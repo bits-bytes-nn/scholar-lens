@@ -1,0 +1,17 @@
+arxiv>=2.1.3
+beautifulsoup4>=4.12.3
+boto3>=1.35.86
+defusedxml>=0.7.1
+faiss-cpu>=1.9.0.post1
+gitpython>=3.1.43
+langchain>=0.3.13
+langchain-aws>=0.2.10
+langchain-community>=0.3.13
+langgraph>=0.2.60
+lxml>=6.0.2
+nltk>=3.9.1
+numpy>=1.26.4
+pydantic[email]>=2.10.5
+pymupdf>=1.25.1
+pypdf>=5.1.0
+python-dotenv>=1.0.1

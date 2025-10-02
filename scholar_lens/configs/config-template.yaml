@@ -1,0 +1,36 @@
+resources:
+  project_name: scholar-lens
+  stage: dev
+  profile_name:
+  default_region_name: ap-northeast-2
+  bedrock_region_name: us-west-2
+  s3_bucket_name:
+  s3_prefix: scholar-lens
+  vpc_id:
+  subnet_ids:
+  email_address:
+
+paper:
+  figure_analysis_model_id: anthropic.claude-3-haiku-20240307-v1:0
+  citation_extraction_model_id: anthropic.claude-sonnet-4-5-20250929-v1:0
+  attributes_extraction_model_id: anthropic.claude-3-5-haiku-20241022-v1:0
+  table_of_contents_model_id: anthropic.claude-sonnet-4-5-20250929-v1:0
+  output_fixing_model_id: anthropic.claude-sonnet-4-5-20250929-v1:0
+
+code:
+  code_analysis_model_id: anthropic.claude-3-haiku-20240307-v1:0
+  code_summarization_model_id: anthropic.claude-3-haiku-20240307-v1:0
+  embed_model_id: amazon.titan-embed-text-v2:0
+  chunk_size: 8192
+  chunk_overlap: 1024
+
+citations:
+  citation_summarization_model_id: anthropic.claude-3-haiku-20240307-v1:0
+  citation_analysis_model_id: anthropic.claude-3-5-haiku-20241022-v1:0
+
+explanation:
+  paper_analysis_model_id: anthropic.claude-sonnet-4-5-20250929-v1:0
+  paper_enrichment_model_id: anthropic.claude-sonnet-4-5-20250929-v1:0
+  paper_finalization_model_id: anthropic.claude-3-5-haiku-20241022-v1:0
+  paper_reflection_model_id: anthropic.claude-sonnet-4-5-20250929-v1:0
+  paper_synthesis_model_id: anthropic.claude-sonnet-4-5-20250929-v1:0
