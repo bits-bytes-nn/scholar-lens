@@ -218,7 +218,7 @@ class HTMLParser(BaseParser):
             except ContentParseError:
                 logger.warning("Failed to fetch from '%s', trying next URL", url)
                 continue
-        raise ContentParseError(f"Failed to fetch HTML for arXiv ID: {arxiv_id}")
+        raise ContentParseError(f"Failed to fetch HTML for arXiv ID: '{arxiv_id}'")
 
     async def _fetch_html_from_url(self, url: str) -> str:
         try:

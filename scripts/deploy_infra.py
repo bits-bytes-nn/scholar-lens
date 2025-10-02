@@ -36,6 +36,7 @@ class PaperReviewStack(Stack):
         vpc_id: str | None = None,
         subnet_ids: list[str] | None = None,
         email_address: str | None = None,
+        github_token: str | None = None,
         langchain_api_key: str | None = None,
         upstage_api_key: str | None = None,
         environment_vars: dict[str, str] | None = None,
@@ -57,6 +58,7 @@ class PaperReviewStack(Stack):
         job_queue = self._create_job_queue()
 
         self._store_ssm_parameters(
+            github_token,
             langchain_api_key,
             upstage_api_key,
             job_queue.job_queue_name,
@@ -262,12 +264,14 @@ class PaperReviewStack(Stack):
 
     def _store_ssm_parameters(
         self,
+        github_token: str | None,
         langchain_api_key: str | None,
         upstage_api_key: str | None,
         job_queue_name: str,
         job_definition_name: str,
     ) -> None:
         ssm_params_to_create = {
+            SSMParams.GITHUB_TOKEN: github_token,
             SSMParams.LANGCHAIN_API_KEY: langchain_api_key,
             SSMParams.UPSTAGE_API_KEY: upstage_api_key,
             SSMParams.BATCH_JOB_QUEUE: job_queue_name,
@@ -275,6 +279,7 @@ class PaperReviewStack(Stack):
         }
 
         descriptions = {
+            SSMParams.GITHUB_TOKEN: "GitHub Token",
             SSMParams.LANGCHAIN_API_KEY: "Langchain API Key",
             SSMParams.UPSTAGE_API_KEY: "Upstage API Key",
             SSMParams.BATCH_JOB_QUEUE: "AWS Batch Job Queue Name for Scholar Lens Paper Review",

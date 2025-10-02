@@ -19,6 +19,7 @@ class EmbeddingModelId(str, Enum):
 
 class EnvVars(str, Enum):
     AWS_PROFILE_NAME = "AWS_PROFILE_NAME"
+    GITHUB_TOKEN = "GITHUB_TOKEN"
     LANGCHAIN_API_KEY = "LANGCHAIN_API_KEY"
     LANGCHAIN_TRACING_V2 = "LANGCHAIN_TRACING_V2"
     LANGCHAIN_ENDPOINT = "LANGCHAIN_ENDPOINT"
@@ -45,10 +46,12 @@ class LanguageModelId(str, Enum):
 
 class LocalPaths(str, Enum):
     ASSETS_DIR = "assets"
-    FIGURES_DIR = "figures"
     FAISS_INDEX_DIR = "faiss_index"
+    FIGURES_DIR = "figures"
+    GITHUB_CLONE_DIR = "github_clone"
     LOGS_DIR = "logs"
     PAPERS_DIR = "papers"
+    POSTS_DIR = "_posts"
     REFERENCES_DIR = "references"
     REPOS_DIR = "repos"
     CONFIG_FILE = "config.yaml"
@@ -72,6 +75,7 @@ class S3Paths(AutoNamedEnum):
 class SSMParams(AutoNamedEnum):
     BATCH_JOB_DEFINITION = "batch-job-definition"
     BATCH_JOB_QUEUE = "batch-job-queue"
+    GITHUB_TOKEN = "github-token"
     LANGCHAIN_API_KEY = "langchain-api-key"
     UPSTAGE_API_KEY = "upstage-api-key"
 

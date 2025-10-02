@@ -211,6 +211,7 @@ assets/
 cdk.context.json
 cdk.out/
 config.yaml
+github_clone/
 ipynb/
 logs/
 papers/

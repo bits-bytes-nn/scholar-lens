@@ -9,6 +9,12 @@ resources:
   vpc_id:
   subnet_ids:
   email_address:
+  github:
+    enabled: false
+    repository:
+    base_branch: main
+    author_name: Scholar Lens Bot
+    author_email:
 
 paper:
   figure_analysis_model_id: anthropic.claude-3-haiku-20240307-v1:0

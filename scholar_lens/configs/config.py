@@ -10,6 +10,14 @@ from pydantic import BaseModel, EmailStr, Field, FilePath
 from scholar_lens.src.constants import EmbeddingModelId, LanguageModelId
 
 
+class Github(BaseModel):
+    enabled: bool = Field(default=False)
+    repository: str | None = Field(default=None)
+    base_branch: str = Field(default="main")
+    author_name: str = Field(default="Scholar Lens Bot")
+    author_email: EmailStr | None = Field(default=None)
+
+
 class Resources(BaseModel):
     project_name: str = Field(min_length=1)
     stage: Literal["dev", "prod"] = Field(default="dev")
@@ -21,6 +29,7 @@ class Resources(BaseModel):
     vpc_id: str | None = Field(default=None)
     subnet_ids: list[str] | None = Field(default=None)
     email_address: EmailStr | None = Field(default=None)
+    github: Github = Field(default_factory=Github)
 
 
 class Paper(BaseModel):
