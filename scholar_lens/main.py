@@ -48,6 +48,7 @@ from scholar_lens.src import (
 ROOT_DIR: Path = Path("/tmp") if is_running_in_aws() else Path(__file__).parent.parent
 COVER_IMAGES_MAP: dict[str, str] = {
     "language-models": "language-models.jpg",
+    "multimodal-learning": "multimodal-learning.jpg",
     "retrieval-augmented-generation": "retrieval-augmented-generation.jpg",
     # NOTE: add new cover images here
 }
@@ -415,7 +416,7 @@ layout: post
 title: "{title}"
 date: {date}
 author: "{author}"
-categories: "{category}"
+categories: [{categories}]
 tags: [{tags}]
 cover: /assets/images/{cover_image}
 use_math: true
@@ -427,11 +428,13 @@ use_math: true
     category_str = paper.attributes.category.replace(" ", "-").lower()
     cover_image = COVER_IMAGES_MAP.get(category_str, "default.jpg")
 
+    categories_str = f'"Paper Reviews", "{paper.attributes.category}"'
+
     front_matter = front_matter_template.format(
         title=paper.title.replace('"', '\\"'),
         date=paper.published.strftime("%Y-%m-%d %H:%M:%S"),
         author=paper.attributes.affiliation,
-        category=paper.attributes.category,
+        categories=categories_str,
         tags=keywords_str,
         cover_image=cover_image,
     )

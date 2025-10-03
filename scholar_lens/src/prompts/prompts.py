@@ -188,7 +188,7 @@ class CitationAnalysisPrompt(BasePrompt):
 
     ## Technical Details
     - Key algorithms, methods, or architectures
-    - Important mathematical formulations (use LaTeX: \\( ... \\) for inline, \\[ ... \\] for display)
+    - Important mathematical formulations (use LaTeX: $ ... $ for inline, $$ ... $$ for display)
     - Critical experimental findings or theoretical results
 
     ## Relevance to Citing Work
@@ -409,8 +409,8 @@ class CitationSummaryPrompt(BasePrompt):
        - Limitations and constraints
 
     3. **Mathematical Content**
-       - Use LaTeX notation: \\( ... \\) for inline, \\[ ... \\] for display
-       - Standard symbols: \\alpha, \\beta, \\sum, \\int, etc.
+       - Use LaTeX notation: $ ... $ for inline, $$ ... $$ for display
+       - Standard symbols: \alpha, \beta, \sum, \int, etc.
        - Define all variables clearly
 
     4. **Relevance Analysis**
@@ -1787,12 +1787,12 @@ class PaperSynthesisPrompt(BasePrompt):
     #### 5.1 Mathematics Formatting (STRICT REQUIREMENTS)
 
     **LaTeX formatting rules:**
-    - Simple inline expressions: \\( ... \\)
-    - Complex display equations: \\[ ... \\]
+    - Simple inline expressions: $ ... $
+    - Complex display equations: $$ ... $$
     - Greek letters: Use \alpha, \beta, etc., NEVER α, β directly
     - ALL mathematical variables and expressions must use LaTeX formatting
-      (e.g., use \\(x\\), \\(y\\), \\(f(x)\\) instead of plain x, y, f(x))
-    - Even when mentioning variables in prose, use LaTeX: "변수 \\(x\\)를 사용하여"
+      (e.g., use $x$, $y$, $f(x)$ instead of plain x, y, f(x))
+    - Even when mentioning variables in prose, use LaTeX: "변수 $x$를 사용하여"
     - Text within math: Use \text{{}} with English ONLY for readability
       * CORRECT: \text{{batch size}}, \text{{learning rate}}
       * INCORRECT: \text{{배치 크기}}, \text{{batch_size}}
