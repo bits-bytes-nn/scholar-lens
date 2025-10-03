@@ -16,11 +16,11 @@ RUN apt-get update && \
     && rm -rf /var/lib/apt/lists/* \
     && ln -sf /usr/bin/python3 /usr/bin/python
 
-COPY requirements.txt .
+WORKDIR /app
+
+COPY scholar_lens/requirements.txt .
 RUN python3 -m pip install --no-cache-dir -r requirements.txt
 
-COPY main.py ./
-COPY configs/ scholar_lens/configs/
-COPY src/ scholar_lens/src/
+COPY scholar_lens ./scholar_lens
 
-CMD ["python3", "main.py"]
+CMD ["python3", "-m", "scholar_lens.main"]

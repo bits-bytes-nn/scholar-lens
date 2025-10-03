@@ -11,7 +11,7 @@ from typing import Any
 
 import boto3
 from git import Repo
-from github import Github, GithubException
+from github import Auth, Github, GithubException
 from pydantic import BaseModel, HttpUrl
 
 sys.path.append(str(Path(__file__).parent.parent))
@@ -536,7 +536,9 @@ async def _create_github_pull_request(
         )
 
         logger.info("Creating a pull request on GitHub...")
-        g = Github(token)
+
+        auth = Auth.Token(token)
+        g = Github(auth=auth)
         gh_repo = g.get_repo(repo_config.repository)
 
         try:
@@ -615,6 +617,7 @@ def _git_operations(
 
     logger.info("Pushing changes to branch '%s'...", branch_name)
     origin = repo.remote(name="origin")
+    origin.push(refspec=f"{branch_name}:{branch_name}", force=True)
     origin.push(refspec=f"{branch_name}:{branch_name}", force=True)
 
 

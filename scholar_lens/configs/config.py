@@ -1,3 +1,4 @@
+import sys
 import yaml
 from pathlib import Path
 from typing import Literal
@@ -6,8 +7,9 @@ from typing import Literal
 from dotenv import load_dotenv
 from pydantic import BaseModel, EmailStr, Field, FilePath
 
+sys.path.append(str(Path(__file__).parent.parent))
 
-from scholar_lens.src.constants import EmbeddingModelId, LanguageModelId
+from src.constants import EmbeddingModelId, LanguageModelId
 
 
 class Github(BaseModel):

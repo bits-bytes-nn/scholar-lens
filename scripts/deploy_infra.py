@@ -118,46 +118,32 @@ class PaperReviewStack(Stack):
         )
 
     def _create_iam_role(self) -> iam.Role:
-        role = iam.Role(
+        all_policies = [
+            "AmazonBedrockFullAccess",
+            "AmazonEC2FullAccess",
+            "AmazonECS_FullAccess",
+            "AmazonS3FullAccess",
+            "AmazonSNSFullAccess",
+            "AmazonSSMFullAccess",
+            "AWSBatchFullAccess",
+            "CloudWatchLogsFullAccess",
+        ]
+        managed_policies = [
+            iam.ManagedPolicy.from_aws_managed_policy_name(name)
+            for name in all_policies
+        ]
+
+        return iam.Role(
             self,
             "PaperReviewRole",
             assumed_by=iam.CompositePrincipal(
                 iam.ServicePrincipal("ec2.amazonaws.com"),
                 iam.ServicePrincipal("ecs-tasks.amazonaws.com"),
             ),
+            description="Role for Paper Review",
+            managed_policies=managed_policies,
             role_name=self._get_resource_name("paper-review"),
         )
-
-        policy = iam.Policy(
-            self,
-            "PaperReviewPolicy",
-            policy_name=self._get_resource_name("paper-review"),
-            statements=[
-                iam.PolicyStatement(actions=["s3:*"], resources=["*"]),
-                iam.PolicyStatement(actions=["bedrock:*"], resources=["*"]),
-                iam.PolicyStatement(
-                    actions=["ssm:GetParameter"],
-                    resources=[
-                        f"arn:aws:ssm:{self.region}:{self.account}:parameter/{self.project_name}/{self.stage}/*"
-                    ],
-                ),
-                iam.PolicyStatement(
-                    actions=["sns:Publish"],
-                    resources=[self.topic.topic_arn],
-                ),
-                iam.PolicyStatement(
-                    actions=[
-                        "logs:CreateLogGroup",
-                        "logs:CreateLogStream",
-                        "logs:PutLogEvents",
-                        "logs:DescribeLogStreams",
-                    ],
-                    resources=["*"],
-                ),
-            ],
-        )
-        role.attach_inline_policy(policy)
-        return role
 
     def _create_sns_topic(self, email_address: str | None) -> sns.Topic:
         topic = sns.Topic(
@@ -176,7 +162,7 @@ class PaperReviewStack(Stack):
         docker_image_asset = DockerImageAsset(
             self,
             "PaperReviewImage",
-            directory=str(Path(__file__).parent.parent / "scholar_lens"),
+            directory=str(Path(__file__).parent.parent),
             file="Dockerfile",
             platform=Platform.LINUX_AMD64,
             exclude=["cdk.out", ".venv", ".git", "**/__pycache__"],
@@ -343,6 +329,7 @@ def main() -> None:
                 if config.resources.email_address
                 else None
             ),
+            github_token=os.getenv(EnvVars.GITHUB_TOKEN.value),
             langchain_api_key=os.getenv(EnvVars.LANGCHAIN_API_KEY.value),
             upstage_api_key=os.getenv(EnvVars.UPSTAGE_API_KEY.value),
             environment_vars=env_vars,

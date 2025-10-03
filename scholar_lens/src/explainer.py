@@ -40,6 +40,8 @@ ROOT_DIR: Path = (
     else Path(__file__).resolve().parent.parent.parent
 )
 
+nltk.data.path.append(str(ROOT_DIR))
+
 try:
     nltk.data.find("tokenizers/punkt_tab")
 except LookupError:
