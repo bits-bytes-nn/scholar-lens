@@ -22,6 +22,7 @@ langgraph = "^0.2.60"
 lxml = "^6.0.2"
 nltk = "^3.9.1"
 numpy = "^1.26.4"
+pillow = "^11.1.0"
 pydantic = {extras = ["email"], version = "^2.10.5"}
 pygithub = "^2.8.1"
 pymupdf = "^1.25.1"
@@ -30,6 +31,7 @@ python-dotenv = "^1.0.1"
 pytz = "^2025.1"
 tiktoken = "^0.11.0"
 tqdm = "^4.67.1"
+unstructured = {extras = ["pdf"], version = "^0.18.15"}
 
 [build-system]
 requires = ["poetry-core"]

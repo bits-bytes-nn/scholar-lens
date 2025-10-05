@@ -73,6 +73,10 @@ class LanguageModelInfo(BaseModel):
         default=False,
         description="Whether the model supports thinking/reasoning capabilities.",
     )
+    supports_1m_context_window: bool = Field(
+        default=False,
+        description="Whether the model supports 1M context window.",
+    )
 
 
 _EMBEDDING_MODEL_INFO: dict[EmbeddingModelId, EmbeddingModelInfo] = {
@@ -95,48 +99,49 @@ _LANGUAGE_MODEL_INFO: dict[LanguageModelId, LanguageModelInfo] = {
     LanguageModelId.CLAUDE_V3_HAIKU: LanguageModelInfo(
         context_window_size=200000,
         max_output_tokens=4096,
-        supports_performance_optimization=False,
         supports_prompt_caching=True,
     ),
     LanguageModelId.CLAUDE_V3_5_HAIKU: LanguageModelInfo(
         context_window_size=200000,
-        max_output_tokens=4096,
+        max_output_tokens=8192,
         supports_performance_optimization=True,
         supports_prompt_caching=True,
     ),
     LanguageModelId.CLAUDE_V3_5_SONNET: LanguageModelInfo(
-        context_window_size=200000, max_output_tokens=4096
+        context_window_size=200000, max_output_tokens=8192
     ),
     LanguageModelId.CLAUDE_V3_5_SONNET_V2: LanguageModelInfo(
-        context_window_size=200000, max_output_tokens=4096, supports_prompt_caching=True
+        context_window_size=200000, max_output_tokens=8192, supports_prompt_caching=True
     ),
     LanguageModelId.CLAUDE_V3_7_SONNET: LanguageModelInfo(
         context_window_size=200000,
-        max_output_tokens=8192,
+        max_output_tokens=64000,
         supports_prompt_caching=True,
         supports_thinking=True,
     ),
     LanguageModelId.CLAUDE_V4_SONNET: LanguageModelInfo(
         context_window_size=200000,
-        max_output_tokens=8192,
+        max_output_tokens=64000,
         supports_prompt_caching=True,
         supports_thinking=True,
+        supports_1m_context_window=True,
     ),
     LanguageModelId.CLAUDE_V4_5_SONNET: LanguageModelInfo(
         context_window_size=200000,
-        max_output_tokens=8192,
+        max_output_tokens=64000,
         supports_prompt_caching=True,
         supports_thinking=True,
+        supports_1m_context_window=True,
     ),
     LanguageModelId.CLAUDE_V4_OPUS: LanguageModelInfo(
         context_window_size=200000,
-        max_output_tokens=8192,
+        max_output_tokens=32000,
         supports_prompt_caching=True,
         supports_thinking=True,
     ),
     LanguageModelId.CLAUDE_V4_1_OPUS: LanguageModelInfo(
         context_window_size=200000,
-        max_output_tokens=8192,
+        max_output_tokens=32000,
         supports_prompt_caching=True,
         supports_thinking=True,
     ),
@@ -423,6 +428,7 @@ class BedrockLanguageModelFactory(
         **kwargs: Any,
     ) -> dict[str, Any]:
         enable_thinking = kwargs.get("enable_thinking", False)
+        supports_1m_context_window = kwargs.get("supports_1m_context_window", False)
         temperature = kwargs.get("temperature", self.DEFAULT_TEMPERATURE)
         final_temperature = (
             1.0
@@ -443,6 +449,16 @@ class BedrockLanguageModelFactory(
             config["model_kwargs"].update(
                 {"max_tokens": final_max_tokens, "temperature": final_temperature}
             )
+        if supports_1m_context_window and model_info.supports_1m_context_window:
+            if is_cross_region:
+                config.setdefault("additional_model_request_fields", {}).update(
+                    {"anthropic_beta": ["context-1m-2025-08-07"]}
+                )
+            else:
+                config["model_kwargs"].setdefault(
+                    "additionalModelRequestFields", {}
+                ).update({"anthropic_beta": ["context-1m-2025-08-07"]})
+            logger.debug("Applied 1M context window support")
         self._apply_model_features(config, model_info, is_cross_region, **kwargs)
         return config
 

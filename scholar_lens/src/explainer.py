@@ -418,7 +418,7 @@ class ExplainerGraph(RetryableBase):
         if not current_explanation.strip():
             feedback = (
                 "The generated explanation was too long and could not be processed properly. "
-                "Please reduce the output length to under 1000 tokens."
+                "Please reduce the output length to under 2000 tokens."
             )
             accumulated_feedback.append(feedback)
             logger.warning(

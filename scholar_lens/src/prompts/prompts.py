@@ -521,7 +521,8 @@ class FigureAnalysisPrompt(BasePrompt):
     2. What key information does it show? (specific metrics, components, relationships, or "non-technical content")
     3. What is its research significance? (main finding, contribution, or "not research-relevant")
 
-    If the figure appears to be a logo, header image, or decorative element unrelated to research content, state this clearly in sentence 1 and keep sentences 2-3 brief.
+    If the figure appears to be a logo, header image, or decorative element unrelated to research content, state this
+    clearly in sentence 1 and keep sentences 2-3 brief.
 
     Be specific and technical for research figures. Use standard terminology.
     """
@@ -1557,7 +1558,7 @@ class PaperSynthesisPrompt(BasePrompt):
 
     ### RULE #3: RESPONSE LENGTH MANAGEMENT
 
-    **Monitor token usage continuously. If approaching ~2000 tokens:**
+    **Monitor token usage continuously. If approaching ~3000 tokens:**
     - STOP at natural paragraph boundary
     - CLOSE </explanation> tag properly
     - SET has_more=y to continue
@@ -1797,6 +1798,7 @@ class PaperSynthesisPrompt(BasePrompt):
       * CORRECT: \text{{batch size}}, \text{{learning rate}}
       * INCORRECT: \text{{배치 크기}}, \text{{batch_size}}
     - Use proper operators: \times instead of x, \in instead of ∈, \log instead of log
+    - Use \vert or \mid instead of | for absolute values and divides
     - NEVER use \rm command - use \text{{}} instead
     - Use aligned environments for multi-line equations
     - Use matrix/bmatrix/pmatrix environments for matrices

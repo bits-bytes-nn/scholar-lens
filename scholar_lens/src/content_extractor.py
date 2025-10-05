@@ -98,7 +98,7 @@ class ContentExtractor(RetryableBase):
             attributes_extraction_model_id, temperature=0.0
         )
         table_of_contents_llm = self.llm_factory.get_model(
-            table_of_contents_model_id, temperature=0.0
+            table_of_contents_model_id, temperature=0.0, supports_1m_context_window=True
         )
         robust_xml_output_parser = create_robust_xml_output_parser(
             self.llm_factory,

@@ -53,6 +53,8 @@ COVER_IMAGES_MAP: dict[str, str] = {
     # NOTE: add new cover images here
 }
 
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+
 
 class AppContext(BaseModel):
     config: Config

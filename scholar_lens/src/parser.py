@@ -12,7 +12,9 @@ import httpx
 from bs4 import BeautifulSoup, Tag
 from langchain.schema.runnable import Runnable
 from langchain.schema.output_parser import StrOutputParser
+from PIL import Image
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from unstructured.partition.pdf import partition_pdf
 
 from .constants import AppConstants, EnvVars, LanguageModelId, LocalPaths
 from .logger import logger
@@ -24,6 +26,7 @@ from .utils import (
 )
 
 DEFAULT_TIMEOUT: int = 60
+MIN_FIGURE_AREA: float = 10000.0
 
 
 class ParserError(Exception):
@@ -292,8 +295,9 @@ class HTMLRichParser(RichParser, HTMLParser):
             if isinstance(img, Tag) and (src := img.get("src")):
                 if isinstance(src, str) and src not in seen_srcs:
                     path = self._construct_figure_url(src, is_ar5iv)
-                    alt_text = img.get("alt", "Refer to caption")
-                    caption = str(alt_text).strip() if alt_text else None
+                    alt_text_raw = img.get("alt", "Refer to caption")
+                    alt_text = str(alt_text_raw) if alt_text_raw else "Refer to caption"
+                    caption = alt_text.strip()
                     figure_tasks.append(
                         Figure.from_llm(self.figure_analyser, str(i), path, caption)
                     )
@@ -304,8 +308,9 @@ class HTMLRichParser(RichParser, HTMLParser):
             if isinstance(img, Tag) and (src := img.get("src")):
                 if isinstance(src, str) and src not in seen_srcs:
                     path = self._construct_figure_url(src, is_ar5iv)
-                    alt_text = img.get("alt", "Refer to caption")
-                    caption = str(alt_text).strip() if alt_text else None
+                    alt_text_raw = img.get("alt", "Refer to caption")
+                    alt_text = str(alt_text_raw) if alt_text_raw else "Refer to caption"
+                    caption = alt_text.strip()
                     figure_tasks.append(
                         Figure.from_llm(self.figure_analyser, str(i), path, caption)
                     )
@@ -391,7 +396,10 @@ class PDFParser(RichParser):
             return figures, content
         except ParserError as e:
             logger.warning("Failed to parse PDF document '%s': %s", pdf_path, e)
-            return [], Content()
+            logger.info("Attempting fallback to Unstructured parser")
+            return await self._parse_with_unstructured(
+                pdf_path, figures_dir, extract_text
+            )
 
     async def _get_or_parse_document(
         self, pdf_path: Path, use_cache: bool
@@ -445,6 +453,15 @@ class PDFParser(RichParser):
         for element in elements:
             category = element.get("category", "").lower()
             if category in self.FIGURE_CATEGORIES and element.get("coordinates"):
+
+                coords = element["coordinates"]
+                if not _is_figure_large_enough(coords):
+                    logger.debug(
+                        "Skipping figure '%s' due to small area",
+                        element.get("id", "unknown"),
+                    )
+                    continue
+
                 soup = BeautifulSoup(
                     element.get("content", {}).get("html", ""), "html.parser"
                 )
@@ -494,6 +511,97 @@ class PDFParser(RichParser):
             )
 
         return unique_figures
+
+    async def _parse_with_unstructured(
+        self,
+        pdf_path: Path,
+        figures_dir: Path | None = None,
+        extract_text: bool = True,
+    ) -> tuple[list[Figure], Content]:
+        try:
+            figures_dir = figures_dir or pdf_path.parent / LocalPaths.FIGURES_DIR.value
+            figures_dir.mkdir(parents=True, exist_ok=True)
+
+            elements = partition_pdf(
+                filename=str(pdf_path),
+                extract_images_in_pdf=True,
+                extract_image_block_output_dir=str(figures_dir),
+                strategy="hi_res",
+                infer_table_structure=True,
+            )
+
+            text_parts = [
+                element.text
+                for element in elements
+                if hasattr(element, "text") and element.text
+            ]
+            content = Content(text="\n\n".join(text_parts) if extract_text else "")
+
+            image_files = sorted(figures_dir.glob("*.jpg")) + sorted(
+                figures_dir.glob("*.png")
+            )
+
+            figure_tasks = []
+            for img_path in image_files:
+                try:
+                    with Image.open(img_path) as img:
+                        width, height = img.size
+
+                    if width * height < MIN_FIGURE_AREA:
+                        logger.debug(
+                            "Skipping small image from Unstructured: %s (area: %d)",
+                            img_path.name,
+                            width * height,
+                        )
+                        continue
+
+                    figure_tasks.append(
+                        Figure.from_llm(
+                            figure_analyser=self.figure_analyser,
+                            figure_id=img_path.stem,
+                            path=str(img_path),
+                            caption=None,
+                        )
+                    )
+                except Exception as e:
+                    logger.warning("Could not process image '%s': %s", img_path, e)
+
+            figures = await asyncio.gather(*figure_tasks) if figure_tasks else []
+
+            logger.info(
+                "Unstructured parser extracted %d figures and %d characters",
+                len(figures),
+                len(content.text),
+            )
+            return figures, content
+
+        except Exception as e:
+            logger.error("Unstructured parser also failed: %s", e)
+            raise ParserError(
+                f"Both Upstage and Unstructured parsers failed: {e}"
+            ) from e
+
+
+def _is_figure_large_enough(
+    coordinates: Sequence[dict[str, float]], min_area: float = MIN_FIGURE_AREA
+) -> bool:
+    if not coordinates or len(coordinates) < 4:
+        return False
+
+    try:
+        x_coords = [p["x"] for p in coordinates if "x" in p]
+        y_coords = [p["y"] for p in coordinates if "y" in p]
+
+        if len(x_coords) < 2 or len(y_coords) < 2:
+            return False
+
+        width = max(x_coords) - min(x_coords)
+        height = max(y_coords) - min(y_coords)
+        area = width * height
+
+        return area >= min_area
+    except (KeyError, TypeError, ValueError):
+        return False
 
 
 def extract_figures_from_pdf(

@@ -9,7 +9,7 @@ from pydantic import BaseModel, EmailStr, Field, FilePath
 
 sys.path.append(str(Path(__file__).parent.parent))
 
-from src.constants import EmbeddingModelId, LanguageModelId
+from scholar_lens.src.constants import EmbeddingModelId, LanguageModelId
 
 
 class Github(BaseModel):

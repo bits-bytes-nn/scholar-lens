@@ -11,6 +11,7 @@ from langchain.schema.output_parser import StrOutputParser
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores.faiss import FAISS
 from langchain_core.vectorstores import VectorStore
+from tqdm import tqdm
 
 from .constants import EmbeddingModelId, LanguageModelId, LocalPaths
 from .logger import logger
@@ -26,6 +27,7 @@ DEFAULT_CHUNK_OVERLAP: int = 256
 DEFAULT_CHUNK_SIZE: int = 1024
 DEFAULT_MAX_CONCURRENCY: int = 10
 DEFAULT_BATCH_SIZE: int = 10
+EMBEDDING_BATCH_SIZE: int = 100
 
 
 class NoPythonFilesError(Exception):
@@ -214,9 +216,50 @@ class CodeRetriever(RetryableBase):
         return augmented_docs
 
     async def _create_and_save_index(self, documents: list[Document]) -> None:
-        self.vector_store = await FAISS.afrom_documents(documents, self.embeddings)
-        await asyncio.to_thread(self.vector_store.save_local, str(self.index_cache_dir))
-        logger.info("Created and saved index to '%s'", self.index_cache_dir)
+        if not documents:
+            logger.warning("No documents provided to create index.")
+            return
+
+        logger.info(
+            "Creating FAISS index for %d documents in batches of %d.",
+            len(documents),
+            EMBEDDING_BATCH_SIZE,
+        )
+
+        first_batch = documents[:EMBEDDING_BATCH_SIZE]
+        self.vector_store = await self._afrom_documents_with_retry(first_batch)
+        logger.info("Initial vector store created with the first batch.")
+
+        remaining_docs = documents[EMBEDDING_BATCH_SIZE:]
+
+        for i in tqdm(
+            range(0, len(remaining_docs), EMBEDDING_BATCH_SIZE),
+            desc="Adding document batches to FAISS",
+        ):
+            batch = remaining_docs[i : i + EMBEDDING_BATCH_SIZE]
+            if not batch:
+                continue
+
+            await self._aadd_documents_with_retry(batch)
+
+        if self.vector_store and isinstance(self.vector_store, FAISS):
+            await asyncio.to_thread(
+                self.vector_store.save_local, str(self.index_cache_dir)
+            )
+        logger.info(
+            "Completed adding all batches. Index saved to '%s'",
+            self.index_cache_dir,
+        )
+
+    @RetryableBase._retry("documents_embedding")
+    async def _afrom_documents_with_retry(self, documents: list[Document]) -> FAISS:
+        return await FAISS.afrom_documents(documents, self.embeddings)
+
+    @RetryableBase._retry("documents_embedding")
+    async def _aadd_documents_with_retry(self, documents: list[Document]) -> None:
+        if not self.vector_store:
+            raise ValueError("Vector store is not initialized.")
+        await self.vector_store.aadd_documents(documents)
 
     def delete_index_sync(self) -> None:
         if self.index_cache_dir.exists():
