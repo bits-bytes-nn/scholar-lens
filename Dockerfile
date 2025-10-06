@@ -11,6 +11,8 @@ RUN apt-get update && \
     python3-pip \
     git \
     locales \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
     && locale-gen ko_KR.UTF-8 \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* \
