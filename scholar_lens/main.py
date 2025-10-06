@@ -509,10 +509,10 @@ async def _create_github_pull_request(
         )
         return
 
+    clone_dir = ROOT_DIR / LocalPaths.GITHUB_CLONE_DIR.value
     try:
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         branch_name = f"paper/{paper.arxiv_id}-{timestamp}"
-        clone_dir = ROOT_DIR / LocalPaths.GITHUB_CLONE_DIR.value
 
         commit_message = f"feat: Add paper review for '{paper.title}'"
         pr_title = f"Paper Review: {paper.title}"

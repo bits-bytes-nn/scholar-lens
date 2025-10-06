@@ -14,6 +14,7 @@ from langchain.schema.runnable import Runnable
 from langchain.schema.output_parser import StrOutputParser
 from PIL import Image
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from unstructured.documents.elements import Image as UnstructuredImage
 from unstructured.partition.pdf import partition_pdf
 
 from .constants import AppConstants, EnvVars, LanguageModelId, LocalPaths
@@ -530,41 +531,49 @@ class PDFParser(RichParser):
                 infer_table_structure=True,
             )
 
-            text_parts = [
-                element.text
-                for element in elements
-                if hasattr(element, "text") and element.text
-            ]
-            content = Content(text="\n\n".join(text_parts) if extract_text else "")
+            content_parts = []
+            valid_figure_paths = []
+            if extract_text:
+                for element in elements:
+                    if isinstance(element, UnstructuredImage):
+                        img_path_str = getattr(element.metadata, "image_path", None)
+                        if img_path_str:
+                            img_path = Path(img_path_str)
+                            try:
+                                with Image.open(img_path) as img:
+                                    width, height = img.size
 
-            image_files = sorted(figures_dir.glob("*.jpg")) + sorted(
-                figures_dir.glob("*.png")
-            )
+                                if width * height >= MIN_FIGURE_AREA:
+                                    content_parts.append("[Image: alt=, src=]")
+                                    valid_figure_paths.append(img_path)
+                                else:
+                                    logger.debug(
+                                        "Skipping small image from Unstructured: '%s' (area: %d)",
+                                        img_path.name,
+                                        width * height,
+                                    )
+                            except Exception as e:
+                                logger.warning(
+                                    "Could not process image for size check '%s': %s",
+                                    img_path,
+                                    e,
+                                )
+
+                    elif hasattr(element, "text") and element.text:
+                        content_parts.append(element.text)
+
+            content = Content(text="\n\n".join(content_parts) if extract_text else "")
 
             figure_tasks = []
-            for img_path in image_files:
-                try:
-                    with Image.open(img_path) as img:
-                        width, height = img.size
-
-                    if width * height < MIN_FIGURE_AREA:
-                        logger.debug(
-                            "Skipping small image from Unstructured: %s (area: %d)",
-                            img_path.name,
-                            width * height,
-                        )
-                        continue
-
-                    figure_tasks.append(
-                        Figure.from_llm(
-                            figure_analyser=self.figure_analyser,
-                            figure_id=img_path.stem,
-                            path=str(img_path),
-                            caption=None,
-                        )
+            for img_path in valid_figure_paths:
+                figure_tasks.append(
+                    Figure.from_llm(
+                        figure_analyser=self.figure_analyser,
+                        figure_id=img_path.stem,
+                        path=str(img_path),
+                        caption=None,
                     )
-                except Exception as e:
-                    logger.warning("Could not process image '%s': %s", img_path, e)
+                )
 
             figures = await asyncio.gather(*figure_tasks) if figure_tasks else []
 
