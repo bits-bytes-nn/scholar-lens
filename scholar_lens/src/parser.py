@@ -398,9 +398,7 @@ class PDFParser(RichParser):
         except ParserError as e:
             logger.warning("Failed to parse PDF document '%s': %s", pdf_path, e)
             logger.info("Attempting fallback to Unstructured parser")
-            return await self._parse_with_unstructured(
-                pdf_path, figures_dir, extract_text
-            )
+            return await self._parse_with_fallback(pdf_path, figures_dir, extract_text)
 
     async def _get_or_parse_document(
         self, pdf_path: Path, use_cache: bool
@@ -513,7 +511,7 @@ class PDFParser(RichParser):
 
         return unique_figures
 
-    async def _parse_with_unstructured(
+    async def _parse_with_fallback(
         self,
         pdf_path: Path,
         figures_dir: Path | None = None,

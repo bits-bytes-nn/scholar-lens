@@ -186,7 +186,9 @@ class ExplainerGraph(RetryableBase):
         model_id: LanguageModelId,
         output_parser: BaseOutputParser,
     ) -> Runnable:
-        llm = self.llm_factory.get_model(model_id, temperature=0.0)
+        llm = self.llm_factory.get_model(
+            model_id, temperature=0.0, supports_1m_context_window=True
+        )
         return prompt_cls.get_prompt() | llm | output_parser
 
     def _create_workflow(self) -> CompiledStateGraph:
@@ -208,7 +210,10 @@ class ExplainerGraph(RetryableBase):
             state: ExplainerState,
         ) -> Literal["go_continue", "go_retry_synthesis"]:
             if state["synthesis_attempts"] >= self.max_synthesis_attempts:
-                logger.warning("Maximum synthesis attempts reached - continuing")
+                logger.warning(
+                    "Maximum synthesis attempts reached (Quality score: %d) - continuing",
+                    state["quality_score"],
+                )
                 return "go_continue"
             if state["quality_score"] >= self.min_quality_score:
                 logger.info(

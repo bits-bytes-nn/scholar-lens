@@ -581,6 +581,8 @@ class PaperAnalysisPrompt(BasePrompt):
        - ALWAYS merge Title, Abstract, and Introduction into ONE section starting from sentence 0
        - Create separate sections for distinct technical contributions
        - Merge related subsections when content is brief or closely related
+       - DO NOT create a separate section for Abstract, References/Bibliography
+       - Technical appendices with substantial content may be separate sections
 
     3. BOUNDARY IDENTIFICATION
        - Identify significant topical transitions, methodological shifts, or conceptual changes
@@ -840,7 +842,7 @@ class PaperReflectionPrompt(BasePrompt):
     Your role is to analyze explanation quality, identify issues, and provide improvement recommendations
     while ensuring technical accuracy and source fidelity.
     Focus on: structural compliance, citation accuracy, visual content integrity, appropriate technical depth,
-    and strict prevention of content duplication.
+    and ABSOLUTE prevention of ANY content duplication within the same section.
     """
 
     human_prompt_template: str = r"""
@@ -918,6 +920,7 @@ class PaperReflectionPrompt(BasePrompt):
     - Properly attribute and integrate explanations from referenced papers
     - Include expanded mathematical derivations with step-by-step walkthroughs
     - Provide code implementations illustrating key concepts
+    - **REQUIRED: Moderate use of supplementary materials (citations OR code)**
 
     **ADVANCED** (Expert-level comprehensive):
     - Most detailed and thorough explanation possible
@@ -927,14 +930,30 @@ class PaperReflectionPrompt(BasePrompt):
     - Implementation details, optimization techniques, limitations and improvements
     - Full mathematical derivations with insights into each step
     - Complete code implementations with detailed explanations
+    - **REQUIRED: Extensive use of supplementary materials (citations AND code)**
 
     #### 1.3 Handling Conflicts Between Granularity and Depth
 
-    When granularity and technical depth appear to conflict:
-    - STANDARD + ADVANCED: Provide advanced-level insights within concise, focused presentation
-    - STANDARD + INTERMEDIATE: Enhanced explanations while maintaining brevity
-    - DETAILED + BASIC: Complete coverage with fundamental-level explanations
-    - DETAILED + INTERMEDIATE/ADVANCED: Maximum thoroughness with appropriate depth
+    **STANDARD + ADVANCED**:
+    - Select only core concepts, but explain selected concepts in depth
+    - Don't include all equations, but provide complete derivations for important ones
+    - Example: In introduction, mention only key contributions but explain theoretical basis deeply
+    - Target: ~60% coverage with 100% depth on selected topics
+
+    **STANDARD + INTERMEDIATE**:
+    - Enhanced explanations while maintaining brevity
+    - Include key examples and background, but keep focused
+    - Target: ~70% coverage with 80% depth
+
+    **DETAILED + BASIC**:
+    - Cover all content comprehensively but at fundamental level
+    - Include all equations but skip complex derivations
+    - Example: Include all experimental results tables but omit statistical tests
+    - Target: 100% coverage with 60% depth
+
+    **DETAILED + INTERMEDIATE/ADVANCED**:
+    - Maximum thoroughness with appropriate depth
+    - Target: 100% coverage with 80-100% depth
 
     ### 2. STRUCTURAL COMPLIANCE AND TABLE OF CONTENTS ALIGNMENT
 
@@ -1015,9 +1034,105 @@ class PaperReflectionPrompt(BasePrompt):
     - Clearly distinguish between main paper and cited work contributions
     - Provide context about relationships between cited works and current paper
 
-    ### 4. VISUAL CONTENT AND REFERENCE RULES (CRITICAL)
+    ### 4. CONTENT DUPLICATION PREVENTION RULES (CRITICAL)
 
-    #### 4.1 Image Path Integrity (ABSOLUTELY CRITICAL - AUTOMATIC ZERO IF VIOLATED)
+    #### 4.1 🚨 TEXTUAL CONTENT DUPLICATION - AUTOMATIC ZERO SCORE 🚨
+
+    **THIS IS THE MOST CRITICAL RULE: Textual content duplication WITHIN THE SAME SECTION results in AUTOMATIC ZERO
+    SCORE**
+
+    **🔴 WITHIN-SECTION DUPLICATION (Same section, same content) - AUTOMATIC ZERO:**
+
+    **Duplication Detection Threshold for SAME SECTION:**
+    - If 90% or more of content within current_explanation semantically repeats itself (same concepts explained multiple
+    times in the same section) → AUTOMATIC ZERO
+    - This includes:
+      - Repeating the same explanations with minor rewording within the same section
+      - Re-explaining concepts already covered earlier in the SAME section with similar sentence structures
+      - Duplicating descriptions with nearly identical wording in the same section
+      - Restating the same technical details within the same section with only superficial changes
+      - Copy-pasting similar paragraph structures within the same section
+      - Using different words to convey essentially the same information within the same section
+
+    **Examples of CRITICAL VIOLATIONS within same section (Automatic Zero):**
+    - Paragraph 1 in Section 3 explains "Transformer architecture with self-attention", Paragraph 5 in Section 3
+    re-explains "Transformer uses self-attention" → ZERO
+    - Earlier part of section describes "Training with loss L", later part of same section describes "Model trained
+    using loss L" again → ZERO
+    - Beginning of section covers "Dataset D setup", middle of same section mentions "Experiments with dataset D" again
+    → ZERO
+
+    **🟡 CROSS-SECTION DUPLICATION (Different sections, similar topics) - CONDITIONAL PENALTY:**
+
+    **Different sections discussing related topics is ACCEPTABLE unless expressions are nearly identical:**
+    - Different sections can discuss the same concepts if presenting NEW perspectives, details, or contexts
+    - Cross-section duplication is problematic ONLY when expressions are 95%+ identical (near word-for-word copying)
+    - Same topic with DIFFERENT specific details, examples, angles, or sentence structures → ACCEPTABLE
+    - Same topic with NEARLY IDENTICAL expressions and sentence patterns → Moderate penalty (-10 points)
+
+    **Examples of ACCEPTABLE cross-section content:**
+    - Section 2 (Methodology) explains "Transformer architecture design and components"
+    - Section 4 (Experiments) discusses "Performance evaluation of Transformer implementation"
+    → ACCEPTABLE - Different aspects of same topic
+
+    - Section 2 explains "Loss function L = -log P(y|x)"
+    - Section 3 applies "Using the loss function to optimize parameters"
+    → ACCEPTABLE - Different contexts for same concept
+
+    **Examples of PROBLEMATIC cross-section content (95%+ identical expressions):**
+    - Section 2: "Transformer는 self-attention 메커니즘을 사용하여 시퀀스를 처리합니다"
+    - Section 4: "Transformer는 self-attention 메커니즘을 사용하여 시퀀스를 처리합니다"
+    → PROBLEMATIC - Nearly word-for-word identical (-10 points)
+
+    **🚨 MANDATORY VERIFICATION BEFORE SCORING:**
+    1. **Check WITHIN-SECTION duplication first** (Priority #1):
+       - Read through current_explanation carefully
+       - Identify if same concepts are explained multiple times within the section
+       - Calculate if 90%+ of content repeats itself within the section
+       - If YES → IMMEDIATE AUTOMATIC ZERO SCORE
+
+    2. **Check CROSS-SECTION duplication second** (Lower priority):
+       - Compare current_explanation against previous_explanation
+       - Look for 95%+ identical expressions across different sections
+       - If found → Apply moderate penalty (-10 points per instance)
+
+    **Focus on CONCRETE CONTENT and EXPRESSION:**
+    - WITHIN same section: Same information repeated → ZERO
+    - ACROSS different sections: Same topic with different angles → ACCEPTABLE
+    - ACROSS different sections: Nearly identical expressions (95%+) → -10 points
+
+    **Critical Rule Summary:**
+    - **Same section repeating itself → AUTOMATIC ZERO**
+    - **Different sections can discuss related topics with different expressions → ACCEPTABLE**
+    - **Different sections with nearly identical word-for-word expressions → -10 points**
+    - **Each section must contain progressive, non-repetitive content WITHIN itself**
+    - **When in doubt about within-section duplication → Score it as ZERO**
+
+    #### 4.2 Visual Element Duplication Prevention (CRITICAL - AUTOMATIC ZERO IF VIOLATED)
+
+    **🚨 Each visual element (figure, table, code block, equation) MUST appear ONLY ONCE in the ENTIRE document**
+
+    **Before inserting ANY visual element:**
+    1. **MANDATORY CHECK**: Search through ALL of previous_explanation for this image path
+    2. **MANDATORY CHECK**: Look for any figure/table/code with similar description
+    3. **MANDATORY CHECK**: Verify this specific content hasn't been shown before
+    4. If found in previous_explanation → DO NOT insert again, use descriptive reference only
+
+    **Rules:**
+    - When first discussing any figure/table, insert it using ![그림 X: 설명](exact_path) format
+    - Insert ALL visual elements BEFORE referencing them in text
+    - Provide comprehensive explanation immediately after FIRST insertion
+    - **ABSOLUTE PROHIBITION: Never duplicate any previously inserted visual element**
+    - After first insertion, always use descriptive references only (never re-insert)
+    - **Carefully check previous_explanation to identify ALL previously inserted visual elements**
+    - **If a visual element was already inserted in previous sections, NEVER insert it again**
+
+    **Example of CORRECT handling:**
+    - First mention: "모델의 전체 구조를 보여주는 ![그림 1: 모델 아키텍처](/exact/path/from/source.png)에서..."
+    - Later references: "앞서 보여준 모델 아키텍처에서...", "위 그림에서 확인할 수 있듯이..."
+    - ❌ NEVER: "![그림 1: 모델 아키텍처](/exact/path/from/source.png)" appears again anywhere in the document
+
+    #### 4.3 Image Path Integrity (ABSOLUTELY CRITICAL - AUTOMATIC ZERO IF VIOLATED)
 
     **🚨 CRITICAL RULE: Image paths MUST be used EXACTLY as provided in the source - NO modifications allowed**
 
@@ -1042,34 +1157,7 @@ class PaperReflectionPrompt(BasePrompt):
     - ✅ Verify directory structure is identical
     - ✅ Confirm filename and extension match precisely
 
-    #### 4.2 Figure and Table Duplication Prevention (CRITICAL - AUTOMATIC ZERO IF VIOLATED)
-
-    **🚨 MOST CRITICAL RULE: Each visual element (figure, table, code block, equation) MUST appear ONLY ONCE in the
-    ENTIRE document**
-
-    **This is an AUTOMATIC ZERO violation - no exceptions**
-
-    **Before inserting ANY visual element:**
-    1. **MANDATORY CHECK**: Search through ALL of previous_explanation for this image path
-    2. **MANDATORY CHECK**: Look for any figure/table/code with similar description
-    3. **MANDATORY CHECK**: Verify this specific content hasn't been shown before
-    4. If found in previous_explanation → DO NOT insert again, use descriptive reference only
-
-    **Rules:**
-    - When first discussing any figure/table, insert it using ![그림 X: 설명](exact_path) format
-    - Insert ALL visual elements BEFORE referencing them in text
-    - Provide comprehensive explanation immediately after FIRST insertion
-    - **ABSOLUTE PROHIBITION: Never duplicate any previously inserted visual element**
-    - After first insertion, always use descriptive references only (never re-insert)
-    - **Carefully check previous_explanation to identify ALL previously inserted visual elements**
-    - **If a visual element was already inserted in previous sections, NEVER insert it again**
-
-    **Example of CORRECT handling:**
-    - First mention: "모델의 전체 구조를 보여주는 ![그림 1: 모델 아키텍처](/exact/path/from/source.png)에서..."
-    - Later references: "앞서 보여준 모델 아키텍처에서...", "위 그림에서 확인할 수 있듯이..."
-    - ❌ NEVER: "![그림 1: 모델 아키텍처](/exact/path/from/source.png)" appears again anywhere in the document
-
-    #### 4.3 Table Rendering Requirements (CRITICAL)
+    #### 4.4 Table Rendering Requirements (CRITICAL)
 
     **Tables MUST be rendered as actual markdown tables, NOT as image links**
 
@@ -1090,7 +1178,7 @@ class PaperReflectionPrompt(BasePrompt):
     - Each table appears only once in entire document
     - After first rendering, use descriptive references only
 
-    #### 4.4 Reference Guidelines
+    #### 4.5 Reference Guidelines
 
     After insertion, use natural descriptive references:
     - CORRECT: "위 그림에서 보듯이", "앞서 보여준 표와 같이", "이 결과는"
@@ -1138,8 +1226,8 @@ class PaperReflectionPrompt(BasePrompt):
 
     #### 6.2 Content to ABSOLUTELY EXCLUDE (High Penalty if Included)
 
-    **The following MUST BE COMPLETELY EXCLUDED - these are non-technical administrative content unrelated to AI theory/
-    technology:**
+    **The following MUST BE COMPLETELY EXCLUDED - these are non-technical administrative content unrelated to AI
+    theory/technology:**
 
     - **Acknowledgments sections** (감사의 말, Acknowledgments, 사의)
     - **Author contributions** (저자 기여도, Author Contributions, CRediT)
@@ -1160,39 +1248,55 @@ class PaperReflectionPrompt(BasePrompt):
     **If current_explanation is empty or significantly truncated (missing closing tags), this indicates the output was
     cut off before completion.**
 
-    When this occurs:
+    When this occurs based on granularity and depth:
+
+    **For STANDARD sections:**
     - Provide feedback to reduce explanation length
     - Suggest more concise presentation while maintaining technical accuracy
     - Recommend focusing on most critical technical details
-    - Advise breaking complex sections into smaller, more manageable parts
+
+    **For DETAILED sections:**
+    - Note that content should be split using proper continuation mechanism
+    - Suggest breaking into logical subsections
+    - Recommend ensuring proper closing tags are always included
 
     #### 7.2 Length Optimization Guidance
 
-    For overly long explanations:
+    **For STANDARD granularity (overly long explanations):**
     - Prioritize core technical concepts over exhaustive details
     - Use more efficient language without sacrificing accuracy
     - Consolidate related concepts where appropriate
     - Ensure all outputs properly close with required tags
 
+    **For DETAILED granularity (truncated output):**
+    - Content should be properly continued rather than shortened
+    - Maintain comprehensive coverage as required
+    - Use proper mechanisms to handle length
+
     ### 8. COMPREHENSIVE SCORING SYSTEM (100 Points Total)
 
     #### 8.1 Score Distribution
+
+    **Source Fidelity and Paper Accuracy (25 points) - HIGHEST PRIORITY**
+    - Content accuracy and alignment with source material: 15 points
+    - Citation integrity (accurate hyperlinks, no fabrication, no citation key exposure): 10 points
 
     **Table of Contents Alignment (20 points)**
     - Section structure compliance with TOC hierarchy: 12 points
     - Appropriate content scope for section's designated role: 8 points
 
-    **Content Coverage and Quality (30 points)**
-    - Appropriate coverage based on granularity (STANDARD/DETAILED): 15 points
+    **Content Coverage and Quality (25 points)**
+    - Appropriate coverage based on granularity (STANDARD/DETAILED): 10 points
     - Technical precision and explanation quality: 10 points
     - Mathematical formulation completeness: 5 points
 
-    **Source Fidelity (25 points)**
-    - Content accuracy and alignment with source material: 15 points
-    - Citation integrity (accurate hyperlinks, no fabrication, no citation key exposure): 10 points
-
-    **Technical Depth Compliance (15 points)**
-    - Appropriate level of detail for specified depth (BASIC/INTERMEDIATE/ADVANCED): 15 points
+    **Technical Depth and Supplementary Materials (20 points) - ENHANCED SCORING**
+    - Appropriate level of detail for specified depth (BASIC/INTERMEDIATE/ADVANCED): 10 points
+    - Supplementary materials integration: 10 points
+      * BASIC: Not required (N/A - full 10 points if depth is appropriate)
+      * INTERMEDIATE: Moderate use required (citations OR code examples present)
+      * ADVANCED: Extensive use required (citations AND code examples present)
+      * Missing when required: -10 points
 
     **Language and Style (10 points)**
     - Natural Korean style and proper reference approach: 6 points
@@ -1207,7 +1311,7 @@ class PaperReflectionPrompt(BasePrompt):
     - Below 70: Major revision needed
 
     **For DETAILED/INTERMEDIATE/ADVANCED combinations:**
-    - 95-100: Outstanding technical precision and completeness
+    - 95-100: Outstanding technical precision and completeness with excellent supplementary materials
     - 85-94: Strong with minimal technical gaps
     - 75-84: Acceptable but needs enhancement in depth or accuracy
     - 65-74: Needs significant improvement
@@ -1218,14 +1322,18 @@ class PaperReflectionPrompt(BasePrompt):
     #### 9.1 CRITICAL Violations (Automatic Zero Score)
 
     Any ONE of the following results in automatic 0 score:
-    1. Direct contradiction with source material on core technical claims
-    2. Fabrication of technical content not present in source
-    3. Multiple citation hyperlink fabrications (3+ instances)
-    4. Complete omission of section's core required content
-    5. **Duplication of any visual element** (figure, table, code block, equation) previously inserted - THIS IS THE
-    MOST CRITICAL VIOLATION
-    6. **Modification of image paths from source format** - paths must be used exactly as provided
-    7. **Repeating content already covered in previous sections** - content must progress forward, never backward
+    1. **🚨 WITHIN-SECTION TEXTUAL CONTENT DUPLICATION: 90% or more of current_explanation content repeats itself within
+    the same section** - THIS IS THE MOST CRITICAL VIOLATION
+    2. **Duplication of any visual element** (figure, table, code block, equation) previously inserted
+    3. **Modification of image paths from source format** - paths must be used exactly as provided
+    4. Direct contradiction with source material on core technical claims
+    5. Fabrication of technical content not present in source
+    6. Multiple citation hyperlink fabrications (3+ instances)
+    7. Complete omission of section's core required content
+
+    **🚨 CRITICAL REMINDER: Before assigning any score above 0, you MUST verify that current_explanation does NOT
+    contain 90%+ duplicated content WITHIN THE SAME SECTION. If you detect significant within-section repetition,
+    IMMEDIATELY assign score of 0.**
 
     #### 9.2 Major Violations (Maximum -20 points per instance, cap at -60 total)
 
@@ -1241,6 +1349,9 @@ class PaperReflectionPrompt(BasePrompt):
 
     #### 9.3 Moderate Violations (Maximum -10 points per instance, cap at -30 total)
 
+    - **Cross-section content with 95%+ identical expressions**: -10 points per instance
+    - Within-section moderate duplication (40-89% similarity): -10 points per instance
+    - **Missing supplementary materials when required** (INTERMEDIATE/ADVANCED depth): -10 points
     - Use of numerical references to figures/tables: -10 points per instance
     - Contradiction with source material on minor points: -10 points
     - Unsupported technical claims: -10 points
@@ -1251,15 +1362,17 @@ class PaperReflectionPrompt(BasePrompt):
 
     #### 9.4 Minor Violations (Maximum -5 points per instance, cap at -15 total)
 
+    - Minor within-section repetition (20-39% similarity): -5 points
     - Mention of missing content or materials: -5 points
     - Minor language quality issues: -5 points
     - Inconsistent terminology: -5 points
-    - Unnecessary content duplication (non-visual): -5 points
+    - Unnecessary content duplication (non-visual, non-textual): -5 points
 
     #### 9.5 Total Penalty Cap
 
     - Maximum total deductions: -60 points (cannot go below 0)
     - After applying all penalties, minimum score is 0
+    - **Exception: Automatic zero violations bypass all other scoring and result in immediate 0 score**
 
     ### 10. ASSESSMENT OUTPUT FORMAT
 
@@ -1274,32 +1387,50 @@ class PaperReflectionPrompt(BasePrompt):
        - Verify current_explanation is complete with proper closing tags
        - Check for truncation or premature termination
        - Assessment: [Complete/Truncated]
-       - Issues: [If truncated, note length management needed]
+       - Issues: [If truncated, note whether length reduction (STANDARD) or proper continuation (DETAILED) is needed]
 
-    2. **Content Duplication Prevention (CRITICAL)**
+    2. **🚨 TEXTUAL CONTENT DUPLICATION CHECK (CRITICAL - PRIORITY #1) 🚨**
+
+       **2A. WITHIN-SECTION DUPLICATION (Same section repeating itself):**
+       - **MANDATORY: Check if current_explanation repeats concepts within itself**
+       - **Look for same explanations appearing multiple times in the same section**
+       - **Within-section duplication percentage estimate**: [X%]
+       - **CRITICAL THRESHOLD**: 90%+ within-section repetition → AUTOMATIC ZERO SCORE
+       - Assessment: [Pass / 🚨 CRITICAL VIOLATION - AUTOMATIC ZERO]
+       - Issues: [If within-section duplication detected, list specific repeated content]
+       - **If 90%+ within-section duplication found**: IMMEDIATELY assign quality_score of 0
+
+       **2B. CROSS-SECTION DUPLICATION (Content from different sections):**
+       - **Compare current_explanation against previous_explanation from other sections**
+       - **Check for 95%+ identical expressions across different sections**
+       - **Cross-section identical expression percentage estimate**: [X%]
+       - **Note**: Same topics discussed differently across sections is ACCEPTABLE
+       - Assessment: [Pass / Moderate Issues Found]
+       - Issues: [If 95%+ identical expressions found, list specific instances - apply -10 penalty]
+
+    3. **Visual Element Duplication Prevention (CRITICAL)**
        - **Verify NO visual elements are duplicated from previous sections**
        - **Check each image path against previous_explanation**
-       - **Verify NO content topics are repeated from previous sections**
        - Check that all figures/tables/code/equations appear only once
        - Confirm proper use of descriptive references for previously inserted elements
        - Assessment: [Pass/CRITICAL VIOLATION FOUND]
        - Issues: [List any duplicated elements with exact paths - results in automatic zero score]
 
-    3. **Image Path Accuracy Verification (CRITICAL)**
+    4. **Image Path Accuracy Verification (CRITICAL)**
        - **Verify ALL image paths match source format exactly (character-by-character)**
        - Check for unauthorized path modifications (URL conversions, path changes)
        - Confirm protocol and directory structure are preserved
        - Assessment: [Pass/CRITICAL VIOLATION FOUND]
        - Issues: [List any modified paths with original vs modified comparison]
 
-    4. **Structural Compliance Assessment**
+    5. **Structural Compliance Assessment**
        - Table of Contents alignment and section role appropriateness
        - Heading hierarchy consistency (check for violations: numbering, skipped levels, inconsistent structure)
        - Content scope and logical progression
        - Assessment: [Pass/Issues Found]
        - Issues: [List specific violations if any]
 
-    5. **Citation and Hyperlink Verification**
+    6. **Citation and Hyperlink Verification**
        - Verification against citation_summaries
        - Check for fabricated, duplicated, or incorrect URLs
        - **Check for exposed citation keys** (e.g., author2024keyword format in prose)
@@ -1307,69 +1438,100 @@ class PaperReflectionPrompt(BasePrompt):
        - Assessment: [Pass/Issues Found]
        - Issues: [List specific violations if any, including citation key exposures]
 
-    6. **Visual Content Integrity**
+    7. **Visual Content Integrity**
        - **Table rendering verification** (must be markdown tables, not image links)
        - Image path verification against source format
        - Proper insertion and descriptive referencing (no numerical references)
        - Assessment: [Pass/Issues Found]
        - Issues: [List specific violations if any, especially table rendering issues]
 
-    7. **Source Fidelity and Technical Accuracy**
-       - Alignment with source material
+    8. **Source Fidelity and Technical Accuracy (HIGHEST PRIORITY)**
+       - Alignment with source material (this is paramount)
        - Identification of unsupported claims or contradictions
        - Technical precision and correctness
        - Assessment: [Pass/Issues Found]
-       - Issues: [List specific violations if any]
+       - Issues: [List specific violations if any - highest priority]
 
-    8. **Coverage and Depth Compliance**
+    9. **Coverage and Depth Compliance**
        - Granularity requirement (STANDARD/DETAILED) achievement
        - Technical depth (BASIC/INTERMEDIATE/ADVANCED) appropriateness
+       - **Supplementary materials usage check** (required for INTERMEDIATE/ADVANCED)
        - Missing critical concepts or incomplete explanations
        - Mathematical formulation completeness (especially for DETAILED)
        - Assessment: [Pass/Issues Found]
-       - Issues: [List specific violations if any]
+       - Issues: [List specific violations if any, including missing supplementary materials]
 
-    9. **Language, Style, and Content Filtering**
-       - Korean language quality and academic tone
-       - First-person pronoun usage check
-       - Proper use of descriptive references (no section/figure numbers)
-       - **Check for inappropriate non-technical content**: acknowledgments, author contributions, funding information,
-       gratitude
-       - Assessment: [Pass/Issues Found]
-       - Issues: [List specific violations if any, especially non-technical administrative content]
+    10. **Language, Style, and Content Filtering**
+        - Korean language quality and academic tone
+        - First-person pronoun usage check
+        - Proper use of descriptive references (no section/figure numbers)
+        - **Check for inappropriate non-technical content**: acknowledgments, author contributions, funding information,
+        gratitude
+        - Assessment: [Pass/Issues Found]
+        - Issues: [List specific violations if any, especially non-technical administrative content]
     </content_validation>
 
     <improvement_feedback>
+    ## PRIORITY HIERARCHY FOR FEEDBACK
+
+    **When multiple issues exist, address them in this order:**
+    1. **Source fidelity issues** (misrepresentation, contradictions) - HIGHEST PRIORITY
+    2. **Critical violations** (duplication, path modification, fabrication)
+    3. **Major structural issues** (heading problems, citation errors)
+    4. **Content completeness** (missing concepts, insufficient depth)
+    5. **Style and language** (Korean quality, references)
+
+    ## FEEDBACK SECTIONS
+
     1. **Critical Corrections (if CRITICAL violations found)**
-       - **If output was truncated**: Reduce explanation length while maintaining technical accuracy
+       - **🚨 If 90%+ within-section content duplication detected**:
+         - SCORE: Automatic 0 - this is non-negotiable
+         - REQUIRED ACTION: Complete rewrite removing ALL repetitive content within the section
+         - SPECIFIC DUPLICATED CONTENT: [List paragraphs that repeat within the same section]
+         - GUIDANCE: Each paragraph must introduce NEW information, never repeat what was already explained in the same
+         section
+         - Remove ALL redundant explanations and ensure each part of the section advances the narrative
+       - **If 95%+ cross-section identical expressions detected**:
+         - Apply -10 penalty per instance
+         - REQUIRED ACTION: Rephrase to present the information differently
+         - SPECIFIC INSTANCES: [List cross-section content with nearly identical wording]
+       - **If output was truncated**:
+         - For STANDARD: Reduce explanation length while maintaining technical accuracy
+         - For DETAILED: Use proper continuation mechanism to complete content
        - **If visual elements duplicated**: Remove ALL duplicate insertions with exact path locations - each element
        appears only once
        - **If image paths modified**: Provide original paths from source and corrected paths to use
-       - **If content repeated from previous sections**: Remove redundant content, focus on new information
        - Specific instructions to address automatic zero score violations
        - Required corrections to restore document validity
 
-    2. **Structural Fixes (if major violations found)**
+    2. **Source Fidelity Corrections (HIGHEST PRIORITY if issues found)**
+       - Specific misrepresentations or contradictions to correct
+       - Unsupported claims to remove or properly support
+       - Technical inaccuracies to fix
+       - Guidance for proper alignment with source material
+
+    3. **Structural Fixes (if major violations found)**
        - Heading hierarchy corrections (remove ALL numbering, fix levels)
        - Image path corrections (provide exact source paths to use)
        - **Table rendering corrections** (convert image links to proper markdown tables)
        - Section scope adjustments to align with TOC
        - **Non-technical content removal** (acknowledgments, contributions, funding, gratitude)
 
-    3. **Citation and Attribution Corrections**
+    4. **Citation and Attribution Corrections**
        - Specific citation errors to fix with correct URLs from citation_summaries
        - **Citation key exposure fixes** (replace citation keys with proper descriptions)
        - Guidance for uncertain citations (remove hyperlinks or use generic references)
        - Proper attribution recommendations
 
-    4. **Content Enhancement**
+    5. **Content Enhancement**
        - Missing technical concepts to add
        - Incomplete explanations to expand
        - Mathematical formulations to include or improve
        - Granularity/depth alignment improvements
+       - **Supplementary materials to add** (if INTERMEDIATE/ADVANCED requires more citations or code)
        - Natural visual element integration recommendations
 
-    5. **Language and Style Improvements**
+    6. **Language and Style Improvements**
        - First-person pronoun replacements
        - Numerical reference corrections (convert to descriptive references)
        - Section numbering reference removals
@@ -1377,14 +1539,15 @@ class PaperReflectionPrompt(BasePrompt):
        - Academic tone adjustments
        - **Content filtering enforcement** (remove all non-technical administrative sections)
 
-    6. **Technical Accuracy Refinements**
+    7. **Technical Accuracy Refinements**
        - Source alignment issues to address
        - Unsupported claims to support or remove
        - Technical terminology corrections
        - Supplementary material integration improvements
 
-    7. **Length Optimization (if needed)**
-       - Suggestions for more concise presentation
+    8. **Length Optimization (if needed)**
+       - For STANDARD: Suggestions for more concise presentation
+       - For DETAILED: Guidance for proper content continuation
        - Prioritization of core technical concepts
        - Strategies to ensure complete output with proper closing tags
     </improvement_feedback>
@@ -1409,6 +1572,25 @@ class PaperSynthesisPrompt(BasePrompt):
     papers in clear, engaging Korean language. Your goal is to create Korean-language reviews that are extremely
     accurate, richly detailed, and technically comprehensive for university students with basic AI/ML knowledge.
 
+    🎯 ABSOLUTE PRIORITY HIERARCHY 🎯
+
+    When facing conflicting requirements, follow this strict priority order:
+
+    **PRIORITY 1 - SOURCE FIDELITY (HIGHEST PRIORITY)**
+    - NEVER alter, misrepresent, or contradict the paper's core content
+    - Paper accuracy is paramount - all other guidelines serve this goal
+    - When in doubt, favor accuracy over style, brevity, or other considerations
+
+    **PRIORITY 2 - ZERO DUPLICATION**
+    - NEVER repeat ANY content from previous_explanation
+    - Each visual element (figure, table, code, equation) appears only ONCE
+    - Before writing ANYTHING, verify it's not in previous_explanation
+
+    **PRIORITY 3 - IMPROVEMENT FEEDBACK**
+    - Follow improvement_feedback directives within Priority 1 and 2 constraints
+    - If feedback conflicts with paper accuracy, prioritize accuracy
+    - If feedback causes duplication, find alternative approaches
+
     Core Responsibilities:
     - Adjust explanation depth based on section granularity and technical requirements specified in section_metadata
     - Explain complex technical concepts accurately while preserving key terminology
@@ -1423,10 +1605,8 @@ class PaperSynthesisPrompt(BasePrompt):
     - **Make difficult concepts accessible through intuitive explanations, practical examples, and extensive use of
     supplementary materials**
 
-    Prioritize technical depth, paper fidelity, and correctness while maintaining clarity in fluent, natural Korean.
-
-    CRITICAL: Always complete your response with proper closing tags. If content is too long, use has_more=y to continue
-    in next response.
+    CRITICAL: Always complete your response with proper closing tags. Monitor token usage and stop at natural
+    breakpoints (~3000 tokens) with has_more=y if needed.
     """
 
     human_prompt_template: str = r"""
@@ -1493,6 +1673,127 @@ class PaperSynthesisPrompt(BasePrompt):
 
     ## 🚨 CRITICAL RULES - READ FIRST (AUTOMATIC ZERO IF VIOLATED) 🚨
 
+    ### RULE #0: ABSOLUTE ZERO DUPLICATION - PRIORITY 2
+
+    **THIS IS YOUR SECOND MOST IMPORTANT RULE (after paper accuracy)**
+
+    🚨 **MANDATORY PRE-WRITING VERIFICATION PROCESS** 🚨
+
+    **BEFORE writing a SINGLE word, you MUST complete this verification:**
+
+    **STEP 1: SCAN previous_explanation COMPLETELY**
+    - Read EVERY LINE of previous_explanation from start to finish
+    - Create a mental inventory of ALL content already covered
+    - Note ALL image paths that have been used
+    - Note ALL tables that have been rendered
+    - Note ALL code blocks that have been shown
+    - Note ALL equations that have been presented
+    - Note ALL concepts, explanations, and technical details already discussed
+
+    **STEP 2: IDENTIFY PROHIBITED CONTENT**
+    Mark as ABSOLUTELY FORBIDDEN to include again:
+    - ❌ ANY image path that appears in previous_explanation
+    - ❌ ANY table structure or data that appears in previous_explanation
+    - ❌ ANY code block or implementation that appears in previous_explanation
+    - ❌ ANY equation or mathematical formulation that appears in previous_explanation
+    - ❌ ANY conceptual explanation that has already been provided
+    - ❌ ANY technical detail that has already been discussed
+    - ❌ ANY figure description that has already been given
+
+    **STEP 3: PLAN YOUR NEW CONTENT ONLY**
+    - Identify what NEW information from current_content has NOT been covered
+    - Determine what ADDITIONAL details can enhance previous explanation
+    - Plan to write ONLY about content that is 100% new
+    - Prepare to REFERENCE (not repeat) previously discussed content
+
+    **STEP 4: WRITE WITH CONTINUOUS VERIFICATION**
+    While writing, CONSTANTLY ask yourself:
+    - "Did I already explain this concept in previous_explanation?"
+    - "Is this image path already used above?"
+    - "Did I already show this table/code/equation?"
+    - "Am I repeating something I wrote earlier?"
+
+    **IF THE ANSWER IS YES TO ANY QUESTION → DO NOT WRITE IT**
+
+    **DUPLICATION DETECTION EXAMPLES:**
+
+    ❌ **FORBIDDEN - Repeating image:**
+    ```
+    previous_explanation contains: ![모델 아키텍처](/figures/model.png)
+    Your response: ![모델 구조](/figures/model.png)  ← ABSOLUTELY WRONG
+    Correct approach: "앞서 제시한 모델 아키텍처에서..." ← USE THIS
+    ```
+
+    ❌ **FORBIDDEN - Re-rendering table:**
+    ```
+    previous_explanation contains:
+    | Model | Accuracy |
+    |-------|----------|
+    | BERT  | 89.7%   |
+
+    Your response: Rendering the same table again ← ABSOLUTELY WRONG
+    Correct approach: "위 표에서 보듯이 BERT는..." ← USE THIS
+    ```
+
+    ❌ **FORBIDDEN - Repeating equation:**
+    ```
+    previous_explanation contains: $$ L = -\sum_{{i}} y_i \log p_i $$
+    Your response: $$ L = -\sum_{{i}} y_i \log p_i $$  ← ABSOLUTELY WRONG
+    Correct approach: "앞서 정의한 손실 함수는..." ← USE THIS
+    ```
+
+    ❌ **FORBIDDEN - Duplicating explanation:**
+    ```
+    previous_explanation: "어텐션 메커니즘은 Query, Key, Value를 사용하여..."
+    Your response: "어텐션은 Query, Key, Value 세 가지 요소로..." ← ABSOLUTELY WRONG
+    Correct approach: Write about DIFFERENT aspect not yet covered ← USE THIS
+    ```
+
+    **VERIFICATION CHECKLIST - ANSWER THESE BEFORE EVERY INSERTION:**
+
+    Before inserting an image:
+    □ Did I search ALL of previous_explanation for this exact path?
+    □ Did I search for similar figure descriptions?
+    □ Is this path 100% new and never used before?
+    □ If NO to last question → DO NOT INSERT, use reference instead
+
+    Before rendering a table:
+    □ Did I search ALL of previous_explanation for this table?
+    □ Did I check for similar data structures?
+    □ Is this table 100% new and never shown before?
+    □ If NO to last question → DO NOT RENDER, use reference instead
+
+    Before showing code:
+    □ Did I search ALL of previous_explanation for this code?
+    □ Did I check for similar implementations?
+    □ Is this code 100% new and never shown before?
+    □ If NO to last question → DO NOT SHOW, use reference instead
+
+    Before writing an equation:
+    □ Did I search ALL of previous_explanation for this equation?
+    □ Did I check for identical mathematical expressions?
+    □ Is this equation 100% new and never presented before?
+    □ If NO to last question → DO NOT WRITE, use reference instead
+
+    **HOW TO REFERENCE PREVIOUSLY SHOWN CONTENT:**
+
+    ✅ **CORRECT ways to reference without duplicating:**
+    - "앞서 제시한 모델 아키텍처에서 볼 수 있듯이"
+    - "위에서 설명한 어텐션 메커니즘을 활용하여"
+    - "이전에 정의한 손실 함수를 기반으로"
+    - "앞서 보여준 실험 결과 표에서 확인할 수 있듯이"
+    - "위 코드 구현에서 나타나듯이"
+    - "앞서 소개한 수식을 확장하면"
+
+    **WHAT TO DO IF EVERYTHING IS ALREADY COVERED:**
+
+    If you find that previous_explanation has already covered ALL content from current_content:
+    1. DO NOT repeat anything
+    2. Look for ADDITIONAL insights not yet discussed
+    3. Provide DEEPER analysis of implications
+    4. Discuss CONNECTIONS to broader context
+    5. If truly nothing new to add, write MINIMAL transitional content only
+
     ### RULE #1: IMAGE PATH ACCURACY (ABSOLUTE ZERO TOLERANCE)
 
     **Image paths MUST be copied EXACTLY character-by-character from the source - NO modifications whatsoever**
@@ -1524,51 +1825,20 @@ class PaperSynthesisPrompt(BasePrompt):
     ![설명](https://arxiv.org/html/2401.12345v1/x1.png)
     - ❌ Source path: /figures/model.png → DON'T USE: https://example.com/figures/model.png
 
-    ### RULE #2: ZERO DUPLICATION (EACH VISUAL ELEMENT APPEARS EXACTLY ONCE)
-
-    **Before inserting ANY figure, table, code block, or equation:**
-
-    **MANDATORY PRE-INSERTION CHECKLIST:**
-    1. **Search ALL of previous_explanation for this exact image path**
-    2. **Search for similar image descriptions or figure numbers**
-    3. **Check for this table's content or structure**
-    4. **Look for this code block or similar implementations**
-    5. **Verify this equation hasn't been shown before**
-
-    **If found anywhere in previous_explanation → DO NOT INSERT AGAIN**
-    - Use descriptive reference: "앞서 보여준 그림에서...", "위 표에서 확인할 수 있듯이..."
-    - NEVER re-insert with ![...](path) syntax
-    - NEVER render the table again
-    - NEVER show the code block again
-    - NEVER repeat the equation
-
-    **Example scenarios:**
-    ```
-    Scenario A - First mention (previous_explanation is empty):
-    ✅ CORRECT: "아키텍처를 보여주는 ![그림 1: 모델 구조](/path/to/arch.png)에서..."
-
-    Scenario B - Already shown (previous_explanation contains /path/to/arch.png):
-    ✅ CORRECT: "앞서 보여준 모델 아키텍처에서..."
-    ❌ WRONG: "![그림 1: 모델 구조](/path/to/arch.png)" (NEVER repeat)
-
-    Scenario C - Table already rendered in previous_explanation:
-    ✅ CORRECT: "위 표에서 제시된 결과를 분석하면..."
-    ❌ WRONG: Rendering the same table again in markdown format
-    ```
-
-    ### RULE #3: RESPONSE LENGTH MANAGEMENT
+    ### RULE #2: RESPONSE LENGTH MANAGEMENT
 
     **Monitor token usage continuously. If approaching ~3000 tokens:**
     - STOP at natural paragraph boundary
     - CLOSE </explanation> tag properly
     - SET has_more=y to continue
     - NEVER let response be truncated mid-sentence
+    - Next response will continue seamlessly (no recap needed)
 
     ## CORE GUIDELINES
 
-    ### 1. CONTENT INTEGRITY AND ACCURACY (HIGHEST PRIORITY)
+    ### 1. CONTENT INTEGRITY AND ACCURACY (PRIORITY 1 - HIGHEST)
 
-    #### 1.1 Primary Source Fidelity
+    #### 1.1 Primary Source Fidelity (ABSOLUTE PRIORITY)
 
     - The paper's original content is the absolute source of truth
     - NEVER alter, misrepresent, or contradict the paper's core technical contributions, methodology, and results
@@ -1578,17 +1848,19 @@ class PaperSynthesisPrompt(BasePrompt):
     - When providing critical evaluation, maintain objectivity and acknowledge the paper's contributions
     - Supplementary materials must enhance understanding without modifying the paper's core claims
 
-    #### 1.2 Improvement Feedback Implementation
+    **This principle overrides all other guidelines including brevity, style, and even improvement feedback**
 
-    - When improvement_feedback exists, it takes HIGHEST PRIORITY over all other guidelines
-    - If improvement_feedback mentions "reduce generation length", this takes absolute priority - implement aggressive
-    splitting
-    - If improvement_feedback mentions duplicated images/tables, verify paths and remove ALL duplicates
-    - If improvement_feedback mentions modified image paths, use EXACT paths from source
-    - Address each feedback point thoroughly and comprehensively while maintaining paper accuracy
+    #### 1.2 Improvement Feedback Implementation (PRIORITY 3)
+
+    - When improvement_feedback exists, implement within Priority 1 and 2 constraints
+    - **If feedback conflicts with paper accuracy → Prioritize paper accuracy**
+    - **If feedback causes duplication → Find alternative approaches that don't duplicate**
+    - Address each feedback point thoroughly while maintaining paper fidelity
     - Implement suggested improvements systematically across all relevant sections
     - Ensure feedback implementation enhances rather than contradicts existing content
     - Validate that improvements align with specified technical depth and granularity levels
+
+    **Critical principle: Never sacrifice paper accuracy to follow feedback**
 
     ### 2. EXPLANATION DEPTH AND GRANULARITY
 
@@ -1607,7 +1879,7 @@ class PaperSynthesisPrompt(BasePrompt):
     - Break down all complex concepts into digestible steps
     - Include all mathematical formulations with thorough explanations
     - Maximum depth and coverage of all technical content
-    - **VERY OFTEN requires splitting with has_more=y - plan accordingly**
+    - **Often requires careful planning to stay within length limits**
 
     #### 2.2 Technical Depth Levels (from section_metadata)
 
@@ -1639,7 +1911,35 @@ class PaperSynthesisPrompt(BasePrompt):
     - Complete code implementations with detailed explanations
     - **Extensively utilize citation_summaries to provide comprehensive background and context**
     - **Provide multiple code examples showing different implementation approaches**
-    - **ALMOST ALWAYS requires splitting with has_more=y - plan from the start**
+    - **Requires careful length management**
+
+    #### 2.3 Handling Conflicts Between Granularity and Depth (DETAILED GUIDANCE)
+
+    **STANDARD + ADVANCED**:
+    - Select only core concepts (~60% coverage)
+    - Explain selected concepts in depth (100% depth on chosen topics)
+    - Don't include all equations, but provide complete derivations for important ones
+    - Example: In introduction, mention only key contributions but explain theoretical basis deeply
+    - Strategy: "Less breadth, more depth"
+
+    **STANDARD + INTERMEDIATE**:
+    - Enhanced explanations while maintaining brevity (~70% coverage)
+    - Include key examples and background, but keep focused (80% depth)
+    - Provide moderate detail on selected concepts
+    - Strategy: "Balanced breadth and depth"
+
+    **DETAILED + BASIC**:
+    - Cover all content comprehensively (100% coverage)
+    - Each item at fundamental level (60% depth)
+    - Include all equations but skip complex derivations
+    - Example: Include all experimental results tables but omit statistical tests
+    - Strategy: "Complete coverage, fundamental depth"
+
+    **DETAILED + INTERMEDIATE/ADVANCED**:
+    - Maximum thoroughness (100% coverage)
+    - Appropriate depth (80-100% depth)
+    - Requires careful length management with proper continuation
+    - Strategy: "Complete and deep - plan for length"
 
     ### 3. STRUCTURAL ORGANIZATION
 
@@ -1662,15 +1962,22 @@ class PaperSynthesisPrompt(BasePrompt):
     - **Acknowledgments sections** (감사의 말, Acknowledgments, 사의, Thanks)
     - **Author contributions** (저자 기여도, Author Contributions, CRediT authorship, 기여자)
     - **Funding information** (연구비 지원, Funding, Grant information, 연구 지원, Financial support)
+    - **References/Bibliography sections** (참고문헌, References, Bibliography, 참조, Works Cited)
     - **Gratitude expressions** (감사 표현, Thanks to..., 도움을 주신 분들, We thank...)
     - **Personal appreciation** (개인적 감사, Personal acknowledgments)
     - **Contributor lists** (기여자 목록, Contributors, Collaborators)
     - **Administrative information** (행정 정보, Procedural content, Ethics statements)
     - **Institutional affiliations** (unless directly relevant to technical methodology)
     - Any content expressing thanks, appreciation, or acknowledgment of support
-    - Any section with titles containing: "Acknowledgment", "감사", "Contribution", "기여", "Funding", "지원", "Thanks"
+    - Any section with titles containing: "Acknowledgment", "감사", "Contribution", "기여", "Funding", "지원", "Thanks",
+    "References", "참고문헌", "Bibliography"
 
     **These sections have ZERO technical value and must be completely ignored**
+
+    **IMPORTANT: References/Bibliography sections are NOT the same as citations within the paper**
+    - Citations within the text (e.g., "[Author et al.](url)") should be used actively and extensively
+    - The References/Bibliography section at the end of papers is just a list of citations and should be skipped
+    - Do not create explanatory content about the references list itself
 
     **FOCUS exclusively on technical content:**
     - Core methodologies and innovations
@@ -1823,16 +2130,16 @@ class PaperSynthesisPrompt(BasePrompt):
 
     **Figure Integration:**
 
-    **STEP 1: Locate exact image path in current_content**
+    **STEP 1: Check previous_explanation FIRST - ALWAYS**
+    - Search for this exact path in ALL of previous_explanation
+    - Search for similar figure descriptions
+    - If found → STOP - DO NOT INSERT - use descriptive reference only
+
+    **STEP 2: Locate exact image path in current_content (ONLY if not in previous_explanation)**
     - Find the precise path as written in source
     - Note whether it's local path, HTTPS URL, HTTP URL, or relative path
 
-    **STEP 2: Check previous_explanation for duplication**
-    - Search for this exact path in ALL of previous_explanation
-    - Search for similar figure descriptions
-    - If found → DO NOT INSERT, use descriptive reference only
-
-    **STEP 3: Insert with EXACT path (if not already shown)**
+    **STEP 3: Insert with EXACT path (ONLY if verified not in previous_explanation)**
     - Copy path character-by-character from source
     - Use format: ![그림 설명](EXACT_PATH_FROM_SOURCE)
     - Example: Current_content has "/images/model.png" → Use: ![모델 아키텍처](/images/model.png)
@@ -1855,11 +2162,11 @@ class PaperSynthesisPrompt(BasePrompt):
 
     **ABSOLUTE REQUIREMENT: Tables MUST be rendered as actual markdown tables, NEVER as image links**
 
-    **STEP 1: Check previous_explanation for this table**
+    **STEP 1: Check previous_explanation FIRST - ALWAYS**
     - Search for similar table content or structure
-    - If found → DO NOT RENDER AGAIN, use descriptive reference only
+    - If found → STOP - DO NOT RENDER - use descriptive reference only
 
-    **STEP 2: Render as markdown (if not already shown)**
+    **STEP 2: Render as markdown (ONLY if verified not in previous_explanation)**
     - Extract all data from source
     - Create proper markdown table with | separators
     - Include all columns and rows with proper alignment
@@ -1878,11 +2185,11 @@ class PaperSynthesisPrompt(BasePrompt):
 
     **Code Formatting:**
 
-    **STEP 1: Check previous_explanation for this code**
+    **STEP 1: Check previous_explanation FIRST - ALWAYS**
     - Search for identical or very similar code blocks
-    - If found → DO NOT SHOW AGAIN, use descriptive reference only
+    - If found → STOP - DO NOT SHOW - use descriptive reference only
 
-    **STEP 2: Include code block (if not already shown)**
+    **STEP 2: Include code block (ONLY if verified not in previous_explanation)**
     - Use proper code blocks with language specification: ```python, ```javascript, etc.
     - Include comprehensive inline comments explaining key steps
     - Provide detailed explanation of code logic
@@ -2068,115 +2375,117 @@ class PaperSynthesisPrompt(BasePrompt):
 
     ### 10. CONTENT CONTINUATION AND QUALITY CONTROL
 
-    #### 10.1 Content Continuation Protocol (CRITICAL - ZERO DUPLICATION)
+    #### 10.1 Content Continuation Protocol
 
-    **CRITICAL**: If your explanation will be very long, proactively split it with has_more=y
-
-    Set has_more=y when:
+    **When to use has_more=y:**
     - Content will exceed ~3000 tokens
-    - DETAILED granularity + ADVANCED depth
+    - DETAILED granularity + INTERMEDIATE/ADVANCED depth
     - Multiple complex equations need thorough derivations
     - Methodology sections with extensive algorithms
 
-    **ABSOLUTE PROHIBITION when continuing (has_more=y):**
-    - **NEVER repeat ANY content from previous_explanation**
-    - **NEVER re-insert figures, tables, equations, or code already shown**
-    - **NEVER re-use image paths that appear in previous_explanation**
-    - **NEVER recap or summarize previous content**
-    - **NEVER duplicate any technical explanations**
-
-    **Before writing continuation:**
-    1. **Read ALL of previous_explanation thoroughly**
-    2. **Note ALL image paths already used**
-    3. **Note ALL tables already rendered**
-    4. **Note ALL code blocks already shown**
-    5. **Note ALL equations already presented**
-    6. **Plan to cover ONLY new content not yet discussed**
-
-    **When continuing (has_more=y):**
-    - Always close </explanation> tag properly in first response
-    - Content must flow naturally from previous response without transition markers
-    - Focus exclusively on NEW, additional information not yet covered
-    - Build upon previously introduced concepts by REFERENCING them descriptively
-    - Use phrases like "앞서 설명한", "이전에 소개된", "위에서 다룬" to connect
-    - Maintain consistent terminology and style
-    - Continue from where previous response ended without overlap
-
-    **Example of CORRECT continuation:**
-    - Previous response ended with: "...기본 어텐션 메커니즘의 구조를 설명했습니다."
-    - Continuation starts with: "이러한 기본 구조를 바탕으로, 멀티헤드 어텐션은..."
-    - NOT: "앞서 설명한 어텐션 메커니즘은 Query, Key, Value로 구성됩니다. [repeating previous content]"
+    **How to continue properly:**
+    - Stop at natural paragraph boundary
+    - ALWAYS close </explanation> tag
+    - Set has_more=y
+    - Next response continues seamlessly (no recap, no summary, no duplication)
+    - Write as if previous and continuation are one continuous document
 
     #### 10.2 Quality Control Checklist
 
-    **Paper Fidelity and Accuracy:**
-    - Verify all explanations align with original paper (paper fidelity is paramount)
+    **Priority Order for Self-Checking:**
+
+    **PRIORITY 1 - Paper Fidelity:**
+    - Verify all explanations align with original paper (this is paramount)
     - Ensure technical accuracy in terminology and concepts
     - Confirm supporting materials enhance without altering core content
-    - Check that improvement feedback has been properly implemented
+    - Check that improvement feedback has been properly implemented WITHOUT compromising accuracy
 
-    **Explanation Level Adherence:**
-    - Verify granularity (STANDARD/DETAILED) matches section_metadata requirements
-    - Confirm technical depth (BASIC/INTERMEDIATE/ADVANCED) is appropriate
-    - Ensure content scope aligns with section type and role
-    - **Verify extensive use of supplementary materials for INTERMEDIATE/ADVANCED depth**
+    **PRIORITY 2 - Duplication Prevention:**
+    - **Before inserting ANY figure, search ALL of previous_explanation for this path**
+    - **Before rendering ANY table, search ALL of previous_explanation for similar content**
+    - **Before showing ANY code, search ALL of previous_explanation for similar implementation**
+    - **Before presenting ANY equation, search ALL of previous_explanation for identical formula**
+    - **If already present ANYWHERE above, use descriptive reference ONLY**
 
-    **Technical Formatting Validation:**
+    **PRIORITY 3 - Technical Formatting:**
+    - **CRITICAL: Verify ALL image paths match source EXACTLY (character-by-character)**
+    - **CRITICAL: Verify tables are rendered as markdown, NOT image links**
     - Validate LaTeX equation formatting follows guidelines
     - Validate heading hierarchy and uniqueness (no section numbers)
     - Confirm citation format adherence and URL accuracy
     - **Verify NO citation keys are exposed in prose**
     - Check for content-based references without section numbers
-    - **CRITICAL: Verify ALL image paths match source EXACTLY (character-by-character)**
-    - **CRITICAL: Verify NO duplication of figures, equations, tables, or code**
-    - **CRITICAL: Verify tables are rendered as markdown, NOT image links**
 
-    **Content and Style Checks:**
+    **Other Quality Checks:**
     - Ensure natural Korean prose without bullet points in main content
     - **Confirm complete exclusion of acknowledgments, contributions, and funding sections**
     - Verify no first-person pronouns ("우리", "저")
     - Check that all visual elements are integrated naturally in prose
     - **MOST CRITICAL**: Ensure </explanation> tag is always closed
-    - **Verify extensive use of citation_summaries and code examples for difficult concepts**
-
-    **Duplication Prevention (CRITICAL):**
-    - **Before inserting ANY figure, check ALL of previous_explanation for this path**
-    - **Before rendering ANY table, check ALL of previous_explanation for similar content**
-    - **Before showing ANY code, check ALL of previous_explanation for similar implementation**
-    - **Before presenting ANY equation, check if already shown in previous_explanation**
-    - **If already present anywhere above, use descriptive reference ONLY**
-
-    **Image Path Accuracy (CRITICAL):**
-    - **Verify EVERY image path matches source format character-by-character**
-    - **Check for unauthorized modifications (URL conversions, path changes)**
-    - **Ensure protocol (http://, https://, or none) matches source exactly**
-    - **Confirm directory structure and filename are preserved exactly**
+    - **Verify appropriate use of supplementary materials for depth level**
 
     ## RESPONSE FORMAT
 
     <explanation>
     [Detailed paper review in natural, flowing Korean using "입니다" style.
 
-    🚨 CRITICAL PRE-WRITING CHECKLIST:
+    🎯 PRE-WRITING PROTOCOL - FOLLOW PRIORITY ORDER 🎯
 
-    1. IMAGE PATH ACCURACY:
-       - Locate EXACT paths in current_content
-       - Copy character-by-character (NO modifications)
-       - Verify each path matches source precisely
+    **PRIORITY 1: PAPER ACCURACY CHECK**
+       - Understand current_content thoroughly
+       - Identify core technical claims
+       - Plan explanation that maintains paper fidelity
+       - Never prioritize style/brevity over accuracy
 
-    2. DUPLICATION PREVENTION:
-       - Read ALL of previous_explanation
-       - Note ALL image paths already used
-       - Note ALL tables/code/equations already shown
-       - NEVER insert any element that appears above
+    **PRIORITY 2: DUPLICATION PREVENTION SCAN**
+       1. Read ENTIRE previous_explanation line by line
+       2. Note EVERY image path used
+       3. Note EVERY table rendered
+       4. Note EVERY code block shown
+       5. Note EVERY equation presented
+       6. Note EVERY concept explained
+       7. Create mental "FORBIDDEN LIST" of all above items
 
-    3. LENGTH MANAGEMENT:
-       - Monitor token count continuously
-       - Stop at ~3000 tokens at natural breakpoint
-       - ALWAYS close </explanation> tag
-       - Use has_more=y if needed
+    **PRIORITY 3: IMPROVEMENT FEEDBACK REVIEW**
+       - Read improvement_feedback carefully
+       - Plan implementation that doesn't violate Priority 1 or 2
+       - If feedback conflicts with accuracy/duplication rules, find alternatives
+
+    **CONTINUOUS VERIFICATION DURING WRITING:**
+
+    Before ANY image:
+    □ Searched previous_explanation for this exact path?
+    □ Path 100% new and never used? → Only if YES, insert
+    □ Path copied EXACTLY from source character-by-character?
+
+    Before ANY table:
+    □ Searched previous_explanation for similar table?
+    □ Table 100% new and never rendered? → Only if YES, render
+    □ Rendering as MARKDOWN, not image link?
+
+    Before ANY code:
+    □ Searched previous_explanation for similar code?
+    □ Code 100% new and never shown? → Only if YES, show
+
+    Before ANY equation:
+    □ Searched previous_explanation for same equation?
+    □ Equation 100% new and never presented? → Only if YES, write
+
+    Before ANY explanation:
+    □ Is this concept already explained above?
+    □ Is this 100% NEW information? → Only if YES, write
+    □ Does this maintain paper accuracy?
+
+    **LENGTH MANAGEMENT:**
+    - Monitor token count continuously
+    - Stop at ~3000 tokens at natural breakpoint
+    - ALWAYS close </explanation> tag
+    - Use has_more=y if needed
 
     CONTENT REQUIREMENTS:
+    - Maintain absolute paper accuracy (Priority 1)
+    - Zero duplication of any content (Priority 2)
+    - Implement feedback within Priority 1 and 2 constraints (Priority 3)
     - Insert figures with EXACT paths from source (NO modifications)
     - Check previous_explanation before inserting ANY visual element
     - Render tables as markdown, NEVER as image links
@@ -2203,17 +2512,11 @@ class PaperSynthesisPrompt(BasePrompt):
     - Methodology sections with extensive algorithms
     - Response approaching ~3000 token limit
 
-    CRITICAL when set to 'y':
-    1. NEVER repeat ANY previously shown content
-    2. NEVER re-insert ANY image paths from previous_explanation
-    3. NEVER re-render ANY tables from previous_explanation
-    4. NEVER re-show ANY code from previous_explanation
-    5. Content flows naturally without transition markers
-    6. Focus exclusively on NEW information
-    7. NO recap or summaries of previous content
-    8. Build upon previous concepts by REFERENCING descriptively
-    9. Check previous_explanation thoroughly before writing
-    10. Verify ZERO duplication of any visual elements]
+    When has_more=y:
+    - Next response continues seamlessly
+    - No recap or summary needed
+    - Continue as one continuous document
+    - Maintain all priority rules (accuracy > duplication > feedback)]
     </has_more>
     """
 
