@@ -427,10 +427,10 @@ use_math: true
     keywords_str = ", ".join(
         [f'"{kw.replace(" ", "-")}"' for kw in paper.attributes.keywords]
     )
-    category_str = paper.attributes.category.replace(" ", "-").lower()
-    cover_image = COVER_IMAGES_MAP.get(category_str, "default.jpg")
+    category_str = paper.attributes.category.replace(" ", "-")
+    cover_image = COVER_IMAGES_MAP.get(category_str.lower(), "default.jpg")
 
-    categories_str = f'"Paper Reviews", "{paper.attributes.category}"'
+    categories_str = f'"Paper Reviews", "{category_str}"'
 
     front_matter = front_matter_template.format(
         title=paper.title.replace('"', '\\"'),

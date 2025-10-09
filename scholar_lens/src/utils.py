@@ -813,7 +813,7 @@ class HTMLTagOutputParser(BaseOutputParser):
         for tag_name in tag_list:
             if tag := soup.find(tag_name):
                 if hasattr(tag, "decode_contents"):
-                    parsed[tag_name] = str(tag.decode_contents(formatter=None)).strip()
+                    parsed[tag_name] = str(tag.decode_contents()).strip()
                 else:
                     parsed[tag_name] = str(tag).strip()
         if isinstance(self.tag_names, list):

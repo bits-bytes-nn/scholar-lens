@@ -5,7 +5,7 @@ from typing import Literal
 
 
 from dotenv import load_dotenv
-from pydantic import BaseModel, EmailStr, Field, FilePath
+from pydantic import BaseModel, EmailStr, Field
 
 sys.path.append(str(Path(__file__).parent.parent))
 
@@ -125,7 +125,7 @@ class Config(BaseModel):
     )
 
     @classmethod
-    def from_yaml(cls, file_path: FilePath) -> "Config":
+    def from_yaml(cls, file_path: str) -> "Config":
         with open(file_path, "r", encoding="utf-8") as f:
             config_data = yaml.safe_load(f)
         return cls(**config_data if config_data else {})
@@ -136,4 +136,4 @@ class Config(BaseModel):
         config_path = Path(__file__).parent / "config.yaml"
         if not config_path.exists():
             return cls()
-        return cls.from_yaml(config_path)
+        return cls.from_yaml(str(config_path))

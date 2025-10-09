@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import io
 import json
 import os
 from collections.abc import Sequence
@@ -26,7 +27,9 @@ from .utils import (
     extract_text_from_html,
 )
 
+DEFAULT_RESIZE_QUALITY: int = 85
 DEFAULT_TIMEOUT: int = 60
+MAX_IMAGE_SIZE_BYTES: int = 5242880
 MIN_FIGURE_AREA: float = 10000.0
 
 
@@ -83,9 +86,8 @@ class Figure(BaseModel, RetryableBase):
             analysis = await figure_analyser.ainvoke(
                 {"caption": caption, "image_data": image_data}
             )
-
         except FigureParseError as e:
-            logger.warning("Failed to get image data for figure %s: %s", figure_id, e)
+            logger.warning("Failed to get image data for figure '%s': %s", figure_id, e)
         except Exception as e:
             raise RuntimeError(
                 f"LLM failed to analyze figure '{figure_id}': {e}"
@@ -95,23 +97,84 @@ class Figure(BaseModel, RetryableBase):
 
     @staticmethod
     async def _get_image_data(path: str) -> str:
+        image_bytes: bytes
+
         if path.startswith(("http://", "https://")):
             try:
                 async with httpx.AsyncClient(timeout=DEFAULT_TIMEOUT) as client:
                     response = await client.get(path)
                     response.raise_for_status()
-                    return base64.b64encode(response.content).decode("utf-8")
-            except httpx.HTTPStatusError as e:
-                raise FigureParseError(
-                    f"HTTP error fetching image '{path}': {e}"
-                ) from e
-            except httpx.RequestError as e:
-                raise FigureParseError(f"Request error for image '{path}': {e}") from e
+                    image_bytes = response.content
+            except httpx.HTTPError as e:
+                raise FigureParseError(f"HTTP error for image '{path}': {e}") from e
+        else:
+            try:
+                with open(path, "rb") as f:
+                    image_bytes = f.read()
+            except IOError as e:
+                raise FigureParseError(f"Failed to read file '{path}': {e}") from e
+
+        processed_bytes = Figure._resize_if_needed(image_bytes)
+        return base64.b64encode(processed_bytes).decode("utf-8")
+
+    @staticmethod
+    def _resize_if_needed(image_bytes: bytes, max_iterations: int = 20) -> bytes:
+        if len(image_bytes) <= MAX_IMAGE_SIZE_BYTES:
+            return image_bytes
+
+        logger.info(
+            "Image size (%.2f MB) exceeds limit. Resizing...",
+            len(image_bytes) / (1024 * 1024),
+        )
         try:
-            with open(path, "rb") as f:
-                return base64.b64encode(f.read()).decode("utf-8")
-        except IOError as e:
-            raise FigureParseError(f"Failed to read image file '{path}': {e}") from e
+            img: Image.Image = Image.open(io.BytesIO(image_bytes))
+
+            if img.mode in ("RGBA", "P", "CMYK"):
+                img = img.convert("RGB")
+
+            quality = DEFAULT_RESIZE_QUALITY
+            iteration = 0
+
+            while iteration < max_iterations:
+                buffer = io.BytesIO()
+                img.save(buffer, format="JPEG", quality=quality)
+
+                if len(buffer.getvalue()) <= MAX_IMAGE_SIZE_BYTES:
+                    resized_bytes = buffer.getvalue()
+                    logger.info(
+                        "Image successfully resized to %.2f MB after %d iterations.",
+                        len(resized_bytes) / (1024 * 1024),
+                        iteration + 1,
+                    )
+                    return resized_bytes
+
+                if quality <= 10:
+                    new_width = int(img.width * 0.8)
+                    new_height = int(img.height * 0.8)
+                    if new_width < 100 or new_height < 100:
+                        raise FigureParseError(
+                            "Cannot resize image below 5MB limit even at minimum size"
+                        )
+                    img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+                    quality = DEFAULT_RESIZE_QUALITY
+                else:
+                    quality -= 10
+
+                iteration += 1
+
+            raise FigureParseError(
+                f"Failed to resize image below 5MB limit after {max_iterations} iterations"
+            )
+
+        except FigureParseError:
+            raise
+        except Exception as e:
+            logger.error(
+                "Failed to resize image due to unexpected error: %s",
+                e,
+                exc_info=True,
+            )
+            raise FigureParseError(f"Image resizing failed: {e}") from e
 
     @field_validator("caption", "analysis", mode="before")
     @classmethod
@@ -317,11 +380,14 @@ class HTMLRichParser(RichParser, HTMLParser):
                     )
                     seen_srcs.add(src)
 
-        all_figures = await asyncio.gather(*figure_tasks)
+        all_figures = await asyncio.gather(*figure_tasks, return_exceptions=True)
 
         unique_figures = []
         seen_paths = set()
         for figure in all_figures:
+            if isinstance(figure, Exception):
+                logger.warning("Figure extraction failed: %s", figure)
+                continue
             if figure.path not in seen_paths:
                 unique_figures.append(figure)
                 seen_paths.add(figure.path)
@@ -493,11 +559,15 @@ class PDFParser(RichParser):
             )
             for i, (fd, path) in enumerate(zip(figure_data, paths))
         ]
-        all_figures = await asyncio.gather(*tasks)
+
+        all_figures = await asyncio.gather(*tasks, return_exceptions=True)
 
         unique_figures = []
         seen_paths = set()
         for figure in all_figures:
+            if isinstance(figure, Exception):
+                logger.warning("Figure extraction failed: %s", figure)
+                continue
             if figure.path not in seen_paths:
                 unique_figures.append(figure)
                 seen_paths.add(figure.path)
@@ -573,7 +643,15 @@ class PDFParser(RichParser):
                     )
                 )
 
-            figures = await asyncio.gather(*figure_tasks) if figure_tasks else []
+            figures = (
+                [
+                    f
+                    for f in await asyncio.gather(*figure_tasks, return_exceptions=True)
+                    if not isinstance(f, Exception)
+                ]
+                if figure_tasks
+                else []
+            )
 
             logger.info(
                 "Unstructured parser extracted %d figures and %d characters",
