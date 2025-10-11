@@ -3,7 +3,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 
-from .constants import LocalPaths
+from .constants import EnvVars, LocalPaths
 
 
 def is_running_in_aws() -> bool:
@@ -71,7 +71,7 @@ def configure_logger(config: LoggerConfig) -> logging.Logger:
 
 
 def get_default_logger(name: str = "app") -> logging.Logger:
-    log_level_str = os.getenv("LOG_LEVEL", "INFO").upper()
+    log_level_str = os.getenv(EnvVars.LOG_LEVEL.value, "INFO").upper()
     log_level = getattr(logging, log_level_str, logging.INFO)
     config = LoggerConfig(name=name, level=log_level)
     return configure_logger(config)

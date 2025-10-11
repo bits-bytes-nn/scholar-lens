@@ -76,8 +76,8 @@ cp .env.template .env
 # Edit .env with your configuration
 
 # Run locally
-python scholar_lens/main.py --arxiv-id 2401.04088v1
+python scholar_lens/main.py --arxiv-id 2312.11805 --parse-pdf True
 
 # Submit batch job
-python scripts/run_batch.py --arxiv-id 2401.04088v1 --repo-urls https://github.com/example/repo  --parse-pdf True
+python scripts/run_batch.py --arxiv-id 2505.09388 --repo-urls http://arxiv.org/pdf/2505.09388v1
 ```

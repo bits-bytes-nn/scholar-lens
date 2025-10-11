@@ -11,8 +11,9 @@ resources:
   email_address:
   github:
     enabled: false
-    repository:
+    repo_name:
     base_branch: main
+    branch_prefix: paper-reviews
     author_name: Scholar Lens Bot
     author_email:
 

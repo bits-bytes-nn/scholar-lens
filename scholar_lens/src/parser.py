@@ -382,13 +382,13 @@ class HTMLRichParser(RichParser, HTMLParser):
 
         all_figures = await asyncio.gather(*figure_tasks, return_exceptions=True)
 
-        unique_figures = []
+        unique_figures: list[Figure] = []
         seen_paths = set()
         for figure in all_figures:
             if isinstance(figure, Exception):
                 logger.warning("Figure extraction failed: %s", figure)
                 continue
-            if figure.path not in seen_paths:
+            if isinstance(figure, Figure) and figure.path not in seen_paths:
                 unique_figures.append(figure)
                 seen_paths.add(figure.path)
 
@@ -518,15 +518,6 @@ class PDFParser(RichParser):
         for element in elements:
             category = element.get("category", "").lower()
             if category in self.FIGURE_CATEGORIES and element.get("coordinates"):
-
-                coords = element["coordinates"]
-                if not _is_figure_large_enough(coords):
-                    logger.debug(
-                        "Skipping figure '%s' due to small area",
-                        element.get("id", "unknown"),
-                    )
-                    continue
-
                 soup = BeautifulSoup(
                     element.get("content", {}).get("html", ""), "html.parser"
                 )
@@ -567,6 +558,8 @@ class PDFParser(RichParser):
         for figure in all_figures:
             if isinstance(figure, Exception):
                 logger.warning("Figure extraction failed: %s", figure)
+                continue
+            if not isinstance(figure, Figure):
                 continue
             if figure.path not in seen_paths:
                 unique_figures.append(figure)
@@ -643,15 +636,14 @@ class PDFParser(RichParser):
                     )
                 )
 
-            figures = (
-                [
-                    f
-                    for f in await asyncio.gather(*figure_tasks, return_exceptions=True)
-                    if not isinstance(f, Exception)
-                ]
-                if figure_tasks
-                else []
-            )
+            all_figures = await asyncio.gather(*figure_tasks, return_exceptions=True)
+            figures = []
+            for f in all_figures:
+                if isinstance(f, Exception):
+                    logger.warning("Figure extraction failed: %s", f)
+                    continue
+                if isinstance(f, Figure):
+                    figures.append(f)
 
             logger.info(
                 "Unstructured parser extracted %d figures and %d characters",
@@ -665,28 +657,6 @@ class PDFParser(RichParser):
             raise ParserError(
                 f"Both Upstage and Unstructured parsers failed: {e}"
             ) from e
-
-
-def _is_figure_large_enough(
-    coordinates: Sequence[dict[str, float]], min_area: float = MIN_FIGURE_AREA
-) -> bool:
-    if not coordinates or len(coordinates) < 4:
-        return False
-
-    try:
-        x_coords = [p["x"] for p in coordinates if "x" in p]
-        y_coords = [p["y"] for p in coordinates if "y" in p]
-
-        if len(x_coords) < 2 or len(y_coords) < 2:
-            return False
-
-        width = max(x_coords) - min(x_coords)
-        height = max(y_coords) - min(y_coords)
-        area = width * height
-
-        return area >= min_area
-    except (KeyError, TypeError, ValueError):
-        return False
 
 
 def extract_figures_from_pdf(

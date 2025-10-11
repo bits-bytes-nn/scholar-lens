@@ -394,7 +394,7 @@ async def _load_translation_guideline(
         / LocalPaths.TRANSLATION_GUIDELINE_FILE.value
     )
     if context.s3_handler:
-        s3_prefix = context.config.resources.s3_prefix or ""
+        s3_prefix = context.config.resources.s3_prefix
         s3_key = f"{s3_prefix}/{S3Paths.TRANSLATION_GUIDELINE.value}/{guideline_path.name}".lstrip(
             "/"
         )
@@ -497,7 +497,7 @@ async def _create_github_pull_request(
 ) -> None:
     repo_config = context.config.resources.github
 
-    if not repo_config.repository:
+    if not repo_config.repo_name:
         logger.error("GitHub repository not configured.")
         return
 
@@ -512,7 +512,7 @@ async def _create_github_pull_request(
     clone_dir = ROOT_DIR / LocalPaths.GITHUB_CLONE_DIR.value
     try:
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        branch_name = f"paper/{paper.arxiv_id}-{timestamp}"
+        branch_name = f"{context.config.resources.github.branch_prefix}/{paper.arxiv_id}-{timestamp}"
 
         commit_message = f"feat: Add paper review for '{paper.title}'"
         pr_title = f"Paper Review: {paper.title}"
@@ -544,7 +544,7 @@ async def _create_github_pull_request(
 
         auth = Auth.Token(token)
         g = Github(auth=auth)
-        gh_repo = g.get_repo(repo_config.repository)
+        gh_repo = g.get_repo(repo_config.repo_name)
 
         try:
             gh_repo.create_pull(
@@ -578,12 +578,12 @@ def _git_operations(
     explanation_path: Path,
 ) -> None:
     repo_config = context.config.resources.github
-    repo_url = f"https://oauth2:{os.getenv(EnvVars.GITHUB_TOKEN.value)}@github.com/{repo_config.repository}.git"
+    repo_url = f"https://oauth2:{os.getenv(EnvVars.GITHUB_TOKEN.value)}@github.com/{repo_config.repo_name}.git"
 
     if clone_dir.exists():
         shutil.rmtree(clone_dir)
 
-    logger.info("Cloning repository '%s' to '%s'", repo_config.repository, clone_dir)
+    logger.info("Cloning repository '%s' to '%s'", repo_config.repo_name, clone_dir)
     repo = Repo.clone_from(repo_url, clone_dir)
 
     if branch_name in repo.heads:

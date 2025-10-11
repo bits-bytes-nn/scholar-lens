@@ -14,8 +14,9 @@ from scholar_lens.src.constants import EmbeddingModelId, LanguageModelId
 
 class Github(BaseModel):
     enabled: bool = Field(default=False)
-    repository: str | None = Field(default=None)
+    repo_name: str | None = Field(default=None)
     base_branch: str = Field(default="main")
+    branch_prefix: str = Field(default="paper-reviews")
     author_name: str = Field(default="Scholar Lens Bot")
     author_email: EmailStr | None = Field(default=None)
 
@@ -27,7 +28,7 @@ class Resources(BaseModel):
     default_region_name: str = Field(default="ap-northeast-2")
     bedrock_region_name: str = Field(default="us-west-2")
     s3_bucket_name: str | None = Field(default=None)
-    s3_prefix: str | None = Field(default=None)
+    s3_prefix: str = Field(default="scholar-lens")
     vpc_id: str | None = Field(default=None)
     subnet_ids: list[str] | None = Field(default=None)
     email_address: EmailStr | None = Field(default=None)
