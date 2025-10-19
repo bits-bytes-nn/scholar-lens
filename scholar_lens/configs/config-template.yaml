@@ -20,7 +20,7 @@ resources:
 paper:
   figure_analysis_model_id: anthropic.claude-3-haiku-20240307-v1:0
   citation_extraction_model_id: anthropic.claude-sonnet-4-5-20250929-v1:0
-  attributes_extraction_model_id: anthropic.claude-3-5-haiku-20241022-v1:0
+  attributes_extraction_model_id: anthropic.claude-haiku-4-5-20251001-v1:0
   table_of_contents_model_id: anthropic.claude-sonnet-4-5-20250929-v1:0
   output_fixing_model_id: anthropic.claude-sonnet-4-5-20250929-v1:0
 
@@ -33,11 +33,11 @@ code:
 
 citations:
   citation_summarization_model_id: anthropic.claude-3-haiku-20240307-v1:0
-  citation_analysis_model_id: anthropic.claude-3-5-haiku-20241022-v1:0
+  citation_analysis_model_id: anthropic.claude-haiku-4-5-20251001-v1:0
 
 explanation:
   paper_analysis_model_id: anthropic.claude-sonnet-4-5-20250929-v1:0
   paper_enrichment_model_id: anthropic.claude-sonnet-4-5-20250929-v1:0
-  paper_finalization_model_id: anthropic.claude-3-5-haiku-20241022-v1:0
+  paper_finalization_model_id: anthropic.claude-haiku-4-5-20251001-v1:0
   paper_reflection_model_id: anthropic.claude-sonnet-4-5-20250929-v1:0
   paper_synthesis_model_id: anthropic.claude-sonnet-4-5-20250929-v1:0

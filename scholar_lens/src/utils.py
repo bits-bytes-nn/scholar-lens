@@ -107,6 +107,11 @@ _LANGUAGE_MODEL_INFO: dict[LanguageModelId, LanguageModelInfo] = {
         supports_performance_optimization=True,
         supports_prompt_caching=True,
     ),
+    LanguageModelId.CLAUDE_V4_5_HAIKU: LanguageModelInfo(
+        context_window_size=200000,
+        max_output_tokens=64000,
+        supports_prompt_caching=True,
+    ),
     LanguageModelId.CLAUDE_V3_5_SONNET: LanguageModelInfo(
         context_window_size=200000, max_output_tokens=8192
     ),
