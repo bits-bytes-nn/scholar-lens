@@ -6,6 +6,7 @@ from langchain.prompts import (
     HumanMessagePromptTemplate,
     SystemMessagePromptTemplate,
 )
+from langchain_core.messages import SystemMessage
 
 
 @dataclass(frozen=True)
@@ -19,25 +20,22 @@ class BasePrompt(ABC):
         self._validate_prompt_variables()
 
     def _validate_prompt_variables(self) -> None:
-        if self.input_variables is not None:
-            for var in self.input_variables:
-                if not var or not isinstance(var, str):
-                    raise ValueError(f"Invalid input variable: '{var}'")
-                if var == "image_data":
-                    continue
-                if (
-                    f"{{{var}}}" not in self.human_prompt_template
-                    and f"{{{var}}}" not in self.system_prompt_template
-                ):
-                    raise ValueError(
-                        f"Input variable '{var}' not found in any prompt template"
-                    )
+        if not self.input_variables:
+            return
+        for var in self.input_variables:
+            if not isinstance(var, str) or not var:
+                raise ValueError(f"Invalid input variable: {var}")
+            if (
+                var != "image_data"
+                and f"{{{var}}}" not in self.human_prompt_template
+                and f"{{{var}}}" not in self.system_prompt_template
+            ):
+                raise ValueError(
+                    f"Input variable '{var}' not found in any prompt template."
+                )
 
     @classmethod
-    def get_prompt(
-        cls,
-        enable_prompt_cache: bool = False,
-    ) -> ChatPromptTemplate:
+    def get_prompt(cls, enable_prompt_cache: bool = False) -> ChatPromptTemplate:
         system_template = cls.system_prompt_template
         human_template = cls.human_prompt_template
         instance = cls(
@@ -46,47 +44,32 @@ class BasePrompt(ABC):
             system_prompt_template=system_template,
             human_prompt_template=human_template,
         )
+
         if enable_prompt_cache:
-            messages = cls._create_cached_messages(instance)
-        else:
-            messages = cls._create_standard_messages(instance)
-        return ChatPromptTemplate.from_messages(messages)
+            system_msg = SystemMessage(
+                content=[
+                    {
+                        "type": "text",
+                        "text": instance.system_prompt_template,
+                        "cache_control": {"type": "ephemeral"},
+                    }
+                ]
+            )
+            human_msg = HumanMessagePromptTemplate.from_template(
+                instance.human_prompt_template
+            )
+            return ChatPromptTemplate.from_messages([system_msg, human_msg])
 
-    @classmethod
-    def _create_cached_messages(
-        cls, instance: "BasePrompt"
-    ) -> list[HumanMessagePromptTemplate | SystemMessagePromptTemplate]:
-        return [
-            SystemMessagePromptTemplate.from_template(
-                template=[
-                    {"type": "text", "text": instance.system_prompt_template},
-                    {"cachePoint": {"type": "default"}},
-                ],
-                input_variables=instance.input_variables,
-            ),
-            HumanMessagePromptTemplate.from_template(
-                template=[
-                    {"type": "text", "text": instance.human_prompt_template},
-                    {"cachePoint": {"type": "default"}},
-                ],
-                input_variables=instance.input_variables,
-            ),
-        ]
-
-    @classmethod
-    def _create_standard_messages(
-        cls, instance: "BasePrompt"
-    ) -> list[HumanMessagePromptTemplate | SystemMessagePromptTemplate]:
-        return [
-            SystemMessagePromptTemplate.from_template(
-                template=instance.system_prompt_template,
-                input_variables=instance.input_variables,
-            ),
-            HumanMessagePromptTemplate.from_template(
-                template=instance.human_prompt_template,
-                input_variables=instance.input_variables,
-            ),
-        ]
+        return ChatPromptTemplate.from_messages(
+            [
+                SystemMessagePromptTemplate.from_template(
+                    instance.system_prompt_template
+                ),
+                HumanMessagePromptTemplate.from_template(
+                    instance.human_prompt_template
+                ),
+            ]
+        )
 
 
 class AttributesExtractionPrompt(BasePrompt):
@@ -778,6 +761,7 @@ class PaperFinalizationPrompt(BasePrompt):
     - Each section must contain exactly 2-3 substantial paragraphs
     - Apply strategic markdown formatting (bold, italics, code blocks) to highlight key concepts
     - Ensure smooth transitions between paragraphs
+    - Headers MUST use exactly four hash marks (####) followed by a space and the section title
 
     **Content Requirements:**
     - Include specific quantitative results, metrics, and performance numbers when available
@@ -788,7 +772,7 @@ class PaperFinalizationPrompt(BasePrompt):
 
     ## REQUIRED SECTION STRUCTURE
 
-    Use these exact Korean headings and follow the content guidelines for each section:
+    Use these exact Korean headings with the EXACT formatting shown (#### followed by space and text):
 
     **#### 이 연구를 시작하게 된 배경과 동기는 무엇입니까?**
     Cover the research background: specific problem domain, existing limitations in current approaches, importance of
@@ -811,12 +795,33 @@ class PaperFinalizationPrompt(BasePrompt):
 
     ## OUTPUT FORMAT
 
-    Enclose your complete Korean summary within <key_takeaways> tags. Ensure each section flows naturally while
-    maintaining the required structure. Use markdown formatting strategically to enhance readability without
-    disrupting narrative flow.
+    **CRITICAL:** Start IMMEDIATELY with the first header. Do NOT include:
+    - A paper title
+    - An introduction paragraph
+    - Any content before the first "#### 이 연구를 시작하게 된 배경과 동기는 무엇입니까?" header
+
+    Your output must begin with exactly this line:
+    #### 이 연구를 시작하게 된 배경과 동기는 무엇입니까?
+
+    Enclose your complete Korean summary within <key_takeaways> tags. The very first line after the opening tag
+    should be the first header (#### 이 연구를 시작하게 된 배경과 동기는 무엇입니까?).
 
     <key_takeaways>
-    [Your comprehensive Korean summary here]
+    #### 이 연구를 시작하게 된 배경과 동기는 무엇입니까?
+
+    [Content for first section]
+
+    #### 이 연구에서 제시하는 새로운 해결 방법은 무엇입니까?
+
+    [Content for second section]
+
+    #### 제안된 방법은 어떻게 구현되었습니까?
+
+    [Content for third section]
+
+    #### 이 연구의 결과가 가지는 의미는 무엇입니까?
+
+    [Content for fourth section]
     </key_takeaways>
     """
 

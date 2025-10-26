@@ -199,6 +199,7 @@ class BaseBedrockWrapper:
 class BaseBedrockModelFactory(Generic[ModelIdT, ModelInfoT, WrapperT], ABC):
     BOTO_READ_TIMEOUT: ClassVar[int] = 300
     BOTO_MAX_ATTEMPTS: ClassVar[int] = 3
+    MAX_POOL_CONNECTIONS: ClassVar[int] = 50
 
     def __init__(
         self,
@@ -210,7 +211,9 @@ class BaseBedrockModelFactory(Generic[ModelIdT, ModelInfoT, WrapperT], ABC):
         self.region_name = region_name or self.boto_session.region_name
         boto_config = BotoConfig(
             read_timeout=self.BOTO_READ_TIMEOUT,
-            retries={"max_attempts": self.BOTO_MAX_ATTEMPTS},
+            connect_timeout=60,
+            retries={"max_attempts": self.BOTO_MAX_ATTEMPTS, "mode": "adaptive"},
+            max_pool_connections=self.MAX_POOL_CONNECTIONS,
         )
         self._client = self.boto_session.client(
             self._get_boto_service_name(),
@@ -499,7 +502,7 @@ class BedrockLanguageModelFactory(
         model_info: LanguageModelInfo,
         is_cross_region: bool,
         **kwargs: Any,
-    ):
+    ) -> None:
         enable_perf = kwargs.get("enable_performance_optimization", False)
         enable_think = kwargs.get("enable_thinking", False)
         if self._should_enable_performance_optimization(
@@ -515,9 +518,12 @@ class BedrockLanguageModelFactory(
                 "thinking_budget_tokens", self.DEFAULT_THINKING_BUDGET_TOKENS
             )
             think_config = {"thinking": {"type": "enabled", "budget_tokens": budget}}
-            config.setdefault("additional_model_request_fields", {}).update(
-                think_config
-            )
+            if is_cross_region:
+                config.setdefault("additional_model_request_fields", {}).update(
+                    think_config
+                )
+            else:
+                config.setdefault("model_kwargs", {}).update(think_config)
             logger.debug("Applied thinking mode (budget_tokens=%d)", budget)
 
     @staticmethod
@@ -857,8 +863,10 @@ class RobustXMLOutputParser(XMLOutputParser):
             if self._sections_preserved(original_sections, result):
                 return result
             raise ValueError("Missing sections in parsed result")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(
+                f"Standard XML parsing failed: {type(e).__name__}: {e}. Trying lxml recovery..."
+            )
 
         try:
             cleaned_text = self._clean_xml_for_lxml(text)
@@ -866,8 +874,10 @@ class RobustXMLOutputParser(XMLOutputParser):
             if self._sections_preserved(original_sections, result):
                 return result
             raise ValueError("Missing sections in lxml result")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(
+                f"LXML recovery parsing failed: {type(e).__name__}: {e}. Trying sanitization..."
+            )
 
         try:
             sanitized_text = self._sanitize_xml_content(text)
@@ -875,8 +885,10 @@ class RobustXMLOutputParser(XMLOutputParser):
             if self._sections_preserved(original_sections, result):
                 return result
             raise ValueError("Missing sections in sanitized result")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(
+                f"Sanitized XML parsing failed: {type(e).__name__}: {e}. Trying aggressive cleaning..."
+            )
 
         try:
             aggressively_cleaned = self._aggressively_clean_xml(text)
@@ -884,31 +896,39 @@ class RobustXMLOutputParser(XMLOutputParser):
             if self._sections_preserved(original_sections, result):
                 return result
             raise ValueError("Missing sections in aggressive result")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(
+                f"Aggressive cleaning parsing failed: {type(e).__name__}: {e}. Trying XML fallback..."
+            )
 
         try:
             fallback_result = self._extract_xml_fallback(text)
             if fallback_result:
                 return fallback_result
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(
+                f"XML fallback extraction failed: {type(e).__name__}: {e}. Trying tags fallback..."
+            )
 
         try:
             fallback_result = self._extract_tags_fallback(text)
             if fallback_result:
                 return fallback_result
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(
+                f"Tags fallback extraction failed: {type(e).__name__}: {e}. Trying list fallback..."
+            )
 
         try:
             fallback_result = self._extract_list_fallback(text)
             if fallback_result:
                 return fallback_result
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(
+                f"List fallback extraction failed: {type(e).__name__}: {e}. All methods exhausted."
+            )
 
-        logger.error(f"All XML parsing attempts failed for content: '{text[:200]}...'")
+        logger.error("All XML parsing attempts failed for content: '%s...'", text[:200])
         raise ValueError(
             f"Failed to parse XML after multiple attempts. Content preview: '{text[:200]}...'"
         )
@@ -1093,8 +1113,9 @@ class RobustXMLOutputParser(XMLOutputParser):
         cleaned = re.sub(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]", "", xml_content)
         cleaned = re.sub(r"&(?!(?:amp|lt|gt|quot|apos);)", "&amp;", cleaned)
 
-        def selective_escape(match: re.Match) -> str:
-            return html.escape(match.group(0), quote=False)
+        def selective_escape(match: re.Match[str]) -> str:
+            escaped: str = html.escape(match.group(0), quote=False)
+            return escaped
 
         cleaned = re.sub(r">([^<]*)<", selective_escape, cleaned)
         return cleaned.strip()
