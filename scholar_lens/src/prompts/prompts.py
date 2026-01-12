@@ -9,6 +9,146 @@ from langchain.prompts import (
 from langchain_core.messages import SystemMessage
 
 
+GRANULARITY_RULES: str = """
+**STANDARD**: Concise summary of key ideas and main concepts
+- Focus on brevity and clarity with essential technical details
+- Include key equations, figures, and core methodologies
+- Suitable for Introduction, Related Work, Evaluation, and Conclusion sections
+- Avoid exhaustive step-by-step breakdowns while maintaining technical accuracy
+
+**DETAILED**: Comprehensive explanation with no omissions
+- Include ALL technical content, equations, algorithms, methodological details
+- Step-by-step explanation of all concepts, equations, algorithms
+- Maximum depth and coverage of all technical content
+- Nothing from original paper should be omitted or oversimplified
+"""
+
+TECHNICAL_DEPTH_RULES: str = """
+**BASIC**: Direct explanation following the paper
+- Use original expressions/terms/examples/equations from paper
+- Explain core concepts clearly but concisely
+- Focus on fundamental understanding and accurate representation
+
+**INTERMEDIATE**: Enhanced explanation with supplementary materials
+- Detailed concept and methodology explanations
+- Include practical examples, use cases, background knowledge
+- Properly attribute and integrate explanations from referenced papers
+- Include expanded mathematical derivations with step-by-step walkthroughs
+- Provide code implementations illustrating key concepts
+- **REQUIRED: Moderate use of supplementary materials (citations OR code)**
+
+**ADVANCED**: Comprehensive expert-level explanation
+- Most detailed and thorough explanation possible
+- In-depth theoretical foundations and mathematical proofs
+- Extensive practical examples and implementations
+- Full mathematical derivations with insights into each step
+- Complete code implementations with detailed explanations
+- **REQUIRED: Extensive use of supplementary materials (citations AND code)**
+"""
+
+GRANULARITY_DEPTH_CONFLICT_RULES: str = """
+**STANDARD + ADVANCED**: Select only core concepts (~60% coverage), explain selected concepts in depth (100% depth)
+**STANDARD + INTERMEDIATE**: Enhanced explanations while maintaining brevity (~70% coverage with 80% depth)
+**DETAILED + BASIC**: Cover all content comprehensively (100% coverage) at fundamental level (60% depth)
+**DETAILED + INTERMEDIATE/ADVANCED**: Maximum thoroughness (100% coverage with 80-100% depth)
+"""
+
+HEADING_STRUCTURE_RULES: str = """
+- Main title: # Paper Title (single # only)
+- Section: ## Section Title (double ##)
+- Subsection: ### Subsection Title (triple ###)
+- Subsubsection: #### Subsubsection Title (quadruple ####)
+- Detailed points: ##### Detailed Title (five #####)
+
+CRITICAL REQUIREMENTS:
+- NEVER include section numbers in headings
+- CORRECT: "## 서론", "### 제안 방법", "#### 실험 설정"
+- INCORRECT: "## 1. 서론", "### 2.1 제안 방법", "## Section 3"
+- Never skip heading levels (e.g., going from ## directly to ####)
+"""
+
+CITATION_KEY_RULES: str = """
+**NEVER expose citation keys** (e.g., smith2023transformer, brown2024attention) in prose.
+
+When author information is clear in citation_summaries:
+- Use proper format: "[Author et al.](url)에서 제안된"
+- Example: "[Vaswani et al.](url)에서 제안된 Transformer 아키텍처"
+
+When author information is unclear or only citation key is available:
+- Use specific identifiers: paper title, model name, algorithm name, or method name
+- CORRECT: "[Transformer 아키텍처](url)", "[BERT 모델](url)", "[Self-Attention 메커니즘](url)"
+- INCORRECT: "[vaswani2017attention](url)", "이전 연구에서", "관련 연구에 따르면"
+"""
+
+EXCLUDED_CONTENT_RULES: str = """
+ABSOLUTELY EXCLUDE (non-technical administrative content):
+- Acknowledgments sections (감사의 말, Acknowledgments)
+- Author contributions (저자 기여도, Author Contributions, CRediT)
+- Funding information (연구비 지원, Funding, Grant information)
+- Gratitude expressions (감사 표현, Thanks to...)
+- Contributor lists (기여자 목록)
+- References/Bibliography sections (the list itself, not in-text citations)
+
+These sections have ZERO technical value and must be completely ignored.
+"""
+
+IMAGE_PATH_RULES: str = """
+**Image paths MUST be copied EXACTLY character-by-character from the source - NO modifications whatsoever**
+
+Path preservation rules:
+- Source has local path → Use local path: ![설명](/exact/local/path.png)
+- Source has HTTPS URL → Use HTTPS URL: ![설명](https://exact.url.com/path.png)
+- Source has relative path → Use relative path: ![설명](./exact/relative/path.png)
+
+FORBIDDEN modifications:
+- Converting local to URL or URL to local
+- Adding/removing https:// or http://
+- Changing / to \\ or vice versa
+- Adding/removing file extensions
+- ANY character-level changes
+"""
+
+VISUAL_DUPLICATION_RULES: str = """
+**Each visual element (figure, table, code block, equation) MUST appear ONLY ONCE in the ENTIRE document**
+
+Before inserting ANY visual element:
+1. Search through ALL of previous_explanation for this image path
+2. Look for any figure/table/code with similar description
+3. If found → DO NOT insert again, use descriptive reference only
+
+After first insertion, use natural descriptive references:
+- CORRECT: "위 그림에서 보듯이", "앞서 보여준 표와 같이"
+- INCORRECT: "그림 3에서", "표 2처럼", "Figure 1에서"
+"""
+
+TABLE_RENDERING_RULES: str = """
+**Tables MUST be rendered as actual markdown tables, NOT as image links**
+
+CORRECT:
+| Model | Accuracy | F1-Score |
+|-------|----------|----------|
+| GPT-4 | 95.2% | 0.94 |
+
+INCORRECT:
+![표 1: 성능 비교](https://arxiv.org/html/2401.12345v1#S1.T1)
+"""
+
+KOREAN_STYLE_RULES: str = """
+- Use natural, flowing Korean in "입니다" style throughout
+- Maintain professional, academic tone while being accessible
+- AVOID first-person pronouns like "우리" or "저"
+  * Instead of "우리는 이 방법을 적용했습니다" → "이 방법이 적용되었습니다"
+  * Instead of "우리의 실험에서" → "실험 결과에서"
+- Never use explicit section numbering references in prose
+  * INCORRECT: "3.2절에서", "2장에서 설명한"
+  * CORRECT: "앞서 설명한 개념", "이전에 소개된 방법론"
+- Translate technical terms to Korean whenever possible; keep English only when translation is unclear or for proper
+nouns (e.g., BERT, GPT)
+  * CORRECT: "손실 함수", "경사 하강법", "사전 학습", "역전파"
+  * INCORRECT: "loss 함수", "gradient 하강", "pre-training"
+"""
+
+
 @dataclass(frozen=True)
 class BasePrompt(ABC):
     system_prompt_template: str
@@ -850,7 +990,8 @@ class PaperReflectionPrompt(BasePrompt):
     and ABSOLUTE prevention of ANY content duplication within the same section.
     """
 
-    human_prompt_template: str = r"""
+    human_prompt_template: str = (
+        r"""
     Analyze and score this Korean technical explanation against strict evaluation criteria.
 
     ## INPUT DOCUMENTS
@@ -894,71 +1035,22 @@ class PaperReflectionPrompt(BasePrompt):
 
     ### 1. GRANULARITY AND TECHNICAL DEPTH REQUIREMENTS
 
-    The section_metadata specifies two key dimensions:
+    The section_metadata specifies two key dimensions. Evaluate against these standards:
 
-    #### 1.1 Granularity Levels
+    #### Granularity Levels
+    """
+        + GRANULARITY_RULES
+        + r"""
 
-    **STANDARD Granularity** (Focused summary approach):
-    - Present essential technical details and core concepts efficiently
-    - Include key equations, figures, and methodological highlights
-    - Appropriate for Introduction, Related Work, Evaluation, Conclusion sections
-    - Avoid exhaustive step-by-step breakdowns while maintaining technical accuracy
+    #### Technical Depth Levels
+    """
+        + TECHNICAL_DEPTH_RULES
+        + r"""
 
-    **DETAILED Granularity** (Comprehensive coverage approach):
-    - Include ALL technical content, equations, algorithms, methodological details
-    - Provide step-by-step explanations for complex concepts
-    - Complete mathematical formulations with thorough explanations
-    - Nothing from original paper should be omitted or oversimplified
-    - Maximum depth and coverage of all technical content
-
-    #### 1.2 Technical Depth Levels
-
-    **BASIC** (Direct explanation following paper):
-    - Use original expressions, terms, examples, equations from paper
-    - Explain core concepts clearly but concisely
-    - Focus on fundamental understanding and accurate representation
-    - Include essential mathematical notation and formulations
-
-    **INTERMEDIATE** (Enhanced with supplementary materials):
-    - Detailed concept and methodology explanations
-    - Include practical examples, use cases, background knowledge
-    - Properly attribute and integrate explanations from referenced papers
-    - Include expanded mathematical derivations with step-by-step walkthroughs
-    - Provide code implementations illustrating key concepts
-    - **REQUIRED: Moderate use of supplementary materials (citations OR code)**
-
-    **ADVANCED** (Expert-level comprehensive):
-    - Most detailed and thorough explanation possible
-    - In-depth theoretical foundations and mathematical proofs
-    - Extensive practical examples and implementations
-    - Comparative analysis with related research
-    - Implementation details, optimization techniques, limitations and improvements
-    - Full mathematical derivations with insights into each step
-    - Complete code implementations with detailed explanations
-    - **REQUIRED: Extensive use of supplementary materials (citations AND code)**
-
-    #### 1.3 Handling Conflicts Between Granularity and Depth
-
-    **STANDARD + ADVANCED**:
-    - Select only core concepts, but explain selected concepts in depth
-    - Don't include all equations, but provide complete derivations for important ones
-    - Example: In introduction, mention only key contributions but explain theoretical basis deeply
-    - Target: ~60% coverage with 100% depth on selected topics
-
-    **STANDARD + INTERMEDIATE**:
-    - Enhanced explanations while maintaining brevity
-    - Include key examples and background, but keep focused
-    - Target: ~70% coverage with 80% depth
-
-    **DETAILED + BASIC**:
-    - Cover all content comprehensively but at fundamental level
-    - Include all equations but skip complex derivations
-    - Example: Include all experimental results tables but omit statistical tests
-    - Target: 100% coverage with 60% depth
-
-    **DETAILED + INTERMEDIATE/ADVANCED**:
-    - Maximum thoroughness with appropriate depth
-    - Target: 100% coverage with 80-100% depth
+    #### Handling Conflicts
+    """
+        + GRANULARITY_DEPTH_CONFLICT_RULES
+        + r"""
 
     ### 2. STRUCTURAL COMPLIANCE AND TABLE OF CONTENTS ALIGNMENT
 
@@ -976,23 +1068,13 @@ class PaperReflectionPrompt(BasePrompt):
     - Appropriate content scope for each section type
 
     #### 2.2 Heading Structure Requirements (CRITICAL)
-
-    EXACT heading hierarchy must be maintained:
-    - Main title: # Paper Title (single # only)
-    - Section: ## Section Title (always double ##)
-    - Subsection: ### Subsection Title (always triple ###)
-    - Subsubsection: #### Subsubsection Title (always quadruple ####)
-    - Detailed points: ##### Detailed Title (always five #####)
-
-    ABSOLUTELY NO section numbering in headings:
-    - CORRECT: "## 서론", "### 제안 방법", "#### 실험 설정"
-    - INCORRECT: "## 1. 서론", "### 2.1 제안 방법", "## Section 3"
+    """
+        + HEADING_STRUCTURE_RULES
+        + r"""
 
     Additional rules:
-    - Never skip heading levels (e.g., going from ## directly to ####)
     - Section titles should use Korean translations (Abstract → 초록, Introduction → 서론)
     - Use descriptive heading titles that reflect content
-    - Skip technically meaningless subsections when appropriate
 
     ### 3. CITATION ACCURACY AND HYPERLINK VALIDATION (CRITICAL)
 
@@ -1005,39 +1087,14 @@ class PaperReflectionPrompt(BasePrompt):
     - Each referenced paper must have unique, accurate hyperlink if available
 
     #### 3.2 Citation Key Exposure Prevention (CRITICAL)
-
-    **NEVER directly expose citation keys** (e.g., smith2023transformer, brown2024attention, wang2025optimization)
-
-    Citation keys are internal identifiers in format "author_year_keyword" and should NEVER appear in prose.
-
-    When citation_summaries contains unclear or incomplete author information:
-    - DO NOT use the citation key as author name
-    - Use specific identifiers: paper title, model name, algorithm name, or method name
-    - Reference by the contribution's actual name, not generic phrases
-    - Only use [Author et al.](url) when actual author names are clearly available
-
-    Examples:
-    - INCORRECT: "[smith2023transformer](url)에서 제안된", "[brown2024attention](url)의 메커니즘"
-    - INCORRECT: "이전 연구에서는", "관련 연구에 따르면", "연구진은" (too generic)
-    - CORRECT: "[Transformer 모델](url)에서 제안된", "[Attention 메커니즘](url)을 활용하여"
-    - CORRECT: "[BERT 사전학습 방법](url)", "[ResNet 아키텍처](url)"
+    """
+        + CITATION_KEY_RULES
+        + r"""
 
     #### 3.3 Citation Format and Integration
-
-    When author information is clear and URL is verified:
-    - "[Author et al.](verified_url)"
-
-    When author information is unclear or unavailable:
-    - Use descriptive text without author attribution
-
-    When URL is unavailable or uncertain:
-    - Use descriptive text without hyperlink
-
-    Additional requirements:
     - Integrate citations naturally into Korean sentence flow
-    - Format: "[Author et al.](Citation URL)"이/가 제안한/개발한/소개한/연구한
-    - Clearly distinguish between main paper and cited work contributions
-    - Provide context about relationships between cited works and current paper
+    - Format: "[Author et al.](url)"이/가 제안한/개발한
+    - When URL unavailable: Use descriptive text without hyperlink
 
     ### 4. CONTENT DUPLICATION PREVENTION RULES (CRITICAL)
 
@@ -1114,137 +1171,38 @@ class PaperReflectionPrompt(BasePrompt):
     - **When in doubt about within-section duplication → Score it as ZERO**
 
     #### 4.2 Visual Element Duplication Prevention (CRITICAL - AUTOMATIC ZERO IF VIOLATED)
+    """
+        + VISUAL_DUPLICATION_RULES
+        + r"""
 
-    **🚨 Each visual element (figure, table, code block, equation) MUST appear ONLY ONCE in the ENTIRE document**
-
-    **Before inserting ANY visual element:**
-    1. **MANDATORY CHECK**: Search through ALL of previous_explanation for this image path
-    2. **MANDATORY CHECK**: Look for any figure/table/code with similar description
-    3. **MANDATORY CHECK**: Verify this specific content hasn't been shown before
-    4. If found in previous_explanation → DO NOT insert again, use descriptive reference only
-
-    **Rules:**
-    - When first discussing any figure/table, insert it using ![그림 X: 설명](exact_path) format
-    - Insert ALL visual elements BEFORE referencing them in text
-    - Provide comprehensive explanation immediately after FIRST insertion
-    - **ABSOLUTE PROHIBITION: Never duplicate any previously inserted visual element**
-    - After first insertion, always use descriptive references only (never re-insert)
-    - **Carefully check previous_explanation to identify ALL previously inserted visual elements**
-    - **If a visual element was already inserted in previous sections, NEVER insert it again**
-
-    **Example of CORRECT handling:**
-    - First mention: "모델의 전체 구조를 보여주는 ![그림 1: 모델 아키텍처](/exact/path/from/source.png)에서..."
-    - Later references: "앞서 보여준 모델 아키텍처에서...", "위 그림에서 확인할 수 있듯이..."
-    - ❌ NEVER: "![그림 1: 모델 아키텍처](/exact/path/from/source.png)" appears again anywhere in the document
+    **Scoring:** Any duplicated visual element → AUTOMATIC ZERO SCORE
 
     #### 4.3 Image Path Integrity (ABSOLUTELY CRITICAL - AUTOMATIC ZERO IF VIOLATED)
-
-    **🚨 CRITICAL RULE: Image paths MUST be used EXACTLY as provided in the source - NO modifications allowed**
-
-    **Path Format Rules:**
-    - If source provides local path (e.g., /path/to/image.png) → Use EXACTLY: ![description](/path/to/image.png)
-    - If source provides HTTPS URL (e.g., https://example.com/fig1.png) → Use EXACTLY:
-    ![description](https://example.com/fig1.png)
-    - If source provides relative path (e.g., ./figures/model.png) → Use EXACTLY: ![description](./figures/model.png)
-
-    **NEVER perform these modifications:**
-    - ❌ Converting local paths to URLs
-    - ❌ Converting URLs to local paths
-    - ❌ Adding or removing domain names
-    - ❌ Changing path separators (/ vs \)
-    - ❌ Adding file extensions if not present in source
-    - ❌ Removing file extensions if present in source
-    - ❌ Modifying any part of the path structure
-
-    **Verification checklist:**
-    - ✅ Compare your image path character-by-character with source
-    - ✅ Ensure protocol (http://, https://, or none) matches exactly
-    - ✅ Verify directory structure is identical
-    - ✅ Confirm filename and extension match precisely
+    """
+        + IMAGE_PATH_RULES
+        + r"""
 
     #### 4.4 Table Rendering Requirements (CRITICAL)
+    """
+        + TABLE_RENDERING_RULES
+        + r"""
 
-    **Tables MUST be rendered as actual markdown tables, NOT as image links**
-
-    When encountering table data:
-    - CORRECT: Render as proper markdown table with | separators
-    - INCORRECT: ![표 1: 성능 비교](https://arxiv.org/html/2401.12345v1#S1.T1)
-
-    Example of CORRECT table rendering:
-    ```
-    | Model | Accuracy | F1-Score |
-    |-------|----------|----------|
-    | GPT-4 | 95.2% | 0.94 |
-    | BERT | 89.7% | 0.88 |
-    ```
-
-    **Table duplication rules:**
-    - **Before rendering any table, check if it was already rendered in previous_explanation**
-    - Each table appears only once in entire document
-    - After first rendering, use descriptive references only
-
-    #### 4.5 Reference Guidelines
-
-    After insertion, use natural descriptive references:
-    - CORRECT: "위 그림에서 보듯이", "앞서 보여준 표와 같이", "이 결과는"
-    - INCORRECT: "그림 3에서", "표 2처럼", "Figure 1에서 볼 수 있듯이"
-
-    NEVER use numerical references to figures or tables:
-    - Do not write "그림 1", "그림 2", "표 3" etc. in prose
-    - Use descriptive references that don't rely on numbering
-
-    When visual elements cannot be inserted:
-    - CORRECT: "논문에서 제시된 실험 결과에 따르면"
-    - INCORRECT: "그림 3에서 볼 수 있듯이" (when 그림 3 is not inserted)
+    **Scoring:** Any modified image path or incorrectly rendered table → AUTOMATIC ZERO SCORE
 
     ### 5. LANGUAGE AND STYLE REQUIREMENTS
-
-    #### 5.1 Korean Style and Academic Tone
-    - Use natural, flowing Korean in "입니다" style throughout
-    - Maintain professional, academic tone while being accessible
-    - Ensure proper grammar and sentence structure
-    - Use technical terminology appropriately with contextual explanations
-
-    #### 5.2 Voice and Pronouns
-
-    AVOID first-person pronouns like "우리" or "저":
-    - Instead of "우리는 이 방법을 적용했습니다" → "이 방법이 적용되었습니다"
-    - Instead of "우리의 실험에서" → "실험 결과에서"
-    - Use passive voice or third-person descriptive statements
-
-    #### 5.3 Reference Style
-
-    Never use explicit section numbering references:
-    - INCORRECT: "1장에서", "3.2절", "Section 2에서"
-    - CORRECT: "앞서 설명한 개념", "이전에 소개된 방법론"
-
-    Additional rules:
-    - Use content-based descriptive references
-    - Never mention missing content or materials
+    """
+        + KOREAN_STYLE_RULES
+        + r"""
 
     ### 6. CONTENT FILTERING RULES (CRITICAL)
 
     #### 6.1 Content to OMIT (No Penalty)
-    The following can be omitted without penalty:
-    - Paper abstracts
-    - Author information and affiliations (unless technically relevant)
+    - Paper abstracts, author information and affiliations (unless technically relevant)
 
     #### 6.2 Content to ABSOLUTELY EXCLUDE (High Penalty if Included)
-
-    **The following MUST BE COMPLETELY EXCLUDED - these are non-technical administrative content unrelated to AI
-    theory/technology:**
-
-    - **Acknowledgments sections** (감사의 말, Acknowledgments, 사의)
-    - **Author contributions** (저자 기여도, Author Contributions, CRediT)
-    - **Funding information** (연구비 지원, Funding, Grant information)
-    - **Gratitude expressions** (감사 표현, Thanks to...)
-    - **Personal appreciation** (개인적 감사, 도움을 준 분들)
-    - **Contributor lists** (기여자 목록)
-    - **Administrative information** (행정 정보)
-    - **Non-technical procedural content** (절차적 내용)
-    - Any section titled "Acknowledgments", "감사의 말", "Contributions", "기여자" or similar
-
-    **These sections have NO relevance to AI/ML theory or technology and must be completely omitted.**
+    """
+        + EXCLUDED_CONTENT_RULES
+        + r"""
 
     ### 7. OUTPUT LENGTH MANAGEMENT (CRITICAL)
 
@@ -1557,6 +1515,7 @@ class PaperReflectionPrompt(BasePrompt):
        - Strategies to ensure complete output with proper closing tags
     </improvement_feedback>
     """
+    )
 
 
 class PaperSynthesisPrompt(BasePrompt):
@@ -1614,7 +1573,8 @@ class PaperSynthesisPrompt(BasePrompt):
     breakpoints (~3000 tokens) with has_more=y if needed.
     """
 
-    human_prompt_template: str = r"""
+    human_prompt_template: str = (
+        r"""
     Analyze the following information and create a comprehensive technical review in Korean that effectively explains
     the paper's concepts with exceptional technical precision. Emphasize mathematical formulations, visual elements,
     code implementations, and relevant citations. Write in natural, flowing Korean prose in "입니다" style without
@@ -1800,35 +1760,15 @@ class PaperSynthesisPrompt(BasePrompt):
     5. If truly nothing new to add, write MINIMAL transitional content only
 
     ### RULE #1: IMAGE PATH ACCURACY (ABSOLUTE ZERO TOLERANCE)
-
-    **Image paths MUST be copied EXACTLY character-by-character from the source - NO modifications whatsoever**
+    """
+        + IMAGE_PATH_RULES
+        + r"""
 
     **Before writing ANY image reference:**
     1. Locate the EXACT image path in current_content
     2. Copy it precisely as written (every character, slash, protocol)
     3. Verify your copied path matches source EXACTLY
     4. Use in format: ![description](EXACT_PATH_FROM_SOURCE)
-
-    **Path preservation rules:**
-    - Source has local path → Use local path: ![설명](/exact/local/path.png)
-    - Source has HTTPS URL → Use HTTPS URL: ![설명](https://exact.url.com/path.png)
-    - Source has HTTP URL → Use HTTP URL: ![설명](http://exact.url.com/path.png)
-    - Source has relative path → Use relative path: ![설명](./exact/relative/path.png)
-
-    **Forbidden modifications:**
-    - ❌ Converting local to URL or URL to local
-    - ❌ Adding/removing https:// or http://
-    - ❌ Changing / to \ or vice versa
-    - ❌ Adding/removing file extensions
-    - ❌ Modifying domain names
-    - ❌ Changing directory structure
-    - ❌ ANY character-level changes
-
-    **Verification:**
-    - ✅ Source path: /figures/model_arch.png → Use: ![설명](/figures/model_arch.png)
-    - ✅ Source path: https://arxiv.org/html/2401.12345v1/x1.png → Use:
-    ![설명](https://arxiv.org/html/2401.12345v1/x1.png)
-    - ❌ Source path: /figures/model.png → DON'T USE: https://example.com/figures/model.png
 
     ### RULE #2: RESPONSE LENGTH MANAGEMENT
 
@@ -1869,82 +1809,21 @@ class PaperSynthesisPrompt(BasePrompt):
 
     ### 2. EXPLANATION DEPTH AND GRANULARITY
 
-    #### 2.1 Granularity Levels (from section_metadata)
+    Adjust explanation based on section_metadata's granularity and technical_depth values:
+    """
+        + GRANULARITY_RULES
+        + r"""
+    """
+        + TECHNICAL_DEPTH_RULES
+        + r"""
 
-    **STANDARD**: Concise summary of key ideas and main concepts
-    - Focus on brevity and clarity with essential technical details
-    - Include key equations, figures, and core methodologies
-    - Suitable for Introduction, Related Work, Evaluation, and Conclusion sections
-    - Provide clear overview without exhaustive detail
-    - Typically fits in single response without splitting
+    #### Handling Conflicts Between Granularity and Depth
+    """
+        + GRANULARITY_DEPTH_CONFLICT_RULES
+        + r"""
 
-    **DETAILED**: Comprehensive explanation with no omissions
-    - Focus on thoroughness and completeness
-    - Step-by-step explanation of all concepts, equations, algorithms, and techniques
-    - Break down all complex concepts into digestible steps
-    - Include all mathematical formulations with thorough explanations
-    - Maximum depth and coverage of all technical content
-    - **Often requires careful planning to stay within length limits**
-
-    #### 2.2 Technical Depth Levels (from section_metadata)
-
-    **BASIC**: Direct explanation following the paper
-    - Use original expressions/terms/examples/equations from paper
-    - Explain core concepts clearly but concisely
-    - Focus on fundamental understanding
-    - Include essential mathematical notation and formulations
-
-    **INTERMEDIATE**: Enhanced explanation with supplementary materials
-    - Detailed concept and methodology explanations
-    - Include practical examples and use cases
-    - Add relevant background knowledge
-    - Integrate explanations from referenced papers (clearly marked as supplementary)
-    - Include expanded mathematical derivations and step-by-step walkthroughs
-    - Provide code implementations that illustrate key concepts
-    - **Actively use citation_summaries to provide context and alternative perspectives**
-    - **Leverage code examples extensively to make abstract concepts concrete**
-
-    **ADVANCED**: Comprehensive expert-level explanation
-    - Most detailed and thorough explanation possible
-    - In-depth theoretical foundations and mathematical proofs
-    - Extensive practical examples and implementations
-    - Rich supplementary materials from referenced papers
-    - Comparative analysis with related research
-    - Implementation details and optimization techniques
-    - Discussion of limitations and potential improvements
-    - Full mathematical derivations with insights into each step
-    - Complete code implementations with detailed explanations
-    - **Extensively utilize citation_summaries to provide comprehensive background and context**
-    - **Provide multiple code examples showing different implementation approaches**
-    - **Requires careful length management**
-
-    #### 2.3 Handling Conflicts Between Granularity and Depth (DETAILED GUIDANCE)
-
-    **STANDARD + ADVANCED**:
-    - Select only core concepts (~60% coverage)
-    - Explain selected concepts in depth (100% depth on chosen topics)
-    - Don't include all equations, but provide complete derivations for important ones
-    - Example: In introduction, mention only key contributions but explain theoretical basis deeply
-    - Strategy: "Less breadth, more depth"
-
-    **STANDARD + INTERMEDIATE**:
-    - Enhanced explanations while maintaining brevity (~70% coverage)
-    - Include key examples and background, but keep focused (80% depth)
-    - Provide moderate detail on selected concepts
-    - Strategy: "Balanced breadth and depth"
-
-    **DETAILED + BASIC**:
-    - Cover all content comprehensively (100% coverage)
-    - Each item at fundamental level (60% depth)
-    - Include all equations but skip complex derivations
-    - Example: Include all experimental results tables but omit statistical tests
-    - Strategy: "Complete coverage, fundamental depth"
-
-    **DETAILED + INTERMEDIATE/ADVANCED**:
-    - Maximum thoroughness (100% coverage)
-    - Appropriate depth (80-100% depth)
-    - Requires careful length management with proper continuation
-    - Strategy: "Complete and deep - plan for length"
+    **Key principle**: For INTERMEDIATE/ADVANCED depth, actively use citation_summaries and code examples
+    to make concepts accessible. For DETAILED granularity, plan for proper continuation with has_more=y.
 
     ### 3. STRUCTURAL ORGANIZATION
 
@@ -1962,44 +1841,15 @@ class PaperSynthesisPrompt(BasePrompt):
     - **Conclusion sections**: Summary and implications without detailed exposition
 
     #### 3.2 Content Filtering and Focus (CRITICAL - ABSOLUTE EXCLUSION REQUIRED)
+    """
+        + EXCLUDED_CONTENT_RULES
+        + r"""
 
-    **ABSOLUTELY SKIP and NEVER EVER include or mention:**
-    - **Acknowledgments sections** (감사의 말, Acknowledgments, 사의, Thanks)
-    - **Author contributions** (저자 기여도, Author Contributions, CRediT authorship, 기여자)
-    - **Funding information** (연구비 지원, Funding, Grant information, 연구 지원, Financial support)
-    - **References/Bibliography sections** (참고문헌, References, Bibliography, 참조, Works Cited)
-    - **Gratitude expressions** (감사 표현, Thanks to..., 도움을 주신 분들, We thank...)
-    - **Personal appreciation** (개인적 감사, Personal acknowledgments)
-    - **Contributor lists** (기여자 목록, Contributors, Collaborators)
-    - **Administrative information** (행정 정보, Procedural content, Ethics statements)
-    - **Institutional affiliations** (unless directly relevant to technical methodology)
-    - Any content expressing thanks, appreciation, or acknowledgment of support
-    - Any section with titles containing: "Acknowledgment", "감사", "Contribution", "기여", "Funding", "지원", "Thanks",
-    "References", "참고문헌", "Bibliography"
+    **IMPORTANT:** References/Bibliography sections ≠ in-text citations
+    - In-text citations "[Author et al.](url)" should be used actively
+    - The References list at the end should be skipped
 
-    **These sections have ZERO technical value and must be completely ignored**
-
-    **IMPORTANT: References/Bibliography sections are NOT the same as citations within the paper**
-    - Citations within the text (e.g., "[Author et al.](url)") should be used actively and extensively
-    - The References/Bibliography section at the end of papers is just a list of citations and should be skipped
-    - Do not create explanatory content about the references list itself
-
-    **FOCUS exclusively on technical content:**
-    - Core methodologies and innovations
-    - Mathematical formulations and theoretical foundations
-    - Experimental procedures and results
-    - Technical analysis and evaluation
-    - Implementation details and practical considerations
-    - Algorithm descriptions and code implementations
-    - Performance metrics and comparisons
-    - Architectural designs and system specifications
-
-    **Detection and Handling:**
-    - If current_content contains acknowledgment/contribution/funding sections, SKIP them entirely
-    - Do not mention, summarize, or reference these sections in any way
-    - Proceed directly to the next technical section
-    - Never apologize for or mention the omission of these sections
-    - Treat them as if they don't exist in the paper
+    **Detection:** If current_content contains excluded sections, SKIP them entirely without mention.
 
     #### 3.3 Content Interconnection
 
@@ -2019,41 +1869,11 @@ class PaperSynthesisPrompt(BasePrompt):
     - Each referenced paper must have unique, accurate hyperlink
 
     #### 4.2 Citation Key Exposure Prevention (CRITICAL - ZERO TOLERANCE)
+    """
+        + CITATION_KEY_RULES
+        + r"""
 
-    **ABSOLUTE PROHIBITION: NEVER use citation keys from citation_summaries as author names in prose**
-
-    Citation keys follow format "author_year_keyword" (e.g., vaswani2017attention, devlin2019bert, brown2020gpt3)
-    These are internal identifiers and MUST NEVER appear in your explanation.
-
-    **When referencing citations:**
-
-    **IF author information is clear in citation_summaries:**
-    - Use proper format: "[Author et al.](url)"이/가 제안한/개발한
-    - Example: "[Vaswani et al.](url)에서 제안된 Transformer 아키텍처"
-    - Example: "[Devlin et al.](url)이 개발한 BERT 모델"
-
-    **IF author information is unclear, incomplete, or only citation key is available:**
-    - Use specific identifiers: paper title, model name, algorithm name, or method name
-    - Reference by the actual contribution name, NOT generic phrases like "이전 연구", "관련 연구"
-    - Focus on WHAT was contributed (model/method/algorithm), not WHO contributed it
-    - Examples:
-    * "[Transformer 아키텍처](url)에서 제안된 방식"
-    * "[BERT 모델](url)은 마스크드 언어 모델링을 사용하며"
-    * "[GPT-3 사전학습 방법](url)을 활용하여"
-    * "[Self-Attention 메커니즘](url)을 기반으로"
-    * "[ResNet 잔차 연결](url)의 개념을 적용"
-    - AVOID generic references: ❌ "이전 연구에서", "관련 연구에 따르면", "선행 연구의"
-    - Focus on the contribution/model/method name with specific terminology
-
-    **NEVER EVER do this:**
-    - ❌ "[vaswani2017attention](url)에서 제안된"
-    - ❌ "[devlin2019bert](url)의 BERT"
-    - ❌ "[brown2020gpt3](url)이 개발한"
-    - ❌ "vaswani2017attention et al."
-    - ❌ "devlin2019bert의 연구"
-
-    **When URL is unavailable:**
-    - Use descriptive text without hyperlink: "이전 연구에서 제안된 Transformer 아키텍처"
+    **When URL is unavailable:** Use descriptive text without hyperlink
 
     #### 4.3 Supporting Material Integration (CRITICAL - MAXIMIZE USAGE FOR READER UNDERSTANDING)
 
@@ -2164,29 +1984,12 @@ class PaperSynthesisPrompt(BasePrompt):
     - NEVER use numbered references: "그림 1에서", "Figure 3처럼"
 
     **Table Rendering (CRITICAL - MANDATORY MARKDOWN FORMAT):**
+    """
+        + TABLE_RENDERING_RULES
+        + r"""
 
-    **ABSOLUTE REQUIREMENT: Tables MUST be rendered as actual markdown tables, NEVER as image links**
-
-    **STEP 1: Check previous_explanation FIRST - ALWAYS**
-    - Search for similar table content or structure
-    - If found → STOP - DO NOT RENDER - use descriptive reference only
-
-    **STEP 2: Render as markdown (ONLY if verified not in previous_explanation)**
-    - Extract all data from source
-    - Create proper markdown table with | separators
-    - Include all columns and rows with proper alignment
-
-    Example of CORRECT table rendering:
-    ```
-    | Model | Accuracy | F1-Score | Parameters |
-    |-------|----------|----------|------------|
-    | GPT-4 | 95.2% | 0.94 | 1.76T |
-    | BERT | 89.7% | 0.88 | 340M |
-    ```
-
-    **NEVER do this:**
-    - ❌ ![표 1: 성능 비교](https://arxiv.org/html/2401.12345v1#S1.T1)
-    - ❌ ![Table 3: Results](any_image_path)
+    **STEP 1:** Check previous_explanation for similar table content - if found, use descriptive reference only
+    **STEP 2:** Render as proper markdown table with | separators (ONLY if not in previous_explanation)
 
     **Code Formatting:**
 
@@ -2210,37 +2013,19 @@ class PaperSynthesisPrompt(BasePrompt):
 
     ### 6. HEADING STRUCTURE AND CONTENT REFERENCES
 
-    #### 6.1 Heading Hierarchy (STRICT)
+    #### 6.1 Heading Hierarchy
+    """
+        + HEADING_STRUCTURE_RULES
+        + r"""
 
-    Use EXACTLY the following heading levels:
-    - Main title: # Paper Title (single # only)
-    - Section: ## Section Title (double ##)
-    - Subsection: ### Subsection Title (triple ###)
-    - Subsubsection: #### Subsubsection Title (quadruple ####)
-    - Detailed points: ##### Detailed Title (five #####)
-
-    #### 6.2 Heading Requirements
-
-    - NEVER include section numbers in headings
-    * CORRECT: "## 서론", "### 제안 방법", "#### 실험 결과"
-    * INCORRECT: "## 1. 서론", "### 2.1 제안 방법", "## Section 3"
-    - Never skip heading levels (don't go from ## to ####)
-    - Use descriptive titles without numbers
-    - Each heading must be unique and appear only once in the document
-
-    #### 6.3 Content Reference Guidelines
+    #### 6.2 Content Reference Guidelines
 
     NEVER use section numbers or explicit references in prose:
     - INCORRECT: "3.2절에서", "2장에서 설명한", "앞의 (1) 식", "Figure 3처럼"
-    - This prevents references to headings/sections that may be omitted or reorganized
 
     USE content-based descriptive references instead:
     - "앞서 설명한 어텐션 메커니즘", "이전에 소개된 손실 함수"
-    - "기본 원리를 확장하여", "이러한 접근법을 바탕으로"
     - "위 그림에서 보듯이", "앞서 정의한 확률 분포"
-
-    Ensure all references remain clear even if intermediate sections are omitted
-    Focus on conceptual connections rather than structural pointers
 
     ### 7. TECHNICAL EXPLANATION STRATEGIES (CRITICAL - PRIORITIZE ACCESSIBILITY)
 
@@ -2524,6 +2309,7 @@ class PaperSynthesisPrompt(BasePrompt):
     - Maintain all priority rules (accuracy > duplication > feedback)]
     </has_more>
     """
+    )
 
 
 class TableOfContentsPrompt(BasePrompt):
@@ -2646,6 +2432,13 @@ class TableOfContentsPrompt(BasePrompt):
     3. **Hierarchy**: Maintain correct parent-child relationships
     4. **Clarity**: Summaries should be informative and specific
     5. **XML Structure**: Use elements not attributes, include all required tags
+
+    ### CRITICAL - XML Output Rules:
+    - Output raw XML tags directly: <section>, <level>, <title>, etc.
+    - NEVER escape XML tags as HTML entities like &lt;section&gt; or &lt;level&gt;
+    - NEVER mix escaped and unescaped tags
+    - Special characters in TEXT CONTENT should be escaped: & → &amp;, < → &lt;, > → &gt;
+    - But XML TAGS themselves must remain unescaped: <section> NOT &lt;section&gt;
 
     ### Best Practices:
     - If section numbering is inconsistent, do your best to determine hierarchy from formatting

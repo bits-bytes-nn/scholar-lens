@@ -123,8 +123,29 @@ class ContentExtractor(RetryableBase):
         )
 
     @classmethod
-    async def create(cls, *args, **kwargs) -> "ContentExtractor":
-        extractor = cls(*args, **kwargs)
+    async def create(
+        cls,
+        citation_extraction_model_id: LanguageModelId,
+        attributes_extraction_model_id: LanguageModelId,
+        table_of_contents_model_id: LanguageModelId,
+        output_fixing_model_id: LanguageModelId,
+        boto_session: boto3.Session,
+        root_dir: Path | None = None,
+        bucket_name: str | None = None,
+        s3_prefix: str | None = None,
+        enable_output_fixing: bool = False,
+    ) -> "ContentExtractor":
+        extractor = cls(
+            citation_extraction_model_id=citation_extraction_model_id,
+            attributes_extraction_model_id=attributes_extraction_model_id,
+            table_of_contents_model_id=table_of_contents_model_id,
+            output_fixing_model_id=output_fixing_model_id,
+            boto_session=boto_session,
+            root_dir=root_dir,
+            bucket_name=bucket_name,
+            s3_prefix=s3_prefix,
+            enable_output_fixing=enable_output_fixing,
+        )
         await extractor._initialize_keywords()
         return extractor
 

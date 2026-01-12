@@ -42,11 +42,13 @@ ROOT_DIR: Path = (
 
 nltk.data.path.append(str(ROOT_DIR))
 
-try:
-    nltk.data.find("tokenizers/punkt_tab")
-except LookupError:
-    logger.info("NLTK resource 'punkt_tab' not found. Downloading...")
-    nltk.download("punkt_tab", download_dir=ROOT_DIR)
+
+def _ensure_nltk_data() -> None:
+    try:
+        nltk.data.find("tokenizers/punkt_tab")
+    except LookupError:
+        logger.info("NLTK resource 'punkt_tab' not found. Downloading...")
+        nltk.download("punkt_tab", download_dir=ROOT_DIR)
 
 
 class ExplainerConfig:
@@ -101,6 +103,7 @@ class ExplainerState(TypedDict):
     improvement_feedback: str
     quality_score: int
     accumulated_feedback: list[str]
+    structure_index_offset: int
 
 
 class ExplainerGraph(RetryableBase):
@@ -123,6 +126,8 @@ class ExplainerGraph(RetryableBase):
         min_quality_score: int = ExplainerConfig.MIN_QUALITY_SCORE,
         enable_output_fixing: bool = False,
     ) -> None:
+        _ensure_nltk_data()
+
         self.paper = paper
         self.citation_summarizer = citation_summarizer
         self.code_retriever = code_retriever
@@ -293,16 +298,22 @@ class ExplainerGraph(RetryableBase):
 
         structure = self.analyzer.invoke({"numbered_sentences": numbered_sentences_str})
 
-        paragraphs = self._extract_paragraphs_by_indices(sentences, structure)
+        paragraphs, prepended_zero = self._extract_paragraphs_by_indices(
+            sentences, structure
+        )
+        structure_index_offset = 1 if prepended_zero else 0
 
         logger.info(
-            "Extracted %d paragraphs based on sentence indices.", len(paragraphs)
+            "Extracted %d paragraphs based on sentence indices (offset: %d).",
+            len(paragraphs),
+            structure_index_offset,
         )
         logger.debug("Structure: '%s'", pformat(structure))
 
         return {
             "paragraphs": paragraphs,
             "structure": structure,
+            "structure_index_offset": structure_index_offset,
             "synthesis_attempts": 0,
             "quality_score": 100,
             "improvement_feedback": "",
@@ -312,7 +323,7 @@ class ExplainerGraph(RetryableBase):
     @staticmethod
     def _extract_paragraphs_by_indices(
         sentences: list[str], structure: dict[str, Any]
-    ) -> list[str]:
+    ) -> tuple[list[str], bool]:
         start_indices = []
         for section in structure.get("paper_structure", []):
             try:
@@ -336,12 +347,14 @@ class ExplainerGraph(RetryableBase):
             logger.warning(
                 "No valid section start indices found. Treating entire text as one section."
             )
-            return [" ".join(sentences)]
+            return [" ".join(sentences)], False
 
         unique_indices = sorted(list(set(start_indices)))
 
+        prepended_zero = False
         if unique_indices[0] != 0:
             unique_indices.insert(0, 0)
+            prepended_zero = True
             logger.debug("Prepended sentence index 0 to ensure full coverage.")
 
         paragraphs = []
@@ -353,11 +366,32 @@ class ExplainerGraph(RetryableBase):
             section_sentences = sentences[start_idx:end_idx]
             paragraphs.append(" ".join(section_sentences))
 
-        return paragraphs
+        return paragraphs, prepended_zero
+
+    @staticmethod
+    def _get_section_analysis(
+        state: ExplainerState, current_index: int
+    ) -> dict[str, Any]:
+        """Safely get section analysis accounting for structure index offset."""
+        offset = state.get("structure_index_offset", 0)
+        structure_index = current_index - offset
+        paper_structure = state["structure"].get("paper_structure", [])
+
+        if structure_index < 0 or structure_index >= len(paper_structure):
+            logger.debug(
+                "No matching section analysis for index %d (structure_index: %d, offset: %d)",
+                current_index,
+                structure_index,
+                offset,
+            )
+            return {"section": [{"section_title": "Introduction", "key_points": []}]}
+
+        return paper_structure[structure_index]
 
     async def enrich_paper(self, state: ExplainerState) -> dict[str, Any]:
-        current_paragraph = state["paragraphs"][state["current_index"]]
-        current_analysis = state["structure"]["paper_structure"][state["current_index"]]
+        current_index = state["current_index"]
+        current_paragraph = state["paragraphs"][current_index]
+        current_analysis = self._get_section_analysis(state, current_index)
         citations_text = "\n".join(
             str(citation) for citation in state["paper"].citations
         )
@@ -424,9 +458,8 @@ class ExplainerGraph(RetryableBase):
         current_index = state["current_index"]
         current_explanation = state["explanations"][current_index]
         current_paragraph = state["paragraphs"][current_index]
-        current_analysis = state["structure"]["paper_structure"][current_index][
-            "section"
-        ]
+        section_data = self._get_section_analysis(state, current_index)
+        current_analysis = section_data.get("section", [])
 
         accumulated_feedback = state["accumulated_feedback"].copy()
 
@@ -479,7 +512,8 @@ class ExplainerGraph(RetryableBase):
             explanations.append("")
 
         previous_explanation = "\n".join(explanations[:current_index])
-        analysis = state["structure"]["paper_structure"][current_index]["section"]
+        section_data = self._get_section_analysis(state, current_index)
+        analysis = section_data.get("section", [])
         final_explanation_for_paragraph = ""
 
         use_thinking = (
@@ -583,6 +617,7 @@ class ExplainerGraph(RetryableBase):
             "quality_score": 100,
             "improvement_feedback": "",
             "accumulated_feedback": [],
+            "structure_index_offset": 0,
         }
         final_state = await self.workflow.ainvoke(
             initial_state,

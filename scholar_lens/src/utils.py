@@ -11,7 +11,6 @@ from typing import Any, Callable, TypeVar, Generic, ClassVar
 
 import asyncio
 import boto3
-import html
 import math
 import tenacity
 from botocore.config import Config as BotoConfig
@@ -583,32 +582,37 @@ class BatchProcessor(BaseModel):
     ) -> list[Any]:
         if not items_to_process:
             return []
-        if run_config:
-            self.max_concurrency = run_config.get(
-                "max_concurrency", self.max_concurrency
-            )
-            self.batch_size = run_config.get("batch_size", self.batch_size)
-        prepared_batch_func = self._create_batch_func(batch_func)
+        max_concurrency = (
+            run_config.get("max_concurrency", self.max_concurrency)
+            if run_config
+            else self.max_concurrency
+        )
+        batch_size = (
+            run_config.get("batch_size", self.batch_size)
+            if run_config
+            else self.batch_size
+        )
+        prepared_batch_func = self._create_batch_func(batch_func, max_concurrency)
         retrying_sequential_func = self._create_retry_decorator(task_name)(
             sequential_func
         )
         all_results = []
         num_items = len(items_to_process)
-        num_chunks = math.ceil(num_items / self.batch_size)
+        num_chunks = math.ceil(num_items / batch_size)
         logger.info(
             "Starting processing for '%s': %d items in %d chunks (batch size: %d)",
             task_name,
             num_items,
             num_chunks,
-            self.batch_size,
+            batch_size,
         )
         for i in tqdm(
-            range(0, num_items, self.batch_size),
+            range(0, num_items, batch_size),
             desc=f"Processing: {task_name}",
             disable=not show_progress,
         ):
-            chunk_items = items_to_process[i : i + self.batch_size]
-            chunk_num = (i // self.batch_size) + 1
+            chunk_items = items_to_process[i : i + batch_size]
+            chunk_num = (i // batch_size) + 1
             logger.debug(
                 "Processing chunk %d/%d (%d items)",
                 chunk_num,
@@ -642,10 +646,13 @@ class BatchProcessor(BaseModel):
         logger.info("Completed '%s': processed %d results", task_name, len(all_results))
         return all_results
 
-    def _create_batch_func(self, batch_func: Callable[..., list[Any]]) -> Callable:
+    @staticmethod
+    def _create_batch_func(
+        batch_func: Callable[..., list[Any]], max_concurrency: int
+    ) -> Callable:
         def _batch_func(inputs: list[dict[str, Any]]) -> list[Any]:
             return batch_func(
-                inputs, config=RunnableConfig(max_concurrency=self.max_concurrency)
+                inputs, config=RunnableConfig(max_concurrency=max_concurrency)
             )
 
         return _batch_func
@@ -716,33 +723,38 @@ class BatchProcessor(BaseModel):
     ) -> list[Any]:
         if not items_to_process:
             return []
-        if run_config:
-            self.max_concurrency = run_config.get(
-                "max_concurrency", self.max_concurrency
-            )
-            self.batch_size = run_config.get("batch_size", self.batch_size)
-        prepared_batch_func = self._create_async_batch_func(batch_func)
+        max_concurrency = (
+            run_config.get("max_concurrency", self.max_concurrency)
+            if run_config
+            else self.max_concurrency
+        )
+        batch_size = (
+            run_config.get("batch_size", self.batch_size)
+            if run_config
+            else self.batch_size
+        )
+        prepared_batch_func = self._create_async_batch_func(batch_func, max_concurrency)
         retrying_sequential_func = self._create_retry_decorator(task_name)(
             sequential_func
         )
         all_results = []
         num_items = len(items_to_process)
-        num_chunks = math.ceil(num_items / self.batch_size)
+        num_chunks = math.ceil(num_items / batch_size)
         logger.info(
             "Starting async processing for '%s': %d items in %d chunks (batch size: %d)",
             task_name,
             num_items,
             num_chunks,
-            self.batch_size,
+            batch_size,
         )
         chunk_iterator = async_tqdm(
-            range(0, num_items, self.batch_size),
+            range(0, num_items, batch_size),
             desc=f"Processing: {task_name}",
             disable=not show_progress,
         )
         for i in chunk_iterator:
-            chunk_items = items_to_process[i : i + self.batch_size]
-            chunk_num = (i // self.batch_size) + 1
+            chunk_items = items_to_process[i : i + batch_size]
+            chunk_num = (i // batch_size) + 1
             logger.debug(
                 "Processing chunk %d/%d (%d items)",
                 chunk_num,
@@ -768,29 +780,34 @@ class BatchProcessor(BaseModel):
                     chunk_inputs,
                     retrying_sequential_func,
                     f"{task_name} (chunk {chunk_num})",
+                    max_concurrency,
                     show_progress,
                 )
                 all_results.extend(chunk_results)
         logger.info("Completed '%s': processed %d results", task_name, len(all_results))
         return all_results
 
-    def _create_async_batch_func(self, batch_func: Callable[..., Any]) -> Callable:
+    @staticmethod
+    def _create_async_batch_func(
+        batch_func: Callable[..., Any], max_concurrency: int
+    ) -> Callable:
         async def _batch_func(inputs: list[dict[str, Any]]) -> list[Any]:
             return await batch_func(
-                inputs, config=RunnableConfig(max_concurrency=self.max_concurrency)
+                inputs, config=RunnableConfig(max_concurrency=max_concurrency)
             )
 
         return _batch_func
 
+    @staticmethod
     async def _aprocess_sequentially_with_fallback(
-        self,
         inputs: list[dict[str, Any]],
         sequential_func: Callable[[dict[str, Any]], Any],
         task_name: str,
+        max_concurrency: int,
         show_progress: bool = True,
     ) -> list[Any]:
         logger.info("Processing %d items concurrently for '%s'", len(inputs), task_name)
-        semaphore = asyncio.Semaphore(self.max_concurrency)
+        semaphore = asyncio.Semaphore(max_concurrency)
 
         async def _process_one(single_input):
             async with semaphore:
@@ -865,6 +882,7 @@ class RetryableBase:
 
 class RobustXMLOutputParser(XMLOutputParser):
     def parse(self, text: str) -> dict[str, Any]:
+        text = self._unescape_xml_tags(text)
         original_sections = self._detect_xml_sections(text)
 
         try:
@@ -896,7 +914,18 @@ class RobustXMLOutputParser(XMLOutputParser):
             raise ValueError("Missing sections in sanitized result")
         except Exception as e:
             logger.debug(
-                f"Sanitized XML parsing failed: {type(e).__name__}: {e}. Trying aggressive cleaning..."
+                f"Sanitized XML parsing failed: {type(e).__name__}: {e}. Trying truncated XML fix..."
+            )
+
+        try:
+            fixed_text = self._fix_truncated_xml(text)
+            result = super().parse(fixed_text)
+            if self._sections_preserved(original_sections, result):
+                return result
+            raise ValueError("Missing sections in truncated fix result")
+        except Exception as e:
+            logger.debug(
+                f"Truncated XML fix failed: {type(e).__name__}: {e}. Trying aggressive cleaning..."
             )
 
         try:
@@ -1052,8 +1081,19 @@ class RobustXMLOutputParser(XMLOutputParser):
 
     @staticmethod
     def _clean_xml_for_lxml(text: str) -> bytes:
-        text = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", text)
-        return text.strip().encode("utf-8")
+        def is_valid_xml_char(char: str) -> bool:
+            cp = ord(char)
+            return (
+                cp == 0x9
+                or cp == 0xA
+                or cp == 0xD
+                or (0x20 <= cp <= 0xD7FF)
+                or (0xE000 <= cp <= 0xFFFD)
+                or (0x10000 <= cp <= 0x10FFFF)
+            )
+
+        cleaned = "".join(char for char in text if is_valid_xml_char(char))
+        return cleaned.strip().encode("utf-8")
 
     @staticmethod
     def _try_lxml_recover_parse(xml_bytes: bytes) -> dict[str, Any]:
@@ -1107,27 +1147,99 @@ class RobustXMLOutputParser(XMLOutputParser):
 
     @staticmethod
     def _sanitize_xml_content(xml_content: str) -> str:
-        def escape_text_content(match: re.Match) -> str:
+        def escape_text_only(text: str) -> str:
+            placeholders = {}
+            entity_pattern = r"&(amp|lt|gt|quot|apos|#\d+|#x[0-9a-fA-F]+);"
+            counter = [0]
+
+            def save_entity(match: re.Match) -> str:
+                key = f"\x00ENTITY{counter[0]}\x00"
+                placeholders[key] = match.group(0)
+                counter[0] += 1
+                return key
+
+            text = re.sub(entity_pattern, save_entity, text)
+
+            text = text.replace("&", "&amp;")
+            text = text.replace("<", "&lt;")
+            text = text.replace(">", "&gt;")
+
+            for key, value in placeholders.items():
+                text = text.replace(key, value)
+
+            return text
+
+        def escape_leaf_content(match: re.Match) -> str:
             tag_open = match.group(1)
             content = match.group(2)
             tag_close = match.group(3)
-            escaped_content = html.escape(content, quote=False)
-            return f"{tag_open}{escaped_content}{tag_close}"
 
-        pattern = r"(<[a-zA-Z0-9_]+\s*[^>]*>)(.*?)(</[a-zA-Z0-9_]+>)"
-        return re.sub(pattern, escape_text_content, xml_content, flags=re.DOTALL)
+            if not re.search(r"<[a-zA-Z_]", content):
+                escaped_content = escape_text_only(content)
+                return f"{tag_open}{escaped_content}{tag_close}"
+            return match.group(0)
+
+        pattern = r"(<([a-zA-Z_][a-zA-Z0-9_]*)\s*[^>]*>)(.*?)(</\2>)"
+        prev_content = ""
+        while prev_content != xml_content:
+            prev_content = xml_content
+            xml_content = re.sub(
+                pattern, escape_leaf_content, xml_content, flags=re.DOTALL
+            )
+
+        return xml_content
 
     @staticmethod
     def _aggressively_clean_xml(xml_content: str) -> str:
         cleaned = re.sub(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]", "", xml_content)
-        cleaned = re.sub(r"&(?!(?:amp|lt|gt|quot|apos);)", "&amp;", cleaned)
 
-        def selective_escape(match: re.Match[str]) -> str:
-            escaped: str = html.escape(match.group(0), quote=False)
-            return escaped
+        def escape_text_between_tags(match: re.Match[str]) -> str:
+            content = match.group(1)
+            content = re.sub(
+                r"&(?!(?:amp|lt|gt|quot|apos|#\d+|#x[0-9a-fA-F]+);)",
+                "&amp;",
+                content,
+            )
+            return f">{content}<"
 
-        cleaned = re.sub(r">([^<]*)<", selective_escape, cleaned)
+        cleaned = re.sub(r">([^<]*)<", escape_text_between_tags, cleaned)
         return cleaned.strip()
+
+    @staticmethod
+    def _unescape_xml_tags(text: str) -> str:
+        text = re.sub(
+            r"&lt;([a-zA-Z_][a-zA-Z0-9_]*(?:\s+[^&]*?)?)&gt;",
+            r"<\1>",
+            text,
+        )
+        text = re.sub(
+            r"&lt;/([a-zA-Z_][a-zA-Z0-9_]*)&gt;",
+            r"</\1>",
+            text,
+        )
+        return text
+
+    @staticmethod
+    def _fix_truncated_xml(text: str) -> str:
+        opening_tags = re.findall(r"<([a-zA-Z_][a-zA-Z0-9_]*)\b[^/>]*>", text)
+        closing_tags = re.findall(r"</([a-zA-Z_][a-zA-Z0-9_]*)>", text)
+
+        tag_stack = []
+        for tag in opening_tags:
+            tag_stack.append(tag)
+        for tag in closing_tags:
+            if tag_stack and tag_stack[-1] == tag:
+                tag_stack.pop()
+            elif tag in tag_stack:
+                idx = len(tag_stack) - 1 - tag_stack[::-1].index(tag)
+                tag_stack.pop(idx)
+
+        text = re.sub(r"<[a-zA-Z_][a-zA-Z0-9_]*\s+[^>]*$", "", text)
+
+        for tag in reversed(tag_stack):
+            text += f"</{tag}>"
+
+        return text
 
     @staticmethod
     def _extract_tags_fallback(text: str) -> dict[str, Any] | None:

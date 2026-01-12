@@ -291,11 +291,6 @@ class HTMLParser(BaseParser):
         try:
             response = await self.async_client.get(url)
             response.raise_for_status()
-
-            if response.status_code in (301, 302, 303, 307, 308):
-                logger.warning("Redirect detected for URL '%s'", url)
-                raise ContentParseError("Redirect detected")
-
             return response.text
         except httpx.HTTPError as e:
             raise ContentParseError(f"Failed to fetch HTML from '{url}': {e}") from e

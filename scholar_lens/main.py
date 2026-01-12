@@ -12,7 +12,7 @@ from typing import Any
 import boto3
 from git import Repo
 from github import Auth, Github, GithubException
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel, ConfigDict, HttpUrl
 
 sys.path.append(str(Path(__file__).parent.parent))
 
@@ -57,13 +57,12 @@ os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 
 class AppContext(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     config: Config
     default_boto_session: boto3.Session
     bedrock_boto_session: boto3.Session
     s3_handler: S3Handler | None = None
-
-    class Config:
-        arbitrary_types_allowed = True
 
 
 def main(arxiv_id: str, repo_urls: list[str] | None, parse_pdf: bool) -> None:
@@ -622,7 +621,6 @@ def _git_operations(
 
     logger.info("Pushing changes to branch '%s'...", branch_name)
     origin = repo.remote(name="origin")
-    origin.push(refspec=f"{branch_name}:{branch_name}", force=True)
     origin.push(refspec=f"{branch_name}:{branch_name}", force=True)
 
 
