@@ -3,7 +3,7 @@ import re
 from pathlib import Path
 
 import boto3
-from langchain.schema.output_parser import StrOutputParser
+from langchain_core.output_parsers import StrOutputParser
 from pypdf import PdfReader
 
 from .arxiv_handler import ArxivHandler, ArxivNotFoundError

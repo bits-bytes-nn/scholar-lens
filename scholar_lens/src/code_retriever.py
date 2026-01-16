@@ -5,10 +5,10 @@ from pathlib import Path
 
 import boto3
 import git
-from langchain.schema import Document
-from langchain.schema.language_model import BaseLanguageModel
-from langchain.schema.output_parser import StrOutputParser
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_core.documents import Document
+from langchain_core.language_models import BaseLanguageModel
+from langchain_core.output_parsers import StrOutputParser
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores.faiss import FAISS
 from langchain_core.vectorstores import VectorStore
 from tqdm import tqdm

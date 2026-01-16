@@ -17,8 +17,8 @@ from botocore.config import Config as BotoConfig
 from bs4 import BeautifulSoup, NavigableString, Tag
 from langchain.output_parsers import OutputFixingParser
 from langchain_aws import ChatBedrock, ChatBedrockConverse
-from langchain.schema import BaseOutputParser
-from langchain.schema.runnable import RunnableConfig
+from langchain_core.output_parsers import BaseOutputParser
+from langchain_core.runnables import RunnableConfig
 from langchain_community.embeddings import BedrockEmbeddings
 from langchain_core.output_parsers import XMLOutputParser
 from langchain_core.runnables import Runnable

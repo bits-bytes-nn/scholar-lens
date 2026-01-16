@@ -11,8 +11,8 @@ import boto3
 import fitz
 import httpx
 from bs4 import BeautifulSoup, Tag
-from langchain.schema.runnable import Runnable
-from langchain.schema.output_parser import StrOutputParser
+from langchain_core.runnables import Runnable
+from langchain_core.output_parsers import StrOutputParser
 from PIL import Image
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from unstructured.documents.elements import Image as UnstructuredImage
