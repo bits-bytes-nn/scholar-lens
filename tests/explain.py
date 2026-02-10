@@ -77,6 +77,8 @@ async def async_main(arxiv_id: str) -> None:
         code_retriever=code_retriever,
         translation_guideline=translation_guideline,
         enable_output_fixing=True,
+        reflector_enable_thinking=config.explanation.reflector_enable_thinking,
+        synthesizer_enable_thinking=config.explanation.synthesizer_enable_thinking,
     )
     _save_workflow_graph(explainer)
 

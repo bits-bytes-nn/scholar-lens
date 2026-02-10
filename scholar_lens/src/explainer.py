@@ -57,7 +57,6 @@ class ExplainerConfig:
     MIN_QUALITY_SCORE: int = 70
     RECURSION_LIMIT: int = 200
     SEARCH_RESULTS_LIMIT: int = 10
-    THINKING_SYNTHESIS_ATTEMPTS: int = 2
 
 
 class Paper(BaseModel):
@@ -125,6 +124,8 @@ class ExplainerGraph(RetryableBase):
         max_synthesis_attempts: int = ExplainerConfig.MAX_SYNTHESIS_ATTEMPTS,
         min_quality_score: int = ExplainerConfig.MIN_QUALITY_SCORE,
         enable_output_fixing: bool = False,
+        reflector_enable_thinking: bool = False,
+        synthesizer_enable_thinking: bool = False,
     ) -> None:
         _ensure_nltk_data()
 
@@ -146,6 +147,8 @@ class ExplainerGraph(RetryableBase):
             paper_synthesis_model_id,
             output_fixing_model_id,
             enable_output_fixing,
+            reflector_enable_thinking=reflector_enable_thinking,
+            synthesizer_enable_thinking=synthesizer_enable_thinking,
         )
         self.workflow = self._create_workflow()
 
@@ -158,6 +161,9 @@ class ExplainerGraph(RetryableBase):
         synthesis_id: LanguageModelId,
         output_fixing_model_id: LanguageModelId,
         enable_output_fixing: bool,
+        *,
+        reflector_enable_thinking: bool = False,
+        synthesizer_enable_thinking: bool = False,
     ) -> None:
         robust_xml_output_parser = create_robust_xml_output_parser(
             self.llm_factory,
@@ -181,18 +187,13 @@ class ExplainerGraph(RetryableBase):
             PaperReflectionPrompt,
             reflection_id,
             HTMLTagOutputParser(tag_names=PaperReflectionPrompt.output_variables),
+            enable_thinking=reflector_enable_thinking,
         )
         self.synthesizer = self._create_chain(
             PaperSynthesisPrompt,
             synthesis_id,
             StrOutputParser(),
-            supports_1m_context_window=True,
-        )
-        self.synthesizer_with_thinking = self._create_chain(
-            PaperSynthesisPrompt,
-            synthesis_id,
-            StrOutputParser(),
-            enable_thinking=True,
+            enable_thinking=synthesizer_enable_thinking,
             supports_1m_context_window=True,
         )
 
@@ -516,16 +517,10 @@ class ExplainerGraph(RetryableBase):
         analysis = section_data.get("section", [])
         final_explanation_for_paragraph = ""
 
-        use_thinking = (
-            state["synthesis_attempts"] >= ExplainerConfig.THINKING_SYNTHESIS_ATTEMPTS
-            and state["quality_score"] < self.min_quality_score
-        )
-
         logger.info(
-            "Synthesizing paper... (index: %d, attempt: %d, use_thinking: %s)",
+            "Synthesizing paper... (index: %d, attempt: %d)",
             current_index,
             state["synthesis_attempts"] + 1,
-            use_thinking,
         )
 
         while True:
@@ -540,7 +535,6 @@ class ExplainerGraph(RetryableBase):
                 code=state.get("code"),
                 analysis=analysis,
                 improvement_feedback=improvement_feedback,
-                use_thinking=use_thinking,
             )
 
             logger.debug("Synthesized chunk:\n%s", result["explanation"])
@@ -571,13 +565,8 @@ class ExplainerGraph(RetryableBase):
         code: list[dict[str, float | str]] | None,
         analysis: dict[str, Any],
         improvement_feedback: str,
-        use_thinking: bool = False,
     ) -> dict[str, str]:
-        synthesizer = (
-            self.synthesizer_with_thinking if use_thinking else self.synthesizer
-        )
-
-        result = synthesizer.invoke(
+        result = self.synthesizer.invoke(
             {
                 "current_content": current_paragraph,
                 "previous_explanation": previous_explanation,

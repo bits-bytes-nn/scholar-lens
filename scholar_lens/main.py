@@ -147,6 +147,8 @@ async def _run_pipeline(
             [translation_guideline] if translation_guideline else None
         ),
         enable_output_fixing=True,
+        reflector_enable_thinking=context.config.explanation.reflector_enable_thinking,
+        synthesizer_enable_thinking=context.config.explanation.synthesizer_enable_thinking,
     )
     _save_workflow_graph(explainer)
 
