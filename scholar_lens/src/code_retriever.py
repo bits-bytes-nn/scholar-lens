@@ -5,12 +5,12 @@ from pathlib import Path
 
 import boto3
 import git
+from langchain_community.vectorstores.faiss import FAISS
 from langchain_core.documents import Document
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.output_parsers import StrOutputParser
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.vectorstores.faiss import FAISS
 from langchain_core.vectorstores import VectorStore
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from tqdm import tqdm
 
 from .constants import EmbeddingModelId, LanguageModelId, LocalPaths
@@ -115,7 +115,8 @@ class CodeRetriever(RetryableBase):
             for url in repo_urls
         ]
         tasks = [
-            self._clone_repo(url, path) for url, path in zip(repo_urls, self.repo_paths)
+            self._clone_repo(url, path)
+            for url, path in zip(repo_urls, self.repo_paths, strict=False)
         ]
         await asyncio.gather(*tasks)
         return self.repo_paths
@@ -205,7 +206,7 @@ class CodeRetriever(RetryableBase):
         )
 
         augmented_docs = []
-        for doc, result in zip(documents, results):
+        for doc, result in zip(documents, results, strict=False):
             summary = result if result else ""
             augmented_docs.append(
                 Document(

@@ -21,7 +21,9 @@ RUN apt-get update && \
 WORKDIR /app
 
 COPY scholar_lens/requirements.txt .
-RUN python3 -m pip install --no-cache-dir -r requirements.txt
+RUN python3 -m pip install --no-cache-dir --upgrade pip setuptools wheel && \
+    python3 -m pip install --no-cache-dir numpy numba && \
+    python3 -m pip install --no-cache-dir -r requirements.txt
 
 COPY scholar_lens ./scholar_lens
 

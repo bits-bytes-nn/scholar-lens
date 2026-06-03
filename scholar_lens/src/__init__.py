@@ -20,12 +20,21 @@ from .constants import (
 from .content_extractor import Attributes, Citation, ContentExtractor
 from .explainer import ExplainerGraph, Paper
 from .logger import is_running_in_aws, logger
+from .paper_source import (
+    ArxivSource,
+    NotAPdfError,
+    PaperSource,
+    PaperSourceError,
+    PdfUrlSource,
+    resolve_paper_source,
+)
 from .parser import Content, Figure, HTMLRichParser, ParserError, PDFParser
 from .utils import arg_as_bool, create_robust_xml_output_parser, plot_langchain_graph
 
 __all__ = [
     "AppConstants",
     "ArxivHandler",
+    "ArxivSource",
     "Attributes",
     "Citation",
     "CitationSummarizer",
@@ -40,9 +49,14 @@ __all__ = [
     "LanguageModelId",
     "LocalPaths",
     "NoPythonFilesError",
+    "NotAPdfError",
     "Paper",
+    "PaperSource",
+    "PaperSourceError",
+    "PdfUrlSource",
     "ParserError",
     "PDFParser",
+    "resolve_paper_source",
     "S3Handler",
     "S3Paths",
     "SSMParams",

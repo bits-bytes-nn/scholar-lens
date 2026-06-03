@@ -68,16 +68,33 @@ python scripts/deploy_infra.py
 
 #### Development
 ```bash
-# Install dependencies
-poetry install
+# Install dependencies (including dev/test tools)
+poetry install --with dev
 
 # Set up environment
 cp .env.template .env
 # Edit .env with your configuration
 
-# Run locally
-python scholar_lens/main.py --arxiv-id 2312.11805 --parse-pdf True
+# Run locally — --source accepts an arXiv ID or a paper PDF URL
+python scholar_lens/main.py --source 2312.11805 --parse-pdf True
+python scholar_lens/main.py --source https://openreview.net/pdf?id=XXXX
 
 # Submit batch job
-python scripts/run_batch.py --arxiv-id 2505.09388 --repo-urls http://arxiv.org/pdf/2505.09388v1
+python scripts/run_batch.py --source 2505.09388 --repo-urls https://github.com/org/repo
 ```
+
+#### Testing & Quality
+```bash
+# Run the test suite (mocks all AWS/network — no credentials or cost)
+poetry run pytest tests/ --cov=scholar_lens --cov-report=term-missing
+
+# Lint & format
+poetry run ruff check scholar_lens scripts tests
+poetry run black --check scholar_lens scripts tests
+
+# Validate infrastructure synthesis (no AWS account needed)
+poetry run python scripts/ci_synth_check.py
+```
+
+CI (`.github/workflows/ci.yml`) runs lint/format, the pytest matrix
+(Python 3.12 & 3.13), and a CDK synth check on every push and PR.

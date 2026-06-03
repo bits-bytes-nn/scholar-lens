@@ -1,0 +1,132 @@
+"""Tests for the pure pieces of the arXiv handler (pydantic model + helpers).
+
+The real arXiv API is never contacted. The only outbound call in scope is the
+DOI-validation ``requests.get`` to doi.org inside ``ArxivMetadata`` validation,
+which is mocked with ``responses`` (or proven not to fire at all).
+"""
+
+from __future__ import annotations
+
+from datetime import datetime
+
+import pytest
+import responses
+
+from scholar_lens.src.arxiv_handler import ArxivHandler, ArxivMetadata
+
+PUBLISHED = datetime(2024, 1, 1, 12, 0, 0)
+UPDATED = datetime(2024, 1, 2, 12, 0, 0)
+
+
+def _base_kwargs(**overrides: object) -> dict[str, object]:
+    # The default ``arxiv_id`` is a NON-arXiv slug so the ``mode="before"`` DOI
+    # validator never matches the arXiv-id pattern and never makes a network
+    # call. Tests that exercise the DOI lookup override ``arxiv_id`` with a real
+    # id AND activate ``responses`` to mock doi.org.
+    kwargs: dict[str, object] = {
+        "arxiv_id": "test-paper-001",
+        "title": "A Title",
+        "authors": ["Alice"],
+        "published": PUBLISHED,
+        "updated": UPDATED,
+        "doi": None,
+    }
+    kwargs.update(overrides)
+    return kwargs
+
+
+class TestCleanAbstract:
+    @pytest.mark.parametrize(
+        "raw,expected",
+        [
+            ("  hello   world  ", "hello world"),
+            ("line one\n\nline two", "line one line two"),
+            ("a\t\tb\n  c", "a b c"),
+            ("single", "single"),
+        ],
+    )
+    def test_whitespace_collapsed(self, raw: str, expected: str) -> None:
+        meta = ArxivMetadata(**_base_kwargs(abstract=raw))
+        assert meta.abstract == expected
+
+    def test_none_abstract_preserved(self) -> None:
+        meta = ArxivMetadata(**_base_kwargs(abstract=None))
+        assert meta.abstract is None
+
+
+class TestSetUpdatedIfMissing:
+    def test_explicit_updated_is_kept(self) -> None:
+        meta = ArxivMetadata(**_base_kwargs())
+        assert meta.updated == UPDATED
+
+    def test_missing_updated_falls_back_to_published(self) -> None:
+        meta = ArxivMetadata(**_base_kwargs(updated=None))
+        assert meta.updated == PUBLISHED
+
+    def test_both_none_raises(self) -> None:
+        with pytest.raises(ValueError):
+            ArxivMetadata(**_base_kwargs(published=None, updated=None))
+
+
+class TestGenerateAndValidateDoi:
+    @responses.activate
+    def test_real_id_generates_validated_doi(self) -> None:
+        expected_doi = "10.48550/arXiv.2401.06066"
+        responses.add(
+            responses.GET,
+            f"https://doi.org/{expected_doi}",
+            status=200,
+        )
+        meta = ArxivMetadata(**_base_kwargs(arxiv_id="2401.06066"))
+        assert meta.doi == expected_doi
+
+    @responses.activate
+    def test_versioned_id_strips_version_for_doi(self) -> None:
+        expected_doi = "10.48550/arXiv.2401.06066"
+        responses.add(
+            responses.GET,
+            f"https://doi.org/{expected_doi}",
+            status=200,
+        )
+        meta = ArxivMetadata(**_base_kwargs(arxiv_id="2401.06066v3"))
+        assert meta.doi == expected_doi
+
+    @responses.activate
+    def test_non_200_yields_no_doi(self) -> None:
+        responses.add(
+            responses.GET,
+            "https://doi.org/10.48550/arXiv.2401.06066",
+            status=404,
+        )
+        meta = ArxivMetadata(**_base_kwargs(arxiv_id="2401.06066"))
+        assert meta.doi is None
+
+    def test_slug_style_id_generates_no_doi_and_no_network(self) -> None:
+        # A non-arXiv slug must not synthesise a DOI and must not hit the
+        # network. ``responses`` is intentionally NOT active here: any HTTP
+        # call would raise ConnectionError and fail the test.
+        meta = ArxivMetadata(**_base_kwargs(arxiv_id="foo-bar-123"))
+        assert meta.doi is None
+
+    def test_explicit_doi_is_preserved(self) -> None:
+        # A provided DOI short-circuits before any network logic.
+        meta = ArxivMetadata(
+            **_base_kwargs(arxiv_id="foo-bar-123", doi="10.1000/explicit")
+        )
+        assert meta.doi == "10.1000/explicit"
+
+
+class TestNormalizeTitle:
+    @pytest.mark.parametrize(
+        "raw,expected",
+        [
+            ("Attention Is All You Need", "attentionisallyouneed"),
+            ("Self-Attention", "selfattention"),
+            ("A.B.C", "abc"),
+            ("  Mixed  -  Title.", "mixedtitle"),
+        ],
+    )
+    def test_normalization_removes_whitespace_dots_dashes(
+        self, raw: str, expected: str
+    ) -> None:
+        assert ArxivHandler._normalize_title(raw) == expected

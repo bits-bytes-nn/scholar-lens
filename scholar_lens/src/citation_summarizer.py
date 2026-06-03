@@ -13,7 +13,6 @@ from .parser import Content, ContentParseError, HTMLParser
 from .prompts import CitationAnalysisPrompt, CitationSummaryPrompt
 from .utils import BedrockLanguageModelFactory, HTMLTagOutputParser, RetryableBase
 
-
 DEFAULT_MAX_CONCURRENCY: int = 10
 DEFAULT_MAX_RETRIES: int = 3
 DEFAULT_SEARCH_RESULTS_LIMIT: int = 10

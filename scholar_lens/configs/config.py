@@ -1,11 +1,11 @@
+import re
 import sys
-import yaml
 from pathlib import Path
 from typing import Literal
 
-
+import yaml
 from dotenv import load_dotenv
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 sys.path.append(str(Path(__file__).parent.parent))
 
@@ -19,6 +19,27 @@ class Github(BaseModel):
     branch_prefix: str = Field(default="paper-reviews")
     author_name: str = Field(default="Scholar Lens Bot")
     author_email: EmailStr | None = Field(default=None)
+    cover_images: dict[str, str] = Field(
+        default_factory=dict,
+        description="Maps a category slug (lowercase, hyphenated) to a cover "
+        "image filename under the blog's assets/images directory.",
+    )
+    default_cover_image: str = Field(default="default.jpg")
+
+    @field_validator("cover_images", mode="before")
+    @classmethod
+    def _default_empty_mapping(cls, v: dict[str, str] | None) -> dict[str, str]:
+        return v or {}
+
+    def cover_image_for(self, category: str) -> str:
+        """Resolve the cover image for a category, falling back to the default.
+
+        The category is normalised to a slug (lowercase, runs of non-alphanumeric
+        characters collapsed to a single hyphen) so that ``"Multimodal Learning"``
+        and ``"multimodal-learning"`` resolve identically.
+        """
+        slug = re.sub(r"[^a-z0-9]+", "-", category.lower()).strip("-")
+        return self.cover_images.get(slug, self.default_cover_image)
 
 
 class Resources(BaseModel):
@@ -129,7 +150,7 @@ class Config(BaseModel):
 
     @classmethod
     def from_yaml(cls, file_path: str) -> "Config":
-        with open(file_path, "r", encoding="utf-8") as f:
+        with open(file_path, encoding="utf-8") as f:
             config_data = yaml.safe_load(f)
         return cls(**config_data if config_data else {})
 

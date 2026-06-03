@@ -17,9 +17,9 @@ from pydantic import BaseModel, ConfigDict, HttpUrl
 sys.path.append(str(Path(__file__).parent.parent))
 
 from scholar_lens.configs import Config
+from scholar_lens.configs import Github as GithubConfig
 from scholar_lens.src import (
     AppConstants,
-    ArxivHandler,
     CitationSummarizer,
     CodeRetriever,
     Content,
@@ -33,6 +33,7 @@ from scholar_lens.src import (
     LocalPaths,
     NoPythonFilesError,
     Paper,
+    PaperSource,
     ParserError,
     PDFParser,
     S3Handler,
@@ -43,15 +44,10 @@ from scholar_lens.src import (
     is_running_in_aws,
     logger,
     plot_langchain_graph,
+    resolve_paper_source,
 )
 
 ROOT_DIR: Path = Path("/tmp") if is_running_in_aws() else Path(__file__).parent.parent
-COVER_IMAGES_MAP: dict[str, str] = {
-    "language-models": "language-models.jpg",
-    "multimodal-learning": "multimodal-learning.jpg",
-    "retrieval-augmented-generation": "retrieval-augmented-generation.jpg",
-    # NOTE: add new cover images here
-}
 
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
@@ -65,7 +61,7 @@ class AppContext(BaseModel):
     s3_handler: S3Handler | None = None
 
 
-def main(arxiv_id: str, repo_urls: list[str] | None, parse_pdf: bool) -> None:
+def main(source: str, repo_urls: list[str] | None, parse_pdf: bool) -> None:
     config = Config.load()
     profile_name = (
         os.getenv(EnvVars.AWS_PROFILE_NAME.value)
@@ -87,13 +83,15 @@ def main(arxiv_id: str, repo_urls: list[str] | None, parse_pdf: bool) -> None:
             context.default_boto_session, config.resources.s3_bucket_name
         )
 
+    paper_source = resolve_paper_source(source)
+
     s3_url: str | None = None
     success = False
     try:
-        s3_url = asyncio.run(_run_pipeline(context, arxiv_id, repo_urls, parse_pdf))
+        s3_url = asyncio.run(_run_pipeline(context, paper_source, repo_urls, parse_pdf))
         success = True
     except Exception as e:
-        logger.error("Failed to process paper '%s': %s", arxiv_id, e, exc_info=True)
+        logger.error("Failed to process paper '%s': %s", source, e, exc_info=True)
         raise
     finally:
         topic_arn = os.getenv(EnvVars.TOPIC_ARN.value)
@@ -102,7 +100,7 @@ def main(arxiv_id: str, repo_urls: list[str] | None, parse_pdf: bool) -> None:
                 context.default_boto_session,
                 topic_arn,
                 success,
-                arxiv_id,
+                paper_source.source_id,
                 repo_urls,
                 parse_pdf,
                 s3_url,
@@ -110,13 +108,21 @@ def main(arxiv_id: str, repo_urls: list[str] | None, parse_pdf: bool) -> None:
 
 
 async def _run_pipeline(
-    context: AppContext, arxiv_id: str, repo_urls: list[str] | None, parse_pdf: bool
+    context: AppContext,
+    source: PaperSource,
+    repo_urls: list[str] | None,
+    parse_pdf: bool,
 ) -> str | None:
-    paper_dir = ROOT_DIR / LocalPaths.PAPERS_DIR.value / arxiv_id.replace(".", "_")
+    paper_dir = ROOT_DIR / LocalPaths.PAPERS_DIR.value / source.source_id
     _setup_aws_env(context)
 
+    # Arbitrary PDF-URL sources have no arXiv HTML rendering, so force PDF parsing.
+    if source.arxiv_html_id is None and not parse_pdf:
+        logger.info("Non-arXiv source detected; forcing PDF parsing.")
+        parse_pdf = True
+
     paper, code_retriever, citation_summarizer = await _prepare_paper_data(
-        context, paper_dir, arxiv_id, repo_urls, parse_pdf
+        context, paper_dir, source, repo_urls, parse_pdf
     )
 
     translation_guideline = await _load_translation_guideline(context)
@@ -155,7 +161,9 @@ async def _run_pipeline(
     explanation, key_takeaways = await explainer.run()
     logger.info("Successfully generated explanation and key takeaways.")
 
-    formatted_explanation = _format_explanation(paper, explanation, key_takeaways)
+    formatted_explanation = _format_explanation(
+        context.config.resources.github, paper, explanation, key_takeaways
+    )
     s3_url, file_name = await _save_and_upload_results(
         context, paper, paper_dir, paper.title, formatted_explanation
     )
@@ -202,13 +210,12 @@ def _setup_aws_env(context: AppContext) -> None:
 async def _prepare_paper_data(
     context: AppContext,
     paper_dir: Path,
-    arxiv_id: str,
+    source: PaperSource,
     repo_urls: list[str] | None,
     parse_pdf: bool,
 ) -> tuple[Paper, CodeRetriever | None, CitationSummarizer]:
-    arxiv_handler = ArxivHandler()
     figures, content, is_pdf_parsed = await _parse_paper_content(
-        context, arxiv_id, parse_pdf, arxiv_handler
+        context, source, parse_pdf
     )
     logger.info("Paper content was parsed using %s", "PDF" if is_pdf_parsed else "HTML")
 
@@ -237,7 +244,7 @@ async def _prepare_paper_data(
             paper_dir / LocalPaths.FIGURES_FILE.value, [f.model_dump() for f in figures]
         ),
     )
-    metadata = arxiv_handler.fetch_metadata(arxiv_id)
+    metadata = source.fetch_metadata()
     content_extractor = await ContentExtractor.create(
         LanguageModelId(context.config.paper.citation_extraction_model_id),
         LanguageModelId(context.config.paper.attributes_extraction_model_id),
@@ -283,41 +290,46 @@ async def _prepare_paper_data(
 
 
 async def _parse_paper_content(
-    context: AppContext, arxiv_id: str, parse_pdf: bool, arxiv_handler: ArxivHandler
+    context: AppContext, source: PaperSource, parse_pdf: bool
 ) -> tuple[list[Figure], Content, bool]:
-    parser_kwargs = {
+    parser_kwargs: dict[str, Any] = {
         "figure_analysis_model_id": LanguageModelId(
             context.config.paper.figure_analysis_model_id
         ),
         "boto_session": context.bedrock_boto_session,
     }
 
-    if parse_pdf:
-        figures, content = await _parse_pdf(arxiv_id, parser_kwargs, arxiv_handler)
+    # HTML parsing relies on arXiv's HTML rendering and is only available for
+    # arXiv sources; arbitrary PDF-URL sources always go through PDF parsing.
+    arxiv_html_id = source.arxiv_html_id
+    if parse_pdf or arxiv_html_id is None:
+        figures, content = await _parse_pdf(source, parser_kwargs)
         return figures, content, True
 
     try:
         parser = HTMLRichParser(**parser_kwargs)
         async with parser:
-            result = await parser.parse(arxiv_id)
+            result = await parser.parse(arxiv_html_id)
             return result.figures, result.content, False
     except ParserError:
-        logger.warning("HTML parsing failed for '%s', falling back to PDF.", arxiv_id)
-        figures, content = await _parse_pdf(arxiv_id, parser_kwargs, arxiv_handler)
+        logger.warning(
+            "HTML parsing failed for '%s', falling back to PDF.", source.source_id
+        )
+        figures, content = await _parse_pdf(source, parser_kwargs)
         return figures, content, True
 
 
 async def _parse_pdf(
-    arxiv_id: str, parser_kwargs: dict[str, Any], arxiv_handler: ArxivHandler
+    source: PaperSource, parser_kwargs: dict[str, Any]
 ) -> tuple[list[Figure], Content]:
     papers_dir = ROOT_DIR / LocalPaths.PAPERS_DIR.value
-    safe_id_dir = papers_dir / arxiv_id.replace(".", "_")
-    pdf_path = arxiv_handler.download_paper(arxiv_id, papers_dir)
+    paper_dir = papers_dir / source.source_id
+    pdf_path = source.download_pdf(papers_dir)
 
     parser = PDFParser(**parser_kwargs)
     async with parser:
         figures, content = await parser.parse(
-            pdf_path, safe_id_dir / LocalPaths.FIGURES_DIR.value
+            pdf_path, paper_dir / LocalPaths.FIGURES_DIR.value
         )
     return figures, content
 
@@ -413,7 +425,9 @@ def _save_workflow_graph(explainer: ExplainerGraph) -> None:
     plot_langchain_graph(explainer.workflow, graph_path)
 
 
-def _format_explanation(paper: Paper, explanation: str, key_takeaways: str) -> str:
+def _format_explanation(
+    github_config: GithubConfig, paper: Paper, explanation: str, key_takeaways: str
+) -> str:
     front_matter_template = """---
 layout: post
 title: "{title}"
@@ -429,7 +443,7 @@ use_math: true
         [f'"{kw.replace(" ", "-")}"' for kw in paper.attributes.keywords]
     )
     category_str = paper.attributes.category.replace(" ", "-")
-    cover_image = COVER_IMAGES_MAP.get(category_str.lower(), "default.jpg")
+    cover_image = github_config.cover_image_for(paper.attributes.category)
 
     categories_str = f'"Paper Reviews", "{category_str}"'
 
@@ -442,18 +456,26 @@ use_math: true
         cover_image=cover_image,
     )
 
-    body = f"### TL;DR\n{key_takeaways}\n- - -\n{explanation}".replace(
-        "다:", "다."
-    ).replace("요:", "요.")
+    body = f"### TL;DR\n{key_takeaways}\n- - -\n{explanation}"
     references = f"\n- - -\n### References\n* [{paper.title}]({paper.pdf_url})"
     return f"{front_matter}{body}{references}"
+
+
+def _slugify(title: str, max_length: int = 120) -> str:
+    """Filesystem- and S3-safe slug for a paper title.
+
+    Lowercases, replaces every run of non-alphanumeric characters (including
+    path separators and quotes that can appear in PDF-extracted titles) with a
+    single hyphen, and caps the length. Falls back to "untitled" if empty.
+    """
+    slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")[:max_length].strip("-")
+    return slug or "untitled"
 
 
 async def _save_and_upload_results(
     context: AppContext, paper: Paper, paper_dir: Path, title: str, explanation: str
 ) -> tuple[str | None, str]:
-    safe_title = re.sub(r"[\s,:?]", "-", title.lower()).strip("-")
-    file_name = f"{datetime.now().strftime('%Y-%m-%d')}-{safe_title}"
+    file_name = f"{datetime.now().strftime('%Y-%m-%d')}-{_slugify(title)}"
     assets_path_str = f"/{S3Paths.ASSETS.value}/{file_name}"
 
     if paper.is_pdf_parsed:
@@ -524,7 +546,7 @@ async def _create_github_pull_request(
         )
         pr_body = (
             f"This PR adds an AI-generated review for the paper: **{paper.title}**\n\n"
-            f"- **ArXiv ID**: {paper.arxiv_id}\n"
+            f"- **Paper ID**: {paper.arxiv_id}\n"
             f"- **PDF URL**: {paper.pdf_url}\n"
             f"- **PDF Parsing**: {'enabled' if paper.is_pdf_parsed else 'disabled'}\n"
             f"- **Number of Characters**: {num_characters:,}\n"
@@ -659,8 +681,16 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Scholar Lens: An AI-powered paper reviewer."
     )
-    parser.add_argument(
-        "--arxiv-id", type=str, required=True, help="arXiv ID of the paper."
+    source_group = parser.add_mutually_exclusive_group(required=True)
+    source_group.add_argument(
+        "--source",
+        type=str,
+        help="arXiv ID (e.g. 2401.06066) or a URL to a paper PDF.",
+    )
+    source_group.add_argument(
+        "--arxiv-id",
+        type=str,
+        help="[Deprecated] arXiv ID of the paper. Use --source instead.",
     )
     parser.add_argument(
         "--repo-urls", type=str, nargs="*", help="Associated GitHub repository URLs."
@@ -675,5 +705,6 @@ if __name__ == "__main__":
         if args.repo_urls and args.repo_urls != [AppConstants.NULL_STRING]
         else None
     )
+    source = args.source or args.arxiv_id
     logger.info("Starting paper review process with args: %s", vars(args))
-    main(args.arxiv_id, repo_urls, args.parse_pdf)
+    main(source, repo_urls, args.parse_pdf)

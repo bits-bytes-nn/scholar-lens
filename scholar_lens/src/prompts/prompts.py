@@ -1,13 +1,12 @@
 from abc import ABC
 from dataclasses import dataclass
 
+from langchain_core.messages import SystemMessage
 from langchain_core.prompts import (
     ChatPromptTemplate,
     HumanMessagePromptTemplate,
     SystemMessagePromptTemplate,
 )
-from langchain_core.messages import SystemMessage
-
 
 GRANULARITY_RULES: str = """
 **STANDARD**: Concise summary of key ideas and main concepts

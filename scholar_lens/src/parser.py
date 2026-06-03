@@ -3,16 +3,16 @@ import base64
 import io
 import json
 import os
-from collections.abc import Sequence
+from collections.abc import Coroutine, Sequence
 from pathlib import Path
-from typing import Any, Coroutine
+from typing import Any
 
 import boto3
 import fitz
 import httpx
 from bs4 import BeautifulSoup, Tag
-from langchain_core.runnables import Runnable
 from langchain_core.output_parsers import StrOutputParser
+from langchain_core.runnables import Runnable
 from PIL import Image
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from unstructured.documents.elements import Image as UnstructuredImage
@@ -111,7 +111,7 @@ class Figure(BaseModel, RetryableBase):
             try:
                 with open(path, "rb") as f:
                     image_bytes = f.read()
-            except IOError as e:
+            except OSError as e:
                 raise FigureParseError(f"Failed to read file '{path}': {e}") from e
 
         processed_bytes = Figure._resize_if_needed(image_bytes)
@@ -478,15 +478,15 @@ class PDFParser(RichParser):
             path.parent.mkdir(parents=True, exist_ok=True)
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(response, f, indent=2, ensure_ascii=False)
-        except IOError as e:
+        except OSError as e:
             logger.warning("Failed to cache response: %s", e)
 
     @staticmethod
     def _load_cached_response(path: Path) -> dict[str, Any]:
         try:
-            with open(path, "r", encoding="utf-8") as f:
+            with open(path, encoding="utf-8") as f:
                 return json.load(f)
-        except (IOError, json.JSONDecodeError) as e:
+        except (OSError, json.JSONDecodeError) as e:
             raise ContentParseError(f"Failed to load cached response: {e}") from e
 
     async def _request_document_parse(self, pdf_path: Path) -> dict[str, Any]:
@@ -501,7 +501,7 @@ class PDFParser(RichParser):
                 )
                 response.raise_for_status()
                 return response.json()
-        except IOError as e:
+        except OSError as e:
             raise ContentParseError(f"Cannot read PDF file '{pdf_path}': {e}") from e
         except httpx.HTTPError as e:
             raise ContentParseError(f"Document parsing API request failed: {e}") from e
@@ -543,7 +543,7 @@ class PDFParser(RichParser):
                 path=str(path),
                 caption=fd["caption"] or None,
             )
-            for i, (fd, path) in enumerate(zip(figure_data, paths))
+            for i, (fd, path) in enumerate(zip(figure_data, paths, strict=False))
         ]
 
         all_figures = await asyncio.gather(*tasks, return_exceptions=True)

@@ -37,6 +37,70 @@ tiktoken = ">=0.11.0"
 tqdm = ">=4.67.1"
 unstructured = { extras = ["pdf"], version = ">=0.18.15" }
 
+[tool.poetry.group.dev.dependencies]
+pytest = ">=8.0"
+pytest-asyncio = ">=0.23"
+pytest-cov = ">=5.0"
+moto = { extras = ["s3", "sns", "ssm", "batch", "sts"], version = ">=5.0" }
+responses = ">=0.25"
+ruff = ">=0.6"
+mypy = ">=1.11"
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+pythonpath = ["."]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = "-ra -q --strict-markers"
+
+[tool.coverage.run]
+source = ["scholar_lens"]
+omit = ["*/tests/*", "*/__init__.py", "*/prompts/*"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+extend-exclude = ["cdk.out", "logs", "papers", ".venv"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "B", "UP"]
+# E501: long lines handled by black. UP042: str+Enum mixins are intentional —
+# members must compare/serialise as plain strings (StrEnum changes semantics).
+# UP046: PEP 695 generics would force a risky rewrite of the factory base class.
+ignore = ["E501", "UP042", "UP046"]
+
+[tool.ruff.lint.per-file-ignores]
+# Package __init__ files are re-export hubs; their "unused" imports are the API.
+"**/__init__.py" = ["F401"]
+# Tests deliberately assert on broad exceptions for Pydantic/argparse validation.
+"tests/**" = ["B017"]
+# Prompt templates contain semantically-significant trailing whitespace.
+"**/prompts/prompts.py" = ["W291", "W293"]
+
+[tool.black]
+line-length = 88
+target-version = ["py312"]
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
+no_implicit_optional = true
+warn_redundant_casts = true
+explicit_package_bases = true
+namespace_packages = true
+files = ["scholar_lens"]
+exclude = "(cdk\\.out|logs|papers)"
+# Suppress framework-typing noise so mypy can be a real (blocking) signal:
+# - call-overload: boto3-stubs Session.client() only matches literal service
+#   names, not the dynamic `str` we pass.
+# - misc: Pydantic class-level field defaults accessed via the class object.
+disable_error_code = ["call-overload", "misc"]

@@ -22,4 +22,5 @@ python-dotenv>=1.0.1
 pytz>=2025.1
 tiktoken>=0.11.0
 tqdm>=4.67.1
+numba>=0.60
 unstructured[pdf]>=0.18.15

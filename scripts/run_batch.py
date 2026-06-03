@@ -3,7 +3,7 @@ import os
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 import boto3
 from pytz import timezone
@@ -23,7 +23,7 @@ from scholar_lens.src import (
 )
 
 
-def main(job_prefix: str, params: Dict[str, Any]) -> None:
+def main(job_prefix: str, params: dict[str, Any]) -> None:
     config = Config.load()
     profile_name = (
         os.environ.get(EnvVars.AWS_PROFILE_NAME.value)
@@ -74,7 +74,7 @@ def _get_batch_job_details(
         raise
 
 
-def _sanitize_parameters_for_batch(params: Dict[str, Any]) -> Dict[str, str]:
+def _sanitize_parameters_for_batch(params: dict[str, Any]) -> dict[str, str]:
     return {
         key: str(value) if value is not None else AppConstants.NULL_STRING
         for key, value in params.items()
@@ -83,8 +83,16 @@ def _sanitize_parameters_for_batch(params: Dict[str, Any]) -> Dict[str, str]:
 
 def _parse_cli_args() -> dict[str, Any]:
     parser = argparse.ArgumentParser(description="Scholar Lens Batch Job Submitter")
-    parser.add_argument(
-        "--arxiv-id", type=str, required=True, help="arXiv ID of the paper."
+    source_group = parser.add_mutually_exclusive_group(required=True)
+    source_group.add_argument(
+        "--source",
+        type=str,
+        help="arXiv ID (e.g. 2401.06066) or a URL to a paper PDF.",
+    )
+    source_group.add_argument(
+        "--arxiv-id",
+        type=str,
+        help="[Deprecated] arXiv ID of the paper. Use --source instead.",
     )
     parser.add_argument(
         "--repo-urls", type=str, nargs="*", help="Associated GitHub repository URLs."
@@ -94,8 +102,9 @@ def _parse_cli_args() -> dict[str, Any]:
     )
     args = parser.parse_args()
 
-    if not args.arxiv_id or args.arxiv_id.lower() == AppConstants.NULL_STRING:
-        logger.error("A valid arXiv ID is required.")
+    source = args.source or args.arxiv_id
+    if not source or source.lower() == AppConstants.NULL_STRING:
+        logger.error("A valid --source (arXiv ID or paper PDF URL) is required.")
         sys.exit(1)
 
     repo_urls = None
@@ -103,7 +112,7 @@ def _parse_cli_args() -> dict[str, Any]:
         repo_urls = " ".join(args.repo_urls)
 
     return {
-        "arxiv_id": args.arxiv_id,
+        "source": source,
         "repo_urls": repo_urls,
         "parse_pdf": str(args.parse_pdf).lower(),
     }

@@ -1,9 +1,9 @@
 import re
-import requests
 from datetime import datetime
 from pathlib import Path
 
 import arxiv
+import requests
 from pydantic import BaseModel, Field, HttpUrl, ValidationInfo, field_validator
 
 from .constants import AppConstants
@@ -55,7 +55,10 @@ class ArxivMetadata(BaseModel):
         if v:
             return v
 
-        if arxiv_id := info.data.get("arxiv_id"):
+        arxiv_id = info.data.get("arxiv_id")
+        # Only synthesise an arXiv DOI for genuine arXiv identifiers; generic
+        # PDF-URL sources use a derived slug for which this lookup is meaningless.
+        if arxiv_id and re.match(r"^\d{4}\.\d{4,5}(v\d+)?$", arxiv_id):
             clean_arxiv_id = arxiv_id.split("v")[0]
             standard_doi = f"10.48550/arXiv.{clean_arxiv_id}"
             try:
