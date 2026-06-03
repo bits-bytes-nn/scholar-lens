@@ -113,6 +113,7 @@ async def _run(
         researcher=researcher,
         language=context.config.output_language,
         enable_thinking=context.config.tech_guide.writer_enable_thinking,
+        thinking_effort=context.config.tech_guide.thinking_effort,
     )
 
     guide = await generator.generate(

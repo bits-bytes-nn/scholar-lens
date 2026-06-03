@@ -67,6 +67,7 @@ class TechGuideGenerator(RetryableBase):
         researcher: WebResearcher | None = None,
         language: str = DEFAULT_LANGUAGE,
         enable_thinking: bool = False,
+        thinking_effort: str = "medium",
         max_sections: int = _MAX_SECTIONS,
     ) -> None:
         self.language = language
@@ -82,7 +83,10 @@ class TechGuideGenerator(RetryableBase):
         self.synopsis_chain: Runnable = (
             TechGuideSynopsisPrompt.get_prompt()
             | self.llm_factory.get_model(
-                synopsis_model_id, temperature=0.0, enable_thinking=enable_thinking
+                synopsis_model_id,
+                temperature=0.0,
+                enable_thinking=enable_thinking,
+                thinking_effort=thinking_effort,
             )
             | HTMLTagOutputParser(tag_names=TechGuideSynopsisPrompt.output_variables)
         )
@@ -92,6 +96,7 @@ class TechGuideGenerator(RetryableBase):
                 writing_model_id,
                 temperature=0.0,
                 enable_thinking=enable_thinking,
+                thinking_effort=thinking_effort,
                 supports_1m_context_window=True,
             )
             | HTMLTagOutputParser(tag_names=TechGuideSectionPrompt.output_variables)

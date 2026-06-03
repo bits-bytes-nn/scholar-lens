@@ -39,21 +39,25 @@ class PaperSummarizer(RetryableBase):
         language: str = DEFAULT_LANGUAGE,
         translation_guideline: list[dict[str, Any]] | None = None,
         enable_thinking: bool = False,
+        thinking_effort: str = "medium",
     ) -> None:
         self.language = language
         self.translation_guideline = translation_guideline or []
         self.llm_factory = BedrockLanguageModelFactory(boto_session=boto_session)
         self.summary_chain: Runnable = self._build_chain(
-            summary_model_id, enable_thinking=enable_thinking
+            summary_model_id,
+            enable_thinking=enable_thinking,
+            thinking_effort=thinking_effort,
         )
 
     def _build_chain(
-        self, model_id: LanguageModelId, *, enable_thinking: bool
+        self, model_id: LanguageModelId, *, enable_thinking: bool, thinking_effort: str
     ) -> Runnable:
         llm = self.llm_factory.get_model(
             model_id,
             temperature=0.0,
             enable_thinking=enable_thinking,
+            thinking_effort=thinking_effort,
             supports_1m_context_window=True,
         )
         return (

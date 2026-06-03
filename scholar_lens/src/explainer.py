@@ -126,6 +126,7 @@ class ExplainerGraph(RetryableBase):
         enable_output_fixing: bool = False,
         reflector_enable_thinking: bool = False,
         synthesizer_enable_thinking: bool = False,
+        thinking_effort: str = "medium",
     ) -> None:
         _ensure_nltk_data()
 
@@ -149,6 +150,7 @@ class ExplainerGraph(RetryableBase):
             enable_output_fixing,
             reflector_enable_thinking=reflector_enable_thinking,
             synthesizer_enable_thinking=synthesizer_enable_thinking,
+            thinking_effort=thinking_effort,
         )
         self.workflow = self._create_workflow()
 
@@ -164,6 +166,7 @@ class ExplainerGraph(RetryableBase):
         *,
         reflector_enable_thinking: bool = False,
         synthesizer_enable_thinking: bool = False,
+        thinking_effort: str = "medium",
     ) -> None:
         robust_xml_output_parser = create_robust_xml_output_parser(
             self.llm_factory,
@@ -188,12 +191,14 @@ class ExplainerGraph(RetryableBase):
             reflection_id,
             HTMLTagOutputParser(tag_names=PaperReflectionPrompt.output_variables),
             enable_thinking=reflector_enable_thinking,
+            thinking_effort=thinking_effort,
         )
         self.synthesizer = self._create_chain(
             PaperSynthesisPrompt,
             synthesis_id,
             StrOutputParser(),
             enable_thinking=synthesizer_enable_thinking,
+            thinking_effort=thinking_effort,
             supports_1m_context_window=True,
         )
 

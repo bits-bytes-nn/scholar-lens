@@ -199,6 +199,7 @@ async def _generate_review(
         enable_output_fixing=True,
         reflector_enable_thinking=context.config.explanation.reflector_enable_thinking,
         synthesizer_enable_thinking=context.config.explanation.synthesizer_enable_thinking,
+        thinking_effort=context.config.explanation.thinking_effort,
     )
     _save_workflow_graph(explainer)
 
@@ -220,6 +221,7 @@ async def _generate_summary(
         language=context.config.output_language,
         translation_guideline=translation_guideline,
         enable_thinking=context.config.summary.summarizer_enable_thinking,
+        thinking_effort=context.config.summary.thinking_effort,
     )
     result = await summarizer.summarize(paper)
     logger.info("Successfully generated paper summary.")

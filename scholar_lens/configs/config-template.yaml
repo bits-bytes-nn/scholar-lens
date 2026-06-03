@@ -49,11 +49,15 @@ explanation:
   paper_synthesis_model_id: anthropic.claude-opus-4-8
   reflector_enable_thinking: True
   synthesizer_enable_thinking: True
+  # Adaptive-thinking effort (low|medium|high) for Opus 4.8+. 'low' is much
+  # faster/cheaper for the per-paragraph synthesis loop; raise for max depth.
+  thinking_effort: low
 
 # Concise paper-summary mode (--mode summarize)
 summary:
   summary_model_id: anthropic.claude-opus-4-8
   summarizer_enable_thinking: True
+  thinking_effort: medium
 
 # Technical guide / tutorial generator (scholar_lens.tech_guide_main)
 tech_guide:
@@ -61,6 +65,7 @@ tech_guide:
   synopsis_model_id: anthropic.claude-sonnet-4-6
   writing_model_id: anthropic.claude-opus-4-8
   writer_enable_thinking: True
+  thinking_effort: medium
 
 # Output language for generated reviews/summaries/guides (e.g. Korean, English)
 output_language: Korean

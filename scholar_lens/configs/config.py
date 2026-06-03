@@ -11,6 +11,11 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 from scholar_lens.src.constants import EmbeddingModelId, LanguageModelId
 
+# Effort level for adaptive-thinking models (e.g. Opus 4.8). Lower effort means
+# shorter reasoning traces — faster and cheaper. Ignored by legacy thinking
+# models, which use a fixed token budget instead.
+ThinkingEffort = Literal["low", "medium", "high"]
+
 
 class Github(BaseModel):
     enabled: bool = Field(default=False)
@@ -81,7 +86,7 @@ class Code(BaseModel):
     code_summarization_model_id: LanguageModelId = Field(
         default=LanguageModelId.CLAUDE_V4_5_HAIKU
     )
-    embed_model_id: EmbeddingModelId | None = Field(default=None)
+    embed_model_id: EmbeddingModelId = Field(default=EmbeddingModelId.TITAN_EMBED_V2)
     chunk_size: int = Field(default=1024)
     chunk_overlap: int = Field(default=256)
 
@@ -111,11 +116,13 @@ class Explanation(BaseModel):
     )
     reflector_enable_thinking: bool = Field(default=False)
     synthesizer_enable_thinking: bool = Field(default=False)
+    thinking_effort: ThinkingEffort = Field(default="medium")
 
 
 class Summary(BaseModel):
     summary_model_id: LanguageModelId = Field(default=LanguageModelId.CLAUDE_V4_8_OPUS)
     summarizer_enable_thinking: bool = Field(default=False)
+    thinking_effort: ThinkingEffort = Field(default="medium")
 
 
 class TechGuide(BaseModel):
@@ -127,6 +134,7 @@ class TechGuide(BaseModel):
     )
     writing_model_id: LanguageModelId = Field(default=LanguageModelId.CLAUDE_V4_8_OPUS)
     writer_enable_thinking: bool = Field(default=False)
+    thinking_effort: ThinkingEffort = Field(default="medium")
 
 
 class Config(BaseModel):
