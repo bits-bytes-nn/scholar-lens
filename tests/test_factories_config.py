@@ -46,7 +46,10 @@ _HAIKU_V3_5 = _LANGUAGE_MODEL_INFO[
 ]  # perf optimization
 _OPUS_V4_8 = _LANGUAGE_MODEL_INFO[
     LanguageModelId.CLAUDE_V4_8_OPUS
-]  # 64000, thinking, 1m
+]  # 64000, adaptive thinking, 1m, temperature deprecated
+_SONNET_V4_5 = _LANGUAGE_MODEL_INFO[
+    LanguageModelId.CLAUDE_V4_5_SONNET
+]  # 64000, legacy (enabled+budget) thinking, 1m
 
 
 class TestValidateMaxTokens:
@@ -187,22 +190,41 @@ class TestBuildModelConfig1MContextWindow:
 
 
 class TestBuildModelConfigFeatures:
-    def test_thinking_sets_temperature_and_budget_cross_region(self) -> None:
+    def test_legacy_thinking_sets_temperature_and_budget_cross_region(self) -> None:
+        # Legacy thinking models (Sonnet 4.5) use enabled+budget and DO send
+        # temperature (forced to 1.0 in thinking mode).
         factory = _make_factory()
         config = factory._build_model_config(
-            _OPUS_V4_8,
-            "global.anthropic.claude-opus-4-8",
+            _SONNET_V4_5,
+            "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
             is_cross_region=True,
             enable_thinking=True,
         )
-        # Thinking forces temperature to 1.0 and caps tokens at the model max.
         assert config["temperature"] == 1.0
-        assert config["max_tokens"] == _OPUS_V4_8.max_output_tokens
+        assert config["max_tokens"] == _SONNET_V4_5.max_output_tokens
         thinking = config["additional_model_request_fields"]["thinking"]
         assert thinking["type"] == "enabled"
         assert (
             thinking["budget_tokens"]
             == BedrockLanguageModelFactory.DEFAULT_THINKING_BUDGET_TOKENS
+        )
+
+    def test_adaptive_thinking_omits_temperature_cross_region(self) -> None:
+        # Opus 4.8 uses adaptive thinking + effort and DEPRECATES temperature,
+        # so the config must NOT include a temperature key.
+        factory = _make_factory()
+        config = factory._build_model_config(
+            _OPUS_V4_8,
+            "us.anthropic.claude-opus-4-8",
+            is_cross_region=True,
+            enable_thinking=True,
+        )
+        assert "temperature" not in config
+        assert config["max_tokens"] == _OPUS_V4_8.max_output_tokens
+        fields = config["additional_model_request_fields"]
+        assert fields["thinking"] == {"type": "adaptive"}
+        assert fields["output_config"]["effort"] == (
+            BedrockLanguageModelFactory.DEFAULT_THINKING_EFFORT
         )
 
     def test_no_thinking_keeps_default_temperature(self) -> None:

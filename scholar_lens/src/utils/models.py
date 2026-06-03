@@ -37,6 +37,15 @@ class LanguageModelInfo(BaseModel):
         default=False,
         description="Whether the model supports thinking/reasoning capabilities.",
     )
+    uses_adaptive_thinking: bool = Field(
+        default=False,
+        description=(
+            "Whether the model uses the newer adaptive thinking API "
+            "(thinking.type='adaptive' + output_config.effort) instead of the "
+            "legacy thinking.type='enabled' + budget_tokens. Opus 4.8+ requires "
+            "the adaptive form."
+        ),
+    )
     supports_1m_context_window: bool = Field(
         default=False,
         description="Whether the model supports 1M context window.",
@@ -151,6 +160,7 @@ _LANGUAGE_MODEL_INFO: dict[LanguageModelId, LanguageModelInfo] = {
         max_output_tokens=64000,
         supports_prompt_caching=True,
         supports_thinking=True,
+        uses_adaptive_thinking=True,
         supports_1m_context_window=True,
     ),
     # NOTE: add new models here

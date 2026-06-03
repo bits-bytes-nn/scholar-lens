@@ -261,6 +261,7 @@ class BedrockLanguageModelFactory(
     DEFAULT_TEMPERATURE: ClassVar[float] = 0.0
     DEFAULT_TOP_K: ClassVar[int] = 50
     DEFAULT_THINKING_BUDGET_TOKENS: ClassVar[int] = 2048
+    DEFAULT_THINKING_EFFORT: ClassVar[str] = "medium"
     DEFAULT_LATENCY_MODE: ClassVar[str] = "normal"
 
     def _get_boto_service_name(self) -> str:
@@ -315,15 +316,16 @@ class BedrockLanguageModelFactory(
         final_max_tokens = self._validate_max_tokens(
             kwargs.get("max_tokens"), model_info
         )
+        # Newer models (Opus 4.8+) deprecate the temperature parameter entirely;
+        # only send max_tokens for them.
+        token_config: dict[str, Any] = {"max_tokens": final_max_tokens}
+        if not model_info.uses_adaptive_thinking:
+            token_config["temperature"] = final_temperature
         config = self._build_base_config(resolved_model_id, is_cross_region, **kwargs)
         if is_cross_region:
-            config.update(
-                {"max_tokens": final_max_tokens, "temperature": final_temperature}
-            )
+            config.update(token_config)
         else:
-            config["model_kwargs"].update(
-                {"max_tokens": final_max_tokens, "temperature": final_temperature}
-            )
+            config["model_kwargs"].update(token_config)
         if supports_1m_context_window and model_info.supports_1m_context_window:
             if is_cross_region:
                 config.setdefault("additional_model_request_fields", {}).update(
@@ -381,17 +383,30 @@ class BedrockLanguageModelFactory(
                 "Applied performance optimization (latency_mode='%s')", latency
             )
         if self._should_enable_thinking(enable_think, model_info):
-            budget = kwargs.get(
-                "thinking_budget_tokens", self.DEFAULT_THINKING_BUDGET_TOKENS
-            )
-            think_config = {"thinking": {"type": "enabled", "budget_tokens": budget}}
+            if model_info.uses_adaptive_thinking:
+                # Opus 4.8+ API: thinking.type='adaptive' + output_config.effort.
+                effort = kwargs.get("thinking_effort", self.DEFAULT_THINKING_EFFORT)
+                think_config = {
+                    "thinking": {"type": "adaptive"},
+                    "output_config": {"effort": effort},
+                }
+                detail = f"effort='{effort}'"
+            else:
+                # Legacy API: thinking.type='enabled' + budget_tokens.
+                budget = kwargs.get(
+                    "thinking_budget_tokens", self.DEFAULT_THINKING_BUDGET_TOKENS
+                )
+                think_config = {
+                    "thinking": {"type": "enabled", "budget_tokens": budget}
+                }
+                detail = f"budget_tokens={budget}"
             if is_cross_region:
                 config.setdefault("additional_model_request_fields", {}).update(
                     think_config
                 )
             else:
                 config.setdefault("model_kwargs", {}).update(think_config)
-            logger.debug("Applied thinking mode (budget_tokens=%d)", budget)
+            logger.debug("Applied thinking mode (%s)", detail)
 
     @staticmethod
     def _validate_max_tokens(
