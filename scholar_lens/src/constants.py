@@ -19,6 +19,7 @@ class EmbeddingModelId(str, Enum):
 
 class EnvVars(str, Enum):
     AWS_PROFILE_NAME = "AWS_PROFILE_NAME"
+    BRAVE_API_KEY = "BRAVE_API_KEY"
     GITHUB_TOKEN = "GITHUB_TOKEN"
     LANGCHAIN_API_KEY = "LANGCHAIN_API_KEY"
     LANGCHAIN_TRACING_V2 = "LANGCHAIN_TRACING_V2"
@@ -80,6 +81,9 @@ class S3Paths(AutoNamedEnum):
 class SSMParams(AutoNamedEnum):
     BATCH_JOB_DEFINITION = "batch-job-definition"
     BATCH_JOB_QUEUE = "batch-job-queue"
+    GUIDE_JOB_DEFINITION = "guide-job-definition"
+    GUIDE_JOB_QUEUE = "guide-job-queue"
+    BRAVE_API_KEY = "brave-api-key"
     GITHUB_TOKEN = "github-token"
     LANGCHAIN_API_KEY = "langchain-api-key"
     UPSTAGE_API_KEY = "upstage-api-key"

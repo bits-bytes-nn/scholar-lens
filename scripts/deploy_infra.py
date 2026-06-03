@@ -60,6 +60,7 @@ class PaperReviewStack(Stack):
         github_token: str | None = None,
         langchain_api_key: str | None = None,
         upstage_api_key: str | None = None,
+        brave_api_key: str | None = None,
         s3_bucket_name: str | None = None,
         s3_prefix: str = "",
         bedrock_region_name: str | None = None,
@@ -83,15 +84,19 @@ class PaperReviewStack(Stack):
         self.job_role = self._create_job_role()
         self.execution_role = self._create_execution_role()
 
-        job_definition = self._create_job_definition(environment_vars or {})
+        review_job_def, guide_job_def = self._create_job_definitions(
+            environment_vars or {}
+        )
         job_queue = self._create_job_queue()
 
         self._store_ssm_parameters(
-            github_token,
-            langchain_api_key,
-            upstage_api_key,
-            job_queue.job_queue_name,
-            job_definition.job_definition_name,
+            github_token=github_token,
+            langchain_api_key=langchain_api_key,
+            upstage_api_key=upstage_api_key,
+            brave_api_key=brave_api_key,
+            job_queue_name=job_queue.job_queue_name,
+            job_definition_name=review_job_def.job_definition_name,
+            guide_job_definition_name=guide_job_def.job_definition_name,
         )
 
     def _get_resource_name(self, suffix: str) -> str:
@@ -341,9 +346,15 @@ class PaperReviewStack(Stack):
             topic.add_subscription(subscriptions.EmailSubscription(email_address))
         return topic
 
-    def _create_job_definition(
+    def _create_job_definitions(
         self, env_vars: dict[str, str]
-    ) -> batch.EcsJobDefinition:
+    ) -> tuple[batch.EcsJobDefinition, batch.EcsJobDefinition]:
+        """Build the paper-review and tech-guide job definitions.
+
+        Both share the same container image and roles but run different
+        entrypoints: ``scholar_lens.main`` (paper review/summary) and
+        ``scholar_lens.tech_guide_main`` (technical guide).
+        """
         docker_image_asset = DockerImageAsset(
             self,
             "PaperReviewImage",
@@ -352,29 +363,17 @@ class PaperReviewStack(Stack):
             platform=Platform.LINUX_AMD64,
             exclude=["cdk.out", ".venv", ".git", "**/__pycache__"],
         )
-
+        image = ecs.ContainerImage.from_docker_image_asset(docker_image_asset)
         container_env = {
             EnvVars.TOPIC_ARN.value: self.topic.topic_arn,
             EnvVars.LOG_LEVEL.value: "INFO",
             **env_vars,
         }
 
-        log_group = logs.LogGroup(
-            self,
-            "PaperReviewLogGroup",
-            log_group_name=f"/aws/batch/{self._get_resource_name('paper-review')}",
-            retention=logs.RetentionDays.ONE_MONTH,
-            removal_policy=RemovalPolicy.DESTROY,
-        )
-
-        container = batch.EcsEc2ContainerDefinition(
-            self,
-            "PaperReviewContainerDef",
-            image=ecs.ContainerImage.from_docker_image_asset(docker_image_asset),
-            job_role=self.job_role,
-            execution_role=self.execution_role,
-            cpu=1,
-            memory=core.Size.mebibytes(1024),
+        review = self._build_job_definition(
+            name="paper-review",
+            image=image,
+            container_env=container_env,
             command=[
                 "python3",
                 "-m",
@@ -385,19 +384,63 @@ class PaperReviewStack(Stack):
                 "Ref::repo_urls",
                 "--parse-pdf",
                 "Ref::parse_pdf",
+                "--mode",
+                "Ref::mode",
             ],
+        )
+        guide = self._build_job_definition(
+            name="tech-guide",
+            image=image,
+            container_env=container_env,
+            command=[
+                "python3",
+                "-m",
+                "scholar_lens.tech_guide_main",
+                "--urls",
+                "Ref::urls",
+                "--discover-subpages",
+                "Ref::discover_subpages",
+                "--search-queries",
+                "Ref::search_queries",
+            ],
+        )
+        return review, guide
+
+    def _build_job_definition(
+        self,
+        *,
+        name: str,
+        image: ecs.ContainerImage,
+        container_env: dict[str, str],
+        command: list[str],
+    ) -> batch.EcsJobDefinition:
+        log_group = logs.LogGroup(
+            self,
+            f"{name.title().replace('-', '')}LogGroup",
+            log_group_name=f"/aws/batch/{self._get_resource_name(name)}",
+            retention=logs.RetentionDays.ONE_MONTH,
+            removal_policy=RemovalPolicy.DESTROY,
+        )
+        container = batch.EcsEc2ContainerDefinition(
+            self,
+            f"{name.title().replace('-', '')}ContainerDef",
+            image=image,
+            job_role=self.job_role,
+            execution_role=self.execution_role,
+            cpu=1,
+            memory=core.Size.mebibytes(1024),
+            command=command,
             environment=container_env,
             logging=ecs.LogDrivers.aws_logs(
                 stream_prefix=f"{self.project_name}-{self.stage}",
                 log_group=log_group,
             ),
         )
-
         return batch.EcsJobDefinition(
             self,
-            "PaperReviewJobDefinition",
+            f"{name.title().replace('-', '')}JobDefinition",
             container=container,
-            job_definition_name=self._get_resource_name("paper-review"),
+            job_definition_name=self._get_resource_name(name),
             retry_attempts=2,
             timeout=Duration.hours(3),
         )
@@ -444,30 +487,40 @@ class PaperReviewStack(Stack):
 
     def _store_ssm_parameters(
         self,
+        *,
         github_token: str | None,
         langchain_api_key: str | None,
         upstage_api_key: str | None,
+        brave_api_key: str | None,
         job_queue_name: str,
         job_definition_name: str,
+        guide_job_definition_name: str,
     ) -> None:
+        # Both job definitions run on the single shared queue.
         ssm_params_to_create = {
             SSMParams.GITHUB_TOKEN: github_token,
             SSMParams.LANGCHAIN_API_KEY: langchain_api_key,
             SSMParams.UPSTAGE_API_KEY: upstage_api_key,
+            SSMParams.BRAVE_API_KEY: brave_api_key,
             SSMParams.BATCH_JOB_QUEUE: job_queue_name,
             SSMParams.BATCH_JOB_DEFINITION: job_definition_name,
+            SSMParams.GUIDE_JOB_QUEUE: job_queue_name,
+            SSMParams.GUIDE_JOB_DEFINITION: guide_job_definition_name,
         }
 
         descriptions = {
             SSMParams.GITHUB_TOKEN: "GitHub Token",
             SSMParams.LANGCHAIN_API_KEY: "Langchain API Key",
             SSMParams.UPSTAGE_API_KEY: "Upstage API Key",
-            SSMParams.BATCH_JOB_QUEUE: "AWS Batch Job Queue Name for Scholar Lens Paper Review",
-            SSMParams.BATCH_JOB_DEFINITION: "AWS Batch Job Definition Name for Scholar Lens Paper Review",
+            SSMParams.BRAVE_API_KEY: "Brave Search API Key",
+            SSMParams.BATCH_JOB_QUEUE: "AWS Batch Job Queue for Scholar Lens",
+            SSMParams.BATCH_JOB_DEFINITION: "AWS Batch Job Definition for paper review/summary",
+            SSMParams.GUIDE_JOB_QUEUE: "AWS Batch Job Queue for Scholar Lens tech guides",
+            SSMParams.GUIDE_JOB_DEFINITION: "AWS Batch Job Definition for technical guides",
         }
 
         # NOTE: CloudFormation/CDK cannot natively create SecureString SSM
-        # parameters. The three secrets (GitHub token, LangChain/Upstage API
+        # parameters. The secrets (GitHub token, LangChain/Upstage/Brave API
         # keys) are written here as standard parameters for bootstrap
         # convenience only; for production they should be migrated to AWS
         # Secrets Manager (rotation + encryption) or re-created out-of-band as
@@ -477,6 +530,7 @@ class PaperReviewStack(Stack):
             SSMParams.GITHUB_TOKEN,
             SSMParams.LANGCHAIN_API_KEY,
             SSMParams.UPSTAGE_API_KEY,
+            SSMParams.BRAVE_API_KEY,
         }
         for param_enum, param_value in ssm_params_to_create.items():
             if param_value:
@@ -541,6 +595,7 @@ def main() -> None:
             github_token=os.getenv(EnvVars.GITHUB_TOKEN.value),
             langchain_api_key=os.getenv(EnvVars.LANGCHAIN_API_KEY.value),
             upstage_api_key=os.getenv(EnvVars.UPSTAGE_API_KEY.value),
+            brave_api_key=os.getenv(EnvVars.BRAVE_API_KEY.value),
             s3_bucket_name=config.resources.s3_bucket_name,
             s3_prefix=config.resources.s3_prefix,
             bedrock_region_name=config.resources.bedrock_region_name,

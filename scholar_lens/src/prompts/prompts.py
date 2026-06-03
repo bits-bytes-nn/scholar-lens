@@ -2461,3 +2461,272 @@ class TableOfContentsPrompt(BasePrompt):
     4. **Final Pass**: Generate XML with proper nesting and all required elements
 
     Generate ONLY the XML output. No additional text or explanations."""
+
+
+class PaperSummaryPrompt(BasePrompt):
+    input_variables: list[str] = ["content", "language", "translation_guideline"]
+    output_variables: list[str] = ["summary", "tags", "urls"]
+
+    system_prompt_template: str = """
+    You are an expert in analyzing and summarizing AI/ML research papers. You excel at conveying complex technical
+    content in a clear and structured manner while maintaining technical precision.
+
+    Your expertise includes:
+    - Identifying core concepts, innovative approaches, and experimental results
+    - Providing technical explanations that are precise yet accessible
+    - Assessing research strengths, limitations, and trade-offs
+    - Recognizing implications and future research directions
+    - Contextualizing research within broader AI/ML developments
+    """
+
+    human_prompt_template: str = """
+    Analyze and summarize the following AI/ML research paper with technical precision and clarity:
+
+    <paper>
+    {content}
+    </paper>
+
+    <Core Requirements>
+    1. Extract key technical concepts, methodologies, and architectural innovations
+    2. Analyze implementation details and technical decisions
+    3. Highlight the most significant experimental results
+    4. Identify limitations and potential improvements
+    5. Connect the research to broader AI/ML applications
+    6. Provide a concise summary (maximum 2 A4 pages, approximately 2000 characters)
+    7. Include relevant figures to enhance understanding
+
+    <Important Note>
+    Select only essential visual elements (images, tables, code) that are critical for understanding key concepts.
+
+    <Focus Distribution>
+    - Provide DETAILED summaries of the novel solution and implementation methods (sections 2 and 3)
+    - Provide BRIEF summaries of the background/motivation, experimental results, and future directions (sections 1, 4,
+    and 5)
+    - For brief summary sections (1, 4, 5), prefer text-based explanations over images, tables, formulas, or code
+
+    <Language>
+    - Write the summary in this language: {language}
+    - When the language is not English, keep established English technical terms as-is (do not force-translate them)
+    - Apply the following translation guideline for consistent terminology (may be empty):
+    {translation_guideline}
+
+    <Output Structure>
+    1. Place the entire HTML summary within <summary> tags
+    2. Place all technical tags within <tags> tags (maximum 5 relevant technical keywords in English, Title Case)
+    3. Place all reference URLs within <urls> tags as [text](url), [text](url), ...
+
+    <Section Headers>
+    Use these exact section headers (translate the visible text to the target language but keep the emoji and the
+    five-question structure; skip a section only if the paper truly lacks relevant information):
+    <h2>🔍 What motivated this research?</h2> [BRIEF SUMMARY - prefer text over images/tables/formulas/code]
+    <h2>💡 What novel solution does this research propose?</h2> [DETAILED SUMMARY]
+    <h2>⚙️ How was the proposed method implemented?</h2> [DETAILED SUMMARY]
+    <h2>📊 What are the key experimental results?</h2> [BRIEF SUMMARY - prefer text over images/tables/formulas/code]
+    <h2>🔮 What is the significance and future direction of this research?</h2> [BRIEF SUMMARY]
+
+    <Formatting Guidelines>
+    - Format your response in clean HTML for optimal readability
+    - Use <strong> tags for key concepts and <ul>/<ol> tags for lists
+    - Include mathematical formulas in LaTeX ($...$ for inline, $$...$$ for display)
+    - IMPORTANT: Avoid LaTeX environments that start with \\begin{{...}} as they may break. Instead:
+      * For matrices, use array environments:
+        $$\\left[ \\begin{{array}}{{ccc}} a & b & c \\\\ d & e & f \\end{{array}} \\right]$$
+      * For aligned equations, use aligned notation with &: $$a = b \\\\ c = d$$
+      * For complex math structures, break them into multiple display equations
+    - Do NOT use the \\bm{{}} command; use \\boldsymbol{{}} for bold symbols (e.g. $\\boldsymbol{{\\alpha}}$)
+    - Enhance understanding with visual elements:
+      * Include relevant figures from the paper using <img> tags
+      * Use <table> for comparative data
+      * Use <pre><code> blocks for algorithms
+    - Image inclusion guidelines:
+      * WARNING: Do NOT confuse local image paths with external URLs
+      * If an image path starts with '/' it is a LOCAL path — keep it exactly as is:
+        <img src="/path/to/image.png" alt="Description" width="600">
+      * NEVER prepend a host (e.g. 'https://arxiv.org/html') to a local path
+      * Only use complete URLs when the source already provides one
+    - Reference figures in the text (e.g., "As shown in Figure 1...")
+
+    <Content Style>
+    - Prioritize technical accuracy and clarity; explain complex concepts accessibly without oversimplifying
+    - Focus on core results rather than exhaustive metrics
+    - Balance text and visuals for optimal comprehension
+
+    <Final Response Format>
+    <summary>
+    <h2>🔍 What motivated this research?</h2>
+    ...
+    <h2>💡 What novel solution does this research propose?</h2>
+    ...
+    <h2>⚙️ How was the proposed method implemented?</h2>
+    ...
+    <h2>📊 What are the key experimental results?</h2>
+    ...
+    <h2>🔮 What is the significance and future direction of this research?</h2>
+    ...
+    </summary>
+    <tags>Technical Tag One, Technical Tag Two, Technical Tag Three, Technical Tag Four, Technical Tag Five</tags>
+    <urls>[GitHub Repository](repo_url), [Dataset](dataset_url), [Project Page](project_url)</urls>
+    """
+
+
+class TechGuideRelevancePrompt(BasePrompt):
+    input_variables: list[str] = ["sources"]
+    output_variables: list[str] = ["is_relevant", "topic", "reason"]
+
+    system_prompt_template: str = """
+    You are a gatekeeper that decides whether a set of web sources is suitable for generating a technical
+    guide/tutorial about a software library, framework, platform, API, or developer tool.
+
+    A source set is RELEVANT only if it predominantly contains technical/developer documentation, API references,
+    tutorials, framework/library/platform guides, SDK docs, or engineering material from which a self-study technical
+    guide could be written. It is NOT relevant if it is mostly marketing, news, blogs unrelated to a specific
+    technology, personal pages, e-commerce, or otherwise non-technical content.
+    """
+
+    human_prompt_template: str = """
+    Evaluate whether the following web sources are suitable for writing a technical guide/tutorial.
+
+    <sources>
+    {sources}
+    </sources>
+
+    Decide strictly. If the sources are not clearly technical developer documentation/tutorial material, mark them as
+    not relevant.
+
+    Respond in exactly this format:
+    <is_relevant>yes or no</is_relevant>
+    <topic>A concise technical topic title for the guide (e.g. "Getting Started with FastAPI"), or "N/A" if not relevant</topic>
+    <reason>One sentence explaining the decision</reason>
+    """
+
+
+class TechGuideSynopsisPrompt(BasePrompt):
+    input_variables: list[str] = ["topic", "sources", "search_results", "language"]
+    output_variables: list[str] = ["synopsis"]
+
+    system_prompt_template: str = """
+    You are an expert technical writer and educator. You design clear, well-structured learning paths for software
+    libraries, frameworks, and platforms, sequencing concepts from fundamentals to advanced usage.
+    """
+
+    human_prompt_template: str = """
+    Design a synopsis (outline) for a comprehensive technical guide/tutorial on the topic below, grounded ONLY in the
+    provided sources and search results. Do not invent sections unsupported by the material.
+
+    <topic>{topic}</topic>
+
+    <sources>
+    {sources}
+    </sources>
+
+    <search_results>
+    {search_results}
+    </search_results>
+
+    Produce an ordered outline that builds understanding progressively (overview -> setup -> core concepts ->
+    practical usage with code -> advanced topics -> pitfalls/best practices). For each section give a title and a
+    one-line description of what it will cover, and note where code examples, tables, or diagrams would help.
+
+    Write the synopsis in this language: {language} (keep established English technical terms as-is).
+
+    Respond in this format:
+    <synopsis>
+    1. [Section Title] - [one-line description] (visuals: code/table/diagram/none)
+    2. ...
+    </synopsis>
+    """
+
+
+class TechGuideSectionPrompt(BasePrompt):
+    input_variables: list[str] = [
+        "topic",
+        "synopsis",
+        "section",
+        "previous_sections",
+        "sources",
+        "available_images",
+        "language",
+    ]
+    output_variables: list[str] = ["section_markdown"]
+
+    system_prompt_template: str = """
+    You are an expert technical writer producing a section of a self-study technical guide/tutorial. You write
+    accurate, example-driven Markdown that teaches by doing: clear prose, runnable code blocks, comparison tables,
+    and LaTeX math where appropriate. You ground every claim in the provided sources and never fabricate APIs.
+    """
+
+    human_prompt_template: str = """
+    Write the following section of a technical guide on "{topic}".
+
+    <full_synopsis>
+    {synopsis}
+    </full_synopsis>
+
+    <section_to_write>
+    {section}
+    </section_to_write>
+
+    <previously_written_sections>
+    {previous_sections}
+    </previously_written_sections>
+
+    <sources>
+    {sources}
+    </sources>
+
+    <available_images>
+    {available_images}
+    </available_images>
+
+    Requirements:
+    - Write in clean GitHub-flavored Markdown, starting with an appropriate '##' or '###' heading for this section.
+    - Ground all technical content in <sources>; do NOT invent APIs, flags, or behaviors not supported by them.
+    - Include runnable code blocks (with language fences) where they aid understanding.
+    - Use Markdown tables for comparisons/options and LaTeX ($...$ / $$...$$) for any math.
+    - You MAY reference an image ONLY if its URL appears in <available_images>, using `![alt](url)`. Never invent image
+      URLs. If no image fits, use none.
+    - Do not repeat content already covered in <previously_written_sections>.
+    - Write in this language: {language} (keep established English technical terms as-is).
+
+    Respond in this format:
+    <section_markdown>
+    [The section in Markdown]
+    </section_markdown>
+    """
+
+
+class SlackIntentPrompt(BasePrompt):
+    input_variables: list[str] = ["message"]
+    output_variables: list[str] = ["intent", "sources", "repo_urls", "reason"]
+
+    system_prompt_template: str = """
+    You are an intent parser for a research assistant Slack bot. You read a user's chat message and decide which
+    action they want and extract the relevant inputs. You never execute anything — you only classify and extract.
+
+    Supported intents:
+    - "review": produce an in-depth review of ONE paper (arXiv id or a paper PDF URL).
+    - "summarize": produce a concise summary of ONE paper (arXiv id or a paper PDF URL).
+    - "guide": produce a technical guide/tutorial from ONE OR MORE documentation URLs.
+    - "unknown": the message does not request any of the above.
+    """
+
+    human_prompt_template: str = """
+    Parse the following Slack message and extract the requested action and inputs.
+
+    <message>
+    {message}
+    </message>
+
+    Rules:
+    - Choose exactly one intent from: review, summarize, guide, unknown.
+    - For review/summarize: <sources> must contain exactly one arXiv id (e.g. 2401.06066) or one paper PDF URL.
+    - For guide: <sources> may contain one or more documentation URLs (comma-separated).
+    - <repo_urls> holds any associated GitHub repository URLs mentioned (comma-separated), else empty.
+    - If you cannot confidently identify the intent or required inputs, use intent "unknown".
+
+    Respond in exactly this format:
+    <intent>review|summarize|guide|unknown</intent>
+    <sources>comma-separated arXiv ids and/or URLs, or empty</sources>
+    <repo_urls>comma-separated GitHub URLs, or empty</repo_urls>
+    <reason>one short sentence explaining the classification</reason>
+    """

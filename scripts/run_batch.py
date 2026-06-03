@@ -100,6 +100,13 @@ def _parse_cli_args() -> dict[str, Any]:
     parser.add_argument(
         "--parse-pdf", type=arg_as_bool, default=False, help="Force PDF parsing."
     )
+    parser.add_argument(
+        "--mode",
+        type=str,
+        choices=["review", "summarize"],
+        default="review",
+        help="Generation mode: 'review' (in-depth) or 'summarize' (concise).",
+    )
     args = parser.parse_args()
 
     source = args.source or args.arxiv_id
@@ -115,6 +122,7 @@ def _parse_cli_args() -> dict[str, Any]:
         "source": source,
         "repo_urls": repo_urls,
         "parse_pdf": str(args.parse_pdf).lower(),
+        "mode": args.mode,
     }
 
 

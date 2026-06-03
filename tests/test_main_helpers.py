@@ -10,11 +10,11 @@ from scholar_lens.configs import Github
 from scholar_lens.main import (
     _enrich_content_with_figures,
     _format_explanation,
-    _slugify,
 )
 from scholar_lens.src.content_extractor import Attributes
 from scholar_lens.src.explainer import Paper
 from scholar_lens.src.parser import Content, Figure
+from scholar_lens.src.publisher import slugify as _slugify
 
 
 class TestSlugify:

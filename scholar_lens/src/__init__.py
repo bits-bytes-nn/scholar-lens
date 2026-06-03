@@ -29,13 +29,23 @@ from .paper_source import (
     resolve_paper_source,
 )
 from .parser import Content, Figure, HTMLRichParser, ParserError, PDFParser
+from .publisher import Publisher, PublishRequest
+from .summarizer import PaperSummarizer
+from .tech_guide import NotTechnicalContentError, TechGuide, TechGuideGenerator
 from .utils import arg_as_bool, create_robust_xml_output_parser, plot_langchain_graph
+from .web_research import (
+    BraveSearchProvider,
+    NullSearchProvider,
+    WebResearcher,
+    WebSearchProvider,
+)
 
 __all__ = [
     "AppConstants",
     "ArxivHandler",
     "ArxivSource",
     "Attributes",
+    "BraveSearchProvider",
     "Citation",
     "CitationSummarizer",
     "CodeRetriever",
@@ -50,16 +60,25 @@ __all__ = [
     "LocalPaths",
     "NoPythonFilesError",
     "NotAPdfError",
+    "NotTechnicalContentError",
+    "NullSearchProvider",
     "Paper",
     "PaperSource",
     "PaperSourceError",
+    "PaperSummarizer",
     "PdfUrlSource",
     "ParserError",
     "PDFParser",
+    "Publisher",
+    "PublishRequest",
     "resolve_paper_source",
     "S3Handler",
     "S3Paths",
     "SSMParams",
+    "TechGuide",
+    "TechGuideGenerator",
+    "WebResearcher",
+    "WebSearchProvider",
     "arg_as_bool",
     "create_robust_xml_output_parser",
     "get_account_id",

@@ -113,6 +113,22 @@ class Explanation(BaseModel):
     synthesizer_enable_thinking: bool = Field(default=False)
 
 
+class Summary(BaseModel):
+    summary_model_id: LanguageModelId = Field(default=LanguageModelId.CLAUDE_V4_8_OPUS)
+    summarizer_enable_thinking: bool = Field(default=False)
+
+
+class TechGuide(BaseModel):
+    relevance_model_id: LanguageModelId = Field(
+        default=LanguageModelId.CLAUDE_V4_5_HAIKU
+    )
+    synopsis_model_id: LanguageModelId = Field(
+        default=LanguageModelId.CLAUDE_V4_6_SONNET
+    )
+    writing_model_id: LanguageModelId = Field(default=LanguageModelId.CLAUDE_V4_8_OPUS)
+    writer_enable_thinking: bool = Field(default=False)
+
+
 class Config(BaseModel):
     resources: Resources = Field(
         default_factory=lambda: Resources(project_name="scholar-lens")
@@ -147,6 +163,9 @@ class Config(BaseModel):
             paper_synthesis_model_id=LanguageModelId.CLAUDE_V4_5_SONNET,
         )
     )
+    summary: Summary = Field(default_factory=Summary)
+    tech_guide: TechGuide = Field(default_factory=TechGuide)
+    output_language: str = Field(default="Korean")
 
     @classmethod
     def from_yaml(cls, file_path: str) -> "Config":

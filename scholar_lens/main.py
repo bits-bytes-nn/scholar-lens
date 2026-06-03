@@ -3,15 +3,11 @@ import asyncio
 import json
 import os
 import re
-import shutil
 import sys
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import boto3
-from git import Repo
-from github import Auth, Github, GithubException
 from pydantic import BaseModel, ConfigDict, HttpUrl
 
 sys.path.append(str(Path(__file__).parent.parent))
@@ -34,8 +30,11 @@ from scholar_lens.src import (
     NoPythonFilesError,
     Paper,
     PaperSource,
+    PaperSummarizer,
     ParserError,
     PDFParser,
+    Publisher,
+    PublishRequest,
     S3Handler,
     S3Paths,
     SSMParams,
@@ -52,6 +51,15 @@ ROOT_DIR: Path = Path("/tmp") if is_running_in_aws() else Path(__file__).parent.
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 
+class Mode:
+    """Generation modes for the pipeline."""
+
+    REVIEW = "review"
+    SUMMARIZE = "summarize"
+
+    ALL = (REVIEW, SUMMARIZE)
+
+
 class AppContext(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -61,7 +69,12 @@ class AppContext(BaseModel):
     s3_handler: S3Handler | None = None
 
 
-def main(source: str, repo_urls: list[str] | None, parse_pdf: bool) -> None:
+def main(
+    source: str,
+    repo_urls: list[str] | None,
+    parse_pdf: bool,
+    mode: str = Mode.REVIEW,
+) -> None:
     config = Config.load()
     profile_name = (
         os.getenv(EnvVars.AWS_PROFILE_NAME.value)
@@ -88,7 +101,9 @@ def main(source: str, repo_urls: list[str] | None, parse_pdf: bool) -> None:
     s3_url: str | None = None
     success = False
     try:
-        s3_url = asyncio.run(_run_pipeline(context, paper_source, repo_urls, parse_pdf))
+        s3_url = asyncio.run(
+            _run_pipeline(context, paper_source, repo_urls, parse_pdf, mode)
+        )
         success = True
     except Exception as e:
         logger.error("Failed to process paper '%s': %s", source, e, exc_info=True)
@@ -112,6 +127,7 @@ async def _run_pipeline(
     source: PaperSource,
     repo_urls: list[str] | None,
     parse_pdf: bool,
+    mode: str = Mode.REVIEW,
 ) -> str | None:
     paper_dir = ROOT_DIR / LocalPaths.PAPERS_DIR.value / source.source_id
     _setup_aws_env(context)
@@ -124,8 +140,35 @@ async def _run_pipeline(
     paper, code_retriever, citation_summarizer = await _prepare_paper_data(
         context, paper_dir, source, repo_urls, parse_pdf
     )
-
     translation_guideline = await _load_translation_guideline(context)
+
+    if mode == Mode.SUMMARIZE:
+        document = await _generate_summary(context, paper, translation_guideline)
+    else:
+        document = await _generate_review(
+            context, paper, citation_summarizer, code_retriever, translation_guideline
+        )
+
+    publisher = _build_publisher(context)
+    request = _build_paper_publish_request(paper, paper_dir, document, mode)
+    s3_url, document_path = await publisher.publish(request)
+
+    if context.config.resources.github.enabled:
+        await publisher.create_pull_request(request, document_path)
+
+    if code_retriever:
+        await code_retriever.delete_index()
+
+    return s3_url
+
+
+async def _generate_review(
+    context: AppContext,
+    paper: Paper,
+    citation_summarizer: CitationSummarizer,
+    code_retriever: CodeRetriever | None,
+    translation_guideline: list[dict[str, Any]] | None,
+) -> str:
     explainer = ExplainerGraph(
         paper=paper,
         paper_analysis_model_id=LanguageModelId(
@@ -160,28 +203,26 @@ async def _run_pipeline(
 
     explanation, key_takeaways = await explainer.run()
     logger.info("Successfully generated explanation and key takeaways.")
-
-    formatted_explanation = _format_explanation(
+    return _format_explanation(
         context.config.resources.github, paper, explanation, key_takeaways
     )
-    s3_url, file_name = await _save_and_upload_results(
-        context, paper, paper_dir, paper.title, formatted_explanation
+
+
+async def _generate_summary(
+    context: AppContext,
+    paper: Paper,
+    translation_guideline: list[dict[str, Any]] | None,
+) -> str:
+    summarizer = PaperSummarizer(
+        LanguageModelId(context.config.summary.summary_model_id),
+        context.bedrock_boto_session,
+        language=context.config.output_language,
+        translation_guideline=translation_guideline,
+        enable_thinking=context.config.summary.summarizer_enable_thinking,
     )
-
-    explanation_path = paper_dir / f"{file_name}.md"
-
-    if context.config.resources.github.enabled:
-        if explanation_path.exists():
-            await _create_github_pull_request(
-                context, paper, explanation_path, len(formatted_explanation)
-            )
-        else:
-            logger.warning("Explanation file not found, skipping PR creation.")
-
-    if code_retriever:
-        await code_retriever.delete_index()
-
-    return s3_url
+    result = await summarizer.summarize(paper)
+    logger.info("Successfully generated paper summary.")
+    return _format_summary(context.config.resources.github, paper, result)
 
 
 def _setup_aws_env(context: AppContext) -> None:
@@ -425,9 +466,14 @@ def _save_workflow_graph(explainer: ExplainerGraph) -> None:
     plot_langchain_graph(explainer.workflow, graph_path)
 
 
-def _format_explanation(
-    github_config: GithubConfig, paper: Paper, explanation: str, key_takeaways: str
+def _build_front_matter(
+    github_config: GithubConfig, paper: Paper, primary_category: str
 ) -> str:
+    """Jekyll front matter shared by reviews and summaries.
+
+    ``primary_category`` is the lead category label (e.g. "Paper Reviews" or
+    "Paper Summaries"); the paper's own subject category is appended after it.
+    """
     front_matter_template = """---
 layout: post
 title: "{title}"
@@ -444,10 +490,9 @@ use_math: true
     )
     category_str = paper.attributes.category.replace(" ", "-")
     cover_image = github_config.cover_image_for(paper.attributes.category)
+    categories_str = f'"{primary_category}", "{category_str}"'
 
-    categories_str = f'"Paper Reviews", "{category_str}"'
-
-    front_matter = front_matter_template.format(
+    return front_matter_template.format(
         title=paper.title.replace('"', '\\"'),
         date=paper.published.strftime("%Y-%m-%d %H:%M:%S"),
         author=paper.attributes.affiliation,
@@ -456,196 +501,68 @@ use_math: true
         cover_image=cover_image,
     )
 
+
+def _format_explanation(
+    github_config: GithubConfig, paper: Paper, explanation: str, key_takeaways: str
+) -> str:
+    front_matter = _build_front_matter(github_config, paper, "Paper Reviews")
     body = f"### TL;DR\n{key_takeaways}\n- - -\n{explanation}"
     references = f"\n- - -\n### References\n* [{paper.title}]({paper.pdf_url})"
     return f"{front_matter}{body}{references}"
 
 
-def _slugify(title: str, max_length: int = 120) -> str:
-    """Filesystem- and S3-safe slug for a paper title.
+def _format_summary(
+    github_config: GithubConfig, paper: Paper, result: dict[str, str]
+) -> str:
+    """Render a summary post: front matter + HTML summary + extracted URLs."""
+    front_matter = _build_front_matter(github_config, paper, "Paper Summaries")
+    body = result["summary"]
+    references_lines = [f"* [{paper.title}]({paper.pdf_url})"]
+    if urls := result.get("urls", "").strip():
+        references_lines.append(urls)
+    references = "\n- - -\n### References\n" + "\n".join(references_lines)
+    return f"{front_matter}{body}{references}"
 
-    Lowercases, replaces every run of non-alphanumeric characters (including
-    path separators and quotes that can appear in PDF-extracted titles) with a
-    single hyphen, and caps the length. Falls back to "untitled" if empty.
-    """
-    slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")[:max_length].strip("-")
-    return slug or "untitled"
 
-
-async def _save_and_upload_results(
-    context: AppContext, paper: Paper, paper_dir: Path, title: str, explanation: str
-) -> tuple[str | None, str]:
-    file_name = f"{datetime.now().strftime('%Y-%m-%d')}-{_slugify(title)}"
-    assets_path_str = f"/{S3Paths.ASSETS.value}/{file_name}"
-
-    if paper.is_pdf_parsed:
-
-        def replace_local_path(match: re.Match) -> str:
-            alt_text = match.group(1)
-            img_filename = match.group(2)
-            if not img_filename.startswith("http"):
-                return f"![{alt_text}]({assets_path_str}/{img_filename})"
-            return match.group(0)
-
-        pattern = r"!\[(.*?)\]\((.*?)\)"
-        explanation = re.sub(pattern, replace_local_path, explanation)
-
-    explanation_path = paper_dir / f"{file_name}.md"
-    await asyncio.to_thread(explanation_path.write_text, explanation, encoding="utf-8")
-
-    if not context.s3_handler:
-        return None, file_name
-
-    s3_prefix = context.config.resources.s3_prefix or ""
-    posts_key = f"{s3_prefix}/{S3Paths.POSTS.value}".lstrip("/")
-    assets_key = f"{s3_prefix}/{S3Paths.ASSETS.value}/{file_name}".lstrip("/")
-    await context.s3_handler.upload_file_async(explanation_path, posts_key)
-    figures_dir = paper_dir / LocalPaths.FIGURES_DIR.value
-    if figures_dir.exists():
-        await asyncio.to_thread(
-            context.s3_handler.upload_directory,
-            figures_dir,
-            assets_key,
-            file_extensions=[".gif", ".jpg", ".jpeg", ".png"],
-            public_readable=True,
-        )
-    return (
-        f"s3://{context.config.resources.s3_bucket_name}/{posts_key}/{file_name}.md",
-        file_name,
+def _build_publisher(context: AppContext) -> Publisher:
+    return Publisher(
+        context.config.resources.github,
+        root_dir=ROOT_DIR,
+        s3_handler=context.s3_handler,
+        s3_bucket_name=context.config.resources.s3_bucket_name,
+        s3_prefix=context.config.resources.s3_prefix,
     )
 
 
-async def _create_github_pull_request(
-    context: AppContext, paper: Paper, explanation_path: Path, num_characters: int
-) -> None:
-    repo_config = context.config.resources.github
-
-    if not repo_config.repo_name:
-        logger.error("GitHub repository not configured.")
-        return
-
-    token = os.getenv(EnvVars.GITHUB_TOKEN.value)
-    if not token:
-        logger.error(
-            "GitHub token not found in environment variable '%s'.",
-            EnvVars.GITHUB_TOKEN.value,
-        )
-        return
-
-    clone_dir = ROOT_DIR / LocalPaths.GITHUB_CLONE_DIR.value
-    try:
-        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        branch_name = f"{context.config.resources.github.branch_prefix}/{paper.arxiv_id}-{timestamp}"
-
-        commit_message = f"feat: Add paper review for '{paper.title}'"
-        pr_title = f"Paper Review: {paper.title}"
-        repo_info = (
-            f"- **Repositories**: {', '.join([str(repo) for repo in paper.repo_urls])}\n"
-            if paper.repo_urls
-            else ""
-        )
-        pr_body = (
-            f"This PR adds an AI-generated review for the paper: **{paper.title}**\n\n"
-            f"- **Paper ID**: {paper.arxiv_id}\n"
-            f"- **PDF URL**: {paper.pdf_url}\n"
-            f"- **PDF Parsing**: {'enabled' if paper.is_pdf_parsed else 'disabled'}\n"
-            f"- **Number of Characters**: {num_characters:,}\n"
-            f"{repo_info}\n"
-            f"This pull request was automatically generated by the Scholar-Lens system."
-        )
-
-        await asyncio.to_thread(
-            _git_operations,
-            context,
-            clone_dir,
-            branch_name,
-            commit_message,
-            explanation_path,
-        )
-
-        logger.info("Creating a pull request on GitHub...")
-
-        auth = Auth.Token(token)
-        g = Github(auth=auth)
-        gh_repo = g.get_repo(repo_config.repo_name)
-
-        try:
-            gh_repo.create_pull(
-                title=pr_title,
-                body=pr_body,
-                head=branch_name,
-                base=repo_config.base_branch,
-            )
-            logger.info("Successfully created a pull request: '%s'", pr_title)
-        except GithubException as e:
-            if e.status == 422 and "A pull request already exists" in str(e.data):
-                logger.warning(
-                    "Pull request for branch '%s' already exists.", branch_name
-                )
-            else:
-                raise
-
-    except Exception as e:
-        logger.error("Failed to create GitHub pull request: %s", e, exc_info=True)
-    finally:
-        if clone_dir.exists():
-            await asyncio.to_thread(shutil.rmtree, clone_dir, ignore_errors=True)
-            logger.info("Cleaned up local clone directory: '%s'", clone_dir)
-
-
-def _git_operations(
-    context: AppContext,
-    clone_dir: Path,
-    branch_name: str,
-    commit_message: str,
-    explanation_path: Path,
-) -> None:
-    repo_config = context.config.resources.github
-    repo_url = f"https://oauth2:{os.getenv(EnvVars.GITHUB_TOKEN.value)}@github.com/{repo_config.repo_name}.git"
-
-    if clone_dir.exists():
-        shutil.rmtree(clone_dir)
-
-    logger.info("Cloning repository '%s' to '%s'", repo_config.repo_name, clone_dir)
-    repo = Repo.clone_from(repo_url, clone_dir)
-
-    if branch_name in repo.heads:
-        new_branch = repo.heads[branch_name]
-    else:
-        new_branch = repo.create_head(
-            branch_name, repo.remotes.origin.refs[repo_config.base_branch]
-        )
-    new_branch.checkout()
-
-    posts_dir = clone_dir / LocalPaths.POSTS_DIR.value
-    posts_dir.mkdir(exist_ok=True)
-    shutil.copy(explanation_path, posts_dir)
-    logger.info("Copied markdown file to '%s'", posts_dir)
-
-    figures_dir = explanation_path.parent / LocalPaths.FIGURES_DIR.value
-    if figures_dir.exists():
-        file_name_stem = explanation_path.stem
-        assets_target_dir = clone_dir / LocalPaths.ASSETS_DIR.value / file_name_stem
-        assets_target_dir.mkdir(parents=True, exist_ok=True)
-        shutil.copytree(figures_dir, assets_target_dir, dirs_exist_ok=True)
-        logger.info("Copied figures to '%s'", assets_target_dir)
-
-    if not repo.is_dirty(untracked_files=True):
-        logger.warning("No changes to commit. Skipping push and pull request.")
-        return
-
-    logger.info("Committing changes...")
-    repo.git.add(all=True)
-    author_actor = (
-        f"{repo_config.author_name} <{repo_config.author_email}>"
-        if repo_config.author_email
-        else repo_config.author_name
+def _build_paper_publish_request(
+    paper: Paper, paper_dir: Path, document: str, mode: str
+) -> PublishRequest:
+    artifact_label = "summary" if mode == Mode.SUMMARIZE else "review"
+    repo_info = (
+        f"- **Repositories**: {', '.join(str(repo) for repo in paper.repo_urls)}\n"
+        if paper.repo_urls
+        else ""
     )
-    repo.git.commit("-m", commit_message, f"--author={author_actor}")
-
-    logger.info("Pushing changes to branch '%s'...", branch_name)
-    origin = repo.remote(name="origin")
-    origin.push(refspec=f"{branch_name}:{branch_name}", force=True)
+    pr_body = (
+        f"This PR adds an AI-generated {artifact_label} for the paper: "
+        f"**{paper.title}**\n\n"
+        f"- **Paper ID**: {paper.arxiv_id}\n"
+        f"- **PDF URL**: {paper.pdf_url}\n"
+        f"- **PDF Parsing**: {'enabled' if paper.is_pdf_parsed else 'disabled'}\n"
+        f"- **Number of Characters**: {len(document):,}\n"
+        f"{repo_info}\n"
+        f"This pull request was automatically generated by the Scholar-Lens system."
+    )
+    return PublishRequest(
+        title=paper.title,
+        markdown=document,
+        work_dir=paper_dir,
+        branch_id=paper.arxiv_id,
+        pr_title=f"Paper {artifact_label.capitalize()}: {paper.title}",
+        pr_body=pr_body,
+        commit_message=f"feat: Add paper {artifact_label} for '{paper.title}'",
+        rewrite_local_images=paper.is_pdf_parsed,
+    )
 
 
 def _send_sns_notification(
@@ -698,6 +615,13 @@ if __name__ == "__main__":
     parser.add_argument(
         "--parse-pdf", type=arg_as_bool, default=False, help="Force PDF parsing."
     )
+    parser.add_argument(
+        "--mode",
+        type=str,
+        choices=Mode.ALL,
+        default=Mode.REVIEW,
+        help="Generation mode: 'review' (in-depth) or 'summarize' (concise).",
+    )
     args = parser.parse_args()
 
     repo_urls = (
@@ -706,5 +630,5 @@ if __name__ == "__main__":
         else None
     )
     source = args.source or args.arxiv_id
-    logger.info("Starting paper review process with args: %s", vars(args))
-    main(source, repo_urls, args.parse_pdf)
+    logger.info("Starting paper %s process with args: %s", args.mode, vars(args))
+    main(source, repo_urls, args.parse_pdf, args.mode)

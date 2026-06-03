@@ -1,26 +1,43 @@
 ## 👩‍🏫 SCHOLAR-LENS
 
-AI-powered academic paper review assistant that generates comprehensive analyses of arXiv papers through intelligent content extraction, citation analysis, and code repository integration.
+AI-powered research assistant that turns papers and documentation into publishable
+content: in-depth **paper reviews**, concise **paper summaries**, and self-study
+**technical guides** — driven from the CLI, AWS Batch, or a Slack bot.
 
 ![Sample](./assets/sample.png)
 
 ### ✨ Features
 
-- **AI-Powered Analysis**: Uses Amazon Bedrock (Claude models) for multi-stage paper understanding
-- **Multi-Source Processing**: Extracts content from arXiv HTML/PDF, analyzes citations, and reviews code repositories
-- **Scalable Infrastructure**: AWS Batch for containerized job execution
-- **Intelligent Extraction**: Figure analysis, table of contents generation, and citation mapping
-- **Code Integration**: GitHub repository analysis with semantic search via FAISS
+- **Three artifact types**: in-depth paper *reviews* (multi-stage LangGraph),
+  concise paper *summaries* (five-section format with figures/tables/math/code),
+  and technical *guides/tutorials* generated from documentation URLs.
+- **Any AI/ML paper**: accepts an arXiv ID **or** an arbitrary paper PDF URL
+  (non-PDF URLs are rejected); arXiv is no longer required.
+- **AI-Powered Analysis**: Amazon Bedrock (Claude, incl. Opus 4.8) for multi-stage
+  understanding, citation analysis, and figure interpretation.
+- **Code Integration**: GitHub repository analysis with semantic search via FAISS.
+- **Slack Paper Bot**: mention/DM the bot with a paper id/URL or doc URLs; it
+  parses intent with an LLM and dispatches a Batch job, then reports back.
+- **Blog publishing**: every artifact can be uploaded to S3 and opened as a PR
+  against a configured github.io blog (category-aware Jekyll front matter).
+- **Scalable Infrastructure**: AWS Batch for containerized job execution.
 
 ### 🏗️ Architecture
 
 #### Core Components
+- **PaperSource** (`paper_source.py`): resolves an arXiv ID or paper PDF URL to a
+  source; validates that URL sources actually serve a PDF.
 - **ArxivHandler** (`arxiv_handler.py`): Paper metadata and content retrieval
 - **Parser** (`parser.py`): HTML/PDF parsing with figure extraction
 - **ContentExtractor** (`content_extractor.py`): Structured content and citation extraction
 - **CodeRetriever** (`code_retriever.py`): Repository cloning and semantic code analysis
 - **CitationSummarizer** (`citation_summarizer.py`): Reference paper analysis
-- **ExplainerGraph** (`explainer.py`): Multi-stage LangGraph workflow for paper synthesis
+- **ExplainerGraph** (`explainer.py`): Multi-stage LangGraph workflow for paper reviews
+- **PaperSummarizer** (`summarizer.py`): five-section paper summaries
+- **TechGuideGenerator** (`tech_guide.py`) + **WebResearcher** (`web_research.py`):
+  research URLs (+ sub-pages + web search) and write a technical guide
+- **Publisher** (`publisher.py`): artifact-agnostic S3 upload + blog PR
+- **Paper Bot** (`slack/`): LLM intent parsing → AWS Batch dispatch
 
 #### Infrastructure
 - **AWS Batch**: Containerized job execution with ECS
@@ -75,12 +92,24 @@ poetry install --with dev
 cp .env.template .env
 # Edit .env with your configuration
 
-# Run locally — --source accepts an arXiv ID or a paper PDF URL
+# Paper REVIEW — --source accepts an arXiv ID or a paper PDF URL
 python scholar_lens/main.py --source 2312.11805 --parse-pdf True
 python scholar_lens/main.py --source https://openreview.net/pdf?id=XXXX
 
-# Submit batch job
-python scripts/run_batch.py --source 2505.09388 --repo-urls https://github.com/org/repo
+# Paper SUMMARY (concise five-section format)
+python scholar_lens/main.py --source 2312.11805 --mode summarize
+
+# Technical GUIDE / tutorial from documentation URLs
+python scholar_lens/tech_guide_main.py \
+  --urls https://docs.framework.io/start https://docs.framework.io/api \
+  --search-queries "framework.io best practices"
+
+# Submit a batch job (review or summarize)
+python scripts/run_batch.py --source 2505.09388 --mode review \
+  --repo-urls https://github.com/org/repo
+
+# Run the Slack Paper Bot (Socket Mode; needs SLACK_BOT_TOKEN/SLACK_APP_TOKEN)
+python -m scholar_lens.slack.bot
 ```
 
 #### Testing & Quality

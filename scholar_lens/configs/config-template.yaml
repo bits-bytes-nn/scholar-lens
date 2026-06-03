@@ -49,3 +49,18 @@ explanation:
   paper_synthesis_model_id: anthropic.claude-opus-4-8
   reflector_enable_thinking: True
   synthesizer_enable_thinking: True
+
+# Concise paper-summary mode (--mode summarize)
+summary:
+  summary_model_id: anthropic.claude-opus-4-8
+  summarizer_enable_thinking: True
+
+# Technical guide / tutorial generator (scholar_lens.tech_guide_main)
+tech_guide:
+  relevance_model_id: anthropic.claude-haiku-4-5-20251001-v1:0
+  synopsis_model_id: anthropic.claude-sonnet-4-6
+  writing_model_id: anthropic.claude-opus-4-8
+  writer_enable_thinking: True
+
+# Output language for generated reviews/summaries/guides (e.g. Korean, English)
+output_language: Korean

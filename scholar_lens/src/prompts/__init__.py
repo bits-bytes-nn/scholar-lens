@@ -11,8 +11,13 @@ from .prompts import (
     PaperEnrichmentPrompt,
     PaperFinalizationPrompt,
     PaperReflectionPrompt,
+    PaperSummaryPrompt,
     PaperSynthesisPrompt,
+    SlackIntentPrompt,
     TableOfContentsPrompt,
+    TechGuideRelevancePrompt,
+    TechGuideSectionPrompt,
+    TechGuideSynopsisPrompt,
 )
 
 __all__ = [
@@ -28,6 +33,11 @@ __all__ = [
     "PaperEnrichmentPrompt",
     "PaperFinalizationPrompt",
     "PaperReflectionPrompt",
+    "PaperSummaryPrompt",
     "PaperSynthesisPrompt",
+    "SlackIntentPrompt",
     "TableOfContentsPrompt",
+    "TechGuideRelevancePrompt",
+    "TechGuideSectionPrompt",
+    "TechGuideSynopsisPrompt",
 ]
