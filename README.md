@@ -24,6 +24,10 @@ content: in-depth **paper reviews**, concise **paper summaries**, and self-study
 
 ### 🏗️ Architecture
 
+> 📖 **Full line-by-line technical documentation:** [`assets/tech-doc.md`](./assets/tech-doc.md)
+> — every module, the end-to-end data flow for all three artifact types, config
+> schema, model usage, infrastructure, and diagrams.
+
 #### Core Components
 - **PaperSource** (`paper_source.py`): resolves an arXiv ID or paper PDF URL to a
   source; validates that URL sources actually serve a PDF.
@@ -54,7 +58,8 @@ content: in-depth **paper reviews**, concise **paper summaries**, and self-study
 
 ### 📋 Configuration
 
-Create `scholar_lens/configs/config.yaml`:
+Copy `scholar_lens/configs/config-template.yaml` to
+`scholar_lens/configs/config.yaml` and edit it. Abbreviated example:
 
 ```yaml
 resources:
@@ -65,15 +70,28 @@ resources:
   bedrock_region_name: us-west-2
   s3_bucket_name: your-bucket
   email_address: your-email@example.com
+  github:
+    enabled: true
+    repo_name: owner/owner.github.io
 
 paper:
-  citation_extraction_model_id: anthropic.claude-sonnet-4-5-20250929-v1:0
-  table_of_contents_model_id: anthropic.claude-sonnet-4-5-20250929-v1:0
+  citation_extraction_model_id: anthropic.claude-sonnet-4-6
+  table_of_contents_model_id: anthropic.claude-sonnet-4-6
 
 explanation:
-  paper_analysis_model_id: anthropic.claude-sonnet-4-5-20250929-v1:0
-  paper_synthesis_model_id: anthropic.claude-sonnet-4-5-20250929-v1:0
+  paper_analysis_model_id: anthropic.claude-sonnet-4-6
+  paper_synthesis_model_id: anthropic.claude-opus-4-8   # newest Claude Opus
+
+summary:
+  summary_model_id: anthropic.claude-opus-4-8
+
+tech_guide:
+  writing_model_id: anthropic.claude-opus-4-8
+
+output_language: Korean
 ```
+
+See [`assets/tech-doc.md`](./assets/tech-doc.md) §5 for the full config schema.
 
 ### 🚀 Usage
 

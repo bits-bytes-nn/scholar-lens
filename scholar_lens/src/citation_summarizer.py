@@ -103,7 +103,7 @@ class CitationSummarizer(RetryableBase):
 
     async def _classify_identifier(self, identifier: str) -> tuple[bool, str | None]:
         if identifier.lower().startswith("arxiv:") or re.match(
-            r"^\d{4}\.\d{5}(v\d+)?$", identifier
+            r"^\d{4}\.\d{4,5}(v\d+)?$", identifier
         ):
             return True, identifier.replace("arXiv:", "")
 

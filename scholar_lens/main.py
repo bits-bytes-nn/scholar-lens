@@ -119,6 +119,7 @@ def main(
                 repo_urls,
                 parse_pdf,
                 s3_url,
+                mode,
             )
 
 
@@ -569,15 +570,17 @@ def _send_sns_notification(
     session: boto3.Session,
     topic_arn: str,
     success: bool,
-    arxiv_id: str,
+    source_id: str,
     repo_urls: list[str] | None,
     parse_pdf: bool,
     s3_url: str | None,
+    mode: str = Mode.REVIEW,
 ) -> None:
     status = "succeeded" if success else "failed"
-    subject = f"Paper Review {status.title()}"
+    artifact = "Summary" if mode == Mode.SUMMARIZE else "Review"
+    subject = f"Paper {artifact} {status.title()}"
     message_lines = [
-        f"Paper review {status} for arXiv ID: {arxiv_id}",
+        f"Paper {artifact.lower()} {status} for: {source_id}",
         f"PDF Parsing: {'enabled' if parse_pdf else 'disabled'}",
     ]
     if repo_urls:

@@ -52,6 +52,36 @@ GRANULARITY_DEPTH_CONFLICT_RULES: str = """
 **DETAILED + INTERMEDIATE/ADVANCED**: Maximum thoroughness (100% coverage with 80-100% depth)
 """
 
+DIFFICULTY_ADAPTIVE_RULES: str = """
+Beyond the configured granularity/depth, calibrate effort to the INTRINSIC
+DIFFICULTY of each concept so the review reads as "easy where it can be, patient
+where it must be":
+
+**EASY concepts** (standard setups, well-known components, routine results):
+- State them concisely and move on. Do NOT pad familiar ideas with filler.
+- A single clear sentence + the relevant equation/figure reference is enough.
+
+**HARD concepts** (novel mechanisms, dense math, non-obvious derivations,
+counter-intuitive results, anything a capable student would stumble on):
+- Slow down and scaffold understanding before formalism:
+  1. Give the intuition first (a plain-language "what this really means").
+  2. Add a concrete analogy or worked micro-example.
+  3. Then present the formal statement / derivation step by step.
+  4. Reinforce with a visual aid where one exists — reference the most relevant
+     figure, table, or code snippet from the source materials (never invent one).
+  5. Pull in citation_summaries for background the paper assumes but doesn't teach.
+- Briefly flag WHY it is subtle ("the non-obvious part is ...") so the reader
+  knows where to focus.
+
+**Calibration discipline**:
+- Spend the explanation budget where difficulty is highest; do not distribute it
+  uniformly. Skimming the easy 80% buys depth for the hard 20%.
+- Visual/auxiliary materials (figures, tables, code, citations) are tools for
+  HARD parts first; do not decorate easy parts with them.
+- Never sacrifice accuracy for accessibility — simplify the exposition, not the
+  facts.
+"""
+
 HEADING_STRUCTURE_RULES: str = """
 - Main title: # Paper Title (single # only)
 - Section: ## Section Title (double ##)
@@ -1051,6 +1081,11 @@ class PaperReflectionPrompt(BasePrompt):
         + GRANULARITY_DEPTH_CONFLICT_RULES
         + r"""
 
+    #### Difficulty-Adaptive Calibration
+    """
+        + DIFFICULTY_ADAPTIVE_RULES
+        + r"""
+
     ### 2. STRUCTURAL COMPLIANCE AND TABLE OF CONTENTS ALIGNMENT
 
     #### 2.1 Section Role Compliance
@@ -1819,6 +1854,11 @@ class PaperSynthesisPrompt(BasePrompt):
     #### Handling Conflicts Between Granularity and Depth
     """
         + GRANULARITY_DEPTH_CONFLICT_RULES
+        + r"""
+
+    #### Difficulty-Adaptive Calibration
+    """
+        + DIFFICULTY_ADAPTIVE_RULES
         + r"""
 
     **Key principle**: For INTERMEDIATE/ADVANCED depth, actively use citation_summaries and code examples
