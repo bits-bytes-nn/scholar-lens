@@ -22,6 +22,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 from scholar_lens.configs import Config
 from scholar_lens.configs import Github as GithubConfig
+from scholar_lens.slack.notifier import post_slack_result
 from scholar_lens.src import (
     AppConstants,
     BraveSearchProvider,
@@ -63,6 +64,8 @@ def main(
     *,
     discover_subpages: bool = True,
     search_queries: list[str] | None = None,
+    slack_channel: str | None = None,
+    slack_thread_ts: str | None = None,
 ) -> str | None:
     config = Config.load()
     profile_name = (
@@ -84,14 +87,61 @@ def main(
             context.default_boto_session, config.resources.s3_bucket_name
         )
 
-    return asyncio.run(
-        _run(
-            context,
-            urls,
-            discover_subpages=discover_subpages,
-            search_queries=search_queries,
+    s3_url: str | None = None
+    success = False
+    error_message: str | None = None
+    topic = ", ".join(urls)
+    try:
+        s3_url = asyncio.run(
+            _run(
+                context,
+                urls,
+                discover_subpages=discover_subpages,
+                search_queries=search_queries,
+            )
         )
-    )
+        success = True
+        return s3_url
+    except Exception as e:
+        error_message = str(e)
+        logger.error("Failed to generate tech guide: %s", e, exc_info=True)
+        raise
+    finally:
+        topic_arn = os.getenv(EnvVars.TOPIC_ARN.value)
+        if is_running_in_aws() and topic_arn:
+            _send_guide_sns_notification(
+                context.default_boto_session, topic_arn, success, topic, s3_url
+            )
+        post_slack_result(
+            channel=slack_channel,
+            thread_ts=slack_thread_ts,
+            success=success,
+            artifact_label="guide",
+            title=topic,
+            s3_url=s3_url,
+            error=error_message,
+        )
+
+
+def _send_guide_sns_notification(
+    session: boto3.Session,
+    topic_arn: str,
+    success: bool,
+    sources: str,
+    s3_url: str | None,
+) -> None:
+    status = "succeeded" if success else "failed"
+    lines = [f"Technical guide {status} for: {sources}"]
+    if s3_url:
+        lines.append(f"Output: {s3_url}")
+    try:
+        session.client("sns").publish(
+            TopicArn=topic_arn,
+            Subject=f"Tech Guide {status.title()}",
+            Message="\n".join(lines),
+        )
+    except Exception as e:  # noqa: BLE001 - notification failure must not fail the job
+        logger.error("Failed to send SNS notification: %s", e)
 
 
 async def _run(
@@ -148,6 +198,7 @@ def _setup_aws_env(context: GuideContext) -> None:
     ssm_map = {
         SSMParams.GITHUB_TOKEN: EnvVars.GITHUB_TOKEN,
         SSMParams.BRAVE_API_KEY: EnvVars.BRAVE_API_KEY,
+        SSMParams.SLACK_BOT_TOKEN: EnvVars.SLACK_BOT_TOKEN,
     }
     for ssm_param, env_var in ssm_map.items():
         try:
@@ -241,6 +292,18 @@ if __name__ == "__main__":
         nargs="*",
         help="Optional web-search queries to augment the research corpus.",
     )
+    parser.add_argument(
+        "--slack-channel",
+        type=str,
+        default=None,
+        help="Slack channel to post the result back to (set by the bot).",
+    )
+    parser.add_argument(
+        "--slack-thread-ts",
+        type=str,
+        default=None,
+        help="Slack thread timestamp to reply in (set by the bot).",
+    )
     args = parser.parse_args()
 
     # AWS Batch substitutes Ref:: parameters as a single space-joined token,
@@ -251,6 +314,11 @@ if __name__ == "__main__":
             items.extend(value.split())
         return [v for v in items if v and v != AppConstants.NULL_STRING]
 
+    def _clean(value: str | None) -> str | None:
+        if not value or value == AppConstants.NULL_STRING:
+            return None
+        return value
+
     urls = _flatten(args.urls)
     search_queries = _flatten(args.search_queries) or None
     logger.info("Starting tech-guide generation for %d URL(s).", len(urls))
@@ -259,6 +327,8 @@ if __name__ == "__main__":
             urls,
             discover_subpages=args.discover_subpages,
             search_queries=search_queries,
+            slack_channel=_clean(args.slack_channel),
+            slack_thread_ts=_clean(args.slack_thread_ts),
         )
     except NotTechnicalContentError as e:
         logger.error("Refusing to generate a guide: %s", e)

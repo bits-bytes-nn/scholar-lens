@@ -26,6 +26,8 @@ class EnvVars(str, Enum):
     LANGCHAIN_ENDPOINT = "LANGCHAIN_ENDPOINT"
     LANGCHAIN_PROJECT = "LANGCHAIN_PROJECT"
     LOG_LEVEL = "LOG_LEVEL"
+    SLACK_BOT_TOKEN = "SLACK_BOT_TOKEN"
+    SLACK_APP_TOKEN = "SLACK_APP_TOKEN"
     TOPIC_ARN = "TOPIC_ARN"
     UPSTAGE_API_KEY = "UPSTAGE_API_KEY"
 
@@ -86,6 +88,7 @@ class SSMParams(AutoNamedEnum):
     BRAVE_API_KEY = "brave-api-key"
     GITHUB_TOKEN = "github-token"
     LANGCHAIN_API_KEY = "langchain-api-key"
+    SLACK_BOT_TOKEN = "slack-bot-token"
     UPSTAGE_API_KEY = "upstage-api-key"
 
 

@@ -17,6 +17,7 @@ from .code_retriever import CodeRetriever
 from .constants import LanguageModelId
 from .content_extractor import Attributes, Citation
 from .logger import is_running_in_aws, logger
+from .metrics import TokenUsageTracker
 from .parser import Content, Figure
 from .prompts import (
     BasePrompt,
@@ -57,6 +58,9 @@ class ExplainerConfig:
     MIN_QUALITY_SCORE: int = 70
     RECURSION_LIMIT: int = 200
     SEARCH_RESULTS_LIMIT: int = 10
+    # Hard cap on the per-section has_more continuation loop, so a model that
+    # keeps emitting has_more=y cannot loop (and bill) forever.
+    MAX_CONTINUATIONS: int = 8
 
 
 class Paper(BaseModel):
@@ -127,10 +131,22 @@ class ExplainerGraph(RetryableBase):
         reflector_enable_thinking: bool = False,
         synthesizer_enable_thinking: bool = False,
         thinking_effort: str = "medium",
+        language: str = "Korean",
+        callbacks: list[Any] | None = None,
+        max_total_tokens: int | None = None,
+        max_continuations: int = ExplainerConfig.MAX_CONTINUATIONS,
     ) -> None:
         _ensure_nltk_data()
 
         self.paper = paper
+        self.language = language
+        self.callbacks = callbacks or []
+        self.max_total_tokens = max_total_tokens
+        self.max_continuations = max_continuations
+        # Locate a token tracker among the callbacks for budget enforcement.
+        self._token_tracker = next(
+            (cb for cb in self.callbacks if isinstance(cb, TokenUsageTracker)), None
+        )
         self.citation_summarizer = citation_summarizer
         self.code_retriever = code_retriever
         self.translation_guideline = translation_guideline or []
@@ -209,6 +225,7 @@ class ExplainerGraph(RetryableBase):
         output_parser: BaseOutputParser,
         **kwargs: Any,
     ) -> Runnable:
+        kwargs.setdefault("callbacks", self.callbacks or None)
         llm = self.llm_factory.get_model(model_id, temperature=0.0, **kwargs)
         return prompt_cls.get_prompt() | llm | output_parser
 
@@ -449,7 +466,10 @@ class ExplainerGraph(RetryableBase):
 
     def finalize_paper(self, state: ExplainerState) -> dict:
         result = self.finalizer.invoke(
-            {"explanation": "\n".join(state["explanations"])}
+            {
+                "explanation": "\n".join(state["explanations"]),
+                "language": self.language,
+            }
         )
         key_takeaways_str = result.get("key_takeaways", "").strip()
         return {"key_takeaways": key_takeaways_str}
@@ -494,6 +514,7 @@ class ExplainerGraph(RetryableBase):
                 "code": str(state.get("code") or []),
                 "analysis": current_analysis,
                 "translation_guideline": str(self.translation_guideline),
+                "language": self.language,
             }
         )
 
@@ -508,6 +529,11 @@ class ExplainerGraph(RetryableBase):
             "quality_score": quality_score,
             "synthesis_attempts": state["synthesis_attempts"] + 1,
         }
+
+    def _enforce_token_budget(self) -> None:
+        """Abort the run if the configured total-token budget is exceeded."""
+        if self._token_tracker is not None and self.max_total_tokens:
+            self._token_tracker.check_budget(self.max_total_tokens)
 
     def synthesize_paper(self, state: ExplainerState) -> dict[str, Any]:
         current_index = state["current_index"]
@@ -528,7 +554,8 @@ class ExplainerGraph(RetryableBase):
             state["synthesis_attempts"] + 1,
         )
 
-        while True:
+        for continuation in range(self.max_continuations):
+            self._enforce_token_budget()
             improvement_feedback = "\n".join(state["accumulated_feedback"])
 
             result = self._synthesize_paper(
@@ -549,6 +576,12 @@ class ExplainerGraph(RetryableBase):
 
             if not result.get("has_more", "n").strip().lower() == "y":
                 break
+            if continuation == self.max_continuations - 1:
+                logger.warning(
+                    "Reached max continuations (%d) for section %d; stopping.",
+                    self.max_continuations,
+                    current_index,
+                )
 
         explanations[current_index] = final_explanation_for_paragraph.strip()
 
@@ -582,6 +615,7 @@ class ExplainerGraph(RetryableBase):
                 "analysis": analysis,
                 "translation_guideline": str(self.translation_guideline),
                 "improvement_feedback": improvement_feedback,
+                "language": self.language,
             }
         )
         explanation_match = re.search(

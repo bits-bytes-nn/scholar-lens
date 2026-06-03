@@ -116,7 +116,7 @@ class Publisher:
                 figures_dir,
                 assets_key,
                 file_extensions=_IMAGE_EXTENSIONS,
-                public_readable=True,
+                public_readable=self.github_config.public_assets,
             )
         return f"s3://{self.s3_bucket_name}/{posts_key}/{file_name}.md"
 

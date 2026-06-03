@@ -110,15 +110,40 @@ class CodeRetriever(RetryableBase):
         )
 
     async def download_repositories(self, repo_urls: list[str]) -> list[Path]:
-        self.repo_paths = [
+        candidate_paths = [
             self.repo_cache_dir / url.split("/")[-1].replace(".git", "")
             for url in repo_urls
         ]
-        tasks = [
-            self._clone_repo(url, path)
-            for url, path in zip(repo_urls, self.repo_paths, strict=False)
+        results = await asyncio.gather(
+            *(
+                self._clone_repo(url, path)
+                for url, path in zip(repo_urls, candidate_paths, strict=False)
+            ),
+            return_exceptions=True,
+        )
+        # Tolerate per-repo failures (auth, network, oversized): keep what cloned,
+        # only abort if NOTHING could be downloaded.
+        self.repo_paths = [
+            path
+            for path, result in zip(candidate_paths, results, strict=False)
+            if not isinstance(result, Exception) and path.exists()
         ]
-        await asyncio.gather(*tasks)
+        failed = [
+            url
+            for url, result in zip(repo_urls, results, strict=False)
+            if isinstance(result, Exception)
+        ]
+        if failed:
+            logger.warning(
+                "Failed to clone %d/%d repositories: %s",
+                len(failed),
+                len(repo_urls),
+                ", ".join(failed),
+            )
+        if not self.repo_paths:
+            raise NoPythonFilesError(
+                "No repositories could be cloned from the supplied URLs."
+            )
         return self.repo_paths
 
     @staticmethod

@@ -110,6 +110,29 @@ class TestJobDispatcher:
         assert submitted["queue"] == "rq"
         assert submitted["definition"] == "rd"
         assert "review" in submitted["name"]
+        # No Slack context -> NULL sentinels (so Batch Ref:: substitution works).
+        assert submitted["parameters"]["slack_channel"] == "null"
+        assert submitted["parameters"]["slack_thread_ts"] == "null"
+
+    def test_slack_context_threaded_to_batch_params(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from scholar_lens.slack.dispatcher import SlackContext
+
+        captured = {}
+        monkeypatch.setattr(
+            "scholar_lens.slack.dispatcher.submit_batch_job",
+            lambda s, name, queue, definition, parameters=None: captured.update(
+                parameters or {}
+            )
+            or "id",
+        )
+        d = _dispatcher(MagicMock())
+        parsed = ParsedIntent(intent=SlackIntent.REVIEW, sources=["2401.06066"])
+        ctx = SlackContext(channel="C123", thread_ts="1700000000.0001", user="U1")
+        d.dispatch(parsed, timestamp="t", slack_context=ctx)
+        assert captured["slack_channel"] == "C123"
+        assert captured["slack_thread_ts"] == "1700000000.0001"
 
     def test_guide_routes_to_guide_definition(
         self, monkeypatch: pytest.MonkeyPatch

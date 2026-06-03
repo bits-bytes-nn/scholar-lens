@@ -20,6 +20,11 @@ from .constants import (
 from .content_extractor import Attributes, Citation, ContentExtractor
 from .explainer import ExplainerGraph, Paper
 from .logger import is_running_in_aws, logger
+from .metrics import (
+    MetricsEmitter,
+    TokenBudgetExceeded,
+    TokenUsageTracker,
+)
 from .paper_source import (
     ArxivSource,
     NotAPdfError,
@@ -58,6 +63,7 @@ __all__ = [
     "HTMLRichParser",
     "LanguageModelId",
     "LocalPaths",
+    "MetricsEmitter",
     "NoPythonFilesError",
     "NotAPdfError",
     "NotTechnicalContentError",
@@ -77,6 +83,8 @@ __all__ = [
     "SSMParams",
     "TechGuide",
     "TechGuideGenerator",
+    "TokenBudgetExceeded",
+    "TokenUsageTracker",
     "WebResearcher",
     "WebSearchProvider",
     "arg_as_bool",

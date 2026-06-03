@@ -21,7 +21,7 @@ from ..configs import Config
 from ..src.aws_helpers import get_ssm_param_value
 from ..src.constants import EnvVars, LanguageModelId, SSMParams
 from ..src.logger import logger
-from .dispatcher import JobDispatcher, utc_timestamp
+from .dispatcher import JobDispatcher, SlackContext, utc_timestamp
 from .intent import IntentParser, ParsedIntent
 
 _INTENT_MODEL = LanguageModelId.CLAUDE_V4_5_HAIKU
@@ -40,13 +40,21 @@ class PaperBot:
         self.intent_parser = intent_parser
         self.dispatcher = dispatcher
 
-    async def handle_message(self, text: str) -> str:
-        """Parse a message, dispatch a job, and return a user-facing reply."""
+    async def handle_message(
+        self, text: str, *, slack_context: SlackContext | None = None
+    ) -> str:
+        """Parse a message, dispatch a job, and return a user-facing reply.
+
+        When ``slack_context`` is provided, it is threaded into the Batch job so
+        the pipeline can post its result back to the originating channel/thread.
+        """
         parsed = await self.intent_parser.parse(text)
         if not parsed.is_actionable:
             return self._help_reply(parsed)
         try:
-            result = self.dispatcher.dispatch(parsed, timestamp=utc_timestamp())
+            result = self.dispatcher.dispatch(
+                parsed, timestamp=utc_timestamp(), slack_context=slack_context
+            )
         except Exception as e:  # noqa: BLE001 - surface any dispatch error to the user
             logger.error("Dispatch failed: %s", e, exc_info=True)
             return f":warning: Failed to start the job: {e}"
@@ -128,17 +136,27 @@ def run_socket_mode() -> None:  # pragma: no cover - requires live Slack tokens
     bot = build_bot()
     app = App(token=os.environ["SLACK_BOT_TOKEN"])
 
+    def _handle(event: dict, say) -> None:  # type: ignore[no-untyped-def]
+        # Reply (and later post the result) in the originating thread.
+        thread_ts = event.get("thread_ts") or event.get("ts")
+        ctx = SlackContext(
+            channel=event.get("channel", ""),
+            thread_ts=thread_ts,
+            user=event.get("user"),
+        )
+        reply = asyncio.run(
+            bot.handle_message(event.get("text", ""), slack_context=ctx)
+        )
+        say(text=reply, thread_ts=thread_ts)
+
     @app.event("app_mention")
     def _on_mention(event: dict, say) -> None:  # type: ignore[no-untyped-def]
-        text = event.get("text", "")
-        reply = asyncio.run(bot.handle_message(text))
-        say(reply)
+        _handle(event, say)
 
     @app.event("message")
     def _on_message(event: dict, say) -> None:  # type: ignore[no-untyped-def]
         if event.get("channel_type") == "im" and not event.get("bot_id"):
-            reply = asyncio.run(bot.handle_message(event.get("text", "")))
-            say(reply)
+            _handle(event, say)
 
     logger.info("Starting Paper Bot in Socket Mode...")
     SocketModeHandler(app, os.environ["SLACK_APP_TOKEN"]).start()

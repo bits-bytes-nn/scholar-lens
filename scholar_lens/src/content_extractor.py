@@ -49,6 +49,10 @@ class Citation(BaseModel):
 
 
 class ContentExtractor(RetryableBase):
+    # Hard cap on the paginated citation-extraction loop, so a model that keeps
+    # emitting has_more=y (or novel near-duplicate citations) cannot loop forever.
+    MAX_CITATION_PAGES: int = 20
+
     def __init__(
         self,
         citation_extraction_model_id: LanguageModelId,
@@ -166,7 +170,7 @@ class ContentExtractor(RetryableBase):
         existing_citations_str = ""
         seen_citations = set()
 
-        while True:
+        for page in range(self.MAX_CITATION_PAGES):
             result = await self._extract_citations(html_content, existing_citations_str)
             raw_citations_str = result.get("citations", "")
             if not raw_citations_str.strip():
@@ -192,6 +196,11 @@ class ContentExtractor(RetryableBase):
                 break
 
             existing_citations_str = "\n".join(repr(c) for c in citations)
+            if page == self.MAX_CITATION_PAGES - 1:
+                logger.warning(
+                    "Reached max citation pages (%d); stopping extraction.",
+                    self.MAX_CITATION_PAGES,
+                )
 
         logger.info("Extracted %d unique citations", len(citations))
         return citations

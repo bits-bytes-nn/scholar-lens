@@ -20,6 +20,15 @@ from .intent import ParsedIntent, SlackIntent
 
 
 @dataclass
+class SlackContext:
+    """Where to post the result back to (the originating message)."""
+
+    channel: str
+    thread_ts: str | None = None
+    user: str | None = None
+
+
+@dataclass
 class DispatchResult:
     job_id: str
     job_name: str
@@ -52,19 +61,45 @@ class JobDispatcher:
         self.guide_job_queue = guide_job_queue or review_job_queue
         self.guide_job_definition = guide_job_definition
 
-    def dispatch(self, parsed: ParsedIntent, *, timestamp: str) -> DispatchResult:
+    def dispatch(
+        self,
+        parsed: ParsedIntent,
+        *,
+        timestamp: str,
+        slack_context: SlackContext | None = None,
+    ) -> DispatchResult:
         if not parsed.is_actionable:
             raise ValueError(
                 f"Intent '{parsed.intent.value}' is not actionable: {parsed.reason}"
             )
         if parsed.intent in (SlackIntent.REVIEW, SlackIntent.SUMMARIZE):
-            return self._dispatch_paper(parsed, timestamp=timestamp)
+            return self._dispatch_paper(
+                parsed, timestamp=timestamp, slack_context=slack_context
+            )
         if parsed.intent is SlackIntent.GUIDE:
-            return self._dispatch_guide(parsed, timestamp=timestamp)
+            return self._dispatch_guide(
+                parsed, timestamp=timestamp, slack_context=slack_context
+            )
         raise ValueError(f"Unsupported intent: {parsed.intent.value}")
 
+    @staticmethod
+    def _slack_params(slack_context: SlackContext | None) -> dict[str, str]:
+        if slack_context is None:
+            return {
+                "slack_channel": AppConstants.NULL_STRING,
+                "slack_thread_ts": AppConstants.NULL_STRING,
+            }
+        return {
+            "slack_channel": slack_context.channel,
+            "slack_thread_ts": slack_context.thread_ts or AppConstants.NULL_STRING,
+        }
+
     def _dispatch_paper(
-        self, parsed: ParsedIntent, *, timestamp: str
+        self,
+        parsed: ParsedIntent,
+        *,
+        timestamp: str,
+        slack_context: SlackContext | None = None,
     ) -> DispatchResult:
         job_name = self._job_name(parsed.intent.value, timestamp)
         repo_urls = (
@@ -75,6 +110,7 @@ class JobDispatcher:
             "repo_urls": repo_urls,
             "parse_pdf": "false",
             "mode": parsed.intent.value,
+            **self._slack_params(slack_context),
         }
         job_id = submit_batch_job(
             self.boto_session,
@@ -89,7 +125,11 @@ class JobDispatcher:
         return DispatchResult(job_id=job_id, job_name=job_name, intent=parsed.intent)
 
     def _dispatch_guide(
-        self, parsed: ParsedIntent, *, timestamp: str
+        self,
+        parsed: ParsedIntent,
+        *,
+        timestamp: str,
+        slack_context: SlackContext | None = None,
     ) -> DispatchResult:
         if not self.guide_job_definition:
             raise ValueError(
@@ -102,6 +142,7 @@ class JobDispatcher:
             "urls": " ".join(parsed.sources),
             "discover_subpages": "true",
             "search_queries": AppConstants.NULL_STRING,
+            **self._slack_params(slack_context),
         }
         job_id = submit_batch_job(
             self.boto_session,

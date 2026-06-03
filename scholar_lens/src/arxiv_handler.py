@@ -1,15 +1,23 @@
 import re
 from datetime import datetime
+from difflib import SequenceMatcher
 from pathlib import Path
 
 import arxiv
 import requests
+import tenacity
 from pydantic import BaseModel, Field, HttpUrl, ValidationInfo, field_validator
 
 from .constants import AppConstants
 from .logger import logger
 
 DEFAULT_TIMEOUT: int = 10
+# App-level retry for transient arXiv API failures (e.g. HTTP 429). This sits on
+# top of the arxiv client's own num_retries and adds jittered backoff so a busy
+# pipeline does not abort a whole job on a momentary rate limit.
+_ARXIV_FETCH_MAX_ATTEMPTS: int = 4
+_ARXIV_FETCH_INITIAL_WAIT: int = 5
+_ARXIV_FETCH_MAX_WAIT: int = 60
 
 
 class ArxivPaperError(Exception):
@@ -142,6 +150,29 @@ class ArxivHandler:
             raise ArxivPaperError(f"Could not process metadata for '{arxiv_id}'") from e
 
     def _fetch_single_paper(self, arxiv_id: str) -> arxiv.Result:
+        # Retry transient API errors (HTTP 429 etc.) with jittered backoff, but
+        # never retry a genuine "not found" — that is terminal.
+        retryer = tenacity.Retrying(
+            wait=tenacity.wait_exponential_jitter(
+                initial=_ARXIV_FETCH_INITIAL_WAIT, max=_ARXIV_FETCH_MAX_WAIT
+            ),
+            stop=tenacity.stop_after_attempt(_ARXIV_FETCH_MAX_ATTEMPTS),
+            # Retry transient API errors but NOT a genuine "not found"
+            # (ArxivNotFoundError subclasses ArxivPaperError, so exclude it).
+            retry=tenacity.retry_if_exception(
+                lambda e: isinstance(e, ArxivPaperError)
+                and not isinstance(e, ArxivNotFoundError)
+            ),
+            before_sleep=lambda s: logger.warning(
+                "arXiv fetch for '%s' failed (attempt %d); retrying...",
+                arxiv_id,
+                s.attempt_number,
+            ),
+            reraise=True,
+        )
+        return retryer(self._fetch_single_paper_once, arxiv_id)
+
+    def _fetch_single_paper_once(self, arxiv_id: str) -> arxiv.Result:
         try:
             search = arxiv.Search(id_list=[arxiv_id])
             return next(self.client.results(search))
@@ -177,6 +208,12 @@ class ArxivHandler:
         author_names = ", ".join([author.name for author in paper.authors])
         return paper.title, author_names
 
+    # Minimum raw-title similarity (on top of an exact normalized match) before
+    # we trust an arXiv title-search hit. Guards against aggressive normalization
+    # collapsing two genuinely different titles onto the same key, which would
+    # silently summarise the WRONG paper.
+    TITLE_SIMILARITY_THRESHOLD: float = 0.85
+
     def search_by_title(self, title: str, max_results: int = 10) -> str | None:
         normalized_query_title = self._normalize_title(title)
         queries_to_try = [f'ti:"{title}"']
@@ -187,13 +224,26 @@ class ArxivHandler:
             try:
                 search = arxiv.Search(query=query, max_results=max_results)
                 for paper in self.client.results(search):
-                    if self._normalize_title(paper.title) == normalized_query_title:
-                        return paper.get_short_id()
+                    if self._normalize_title(paper.title) != normalized_query_title:
+                        continue
+                    similarity = SequenceMatcher(
+                        None, title.lower(), paper.title.lower()
+                    ).ratio()
+                    if similarity < self.TITLE_SIMILARITY_THRESHOLD:
+                        logger.warning(
+                            "Rejecting low-similarity title match (%.2f) for '%s' "
+                            "vs '%s'.",
+                            similarity,
+                            title,
+                            paper.title,
+                        )
+                        continue
+                    return paper.get_short_id()
             except Exception as e:
                 logger.warning("Search query '%s' failed: %s", query, e)
                 continue
 
-        logger.warning("No exact title match found for: '%s'", title)
+        logger.warning("No confident title match found for: '%s'", title)
         return None
 
     @staticmethod

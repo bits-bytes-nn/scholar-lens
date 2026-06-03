@@ -30,6 +30,11 @@ class Github(BaseModel):
         "image filename under the blog's assets/images directory.",
     )
     default_cover_image: str = Field(default="default.jpg")
+    # Whether figures uploaded to S3 are world-readable. Default False (private):
+    # blog images are served from the GitHub Pages repo, so public S3 ACLs are
+    # an unnecessary exposure (and are rejected by buckets with Block Public
+    # Access). Set True only if you intentionally serve assets straight from S3.
+    public_assets: bool = Field(default=False)
 
     @field_validator("cover_images", mode="before")
     @classmethod
@@ -117,6 +122,9 @@ class Explanation(BaseModel):
     reflector_enable_thinking: bool = Field(default=False)
     synthesizer_enable_thinking: bool = Field(default=False)
     thinking_effort: ThinkingEffort = Field(default="medium")
+    # Hard total-token ceiling for one review run (None = no limit). Guards
+    # against runaway cost on the per-paragraph synthesis loop.
+    max_total_tokens: int | None = Field(default=None)
 
 
 class Summary(BaseModel):

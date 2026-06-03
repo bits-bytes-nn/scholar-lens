@@ -15,10 +15,22 @@ from aws_cdk import (
     aws_batch as batch,
 )
 from aws_cdk import (
+    aws_cloudwatch as cloudwatch,
+)
+from aws_cdk import (
+    aws_cloudwatch_actions as cw_actions,
+)
+from aws_cdk import (
     aws_ec2 as ec2,
 )
 from aws_cdk import (
     aws_ecs as ecs,
+)
+from aws_cdk import (
+    aws_events as events,
+)
+from aws_cdk import (
+    aws_events_targets as targets,
 )
 from aws_cdk import (
     aws_iam as iam,
@@ -61,6 +73,7 @@ class PaperReviewStack(Stack):
         langchain_api_key: str | None = None,
         upstage_api_key: str | None = None,
         brave_api_key: str | None = None,
+        slack_bot_token: str | None = None,
         s3_bucket_name: str | None = None,
         s3_prefix: str = "",
         bedrock_region_name: str | None = None,
@@ -84,20 +97,24 @@ class PaperReviewStack(Stack):
         self.job_role = self._create_job_role()
         self.execution_role = self._create_execution_role()
 
+        self.log_groups: list[logs.LogGroup] = []
         review_job_def, guide_job_def = self._create_job_definitions(
             environment_vars or {}
         )
-        job_queue = self._create_job_queue()
+        self.job_queue = self._create_job_queue()
+        job_queue = self.job_queue
 
         self._store_ssm_parameters(
             github_token=github_token,
             langchain_api_key=langchain_api_key,
             upstage_api_key=upstage_api_key,
             brave_api_key=brave_api_key,
+            slack_bot_token=slack_bot_token,
             job_queue_name=job_queue.job_queue_name,
             job_definition_name=review_job_def.job_definition_name,
             guide_job_definition_name=guide_job_def.job_definition_name,
         )
+        self._create_observability()
 
     def _get_resource_name(self, suffix: str) -> str:
         return f"{self.project_name}-{self.stage}-{suffix}"
@@ -386,6 +403,10 @@ class PaperReviewStack(Stack):
                 "Ref::parse_pdf",
                 "--mode",
                 "Ref::mode",
+                "--slack-channel",
+                "Ref::slack_channel",
+                "--slack-thread-ts",
+                "Ref::slack_thread_ts",
             ],
         )
         guide = self._build_job_definition(
@@ -402,6 +423,10 @@ class PaperReviewStack(Stack):
                 "Ref::discover_subpages",
                 "--search-queries",
                 "Ref::search_queries",
+                "--slack-channel",
+                "Ref::slack_channel",
+                "--slack-thread-ts",
+                "Ref::slack_thread_ts",
             ],
         )
         return review, guide
@@ -421,6 +446,7 @@ class PaperReviewStack(Stack):
             retention=logs.RetentionDays.ONE_MONTH,
             removal_policy=RemovalPolicy.DESTROY,
         )
+        self.log_groups.append(log_group)
         container = batch.EcsEc2ContainerDefinition(
             self,
             f"{name.title().replace('-', '')}ContainerDef",
@@ -492,6 +518,7 @@ class PaperReviewStack(Stack):
         langchain_api_key: str | None,
         upstage_api_key: str | None,
         brave_api_key: str | None,
+        slack_bot_token: str | None,
         job_queue_name: str,
         job_definition_name: str,
         guide_job_definition_name: str,
@@ -502,6 +529,7 @@ class PaperReviewStack(Stack):
             SSMParams.LANGCHAIN_API_KEY: langchain_api_key,
             SSMParams.UPSTAGE_API_KEY: upstage_api_key,
             SSMParams.BRAVE_API_KEY: brave_api_key,
+            SSMParams.SLACK_BOT_TOKEN: slack_bot_token,
             SSMParams.BATCH_JOB_QUEUE: job_queue_name,
             SSMParams.BATCH_JOB_DEFINITION: job_definition_name,
             SSMParams.GUIDE_JOB_QUEUE: job_queue_name,
@@ -513,6 +541,7 @@ class PaperReviewStack(Stack):
             SSMParams.LANGCHAIN_API_KEY: "Langchain API Key",
             SSMParams.UPSTAGE_API_KEY: "Upstage API Key",
             SSMParams.BRAVE_API_KEY: "Brave Search API Key",
+            SSMParams.SLACK_BOT_TOKEN: "Slack Bot Token (chat.postMessage)",
             SSMParams.BATCH_JOB_QUEUE: "AWS Batch Job Queue for Scholar Lens",
             SSMParams.BATCH_JOB_DEFINITION: "AWS Batch Job Definition for paper review/summary",
             SSMParams.GUIDE_JOB_QUEUE: "AWS Batch Job Queue for Scholar Lens tech guides",
@@ -520,7 +549,7 @@ class PaperReviewStack(Stack):
         }
 
         # NOTE: CloudFormation/CDK cannot natively create SecureString SSM
-        # parameters. The secrets (GitHub token, LangChain/Upstage/Brave API
+        # parameters. The secrets (GitHub token, LangChain/Upstage/Brave/Slack
         # keys) are written here as standard parameters for bootstrap
         # convenience only; for production they should be migrated to AWS
         # Secrets Manager (rotation + encryption) or re-created out-of-band as
@@ -531,6 +560,7 @@ class PaperReviewStack(Stack):
             SSMParams.LANGCHAIN_API_KEY,
             SSMParams.UPSTAGE_API_KEY,
             SSMParams.BRAVE_API_KEY,
+            SSMParams.SLACK_BOT_TOKEN,
         }
         for param_enum, param_value in ssm_params_to_create.items():
             if param_value:
@@ -546,6 +576,86 @@ class PaperReviewStack(Stack):
                     description=description,
                     tier=ssm.ParameterTier.STANDARD,
                 )
+
+    def _create_observability(self) -> None:
+        """Wire failure/error/cost alarms to the (email-subscribed) SNS topic."""
+        sns_action = cw_actions.SnsAction(self.topic)
+
+        # 1) Any Batch job that FAILS (on this stack's queue) -> SNS, with the
+        #    job name + status reason so the email is actionable.
+        events.Rule(
+            self,
+            "BatchJobFailedRule",
+            rule_name=self._get_resource_name("batch-failed"),
+            description="Notify on Batch job failures for Scholar Lens.",
+            event_pattern=events.EventPattern(
+                source=["aws.batch"],
+                detail_type=["Batch Job State Change"],
+                detail={
+                    "status": ["FAILED"],
+                    "jobQueue": [self.job_queue.job_queue_arn],
+                },
+            ),
+            targets=[
+                targets.SnsTopic(
+                    self.topic,
+                    message=events.RuleTargetInput.from_text(
+                        "Scholar Lens Batch job FAILED: "
+                        f"{events.EventField.from_path('$.detail.jobName')} "
+                        f"(id {events.EventField.from_path('$.detail.jobId')})\n"
+                        f"Reason: {events.EventField.from_path('$.detail.statusReason')}"
+                    ),
+                )
+            ],
+        )
+
+        # 2) ERROR lines in any job log group -> metric -> alarm -> SNS.
+        for index, log_group in enumerate(self.log_groups):
+            metric_filter = logs.MetricFilter(
+                self,
+                f"ErrorMetricFilter{index}",
+                log_group=log_group,
+                metric_namespace=f"{self.project_name}/{self.stage}",
+                metric_name="LogErrors",
+                filter_pattern=logs.FilterPattern.any_term("ERROR"),
+                metric_value="1",
+                default_value=0,
+            )
+            alarm = cloudwatch.Alarm(
+                self,
+                f"LogErrorsAlarm{index}",
+                alarm_name=self._get_resource_name(f"log-errors-{index}"),
+                metric=metric_filter.metric(
+                    statistic="Sum", period=Duration.minutes(5)
+                ),
+                threshold=1,
+                evaluation_periods=1,
+                comparison_operator=(
+                    cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD
+                ),
+                treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
+            )
+            alarm.add_alarm_action(sns_action)
+
+        # 3) Estimated-cost guardrail on the custom metric emitted by the app
+        #    (ScholarLens/EstimatedCostUSD). Alarms if a single 1h window's total
+        #    estimated spend crosses the threshold.
+        cost_alarm = cloudwatch.Alarm(
+            self,
+            "EstimatedCostAlarm",
+            alarm_name=self._get_resource_name("estimated-cost"),
+            metric=cloudwatch.Metric(
+                namespace="ScholarLens",
+                metric_name="EstimatedCostUSD",
+                statistic="Sum",
+                period=Duration.hours(1),
+            ),
+            threshold=50,
+            evaluation_periods=1,
+            comparison_operator=(cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD),
+            treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
+        )
+        cost_alarm.add_alarm_action(sns_action)
 
 
 def main() -> None:
@@ -596,6 +706,7 @@ def main() -> None:
             langchain_api_key=os.getenv(EnvVars.LANGCHAIN_API_KEY.value),
             upstage_api_key=os.getenv(EnvVars.UPSTAGE_API_KEY.value),
             brave_api_key=os.getenv(EnvVars.BRAVE_API_KEY.value),
+            slack_bot_token=os.getenv(EnvVars.SLACK_BOT_TOKEN.value),
             s3_bucket_name=config.resources.s3_bucket_name,
             s3_prefix=config.resources.s3_prefix,
             bedrock_region_name=config.resources.bedrock_region_name,

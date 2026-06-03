@@ -130,3 +130,43 @@ class TestNormalizeTitle:
         self, raw: str, expected: str
     ) -> None:
         assert ArxivHandler._normalize_title(raw) == expected
+
+
+class _FakePaper:
+    def __init__(self, title: str, short_id: str) -> None:
+        self.title = title
+        self._short_id = short_id
+
+    def get_short_id(self) -> str:
+        return self._short_id
+
+
+class TestSearchByTitleSimilarity:
+    def _handler(self, returned: list[_FakePaper]):
+        from unittest.mock import MagicMock
+
+        handler = ArxivHandler.__new__(ArxivHandler)
+        handler.client = MagicMock()
+        handler.client.results = MagicMock(return_value=iter(returned))
+        return handler
+
+    def test_exact_match_accepted(self) -> None:
+        handler = self._handler([_FakePaper("Attention Is All You Need", "1706.03762")])
+        assert handler.search_by_title("Attention Is All You Need") == "1706.03762"
+
+    def test_no_match_returns_none(self) -> None:
+        handler = self._handler(
+            [_FakePaper("Something Entirely Different", "9999.99999")]
+        )
+        assert handler.search_by_title("Attention Is All You Need") is None
+
+    def test_low_similarity_match_rejected(self, monkeypatch) -> None:
+        # Force the normalized titles to collide while the raw titles differ a
+        # lot, so the similarity gate (not the exact gate) does the rejecting.
+        monkeypatch.setattr(
+            ArxivHandler, "_normalize_title", staticmethod(lambda t: "x")
+        )
+        handler = self._handler(
+            [_FakePaper("A completely unrelated paper title here", "0000.00000")]
+        )
+        assert handler.search_by_title("Attention Is All You Need") is None

@@ -40,6 +40,7 @@ class PaperSummarizer(RetryableBase):
         translation_guideline: list[dict[str, Any]] | None = None,
         enable_thinking: bool = False,
         thinking_effort: str = "medium",
+        callbacks: list[Any] | None = None,
     ) -> None:
         self.language = language
         self.translation_guideline = translation_guideline or []
@@ -48,10 +49,16 @@ class PaperSummarizer(RetryableBase):
             summary_model_id,
             enable_thinking=enable_thinking,
             thinking_effort=thinking_effort,
+            callbacks=callbacks,
         )
 
     def _build_chain(
-        self, model_id: LanguageModelId, *, enable_thinking: bool, thinking_effort: str
+        self,
+        model_id: LanguageModelId,
+        *,
+        enable_thinking: bool,
+        thinking_effort: str,
+        callbacks: list[Any] | None = None,
     ) -> Runnable:
         llm = self.llm_factory.get_model(
             model_id,
@@ -59,6 +66,7 @@ class PaperSummarizer(RetryableBase):
             enable_thinking=enable_thinking,
             thinking_effort=thinking_effort,
             supports_1m_context_window=True,
+            callbacks=callbacks or None,
         )
         return (
             PaperSummaryPrompt.get_prompt()

@@ -13,8 +13,10 @@ class RetryableBase:
     @staticmethod
     def _retry(operation_name: str) -> Callable:
         return tenacity.retry(
-            wait=tenacity.wait_exponential(
-                multiplier=RETRY_MULTIPLIER, max=RETRY_MAX_WAIT
+            # Exponential backoff with jitter to avoid a thundering herd of
+            # concurrent retries hammering rate-limited APIs (e.g. arXiv 429).
+            wait=tenacity.wait_exponential_jitter(
+                initial=RETRY_MULTIPLIER, max=RETRY_MAX_WAIT
             ),
             stop=tenacity.stop_after_attempt(MAX_RETRIES),
             before_sleep=lambda retry_state: logger.warning(

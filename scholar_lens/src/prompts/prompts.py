@@ -898,7 +898,7 @@ class PaperEnrichmentPrompt(BasePrompt):
 
 
 class PaperFinalizationPrompt(BasePrompt):
-    input_variables: list[str] = ["explanation"]
+    input_variables: list[str] = ["explanation", "language"]
     output_variables: list[str] = ["key_takeaways"]
 
     system_prompt_template: str = """
@@ -909,8 +909,14 @@ class PaperFinalizationPrompt(BasePrompt):
     """
 
     human_prompt_template: str = """
-    Transform the provided paper explanation into a comprehensive Korean summary for technical professionals who need
-    both depth and clarity. Create an authoritative reference that captures all essential technical details while
+    **OUTPUT LANGUAGE (HIGHEST PRECEDENCE): Write the entire summary in {language}**,
+    including the four section headings. The Korean headings shown below are
+    REFERENCE TEMPLATES — translate them into {language} (keep the leading `####`,
+    the question form, and the same order). Apply Korean-specific style only when
+    {language} is Korean.
+
+    Transform the provided paper explanation into a comprehensive summary in {language} for technical professionals who
+    need both depth and clarity. Create an authoritative reference that captures all essential technical details while
     being highly readable.
 
     <explanation>
@@ -920,8 +926,8 @@ class PaperFinalizationPrompt(BasePrompt):
     ## REQUIREMENTS
 
     **Language and Style:**
-    - Write exclusively in Korean with natural, professional tone
-    - Use precise technical terminology with Korean equivalents where appropriate
+    - Write exclusively in {language} with a natural, professional tone
+    - Use precise technical terminology, keeping established English terms as-is
     - Maintain academic rigor while ensuring accessibility
     - Use clear, flowing narrative structure
 
@@ -964,16 +970,16 @@ class PaperFinalizationPrompt(BasePrompt):
 
     ## OUTPUT FORMAT
 
-    **CRITICAL:** Start IMMEDIATELY with the first header. Do NOT include:
+    **CRITICAL:** Start IMMEDIATELY with the first header (in {language}). Do NOT include:
     - A paper title
     - An introduction paragraph
-    - Any content before the first "#### 이 연구를 시작하게 된 배경과 동기는 무엇입니까?" header
+    - Any content before the first section header
 
-    Your output must begin with exactly this line:
-    #### 이 연구를 시작하게 된 배경과 동기는 무엇입니까?
+    Your output must begin directly with the first `####` header, written in {language}
+    (the {language} rendering of "이 연구를 시작하게 된 배경과 동기는 무엇입니까?").
 
-    Enclose your complete Korean summary within <key_takeaways> tags. The very first line after the opening tag
-    should be the first header (#### 이 연구를 시작하게 된 배경과 동기는 무엇입니까?).
+    Enclose your complete summary within <key_takeaways> tags. The very first line after the opening tag
+    should be that first `####` header in {language}.
 
     <key_takeaways>
     #### 이 연구를 시작하게 된 배경과 동기는 무엇입니까?
@@ -1004,6 +1010,7 @@ class PaperReflectionPrompt(BasePrompt):
         "code",
         "analysis",
         "translation_guideline",
+        "language",
     ]
     output_variables: list[str] = [
         "quality_score",
@@ -1021,7 +1028,12 @@ class PaperReflectionPrompt(BasePrompt):
 
     human_prompt_template: str = (
         r"""
-    Analyze and score this Korean technical explanation against strict evaluation criteria.
+    The target output language for this explanation is **{language}**. Evaluate
+    "language quality" against {language}'s natural formal academic register —
+    NOT against Korean — and apply Korean-specific stylistic rules (e.g. "입니다")
+    ONLY when {language} is Korean. Do not penalise correct non-Korean output.
+
+    Analyze and score this technical explanation against strict evaluation criteria.
 
     ## INPUT DOCUMENTS
 
@@ -1030,7 +1042,7 @@ class PaperReflectionPrompt(BasePrompt):
     {current_content}
     </current_content>
 
-    Current Korean explanation:
+    Current explanation:
     <current_explanation>
     {current_explanation}
     </current_explanation>
@@ -1563,12 +1575,14 @@ class PaperSynthesisPrompt(BasePrompt):
         "analysis",
         "translation_guideline",
         "improvement_feedback",
+        "language",
     ]
 
     system_prompt_template: str = """
     You are an expert technical writer and AI/ML researcher specializing in analyzing and explaining complex academic
-    papers in clear, engaging Korean language. Your goal is to create Korean-language reviews that are extremely
-    accurate, richly detailed, and technically comprehensive for university students with basic AI/ML knowledge.
+    papers in clear, engaging prose in the target output language specified in the user message. Your goal is to create
+    reviews that are extremely accurate, richly detailed, and technically comprehensive for university students with
+    basic AI/ML knowledge.
 
     🎯 ABSOLUTE PRIORITY HIERARCHY 🎯
 
@@ -1609,9 +1623,16 @@ class PaperSynthesisPrompt(BasePrompt):
 
     human_prompt_template: str = (
         r"""
-    Analyze the following information and create a comprehensive technical review in Korean that effectively explains
+    **OUTPUT LANGUAGE (HIGHEST PRECEDENCE): Write the entire review in {language}.**
+    This overrides any language-specific examples below. Keep well-established
+    English technical terms as-is (e.g. BERT, GPT, Transformer). Korean-specific
+    style guidance (e.g. the "입니다" register) applies ONLY when {language} is
+    Korean; for any other language use that language's natural formal academic
+    register and ignore the Korean stylistic rules.
+
+    Analyze the following information and create a comprehensive technical review in {language} that effectively explains
     the paper's concepts with exceptional technical precision. Emphasize mathematical formulations, visual elements,
-    code implementations, and relevant citations. Write in natural, flowing Korean prose in "입니다" style without
+    code implementations, and relevant citations. Write in natural, flowing prose without
     using bullet points or numbered lists, ensuring content is technically detailed and accurate.
 
     **CRITICAL INSTRUCTION: Make complex concepts accessible and understandable**

@@ -1,9 +1,12 @@
 import argparse
 import asyncio
+import html
 import json
 import os
 import re
 import sys
+import time
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +17,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 from scholar_lens.configs import Config
 from scholar_lens.configs import Github as GithubConfig
+from scholar_lens.slack.notifier import post_slack_result
 from scholar_lens.src import (
     AppConstants,
     CitationSummarizer,
@@ -27,6 +31,7 @@ from scholar_lens.src import (
     HTMLRichParser,
     LanguageModelId,
     LocalPaths,
+    MetricsEmitter,
     NoPythonFilesError,
     Paper,
     PaperSource,
@@ -38,6 +43,7 @@ from scholar_lens.src import (
     S3Handler,
     S3Paths,
     SSMParams,
+    TokenUsageTracker,
     arg_as_bool,
     get_ssm_param_value,
     is_running_in_aws,
@@ -74,6 +80,8 @@ def main(
     repo_urls: list[str] | None,
     parse_pdf: bool,
     mode: str = Mode.REVIEW,
+    slack_channel: str | None = None,
+    slack_thread_ts: str | None = None,
 ) -> None:
     config = Config.load()
     profile_name = (
@@ -97,15 +105,18 @@ def main(
         )
 
     paper_source = resolve_paper_source(source)
+    artifact_label = "summary" if mode == Mode.SUMMARIZE else "review"
 
     s3_url: str | None = None
     success = False
+    error_message: str | None = None
     try:
         s3_url = asyncio.run(
             _run_pipeline(context, paper_source, repo_urls, parse_pdf, mode)
         )
         success = True
     except Exception as e:
+        error_message = str(e)
         logger.error("Failed to process paper '%s': %s", source, e, exc_info=True)
         raise
     finally:
@@ -121,6 +132,15 @@ def main(
                 s3_url,
                 mode,
             )
+        post_slack_result(
+            channel=slack_channel,
+            thread_ts=slack_thread_ts,
+            success=success,
+            artifact_label=artifact_label,
+            title=paper_source.source_id,
+            s3_url=s3_url,
+            error=error_message,
+        )
 
 
 async def _run_pipeline(
@@ -143,11 +163,32 @@ async def _run_pipeline(
     )
     translation_guideline = await _load_translation_guideline(context)
 
-    if mode == Mode.SUMMARIZE:
-        document = await _generate_summary(context, paper, translation_guideline)
-    else:
-        document = await _generate_review(
-            context, paper, citation_summarizer, code_retriever, translation_guideline
+    tracker = TokenUsageTracker()
+    started = time.monotonic()
+    gen_success = False
+    try:
+        if mode == Mode.SUMMARIZE:
+            document = await _generate_summary(
+                context, paper, translation_guideline, tracker
+            )
+        else:
+            document = await _generate_review(
+                context,
+                paper,
+                citation_summarizer,
+                code_retriever,
+                translation_guideline,
+                tracker,
+            )
+        gen_success = True
+    finally:
+        MetricsEmitter(
+            context.default_boto_session, enabled=is_running_in_aws()
+        ).emit_run(
+            mode=mode,
+            success=gen_success,
+            duration_seconds=time.monotonic() - started,
+            tracker=tracker,
         )
 
     publisher = _build_publisher(context)
@@ -169,9 +210,11 @@ async def _generate_review(
     citation_summarizer: CitationSummarizer,
     code_retriever: CodeRetriever | None,
     translation_guideline: list[dict[str, Any]] | None,
+    tracker: TokenUsageTracker,
 ) -> str:
     explainer = ExplainerGraph(
         paper=paper,
+        callbacks=[tracker],
         paper_analysis_model_id=LanguageModelId(
             context.config.explanation.paper_analysis_model_id
         ),
@@ -200,6 +243,8 @@ async def _generate_review(
         reflector_enable_thinking=context.config.explanation.reflector_enable_thinking,
         synthesizer_enable_thinking=context.config.explanation.synthesizer_enable_thinking,
         thinking_effort=context.config.explanation.thinking_effort,
+        language=context.config.output_language,
+        max_total_tokens=context.config.explanation.max_total_tokens,
     )
     _save_workflow_graph(explainer)
 
@@ -214,6 +259,7 @@ async def _generate_summary(
     context: AppContext,
     paper: Paper,
     translation_guideline: list[dict[str, Any]] | None,
+    tracker: TokenUsageTracker,
 ) -> str:
     summarizer = PaperSummarizer(
         LanguageModelId(context.config.summary.summary_model_id),
@@ -222,6 +268,7 @@ async def _generate_summary(
         translation_guideline=translation_guideline,
         enable_thinking=context.config.summary.summarizer_enable_thinking,
         thinking_effort=context.config.summary.thinking_effort,
+        callbacks=[tracker],
     )
     result = await summarizer.summarize(paper)
     logger.info("Successfully generated paper summary.")
@@ -239,6 +286,7 @@ def _setup_aws_env(context: AppContext) -> None:
         SSMParams.GITHUB_TOKEN: EnvVars.GITHUB_TOKEN,
         SSMParams.LANGCHAIN_API_KEY: EnvVars.LANGCHAIN_API_KEY,
         SSMParams.UPSTAGE_API_KEY: EnvVars.UPSTAGE_API_KEY,
+        SSMParams.SLACK_BOT_TOKEN: EnvVars.SLACK_BOT_TOKEN,
     }
     for ssm_param, env_var in ssm_map.items():
         try:
@@ -481,6 +529,7 @@ def _build_front_matter(
 layout: post
 title: "{title}"
 date: {date}
+paper_date: {paper_date}
 author: "{author}"
 categories: [{categories}]
 tags: [{tags}]
@@ -488,17 +537,23 @@ cover: /assets/images/{cover_image}
 use_math: true
 ---
 """
+    # Unescape HTML entities (e.g. "&amp;") that the extractor may leave in the
+    # category/keywords before slugifying, so they never leak into the YAML.
+    category = html.unescape(paper.attributes.category)
     keywords_str = ", ".join(
-        [f'"{kw.replace(" ", "-")}"' for kw in paper.attributes.keywords]
+        [f'"{html.unescape(kw).replace(" ", "-")}"' for kw in paper.attributes.keywords]
     )
-    category_str = paper.attributes.category.replace(" ", "-")
-    cover_image = github_config.cover_image_for(paper.attributes.category)
+    category_str = category.replace(" ", "-")
+    cover_image = github_config.cover_image_for(category)
     categories_str = f'"{primary_category}", "{category_str}"'
 
     return front_matter_template.format(
         title=paper.title.replace('"', '\\"'),
-        date=paper.published.strftime("%Y-%m-%d %H:%M:%S"),
-        author=paper.attributes.affiliation,
+        # The post's own publication date is "now"; the paper's original date is
+        # surfaced separately so the blog doesn't sort the post years into the past.
+        date=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        paper_date=paper.published.strftime("%Y-%m-%d"),
+        author=html.unescape(paper.attributes.affiliation),
         categories=categories_str,
         tags=keywords_str,
         cover_image=cover_image,
@@ -627,6 +682,18 @@ if __name__ == "__main__":
         default=Mode.REVIEW,
         help="Generation mode: 'review' (in-depth) or 'summarize' (concise).",
     )
+    parser.add_argument(
+        "--slack-channel",
+        type=str,
+        default=None,
+        help="Slack channel to post the result back to (set by the bot).",
+    )
+    parser.add_argument(
+        "--slack-thread-ts",
+        type=str,
+        default=None,
+        help="Slack thread timestamp to reply in (set by the bot).",
+    )
     args = parser.parse_args()
 
     repo_urls = (
@@ -636,4 +703,11 @@ if __name__ == "__main__":
     )
     source = args.source or args.arxiv_id
     logger.info("Starting paper %s process with args: %s", args.mode, vars(args))
-    main(source, repo_urls, args.parse_pdf, args.mode)
+    main(
+        source,
+        repo_urls,
+        args.parse_pdf,
+        args.mode,
+        slack_channel=args.slack_channel,
+        slack_thread_ts=args.slack_thread_ts,
+    )
