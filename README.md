@@ -1,65 +1,86 @@
-## 👩‍🏫 SCHOLAR-LENS
+<div align="center">
 
-AI-powered research assistant that turns papers and documentation into publishable
-content: in-depth **paper reviews**, concise **paper summaries**, and self-study
-**technical guides** — driven from the CLI, AWS Batch, or a Slack bot.
+# 👩‍🏫 Scholar-Lens
+
+**Turn AI/ML papers and documentation into publishable content — paper reviews, summaries, and technical guides.**
+
+Driven from the CLI, AWS Batch, or a Slack bot · powered by Amazon Bedrock (Claude).
+
+[![CI](https://github.com/bits-bytes-nn/scholar-lens/actions/workflows/ci.yml/badge.svg)](https://github.com/bits-bytes-nn/scholar-lens/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/python-3.12%2B-blue)
+![AWS CDK](https://img.shields.io/badge/IaC-AWS%20CDK-orange)
+![Bedrock](https://img.shields.io/badge/LLM-Amazon%20Bedrock%20(Claude)-green)
+
+🇰🇷 [한국어 README](./README.ko.md) · 📖 [Technical reference](./docs/tech-doc.md)
 
 ![Sample](./assets/sample.png)
 
-### ✨ Features
+</div>
 
-- **Three artifact types**: in-depth paper *reviews* (multi-stage LangGraph),
-  concise paper *summaries* (five-section format with figures/tables/math/code),
-  and technical *guides/tutorials* generated from documentation URLs.
-- **Any AI/ML paper**: accepts an arXiv ID **or** an arbitrary paper PDF URL
-  (non-PDF URLs are rejected); arXiv is no longer required.
-- **AI-Powered Analysis**: Amazon Bedrock (Claude, incl. Opus 4.8) for multi-stage
-  understanding, citation analysis, and figure interpretation.
-- **Code Integration**: GitHub repository analysis with semantic search via FAISS.
-- **Slack Paper Bot**: mention/DM the bot with a paper id/URL or doc URLs; it
-  parses intent with an LLM and dispatches a Batch job, then reports back.
-- **Blog publishing**: every artifact can be uploaded to S3 and opened as a PR
-  against a configured github.io blog (category-aware Jekyll front matter).
-- **Scalable Infrastructure**: AWS Batch for containerized job execution.
+---
 
-### 🏗️ Architecture
+## What it does
 
-> 📖 **Full line-by-line technical documentation:** [`assets/tech-doc.md`](./assets/tech-doc.md)
-> — every module, the end-to-end data flow for all three artifact types, config
-> schema, model usage, infrastructure, and diagrams.
+Scholar-Lens produces three kinds of artifact from a paper or a set of documentation URLs:
 
-#### Core Components
-- **PaperSource** (`paper_source.py`): resolves an arXiv ID or paper PDF URL to a
-  source; validates that URL sources actually serve a PDF.
-- **ArxivHandler** (`arxiv_handler.py`): Paper metadata and content retrieval
-- **Parser** (`parser.py`): HTML/PDF parsing with figure extraction
-- **ContentExtractor** (`content_extractor.py`): Structured content and citation extraction
-- **CodeRetriever** (`code_retriever.py`): Repository cloning and semantic code analysis
-- **CitationSummarizer** (`citation_summarizer.py`): Reference paper analysis
-- **ExplainerGraph** (`explainer.py`): Multi-stage LangGraph workflow for paper reviews
-- **PaperSummarizer** (`summarizer.py`): five-section paper summaries
-- **TechGuideGenerator** (`tech_guide.py`) + **WebResearcher** (`web_research.py`):
-  research URLs (+ sub-pages + web search) and write a technical guide
-- **Publisher** (`publisher.py`): artifact-agnostic S3 upload + blog PR
-- **Paper Bot** (`slack/`): LLM intent parsing → AWS Batch dispatch
+| Artifact | Input | Output |
+| --- | --- | --- |
+| 📝 **Review** | one paper (arXiv ID or PDF URL) | in-depth, section-by-section explanation (intuition → formalism → code) via a multi-stage LangGraph workflow |
+| 📄 **Summary** | one paper (arXiv ID or PDF URL) | a concise five-section summary (motivation · solution · implementation · results · significance) |
+| 📚 **Tech Guide** | one or more documentation URLs | a hands-on, source-grounded technical guide / tutorial |
 
-#### Infrastructure
-- **AWS Batch**: Containerized job execution with ECS
-- **Amazon Bedrock**: Claude models for analysis and generation
-- **S3**: Paper storage and asset management
-- **SSM Parameter Store**: Configuration management
+Every artifact is clean, blog-ready Markdown that can be uploaded to S3 and opened as a pull request against a Jekyll blog.
 
-### 🛠️ Tech Stack
+## Highlights
 
-- Python 3.12+, AWS CDK, Docker
-- Amazon Bedrock, LangChain, LangGraph
-- PyMuPDF, BeautifulSoup4, FAISS
-- Pydantic validation, YAML configuration
+- **Any AI/ML paper** — accepts an arXiv ID *or* an arbitrary paper **PDF URL** (non-PDF URLs are rejected). arXiv is no longer required.
+- **Grounded, not hallucinated** — citations resolve through Crossref / Semantic Scholar with a title-similarity gate; the writer may only link URLs that appear in its sources. Tech guides run a per-section fact-check pass.
+- **Latest Claude** — Amazon Bedrock with Claude Opus 4.8 / Sonnet 4.6 / Haiku 4.5 and adaptive thinking, per-stage configurable.
+- **Code-aware reviews** — optional GitHub repository analysis with FAISS semantic search.
+- **On-demand Slack bot** — mention it with a paper or doc URLs; it parses your *explicit* request with an LLM, runs a Batch job, and replies in-thread with a link to the result.
+- **Scalable & observable** — AWS Batch (on-demand + spot), CloudWatch alarms, EventBridge→SNS failure alerts, encrypted SecureString secrets.
 
-### 📋 Configuration
+## Architecture
 
-Copy `scholar_lens/configs/config-template.yaml` to
-`scholar_lens/configs/config.yaml` and edit it. Abbreviated example:
+### Generation pipelines
+
+The three artifact types share a front-end (resolve → parse → extract) and then diverge:
+
+![Generation pipelines](./docs/diagrams/pipeline.png)
+
+### AWS infrastructure
+
+All work runs as a containerised job on AWS Batch; the same job is submitted by the CLI, the Slack bot, or `run_batch.py`:
+
+![AWS architecture](./docs/diagrams/aws-architecture.png)
+
+### Core components
+
+| Module | Responsibility |
+| --- | --- |
+| `paper_source.py` | Resolve an arXiv ID or paper PDF URL to a `PaperSource`; validate that URL sources serve a PDF (with an SSRF guard). |
+| `parser.py` · `content_extractor.py` | HTML/PDF parsing + figure extraction; structured citation / attribute / TOC extraction. |
+| `citation_metadata.py` · `citation_summarizer.py` | Abstract-first reference resolution (Crossref / Semantic Scholar), rate-limited, title-gated. |
+| `explainer.py` | `ExplainerGraph` — the multi-stage LangGraph review workflow. |
+| `summarizer.py` | `PaperSummarizer` — the five-section summary. |
+| `tech_guide.py` · `web_research.py` | Research doc URLs (+ sub-pages + web search) and write a grounded guide. |
+| `code_retriever.py` | Clone repos and run semantic code search (FAISS). |
+| `publisher.py` | Artifact-agnostic S3 upload + Jekyll blog PR. |
+| `slack/` | The on-demand Paper Bot (intent parsing → Batch dispatch). |
+
+> 📖 See [`docs/tech-doc.md`](./docs/tech-doc.md) for the full, line-by-line technical reference — every module, the end-to-end data flow, config schema, model usage, infrastructure, and prompts.
+
+## Tech stack
+
+Python 3.12+ · AWS CDK · Docker · Amazon Bedrock · LangChain / LangGraph · PyMuPDF · BeautifulSoup4 · FAISS · Pydantic.
+
+## Configuration
+
+Copy the template and edit it:
+
+```bash
+cp scholar_lens/configs/config-template.yaml scholar_lens/configs/config.yaml
+```
 
 ```yaml
 resources:
@@ -69,86 +90,82 @@ resources:
   default_region_name: ap-northeast-2
   bedrock_region_name: us-west-2
   s3_bucket_name: your-bucket
-  email_address: your-email@example.com
   github:
     enabled: true
     repo_name: owner/owner.github.io
-
-paper:
-  citation_extraction_model_id: anthropic.claude-sonnet-4-6
-  table_of_contents_model_id: anthropic.claude-sonnet-4-6
+    review_category: Paper Reviews     # blog category tab labels (configurable)
+    summary_category: Paper Summaries
+    tech_guide_category: Tech Guides
 
 explanation:
-  paper_analysis_model_id: anthropic.claude-sonnet-4-6
   paper_synthesis_model_id: anthropic.claude-opus-4-8   # newest Claude Opus
-
 summary:
   summary_model_id: anthropic.claude-opus-4-8
-
 tech_guide:
   writing_model_id: anthropic.claude-opus-4-8
+  verify_grounding: true               # per-section fact-check pass
 
 output_language: Korean
 ```
 
-See [`assets/tech-doc.md`](./assets/tech-doc.md) §5 for the full config schema.
+See [`docs/tech-doc.md` §5](./docs/tech-doc.md) for the full schema.
 
-### 🚀 Usage
+## Usage
 
-#### Infrastructure Deployment
+### Setup
+
 ```bash
-# Deploy infrastructure
-python scripts/deploy_infra.py
+poetry install --with dev          # dependencies + dev/test tools
+cp .env.template .env               # then fill in tokens (see .env.template)
+python scripts/deploy_infra.py      # deploy AWS infrastructure (CDK)
 ```
 
-#### Development
+### Generate artifacts (CLI)
+
 ```bash
-# Install dependencies (including dev/test tools)
-poetry install --with dev
-
-# Set up environment
-cp .env.template .env
-# Edit .env with your configuration
-
-# Paper REVIEW — --source accepts an arXiv ID or a paper PDF URL
+# REVIEW — --source accepts an arXiv ID or a paper PDF URL
 python scholar_lens/main.py --source 2312.11805 --parse-pdf True
 python scholar_lens/main.py --source https://openreview.net/pdf?id=XXXX
 
-# Paper SUMMARY (concise five-section format)
+# SUMMARY (concise five-section format)
 python scholar_lens/main.py --source 2312.11805 --mode summarize
 
-# Technical GUIDE / tutorial from documentation URLs
+# TECH GUIDE from documentation URLs
 python scholar_lens/tech_guide_main.py \
   --urls https://docs.framework.io/start https://docs.framework.io/api \
   --search-queries "framework.io best practices"
 
-# Submit a batch job (review or summarize)
+# Submit as an AWS Batch job
 python scripts/run_batch.py --source 2505.09388 --mode review \
   --repo-urls https://github.com/org/repo
+```
 
-# Run the Slack Paper Bot (Socket Mode; needs SLACK_BOT_TOKEN/SLACK_APP_TOKEN)
+### Slack bot
+
+```bash
+# Socket Mode (needs SLACK_BOT_TOKEN / SLACK_APP_TOKEN)
 python -m scholar_lens.slack.bot
 ```
 
-> **Use a dedicated Slack app for Paper Bot.** Do not reuse another bot's tokens
-> (e.g. the OmniSummary app). Two Socket Mode processes sharing one Slack app
-> make Slack deliver each `app_mention`/DM to only one of them at random, so
-> mentions silently route to the wrong bot. Set `SLACK_EXPECTED_APP_ID` to Paper
-> Bot's own app id and the process will refuse to start if it's bound to the
-> wrong app.
+Then mention the bot with what you want done — e.g. `review 2401.06066`,
+`summarize https://arxiv.org/pdf/2401.06066`, or
+`guide https://docs.framework.io/start`. The result is saved to S3 / published to
+your blog, and the bot posts the status and a link back in the thread.
 
-#### Testing & Quality
+> ⚠️ **Use a dedicated Slack app for Paper Bot.** Two Socket Mode processes
+> sharing one app make Slack deliver each mention/DM to only one of them at
+> random. Set `SLACK_EXPECTED_APP_ID` to the bot's own app id and it refuses to
+> start if bound to the wrong app.
+
+## Testing & quality
+
 ```bash
-# Run the test suite (mocks all AWS/network — no credentials or cost)
-poetry run pytest tests/ --cov=scholar_lens --cov-report=term-missing
-
-# Lint & format
+poetry run pytest tests/ --cov=scholar_lens --cov-report=term-missing  # all AWS/network mocked
 poetry run ruff check scholar_lens scripts tests
 poetry run black --check scholar_lens scripts tests
-
-# Validate infrastructure synthesis (no AWS account needed)
-poetry run python scripts/ci_synth_check.py
+poetry run mypy scholar_lens
+poetry run python scripts/ci_synth_check.py   # validate CDK synth, no AWS account needed
 ```
 
-CI (`.github/workflows/ci.yml`) runs lint/format, the pytest matrix
-(Python 3.12 & 3.13), and a CDK synth check on every push and PR.
+CI (`.github/workflows/ci.yml`) runs lint/format, the pytest matrix (Python 3.12 & 3.13),
+and a CDK synth check on every push and PR.

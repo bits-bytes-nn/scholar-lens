@@ -93,6 +93,10 @@ Socket Mode를 통한 이벤트 기반 디스패칭 (`scholar_lens/slack/bot.py`
 
 ## 2. 아키텍처 한눈에 보기 (Architecture Overview)
 
+세 산출물(리뷰 · 요약 · 기술 가이드)은 공통 프런트엔드(소스 해석 → 파싱 → 추출)를 공유한 뒤 각자의 생성 파이프라인으로 분기하고, 다시 공통 `Publisher`로 수렴합니다.
+
+![생성 파이프라인](./diagrams/pipeline.png)
+
 ### 상위-레벨 데이터 흐름
 
 Scholar-Lens는 세 가지 주요 단계로 논문을 처리합니다:
@@ -1273,6 +1277,8 @@ Authors: author1, author2, …
 - 저자 행이 빠질 수 있음 (저자 정보 없음)
 
 ## 9. 인프라 (AWS)
+
+![AWS 아키텍처](./diagrams/aws-architecture.png)
 
 ### CDK 스택 구조
 

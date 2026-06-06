@@ -210,7 +210,6 @@ cython_debug/
 .virtual_documents
 assets/*
 !assets/sample.png
-!assets/tech-doc.md
 cdk.context.json
 cdk.out/
 config.yaml
