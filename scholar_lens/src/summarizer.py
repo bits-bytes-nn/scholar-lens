@@ -26,6 +26,9 @@ from .utils import (
 )
 
 DEFAULT_LANGUAGE: str = "Korean"
+# Language-neutral sentinel for "no code repository was provided"; the summary
+# prompt keys off this exact string to decide whether to use a codebase.
+_NO_CODEBASE: str = "(no code repository provided)"
 
 
 class PaperSummarizer(RetryableBase):
@@ -82,7 +85,7 @@ class PaperSummarizer(RetryableBase):
         is a comma-separated keyword list; ``urls`` is a comma-separated markdown
         link list. All three are LLM-extracted from the paper content.
         """
-        result = await self._summarize(paper.content.text)
+        result = await self._summarize(paper.content.text, paper.codebase_summary)
         summary = result.get("summary", "").strip()
         if not summary:
             raise ValueError("Summarizer returned an empty summary.")
@@ -98,10 +101,13 @@ class PaperSummarizer(RetryableBase):
         }
 
     @RetryableBase._retry("paper_summarization")
-    async def _summarize(self, content: str) -> dict[str, str]:
+    async def _summarize(
+        self, content: str, codebase_summary: str | None = None
+    ) -> dict[str, str]:
         return await self.summary_chain.ainvoke(
             {
                 "content": content,
+                "codebase_summary": codebase_summary or _NO_CODEBASE,
                 "language": self.language,
                 "translation_guideline": str(self.translation_guideline),
             }

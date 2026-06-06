@@ -151,9 +151,8 @@ python -m scholar_lens.slack.bot
 `summarize https://arxiv.org/pdf/2401.06066`, `guide https://docs.framework.io/start`.
 결과는 S3에 저장되고 블로그에 발행되며, 봇은 스레드에 상태와 링크를 회신합니다.
 
-> ⚠️ **Paper Bot은 전용 Slack 앱을 사용하세요.** 두 Socket Mode 프로세스가 한 앱을
-> 공유하면 Slack이 멘션/DM을 둘 중 하나에만 무작위로 전달합니다. `SLACK_EXPECTED_APP_ID`를
-> 봇 전용 앱 ID로 설정하면 잘못된 앱에 바인딩될 때 시작을 거부합니다.
+> 💡 봇은 전용 Slack 앱에서 실행하세요. 같은 워크스페이스에서 다른 Socket Mode 봇을
+> 함께 운영한다면, 두 봇이 같은 앱 토큰을 공유하지 않도록 각각 별도 앱으로 분리하면 됩니다.
 
 ## 테스트 & 품질
 

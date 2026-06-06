@@ -225,7 +225,14 @@ class PaperReviewStack(Stack):
         bedrock_regions = {self.region}
         if self.bedrock_region_name:
             bedrock_regions.add(self.bedrock_region_name)
-        bedrock_resources: list[str] = []
+        bedrock_resources: list[str] = [
+            # Newer short-form model IDs (e.g. anthropic.claude-sonnet-4-6,
+            # anthropic.claude-opus-4-8) are invoked as region-less / global
+            # foundation models, so their ARN has an EMPTY region segment
+            # (arn:aws:bedrock:::foundation-model/...). The region-scoped ARNs
+            # below do not match those, so grant the region-less form too.
+            f"arn:{self.partition}:bedrock:::foundation-model/*",
+        ]
         for region in bedrock_regions:
             bedrock_resources.extend(
                 [

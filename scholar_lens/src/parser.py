@@ -21,6 +21,7 @@ from unstructured.partition.pdf import partition_pdf
 from .constants import AppConstants, EnvVars, LanguageModelId, LocalPaths
 from .logger import logger
 from .prompts import FigureAnalysisPrompt
+from .url_guard import UnsafeUrlError, assert_url_is_public
 from .utils import (
     BedrockLanguageModelFactory,
     RetryableBase,
@@ -106,6 +107,12 @@ class Figure(BaseModel, RetryableBase):
         image_bytes: bytes
 
         if path.startswith(("http://", "https://")):
+            # Figure URLs can originate from untrusted paper/page content; run
+            # them through the SSRF guard before fetching server-side.
+            try:
+                assert_url_is_public(path)
+            except UnsafeUrlError as e:
+                raise FigureParseError(f"Unsafe image URL '{path}': {e}") from e
             try:
                 async with httpx.AsyncClient(timeout=DEFAULT_TIMEOUT) as client:
                     response = await client.get(path)

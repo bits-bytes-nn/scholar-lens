@@ -71,6 +71,20 @@ class TestIntentParserFromRaw:
         )
         assert not parsed.is_actionable
 
+    def test_parse_pdf_parsed_from_raw(self) -> None:
+        yes = IntentParser.from_raw(
+            {"intent": "summarize", "sources": "2401.06066", "parse_pdf": "yes"}
+        )
+        assert yes.parse_pdf is True
+        no = IntentParser.from_raw(
+            {"intent": "summarize", "sources": "2401.06066", "parse_pdf": "no"}
+        )
+        assert no.parse_pdf is False
+        default = IntentParser.from_raw(
+            {"intent": "summarize", "sources": "2401.06066"}
+        )
+        assert default.parse_pdf is False
+
 
 def _dispatcher(submit_mock: MagicMock, *, with_guide: bool = True) -> JobDispatcher:
     return JobDispatcher(

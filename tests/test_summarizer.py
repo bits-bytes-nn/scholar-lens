@@ -48,6 +48,7 @@ class TestPaperSummaryPrompt:
     def test_prompt_builds_with_required_variables(self) -> None:
         assert PaperSummaryPrompt.input_variables == [
             "content",
+            "codebase_summary",
             "language",
             "translation_guideline",
         ]
@@ -76,6 +77,31 @@ class TestPaperSummarizer:
         assert result["summary"].startswith("## ")
         assert result["tags"] == "Scaling Laws, Transformers"
         assert result["urls"] == "[Repo](https://github.com/x/y)"
+
+    async def test_codebase_summary_passed_to_chain(self, sample_paper: Paper) -> None:
+        # When the paper carries a codebase summary, it must reach the prompt so
+        # the implementation section can be grounded in the official code.
+        paper = sample_paper.model_copy(
+            update={"codebase_summary": "LoRA layer in lora/layers.py"}
+        )
+        summarizer = _make_summarizer_with_stub_chain(
+            {"summary": "## 🔍 x", "tags": "", "urls": ""}
+        )
+        await summarizer.summarize(paper)
+        payload = summarizer.summary_chain.ainvoke.await_args.args[0]
+        assert payload["codebase_summary"] == "LoRA layer in lora/layers.py"
+
+    async def test_no_codebase_summary_uses_placeholder(
+        self, sample_paper: Paper
+    ) -> None:
+        summarizer = _make_summarizer_with_stub_chain(
+            {"summary": "## 🔍 x", "tags": "", "urls": ""}
+        )
+        await summarizer.summarize(sample_paper)  # codebase_summary is None
+        payload = summarizer.summary_chain.ainvoke.await_args.args[0]
+        # Language-neutral sentinel so the prompt behaves the same regardless of
+        # the target summary language.
+        assert payload["codebase_summary"] == "(no code repository provided)"
 
     async def test_empty_summary_raises(self, sample_paper: Paper) -> None:
         summarizer = _make_summarizer_with_stub_chain(

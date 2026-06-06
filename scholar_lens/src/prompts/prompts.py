@@ -89,10 +89,10 @@ HEADING_STRUCTURE_RULES: str = """
 - Subsubsection: #### Subsubsection Title (quadruple ####)
 - Detailed points: ##### Detailed Title (five #####)
 
-CRITICAL REQUIREMENTS:
+CRITICAL REQUIREMENTS (headings are written in the target output language):
 - NEVER include section numbers in headings
-- CORRECT: "## 서론", "### 제안 방법", "#### 실험 설정"
-- INCORRECT: "## 1. 서론", "### 2.1 제안 방법", "## Section 3"
+- CORRECT: "## Introduction" / "## 서론", "### Proposed Method" / "### 제안 방법"
+- INCORRECT: "## 1. Introduction", "### 2.1 제안 방법", "## Section 3"
 - Never skip heading levels (e.g., going from ## directly to ####)
 """
 
@@ -106,17 +106,22 @@ links to the WRONG paper (e.g. labelling a GPT-2 link with T5's id). If the
 referenced paper has no URL in citation_summaries, mention it as plain text with
 NO hyperlink. A wrong link is far worse than no link.
 
+Reference prose is written in the target output language; the examples below show
+English and Korean forms — follow the same pattern in whatever language you write.
+
 When author information is clear in citation_summaries AND a URL is provided there:
-- Use proper format: "[Author et al.](url)에서 제안된" (url copied verbatim)
-- Example: "[Vaswani et al.](url)에서 제안된 Transformer 아키텍처"
+- Use proper format with the url copied verbatim, e.g.
+  "the Transformer architecture proposed by [Vaswani et al.](url)" /
+  "[Vaswani et al.](url)에서 제안된 Transformer 아키텍처"
 
 When author info is unclear, only a citation key is available, or NO url is provided:
 - Use specific identifiers as PLAIN TEXT (no hyperlink): paper title, model name,
   algorithm name, or method name
-- CORRECT (no url available): "Transformer 아키텍처", "BERT 모델"
-- CORRECT (url in citation_summaries): "[Transformer 아키텍처](url)"
-- INCORRECT: "[vaswani2017attention](url)", "이전 연구에서", "관련 연구에 따르면",
-  or any [text](url) whose url you recalled rather than copied from citation_summaries
+- CORRECT (no url available): "the Transformer architecture", "BERT 모델"
+- CORRECT (url in citation_summaries): "[the Transformer architecture](url)"
+- INCORRECT: "[vaswani2017attention](url)", "in prior work" / "이전 연구에서",
+  "according to related work" / "관련 연구에 따르면", or any [text](url) whose url
+  you recalled rather than copied from citation_summaries
 """
 
 EXCLUDED_CONTENT_RULES: str = """
@@ -955,8 +960,8 @@ class PaperFinalizationPrompt(BasePrompt):
     output_variables: list[str] = ["key_takeaways"]
 
     system_prompt_template: str = """
-    You are an expert technical writer and AI/ML researcher who specializes in creating clear, accurate Korean summaries
-    of complex academic papers. You excel at preserving technical precision while making content accessible to technical
+    You are an expert technical writer and AI/ML researcher who specializes in creating clear, accurate summaries
+    of complex academic papers in the requested target language. You excel at preserving technical precision while making content accessible to technical
     professionals. Your expertise includes maintaining scientific rigor, accurately translating technical terminology,
     and structuring information for maximum comprehension.
     """
@@ -1179,7 +1184,9 @@ class PaperReflectionPrompt(BasePrompt):
         + r"""
 
     Additional rules:
-    - Section titles should use Korean translations (Abstract → 초록, Introduction → 서론)
+    - Section titles should be translated into the target output language
+      (e.g. for Korean: Abstract → 초록, Introduction → 서론); keep them as-is when
+      the target language is English
     - Use descriptive heading titles that reflect content
 
     ### 3. CITATION ACCURACY AND HYPERLINK VALIDATION (CRITICAL)
@@ -1961,7 +1968,9 @@ class PaperSynthesisPrompt(BasePrompt):
 
     - Use table_of_contents as your structural guide for content organization
     - Ensure your section's content aligns with its designated role in the overall document
-    - Section titles should use Korean translations (Abstract → 초록, Introduction → 서론, Related Work → 관련 연구)
+    - Section titles should be translated into the target output language (e.g. for
+      Korean: Abstract → 초록, Introduction → 서론, Related Work → 관련 연구); keep them
+      as-is when the target language is English
     - Skip technically meaningless subsections that don't add value
 
     Maintain appropriate content scope for each section type:
@@ -2067,10 +2076,10 @@ class PaperSynthesisPrompt(BasePrompt):
 
     **Equation guidelines:**
     - NEVER skip any mathematical formulation from the original paper
-    - Include ALL equations with comprehensive explanations in Korean
+    - Include ALL equations with comprehensive explanations written in the target output language
     - **ABSOLUTE PROHIBITION: NEVER duplicate previously shown equations** - reference them descriptively instead
-    - Reference previous equations using descriptive natural Korean language
-      (e.g., "앞서 소개한 손실 함수" instead of "식 (3)")
+    - Reference previous equations using descriptive natural language in the target output language
+      (e.g., "the loss function introduced earlier" / "앞서 소개한 손실 함수" instead of "Eq. (3)")
     - Define all variables and operators precisely with clear explanations
     - Provide step-by-step derivations with justification for each step
     - Connect mathematical formulations to their practical implications
@@ -2595,7 +2604,12 @@ class TableOfContentsPrompt(BasePrompt):
 
 
 class PaperSummaryPrompt(BasePrompt):
-    input_variables: list[str] = ["content", "language", "translation_guideline"]
+    input_variables: list[str] = [
+        "content",
+        "codebase_summary",
+        "language",
+        "translation_guideline",
+    ]
     output_variables: list[str] = ["summary", "tags", "urls"]
 
     system_prompt_template: str = """
@@ -2617,6 +2631,10 @@ class PaperSummaryPrompt(BasePrompt):
     {content}
     </paper>
 
+    <official_codebase_summary>
+    {codebase_summary}
+    </official_codebase_summary>
+
     <Core Requirements>
     1. Extract key technical concepts, methodologies, and architectural innovations
     2. Analyze implementation details and technical decisions
@@ -2630,6 +2648,13 @@ class PaperSummaryPrompt(BasePrompt):
     Select only essential visual elements (images, tables, code) that are critical for understanding key concepts.
     Every figure you insert MUST be referenced in the adjacent prose (e.g. "아래 그림은 …"); never leave a
     caption-only orphan image. If a figure cannot be tied into the narrative, omit it.
+
+    <Using the Official Codebase>
+    When <official_codebase_summary> is provided (not "(no code repository provided)"), use it to make the
+    "how it was implemented" section more concrete and accurate — e.g. the actual module/class structure, key
+    default hyper-parameters, or API surface — and to resolve ambiguities in the paper's description. Treat it as
+    supporting evidence: ground claims in it, never contradict the paper, and do NOT pad the summary with code
+    walkthroughs. If no codebase is provided, simply summarise from the paper.
 
     <Calibrated Help>
     Spend your explanation budget where it is actually hard. When the paper makes a non-obvious conceptual leap
@@ -2669,11 +2694,13 @@ class PaperSummaryPrompt(BasePrompt):
     - Format your response in clean GitHub-Flavored Markdown (NOT HTML) for optimal readability on a Jekyll blog
     - Use **bold** for key concepts and `-`/`1.` lists; do NOT emit raw HTML tags (no <p>, <strong>, <ul>, <img>, ...)
     - Include mathematical formulas in LaTeX ($...$ for inline, $$...$$ for display)
-    - IMPORTANT: Avoid LaTeX environments that start with \\begin{{...}} as they may break. Instead:
-      * For matrices, use array environments:
+    - IMPORTANT: Avoid the standalone amsmath display environments \\begin{{align}}, \\begin{{equation}},
+      and \\begin{{gather}} — on the blog's MathJax setup they often fail to render. Instead:
+      * For matrices, the \\begin{{array}}{{...}} ... \\end{{array}} environment INSIDE a $$...$$ block is fine:
         $$\\left[ \\begin{{array}}{{ccc}} a & b & c \\\\ d & e & f \\end{{array}} \\right]$$
-      * For aligned equations, use aligned notation with &: $$a = b \\\\ c = d$$
-      * For complex math structures, break them into multiple display equations
+      * For multi-line/aligned equations, wrap an \\begin{{aligned}} ... \\end{{aligned}} inside $$...$$:
+        $$\\begin{{aligned}} a &= b \\\\ c &= d \\end{{aligned}}$$
+      * For complex math structures, break them into multiple separate display equations
     - Do NOT use the \\bm{{}} command; use \\boldsymbol{{}} for bold symbols (e.g. $\\boldsymbol{{\\alpha}}$)
     - Enhance understanding with visual elements:
       * Include relevant figures from the paper as Markdown images: ![Description](path)
@@ -2913,7 +2940,13 @@ class TechGuideGroundingPrompt(BasePrompt):
 
 class SlackIntentPrompt(BasePrompt):
     input_variables: list[str] = ["message"]
-    output_variables: list[str] = ["intent", "sources", "repo_urls", "reason"]
+    output_variables: list[str] = [
+        "intent",
+        "sources",
+        "repo_urls",
+        "parse_pdf",
+        "reason",
+    ]
 
     system_prompt_template: str = """
     You are an intent parser for a research assistant Slack bot. You read a user's chat message and decide which
@@ -2947,12 +2980,16 @@ class SlackIntentPrompt(BasePrompt):
       than guessing between review and summarize.
     - For review/summarize: <sources> must contain exactly one arXiv id (e.g. 2401.06066) or one paper PDF URL.
     - For guide: <sources> may contain one or more documentation URLs (comma-separated).
-    - <repo_urls> holds any associated GitHub repository URLs mentioned (comma-separated), else empty.
+    - <repo_urls> holds any associated GitHub repository URLs mentioned (comma-separated), else empty. These are the
+      paper's official code — used to make a review/summary's implementation details more accurate.
+    - <parse_pdf>: "yes" ONLY if the user explicitly asks to parse/use the PDF (e.g. "PDF로 파싱", "force PDF",
+      "use the pdf", "PDF 파싱해서"); otherwise "no". Default "no" lets arXiv sources use the richer HTML rendering.
     - If you cannot confidently identify BOTH the intent and its required inputs, use intent "unknown".
 
     Respond in exactly this format:
     <intent>review|summarize|guide|unknown</intent>
     <sources>comma-separated arXiv ids and/or URLs, or empty</sources>
     <repo_urls>comma-separated GitHub URLs, or empty</repo_urls>
+    <parse_pdf>yes or no</parse_pdf>
     <reason>one short sentence explaining the classification</reason>
     """

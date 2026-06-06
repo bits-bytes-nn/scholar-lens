@@ -292,7 +292,11 @@ class TechGuideGenerator(RetryableBase):
         # Fallback: model omitted the wrapper tag — use raw text.
         raw = (await self._section_str_chain.ainvoke(payload)).strip()
         match = re.search(r"<section_markdown>(.*?)</section_markdown>", raw, re.DOTALL)
-        return (match.group(1) if match else raw).strip()
+        text = match.group(1) if match else raw
+        # Strip any stray wrapper tag fragments (e.g. an unclosed opening tag) so
+        # raw XML never leaks into the published Markdown.
+        text = re.sub(r"</?section_markdown>", "", text)
+        return text.strip()
 
     def _parse_synopsis_sections(
         self, synopsis: str, *, apply_cap: bool = True

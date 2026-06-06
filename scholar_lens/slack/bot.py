@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import os
 import threading
+from dataclasses import dataclass, field
 
 import boto3
 
@@ -26,6 +27,52 @@ from .dispatcher import JobDispatcher, SlackContext, utc_timestamp
 from .intent import IntentParser, ParsedIntent
 
 _INTENT_MODEL = LanguageModelId.CLAUDE_V4_5_HAIKU
+
+# Friendly emoji + label per intent, used in the acknowledgement reply.
+_INTENT_LABELS = {
+    "review": (":memo:", "Review"),
+    "summarize": (":page_facing_up:", "Summary"),
+    "guide": (":books:", "Tech guide"),
+}
+
+
+@dataclass
+class SlackReply:
+    """A Slack reply carrying both fallback text and rich Block Kit blocks.
+
+    ``text`` is the notification/fallback string (shown in notifications and by
+    older clients); ``blocks`` is the rich rendering. Both ``handle_message`` and
+    the Socket Mode handler pass these straight to ``say(text=..., blocks=...)``.
+    """
+
+    text: str
+    blocks: list[dict] = field(default_factory=list)
+
+
+def _section(text: str) -> dict:
+    return {"type": "section", "text": {"type": "mrkdwn", "text": text}}
+
+
+def _context(text: str) -> dict:
+    return {"type": "context", "elements": [{"type": "mrkdwn", "text": text}]}
+
+
+def _header(text: str) -> dict:
+    # Header blocks are plain_text only (no mrkdwn/emoji-colon expansion beyond
+    # standard emoji), so keep them short and literal.
+    return {
+        "type": "header",
+        "text": {"type": "plain_text", "text": text, "emoji": True},
+    }
+
+
+def _one_line(text: str, *, limit: int = 600) -> str:
+    """Collapse whitespace and cap an error string for a code block.
+
+    Backticks are stripped so the surrounding ``` fence can't be broken out of.
+    """
+    flat = " ".join(text.replace("`", "ʼ").split())
+    return flat if len(flat) <= limit else flat[: limit - 1] + "…"
 
 
 def is_user_authorized(user_id: str | None) -> bool:
@@ -83,7 +130,7 @@ class PaperBot:
 
     async def handle_message(
         self, text: str, *, slack_context: SlackContext | None = None
-    ) -> str:
+    ) -> SlackReply:
         """Parse a message, dispatch a job, and return a user-facing reply.
 
         When ``slack_context`` is provided, it is threaded into the Batch job so
@@ -98,22 +145,78 @@ class PaperBot:
             )
         except Exception as e:  # noqa: BLE001 - surface any dispatch error to the user
             logger.error("Dispatch failed: %s", e, exc_info=True)
-            return f":warning: Failed to start the job: {e}"
-        return (
-            f":rocket: Started a *{result.intent.value}* job "
-            f"(`{result.job_name}`) for: {', '.join(parsed.sources)}.\n"
-            f"I'll post the result here when it's ready."
+            return self._dispatch_error_reply(e)
+        return self._ack_reply(parsed, result.intent.value)
+
+    @staticmethod
+    def _ack_reply(parsed: ParsedIntent, intent_value: str) -> SlackReply:
+        emoji, nice = _INTENT_LABELS.get(
+            intent_value, (":rocket:", intent_value.capitalize())
+        )
+        sources = ", ".join(parsed.sources)
+        extras = []
+        if parsed.repo_urls:
+            extras.append(f":link: code: {', '.join(parsed.repo_urls)}")
+        if parsed.parse_pdf:
+            extras.append(":page_with_curl: PDF parsing on")
+        blocks = [
+            _section(f"{emoji}  *{nice}* started for `{sources}`"),
+            _context(
+                ":hourglass_flowing_sand: I'll post the result here when it's ready."
+            ),
+        ]
+        if extras:
+            blocks.insert(1, _context("   ·   ".join(extras)))
+        return SlackReply(text=f"{nice} started for {sources}", blocks=blocks)
+
+    @staticmethod
+    def _dispatch_error_reply(error: Exception) -> SlackReply:
+        return SlackReply(
+            text=f"Couldn't start the job: {error}",
+            blocks=[
+                _header(":x: Couldn't start the job"),
+                _section(f"```{_one_line(str(error))}```"),
+                _context(
+                    ":arrows_counterclockwise: Please try again in a moment, "
+                    "or check the bot logs if it keeps happening."
+                ),
+            ],
         )
 
     @staticmethod
-    def _help_reply(parsed: ParsedIntent) -> str:
-        return (
-            ":wave: I couldn't turn that into an action"
-            + (f" ({parsed.reason})" if parsed.reason else "")
-            + ".\nTry:\n"
-            "• `review 2401.06066`\n"
-            "• `summarize https://arxiv.org/pdf/2401.06066`\n"
-            "• `guide https://docs.framework.io/start https://docs.framework.io/api`"
+    def _help_reply(parsed: ParsedIntent) -> SlackReply:
+        reason = f"  _({parsed.reason})_" if parsed.reason else ""
+        return SlackReply(
+            text="I couldn't tell what you'd like me to do.",
+            blocks=[
+                _section(
+                    f":wave: I couldn't tell what you'd like me to do.{reason}\n"
+                    "Here's what I can do:"
+                ),
+                _section(
+                    ":memo:  `review 2401.06066`\n_In-depth, section-by-section paper review._\n\n"
+                    ":page_facing_up:  `summarize https://arxiv.org/pdf/2401.06066`\n"
+                    "_Concise five-point summary._\n\n"
+                    ":books:  `guide https://docs.framework.io/start`\n"
+                    "_Technical how-to guide built from documentation._"
+                ),
+                _context(
+                    ":bulb: Tip: add a GitHub repo to ground the implementation, "
+                    'or say "parse the PDF" to force PDF parsing.'
+                ),
+            ],
+        )
+
+    @staticmethod
+    def _unauthorized_reply() -> SlackReply:
+        return SlackReply(
+            text="You're not authorized to run jobs.",
+            blocks=[
+                _section(
+                    ":lock:  *Sorry, you're not authorized to run jobs.*\n"
+                    "_Ask an admin to add you to the allowlist._"
+                )
+            ],
         )
 
 
@@ -196,11 +299,9 @@ def verify_slack_app_identity(bot_token: str, app_token: str) -> None:
     actual_app_id = _app_id_from_app_token(app_token)
     expected = os.getenv(EnvVars.SLACK_EXPECTED_APP_ID.value)
     if not expected:
-        logger.warning(
-            "SLACK_EXPECTED_APP_ID is not set; skipping Slack app-identity check. "
-            "Set it to Paper Bot's own app id (starts with 'A') to guard against "
-            "sharing a token with another bot — see README.",
-        )
+        # The guard is opt-in. When the env var is unset we simply skip it — no
+        # warning, since running a single dedicated app is the normal setup.
+        logger.debug("SLACK_EXPECTED_APP_ID is not set; skipping app-identity check.")
         return
     if actual_app_id is None:
         logger.warning(
@@ -247,10 +348,8 @@ def run_socket_mode() -> None:  # pragma: no cover - requires live Slack tokens
         thread_ts = event.get("thread_ts") or event.get("ts")
         if not is_user_authorized(user):
             logger.warning("Unauthorized Slack user '%s' attempted a job.", user)
-            say(
-                text=":lock: Sorry, you're not authorized to run Paper Bot jobs.",
-                thread_ts=thread_ts,
-            )
+            denied = PaperBot._unauthorized_reply()
+            say(text=denied.text, blocks=denied.blocks, thread_ts=thread_ts)
             return
         # Reply (and later post the result) in the originating thread.
         ctx = SlackContext(
@@ -261,7 +360,7 @@ def run_socket_mode() -> None:  # pragma: no cover - requires live Slack tokens
         reply = asyncio.run(
             bot.handle_message(event.get("text", ""), slack_context=ctx)
         )
-        say(text=reply, thread_ts=thread_ts)
+        say(text=reply.text, blocks=reply.blocks, thread_ts=thread_ts)
 
     @app.event("app_mention")
     def _on_mention(event: dict, say) -> None:  # type: ignore[no-untyped-def]

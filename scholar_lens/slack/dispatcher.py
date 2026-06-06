@@ -108,7 +108,7 @@ class JobDispatcher:
         parameters = {
             "source": parsed.sources[0],
             "repo_urls": repo_urls,
-            "parse_pdf": "false",
+            "parse_pdf": "true" if parsed.parse_pdf else "false",
             "mode": parsed.intent.value,
             **self._slack_params(slack_context),
         }

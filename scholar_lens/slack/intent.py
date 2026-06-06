@@ -18,7 +18,11 @@ from langchain_core.runnables import Runnable
 from ..src.constants import LanguageModelId
 from ..src.logger import logger
 from ..src.prompts import SlackIntentPrompt
-from ..src.utils import BedrockLanguageModelFactory, HTMLTagOutputParser
+from ..src.utils import (
+    BedrockLanguageModelFactory,
+    HTMLTagOutputParser,
+    is_affirmative,
+)
 
 # Slack wraps URLs as <url> or <url|label>; strip that decoration.
 _SLACK_LINK = re.compile(r"<(https?://[^>|]+)(?:\|[^>]*)?>")
@@ -37,6 +41,9 @@ class ParsedIntent:
     sources: list[str] = field(default_factory=list)
     repo_urls: list[str] = field(default_factory=list)
     reason: str = ""
+    # Whether the user explicitly asked to force PDF parsing (vs the default,
+    # which prefers arXiv HTML when available). Only meaningful for review/summarize.
+    parse_pdf: bool = False
 
     @property
     def is_actionable(self) -> bool:
@@ -68,6 +75,7 @@ class IntentParser:
             sources=_split_csv(result.get("sources", "")),
             repo_urls=_split_csv(result.get("repo_urls", "")),
             reason=result.get("reason", "").strip(),
+            parse_pdf=is_affirmative(result.get("parse_pdf")),
         )
 
 

@@ -152,10 +152,9 @@ Then mention the bot with what you want done — e.g. `review 2401.06066`,
 `guide https://docs.framework.io/start`. The result is saved to S3 / published to
 your blog, and the bot posts the status and a link back in the thread.
 
-> ⚠️ **Use a dedicated Slack app for Paper Bot.** Two Socket Mode processes
-> sharing one app make Slack deliver each mention/DM to only one of them at
-> random. Set `SLACK_EXPECTED_APP_ID` to the bot's own app id and it refuses to
-> start if bound to the wrong app.
+> 💡 Run the bot on its own Slack app. If you also run another Socket Mode bot in
+> the same workspace, just give each one a separate app so they don't share an
+> app token.
 
 ## Testing & quality
 

@@ -11,7 +11,13 @@ import builtins
 import pytest
 
 from scholar_lens.slack import notifier
-from scholar_lens.slack.notifier import _clean, _mrkdwn_safe, post_slack_result
+from scholar_lens.slack.notifier import (
+    _build_result_message,
+    _clean,
+    _mrkdwn_safe,
+    _short,
+    post_slack_result,
+)
 from scholar_lens.src.constants import EnvVars
 
 
@@ -157,6 +163,49 @@ class TestPostSlackResult:
         # "null" thread_ts is cleaned to None.
         assert calls[0]["thread_ts"] is None
         assert "ready" in calls[0]["text"].lower()
+        # Rich Block Kit message: a header block + the title section.
+        blocks = calls[0]["blocks"]
+        assert blocks[0]["type"] == "header"
+        assert any(
+            b["type"] == "section" and "Some Paper" in b["text"]["text"] for b in blocks
+        )
+        # An s3:// URI (not http) is shown as a code section, not a button.
+        assert not any(b["type"] == "actions" for b in blocks)
+
+
+class TestBuildResultMessage:
+    def test_failure_renders_error_in_code_block(self) -> None:
+        text, blocks = _build_result_message(
+            success=False,
+            artifact_label="review",
+            title="Some Paper",
+            s3_url=None,
+            error="AccessDeniedException: bedrock:InvokeModel not allowed",
+        )
+        assert "failed" in text.lower()
+        assert blocks[0]["type"] == "header"
+        # Error is shown in its own section as a fenced code block, plus a hint.
+        err_section = next(
+            b for b in blocks if b["type"] == "section" and "```" in b["text"]["text"]
+        )
+        assert "AccessDeniedException" in err_section["text"]["text"]
+        assert any(b["type"] == "context" for b in blocks)
+
+    def test_https_url_renders_button(self) -> None:
+        _, blocks = _build_result_message(
+            success=True,
+            artifact_label="summary",
+            title="Some Paper",
+            s3_url="https://blog.example.com/post",
+            error=None,
+        )
+        actions = next(b for b in blocks if b["type"] == "actions")
+        assert actions["elements"][0]["url"] == "https://blog.example.com/post"
+
+    def test_short_collapses_and_caps(self) -> None:
+        assert _short("a\n\n  b\tc") == "a b c"
+        assert _short("x" * 1000).endswith("…")
+        assert "`" not in _short("danger ``` fence")
 
 
 def test_notifier_module_importable() -> None:

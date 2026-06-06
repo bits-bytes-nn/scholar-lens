@@ -27,6 +27,18 @@ def _bot(parsed: ParsedIntent, *, dispatch=None) -> PaperBot:
     return PaperBot(MagicMock(), parser, dispatcher)
 
 
+def _blocks_text(reply) -> str:  # type: ignore[no-untyped-def]
+    """Flatten all text out of a SlackReply's Block Kit blocks for assertions."""
+    parts: list[str] = [reply.text]
+    for block in reply.blocks:
+        if "text" in block and isinstance(block["text"], dict):
+            parts.append(block["text"]["text"])
+        for el in block.get("elements", []):
+            if isinstance(el, dict) and isinstance(el.get("text"), str):
+                parts.append(el["text"])
+    return "\n".join(parts)
+
+
 class TestHandleMessage:
     async def test_actionable_dispatches_and_confirms(self) -> None:
         parsed = ParsedIntent(intent=SlackIntent.REVIEW, sources=["2401.06066"])
@@ -40,9 +52,28 @@ class TestHandleMessage:
         bot = _bot(parsed, dispatch=dispatch)
         reply = await bot.handle_message("review 2401.06066")
         dispatch.assert_called_once()
-        assert ":rocket:" in reply
-        assert "review" in reply
-        assert "2401.06066" in reply
+        assert reply.blocks  # rich Block Kit, not just text
+        text = _blocks_text(reply)
+        assert "Review" in text
+        assert "started" in text.lower()
+        assert "2401.06066" in text
+
+    async def test_ack_shows_repo_and_parse_pdf(self) -> None:
+        parsed = ParsedIntent(
+            intent=SlackIntent.SUMMARIZE,
+            sources=["2401.06066"],
+            repo_urls=["https://github.com/x/y"],
+            parse_pdf=True,
+        )
+        dispatch = MagicMock(
+            return_value=DispatchResult(
+                job_id="j1", job_name="n", intent=SlackIntent.SUMMARIZE
+            )
+        )
+        reply = await _bot(parsed, dispatch=dispatch).handle_message("...")
+        text = _blocks_text(reply)
+        assert "github.com/x/y" in text
+        assert "PDF parsing on" in text
 
     async def test_unknown_returns_help(self) -> None:
         parsed = ParsedIntent(
@@ -50,8 +81,9 @@ class TestHandleMessage:
         )
         bot = _bot(parsed)
         reply = await bot.handle_message("hello there")
-        assert "couldn't turn that into an action" in reply
-        assert "just chatting" in reply
+        text = _blocks_text(reply)
+        assert "couldn't tell what you'd like" in text
+        assert "just chatting" in text
         bot.dispatcher.dispatch.assert_not_called()
 
     async def test_dispatch_failure_is_reported(self) -> None:
@@ -59,8 +91,9 @@ class TestHandleMessage:
         dispatch = MagicMock(side_effect=RuntimeError("batch down"))
         bot = _bot(parsed, dispatch=dispatch)
         reply = await bot.handle_message("guide https://docs.x.io")
-        assert ":warning:" in reply
-        assert "batch down" in reply
+        text = _blocks_text(reply)
+        assert "Couldn't start the job" in text
+        assert "batch down" in text
 
 
 class TestSlackAppIdentityGuard:

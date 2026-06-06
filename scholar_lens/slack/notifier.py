@@ -65,27 +65,121 @@ def post_slack_result(
         logger.info("No Slack bot token; cannot post result to channel '%s'.", channel)
         return
 
-    safe_title = _mrkdwn_safe(title)
-    if success:
-        text = (
-            f":white_check_mark: *{artifact_label.capitalize()}* ready for "
-            f"*{safe_title}*."
-        )
-        if s3_url:
-            text += f"\n• Output: `{_mrkdwn_safe(s3_url)}`"
-    else:
-        text = f":x: *{artifact_label.capitalize()}* failed for *{safe_title}*."
-        if error:
-            text += f"\n• Error: {_mrkdwn_safe(error)}"
-
+    text, blocks = _build_result_message(
+        success=success,
+        artifact_label=artifact_label,
+        title=title,
+        s3_url=s3_url,
+        error=error,
+    )
     try:
         from slack_sdk import WebClient
 
         WebClient(token=token).chat_postMessage(
             channel=channel,
             thread_ts=_clean(thread_ts),
-            text=text,
+            text=text,  # notification/fallback text
+            blocks=blocks,
         )
         logger.info("Posted %s result to Slack channel '%s'.", artifact_label, channel)
     except Exception as e:  # noqa: BLE001 - Slack delivery must never fail the job
         logger.warning("Failed to post result to Slack: %s", e)
+
+
+# Friendly labels + emoji per artifact type, shown in the result header.
+_ARTIFACT_META = {
+    "review": (":memo:", "Paper Review"),
+    "summary": (":page_facing_up:", "Paper Summary"),
+    "guide": (":books:", "Tech Guide"),
+}
+
+
+def _build_result_message(
+    *,
+    success: bool,
+    artifact_label: str,
+    title: str,
+    s3_url: str | None,
+    error: str | None,
+) -> tuple[str, list[dict]]:
+    """Build (fallback_text, Block Kit blocks) for a completion message."""
+    emoji, nice = _ARTIFACT_META.get(
+        artifact_label.lower(), (":robot_face:", artifact_label.capitalize())
+    )
+    safe_title = _mrkdwn_safe(title)
+
+    if success:
+        header = f"{emoji} {nice} ready"
+        fallback = f"{nice} ready for {title}"
+        section = f"*{safe_title}*"
+        blocks: list[dict] = [
+            {"type": "header", "text": {"type": "plain_text", "text": header}},
+            {"type": "section", "text": {"type": "mrkdwn", "text": section}},
+        ]
+        if s3_url:
+            # Render https links as a clickable button; show s3:// URIs as code.
+            if s3_url.startswith(("http://", "https://")):
+                blocks.append(
+                    {
+                        "type": "actions",
+                        "elements": [
+                            {
+                                "type": "button",
+                                "text": {
+                                    "type": "plain_text",
+                                    "text": ":open_file_folder: View output",
+                                },
+                                "url": s3_url,
+                            }
+                        ],
+                    }
+                )
+            else:
+                blocks.append(
+                    {
+                        "type": "section",
+                        "text": {
+                            "type": "mrkdwn",
+                            "text": f":open_file_folder: Output: `{_mrkdwn_safe(s3_url)}`",
+                        },
+                    }
+                )
+    else:
+        header = f"{nice} couldn't be completed"
+        fallback = f"{nice} failed for {title}"
+        blocks = [
+            {"type": "header", "text": {"type": "plain_text", "text": f":x: {header}"}},
+            {"type": "section", "text": {"type": "mrkdwn", "text": f"*{safe_title}*"}},
+        ]
+        if error:
+            blocks.append({"type": "divider"})
+            blocks.append(
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": f":warning: *What went wrong*\n```{_short(error)}```",
+                    },
+                }
+            )
+            blocks.append(
+                {
+                    "type": "context",
+                    "elements": [
+                        {
+                            "type": "mrkdwn",
+                            "text": "Check the AWS Batch job logs for the full trace.",
+                        }
+                    ],
+                }
+            )
+    return fallback, blocks
+
+
+def _short(text: str, *, limit: int = 600) -> str:
+    """Collapse whitespace and cap an error string for display in a code block.
+
+    Backticks are stripped so the surrounding ``` fence can't be broken out of.
+    """
+    flat = " ".join(text.replace("`", "ʼ").split())
+    return flat if len(flat) <= limit else flat[: limit - 1] + "…"
