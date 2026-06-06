@@ -300,11 +300,45 @@ async def test_summarize_resolves_from_metadata_abstract(
     summarizer.metadata_resolver = _FakeResolver(md)  # type: ignore[assignment]
     summarizer.citation_summarizer = _FakeChain("A concise summary.")  # type: ignore[assignment]
 
-    out = await summarizer.summarize(["Some free-text title"], "original context")
+    # Query the matching title so the resolved URL is trusted and linked.
+    out = await summarizer.summarize(["Some Paper"], "original context")
     assert len(out) == 1
-    assert "Some Paper" in out[0]
+    assert "[Some Paper](https://x)" in out[0]  # link attached on a confident match
     assert "A concise summary." in out[0]
     assert "Authors: A B" in out[0]
+
+
+@pytest.mark.asyncio
+async def test_summarize_drops_url_on_title_mismatch(
+    summarizer: CitationSummarizer,
+) -> None:
+    # Resolver returned a DIFFERENT paper than queried (fuzzy mis-match): the
+    # wrong URL must NOT be linked — keep the title as plain text.
+    md = ReferenceMetadata(
+        title="A Totally Different Paper",
+        authors=["X"],
+        abstract="abs",
+        url="https://wrong",
+    )
+    summarizer.metadata_resolver = _FakeResolver(md)  # type: ignore[assignment]
+    summarizer.citation_summarizer = _FakeChain("summary")  # type: ignore[assignment]
+
+    out = await summarizer.summarize(["RoBERTa Pretraining Approach"], "ctx")
+    assert len(out) == 1
+    assert "https://wrong" not in out[0]  # mis-attributed link suppressed
+    assert "A Totally Different Paper" in out[0]  # title still shown as text
+
+
+def test_title_matches_gate() -> None:
+    m = CitationSummarizer._title_matches
+    assert m("LoRA: Low-Rank Adaptation", "LoRA: Low-Rank Adaptation of LLMs")
+    assert m(
+        "Hu et al., LoRA: Low-Rank Adaptation of LLMs, 2021",
+        "LoRA: Low-Rank Adaptation of LLMs",
+    )
+    assert not m("RoBERTa Pretraining", "Unrelated Journal Article on Plants")
+    assert not m(None, "x")
+    assert not m("x", None)
 
 
 @pytest.mark.asyncio

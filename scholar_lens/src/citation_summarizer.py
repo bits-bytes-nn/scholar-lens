@@ -1,5 +1,6 @@
 import asyncio
 import re
+from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
 
@@ -161,7 +162,9 @@ class CitationSummarizer(RetryableBase):
         if metadata is not None and (
             metadata.has_abstract or not self.prefer_full_text
         ):
-            summary = await self._summarize_from_metadata(metadata, original_content)
+            summary = await self._summarize_from_metadata(
+                metadata, original_content, identifier
+            )
             if summary is not None:
                 return summary
 
@@ -188,11 +191,48 @@ class CitationSummarizer(RetryableBase):
             or re.match(r"^\d{4}\.\d{4,5}(v\d+)?$", identifier)
         )
 
+    # Minimum title similarity to trust a resolved metadata URL as the right
+    # paper. Below this we keep the title as plain text (no mis-attributed link).
+    TITLE_MATCH_THRESHOLD: float = 0.72
+
+    @staticmethod
+    def _title_matches(queried: str | None, resolved: str | None) -> bool:
+        """Whether a resolved title is close enough to the queried one to trust.
+
+        The queried identifier is often a raw citation string ("Smith et al.,
+        Foo Bar, 2021"); we compare on a normalised, lowercased basis and accept
+        either a high overall ratio or full containment of one normalised title
+        in the other (handles extra author/year noise around the title).
+        """
+        if not queried or not resolved:
+            return False
+
+        def _norm(s: str) -> str:
+            return re.sub(r"[^a-z0-9 ]+", " ", s.lower()).strip()
+
+        q, r = _norm(queried), _norm(resolved)
+        if not q or not r:
+            return False
+        if r in q or q in r:
+            return True
+        ratio = SequenceMatcher(None, q, r).ratio()
+        return ratio >= CitationSummarizer.TITLE_MATCH_THRESHOLD
+
     @RetryableBase._retry("citation_metadata_summary")
     async def _summarize_from_metadata(
-        self, metadata: ReferenceMetadata, original_content: str
+        self,
+        metadata: ReferenceMetadata,
+        original_content: str,
+        queried_identifier: str | None = None,
     ) -> str | None:
-        """Summarise a reference from its abstract (no full-text download)."""
+        """Summarise a reference from its abstract (no full-text download).
+
+        The resolver returns the top fuzzy match from Crossref/Semantic Scholar,
+        which is sometimes the WRONG paper — embedding its URL produces a
+        mis-attributed citation link. Only attach the link when the resolved
+        title closely matches the queried title; otherwise keep the (queried)
+        title as plain text so we never point at a wrong paper.
+        """
         reference_text = metadata.abstract or metadata.title
         if not reference_text.strip():
             return None
@@ -204,7 +244,11 @@ class CitationSummarizer(RetryableBase):
         )
         if not summary or self.FAILURE_STRING in summary:
             return None
-        link = f"[{metadata.title}]({metadata.url})" if metadata.url else metadata.title
+        trustworthy = self._title_matches(queried_identifier, metadata.title)
+        if metadata.url and trustworthy:
+            link = f"[{metadata.title}]({metadata.url})"
+        else:
+            link = metadata.title
         author_line = f"Authors: {metadata.author_str}\n" if metadata.authors else ""
         return f"Title: {link}\n{author_line}\n{summary}"
 
