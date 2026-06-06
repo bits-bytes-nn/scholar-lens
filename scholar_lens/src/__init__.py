@@ -6,6 +6,12 @@ from .aws_helpers import (
     submit_batch_job,
     wait_for_batch_job_completion,
 )
+from .citation_metadata import (
+    ChainedMetadataResolver,
+    CrossrefProvider,
+    ReferenceMetadata,
+    SemanticScholarProvider,
+)
 from .citation_summarizer import CitationSummarizer
 from .code_retriever import CodeRetriever, NoPythonFilesError
 from .constants import (
@@ -35,6 +41,7 @@ from .paper_source import (
 )
 from .parser import Content, Figure, HTMLRichParser, ParserError, PDFParser
 from .publisher import Publisher, PublishRequest
+from .rate_limiter import RateLimiter
 from .summarizer import PaperSummarizer
 from .tech_guide import NotTechnicalContentError, TechGuide, TechGuideGenerator
 from .utils import arg_as_bool, create_robust_xml_output_parser, plot_langchain_graph
@@ -51,8 +58,10 @@ __all__ = [
     "ArxivSource",
     "Attributes",
     "BraveSearchProvider",
+    "ChainedMetadataResolver",
     "Citation",
     "CitationSummarizer",
+    "CrossrefProvider",
     "CodeRetriever",
     "Content",
     "ContentExtractor",
@@ -77,7 +86,10 @@ __all__ = [
     "PDFParser",
     "Publisher",
     "PublishRequest",
+    "RateLimiter",
+    "ReferenceMetadata",
     "resolve_paper_source",
+    "SemanticScholarProvider",
     "S3Handler",
     "S3Paths",
     "SSMParams",

@@ -4,20 +4,39 @@ from difflib import SequenceMatcher
 from pathlib import Path
 
 import arxiv
-import requests
 import tenacity
 from pydantic import BaseModel, Field, HttpUrl, ValidationInfo, field_validator
 
-from .constants import AppConstants
 from .logger import logger
+from .rate_limiter import RateLimiter
 
-DEFAULT_TIMEOUT: int = 10
 # App-level retry for transient arXiv API failures (e.g. HTTP 429). This sits on
 # top of the arxiv client's own num_retries and adds jittered backoff so a busy
 # pipeline does not abort a whole job on a momentary rate limit.
 _ARXIV_FETCH_MAX_ATTEMPTS: int = 4
 _ARXIV_FETCH_INITIAL_WAIT: int = 5
 _ARXIV_FETCH_MAX_WAIT: int = 60
+
+# A single process-wide limiter shared by ALL ArxivHandler instances, so the
+# concurrent citation stage cannot fan out into an arXiv 429 storm. arXiv asks
+# for ~1 request / 3s; we honour that globally.
+_ARXIV_RATE_LIMITER = RateLimiter(rate=1.0, per=3.0, name="arxiv")
+
+
+def _retry_after_seconds(error: Exception) -> float:
+    """Best-effort extraction of a Retry-After hint from an arXiv/HTTP error."""
+    response = getattr(error, "response", None)
+    headers = getattr(response, "headers", None) or {}
+    raw = headers.get("Retry-After") or headers.get("retry-after")
+    if raw:
+        try:
+            return float(raw)
+        except (TypeError, ValueError):
+            return 0.0
+    # arXiv 429s rarely include Retry-After; apply a conservative default.
+    if "429" in str(error):
+        return 30.0
+    return 0.0
 
 
 class ArxivPaperError(Exception):
@@ -65,29 +84,14 @@ class ArxivMetadata(BaseModel):
 
         arxiv_id = info.data.get("arxiv_id")
         # Only synthesise an arXiv DOI for genuine arXiv identifiers; generic
-        # PDF-URL sources use a derived slug for which this lookup is meaningless.
+        # PDF-URL sources use a derived slug for which this is meaningless.
+        # The arXiv DOI is deterministic (10.48550/arXiv.<id>), so we construct
+        # it directly. A previous version made a doi.org round-trip "to validate"
+        # on every metadata construction — wasteful and a 429/hang risk inside a
+        # pydantic validator. The format is stable; no network call is needed.
         if arxiv_id and re.match(r"^\d{4}\.\d{4,5}(v\d+)?$", arxiv_id):
             clean_arxiv_id = arxiv_id.split("v")[0]
-            standard_doi = f"10.48550/arXiv.{clean_arxiv_id}"
-            try:
-                response = requests.get(
-                    f"{AppConstants.External.DOI_ORG.value}/{standard_doi}",
-                    timeout=DEFAULT_TIMEOUT,
-                    allow_redirects=True,
-                )
-                if response.status_code == 200:
-                    logger.info(
-                        "Successfully validated and generated DOI: '%s'", standard_doi
-                    )
-                    return standard_doi
-                else:
-                    logger.warning(
-                        "Generated DOI for '%s' failed validation with status %s",
-                        arxiv_id,
-                        response.status_code,
-                    )
-            except requests.RequestException as e:
-                logger.error("DOI validation request for '%s' failed: %s", arxiv_id, e)
+            return f"10.48550/arXiv.{clean_arxiv_id}"
 
         return None
 
@@ -173,6 +177,7 @@ class ArxivHandler:
         return retryer(self._fetch_single_paper_once, arxiv_id)
 
     def _fetch_single_paper_once(self, arxiv_id: str) -> arxiv.Result:
+        _ARXIV_RATE_LIMITER.acquire()
         try:
             search = arxiv.Search(id_list=[arxiv_id])
             return next(self.client.results(search))
@@ -181,6 +186,7 @@ class ArxivHandler:
                 f"Paper not found for arXiv ID: '{arxiv_id}'"
             ) from e
         except Exception as e:
+            _ARXIV_RATE_LIMITER.penalize(_retry_after_seconds(e))
             raise ArxivPaperError(
                 f"An unexpected error occurred while fetching '{arxiv_id}': {e}"
             ) from e
@@ -222,6 +228,7 @@ class ArxivHandler:
 
         for query in queries_to_try:
             try:
+                _ARXIV_RATE_LIMITER.acquire()
                 search = arxiv.Search(query=query, max_results=max_results)
                 for paper in self.client.results(search):
                     if self._normalize_title(paper.title) != normalized_query_title:
@@ -240,6 +247,7 @@ class ArxivHandler:
                         continue
                     return paper.get_short_id()
             except Exception as e:
+                _ARXIV_RATE_LIMITER.penalize(_retry_after_seconds(e))
                 logger.warning("Search query '%s' failed: %s", query, e)
                 continue
 

@@ -164,13 +164,18 @@ async def _run(
         language=context.config.output_language,
         enable_thinking=context.config.tech_guide.writer_enable_thinking,
         thinking_effort=context.config.tech_guide.thinking_effort,
+        verify_grounding=context.config.tech_guide.verify_grounding,
     )
 
-    guide = await generator.generate(
-        urls,
-        discover_subpages=discover_subpages,
-        search_queries=search_queries,
-    )
+    try:
+        guide = await generator.generate(
+            urls,
+            discover_subpages=discover_subpages,
+            search_queries=search_queries,
+        )
+    finally:
+        # Release the researcher's HTTP connection pool regardless of outcome.
+        researcher.close()
 
     work_dir = ROOT_DIR / LocalPaths.PAPERS_DIR.value / _guide_slug(guide.topic)
     work_dir.mkdir(parents=True, exist_ok=True)

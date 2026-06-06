@@ -1,3 +1,4 @@
+import html
 import re
 from collections import defaultdict
 from typing import Any
@@ -8,9 +9,26 @@ from lxml import etree
 
 from ..logger import logger
 
+# Matches a run of orphan closing tags at the very end of extracted content,
+# e.g. a stray "</path></name>" the model appended after the real body. These
+# leak into Markdown artifacts; legitimate trailing content is never a bare
+# closing tag, so stripping a trailing run of them is safe.
+_TRAILING_CLOSE_TAGS = re.compile(r"(?:\s*</[a-zA-Z][a-zA-Z0-9_]*>)+\s*$")
+
 
 class HTMLTagOutputParser(BaseOutputParser):
     tag_names: str | list[str]
+
+    @staticmethod
+    def _clean(content: str) -> str:
+        """Normalise extracted tag content for Markdown/plaintext output.
+
+        ``decode_contents()`` keeps HTML entities (``&amp;``, ``&gt;``) escaped,
+        which then leak verbatim into Markdown bodies; unescape them. Also drop a
+        trailing run of orphan closing tags the model sometimes appends.
+        """
+        content = _TRAILING_CLOSE_TAGS.sub("", content)
+        return html.unescape(content).strip()
 
     def parse(self, text: str) -> str | dict[str, str]:
         if not text:
@@ -23,9 +41,9 @@ class HTMLTagOutputParser(BaseOutputParser):
         for tag_name in tag_list:
             if tag := soup.find(tag_name):
                 if hasattr(tag, "decode_contents"):
-                    parsed[tag_name] = str(tag.decode_contents()).strip()
+                    parsed[tag_name] = self._clean(str(tag.decode_contents()))
                 else:
-                    parsed[tag_name] = str(tag).strip()
+                    parsed[tag_name] = self._clean(str(tag))
         if isinstance(self.tag_names, list):
             return parsed
         return next(iter(parsed.values()), "")

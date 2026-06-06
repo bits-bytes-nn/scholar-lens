@@ -30,6 +30,11 @@ from pydantic import HttpUrl
 
 from .arxiv_handler import ArxivHandler, ArxivMetadata
 from .logger import logger
+from .url_guard import (
+    UnsafeUrlError,
+    assert_url_is_public,
+    assert_url_scheme_and_literal,
+)
 
 # arXiv IDs come in two shapes: new style "2401.06066" (optionally "v3") and the
 # legacy "math.GT/0309136" form. We only need to recognise the modern style plus
@@ -41,6 +46,8 @@ _ARXIV_HOST_PATTERN = re.compile(r"(^|\.)arxiv\.org$", re.IGNORECASE)
 _PDF_DOWNLOAD_TIMEOUT_SECONDS = 30
 _PDF_PROBE_TIMEOUT_SECONDS = 15
 _PDF_MAGIC_BYTES = b"%PDF-"
+# Cap PDF downloads so a hostile/oversized URL cannot exhaust disk or memory.
+_MAX_PDF_BYTES = 100 * 1024 * 1024  # 100 MB
 
 
 class PaperSourceError(Exception):
@@ -81,6 +88,9 @@ class PaperSource(ABC):
 
     @abstractmethod
     def download_pdf(self, papers_dir: Path) -> Path: ...
+
+    def close(self) -> None:  # noqa: B027 - intentional optional no-op hook
+        """Release any held resources (e.g. HTTP sessions). Default no-op."""
 
 
 class ArxivSource(PaperSource):
@@ -125,6 +135,13 @@ class PdfUrlSource(PaperSource):
     def __init__(self, url: str, session: requests.Session | None = None) -> None:
         self._url = HttpUrl(url)
         self._raw_url = url
+        # SSRF guard (cheap, offline): reject bad schemes and internal IP
+        # literals at construction. The full DNS-resolving check runs at fetch
+        # time in _assert_is_pdf so constructing a source does no network I/O.
+        try:
+            assert_url_scheme_and_literal(url)
+        except UnsafeUrlError as e:
+            raise PaperSourceError(str(e)) from e
         self._session = session or requests.Session()
         self._discovered_title: str | None = None
 
@@ -180,10 +197,28 @@ class PdfUrlSource(PaperSource):
                 self._raw_url, timeout=_PDF_DOWNLOAD_TIMEOUT_SECONDS, stream=True
             ) as response:
                 response.raise_for_status()
+                # Reject oversized downloads up front when the server declares a
+                # length, and enforce the cap while streaming regardless.
+                declared = response.headers.get("Content-Length")
+                if declared and declared.isdigit() and int(declared) > _MAX_PDF_BYTES:
+                    raise PaperSourceError(
+                        f"PDF at '{self._raw_url}' exceeds the {_MAX_PDF_BYTES}-byte "
+                        f"limit (Content-Length: {declared})."
+                    )
+                written = 0
                 with pdf_path.open("wb") as fh:
                     for chunk in response.iter_content(chunk_size=8192):
-                        if chunk:
-                            fh.write(chunk)
+                        if not chunk:
+                            continue
+                        written += len(chunk)
+                        if written > _MAX_PDF_BYTES:
+                            fh.close()
+                            pdf_path.unlink(missing_ok=True)
+                            raise PaperSourceError(
+                                f"PDF at '{self._raw_url}' exceeds the "
+                                f"{_MAX_PDF_BYTES}-byte limit."
+                            )
+                        fh.write(chunk)
         except requests.RequestException as e:
             raise PaperSourceError(
                 f"Failed to download PDF from '{self._raw_url}': {e}"
@@ -224,6 +259,11 @@ class PdfUrlSource(PaperSource):
         probe. Only if every signal is inconclusive do we defer to the
         post-download magic-byte check in :meth:`download_pdf`.
         """
+        # Full SSRF check (resolves DNS) right before the first real request.
+        try:
+            assert_url_is_public(self._raw_url)
+        except UnsafeUrlError as e:
+            raise PaperSourceError(str(e)) from e
         try:
             head = self._session.head(
                 self._raw_url,
@@ -263,6 +303,10 @@ class PdfUrlSource(PaperSource):
     def _has_pdf_magic(pdf_path: Path) -> bool:
         with pdf_path.open("rb") as fh:
             return fh.read(len(_PDF_MAGIC_BYTES)).startswith(_PDF_MAGIC_BYTES)
+
+    def close(self) -> None:
+        """Close the owned requests session (releases the connection pool)."""
+        self._session.close()
 
 
 def is_arxiv_id(value: str) -> bool:

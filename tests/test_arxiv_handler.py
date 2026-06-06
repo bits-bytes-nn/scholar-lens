@@ -10,7 +10,6 @@ from __future__ import annotations
 from datetime import datetime
 
 import pytest
-import responses
 
 from scholar_lens.src.arxiv_handler import ArxivHandler, ArxivMetadata
 
@@ -69,47 +68,21 @@ class TestSetUpdatedIfMissing:
 
 
 class TestGenerateAndValidateDoi:
-    @responses.activate
-    def test_real_id_generates_validated_doi(self) -> None:
-        expected_doi = "10.48550/arXiv.2401.06066"
-        responses.add(
-            responses.GET,
-            f"https://doi.org/{expected_doi}",
-            status=200,
-        )
+    # The arXiv DOI is deterministic (10.48550/arXiv.<id>); it is synthesised
+    # offline with no doi.org round-trip. None of these touch the network.
+    def test_real_id_generates_doi(self) -> None:
         meta = ArxivMetadata(**_base_kwargs(arxiv_id="2401.06066"))
-        assert meta.doi == expected_doi
+        assert meta.doi == "10.48550/arXiv.2401.06066"
 
-    @responses.activate
     def test_versioned_id_strips_version_for_doi(self) -> None:
-        expected_doi = "10.48550/arXiv.2401.06066"
-        responses.add(
-            responses.GET,
-            f"https://doi.org/{expected_doi}",
-            status=200,
-        )
         meta = ArxivMetadata(**_base_kwargs(arxiv_id="2401.06066v3"))
-        assert meta.doi == expected_doi
+        assert meta.doi == "10.48550/arXiv.2401.06066"
 
-    @responses.activate
-    def test_non_200_yields_no_doi(self) -> None:
-        responses.add(
-            responses.GET,
-            "https://doi.org/10.48550/arXiv.2401.06066",
-            status=404,
-        )
-        meta = ArxivMetadata(**_base_kwargs(arxiv_id="2401.06066"))
-        assert meta.doi is None
-
-    def test_slug_style_id_generates_no_doi_and_no_network(self) -> None:
-        # A non-arXiv slug must not synthesise a DOI and must not hit the
-        # network. ``responses`` is intentionally NOT active here: any HTTP
-        # call would raise ConnectionError and fail the test.
+    def test_slug_style_id_generates_no_doi(self) -> None:
         meta = ArxivMetadata(**_base_kwargs(arxiv_id="foo-bar-123"))
         assert meta.doi is None
 
     def test_explicit_doi_is_preserved(self) -> None:
-        # A provided DOI short-circuits before any network logic.
         meta = ArxivMetadata(
             **_base_kwargs(arxiv_id="foo-bar-123", doi="10.1000/explicit")
         )

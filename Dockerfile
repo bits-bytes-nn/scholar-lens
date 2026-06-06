@@ -36,4 +36,9 @@ RUN python3.12 -m pip install --no-cache-dir --upgrade pip setuptools wheel && \
 
 COPY scholar_lens ./scholar_lens
 
+# Run as a non-root user (defense-in-depth: limits blast radius if the process
+# is compromised). Done after installs/copies so build steps keep root.
+RUN useradd --create-home --uid 10001 appuser && chown -R appuser:appuser /app
+USER appuser
+
 CMD ["python3", "-m", "scholar_lens.main"]

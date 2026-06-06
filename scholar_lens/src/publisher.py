@@ -182,6 +182,32 @@ class Publisher:
         repo_config = self.github_config
         token = os.getenv(EnvVars.GITHUB_TOKEN.value)
         repo_url = f"https://oauth2:{token}@github.com/{repo_config.repo_name}.git"
+        try:
+            self._git_operations_inner(
+                clone_dir, branch_name, commit_message, markdown_path, repo_url
+            )
+        except Exception as e:
+            # GitPython embeds the failing command (including the tokened clone
+            # URL) in its exception text; scrub the token before it propagates or
+            # gets logged so credentials never leak into logs/SNS/Slack.
+            raise self._redact_token(e, token) from None
+
+    @staticmethod
+    def _redact_token(error: Exception, token: str | None) -> Exception:
+        if not token:
+            return error
+        scrubbed = str(error).replace(token, "***")
+        return type(error)(scrubbed)
+
+    def _git_operations_inner(
+        self,
+        clone_dir: Path,
+        branch_name: str,
+        commit_message: str,
+        markdown_path: Path,
+        repo_url: str,
+    ) -> None:
+        repo_config = self.github_config
         if clone_dir.exists():
             shutil.rmtree(clone_dir)
 

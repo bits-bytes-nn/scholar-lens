@@ -78,9 +78,9 @@ class PaperSummarizer(RetryableBase):
     async def summarize(self, paper: Paper) -> dict[str, str]:
         """Return ``{"summary", "tags", "urls"}`` for the paper.
 
-        ``summary`` is an HTML fragment (the five emoji sections); ``tags`` is a
-        comma-separated keyword list; ``urls`` is a comma-separated markdown link
-        list. All three are LLM-extracted from the paper content.
+        ``summary`` is a Markdown fragment (the five emoji ``##`` sections); ``tags``
+        is a comma-separated keyword list; ``urls`` is a comma-separated markdown
+        link list. All three are LLM-extracted from the paper content.
         """
         result = await self._summarize(paper.content.text)
         summary = result.get("summary", "").strip()

@@ -27,6 +27,43 @@ from .intent import IntentParser, ParsedIntent
 _INTENT_MODEL = LanguageModelId.CLAUDE_V4_5_HAIKU
 
 
+def is_user_authorized(user_id: str | None) -> bool:
+    """Whether a Slack user may trigger jobs.
+
+    Controlled by ``SLACK_ALLOWED_USER_IDS`` (comma-separated). Unset ⇒ everyone
+    is allowed (open mode). Set ⇒ only listed users; everyone else is refused.
+    """
+    allowlist = os.getenv(EnvVars.SLACK_ALLOWED_USER_IDS.value, "").strip()
+    if not allowlist:
+        return True
+    allowed = {u.strip() for u in allowlist.split(",") if u.strip()}
+    return bool(user_id and user_id in allowed)
+
+
+class _SeenEvents:
+    """Bounded set for de-duplicating at-least-once Slack event deliveries.
+
+    Slack may redeliver the same event (same ``event_id``/``client_msg_id``);
+    without this a single mention could launch duplicate Batch jobs. Kept small
+    and in-process — sufficient for a single Socket Mode worker.
+    """
+
+    def __init__(self, capacity: int = 512) -> None:
+        self._capacity = capacity
+        self._seen: dict[str, None] = {}
+
+    def seen(self, key: str | None) -> bool:
+        if not key:
+            return False
+        if key in self._seen:
+            return True
+        self._seen[key] = None
+        if len(self._seen) > self._capacity:
+            # Drop oldest insertion (dicts preserve insertion order).
+            self._seen.pop(next(iter(self._seen)))
+        return False
+
+
 class PaperBot:
     """Glues intent parsing to job dispatch for a Slack workspace."""
 
@@ -124,25 +161,98 @@ def _optional_ssm(session: boto3.Session, name: str) -> str | None:
         return None
 
 
+class SlackAppMismatchError(RuntimeError):
+    """Raised when the Slack app token does not belong to the expected app."""
+
+
+def _app_id_from_app_token(app_token: str) -> str | None:
+    """Extract the Slack app id from an app-level token.
+
+    App tokens are formatted ``xapp-1-<APP_ID>-<...>``; the app id is the second
+    dash-delimited segment after the ``xapp-1`` prefix. Returns ``None`` if the
+    token is malformed so the caller can degrade gracefully.
+    """
+    parts = app_token.split("-")
+    if len(parts) >= 3 and parts[0] == "xapp":
+        return parts[2]
+    return None
+
+
+def verify_slack_app_identity(bot_token: str, app_token: str) -> None:
+    """Fail fast if the tokens belong to the wrong Slack app.
+
+    Paper Bot must run on its OWN Slack app. Sharing one app's tokens with
+    another Socket Mode bot (e.g. OmniSummary) makes Slack deliver each event to
+    only one of the connected processes at random, so mentions silently route to
+    the wrong bot. When ``SLACK_EXPECTED_APP_ID`` is set, a mismatch raises
+    :class:`SlackAppMismatchError` at startup instead of causing that confusing
+    runtime behaviour. The check is offline: the app id lives inside the app
+    token itself (``xapp-1-<APP_ID>-...``).
+    """
+    actual_app_id = _app_id_from_app_token(app_token)
+    expected = os.getenv(EnvVars.SLACK_EXPECTED_APP_ID.value)
+    if not expected:
+        logger.warning(
+            "SLACK_EXPECTED_APP_ID is not set; skipping Slack app-identity check. "
+            "Set it to Paper Bot's own app id (starts with 'A') to guard against "
+            "sharing a token with another bot — see README.",
+        )
+        return
+    if actual_app_id is None:
+        logger.warning(
+            "Could not parse an app id from SLACK_APP_TOKEN; skipping identity "
+            "check (expected app id %s).",
+            expected,
+        )
+        return
+    if actual_app_id != expected:
+        raise SlackAppMismatchError(
+            f"SLACK_APP_TOKEN belongs to app {actual_app_id}, but "
+            f"SLACK_EXPECTED_APP_ID={expected}. Paper Bot must use its OWN Slack "
+            "app — refusing to start to avoid colliding with another bot."
+        )
+    logger.info("Slack app identity verified: app id %s.", actual_app_id)
+
+
 def run_socket_mode() -> None:  # pragma: no cover - requires live Slack tokens
     """Run the bot in Slack Socket Mode (long-running process).
 
     Requires ``slack_bolt`` and the ``SLACK_BOT_TOKEN`` / ``SLACK_APP_TOKEN``
-    environment variables.
+    environment variables. Set ``SLACK_EXPECTED_APP_ID`` to bind this process to
+    Paper Bot's own Slack app and avoid colliding with another Socket Mode bot.
     """
     from slack_bolt import App
     from slack_bolt.adapter.socket_mode import SocketModeHandler
 
+    bot_token = os.environ["SLACK_BOT_TOKEN"]
+    app_token = os.environ["SLACK_APP_TOKEN"]
+    verify_slack_app_identity(bot_token, app_token)
+
     bot = build_bot()
-    app = App(token=os.environ["SLACK_BOT_TOKEN"])
+    app = App(token=bot_token)
+    seen_events = _SeenEvents()
 
     def _handle(event: dict, say) -> None:  # type: ignore[no-untyped-def]
-        # Reply (and later post the result) in the originating thread.
+        # Drop redelivered events so one mention can't launch duplicate jobs.
+        dedup_key = event.get("client_msg_id") or event.get("event_ts")
+        if seen_events.seen(dedup_key):
+            logger.info("Ignoring duplicate Slack event '%s'.", dedup_key)
+            return
+        # Authorization: refuse users not on the allowlist (when configured).
+        user = event.get("user")
         thread_ts = event.get("thread_ts") or event.get("ts")
+        if not is_user_authorized(user):
+            logger.warning("Unauthorized Slack user '%s' attempted a job.", user)
+            say(
+                text=":lock: Sorry, you're not authorized to run Paper Bot jobs.",
+                thread_ts=thread_ts,
+            )
+            return
+        # Reply (and later post the result) in the originating thread.
         ctx = SlackContext(
             channel=event.get("channel", ""),
             thread_ts=thread_ts,
-            user=event.get("user"),
+            user=user,
         )
         reply = asyncio.run(
             bot.handle_message(event.get("text", ""), slack_context=ctx)
@@ -159,7 +269,7 @@ def run_socket_mode() -> None:  # pragma: no cover - requires live Slack tokens
             _handle(event, say)
 
     logger.info("Starting Paper Bot in Socket Mode...")
-    SocketModeHandler(app, os.environ["SLACK_APP_TOKEN"]).start()
+    SocketModeHandler(app, app_token).start()
 
 
 if __name__ == "__main__":  # pragma: no cover

@@ -67,13 +67,13 @@ class TestPaperSummarizer:
     ) -> None:
         summarizer = _make_summarizer_with_stub_chain(
             {
-                "summary": "<h2>🔍 ...</h2><p>body</p>",
+                "summary": "## 🔍 ...\n\nbody",
                 "tags": "Scaling Laws, Transformers",
                 "urls": "[Repo](https://github.com/x/y)",
             }
         )
         result = await summarizer.summarize(sample_paper)
-        assert result["summary"].startswith("<h2>")
+        assert result["summary"].startswith("## ")
         assert result["tags"] == "Scaling Laws, Transformers"
         assert result["urls"] == "[Repo](https://github.com/x/y)"
 
@@ -95,7 +95,7 @@ class TestFormatSummary:
             cover_images={"language-models": "lm.jpg"}, default_cover_image="d.jpg"
         )
         result = {
-            "summary": "<h2>🔍 motivation</h2>",
+            "summary": "## 🔍 motivation",
             "tags": "Scaling Laws",
             "urls": "[Repo](https://github.com/x/y)",
         }
@@ -104,14 +104,14 @@ class TestFormatSummary:
         # Summaries land under the "Paper Summaries" primary category.
         assert '"Paper Summaries"' in out
         assert "cover: /assets/images/lm.jpg" in out
-        assert "<h2>🔍 motivation</h2>" in out
+        assert "## 🔍 motivation" in out
         assert "### References" in out
         assert "[Repo](https://github.com/x/y)" in out
 
     def test_summary_without_urls_still_lists_paper(self, sample_paper: Paper) -> None:
         gh = Github()
         out = _format_summary(
-            gh, sample_paper, {"summary": "<p>x</p>", "tags": "", "urls": ""}
+            gh, sample_paper, {"summary": "x", "tags": "", "urls": ""}
         )
         assert f"[{sample_paper.title}]({sample_paper.pdf_url})" in out
 

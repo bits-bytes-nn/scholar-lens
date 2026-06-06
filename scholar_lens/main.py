@@ -141,6 +141,7 @@ def main(
             s3_url=s3_url,
             error=error_message,
         )
+        paper_source.close()
 
 
 async def _run_pipeline(
@@ -158,15 +159,17 @@ async def _run_pipeline(
         logger.info("Non-arXiv source detected; forcing PDF parsing.")
         parse_pdf = True
 
-    paper, code_retriever, citation_summarizer = await _prepare_paper_data(
-        context, paper_dir, source, repo_urls, parse_pdf
-    )
-    translation_guideline = await _load_translation_guideline(context)
-
+    # Create the token tracker BEFORE data prep so the citation/extraction/code
+    # Bedrock calls are counted and budgeted too (not just generation).
     tracker = TokenUsageTracker()
     started = time.monotonic()
     gen_success = False
     try:
+        paper, code_retriever, citation_summarizer = await _prepare_paper_data(
+            context, paper_dir, source, repo_urls, parse_pdf, tracker
+        )
+        translation_guideline = await _load_translation_guideline(context)
+
         if mode == Mode.SUMMARIZE:
             document = await _generate_summary(
                 context, paper, translation_guideline, tracker
@@ -305,7 +308,9 @@ async def _prepare_paper_data(
     source: PaperSource,
     repo_urls: list[str] | None,
     parse_pdf: bool,
+    tracker: TokenUsageTracker | None = None,
 ) -> tuple[Paper, CodeRetriever | None, CitationSummarizer]:
+    callbacks = [tracker] if tracker is not None else None
     figures, content, is_pdf_parsed = await _parse_paper_content(
         context, source, parse_pdf
     )
@@ -361,6 +366,8 @@ async def _prepare_paper_data(
         LanguageModelId(context.config.citations.citation_analysis_model_id),
         context.bedrock_boto_session,
         paper_dir=paper_dir,
+        callbacks=callbacks,
+        prefer_full_text=context.config.citations.prefer_full_text,
     )
     converted_repo_urls = [HttpUrl(url) for url in repo_urls] if repo_urls else []
     paper = Paper(
@@ -572,7 +579,7 @@ def _format_explanation(
 def _format_summary(
     github_config: GithubConfig, paper: Paper, result: dict[str, str]
 ) -> str:
-    """Render a summary post: front matter + HTML summary + extracted URLs."""
+    """Render a summary post: front matter + Markdown summary + extracted URLs."""
     front_matter = _build_front_matter(github_config, paper, "Paper Summaries")
     body = result["summary"]
     references_lines = [f"* [{paper.title}]({paper.pdf_url})"]

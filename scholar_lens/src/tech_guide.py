@@ -24,6 +24,7 @@ from langchain_core.runnables import Runnable
 from .constants import LanguageModelId
 from .logger import logger
 from .prompts import (
+    TechGuideGroundingPrompt,
     TechGuideRelevancePrompt,
     TechGuideSectionPrompt,
     TechGuideSynopsisPrompt,
@@ -69,9 +70,14 @@ class TechGuideGenerator(RetryableBase):
         enable_thinking: bool = False,
         thinking_effort: str = "medium",
         max_sections: int = _MAX_SECTIONS,
+        verify_grounding: bool = True,
     ) -> None:
         self.language = language
         self.max_sections = max_sections
+        # When True, each drafted section is fact-checked against the sources to
+        # strip ungrounded claims (the review pipeline's reflect-and-revise idea
+        # applied to guides). Cheap insurance against hallucinated APIs/flags.
+        self.verify_grounding = verify_grounding
         self.researcher = researcher or WebResearcher()
         self.llm_factory = BedrockLanguageModelFactory(boto_session=boto_session)
 
@@ -106,6 +112,18 @@ class TechGuideGenerator(RetryableBase):
             TechGuideSectionPrompt.get_prompt()
             | self.llm_factory.get_model(writing_model_id, temperature=0.0)
             | StrOutputParser()
+        )
+        # Fact-checking pass: rewrites each section to drop ungrounded claims.
+        self.grounding_chain: Runnable = (
+            TechGuideGroundingPrompt.get_prompt()
+            | self.llm_factory.get_model(
+                writing_model_id,
+                temperature=0.0,
+                enable_thinking=enable_thinking,
+                thinking_effort=thinking_effort,
+                supports_1m_context_window=True,
+            )
+            | HTMLTagOutputParser(tag_names=TechGuideGroundingPrompt.output_variables)
         )
 
     @measure_execution_time
@@ -175,24 +193,67 @@ class TechGuideGenerator(RetryableBase):
     async def _write_sections(
         self, topic: str, synopsis: str, corpus: ResearchCorpus
     ) -> str:
-        sections = self._parse_synopsis_sections(synopsis)
+        all_sections = self._parse_synopsis_sections(synopsis, apply_cap=False)
+        sections = all_sections[: self.max_sections]
+        if len(all_sections) > len(sections):
+            # Don't silently drop: the writer must NOT cross-reference sections
+            # that won't exist (the cause of "see chapter 17" hallucinations).
+            logger.warning(
+                "Synopsis proposed %d sections; capping to max_sections=%d. "
+                "Dropped: %s",
+                len(all_sections),
+                self.max_sections,
+                all_sections[self.max_sections :],
+            )
         sources = corpus.combined_text(_SOURCE_CHAR_BUDGET)
         available_images = "\n".join(corpus.image_urls) or "(none)"
 
+        # Canonical numbered outline of ONLY the sections that will be written,
+        # so the model never sees (and never references) dropped section numbers.
+        final_outline = "\n".join(
+            f"{i}. {title}" for i, title in enumerate(sections, start=1)
+        )
+        total = len(sections)
+
         written: list[str] = []
         for index, section in enumerate(sections, start=1):
-            logger.info("Writing section %d/%d: %s", index, len(sections), section)
+            logger.info("Writing section %d/%d: %s", index, total, section)
             markdown = await self._write_one_section(
                 topic=topic,
-                synopsis=synopsis,
-                section=section,
+                synopsis=final_outline,
+                section=f"{index}. {section}",
+                section_number=index,
+                total_sections=total,
                 previous_sections="\n\n".join(written),
                 sources=sources,
                 available_images=available_images,
             )
-            if markdown:
-                written.append(markdown)
+            if not markdown:
+                continue
+            if self.verify_grounding:
+                markdown = await self._ground_section(markdown, sources, total)
+            written.append(markdown)
         return "\n\n".join(written)
+
+    @RetryableBase._retry("tech_guide_grounding")
+    async def _ground_section(
+        self, section_markdown: str, sources: str, total_sections: int
+    ) -> str:
+        """Fact-check a drafted section, returning the cleaned version.
+
+        Falls back to the original draft if the grounding pass returns nothing,
+        so verification can only improve—never drop—a section.
+        """
+        result = await self.grounding_chain.ainvoke(
+            {
+                "section": section_markdown,
+                "sources": sources,
+                "total_sections": total_sections,
+                "language": self.language,
+            }
+        )
+        grounded = (result or {}).get("grounded_markdown", "").strip()
+        return grounded or section_markdown
 
     @RetryableBase._retry("tech_guide_section")
     async def _write_one_section(
@@ -201,6 +262,8 @@ class TechGuideGenerator(RetryableBase):
         topic: str,
         synopsis: str,
         section: str,
+        section_number: int,
+        total_sections: int,
         previous_sections: str,
         sources: str,
         available_images: str,
@@ -209,6 +272,8 @@ class TechGuideGenerator(RetryableBase):
             "topic": topic,
             "synopsis": synopsis,
             "section": section,
+            "section_number": section_number,
+            "total_sections": total_sections,
             "previous_sections": previous_sections,
             "sources": sources,
             "available_images": available_images,
@@ -223,7 +288,9 @@ class TechGuideGenerator(RetryableBase):
         match = re.search(r"<section_markdown>(.*?)</section_markdown>", raw, re.DOTALL)
         return (match.group(1) if match else raw).strip()
 
-    def _parse_synopsis_sections(self, synopsis: str) -> list[str]:
+    def _parse_synopsis_sections(
+        self, synopsis: str, *, apply_cap: bool = True
+    ) -> list[str]:
         sections: list[str] = []
         for line in synopsis.splitlines():
             stripped = line.strip()
@@ -232,7 +299,7 @@ class TechGuideGenerator(RetryableBase):
         if not sections:
             # Fall back to non-empty lines if the model didn't number them.
             sections = [ln.strip() for ln in synopsis.splitlines() if ln.strip()]
-        return sections[: self.max_sections]
+        return sections[: self.max_sections] if apply_cap else sections
 
     @staticmethod
     def _sources_digest(corpus: ResearchCorpus, max_chars: int = 6000) -> str:

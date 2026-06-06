@@ -440,9 +440,15 @@ class ExplainerGraph(RetryableBase):
 
         citation_summaries = None
         if reference_identifiers:
-            citation_summaries = await self.citation_summarizer.summarize(
-                reference_identifiers, current_paragraph
-            )
+            try:
+                citation_summaries = await self.citation_summarizer.summarize(
+                    reference_identifiers, current_paragraph
+                )
+            except Exception as e:
+                # Degrade gracefully (mirrors the code-search path below): a
+                # citation failure — e.g. an arXiv 429 escaping the summarizer —
+                # must not crash the whole review.
+                logger.warning("Failed to summarize citations: '%s'", str(e))
 
         code = None
         if should_search_code and self.code_retriever:

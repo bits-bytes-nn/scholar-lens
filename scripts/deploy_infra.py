@@ -57,6 +57,42 @@ sys.path.append(str(Path(__file__).parent.parent))
 from scholar_lens.configs import Config
 from scholar_lens.src import EnvVars, SSMParams, get_account_id, logger
 
+# Secret SSM params are written as encrypted SecureString out-of-band (see
+# put_secure_secrets), NOT baked into the CloudFormation template as plaintext.
+SECRET_SSM_PARAMS = {
+    SSMParams.GITHUB_TOKEN,
+    SSMParams.LANGCHAIN_API_KEY,
+    SSMParams.UPSTAGE_API_KEY,
+    SSMParams.BRAVE_API_KEY,
+    SSMParams.SLACK_BOT_TOKEN,
+}
+
+
+def put_secure_secrets(
+    boto_session: boto3.Session,
+    project_name: str,
+    stage: str,
+    secrets: dict[SSMParams, str | None],
+) -> None:
+    """Write secret values to SSM as encrypted SecureString parameters.
+
+    Done with the SSM API (not CDK) because CloudFormation cannot create
+    SecureString parameters and a plaintext StringParameter would expose the
+    value in the readable stack template. Idempotent via Overwrite=True.
+    """
+    ssm_client = boto_session.client("ssm")
+    for param_enum, value in secrets.items():
+        if not value:
+            continue
+        name = f"/{project_name}/{stage}/{param_enum.value}"
+        ssm_client.put_parameter(
+            Name=name,
+            Value=value,
+            Type="SecureString",
+            Overwrite=True,
+        )
+        logger.info("Stored SecureString SSM parameter '%s'.", name)
+
 
 class PaperReviewStack(Stack):
     def __init__(
@@ -548,32 +584,23 @@ class PaperReviewStack(Stack):
             SSMParams.GUIDE_JOB_DEFINITION: "AWS Batch Job Definition for technical guides",
         }
 
-        # NOTE: CloudFormation/CDK cannot natively create SecureString SSM
-        # parameters. The secrets (GitHub token, LangChain/Upstage/Brave/Slack
-        # keys) are written here as standard parameters for bootstrap
-        # convenience only; for production they should be migrated to AWS
-        # Secrets Manager (rotation + encryption) or re-created out-of-band as
-        # SecureString. Access is already restricted to this project's path via
-        # the scoped job-role policy.
-        secret_params = {
-            SSMParams.GITHUB_TOKEN,
-            SSMParams.LANGCHAIN_API_KEY,
-            SSMParams.UPSTAGE_API_KEY,
-            SSMParams.BRAVE_API_KEY,
-            SSMParams.SLACK_BOT_TOKEN,
-        }
+        # Secrets are NOT created here: CloudFormation/CDK cannot make
+        # SecureString parameters, and a plaintext StringParameter would embed
+        # the secret value in the (readable) CloudFormation template. They are
+        # written out-of-band as encrypted SecureString parameters by
+        # :func:`put_secure_secrets` during deploy. Only non-secret operational
+        # params (queue/definition names) are created in the template.
         for param_enum, param_value in ssm_params_to_create.items():
+            if param_enum in SECRET_SSM_PARAMS:
+                continue
             if param_value:
                 param_name = f"/{self.project_name}/{self.stage}/{param_enum.value}"
-                description = descriptions[param_enum]
-                if param_enum in secret_params:
-                    description += " (rotate to Secrets Manager for production)"
                 ssm.StringParameter(
                     self,
                     f"SsmParam{param_enum.name}",
                     parameter_name=param_name,
                     string_value=param_value,
-                    description=description,
+                    description=descriptions[param_enum],
                     tier=ssm.ParameterTier.STANDARD,
                 )
 
@@ -714,6 +741,21 @@ def main() -> None:
             env=env,
         )
         app.synth()
+
+        # Write secrets as encrypted SecureString params out-of-band so they are
+        # never embedded in the CloudFormation template.
+        put_secure_secrets(
+            boto_session,
+            config.resources.project_name,
+            config.resources.stage,
+            {
+                SSMParams.GITHUB_TOKEN: os.getenv(EnvVars.GITHUB_TOKEN.value),
+                SSMParams.LANGCHAIN_API_KEY: os.getenv(EnvVars.LANGCHAIN_API_KEY.value),
+                SSMParams.UPSTAGE_API_KEY: os.getenv(EnvVars.UPSTAGE_API_KEY.value),
+                SSMParams.BRAVE_API_KEY: os.getenv(EnvVars.BRAVE_API_KEY.value),
+                SSMParams.SLACK_BOT_TOKEN: os.getenv(EnvVars.SLACK_BOT_TOKEN.value),
+            },
+        )
 
     except Exception as e:
         logger.error("Error occurred: %s", e, exc_info=True)

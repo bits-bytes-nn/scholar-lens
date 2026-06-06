@@ -6,8 +6,38 @@ import textwrap
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
-from scholar_lens.configs import Config, Github
+from scholar_lens.configs import Code, Config, Explanation, Github
+from scholar_lens.src.constants import LanguageModelId
+
+
+class TestConfigValidation:
+    def test_chunk_overlap_must_be_less_than_size(self) -> None:
+        with pytest.raises(ValidationError):
+            Code(chunk_size=1024, chunk_overlap=2048)
+
+    def test_chunk_size_must_be_positive(self) -> None:
+        with pytest.raises(ValidationError):
+            Code(chunk_size=0, chunk_overlap=0)
+
+    def test_valid_chunk_config_accepted(self) -> None:
+        c = Code(chunk_size=1024, chunk_overlap=256)
+        assert c.chunk_size == 1024 and c.chunk_overlap == 256
+
+    def test_max_total_tokens_must_be_positive_when_set(self) -> None:
+        with pytest.raises(ValidationError):
+            Explanation(
+                paper_finalization_model_id=LanguageModelId.CLAUDE_V4_5_HAIKU,
+                max_total_tokens=-1000,
+            )
+
+    def test_max_total_tokens_none_is_allowed(self) -> None:
+        e = Explanation(
+            paper_finalization_model_id=LanguageModelId.CLAUDE_V4_5_HAIKU,
+            max_total_tokens=None,
+        )
+        assert e.max_total_tokens is None
 
 
 class TestGithubCoverImages:

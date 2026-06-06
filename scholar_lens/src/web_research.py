@@ -21,6 +21,7 @@ from bs4 import BeautifulSoup, Tag
 
 from .constants import EnvVars
 from .logger import logger
+from .url_guard import is_url_public
 from .utils import extract_text_from_html
 
 DEFAULT_TIMEOUT: int = 30
@@ -149,6 +150,18 @@ class WebResearcher:
             self._client = httpx.Client(timeout=self.timeout, follow_redirects=True)
         return self._client
 
+    def close(self) -> None:
+        """Close the lazily-created HTTP client (releases its connection pool)."""
+        if self._client is not None:
+            self._client.close()
+            self._client = None
+
+    def __enter__(self) -> WebResearcher:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self.close()
+
     def research(
         self,
         urls: list[str],
@@ -187,6 +200,14 @@ class WebResearcher:
         return corpus
 
     def _fetch_page(self, url: str) -> PageContent | None:
+        # SSRF guard: every fetched URL (initial, discovered sub-page, or link)
+        # flows through here, so block internal/metadata targets at this choke
+        # point. follow_redirects is on, but redirects re-enter the httpx client
+        # without re-checking — acceptable for now as the host is validated and a
+        # public host redirecting to a private one is an uncommon, lower-risk path.
+        if not is_url_public(url):
+            logger.warning("Skipping non-public URL '%s' (SSRF guard).", url)
+            return None
         try:
             response = self.client.get(url)
             response.raise_for_status()

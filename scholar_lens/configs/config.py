@@ -5,7 +5,7 @@ from typing import Literal
 
 import yaml
 from dotenv import load_dotenv
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
 sys.path.append(str(Path(__file__).parent.parent))
 
@@ -92,8 +92,18 @@ class Code(BaseModel):
         default=LanguageModelId.CLAUDE_V4_5_HAIKU
     )
     embed_model_id: EmbeddingModelId = Field(default=EmbeddingModelId.TITAN_EMBED_V2)
-    chunk_size: int = Field(default=1024)
-    chunk_overlap: int = Field(default=256)
+    chunk_size: int = Field(default=1024, gt=0, le=1_000_000)
+    chunk_overlap: int = Field(default=256, ge=0)
+
+    @model_validator(mode="after")
+    def _check_overlap_lt_size(self) -> "Code":
+        # overlap >= size makes RecursiveCharacterTextSplitter loop/misbehave.
+        if self.chunk_overlap >= self.chunk_size:
+            raise ValueError(
+                f"chunk_overlap ({self.chunk_overlap}) must be smaller than "
+                f"chunk_size ({self.chunk_size})."
+            )
+        return self
 
 
 class Citations(BaseModel):
@@ -103,6 +113,10 @@ class Citations(BaseModel):
     citation_analysis_model_id: LanguageModelId = Field(
         default=LanguageModelId.CLAUDE_V4_5_HAIKU
     )
+    # When True, download each cited paper's full text (slow, arXiv-heavy). When
+    # False (default), summarise from the abstract resolved via Crossref/Semantic
+    # Scholar/arXiv metadata — far fewer calls and no arXiv rate-limit storms.
+    prefer_full_text: bool = Field(default=False)
 
 
 class Explanation(BaseModel):
@@ -123,8 +137,9 @@ class Explanation(BaseModel):
     synthesizer_enable_thinking: bool = Field(default=False)
     thinking_effort: ThinkingEffort = Field(default="medium")
     # Hard total-token ceiling for one review run (None = no limit). Guards
-    # against runaway cost on the per-paragraph synthesis loop.
-    max_total_tokens: int | None = Field(default=None)
+    # against runaway cost on the per-paragraph synthesis loop. Must be positive
+    # when set — a non-positive ceiling would trip the budget guard immediately.
+    max_total_tokens: int | None = Field(default=None, gt=0)
 
 
 class Summary(BaseModel):
@@ -143,6 +158,9 @@ class TechGuide(BaseModel):
     writing_model_id: LanguageModelId = Field(default=LanguageModelId.CLAUDE_V4_8_OPUS)
     writer_enable_thinking: bool = Field(default=False)
     thinking_effort: ThinkingEffort = Field(default="medium")
+    # Fact-check each drafted section against the sources to remove ungrounded
+    # claims (hallucinated APIs/flags). Adds one LLM call per section.
+    verify_grounding: bool = Field(default=True)
 
 
 class Config(BaseModel):

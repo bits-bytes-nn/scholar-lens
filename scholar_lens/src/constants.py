@@ -28,6 +28,17 @@ class EnvVars(str, Enum):
     LOG_LEVEL = "LOG_LEVEL"
     SLACK_BOT_TOKEN = "SLACK_BOT_TOKEN"
     SLACK_APP_TOKEN = "SLACK_APP_TOKEN"
+    # Optional: the Slack app id this bot is allowed to bind to. When set, the
+    # bot fails fast at startup if the SLACK_BOT_TOKEN belongs to a different app
+    # (e.g. a token accidentally shared with another bot like OmniSummary), which
+    # would otherwise cause two Socket Mode processes to fight over one app's
+    # events. Find it under Slack app settings ("App ID", starts with 'A').
+    SLACK_EXPECTED_APP_ID = "SLACK_EXPECTED_APP_ID"
+    # Optional comma-separated allowlist of Slack user ids permitted to trigger
+    # jobs. When unset, any workspace member may trigger (logged). When set, all
+    # other users get a polite refusal — basic authorization for a bot that
+    # spends Bedrock + AWS Batch budget.
+    SLACK_ALLOWED_USER_IDS = "SLACK_ALLOWED_USER_IDS"
     TOPIC_ARN = "TOPIC_ARN"
     UPSTAGE_API_KEY = "UPSTAGE_API_KEY"
 

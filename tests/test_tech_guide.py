@@ -13,16 +13,18 @@ from scholar_lens.src.tech_guide import (
 from scholar_lens.src.web_research import PageContent, ResearchCorpus
 
 
-def _make_generator() -> TechGuideGenerator:
+def _make_generator(*, verify_grounding: bool = False) -> TechGuideGenerator:
     """Construct a generator without touching Bedrock or the network."""
     gen = TechGuideGenerator.__new__(TechGuideGenerator)
     gen.language = "English"
     gen.max_sections = 12
+    gen.verify_grounding = verify_grounding
     gen.researcher = MagicMock()
     gen.relevance_chain = MagicMock()
     gen.synopsis_chain = MagicMock()
     gen.section_chain = MagicMock()
     gen._section_str_chain = MagicMock()
+    gen.grounding_chain = MagicMock()
     return gen
 
 
@@ -124,10 +126,58 @@ class TestGenerateFlow:
         )
         out = await gen._write_one_section(
             topic="X",
-            synopsis="s",
-            section="Intro",
+            synopsis="1. Intro",
+            section="1. Intro",
+            section_number=1,
+            total_sections=1,
             previous_sections="",
             sources="src",
             available_images="(none)",
         )
         assert out == "## Recovered\nbody"
+
+
+class TestGrounding:
+    async def test_grounding_pass_runs_when_enabled(self) -> None:
+        gen = _make_generator(verify_grounding=True)
+        gen.researcher.research = MagicMock(return_value=_corpus())
+        gen.relevance_chain.ainvoke = AsyncMock(
+            return_value={"is_relevant": "yes", "topic": "Using X", "reason": "docs"}
+        )
+        gen.synopsis_chain.ainvoke = AsyncMock(
+            return_value={"synopsis": "1. Intro - overview"}
+        )
+        gen.section_chain.ainvoke = AsyncMock(
+            return_value={"section_markdown": "## Section\nungrounded claim"}
+        )
+        gen.grounding_chain.ainvoke = AsyncMock(
+            return_value={"grounded_markdown": "## Section\ncleaned"}
+        )
+        guide = await gen.generate(["https://docs.x.com"], discover_subpages=False)
+        gen.grounding_chain.ainvoke.assert_awaited()
+        assert "cleaned" in guide.body
+        assert "ungrounded" not in guide.body
+
+    async def test_grounding_falls_back_to_draft_when_empty(self) -> None:
+        gen = _make_generator(verify_grounding=True)
+        gen.grounding_chain.ainvoke = AsyncMock(
+            return_value={"grounded_markdown": "   "}
+        )
+        out = await gen._ground_section("## Original\nbody", "src", 1)
+        assert out == "## Original\nbody"
+
+    async def test_grounding_skipped_when_disabled(self) -> None:
+        gen = _make_generator(verify_grounding=False)
+        gen.researcher.research = MagicMock(return_value=_corpus())
+        gen.relevance_chain.ainvoke = AsyncMock(
+            return_value={"is_relevant": "yes", "topic": "Using X", "reason": "docs"}
+        )
+        gen.synopsis_chain.ainvoke = AsyncMock(
+            return_value={"synopsis": "1. Intro - overview"}
+        )
+        gen.section_chain.ainvoke = AsyncMock(
+            return_value={"section_markdown": "## Section\nbody"}
+        )
+        gen.grounding_chain.ainvoke = AsyncMock()
+        await gen.generate(["https://docs.x.com"], discover_subpages=False)
+        gen.grounding_chain.ainvoke.assert_not_awaited()

@@ -130,6 +130,13 @@ python scripts/run_batch.py --source 2505.09388 --mode review \
 python -m scholar_lens.slack.bot
 ```
 
+> **Use a dedicated Slack app for Paper Bot.** Do not reuse another bot's tokens
+> (e.g. the OmniSummary app). Two Socket Mode processes sharing one Slack app
+> make Slack deliver each `app_mention`/DM to only one of them at random, so
+> mentions silently route to the wrong bot. Set `SLACK_EXPECTED_APP_ID` to Paper
+> Bot's own app id and the process will refuse to start if it's bound to the
+> wrong app.
+
 #### Testing & Quality
 ```bash
 # Run the test suite (mocks all AWS/network — no credentials or cost)
