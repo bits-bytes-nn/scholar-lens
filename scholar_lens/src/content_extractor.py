@@ -19,6 +19,8 @@ from .utils import (
     HTMLTagOutputParser,
     RetryableBase,
     create_robust_xml_output_parser,
+    is_affirmative,
+    is_placeholder,
 )
 
 
@@ -26,6 +28,10 @@ class Attributes(BaseModel):
     affiliation: str = Field(min_length=1)
     category: str = Field(min_length=1)
     keywords: list[str] = Field(default_factory=list)
+    # Title/authors parsed from the PDF text — used to fill metadata for sources
+    # (e.g. arbitrary PDF URLs) that don't carry it. "N/A"/empty means unknown.
+    title: str | None = Field(default=None)
+    authors: list[str] = Field(default_factory=list)
 
 
 class Citation(BaseModel):
@@ -49,6 +55,10 @@ class Citation(BaseModel):
 
 
 class ContentExtractor(RetryableBase):
+    # Hard cap on the paginated citation-extraction loop, so a model that keeps
+    # emitting has_more=y (or novel near-duplicate citations) cannot loop forever.
+    MAX_CITATION_PAGES: int = 20
+
     def __init__(
         self,
         citation_extraction_model_id: LanguageModelId,
@@ -166,7 +176,7 @@ class ContentExtractor(RetryableBase):
         existing_citations_str = ""
         seen_citations = set()
 
-        while True:
+        for page in range(self.MAX_CITATION_PAGES):
             result = await self._extract_citations(html_content, existing_citations_str)
             raw_citations_str = result.get("citations", "")
             if not raw_citations_str.strip():
@@ -188,10 +198,15 @@ class ContentExtractor(RetryableBase):
                 break
 
             citations.extend(unique_new_citations)
-            if result.get("has_more", "n").strip().lower() != "y":
+            if not is_affirmative(result.get("has_more")):
                 break
 
             existing_citations_str = "\n".join(repr(c) for c in citations)
+            if page == self.MAX_CITATION_PAGES - 1:
+                logger.warning(
+                    "Reached max citation pages (%d); stopping extraction.",
+                    self.MAX_CITATION_PAGES,
+                )
 
         logger.info("Extracted %d unique citations", len(citations))
         return citations
@@ -235,10 +250,22 @@ class ContentExtractor(RetryableBase):
         ]
         await self._update_keywords(extracted_keywords)
 
+        def _clean_na(value: str) -> str:
+            return "" if is_placeholder(value) else value.strip()
+
+        title = _clean_na(result.get("title", "")) or None
+        authors = [
+            a.strip()
+            for a in _clean_na(result.get("authors", "")).split(",")
+            if a.strip()
+        ]
+
         return Attributes(
             affiliation=result.get("affiliation", "N/A"),
             category=result.get("category", "N/A"),
             keywords=extracted_keywords,
+            title=title,
+            authors=authors,
         )
 
     async def _update_keywords(self, new_keywords: list[str]) -> None:

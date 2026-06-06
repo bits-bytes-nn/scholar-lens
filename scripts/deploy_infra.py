@@ -7,14 +7,47 @@ import aws_cdk as core
 import boto3
 from aws_cdk import (
     Duration,
+    RemovalPolicy,
     Stack,
     Tags,
+)
+from aws_cdk import (
     aws_batch as batch,
+)
+from aws_cdk import (
+    aws_cloudwatch as cloudwatch,
+)
+from aws_cdk import (
+    aws_cloudwatch_actions as cw_actions,
+)
+from aws_cdk import (
     aws_ec2 as ec2,
+)
+from aws_cdk import (
     aws_ecs as ecs,
+)
+from aws_cdk import (
+    aws_events as events,
+)
+from aws_cdk import (
+    aws_events_targets as targets,
+)
+from aws_cdk import (
     aws_iam as iam,
+)
+from aws_cdk import (
+    aws_kms as kms,
+)
+from aws_cdk import (
+    aws_logs as logs,
+)
+from aws_cdk import (
     aws_sns as sns,
+)
+from aws_cdk import (
     aws_sns_subscriptions as subscriptions,
+)
+from aws_cdk import (
     aws_ssm as ssm,
 )
 from aws_cdk.aws_ecr_assets import DockerImageAsset, Platform
@@ -23,6 +56,42 @@ from constructs import Construct
 sys.path.append(str(Path(__file__).parent.parent))
 from scholar_lens.configs import Config
 from scholar_lens.src import EnvVars, SSMParams, get_account_id, logger
+
+# Secret SSM params are written as encrypted SecureString out-of-band (see
+# put_secure_secrets), NOT baked into the CloudFormation template as plaintext.
+SECRET_SSM_PARAMS = {
+    SSMParams.GITHUB_TOKEN,
+    SSMParams.LANGCHAIN_API_KEY,
+    SSMParams.UPSTAGE_API_KEY,
+    SSMParams.BRAVE_API_KEY,
+    SSMParams.SLACK_BOT_TOKEN,
+}
+
+
+def put_secure_secrets(
+    boto_session: boto3.Session,
+    project_name: str,
+    stage: str,
+    secrets: dict[SSMParams, str | None],
+) -> None:
+    """Write secret values to SSM as encrypted SecureString parameters.
+
+    Done with the SSM API (not CDK) because CloudFormation cannot create
+    SecureString parameters and a plaintext StringParameter would expose the
+    value in the readable stack template. Idempotent via Overwrite=True.
+    """
+    ssm_client = boto_session.client("ssm")
+    for param_enum, value in secrets.items():
+        if not value:
+            continue
+        name = f"/{project_name}/{stage}/{param_enum.value}"
+        ssm_client.put_parameter(
+            Name=name,
+            Value=value,
+            Type="SecureString",
+            Overwrite=True,
+        )
+        logger.info("Stored SecureString SSM parameter '%s'.", name)
 
 
 class PaperReviewStack(Stack):
@@ -39,6 +108,11 @@ class PaperReviewStack(Stack):
         github_token: str | None = None,
         langchain_api_key: str | None = None,
         upstage_api_key: str | None = None,
+        brave_api_key: str | None = None,
+        slack_bot_token: str | None = None,
+        s3_bucket_name: str | None = None,
+        s3_prefix: str = "",
+        bedrock_region_name: str | None = None,
         environment_vars: dict[str, str] | None = None,
         **kwargs: Any,
     ) -> None:
@@ -46,24 +120,37 @@ class PaperReviewStack(Stack):
 
         self.project_name = project_name
         self.stage = stage
+        self.s3_bucket_name = s3_bucket_name
+        self.s3_prefix = s3_prefix
+        self.bedrock_region_name = bedrock_region_name
 
         self._add_tags()
         self._configure_vpc(vpc_id, subnet_ids)
         self.security_group = self._create_security_group()
 
         self.topic = self._create_sns_topic(email_address)
-        self.role = self._create_iam_role()
+        self.instance_role = self._create_instance_role()
+        self.job_role = self._create_job_role()
+        self.execution_role = self._create_execution_role()
 
-        job_definition = self._create_job_definition(environment_vars or {})
-        job_queue = self._create_job_queue()
+        self.log_groups: list[logs.LogGroup] = []
+        review_job_def, guide_job_def = self._create_job_definitions(
+            environment_vars or {}
+        )
+        self.job_queue = self._create_job_queue()
+        job_queue = self.job_queue
 
         self._store_ssm_parameters(
-            github_token,
-            langchain_api_key,
-            upstage_api_key,
-            job_queue.job_queue_name,
-            job_definition.job_definition_name,
+            github_token=github_token,
+            langchain_api_key=langchain_api_key,
+            upstage_api_key=upstage_api_key,
+            brave_api_key=brave_api_key,
+            slack_bot_token=slack_bot_token,
+            job_queue_name=job_queue.job_queue_name,
+            job_definition_name=review_job_def.job_definition_name,
+            guide_job_definition_name=guide_job_def.job_definition_name,
         )
+        self._create_observability()
 
     def _get_resource_name(self, suffix: str) -> str:
         return f"{self.project_name}-{self.stage}-{suffix}"
@@ -108,57 +195,226 @@ class PaperReviewStack(Stack):
             )
 
     def _create_security_group(self) -> ec2.SecurityGroup:
-        return ec2.SecurityGroup(
+        # Egress is required for ECR image pulls, Bedrock, S3, SSM and arXiv/PDF
+        # fetches over HTTPS. We deny plaintext HTTP and all inbound traffic
+        # (batch jobs accept no connections). Outbound is restricted to 443.
+        security_group = ec2.SecurityGroup(
             self,
             "PaperReviewSecurityGroup",
             vpc=self.vpc,
-            allow_all_outbound=True,
+            allow_all_outbound=False,
             security_group_name=self._get_resource_name("paper-review"),
-            description="Security group for Paper Review",
+            description="Security group for Paper Review (HTTPS egress only)",
+        )
+        security_group.add_egress_rule(
+            peer=ec2.Peer.any_ipv4(),
+            connection=ec2.Port.tcp(443),
+            description="Allow outbound HTTPS to AWS APIs and paper sources",
+        )
+        return security_group
+
+    def _aws_partition_arn(self, service: str, resource: str) -> str:
+        return f"arn:{self.partition}:{service}:{self.region}:{self.account}:{resource}"
+
+    def _create_job_policy_statements(self) -> list[iam.PolicyStatement]:
+        """Least-privilege statements for the application running in-container."""
+        statements: list[iam.PolicyStatement] = []
+
+        # Bedrock: invoke foundation models and inference profiles in the
+        # default region and the (cross-region) Bedrock region.
+        bedrock_regions = {self.region}
+        if self.bedrock_region_name:
+            bedrock_regions.add(self.bedrock_region_name)
+        bedrock_resources: list[str] = [
+            # Newer short-form model IDs (e.g. anthropic.claude-sonnet-4-6,
+            # anthropic.claude-opus-4-8) are invoked as region-less / global
+            # foundation models, so their ARN has an EMPTY region segment
+            # (arn:aws:bedrock:::foundation-model/...). The region-scoped ARNs
+            # below do not match those, so grant the region-less form too.
+            f"arn:{self.partition}:bedrock:::foundation-model/*",
+        ]
+        for region in bedrock_regions:
+            bedrock_resources.extend(
+                [
+                    f"arn:{self.partition}:bedrock:{region}::foundation-model/*",
+                    f"arn:{self.partition}:bedrock:{region}:{self.account}:inference-profile/*",
+                ]
+            )
+        statements.append(
+            iam.PolicyStatement(
+                sid="BedrockInvoke",
+                actions=[
+                    "bedrock:InvokeModel",
+                    "bedrock:InvokeModelWithResponseStream",
+                ],
+                resources=bedrock_resources,
+            )
+        )
+        # Inference-profile/model discovery (used to resolve cross-region model
+        # IDs) are list/describe actions that do not support resource-level ARNs,
+        # so they require "*". We constrain them to the regions we actually call
+        # via an aws:RequestedRegion condition.
+        statements.append(
+            iam.PolicyStatement(
+                sid="BedrockDiscovery",
+                actions=[
+                    "bedrock:ListInferenceProfiles",
+                    "bedrock:GetInferenceProfile",
+                    "bedrock:ListFoundationModels",
+                ],
+                resources=["*"],
+                conditions={
+                    "StringEquals": {"aws:RequestedRegion": sorted(bedrock_regions)}
+                },
+            )
         )
 
-    def _create_iam_role(self) -> iam.Role:
-        all_policies = [
-            "AmazonBedrockFullAccess",
-            "AmazonEC2FullAccess",
-            "AmazonECS_FullAccess",
-            "AmazonS3FullAccess",
-            "AmazonSNSFullAccess",
-            "AmazonSSMFullAccess",
-            "AWSBatchFullAccess",
-            "CloudWatchLogsFullAccess",
-        ]
-        managed_policies = [
-            iam.ManagedPolicy.from_aws_managed_policy_name(name)
-            for name in all_policies
-        ]
+        # S3: read/write only within this project's bucket + prefix.
+        if self.s3_bucket_name:
+            bucket_arn = f"arn:{self.partition}:s3:::{self.s3_bucket_name}"
+            object_arn = (
+                f"{bucket_arn}/{self.s3_prefix}/*"
+                if self.s3_prefix
+                else f"{bucket_arn}/*"
+            )
+            statements.append(
+                iam.PolicyStatement(
+                    sid="S3ObjectAccess",
+                    actions=[
+                        "s3:GetObject",
+                        "s3:PutObject",
+                        "s3:PutObjectAcl",
+                        "s3:DeleteObject",
+                    ],
+                    resources=[object_arn],
+                )
+            )
+            statements.append(
+                iam.PolicyStatement(
+                    sid="S3ListBucket",
+                    actions=["s3:ListBucket", "s3:GetBucketLocation"],
+                    resources=[bucket_arn],
+                )
+            )
 
+        # SNS: publish only to this stack's topic.
+        statements.append(
+            iam.PolicyStatement(
+                sid="SnsPublish",
+                actions=["sns:Publish"],
+                resources=[self.topic.topic_arn],
+            )
+        )
+
+        # SSM: read only this project's parameters.
+        statements.append(
+            iam.PolicyStatement(
+                sid="SsmReadParameters",
+                actions=["ssm:GetParameter", "ssm:GetParameters"],
+                resources=[
+                    self._aws_partition_arn(
+                        "ssm", f"parameter/{self.project_name}/{self.stage}/*"
+                    )
+                ],
+            )
+        )
+
+        # AWS Batch: submit jobs only to this stack's queue + job definition
+        # (needed when the bot/script triggers runs). SubmitJob supports
+        # resource-level ARNs; DescribeJobs/ListJobs do not and require "*".
+        batch_name = self._get_resource_name("paper-review")
+        statements.append(
+            iam.PolicyStatement(
+                sid="BatchSubmit",
+                actions=["batch:SubmitJob"],
+                resources=[
+                    self._aws_partition_arn("batch", f"job-queue/{batch_name}"),
+                    self._aws_partition_arn("batch", f"job-definition/{batch_name}*"),
+                ],
+            )
+        )
+        statements.append(
+            iam.PolicyStatement(
+                sid="BatchDescribe",
+                actions=["batch:DescribeJobs", "batch:ListJobs"],
+                resources=["*"],
+            )
+        )
+        return statements
+
+    def _create_job_role(self) -> iam.Role:
+        role = iam.Role(
+            self,
+            "PaperReviewJobRole",
+            assumed_by=iam.ServicePrincipal("ecs-tasks.amazonaws.com"),
+            description="Application (task) role for Paper Review containers",
+            role_name=self._get_resource_name("paper-review-job"),
+        )
+        for statement in self._create_job_policy_statements():
+            role.add_to_policy(statement)
+        return role
+
+    def _create_execution_role(self) -> iam.Role:
+        # The ECS execution role only needs to pull the image and write logs.
         return iam.Role(
             self,
-            "PaperReviewRole",
-            assumed_by=iam.CompositePrincipal(
-                iam.ServicePrincipal("ec2.amazonaws.com"),
-                iam.ServicePrincipal("ecs-tasks.amazonaws.com"),
-            ),
-            description="Role for Paper Review",
-            managed_policies=managed_policies,
-            role_name=self._get_resource_name("paper-review"),
+            "PaperReviewExecutionRole",
+            assumed_by=iam.ServicePrincipal("ecs-tasks.amazonaws.com"),
+            description="ECS execution role for Paper Review (image pull + logs)",
+            role_name=self._get_resource_name("paper-review-exec"),
+            managed_policies=[
+                iam.ManagedPolicy.from_aws_managed_policy_name(
+                    "service-role/AmazonECSTaskExecutionRolePolicy"
+                )
+            ],
+        )
+
+    def _create_instance_role(self) -> iam.Role:
+        # EC2 container instances in the Batch compute environment need the
+        # standard ECS container-instance permissions only.
+        return iam.Role(
+            self,
+            "PaperReviewInstanceRole",
+            assumed_by=iam.ServicePrincipal("ec2.amazonaws.com"),
+            description="EC2 instance role for Paper Review Batch compute env",
+            role_name=self._get_resource_name("paper-review-instance"),
+            managed_policies=[
+                iam.ManagedPolicy.from_aws_managed_policy_name(
+                    "service-role/AmazonEC2ContainerServiceforEC2Role"
+                )
+            ],
         )
 
     def _create_sns_topic(self, email_address: str | None) -> sns.Topic:
+        topic_key = kms.Key(
+            self,
+            "PaperReviewTopicKey",
+            description="KMS key for Scholar Lens SNS notifications",
+            enable_key_rotation=True,
+            removal_policy=RemovalPolicy.DESTROY,
+            alias=self._get_resource_name("paper-review-sns"),
+        )
         topic = sns.Topic(
             self,
             "PaperReviewTopic",
             topic_name=self._get_resource_name("paper-review"),
             display_name="Scholar Lens Notifications",
+            master_key=topic_key,
+            enforce_ssl=True,
         )
         if email_address:
             topic.add_subscription(subscriptions.EmailSubscription(email_address))
         return topic
 
-    def _create_job_definition(
+    def _create_job_definitions(
         self, env_vars: dict[str, str]
-    ) -> batch.EcsJobDefinition:
+    ) -> tuple[batch.EcsJobDefinition, batch.EcsJobDefinition]:
+        """Build the paper-review and tech-guide job definitions.
+
+        Both share the same container image and roles but run different
+        entrypoints: ``scholar_lens.main`` (paper review/summary) and
+        ``scholar_lens.tech_guide_main`` (technical guide).
+        """
         docker_image_asset = DockerImageAsset(
             self,
             "PaperReviewImage",
@@ -167,43 +423,93 @@ class PaperReviewStack(Stack):
             platform=Platform.LINUX_AMD64,
             exclude=["cdk.out", ".venv", ".git", "**/__pycache__"],
         )
-
+        image = ecs.ContainerImage.from_docker_image_asset(docker_image_asset)
         container_env = {
             EnvVars.TOPIC_ARN.value: self.topic.topic_arn,
             EnvVars.LOG_LEVEL.value: "INFO",
             **env_vars,
         }
 
-        container = batch.EcsEc2ContainerDefinition(
-            self,
-            "PaperReviewContainerDef",
-            image=ecs.ContainerImage.from_docker_image_asset(docker_image_asset),
-            job_role=self.role,
-            execution_role=self.role,
-            cpu=1,
-            memory=core.Size.mebibytes(1024),
+        review = self._build_job_definition(
+            name="paper-review",
+            image=image,
+            container_env=container_env,
             command=[
                 "python3",
                 "-m",
                 "scholar_lens.main",
-                "--arxiv-id",
-                "Ref::arxiv_id",
+                "--source",
+                "Ref::source",
                 "--repo-urls",
                 "Ref::repo_urls",
                 "--parse-pdf",
                 "Ref::parse_pdf",
+                "--mode",
+                "Ref::mode",
+                "--slack-channel",
+                "Ref::slack_channel",
+                "--slack-thread-ts",
+                "Ref::slack_thread_ts",
             ],
+        )
+        guide = self._build_job_definition(
+            name="tech-guide",
+            image=image,
+            container_env=container_env,
+            command=[
+                "python3",
+                "-m",
+                "scholar_lens.tech_guide_main",
+                "--urls",
+                "Ref::urls",
+                "--discover-subpages",
+                "Ref::discover_subpages",
+                "--search-queries",
+                "Ref::search_queries",
+                "--slack-channel",
+                "Ref::slack_channel",
+                "--slack-thread-ts",
+                "Ref::slack_thread_ts",
+            ],
+        )
+        return review, guide
+
+    def _build_job_definition(
+        self,
+        *,
+        name: str,
+        image: ecs.ContainerImage,
+        container_env: dict[str, str],
+        command: list[str],
+    ) -> batch.EcsJobDefinition:
+        log_group = logs.LogGroup(
+            self,
+            f"{name.title().replace('-', '')}LogGroup",
+            log_group_name=f"/aws/batch/{self._get_resource_name(name)}",
+            retention=logs.RetentionDays.ONE_MONTH,
+            removal_policy=RemovalPolicy.DESTROY,
+        )
+        self.log_groups.append(log_group)
+        container = batch.EcsEc2ContainerDefinition(
+            self,
+            f"{name.title().replace('-', '')}ContainerDef",
+            image=image,
+            job_role=self.job_role,
+            execution_role=self.execution_role,
+            cpu=1,
+            memory=core.Size.mebibytes(1024),
+            command=command,
             environment=container_env,
             logging=ecs.LogDrivers.aws_logs(
-                stream_prefix=f"{self.project_name}-{self.stage}"
+                stream_prefix=f"{self.project_name}-{self.stage}",
+                log_group=log_group,
             ),
         )
-
         return batch.EcsJobDefinition(
             self,
-            "PaperReviewJobDefinition",
+            f"{name.title().replace('-', '')}JobDefinition",
             container=container,
-            job_definition_name=self._get_resource_name("paper-review"),
+            job_definition_name=self._get_resource_name(name),
             retry_attempts=2,
             timeout=Duration.hours(3),
         )
@@ -218,7 +524,7 @@ class PaperReviewStack(Stack):
         )
 
         compute_env_config = {
-            "instance_role": self.role,
+            "instance_role": self.instance_role,
             "instance_types": [ec2.InstanceType("optimal")],
             "vpc": self.vpc,
             "security_groups": [self.security_group],
@@ -250,29 +556,50 @@ class PaperReviewStack(Stack):
 
     def _store_ssm_parameters(
         self,
+        *,
         github_token: str | None,
         langchain_api_key: str | None,
         upstage_api_key: str | None,
+        brave_api_key: str | None,
+        slack_bot_token: str | None,
         job_queue_name: str,
         job_definition_name: str,
+        guide_job_definition_name: str,
     ) -> None:
+        # Both job definitions run on the single shared queue.
         ssm_params_to_create = {
             SSMParams.GITHUB_TOKEN: github_token,
             SSMParams.LANGCHAIN_API_KEY: langchain_api_key,
             SSMParams.UPSTAGE_API_KEY: upstage_api_key,
+            SSMParams.BRAVE_API_KEY: brave_api_key,
+            SSMParams.SLACK_BOT_TOKEN: slack_bot_token,
             SSMParams.BATCH_JOB_QUEUE: job_queue_name,
             SSMParams.BATCH_JOB_DEFINITION: job_definition_name,
+            SSMParams.GUIDE_JOB_QUEUE: job_queue_name,
+            SSMParams.GUIDE_JOB_DEFINITION: guide_job_definition_name,
         }
 
         descriptions = {
             SSMParams.GITHUB_TOKEN: "GitHub Token",
             SSMParams.LANGCHAIN_API_KEY: "Langchain API Key",
             SSMParams.UPSTAGE_API_KEY: "Upstage API Key",
-            SSMParams.BATCH_JOB_QUEUE: "AWS Batch Job Queue Name for Scholar Lens Paper Review",
-            SSMParams.BATCH_JOB_DEFINITION: "AWS Batch Job Definition Name for Scholar Lens Paper Review",
+            SSMParams.BRAVE_API_KEY: "Brave Search API Key",
+            SSMParams.SLACK_BOT_TOKEN: "Slack Bot Token (chat.postMessage)",
+            SSMParams.BATCH_JOB_QUEUE: "AWS Batch Job Queue for Scholar Lens",
+            SSMParams.BATCH_JOB_DEFINITION: "AWS Batch Job Definition for paper review/summary",
+            SSMParams.GUIDE_JOB_QUEUE: "AWS Batch Job Queue for Scholar Lens tech guides",
+            SSMParams.GUIDE_JOB_DEFINITION: "AWS Batch Job Definition for technical guides",
         }
 
+        # Secrets are NOT created here: CloudFormation/CDK cannot make
+        # SecureString parameters, and a plaintext StringParameter would embed
+        # the secret value in the (readable) CloudFormation template. They are
+        # written out-of-band as encrypted SecureString parameters by
+        # :func:`put_secure_secrets` during deploy. Only non-secret operational
+        # params (queue/definition names) are created in the template.
         for param_enum, param_value in ssm_params_to_create.items():
+            if param_enum in SECRET_SSM_PARAMS:
+                continue
             if param_value:
                 param_name = f"/{self.project_name}/{self.stage}/{param_enum.value}"
                 ssm.StringParameter(
@@ -283,6 +610,86 @@ class PaperReviewStack(Stack):
                     description=descriptions[param_enum],
                     tier=ssm.ParameterTier.STANDARD,
                 )
+
+    def _create_observability(self) -> None:
+        """Wire failure/error/cost alarms to the (email-subscribed) SNS topic."""
+        sns_action = cw_actions.SnsAction(self.topic)
+
+        # 1) Any Batch job that FAILS (on this stack's queue) -> SNS, with the
+        #    job name + status reason so the email is actionable.
+        events.Rule(
+            self,
+            "BatchJobFailedRule",
+            rule_name=self._get_resource_name("batch-failed"),
+            description="Notify on Batch job failures for Scholar Lens.",
+            event_pattern=events.EventPattern(
+                source=["aws.batch"],
+                detail_type=["Batch Job State Change"],
+                detail={
+                    "status": ["FAILED"],
+                    "jobQueue": [self.job_queue.job_queue_arn],
+                },
+            ),
+            targets=[
+                targets.SnsTopic(
+                    self.topic,
+                    message=events.RuleTargetInput.from_text(
+                        "Scholar Lens Batch job FAILED: "
+                        f"{events.EventField.from_path('$.detail.jobName')} "
+                        f"(id {events.EventField.from_path('$.detail.jobId')})\n"
+                        f"Reason: {events.EventField.from_path('$.detail.statusReason')}"
+                    ),
+                )
+            ],
+        )
+
+        # 2) ERROR lines in any job log group -> metric -> alarm -> SNS.
+        for index, log_group in enumerate(self.log_groups):
+            metric_filter = logs.MetricFilter(
+                self,
+                f"ErrorMetricFilter{index}",
+                log_group=log_group,
+                metric_namespace=f"{self.project_name}/{self.stage}",
+                metric_name="LogErrors",
+                filter_pattern=logs.FilterPattern.any_term("ERROR"),
+                metric_value="1",
+                default_value=0,
+            )
+            alarm = cloudwatch.Alarm(
+                self,
+                f"LogErrorsAlarm{index}",
+                alarm_name=self._get_resource_name(f"log-errors-{index}"),
+                metric=metric_filter.metric(
+                    statistic="Sum", period=Duration.minutes(5)
+                ),
+                threshold=1,
+                evaluation_periods=1,
+                comparison_operator=(
+                    cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD
+                ),
+                treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
+            )
+            alarm.add_alarm_action(sns_action)
+
+        # 3) Estimated-cost guardrail on the custom metric emitted by the app
+        #    (ScholarLens/EstimatedCostUSD). Alarms if a single 1h window's total
+        #    estimated spend crosses the threshold.
+        cost_alarm = cloudwatch.Alarm(
+            self,
+            "EstimatedCostAlarm",
+            alarm_name=self._get_resource_name("estimated-cost"),
+            metric=cloudwatch.Metric(
+                namespace="ScholarLens",
+                metric_name="EstimatedCostUSD",
+                statistic="Sum",
+                period=Duration.hours(1),
+            ),
+            threshold=50,
+            evaluation_periods=1,
+            comparison_operator=(cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD),
+            treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
+        )
+        cost_alarm.add_alarm_action(sns_action)
 
 
 def main() -> None:
@@ -332,10 +739,30 @@ def main() -> None:
             github_token=os.getenv(EnvVars.GITHUB_TOKEN.value),
             langchain_api_key=os.getenv(EnvVars.LANGCHAIN_API_KEY.value),
             upstage_api_key=os.getenv(EnvVars.UPSTAGE_API_KEY.value),
+            brave_api_key=os.getenv(EnvVars.BRAVE_API_KEY.value),
+            slack_bot_token=os.getenv(EnvVars.SLACK_BOT_TOKEN.value),
+            s3_bucket_name=config.resources.s3_bucket_name,
+            s3_prefix=config.resources.s3_prefix,
+            bedrock_region_name=config.resources.bedrock_region_name,
             environment_vars=env_vars,
             env=env,
         )
         app.synth()
+
+        # Write secrets as encrypted SecureString params out-of-band so they are
+        # never embedded in the CloudFormation template.
+        put_secure_secrets(
+            boto_session,
+            config.resources.project_name,
+            config.resources.stage,
+            {
+                SSMParams.GITHUB_TOKEN: os.getenv(EnvVars.GITHUB_TOKEN.value),
+                SSMParams.LANGCHAIN_API_KEY: os.getenv(EnvVars.LANGCHAIN_API_KEY.value),
+                SSMParams.UPSTAGE_API_KEY: os.getenv(EnvVars.UPSTAGE_API_KEY.value),
+                SSMParams.BRAVE_API_KEY: os.getenv(EnvVars.BRAVE_API_KEY.value),
+                SSMParams.SLACK_BOT_TOKEN: os.getenv(EnvVars.SLACK_BOT_TOKEN.value),
+            },
+        )
 
     except Exception as e:
         logger.error("Error occurred: %s", e, exc_info=True)

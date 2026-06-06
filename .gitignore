@@ -218,3 +218,6 @@ ipynb/
 logs/
 papers/
 tokenizers/
+
+# Local-only quality rubrics + LLM-judge evaluation (not shipped)
+eval/

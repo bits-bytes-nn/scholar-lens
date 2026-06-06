@@ -5,12 +5,12 @@ from pathlib import Path
 
 import boto3
 import git
+from langchain_community.vectorstores.faiss import FAISS
 from langchain_core.documents import Document
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.output_parsers import StrOutputParser
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.vectorstores.faiss import FAISS
 from langchain_core.vectorstores import VectorStore
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from tqdm import tqdm
 
 from .constants import EmbeddingModelId, LanguageModelId, LocalPaths
@@ -109,15 +109,52 @@ class CodeRetriever(RetryableBase):
             length_function=len,
         )
 
+    @staticmethod
+    def _repo_dir_name(url: str) -> str:
+        """Derive a safe cache subdirectory name from a repo URL.
+
+        Strips trailing slashes/``.git`` and any path noise so a URL like
+        ``https://github.com/org/repo/`` does not yield an empty component (which
+        would make the cache path collapse onto ``repo_cache_dir`` itself — and a
+        later ``rmtree`` would wipe the whole cache).
+        """
+        name = url.rstrip("/").split("/")[-1].removesuffix(".git").strip()
+        return name or "repo"
+
     async def download_repositories(self, repo_urls: list[str]) -> list[Path]:
+        candidate_paths = [
+            self.repo_cache_dir / self._repo_dir_name(url) for url in repo_urls
+        ]
+        results = await asyncio.gather(
+            *(
+                self._clone_repo(url, path)
+                for url, path in zip(repo_urls, candidate_paths, strict=False)
+            ),
+            return_exceptions=True,
+        )
+        # Tolerate per-repo failures (auth, network, oversized): keep what cloned,
+        # only abort if NOTHING could be downloaded.
         self.repo_paths = [
-            self.repo_cache_dir / url.split("/")[-1].replace(".git", "")
-            for url in repo_urls
+            path
+            for path, result in zip(candidate_paths, results, strict=False)
+            if not isinstance(result, Exception) and path.exists()
         ]
-        tasks = [
-            self._clone_repo(url, path) for url, path in zip(repo_urls, self.repo_paths)
+        failed = [
+            url
+            for url, result in zip(repo_urls, results, strict=False)
+            if isinstance(result, Exception)
         ]
-        await asyncio.gather(*tasks)
+        if failed:
+            logger.warning(
+                "Failed to clone %d/%d repositories: %s",
+                len(failed),
+                len(repo_urls),
+                ", ".join(failed),
+            )
+        if not self.repo_paths:
+            raise NoPythonFilesError(
+                "No repositories could be cloned from the supplied URLs."
+            )
         return self.repo_paths
 
     @staticmethod
@@ -205,7 +242,7 @@ class CodeRetriever(RetryableBase):
         )
 
         augmented_docs = []
-        for doc, result in zip(documents, results):
+        for doc, result in zip(documents, results, strict=False):
             summary = result if result else ""
             augmented_docs.append(
                 Document(
@@ -280,7 +317,10 @@ class CodeRetriever(RetryableBase):
         if not repo_paths:
             raise ValueError("No repository paths provided")
         all_content, total_chars = [], 0
+        limit_reached = False
         for repo_path in repo_paths:
+            if limit_reached:
+                break
             for py_file in repo_path.rglob("*.py"):
                 try:
                     content = await asyncio.to_thread(
@@ -291,6 +331,9 @@ class CodeRetriever(RetryableBase):
                             "Reached character limit (%d). Skipping remaining files.",
                             self.MAX_CHARS,
                         )
+                        # Stop the OUTER repo loop too, not just this repo's files,
+                        # so the summary never exceeds MAX_CHARS across repos.
+                        limit_reached = True
                         break
                     total_chars += len(content)
                     all_content.append(content)

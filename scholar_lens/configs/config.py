@@ -1,15 +1,20 @@
+import re
 import sys
-import yaml
 from pathlib import Path
 from typing import Literal
 
-
+import yaml
 from dotenv import load_dotenv
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
 sys.path.append(str(Path(__file__).parent.parent))
 
 from scholar_lens.src.constants import EmbeddingModelId, LanguageModelId
+
+# Effort level for adaptive-thinking models (e.g. Opus 4.8). Lower effort means
+# shorter reasoning traces — faster and cheaper. Ignored by legacy thinking
+# models, which use a fixed token budget instead.
+ThinkingEffort = Literal["low", "medium", "high"]
 
 
 class Github(BaseModel):
@@ -19,6 +24,40 @@ class Github(BaseModel):
     branch_prefix: str = Field(default="paper-reviews")
     author_name: str = Field(default="Scholar Lens Bot")
     author_email: EmailStr | None = Field(default=None)
+    cover_images: dict[str, str] = Field(
+        default_factory=dict,
+        description="Maps a category slug (lowercase, hyphenated) to a cover "
+        "image filename under the blog's assets/images directory.",
+    )
+    default_cover_image: str = Field(default="default.jpg")
+    # Primary (lead) category label written to each artifact's front matter, by
+    # artifact type. These are the values a blog's category tabs filter on, so
+    # they are configurable to match the target blog without code changes.
+    # Defaults are generic; override per-blog (e.g. to align with a Jekyll site's
+    # category pages).
+    review_category: str = Field(default="Paper Reviews")
+    summary_category: str = Field(default="Paper Summaries")
+    tech_guide_category: str = Field(default="Tech Guides")
+    # Whether figures uploaded to S3 are world-readable. Default False (private):
+    # blog images are served from the GitHub Pages repo, so public S3 ACLs are
+    # an unnecessary exposure (and are rejected by buckets with Block Public
+    # Access). Set True only if you intentionally serve assets straight from S3.
+    public_assets: bool = Field(default=False)
+
+    @field_validator("cover_images", mode="before")
+    @classmethod
+    def _default_empty_mapping(cls, v: dict[str, str] | None) -> dict[str, str]:
+        return v or {}
+
+    def cover_image_for(self, category: str) -> str:
+        """Resolve the cover image for a category, falling back to the default.
+
+        The category is normalised to a slug (lowercase, runs of non-alphanumeric
+        characters collapsed to a single hyphen) so that ``"Multimodal Learning"``
+        and ``"multimodal-learning"`` resolve identically.
+        """
+        slug = re.sub(r"[^a-z0-9]+", "-", category.lower()).strip("-")
+        return self.cover_images.get(slug, self.default_cover_image)
 
 
 class Resources(BaseModel):
@@ -60,9 +99,19 @@ class Code(BaseModel):
     code_summarization_model_id: LanguageModelId = Field(
         default=LanguageModelId.CLAUDE_V4_5_HAIKU
     )
-    embed_model_id: EmbeddingModelId | None = Field(default=None)
-    chunk_size: int = Field(default=1024)
-    chunk_overlap: int = Field(default=256)
+    embed_model_id: EmbeddingModelId = Field(default=EmbeddingModelId.TITAN_EMBED_V2)
+    chunk_size: int = Field(default=1024, gt=0, le=1_000_000)
+    chunk_overlap: int = Field(default=256, ge=0)
+
+    @model_validator(mode="after")
+    def _check_overlap_lt_size(self) -> "Code":
+        # overlap >= size makes RecursiveCharacterTextSplitter loop/misbehave.
+        if self.chunk_overlap >= self.chunk_size:
+            raise ValueError(
+                f"chunk_overlap ({self.chunk_overlap}) must be smaller than "
+                f"chunk_size ({self.chunk_size})."
+            )
+        return self
 
 
 class Citations(BaseModel):
@@ -72,6 +121,10 @@ class Citations(BaseModel):
     citation_analysis_model_id: LanguageModelId = Field(
         default=LanguageModelId.CLAUDE_V4_5_HAIKU
     )
+    # When True, download each cited paper's full text (slow, arXiv-heavy). When
+    # False (default), summarise from the abstract resolved via Crossref/Semantic
+    # Scholar/arXiv metadata — far fewer calls and no arXiv rate-limit storms.
+    prefer_full_text: bool = Field(default=False)
 
 
 class Explanation(BaseModel):
@@ -90,6 +143,32 @@ class Explanation(BaseModel):
     )
     reflector_enable_thinking: bool = Field(default=False)
     synthesizer_enable_thinking: bool = Field(default=False)
+    thinking_effort: ThinkingEffort = Field(default="medium")
+    # Hard total-token ceiling for one review run (None = no limit). Guards
+    # against runaway cost on the per-paragraph synthesis loop. Must be positive
+    # when set — a non-positive ceiling would trip the budget guard immediately.
+    max_total_tokens: int | None = Field(default=None, gt=0)
+
+
+class Summary(BaseModel):
+    summary_model_id: LanguageModelId = Field(default=LanguageModelId.CLAUDE_V4_8_OPUS)
+    summarizer_enable_thinking: bool = Field(default=False)
+    thinking_effort: ThinkingEffort = Field(default="medium")
+
+
+class TechGuide(BaseModel):
+    relevance_model_id: LanguageModelId = Field(
+        default=LanguageModelId.CLAUDE_V4_5_HAIKU
+    )
+    synopsis_model_id: LanguageModelId = Field(
+        default=LanguageModelId.CLAUDE_V4_6_SONNET
+    )
+    writing_model_id: LanguageModelId = Field(default=LanguageModelId.CLAUDE_V4_8_OPUS)
+    writer_enable_thinking: bool = Field(default=False)
+    thinking_effort: ThinkingEffort = Field(default="medium")
+    # Fact-check each drafted section against the sources to remove ungrounded
+    # claims (hallucinated APIs/flags). Adds one LLM call per section.
+    verify_grounding: bool = Field(default=True)
 
 
 class Config(BaseModel):
@@ -126,10 +205,13 @@ class Config(BaseModel):
             paper_synthesis_model_id=LanguageModelId.CLAUDE_V4_5_SONNET,
         )
     )
+    summary: Summary = Field(default_factory=Summary)
+    tech_guide: TechGuide = Field(default_factory=TechGuide)
+    output_language: str = Field(default="Korean")
 
     @classmethod
     def from_yaml(cls, file_path: str) -> "Config":
-        with open(file_path, "r", encoding="utf-8") as f:
+        with open(file_path, encoding="utf-8") as f:
             config_data = yaml.safe_load(f)
         return cls(**config_data if config_data else {})
 

@@ -1,0 +1,98 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  POETRY_VERSION: "1.8.5"
+
+jobs:
+  lint:
+    name: Lint & format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Poetry
+        run: pipx install "poetry==${{ env.POETRY_VERSION }}"
+      - name: Install dependencies (locked dev tools)
+        run: poetry install --no-interaction --with dev
+      - name: Ruff (lint)
+        run: poetry run ruff check scholar_lens scripts tests
+      - name: Black (format check)
+        run: poetry run black --check scholar_lens scripts tests
+      - name: Mypy (type check)
+        run: poetry run mypy scholar_lens
+
+  test:
+    name: Test (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install Poetry
+        run: pipx install "poetry==${{ env.POETRY_VERSION }}"
+      - name: Configure Poetry
+        run: poetry config virtualenvs.in-project true
+      - name: Cache virtualenv
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: venv-${{ matrix.python-version }}-${{ hashFiles('poetry.lock') }}
+      - name: Install dependencies (with dev group)
+        run: poetry install --no-interaction --with dev
+      - name: Run pytest with coverage
+        run: >-
+          poetry run pytest tests/
+          -p no:cacheprovider
+          -W ignore::DeprecationWarning
+          --cov=scholar_lens
+          --cov-report=term-missing
+          --cov-report=xml
+      - name: Upload coverage artifact
+        if: matrix.python-version == '3.12'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: coverage.xml
+          if-no-files-found: ignore
+
+  cdk-synth:
+    name: CDK synth (infra validation)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install AWS CDK CLI
+        run: npm install -g aws-cdk
+      - name: Install Poetry
+        run: pipx install "poetry==${{ env.POETRY_VERSION }}"
+      - name: Install dependencies
+        run: poetry install --no-interaction --with dev
+      - name: Synthesize stack (fake account, no AWS calls)
+        env:
+          CDK_DEFAULT_ACCOUNT: "123456789012"
+          CDK_DEFAULT_REGION: "ap-northeast-2"
+          AWS_DEFAULT_REGION: "ap-northeast-2"
+        run: poetry run python scripts/ci_synth_check.py

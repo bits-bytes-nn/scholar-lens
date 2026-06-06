@@ -17,6 +17,7 @@ from .code_retriever import CodeRetriever
 from .constants import LanguageModelId
 from .content_extractor import Attributes, Citation
 from .logger import is_running_in_aws, logger
+from .metrics import TokenUsageTracker
 from .parser import Content, Figure
 from .prompts import (
     BasePrompt,
@@ -31,6 +32,7 @@ from .utils import (
     HTMLTagOutputParser,
     RetryableBase,
     create_robust_xml_output_parser,
+    is_affirmative,
     measure_execution_time,
 )
 
@@ -57,6 +59,9 @@ class ExplainerConfig:
     MIN_QUALITY_SCORE: int = 70
     RECURSION_LIMIT: int = 200
     SEARCH_RESULTS_LIMIT: int = 10
+    # Hard cap on the per-section has_more continuation loop, so a model that
+    # keeps emitting has_more=y cannot loop (and bill) forever.
+    MAX_CONTINUATIONS: int = 8
 
 
 class Paper(BaseModel):
@@ -126,10 +131,23 @@ class ExplainerGraph(RetryableBase):
         enable_output_fixing: bool = False,
         reflector_enable_thinking: bool = False,
         synthesizer_enable_thinking: bool = False,
+        thinking_effort: str = "medium",
+        language: str = "Korean",
+        callbacks: list[Any] | None = None,
+        max_total_tokens: int | None = None,
+        max_continuations: int = ExplainerConfig.MAX_CONTINUATIONS,
     ) -> None:
         _ensure_nltk_data()
 
         self.paper = paper
+        self.language = language
+        self.callbacks = callbacks or []
+        self.max_total_tokens = max_total_tokens
+        self.max_continuations = max_continuations
+        # Locate a token tracker among the callbacks for budget enforcement.
+        self._token_tracker = next(
+            (cb for cb in self.callbacks if isinstance(cb, TokenUsageTracker)), None
+        )
         self.citation_summarizer = citation_summarizer
         self.code_retriever = code_retriever
         self.translation_guideline = translation_guideline or []
@@ -149,6 +167,7 @@ class ExplainerGraph(RetryableBase):
             enable_output_fixing,
             reflector_enable_thinking=reflector_enable_thinking,
             synthesizer_enable_thinking=synthesizer_enable_thinking,
+            thinking_effort=thinking_effort,
         )
         self.workflow = self._create_workflow()
 
@@ -164,6 +183,7 @@ class ExplainerGraph(RetryableBase):
         *,
         reflector_enable_thinking: bool = False,
         synthesizer_enable_thinking: bool = False,
+        thinking_effort: str = "medium",
     ) -> None:
         robust_xml_output_parser = create_robust_xml_output_parser(
             self.llm_factory,
@@ -188,12 +208,14 @@ class ExplainerGraph(RetryableBase):
             reflection_id,
             HTMLTagOutputParser(tag_names=PaperReflectionPrompt.output_variables),
             enable_thinking=reflector_enable_thinking,
+            thinking_effort=thinking_effort,
         )
         self.synthesizer = self._create_chain(
             PaperSynthesisPrompt,
             synthesis_id,
             StrOutputParser(),
             enable_thinking=synthesizer_enable_thinking,
+            thinking_effort=thinking_effort,
             supports_1m_context_window=True,
         )
 
@@ -204,6 +226,7 @@ class ExplainerGraph(RetryableBase):
         output_parser: BaseOutputParser,
         **kwargs: Any,
     ) -> Runnable:
+        kwargs.setdefault("callbacks", self.callbacks or None)
         llm = self.llm_factory.get_model(model_id, temperature=0.0, **kwargs)
         return prompt_cls.get_prompt() | llm | output_parser
 
@@ -291,7 +314,9 @@ class ExplainerGraph(RetryableBase):
 
         return workflow.compile()
 
+    @RetryableBase._retry("paper_analysis")
     def analyze_paper(self, state: ExplainerState) -> dict[str, Any]:
+        self._enforce_token_budget()
         text = state["paper"].content.text
         sentences = nltk.sent_tokenize(text)
 
@@ -315,6 +340,7 @@ class ExplainerGraph(RetryableBase):
             "paragraphs": paragraphs,
             "structure": structure,
             "structure_index_offset": structure_index_offset,
+            "explanations": [],
             "synthesis_attempts": 0,
             "quality_score": 100,
             "improvement_feedback": "",
@@ -389,7 +415,9 @@ class ExplainerGraph(RetryableBase):
 
         return paper_structure[structure_index]
 
+    @RetryableBase._retry("paper_enrichment")
     async def enrich_paper(self, state: ExplainerState) -> dict[str, Any]:
+        self._enforce_token_budget()
         current_index = state["current_index"]
         current_paragraph = state["paragraphs"][current_index]
         current_analysis = self._get_section_analysis(state, current_index)
@@ -411,16 +439,20 @@ class ExplainerGraph(RetryableBase):
             result.get("reference_identifiers", "")
         )
         logger.debug("Reference identifiers: '%s'", reference_identifiers)
-        should_search_code = (
-            result.get("should_search_code", "n").strip().lower() == "y"
-        )
+        should_search_code = is_affirmative(result.get("should_search_code"))
         logger.debug("Should search code: '%s'", should_search_code)
 
         citation_summaries = None
         if reference_identifiers:
-            citation_summaries = await self.citation_summarizer.summarize(
-                reference_identifiers, current_paragraph
-            )
+            try:
+                citation_summaries = await self.citation_summarizer.summarize(
+                    reference_identifiers, current_paragraph
+                )
+            except Exception as e:
+                # Degrade gracefully (mirrors the code-search path below): a
+                # citation failure — e.g. an arXiv 429 escaping the summarizer —
+                # must not crash the whole review.
+                logger.warning("Failed to summarize citations: '%s'", str(e))
 
         code = None
         if should_search_code and self.code_retriever:
@@ -442,9 +474,14 @@ class ExplainerGraph(RetryableBase):
             "code": code,
         }
 
+    @RetryableBase._retry("paper_finalization")
     def finalize_paper(self, state: ExplainerState) -> dict:
+        self._enforce_token_budget()
         result = self.finalizer.invoke(
-            {"explanation": "\n".join(state["explanations"])}
+            {
+                "explanation": "\n".join(state["explanations"]),
+                "language": self.language,
+            }
         )
         key_takeaways_str = result.get("key_takeaways", "").strip()
         return {"key_takeaways": key_takeaways_str}
@@ -455,7 +492,9 @@ class ExplainerGraph(RetryableBase):
             line.strip() for line in reference_identifiers.splitlines() if line.strip()
         ]
 
+    @RetryableBase._retry("paper_reflection")
     def reflect_paper(self, state: ExplainerState) -> dict[str, Any]:
+        self._enforce_token_budget()
         current_index = state["current_index"]
         current_explanation = state["explanations"][current_index]
         current_paragraph = state["paragraphs"][current_index]
@@ -489,6 +528,7 @@ class ExplainerGraph(RetryableBase):
                 "code": str(state.get("code") or []),
                 "analysis": current_analysis,
                 "translation_guideline": str(self.translation_guideline),
+                "language": self.language,
             }
         )
 
@@ -496,13 +536,23 @@ class ExplainerGraph(RetryableBase):
             accumulated_feedback.append(feedback)
             logger.debug("Improvement feedback: '%s'", feedback)
 
-        quality_score = int(result.get("quality_score", "0"))
+        # The LLM occasionally returns a non-numeric quality_score ("N/A", "",
+        # "85/100"); fall back to 0 (triggers another synthesis attempt) rather
+        # than crashing the whole review on a bad int() conversion.
+        raw_score = str(result.get("quality_score", "0")).strip()
+        match = re.search(r"-?\d+", raw_score)
+        quality_score = int(match.group()) if match else 0
 
         return {
             "accumulated_feedback": accumulated_feedback,
             "quality_score": quality_score,
             "synthesis_attempts": state["synthesis_attempts"] + 1,
         }
+
+    def _enforce_token_budget(self) -> None:
+        """Abort the run if the configured total-token budget is exceeded."""
+        if self._token_tracker is not None and self.max_total_tokens:
+            self._token_tracker.check_budget(self.max_total_tokens)
 
     def synthesize_paper(self, state: ExplainerState) -> dict[str, Any]:
         current_index = state["current_index"]
@@ -523,7 +573,8 @@ class ExplainerGraph(RetryableBase):
             state["synthesis_attempts"] + 1,
         )
 
-        while True:
+        for continuation in range(self.max_continuations):
+            self._enforce_token_budget()
             improvement_feedback = "\n".join(state["accumulated_feedback"])
 
             result = self._synthesize_paper(
@@ -542,8 +593,14 @@ class ExplainerGraph(RetryableBase):
             if explanation_chunk := result.get("explanation", "").strip():
                 final_explanation_for_paragraph += explanation_chunk + "\n"
 
-            if not result.get("has_more", "n").strip().lower() == "y":
+            if not is_affirmative(result.get("has_more")):
                 break
+            if continuation == self.max_continuations - 1:
+                logger.warning(
+                    "Reached max continuations (%d) for section %d; stopping.",
+                    self.max_continuations,
+                    current_index,
+                )
 
         explanations[current_index] = final_explanation_for_paragraph.strip()
 
@@ -577,6 +634,7 @@ class ExplainerGraph(RetryableBase):
                 "analysis": analysis,
                 "translation_guideline": str(self.translation_guideline),
                 "improvement_feedback": improvement_feedback,
+                "language": self.language,
             }
         )
         explanation_match = re.search(

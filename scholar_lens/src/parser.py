@@ -3,16 +3,16 @@ import base64
 import io
 import json
 import os
-from collections.abc import Sequence
+from collections.abc import Coroutine, Sequence
 from pathlib import Path
-from typing import Any, Coroutine
+from typing import Any
 
 import boto3
 import fitz
 import httpx
 from bs4 import BeautifulSoup, Tag
-from langchain_core.runnables import Runnable
 from langchain_core.output_parsers import StrOutputParser
+from langchain_core.runnables import Runnable
 from PIL import Image
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from unstructured.documents.elements import Image as UnstructuredImage
@@ -21,6 +21,7 @@ from unstructured.partition.pdf import partition_pdf
 from .constants import AppConstants, EnvVars, LanguageModelId, LocalPaths
 from .logger import logger
 from .prompts import FigureAnalysisPrompt
+from .url_guard import UnsafeUrlError, assert_url_is_public
 from .utils import (
     BedrockLanguageModelFactory,
     RetryableBase,
@@ -31,6 +32,12 @@ DEFAULT_RESIZE_QUALITY: int = 85
 DEFAULT_TIMEOUT: int = 60
 MAX_IMAGE_SIZE_BYTES: int = 5242880
 MIN_FIGURE_AREA: float = 10000.0
+# Resize fallback loop tuning: once JPEG quality bottoms out, shrink dimensions
+# by RESIZE_SCALE_FACTOR per pass and give up below MIN_RESIZE_DIMENSION px.
+MIN_RESIZE_QUALITY: int = 10
+RESIZE_QUALITY_STEP: int = 10
+RESIZE_SCALE_FACTOR: float = 0.8
+MIN_RESIZE_DIMENSION: int = 100
 
 
 class ParserError(Exception):
@@ -100,6 +107,12 @@ class Figure(BaseModel, RetryableBase):
         image_bytes: bytes
 
         if path.startswith(("http://", "https://")):
+            # Figure URLs can originate from untrusted paper/page content; run
+            # them through the SSRF guard before fetching server-side.
+            try:
+                assert_url_is_public(path)
+            except UnsafeUrlError as e:
+                raise FigureParseError(f"Unsafe image URL '{path}': {e}") from e
             try:
                 async with httpx.AsyncClient(timeout=DEFAULT_TIMEOUT) as client:
                     response = await client.get(path)
@@ -111,7 +124,7 @@ class Figure(BaseModel, RetryableBase):
             try:
                 with open(path, "rb") as f:
                     image_bytes = f.read()
-            except IOError as e:
+            except OSError as e:
                 raise FigureParseError(f"Failed to read file '{path}': {e}") from e
 
         processed_bytes = Figure._resize_if_needed(image_bytes)
@@ -148,17 +161,20 @@ class Figure(BaseModel, RetryableBase):
                     )
                     return resized_bytes
 
-                if quality <= 10:
-                    new_width = int(img.width * 0.8)
-                    new_height = int(img.height * 0.8)
-                    if new_width < 100 or new_height < 100:
+                if quality <= MIN_RESIZE_QUALITY:
+                    new_width = int(img.width * RESIZE_SCALE_FACTOR)
+                    new_height = int(img.height * RESIZE_SCALE_FACTOR)
+                    if (
+                        new_width < MIN_RESIZE_DIMENSION
+                        or new_height < MIN_RESIZE_DIMENSION
+                    ):
                         raise FigureParseError(
                             "Cannot resize image below 5MB limit even at minimum size"
                         )
                     img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
                     quality = DEFAULT_RESIZE_QUALITY
                 else:
-                    quality -= 10
+                    quality -= RESIZE_QUALITY_STEP
 
                 iteration += 1
 
@@ -478,15 +494,15 @@ class PDFParser(RichParser):
             path.parent.mkdir(parents=True, exist_ok=True)
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(response, f, indent=2, ensure_ascii=False)
-        except IOError as e:
+        except OSError as e:
             logger.warning("Failed to cache response: %s", e)
 
     @staticmethod
     def _load_cached_response(path: Path) -> dict[str, Any]:
         try:
-            with open(path, "r", encoding="utf-8") as f:
+            with open(path, encoding="utf-8") as f:
                 return json.load(f)
-        except (IOError, json.JSONDecodeError) as e:
+        except (OSError, json.JSONDecodeError) as e:
             raise ContentParseError(f"Failed to load cached response: {e}") from e
 
     async def _request_document_parse(self, pdf_path: Path) -> dict[str, Any]:
@@ -501,10 +517,16 @@ class PDFParser(RichParser):
                 )
                 response.raise_for_status()
                 return response.json()
-        except IOError as e:
+        except OSError as e:
             raise ContentParseError(f"Cannot read PDF file '{pdf_path}': {e}") from e
         except httpx.HTTPError as e:
             raise ContentParseError(f"Document parsing API request failed: {e}") from e
+        except ValueError as e:
+            # response.json() raises JSONDecodeError (a ValueError) on a non-JSON
+            # / truncated API response — surface as a parse error, not a crash.
+            raise ContentParseError(
+                f"Document parsing API returned invalid JSON: {e}"
+            ) from e
 
     async def _extract_figures(
         self, elements: list[dict[str, Any]], pdf_path: Path, figures_dir: Path
@@ -543,7 +565,7 @@ class PDFParser(RichParser):
                 path=str(path),
                 caption=fd["caption"] or None,
             )
-            for i, (fd, path) in enumerate(zip(figure_data, paths))
+            for i, (fd, path) in enumerate(zip(figure_data, paths, strict=False))
         ]
 
         all_figures = await asyncio.gather(*tasks, return_exceptions=True)

@@ -19,12 +19,26 @@ class EmbeddingModelId(str, Enum):
 
 class EnvVars(str, Enum):
     AWS_PROFILE_NAME = "AWS_PROFILE_NAME"
+    BRAVE_API_KEY = "BRAVE_API_KEY"
     GITHUB_TOKEN = "GITHUB_TOKEN"
     LANGCHAIN_API_KEY = "LANGCHAIN_API_KEY"
     LANGCHAIN_TRACING_V2 = "LANGCHAIN_TRACING_V2"
     LANGCHAIN_ENDPOINT = "LANGCHAIN_ENDPOINT"
     LANGCHAIN_PROJECT = "LANGCHAIN_PROJECT"
     LOG_LEVEL = "LOG_LEVEL"
+    SLACK_BOT_TOKEN = "SLACK_BOT_TOKEN"
+    SLACK_APP_TOKEN = "SLACK_APP_TOKEN"
+    # Optional: the Slack app id this bot is allowed to bind to. When set, the
+    # bot fails fast at startup if the SLACK_BOT_TOKEN belongs to a different app
+    # (e.g. a token accidentally shared with another bot like OmniSummary), which
+    # would otherwise cause two Socket Mode processes to fight over one app's
+    # events. Find it under Slack app settings ("App ID", starts with 'A').
+    SLACK_EXPECTED_APP_ID = "SLACK_EXPECTED_APP_ID"
+    # Optional comma-separated allowlist of Slack user ids permitted to trigger
+    # jobs. When unset, any workspace member may trigger (logged). When set, all
+    # other users get a polite refusal — basic authorization for a bot that
+    # spends Bedrock + AWS Batch budget.
+    SLACK_ALLOWED_USER_IDS = "SLACK_ALLOWED_USER_IDS"
     TOPIC_ARN = "TOPIC_ARN"
     UPSTAGE_API_KEY = "UPSTAGE_API_KEY"
 
@@ -40,10 +54,13 @@ class LanguageModelId(str, Enum):
     CLAUDE_V3_7_SONNET = "anthropic.claude-3-7-sonnet-20250219-v1:0"
     CLAUDE_V4_SONNET = "anthropic.claude-sonnet-4-20250514-v1:0"
     CLAUDE_V4_5_SONNET = "anthropic.claude-sonnet-4-5-20250929-v1:0"
+    CLAUDE_V4_6_SONNET = "anthropic.claude-sonnet-4-6"
     CLAUDE_V4_OPUS = "anthropic.claude-opus-4-20250514-v1:0"
     CLAUDE_V4_1_OPUS = "anthropic.claude-opus-4-1-20250805-v1:0"
     CLAUDE_V4_5_OPUS = "anthropic.claude-opus-4-5-20251101-v1:0"
     CLAUDE_V4_6_OPUS = "anthropic.claude-opus-4-6-v1"
+    CLAUDE_V4_7_OPUS = "anthropic.claude-opus-4-7"
+    CLAUDE_V4_8_OPUS = "anthropic.claude-opus-4-8"
     # NOTE: add new models here
 
 
@@ -78,8 +95,12 @@ class S3Paths(AutoNamedEnum):
 class SSMParams(AutoNamedEnum):
     BATCH_JOB_DEFINITION = "batch-job-definition"
     BATCH_JOB_QUEUE = "batch-job-queue"
+    GUIDE_JOB_DEFINITION = "guide-job-definition"
+    GUIDE_JOB_QUEUE = "guide-job-queue"
+    BRAVE_API_KEY = "brave-api-key"
     GITHUB_TOKEN = "github-token"
     LANGCHAIN_API_KEY = "langchain-api-key"
+    SLACK_BOT_TOKEN = "slack-bot-token"
     UPSTAGE_API_KEY = "upstage-api-key"
 
 
