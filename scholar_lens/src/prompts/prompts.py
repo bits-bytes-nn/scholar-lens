@@ -99,14 +99,24 @@ CRITICAL REQUIREMENTS:
 CITATION_KEY_RULES: str = """
 **NEVER expose citation keys** (e.g., smith2023transformer, brown2024attention) in prose.
 
-When author information is clear in citation_summaries:
-- Use proper format: "[Author et al.](url)에서 제안된"
+**Hyperlink URLs may ONLY be copied verbatim from a URL that appears in
+citation_summaries.** NEVER write a URL (arxiv.org/abs, arxiv.org/pdf, doi.org,
+…) from your own memory — your recall of arXiv IDs is unreliable and produces
+links to the WRONG paper (e.g. labelling a GPT-2 link with T5's id). If the
+referenced paper has no URL in citation_summaries, mention it as plain text with
+NO hyperlink. A wrong link is far worse than no link.
+
+When author information is clear in citation_summaries AND a URL is provided there:
+- Use proper format: "[Author et al.](url)에서 제안된" (url copied verbatim)
 - Example: "[Vaswani et al.](url)에서 제안된 Transformer 아키텍처"
 
-When author information is unclear or only citation key is available:
-- Use specific identifiers: paper title, model name, algorithm name, or method name
-- CORRECT: "[Transformer 아키텍처](url)", "[BERT 모델](url)", "[Self-Attention 메커니즘](url)"
-- INCORRECT: "[vaswani2017attention](url)", "이전 연구에서", "관련 연구에 따르면"
+When author info is unclear, only a citation key is available, or NO url is provided:
+- Use specific identifiers as PLAIN TEXT (no hyperlink): paper title, model name,
+  algorithm name, or method name
+- CORRECT (no url available): "Transformer 아키텍처", "BERT 모델"
+- CORRECT (url in citation_summaries): "[Transformer 아키텍처](url)"
+- INCORRECT: "[vaswani2017attention](url)", "이전 연구에서", "관련 연구에 따르면",
+  or any [text](url) whose url you recalled rather than copied from citation_summaries
 """
 
 EXCLUDED_CONTENT_RULES: str = """
