@@ -9,15 +9,33 @@ from lxml import etree
 
 from ..logger import logger
 
-# Matches a run of orphan closing tags at the very end of extracted content,
-# e.g. a stray "</path></name>" the model appended after the real body. These
-# leak into Markdown artifacts; legitimate trailing content is never a bare
-# closing tag, so stripping a trailing run of them is safe.
-_TRAILING_CLOSE_TAGS = re.compile(r"(?:\s*</[a-zA-Z][a-zA-Z0-9_]*>)+\s*$")
+# A trailing run of closing tags at the very end of extracted content, e.g. a
+# stray "</path></name>" the model appended after the real body. We only strip
+# these when they are ORPHANS (no matching opening tag earlier in the content),
+# so legitimate prose ending in "...defined by </response>" is preserved.
+_TRAILING_CLOSE_TAGS = re.compile(r"(?:\s*</([a-zA-Z][a-zA-Z0-9_]*)>)\s*$")
 
 
 class HTMLTagOutputParser(BaseOutputParser):
     tag_names: str | list[str]
+
+    @staticmethod
+    def _strip_orphan_close_tags(content: str) -> str:
+        """Drop trailing closing tags that have no matching opening tag.
+
+        Repeatedly removes a single trailing ``</tag>`` only when no ``<tag``
+        appears earlier in the text — i.e. it is structurally orphaned (the
+        ``</path></name>`` envelope-leak case). A closing tag that pairs with an
+        opening tag (real inline HTML the author intended) is left untouched.
+        """
+        while match := _TRAILING_CLOSE_TAGS.search(content):
+            tag = match.group(1)
+            head = content[: match.start()]
+            # If an opening tag for this name exists earlier, it's not an orphan.
+            if re.search(rf"<{re.escape(tag)}(\s|>|/)", head):
+                break
+            content = head
+        return content
 
     @staticmethod
     def _clean(content: str) -> str:
@@ -27,7 +45,7 @@ class HTMLTagOutputParser(BaseOutputParser):
         which then leak verbatim into Markdown bodies; unescape them. Also drop a
         trailing run of orphan closing tags the model sometimes appends.
         """
-        content = _TRAILING_CLOSE_TAGS.sub("", content)
+        content = HTMLTagOutputParser._strip_orphan_close_tags(content)
         return html.unescape(content).strip()
 
     def parse(self, text: str) -> str | dict[str, str]:

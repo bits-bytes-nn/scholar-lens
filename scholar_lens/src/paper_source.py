@@ -206,19 +206,24 @@ class PdfUrlSource(PaperSource):
                         f"limit (Content-Length: {declared})."
                     )
                 written = 0
+                oversized = False
                 with pdf_path.open("wb") as fh:
                     for chunk in response.iter_content(chunk_size=8192):
                         if not chunk:
                             continue
                         written += len(chunk)
                         if written > _MAX_PDF_BYTES:
-                            fh.close()
-                            pdf_path.unlink(missing_ok=True)
-                            raise PaperSourceError(
-                                f"PDF at '{self._raw_url}' exceeds the "
-                                f"{_MAX_PDF_BYTES}-byte limit."
-                            )
+                            oversized = True
+                            break
                         fh.write(chunk)
+                # Delete the partial file AFTER the handle is closed by the
+                # context manager (portable; no unlink-while-open).
+                if oversized:
+                    pdf_path.unlink(missing_ok=True)
+                    raise PaperSourceError(
+                        f"PDF at '{self._raw_url}' exceeds the "
+                        f"{_MAX_PDF_BYTES}-byte limit."
+                    )
         except requests.RequestException as e:
             raise PaperSourceError(
                 f"Failed to download PDF from '{self._raw_url}': {e}"

@@ -90,6 +90,23 @@ def test_parser_strips_trailing_orphan_tags() -> None:
     assert p.parse("<summary>real body</path></name></summary>") == "real body"
 
 
+def test_parser_keeps_trailing_closing_tag_that_is_real_prose() -> None:
+    # Regression guard: a closing-tag-like token in legitimate prose, with NO
+    # matching opening tag, must be preserved (not silently stripped). Here the
+    # content ends with an escaped </response> the author meant to show.
+    p = HTMLTagOutputParser(tag_names="guide")
+    out = p.parse("<guide>The end marker is &lt;/response&gt;</guide>")
+    assert out == "The end marker is </response>"
+
+
+def test_parser_keeps_paired_trailing_close_tag() -> None:
+    # A closing tag that pairs with an earlier opening tag is intentional inline
+    # HTML and must be kept.
+    p = HTMLTagOutputParser(tag_names="guide")
+    out = p.parse("<guide>see &lt;kbd&gt;Enter&lt;/kbd&gt;</guide>")
+    assert out == "see <kbd>Enter</kbd>"
+
+
 def test_parser_keeps_inline_markup_but_unescapes() -> None:
     p = HTMLTagOutputParser(tag_names="guide")
     # A markdown table header with an escaped ampersand must come back literal.

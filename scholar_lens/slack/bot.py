@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import threading
 
 import boto3
 
@@ -44,24 +45,27 @@ class _SeenEvents:
     """Bounded set for de-duplicating at-least-once Slack event deliveries.
 
     Slack may redeliver the same event (same ``event_id``/``client_msg_id``);
-    without this a single mention could launch duplicate Batch jobs. Kept small
-    and in-process — sufficient for a single Socket Mode worker.
+    without this a single mention could launch duplicate Batch jobs. Bolt's
+    SocketModeHandler dispatches sync handlers on a thread pool, so the
+    check-insert-evict must be atomic — guarded by a lock.
     """
 
     def __init__(self, capacity: int = 512) -> None:
         self._capacity = capacity
         self._seen: dict[str, None] = {}
+        self._lock = threading.Lock()
 
     def seen(self, key: str | None) -> bool:
         if not key:
             return False
-        if key in self._seen:
-            return True
-        self._seen[key] = None
-        if len(self._seen) > self._capacity:
-            # Drop oldest insertion (dicts preserve insertion order).
-            self._seen.pop(next(iter(self._seen)))
-        return False
+        with self._lock:
+            if key in self._seen:
+                return True
+            self._seen[key] = None
+            if len(self._seen) > self._capacity:
+                # Drop oldest insertion (dicts preserve insertion order).
+                self._seen.pop(next(iter(self._seen)))
+            return False
 
 
 class PaperBot:

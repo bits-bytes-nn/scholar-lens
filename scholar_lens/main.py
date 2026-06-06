@@ -104,13 +104,17 @@ def main(
             context.default_boto_session, config.resources.s3_bucket_name
         )
 
-    paper_source = resolve_paper_source(source)
     artifact_label = "summary" if mode == Mode.SUMMARIZE else "review"
 
+    # Resolve INSIDE the try so a construction failure (e.g. SSRF rejection of a
+    # bad URL in PdfUrlSource.__init__) still reports back via SNS/Slack instead
+    # of vanishing. paper_source may be None in finally — guard every access.
+    paper_source: PaperSource | None = None
     s3_url: str | None = None
     success = False
     error_message: str | None = None
     try:
+        paper_source = resolve_paper_source(source)
         s3_url = asyncio.run(
             _run_pipeline(context, paper_source, repo_urls, parse_pdf, mode)
         )
@@ -120,13 +124,15 @@ def main(
         logger.error("Failed to process paper '%s': %s", source, e, exc_info=True)
         raise
     finally:
+        # Fall back to the raw input for notifications when resolution failed.
+        notify_title = paper_source.source_id if paper_source is not None else source
         topic_arn = os.getenv(EnvVars.TOPIC_ARN.value)
         if is_running_in_aws() and topic_arn:
             _send_sns_notification(
                 context.default_boto_session,
                 topic_arn,
                 success,
-                paper_source.source_id,
+                notify_title,
                 repo_urls,
                 parse_pdf,
                 s3_url,
@@ -137,11 +143,12 @@ def main(
             thread_ts=slack_thread_ts,
             success=success,
             artifact_label=artifact_label,
-            title=paper_source.source_id,
+            title=notify_title,
             s3_url=s3_url,
             error=error_message,
         )
-        paper_source.close()
+        if paper_source is not None:
+            paper_source.close()
 
 
 async def _run_pipeline(
