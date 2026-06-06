@@ -141,6 +141,13 @@ FORBIDDEN modifications:
 - Changing / to \\ or vice versa
 - Adding/removing file extensions
 - ANY character-level changes
+
+**NEVER invent or guess an image URL.** Only insert an image whose EXACT path
+appears in the provided figures/analysis. In particular, NEVER use a paper
+landing/HTML page (e.g. `https://arxiv.org/html/2106.09685`) or an `/abs/` URL
+as an image `src` — those are web pages, not images, and render as broken
+images. If no real figure asset exists for a point, describe it in prose instead
+of inserting a fabricated image link.
 """
 
 VISUAL_DUPLICATION_RULES: str = """
