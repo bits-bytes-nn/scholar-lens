@@ -26,6 +26,10 @@ class Attributes(BaseModel):
     affiliation: str = Field(min_length=1)
     category: str = Field(min_length=1)
     keywords: list[str] = Field(default_factory=list)
+    # Title/authors parsed from the PDF text — used to fill metadata for sources
+    # (e.g. arbitrary PDF URLs) that don't carry it. "N/A"/empty means unknown.
+    title: str | None = Field(default=None)
+    authors: list[str] = Field(default_factory=list)
 
 
 class Citation(BaseModel):
@@ -244,10 +248,23 @@ class ContentExtractor(RetryableBase):
         ]
         await self._update_keywords(extracted_keywords)
 
+        def _clean_na(value: str) -> str:
+            v = value.strip()
+            return "" if v.upper() == "N/A" else v
+
+        title = _clean_na(result.get("title", "")) or None
+        authors = [
+            a.strip()
+            for a in _clean_na(result.get("authors", "")).split(",")
+            if a.strip()
+        ]
+
         return Attributes(
             affiliation=result.get("affiliation", "N/A"),
             category=result.get("category", "N/A"),
             keywords=extracted_keywords,
+            title=title,
+            authors=authors,
         )
 
     async def _update_keywords(self, new_keywords: list[str]) -> None:

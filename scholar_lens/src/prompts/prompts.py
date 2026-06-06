@@ -119,6 +119,12 @@ ABSOLUTELY EXCLUDE (non-technical administrative content):
 - References/Bibliography sections (the list itself, not in-text citations)
 
 These sections have ZERO technical value and must be completely ignored.
+
+**Silently** omit them: do NOT announce, describe, or comment on the exclusion.
+If the current content to explain is one of these administrative sections (e.g.
+a References list), output NOTHING for it — never write meta-text such as "이
+부분은 참고문헌 목록이라 분석을 생략합니다" or "이 섹션은 행정적 정보입니다". The
+reader must never see that a section was skipped.
 """
 
 IMAGE_PATH_RULES: str = """
@@ -248,11 +254,17 @@ class BasePrompt(ABC):
 
 class AttributesExtractionPrompt(BasePrompt):
     input_variables: list[str] = ["text", "existing_keywords"]
-    output_variables: list[str] = ["affiliation", "category", "keywords"]
+    output_variables: list[str] = [
+        "title",
+        "authors",
+        "affiliation",
+        "category",
+        "keywords",
+    ]
 
     system_prompt_template: str = """
     You are a specialized metadata extraction system for AI/ML research papers. Your task is to accurately identify and
-    extract three specific types of information: institutional affiliations, research categories, and technical keywords
+    extract the paper's title and authors plus institutional affiliation, research category, and technical keywords
     representing novel contributions.
     """
 
@@ -268,6 +280,11 @@ class AttributesExtractionPrompt(BasePrompt):
     </existing_keywords>
 
     EXTRACTION REQUIREMENTS:
+
+    0. TITLE & AUTHORS (from the paper's header / first page):
+       - TITLE: the paper's exact title as printed. If it genuinely cannot be found, output "N/A".
+       - AUTHORS: the author names in order, comma-separated (e.g. "Edward J. Hu, Yelong Shen, Phillip Wallis").
+         Names only — no affiliations, superscripts, or emails. If none can be found, output "N/A".
 
     1. KEYWORDS EXTRACTION (Maximum 10 items):
        - FIRST PRIORITY: Reuse existing keywords EXACTLY as written when they match the paper's content
@@ -299,6 +316,14 @@ class AttributesExtractionPrompt(BasePrompt):
        - Other
 
     OUTPUT FORMAT (Follow exactly):
+    <title>
+    [The paper's exact title, or "N/A"]
+    </title>
+
+    <authors>
+    [Comma-separated author names in order, or "N/A"]
+    </authors>
+
     <affiliation>
     [First author's primary institution with department/lab if notable]
     </affiliation>

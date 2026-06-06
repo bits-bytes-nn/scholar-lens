@@ -36,6 +36,18 @@ class TestBuildFrontMatter:
         out = _build_front_matter(Github(), self._paper(), "Paper Reviews")
         assert "&amp;" not in out
 
+    def test_author_is_paper_author_not_affiliation(self) -> None:
+        # Regression: front matter must use the real author ("Ada"), never the
+        # affiliation ("ACME") as the author.
+        out = _build_front_matter(Github(), self._paper(), "Paper Reviews")
+        assert 'author: "Ada"' in out
+        assert "ACME" not in out
+
+    def test_author_falls_back_to_affiliation_when_no_authors(self) -> None:
+        paper = self._paper().model_copy(update={"authors": ["Unknown"]})
+        out = _build_front_matter(Github(), paper, "Paper Reviews")
+        assert 'author: "ACME"' in out
+
     def test_date_is_today(self) -> None:
         out = _build_front_matter(Github(), self._paper(), "Paper Reviews")
         today = datetime.now().strftime("%Y-%m-%d")

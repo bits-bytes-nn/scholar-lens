@@ -20,6 +20,7 @@ from scholar_lens.configs import Github as GithubConfig
 from scholar_lens.slack.notifier import post_slack_result
 from scholar_lens.src import (
     AppConstants,
+    Attributes,
     CitationSummarizer,
     CodeRetriever,
     Content,
@@ -377,8 +378,13 @@ async def _prepare_paper_data(
         prefer_full_text=context.config.citations.prefer_full_text,
     )
     converted_repo_urls = [HttpUrl(url) for url in repo_urls] if repo_urls else []
+    # Sources without real bibliographic metadata (e.g. an arbitrary PDF URL)
+    # yield a placeholder title ("Pdf") and ["Unknown"] authors. Backfill those
+    # from the title/authors the attribute extractor parsed out of the PDF text.
+    meta_fields = metadata.model_dump()
+    meta_fields = _backfill_metadata(meta_fields, attributes)
     paper = Paper(
-        **metadata.model_dump(),
+        **meta_fields,
         content=content,
         attributes=attributes,
         citations=citations,
@@ -580,6 +586,26 @@ use_math: true
         tags=keywords_str,
         cover_image=cover_image,
     )
+
+
+def _backfill_metadata(
+    meta_fields: dict[str, Any], attributes: Attributes
+) -> dict[str, Any]:
+    """Fill placeholder title/authors from PDF-parsed attributes.
+
+    Source metadata from a bare PDF URL has no real title/authors (title is a
+    URL-stem fallback like "Pdf"; authors are ``["Unknown"]``). When the
+    extractor recovered them from the document text, prefer those.
+    """
+    title = str(meta_fields.get("title", "")).strip()
+    if attributes.title and (not title or title.lower() in {"pdf", "untitled"}):
+        meta_fields["title"] = attributes.title
+    authors = [
+        a for a in (meta_fields.get("authors") or []) if a and a.lower() != "unknown"
+    ]
+    if not authors and attributes.authors:
+        meta_fields["authors"] = attributes.authors
+    return meta_fields
 
 
 def _format_authors(authors: list[str]) -> str:
