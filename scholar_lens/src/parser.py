@@ -31,6 +31,12 @@ DEFAULT_RESIZE_QUALITY: int = 85
 DEFAULT_TIMEOUT: int = 60
 MAX_IMAGE_SIZE_BYTES: int = 5242880
 MIN_FIGURE_AREA: float = 10000.0
+# Resize fallback loop tuning: once JPEG quality bottoms out, shrink dimensions
+# by RESIZE_SCALE_FACTOR per pass and give up below MIN_RESIZE_DIMENSION px.
+MIN_RESIZE_QUALITY: int = 10
+RESIZE_QUALITY_STEP: int = 10
+RESIZE_SCALE_FACTOR: float = 0.8
+MIN_RESIZE_DIMENSION: int = 100
 
 
 class ParserError(Exception):
@@ -148,17 +154,20 @@ class Figure(BaseModel, RetryableBase):
                     )
                     return resized_bytes
 
-                if quality <= 10:
-                    new_width = int(img.width * 0.8)
-                    new_height = int(img.height * 0.8)
-                    if new_width < 100 or new_height < 100:
+                if quality <= MIN_RESIZE_QUALITY:
+                    new_width = int(img.width * RESIZE_SCALE_FACTOR)
+                    new_height = int(img.height * RESIZE_SCALE_FACTOR)
+                    if (
+                        new_width < MIN_RESIZE_DIMENSION
+                        or new_height < MIN_RESIZE_DIMENSION
+                    ):
                         raise FigureParseError(
                             "Cannot resize image below 5MB limit even at minimum size"
                         )
                     img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
                     quality = DEFAULT_RESIZE_QUALITY
                 else:
-                    quality -= 10
+                    quality -= RESIZE_QUALITY_STEP
 
                 iteration += 1
 

@@ -16,6 +16,9 @@ from .rate_limiter import RateLimiter
 _ARXIV_FETCH_MAX_ATTEMPTS: int = 4
 _ARXIV_FETCH_INITIAL_WAIT: int = 5
 _ARXIV_FETCH_MAX_WAIT: int = 60
+# Fallback penalty when a 429 carries no Retry-After header (arXiv usually omits
+# it). Named so the assumption is visible alongside the other retry constants.
+_ARXIV_429_FALLBACK_RETRY_SECONDS: float = 30.0
 
 # A single process-wide limiter shared by ALL ArxivHandler instances, so the
 # concurrent citation stage cannot fan out into an arXiv 429 storm. arXiv asks
@@ -35,7 +38,7 @@ def _retry_after_seconds(error: Exception) -> float:
             return 0.0
     # arXiv 429s rarely include Retry-After; apply a conservative default.
     if "429" in str(error):
-        return 30.0
+        return _ARXIV_429_FALLBACK_RETRY_SECONDS
     return 0.0
 
 

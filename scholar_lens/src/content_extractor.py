@@ -19,6 +19,8 @@ from .utils import (
     HTMLTagOutputParser,
     RetryableBase,
     create_robust_xml_output_parser,
+    is_affirmative,
+    is_placeholder,
 )
 
 
@@ -196,7 +198,7 @@ class ContentExtractor(RetryableBase):
                 break
 
             citations.extend(unique_new_citations)
-            if result.get("has_more", "n").strip().lower() != "y":
+            if not is_affirmative(result.get("has_more")):
                 break
 
             existing_citations_str = "\n".join(repr(c) for c in citations)
@@ -249,8 +251,7 @@ class ContentExtractor(RetryableBase):
         await self._update_keywords(extracted_keywords)
 
         def _clean_na(value: str) -> str:
-            v = value.strip()
-            return "" if v.upper() == "N/A" else v
+            return "" if is_placeholder(value) else value.strip()
 
         title = _clean_na(result.get("title", "")) or None
         authors = [

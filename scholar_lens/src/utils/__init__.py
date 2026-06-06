@@ -8,7 +8,13 @@ from .factories import (
     BedrockLanguageModelFactory,
 )
 from .graph import plot_langchain_graph
-from .helpers import arg_as_bool, extract_text_from_html, measure_execution_time
+from .helpers import (
+    arg_as_bool,
+    extract_text_from_html,
+    is_affirmative,
+    is_placeholder,
+    measure_execution_time,
+)
 from .models import (
     _EMBEDDING_MODEL_INFO,
     _LANGUAGE_MODEL_INFO,
@@ -34,6 +40,8 @@ __all__ = [
     "BatchProcessor",
     "arg_as_bool",
     "extract_text_from_html",
+    "is_affirmative",
+    "is_placeholder",
     "measure_execution_time",
     "plot_langchain_graph",
     "create_robust_xml_output_parser",

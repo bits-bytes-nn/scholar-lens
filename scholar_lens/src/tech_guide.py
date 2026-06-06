@@ -33,6 +33,8 @@ from .utils import (
     BedrockLanguageModelFactory,
     HTMLTagOutputParser,
     RetryableBase,
+    is_affirmative,
+    is_placeholder,
     measure_execution_time,
 )
 from .web_research import ResearchCorpus, WebResearcher
@@ -165,14 +167,14 @@ class TechGuideGenerator(RetryableBase):
     async def _assert_relevant(self, corpus: ResearchCorpus) -> str:
         sources = self._sources_digest(corpus)
         result = await self.relevance_chain.ainvoke({"sources": sources})
-        is_relevant = result.get("is_relevant", "no").strip().lower().startswith("y")
+        is_relevant = is_affirmative(result.get("is_relevant"))
         reason = result.get("reason", "").strip()
         if not is_relevant:
             raise NotTechnicalContentError(
                 f"Supplied URLs are not technical documentation: {reason}"
             )
         topic = result.get("topic", "").strip()
-        if not topic or topic.upper() == "N/A":
+        if is_placeholder(topic):
             raise NotTechnicalContentError(
                 "Could not determine a technical topic from the sources."
             )

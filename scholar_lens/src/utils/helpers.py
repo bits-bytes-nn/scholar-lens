@@ -25,6 +25,26 @@ def arg_as_bool(value: Any) -> bool:
     raise argparse.ArgumentTypeError("Boolean value expected")
 
 
+_AFFIRMATIVE = frozenset({"y", "yes", "yeah", "yep", "true", "t", "1"})
+_PLACEHOLDER = frozenset(
+    {"n/a", "na", "none", "null", "unknown", "unnamed", "anonymous", "not available"}
+)
+
+
+def is_affirmative(value: str | None) -> bool:
+    """Whether an LLM yes/no field means "yes".
+
+    Tolerant of the common ways a model says yes ("y", "yes", "true", …) instead
+    of brittle equality with a single character. Anything else (incl. None) is no.
+    """
+    return value is not None and value.strip().lower() in _AFFIRMATIVE
+
+
+def is_placeholder(value: str | None) -> bool:
+    """Whether a value is a missing/placeholder marker (N/A, Unknown, None…)."""
+    return not value or value.strip().lower() in _PLACEHOLDER
+
+
 def extract_text_from_html(html_content: str) -> str:
     if not html_content:
         return ""

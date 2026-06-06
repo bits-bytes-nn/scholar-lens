@@ -61,6 +61,7 @@ class BaseBedrockWrapper:
 
 class BaseBedrockModelFactory(Generic[ModelIdT, ModelInfoT, WrapperT], ABC):
     BOTO_READ_TIMEOUT: ClassVar[int] = 300
+    BOTO_CONNECT_TIMEOUT: ClassVar[int] = 60
     BOTO_MAX_ATTEMPTS: ClassVar[int] = 3
     MAX_POOL_CONNECTIONS: ClassVar[int] = 50
 
@@ -74,7 +75,7 @@ class BaseBedrockModelFactory(Generic[ModelIdT, ModelInfoT, WrapperT], ABC):
         self.region_name = region_name or self.boto_session.region_name
         boto_config = BotoConfig(
             read_timeout=self.BOTO_READ_TIMEOUT,
-            connect_timeout=60,
+            connect_timeout=self.BOTO_CONNECT_TIMEOUT,
             retries={"max_attempts": self.BOTO_MAX_ATTEMPTS, "mode": "adaptive"},
             max_pool_connections=self.MAX_POOL_CONNECTIONS,
         )
@@ -161,14 +162,20 @@ class BedrockCrossRegionModelHelper:
         bedrock_client: Any, cross_region_id: str
     ) -> bool:
         try:
-            response = bedrock_client.list_inference_profiles(
-                maxResults=1000, typeEquals="SYSTEM_DEFINED"
-            )
-            available_profiles = {
-                profile["inferenceProfileId"]
-                for profile in response.get("inferenceProfileSummaries", [])
-            }
-            return cross_region_id in available_profiles
+            # Paginate: a single maxResults page can silently truncate the
+            # catalog (and miss the profile we're checking) as AWS adds models.
+            next_token: str | None = None
+            while True:
+                kwargs: dict[str, Any] = {"typeEquals": "SYSTEM_DEFINED"}
+                if next_token:
+                    kwargs["nextToken"] = next_token
+                response = bedrock_client.list_inference_profiles(**kwargs)
+                for profile in response.get("inferenceProfileSummaries", []):
+                    if profile["inferenceProfileId"] == cross_region_id:
+                        return True
+                next_token = response.get("nextToken")
+                if not next_token:
+                    return False
         except Exception as e:
             raise RuntimeError(
                 f"Failed to check cross-region model availability: {e}"

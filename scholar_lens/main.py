@@ -47,6 +47,7 @@ from scholar_lens.src import (
     TokenUsageTracker,
     arg_as_bool,
     get_ssm_param_value,
+    is_placeholder,
     is_running_in_aws,
     logger,
     plot_langchain_graph,
@@ -600,9 +601,7 @@ def _backfill_metadata(
     title = str(meta_fields.get("title", "")).strip()
     if attributes.title and (not title or title.lower() in {"pdf", "untitled"}):
         meta_fields["title"] = attributes.title
-    authors = [
-        a for a in (meta_fields.get("authors") or []) if a and a.lower() != "unknown"
-    ]
+    authors = [a for a in (meta_fields.get("authors") or []) if not is_placeholder(a)]
     if not authors and attributes.authors:
         meta_fields["authors"] = attributes.authors
     return meta_fields
@@ -614,7 +613,7 @@ def _format_authors(authors: list[str]) -> str:
     Filters out junk placeholders ("Unknown") that the PDF-URL path emits when
     no real author metadata is available.
     """
-    names = [a.strip() for a in authors if a.strip() and a.strip().lower() != "unknown"]
+    names = [a.strip() for a in authors if not is_placeholder(a)]
     if not names:
         return ""
     if len(names) == 1:

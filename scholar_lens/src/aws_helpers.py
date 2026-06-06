@@ -8,6 +8,12 @@ from botocore.exceptions import ClientError
 
 from .logger import logger
 
+# Batch poll defaults. The timeout matches the longest job-definition timeout in
+# the CDK stack (3h) so the waiter does not abandon a job the platform would
+# still run; the poll interval trades latency for describe_jobs API volume.
+DEFAULT_BATCH_TIMEOUT_SECONDS = 3 * 60 * 60
+DEFAULT_BATCH_POLL_INTERVAL_SECONDS = 30
+
 
 class AWSHandlerError(Exception):
     pass
@@ -179,8 +185,8 @@ def submit_batch_job(
 def wait_for_batch_job_completion(
     boto_session: boto3.Session,
     job_id: str,
-    timeout_seconds: int = 3600,
-    poll_interval_seconds: int = 30,
+    timeout_seconds: int = DEFAULT_BATCH_TIMEOUT_SECONDS,
+    poll_interval_seconds: int = DEFAULT_BATCH_POLL_INTERVAL_SECONDS,
 ):
     batch_client = boto_session.client("batch")
     start_time = time.monotonic()

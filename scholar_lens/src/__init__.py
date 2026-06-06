@@ -45,7 +45,13 @@ from .publisher import Publisher, PublishRequest
 from .rate_limiter import RateLimiter
 from .summarizer import PaperSummarizer
 from .tech_guide import NotTechnicalContentError, TechGuide, TechGuideGenerator
-from .utils import arg_as_bool, create_robust_xml_output_parser, plot_langchain_graph
+from .utils import (
+    arg_as_bool,
+    create_robust_xml_output_parser,
+    is_affirmative,
+    is_placeholder,
+    plot_langchain_graph,
+)
 from .web_research import (
     BraveSearchProvider,
     NullSearchProvider,
@@ -103,6 +109,8 @@ __all__ = [
     "WebSearchProvider",
     "arg_as_bool",
     "create_robust_xml_output_parser",
+    "is_affirmative",
+    "is_placeholder",
     "get_account_id",
     "get_ssm_param_value",
     "logger",

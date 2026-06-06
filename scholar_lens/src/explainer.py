@@ -32,6 +32,7 @@ from .utils import (
     HTMLTagOutputParser,
     RetryableBase,
     create_robust_xml_output_parser,
+    is_affirmative,
     measure_execution_time,
 )
 
@@ -433,9 +434,7 @@ class ExplainerGraph(RetryableBase):
             result.get("reference_identifiers", "")
         )
         logger.debug("Reference identifiers: '%s'", reference_identifiers)
-        should_search_code = (
-            result.get("should_search_code", "n").strip().lower() == "y"
-        )
+        should_search_code = is_affirmative(result.get("should_search_code"))
         logger.debug("Should search code: '%s'", should_search_code)
 
         citation_summaries = None
@@ -580,7 +579,7 @@ class ExplainerGraph(RetryableBase):
             if explanation_chunk := result.get("explanation", "").strip():
                 final_explanation_for_paragraph += explanation_chunk + "\n"
 
-            if not result.get("has_more", "n").strip().lower() == "y":
+            if not is_affirmative(result.get("has_more")):
                 break
             if continuation == self.max_continuations - 1:
                 logger.warning(

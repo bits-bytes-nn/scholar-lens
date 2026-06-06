@@ -180,20 +180,26 @@ INCORRECT:
 ![표 1: 성능 비교](https://arxiv.org/html/2401.12345v1#S1.T1)
 """
 
-KOREAN_STYLE_RULES: str = """
-- Use natural, flowing Korean in "입니다" style throughout
-- Maintain professional, academic tone while being accessible
-- AVOID first-person pronouns like "우리" or "저"
-  * Instead of "우리는 이 방법을 적용했습니다" → "이 방법이 적용되었습니다"
-  * Instead of "우리의 실험에서" → "실험 결과에서"
-- Never use explicit section numbering references in prose
-  * INCORRECT: "3.2절에서", "2장에서 설명한"
-  * CORRECT: "앞서 설명한 개념", "이전에 소개된 방법론"
-- Translate technical terms to Korean whenever possible; keep English only when translation is unclear or for proper
-nouns (e.g., BERT, GPT)
-  * CORRECT: "손실 함수", "경사 하강법", "사전 학습", "역전파"
-  * INCORRECT: "loss 함수", "gradient 하강", "pre-training"
+# Output-style rules. Written language-agnostically so they hold for ANY target
+# output language; the Korean specifics are explicitly scoped to "when the output
+# language is Korean" so non-Korean runs are not given conflicting guidance.
+STYLE_RULES: str = """
+- Write in natural, flowing prose in the target output language, in a
+  professional yet accessible academic tone.
+- Prefer impersonal phrasing; avoid first-person pronouns (e.g. "we"/"우리").
+  * "We applied this method" → "This method was applied"
+- Never use explicit section-number references in prose.
+  * INCORRECT: "in Section 3.2", "as described in Chapter 2"
+  * CORRECT: "as described earlier", "the method introduced above"
+- Use the target language's established technical vocabulary; keep English only
+  for proper nouns or terms with no clear translation (e.g. BERT, GPT).
+- WHEN THE OUTPUT LANGUAGE IS KOREAN: use the "입니다" style; avoid "우리"/"저";
+  prefer translated terms ("손실 함수", "경사 하강법", "사전 학습", "역전파") and
+  keep English only when a translation is unclear or for proper nouns.
 """
+
+# Backwards-compatible alias (older references / tests may import this name).
+KOREAN_STYLE_RULES = STYLE_RULES
 
 
 @dataclass(frozen=True)
