@@ -24,11 +24,21 @@ WrapperT = TypeVar("WrapperT")
 
 class BaseBedrockWrapper:
     buffer_tokens: int = Field(default=128, ge=0)
-    _tokenizer: Encoding = PrivateAttr()
+    _tokenizer: Encoding | None = PrivateAttr(default=None)
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
-        self._tokenizer = get_encoding("cl100k_base")
+        # The tokenizer is loaded lazily: get_encoding("cl100k_base") downloads
+        # the BPE vocab from the network on a cold cache, so doing it at
+        # construction would make every wrapper instantiation hit the network
+        # (breaking offline/test/Batch environments). Load on first real use.
+        self._tokenizer = None
+
+    @property
+    def tokenizer(self) -> Encoding:
+        if self._tokenizer is None:
+            self._tokenizer = get_encoding("cl100k_base")
+        return self._tokenizer
 
     def _truncate_text(
         self, text: str, max_chars: int | None, max_tokens: int | None, text_type: str
@@ -36,18 +46,21 @@ class BaseBedrockWrapper:
         if not max_chars and not max_tokens:
             return text
 
-        token_ids = self._tokenizer.encode(text, allowed_special="all")
         final_text = text
         truncated = False
 
-        if max_tokens and len(token_ids) > max_tokens:
-            effective_tokens = max_tokens - self.buffer_tokens
-            truncated_token_ids = token_ids[:effective_tokens]
-            final_text = self._tokenizer.decode(truncated_token_ids)
-            logger.warning(
-                f"{text_type.capitalize()} token count ({len(token_ids)}) exceeds maximum ({max_tokens}). Truncating."
-            )
-            truncated = True
+        # Only tokenize when a token limit is actually requested — a char-only
+        # truncation must not pull in the tokenizer (and its network download).
+        if max_tokens:
+            token_ids = self.tokenizer.encode(text, allowed_special="all")
+            if len(token_ids) > max_tokens:
+                effective_tokens = max_tokens - self.buffer_tokens
+                truncated_token_ids = token_ids[:effective_tokens]
+                final_text = self.tokenizer.decode(truncated_token_ids)
+                logger.warning(
+                    f"{text_type.capitalize()} token count ({len(token_ids)}) exceeds maximum ({max_tokens}). Truncating."
+                )
+                truncated = True
 
         if max_chars and len(text) > max_chars:
             if not truncated or len(text[:max_chars]) < len(final_text):

@@ -291,6 +291,17 @@ class TestBaseBedrockWrapperTruncation:
         # truncation path raises TypeError on ``max_tokens - self.buffer_tokens``.
         # See scholar_lens/src/utils/factories.py:44.
         wrapper = BaseBedrockWrapper()
+        # Inject a fake tokenizer so the token path is reached without
+        # downloading the real BPE vocab (network-free / CI-safe).
+
+        class _FakeTok:
+            def encode(self, text: str, allowed_special: str = "all") -> list[int]:
+                return list(range(len(text.split())))
+
+            def decode(self, ids: list[int]) -> str:
+                return "x"
+
+        wrapper._tokenizer = _FakeTok()  # type: ignore[assignment]
         long_text = "word " * 100
         with pytest.raises(TypeError):
             wrapper._truncate_text(
