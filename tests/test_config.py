@@ -39,6 +39,15 @@ class TestConfigValidation:
         )
         assert e.max_total_tokens is None
 
+    def test_category_labels_default_and_override(self) -> None:
+        assert Github().review_category == "Paper Reviews"
+        assert Github().summary_category == "Paper Summaries"
+        assert Github().tech_guide_category == "Tech Guides"
+        # A blog whose summary tab reads site.categories['Summaries'] can align.
+        gh = Github(summary_category="Summaries", tech_guide_category="Guides")
+        assert gh.summary_category == "Summaries"
+        assert gh.tech_guide_category == "Guides"
+
 
 class TestGithubCoverImages:
     def test_known_category_maps_to_configured_image(self) -> None:

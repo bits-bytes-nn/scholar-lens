@@ -242,11 +242,12 @@ use_math: true
 ---
 """
     cover_image = github_config.cover_image_for("tech-guides")
+    category = github_config.tech_guide_category.replace('"', '\\"')
     front_matter = front_matter_template.format(
         title=guide.topic.replace('"', '\\"'),
         date=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         author=github_config.author_name,
-        categories='"Tech Guides"',
+        categories=f'"{category}"',
         tags="",
         cover_image=cover_image,
     )

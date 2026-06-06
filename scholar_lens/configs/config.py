@@ -30,6 +30,14 @@ class Github(BaseModel):
         "image filename under the blog's assets/images directory.",
     )
     default_cover_image: str = Field(default="default.jpg")
+    # Primary (lead) category label written to each artifact's front matter, by
+    # artifact type. These are the values a blog's category tabs filter on, so
+    # they are configurable to match the target blog without code changes.
+    # Defaults are generic; override per-blog (e.g. to align with a Jekyll site's
+    # category pages).
+    review_category: str = Field(default="Paper Reviews")
+    summary_category: str = Field(default="Paper Summaries")
+    tech_guide_category: str = Field(default="Tech Guides")
     # Whether figures uploaded to S3 are world-readable. Default False (private):
     # blog images are served from the GitHub Pages repo, so public S3 ACLs are
     # an unnecessary exposure (and are rejected by buckets with Block Public

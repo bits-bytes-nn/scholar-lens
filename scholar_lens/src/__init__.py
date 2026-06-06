@@ -26,6 +26,7 @@ from .constants import (
 from .content_extractor import Attributes, Citation, ContentExtractor
 from .explainer import ExplainerGraph, Paper
 from .logger import is_running_in_aws, logger
+from .markdown_math import normalize_math_underscores
 from .metrics import (
     MetricsEmitter,
     TokenBudgetExceeded,
@@ -76,6 +77,7 @@ __all__ = [
     "NoPythonFilesError",
     "NotAPdfError",
     "NotTechnicalContentError",
+    "normalize_math_underscores",
     "NullSearchProvider",
     "Paper",
     "PaperSource",

@@ -16,6 +16,13 @@ resources:
     branch_prefix: paper-reviews
     author_name: Scholar Lens Bot
     author_email:
+    # Primary category label per artifact type — the value a blog's category
+    # tabs filter on. Override to match your blog (e.g. a Jekyll site whose
+    # summary tab reads site.categories['Summaries'] would set summary_category
+    # to "Summaries"). Defaults below are the generic labels.
+    review_category: Paper Reviews
+    summary_category: Paper Summaries
+    tech_guide_category: Tech Guides
     # Cover image filename (under the blog's assets/images dir) used when no
     # category-specific entry matches. Category slugs are lowercase, hyphenated.
     default_cover_image: default.jpg

@@ -27,6 +27,7 @@ from github import Auth, Github, GithubException
 from .aws_helpers import S3Handler
 from .constants import EnvVars, LocalPaths, S3Paths
 from .logger import logger
+from .markdown_math import normalize_math_underscores
 
 if TYPE_CHECKING:
     from ..configs import Github as GithubConfig
@@ -79,6 +80,9 @@ class Publisher:
         """Save + upload the artifact; return (s3_url, local_markdown_path)."""
         file_name = f"{datetime.now().strftime('%Y-%m-%d')}-{slugify(request.title)}"
         markdown = request.markdown
+        # Escape underscores inside math so kramdown(GFM) doesn't eat subscripts
+        # before MathJax renders (a recurring blog-rendering issue).
+        markdown = normalize_math_underscores(markdown)
         if request.rewrite_local_images:
             markdown = self._rewrite_local_images(markdown, file_name)
 

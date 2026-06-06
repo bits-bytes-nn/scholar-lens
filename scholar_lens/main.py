@@ -627,7 +627,9 @@ def _format_authors(authors: list[str]) -> str:
 def _format_explanation(
     github_config: GithubConfig, paper: Paper, explanation: str, key_takeaways: str
 ) -> str:
-    front_matter = _build_front_matter(github_config, paper, "Paper Reviews")
+    front_matter = _build_front_matter(
+        github_config, paper, github_config.review_category
+    )
     body = f"### TL;DR\n{key_takeaways}\n- - -\n{explanation}"
     references = f"\n- - -\n### References\n* [{paper.title}]({paper.pdf_url})"
     return f"{front_matter}{body}{references}"
@@ -637,7 +639,9 @@ def _format_summary(
     github_config: GithubConfig, paper: Paper, result: dict[str, str]
 ) -> str:
     """Render a summary post: front matter + Markdown summary + extracted URLs."""
-    front_matter = _build_front_matter(github_config, paper, "Paper Summaries")
+    front_matter = _build_front_matter(
+        github_config, paper, github_config.summary_category
+    )
     body = result["summary"]
     references_lines = [f"* [{paper.title}]({paper.pdf_url})"]
     if urls := result.get("urls", "").strip():
