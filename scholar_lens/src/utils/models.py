@@ -155,6 +155,14 @@ _LANGUAGE_MODEL_INFO: dict[LanguageModelId, LanguageModelInfo] = {
         supports_thinking=True,
         supports_1m_context_window=True,
     ),
+    LanguageModelId.CLAUDE_V4_7_OPUS: LanguageModelInfo(
+        context_window_size=200000,
+        max_output_tokens=64000,
+        supports_prompt_caching=True,
+        supports_thinking=True,
+        uses_adaptive_thinking=True,
+        supports_1m_context_window=True,
+    ),
     LanguageModelId.CLAUDE_V4_8_OPUS: LanguageModelInfo(
         context_window_size=200000,
         max_output_tokens=64000,
