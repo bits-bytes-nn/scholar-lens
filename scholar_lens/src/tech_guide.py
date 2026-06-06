@@ -39,7 +39,10 @@ from .web_research import ResearchCorpus, WebResearcher
 
 DEFAULT_LANGUAGE: str = "Korean"
 _SOURCE_CHAR_BUDGET: int = 120_000
-_MAX_SECTIONS: int = 12
+# Upper bound on guide sections. The synopsis is told this budget so it plans a
+# self-contained guide rather than over-proposing (which left the old vLLM guide
+# promising chapters 13-26 that were never written).
+_MAX_SECTIONS: int = 16
 
 
 class NotTechnicalContentError(Exception):
@@ -182,6 +185,7 @@ class TechGuideGenerator(RetryableBase):
                 "topic": topic,
                 "sources": corpus.combined_text(_SOURCE_CHAR_BUDGET),
                 "search_results": self._search_digest(corpus),
+                "max_sections": self.max_sections,
                 "language": self.language,
             }
         )

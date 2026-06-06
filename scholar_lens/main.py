@@ -561,17 +561,41 @@ use_math: true
     cover_image = github_config.cover_image_for(category)
     categories_str = f'"{primary_category}", "{category_str}"'
 
+    # Prefer the paper's real authors ("Vaswani et al."); fall back to the
+    # extracted affiliation only when no author list is available (e.g. a
+    # non-arXiv PDF whose metadata yielded none). Using affiliation AS the author
+    # (the old behaviour) wrongly printed "Microsoft Corporation" as the author.
+    author = _format_authors(paper.authors) or html.unescape(
+        paper.attributes.affiliation
+    )
+
     return front_matter_template.format(
         title=paper.title.replace('"', '\\"'),
         # The post's own publication date is "now"; the paper's original date is
         # surfaced separately so the blog doesn't sort the post years into the past.
         date=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         paper_date=paper.published.strftime("%Y-%m-%d"),
-        author=html.unescape(paper.attributes.affiliation),
+        author=author.replace('"', '\\"'),
         categories=categories_str,
         tags=keywords_str,
         cover_image=cover_image,
     )
+
+
+def _format_authors(authors: list[str]) -> str:
+    """Render an author list as front-matter text ("A", "A and B", "A et al.").
+
+    Filters out junk placeholders ("Unknown") that the PDF-URL path emits when
+    no real author metadata is available.
+    """
+    names = [a.strip() for a in authors if a.strip() and a.strip().lower() != "unknown"]
+    if not names:
+        return ""
+    if len(names) == 1:
+        return names[0]
+    if len(names) == 2:
+        return f"{names[0]} and {names[1]}"
+    return f"{names[0]} et al."
 
 
 def _format_explanation(

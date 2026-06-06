@@ -148,6 +148,11 @@ Before inserting ANY visual element:
 After first insertion, use natural descriptive references:
 - CORRECT: "위 그림에서 보듯이", "앞서 보여준 표와 같이"
 - INCORRECT: "그림 3에서", "표 2처럼", "Figure 1에서"
+
+**Every inserted figure MUST be referenced in the surrounding prose.** Never drop
+an image as a caption-only orphan: the sentence immediately before or after the
+image must point to it (e.g. "아래 그림은 …를 보여줍니다", "다음 그림에서 보듯…").
+If you cannot naturally tie a figure into the narrative, do not insert it.
 """
 
 TABLE_RENDERING_RULES: str = """
@@ -944,6 +949,13 @@ class PaperFinalizationPrompt(BasePrompt):
     - Explain technical concepts with sufficient context
     - Maintain complete fidelity to original research findings
     - When introducing technical terms, provide brief contextual explanations
+    - This is a high-level TL;DR that PRECEDES the full review. Convey the key
+      numbers QUALITATIVELY (e.g. "체크포인트 크기를 수천 배 줄였다") rather than
+      reproducing every exact figure verbatim — the detailed review states the
+      precise values once. Avoid making the TL;DR a literal copy of body sentences.
+    - NEVER narrate the writing process or pipeline mechanics. Do not emit
+      meta-comments like "이 부분은 참고문헌 목록으로 … 제외됩니다" or references to
+      sections being skipped — write only reader-facing content about the paper.
 
     ## REQUIRED SECTION STRUCTURE
 
@@ -1592,6 +1604,16 @@ class PaperSynthesisPrompt(BasePrompt):
     - NEVER alter, misrepresent, or contradict the paper's core content
     - Paper accuracy is paramount - all other guidelines serve this goal
     - When in doubt, favor accuracy over style, brevity, or other considerations
+    - CODE FIDELITY: any code/pseudocode you write must match the paper's described
+      method. Do NOT invent unstated constants (e.g. an init scale like `* 0.01`
+      or `* 1/sqrt(r)` the paper never gives) — if the paper does not specify a
+      value, comment it as a choice rather than presenting it as the paper's. The
+      SAME concept (e.g. an initialization scheme) must be implemented identically
+      everywhere it appears; never show two contradicting versions.
+    - COMPUTED vs REPORTED: clearly distinguish numbers YOU derive/estimate from
+      numbers the paper reports. Never present your own calculation (e.g. a
+      derived "99.97% frozen") as if it were an experimental result from the paper;
+      mark it ("대략 계산하면…") so a reader is not misled.
 
     **PRIORITY 2 - ZERO DUPLICATION**
     - NEVER repeat ANY content from previous_explanation
@@ -2558,12 +2580,22 @@ class PaperSummaryPrompt(BasePrompt):
 
     <Important Note>
     Select only essential visual elements (images, tables, code) that are critical for understanding key concepts.
+    Every figure you insert MUST be referenced in the adjacent prose (e.g. "아래 그림은 …"); never leave a
+    caption-only orphan image. If a figure cannot be tied into the narrative, omit it.
+
+    <Calibrated Help>
+    Spend your explanation budget where it is actually hard. When the paper makes a non-obvious conceptual leap
+    (e.g. an assumption like "the weight update has low intrinsic rank"), attach a one-line intuition or define the
+    key term the first time it appears. Do NOT over-explain routine background (standard fine-tuning, basic MLE);
+    state it briefly and move on.
 
     <Focus Distribution>
     - Provide DETAILED summaries of the novel solution and implementation methods (sections 2 and 3)
     - Provide BRIEF summaries of the background/motivation, experimental results, and future directions (sections 1, 4,
     and 5)
     - For brief summary sections (1, 4, 5), prefer text-based explanations over images, tables, formulas, or code
+    - In the results section, include the key setting that produced the headline numbers (e.g. the specific rank or
+      hyper-parameter) and any ablation that justifies the core claim — not just the top-line metrics
 
     <Language>
     - Write the summary in this language: {language}
@@ -2665,7 +2697,13 @@ class TechGuideRelevancePrompt(BasePrompt):
 
 
 class TechGuideSynopsisPrompt(BasePrompt):
-    input_variables: list[str] = ["topic", "sources", "search_results", "language"]
+    input_variables: list[str] = [
+        "topic",
+        "sources",
+        "search_results",
+        "max_sections",
+        "language",
+    ]
     output_variables: list[str] = ["synopsis"]
 
     system_prompt_template: str = """
@@ -2694,6 +2732,11 @@ class TechGuideSynopsisPrompt(BasePrompt):
     Produce an ordered outline that builds understanding progressively (overview -> setup -> core concepts ->
     practical usage with code -> advanced topics -> pitfalls/best practices). For each section give a title and a
     one-line description of what it will cover, and note where code examples, tables, or diagrams would help.
+
+    IMPORTANT: Propose AT MOST {max_sections} sections — the guide will contain exactly the sections you list and no
+    more. Plan a SELF-CONTAINED guide within that budget: do not outline topics you cannot fit, and do not promise
+    follow-on chapters beyond the list. Prioritise the most important, source-supported topics for a reader getting
+    started, merging or dropping less essential ones so the outline is complete within {max_sections} sections.
 
     Write the synopsis in this language: {language} (keep established English technical terms as-is).
 
