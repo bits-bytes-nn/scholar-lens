@@ -514,6 +514,12 @@ class PDFParser(RichParser):
             raise ContentParseError(f"Cannot read PDF file '{pdf_path}': {e}") from e
         except httpx.HTTPError as e:
             raise ContentParseError(f"Document parsing API request failed: {e}") from e
+        except ValueError as e:
+            # response.json() raises JSONDecodeError (a ValueError) on a non-JSON
+            # / truncated API response — surface as a parse error, not a crash.
+            raise ContentParseError(
+                f"Document parsing API returned invalid JSON: {e}"
+            ) from e
 
     async def _extract_figures(
         self, elements: list[dict[str, Any]], pdf_path: Path, figures_dir: Path

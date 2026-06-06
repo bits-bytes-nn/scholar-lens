@@ -2917,13 +2917,18 @@ class SlackIntentPrompt(BasePrompt):
 
     system_prompt_template: str = """
     You are an intent parser for a research assistant Slack bot. You read a user's chat message and decide which
-    action they want and extract the relevant inputs. You never execute anything — you only classify and extract.
+    action they EXPLICITLY requested, then extract the relevant inputs. You never execute anything — you only
+    classify and extract.
 
     Supported intents:
-    - "review": produce an in-depth review of ONE paper (arXiv id or a paper PDF URL).
-    - "summarize": produce a concise summary of ONE paper (arXiv id or a paper PDF URL).
-    - "guide": produce a technical guide/tutorial from ONE OR MORE documentation URLs.
-    - "unknown": the message does not request any of the above.
+    - "review": the user explicitly asks to REVIEW a paper (in-depth read of ONE paper).
+    - "summarize": the user explicitly asks to SUMMARIZE a paper (concise summary of ONE paper).
+    - "guide": the user explicitly asks for a technical GUIDE/tutorial (from one or more documentation URLs).
+    - "unknown": no clear request, OR an ambiguous one (see rules).
+
+    DECIDE BY THE USER'S EXPRESSED REQUEST, NOT BY THE INPUT TYPE. A bare link or arXiv id with no verb does NOT
+    by itself imply review vs summarize — those produce very different outputs, so guessing is wrong. The presence
+    of a URL is only supporting evidence, never the deciding factor.
     """
 
     human_prompt_template: str = """
@@ -2935,10 +2940,15 @@ class SlackIntentPrompt(BasePrompt):
 
     Rules:
     - Choose exactly one intent from: review, summarize, guide, unknown.
+    - Base the intent on the user's EXPLICIT request (verbs/keywords like "review", "리뷰", "summarize", "요약",
+      "guide", "tutorial", "가이드"). Do NOT infer review-vs-summarize purely from whether a link is present.
+    - AMBIGUOUS → "unknown": if the user provides a paper/URL but does not clearly say which action they want
+      (e.g. just pastes an arXiv id, or says "check this out"), classify as "unknown" so the bot can ask, rather
+      than guessing between review and summarize.
     - For review/summarize: <sources> must contain exactly one arXiv id (e.g. 2401.06066) or one paper PDF URL.
     - For guide: <sources> may contain one or more documentation URLs (comma-separated).
     - <repo_urls> holds any associated GitHub repository URLs mentioned (comma-separated), else empty.
-    - If you cannot confidently identify the intent or required inputs, use intent "unknown".
+    - If you cannot confidently identify BOTH the intent and its required inputs, use intent "unknown".
 
     Respond in exactly this format:
     <intent>review|summarize|guide|unknown</intent>

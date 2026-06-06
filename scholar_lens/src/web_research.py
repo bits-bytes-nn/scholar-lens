@@ -111,7 +111,8 @@ class BraveSearchProvider(WebSearchProvider):
             )
             response.raise_for_status()
             data = response.json()
-        except httpx.HTTPError as e:
+        except (httpx.HTTPError, ValueError) as e:
+            # ValueError covers JSONDecodeError on a malformed/truncated response.
             logger.warning("Brave search failed for '%s': %s", query, e)
             return []
         results = data.get("web", {}).get("results", [])

@@ -630,8 +630,16 @@ def _format_explanation(
         github_config, paper, github_config.review_category
     )
     body = f"### TL;DR\n{key_takeaways}\n- - -\n{explanation}"
-    references = f"\n- - -\n### References\n* [{paper.title}]({paper.pdf_url})"
+    references = (
+        f"\n- - -\n### References\n* [{_md_link_text(paper.title)}]({paper.pdf_url})"
+    )
     return f"{front_matter}{body}{references}"
+
+
+def _md_link_text(text: str) -> str:
+    """Escape brackets in Markdown link text so a title with ``]`` doesn't break
+    the ``[text](url)`` syntax."""
+    return text.replace("[", "\\[").replace("]", "\\]")
 
 
 def _format_summary(
@@ -642,7 +650,7 @@ def _format_summary(
         github_config, paper, github_config.summary_category
     )
     body = result["summary"]
-    references_lines = [f"* [{paper.title}]({paper.pdf_url})"]
+    references_lines = [f"* [{_md_link_text(paper.title)}]({paper.pdf_url})"]
     if urls := result.get("urls", "").strip():
         references_lines.append(urls)
     references = "\n- - -\n### References\n" + "\n".join(references_lines)

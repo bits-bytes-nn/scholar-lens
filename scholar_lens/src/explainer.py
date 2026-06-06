@@ -314,7 +314,9 @@ class ExplainerGraph(RetryableBase):
 
         return workflow.compile()
 
+    @RetryableBase._retry("paper_analysis")
     def analyze_paper(self, state: ExplainerState) -> dict[str, Any]:
+        self._enforce_token_budget()
         text = state["paper"].content.text
         sentences = nltk.sent_tokenize(text)
 
@@ -338,6 +340,7 @@ class ExplainerGraph(RetryableBase):
             "paragraphs": paragraphs,
             "structure": structure,
             "structure_index_offset": structure_index_offset,
+            "explanations": [],
             "synthesis_attempts": 0,
             "quality_score": 100,
             "improvement_feedback": "",
@@ -412,7 +415,9 @@ class ExplainerGraph(RetryableBase):
 
         return paper_structure[structure_index]
 
+    @RetryableBase._retry("paper_enrichment")
     async def enrich_paper(self, state: ExplainerState) -> dict[str, Any]:
+        self._enforce_token_budget()
         current_index = state["current_index"]
         current_paragraph = state["paragraphs"][current_index]
         current_analysis = self._get_section_analysis(state, current_index)
@@ -469,7 +474,9 @@ class ExplainerGraph(RetryableBase):
             "code": code,
         }
 
+    @RetryableBase._retry("paper_finalization")
     def finalize_paper(self, state: ExplainerState) -> dict:
+        self._enforce_token_budget()
         result = self.finalizer.invoke(
             {
                 "explanation": "\n".join(state["explanations"]),
@@ -485,7 +492,9 @@ class ExplainerGraph(RetryableBase):
             line.strip() for line in reference_identifiers.splitlines() if line.strip()
         ]
 
+    @RetryableBase._retry("paper_reflection")
     def reflect_paper(self, state: ExplainerState) -> dict[str, Any]:
+        self._enforce_token_budget()
         current_index = state["current_index"]
         current_explanation = state["explanations"][current_index]
         current_paragraph = state["paragraphs"][current_index]
@@ -527,7 +536,12 @@ class ExplainerGraph(RetryableBase):
             accumulated_feedback.append(feedback)
             logger.debug("Improvement feedback: '%s'", feedback)
 
-        quality_score = int(result.get("quality_score", "0"))
+        # The LLM occasionally returns a non-numeric quality_score ("N/A", "",
+        # "85/100"); fall back to 0 (triggers another synthesis attempt) rather
+        # than crashing the whole review on a bad int() conversion.
+        raw_score = str(result.get("quality_score", "0")).strip()
+        match = re.search(r"-?\d+", raw_score)
+        quality_score = int(match.group()) if match else 0
 
         return {
             "accumulated_feedback": accumulated_feedback,

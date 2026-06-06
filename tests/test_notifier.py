@@ -11,8 +11,16 @@ import builtins
 import pytest
 
 from scholar_lens.slack import notifier
-from scholar_lens.slack.notifier import _clean, post_slack_result
+from scholar_lens.slack.notifier import _clean, _mrkdwn_safe, post_slack_result
 from scholar_lens.src.constants import EnvVars
+
+
+def test_mrkdwn_safe_neutralizes_formatting() -> None:
+    out = _mrkdwn_safe("fail *boom* _x_ `code`\nline2")
+    assert "*boom*" not in out
+    assert "\\*boom\\*" in out
+    assert "`" not in out  # backticks replaced
+    assert "\n" not in out  # newlines collapsed
 
 
 class TestClean:

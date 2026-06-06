@@ -18,7 +18,13 @@ from scholar_lens.src.metrics import TokenBudgetExceeded, TokenUsageTracker
 
 def _bare_graph() -> ExplainerGraph:
     """An ExplainerGraph with no chains/NLTK initialised."""
-    return ExplainerGraph.__new__(ExplainerGraph)
+    g = ExplainerGraph.__new__(ExplainerGraph)
+    # Nodes call _enforce_token_budget(); production __init__ sets these, so a
+    # bare instance must too (else AttributeError, which the node retry wrapper
+    # would re-raise after a long backoff).
+    g._token_tracker = None
+    g.max_total_tokens = None
+    return g
 
 
 def _make_structure(*start_numbers: int) -> dict[str, Any]:
@@ -187,6 +193,17 @@ class TestReflectPaper:
         g.reflector.invoke.return_value = {"quality_score": "100"}
         result = g.reflect_paper(self._state())
         assert result["quality_score"] == 100
+
+    def test_non_numeric_quality_score_does_not_crash(self) -> None:
+        # The LLM may return "85/100", "N/A", or "" — must not raise, fall back.
+        g = _bare_graph()
+        g.language = "Korean"
+        g.translation_guideline = []
+        g.reflector = MagicMock()
+        for raw, expected in [("85/100", 85), ("N/A", 0), ("", 0), ("score: 7", 7)]:
+            g.reflector.invoke.return_value = {"quality_score": raw}
+            result = g.reflect_paper(self._state())
+            assert result["quality_score"] == expected, raw
 
     def test_empty_explanation_returns_zero_and_length_feedback(self) -> None:
         g = _bare_graph()

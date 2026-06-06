@@ -27,6 +27,19 @@ def _clean(value: str | None) -> str | None:
     return value.strip()
 
 
+def _mrkdwn_safe(value: str) -> str:
+    """Neutralise Slack mrkdwn control chars in user-influenced text.
+
+    The title and error strings originate from paper metadata / exception text,
+    so escape the formatting characters (`*_~` and backtick) and collapse
+    newlines to keep an injected string from reshaping the status message.
+    """
+    out = value.replace("`", "ʼ")
+    for ch in ("*", "_", "~"):
+        out = out.replace(ch, "\\" + ch)
+    return " ".join(out.split())
+
+
 def post_slack_result(
     *,
     channel: str | None,
@@ -52,16 +65,18 @@ def post_slack_result(
         logger.info("No Slack bot token; cannot post result to channel '%s'.", channel)
         return
 
+    safe_title = _mrkdwn_safe(title)
     if success:
         text = (
-            f":white_check_mark: *{artifact_label.capitalize()}* ready for *{title}*."
+            f":white_check_mark: *{artifact_label.capitalize()}* ready for "
+            f"*{safe_title}*."
         )
         if s3_url:
-            text += f"\n• Output: `{s3_url}`"
+            text += f"\n• Output: `{_mrkdwn_safe(s3_url)}`"
     else:
-        text = f":x: *{artifact_label.capitalize()}* failed for *{title}*."
+        text = f":x: *{artifact_label.capitalize()}* failed for *{safe_title}*."
         if error:
-            text += f"\n• Error: {error}"
+            text += f"\n• Error: {_mrkdwn_safe(error)}"
 
     try:
         from slack_sdk import WebClient
