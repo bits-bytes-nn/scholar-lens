@@ -162,6 +162,7 @@ def test_crossref_provider_parses_and_strips_abstract(
                         ],
                         "abstract": "<jats:p>We propose the Transformer.</jats:p>",
                         "URL": "https://doi.org/x",
+                        "type": "journal-article",
                     }
                 ]
             }
@@ -172,7 +173,34 @@ def test_crossref_provider_parses_and_strips_abstract(
     assert md.title == "Attention Is All You Need"
     assert md.authors == ["Ashish Vaswani", "Noam Shazeer"]
     assert md.abstract == "We propose the Transformer."
-    assert md.url == "https://doi.org/x"
+    assert md.url == "https://doi.org/x"  # primary type → URL trusted
+
+
+def test_crossref_drops_url_for_book_chapter_type(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A book chapter that merely cites the paper must NOT contribute its URL
+    # (mis-attribution guard); title/abstract are still usable.
+    _patch_httpx(
+        monkeypatch,
+        {
+            "message": {
+                "items": [
+                    {
+                        "title": ["Attention Is All You Need"],
+                        "author": [{"given": "Some", "family": "Editor"}],
+                        "abstract": "<jats:p>A chapter discussing transformers.</jats:p>",
+                        "URL": "https://doi.org/10.1007/978-3-031-84300-6_13",
+                        "type": "book-chapter",
+                    }
+                ]
+            }
+        },
+    )
+    md = CrossrefProvider().lookup("attention is all you need")
+    assert md is not None
+    assert md.title == "Attention Is All You Need"
+    assert md.url is None  # book-chapter URL dropped
 
 
 def test_crossref_provider_returns_none_on_empty(

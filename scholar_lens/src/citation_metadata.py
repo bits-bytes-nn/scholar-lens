@@ -32,6 +32,18 @@ _SEMANTIC_SCHOLAR_URL = "https://api.semanticscholar.org/graph/v1/paper/search"
 _CROSSREF_LIMITER = RateLimiter(rate=5.0, per=1.0, name="crossref")
 _SEMANTIC_SCHOLAR_LIMITER = RateLimiter(rate=1.0, per=1.0, name="semantic-scholar")
 
+# Crossref work types whose URL we trust as the primary publication of a cited
+# paper. Book chapters / encyclopedia entries / monographs are EXCLUDED: for an
+# AI/ML reference they are almost always a different work that merely cites the
+# original, so their URL would mis-attribute the citation.
+_CROSSREF_PRIMARY_TYPES = frozenset(
+    {
+        "journal-article",
+        "proceedings-article",
+        "posted-content",  # preprints (arXiv, bioRxiv, …)
+    }
+)
+
 
 @dataclass
 class ReferenceMetadata:
@@ -67,7 +79,7 @@ class CrossrefProvider(MetadataProvider):
         params = {
             "query.bibliographic": title,
             "rows": "1",
-            "select": "title,author,abstract,URL",
+            "select": "title,author,abstract,URL,type",
         }
         if self.mailto:
             params["mailto"] = self.mailto
@@ -88,11 +100,17 @@ class CrossrefProvider(MetadataProvider):
             for a in item.get("author", [])
         ]
         abstract = _strip_jats(item.get("abstract"))
+        # Crossref's top fuzzy hit for an AI/ML paper is frequently a book
+        # chapter / encyclopedia entry that merely CITES the work (e.g. a Springer
+        # chapter matching "Attention Is All You Need"). Linking to it
+        # mis-attributes the citation, so only trust the URL for primary
+        # article-like types; otherwise keep title/abstract but drop the link.
+        url = item.get("URL") if item.get("type") in _CROSSREF_PRIMARY_TYPES else None
         return ReferenceMetadata(
             title=found_title,
             authors=[a for a in authors if a],
             abstract=abstract,
-            url=item.get("URL"),
+            url=url,
         )
 
 
@@ -141,19 +159,28 @@ class ChainedMetadataResolver:
         )
 
     def resolve(self, title: str) -> ReferenceMetadata | None:
-        first_hit: ReferenceMetadata | None = None
+        hits: list[ReferenceMetadata] = []
         for provider in self.providers:
             try:
                 result = provider.lookup(title)
             except Exception as e:  # noqa: BLE001 - resolution must never raise
                 logger.debug("Provider %s raised for '%s': %s", provider, title, e)
                 continue
-            if result is None:
-                continue
-            if result.has_abstract:
-                return result
-            first_hit = first_hit or result
-        return first_hit
+            if result is not None:
+                hits.append(result)
+        if not hits:
+            return None
+
+        # Prefer a single coherent hit that has BOTH an abstract (for
+        # summarising) and its OWN URL (for linking); then any hit with an
+        # abstract; then the first hit. We never graft a URL from a different
+        # provider's result onto another's metadata — that could surface a URL
+        # for a different paper. Final link trust is still gated by title
+        # similarity in the summariser.
+        for h in hits:
+            if h.has_abstract and h.url:
+                return h
+        return next((h for h in hits if h.has_abstract), hits[0])
 
 
 def _strip_jats(abstract: str | None) -> str | None:
