@@ -51,10 +51,6 @@ class PublishRequest:
     rewrite_local_images: bool = True
     figures_dirname: str = LocalPaths.FIGURES_DIR.value
     extra_metadata: dict[str, str] = field(default_factory=dict)
-    # Date used to prefix the Jekyll post filename (YYYY-MM-DD-…). Defaults to the
-    # publish time; pass the paper's publication date to keep the filename and the
-    # front-matter `date` consistent.
-    post_date: datetime | None = None
 
 
 def slugify(title: str, max_length: int = 120) -> str:
@@ -83,8 +79,9 @@ class Publisher:
 
     async def publish(self, request: PublishRequest) -> tuple[str | None, Path]:
         """Save + upload the artifact; return (s3_url, local_markdown_path)."""
-        post_date = request.post_date or datetime.now()
-        file_name = f"{post_date.strftime('%Y-%m-%d')}-{slugify(request.title)}"
+        # The post filename is prefixed with the publish date (today); the paper's
+        # own date lives in the front-matter `date` field, set by the caller.
+        file_name = f"{datetime.now().strftime('%Y-%m-%d')}-{slugify(request.title)}"
         markdown = request.markdown
         # Escape underscores inside math so kramdown(GFM) doesn't eat subscripts
         # before MathJax renders (a recurring blog-rendering issue).
