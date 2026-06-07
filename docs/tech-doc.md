@@ -910,7 +910,15 @@ explainer = ExplainerGraph(
 - 이전 모델에서는 온도를 기본값 0.0으로 설정 (결정론적 생성)
 - 사고 활성화 시 온도를 1.0으로 강제 설정 (레거시 모델에만)
 
-1M 컨텍스트 윈도우 지원(`supports_1m_context_window=True`)은 요약과 기술 가이드 작성 시 명시적으로 활성화되어, 대규모 논문 텍스트와 소스 자료를 처리할 수 있게 합니다(`scholar_lens/src/summarizer.py:68`, `scholar_lens/src/tech_guide.py:111`).
+1M 컨텍스트 윈도우 지원(`supports_1m_context_window=True`)은 분석/요약/기술 가이드 등 전체 본문을 받는 단계에서 명시적으로 활성화되어, 대규모 논문 텍스트와 소스 자료를 처리할 수 있게 합니다(`scholar_lens/src/summarizer.py`, `scholar_lens/src/tech_guide.py`, `scholar_lens/src/explainer.py`).
+
+#### 컨텍스트 윈도우 맞춤(텍스트 피팅)
+
+긴 논문/문서가 모델의 컨텍스트 한도를 초과하지 않도록, 전체 본문을 모델에 보내는 모든 경로는 호출 직전에 텍스트를 모델 예산에 맞게 잘라냅니다. 이 로직은 단일 공유 메서드 `BedrockLanguageModelFactory.fit_text`로 일원화되어 있으며(`scholar_lens/src/utils/factories.py`), content_extractor(인용/속성/목차), explainer(analyze), summarizer, tech_guide, citation_summarizer가 모두 이를 사용합니다.
+
+핵심 원칙은 **토큰 수를 추정(예: chars-per-token, 외부 토크나이저)하지 않고 Bedrock `CountTokens` API로 정확히 측정**하는 것입니다(`count_tokens`). 1M 모델에서는 200K를 초과하는 입력도 측정할 수 있도록 long-context 베타 플래그(`anthropic_beta: ["context-1m-2025-08-07"]`)를 함께 전달하며, 측정 대상 모델 ID는 실제 호출에 쓰이는 크로스 리전 해석 ID를 사용합니다. `fit_text`는 전체 텍스트가 예산을 초과하면 정확한 토큰 수를 기준으로 **이진 탐색**하여 예산 내에 들어가는 가장 긴 접두부를 찾습니다. `CountTokens`가 일시적으로 실패하면(스로틀링 등) 본문을 그대로 두어 콘텐츠가 조용히 잘려나가지 않게 합니다(실제 초과 시에는 모델 호출의 재시도/오류 경로가 처리). 임베딩 모델(Titan/Cohere)은 `CountTokens`가 지원되지 않아 문자 수 상한만 적용합니다.
+
+이 단계의 IAM 권한으로 잡 역할에 `bedrock:CountTokens`가 부여됩니다(`scripts/deploy_infra.py`).
 
 ### 모델 정보 조회 및 팩토리 패턴
 

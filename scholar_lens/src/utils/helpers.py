@@ -27,7 +27,17 @@ def arg_as_bool(value: Any) -> bool:
 
 _AFFIRMATIVE = frozenset({"y", "yes", "yeah", "yep", "true", "t", "1"})
 _PLACEHOLDER = frozenset(
-    {"n/a", "na", "none", "null", "unknown", "unnamed", "anonymous", "not available"}
+    {
+        "n/a",
+        "na",
+        "none",
+        "null",
+        "unknown",
+        "unnamed",
+        "anonymous",
+        "not available",
+        "empty",
+    }
 )
 
 

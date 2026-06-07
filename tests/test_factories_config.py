@@ -282,28 +282,72 @@ class TestBaseBedrockWrapperTruncation:
         )
         assert out == "abc"
 
-    def test_token_truncation_crashes_on_bare_wrapper(self) -> None:
-        # POTENTIAL SOURCE BUG: BaseBedrockWrapper declares
-        # ``buffer_tokens: int = Field(default=128, ge=0)`` but is a plain
-        # (non-pydantic) class on its own; pydantic field resolution only
-        # happens when it is mixed with BedrockEmbeddings. On a bare instance
-        # ``self.buffer_tokens`` stays a FieldInfo object, so the token
-        # truncation path raises TypeError on ``max_tokens - self.buffer_tokens``.
-        # See scholar_lens/src/utils/factories.py:44.
+    def test_max_tokens_is_ignored_only_char_cap_applies(self) -> None:
+        # Embedding truncation is char-only now (Bedrock CountTokens doesn't
+        # support embedding models); max_tokens is accepted but not enforced.
         wrapper = BaseBedrockWrapper()
-        # Inject a fake tokenizer so the token path is reached without
-        # downloading the real BPE vocab (network-free / CI-safe).
+        out = wrapper._truncate_text(
+            "abcdefghij", max_chars=None, max_tokens=2, text_type="doc"
+        )
+        assert out == "abcdefghij"
 
-        class _FakeTok:
-            def encode(self, text: str, allowed_special: str = "all") -> list[int]:
-                return list(range(len(text.split())))
 
-            def decode(self, ids: list[int]) -> str:
-                return "x"
+class TestFitText:
+    """fit_text/count_tokens against a fake CountTokens (no network).
 
-        wrapper._tokenizer = _FakeTok()  # type: ignore[assignment]
-        long_text = "word " * 100
-        with pytest.raises(TypeError):
-            wrapper._truncate_text(
-                long_text, max_chars=None, max_tokens=10, text_type="doc"
-            )
+    The fake counts 1 token per 4 characters and, like the real API, rejects
+    inputs above a hard limit with a 'too long' ValidationException so the
+    binary-search shrink path is exercised."""
+
+    _HARD_LIMIT_TOKENS = 200_000
+
+    def _factory_with_counter(self) -> BedrockLanguageModelFactory:
+        factory = _make_factory()
+
+        def fake_count_tokens(*, modelId: str, input: dict) -> dict:  # noqa: N803
+            text = input["converse"]["messages"][0]["content"][0]["text"]
+            tokens = -(-len(text) // 4)  # ceil(len/4)
+            if tokens > self._HARD_LIMIT_TOKENS:
+                raise RuntimeError(
+                    "ValidationException: prompt is too long: "
+                    f"{tokens} tokens > {self._HARD_LIMIT_TOKENS} maximum"
+                )
+            return {"inputTokens": tokens}
+
+        factory._client.count_tokens = MagicMock(side_effect=fake_count_tokens)
+        # Cross-region resolution would hit the network; keep the plain id.
+        factory._client.list_inference_profiles = MagicMock(
+            return_value={"inferenceProfileSummaries": []}
+        )
+        return factory
+
+    def test_short_text_returned_unchanged(self) -> None:
+        factory = self._factory_with_counter()
+        text = "hello world"
+        assert factory.fit_text(LanguageModelId.CLAUDE_V4_5_HAIKU, text) == text
+
+    def test_empty_text_is_noop(self) -> None:
+        factory = self._factory_with_counter()
+        assert factory.fit_text(LanguageModelId.CLAUDE_V4_5_HAIKU, "") == ""
+
+    def test_long_text_fitted_under_budget(self) -> None:
+        factory = self._factory_with_counter()
+        model = LanguageModelId.CLAUDE_V4_5_HAIKU  # 200k window
+        # ~300k tokens of text (1.2M chars) — well over the budget.
+        text = "x" * 1_200_000
+        fitted = factory.fit_text(model, text)
+        assert len(fitted) < len(text)
+        budget = factory.effective_context_window(model) - (
+            factory.DEFAULT_CONTEXT_RESERVE_TOKENS
+        )
+        # The fitted text's exact token count must be within budget.
+        assert factory.count_tokens(model, fitted) <= budget
+
+    def test_counter_error_leaves_text_intact(self) -> None:
+        factory = self._factory_with_counter()
+        factory._client.count_tokens = MagicMock(
+            side_effect=RuntimeError("transient throttling")
+        )
+        text = "x" * 1_200_000
+        # A non-"too long" error must not silently gut the content.
+        assert factory.fit_text(LanguageModelId.CLAUDE_V4_5_HAIKU, text) == text

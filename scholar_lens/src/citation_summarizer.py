@@ -221,6 +221,9 @@ class CitationSummarizer(RetryableBase):
     # Minimum title similarity to trust a resolved metadata URL as the right
     # paper. Below this we keep the title as plain text (no mis-attributed link).
     TITLE_MATCH_THRESHOLD: float = 0.72
+    # Minimum normalised length of a contained title before substring containment
+    # is trusted, so a short generic title isn't matched inside a long citation.
+    MIN_CONTAINED_TITLE_CHARS: int = 16
 
     @staticmethod
     def _title_matches(queried: str | None, resolved: str | None) -> bool:
@@ -240,10 +243,21 @@ class CitationSummarizer(RetryableBase):
         q, r = _norm(queried), _norm(resolved)
         if not q or not r:
             return False
-        if r in q or q in r:
+        # Strong overall similarity (incl. an exact match) is always trusted,
+        # regardless of length.
+        if (
+            SequenceMatcher(None, q, r).ratio()
+            >= CitationSummarizer.TITLE_MATCH_THRESHOLD
+        ):
             return True
-        ratio = SequenceMatcher(None, q, r).ratio()
-        return ratio >= CitationSummarizer.TITLE_MATCH_THRESHOLD
+        # Otherwise, proper containment handles author/year noise around the real
+        # title (e.g. the resolved title sits inside "Hu et al., <title>, 2021"),
+        # but only when the contained string is itself a substantial title — a
+        # short generic resolved title ("attention") inside a long citation must
+        # NOT auto-match. Real paper titles are well over this length.
+        if r in q or q in r:
+            return min(len(q), len(r)) >= CitationSummarizer.MIN_CONTAINED_TITLE_CHARS
+        return False
 
     @RetryableBase._retry("citation_metadata_summary")
     async def _summarize_from_metadata(

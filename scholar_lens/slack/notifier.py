@@ -16,6 +16,7 @@ import os
 
 from ..src.constants import AppConstants, EnvVars
 from ..src.logger import logger
+from .blocks import context, header, mrkdwn_safe, one_line, section
 
 
 def _clean(value: str | None) -> str | None:
@@ -23,22 +24,6 @@ def _clean(value: str | None) -> str | None:
     if not value or value.strip().lower() == AppConstants.NULL_STRING:
         return None
     return value.strip()
-
-
-def _mrkdwn_safe(value: str) -> str:
-    """Neutralise Slack mrkdwn control chars in user-influenced text.
-
-    The title and error strings come from paper metadata / exception text. Slack
-    mrkdwn does NOT honour backslash escaping (``\\_`` renders the backslash
-    literally), so instead of escaping we swap the characters that genuinely
-    break a layout — backtick and ``*`` — for visually-identical homoglyphs.
-    ``_`` and ``~`` only italicise/strike when they wrap text at word
-    boundaries, so a mid-token ``_`` (e.g. an arXiv id like ``2504_03182``) is
-    left untouched and displays cleanly. Newlines are collapsed so an injected
-    string can't reshape the message.
-    """
-    out = value.replace("`", "ʼ").replace("*", "∗")
-    return " ".join(out.split())
 
 
 def post_slack_result(
@@ -107,15 +92,13 @@ def _build_result_message(
     emoji, nice = _ARTIFACT_META.get(
         artifact_label.lower(), (":robot_face:", artifact_label.capitalize())
     )
-    safe_title = _mrkdwn_safe(title)
+    safe_title = mrkdwn_safe(title)
 
     if success:
-        header = f"{emoji} {nice} ready"
         fallback = f"{nice} ready for {title}"
-        section = f"*{safe_title}*"
         blocks: list[dict] = [
-            {"type": "header", "text": {"type": "plain_text", "text": header}},
-            {"type": "section", "text": {"type": "mrkdwn", "text": section}},
+            header(f"{emoji} {nice} ready"),
+            section(f"*{safe_title}*"),
         ]
         if s3_url:
             # Render https links as a clickable button; show s3:// URIs as code.
@@ -137,50 +120,18 @@ def _build_result_message(
                 )
             else:
                 blocks.append(
-                    {
-                        "type": "section",
-                        "text": {
-                            "type": "mrkdwn",
-                            "text": f":open_file_folder: Output: `{_mrkdwn_safe(s3_url)}`",
-                        },
-                    }
+                    section(f":open_file_folder: Output: `{mrkdwn_safe(s3_url)}`")
                 )
     else:
-        header = f"{nice} couldn't be completed"
         fallback = f"{nice} failed for {title}"
         blocks = [
-            {"type": "header", "text": {"type": "plain_text", "text": f":x: {header}"}},
-            {"type": "section", "text": {"type": "mrkdwn", "text": f"*{safe_title}*"}},
+            header(f":x: {nice} couldn't be completed"),
+            section(f"*{safe_title}*"),
         ]
         if error:
             blocks.append({"type": "divider"})
             blocks.append(
-                {
-                    "type": "section",
-                    "text": {
-                        "type": "mrkdwn",
-                        "text": f":warning: *What went wrong*\n```{_short(error)}```",
-                    },
-                }
+                section(f":warning: *What went wrong*\n```{one_line(error)}```")
             )
-            blocks.append(
-                {
-                    "type": "context",
-                    "elements": [
-                        {
-                            "type": "mrkdwn",
-                            "text": "Check the AWS Batch job logs for the full trace.",
-                        }
-                    ],
-                }
-            )
+            blocks.append(context("Check the AWS Batch job logs for the full trace."))
     return fallback, blocks
-
-
-def _short(text: str, *, limit: int = 600) -> str:
-    """Collapse whitespace and cap an error string for display in a code block.
-
-    Backticks are stripped so the surrounding ``` fence can't be broken out of.
-    """
-    flat = " ".join(text.replace("`", "ʼ").split())
-    return flat if len(flat) <= limit else flat[: limit - 1] + "…"

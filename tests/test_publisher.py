@@ -115,6 +115,78 @@ class TestCreatePullRequest:
         request = _request(tmp_path)
         await pub.create_pull_request(request, tmp_path / "x.md")  # no raise
 
+
+class TestGitOperations:
+    """Exercise the real git flow against a LOCAL bare repo (no network).
+
+    Verifies the committer identity is set (regression: the Batch container has
+    no global git identity, so a commit failed with "empty ident name"), and
+    that extracted figures are copied into the blog's assets/<post>/ dir.
+    """
+
+    def _make_bare_remote(self, tmp_path: Path) -> Path:
+        from git import Repo
+
+        # A bare repo with an initial commit on `main` to branch from.
+        seed = tmp_path / "seed"
+        seed.mkdir()
+        seed_repo = Repo.init(seed, initial_branch="main")
+        with seed_repo.config_writer() as cfg:
+            cfg.set_value("user", "name", "seed")
+            cfg.set_value("user", "email", "seed@example.com")
+        (seed / "README.md").write_text("seed", encoding="utf-8")
+        seed_repo.git.add(all=True)
+        seed_repo.git.commit("-m", "init")
+        bare = tmp_path / "remote.git"
+        seed_repo.clone(bare, bare=True)
+        return bare
+
+    async def test_commit_succeeds_and_copies_figures(self, tmp_path: Path) -> None:
+        bare = self._make_bare_remote(tmp_path)
+
+        # A post with a figure that must travel into assets/<post>/.
+        work_dir = tmp_path / "work"
+        figures = work_dir / "figures"
+        figures.mkdir(parents=True)
+        (figures / "diagram.png").write_bytes(b"PNG")
+        markdown_path = work_dir / "2026-06-07-my-post.md"
+        markdown_path.write_text(
+            "# T\n\n![fig](/assets/2026-06-07-my-post/diagram.png)\n",
+            encoding="utf-8",
+        )
+
+        pub = Publisher(
+            Github(
+                repo_name="owner/blog",
+                base_branch="main",
+                author_name="Bot",
+                author_email="bot@example.com",
+            ),
+            root_dir=tmp_path,
+        )
+        clone_dir = tmp_path / "clone"
+        # Point the clone at the local bare repo instead of github.com.
+        pub._git_operations_inner(
+            clone_dir,
+            branch_name="paper-reviews/my-post",
+            commit_message="feat: add my post",
+            markdown_path=markdown_path,
+            repo_url=str(bare),
+        )
+
+        from git import Repo
+
+        repo = Repo(clone_dir)
+        # The commit landed (committer identity was set) with our author.
+        head = repo.head.commit
+        assert head.author.name == "Bot"
+        assert head.committer.email  # non-empty committer identity
+        # The figure was copied into the blog's assets/<post>/ layout.
+        copied = clone_dir / "assets" / markdown_path.stem / "diagram.png"
+        assert copied.exists()
+        # The post markdown is in _posts/.
+        assert (clone_dir / "_posts" / markdown_path.name).exists()
+
     async def test_git_and_pr_invoked_when_configured(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

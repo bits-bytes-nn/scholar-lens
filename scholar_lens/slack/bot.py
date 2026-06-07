@@ -23,6 +23,7 @@ from ..configs import Config
 from ..src.aws_helpers import get_ssm_param_value
 from ..src.constants import EnvVars, LanguageModelId, SSMParams
 from ..src.logger import logger
+from . import blocks
 from .dispatcher import JobDispatcher, SlackContext, utc_timestamp
 from .intent import IntentParser, ParsedIntent
 
@@ -49,30 +50,11 @@ class SlackReply:
     blocks: list[dict] = field(default_factory=list)
 
 
-def _section(text: str) -> dict:
-    return {"type": "section", "text": {"type": "mrkdwn", "text": text}}
-
-
-def _context(text: str) -> dict:
-    return {"type": "context", "elements": [{"type": "mrkdwn", "text": text}]}
-
-
-def _header(text: str) -> dict:
-    # Header blocks are plain_text only (no mrkdwn/emoji-colon expansion beyond
-    # standard emoji), so keep them short and literal.
-    return {
-        "type": "header",
-        "text": {"type": "plain_text", "text": text, "emoji": True},
-    }
-
-
-def _one_line(text: str, *, limit: int = 600) -> str:
-    """Collapse whitespace and cap an error string for a code block.
-
-    Backticks are stripped so the surrounding ``` fence can't be broken out of.
-    """
-    flat = " ".join(text.replace("`", "ʼ").split())
-    return flat if len(flat) <= limit else flat[: limit - 1] + "…"
+# Block Kit builders + text sanitisers are shared with the notifier.
+_section = blocks.section
+_context = blocks.context
+_header = blocks.header
+_one_line = blocks.one_line
 
 
 def is_user_authorized(user_id: str | None) -> bool:

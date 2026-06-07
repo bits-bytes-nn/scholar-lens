@@ -11,11 +11,11 @@ import builtins
 import pytest
 
 from scholar_lens.slack import notifier
+from scholar_lens.slack.blocks import mrkdwn_safe as _mrkdwn_safe
+from scholar_lens.slack.blocks import one_line as _short
 from scholar_lens.slack.notifier import (
     _build_result_message,
     _clean,
-    _mrkdwn_safe,
-    _short,
     post_slack_result,
 )
 from scholar_lens.src.constants import EnvVars

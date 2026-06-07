@@ -418,13 +418,17 @@ class ExplainerGraph(RetryableBase):
         paper_structure = state["structure"].get("paper_structure", [])
 
         if structure_index < 0 or structure_index >= len(paper_structure):
-            logger.debug(
-                "No matching section analysis for index %d (structure_index: %d, offset: %d)",
+            logger.info(
+                "No matching section analysis for index %d (structure_index: %d, "
+                "offset: %d); using an empty section title.",
                 current_index,
                 structure_index,
                 offset,
             )
-            return {"section": [{"section_title": "Introduction", "key_points": []}]}
+            # Empty title rather than a fabricated "Introduction" (which both
+            # mislabels mid-paper sections and leaks an English word into a
+            # non-English review). The synthesizer derives the heading itself.
+            return {"section": [{"section_title": "", "key_points": []}]}
 
         return paper_structure[structure_index]
 
@@ -518,8 +522,8 @@ class ExplainerGraph(RetryableBase):
 
         if not current_explanation.strip():
             feedback = (
-                "The generated explanation was too long and could not be processed properly. "
-                "Please reduce the output length to under 2000 tokens."
+                "The generated explanation was empty or could not be processed. "
+                "Produce a more concise explanation for this section."
             )
             accumulated_feedback.append(feedback)
             logger.warning(
@@ -549,18 +553,30 @@ class ExplainerGraph(RetryableBase):
             accumulated_feedback.append(feedback)
             logger.debug("Improvement feedback: '%s'", feedback)
 
-        # The LLM occasionally returns a non-numeric quality_score ("N/A", "",
-        # "85/100"); fall back to 0 (triggers another synthesis attempt) rather
-        # than crashing the whole review on a bad int() conversion.
-        raw_score = str(result.get("quality_score", "0")).strip()
-        match = re.search(r"-?\d+", raw_score)
-        quality_score = int(match.group()) if match else 0
+        quality_score = self._parse_quality_score(result.get("quality_score"))
 
         return {
             "accumulated_feedback": accumulated_feedback,
             "quality_score": quality_score,
             "synthesis_attempts": state["synthesis_attempts"] + 1,
         }
+
+    @staticmethod
+    def _parse_quality_score(raw: Any) -> int:
+        """Parse the reflector's 0-100 quality score robustly.
+
+        The reflection prompt asks for a bare integer, but a model may still emit
+        "85", "85/100", or "N/A". Prefer a clean integer; otherwise take the FIRST
+        number in a leading "<n>/<total>" form (so "85/100" -> 85, not 100); a
+        non-numeric value falls back to 0, which triggers another synthesis pass
+        rather than crashing the review."""
+        text = str(raw if raw is not None else "").strip()
+        try:
+            return int(text)
+        except ValueError:
+            pass
+        match = re.match(r"-?\d+", text)
+        return int(match.group()) if match else 0
 
     def _enforce_token_budget(self) -> None:
         """Abort the run if the configured total-token budget is exceeded."""
@@ -650,15 +666,21 @@ class ExplainerGraph(RetryableBase):
                 "language": self.language,
             }
         )
+        has_more_match = re.search(r"<has_more>(.*?)</has_more>", result, re.DOTALL)
         explanation_match = re.search(
             r"<explanation>(.*?)</explanation>", result, re.DOTALL
         )
-        has_more_match = re.search(r"<has_more>(.*?)</has_more>", result, re.DOTALL)
+        if explanation_match:
+            explanation = explanation_match.group(1).strip()
+        else:
+            # The model omitted the wrapper tag — don't drop the whole chunk; use
+            # the raw output minus any has_more tag so content isn't silently lost.
+            explanation = re.sub(
+                r"<has_more>.*?</has_more>", "", result, flags=re.DOTALL
+            ).strip()
 
         return {
-            "explanation": (
-                explanation_match.group(1).strip() if explanation_match else ""
-            ),
+            "explanation": explanation,
             "has_more": has_more_match.group(1).strip() if has_more_match else "n",
         }
 

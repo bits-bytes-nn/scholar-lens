@@ -179,7 +179,8 @@ After first insertion, use natural descriptive references:
 
 **Every inserted figure MUST be referenced in the surrounding prose.** Never drop
 an image as a caption-only orphan: the sentence immediately before or after the
-image must point to it (e.g. "아래 그림은 …를 보여줍니다", "다음 그림에서 보듯…").
+image must point to it, in the target output language (e.g. "The figure below
+shows …" / "아래 그림은 …를 보여줍니다", "As the next figure shows …" / "다음 그림에서 보듯…").
 If you cannot naturally tie a figure into the narrative, do not insert it.
 """
 
@@ -1375,7 +1376,7 @@ class PaperReflectionPrompt(BasePrompt):
       * Missing when required: -10 points
 
     **Language and Style (10 points)**
-    - Natural Korean style and proper reference approach: 6 points
+    - Natural {language} style and proper reference approach: 6 points
     - Consistent formatting and heading structure: 4 points
 
     #### 8.2 Quality Thresholds and Expectations
@@ -1538,7 +1539,7 @@ class PaperReflectionPrompt(BasePrompt):
        - Issues: [List specific violations if any, including missing supplementary materials]
 
     10. **Language, Style, and Content Filtering**
-        - Korean language quality and academic tone
+        - {language} language quality and academic tone
         - First-person pronoun usage check
         - Proper use of descriptive references (no section/figure numbers)
         - **Check for inappropriate non-technical content**: acknowledgments, author contributions, funding information,
@@ -1555,7 +1556,7 @@ class PaperReflectionPrompt(BasePrompt):
     2. **Critical violations** (duplication, path modification, fabrication)
     3. **Major structural issues** (heading problems, citation errors)
     4. **Content completeness** (missing concepts, insufficient depth)
-    5. **Style and language** (Korean quality, references)
+    5. **Style and language** ({language} quality, references)
 
     ## FEEDBACK SECTIONS
 
@@ -1611,7 +1612,7 @@ class PaperReflectionPrompt(BasePrompt):
        - First-person pronoun replacements
        - Numerical reference corrections (convert to descriptive references)
        - Section numbering reference removals
-       - Korean language quality enhancements
+       - {language} language quality enhancements
        - Academic tone adjustments
        - **Content filtering enforcement** (remove all non-technical administrative sections)
 
@@ -2256,7 +2257,7 @@ class PaperSynthesisPrompt(BasePrompt):
 
     #### 8.1 Target Audience
 
-    - Korean-speaking university students with basic knowledge of machine learning and deep learning
+    - {language}-speaking university students with basic knowledge of machine learning and deep learning
     - **Assume readers need help understanding complex concepts - provide comprehensive explanations**
     - **Use supplementary materials (citations, code) extensively to build understanding**
     - Provide comprehensive context and step-by-step explanations for complex theoretical developments
@@ -2265,10 +2266,12 @@ class PaperSynthesisPrompt(BasePrompt):
 
     #### 8.2 Writing Style Requirements
 
-    - Use natural, flowing Korean in "입니다" style throughout
-    - AVOID first-person pronouns like "우리" (we) or "저" (I)
-    * Instead of "우리는 이 방법을 적용했습니다", use "이 방법이 적용되었습니다"
-    * Instead of "우리의 실험에서", use "실험 결과에서"
+    - Use natural, flowing prose in {language} throughout; when {language} is
+      Korean, use the formal "입니다" register
+    - Prefer impersonal/passive phrasing over first-person pronouns (e.g. "we"/"I",
+      or in Korean "우리"/"저")
+    * e.g. instead of "we applied this method", write "this method was applied"
+      (Korean: "우리는 이 방법을 적용했습니다" → "이 방법이 적용되었습니다")
     * Use passive voice or third-person descriptive statements
     - Maintain professional, academic tone while being accessible
     - Prioritize technical precision and mathematical rigor
@@ -2346,9 +2349,9 @@ class PaperSynthesisPrompt(BasePrompt):
     - Check for content-based references without section numbers
 
     **Other Quality Checks:**
-    - Ensure natural Korean prose without bullet points in main content
+    - Ensure natural {language} prose without bullet points in main content
     - **Confirm complete exclusion of acknowledgments, contributions, and funding sections**
-    - Verify no first-person pronouns ("우리", "저")
+    - Verify no first-person pronouns (e.g. "we"/"I"; in Korean "우리"/"저")
     - Check that all visual elements are integrated naturally in prose
     - **MOST CRITICAL**: Ensure </explanation> tag is always closed
     - **Verify appropriate use of supplementary materials for depth level**
@@ -2356,7 +2359,7 @@ class PaperSynthesisPrompt(BasePrompt):
     ## RESPONSE FORMAT
 
     <explanation>
-    [Detailed paper review in natural, flowing Korean using "입니다" style.
+    [Detailed paper review in natural, flowing {language} prose (use the formal "입니다" register when {language} is Korean).
 
     🎯 PRE-WRITING PROTOCOL - FOLLOW PRIORITY ORDER 🎯
 
@@ -2646,7 +2649,7 @@ class PaperSummaryPrompt(BasePrompt):
 
     <Important Note>
     Select only essential visual elements (images, tables, code) that are critical for understanding key concepts.
-    Every figure you insert MUST be referenced in the adjacent prose (e.g. "아래 그림은 …"); never leave a
+    Every figure you insert MUST be referenced in the adjacent prose (e.g. "The figure below shows …" / "아래 그림은 …"); never leave a
     caption-only orphan image. If a figure cannot be tied into the narrative, omit it.
 
     <Using the Official Codebase>

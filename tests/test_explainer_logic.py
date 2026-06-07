@@ -113,14 +113,14 @@ class TestGetSectionAnalysis:
     def test_out_of_range_returns_default(self) -> None:
         state = self._state()
         section = ExplainerGraph._get_section_analysis(state, 99)
-        assert section == {
-            "section": [{"section_title": "Introduction", "key_points": []}]
-        }
+        # Empty title (not a fabricated "Introduction") so a non-English review
+        # doesn't get an English heading leaked in.
+        assert section == {"section": [{"section_title": "", "key_points": []}]}
 
     def test_negative_structure_index_returns_default(self) -> None:
         state = self._state(offset=5)
         section = ExplainerGraph._get_section_analysis(state, 0)
-        assert section["section"][0]["section_title"] == "Introduction"
+        assert section["section"][0]["section_title"] == ""
 
 
 class TestParseReferenceIdentifiers:
@@ -195,17 +195,26 @@ class TestReflectPaper:
         assert result["quality_score"] == 100
 
     def test_non_numeric_quality_score_does_not_crash(self) -> None:
-        # The LLM may return "85/100", "N/A", or "" — must not raise, fall back.
+        # The LLM may return "85/100", "N/A", "", or prose — must not raise.
+        # A clean int or a leading "<n>/<total>" parses; anything that doesn't
+        # START with a number falls back to 0 (rather than scraping a number from
+        # mid-string, which could grab the wrong value e.g. "out of 100, 85").
         g = _bare_graph()
         g.language = "Korean"
         g.translation_guideline = []
         g.reflector = MagicMock()
-        for raw, expected in [("85/100", 85), ("N/A", 0), ("", 0), ("score: 7", 7)]:
+        for raw, expected in [
+            ("85", 85),
+            ("85/100", 85),
+            ("N/A", 0),
+            ("", 0),
+            ("score: 7", 0),
+        ]:
             g.reflector.invoke.return_value = {"quality_score": raw}
             result = g.reflect_paper(self._state())
             assert result["quality_score"] == expected, raw
 
-    def test_empty_explanation_returns_zero_and_length_feedback(self) -> None:
+    def test_empty_explanation_returns_zero_and_feedback(self) -> None:
         g = _bare_graph()
         g.language = "Korean"
         g.translation_guideline = []
@@ -214,9 +223,7 @@ class TestReflectPaper:
 
         assert result["quality_score"] == 0
         assert result["synthesis_attempts"] == 2
-        assert any(
-            "reduce the output length" in f for f in result["accumulated_feedback"]
-        )
+        assert any("concise" in f for f in result["accumulated_feedback"])
         g.reflector.invoke.assert_not_called()
 
 

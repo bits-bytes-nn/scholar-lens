@@ -246,6 +246,13 @@ class Publisher:
 
         logger.info("Committing changes...")
         repo.git.add(all=True)
+        # Set the committer identity on this repo. ``--author`` only sets the
+        # author; git still refuses to commit without a committer name/email,
+        # which the Batch container does not have globally ("empty ident name").
+        with repo.config_writer() as cfg:
+            cfg.set_value("user", "name", repo_config.author_name)
+            if repo_config.author_email:
+                cfg.set_value("user", "email", repo_config.author_email)
         author_actor = (
             f"{repo_config.author_name} <{repo_config.author_email}>"
             if repo_config.author_email

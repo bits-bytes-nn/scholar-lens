@@ -108,8 +108,14 @@ class TestFormatExplanation:
         out = _format_explanation(gh, paper, "E", "T")
         assert "cover: /assets/images/default.jpg" in out
 
-    def test_no_korean_punctuation_hack(self, sample_paper: Paper) -> None:
-        # The removed locale hack converted "다:" -> "다." Ensure raw text passes through.
+    def test_no_punctuation_hack_passthrough(self, sample_paper: Paper) -> None:
+        # A removed locale hack rewrote a trailing "다:" -> "다.". The body must
+        # now pass through verbatim regardless of language — check both an
+        # English colon-ending body and the original Korean one.
         gh = Github()
-        out = _format_explanation(gh, sample_paper, "결론입니다: 좋다:", "요약:")
-        assert "결론입니다: 좋다:" in out  # unchanged
+        out_en = _format_explanation(
+            gh, sample_paper, "In conclusion: good:", "Summary:"
+        )
+        assert "In conclusion: good:" in out_en  # unchanged
+        out_ko = _format_explanation(gh, sample_paper, "결론입니다: 좋다:", "요약:")
+        assert "결론입니다: 좋다:" in out_ko  # unchanged

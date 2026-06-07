@@ -311,11 +311,16 @@ class _FakeResolver:
 @pytest.fixture
 def summarizer() -> CitationSummarizer:
     session = boto3.Session(region_name="us-east-1")
-    return CitationSummarizer(
+    summ = CitationSummarizer(
         citation_summarizing_model_id=LanguageModelId.CLAUDE_V4_5_HAIKU,
         citation_analysis_model_id=LanguageModelId.CLAUDE_V4_5_HAIKU,
         boto_session=session,
     )
+    # fit_text would call Bedrock CountTokens over the network; pass text through.
+    summ.llm_factory.fit_text = (  # type: ignore[method-assign]
+        lambda model_id, text, **kw: text
+    )
+    return summ
 
 
 @pytest.mark.asyncio
@@ -367,6 +372,8 @@ def test_title_matches_gate() -> None:
     assert not m("RoBERTa Pretraining", "Unrelated Journal Article on Plants")
     assert not m(None, "x")
     assert not m("x", None)
+    # A short generic resolved title contained in a long citation must NOT match.
+    assert not m("Vaswani et al., Attention to Detail in Vision, 2021", "Attention")
 
 
 @pytest.mark.asyncio
