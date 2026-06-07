@@ -788,7 +788,13 @@ if __name__ == "__main__":
         else None
     )
     source = args.source or args.arxiv_id
-    logger.info("Starting paper %s process with args: %s", args.mode, vars(args))
+    logger.info(
+        "Starting paper %s process: source=%s repo_urls=%s parse_pdf=%s",
+        args.mode,
+        source,
+        repo_urls,
+        args.parse_pdf,
+    )
     main(
         source,
         repo_urls,

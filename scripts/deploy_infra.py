@@ -524,8 +524,12 @@ class PaperReviewStack(Stack):
             image=image,
             job_role=self.job_role,
             execution_role=self.execution_role,
-            cpu=1,
-            memory=core.Size.mebibytes(1024),
+            # PDF parsing (Unstructured "fast" fallback / Upstage) plus FAISS code
+            # embeddings are memory-hungry; 1 GiB OOM-killed (exit 137) on large
+            # PDFs. 2 vCPU / 8 GiB gives ample headroom and stays within the
+            # compute environments' maxvCpus (4 on-demand / 8 spot).
+            cpu=2,
+            memory=core.Size.mebibytes(8192),
             command=command,
             environment=container_env,
             logging=ecs.LogDrivers.aws_logs(

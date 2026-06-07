@@ -601,12 +601,15 @@ class PDFParser(RichParser):
             figures_dir = figures_dir or pdf_path.parent / LocalPaths.FIGURES_DIR.value
             figures_dir.mkdir(parents=True, exist_ok=True)
 
+            # The "fast" strategy extracts text without loading the heavy layout/
+            # OCR vision models that "hi_res" needs — those routinely OOM a large
+            # PDF on a memory-constrained container (the very case that triggers
+            # this fallback, e.g. an Upstage 413 on an oversized document). For a
+            # review/summary the text is what matters; figures are best-effort and
+            # already captured on the primary (Upstage) path when it succeeds.
             elements = partition_pdf(
                 filename=str(pdf_path),
-                extract_images_in_pdf=True,
-                extract_image_block_output_dir=str(figures_dir),
-                strategy="hi_res",
-                infer_table_structure=True,
+                strategy="fast",
             )
 
             content_parts = []
