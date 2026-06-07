@@ -42,22 +42,25 @@ class TestHeadingBlankLine:
         assert lint_markdown(src) == src
 
 
+@pytest.mark.usefixtures("_capture_app_logs")
 class TestPipeInMath:
-    def test_bare_pipe_in_inline_math_becomes_vert(self) -> None:
-        out = lint_markdown(r"prob \(P(a|b)\) here")
-        assert r"\(P(a\vert b)\)" in out
+    def test_bare_pipe_in_math_warns_not_rewritten(self, caplog) -> None:
+        # NOT auto-rewritten (\vert would break \left|, array{c|c}); warn instead.
+        with caplog.at_level(logging.WARNING, logger="app"):
+            out = lint_markdown(r"prob \(P(a|b)\) here")
+        assert out == r"prob \(P(a|b)\) here"  # text unchanged
+        assert any("bare '|'" in r.message for r in caplog.records)
 
-    def test_bare_pipe_in_display_math_becomes_vert(self) -> None:
-        out = lint_markdown(r"$$ P(a|b) = 1 $$")
-        assert r"\vert" in out and "|" not in out.replace(r"\vert", "")
+    def test_left_right_delimiters_not_broken(self, caplog) -> None:
+        # The whole point: a \vert rewrite would corrupt these — confirm we don't.
+        src = r"$$\left| x \right| + \begin{array}{c|c} a & b \end{array}$$"
+        with caplog.at_level(logging.WARNING, logger="app"):
+            assert lint_markdown(src) == src
 
-    def test_table_pipes_untouched(self) -> None:
-        src = "before\n\n| a | b |\n|---|---|\n| 1 | 2 |"
-        assert lint_markdown(src) == src
-
-    def test_pipe_in_code_untouched(self) -> None:
-        src = "run `cat x | grep y` now"
-        assert lint_markdown(src) == src
+    def test_no_warning_when_no_bare_pipe(self, caplog) -> None:
+        with caplog.at_level(logging.WARNING, logger="app"):
+            lint_markdown(r"clean \(P(a \mid b)\) here")
+        assert not any("bare '|'" in r.message for r in caplog.records)
 
 
 @pytest.mark.usefixtures("_capture_app_logs")
@@ -72,15 +75,17 @@ class TestWarnings:
             lint_markdown(r"the price `$5` is fine")
         assert not any("single-$" in r.message for r in caplog.records)
 
-    def test_known_blog_macros_do_not_warn(self, caplog) -> None:
+    def test_standard_macros_do_not_warn(self, caplog) -> None:
+        # Base-MathJax macros (and unknown-but-not-flagged ones) must not warn —
+        # we only flag the explicit known-undefined set, never allowlist base.
         with caplog.at_level(logging.WARNING, logger="app"):
-            lint_markdown(r"math \(\llbracket x \rrbracket + \alpha\)")
-        assert not any("macro" in r.message for r in caplog.records)
+            lint_markdown(r"math \(\alpha + \frac{a}{b} + \mathbb{R}\)")
+        assert not any("render as red raw text" in r.message for r in caplog.records)
 
-    def test_undefined_macro_warns(self, caplog) -> None:
+    def test_known_undefined_macro_warns(self, caplog) -> None:
         with caplog.at_level(logging.WARNING, logger="app"):
-            lint_markdown(r"math \(\foobarbaz x\)")
-        assert any("foobarbaz" in r.message for r in caplog.records)
+            lint_markdown(r"math \(\llbracket x \rrbracket\)")
+        assert any("llbracket" in r.message for r in caplog.records)
 
     def test_non_url_link_target_warns(self, caplog) -> None:
         with caplog.at_level(logging.WARNING, logger="app"):

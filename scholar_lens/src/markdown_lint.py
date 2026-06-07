@@ -5,22 +5,23 @@ one catches the *other* recurring blog-rendering failures. It reuses the same
 validated code/math-span splitter (:data:`markdown_math.SEGMENT_PATTERN`) so it
 never mistakes code for prose or math.
 
-Two classes of action, split by risk:
+Only ONE auto-fix is applied — one that is genuinely lossless:
 
-* **Auto-fixes** (deterministic, lossless) — applied silently:
-    1. Insert the blank line kramdown needs before a heading glued to the
-       previous line (outside fenced code).
-    2. Replace a bare ``|`` inside a math span with ``\vert`` (kramdown otherwise
-       reads it as a table delimiter); ``\vert`` renders identically.
+* **Auto-fix** (deterministic, lossless): insert the blank line kramdown needs
+  before a heading glued to the previous line (outside fenced code).
 
-* **Warnings** (context-dependent, NOT auto-changed — a wrong rewrite would ship
-  a new bug) — logged so a human can review:
-    3. A single-``$ ... $`` inline math span (the blog strips ``$`` delimiters,
-       so it won't render — but it could also be a currency amount, so we don't
-       touch it).
-    4. A LaTeX macro outside the blog's known set (renders as red raw text).
-    5. A Markdown link whose target is not an http(s) URL (a prose/section/slug
-       target is a broken link).
+Everything else is a **warning** (logged, never rewritten — a wrong rewrite
+would ship a new bug):
+
+* A bare ``|`` inside a math span (kramdown may read it as a table delimiter).
+  NOT auto-rewritten to ``\vert``: that breaks ``\left|``/``\right|``/``\middle|``
+  and ``array{c|c}`` column specs, where the ``|`` must stay a literal delimiter.
+* A single-``$ ... $`` inline math span (the blog strips ``$`` delimiters, so it
+  won't render — but it could also be a currency amount).
+* A LaTeX macro from a known problematic non-standard package (e.g. stmaryrd's
+  ``\llbracket``) that the blog does NOT define, which renders as red raw text.
+* A Markdown link whose target is not an http(s)/site-relative URL (likely a
+  broken cross-reference).
 
 :func:`lint_markdown` returns the auto-fixed text and logs any warnings.
 """
@@ -32,197 +33,19 @@ import re
 from .logger import logger
 from .markdown_math import SEGMENT_PATTERN
 
-# Macros MathJax provides out of the box are too many to list; instead we only
-# flag macros NOT known to render on this blog. The blog's custom/loaded set
-# (beyond base MathJax) is small and explicit — extend here if the blog adds
-# more \newcommand/packages.
-_BLOG_EXTRA_MACROS = frozenset({"llbracket", "rrbracket", "textsc", "vert", "mid"})
-# Common base-MathJax macros we never want to warn about. This is a pragmatic
-# allowlist of frequently-used commands; anything outside it AND outside the
-# blog set is surfaced as a warning (not an error), so a missing entry only
-# costs a noisy log line, never a wrong rewrite.
-_BASE_MATHJAX_MACROS = frozenset(
+# Non-standard-package macros that are commonly emitted but are NOT loaded on the
+# blog's MathJax, so they render as red raw text. We warn ONLY on this small,
+# explicit "known-bad-unless-defined" set rather than trying to allowlist the
+# hundreds of base-MathJax macros (which would mis-warn on valid ones). Drop a
+# macro from here once the blog adds a \newcommand/package for it.
+_UNDEFINED_MACROS = frozenset(
     {
-        # greek
-        "alpha",
-        "beta",
-        "gamma",
-        "delta",
-        "epsilon",
-        "varepsilon",
-        "zeta",
-        "eta",
-        "theta",
-        "vartheta",
-        "iota",
-        "kappa",
-        "lambda",
-        "mu",
-        "nu",
-        "xi",
-        "pi",
-        "varpi",
-        "rho",
-        "varrho",
-        "sigma",
-        "varsigma",
-        "tau",
-        "upsilon",
-        "phi",
-        "varphi",
-        "chi",
-        "psi",
-        "omega",
-        "Gamma",
-        "Delta",
-        "Theta",
-        "Lambda",
-        "Xi",
-        "Pi",
-        "Sigma",
-        "Upsilon",
-        "Phi",
-        "Psi",
-        "Omega",
-        # operators / functions
-        "sum",
-        "prod",
-        "int",
-        "iint",
-        "iiint",
-        "oint",
-        "lim",
-        "inf",
-        "sup",
-        "max",
-        "min",
-        "arg",
-        "argmax",
-        "argmin",
-        "log",
-        "ln",
-        "exp",
-        "sin",
-        "cos",
-        "tan",
-        "det",
-        "dim",
-        "ker",
-        "deg",
-        "gcd",
-        "Pr",
-        # symbols / relations
-        "infty",
-        "partial",
-        "nabla",
-        "cdot",
-        "cdots",
-        "ldots",
-        "dots",
-        "vdots",
-        "ddots",
-        "times",
-        "div",
-        "pm",
-        "mp",
-        "ast",
-        "star",
-        "circ",
-        "bullet",
-        "oplus",
-        "otimes",
-        "odot",
-        "leq",
-        "geq",
-        "neq",
-        "approx",
-        "equiv",
-        "sim",
-        "simeq",
-        "cong",
-        "propto",
-        "ll",
-        "gg",
-        "subset",
-        "supset",
-        "subseteq",
-        "supseteq",
-        "in",
-        "ni",
-        "notin",
-        "cup",
-        "cap",
-        "emptyset",
-        "forall",
-        "exists",
-        "neg",
-        "land",
-        "lor",
-        "implies",
-        "iff",
-        "to",
-        "rightarrow",
-        "leftarrow",
-        "leftrightarrow",
-        "Rightarrow",
-        "Leftarrow",
-        "Leftrightarrow",
-        "mapsto",
-        "langle",
-        "rangle",
-        "lfloor",
-        "rfloor",
-        "lceil",
-        "rceil",
-        "left",
-        "right",
-        "big",
-        "Big",
-        "bigg",
-        "Bigg",
-        # structures / styling
-        "frac",
-        "dfrac",
-        "tfrac",
-        "sqrt",
-        "overline",
-        "underline",
-        "hat",
-        "widehat",
-        "bar",
-        "tilde",
-        "widetilde",
-        "vec",
-        "dot",
-        "ddot",
-        "boldsymbol",
-        "mathbf",
-        "mathrm",
-        "mathcal",
-        "mathbb",
-        "mathfrak",
-        "mathsf",
-        "mathtt",
-        "mathit",
-        "text",
-        "operatorname",
-        "begin",
-        "end",
-        "array",
-        "aligned",
-        "matrix",
-        "bmatrix",
-        "pmatrix",
-        "vmatrix",
-        "cases",
-        "substack",
-        "quad",
-        "qquad",
-        "label",
-        "nonumber",
-        "prime",
-        "ldotp",
-        "colon",
+        "llbracket",  # stmaryrd
+        "rrbracket",  # stmaryrd
+        "textsc",  # not in MathJax core
+        "coloneqq",  # mathtools
+        "eqqcolon",  # mathtools
+        "vcentcolon",  # mathtools
     }
 )
 
@@ -278,16 +101,21 @@ def _fix_headings(markdown: str) -> str:
     return "\n".join(out)
 
 
-def _fix_pipes_in_math(markdown: str) -> str:
-    """Replace a bare ``|`` inside a math span with ``\\vert`` (identical render)
-    so kramdown doesn't misread it as a table-cell delimiter."""
-
-    def repl(match: re.Match[str]) -> str:
-        if match.lastgroup in ("display", "inline"):
-            return _BARE_PIPE.sub(r"\\vert ", match.group(0))
-        return match.group(0)
-
-    return SEGMENT_PATTERN.sub(repl, markdown)
+def _warn_pipes_in_math(markdown: str, regions: list[tuple[int, int, str]]) -> None:
+    """Warn about a bare ``|`` inside a math span (kramdown may read it as a
+    table-cell delimiter). NOT auto-rewritten: ``\\vert`` would be wrong after
+    ``\\left``/``\\right``/``\\middle`` and inside ``array{c|c}`` column specs, so
+    the safe fix is context-dependent and left to a human."""
+    for ms, me, kind in regions:
+        if kind not in ("display", "inline"):
+            continue
+        if _BARE_PIPE.search(markdown[ms:me]):
+            logger.warning(
+                "Markdown lint: bare '|' inside math %r — kramdown may read it as "
+                "a table delimiter. Use \\vert / \\mid (or \\left|...\\right| for "
+                "delimiters) so it renders correctly.",
+                markdown[ms:me][:60],
+            )
 
 
 def _warn_single_dollar(markdown: str, regions: list[tuple[int, int, str]]) -> None:
@@ -303,20 +131,22 @@ def _warn_single_dollar(markdown: str, regions: list[tuple[int, int, str]]) -> N
 
 
 def _warn_undefined_macros(markdown: str, regions: list[tuple[int, int, str]]) -> None:
+    """Warn when math uses a macro from the known-problematic set (non-standard
+    packages the blog doesn't load), which renders as red raw text. We check this
+    small explicit set rather than allowlisting all of base MathJax."""
     seen: set[str] = set()
     for ms, me, kind in regions:
         if kind not in ("display", "inline"):
             continue
         for mm in _MACRO.finditer(markdown[ms:me]):
-            name = mm.group(1)
-            if name not in _BASE_MATHJAX_MACROS and name not in _BLOG_EXTRA_MACROS:
-                seen.add(name)
+            if mm.group(1) in _UNDEFINED_MACROS:
+                seen.add(mm.group(1))
     if seen:
         logger.warning(
-            "Markdown lint: math uses macro(s) not in the blog's known set %s "
-            "— they may render as red raw text. Known extra macros: %s.",
+            "Markdown lint: math uses macro(s) %s the blog's MathJax does not "
+            "define — they will render as red raw text. Replace with a base "
+            "MathJax equivalent.",
             sorted(seen),
-            sorted(_BLOG_EXTRA_MACROS),
         )
 
 
@@ -338,16 +168,17 @@ def _warn_non_url_links(markdown: str, regions: list[tuple[int, int, str]]) -> N
 
 
 def lint_markdown(markdown: str) -> str:
-    """Auto-fix safe blog-rendering issues and warn about risky ones.
+    """Auto-fix the one safe blog-rendering issue and warn about risky ones.
 
-    Auto-fixed (lossless): blank line before headings, bare ``|`` -> ``\\vert``
-    inside math. Warned (left untouched): single-$ inline math, macros outside
-    the blog's known set, and non-URL link targets. Returns the fixed Markdown.
+    Auto-fixed (lossless): blank line before a heading glued to the previous
+    line. Warned (left untouched, since a rewrite could ship a new bug): bare
+    ``|`` in math, single-$ inline math, known-undefined macros, and non-URL link
+    targets. Returns the (heading-fixed) Markdown.
     """
     fixed = _fix_headings(markdown)
-    fixed = _fix_pipes_in_math(fixed)
 
     regions = _classify_regions(fixed)
+    _warn_pipes_in_math(fixed, regions)
     _warn_single_dollar(fixed, regions)
     _warn_undefined_macros(fixed, regions)
     _warn_non_url_links(fixed, regions)

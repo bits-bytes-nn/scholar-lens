@@ -63,18 +63,17 @@ class TestPublishLocal:
 
     async def test_publish_applies_markdown_lint(self, tmp_path: Path) -> None:
         # publish() runs the lint pass for EVERY artifact (review/summary/guide
-        # all go through this same method), so a heading glued to the previous
-        # line gets its blank line and a bare | in math becomes \vert.
+        # all go through this same method): a heading glued to the previous line
+        # gets its blank line (the one auto-fix).
         pub = Publisher(Github(), root_dir=tmp_path)
         request = _request(
             tmp_path,
-            markdown="intro line\n## Section\n\\(P(a|b)\\)\n",
+            markdown="intro line\n## Section\nbody\n",
             rewrite_local_images=False,
         )
         _, md_path = await pub.publish(request)
         content = md_path.read_text(encoding="utf-8")
         assert "intro line\n\n## Section" in content  # blank line inserted
-        assert r"\(P(a\vert b)\)" in content  # bare pipe fixed
 
     async def test_http_images_untouched(self, tmp_path: Path) -> None:
         pub = Publisher(Github(), root_dir=tmp_path)
