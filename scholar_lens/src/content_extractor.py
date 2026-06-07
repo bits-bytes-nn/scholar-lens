@@ -26,6 +26,11 @@ from .utils import (
 # Tokens to hold back from a model's context window for the prompt template,
 # the model's own output, and a safety margin, when fitting the paper text.
 _CONTEXT_RESERVE_TOKENS: int = 16000
+# Our counter (tiktoken cl100k_base) under-counts vs Claude's own tokenizer by
+# ~10-15%, so the truncation budget is scaled down to stay clear of the model's
+# hard limit (a slightly shorter paper body barely affects attribute/TOC/
+# citation extraction, but overshooting fails the whole call).
+_TOKENIZER_SAFETY_RATIO: float = 0.80
 
 _tokenizer: Any = None
 
@@ -178,7 +183,8 @@ class ContentExtractor(RetryableBase):
         # A model flagged for the 1M window is invoked with it enabled.
         if info and info.supports_1m_context_window:
             window = max(window, 1000000)
-        return max(window - _CONTEXT_RESERVE_TOKENS, 1000)
+        usable = (window - _CONTEXT_RESERVE_TOKENS) * _TOKENIZER_SAFETY_RATIO
+        return max(int(usable), 1000)
 
     def _fit(self, text: str, budget: int, what: str) -> str:
         """Truncate ``text`` to ``budget`` tokens (best-effort) so a long paper
