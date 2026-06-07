@@ -26,13 +26,14 @@ from .utils import (
 # Tokens to hold back from a model's context window for the prompt template,
 # the model's own output, and a safety margin, when fitting the paper text.
 _CONTEXT_RESERVE_TOKENS: int = 16000
-# We truncate by CHARACTER count, not tiktoken: cl100k_base under-counts vs
-# Claude's tokenizer by an amount that varies wildly with content — a math/HTML
-# heavy paper measured ~2.0 chars per Claude token (≈37% denser than cl100k
-# estimated), so a token-based cut overshot the hard limit. A conservative
-# floor of chars-per-token guarantees the byte budget stays under the model's
-# token limit regardless of content density.
+# Conservative chars-per-token floor used ONLY to size a cheap first cut before
+# measuring the exact count, so we don't send a 500k+ char body to CountTokens.
+# A real paper runs well above this (cl100k mis-estimates wildly on math/HTML),
+# so this only ever over-trims slightly; the exact CountTokens pass below then
+# fits precisely.
 _MIN_CHARS_PER_TOKEN: float = 1.8
+# Max CountTokens refinement passes when fitting text to the token budget.
+_FIT_MAX_PASSES: int = 4
 
 
 class Attributes(BaseModel):
@@ -96,6 +97,11 @@ class ContentExtractor(RetryableBase):
         )
         self.existing_keywords: set[str] = set()
         self.llm_factory = BedrockLanguageModelFactory(boto_session=self.boto_session)
+        # Used to count tokens exactly with Bedrock's CountTokens API (Claude's
+        # own tokenizer) when fitting long papers to a model's context window.
+        self._token_counter = self.boto_session.client(
+            "bedrock-runtime", region_name=self.llm_factory.region_name
+        )
         self._initialize_chains(
             citation_extraction_model_id,
             attributes_extraction_model_id,
@@ -130,15 +136,22 @@ class ContentExtractor(RetryableBase):
             table_of_contents_model_id, temperature=0.0, supports_1m_context_window=True
         )
 
-        # Per-extractor input-char budget, so a very long paper is truncated to
-        # fit the model rather than failing the whole job with
+        # Per-extractor (model_id, input-token budget), so a very long paper is
+        # truncated to fit the model rather than failing the whole job with
         # "prompt is too long". Models that don't support the 1M window keep
         # their 200k window, so each extractor gets the budget for ITS model.
-        self._citation_budget = self._input_char_budget(citation_extraction_model_id)
-        self._attributes_budget = self._input_char_budget(
-            attributes_extraction_model_id
+        self._citation_fit = (
+            citation_extraction_model_id,
+            self._input_token_budget(citation_extraction_model_id),
         )
-        self._toc_budget = self._input_char_budget(table_of_contents_model_id)
+        self._attributes_fit = (
+            attributes_extraction_model_id,
+            self._input_token_budget(attributes_extraction_model_id),
+        )
+        self._toc_fit = (
+            table_of_contents_model_id,
+            self._input_token_budget(table_of_contents_model_id),
+        )
         robust_xml_output_parser = create_robust_xml_output_parser(
             self.llm_factory,
             enable_output_fixing=enable_output_fixing,
@@ -161,37 +174,74 @@ class ContentExtractor(RetryableBase):
             | robust_xml_output_parser
         )
 
-    def _input_char_budget(self, model_id: LanguageModelId) -> int:
-        """Max paper-text CHARACTERS for ``model_id``.
-
-        Derived from the model's token window less a reserve for the prompt
-        template + output, converted to characters via a conservative
-        chars-per-token floor so the result stays under the hard token limit
-        regardless of how token-dense the content is. Falls back to the 200k
+    def _input_token_budget(self, model_id: LanguageModelId) -> int:
+        """Max paper-text TOKENS for ``model_id``: the model's context window
+        less a reserve for the prompt template + output. Falls back to the 200k
         window if the model is unknown."""
         info = self.llm_factory.get_model_info(model_id)
         window = info.context_window_size if info else 200000
         # A model flagged for the 1M window is invoked with it enabled.
         if info and info.supports_1m_context_window:
             window = max(window, 1000000)
-        usable_tokens = max(window - _CONTEXT_RESERVE_TOKENS, 1000)
-        return int(usable_tokens * _MIN_CHARS_PER_TOKEN)
+        return max(window - _CONTEXT_RESERVE_TOKENS, 1000)
 
-    @staticmethod
-    def _fit(text: str, char_budget: int, what: str) -> str:
-        """Truncate ``text`` to ``char_budget`` characters so a long paper fits
-        the model's context window instead of failing the call. Character-based
-        (not tiktoken) because cl100k under-counts Claude's tokens by a
-        content-dependent margin that overshot the limit."""
-        if len(text) <= char_budget:
-            return text
-        logger.warning(
-            "%s input (%d chars) exceeds the budget (%d chars); truncating.",
-            what,
-            len(text),
-            char_budget,
+    def _count_tokens(self, model_id: LanguageModelId, text: str) -> int:
+        """Exact Claude token count for ``text`` via Bedrock CountTokens."""
+        response = self._token_counter.count_tokens(
+            modelId=model_id.value,
+            input={
+                "converse": {
+                    "messages": [{"role": "user", "content": [{"text": text}]}]
+                }
+            },
         )
-        return text[:char_budget]
+        return int(response["inputTokens"])
+
+    def _fit(self, model_id: LanguageModelId, budget: int, text: str, what: str) -> str:
+        """Truncate ``text`` so it fits ``budget`` tokens for ``model_id``, using
+        Bedrock's CountTokens (Claude's own tokenizer) for an exact count.
+
+        A cheap char-based first cut keeps us from sending a huge body to
+        CountTokens; the measured count then drives proportional refinement
+        passes until the text is under budget."""
+        # Cheap upper-bound cut so the very first CountTokens call isn't on 500k+
+        # chars. Over-trimming here is harmless — refinement only shrinks further.
+        candidate = text[: int(budget / _MIN_CHARS_PER_TOKEN)] if text else text
+        for _ in range(_FIT_MAX_PASSES):
+            try:
+                tokens = self._count_tokens(model_id, candidate)
+            except (
+                Exception
+            ) as e:  # noqa: BLE001 - fall back to char budget on API error
+                logger.warning(
+                    "CountTokens failed for %s (%s); using char-based truncation.",
+                    what,
+                    e,
+                )
+                limit = int(budget * _MIN_CHARS_PER_TOKEN)
+                return text[:limit]
+            if tokens <= budget:
+                if candidate is not text and len(candidate) < len(text):
+                    logger.info(
+                        "%s truncated to %d chars (%d tokens, budget %d).",
+                        what,
+                        len(candidate),
+                        tokens,
+                        budget,
+                    )
+                return candidate
+            # Scale the char length by the token ratio, with a 3% safety shave.
+            ratio = (budget / tokens) * 0.97
+            new_len = max(int(len(candidate) * ratio), 1)
+            logger.warning(
+                "%s input (%d tokens) exceeds budget (%d); shrinking to %d chars.",
+                what,
+                tokens,
+                budget,
+                new_len,
+            )
+            candidate = candidate[:new_len]
+        return candidate
 
     @classmethod
     async def create(
@@ -278,7 +328,7 @@ class ContentExtractor(RetryableBase):
     ) -> dict[str, str]:
         return await self.citation_extractor.ainvoke(
             {
-                "text": self._fit(html_content, self._citation_budget, "Citation"),
+                "text": self._fit(*self._citation_fit, html_content, "Citation"),
                 "existing_citations": existing_citations,
             }
         )
@@ -304,7 +354,7 @@ class ContentExtractor(RetryableBase):
     async def extract_attributes(self, html_content: str) -> Attributes:
         result = await self.attributes_extractor.ainvoke(
             {
-                "text": self._fit(html_content, self._attributes_budget, "Attributes"),
+                "text": self._fit(*self._attributes_fit, html_content, "Attributes"),
                 "existing_keywords": ", ".join(sorted(list(self.existing_keywords))),
             }
         )
@@ -354,5 +404,5 @@ class ContentExtractor(RetryableBase):
     @RetryableBase._retry("table_of_contents_extraction")
     async def extract_table_of_contents(self, html_content: str) -> dict[str, Any]:
         return await self.table_of_contents_extractor.ainvoke(
-            {"paper_content": self._fit(html_content, self._toc_budget, "TOC")}
+            {"paper_content": self._fit(*self._toc_fit, html_content, "TOC")}
         )
