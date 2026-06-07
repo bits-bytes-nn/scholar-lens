@@ -48,14 +48,14 @@ class TestBuildFrontMatter:
         out = _build_front_matter(Github(), paper, "Paper Reviews")
         assert 'author: "ACME"' in out
 
-    def test_date_is_today(self) -> None:
+    def test_date_is_paper_published_date(self) -> None:
+        # The post date is the paper's own publication date, not "now".
         out = _build_front_matter(Github(), self._paper(), "Paper Reviews")
-        today = datetime.now().strftime("%Y-%m-%d")
-        assert f"date: {today}" in out
+        assert "date: 2021-05-04 08:00:00" in out
 
-    def test_paper_date_reflects_published_year(self) -> None:
+    def test_no_separate_paper_date_field(self) -> None:
         out = _build_front_matter(Github(), self._paper(), "Paper Reviews")
-        assert "paper_date: 2021-05-04" in out
+        assert "paper_date:" not in out
 
 
 class TestReviewPromptsCarryLanguage:

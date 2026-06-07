@@ -6,7 +6,6 @@ import os
 import re
 import sys
 import time
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -550,7 +549,6 @@ def _build_front_matter(
 layout: post
 title: "{title}"
 date: {date}
-paper_date: {paper_date}
 author: "{author}"
 categories: [{categories}]
 tags: [{tags}]
@@ -578,10 +576,8 @@ use_math: true
 
     return front_matter_template.format(
         title=paper.title.replace('"', '\\"'),
-        # The post's own publication date is "now"; the paper's original date is
-        # surfaced separately so the blog doesn't sort the post years into the past.
-        date=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        paper_date=paper.published.strftime("%Y-%m-%d"),
+        # Use the paper's own publication date as the post date.
+        date=paper.published.strftime("%Y-%m-%d %H:%M:%S"),
         author=author.replace('"', '\\"'),
         categories=categories_str,
         tags=keywords_str,
