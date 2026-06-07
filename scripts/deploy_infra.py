@@ -248,6 +248,9 @@ class PaperReviewStack(Stack):
                 actions=[
                     "bedrock:InvokeModel",
                     "bedrock:InvokeModelWithResponseStream",
+                    # CountTokens is used to fit long papers to the context window
+                    # using Claude's exact tokenizer before invoking the model.
+                    "bedrock:CountTokens",
                 ],
                 resources=bedrock_resources,
             )
