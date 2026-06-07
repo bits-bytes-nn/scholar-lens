@@ -23,6 +23,25 @@ from .utils import (
     is_placeholder,
 )
 
+# Tokens to hold back from a model's context window for the prompt template,
+# the model's own output, and a safety margin, when fitting the paper text.
+_CONTEXT_RESERVE_TOKENS: int = 16000
+
+_tokenizer: Any = None
+
+
+def _get_tokenizer() -> Any:
+    """Lazily load the cl100k_base tokenizer (used only as an approximate token
+    counter for truncation). Loaded on first use so importing this module does
+    not trigger tiktoken's vocab download (which breaks offline/CI/Batch cold
+    starts)."""
+    global _tokenizer
+    if _tokenizer is None:
+        from tiktoken import get_encoding
+
+        _tokenizer = get_encoding("cl100k_base")
+    return _tokenizer
+
 
 class Attributes(BaseModel):
     affiliation: str = Field(min_length=1)
@@ -101,15 +120,33 @@ class ContentExtractor(RetryableBase):
         output_fixing_model_id: LanguageModelId,
         enable_output_fixing: bool,
     ) -> None:
+        # All three extractors are fed the full paper text, which for long papers
+        # (e.g. 500k+ chars) exceeds the 200k default context window. Enable the
+        # 1M context window on each so long papers don't fail with
+        # "prompt is too long" (no-op on models that don't support it).
         citation_llm = self.llm_factory.get_model(
-            citation_extraction_model_id, temperature=0.0
+            citation_extraction_model_id,
+            temperature=0.0,
+            supports_1m_context_window=True,
         )
         attributes_llm = self.llm_factory.get_model(
-            attributes_extraction_model_id, temperature=0.0
+            attributes_extraction_model_id,
+            temperature=0.0,
+            supports_1m_context_window=True,
         )
         table_of_contents_llm = self.llm_factory.get_model(
             table_of_contents_model_id, temperature=0.0, supports_1m_context_window=True
         )
+
+        # Per-extractor input-token budget, so a very long paper is truncated to
+        # fit the model rather than failing the whole job with
+        # "prompt is too long". Models that don't support the 1M window keep
+        # their 200k window, so each extractor gets the budget for ITS model.
+        self._citation_budget = self._input_token_budget(citation_extraction_model_id)
+        self._attributes_budget = self._input_token_budget(
+            attributes_extraction_model_id
+        )
+        self._toc_budget = self._input_token_budget(table_of_contents_model_id)
         robust_xml_output_parser = create_robust_xml_output_parser(
             self.llm_factory,
             enable_output_fixing=enable_output_fixing,
@@ -131,6 +168,32 @@ class ContentExtractor(RetryableBase):
             | table_of_contents_llm
             | robust_xml_output_parser
         )
+
+    def _input_token_budget(self, model_id: LanguageModelId) -> int:
+        """Max paper-text tokens for ``model_id``, less a reserve for the prompt
+        template + output. Falls back to the 200k default if the model is
+        unknown."""
+        info = self.llm_factory.get_model_info(model_id)
+        window = info.context_window_size if info else 200000
+        # A model flagged for the 1M window is invoked with it enabled.
+        if info and info.supports_1m_context_window:
+            window = max(window, 1000000)
+        return max(window - _CONTEXT_RESERVE_TOKENS, 1000)
+
+    def _fit(self, text: str, budget: int, what: str) -> str:
+        """Truncate ``text`` to ``budget`` tokens (best-effort) so a long paper
+        fits the model's context window instead of failing the call."""
+        tokenizer = _get_tokenizer()
+        token_ids = tokenizer.encode(text, allowed_special="all")
+        if len(token_ids) <= budget:
+            return text
+        logger.warning(
+            "%s input (%d tokens) exceeds the model budget (%d); truncating.",
+            what,
+            len(token_ids),
+            budget,
+        )
+        return tokenizer.decode(token_ids[:budget])
 
     @classmethod
     async def create(
@@ -216,7 +279,10 @@ class ContentExtractor(RetryableBase):
         self, html_content: str, existing_citations: str
     ) -> dict[str, str]:
         return await self.citation_extractor.ainvoke(
-            {"text": html_content, "existing_citations": existing_citations}
+            {
+                "text": self._fit(html_content, self._citation_budget, "Citation"),
+                "existing_citations": existing_citations,
+            }
         )
 
     @staticmethod
@@ -240,7 +306,7 @@ class ContentExtractor(RetryableBase):
     async def extract_attributes(self, html_content: str) -> Attributes:
         result = await self.attributes_extractor.ainvoke(
             {
-                "text": html_content,
+                "text": self._fit(html_content, self._attributes_budget, "Attributes"),
                 "existing_keywords": ", ".join(sorted(list(self.existing_keywords))),
             }
         )
@@ -290,5 +356,5 @@ class ContentExtractor(RetryableBase):
     @RetryableBase._retry("table_of_contents_extraction")
     async def extract_table_of_contents(self, html_content: str) -> dict[str, Any]:
         return await self.table_of_contents_extractor.ainvoke(
-            {"paper_content": html_content}
+            {"paper_content": self._fit(html_content, self._toc_budget, "TOC")}
         )

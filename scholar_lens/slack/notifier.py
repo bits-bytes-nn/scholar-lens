@@ -30,13 +30,16 @@ def _clean(value: str | None) -> str | None:
 def _mrkdwn_safe(value: str) -> str:
     """Neutralise Slack mrkdwn control chars in user-influenced text.
 
-    The title and error strings originate from paper metadata / exception text,
-    so escape the formatting characters (`*_~` and backtick) and collapse
-    newlines to keep an injected string from reshaping the status message.
+    The title and error strings come from paper metadata / exception text. Slack
+    mrkdwn does NOT honour backslash escaping (``\\_`` renders the backslash
+    literally), so instead of escaping we swap the characters that genuinely
+    break a layout — backtick and ``*`` — for visually-identical homoglyphs.
+    ``_`` and ``~`` only italicise/strike when they wrap text at word
+    boundaries, so a mid-token ``_`` (e.g. an arXiv id like ``2504_03182``) is
+    left untouched and displays cleanly. Newlines are collapsed so an injected
+    string can't reshape the message.
     """
-    out = value.replace("`", "ʼ")
-    for ch in ("*", "_", "~"):
-        out = out.replace(ch, "\\" + ch)
+    out = value.replace("`", "ʼ").replace("*", "∗")
     return " ".join(out.split())
 
 

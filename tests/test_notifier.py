@@ -23,10 +23,15 @@ from scholar_lens.src.constants import EnvVars
 
 def test_mrkdwn_safe_neutralizes_formatting() -> None:
     out = _mrkdwn_safe("fail *boom* _x_ `code`\nline2")
-    assert "*boom*" not in out
-    assert "\\*boom\\*" in out
+    assert "*boom*" not in out  # asterisks swapped for a homoglyph
+    assert "\\" not in out  # no backslash escaping (Slack renders it literally)
     assert "`" not in out  # backticks replaced
     assert "\n" not in out  # newlines collapsed
+
+
+def test_mrkdwn_safe_keeps_arxiv_id_clean() -> None:
+    # A mid-token underscore must NOT be escaped — it shows literally on Slack.
+    assert _mrkdwn_safe("2504_03182") == "2504_03182"
 
 
 class TestClean:
