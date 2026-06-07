@@ -691,6 +691,8 @@ def _build_paper_publish_request(
         pr_body=pr_body,
         commit_message=f"feat: Add paper {artifact_label} for '{paper.title}'",
         rewrite_local_images=paper.is_pdf_parsed,
+        # Date the post (filename + front-matter) to the paper's publication date.
+        post_date=paper.published,
     )
 
 
