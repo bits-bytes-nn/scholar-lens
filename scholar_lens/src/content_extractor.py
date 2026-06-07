@@ -34,6 +34,9 @@ _CONTEXT_RESERVE_TOKENS: int = 16000
 _MIN_CHARS_PER_TOKEN: float = 1.8
 # Max CountTokens refinement passes when fitting text to the token budget.
 _FIT_MAX_PASSES: int = 4
+# Bedrock CountTokens rejects inputs above the model's context limit, so it is
+# only useful for budgets up to ~200k; above this we rely on the char cap alone.
+_COUNT_TOKENS_MAX_INPUT: int = 200000
 
 
 class Attributes(BaseModel):
@@ -197,16 +200,33 @@ class ContentExtractor(RetryableBase):
         )
         return int(response["inputTokens"])
 
-    def _fit(self, model_id: LanguageModelId, budget: int, text: str, what: str) -> str:
-        """Truncate ``text`` so it fits ``budget`` tokens for ``model_id``, using
-        Bedrock's CountTokens (Claude's own tokenizer) for an exact count.
+    def _char_cap(self, budget: int) -> int:
+        """Max chars that are guaranteed ≤ ``budget`` tokens, using a
+        conservative chars-per-token floor."""
+        return int(budget * _MIN_CHARS_PER_TOKEN)
 
-        A cheap char-based first cut keeps us from sending a huge body to
-        CountTokens; the measured count then drives proportional refinement
-        passes until the text is under budget."""
-        # Cheap upper-bound cut so the very first CountTokens call isn't on 500k+
-        # chars. Over-trimming here is harmless — refinement only shrinks further.
-        candidate = text[: int(budget / _MIN_CHARS_PER_TOKEN)] if text else text
+    def _fit(self, model_id: LanguageModelId, budget: int, text: str, what: str) -> str:
+        """Truncate ``text`` so it fits ``budget`` tokens for ``model_id``.
+
+        For large-window (1M) models the budget far exceeds any real paper, so a
+        char-based cap (which never trims a normal paper) is used directly —
+        CountTokens can't even measure inputs that big. For 200k-window models we
+        refine the cut with Bedrock's CountTokens (Claude's exact tokenizer):
+        a char-based first cut keeps the measured input under the API's own
+        limit, then proportional passes converge to the exact budget."""
+        if not text:
+            return text
+        # The char cap alone guarantees tokens <= budget (given the floor holds),
+        # so it is always a safe upper bound and the only step needed when the
+        # budget is too large for CountTokens to measure.
+        cap = self._char_cap(budget)
+        candidate = text[:cap]
+        if budget > _COUNT_TOKENS_MAX_INPUT:
+            if len(candidate) < len(text):
+                logger.info(
+                    "%s truncated to %d chars (char budget).", what, len(candidate)
+                )
+            return candidate
         for _ in range(_FIT_MAX_PASSES):
             try:
                 tokens = self._count_tokens(model_id, candidate)
@@ -218,10 +238,9 @@ class ContentExtractor(RetryableBase):
                     what,
                     e,
                 )
-                limit = int(budget * _MIN_CHARS_PER_TOKEN)
-                return text[:limit]
+                return candidate
             if tokens <= budget:
-                if candidate is not text and len(candidate) < len(text):
+                if len(candidate) < len(text):
                     logger.info(
                         "%s truncated to %d chars (%d tokens, budget %d).",
                         what,

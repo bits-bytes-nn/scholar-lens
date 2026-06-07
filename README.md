@@ -11,7 +11,7 @@ Driven from the CLI, AWS Batch, or a Slack bot · powered by Amazon Bedrock (Cla
 ![AWS CDK](https://img.shields.io/badge/IaC-AWS%20CDK-orange)
 ![Bedrock](https://img.shields.io/badge/LLM-Amazon%20Bedrock%20(Claude)-green)
 
-🇰🇷 [한국어 README](./README.ko.md) · 📖 [Technical reference](./docs/tech-doc.md)
+🇰🇷 [한국어 README](./README.ko.md)
 
 ![Sample](./assets/sample.png)
 
@@ -68,8 +68,6 @@ All work runs as a containerised job on AWS Batch; the same job is submitted by 
 | `publisher.py` | Artifact-agnostic S3 upload + Jekyll blog PR. |
 | `slack/` | The on-demand Paper Bot (intent parsing → Batch dispatch). |
 
-> 📖 See [`docs/tech-doc.md`](./docs/tech-doc.md) for the full, line-by-line technical reference — every module, the end-to-end data flow, config schema, model usage, infrastructure, and prompts.
-
 ## Tech stack
 
 Python 3.12+ · AWS CDK · Docker · Amazon Bedrock · LangChain / LangGraph · PyMuPDF · BeautifulSoup4 · FAISS · Pydantic.
@@ -108,7 +106,7 @@ tech_guide:
 output_language: Korean
 ```
 
-See [`docs/tech-doc.md` §5](./docs/tech-doc.md) for the full schema.
+See [`scholar_lens/configs/config-template.yaml`](./scholar_lens/configs/config-template.yaml) for the full schema.
 
 ## Usage
 
