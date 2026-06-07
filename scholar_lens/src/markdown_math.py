@@ -1,12 +1,16 @@
 r"""Make LaTeX math survive the blog's kramdown(GFM) + MathJax pipeline.
 
 The target Jekyll blog parses Markdown with ``kramdown`` in GFM mode. GFM treats
-``_`` as an emphasis delimiter, so a math span like ``$W_0 + h_t$`` can have its
-subscript underscores eaten (rendered as italics) before MathJax ever sees it.
-The fix the author applies by hand is to escape underscores inside math as
+``_`` as an emphasis delimiter, so a math span like ``\(W_0 + h_t\)`` can have
+its subscript underscores eaten (rendered as italics) before MathJax ever sees
+it. The fix the author applies by hand is to escape underscores inside math as
 ``\_``. This module does that automatically, but ONLY inside math spans, and
 without touching code (fenced blocks or inline code), where ``_`` is literal and
 must be left alone.
+
+Inline math uses ``\( ... \)`` (the blog strips single-``$`` delimiters to
+protect prose like prices, so ``$...$`` does not render and is not treated as
+math here); display math uses ``$$ ... $$``.
 
 :func:`normalize_math_underscores` is the entry point.
 """
@@ -16,14 +20,16 @@ from __future__ import annotations
 import re
 
 # Fenced code blocks (``` or ~~~), inline code (`...`), then display ($$...$$)
-# and inline ($...$) math. Order matters: code is matched first so math inside
-# code is never rewritten, and $$ before $ so display math isn't split.
+# and inline (\( ... \)) math. Order matters: code is matched first so math
+# inside code is never rewritten. Single-$ spans are intentionally NOT matched:
+# the blog strips $ delimiters (to protect prose like prices), so $...$ is not
+# math here and must be left as prose.
 _SEGMENT = re.compile(
     r"""
     (?P<fence>^[ \t]*(?P<ff>```|~~~).*?\n(?:.*?\n)*?[ \t]*(?P=ff)[ \t]*$)
     | (?P<icode>`+[^`]*`+)
     | (?P<display>\$\$.+?\$\$)
-    | (?P<inline>(?<!\$)\$(?!\s)(?:\\\$|[^$\n])+?\$(?!\$))
+    | (?P<inline>\\\((?:\\.|[^\n\\])+?\\\))
     """,
     re.VERBOSE | re.MULTILINE | re.DOTALL,
 )

@@ -399,7 +399,7 @@ class CitationAnalysisPrompt(BasePrompt):
 
     ## Technical Details
     - Key algorithms, methods, or architectures
-    - Important mathematical formulations (use LaTeX: $ ... $ for inline, $$ ... $$ for display)
+    - Important mathematical formulations (use LaTeX: \\( ... \\) for inline, $$ ... $$ for display; never single-dollar $ ... $ for inline)
     - Critical experimental findings or theoretical results
 
     ## Relevance to Citing Work
@@ -620,7 +620,7 @@ class CitationSummaryPrompt(BasePrompt):
        - Limitations and constraints
 
     3. **Mathematical Content**
-       - Use LaTeX notation: $ ... $ for inline, $$ ... $$ for display
+       - Use LaTeX notation: \\( ... \\) for inline, $$ ... $$ for display; never single-dollar $ ... $ for inline
        - Standard symbols: \alpha, \beta, \sum, \int, etc.
        - Define all variables clearly
 
@@ -2060,12 +2060,14 @@ class PaperSynthesisPrompt(BasePrompt):
     #### 5.1 Mathematics Formatting (STRICT REQUIREMENTS)
 
     **LaTeX formatting rules:**
-    - Simple inline expressions: $ ... $
+    - Inline expressions: \\( ... \\)  — do NOT use single-dollar $ ... $ for inline
+      math (the blog strips the $ delimiter to protect prose like prices, so
+      $ ... $ will NOT render)
     - Complex display equations: $$ ... $$
     - Greek letters: Use \alpha, \beta, etc., NEVER α, β directly
     - ALL mathematical variables and expressions must use LaTeX formatting
-      (e.g., use $x$, $y$, $f(x)$ instead of plain x, y, f(x))
-    - Even when mentioning variables in prose, use LaTeX: "변수 $x$를 사용하여"
+      (e.g., use \\(x\\), \\(y\\), \\(f(x)\\) instead of plain x, y, f(x))
+    - Even when mentioning variables in prose, use inline LaTeX: "변수 \\(x\\)를 사용하여"
     - Text within math: Use \text{{}} with English ONLY for readability
       * CORRECT: \text{{batch size}}, \text{{learning rate}}
       * INCORRECT: \text{{배치 크기}}, \text{{batch_size}}
@@ -2696,7 +2698,7 @@ class PaperSummaryPrompt(BasePrompt):
     <Formatting Guidelines>
     - Format your response in clean GitHub-Flavored Markdown (NOT HTML) for optimal readability on a Jekyll blog
     - Use **bold** for key concepts and `-`/`1.` lists; do NOT emit raw HTML tags (no <p>, <strong>, <ul>, <img>, ...)
-    - Include mathematical formulas in LaTeX ($...$ for inline, $$...$$ for display)
+    - Include mathematical formulas in LaTeX (\\( ... \\) for inline, $$...$$ for display; never single-dollar $...$ for inline — the blog strips $ delimiters so it won't render)
     - IMPORTANT: Avoid the standalone amsmath display environments \\begin{{align}}, \\begin{{equation}},
       and \\begin{{gather}} — on the blog's MathJax setup they often fail to render. Instead:
       * For matrices, the \\begin{{array}}{{...}} ... \\end{{array}} environment INSIDE a $$...$$ block is fine:
@@ -2704,7 +2706,7 @@ class PaperSummaryPrompt(BasePrompt):
       * For multi-line/aligned equations, wrap an \\begin{{aligned}} ... \\end{{aligned}} inside $$...$$:
         $$\\begin{{aligned}} a &= b \\\\ c &= d \\end{{aligned}}$$
       * For complex math structures, break them into multiple separate display equations
-    - Do NOT use the \\bm{{}} command; use \\boldsymbol{{}} for bold symbols (e.g. $\\boldsymbol{{\\alpha}}$)
+    - Do NOT use the \\bm{{}} command; use \\boldsymbol{{}} for bold symbols (e.g. \\(\\boldsymbol{{\\alpha}}\\))
     - Enhance understanding with visual elements:
       * Include relevant figures from the paper as Markdown images: ![Description](path)
       * Render comparative data as actual Markdown tables (NEVER as image links)
@@ -2880,7 +2882,7 @@ class TechGuideSectionPrompt(BasePrompt):
     - Write in clean GitHub-flavored Markdown, starting with an appropriate '##' or '###' heading for this section.
     - Ground all technical content in <sources>; do NOT invent APIs, flags, or behaviors not supported by them.
     - Include runnable code blocks (with language fences) where they aid understanding.
-    - Use Markdown tables for comparisons/options and LaTeX ($...$ / $$...$$) for any math.
+    - Use Markdown tables for comparisons/options and LaTeX (\\( ... \\) inline / $$...$$ display; never single-dollar $...$ inline) for any math.
     - You MAY reference an image ONLY if its URL appears in <available_images>, using `![alt](url)`. Never invent image
       URLs. If no image fits, use none.
     - Do not repeat content already covered in <previously_written_sections>.
