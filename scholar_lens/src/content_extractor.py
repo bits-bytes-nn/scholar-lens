@@ -26,26 +26,13 @@ from .utils import (
 # Tokens to hold back from a model's context window for the prompt template,
 # the model's own output, and a safety margin, when fitting the paper text.
 _CONTEXT_RESERVE_TOKENS: int = 16000
-# Our counter (tiktoken cl100k_base) under-counts vs Claude's own tokenizer by
-# ~10-15%, so the truncation budget is scaled down to stay clear of the model's
-# hard limit (a slightly shorter paper body barely affects attribute/TOC/
-# citation extraction, but overshooting fails the whole call).
-_TOKENIZER_SAFETY_RATIO: float = 0.80
-
-_tokenizer: Any = None
-
-
-def _get_tokenizer() -> Any:
-    """Lazily load the cl100k_base tokenizer (used only as an approximate token
-    counter for truncation). Loaded on first use so importing this module does
-    not trigger tiktoken's vocab download (which breaks offline/CI/Batch cold
-    starts)."""
-    global _tokenizer
-    if _tokenizer is None:
-        from tiktoken import get_encoding
-
-        _tokenizer = get_encoding("cl100k_base")
-    return _tokenizer
+# We truncate by CHARACTER count, not tiktoken: cl100k_base under-counts vs
+# Claude's tokenizer by an amount that varies wildly with content — a math/HTML
+# heavy paper measured ~2.0 chars per Claude token (≈37% denser than cl100k
+# estimated), so a token-based cut overshot the hard limit. A conservative
+# floor of chars-per-token guarantees the byte budget stays under the model's
+# token limit regardless of content density.
+_MIN_CHARS_PER_TOKEN: float = 1.8
 
 
 class Attributes(BaseModel):
@@ -143,15 +130,15 @@ class ContentExtractor(RetryableBase):
             table_of_contents_model_id, temperature=0.0, supports_1m_context_window=True
         )
 
-        # Per-extractor input-token budget, so a very long paper is truncated to
+        # Per-extractor input-char budget, so a very long paper is truncated to
         # fit the model rather than failing the whole job with
         # "prompt is too long". Models that don't support the 1M window keep
         # their 200k window, so each extractor gets the budget for ITS model.
-        self._citation_budget = self._input_token_budget(citation_extraction_model_id)
-        self._attributes_budget = self._input_token_budget(
+        self._citation_budget = self._input_char_budget(citation_extraction_model_id)
+        self._attributes_budget = self._input_char_budget(
             attributes_extraction_model_id
         )
-        self._toc_budget = self._input_token_budget(table_of_contents_model_id)
+        self._toc_budget = self._input_char_budget(table_of_contents_model_id)
         robust_xml_output_parser = create_robust_xml_output_parser(
             self.llm_factory,
             enable_output_fixing=enable_output_fixing,
@@ -174,32 +161,37 @@ class ContentExtractor(RetryableBase):
             | robust_xml_output_parser
         )
 
-    def _input_token_budget(self, model_id: LanguageModelId) -> int:
-        """Max paper-text tokens for ``model_id``, less a reserve for the prompt
-        template + output. Falls back to the 200k default if the model is
-        unknown."""
+    def _input_char_budget(self, model_id: LanguageModelId) -> int:
+        """Max paper-text CHARACTERS for ``model_id``.
+
+        Derived from the model's token window less a reserve for the prompt
+        template + output, converted to characters via a conservative
+        chars-per-token floor so the result stays under the hard token limit
+        regardless of how token-dense the content is. Falls back to the 200k
+        window if the model is unknown."""
         info = self.llm_factory.get_model_info(model_id)
         window = info.context_window_size if info else 200000
         # A model flagged for the 1M window is invoked with it enabled.
         if info and info.supports_1m_context_window:
             window = max(window, 1000000)
-        usable = (window - _CONTEXT_RESERVE_TOKENS) * _TOKENIZER_SAFETY_RATIO
-        return max(int(usable), 1000)
+        usable_tokens = max(window - _CONTEXT_RESERVE_TOKENS, 1000)
+        return int(usable_tokens * _MIN_CHARS_PER_TOKEN)
 
-    def _fit(self, text: str, budget: int, what: str) -> str:
-        """Truncate ``text`` to ``budget`` tokens (best-effort) so a long paper
-        fits the model's context window instead of failing the call."""
-        tokenizer = _get_tokenizer()
-        token_ids = tokenizer.encode(text, allowed_special="all")
-        if len(token_ids) <= budget:
+    @staticmethod
+    def _fit(text: str, char_budget: int, what: str) -> str:
+        """Truncate ``text`` to ``char_budget`` characters so a long paper fits
+        the model's context window instead of failing the call. Character-based
+        (not tiktoken) because cl100k under-counts Claude's tokens by a
+        content-dependent margin that overshot the limit."""
+        if len(text) <= char_budget:
             return text
         logger.warning(
-            "%s input (%d tokens) exceeds the model budget (%d); truncating.",
+            "%s input (%d chars) exceeds the budget (%d chars); truncating.",
             what,
-            len(token_ids),
-            budget,
+            len(text),
+            char_budget,
         )
-        return tokenizer.decode(token_ids[:budget])
+        return text[:char_budget]
 
     @classmethod
     async def create(
