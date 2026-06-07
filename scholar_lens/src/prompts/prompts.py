@@ -339,7 +339,7 @@ class AttributesExtractionPrompt(BasePrompt):
        - Image/Video Generation
        - Training & Inference Optimization
        - Reinforcement Learning
-       - Retrieval Augmented Generation
+       - Retrieval Augmented Generation (incl. knowledge graphs & ontologies)
        - Recommendation Systems
        - Time Series Analysis
        - Other
