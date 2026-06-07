@@ -34,6 +34,10 @@ _SEGMENT = re.compile(
     re.VERBOSE | re.MULTILINE | re.DOTALL,
 )
 
+# Public alias: the markdown lint pass reuses this validated code/math-span
+# splitter so it classifies regions identically (code vs math vs prose).
+SEGMENT_PATTERN = _SEGMENT
+
 
 def _escape_underscores(math: str) -> str:
     """Escape unescaped underscores in a math span (``_`` -> ``\\_``)."""

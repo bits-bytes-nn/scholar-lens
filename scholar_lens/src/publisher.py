@@ -27,6 +27,7 @@ from github import Auth, Github, GithubException
 from .aws_helpers import S3Handler
 from .constants import EnvVars, LocalPaths, S3Paths
 from .logger import logger
+from .markdown_lint import lint_markdown
 from .markdown_math import normalize_math_underscores
 
 if TYPE_CHECKING:
@@ -88,6 +89,10 @@ class Publisher:
         # Escape underscores inside math so kramdown(GFM) doesn't eat subscripts
         # before MathJax renders (a recurring blog-rendering issue).
         markdown = normalize_math_underscores(markdown)
+        # Auto-fix other kramdown/MathJax pitfalls (blank line before headings,
+        # bare | in math) and warn about risky ones (single-$ math, undefined
+        # macros, non-URL links).
+        markdown = lint_markdown(markdown)
         if request.rewrite_local_images:
             markdown = self._rewrite_local_images(markdown, file_name)
 
