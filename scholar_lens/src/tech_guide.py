@@ -40,7 +40,10 @@ from .utils import (
 from .web_research import ResearchCorpus, WebResearcher
 
 DEFAULT_LANGUAGE: str = "Korean"
-_SOURCE_CHAR_BUDGET: int = 120_000
+# Headroom reserved from the writer model's window when fitting the source
+# corpus, leaving room for the prompt template, the model's output, and the
+# previous-sections context that grows as sections are written.
+_SECTION_CONTEXT_RESERVE_TOKENS: int = 80_000
 # Upper bound on guide sections. The synopsis is told this budget so it plans a
 # self-contained guide rather than over-proposing (which left the old vLLM guide
 # promising chapters 13-26 that were never written).
@@ -91,6 +94,8 @@ class TechGuideGenerator(RetryableBase):
             | self.llm_factory.get_model(relevance_model_id, temperature=0.0)
             | HTMLTagOutputParser(tag_names=TechGuideRelevancePrompt.output_variables)
         )
+        self.synopsis_model_id = synopsis_model_id
+        self.writing_model_id = writing_model_id
         self.synopsis_chain: Runnable = (
             TechGuideSynopsisPrompt.get_prompt()
             | self.llm_factory.get_model(
@@ -98,6 +103,7 @@ class TechGuideGenerator(RetryableBase):
                 temperature=0.0,
                 enable_thinking=enable_thinking,
                 thinking_effort=thinking_effort,
+                supports_1m_context_window=True,
             )
             | HTMLTagOutputParser(tag_names=TechGuideSynopsisPrompt.output_variables)
         )
@@ -185,7 +191,11 @@ class TechGuideGenerator(RetryableBase):
         result = await self.synopsis_chain.ainvoke(
             {
                 "topic": topic,
-                "sources": corpus.combined_text(_SOURCE_CHAR_BUDGET),
+                "sources": self.llm_factory.fit_text(
+                    self.synopsis_model_id,
+                    corpus.combined_text(),
+                    label="synopsis sources",
+                ),
                 "search_results": self._search_digest(corpus),
                 "max_sections": self.max_sections,
                 "language": self.language,
@@ -211,7 +221,14 @@ class TechGuideGenerator(RetryableBase):
                 self.max_sections,
                 all_sections[self.max_sections :],
             )
-        sources = corpus.combined_text(_SOURCE_CHAR_BUDGET)
+        # Fit the corpus to the writer model's window, reserving headroom for the
+        # prompt plus the previous-sections context that accumulates per section.
+        sources = self.llm_factory.fit_text(
+            self.writing_model_id,
+            corpus.combined_text(),
+            reserve_tokens=_SECTION_CONTEXT_RESERVE_TOKENS,
+            label="section sources",
+        )
         available_images = "\n".join(corpus.image_urls) or "(none)"
 
         # Canonical numbered outline of ONLY the sections that will be written,

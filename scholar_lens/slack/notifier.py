@@ -14,15 +14,13 @@ from __future__ import annotations
 
 import os
 
-from ..src.constants import EnvVars
+from ..src.constants import AppConstants, EnvVars
 from ..src.logger import logger
-
-_NULL = "null"
 
 
 def _clean(value: str | None) -> str | None:
     """Treat the Batch NULL sentinel and blanks as absent."""
-    if not value or value.strip().lower() == _NULL:
+    if not value or value.strip().lower() == AppConstants.NULL_STRING:
         return None
     return value.strip()
 

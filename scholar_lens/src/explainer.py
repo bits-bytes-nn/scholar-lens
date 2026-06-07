@@ -190,8 +190,15 @@ class ExplainerGraph(RetryableBase):
             enable_output_fixing=enable_output_fixing,
             output_fixing_model_id=output_fixing_model_id,
         )
+        # The analyzer is the one node that legitimately receives the whole
+        # paper, so it gets the 1M window and its input is fitted to the model's
+        # budget at call time (see analyze_paper).
+        self.analysis_model_id = analysis_id
         self.analyzer = self._create_chain(
-            PaperAnalysisPrompt, analysis_id, robust_xml_output_parser
+            PaperAnalysisPrompt,
+            analysis_id,
+            robust_xml_output_parser,
+            supports_1m_context_window=True,
         )
         self.enricher = self._create_chain(
             PaperEnrichmentPrompt,
@@ -321,6 +328,12 @@ class ExplainerGraph(RetryableBase):
         sentences = nltk.sent_tokenize(text)
 
         numbered_sentences_str = "\n".join(f"{i}: {s}" for i, s in enumerate(sentences))
+        # Fit to the analyzer model's context window (exact, via CountTokens) so a
+        # very long paper drops trailing sentences instead of failing the call;
+        # the returned indices only reference sentences that were shown.
+        numbered_sentences_str = self.llm_factory.fit_text(
+            self.analysis_model_id, numbered_sentences_str, label="paper structure"
+        )
 
         structure = self.analyzer.invoke({"numbered_sentences": numbered_sentences_str})
 

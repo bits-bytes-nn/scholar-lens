@@ -212,11 +212,6 @@ class ArxivHandler:
             pdf_url=HttpUrl(paper.pdf_url) if paper.pdf_url else None,
         )
 
-    def get_title_and_authors(self, arxiv_id: str) -> tuple[str, str]:
-        paper = self._fetch_single_paper(arxiv_id)
-        author_names = ", ".join([author.name for author in paper.authors])
-        return paper.title, author_names
-
     # Minimum raw-title similarity (on top of an exact normalized match) before
     # we trust an arXiv title-search hit. Guards against aggressive normalization
     # collapsing two genuinely different titles onto the same key, which would

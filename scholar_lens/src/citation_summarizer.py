@@ -24,7 +24,6 @@ DEFAULT_TIMEOUT: int = 60
 
 class CitationSummarizer(RetryableBase):
     FAILURE_STRING: str = "Could not generate summary."
-    MAX_CHARS_PER_CONTENT: int = 100000
 
     def __init__(
         self,
@@ -58,6 +57,7 @@ class CitationSummarizer(RetryableBase):
         self._inflight: dict[str, asyncio.Future[str | None]] = {}
         self._cache_lock = asyncio.Lock()
 
+        self.citation_summarizing_model_id = citation_summarizing_model_id
         analysis_llm = self.llm_factory.get_model(
             citation_analysis_model_id, temperature=0.0, callbacks=self._callbacks
         )
@@ -81,6 +81,33 @@ class CitationSummarizer(RetryableBase):
         )
         self.arxiv_handler = ArxivHandler(max_retries=max_retries)
         self.html_parser = HTMLParser(timeout=timeout)
+
+    def _fit_summary_inputs(
+        self, reference_content: str, original_content: str
+    ) -> dict[str, str]:
+        """Fit the (reference, original) pair to the summarizing model's window
+        with Bedrock CountTokens. The two texts share one prompt, so each is
+        given roughly half the window's headroom."""
+        half_reserve = (
+            self.llm_factory.effective_context_window(
+                self.citation_summarizing_model_id
+            )
+            // 2
+        )
+        return {
+            "reference_content": self.llm_factory.fit_text(
+                self.citation_summarizing_model_id,
+                reference_content,
+                reserve_tokens=half_reserve,
+                label="citation reference",
+            ),
+            "original_content": self.llm_factory.fit_text(
+                self.citation_summarizing_model_id,
+                original_content,
+                reserve_tokens=half_reserve,
+                label="citation original",
+            ),
+        }
 
     async def summarize(
         self, reference_identifiers: list[str], original_content: str
@@ -237,10 +264,7 @@ class CitationSummarizer(RetryableBase):
         if not reference_text.strip():
             return None
         summary = await self.citation_summarizer.ainvoke(
-            {
-                "reference_content": reference_text[: self.MAX_CHARS_PER_CONTENT],
-                "original_content": original_content[: self.MAX_CHARS_PER_CONTENT],
-            }
+            self._fit_summary_inputs(reference_text, original_content)
         )
         if not summary or self.FAILURE_STRING in summary:
             return None
@@ -276,10 +300,7 @@ class CitationSummarizer(RetryableBase):
                     reference_text = content.text
 
             summary = await self.citation_summarizer.ainvoke(
-                {
-                    "reference_content": reference_text[: self.MAX_CHARS_PER_CONTENT],
-                    "original_content": original_content[: self.MAX_CHARS_PER_CONTENT],
-                }
+                self._fit_summary_inputs(reference_text, original_content)
             )
             url = f"{AppConstants.External.ARXIV_PDF.value}/{arxiv_id}"
             return f"Title: [{title}]({url})\nAuthors: {authors}\n\n{summary}"

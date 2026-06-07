@@ -9,6 +9,7 @@ import pytest
 
 from scholar_lens.configs import Github
 from scholar_lens.main import Mode, _format_summary
+from scholar_lens.src.constants import LanguageModelId
 from scholar_lens.src.content_extractor import Attributes
 from scholar_lens.src.explainer import Paper
 from scholar_lens.src.parser import Content
@@ -38,6 +39,11 @@ def _make_summarizer_with_stub_chain(chain_result: dict[str, str]) -> PaperSumma
     summarizer = PaperSummarizer.__new__(PaperSummarizer)
     summarizer.language = "Korean"
     summarizer.translation_guideline = []
+    summarizer.summary_model_id = LanguageModelId.CLAUDE_V4_5_HAIKU
+    # fit_text would call Bedrock CountTokens; stub it to a pass-through.
+    factory = MagicMock()
+    factory.fit_text = MagicMock(side_effect=lambda model_id, text, **kw: text)
+    summarizer.llm_factory = factory
     chain = MagicMock()
     chain.ainvoke = AsyncMock(return_value=chain_result)
     summarizer.summary_chain = chain

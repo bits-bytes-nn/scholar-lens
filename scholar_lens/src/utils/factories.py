@@ -5,8 +5,7 @@ import boto3
 from botocore.config import Config as BotoConfig
 from langchain_aws import ChatBedrock, ChatBedrockConverse
 from langchain_community.embeddings import BedrockEmbeddings
-from pydantic import Field, PrivateAttr
-from tiktoken import Encoding, get_encoding
+from pydantic import Field
 
 from ..constants import EmbeddingModelId, LanguageModelId
 from ..logger import logger
@@ -23,53 +22,26 @@ WrapperT = TypeVar("WrapperT")
 
 
 class BaseBedrockWrapper:
-    buffer_tokens: int = Field(default=128, ge=0)
-    _tokenizer: Encoding | None = PrivateAttr(default=None)
-
-    def __init__(self, **kwargs: Any) -> None:
-        super().__init__(**kwargs)
-        # The tokenizer is loaded lazily: get_encoding("cl100k_base") downloads
-        # the BPE vocab from the network on a cold cache, so doing it at
-        # construction would make every wrapper instantiation hit the network
-        # (breaking offline/test/Batch environments). Load on first real use.
-        self._tokenizer = None
-
-    @property
-    def tokenizer(self) -> Encoding:
-        if self._tokenizer is None:
-            self._tokenizer = get_encoding("cl100k_base")
-        return self._tokenizer
-
     def _truncate_text(
         self, text: str, max_chars: int | None, max_tokens: int | None, text_type: str
     ) -> str:
-        if not max_chars and not max_tokens:
-            return text
+        """Cap ``text`` to ``max_chars`` for an embedding model.
 
-        final_text = text
-        truncated = False
-
-        # Only tokenize when a token limit is actually requested — a char-only
-        # truncation must not pull in the tokenizer (and its network download).
-        if max_tokens:
-            token_ids = self.tokenizer.encode(text, allowed_special="all")
-            if len(token_ids) > max_tokens:
-                effective_tokens = max_tokens - self.buffer_tokens
-                truncated_token_ids = token_ids[:effective_tokens]
-                final_text = self.tokenizer.decode(truncated_token_ids)
-                logger.warning(
-                    f"{text_type.capitalize()} token count ({len(token_ids)}) exceeds maximum ({max_tokens}). Truncating."
-                )
-                truncated = True
-
+        Embedding models (Titan/Cohere) are NOT supported by Bedrock CountTokens,
+        and the project policy is to use CountTokens for token counting rather
+        than a foreign tokenizer estimate. So embedding inputs are bounded only
+        by the model's character limit; ``max_tokens`` is accepted for interface
+        compatibility but intentionally not enforced here (embedding chunks are
+        ~1k chars, far below any model's token limit, so the char cap suffices)."""
         if max_chars and len(text) > max_chars:
-            if not truncated or len(text[:max_chars]) < len(final_text):
-                final_text = text[:max_chars]
-                logger.warning(
-                    f"{text_type.capitalize()} character count ({len(text)}) exceeds maximum ({max_chars}). Truncating."
-                )
-
-        return final_text
+            logger.warning(
+                "%s character count (%d) exceeds maximum (%d). Truncating.",
+                text_type.capitalize(),
+                len(text),
+                max_chars,
+            )
+            return text[:max_chars]
+        return text
 
 
 class BaseBedrockModelFactory(Generic[ModelIdT, ModelInfoT, WrapperT], ABC):
@@ -283,6 +255,11 @@ class BedrockLanguageModelFactory(
     DEFAULT_THINKING_BUDGET_TOKENS: ClassVar[int] = 2048
     DEFAULT_THINKING_EFFORT: ClassVar[str] = "medium"
     DEFAULT_LATENCY_MODE: ClassVar[str] = "normal"
+    ANTHROPIC_1M_BETA: ClassVar[str] = "context-1m-2025-08-07"
+    LARGE_CONTEXT_WINDOW: ClassVar[int] = 1_000_000
+    # Tokens held back from the context window for the prompt template wrapping
+    # the fitted text plus the model's own response.
+    DEFAULT_CONTEXT_RESERVE_TOKENS: ClassVar[int] = 16_000
 
     def _get_boto_service_name(self) -> str:
         return "bedrock-runtime"
@@ -315,6 +292,110 @@ class BedrockLanguageModelFactory(
             model_class.__name__,
         )
         return model
+
+    def effective_context_window(self, model_id: LanguageModelId) -> int:
+        """The usable context window for ``model_id`` in tokens.
+
+        Models flagged for the 1M window are always invoked with it enabled, so
+        their effective window is the large one; otherwise it is the registered
+        window. Unknown models fall back to a conservative 200k."""
+        info = self.get_model_info(model_id)
+        if not info:
+            return 200_000
+        if info.supports_1m_context_window:
+            return max(info.context_window_size, self.LARGE_CONTEXT_WINDOW)
+        return info.context_window_size
+
+    def count_tokens(self, model_id: LanguageModelId, text: str) -> int:
+        """Exact input-token count for ``text`` via Bedrock CountTokens (the
+        model's own tokenizer).
+
+        Uses the cross-region-resolved id (the one actually invoked) and, for
+        1M-capable models, sends the long-context beta flag so inputs above the
+        base 200k limit can still be measured. Raises on API error (callers that
+        must not fail catch it)."""
+        resolved_id = BedrockCrossRegionModelHelper.get_cross_region_model_id(
+            self.boto_session, model_id, self.region_name or ""
+        )
+        converse: dict[str, Any] = {
+            "messages": [{"role": "user", "content": [{"text": text}]}]
+        }
+        info = self.get_model_info(model_id)
+        if info and info.supports_1m_context_window:
+            converse["additionalModelRequestFields"] = {
+                "anthropic_beta": [self.ANTHROPIC_1M_BETA]
+            }
+        response = self._client.count_tokens(
+            modelId=resolved_id, input={"converse": converse}
+        )
+        return int(response["inputTokens"])
+
+    def _within_budget(self, model_id: LanguageModelId, text: str, budget: int) -> bool:
+        """Whether ``text`` fits ``budget`` tokens. CountTokens itself rejects
+        inputs beyond the model's measurable limit with a "too long"
+        ValidationException — that unambiguously means over budget, so it is
+        treated as a False (shrink) signal rather than an error."""
+        try:
+            return self.count_tokens(model_id, text) <= budget
+        except Exception as e:  # noqa: BLE001
+            if "too long" in str(e).lower():
+                return False
+            raise
+
+    def fit_text(
+        self,
+        model_id: LanguageModelId,
+        text: str,
+        *,
+        reserve_tokens: int | None = None,
+        label: str = "input",
+    ) -> str:
+        """Truncate ``text`` so it fits ``model_id``'s context window, measured
+        exactly with Bedrock CountTokens (no chars-per-token estimation).
+
+        Returns ``text`` unchanged when it already fits; otherwise binary-searches
+        the longest prefix whose exact token count is within budget. A genuine
+        "prompt too long" from the counter shrinks the search; any other API error
+        leaves the text intact so a transient issue can't silently gut content
+        (the caller's retry/raise path then handles a real overflow)."""
+        if not text:
+            return text
+        reserve = (
+            reserve_tokens
+            if reserve_tokens is not None
+            else self.DEFAULT_CONTEXT_RESERVE_TOKENS
+        )
+        budget = max(self.effective_context_window(model_id) - reserve, 1_000)
+        try:
+            if self._within_budget(model_id, text, budget):
+                return text
+            lo, hi, best = 0, len(text), 0
+            while lo <= hi:
+                mid = (lo + hi) // 2
+                if mid > 0 and self._within_budget(model_id, text[:mid], budget):
+                    best = mid
+                    lo = mid + 1
+                else:
+                    hi = mid - 1
+        except (
+            Exception
+        ) as e:  # noqa: BLE001 - never fail the pipeline on a counter error
+            logger.warning(
+                "CountTokens failed while fitting %s for '%s' (%s); leaving text intact.",
+                label,
+                model_id.value,
+                e,
+            )
+            return text
+        logger.info(
+            "Fitted %s for '%s': %d -> %d chars to stay within %d tokens.",
+            label,
+            model_id.value,
+            len(text),
+            best,
+            budget,
+        )
+        return text[:best]
 
     def _build_model_config(
         self,
