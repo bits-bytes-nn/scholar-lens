@@ -331,7 +331,8 @@ class AttributesExtractionPrompt(BasePrompt):
        - Format as a single, clear institutional identifier
 
     3. RESEARCH CATEGORY (Select exactly ONE):
-       Choose the most specific category that best represents the paper's primary technical contribution:
+       Choose the most specific category that best represents the paper's primary technical contribution.
+       Output the category label EXACTLY as written below — no extra words, notes, or parentheticals.
        - Computer Vision
        - Language Models
        - Speech Processing
@@ -339,10 +340,14 @@ class AttributesExtractionPrompt(BasePrompt):
        - Image/Video Generation
        - Training & Inference Optimization
        - Reinforcement Learning
-       - Retrieval Augmented Generation (incl. knowledge graphs & ontologies)
+       - Retrieval Augmented Generation
        - Recommendation Systems
        - Time Series Analysis
        - Other
+
+       Category scope notes (do NOT append these to the output):
+       - "Retrieval Augmented Generation" also covers knowledge graphs, ontologies,
+         and graph/knowledge-based retrieval or querying.
 
     OUTPUT FORMAT (Follow exactly):
     <title>
