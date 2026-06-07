@@ -626,9 +626,9 @@ def _format_explanation(
         github_config, paper, github_config.review_category
     )
     body = f"### TL;DR\n{key_takeaways}\n- - -\n{explanation}"
-    references = (
-        f"\n- - -\n### References\n* [{_md_link_text(paper.title)}]({paper.pdf_url})"
-    )
+    references_lines = [f"* [{_md_link_text(paper.title)}]({paper.pdf_url})"]
+    references_lines.extend(_code_repository_references(paper))
+    references = "\n- - -\n### References\n" + "\n".join(references_lines)
     return f"{front_matter}{body}{references}"
 
 
@@ -636,6 +636,20 @@ def _md_link_text(text: str) -> str:
     """Escape brackets in Markdown link text so a title with ``]`` doesn't break
     the ``[text](url)`` syntax."""
     return text.replace("[", "\\[").replace("]", "\\]")
+
+
+def _code_repository_references(paper: Paper) -> list[str]:
+    """Reference bullets for the paper's associated code repositories, if any.
+
+    Uses the same bullet style as the paper entry (no label); the repo URL's last
+    path segment ("owner/name") is the link text so it reads as a repository
+    rather than a bare URL."""
+    lines = []
+    for repo in paper.repo_urls:
+        url = str(repo)
+        name = "/".join(url.rstrip("/").split("/")[-2:]) or url
+        lines.append(f"* [{_md_link_text(name)}]({url})")
+    return lines
 
 
 def _format_summary(
@@ -647,6 +661,7 @@ def _format_summary(
     )
     body = result["summary"]
     references_lines = [f"* [{_md_link_text(paper.title)}]({paper.pdf_url})"]
+    references_lines.extend(_code_repository_references(paper))
     if urls := result.get("urls", "").strip():
         references_lines.append(urls)
     references = "\n- - -\n### References\n" + "\n".join(references_lines)

@@ -96,6 +96,20 @@ class TestFormatExplanation:
         assert "EXPLANATION" in out
         assert "use_math: true" in out
 
+    def test_code_repositories_listed_in_references(self, sample_paper: Paper) -> None:
+        paper = sample_paper.model_copy(
+            update={"repo_urls": ["https://github.com/org/repo"]}
+        )
+        out = _format_explanation(Github(), paper, "E", "T")
+        assert "### References" in out
+        # Repo appears as a plain bullet, same style as the paper entry.
+        assert "* [org/repo](https://github.com/org/repo)" in out
+
+    def test_no_repo_reference_when_no_repos(self, sample_paper: Paper) -> None:
+        out = _format_explanation(Github(), sample_paper, "E", "T")
+        # Only the paper bullet in References — no extra repo bullet.
+        assert out.count("github.com") == 0
+
     def test_unknown_category_uses_default_cover(self, sample_paper: Paper) -> None:
         paper = sample_paper.model_copy(
             update={
