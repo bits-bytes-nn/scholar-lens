@@ -150,18 +150,20 @@ class Publisher:
 
     async def create_pull_request(
         self, request: PublishRequest, markdown_path: Path
-    ) -> None:
+    ) -> str | None:
+        """Open a blog PR and return its URL (None if skipped or on failure —
+        never raises, so a publish hiccup can't fail the pipeline)."""
         repo_config = self.github_config
         if not repo_config.repo_name:
             logger.error("GitHub repository not configured.")
-            return
+            return None
         token = os.getenv(EnvVars.GITHUB_TOKEN.value)
         if not token:
             logger.error(
                 "GitHub token not found in environment variable '%s'.",
                 EnvVars.GITHUB_TOKEN.value,
             )
-            return
+            return None
 
         clone_dir = self.root_dir / LocalPaths.GITHUB_CLONE_DIR.value
         try:
@@ -177,24 +179,24 @@ class Publisher:
             logger.info("Creating a pull request on GitHub...")
             gh_repo = Github(auth=Auth.Token(token)).get_repo(repo_config.repo_name)
             try:
-                gh_repo.create_pull(
+                pull = gh_repo.create_pull(
                     title=request.pr_title,
                     body=request.pr_body,
                     head=branch_name,
                     base=repo_config.base_branch,
                 )
-                logger.info(
-                    "Successfully created a pull request: '%s'", request.pr_title
-                )
+                logger.info("Successfully created a pull request: '%s'", pull.html_url)
+                return pull.html_url
             except GithubException as e:
                 if e.status == 422 and "A pull request already exists" in str(e.data):
                     logger.warning(
                         "Pull request for branch '%s' already exists.", branch_name
                     )
-                else:
-                    raise
+                    return None
+                raise
         except Exception as e:
             logger.error("Failed to create GitHub pull request: %s", e, exc_info=True)
+            return None
         finally:
             if clone_dir.exists():
                 await asyncio.to_thread(shutil.rmtree, clone_dir, ignore_errors=True)

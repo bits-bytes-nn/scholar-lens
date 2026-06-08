@@ -34,6 +34,7 @@ def post_slack_result(
     artifact_label: str,
     title: str,
     s3_url: str | None,
+    pr_url: str | None = None,
     error: str | None = None,
     bot_token: str | None = None,
 ) -> None:
@@ -56,6 +57,7 @@ def post_slack_result(
         artifact_label=artifact_label,
         title=title,
         s3_url=s3_url,
+        pr_url=pr_url,
         error=error,
     )
     try:
@@ -80,13 +82,18 @@ _ARTIFACT_META = {
 }
 
 
+def _link_button(text: str, url: str) -> dict:
+    return {"type": "button", "text": {"type": "plain_text", "text": text}, "url": url}
+
+
 def _build_result_message(
     *,
     success: bool,
     artifact_label: str,
     title: str,
     s3_url: str | None,
-    error: str | None,
+    pr_url: str | None = None,
+    error: str | None = None,
 ) -> tuple[str, list[dict]]:
     """Build (fallback_text, Block Kit blocks) for a completion message."""
     emoji, nice = _ARTIFACT_META.get(
@@ -100,28 +107,19 @@ def _build_result_message(
             header(f"{emoji} {nice} ready"),
             section(f"*{safe_title}*"),
         ]
-        if s3_url:
-            # Render https links as a clickable button; show s3:// URIs as code.
-            if s3_url.startswith(("http://", "https://")):
-                blocks.append(
-                    {
-                        "type": "actions",
-                        "elements": [
-                            {
-                                "type": "button",
-                                "text": {
-                                    "type": "plain_text",
-                                    "text": ":open_file_folder: View output",
-                                },
-                                "url": s3_url,
-                            }
-                        ],
-                    }
-                )
-            else:
-                blocks.append(
-                    section(f":open_file_folder: Output: `{mrkdwn_safe(s3_url)}`")
-                )
+        # Clickable buttons for any https links (blog PR, http output); s3:// URIs
+        # aren't clickable so they're shown as code instead.
+        buttons = []
+        if pr_url and pr_url.startswith(("http://", "https://")):
+            buttons.append(_link_button(":github: View pull request", pr_url))
+        if s3_url and s3_url.startswith(("http://", "https://")):
+            buttons.append(_link_button(":open_file_folder: View output", s3_url))
+        if buttons:
+            blocks.append({"type": "actions", "elements": buttons})
+        if s3_url and not s3_url.startswith(("http://", "https://")):
+            blocks.append(
+                section(f":open_file_folder: Output: `{mrkdwn_safe(s3_url)}`")
+            )
     else:
         fallback = f"{nice} failed for {title}"
         blocks = [

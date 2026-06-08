@@ -207,6 +207,21 @@ class TestBuildResultMessage:
         actions = next(b for b in blocks if b["type"] == "actions")
         assert actions["elements"][0]["url"] == "https://blog.example.com/post"
 
+    def test_pr_url_renders_button(self) -> None:
+        _, blocks = _build_result_message(
+            success=True,
+            artifact_label="summary",
+            title="Some Paper",
+            s3_url="s3://bucket/key.md",
+            pr_url="https://github.com/o/r/pull/42",
+            error=None,
+        )
+        actions = next(b for b in blocks if b["type"] == "actions")
+        urls = [e["url"] for e in actions["elements"]]
+        # PR button is present (and first); s3:// stays a code section, not a button.
+        assert "https://github.com/o/r/pull/42" in urls
+        assert all(not u.startswith("s3://") for u in urls)
+
     def test_short_collapses_and_caps(self) -> None:
         assert _short("a\n\n  b\tc") == "a b c"
         assert _short("x" * 1000).endswith("…")

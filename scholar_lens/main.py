@@ -113,11 +113,12 @@ def main(
     # of vanishing. paper_source may be None in finally — guard every access.
     paper_source: PaperSource | None = None
     s3_url: str | None = None
+    pr_url: str | None = None
     success = False
     error_message: str | None = None
     try:
         paper_source = resolve_paper_source(source)
-        s3_url = asyncio.run(
+        s3_url, pr_url = asyncio.run(
             _run_pipeline(context, paper_source, repo_urls, parse_pdf, mode)
         )
         success = True
@@ -147,6 +148,7 @@ def main(
             artifact_label=artifact_label,
             title=notify_title,
             s3_url=s3_url,
+            pr_url=pr_url,
             error=error_message,
         )
         if paper_source is not None:
@@ -159,7 +161,7 @@ async def _run_pipeline(
     repo_urls: list[str] | None,
     parse_pdf: bool,
     mode: str = Mode.REVIEW,
-) -> str | None:
+) -> tuple[str | None, str | None]:
     paper_dir = ROOT_DIR / LocalPaths.PAPERS_DIR.value / source.source_id
     _setup_aws_env(context)
 
@@ -210,13 +212,14 @@ async def _run_pipeline(
     request = _build_paper_publish_request(paper, paper_dir, document, mode)
     s3_url, document_path = await publisher.publish(request)
 
+    pr_url: str | None = None
     if context.config.resources.github.enabled:
-        await publisher.create_pull_request(request, document_path)
+        pr_url = await publisher.create_pull_request(request, document_path)
 
     if code_retriever:
         await code_retriever.delete_index()
 
-    return s3_url
+    return s3_url, pr_url
 
 
 async def _generate_review(
