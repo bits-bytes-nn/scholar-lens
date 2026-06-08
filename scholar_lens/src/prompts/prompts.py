@@ -214,9 +214,6 @@ STYLE_RULES: str = """
   keep English only when a translation is unclear or for proper nouns.
 """
 
-# Backwards-compatible alias (older references / tests may import this name).
-KOREAN_STYLE_RULES = STYLE_RULES
-
 
 @dataclass(frozen=True)
 class BasePrompt(ABC):
@@ -1211,8 +1208,8 @@ class PaperReflectionPrompt(BasePrompt):
         + r"""
 
     #### 3.3 Citation Format and Integration
-    - Integrate citations naturally into Korean sentence flow
-    - Format: "[Author et al.](url)"이/가 제안한/개발한
+    - Integrate citations naturally into the target-language sentence flow
+      (e.g. English "[Author et al.](url) proposed…", Korean "[Author et al.](url)이 제안한…")
     - When URL unavailable: Use descriptive text without hyperlink
 
     ### 4. CONTENT DUPLICATION PREVENTION RULES (CRITICAL)
@@ -1272,10 +1269,9 @@ class PaperReflectionPrompt(BasePrompt):
        - Calculate if 90%+ of content repeats itself within the section
        - If YES → IMMEDIATE AUTOMATIC ZERO SCORE
 
-    2. **Check CROSS-SECTION duplication second** (Lower priority):
-       - Compare current_explanation against previous_explanation
-       - Look for 95%+ identical expressions across different sections
-       - If found → Apply moderate penalty (-10 points per instance)
+    2. **Within-section repetition is the focus here.** (Cross-section duplication
+       is prevented upstream by the synthesizer, which sees prior sections — the
+       reflector only has the current section, so judge repetition WITHIN it.)
 
     **Focus on CONCRETE CONTENT and EXPRESSION:**
     - WITHIN same section: Same information repeated → ZERO
@@ -1310,7 +1306,7 @@ class PaperReflectionPrompt(BasePrompt):
 
     ### 5. LANGUAGE AND STYLE REQUIREMENTS
     """
-        + KOREAN_STYLE_RULES
+        + STYLE_RULES
         + r"""
 
     ### 6. CONTENT FILTERING RULES (CRITICAL)
@@ -1482,18 +1478,8 @@ class PaperReflectionPrompt(BasePrompt):
        - Issues: [If within-section duplication detected, list specific repeated content]
        - **If 90%+ within-section duplication found**: IMMEDIATELY assign quality_score of 0
 
-       **2B. CROSS-SECTION DUPLICATION (Content from different sections):**
-       - **Compare current_explanation against previous_explanation from other sections**
-       - **Check for 95%+ identical expressions across different sections**
-       - **Cross-section identical expression percentage estimate**: [X%]
-       - **Note**: Same topics discussed differently across sections is ACCEPTABLE
-       - Assessment: [Pass / Moderate Issues Found]
-       - Issues: [If 95%+ identical expressions found, list specific instances - apply -10 penalty]
-
     3. **Visual Element Duplication Prevention (CRITICAL)**
-       - **Verify NO visual elements are duplicated from previous sections**
-       - **Check each image path against previous_explanation**
-       - Check that all figures/tables/code/equations appear only once
+       - Within this section, check that all figures/tables/code/equations appear only once
        - Confirm proper use of descriptive references for previously inserted elements
        - Assessment: [Pass/CRITICAL VIOLATION FOUND]
        - Issues: [List any duplicated elements with exact paths - results in automatic zero score]
@@ -1701,7 +1687,7 @@ class PaperSynthesisPrompt(BasePrompt):
     supplementary materials**
 
     CRITICAL: Always complete your response with proper closing tags. Monitor token usage and stop at natural
-    breakpoints (~3000 tokens) with has_more=y if needed.
+    natural breakpoints with has_more=y if the section runs long.
     """
 
     human_prompt_template: str = (
@@ -1910,7 +1896,7 @@ class PaperSynthesisPrompt(BasePrompt):
 
     ### RULE #2: RESPONSE LENGTH MANAGEMENT
 
-    **Monitor token usage continuously. If approaching ~3000 tokens:**
+    **If a section is getting long, wrap up at a natural breakpoint:**
     - STOP at natural paragraph boundary
     - CLOSE </explanation> tag properly
     - SET has_more=y to continue
@@ -2322,7 +2308,7 @@ class PaperSynthesisPrompt(BasePrompt):
     #### 10.1 Content Continuation Protocol
 
     **When to use has_more=y:**
-    - Content will exceed ~3000 tokens
+    - The section is long enough that a natural breakpoint is approaching
     - DETAILED granularity + INTERMEDIATE/ADVANCED depth
     - Multiple complex equations need thorough derivations
     - Methodology sections with extensive algorithms
@@ -2421,8 +2407,7 @@ class PaperSynthesisPrompt(BasePrompt):
     □ Does this maintain paper accuracy?
 
     **LENGTH MANAGEMENT:**
-    - Monitor token count continuously
-    - Stop at ~3000 tokens at natural breakpoint
+    - If the section grows long, stop at a natural breakpoint
     - ALWAYS close </explanation> tag
     - Use has_more=y if needed
 
@@ -2454,7 +2439,7 @@ class PaperSynthesisPrompt(BasePrompt):
     - DETAILED granularity + INTERMEDIATE/ADVANCED depth
     - Multiple complex equations requiring thorough explanations
     - Methodology sections with extensive algorithms
-    - Response approaching ~3000 token limit
+    - The current response is getting long and a natural breakpoint is near
 
     When has_more=y:
     - Next response continues seamlessly

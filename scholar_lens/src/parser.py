@@ -124,8 +124,29 @@ class Figure(BaseModel, RetryableBase):
             except OSError as e:
                 raise FigureParseError(f"Failed to read file '{path}': {e}") from e
 
+        # Normalise to JPEG so the data URI's declared "image/jpeg" media type is
+        # always accurate (figures may be PNG/WebP/etc.); then resize if needed.
+        image_bytes = Figure._to_jpeg(image_bytes)
         processed_bytes = Figure._resize_if_needed(image_bytes)
         return base64.b64encode(processed_bytes).decode("utf-8")
+
+    @staticmethod
+    def _to_jpeg(image_bytes: bytes) -> bytes:
+        """Re-encode any supported image to JPEG; pass bytes through unchanged if
+        decoding fails (the downstream model still sniffs the real bytes)."""
+        try:
+            with Image.open(io.BytesIO(image_bytes)) as opened:
+                rgb = (
+                    opened.convert("RGB")
+                    if opened.mode in ("RGBA", "P", "LA", "CMYK")
+                    else opened
+                )
+                buffer = io.BytesIO()
+                rgb.save(buffer, format="JPEG", quality=DEFAULT_RESIZE_QUALITY)
+                return buffer.getvalue()
+        except Exception as e:  # noqa: BLE001 - keep original bytes on any decode error
+            logger.warning("Could not re-encode image to JPEG: %s", e)
+            return image_bytes
 
     @staticmethod
     def _resize_if_needed(image_bytes: bytes, max_iterations: int = 20) -> bytes:
