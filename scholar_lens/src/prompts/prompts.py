@@ -2651,7 +2651,11 @@ class PaperSummaryPrompt(BasePrompt):
     3. Highlight the most significant experimental results
     4. Identify limitations and potential improvements
     5. Connect the research to broader AI/ML applications
-    6. Provide a concise summary (maximum 2 A4 pages, approximately 2000 characters)
+    6. Write enough to convey the methods and results in real depth — a reader
+       should come away genuinely understanding the paper's core, not just its
+       gist. Depth is set per section (see <Focus Distribution>), NOT by a fixed
+       length or ratio: go deep on the hard parts, stay brief on routine ones.
+       Never pad to hit a length; never compress a key mechanism into one line.
     7. Include relevant figures to enhance understanding
 
     <Important Note>
@@ -2673,7 +2677,10 @@ class PaperSummaryPrompt(BasePrompt):
     state it briefly and move on.
 
     <Focus Distribution>
-    - Provide DETAILED summaries of the novel solution and implementation methods (sections 2 and 3)
+    - Provide DETAILED summaries of the novel solution and implementation methods (sections 2 and 3): explain the
+      key mechanisms, the reasoning behind the main design decisions, the important equations, and concrete
+      specifics (architecture, key hyper-parameters, algorithm steps) — multiple substantial paragraphs each, not a
+      single paragraph. This is where most of the summary's length should go.
     - Provide BRIEF summaries of the background/motivation, experimental results, and future directions (sections 1, 4,
     and 5)
     - For brief summary sections (1, 4, 5), prefer text-based explanations over images, tables, formulas, or code
@@ -2692,13 +2699,19 @@ class PaperSummaryPrompt(BasePrompt):
     3. Place all reference URLs within <urls> tags as [text](url), [text](url), ...
 
     <Section Headers>
-    Use these exact section headers as level-2 Markdown headings (translate the visible text to the target language but
-    keep the emoji and the five-question structure; skip a section only if the paper truly lacks relevant information):
-    ## 🔍 What motivated this research? [BRIEF SUMMARY - prefer text over images/tables/formulas/code]
-    ## 💡 What novel solution does this research propose? [DETAILED SUMMARY]
-    ## ⚙️ How was the proposed method implemented? [DETAILED SUMMARY]
-    ## 📊 What are the key experimental results? [BRIEF SUMMARY - prefer text over images/tables/formulas/code]
-    ## 🔮 What is the significance and future direction of this research? [BRIEF SUMMARY]
+    Use these exact level-2 Markdown headings — keep the emoji and the five-question structure, and write the heading
+    text IN THE TARGET LANGUAGE {language} (the bracketed depth note is guidance for you, NOT part of the output; do
+    not include it). Skip a section only if the paper truly lacks relevant information.
+
+    When {language} is Korean, use these headings verbatim:
+    ## 🔍 이 연구가 왜 필요한가?  [BRIEF — prefer text over images/tables/formulas/code]
+    ## 💡 어떤 새로운 해결책을 제시하는가?  [DETAILED]
+    ## ⚙️ 제안한 방법을 어떻게 구현했는가?  [DETAILED]
+    ## 📊 핵심 실험 결과는 무엇인가?  [BRIEF — prefer text over images/tables/formulas/code]
+    ## 🔮 이 연구의 의의와 향후 방향은?  [BRIEF]
+
+    For any other language, translate those five questions into {language} (keep the same emoji and order). Never leave
+    the headings in English when {language} is not English.
 
     <Formatting Guidelines>
     - Format your response in clean GitHub-Flavored Markdown (NOT HTML) for optimal readability on a Jekyll blog
@@ -2730,16 +2743,17 @@ class PaperSummaryPrompt(BasePrompt):
     - Balance text and visuals for optimal comprehension
 
     <Final Response Format>
+    (headings shown in Korean; use the {language} versions from <Section Headers>)
     <summary>
-    ## 🔍 What motivated this research?
+    ## 🔍 이 연구가 왜 필요한가?
     ...
-    ## 💡 What novel solution does this research propose?
+    ## 💡 어떤 새로운 해결책을 제시하는가?
     ...
-    ## ⚙️ How was the proposed method implemented?
+    ## ⚙️ 제안한 방법을 어떻게 구현했는가?
     ...
-    ## 📊 What are the key experimental results?
+    ## 📊 핵심 실험 결과는 무엇인가?
     ...
-    ## 🔮 What is the significance and future direction of this research?
+    ## 🔮 이 연구의 의의와 향후 방향은?
     ...
     </summary>
     <tags>Technical Tag One, Technical Tag Two, Technical Tag Three, Technical Tag Four, Technical Tag Five</tags>
