@@ -68,6 +68,7 @@ jobs:
           --cov=scholar_lens
           --cov-report=term-missing
           --cov-report=xml
+          --cov-fail-under=65
       - name: Upload coverage artifact
         if: matrix.python-version == '3.12'
         uses: actions/upload-artifact@v4

@@ -4,8 +4,9 @@ The boto3 ``Session`` is replaced with a ``MagicMock`` so the factory can be
 constructed without any network access; ``Session.client`` returns a mock and
 is never exercised against AWS here. Only deterministic, offline logic is
 tested: ``max_tokens`` validation, thinking/performance flag logic, config
-construction (including the 1M-context-window beta injection), token
-truncation via tiktoken, and ``get_model_info`` lookup.
+construction (including the 1M-context-window beta injection and forcing the
+Converse path), text fitting via a fake Bedrock CountTokens, and
+``get_model_info`` lookup.
 """
 
 from __future__ import annotations
