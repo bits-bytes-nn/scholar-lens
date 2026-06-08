@@ -278,8 +278,16 @@ class BedrockLanguageModelFactory(
         )
         is_cross_region = resolved_model_id != model_id.value
         enable_thinking = kwargs.get("enable_thinking", False)
-        use_converse = is_cross_region or (
-            enable_thinking and model_info.supports_thinking
+        want_1m = kwargs.get("supports_1m_context_window", False)
+        # The 1M-context beta is passed via additionalModelRequestFields, which is
+        # a Converse-only field — on the legacy ChatBedrock (InvokeModel) path it
+        # is silently dropped, so the window would NOT actually be enabled and
+        # fit_text (trusting a 1M budget) would overflow the real 200k limit.
+        # Force Converse whenever the 1M window is requested and supported.
+        use_converse = (
+            is_cross_region
+            or (enable_thinking and model_info.supports_thinking)
+            or (want_1m and model_info.supports_1m_context_window)
         )
         model_config = self._build_model_config(
             model_info, resolved_model_id, use_converse, **kwargs
@@ -426,14 +434,18 @@ class BedrockLanguageModelFactory(
         else:
             config["model_kwargs"].update(token_config)
         if supports_1m_context_window and model_info.supports_1m_context_window:
+            # get_model forces the Converse path when the 1M window is requested,
+            # so is_cross_region is True here and the beta goes through Converse's
+            # additional_model_request_fields (the InvokeModel branch below can't
+            # actually deliver it).
             if is_cross_region:
                 config.setdefault("additional_model_request_fields", {}).update(
-                    {"anthropic_beta": ["context-1m-2025-08-07"]}
+                    {"anthropic_beta": [self.ANTHROPIC_1M_BETA]}
                 )
             else:
                 config["model_kwargs"].setdefault(
                     "additionalModelRequestFields", {}
-                ).update({"anthropic_beta": ["context-1m-2025-08-07"]})
+                ).update({"anthropic_beta": [self.ANTHROPIC_1M_BETA]})
             logger.debug("Applied 1M context window support")
         self._apply_model_features(config, model_info, is_cross_region, **kwargs)
         return config

@@ -166,6 +166,36 @@ class TestBuildModelConfig1MContextWindow:
         beta = config["model_kwargs"]["additionalModelRequestFields"]["anthropic_beta"]
         assert beta == ["context-1m-2025-08-07"]
 
+    def test_1m_request_forces_converse_path(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Regression: the 1M beta is a Converse-only field; if get_model picked
+        # the legacy ChatBedrock path it would be silently dropped. Requesting the
+        # 1M window must force ChatBedrockConverse even without thinking/cross-region.
+        import scholar_lens.src.utils.factories as fac
+
+        factory = _make_factory()
+        monkeypatch.setattr(
+            fac.BedrockCrossRegionModelHelper,
+            "get_cross_region_model_id",
+            staticmethod(lambda *a, **k: LanguageModelId.CLAUDE_V4_8_OPUS.value),
+        )
+        picked = {}
+        monkeypatch.setattr(
+            fac, "ChatBedrock", lambda **kw: picked.setdefault("cls", "ChatBedrock")
+        )
+        monkeypatch.setattr(
+            fac,
+            "ChatBedrockConverse",
+            lambda **kw: picked.setdefault("cls", "ChatBedrockConverse"),
+        )
+        factory.get_model(
+            LanguageModelId.CLAUDE_V4_8_OPUS,
+            supports_1m_context_window=True,
+            enable_thinking=False,
+        )
+        assert picked["cls"] == "ChatBedrockConverse"
+
     def test_beta_header_absent_when_flag_off(self) -> None:
         factory = _make_factory()
         config = factory._build_model_config(
