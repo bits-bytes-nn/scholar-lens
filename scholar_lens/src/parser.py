@@ -471,7 +471,7 @@ class PDFParser(RichParser):
             return figures, content
         except ParserError as e:
             logger.warning("Failed to parse PDF document '%s': %s", pdf_path, e)
-            logger.info("Attempting fallback to Unstructured parser")
+            logger.info("Attempting fallback to PyMuPDF text extraction")
             return await self._parse_with_fallback(pdf_path, figures_dir, extract_text)
 
     async def _get_or_parse_document(

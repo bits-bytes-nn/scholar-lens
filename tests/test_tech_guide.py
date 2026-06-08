@@ -61,7 +61,7 @@ class TestParseSynopsisSections:
         out = gen._parse_synopsis_sections("1. a\n2. b\n3. c")
         assert out == ["a", "b"]
 
-    def test_unstructured_fallback_to_lines(self) -> None:
+    def test_unnumbered_synopsis_falls_back_to_lines(self) -> None:
         gen = _make_generator()
         assert gen._parse_synopsis_sections("just one line") == ["just one line"]
 

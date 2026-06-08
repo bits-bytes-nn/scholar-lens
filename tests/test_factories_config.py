@@ -14,6 +14,7 @@ import logging
 from unittest.mock import MagicMock
 
 import pytest
+from botocore.exceptions import ClientError
 
 from scholar_lens.src.constants import LanguageModelId
 from scholar_lens.src.utils.factories import (
@@ -338,9 +339,19 @@ class TestFitText:
             text = input["converse"]["messages"][0]["content"][0]["text"]
             tokens = -(-len(text) // 4)  # ceil(len/4)
             if tokens > self._HARD_LIMIT_TOKENS:
-                raise RuntimeError(
-                    "ValidationException: prompt is too long: "
-                    f"{tokens} tokens > {self._HARD_LIMIT_TOKENS} maximum"
+                # Mirror the real API: a structured ValidationException, not a
+                # bare RuntimeError — _within_budget keys off the error CODE.
+                raise ClientError(
+                    {
+                        "Error": {
+                            "Code": "ValidationException",
+                            "Message": (
+                                f"prompt is too long: {tokens} tokens > "
+                                f"{self._HARD_LIMIT_TOKENS} maximum"
+                            ),
+                        }
+                    },
+                    "CountTokens",
                 )
             return {"inputTokens": tokens}
 

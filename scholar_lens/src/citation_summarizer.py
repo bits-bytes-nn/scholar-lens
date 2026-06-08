@@ -86,25 +86,27 @@ class CitationSummarizer(RetryableBase):
         self, reference_content: str, original_content: str
     ) -> dict[str, str]:
         """Fit the (reference, original) pair to the summarizing model's window
-        with Bedrock CountTokens. The two texts share one prompt, so each is
-        given roughly half the window's headroom."""
-        half_reserve = (
-            self.llm_factory.effective_context_window(
-                self.citation_summarizing_model_id
-            )
-            // 2
-        )
+        with Bedrock CountTokens. Both texts share one prompt, so first hold back
+        room for the prompt template + the model's response, then split the
+        REMAINING budget between the two (each gets half)."""
+        model_id = self.citation_summarizing_model_id
+        window = self.llm_factory.effective_context_window(model_id)
+        # Headroom for prompt template + output, then halve what's left per input.
+        usable = max(window - self.llm_factory.DEFAULT_CONTEXT_RESERVE_TOKENS, 1000)
+        # fit_text computes budget = window - reserve_tokens, so to give each input
+        # `usable // 2` tokens we reserve everything above that.
+        per_input_reserve = window - usable // 2
         return {
             "reference_content": self.llm_factory.fit_text(
-                self.citation_summarizing_model_id,
+                model_id,
                 reference_content,
-                reserve_tokens=half_reserve,
+                reserve_tokens=per_input_reserve,
                 label="citation reference",
             ),
             "original_content": self.llm_factory.fit_text(
-                self.citation_summarizing_model_id,
+                model_id,
                 original_content,
-                reserve_tokens=half_reserve,
+                reserve_tokens=per_input_reserve,
                 label="citation original",
             ),
         }

@@ -3,6 +3,7 @@ from typing import Any, ClassVar, Generic, TypeVar
 
 import boto3
 from botocore.config import Config as BotoConfig
+from botocore.exceptions import ClientError
 from langchain_aws import ChatBedrock, ChatBedrockConverse
 from langchain_community.embeddings import BedrockEmbeddings
 from pydantic import Field
@@ -338,13 +339,15 @@ class BedrockLanguageModelFactory(
 
     def _within_budget(self, model_id: LanguageModelId, text: str, budget: int) -> bool:
         """Whether ``text`` fits ``budget`` tokens. CountTokens itself rejects
-        inputs beyond the model's measurable limit with a "too long"
-        ValidationException — that unambiguously means over budget, so it is
+        inputs beyond the model's measurable limit with a ValidationException
+        ("prompt is too long") — that unambiguously means over budget, so it is
         treated as a False (shrink) signal rather than an error."""
         try:
             return self.count_tokens(model_id, text) <= budget
-        except Exception as e:  # noqa: BLE001
-            if "too long" in str(e).lower():
+        except ClientError as e:
+            code = e.response.get("Error", {}).get("Code", "")
+            message = e.response.get("Error", {}).get("Message", "").lower()
+            if code == "ValidationException" and "too long" in message:
                 return False
             raise
 
