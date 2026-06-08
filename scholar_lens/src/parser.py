@@ -15,8 +15,6 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import Runnable
 from PIL import Image
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from unstructured.documents.elements import Image as UnstructuredImage
-from unstructured.partition.pdf import partition_pdf
 
 from .constants import AppConstants, EnvVars, LanguageModelId, LocalPaths
 from .logger import logger
@@ -31,7 +29,6 @@ from .utils import (
 DEFAULT_RESIZE_QUALITY: int = 85
 DEFAULT_TIMEOUT: int = 60
 MAX_IMAGE_SIZE_BYTES: int = 5242880
-MIN_FIGURE_AREA: float = 10000.0
 # Resize fallback loop tuning: once JPEG quality bottoms out, shrink dimensions
 # by RESIZE_SCALE_FACTOR per pass and give up below MIN_RESIZE_DIMENSION px.
 MIN_RESIZE_QUALITY: int = 10
@@ -597,86 +594,32 @@ class PDFParser(RichParser):
         figures_dir: Path | None = None,
         extract_text: bool = True,
     ) -> tuple[list[Figure], Content]:
+        # Fallback when the primary (Upstage) parser fails, e.g. a 413 on a large
+        # PDF. Use PyMuPDF (fitz): it reads the PDF's text layer directly, is
+        # lightweight (no layout/OCR vision models, so it never OOMs the way
+        # Unstructured "hi_res" did), and is already a dependency. For a
+        # review/summary the text is what matters; figures are best-effort and
+        # captured on the primary path when it succeeds, so the fallback is
+        # text-only.
         try:
-            figures_dir = figures_dir or pdf_path.parent / LocalPaths.FIGURES_DIR.value
-            figures_dir.mkdir(parents=True, exist_ok=True)
-
-            # The "fast" strategy extracts text without loading the heavy layout/
-            # OCR vision models that "hi_res" needs — those routinely OOM a large
-            # PDF on a memory-constrained container (the very case that triggers
-            # this fallback, e.g. an Upstage 413 on an oversized document). For a
-            # review/summary the text is what matters; figures are best-effort and
-            # already captured on the primary (Upstage) path when it succeeds.
-            elements = partition_pdf(
-                filename=str(pdf_path),
-                strategy="fast",
-            )
-
-            content_parts = []
-            valid_figure_paths = []
-            if extract_text:
-                for element in elements:
-                    if isinstance(element, UnstructuredImage):
-                        img_path_str = getattr(element.metadata, "image_path", None)
-                        if img_path_str:
-                            img_path = Path(img_path_str)
-                            try:
-                                with Image.open(img_path) as img:
-                                    width, height = img.size
-
-                                if width * height >= MIN_FIGURE_AREA:
-                                    content_parts.append("[Image: alt=, src=]")
-                                    valid_figure_paths.append(img_path)
-                                else:
-                                    logger.debug(
-                                        "Skipping small image from Unstructured: '%s' (area: %d)",
-                                        img_path.name,
-                                        width * height,
-                                    )
-                            except Exception as e:
-                                logger.warning(
-                                    "Could not process image for size check '%s': %s",
-                                    img_path,
-                                    e,
-                                )
-
-                    elif hasattr(element, "text") and element.text:
-                        content_parts.append(element.text)
-
-            content = Content(text="\n\n".join(content_parts) if extract_text else "")
-
-            figure_tasks = []
-            for img_path in valid_figure_paths:
-                figure_tasks.append(
-                    Figure.from_llm(
-                        figure_analyser=self.figure_analyser,
-                        figure_id=img_path.stem,
-                        path=str(img_path),
-                        caption=None,
-                    )
-                )
-
-            all_figures = await asyncio.gather(*figure_tasks, return_exceptions=True)
-            figures = []
-            for f in all_figures:
-                if isinstance(f, Exception):
-                    logger.warning("Figure extraction failed: %s", f)
-                    continue
-                if isinstance(f, Figure):
-                    figures.append(f)
-
-            logger.info(
-                "Unstructured parser extracted %d figures and %d characters",
-                len(figures),
-                len(content.text),
-            )
-            return figures, content
-
+            text = await asyncio.to_thread(self._extract_text_with_fitz, pdf_path)
         except Exception as e:
-            logger.error("Unstructured parser also failed: %s", e)
+            logger.error("PyMuPDF fallback parser failed: %s", e)
+            raise ParserError(f"Both Upstage and PyMuPDF parsers failed: {e}") from e
+
+        if not text.strip():
             raise ParserError(
-                f"Both Upstage and Unstructured parsers failed: {e}"
-            ) from e
+                f"PyMuPDF extracted no text from '{pdf_path}' (the PDF may be "
+                "scanned/image-only with no text layer)."
+            )
+
+        logger.info("PyMuPDF fallback parser extracted %d characters", len(text))
+        return [], Content(text=text if extract_text else "")
+
+    @staticmethod
+    def _extract_text_with_fitz(pdf_path: Path) -> str:
+        with fitz.open(str(pdf_path)) as doc:
+            return "\n\n".join(page.get_text() for page in doc)
 
 
 def extract_figures_from_pdf(
