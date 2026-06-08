@@ -351,3 +351,15 @@ class TestFitText:
         text = "x" * 1_200_000
         # A non-"too long" error must not silently gut the content.
         assert factory.fit_text(LanguageModelId.CLAUDE_V4_5_HAIKU, text) == text
+
+    def test_count_tokens_uses_base_model_id(self) -> None:
+        # Regression: CountTokens rejects cross-region profile ids (apac./global.)
+        # — it must be called with the BASE model id, not the resolved one.
+        captured: dict = {}
+        factory = _make_factory()
+        factory._client.count_tokens = MagicMock(
+            side_effect=lambda **kw: captured.update(kw) or {"inputTokens": 1}
+        )
+        factory.count_tokens(LanguageModelId.CLAUDE_V4_6_SONNET, "hi")
+        assert captured["modelId"] == LanguageModelId.CLAUDE_V4_6_SONNET.value
+        assert not captured["modelId"].startswith(("apac.", "global.", "us."))

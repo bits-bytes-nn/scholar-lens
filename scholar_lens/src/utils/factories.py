@@ -310,13 +310,11 @@ class BedrockLanguageModelFactory(
         """Exact input-token count for ``text`` via Bedrock CountTokens (the
         model's own tokenizer).
 
-        Uses the cross-region-resolved id (the one actually invoked) and, for
-        1M-capable models, sends the long-context beta flag so inputs above the
+        Uses the BASE model id: CountTokens rejects cross-region inference-profile
+        ids (``apac.``/``global.`` → ValidationException), unlike Converse. For
+        1M-capable models it sends the long-context beta flag so inputs above the
         base 200k limit can still be measured. Raises on API error (callers that
         must not fail catch it)."""
-        resolved_id = BedrockCrossRegionModelHelper.get_cross_region_model_id(
-            self.boto_session, model_id, self.region_name or ""
-        )
         converse: dict[str, Any] = {
             "messages": [{"role": "user", "content": [{"text": text}]}]
         }
@@ -326,7 +324,7 @@ class BedrockLanguageModelFactory(
                 "anthropic_beta": [self.ANTHROPIC_1M_BETA]
             }
         response = self._client.count_tokens(
-            modelId=resolved_id, input={"converse": converse}
+            modelId=model_id.value, input={"converse": converse}
         )
         return int(response["inputTokens"])
 
