@@ -174,7 +174,7 @@ async def _run_pipeline(
     gen_success = False
     try:
         paper, code_retriever, citation_summarizer = await _prepare_paper_data(
-            context, paper_dir, source, repo_urls, parse_pdf, tracker
+            context, paper_dir, source, repo_urls, parse_pdf, tracker, mode
         )
         translation_guideline = await _load_translation_guideline(context)
 
@@ -183,6 +183,9 @@ async def _run_pipeline(
                 context, paper, translation_guideline, tracker
             )
         else:
+            # Review mode always builds the citation summarizer (see
+            # _prepare_paper_data); assert for the type checker.
+            assert citation_summarizer is not None
             document = await _generate_review(
                 context,
                 paper,
@@ -317,8 +320,14 @@ async def _prepare_paper_data(
     repo_urls: list[str] | None,
     parse_pdf: bool,
     tracker: TokenUsageTracker | None = None,
-) -> tuple[Paper, CodeRetriever | None, CitationSummarizer]:
+    mode: str = Mode.REVIEW,
+) -> tuple[Paper, CodeRetriever | None, CitationSummarizer | None]:
     callbacks = [tracker] if tracker is not None else None
+    # Citations + table-of-contents feed the review's ExplainerGraph only; the
+    # summary path uses neither. Skipping them for summaries avoids a slow,
+    # wasteful pass (extracting/expanding 100s of references, and a full-text TOC
+    # call that can read-timeout) that never affects the output.
+    needs_citations_and_toc = mode != Mode.SUMMARIZE
     figures, content, is_pdf_parsed = await _parse_paper_content(
         context, source, parse_pdf
     )
@@ -361,21 +370,29 @@ async def _prepare_paper_data(
         s3_prefix=context.config.resources.s3_prefix,
         enable_output_fixing=True,
     )
-    citations, attributes, table_of_contents = await asyncio.gather(
-        content_extractor.extract_citations(content.text),
-        content_extractor.extract_attributes(content.text),
-        content_extractor.extract_table_of_contents(content.text),
-    )
+    if needs_citations_and_toc:
+        citations, attributes, table_of_contents = await asyncio.gather(
+            content_extractor.extract_citations(content.text),
+            content_extractor.extract_attributes(content.text),
+            content_extractor.extract_table_of_contents(content.text),
+        )
+    else:
+        attributes = await content_extractor.extract_attributes(content.text)
+        citations, table_of_contents = [], {}
     codebase_summary, code_retriever = await _process_code(
         context, paper_dir, repo_urls
     )
-    citation_summarizer = CitationSummarizer(
-        LanguageModelId(context.config.citations.citation_summarization_model_id),
-        LanguageModelId(context.config.citations.citation_analysis_model_id),
-        context.bedrock_boto_session,
-        paper_dir=paper_dir,
-        callbacks=callbacks,
-        prefer_full_text=context.config.citations.prefer_full_text,
+    citation_summarizer = (
+        CitationSummarizer(
+            LanguageModelId(context.config.citations.citation_summarization_model_id),
+            LanguageModelId(context.config.citations.citation_analysis_model_id),
+            context.bedrock_boto_session,
+            paper_dir=paper_dir,
+            callbacks=callbacks,
+            prefer_full_text=context.config.citations.prefer_full_text,
+        )
+        if needs_citations_and_toc
+        else None
     )
     converted_repo_urls = [HttpUrl(url) for url in repo_urls] if repo_urls else []
     # Sources without real bibliographic metadata (e.g. an arbitrary PDF URL)
