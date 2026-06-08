@@ -74,7 +74,6 @@ class LocalPaths(str, Enum):
     POSTS_DIR = "_posts"
     REFERENCES_DIR = "references"
     REPOS_DIR = "repos"
-    CONFIG_FILE = "config.yaml"
     CONTENT_FILE = "content.json"
     FIGURES_FILE = "figures.json"
     GRAPH_FILE = "graph.png"
@@ -111,5 +110,4 @@ class AppConstants:
         ARXIV_HTML = "https://arxiv.org/html"
         AR5IV_LABS_HTML = "https://ar5iv.labs.arxiv.org/html"
         ARXIV_PDF = "https://arxiv.org/pdf"
-        DOI_ORG = "https://doi.org"
         UPSTAGE_DOCUMENT_PARSE = "https://api.upstage.ai/v1/document-ai/document-parse"

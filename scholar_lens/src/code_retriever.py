@@ -348,24 +348,6 @@ class CodeRetriever(RetryableBase):
     async def _summarize_codebase(self, codebase: str) -> str:
         return await self.codebase_summarizer.ainvoke({"codebase": codebase})
 
-    def search_similar_code_sync(
-        self, content: str, k: int = 10
-    ) -> list[dict[str, float | str]]:
-        if not self.vector_store:
-            raise ValueError("Vector store index not created.")
-        query = (
-            content[: self.max_sequence_length] if self.max_sequence_length else content
-        )
-        results = self.vector_store.similarity_search_with_score(query, k=k)
-        return [
-            {
-                "source": doc.metadata["source"],
-                "content": doc.page_content,
-                "similarity": float(score),
-            }
-            for doc, score in results
-        ]
-
     async def search_similar_code(
         self, content: str, k: int = 10
     ) -> list[dict[str, float | str]]:

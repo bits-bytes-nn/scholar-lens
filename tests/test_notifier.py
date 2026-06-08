@@ -11,11 +11,11 @@ import builtins
 import pytest
 
 from scholar_lens.slack import notifier
+from scholar_lens.slack.blocks import mrkdwn_safe as _mrkdwn_safe
+from scholar_lens.slack.blocks import one_line as _short
 from scholar_lens.slack.notifier import (
     _build_result_message,
     _clean,
-    _mrkdwn_safe,
-    _short,
     post_slack_result,
 )
 from scholar_lens.src.constants import EnvVars
@@ -23,10 +23,15 @@ from scholar_lens.src.constants import EnvVars
 
 def test_mrkdwn_safe_neutralizes_formatting() -> None:
     out = _mrkdwn_safe("fail *boom* _x_ `code`\nline2")
-    assert "*boom*" not in out
-    assert "\\*boom\\*" in out
+    assert "*boom*" not in out  # asterisks swapped for a homoglyph
+    assert "\\" not in out  # no backslash escaping (Slack renders it literally)
     assert "`" not in out  # backticks replaced
     assert "\n" not in out  # newlines collapsed
+
+
+def test_mrkdwn_safe_keeps_arxiv_id_clean() -> None:
+    # A mid-token underscore must NOT be escaped — it shows literally on Slack.
+    assert _mrkdwn_safe("2504_03182") == "2504_03182"
 
 
 class TestClean:
@@ -201,6 +206,21 @@ class TestBuildResultMessage:
         )
         actions = next(b for b in blocks if b["type"] == "actions")
         assert actions["elements"][0]["url"] == "https://blog.example.com/post"
+
+    def test_pr_url_renders_button(self) -> None:
+        _, blocks = _build_result_message(
+            success=True,
+            artifact_label="summary",
+            title="Some Paper",
+            s3_url="s3://bucket/key.md",
+            pr_url="https://github.com/o/r/pull/42",
+            error=None,
+        )
+        actions = next(b for b in blocks if b["type"] == "actions")
+        urls = [e["url"] for e in actions["elements"]]
+        # PR button is present (and first); s3:// stays a code section, not a button.
+        assert "https://github.com/o/r/pull/42" in urls
+        assert all(not u.startswith("s3://") for u in urls)
 
     def test_short_collapses_and_caps(self) -> None:
         assert _short("a\n\n  b\tc") == "a b c"

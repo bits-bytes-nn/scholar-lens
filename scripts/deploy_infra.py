@@ -225,20 +225,22 @@ class PaperReviewStack(Stack):
         bedrock_regions = {self.region}
         if self.bedrock_region_name:
             bedrock_regions.add(self.bedrock_region_name)
+        # Foundation models are public, read-only model endpoints. A cross-region
+        # inference profile fans a single call out to whichever member region has
+        # capacity (e.g. a us-* profile may land in us-east-1 even though we only
+        # configured ap-northeast-2 + us-west-2), and newer short-form IDs are
+        # invoked region-less (arn:...:bedrock:::foundation-model/...). Pinning
+        # foundation-model ARNs to a fixed region list therefore causes sporadic
+        # AccessDenied. Allow InvokeModel on foundation models in ANY region (the
+        # `*` region segment, plus the region-less form). Inference profiles ARE
+        # account-scoped resources, so keep those pinned to the regions we use.
         bedrock_resources: list[str] = [
-            # Newer short-form model IDs (e.g. anthropic.claude-sonnet-4-6,
-            # anthropic.claude-opus-4-8) are invoked as region-less / global
-            # foundation models, so their ARN has an EMPTY region segment
-            # (arn:aws:bedrock:::foundation-model/...). The region-scoped ARNs
-            # below do not match those, so grant the region-less form too.
             f"arn:{self.partition}:bedrock:::foundation-model/*",
+            f"arn:{self.partition}:bedrock:*::foundation-model/*",
         ]
         for region in bedrock_regions:
-            bedrock_resources.extend(
-                [
-                    f"arn:{self.partition}:bedrock:{region}::foundation-model/*",
-                    f"arn:{self.partition}:bedrock:{region}:{self.account}:inference-profile/*",
-                ]
+            bedrock_resources.append(
+                f"arn:{self.partition}:bedrock:{region}:{self.account}:inference-profile/*"
             )
         statements.append(
             iam.PolicyStatement(
@@ -246,6 +248,9 @@ class PaperReviewStack(Stack):
                 actions=[
                     "bedrock:InvokeModel",
                     "bedrock:InvokeModelWithResponseStream",
+                    # CountTokens is used to fit long papers to the context window
+                    # using Claude's exact tokenizer before invoking the model.
+                    "bedrock:CountTokens",
                 ],
                 resources=bedrock_resources,
             )
@@ -303,6 +308,28 @@ class PaperReviewStack(Stack):
                 sid="SnsPublish",
                 actions=["sns:Publish"],
                 resources=[self.topic.topic_arn],
+            )
+        )
+
+        # KMS: the SNS topic is encrypted with a customer-managed key, so
+        # publishing requires GenerateDataKey/Decrypt on that key.
+        statements.append(
+            iam.PolicyStatement(
+                sid="SnsTopicKey",
+                actions=["kms:GenerateDataKey", "kms:Decrypt"],
+                resources=[self.topic_key.key_arn],
+            )
+        )
+
+        # CloudWatch: emit custom run metrics (PutMetricData has no resource-level
+        # ARN; scope it to the app's metrics namespace via a condition). Must
+        # match METRICS_NAMESPACE in scholar_lens/src/metrics.py.
+        statements.append(
+            iam.PolicyStatement(
+                sid="CloudWatchMetrics",
+                actions=["cloudwatch:PutMetricData"],
+                resources=["*"],
+                conditions={"StringEquals": {"cloudwatch:namespace": "ScholarLens"}},
             )
         )
 
@@ -394,6 +421,7 @@ class PaperReviewStack(Stack):
             removal_policy=RemovalPolicy.DESTROY,
             alias=self._get_resource_name("paper-review-sns"),
         )
+        self.topic_key = topic_key
         topic = sns.Topic(
             self,
             "PaperReviewTopic",
@@ -496,8 +524,12 @@ class PaperReviewStack(Stack):
             image=image,
             job_role=self.job_role,
             execution_role=self.execution_role,
-            cpu=1,
-            memory=core.Size.mebibytes(1024),
+            # PDF parsing (Unstructured "fast" fallback / Upstage) plus FAISS code
+            # embeddings are memory-hungry; 1 GiB OOM-killed (exit 137) on large
+            # PDFs. 2 vCPU / 8 GiB gives ample headroom and stays within the
+            # compute environments' maxvCpus (4 on-demand / 8 spot).
+            cpu=2,
+            memory=core.Size.mebibytes(8192),
             command=command,
             environment=container_env,
             logging=ecs.LogDrivers.aws_logs(

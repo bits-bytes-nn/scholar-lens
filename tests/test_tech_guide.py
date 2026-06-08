@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from scholar_lens.src.constants import LanguageModelId
 from scholar_lens.src.tech_guide import (
     NotTechnicalContentError,
     TechGuideGenerator,
@@ -25,6 +26,12 @@ def _make_generator(*, verify_grounding: bool = False) -> TechGuideGenerator:
     gen.section_chain = MagicMock()
     gen._section_str_chain = MagicMock()
     gen.grounding_chain = MagicMock()
+    gen.synopsis_model_id = LanguageModelId.CLAUDE_V4_5_HAIKU
+    gen.writing_model_id = LanguageModelId.CLAUDE_V4_5_HAIKU
+    # fit_text would call Bedrock CountTokens; stub it to a pass-through.
+    factory = MagicMock()
+    factory.fit_text = MagicMock(side_effect=lambda model_id, text, **kw: text)
+    gen.llm_factory = factory
     return gen
 
 
@@ -54,7 +61,7 @@ class TestParseSynopsisSections:
         out = gen._parse_synopsis_sections("1. a\n2. b\n3. c")
         assert out == ["a", "b"]
 
-    def test_unstructured_fallback_to_lines(self) -> None:
+    def test_unnumbered_synopsis_falls_back_to_lines(self) -> None:
         gen = _make_generator()
         assert gen._parse_synopsis_sections("just one line") == ["just one line"]
 

@@ -27,7 +27,17 @@ def arg_as_bool(value: Any) -> bool:
 
 _AFFIRMATIVE = frozenset({"y", "yes", "yeah", "yep", "true", "t", "1"})
 _PLACEHOLDER = frozenset(
-    {"n/a", "na", "none", "null", "unknown", "unnamed", "anonymous", "not available"}
+    {
+        "n/a",
+        "na",
+        "none",
+        "null",
+        "unknown",
+        "unnamed",
+        "anonymous",
+        "not available",
+        "empty",
+    }
 )
 
 
@@ -88,7 +98,10 @@ def extract_text_from_html(html_content: str) -> str:
 
     extracted_text = parse_element(soup)
 
-    replacements = {"\\AND": "", "\\n": " ", "\\times": "x", "footnotemark:": ""}
+    # Strip a few LaTeXML extraction artifacts. NOTE: do NOT map "\times" -> "x"
+    # here — it corrupts real math (e.g. "a \times b"); math underscores/operators
+    # are handled downstream by markdown_math, not by lossy string replacement.
+    replacements = {"\\AND": "", "\\n": " ", "footnotemark:": ""}
     for old, new in replacements.items():
         extracted_text = extracted_text.replace(old, new)
 

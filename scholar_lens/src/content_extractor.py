@@ -101,15 +101,28 @@ class ContentExtractor(RetryableBase):
         output_fixing_model_id: LanguageModelId,
         enable_output_fixing: bool,
     ) -> None:
+        # All three extractors are fed the full paper text, which for long papers
+        # (e.g. 500k+ chars) exceeds the 200k default context window. Enable the
+        # 1M context window on each so long papers don't fail with
+        # "prompt is too long" (no-op on models that don't support it). The text
+        # itself is fitted to each model's exact budget at call time via
+        # llm_factory.fit_text (Bedrock CountTokens).
         citation_llm = self.llm_factory.get_model(
-            citation_extraction_model_id, temperature=0.0
+            citation_extraction_model_id,
+            temperature=0.0,
+            supports_1m_context_window=True,
         )
         attributes_llm = self.llm_factory.get_model(
-            attributes_extraction_model_id, temperature=0.0
+            attributes_extraction_model_id,
+            temperature=0.0,
+            supports_1m_context_window=True,
         )
         table_of_contents_llm = self.llm_factory.get_model(
             table_of_contents_model_id, temperature=0.0, supports_1m_context_window=True
         )
+        self._citation_model_id = citation_extraction_model_id
+        self._attributes_model_id = attributes_extraction_model_id
+        self._toc_model_id = table_of_contents_model_id
         robust_xml_output_parser = create_robust_xml_output_parser(
             self.llm_factory,
             enable_output_fixing=enable_output_fixing,
@@ -216,7 +229,12 @@ class ContentExtractor(RetryableBase):
         self, html_content: str, existing_citations: str
     ) -> dict[str, str]:
         return await self.citation_extractor.ainvoke(
-            {"text": html_content, "existing_citations": existing_citations}
+            {
+                "text": self.llm_factory.fit_text(
+                    self._citation_model_id, html_content, label="citation text"
+                ),
+                "existing_citations": existing_citations,
+            }
         )
 
     @staticmethod
@@ -240,7 +258,9 @@ class ContentExtractor(RetryableBase):
     async def extract_attributes(self, html_content: str) -> Attributes:
         result = await self.attributes_extractor.ainvoke(
             {
-                "text": html_content,
+                "text": self.llm_factory.fit_text(
+                    self._attributes_model_id, html_content, label="attributes text"
+                ),
                 "existing_keywords": ", ".join(sorted(list(self.existing_keywords))),
             }
         )
@@ -290,5 +310,9 @@ class ContentExtractor(RetryableBase):
     @RetryableBase._retry("table_of_contents_extraction")
     async def extract_table_of_contents(self, html_content: str) -> dict[str, Any]:
         return await self.table_of_contents_extractor.ainvoke(
-            {"paper_content": html_content}
+            {
+                "paper_content": self.llm_factory.fit_text(
+                    self._toc_model_id, html_content, label="TOC text"
+                )
+            }
         )

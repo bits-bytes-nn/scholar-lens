@@ -6,7 +6,6 @@ import os
 import re
 import sys
 import time
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -46,6 +45,7 @@ from scholar_lens.src import (
     SSMParams,
     TokenUsageTracker,
     arg_as_bool,
+    build_pr_body,
     get_ssm_param_value,
     is_placeholder,
     is_running_in_aws,
@@ -113,11 +113,12 @@ def main(
     # of vanishing. paper_source may be None in finally — guard every access.
     paper_source: PaperSource | None = None
     s3_url: str | None = None
+    pr_url: str | None = None
     success = False
     error_message: str | None = None
     try:
         paper_source = resolve_paper_source(source)
-        s3_url = asyncio.run(
+        s3_url, pr_url = asyncio.run(
             _run_pipeline(context, paper_source, repo_urls, parse_pdf, mode)
         )
         success = True
@@ -147,6 +148,7 @@ def main(
             artifact_label=artifact_label,
             title=notify_title,
             s3_url=s3_url,
+            pr_url=pr_url,
             error=error_message,
         )
         if paper_source is not None:
@@ -159,7 +161,7 @@ async def _run_pipeline(
     repo_urls: list[str] | None,
     parse_pdf: bool,
     mode: str = Mode.REVIEW,
-) -> str | None:
+) -> tuple[str | None, str | None]:
     paper_dir = ROOT_DIR / LocalPaths.PAPERS_DIR.value / source.source_id
     _setup_aws_env(context)
 
@@ -175,7 +177,7 @@ async def _run_pipeline(
     gen_success = False
     try:
         paper, code_retriever, citation_summarizer = await _prepare_paper_data(
-            context, paper_dir, source, repo_urls, parse_pdf, tracker
+            context, paper_dir, source, repo_urls, parse_pdf, tracker, mode
         )
         translation_guideline = await _load_translation_guideline(context)
 
@@ -184,6 +186,9 @@ async def _run_pipeline(
                 context, paper, translation_guideline, tracker
             )
         else:
+            # Review mode always builds the citation summarizer (see
+            # _prepare_paper_data); assert for the type checker.
+            assert citation_summarizer is not None
             document = await _generate_review(
                 context,
                 paper,
@@ -207,13 +212,14 @@ async def _run_pipeline(
     request = _build_paper_publish_request(paper, paper_dir, document, mode)
     s3_url, document_path = await publisher.publish(request)
 
+    pr_url: str | None = None
     if context.config.resources.github.enabled:
-        await publisher.create_pull_request(request, document_path)
+        pr_url = await publisher.create_pull_request(request, document_path)
 
     if code_retriever:
         await code_retriever.delete_index()
 
-    return s3_url
+    return s3_url, pr_url
 
 
 async def _generate_review(
@@ -318,8 +324,14 @@ async def _prepare_paper_data(
     repo_urls: list[str] | None,
     parse_pdf: bool,
     tracker: TokenUsageTracker | None = None,
-) -> tuple[Paper, CodeRetriever | None, CitationSummarizer]:
+    mode: str = Mode.REVIEW,
+) -> tuple[Paper, CodeRetriever | None, CitationSummarizer | None]:
     callbacks = [tracker] if tracker is not None else None
+    # Citations + table-of-contents feed the review's ExplainerGraph only; the
+    # summary path uses neither. Skipping them for summaries avoids a slow,
+    # wasteful pass (extracting/expanding 100s of references, and a full-text TOC
+    # call that can read-timeout) that never affects the output.
+    needs_citations_and_toc = mode != Mode.SUMMARIZE
     figures, content, is_pdf_parsed = await _parse_paper_content(
         context, source, parse_pdf
     )
@@ -362,21 +374,29 @@ async def _prepare_paper_data(
         s3_prefix=context.config.resources.s3_prefix,
         enable_output_fixing=True,
     )
-    citations, attributes, table_of_contents = await asyncio.gather(
-        content_extractor.extract_citations(content.text),
-        content_extractor.extract_attributes(content.text),
-        content_extractor.extract_table_of_contents(content.text),
-    )
+    if needs_citations_and_toc:
+        citations, attributes, table_of_contents = await asyncio.gather(
+            content_extractor.extract_citations(content.text),
+            content_extractor.extract_attributes(content.text),
+            content_extractor.extract_table_of_contents(content.text),
+        )
+    else:
+        attributes = await content_extractor.extract_attributes(content.text)
+        citations, table_of_contents = [], {}
     codebase_summary, code_retriever = await _process_code(
         context, paper_dir, repo_urls
     )
-    citation_summarizer = CitationSummarizer(
-        LanguageModelId(context.config.citations.citation_summarization_model_id),
-        LanguageModelId(context.config.citations.citation_analysis_model_id),
-        context.bedrock_boto_session,
-        paper_dir=paper_dir,
-        callbacks=callbacks,
-        prefer_full_text=context.config.citations.prefer_full_text,
+    citation_summarizer = (
+        CitationSummarizer(
+            LanguageModelId(context.config.citations.citation_summarization_model_id),
+            LanguageModelId(context.config.citations.citation_analysis_model_id),
+            context.bedrock_boto_session,
+            paper_dir=paper_dir,
+            callbacks=callbacks,
+            prefer_full_text=context.config.citations.prefer_full_text,
+        )
+        if needs_citations_and_toc
+        else None
     )
     converted_repo_urls = [HttpUrl(url) for url in repo_urls] if repo_urls else []
     # Sources without real bibliographic metadata (e.g. an arbitrary PDF URL)
@@ -550,7 +570,6 @@ def _build_front_matter(
 layout: post
 title: "{title}"
 date: {date}
-paper_date: {paper_date}
 author: "{author}"
 categories: [{categories}]
 tags: [{tags}]
@@ -578,10 +597,8 @@ use_math: true
 
     return front_matter_template.format(
         title=paper.title.replace('"', '\\"'),
-        # The post's own publication date is "now"; the paper's original date is
-        # surfaced separately so the blog doesn't sort the post years into the past.
-        date=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        paper_date=paper.published.strftime("%Y-%m-%d"),
+        # Use the paper's own publication date as the post date.
+        date=paper.published.strftime("%Y-%m-%d %H:%M:%S"),
         author=author.replace('"', '\\"'),
         categories=categories_str,
         tags=keywords_str,
@@ -630,9 +647,9 @@ def _format_explanation(
         github_config, paper, github_config.review_category
     )
     body = f"### TL;DR\n{key_takeaways}\n- - -\n{explanation}"
-    references = (
-        f"\n- - -\n### References\n* [{_md_link_text(paper.title)}]({paper.pdf_url})"
-    )
+    references_lines = [f"* [{_md_link_text(paper.title)}]({paper.pdf_url})"]
+    references_lines.extend(_code_repository_references(paper))
+    references = "\n- - -\n### References\n" + "\n".join(references_lines)
     return f"{front_matter}{body}{references}"
 
 
@@ -640,6 +657,20 @@ def _md_link_text(text: str) -> str:
     """Escape brackets in Markdown link text so a title with ``]`` doesn't break
     the ``[text](url)`` syntax."""
     return text.replace("[", "\\[").replace("]", "\\]")
+
+
+def _code_repository_references(paper: Paper) -> list[str]:
+    """Reference bullets for the paper's associated code repositories, if any.
+
+    Uses the same bullet style as the paper entry (no label); the repo URL's last
+    path segment ("owner/name") is the link text so it reads as a repository
+    rather than a bare URL."""
+    lines = []
+    for repo in paper.repo_urls:
+        url = str(repo)
+        name = "/".join(url.rstrip("/").split("/")[-2:]) or url
+        lines.append(f"* [{_md_link_text(name)}]({url})")
+    return lines
 
 
 def _format_summary(
@@ -651,6 +682,7 @@ def _format_summary(
     )
     body = result["summary"]
     references_lines = [f"* [{_md_link_text(paper.title)}]({paper.pdf_url})"]
+    references_lines.extend(_code_repository_references(paper))
     if urls := result.get("urls", "").strip():
         references_lines.append(urls)
     references = "\n- - -\n### References\n" + "\n".join(references_lines)
@@ -671,20 +703,16 @@ def _build_paper_publish_request(
     paper: Paper, paper_dir: Path, document: str, mode: str
 ) -> PublishRequest:
     artifact_label = "summary" if mode == Mode.SUMMARIZE else "review"
-    repo_info = (
-        f"- **Repositories**: {', '.join(str(repo) for repo in paper.repo_urls)}\n"
-        if paper.repo_urls
-        else ""
-    )
-    pr_body = (
-        f"This PR adds an AI-generated {artifact_label} for the paper: "
-        f"**{paper.title}**\n\n"
-        f"- **Paper ID**: {paper.arxiv_id}\n"
-        f"- **PDF URL**: {paper.pdf_url}\n"
-        f"- **PDF Parsing**: {'enabled' if paper.is_pdf_parsed else 'disabled'}\n"
-        f"- **Number of Characters**: {len(document):,}\n"
-        f"{repo_info}\n"
-        f"This pull request was automatically generated by the Scholar-Lens system."
+    pr_body = build_pr_body(
+        kind=f"paper {artifact_label}",
+        title=paper.title,
+        fields={
+            "Paper ID": paper.arxiv_id or "",
+            "PDF URL": str(paper.pdf_url) if paper.pdf_url else "",
+            "PDF Parsing": "enabled" if paper.is_pdf_parsed else "disabled",
+            "Characters": f"{len(document):,}",
+            "Repositories": ", ".join(str(r) for r in paper.repo_urls),
+        },
     )
     return PublishRequest(
         title=paper.title,
@@ -777,7 +805,13 @@ if __name__ == "__main__":
         else None
     )
     source = args.source or args.arxiv_id
-    logger.info("Starting paper %s process with args: %s", args.mode, vars(args))
+    logger.info(
+        "Starting paper %s process: source=%s repo_urls=%s parse_pdf=%s",
+        args.mode,
+        source,
+        repo_urls,
+        args.parse_pdf,
+    )
     main(
         source,
         repo_urls,

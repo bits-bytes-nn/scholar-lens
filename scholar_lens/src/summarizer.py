@@ -47,6 +47,7 @@ class PaperSummarizer(RetryableBase):
     ) -> None:
         self.language = language
         self.translation_guideline = translation_guideline or []
+        self.summary_model_id = summary_model_id
         self.llm_factory = BedrockLanguageModelFactory(boto_session=boto_session)
         self.summary_chain: Runnable = self._build_chain(
             summary_model_id,
@@ -104,6 +105,11 @@ class PaperSummarizer(RetryableBase):
     async def _summarize(
         self, content: str, codebase_summary: str | None = None
     ) -> dict[str, str]:
+        # Fit the paper to the model's context window (exact, via CountTokens) so
+        # a very long paper is trimmed rather than overflowing the call.
+        content = self.llm_factory.fit_text(
+            self.summary_model_id, content, label="summary content"
+        )
         return await self.summary_chain.ainvoke(
             {
                 "content": content,

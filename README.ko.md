@@ -11,7 +11,7 @@ CLI · AWS Batch · Slack 봇으로 구동 · Amazon Bedrock (Claude) 기반.
 ![AWS CDK](https://img.shields.io/badge/IaC-AWS%20CDK-orange)
 ![Bedrock](https://img.shields.io/badge/LLM-Amazon%20Bedrock%20(Claude)-green)
 
-🇺🇸 [English README](./README.md) · 📖 [기술 레퍼런스](./docs/tech-doc.md)
+🇺🇸 [English README](./README.md)
 
 ![Sample](./assets/sample.png)
 
@@ -68,8 +68,6 @@ Scholar-Lens는 논문 또는 문서 URL 묶음으로부터 세 가지 산출물
 | `publisher.py` | 산출물 무관 S3 업로드 + Jekyll 블로그 PR. |
 | `slack/` | 온디맨드 Paper Bot(의도 파싱 → Batch 디스패치). |
 
-> 📖 모든 모듈, 엔드투엔드 데이터 흐름, 설정 스키마, 모델 사용, 인프라, 프롬프트까지 — 자세한 라인 단위 기술 문서는 [`docs/tech-doc.md`](./docs/tech-doc.md)를 참고하세요.
-
 ## 기술 스택
 
 Python 3.12+ · AWS CDK · Docker · Amazon Bedrock · LangChain / LangGraph · PyMuPDF · BeautifulSoup4 · FAISS · Pydantic.
@@ -108,7 +106,7 @@ tech_guide:
 output_language: Korean
 ```
 
-전체 스키마는 [`docs/tech-doc.md` §5](./docs/tech-doc.md)를 참고하세요.
+전체 스키마는 [`scholar_lens/configs/config-template.yaml`](./scholar_lens/configs/config-template.yaml)를 참고하세요.
 
 ## 사용법
 

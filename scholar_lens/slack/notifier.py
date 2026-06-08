@@ -14,30 +14,16 @@ from __future__ import annotations
 
 import os
 
-from ..src.constants import EnvVars
+from ..src.constants import AppConstants, EnvVars
 from ..src.logger import logger
-
-_NULL = "null"
+from .blocks import context, header, mrkdwn_safe, one_line, section
 
 
 def _clean(value: str | None) -> str | None:
     """Treat the Batch NULL sentinel and blanks as absent."""
-    if not value or value.strip().lower() == _NULL:
+    if not value or value.strip().lower() == AppConstants.NULL_STRING:
         return None
     return value.strip()
-
-
-def _mrkdwn_safe(value: str) -> str:
-    """Neutralise Slack mrkdwn control chars in user-influenced text.
-
-    The title and error strings originate from paper metadata / exception text,
-    so escape the formatting characters (`*_~` and backtick) and collapse
-    newlines to keep an injected string from reshaping the status message.
-    """
-    out = value.replace("`", "ʼ")
-    for ch in ("*", "_", "~"):
-        out = out.replace(ch, "\\" + ch)
-    return " ".join(out.split())
 
 
 def post_slack_result(
@@ -48,6 +34,7 @@ def post_slack_result(
     artifact_label: str,
     title: str,
     s3_url: str | None,
+    pr_url: str | None = None,
     error: str | None = None,
     bot_token: str | None = None,
 ) -> None:
@@ -70,6 +57,7 @@ def post_slack_result(
         artifact_label=artifact_label,
         title=title,
         s3_url=s3_url,
+        pr_url=pr_url,
         error=error,
     )
     try:
@@ -94,92 +82,54 @@ _ARTIFACT_META = {
 }
 
 
+def _link_button(text: str, url: str) -> dict:
+    return {"type": "button", "text": {"type": "plain_text", "text": text}, "url": url}
+
+
 def _build_result_message(
     *,
     success: bool,
     artifact_label: str,
     title: str,
     s3_url: str | None,
-    error: str | None,
+    pr_url: str | None = None,
+    error: str | None = None,
 ) -> tuple[str, list[dict]]:
     """Build (fallback_text, Block Kit blocks) for a completion message."""
     emoji, nice = _ARTIFACT_META.get(
         artifact_label.lower(), (":robot_face:", artifact_label.capitalize())
     )
-    safe_title = _mrkdwn_safe(title)
+    safe_title = mrkdwn_safe(title)
 
     if success:
-        header = f"{emoji} {nice} ready"
         fallback = f"{nice} ready for {title}"
-        section = f"*{safe_title}*"
         blocks: list[dict] = [
-            {"type": "header", "text": {"type": "plain_text", "text": header}},
-            {"type": "section", "text": {"type": "mrkdwn", "text": section}},
+            header(f"{emoji} {nice} ready"),
+            section(f"*{safe_title}*"),
         ]
-        if s3_url:
-            # Render https links as a clickable button; show s3:// URIs as code.
-            if s3_url.startswith(("http://", "https://")):
-                blocks.append(
-                    {
-                        "type": "actions",
-                        "elements": [
-                            {
-                                "type": "button",
-                                "text": {
-                                    "type": "plain_text",
-                                    "text": ":open_file_folder: View output",
-                                },
-                                "url": s3_url,
-                            }
-                        ],
-                    }
-                )
-            else:
-                blocks.append(
-                    {
-                        "type": "section",
-                        "text": {
-                            "type": "mrkdwn",
-                            "text": f":open_file_folder: Output: `{_mrkdwn_safe(s3_url)}`",
-                        },
-                    }
-                )
+        # Clickable buttons for any https links (blog PR, http output); s3:// URIs
+        # aren't clickable so they're shown as code instead.
+        buttons = []
+        if pr_url and pr_url.startswith(("http://", "https://")):
+            buttons.append(_link_button(":github: View pull request", pr_url))
+        if s3_url and s3_url.startswith(("http://", "https://")):
+            buttons.append(_link_button(":open_file_folder: View output", s3_url))
+        if buttons:
+            blocks.append({"type": "actions", "elements": buttons})
+        if s3_url and not s3_url.startswith(("http://", "https://")):
+            blocks.append(
+                section(f":open_file_folder: Output: `{mrkdwn_safe(s3_url)}`")
+            )
     else:
-        header = f"{nice} couldn't be completed"
         fallback = f"{nice} failed for {title}"
         blocks = [
-            {"type": "header", "text": {"type": "plain_text", "text": f":x: {header}"}},
-            {"type": "section", "text": {"type": "mrkdwn", "text": f"*{safe_title}*"}},
+            header(f":x: {nice} couldn't be completed"),
+            section(f"*{safe_title}*"),
         ]
         if error:
             blocks.append({"type": "divider"})
             blocks.append(
-                {
-                    "type": "section",
-                    "text": {
-                        "type": "mrkdwn",
-                        "text": f":warning: *What went wrong*\n```{_short(error)}```",
-                    },
-                }
+                section(f":warning: *What went wrong*\n```{one_line(error)}```")
             )
-            blocks.append(
-                {
-                    "type": "context",
-                    "elements": [
-                        {
-                            "type": "mrkdwn",
-                            "text": "Check the AWS Batch job logs for the full trace.",
-                        }
-                    ],
-                }
-            )
+            blocks.append(context("Check the AWS Batch job logs for the full trace."))
     return fallback, blocks
-
-
-def _short(text: str, *, limit: int = 600) -> str:
-    """Collapse whitespace and cap an error string for display in a code block.
-
-    Backticks are stripped so the surrounding ``` fence can't be broken out of.
-    """
-    flat = " ".join(text.replace("`", "ʼ").split())
-    return flat if len(flat) <= limit else flat[: limit - 1] + "…"

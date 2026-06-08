@@ -32,9 +32,14 @@ class RetryableBase:
             # Never retry terminal errors (e.g. a token-budget breach).
             retry=tenacity.retry_if_exception(_is_retryable),
             before_sleep=lambda retry_state: logger.warning(
-                "Retrying '%s' (attempt %d failed). Waiting %.1fs",
+                "Retrying '%s' (attempt %d failed: %s). Waiting %.1fs",
                 operation_name,
                 retry_state.attempt_number,
+                (
+                    retry_state.outcome.exception()
+                    if retry_state.outcome and retry_state.outcome.failed
+                    else "unknown error"
+                ),
                 retry_state.next_action.sleep if retry_state.next_action else 0,
             ),
             reraise=True,

@@ -22,6 +22,7 @@ from ..src.utils import (
     BedrockLanguageModelFactory,
     HTMLTagOutputParser,
     is_affirmative,
+    is_placeholder,
 )
 
 # Slack wraps URLs as <url> or <url|label>; strip that decoration.
@@ -88,7 +89,9 @@ def _coerce_intent(value: str) -> SlackIntent:
 
 def _split_csv(value: str) -> list[str]:
     items = [item.strip() for item in re.split(r"[,\n]", value or "")]
-    return [item for item in items if item and item.lower() != "empty"]
+    # Drop any placeholder marker the model emits for "no value" (the prompt
+    # hints "or empty", but a model may say none/N/A/etc. just as easily).
+    return [item for item in items if item and not is_placeholder(item)]
 
 
 def _unwrap_slack_links(message: str) -> str:

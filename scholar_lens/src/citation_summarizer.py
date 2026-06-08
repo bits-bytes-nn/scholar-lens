@@ -24,7 +24,6 @@ DEFAULT_TIMEOUT: int = 60
 
 class CitationSummarizer(RetryableBase):
     FAILURE_STRING: str = "Could not generate summary."
-    MAX_CHARS_PER_CONTENT: int = 100000
 
     def __init__(
         self,
@@ -58,6 +57,7 @@ class CitationSummarizer(RetryableBase):
         self._inflight: dict[str, asyncio.Future[str | None]] = {}
         self._cache_lock = asyncio.Lock()
 
+        self.citation_summarizing_model_id = citation_summarizing_model_id
         analysis_llm = self.llm_factory.get_model(
             citation_analysis_model_id, temperature=0.0, callbacks=self._callbacks
         )
@@ -81,6 +81,35 @@ class CitationSummarizer(RetryableBase):
         )
         self.arxiv_handler = ArxivHandler(max_retries=max_retries)
         self.html_parser = HTMLParser(timeout=timeout)
+
+    def _fit_summary_inputs(
+        self, reference_content: str, original_content: str
+    ) -> dict[str, str]:
+        """Fit the (reference, original) pair to the summarizing model's window
+        with Bedrock CountTokens. Both texts share one prompt, so first hold back
+        room for the prompt template + the model's response, then split the
+        REMAINING budget between the two (each gets half)."""
+        model_id = self.citation_summarizing_model_id
+        window = self.llm_factory.effective_context_window(model_id)
+        # Headroom for prompt template + output, then halve what's left per input.
+        usable = max(window - self.llm_factory.DEFAULT_CONTEXT_RESERVE_TOKENS, 1000)
+        # fit_text computes budget = window - reserve_tokens, so to give each input
+        # `usable // 2` tokens we reserve everything above that.
+        per_input_reserve = window - usable // 2
+        return {
+            "reference_content": self.llm_factory.fit_text(
+                model_id,
+                reference_content,
+                reserve_tokens=per_input_reserve,
+                label="citation reference",
+            ),
+            "original_content": self.llm_factory.fit_text(
+                model_id,
+                original_content,
+                reserve_tokens=per_input_reserve,
+                label="citation original",
+            ),
+        }
 
     async def summarize(
         self, reference_identifiers: list[str], original_content: str
@@ -194,6 +223,9 @@ class CitationSummarizer(RetryableBase):
     # Minimum title similarity to trust a resolved metadata URL as the right
     # paper. Below this we keep the title as plain text (no mis-attributed link).
     TITLE_MATCH_THRESHOLD: float = 0.72
+    # Minimum normalised length of a contained title before substring containment
+    # is trusted, so a short generic title isn't matched inside a long citation.
+    MIN_CONTAINED_TITLE_CHARS: int = 16
 
     @staticmethod
     def _title_matches(queried: str | None, resolved: str | None) -> bool:
@@ -213,10 +245,21 @@ class CitationSummarizer(RetryableBase):
         q, r = _norm(queried), _norm(resolved)
         if not q or not r:
             return False
-        if r in q or q in r:
+        # Strong overall similarity (incl. an exact match) is always trusted,
+        # regardless of length.
+        if (
+            SequenceMatcher(None, q, r).ratio()
+            >= CitationSummarizer.TITLE_MATCH_THRESHOLD
+        ):
             return True
-        ratio = SequenceMatcher(None, q, r).ratio()
-        return ratio >= CitationSummarizer.TITLE_MATCH_THRESHOLD
+        # Otherwise, proper containment handles author/year noise around the real
+        # title (e.g. the resolved title sits inside "Hu et al., <title>, 2021"),
+        # but only when the contained string is itself a substantial title — a
+        # short generic resolved title ("attention") inside a long citation must
+        # NOT auto-match. Real paper titles are well over this length.
+        if r in q or q in r:
+            return min(len(q), len(r)) >= CitationSummarizer.MIN_CONTAINED_TITLE_CHARS
+        return False
 
     @RetryableBase._retry("citation_metadata_summary")
     async def _summarize_from_metadata(
@@ -237,10 +280,7 @@ class CitationSummarizer(RetryableBase):
         if not reference_text.strip():
             return None
         summary = await self.citation_summarizer.ainvoke(
-            {
-                "reference_content": reference_text[: self.MAX_CHARS_PER_CONTENT],
-                "original_content": original_content[: self.MAX_CHARS_PER_CONTENT],
-            }
+            self._fit_summary_inputs(reference_text, original_content)
         )
         if not summary or self.FAILURE_STRING in summary:
             return None
@@ -276,10 +316,7 @@ class CitationSummarizer(RetryableBase):
                     reference_text = content.text
 
             summary = await self.citation_summarizer.ainvoke(
-                {
-                    "reference_content": reference_text[: self.MAX_CHARS_PER_CONTENT],
-                    "original_content": original_content[: self.MAX_CHARS_PER_CONTENT],
-                }
+                self._fit_summary_inputs(reference_text, original_content)
             )
             url = f"{AppConstants.External.ARXIV_PDF.value}/{arxiv_id}"
             return f"Title: [{title}]({url})\nAuthors: {authors}\n\n{summary}"

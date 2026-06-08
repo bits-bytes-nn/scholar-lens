@@ -96,6 +96,20 @@ class TestFormatExplanation:
         assert "EXPLANATION" in out
         assert "use_math: true" in out
 
+    def test_code_repositories_listed_in_references(self, sample_paper: Paper) -> None:
+        paper = sample_paper.model_copy(
+            update={"repo_urls": ["https://github.com/org/repo"]}
+        )
+        out = _format_explanation(Github(), paper, "E", "T")
+        assert "### References" in out
+        # Repo appears as a plain bullet, same style as the paper entry.
+        assert "* [org/repo](https://github.com/org/repo)" in out
+
+    def test_no_repo_reference_when_no_repos(self, sample_paper: Paper) -> None:
+        out = _format_explanation(Github(), sample_paper, "E", "T")
+        # Only the paper bullet in References — no extra repo bullet.
+        assert out.count("github.com") == 0
+
     def test_unknown_category_uses_default_cover(self, sample_paper: Paper) -> None:
         paper = sample_paper.model_copy(
             update={
@@ -108,8 +122,14 @@ class TestFormatExplanation:
         out = _format_explanation(gh, paper, "E", "T")
         assert "cover: /assets/images/default.jpg" in out
 
-    def test_no_korean_punctuation_hack(self, sample_paper: Paper) -> None:
-        # The removed locale hack converted "다:" -> "다." Ensure raw text passes through.
+    def test_no_punctuation_hack_passthrough(self, sample_paper: Paper) -> None:
+        # A removed locale hack rewrote a trailing "다:" -> "다.". The body must
+        # now pass through verbatim regardless of language — check both an
+        # English colon-ending body and the original Korean one.
         gh = Github()
-        out = _format_explanation(gh, sample_paper, "결론입니다: 좋다:", "요약:")
-        assert "결론입니다: 좋다:" in out  # unchanged
+        out_en = _format_explanation(
+            gh, sample_paper, "In conclusion: good:", "Summary:"
+        )
+        assert "In conclusion: good:" in out_en  # unchanged
+        out_ko = _format_explanation(gh, sample_paper, "결론입니다: 좋다:", "요약:")
+        assert "결론입니다: 좋다:" in out_ko  # unchanged

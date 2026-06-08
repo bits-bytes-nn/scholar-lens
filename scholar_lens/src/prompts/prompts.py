@@ -179,7 +179,8 @@ After first insertion, use natural descriptive references:
 
 **Every inserted figure MUST be referenced in the surrounding prose.** Never drop
 an image as a caption-only orphan: the sentence immediately before or after the
-image must point to it (e.g. "아래 그림은 …를 보여줍니다", "다음 그림에서 보듯…").
+image must point to it, in the target output language (e.g. "The figure below
+shows …" / "아래 그림은 …를 보여줍니다", "As the next figure shows …" / "다음 그림에서 보듯…").
 If you cannot naturally tie a figure into the narrative, do not insert it.
 """
 
@@ -212,9 +213,6 @@ STYLE_RULES: str = """
   prefer translated terms ("손실 함수", "경사 하강법", "사전 학습", "역전파") and
   keep English only when a translation is unclear or for proper nouns.
 """
-
-# Backwards-compatible alias (older references / tests may import this name).
-KOREAN_STYLE_RULES = STYLE_RULES
 
 
 @dataclass(frozen=True)
@@ -330,7 +328,8 @@ class AttributesExtractionPrompt(BasePrompt):
        - Format as a single, clear institutional identifier
 
     3. RESEARCH CATEGORY (Select exactly ONE):
-       Choose the most specific category that best represents the paper's primary technical contribution:
+       Choose the most specific category that best represents the paper's primary technical contribution.
+       Output the category label EXACTLY as written below — no extra words, notes, or parentheticals.
        - Computer Vision
        - Language Models
        - Speech Processing
@@ -342,6 +341,10 @@ class AttributesExtractionPrompt(BasePrompt):
        - Recommendation Systems
        - Time Series Analysis
        - Other
+
+       Category scope notes (do NOT append these to the output):
+       - "Retrieval Augmented Generation" also covers knowledge graphs, ontologies,
+         and graph/knowledge-based retrieval or querying.
 
     OUTPUT FORMAT (Follow exactly):
     <title>
@@ -398,7 +401,7 @@ class CitationAnalysisPrompt(BasePrompt):
 
     ## Technical Details
     - Key algorithms, methods, or architectures
-    - Important mathematical formulations (use LaTeX: $ ... $ for inline, $$ ... $$ for display)
+    - Important mathematical formulations (use LaTeX: \\( ... \\) for inline, $$ ... $$ for display; never single-dollar $ ... $ for inline)
     - Critical experimental findings or theoretical results
 
     ## Relevance to Citing Work
@@ -619,7 +622,7 @@ class CitationSummaryPrompt(BasePrompt):
        - Limitations and constraints
 
     3. **Mathematical Content**
-       - Use LaTeX notation: $ ... $ for inline, $$ ... $$ for display
+       - Use LaTeX notation: \\( ... \\) for inline, $$ ... $$ for display; never single-dollar $ ... $ for inline
        - Standard symbols: \alpha, \beta, \sum, \int, etc.
        - Define all variables clearly
 
@@ -1205,8 +1208,8 @@ class PaperReflectionPrompt(BasePrompt):
         + r"""
 
     #### 3.3 Citation Format and Integration
-    - Integrate citations naturally into Korean sentence flow
-    - Format: "[Author et al.](url)"이/가 제안한/개발한
+    - Integrate citations naturally into the target-language sentence flow
+      (e.g. English "[Author et al.](url) proposed…", Korean "[Author et al.](url)이 제안한…")
     - When URL unavailable: Use descriptive text without hyperlink
 
     ### 4. CONTENT DUPLICATION PREVENTION RULES (CRITICAL)
@@ -1266,10 +1269,9 @@ class PaperReflectionPrompt(BasePrompt):
        - Calculate if 90%+ of content repeats itself within the section
        - If YES → IMMEDIATE AUTOMATIC ZERO SCORE
 
-    2. **Check CROSS-SECTION duplication second** (Lower priority):
-       - Compare current_explanation against previous_explanation
-       - Look for 95%+ identical expressions across different sections
-       - If found → Apply moderate penalty (-10 points per instance)
+    2. **Within-section repetition is the focus here.** (Cross-section duplication
+       is prevented upstream by the synthesizer, which sees prior sections — the
+       reflector only has the current section, so judge repetition WITHIN it.)
 
     **Focus on CONCRETE CONTENT and EXPRESSION:**
     - WITHIN same section: Same information repeated → ZERO
@@ -1304,7 +1306,7 @@ class PaperReflectionPrompt(BasePrompt):
 
     ### 5. LANGUAGE AND STYLE REQUIREMENTS
     """
-        + KOREAN_STYLE_RULES
+        + STYLE_RULES
         + r"""
 
     ### 6. CONTENT FILTERING RULES (CRITICAL)
@@ -1375,7 +1377,7 @@ class PaperReflectionPrompt(BasePrompt):
       * Missing when required: -10 points
 
     **Language and Style (10 points)**
-    - Natural Korean style and proper reference approach: 6 points
+    - Natural {language} style and proper reference approach: 6 points
     - Consistent formatting and heading structure: 4 points
 
     #### 8.2 Quality Thresholds and Expectations
@@ -1476,18 +1478,8 @@ class PaperReflectionPrompt(BasePrompt):
        - Issues: [If within-section duplication detected, list specific repeated content]
        - **If 90%+ within-section duplication found**: IMMEDIATELY assign quality_score of 0
 
-       **2B. CROSS-SECTION DUPLICATION (Content from different sections):**
-       - **Compare current_explanation against previous_explanation from other sections**
-       - **Check for 95%+ identical expressions across different sections**
-       - **Cross-section identical expression percentage estimate**: [X%]
-       - **Note**: Same topics discussed differently across sections is ACCEPTABLE
-       - Assessment: [Pass / Moderate Issues Found]
-       - Issues: [If 95%+ identical expressions found, list specific instances - apply -10 penalty]
-
     3. **Visual Element Duplication Prevention (CRITICAL)**
-       - **Verify NO visual elements are duplicated from previous sections**
-       - **Check each image path against previous_explanation**
-       - Check that all figures/tables/code/equations appear only once
+       - Within this section, check that all figures/tables/code/equations appear only once
        - Confirm proper use of descriptive references for previously inserted elements
        - Assessment: [Pass/CRITICAL VIOLATION FOUND]
        - Issues: [List any duplicated elements with exact paths - results in automatic zero score]
@@ -1538,7 +1530,7 @@ class PaperReflectionPrompt(BasePrompt):
        - Issues: [List specific violations if any, including missing supplementary materials]
 
     10. **Language, Style, and Content Filtering**
-        - Korean language quality and academic tone
+        - {language} language quality and academic tone
         - First-person pronoun usage check
         - Proper use of descriptive references (no section/figure numbers)
         - **Check for inappropriate non-technical content**: acknowledgments, author contributions, funding information,
@@ -1555,7 +1547,7 @@ class PaperReflectionPrompt(BasePrompt):
     2. **Critical violations** (duplication, path modification, fabrication)
     3. **Major structural issues** (heading problems, citation errors)
     4. **Content completeness** (missing concepts, insufficient depth)
-    5. **Style and language** (Korean quality, references)
+    5. **Style and language** ({language} quality, references)
 
     ## FEEDBACK SECTIONS
 
@@ -1611,7 +1603,7 @@ class PaperReflectionPrompt(BasePrompt):
        - First-person pronoun replacements
        - Numerical reference corrections (convert to descriptive references)
        - Section numbering reference removals
-       - Korean language quality enhancements
+       - {language} language quality enhancements
        - Academic tone adjustments
        - **Content filtering enforcement** (remove all non-technical administrative sections)
 
@@ -1695,7 +1687,7 @@ class PaperSynthesisPrompt(BasePrompt):
     supplementary materials**
 
     CRITICAL: Always complete your response with proper closing tags. Monitor token usage and stop at natural
-    breakpoints (~3000 tokens) with has_more=y if needed.
+    natural breakpoints with has_more=y if the section runs long.
     """
 
     human_prompt_template: str = (
@@ -1904,7 +1896,7 @@ class PaperSynthesisPrompt(BasePrompt):
 
     ### RULE #2: RESPONSE LENGTH MANAGEMENT
 
-    **Monitor token usage continuously. If approaching ~3000 tokens:**
+    **If a section is getting long, wrap up at a natural breakpoint:**
     - STOP at natural paragraph boundary
     - CLOSE </explanation> tag properly
     - SET has_more=y to continue
@@ -2059,20 +2051,27 @@ class PaperSynthesisPrompt(BasePrompt):
     #### 5.1 Mathematics Formatting (STRICT REQUIREMENTS)
 
     **LaTeX formatting rules:**
-    - Simple inline expressions: $ ... $
+    - Inline expressions: \\( ... \\)  — do NOT use single-dollar $ ... $ for inline
+      math (the blog strips the $ delimiter to protect prose like prices, so
+      $ ... $ will NOT render)
     - Complex display equations: $$ ... $$
     - Greek letters: Use \alpha, \beta, etc., NEVER α, β directly
     - ALL mathematical variables and expressions must use LaTeX formatting
-      (e.g., use $x$, $y$, $f(x)$ instead of plain x, y, f(x))
-    - Even when mentioning variables in prose, use LaTeX: "변수 $x$를 사용하여"
+      (e.g., use \\(x\\), \\(y\\), \\(f(x)\\) instead of plain x, y, f(x))
+    - Even when mentioning variables in prose, use inline LaTeX: "변수 \\(x\\)를 사용하여"
     - Text within math: Use \text{{}} with English ONLY for readability
       * CORRECT: \text{{batch size}}, \text{{learning rate}}
       * INCORRECT: \text{{배치 크기}}, \text{{batch_size}}
     - Use proper operators: \times instead of x, \in instead of ∈, \log instead of log
     - Use \vert or \mid instead of | for absolute values and divides
     - NEVER use \rm command - use \text{{}} instead
-    - Use aligned environments for multi-line equations
-    - Use matrix/bmatrix/pmatrix environments for matrices
+    - NEVER use the \bm{{}} command; use \boldsymbol{{}} for bold symbols
+    - AVOID the standalone amsmath display environments \begin{{align}},
+      \begin{{equation}}, \begin{{gather}} — they often fail to render on the
+      blog's MathJax. Instead:
+      * Multi-line/aligned equations: wrap \begin{{aligned}} ... \end{{aligned}} inside $$...$$
+      * Matrices: \begin{{array}}{{...}} ... \end{{array}} or matrix/bmatrix/pmatrix, inside $$...$$
+      * For complex structures, split into multiple separate $$...$$ display equations
 
     **Equation guidelines:**
     - NEVER skip any mathematical formulation from the original paper
@@ -2256,7 +2255,7 @@ class PaperSynthesisPrompt(BasePrompt):
 
     #### 8.1 Target Audience
 
-    - Korean-speaking university students with basic knowledge of machine learning and deep learning
+    - {language}-speaking university students with basic knowledge of machine learning and deep learning
     - **Assume readers need help understanding complex concepts - provide comprehensive explanations**
     - **Use supplementary materials (citations, code) extensively to build understanding**
     - Provide comprehensive context and step-by-step explanations for complex theoretical developments
@@ -2265,10 +2264,12 @@ class PaperSynthesisPrompt(BasePrompt):
 
     #### 8.2 Writing Style Requirements
 
-    - Use natural, flowing Korean in "입니다" style throughout
-    - AVOID first-person pronouns like "우리" (we) or "저" (I)
-    * Instead of "우리는 이 방법을 적용했습니다", use "이 방법이 적용되었습니다"
-    * Instead of "우리의 실험에서", use "실험 결과에서"
+    - Use natural, flowing prose in {language} throughout; when {language} is
+      Korean, use the formal "입니다" register
+    - Prefer impersonal/passive phrasing over first-person pronouns (e.g. "we"/"I",
+      or in Korean "우리"/"저")
+    * e.g. instead of "we applied this method", write "this method was applied"
+      (Korean: "우리는 이 방법을 적용했습니다" → "이 방법이 적용되었습니다")
     * Use passive voice or third-person descriptive statements
     - Maintain professional, academic tone while being accessible
     - Prioritize technical precision and mathematical rigor
@@ -2307,7 +2308,7 @@ class PaperSynthesisPrompt(BasePrompt):
     #### 10.1 Content Continuation Protocol
 
     **When to use has_more=y:**
-    - Content will exceed ~3000 tokens
+    - The section is long enough that a natural breakpoint is approaching
     - DETAILED granularity + INTERMEDIATE/ADVANCED depth
     - Multiple complex equations need thorough derivations
     - Methodology sections with extensive algorithms
@@ -2346,9 +2347,9 @@ class PaperSynthesisPrompt(BasePrompt):
     - Check for content-based references without section numbers
 
     **Other Quality Checks:**
-    - Ensure natural Korean prose without bullet points in main content
+    - Ensure natural {language} prose without bullet points in main content
     - **Confirm complete exclusion of acknowledgments, contributions, and funding sections**
-    - Verify no first-person pronouns ("우리", "저")
+    - Verify no first-person pronouns (e.g. "we"/"I"; in Korean "우리"/"저")
     - Check that all visual elements are integrated naturally in prose
     - **MOST CRITICAL**: Ensure </explanation> tag is always closed
     - **Verify appropriate use of supplementary materials for depth level**
@@ -2356,7 +2357,7 @@ class PaperSynthesisPrompt(BasePrompt):
     ## RESPONSE FORMAT
 
     <explanation>
-    [Detailed paper review in natural, flowing Korean using "입니다" style.
+    [Detailed paper review in natural, flowing {language} prose (use the formal "입니다" register when {language} is Korean).
 
     🎯 PRE-WRITING PROTOCOL - FOLLOW PRIORITY ORDER 🎯
 
@@ -2406,8 +2407,7 @@ class PaperSynthesisPrompt(BasePrompt):
     □ Does this maintain paper accuracy?
 
     **LENGTH MANAGEMENT:**
-    - Monitor token count continuously
-    - Stop at ~3000 tokens at natural breakpoint
+    - If the section grows long, stop at a natural breakpoint
     - ALWAYS close </explanation> tag
     - Use has_more=y if needed
 
@@ -2439,7 +2439,7 @@ class PaperSynthesisPrompt(BasePrompt):
     - DETAILED granularity + INTERMEDIATE/ADVANCED depth
     - Multiple complex equations requiring thorough explanations
     - Methodology sections with extensive algorithms
-    - Response approaching ~3000 token limit
+    - The current response is getting long and a natural breakpoint is near
 
     When has_more=y:
     - Next response continues seamlessly
@@ -2641,12 +2641,16 @@ class PaperSummaryPrompt(BasePrompt):
     3. Highlight the most significant experimental results
     4. Identify limitations and potential improvements
     5. Connect the research to broader AI/ML applications
-    6. Provide a concise summary (maximum 2 A4 pages, approximately 2000 characters)
+    6. Write enough to convey the methods and results in real depth — a reader
+       should come away genuinely understanding the paper's core, not just its
+       gist. Depth is set per section (see <Focus Distribution>), NOT by a fixed
+       length or ratio: go deep on the hard parts, stay brief on routine ones.
+       Never pad to hit a length; never compress a key mechanism into one line.
     7. Include relevant figures to enhance understanding
 
     <Important Note>
     Select only essential visual elements (images, tables, code) that are critical for understanding key concepts.
-    Every figure you insert MUST be referenced in the adjacent prose (e.g. "아래 그림은 …"); never leave a
+    Every figure you insert MUST be referenced in the adjacent prose (e.g. "The figure below shows …" / "아래 그림은 …"); never leave a
     caption-only orphan image. If a figure cannot be tied into the narrative, omit it.
 
     <Using the Official Codebase>
@@ -2663,7 +2667,10 @@ class PaperSummaryPrompt(BasePrompt):
     state it briefly and move on.
 
     <Focus Distribution>
-    - Provide DETAILED summaries of the novel solution and implementation methods (sections 2 and 3)
+    - Provide DETAILED summaries of the novel solution and implementation methods (sections 2 and 3): explain the
+      key mechanisms, the reasoning behind the main design decisions, the important equations, and concrete
+      specifics (architecture, key hyper-parameters, algorithm steps) — multiple substantial paragraphs each, not a
+      single paragraph. This is where most of the summary's length should go.
     - Provide BRIEF summaries of the background/motivation, experimental results, and future directions (sections 1, 4,
     and 5)
     - For brief summary sections (1, 4, 5), prefer text-based explanations over images, tables, formulas, or code
@@ -2682,18 +2689,24 @@ class PaperSummaryPrompt(BasePrompt):
     3. Place all reference URLs within <urls> tags as [text](url), [text](url), ...
 
     <Section Headers>
-    Use these exact section headers as level-2 Markdown headings (translate the visible text to the target language but
-    keep the emoji and the five-question structure; skip a section only if the paper truly lacks relevant information):
-    ## 🔍 What motivated this research? [BRIEF SUMMARY - prefer text over images/tables/formulas/code]
-    ## 💡 What novel solution does this research propose? [DETAILED SUMMARY]
-    ## ⚙️ How was the proposed method implemented? [DETAILED SUMMARY]
-    ## 📊 What are the key experimental results? [BRIEF SUMMARY - prefer text over images/tables/formulas/code]
-    ## 🔮 What is the significance and future direction of this research? [BRIEF SUMMARY]
+    Use these exact level-2 Markdown headings — keep the emoji and the five-question structure, and write the heading
+    text IN THE TARGET LANGUAGE {language} (the bracketed depth note is guidance for you, NOT part of the output; do
+    not include it). Skip a section only if the paper truly lacks relevant information.
+
+    When {language} is Korean, use these headings verbatim:
+    ## 🔍 이 연구가 왜 필요한가?  [BRIEF — prefer text over images/tables/formulas/code]
+    ## 💡 어떤 새로운 해결책을 제시하는가?  [DETAILED]
+    ## ⚙️ 제안한 방법을 어떻게 구현했는가?  [DETAILED]
+    ## 📊 핵심 실험 결과는 무엇인가?  [BRIEF — prefer text over images/tables/formulas/code]
+    ## 🔮 이 연구의 의의와 향후 방향은?  [BRIEF]
+
+    For any other language, translate those five questions into {language} (keep the same emoji and order). Never leave
+    the headings in English when {language} is not English.
 
     <Formatting Guidelines>
     - Format your response in clean GitHub-Flavored Markdown (NOT HTML) for optimal readability on a Jekyll blog
     - Use **bold** for key concepts and `-`/`1.` lists; do NOT emit raw HTML tags (no <p>, <strong>, <ul>, <img>, ...)
-    - Include mathematical formulas in LaTeX ($...$ for inline, $$...$$ for display)
+    - Include mathematical formulas in LaTeX (\\( ... \\) for inline, $$...$$ for display; never single-dollar $...$ for inline — the blog strips $ delimiters so it won't render)
     - IMPORTANT: Avoid the standalone amsmath display environments \\begin{{align}}, \\begin{{equation}},
       and \\begin{{gather}} — on the blog's MathJax setup they often fail to render. Instead:
       * For matrices, the \\begin{{array}}{{...}} ... \\end{{array}} environment INSIDE a $$...$$ block is fine:
@@ -2701,7 +2714,7 @@ class PaperSummaryPrompt(BasePrompt):
       * For multi-line/aligned equations, wrap an \\begin{{aligned}} ... \\end{{aligned}} inside $$...$$:
         $$\\begin{{aligned}} a &= b \\\\ c &= d \\end{{aligned}}$$
       * For complex math structures, break them into multiple separate display equations
-    - Do NOT use the \\bm{{}} command; use \\boldsymbol{{}} for bold symbols (e.g. $\\boldsymbol{{\\alpha}}$)
+    - Do NOT use the \\bm{{}} command; use \\boldsymbol{{}} for bold symbols (e.g. \\(\\boldsymbol{{\\alpha}}\\))
     - Enhance understanding with visual elements:
       * Include relevant figures from the paper as Markdown images: ![Description](path)
       * Render comparative data as actual Markdown tables (NEVER as image links)
@@ -2720,16 +2733,17 @@ class PaperSummaryPrompt(BasePrompt):
     - Balance text and visuals for optimal comprehension
 
     <Final Response Format>
+    (headings shown in Korean; use the {language} versions from <Section Headers>)
     <summary>
-    ## 🔍 What motivated this research?
+    ## 🔍 이 연구가 왜 필요한가?
     ...
-    ## 💡 What novel solution does this research propose?
+    ## 💡 어떤 새로운 해결책을 제시하는가?
     ...
-    ## ⚙️ How was the proposed method implemented?
+    ## ⚙️ 제안한 방법을 어떻게 구현했는가?
     ...
-    ## 📊 What are the key experimental results?
+    ## 📊 핵심 실험 결과는 무엇인가?
     ...
-    ## 🔮 What is the significance and future direction of this research?
+    ## 🔮 이 연구의 의의와 향후 방향은?
     ...
     </summary>
     <tags>Technical Tag One, Technical Tag Two, Technical Tag Three, Technical Tag Four, Technical Tag Five</tags>
@@ -2877,7 +2891,7 @@ class TechGuideSectionPrompt(BasePrompt):
     - Write in clean GitHub-flavored Markdown, starting with an appropriate '##' or '###' heading for this section.
     - Ground all technical content in <sources>; do NOT invent APIs, flags, or behaviors not supported by them.
     - Include runnable code blocks (with language fences) where they aid understanding.
-    - Use Markdown tables for comparisons/options and LaTeX ($...$ / $$...$$) for any math.
+    - Use Markdown tables for comparisons/options and LaTeX (\\( ... \\) inline / $$...$$ display; never single-dollar $...$ inline) for any math.
     - You MAY reference an image ONLY if its URL appears in <available_images>, using `![alt](url)`. Never invent image
       URLs. If no image fits, use none.
     - Do not repeat content already covered in <previously_written_sections>.

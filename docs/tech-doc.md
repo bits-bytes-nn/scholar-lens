@@ -126,8 +126,9 @@ PaperSource (arXiv / PDF URL)
 3. **생성** (모드별):
    - **review 모드**: `ExplainerGraph` (LangGraph 기반 멀티 에이전트)
    - **summarize 모드**: `PaperSummarizer` (간단한 구조)
+   - 참고: 인용문 추출/요약과 목차(TOC) 추출은 **리뷰 전용**입니다. 요약 경로는 이를 사용하지 않으므로 `_prepare_paper_data`가 summarize 모드에서 건너뛰어(속성 추출만 수행) 불필요한 비용/지연을 없앱니다.
 
-4. **발행**: `Publisher`는 마크다운을 S3 업로드, 블로그 PR 생성, Slack/SNS 통지
+4. **발행**: `Publisher`는 마크다운을 S3 업로드, 블로그 PR 생성(생성된 PR URL은 Slack 완료 메시지에 버튼으로 표시), Slack/SNS 통지. PR 본문은 `build_pr_body`로 리뷰/요약/가이드가 동일한 형식(헤더+필드+푸터)을 사용합니다.
 
 ### 패키지 레이아웃
 
@@ -224,10 +225,18 @@ _SEMANTIC_SCHOLAR_LIMITER = RateLimiter(rate=1.0, per=1.0, name="semantic-schola
 `normalize_math_underscores()`는 LaTeX 수식 내 언더스코어를 이스케이프합니다:
 
 - 목표: kramdown GFM 파이프라인 호환 (마크다운 → MathJax)
-- GFM은 `_`를 강조로 해석하므로 `$W_0$` → `$W\_0$`로 변환
+- GFM은 `_`를 강조로 해석하므로 인라인 `\(W_0\)` → `\(W\_0\)`로 변환 (디스플레이 `$$...$$`도 동일)
+- 인라인 수식은 `\( ... \)`만 인식 — 블로그가 단일 `$`를 제거하므로 `$...$`는 수식으로 취급하지 않음
 - 코드 블록(fenced/inline) 내부는 건드리지 않음 (정규식 오더링 중요)
 
 **사용처**: `Publisher.publish()` (마크다운 후처리)
+
+#### 5-1. 마크다운 린트 (`scholar_lens/src/markdown_lint.py`)
+
+`lint_markdown()`은 `normalize_math_underscores` 다음에 `Publisher.publish()`에서 실행되어 블로그(kramdown/MathJax) 렌더링 함정을 처리합니다. `markdown_math`의 검증된 코드/수식 스팬 분리기를 재사용합니다.
+
+- **자동 교정(무손실)**: 앞 줄에 붙은 헤딩 앞에 빈 줄 삽입 (코드 펜스 내부는 제외).
+- **경고만(자동 변경 X — 잘못 고치면 새 버그)**: 수식 내 bare `|`(kramdown이 표 구분자로 오인), `\begin{align|equation|gather}`/`\bm`(블로그 MathJax에서 깨짐), 단일 `$...$` 인라인 수식, 블로그 미정의 매크로(stmaryrd 등), http(s)/사이트-상대 경로가 아닌 링크 타깃.
 
 #### 6. 콘텐츠 추출 및 인용문 요약
 
@@ -441,7 +450,7 @@ GUIDE 모드는 기술 문서 URL 목록으로부터 자체 학습 가이드를 
 - `Figure` (line 67): 그림 메타데이터(경로, 설명, LLM 분석)를 저장하며, `Figure.from_llm()` (line 82)은 이미지를 base64로 인코딩하고 Bedrock에 보냅니다.
 - `HTMLParser` (line 263): arXiv 및 ar5iv 중 하나에서 HTML을 페치하고 BeautifulSoup으로 파싱합니다 (line 268).
 - `HTMLRichParser` (line 308): HTML을 파싱하되, 그림을 비동기로 병렬 추출·분석합니다 (line 340-406).
-- `PDFParser` (line 409): Upstage Document Parse API로 PDF를 파싱하고, 실패 시 Unstructured 라이브러리로 폴백합니다 (line 587). 그림은 좌표 지역으로 추출합니다 (line 672).
+- `PDFParser`: Upstage Document Parse API로 PDF를 파싱하고, 실패 시(예: 대용량 PDF의 413) PyMuPDF(`fitz`)로 텍스트 레이어를 직접 추출하는 경량 폴백을 사용합니다. 폴백은 텍스트 전용이며(그림은 기본 경로에서만 추출), 텍스트 레이어가 없는 스캔 PDF는 명확한 오류로 처리합니다. 그림은 좌표 지역으로 추출합니다.
 
 ---
 
@@ -575,7 +584,7 @@ GUIDE 모드는 기술 문서 URL 목록으로부터 자체 학습 가이드를 
 **책임**: LaTeX 수학 식이 kramdown(GFM) + MathJax 파이프라인을 통과할 수 있도록 언더스코어를 이스케이프합니다.
 
 **주요 클래스/함수**:
-- `normalize_math_underscores()` (line 37): 정규식으로 수학 span(`$...$`, `$$...$$`)을 찾고 unescaped 언더스코어를 `\_`로 변환하되, 코드 블록(펜스 또는 인라인)은 건드리지 않습니다 (line 45-48). 멱등입니다.
+- `normalize_math_underscores()`: 정규식으로 수학 span(인라인 `\( ... \)`, 디스플레이 `$$...$$`)을 찾고 unescaped 언더스코어를 `\_`로 변환하되, 코드 블록(펜스 또는 인라인)은 건드리지 않습니다. 멱등입니다. 블로그가 단일 `$` 구분자를 (통화 표기 보호를 위해) 제거하므로 `$...$`는 수식으로 취급하지 않습니다 — 인라인 수식은 반드시 `\( ... \)`를 사용합니다.
 
 ## 5. 설정 레퍼런스 (Configuration)
 
@@ -910,7 +919,15 @@ explainer = ExplainerGraph(
 - 이전 모델에서는 온도를 기본값 0.0으로 설정 (결정론적 생성)
 - 사고 활성화 시 온도를 1.0으로 강제 설정 (레거시 모델에만)
 
-1M 컨텍스트 윈도우 지원(`supports_1m_context_window=True`)은 요약과 기술 가이드 작성 시 명시적으로 활성화되어, 대규모 논문 텍스트와 소스 자료를 처리할 수 있게 합니다(`scholar_lens/src/summarizer.py:68`, `scholar_lens/src/tech_guide.py:111`).
+1M 컨텍스트 윈도우 지원(`supports_1m_context_window=True`)은 분석/요약/기술 가이드 등 전체 본문을 받는 단계에서 명시적으로 활성화되어, 대규모 논문 텍스트와 소스 자료를 처리할 수 있게 합니다(`scholar_lens/src/summarizer.py`, `scholar_lens/src/tech_guide.py`, `scholar_lens/src/explainer.py`).
+
+#### 컨텍스트 윈도우 맞춤(텍스트 피팅)
+
+긴 논문/문서가 모델의 컨텍스트 한도를 초과하지 않도록, 전체 본문을 모델에 보내는 모든 경로는 호출 직전에 텍스트를 모델 예산에 맞게 잘라냅니다. 이 로직은 단일 공유 메서드 `BedrockLanguageModelFactory.fit_text`로 일원화되어 있으며(`scholar_lens/src/utils/factories.py`), content_extractor(인용/속성/목차), explainer(analyze), summarizer, tech_guide, citation_summarizer가 모두 이를 사용합니다.
+
+핵심 원칙은 **토큰 수를 추정(예: chars-per-token, 외부 토크나이저)하지 않고 Bedrock `CountTokens` API로 정확히 측정**하는 것입니다(`count_tokens`). 1M 모델에서는 200K를 초과하는 입력도 측정할 수 있도록 long-context 베타 플래그(`anthropic_beta: ["context-1m-2025-08-07"]`)를 함께 전달하며, 측정 대상 모델 ID는 실제 호출에 쓰이는 크로스 리전 해석 ID를 사용합니다. `CountTokens` 호출에는 **베이스 모델 ID**를 사용합니다 — 크로스 리전 추론 프로파일 ID(`apac.`/`global.`)는 CountTokens가 거부하기 때문입니다(Converse와 다름). 또한 1M 윈도우를 쓰는 모델은 항상 Converse 경로로 호출해 베타 헤더가 실제로 전달되도록 합니다(레거시 InvokeModel 경로에선 누락됨). `fit_text`는 전체 텍스트가 예산을 초과하면 정확한 토큰 수를 기준으로 **이진 탐색**하여 예산 내에 들어가는 가장 긴 접두부를 찾습니다. `CountTokens`가 일시적으로 실패하면(스로틀링 등) 본문을 그대로 두어 콘텐츠가 조용히 잘려나가지 않게 합니다(실제 초과 시에는 모델 호출의 재시도/오류 경로가 처리). 임베딩 모델(Titan/Cohere)은 `CountTokens`가 지원되지 않아 문자 수 상한만 적용합니다.
+
+이 단계의 IAM 권한으로 잡 역할에 `bedrock:CountTokens`가 부여됩니다(`scripts/deploy_infra.py`).
 
 ### 모델 정보 조회 및 팩토리 패턴
 
@@ -1334,8 +1351,8 @@ VPC는 두 가지 모드로 설정합니다 (`scripts/deploy_infra.py:167–195`
 2. **tech-guide**: `scholar_lens.tech_guide_main` 진입점으로 기술 가이드를 생성합니다.
 
 두 정의는 동일한 이미지 및 역할을 공유하며, 다음 사양을 가집니다:
-- **CPU**: 1 vCPU
-- **메모리**: 1024 MiB
+- **CPU**: 2 vCPU
+- **메모리**: 8192 MiB (8 GiB) — PDF 파싱(PyMuPDF)과 FAISS 코드 임베딩이 메모리를 많이 써서 1 GiB에선 대용량 PDF가 OOM(exit 137)으로 종료됨
 - **재시도**: 2회
 - **타임아웃**: 3시간
 - **로그**: CloudWatch Logs, `/aws/batch/{project_name}-{stage}-{job_name}` 그룹, 1개월 보관 (`scripts/deploy_infra.py:470–508`)

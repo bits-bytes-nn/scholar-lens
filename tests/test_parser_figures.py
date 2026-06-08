@@ -141,3 +141,36 @@ class TestExtractFiguresFromPdf:
                 tmp_path / "figures",
                 [Region(page=1, coordinates=SQUARE_COORDS)],
             )
+
+
+class TestFitzTextFallback:
+    """The PyMuPDF (fitz) fallback used when the primary PDF parser fails."""
+
+    def test_extracts_text_layer(self, one_page_pdf: Path) -> None:
+        from scholar_lens.src.parser import PDFParser
+
+        text = PDFParser._extract_text_with_fitz(one_page_pdf)
+        assert "Hello figure" in text
+
+    async def test_fallback_returns_text_no_figures(self, one_page_pdf: Path) -> None:
+        from scholar_lens.src.parser import PDFParser
+
+        parser = PDFParser.__new__(PDFParser)  # no Bedrock/Upstage init
+        figures, content = await parser._parse_with_fallback(one_page_pdf)
+        assert figures == []  # fallback is text-only
+        assert "Hello figure" in content.text
+
+    async def test_fallback_raises_on_empty_text(self, tmp_path: Path) -> None:
+        # A PDF with no text layer (blank page) must raise, not return "" — an
+        # empty body would otherwise produce an empty summary downstream.
+        from scholar_lens.src.parser import ParserError, PDFParser
+
+        blank = tmp_path / "blank.pdf"
+        doc = fitz.open()
+        doc.new_page(width=612, height=792)
+        doc.save(str(blank))
+        doc.close()
+
+        parser = PDFParser.__new__(PDFParser)
+        with pytest.raises(ParserError, match="no text"):
+            await parser._parse_with_fallback(blank)

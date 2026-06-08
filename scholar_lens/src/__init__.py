@@ -41,7 +41,7 @@ from .paper_source import (
     resolve_paper_source,
 )
 from .parser import Content, Figure, HTMLRichParser, ParserError, PDFParser
-from .publisher import Publisher, PublishRequest
+from .publisher import Publisher, PublishRequest, build_pr_body
 from .rate_limiter import RateLimiter
 from .summarizer import PaperSummarizer
 from .tech_guide import NotTechnicalContentError, TechGuide, TechGuideGenerator
@@ -95,6 +95,7 @@ __all__ = [
     "Publisher",
     "PublishRequest",
     "RateLimiter",
+    "build_pr_body",
     "ReferenceMetadata",
     "resolve_paper_source",
     "SemanticScholarProvider",

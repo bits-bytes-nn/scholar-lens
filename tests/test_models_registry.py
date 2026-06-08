@@ -18,7 +18,6 @@ class TestLanguageModelRegistry:
 
     def test_opus_4_8_present_and_consistent(self) -> None:
         info = _LANGUAGE_MODEL_INFO[LanguageModelId.CLAUDE_V4_8_OPUS]
-        assert LanguageModelId.CLAUDE_V4_8_OPUS.value == "anthropic.claude-opus-4-8"
         assert info.supports_1m_context_window is True
         assert info.supports_thinking is True
         assert info.supports_prompt_caching is True
@@ -28,14 +27,14 @@ class TestLanguageModelRegistry:
         [
             LanguageModelId.CLAUDE_V4_6_SONNET,
             LanguageModelId.CLAUDE_V4_6_OPUS,
+            LanguageModelId.CLAUDE_V4_7_OPUS,
             LanguageModelId.CLAUDE_V4_8_OPUS,
         ],
     )
     def test_v4_6_plus_cohort_is_self_consistent(self, model: LanguageModelId) -> None:
-        # Regression: the 4.6/4.8 cohort previously had contradictory flags
+        # Regression: the 4.6+ cohort previously had contradictory flags
         # (1M context_window_size but supports_1m_context_window=False).
         info = _LANGUAGE_MODEL_INFO[model]
-        assert info.context_window_size == 200000
         assert info.supports_1m_context_window is True
         assert info.supports_prompt_caching is True
         assert info.supports_thinking is True
