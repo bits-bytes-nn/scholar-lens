@@ -60,6 +60,10 @@ _MD_LINK = re.compile(r"(?<!\!)\[(?:[^\]]*)\]\(([^)]*)\)")
 _MACRO = re.compile(r"\\([a-zA-Z]+)")
 # A heading line that needs a blank line before it.
 _HEADING = re.compile(r"^#{1,6}[ \t]")
+# Constructs that render poorly on the blog's MathJax: the standalone amsmath
+# display environments (use \begin{aligned} inside $$...$$ instead) and \bm (use
+# \boldsymbol). Warn-only — fixing requires understanding the equation.
+_FRAGILE_MATH = re.compile(r"\\begin\{(align|equation|gather)\*?\}|\\bm\b")
 
 
 def _classify_regions(markdown: str) -> list[tuple[int, int, str]]:
@@ -118,6 +122,25 @@ def _warn_pipes_in_math(markdown: str, regions: list[tuple[int, int, str]]) -> N
             )
 
 
+def _warn_fragile_math(markdown: str, regions: list[tuple[int, int, str]]) -> None:
+    """Warn about amsmath display environments / ``\\bm`` that the blog's MathJax
+    renders poorly. NOT auto-rewritten (the right replacement depends on the
+    equation); the generator prompts are told to avoid these."""
+    seen: set[str] = set()
+    for ms, me, kind in regions:
+        if kind not in ("display", "inline"):
+            continue
+        for m in _FRAGILE_MATH.finditer(markdown[ms:me]):
+            seen.add(m.group(0))
+    if seen:
+        logger.warning(
+            "Markdown lint: math uses %s — these render poorly on the blog's "
+            "MathJax. Use \\begin{aligned}...\\end{aligned} inside $$...$$ and "
+            "\\boldsymbol instead of \\bm.",
+            sorted(seen),
+        )
+
+
 def _warn_single_dollar(markdown: str, regions: list[tuple[int, int, str]]) -> None:
     code = [(s, e) for s, e, k in regions if k in ("fence", "icode")]
     for m in _SINGLE_DOLLAR.finditer(markdown):
@@ -172,13 +195,15 @@ def lint_markdown(markdown: str) -> str:
 
     Auto-fixed (lossless): blank line before a heading glued to the previous
     line. Warned (left untouched, since a rewrite could ship a new bug): bare
-    ``|`` in math, single-$ inline math, known-undefined macros, and non-URL link
-    targets. Returns the (heading-fixed) Markdown.
+    ``|`` in math, fragile amsmath envs / ``\\bm``, single-$ inline math,
+    known-undefined macros, and non-URL link targets. Returns the (heading-fixed)
+    Markdown.
     """
     fixed = _fix_headings(markdown)
 
     regions = _classify_regions(fixed)
     _warn_pipes_in_math(fixed, regions)
+    _warn_fragile_math(fixed, regions)
     _warn_single_dollar(fixed, regions)
     _warn_undefined_macros(fixed, regions)
     _warn_non_url_links(fixed, regions)

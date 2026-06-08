@@ -2079,8 +2079,13 @@ class PaperSynthesisPrompt(BasePrompt):
     - Use proper operators: \times instead of x, \in instead of ∈, \log instead of log
     - Use \vert or \mid instead of | for absolute values and divides
     - NEVER use \rm command - use \text{{}} instead
-    - Use aligned environments for multi-line equations
-    - Use matrix/bmatrix/pmatrix environments for matrices
+    - NEVER use the \bm{{}} command; use \boldsymbol{{}} for bold symbols
+    - AVOID the standalone amsmath display environments \begin{{align}},
+      \begin{{equation}}, \begin{{gather}} — they often fail to render on the
+      blog's MathJax. Instead:
+      * Multi-line/aligned equations: wrap \begin{{aligned}} ... \end{{aligned}} inside $$...$$
+      * Matrices: \begin{{array}}{{...}} ... \end{{array}} or matrix/bmatrix/pmatrix, inside $$...$$
+      * For complex structures, split into multiple separate $$...$$ display equations
 
     **Equation guidelines:**
     - NEVER skip any mathematical formulation from the original paper

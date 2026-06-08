@@ -75,6 +75,18 @@ class TestWarnings:
             lint_markdown(r"the price `$5` is fine")
         assert not any("single-$" in r.message for r in caplog.records)
 
+    def test_fragile_math_env_and_bm_warn(self, caplog) -> None:
+        with caplog.at_level(logging.WARNING, logger="app"):
+            lint_markdown(r"$$\begin{align} a &= b \end{align}$$ and \(\bm{x}\)")
+        msgs = " ".join(r.message for r in caplog.records)
+        assert "render poorly" in msgs
+
+    def test_aligned_env_does_not_warn(self, caplog) -> None:
+        # The recommended \begin{aligned} form must NOT trigger the fragile warning.
+        with caplog.at_level(logging.WARNING, logger="app"):
+            lint_markdown(r"$$\begin{aligned} a &= b \end{aligned}$$")
+        assert not any("render poorly" in r.message for r in caplog.records)
+
     def test_standard_macros_do_not_warn(self, caplog) -> None:
         # Base-MathJax macros (and unknown-but-not-flagged ones) must not warn —
         # we only flag the explicit known-undefined set, never allowlist base.
