@@ -411,22 +411,6 @@ class HTMLRichParser(RichParser, HTMLParser):
 
 
 class PDFParser(RichParser):
-    VALID_CATEGORIES = frozenset(
-        {
-            "caption",
-            "chart",
-            "equation",
-            "figure",
-            "footer",
-            "footnote",
-            "header",
-            "heading1",
-            "index",
-            "list",
-            "paragraph",
-            "table",
-        }
-    )
     FIGURE_CATEGORIES = frozenset({"chart", "figure"})
 
     def __init__(
