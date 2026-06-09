@@ -398,14 +398,14 @@ GUIDE 모드는 기술 문서 URL 목록으로부터 자체 학습 가이드를 
 **딥리서치 플래닝** (`tech_guide.py:_plan_research`)  
 `generate()`는 먼저 시드 URL(및 선택적 하위 페이지)을 **한 번** 크롤링해 ResearchCorpus를 만든 뒤:
 1. 명시적 `search_queries`가 없고 `auto_research=True`이면, TechGuideResearchPlanPrompt로 시드 문서에서 토픽과 웹 검색 쿼리(개념/원리·사용법·비교·함정 등 다른 각도)를 자동 생성합니다.
-2. 생성된(또는 명시된) 쿼리를 `WebResearcher.run_searches()`로 실행해 코퍼스의 `search_results`를 보강합니다(시드 페이지 재크롤링 없음).
-3. 플래닝 실패는 best-effort로 흡수되어 시드 URL만으로 진행합니다.
+2. 생성된(또는 명시된) 쿼리를 `WebResearcher.run_searches(..., fetch_top=N)`로 실행합니다. 검색 결과 목록뿐 아니라 상위 N개(`fetch_top_results`, 기본 4) 결과 페이지를 실제로 fetch해 `corpus.pages`에 추가하므로, 모아온 자료가 목차 플래너뿐 아니라 **본문 작성기까지** 도달합니다(시드 페이지 재크롤링 없음; SSRF 가드 + 리다이렉트 후 호스트 재검증 통과).
+3. 검색 백엔드가 실제 결과를 줄 수 없으면(NullSearchProvider, `supports_search=False`) 플래너 LLM 호출 자체를 건너뜁니다. 플래닝 실패도 best-effort로 흡수되어 시드 URL만으로 진행합니다.
 
 **관련성 검증** (`tech_guide.py:_assert_relevant`)  
 TechGuideRelevancePrompt로 코퍼스가 기술 문서인지 판단합니다. 토픽이 비면 플래너가 추정한 토픽으로 폴백하며, 그래도 없으면 NotTechnicalContentError를 발생시킵니다.
 
 **구조화 플래닝(목차 작성)** (`tech_guide.py:_draft_synopsis`)  
-TechGuideSynopsisPrompt는 각 섹션에 **관심 영역**(CONCEPT/DETAIL/USAGE/APPLICATION)과 **깊이**(deep/standard/brief), 시각 요소 힌트를 태깅한 구조화 목차를 생성합니다(최대 `_MAX_SECTIONS=16`). 깊이는 고정 비율이 아니라 "중요·난해한 부분은 깊게, 쉬운·주변 부분은 짧게"라는 원칙을 따릅니다. `_parse_synopsis_sections()`가 이를 `PlannedSection`(title/area/depth)으로 파싱합니다.
+TechGuideSynopsisPrompt는 각 섹션에 **관심 영역**(CONCEPT/DETAIL/USAGE/APPLICATION)과 **깊이**(deep/standard/brief), 시각 요소 힌트를 태깅한 구조화 목차를 생성합니다(최대 `_MAX_SECTIONS=16`). 깊이는 고정 비율이 아니라 "중요·난해한 부분은 깊게, 쉬운·주변 부분은 짧게"라는 원칙을 따릅니다. `_parse_synopsis_sections()`가 이를 `PlannedSection`(title/area/depth/visuals)으로 파싱하며, 영역/깊이 태그는 단일 토큰으로 명시(파이프 리스트 금지)되어 파싱 불일치를 막습니다. 시각 힌트는 버려지지 않고 섹션 작성기의 깊이 지시문에 포함됩니다.
 
 **섹션별 작성** (`tech_guide.py:_write_sections`)  
 각 섹션에 대해:
@@ -413,7 +413,7 @@ TechGuideSynopsisPrompt는 각 섹션에 **관심 영역**(CONCEPT/DETAIL/USAGE/
 2. HTMLTagOutputParser로 `<section_markdown>`을 추출하고, 실패 시 StrOutputParser로 폴백합니다.
 
 **평가 및 재작성** (`tech_guide.py:_evaluate_and_revise`)  
-`max_revision_attempts > 0`일 때, TechGuideEvaluationPrompt가 각 섹션을 0–100점(깊이 적합/구조/문체/중복/시각·실용성)으로 채점하고 구체적 피드백을 반환합니다. `min_quality_score` 미만이면 피드백을 깊이 지시문에 덧붙여 재작성합니다(논문 리뷰의 reflect 루프와 동일).
+`max_revision_attempts > 0`일 때, TechGuideEvaluationPrompt가 각 섹션을 0–100점(깊이 적합/구조/문체/중복/시각·실용성)으로 채점하고 구체적 피드백을 반환합니다. 루브릭은 점수 앵커(90+는 흠 없을 때만)와 "이전 섹션 중복 시 총점 40 상한"을 명시해 채점 인플레를 억제합니다. `min_quality_score` 미만이면 피드백을 깊이 지시문에 덧붙여 재작성하되, **best-of**: 재작성본은 다시 채점되어 기존보다 높을 때만 채택됩니다(재작성이 더 나빠지면 폐기). 논문 리뷰의 reflect 루프와 동일한 패턴입니다.
 
 **사실 검증** (`tech_guide.py:_ground_section`)  
 `verify_grounding=True`일 경우 TechGuideGroundingPrompt로 작성된 섹션을 재검토하여 비근거 청구를 제거합니다(빈 결과 시 원본 유지 — 검증은 섹션을 개선만 할 뿐 삭제하지 않음).
@@ -424,7 +424,7 @@ TechGuideSynopsisPrompt는 각 섹션에 **관심 영역**(CONCEPT/DETAIL/USAGE/
 > **다이어그램(향후 과제)**: "시각 요소"는 현재 표·소스 이미지·코드 블록으로 충족합니다. LLM 생성 다이어그램(Mermaid handDrawn→PNG / mingrammer `diagrams`로 실제 AWS 아이콘)은 HTTP 렌더로 기술적으로 가능함을 확인했으나(Chromium 불필요), 별도 과제로 보류되어 있습니다.
 
 **토큰 및 예산 추적**  
-세 파이프라인 모두 TokenUsageTracker 콜백(`main.py:173-204`)으로 Bedrock 호출의 입출력 토큰을 추적하며, `max_total_tokens` 설정으로 초과 시 실행을 중단합니다(ExplainerGraph의 `_enforce_token_budget()`, `explainer.py:552-555`).
+세 파이프라인 모두 TokenUsageTracker 콜백으로 Bedrock 호출의 입출력 토큰을 추적합니다. 리뷰는 `max_total_tokens` 초과 시 실행을 중단하고(ExplainerGraph의 `_enforce_token_budget()`), 가이드는 섹션당 호출이 많은 평가/재작성+검증 루프를 가지므로 `max_total_tokens` 초과 시 **남은 섹션은 작성은 하되** 평가/재작성/검증을 건너뜁니다(`_budget_exhausted()`) — 가이드가 잘리지 않고 완성되도록.
 
 ## 4. 모듈 레퍼런스 (Module Reference)
 

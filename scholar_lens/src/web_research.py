@@ -73,12 +73,18 @@ class ResearchCorpus:
 class WebSearchProvider(ABC):
     """Pluggable web-search backend."""
 
+    # Whether this backend can actually return results. Callers gate expensive
+    # research planning on this so they don't generate queries for a no-op.
+    supports_search: bool = True
+
     @abstractmethod
     def search(self, query: str, *, count: int = 5) -> list[SearchResult]: ...
 
 
 class NullSearchProvider(WebSearchProvider):
     """No-op provider: research relies solely on the supplied URLs."""
+
+    supports_search: bool = False
 
     def search(self, query: str, *, count: int = 5) -> list[SearchResult]:
         return []
@@ -199,22 +205,48 @@ class WebResearcher:
         )
         return corpus
 
-    def run_searches(self, corpus: ResearchCorpus, queries: list[str]) -> None:
-        """Append web-search results for each query onto an existing corpus.
+    def run_searches(
+        self, corpus: ResearchCorpus, queries: list[str], *, fetch_top: int = 0
+    ) -> None:
+        """Append web-search results (and optionally their pages) to a corpus.
 
         Split out from :meth:`research` so the deep-research planner can fetch
-        the seed pages once, derive queries from them, then add search results
+        the seed pages once, derive queries from them, then broaden the corpus
         without re-fetching the seed URLs.
+
+        ``fetch_top`` > 0 also fetches that many of the highest-ranked, not-yet-
+        visited result URLs into ``corpus.pages`` so the gathered material
+        actually reaches the writer (search results alone are title+snippet
+        only). Fetches are deduped against pages already in the corpus and pass
+        through the same SSRF guard as every other fetch.
         """
         for query in queries:
             corpus.search_results.extend(self.search_provider.search(query))
 
+        if fetch_top <= 0:
+            return
+
+        visited = {_normalize_url(p.url) for p in corpus.pages}
+        fetched = 0
+        for result in corpus.search_results:
+            if fetched >= fetch_top:
+                break
+            norm = _normalize_url(result.url)
+            if not norm or norm in visited:
+                continue
+            visited.add(norm)
+            page = self._fetch_page(result.url)
+            if page is not None:
+                corpus.pages.append(page)
+                fetched += 1
+        logger.info(
+            "Fetched %d/%d search-result pages into the corpus.", fetched, fetch_top
+        )
+
     def _fetch_page(self, url: str) -> PageContent | None:
-        # SSRF guard: every fetched URL (initial, discovered sub-page, or link)
-        # flows through here, so block internal/metadata targets at this choke
-        # point. follow_redirects is on, but redirects re-enter the httpx client
-        # without re-checking — acceptable for now as the host is validated and a
-        # public host redirecting to a private one is an uncommon, lower-risk path.
+        # SSRF guard: every fetched URL (initial, discovered sub-page, search
+        # result, or link) flows through here, so block internal/metadata
+        # targets at this choke point.
         if not is_url_public(url):
             logger.warning("Skipping non-public URL '%s' (SSRF guard).", url)
             return None
@@ -223,6 +255,18 @@ class WebResearcher:
             response.raise_for_status()
         except httpx.HTTPError as e:
             logger.warning("Failed to fetch '%s': %s", url, e)
+            return None
+
+        # follow_redirects is on, so re-validate the FINAL host: a public URL can
+        # 30x-redirect to a private/metadata IP. This matters now that search
+        # results (externally-influenced URLs) are fetched, not just user input.
+        final_url = str(response.url)
+        if final_url != url and not is_url_public(final_url):
+            logger.warning(
+                "Skipping '%s' — redirected to non-public '%s' (SSRF guard).",
+                url,
+                final_url,
+            )
             return None
 
         content_type = response.headers.get("Content-Type", "").lower()

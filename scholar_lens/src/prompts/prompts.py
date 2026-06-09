@@ -2896,10 +2896,19 @@ class TechGuideSynopsisPrompt(BasePrompt):
     Write section titles and descriptions in this language: {language} (keep established English technical terms
     as-is). Keep the bracketed area/depth/visuals keywords in English exactly as shown.
 
+    FORMAT — each line is: a number, then ONE area tag in brackets, then ONE depth tag in brackets, then the title,
+    then " — " and a one-line description, then a "(visuals: ...)" hint.
+    - Pick EXACTLY ONE area from: CONCEPT, DETAIL, USAGE, APPLICATION (do NOT write the pipe list literally).
+    - Pick EXACTLY ONE depth from: deep, standard, brief.
+    - visuals is one of: table, image, code, none.
+    Example:
+    1. [CONCEPT] [deep] How GitOps Reconciliation Works — the control loop and desired-state model (visuals: table)
+
     Respond in this format (one line per section):
     <synopsis>
-    1. [CONCEPT|DETAIL|USAGE|APPLICATION] [deep|standard|brief] Section Title — one-line description (visuals: table/image/code/none)
-    2. ...
+    1. [CONCEPT] [deep] Section Title — one-line description (visuals: table)
+    2. [USAGE] [brief] Section Title — one-line description (visuals: code)
+    ...
     </synopsis>
     """
 
@@ -2972,14 +2981,22 @@ class TechGuideSectionPrompt(BasePrompt):
 
     Requirements:
     - Write in clean GitHub-flavored Markdown, starting with an appropriate '##' or '###' heading for this section.
+      Headings must NOT contain section numbers (write "## How Reconciliation Works", never "## 1. How
+      Reconciliation Works" or "## Section 1").
     - HONOUR THE <depth_directive>: spend the writing budget where the directive says. Go deep and detailed on
       conceptually hard parts; stay brief on routine ones. This is a guide to be studied, not a translation — depth is
       set per section, not by a fixed length.
     - Ground all technical content in <sources>; do NOT invent APIs, flags, or behaviors not supported by them.
-    - Include runnable code blocks (with language fences) where they aid understanding.
-    - Use Markdown tables for comparisons/options and LaTeX (\\( ... \\) inline / $$...$$ display; never single-dollar $...$ inline) for any math.
+    - Include runnable code blocks (with language fences) where they aid understanding. For a section whose
+      depth_directive plans a code/table visual, include it unless the sources genuinely do not support one.
+    - Render comparisons/options/parameters as actual GitHub-flavored Markdown tables (pipes and a header row), NEVER
+      as an image link to a table.
+    - For any math use LaTeX: \\( ... \\) inline / $$...$$ display. NEVER single-dollar $...$ inline. Do NOT use
+      standalone \\begin{{align}}/\\begin{{equation}}/\\begin{{gather}} — use \\begin{{aligned}} inside $$...$$. Write
+      \\boldsymbol, not \\bm; spell Greek letters as \\alpha, \\beta, etc.
     - You MAY reference an image ONLY if its URL appears in <available_images>, using `![alt](url)`. Never invent image
-      URLs, and never alter a URL from <available_images>. If no image fits, use none.
+      URLs, and never alter a URL from <available_images>. Every image you embed MUST be referenced and explained in
+      the adjacent prose — if you would not discuss it, omit it. If no image fits, use none.
     - CROSS-REFERENCES: This guide has EXACTLY {total_sections} sections, listed in <full_outline>. If you refer to
       another section, reference it ONLY by its title or its number within 1..{total_sections}. NEVER cite a section
       number greater than {total_sections}, and never promise content for a section that is not in <full_outline>.
@@ -3091,16 +3108,22 @@ class TechGuideEvaluationPrompt(BasePrompt):
     Score the section 0-100 across these dimensions:
     - Depth fit (30): Does the actual depth MATCH the <depth_directive>? A "deep" section that is shallow loses heavily;
       a "brief" section that is bloated also loses. Hard concepts must be explained, not just named.
-    - Structure & flow (20): Clear heading, logical progression, self-contained, no dangling cross-references to
-      sections beyond 1..{total_sections}.
+    - Structure & flow (20): Clear heading (NO section numbers in the heading), logical progression, self-contained,
+      no dangling cross-references to sections beyond 1..{total_sections}.
     - Style & tone (15): Follows the shared STYLE rules and the target language register; clean Markdown.
     - Non-duplication (20): Does NOT restate concepts/examples/tables/images already in <previously_written_sections>.
-      Substantial overlap (a re-explained concept or repeated example) should score this dimension near zero.
     - Visual & practical richness (15): Uses tables, code blocks, or source images where they genuinely aid learning,
       per the planned section's visual hint — not decoratively, not absent where clearly helpful.
 
-    Then give specific, actionable feedback the writer can apply to improve THIS section. If the section is already
-    strong, say what (if anything) would make it better; do not invent problems.
+    SCORING DISCIPLINE — calibrate, do not inflate:
+    - 90-100 = no actionable improvement remains. 75-89 = solid, minor polish only. 60-74 = a real weakness a revision
+      should fix. Below 60 = a significant gap (wrong depth, thin on a hard concept, missing planned visual).
+    - Most first drafts have at least one fixable weakness; reserve 90+ for sections you genuinely cannot improve.
+    - HARD CAP: if this section substantially re-explains content already in <previously_written_sections> (a
+      duplicated concept, example, table, or image), the TOTAL score must not exceed 40, regardless of other merits.
+
+    Then give specific, actionable feedback the writer can apply to improve THIS section, tied to the lowest-scoring
+    dimension(s). If the section is genuinely excellent (90+), return empty feedback rather than inventing problems.
 
     Write the feedback in this language: {language}.
 

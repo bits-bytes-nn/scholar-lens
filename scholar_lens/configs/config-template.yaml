@@ -74,12 +74,16 @@ tech_guide:
   writer_enable_thinking: True
   thinking_effort: medium
   verify_grounding: True
-  # Deep research: derive web-search queries from the seed docs (needs Brave).
+  # Deep research: derive web-search queries from the seed docs (needs Brave) and
+  # fetch the top result pages into the corpus so they reach the writer.
   auto_research: True
   max_research_queries: 6
+  fetch_top_results: 4
   # Per-section evaluate-and-revise loop.
   min_quality_score: 75
   max_revision_attempts: 2
+  # Hard total-token ceiling for one guide run (omit / null = no limit).
+  # max_total_tokens: 4000000
 
 # Output language for generated reviews/summaries/guides (e.g. Korean, English)
 output_language: Korean

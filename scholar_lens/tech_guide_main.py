@@ -37,6 +37,7 @@ from scholar_lens.src import (
     SSMParams,
     TechGuide,
     TechGuideGenerator,
+    TokenUsageTracker,
     WebResearcher,
     WebSearchProvider,
     arg_as_bool,
@@ -155,6 +156,7 @@ async def _run(
     search_queries: list[str] | None,
 ) -> tuple[str | None, str | None]:
     _setup_aws_env(context)
+    tracker = TokenUsageTracker()
     researcher = WebResearcher(search_provider=_build_search_provider())
     generator = TechGuideGenerator(
         relevance_model_id=LanguageModelId(
@@ -170,8 +172,11 @@ async def _run(
         verify_grounding=context.config.tech_guide.verify_grounding,
         auto_research=context.config.tech_guide.auto_research,
         max_research_queries=context.config.tech_guide.max_research_queries,
+        fetch_top_results=context.config.tech_guide.fetch_top_results,
         min_quality_score=context.config.tech_guide.min_quality_score,
         max_revision_attempts=context.config.tech_guide.max_revision_attempts,
+        max_total_tokens=context.config.tech_guide.max_total_tokens,
+        callbacks=[tracker],
     )
 
     try:
@@ -183,6 +188,14 @@ async def _run(
     finally:
         # Release the researcher's HTTP connection pool regardless of outcome.
         researcher.close()
+        logger.info(
+            "Tech-guide token usage: %d in + %d out = %d total (~$%.2f), %d calls.",
+            tracker.input_tokens,
+            tracker.output_tokens,
+            tracker.total_tokens,
+            tracker.estimated_cost_usd(),
+            tracker.call_count,
+        )
 
     work_dir = ROOT_DIR / LocalPaths.PAPERS_DIR.value / _guide_slug(guide.topic)
     work_dir.mkdir(parents=True, exist_ok=True)

@@ -174,10 +174,16 @@ class TechGuide(BaseModel):
     # configured search provider (Brave); a no-op otherwise.
     auto_research: bool = Field(default=True)
     max_research_queries: int = Field(default=6, gt=0)
+    # How many top search-result pages to fetch into the corpus so the gathered
+    # material reaches the section writer (not just the outline planner).
+    fetch_top_results: int = Field(default=4, ge=0)
     # Per-section evaluate-and-revise loop (the review pipeline's reflect gate):
     # sections scoring below the threshold are revised up to N times.
     min_quality_score: int = Field(default=75, ge=0, le=100)
     max_revision_attempts: int = Field(default=2, ge=0)
+    # Hard total-token ceiling for one guide run (None = no limit). Guards the
+    # per-section write + evaluate/revise + grounding loop against runaway cost.
+    max_total_tokens: int | None = Field(default=None, gt=0)
 
 
 class Config(BaseModel):

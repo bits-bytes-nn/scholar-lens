@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from typing import Any
 
 import boto3
 from langchain_core.output_parsers import StrOutputParser
@@ -32,7 +33,9 @@ from langchain_core.runnables import Runnable
 
 from .constants import LanguageModelId
 from .logger import logger
+from .metrics import TokenUsageTracker
 from .prompts import (
+    BasePrompt,
     TechGuideEvaluationPrompt,
     TechGuideGroundingPrompt,
     TechGuideRelevancePrompt,
@@ -61,6 +64,9 @@ _SECTION_CONTEXT_RESERVE_TOKENS: int = 80_000
 _MAX_SECTIONS: int = 16
 # Default number of web-search queries the research planner may propose.
 _MAX_RESEARCH_QUERIES: int = 6
+# Default number of top search-result pages fetched into the corpus so the
+# gathered material reaches the writer (not just the outline planner).
+_FETCH_TOP_RESULTS: int = 4
 # Section quality gate (mirrors the review pipeline's reflect loop).
 _MIN_QUALITY_SCORE: int = 75
 _MAX_REVISION_ATTEMPTS: int = 2
@@ -94,15 +100,22 @@ class NotTechnicalContentError(Exception):
 
 @dataclass
 class PlannedSection:
-    """One outline entry: the title plus its concern area and writing depth."""
+    """One outline entry: title, concern area, writing depth, and visual hint."""
 
     title: str
     area: str = ""
     depth: str = _DEFAULT_DEPTH
+    visuals: str = ""
 
     @property
     def depth_directive(self) -> str:
-        return _DEPTH_DIRECTIVES.get(self.depth, _DEPTH_DIRECTIVES[_DEFAULT_DEPTH])
+        directive = _DEPTH_DIRECTIVES.get(self.depth, _DEPTH_DIRECTIVES[_DEFAULT_DEPTH])
+        if self.visuals and self.visuals != "none":
+            directive += (
+                f"\nPlanned visual aid for this section: {self.visuals}. Include it "
+                f"if it genuinely helps the reader."
+            )
+        return directive
 
 
 @dataclass
@@ -132,8 +145,11 @@ class TechGuideGenerator(RetryableBase):
         verify_grounding: bool = True,
         auto_research: bool = True,
         max_research_queries: int = _MAX_RESEARCH_QUERIES,
+        fetch_top_results: int = _FETCH_TOP_RESULTS,
         min_quality_score: int = _MIN_QUALITY_SCORE,
         max_revision_attempts: int = _MAX_REVISION_ATTEMPTS,
+        max_total_tokens: int | None = None,
+        callbacks: list[Any] | None = None,
     ) -> None:
         self.language = language
         self.max_sections = max_sections
@@ -146,78 +162,93 @@ class TechGuideGenerator(RetryableBase):
         # the seed page before writing.
         self.auto_research = auto_research
         self.max_research_queries = max_research_queries
+        self.fetch_top_results = fetch_top_results
         self.min_quality_score = min_quality_score
         self.max_revision_attempts = max_revision_attempts
+        # Hard total-token ceiling for one guide run (None = no limit). The
+        # evaluate-and-revise + grounding loop multiplies per-section calls, so
+        # this guards against runaway cost the way the review pipeline does.
+        self.max_total_tokens = max_total_tokens
+        self.callbacks = callbacks or []
+        self._token_tracker = next(
+            (cb for cb in self.callbacks if isinstance(cb, TokenUsageTracker)), None
+        )
         self.researcher = researcher or WebResearcher()
         self.llm_factory = BedrockLanguageModelFactory(boto_session=boto_session)
-
-        self.relevance_chain: Runnable = (
-            TechGuideRelevancePrompt.get_prompt()
-            | self.llm_factory.get_model(relevance_model_id, temperature=0.0)
-            | HTMLTagOutputParser(tag_names=TechGuideRelevancePrompt.output_variables)
-        )
-        # The research planner is cheap and reuses the relevance model tier.
-        self.research_plan_chain: Runnable = (
-            TechGuideResearchPlanPrompt.get_prompt()
-            | self.llm_factory.get_model(relevance_model_id, temperature=0.0)
-            | HTMLTagOutputParser(
-                tag_names=TechGuideResearchPlanPrompt.output_variables
-            )
-        )
         self.synopsis_model_id = synopsis_model_id
         self.writing_model_id = writing_model_id
-        self.synopsis_chain: Runnable = (
-            TechGuideSynopsisPrompt.get_prompt()
-            | self.llm_factory.get_model(
-                synopsis_model_id,
-                temperature=0.0,
-                enable_thinking=enable_thinking,
-                thinking_effort=thinking_effort,
-                supports_1m_context_window=True,
-            )
-            | HTMLTagOutputParser(tag_names=TechGuideSynopsisPrompt.output_variables)
+
+        # The relevance gate and research planner are cheap and reuse the
+        # relevance model tier (no thinking / 1M context).
+        self.relevance_chain = self._build_chain(
+            TechGuideRelevancePrompt, relevance_model_id
         )
-        self.section_chain: Runnable = (
-            TechGuideSectionPrompt.get_prompt()
-            | self.llm_factory.get_model(
-                writing_model_id,
-                temperature=0.0,
-                enable_thinking=enable_thinking,
-                thinking_effort=thinking_effort,
-                supports_1m_context_window=True,
-            )
-            | HTMLTagOutputParser(tag_names=TechGuideSectionPrompt.output_variables)
+        self.research_plan_chain = self._build_chain(
+            TechGuideResearchPlanPrompt, relevance_model_id
+        )
+        self.synopsis_chain = self._build_chain(
+            TechGuideSynopsisPrompt,
+            synopsis_model_id,
+            enable_thinking=enable_thinking,
+            thinking_effort=thinking_effort,
+            supports_1m_context_window=True,
+        )
+        self.section_chain = self._build_chain(
+            TechGuideSectionPrompt,
+            writing_model_id,
+            enable_thinking=enable_thinking,
+            thinking_effort=thinking_effort,
+            supports_1m_context_window=True,
         )
         # Lightweight chain reused if structured parsing of a section fails.
         self._section_str_chain: Runnable = (
             TechGuideSectionPrompt.get_prompt()
-            | self.llm_factory.get_model(writing_model_id, temperature=0.0)
+            | self.llm_factory.get_model(
+                writing_model_id,
+                temperature=0.0,
+                callbacks=self.callbacks or None,
+            )
             | StrOutputParser()
         )
         # Evaluation pass: scores a drafted section 0-100 and returns feedback,
         # driving a score-and-revise loop (the review pipeline's reflect node).
-        self.evaluation_chain: Runnable = (
-            TechGuideEvaluationPrompt.get_prompt()
-            | self.llm_factory.get_model(
-                synopsis_model_id,
-                temperature=0.0,
-                enable_thinking=enable_thinking,
-                thinking_effort=thinking_effort,
-                supports_1m_context_window=True,
-            )
-            | HTMLTagOutputParser(tag_names=TechGuideEvaluationPrompt.output_variables)
+        self.evaluation_chain = self._build_chain(
+            TechGuideEvaluationPrompt,
+            synopsis_model_id,
+            enable_thinking=enable_thinking,
+            thinking_effort=thinking_effort,
+            supports_1m_context_window=True,
         )
         # Fact-checking pass: rewrites each section to drop ungrounded claims.
-        self.grounding_chain: Runnable = (
-            TechGuideGroundingPrompt.get_prompt()
-            | self.llm_factory.get_model(
-                writing_model_id,
-                temperature=0.0,
-                enable_thinking=enable_thinking,
-                thinking_effort=thinking_effort,
-                supports_1m_context_window=True,
-            )
-            | HTMLTagOutputParser(tag_names=TechGuideGroundingPrompt.output_variables)
+        self.grounding_chain = self._build_chain(
+            TechGuideGroundingPrompt,
+            writing_model_id,
+            enable_thinking=enable_thinking,
+            thinking_effort=thinking_effort,
+            supports_1m_context_window=True,
+        )
+
+    def _build_chain(
+        self,
+        prompt_cls: type[BasePrompt],
+        model_id: LanguageModelId,
+        **model_kwargs: Any,
+    ) -> Runnable:
+        """Prompt | model | HTMLTagOutputParser, with shared callbacks attached.
+
+        Callbacks carry the TokenUsageTracker so every chain's usage counts
+        toward the run's token budget.
+        """
+        model = self.llm_factory.get_model(
+            model_id,
+            temperature=0.0,
+            callbacks=self.callbacks or None,
+            **model_kwargs,
+        )
+        return (
+            prompt_cls.get_prompt()
+            | model
+            | HTMLTagOutputParser(tag_names=prompt_cls.output_variables or [])
         )
 
     @measure_execution_time
@@ -245,13 +276,23 @@ class TechGuideGenerator(RetryableBase):
         # Deep-research planning: when no explicit queries are supplied, derive
         # search queries (and an early topic guess) from the seed pages so the
         # corpus is broadened with complementary material — the guide should not
-        # be a translation of a single doc page.
+        # be a translation of a single doc page. Skipped (no wasted LLM call) when
+        # the search backend can't actually return results.
+        can_search = self.researcher.search_provider.supports_search
         planned_topic: str | None = None
         queries = list(search_queries or [])
-        if not queries and self.auto_research:
+        if not queries and self.auto_research and can_search:
             planned_topic, queries = await self._plan_research(corpus)
-        if queries:
-            self.researcher.run_searches(corpus, queries)
+        if queries and can_search:
+            # Fetch the top results into the corpus so the gathered material
+            # actually reaches the writer, not just the outline planner.
+            self.researcher.run_searches(
+                corpus, queries, fetch_top=self.fetch_top_results
+            )
+        elif queries:
+            logger.info(
+                "Search backend has no results; skipping %d queries.", len(queries)
+            )
 
         topic = await self._assert_relevant(corpus, fallback_topic=planned_topic)
         synopsis = await self._draft_synopsis(topic, corpus)
@@ -383,22 +424,40 @@ class TechGuideGenerator(RetryableBase):
             )
             if not markdown:
                 continue
-            markdown = await self._evaluate_and_revise(
-                topic=topic,
-                planned=planned,
-                section_label=section_label,
-                markdown=markdown,
-                section_number=index,
-                total_sections=total,
-                previous_sections=previous,
-                sources=sources,
-                available_images=available_images,
-                final_outline=final_outline,
-            )
-            if self.verify_grounding:
-                markdown = await self._ground_section(markdown, sources, total)
+            # Skip the expensive evaluate/revise + grounding passes once the
+            # token budget is spent — still WRITE every section, just without
+            # the optional refinement, so the guide is complete rather than cut.
+            if not self._budget_exhausted():
+                markdown = await self._evaluate_and_revise(
+                    topic=topic,
+                    planned=planned,
+                    section_label=section_label,
+                    markdown=markdown,
+                    section_number=index,
+                    total_sections=total,
+                    previous_sections=previous,
+                    sources=sources,
+                    available_images=available_images,
+                    final_outline=final_outline,
+                )
+                if self.verify_grounding:
+                    markdown = await self._ground_section(markdown, sources, total)
             written.append(markdown)
         return "\n\n".join(written)
+
+    def _budget_exhausted(self) -> bool:
+        """Whether the run has hit its total-token ceiling (if one is set)."""
+        if self._token_tracker is None or not self.max_total_tokens:
+            return False
+        if self._token_tracker.total_tokens >= self.max_total_tokens:
+            logger.warning(
+                "Token budget reached (%d >= %d); writing remaining sections "
+                "without evaluate/revise/grounding.",
+                self._token_tracker.total_tokens,
+                self.max_total_tokens,
+            )
+            return True
+        return False
 
     async def _evaluate_and_revise(
         self,
@@ -416,31 +475,36 @@ class TechGuideGenerator(RetryableBase):
     ) -> str:
         """Score a section and revise it while it stays below the threshold.
 
-        Mirrors the review pipeline's reflect loop: evaluate -> if below the
-        quality bar and attempts remain, re-write with the feedback appended to
-        the depth directive; otherwise keep the best draft so far.
+        Mirrors the review pipeline's reflect loop, but keeps the BEST-scoring
+        draft: every revision is re-scored, and a revision is only kept if it
+        beats the best so far — so a feedback-driven rewrite can never make the
+        section worse than the draft it replaced.
         """
+        if self.max_revision_attempts <= 0:
+            # No revision budget: skip evaluation entirely (no wasted LLM call).
+            return markdown
+        best_markdown = markdown
+        best_score, feedback = await self._evaluate_section(
+            topic=topic,
+            planned=planned,
+            section_label=section_label,
+            markdown=markdown,
+            total_sections=total_sections,
+            previous_sections=previous_sections,
+        )
         for attempt in range(1, self.max_revision_attempts + 1):
-            score, feedback = await self._evaluate_section(
-                topic=topic,
-                planned=planned,
-                section_label=section_label,
-                markdown=markdown,
-                total_sections=total_sections,
-                previous_sections=previous_sections,
-            )
-            if score >= self.min_quality_score or not feedback:
+            if best_score >= self.min_quality_score or not feedback:
                 logger.info(
                     "Section %d scored %d (>= %d or no feedback) - accepting.",
                     section_number,
-                    score,
+                    best_score,
                     self.min_quality_score,
                 )
-                return markdown
+                return best_markdown
             logger.info(
                 "Section %d scored %d (< %d) - revising (attempt %d/%d).",
                 section_number,
-                score,
+                best_score,
                 self.min_quality_score,
                 attempt,
                 self.max_revision_attempts,
@@ -459,9 +523,28 @@ class TechGuideGenerator(RetryableBase):
                     f"{feedback}"
                 ),
             )
-            if revised:
-                markdown = revised
-        return markdown
+            if not revised:
+                break
+            score, feedback = await self._evaluate_section(
+                topic=topic,
+                planned=planned,
+                section_label=section_label,
+                markdown=revised,
+                total_sections=total_sections,
+                previous_sections=previous_sections,
+            )
+            # Keep the revision only if it scored higher than the best so far;
+            # otherwise discard it (a rewrite can regress).
+            if score > best_score:
+                best_markdown, best_score = revised, score
+            else:
+                logger.info(
+                    "Section %d revision scored %d (<= best %d) - keeping prior draft.",
+                    section_number,
+                    score,
+                    best_score,
+                )
+        return best_markdown
 
     @RetryableBase._retry("tech_guide_evaluation")
     async def _evaluate_section(
@@ -565,9 +648,11 @@ class TechGuideGenerator(RetryableBase):
             if not re.match(r"^(\d+[.)]|[-*•])\s+", stripped):
                 continue
             body = re.sub(r"^(\d+[.)]|[-*•])\s+", "", stripped)
-            area, depth, title = self._extract_area_depth(body)
+            area, depth, visuals, title = self._extract_area_depth(body)
             if title:
-                sections.append(PlannedSection(title=title, area=area, depth=depth))
+                sections.append(
+                    PlannedSection(title=title, area=area, depth=depth, visuals=visuals)
+                )
         if not sections:
             # Fall back to non-empty lines if the model didn't number them.
             sections = [
@@ -578,14 +663,14 @@ class TechGuideGenerator(RetryableBase):
         return sections[: self.max_sections] if apply_cap else sections
 
     @staticmethod
-    def _extract_area_depth(body: str) -> tuple[str, str, str]:
-        """Pull leading [AREA] [depth] tags off an outline line.
+    def _extract_area_depth(body: str) -> tuple[str, str, str, str]:
+        """Pull leading [AREA] [depth] tags and a trailing visuals hint off a line.
 
-        Returns (area, depth, title). Tags MUST be bracketed (the synopsis
-        prompt always brackets them); this avoids mis-reading a title word that
-        happens to match a keyword (e.g. "Usage — ..."). They may appear in
-        either order; the remaining text (minus a trailing "(visuals: ...)"
-        hint) is the title."""
+        Returns (area, depth, visuals, title). Tags MUST be bracketed (the
+        synopsis prompt always brackets them); this avoids mis-reading a title
+        word that happens to match a keyword (e.g. "Usage — ..."). They may
+        appear in either order; the remaining text (minus a trailing
+        "(visuals: ...)" hint) is the title."""
         area = ""
         depth = _DEFAULT_DEPTH
         # Consume up to two leading [..] bracketed tokens.
@@ -601,9 +686,13 @@ class TechGuideGenerator(RetryableBase):
             else:
                 break
             body = body[match.end() :]
+        # Capture the planned visual aid, e.g. "(visuals: table)".
+        visuals = ""
+        if vmatch := re.search(r"\(visuals?:\s*([^)]*)\)", body, re.IGNORECASE):
+            visuals = vmatch.group(1).strip().lower()
         # Title is everything up to the description separator / visuals hint.
         title = re.split(r"\s+[—–-]\s+|\(visuals?:", body, maxsplit=1)[0].strip()
-        return area, depth, title or body.strip()
+        return area, depth, visuals, title or body.strip()
 
     @staticmethod
     def _parse_queries(raw: str) -> list[str]:

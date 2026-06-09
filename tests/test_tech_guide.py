@@ -60,8 +60,11 @@ def _make_generator(
     gen.verify_grounding = verify_grounding
     gen.auto_research = auto_research
     gen.max_research_queries = 6
+    gen.fetch_top_results = 4
     gen.min_quality_score = min_quality_score
     gen.max_revision_attempts = max_revision_attempts
+    gen.max_total_tokens = None
+    gen._token_tracker = None
     gen.researcher = MagicMock()
     gen.relevance_chain = MagicMock()
     gen.research_plan_chain = MagicMock()
@@ -118,9 +121,19 @@ class TestParseSynopsisSections:
         assert out[0].area == "CONCEPT"
         assert out[0].depth == "deep"
         assert out[0].title == "How GitOps works"
+        assert out[0].visuals == "none"
         assert out[1].area == "USAGE"
         assert out[1].depth == "brief"
         assert out[1].title == "Quick install"
+        assert out[1].visuals == "code"
+
+    def test_visual_hint_reaches_depth_directive(self) -> None:
+        # P2: the planned visual is carried into the writer's depth directive
+        # (it used to be parsed then discarded).
+        gen = _make_generator()
+        out = gen._parse_synopsis_sections("1. [DETAIL] [deep] X — y (visuals: table)")
+        assert out[0].visuals == "table"
+        assert "table" in out[0].depth_directive
 
     def test_unknown_tags_default_gracefully(self) -> None:
         # A loosely-formatted line without recognised tags still yields a title
@@ -306,6 +319,27 @@ class TestResearchPlanning:
         await gen.generate(["https://docs.x.com"], discover_subpages=False)
         gen.researcher.run_searches.assert_called_once()
         assert gen.researcher.run_searches.call_args.args[1] == ["q1", "q2"]
+        # Top results are fetched into the corpus (reaches the writer, not just
+        # the outline) — the C1 fix.
+        assert gen.researcher.run_searches.call_args.kwargs["fetch_top"] == 4
+
+    async def test_planning_skipped_when_backend_cannot_search(self) -> None:
+        # H4: with a no-op search backend, the planner LLM call is not made.
+        gen = _make_generator(auto_research=True)
+        gen.researcher.search_provider.supports_search = False
+        gen.researcher.research = MagicMock(return_value=_corpus())
+        gen.researcher.run_searches = MagicMock()
+        gen.research_plan_chain.ainvoke = AsyncMock()
+        gen.relevance_chain.ainvoke = AsyncMock(
+            return_value={"is_relevant": "yes", "topic": "Using X", "reason": "ok"}
+        )
+        gen.synopsis_chain.ainvoke = AsyncMock(return_value={"synopsis": "1. Intro"})
+        gen.section_chain.ainvoke = AsyncMock(
+            return_value={"section_markdown": "## S\nbody"}
+        )
+        await gen.generate(["https://docs.x.com"], discover_subpages=False)
+        gen.research_plan_chain.ainvoke.assert_not_awaited()
+        gen.researcher.run_searches.assert_not_called()
 
     async def test_explicit_queries_skip_planning(self) -> None:
         gen = _make_generator(auto_research=True)
@@ -342,10 +376,14 @@ class TestResearchPlanning:
 class TestEvaluateAndRevise:
     """The reflect-and-revise loop (ported from the review pipeline)."""
 
-    async def test_low_score_triggers_revision(self) -> None:
+    async def test_better_revision_is_kept(self) -> None:
+        # Draft scores 50 (< 80); the revision scores higher (70), so it's kept.
         gen = _make_generator(min_quality_score=80, max_revision_attempts=1)
         gen.evaluation_chain.ainvoke = AsyncMock(
-            return_value={"quality_score": "50", "improvement_feedback": "go deeper"}
+            side_effect=[
+                {"quality_score": "50", "improvement_feedback": "go deeper"},
+                {"quality_score": "70", "improvement_feedback": "better"},
+            ]
         )
         gen.section_chain.ainvoke = AsyncMock(
             return_value={"section_markdown": "## Revised\ndeeper body"}
@@ -364,6 +402,33 @@ class TestEvaluateAndRevise:
         )
         gen.section_chain.ainvoke.assert_awaited()  # a revision happened
         assert out == "## Revised\ndeeper body"
+
+    async def test_worse_revision_is_discarded(self) -> None:
+        # Regression for the best-of guard: a revision that does NOT beat the
+        # original (same/lower score) must be discarded, never returned.
+        gen = _make_generator(min_quality_score=80, max_revision_attempts=1)
+        gen.evaluation_chain.ainvoke = AsyncMock(
+            side_effect=[
+                {"quality_score": "50", "improvement_feedback": "go deeper"},
+                {"quality_score": "30", "improvement_feedback": "now worse"},
+            ]
+        )
+        gen.section_chain.ainvoke = AsyncMock(
+            return_value={"section_markdown": "## Regressed\nworse body"}
+        )
+        out = await gen._evaluate_and_revise(
+            topic="X",
+            planned=PlannedSection(title="Intro", depth="deep"),
+            section_label="1. Intro",
+            markdown="## Draft\noriginal",
+            section_number=1,
+            total_sections=1,
+            previous_sections="",
+            sources="src",
+            available_images="(none)",
+            final_outline="1. Intro",
+        )
+        assert out == "## Draft\noriginal"  # original kept, not the worse rewrite
 
     async def test_high_score_accepts_without_revision(self) -> None:
         gen = _make_generator(min_quality_score=70, max_revision_attempts=2)
@@ -410,6 +475,44 @@ class TestEvaluateAndRevise:
         assert TechGuideGenerator._parse_quality_score("85/100") == 85
         assert TechGuideGenerator._parse_quality_score("N/A") == 0
         assert TechGuideGenerator._parse_quality_score(None) == 0
+
+
+class TestTokenBudget:
+    def test_no_budget_never_exhausted(self) -> None:
+        gen = _make_generator()
+        gen.max_total_tokens = None
+        gen._token_tracker = MagicMock(total_tokens=10_000_000)
+        assert gen._budget_exhausted() is False
+
+    def test_budget_exhausted_when_over(self) -> None:
+        gen = _make_generator()
+        gen.max_total_tokens = 1000
+        gen._token_tracker = MagicMock(total_tokens=2000)
+        assert gen._budget_exhausted() is True
+
+    def test_budget_not_exhausted_when_under(self) -> None:
+        gen = _make_generator()
+        gen.max_total_tokens = 5000
+        gen._token_tracker = MagicMock(total_tokens=2000)
+        assert gen._budget_exhausted() is False
+
+    async def test_over_budget_skips_eval_and_grounding(self) -> None:
+        # When the budget is spent, sections are still WRITTEN but the expensive
+        # evaluate/revise + grounding passes are skipped.
+        gen = _make_generator(
+            verify_grounding=True, min_quality_score=80, max_revision_attempts=2
+        )
+        gen.max_total_tokens = 1000
+        gen._token_tracker = MagicMock(total_tokens=5000)  # already over
+        gen.section_chain.ainvoke = AsyncMock(
+            return_value={"section_markdown": "## S\nbody"}
+        )
+        gen.evaluation_chain.ainvoke = AsyncMock()
+        gen.grounding_chain.ainvoke = AsyncMock()
+        body = await gen._write_sections("X", "1. [CONCEPT] [deep] Intro", _corpus())
+        assert "## S" in body
+        gen.evaluation_chain.ainvoke.assert_not_awaited()
+        gen.grounding_chain.ainvoke.assert_not_awaited()
 
 
 class TestMainForwardsPrUrl:
