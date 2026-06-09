@@ -168,6 +168,10 @@ async def _run(
         enable_thinking=context.config.tech_guide.writer_enable_thinking,
         thinking_effort=context.config.tech_guide.thinking_effort,
         verify_grounding=context.config.tech_guide.verify_grounding,
+        auto_research=context.config.tech_guide.auto_research,
+        max_research_queries=context.config.tech_guide.max_research_queries,
+        min_quality_score=context.config.tech_guide.min_quality_score,
+        max_revision_attempts=context.config.tech_guide.max_revision_attempts,
     )
 
     try:

@@ -189,8 +189,7 @@ class WebResearcher:
                         corpus.pages.append(sub_page)
                         visited.add(_normalize_url(sub_url))
 
-        for query in search_queries or []:
-            corpus.search_results.extend(self.search_provider.search(query))
+        self.run_searches(corpus, search_queries or [])
 
         logger.info(
             "Researched %d pages, %d search results, %d unique images.",
@@ -199,6 +198,16 @@ class WebResearcher:
             len(corpus.image_urls),
         )
         return corpus
+
+    def run_searches(self, corpus: ResearchCorpus, queries: list[str]) -> None:
+        """Append web-search results for each query onto an existing corpus.
+
+        Split out from :meth:`research` so the deep-research planner can fetch
+        the seed pages once, derive queries from them, then add search results
+        without re-fetching the seed URLs.
+        """
+        for query in queries:
+            corpus.search_results.extend(self.search_provider.search(query))
 
     def _fetch_page(self, url: str) -> PageContent | None:
         # SSRF guard: every fetched URL (initial, discovered sub-page, or link)

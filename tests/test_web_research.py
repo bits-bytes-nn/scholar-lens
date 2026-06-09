@@ -124,6 +124,41 @@ class TestWebResearcherFetch:
         assert all("external.com" not in u for u in urls)
 
 
+class _StubProvider(NullSearchProvider):
+    """Returns one canned result per query and records the queries it saw."""
+
+    def __init__(self) -> None:
+        self.seen: list[str] = []
+
+    def search(self, query: str, *, count: int = 5) -> list[SearchResult]:
+        self.seen.append(query)
+        return [SearchResult(title=f"r:{query}", url=f"https://x/{len(self.seen)}")]
+
+
+class TestRunSearches:
+    def test_run_searches_appends_without_refetching(self) -> None:
+        provider = _StubProvider()
+        researcher = _researcher({}, search_provider=provider)
+        corpus = ResearchCorpus(pages=[PageContent("u", "t", "seed")])
+        researcher.run_searches(corpus, ["q1", "q2"])
+        # Seed pages untouched; one search result appended per query.
+        assert len(corpus.pages) == 1
+        assert provider.seen == ["q1", "q2"]
+        assert [r.title for r in corpus.search_results] == ["r:q1", "r:q2"]
+
+    def test_research_drives_searches_via_run_searches(self) -> None:
+        url = "https://fastapi.tiangolo.com/"
+        provider = _StubProvider()
+        researcher = _researcher(
+            {url: (200, "text/html", DOCS_HTML)}, search_provider=provider
+        )
+        corpus = researcher.research(
+            [url], discover_subpages=False, search_queries=["fastapi tutorial"]
+        )
+        assert provider.seen == ["fastapi tutorial"]
+        assert len(corpus.search_results) == 1
+
+
 class TestBraveSearchProvider:
     def test_requires_api_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("BRAVE_API_KEY", raising=False)

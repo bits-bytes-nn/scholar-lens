@@ -388,32 +388,40 @@ PaperSummarizer는:
 
 ### 3.3 GUIDE 파이프라인
 
-GUIDE 모드는 기술 문서 URL 목록으로부터 자체 학습 가이드를 생성합니다(`tech_guide_main.py`, `tech_guide.py`).
+GUIDE 모드는 기술 문서 URL 목록으로부터 자체 학습 가이드를 생성합니다(`tech_guide_main.py`, `tech_guide.py`). 단일 문서 페이지를 번역하는 것이 아니라, 딥리서치로 보완 자료를 모으고 → 구조화 플래닝 → 섹션 작성 → 평가·재작성 → 사실 검증을 거치는 다단계 파이프라인입니다(논문 리뷰의 reflect-and-revise 패턴을 가이드에 이식).
 
-**초기화 및 코퍼스 구성** (`tech_guide_main.py:147-195`)  
+**초기화** (`tech_guide_main.py:_run`)  
 `_run()` 함수는:
 1. WebResearcher를 초기화합니다. Brave API 키가 설정되면 BraveSearchProvider를, 아니면 NullSearchProvider를 사용합니다.
-2. TechGuideGenerator(`tech_guide.py:63-133`)를 생성하며, 여기에 relevance_chain, synopsis_chain, section_chain, grounding_chain이 포함됩니다.
+2. TechGuideGenerator를 생성합니다. 여기에는 relevance_chain, research_plan_chain, synopsis_chain, section_chain, evaluation_chain, grounding_chain이 포함됩니다. `auto_research`/`max_research_queries`/`min_quality_score`/`max_revision_attempts` 노브가 config(`TechGuide`)에서 주입됩니다.
 
-**관련성 검증** (`tech_guide.py:167-182`)  
-`generate()` 메서드 내 `_assert_relevant()`에서:
-1. WebResearcher.research()로 제공된 URL들(및 선택적 부페이지 발견)을 크롤링하여 ResearchCorpus를 구성합니다.
-2. TechGuideRelevancePrompt로 코퍼스를 분석하여 기술 문서인지 판단합니다.
-3. 관련성 검증 실패 시 NotTechnicalContentError를 발생시킵니다.
+**딥리서치 플래닝** (`tech_guide.py:_plan_research`)  
+`generate()`는 먼저 시드 URL(및 선택적 하위 페이지)을 **한 번** 크롤링해 ResearchCorpus를 만든 뒤:
+1. 명시적 `search_queries`가 없고 `auto_research=True`이면, TechGuideResearchPlanPrompt로 시드 문서에서 토픽과 웹 검색 쿼리(개념/원리·사용법·비교·함정 등 다른 각도)를 자동 생성합니다.
+2. 생성된(또는 명시된) 쿼리를 `WebResearcher.run_searches()`로 실행해 코퍼스의 `search_results`를 보강합니다(시드 페이지 재크롤링 없음).
+3. 플래닝 실패는 best-effort로 흡수되어 시드 URL만으로 진행합니다.
 
-**목차 작성** (`tech_guide.py:184-197`)  
-`_draft_synopsis()`는:
-1. 코퍼스 텍스트(최대 120,000자, `_SOURCE_CHAR_BUDGET`)와 웹 검색 결과를 TechGuideSynopsisPrompt에 전달합니다.
-2. 모델은 최대 16개 섹션(`_MAX_SECTIONS`)으로 제한된 번호가 매겨진 목차를 생성합니다.
+**관련성 검증** (`tech_guide.py:_assert_relevant`)  
+TechGuideRelevancePrompt로 코퍼스가 기술 문서인지 판단합니다. 토픽이 비면 플래너가 추정한 토픽으로 폴백하며, 그래도 없으면 NotTechnicalContentError를 발생시킵니다.
 
-**섹션별 작성** (`tech_guide.py:199-296`)  
-`_write_sections()` 루프는 각 섹션에 대해:
-1. 섹션 번호, 제목, 이전 섹션 텍스트, 전체 목차, 소스 텍스트를 TechGuideSectionPrompt에 전달합니다.
-2. HTMLTagOutputParser로 `<section_markdown>` 태그를 추출하고, 실패 시 StrOutputParser로 폴백합니다.
-3. 검증 활성화(`verify_grounding=True`)일 경우 TechGuideGroundingPrompt로 작성된 섹션을 재검토하여 비근거 청구를 제거합니다(`_ground_section()`, `tech_guide.py:244-262`).
+**구조화 플래닝(목차 작성)** (`tech_guide.py:_draft_synopsis`)  
+TechGuideSynopsisPrompt는 각 섹션에 **관심 영역**(CONCEPT/DETAIL/USAGE/APPLICATION)과 **깊이**(deep/standard/brief), 시각 요소 힌트를 태깅한 구조화 목차를 생성합니다(최대 `_MAX_SECTIONS=16`). 깊이는 고정 비율이 아니라 "중요·난해한 부분은 깊게, 쉬운·주변 부분은 짧게"라는 원칙을 따릅니다. `_parse_synopsis_sections()`가 이를 `PlannedSection`(title/area/depth)으로 파싱합니다.
 
-**발행** (`tech_guide_main.py:180-195`)  
+**섹션별 작성** (`tech_guide.py:_write_sections`)  
+각 섹션에 대해:
+1. 섹션 라벨, 이전 섹션 전체 텍스트(중복 방지), 전체 목차, 소스, 사용 가능 이미지, 그리고 깊이별 지시문(`PlannedSection.depth_directive`)을 TechGuideSectionPrompt에 전달합니다. 프롬프트는 공유 `STYLE_RULES`로 리뷰·요약과 톤을 통일하고, 작성 전 명시적 중복 검증을 수행합니다.
+2. HTMLTagOutputParser로 `<section_markdown>`을 추출하고, 실패 시 StrOutputParser로 폴백합니다.
+
+**평가 및 재작성** (`tech_guide.py:_evaluate_and_revise`)  
+`max_revision_attempts > 0`일 때, TechGuideEvaluationPrompt가 각 섹션을 0–100점(깊이 적합/구조/문체/중복/시각·실용성)으로 채점하고 구체적 피드백을 반환합니다. `min_quality_score` 미만이면 피드백을 깊이 지시문에 덧붙여 재작성합니다(논문 리뷰의 reflect 루프와 동일).
+
+**사실 검증** (`tech_guide.py:_ground_section`)  
+`verify_grounding=True`일 경우 TechGuideGroundingPrompt로 작성된 섹션을 재검토하여 비근거 청구를 제거합니다(빈 결과 시 원본 유지 — 검증은 섹션을 개선만 할 뿐 삭제하지 않음).
+
+**발행** (`tech_guide_main.py`)  
 완성된 TechGuide는 `_format_guide()`에서 프론트매터 및 소스 링크와 함께 조합되어 Publisher를 거쳐 발행됩니다.
+
+> **다이어그램(향후 과제)**: "시각 요소"는 현재 표·소스 이미지·코드 블록으로 충족합니다. LLM 생성 다이어그램(Mermaid handDrawn→PNG / mingrammer `diagrams`로 실제 AWS 아이콘)은 HTTP 렌더로 기술적으로 가능함을 확인했으나(Chromium 불필요), 별도 과제로 보류되어 있습니다.
 
 **토큰 및 예산 추적**  
 세 파이프라인 모두 TokenUsageTracker 콜백(`main.py:173-204`)으로 Bedrock 호출의 입출력 토큰을 추적하며, `max_total_tokens` 설정으로 초과 시 실행을 중단합니다(ExplainerGraph의 `_enforce_token_budget()`, `explainer.py:552-555`).

@@ -169,6 +169,15 @@ class TechGuide(BaseModel):
     # Fact-check each drafted section against the sources to remove ungrounded
     # claims (hallucinated APIs/flags). Adds one LLM call per section.
     verify_grounding: bool = Field(default=True)
+    # Deep-research planning: derive web-search queries from the seed docs so the
+    # guide draws on complementary material, not just a single page. Requires a
+    # configured search provider (Brave); a no-op otherwise.
+    auto_research: bool = Field(default=True)
+    max_research_queries: int = Field(default=6, gt=0)
+    # Per-section evaluate-and-revise loop (the review pipeline's reflect gate):
+    # sections scoring below the threshold are revised up to N times.
+    min_quality_score: int = Field(default=75, ge=0, le=100)
+    max_revision_attempts: int = Field(default=2, ge=0)
 
 
 class Config(BaseModel):
