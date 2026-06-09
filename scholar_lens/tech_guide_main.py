@@ -89,11 +89,12 @@ def main(
         )
 
     s3_url: str | None = None
+    pr_url: str | None = None
     success = False
     error_message: str | None = None
     topic = ", ".join(urls)
     try:
-        s3_url = asyncio.run(
+        s3_url, pr_url = asyncio.run(
             _run(
                 context,
                 urls,
@@ -120,6 +121,7 @@ def main(
             artifact_label="guide",
             title=topic,
             s3_url=s3_url,
+            pr_url=pr_url,
             error=error_message,
         )
 
@@ -151,7 +153,7 @@ async def _run(
     *,
     discover_subpages: bool,
     search_queries: list[str] | None,
-) -> str | None:
+) -> tuple[str | None, str | None]:
     _setup_aws_env(context)
     researcher = WebResearcher(search_provider=_build_search_provider())
     generator = TechGuideGenerator(
@@ -191,9 +193,10 @@ async def _run(
     )
     request = _build_request(guide, work_dir, document)
     s3_url, document_path = await publisher.publish(request)
+    pr_url: str | None = None
     if context.config.resources.github.enabled:
-        await publisher.create_pull_request(request, document_path)
-    return s3_url
+        pr_url = await publisher.create_pull_request(request, document_path)
+    return s3_url, pr_url
 
 
 def _setup_aws_env(context: GuideContext) -> None:

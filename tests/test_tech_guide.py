@@ -188,3 +188,35 @@ class TestGrounding:
         gen.grounding_chain.ainvoke = AsyncMock()
         await gen.generate(["https://docs.x.com"], discover_subpages=False)
         gen.grounding_chain.ainvoke.assert_not_awaited()
+
+
+class TestMainForwardsPrUrl:
+    """Regression: the guide pipeline dropped the PR url before Slack.
+
+    `_run` returns (s3_url, pr_url); `main()` must unpack both and pass pr_url
+    through to `post_slack_result` so the completion message links the PR — the
+    same contract the paper review/summary path already has."""
+
+    def test_pr_url_reaches_slack(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import scholar_lens.tech_guide_main as tg
+
+        monkeypatch.setattr(tg.Config, "load", classmethod(lambda cls: MagicMock()))
+        monkeypatch.setattr(tg.boto3, "Session", lambda **kw: MagicMock())
+        monkeypatch.setattr(tg, "is_running_in_aws", lambda: False)
+        # GuideContext is a pydantic model; bypass its validation with a stub.
+        monkeypatch.setattr(tg, "GuideContext", lambda **kw: MagicMock())
+        monkeypatch.setattr(tg, "S3Handler", lambda *a, **k: MagicMock())
+        monkeypatch.setattr(
+            tg,
+            "_run",
+            AsyncMock(return_value=("s3://bucket/post.md", "https://gh/o/r/pull/7")),
+        )
+
+        captured: dict = {}
+        monkeypatch.setattr(tg, "post_slack_result", lambda **kw: captured.update(kw))
+
+        tg.main(["https://docs.x.com"], slack_channel="C1", slack_thread_ts="1.2")
+
+        assert captured["pr_url"] == "https://gh/o/r/pull/7"
+        assert captured["s3_url"] == "s3://bucket/post.md"
+        assert captured["success"] is True
