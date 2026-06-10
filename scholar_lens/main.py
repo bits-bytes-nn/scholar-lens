@@ -55,6 +55,7 @@ from scholar_lens.src.runtime import (
     RunContext,
     build_context,
     build_publisher,
+    format_alarm,
     load_secrets_from_ssm,
     publish_sns,
 )
@@ -700,19 +701,24 @@ def _send_sns_notification(
     s3_url: str | None,
     mode: str = Mode.REVIEW,
 ) -> None:
-    status = "succeeded" if success else "failed"
-    artifact = "Summary" if mode == Mode.SUMMARIZE else "Review"
-    subject = f"Paper {artifact} {status.title()}"
-    message_lines = [
-        f"Paper {artifact.lower()} {status} for: {source_id}",
-        f"PDF Parsing: {'enabled' if parse_pdf else 'disabled'}",
-    ]
-    if repo_urls:
-        message_lines.append(f"Repositories: {', '.join(repo_urls)}")
-    if s3_url:
-        message_lines.append(f"Output: {s3_url}")
+    # Only failures are alarm-worthy; a successful run is reported in Slack, not SNS.
+    if success:
+        return
 
-    publish_sns(session, topic_arn, subject=subject, lines=message_lines)
+    artifact = "Summary" if mode == Mode.SUMMARIZE else "Review"
+    fields = {
+        "Source": source_id,
+        "PDF Parsing": "enabled" if parse_pdf else "disabled",
+    }
+    if repo_urls:
+        fields["Repositories"] = ", ".join(repo_urls)
+    if s3_url:
+        fields["Output"] = s3_url
+
+    subject, message = format_alarm(
+        event=f"Paper {artifact}", status="FAILED", fields=fields
+    )
+    publish_sns(session, topic_arn, subject=subject, message=message)
 
 
 if __name__ == "__main__":

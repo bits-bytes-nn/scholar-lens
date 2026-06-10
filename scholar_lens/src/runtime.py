@@ -11,6 +11,7 @@ here so both paths share one implementation.
 from __future__ import annotations
 
 import os
+from datetime import UTC, datetime
 from pathlib import Path
 
 import boto3
@@ -82,13 +83,58 @@ def load_secrets_from_ssm(
             logger.info("Could not set '%s' from SSM: %s", env_var.value, e)
 
 
+PROJECT = "scholar-lens"
+
+
+def format_alarm(
+    *,
+    event: str,
+    status: str,
+    fields: dict[str, str],
+    project: str = PROJECT,
+    timestamp: datetime | None = None,
+) -> tuple[str, str]:
+    """Build a ``(subject, message)`` pair in the project family's unified alarm
+    format, shared verbatim across omnisummary/tech-digest/paper-bridge:
+
+        Subject: [<project>] <event> — <STATUS>
+
+        <event> <STATUS>
+
+        Key:   Value
+
+        — 2026-06-10 04:12:00 UTC
+
+    ``status`` is a short uppercase state (``FAILED``/``ALERT``). ``fields`` is an
+    ordered mapping; single-line values render as an aligned ``Key: Value`` block,
+    multi-line values render under their own ``Key:`` header. Omit a row by leaving
+    it out of the dict.
+    """
+    ts = (timestamp or datetime.now(UTC)).strftime("%Y-%m-%d %H:%M:%S")
+    subject = f"[{project}] {event} — {status}"
+
+    inline = {k: v for k, v in fields.items() if "\n" not in v}
+    block = {k: v for k, v in fields.items() if "\n" in v}
+
+    lines = [f"{event} {status}", ""]
+    if inline:
+        width = max(len(k) for k in inline)
+        lines += [f"{k + ':':<{width + 1}} {v}" for k, v in inline.items()]
+    for k, v in block.items():
+        lines += ["", f"{k}:", v.strip("\n")]
+    lines.append("")
+    lines.append(f"— {ts} UTC")
+
+    return subject, "\n".join(lines)
+
+
 def publish_sns(
-    session: boto3.Session, topic_arn: str, *, subject: str, lines: list[str]
+    session: boto3.Session, topic_arn: str, *, subject: str, message: str
 ) -> None:
     """Publish a plain-text SNS notification; a failure must not fail the job."""
     try:
         session.client("sns").publish(
-            TopicArn=topic_arn, Subject=subject, Message="\n".join(lines)
+            TopicArn=topic_arn, Subject=subject, Message=message
         )
     except Exception as e:  # noqa: BLE001 - notification failure must not fail the job
         logger.error("Failed to send SNS notification: %s", e)

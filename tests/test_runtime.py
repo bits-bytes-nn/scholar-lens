@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
 import pytest
@@ -58,7 +59,7 @@ class TestPublishSns:
     def test_publishes_subject_and_body(self) -> None:
         session = MagicMock()
         sns = session.client.return_value
-        runtime.publish_sns(session, "arn:topic", subject="Hi", lines=["a", "b"])
+        runtime.publish_sns(session, "arn:topic", subject="Hi", message="a\nb")
         sns.publish.assert_called_once_with(
             TopicArn="arn:topic", Subject="Hi", Message="a\nb"
         )
@@ -67,4 +68,35 @@ class TestPublishSns:
         session = MagicMock()
         session.client.return_value.publish.side_effect = RuntimeError("sns down")
         # Must not raise — a notification failure can't fail the job.
-        runtime.publish_sns(session, "arn", subject="s", lines=["x"])
+        runtime.publish_sns(session, "arn", subject="s", message="x")
+
+
+class TestFormatAlarm:
+    def test_subject_and_inline_fields_are_aligned(self) -> None:
+        ts = datetime(2026, 6, 10, 4, 12, 0, tzinfo=UTC)
+        subject, message = runtime.format_alarm(
+            event="Tech Guide",
+            status="FAILED",
+            fields={"Sources": "https://x", "Error": "boom"},
+            timestamp=ts,
+        )
+        assert subject == "[scholar-lens] Tech Guide — FAILED"
+        assert message == (
+            "Tech Guide FAILED\n"
+            "\n"
+            "Sources: https://x\n"
+            "Error:   boom\n"
+            "\n"
+            "— 2026-06-10 04:12:00 UTC"
+        )
+
+    def test_multiline_field_renders_as_block(self) -> None:
+        ts = datetime(2026, 6, 10, 4, 12, 0, tzinfo=UTC)
+        _, message = runtime.format_alarm(
+            event="Paper Review",
+            status="FAILED",
+            fields={"Source": "abc", "Trace": "line1\nline2"},
+            timestamp=ts,
+        )
+        assert "Source: abc" in message
+        assert "Trace:\nline1\nline2" in message

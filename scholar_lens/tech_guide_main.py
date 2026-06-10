@@ -45,6 +45,7 @@ from scholar_lens.src.runtime import (
     RunContext,
     build_context,
     build_publisher,
+    format_alarm,
     load_secrets_from_ssm,
     publish_sns,
 )
@@ -92,16 +93,19 @@ def main(
         raise
     finally:
         topic_arn = os.getenv(EnvVars.TOPIC_ARN.value)
-        if is_running_in_aws() and topic_arn:
-            status = "succeeded" if success else "failed"
-            lines = [f"Technical guide {status} for: {sources}"]
-            if s3_url:
-                lines.append(f"Output: {s3_url}")
+        # Only failures are alarm-worthy; a successful run is reported in Slack, not SNS.
+        if is_running_in_aws() and topic_arn and not success:
+            fields = {"Sources": sources}
+            if error_message:
+                fields["Error"] = error_message
+            subject, message = format_alarm(
+                event="Tech Guide", status="FAILED", fields=fields
+            )
             publish_sns(
                 context.default_boto_session,
                 topic_arn,
-                subject=f"Tech Guide {status.title()}",
-                lines=lines,
+                subject=subject,
+                message=message,
             )
         post_slack_result(
             channel=slack_channel,
