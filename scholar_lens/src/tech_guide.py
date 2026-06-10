@@ -51,13 +51,17 @@ from .utils import (
     is_placeholder,
     measure_execution_time,
 )
-from .web_research import ResearchCorpus, WebResearcher
+from .web_research import ResearchCorpus, WebResearcher, neutralize_prompt_tags
 
 DEFAULT_LANGUAGE: str = "Korean"
 # Headroom reserved from the writer model's window when fitting the source
 # corpus, leaving room for the prompt template, the model's output, and the
 # previous-sections context that grows as sections are written.
 _SECTION_CONTEXT_RESERVE_TOKENS: int = 80_000
+# Reserve used when bounding the accumulated previous-sections context. The
+# writer is a 1M-window model, so this caps that context at ~150k tokens
+# (1M - 850k) — enough for dedup/flow without crowding out sources + output.
+_PREVIOUS_SECTIONS_RESERVE_TOKENS: int = 850_000
 # Upper bound on guide sections. The synopsis is told this budget so it plans a
 # self-contained guide rather than over-proposing (which left the old vLLM guide
 # promising chapters 13-26 that were never written).
@@ -409,7 +413,17 @@ class TechGuideGenerator(RetryableBase):
         written: list[str] = []
         for index, planned in enumerate(sections, start=1):
             logger.info("Writing section %d/%d: %s", index, total, planned.title)
-            previous = "\n\n".join(written)
+            # Bound the accumulated previous-sections context: it grows every
+            # section and, with the fitted sources, could otherwise overflow the
+            # window on a long guide. fit_text keeps the longest prefix — the
+            # early sections where foundational concepts are defined, which is
+            # what the dedup check most needs.
+            previous = self.llm_factory.fit_text(
+                self.writing_model_id,
+                "\n\n".join(written),
+                reserve_tokens=_PREVIOUS_SECTIONS_RESERVE_TOKENS,
+                label="previous sections",
+            )
             section_label = f"{index}. {planned.title}"
             markdown = await self._write_one_section(
                 topic=topic,
@@ -673,7 +687,9 @@ class TechGuideGenerator(RetryableBase):
         "(visuals: ...)" hint) is the title."""
         area = ""
         depth = _DEFAULT_DEPTH
-        # Consume up to two leading [..] bracketed tokens.
+        # Consume up to two leading [..] bracketed tokens. An unrecognised token
+        # (typo'd / hallucinated tag) is still consumed so it never leaks into
+        # the rendered heading.
         for _ in range(2):
             match = re.match(r"^\[([A-Za-z]+)\]\s*", body)
             if not match:
@@ -683,24 +699,34 @@ class TechGuideGenerator(RetryableBase):
                 area = token.upper()
             elif token.lower() in _DEPTH_DIRECTIVES:
                 depth = token.lower()
-            else:
-                break
             body = body[match.end() :]
         # Capture the planned visual aid, e.g. "(visuals: table)".
         visuals = ""
         if vmatch := re.search(r"\(visuals?:\s*([^)]*)\)", body, re.IGNORECASE):
             visuals = vmatch.group(1).strip().lower()
         # Title is everything up to the description separator / visuals hint.
-        title = re.split(r"\s+[—–-]\s+|\(visuals?:", body, maxsplit=1)[0].strip()
+        # Only an em/en dash separates title from description — a spaced ASCII
+        # hyphen is left intact so titles like "Using gRPC - the basics" survive.
+        title = re.split(r"\s+[—–]\s+|\(visuals?:", body, maxsplit=1)[0].strip()
         return area, depth, visuals, title or body.strip()
 
     @staticmethod
     def _parse_queries(raw: str) -> list[str]:
         queries: list[str] = []
+        seen: set[str] = set()
         for line in raw.splitlines():
             stripped = re.sub(r"^(\d+[.)]|[-*•])\s+", "", line.strip()).strip()
-            if stripped and not stripped.startswith("<"):
-                queries.append(stripped)
+            # Skip blanks, tag lines, and punctuation-only lines like the prompt's
+            # literal "..." placeholder (which models often echo verbatim).
+            if not stripped or stripped.startswith("<"):
+                continue
+            if not re.search(r"[A-Za-z0-9]", stripped):
+                continue
+            key = stripped.lower()
+            if key in seen:  # dedup case-insensitively to avoid paid dup searches
+                continue
+            seen.add(key)
+            queries.append(stripped)
         return queries
 
     @staticmethod
@@ -725,12 +751,16 @@ class TechGuideGenerator(RetryableBase):
         for page in corpus.pages:
             snippet = page.text[:500].replace("\n", " ")
             lines.append(f"- {page.url}\n  {page.title}\n  {snippet}")
-        return "\n".join(lines)[:max_chars]
+        # Untrusted page text → defang prompt-fence tags before interpolation.
+        return neutralize_prompt_tags("\n".join(lines)[:max_chars])
 
     @staticmethod
     def _search_digest(corpus: ResearchCorpus) -> str:
         if not corpus.search_results:
             return "(no web search results)"
-        return "\n".join(
-            f"- [{r.title}]({r.url}): {r.description}" for r in corpus.search_results
+        return neutralize_prompt_tags(
+            "\n".join(
+                f"- [{r.title}]({r.url}): {r.description}"
+                for r in corpus.search_results
+            )
         )

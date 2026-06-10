@@ -102,12 +102,15 @@ def _build_result_message(
     emoji, nice = _ARTIFACT_META.get(
         artifact_label.lower(), (":robot_face:", artifact_label.capitalize())
     )
-    safe_title = mrkdwn_safe(title)
+    # Coerce None/blank defensively: this runs OUTSIDE post_slack_result's try,
+    # so an AttributeError here would fail the whole job, not just the post.
+    safe_title = mrkdwn_safe(title or "(untitled)")
     # Show the source(s) as a muted sub-line only when they differ from the
     # title (e.g. a guide's title is the generated topic, not its source URL).
     source_line = None
-    if sources and mrkdwn_safe(sources) != safe_title:
-        source_line = mrkdwn_safe(sources)
+    safe_sources = mrkdwn_safe(sources) if sources else ""
+    if safe_sources and safe_sources != safe_title:
+        source_line = safe_sources
 
     if success:
         fallback = f"{nice} ready: {title}"

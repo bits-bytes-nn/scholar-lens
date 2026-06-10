@@ -171,7 +171,7 @@ class TechGuide(BaseModel):
     verify_grounding: bool = Field(default=True)
     # Deep-research planning: derive web-search queries from the seed docs so the
     # guide draws on complementary material, not just a single page. Requires a
-    # configured search provider (Brave); a no-op otherwise.
+    # configured search provider (Tavily or Brave); a no-op otherwise.
     auto_research: bool = Field(default=True)
     max_research_queries: int = Field(default=6, gt=0)
     # How many top search-result pages to fetch into the corpus so the gathered

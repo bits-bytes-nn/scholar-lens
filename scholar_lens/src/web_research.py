@@ -12,6 +12,7 @@ The search provider is an abstraction so deployments can choose their backend
 from __future__ import annotations
 
 import os
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from urllib.parse import urljoin, urlparse
@@ -29,6 +30,33 @@ DEFAULT_MAX_SUBPAGES: int = 8
 DEFAULT_MAX_IMAGES_PER_PAGE: int = 12
 _BRAVE_WEB_SEARCH_URL = "https://api.search.brave.com/res/v1/web/search"
 _TAVILY_SEARCH_URL = "https://api.tavily.com/search"
+
+# Fetched page/search text is interpolated into prompt XML fences (<sources>,
+# <search_results>, ...). A malicious page body containing a literal closing tag
+# could break out of the data fence and inject instructions, so the prompts'
+# "treat as untrusted DATA" framing is only sound if the delimiter itself can't
+# appear in the data. Neutralise any "</tag>" / "<tag>" fence sequence by
+# inserting a zero-width space after "<", which renders identically but no longer
+# matches the delimiter. Only the prompt fence tags are touched, so legitimate
+# markup/code in the source is left intact.
+_PROMPT_FENCE_TAGS = (
+    "sources",
+    "source",
+    "search_results",
+    "available_images",
+    "previously_written_sections",
+    "section_to_write",
+    "section",
+    "depth_directive",
+)
+_FENCE_TAG_RE = re.compile(
+    r"<(/?)(" + "|".join(_PROMPT_FENCE_TAGS) + r")\s*>", re.IGNORECASE
+)
+
+
+def neutralize_prompt_tags(text: str) -> str:
+    """Defang prompt-fence tags in untrusted text so it can't break the fence."""
+    return _FENCE_TAG_RE.sub(lambda m: f"<​{m.group(1)}{m.group(2)}>", text)
 
 
 @dataclass(frozen=True)
@@ -69,7 +97,10 @@ class ResearchCorpus:
         return ordered
 
     def combined_text(self, max_chars: int | None = None) -> str:
-        blocks = [f"## Source: {p.url}\n# {p.title}\n\n{p.text}" for p in self.pages]
+        blocks = [
+            f"## Source: {p.url}\n# {p.title}\n\n{neutralize_prompt_tags(p.text)}"
+            for p in self.pages
+        ]
         text = "\n\n---\n\n".join(blocks)
         return text[:max_chars] if max_chars else text
 
@@ -125,7 +156,9 @@ class BraveSearchProvider(WebSearchProvider):
             # ValueError covers JSONDecodeError on a malformed/truncated response.
             logger.warning("Brave search failed for '%s': %s", query, e)
             return []
-        results = data.get("web", {}).get("results", [])
+        results = data.get("web", {}).get("results") or []
+        if not isinstance(results, list):
+            return []
         return [
             SearchResult(
                 title=r.get("title", ""),
@@ -174,7 +207,9 @@ class TavilySearchProvider(WebSearchProvider):
             # ValueError covers JSONDecodeError on a malformed/truncated response.
             logger.warning("Tavily search failed for '%s': %s", query, e)
             return []
-        results = data.get("results", [])
+        results = data.get("results") or []
+        if not isinstance(results, list):
+            return []
         return [
             SearchResult(
                 title=r.get("title", ""),

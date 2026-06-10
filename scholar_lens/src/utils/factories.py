@@ -320,10 +320,12 @@ class BedrockLanguageModelFactory(
         model's own tokenizer).
 
         Uses the BASE model id: CountTokens rejects cross-region inference-profile
-        ids (``apac.``/``global.`` → ValidationException), unlike Converse. For
-        1M-capable models it sends the long-context beta flag so inputs above the
-        base 200k limit can still be measured. Raises on API error (callers that
-        must not fail catch it)."""
+        ids (``apac.``/``global.`` → ValidationException), unlike Converse. Some
+        newer models (e.g. Opus 4.6+) aren't supported by CountTokens at all; for
+        those a same-family ``count_tokens_proxy`` is used so the count stays
+        accurate. For 1M-capable models it sends the long-context beta flag so
+        inputs above the base 200k limit can still be measured. Raises on API
+        error (callers that must not fail catch it)."""
         converse: dict[str, Any] = {
             "messages": [{"role": "user", "content": [{"text": text}]}]
         }
@@ -332,16 +334,26 @@ class BedrockLanguageModelFactory(
             converse["additionalModelRequestFields"] = {
                 "anthropic_beta": [self.ANTHROPIC_1M_BETA]
             }
+        # Count with the proxy model when the target isn't CountTokens-capable.
+        count_model_id = (info.count_tokens_proxy if info else None) or model_id.value
         response = self._client.count_tokens(
-            modelId=model_id.value, input={"converse": converse}
+            modelId=count_model_id, input={"converse": converse}
         )
         return int(response["inputTokens"])
+
+    # Conservative chars-per-token used only as a last-resort estimate when a
+    # model is not supported by CountTokens and has no proxy (English/Korean
+    # technical text runs ~3.5-4 chars/token; 3.5 errs toward over-counting).
+    _FALLBACK_CHARS_PER_TOKEN: float = 3.5
 
     def _within_budget(self, model_id: LanguageModelId, text: str, budget: int) -> bool:
         """Whether ``text`` fits ``budget`` tokens. CountTokens itself rejects
         inputs beyond the model's measurable limit with a ValidationException
         ("prompt is too long") — that unambiguously means over budget, so it is
-        treated as a False (shrink) signal rather than an error."""
+        treated as a False (shrink) signal rather than an error. If the model is
+        simply not supported by CountTokens (and has no proxy), fall back to a
+        deterministic char estimate so the text is still bounded rather than
+        passed through unfitted."""
         try:
             return self.count_tokens(model_id, text) <= budget
         except ClientError as e:
@@ -349,6 +361,11 @@ class BedrockLanguageModelFactory(
             message = e.response.get("Error", {}).get("Message", "").lower()
             if code == "ValidationException" and "too long" in message:
                 return False
+            if code == "ValidationException" and (
+                "support" in message and "counting tokens" in message
+            ):
+                est_tokens = len(text) / self._FALLBACK_CHARS_PER_TOKEN
+                return est_tokens <= budget
             raise
 
     def fit_text(

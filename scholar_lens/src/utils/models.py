@@ -50,6 +50,15 @@ class LanguageModelInfo(BaseModel):
         default=False,
         description="Whether the model supports 1M context window.",
     )
+    count_tokens_proxy: str | None = Field(
+        default=None,
+        description=(
+            "Base model id to use for Bedrock CountTokens when this model is not "
+            "itself supported by the CountTokens API (e.g. Opus 4.6+). The proxy "
+            "must share the Claude tokenizer family so counts stay accurate. When "
+            "None, the model counts with its own id."
+        ),
+    )
 
 
 _EMBEDDING_MODEL_INFO: dict[EmbeddingModelId, EmbeddingModelInfo] = {
@@ -154,6 +163,7 @@ _LANGUAGE_MODEL_INFO: dict[LanguageModelId, LanguageModelInfo] = {
         supports_prompt_caching=True,
         supports_thinking=True,
         supports_1m_context_window=True,
+        count_tokens_proxy=LanguageModelId.CLAUDE_V4_6_SONNET.value,
     ),
     LanguageModelId.CLAUDE_V4_7_OPUS: LanguageModelInfo(
         context_window_size=200000,
@@ -162,6 +172,7 @@ _LANGUAGE_MODEL_INFO: dict[LanguageModelId, LanguageModelInfo] = {
         supports_thinking=True,
         uses_adaptive_thinking=True,
         supports_1m_context_window=True,
+        count_tokens_proxy=LanguageModelId.CLAUDE_V4_6_SONNET.value,
     ),
     LanguageModelId.CLAUDE_V4_8_OPUS: LanguageModelInfo(
         context_window_size=200000,
@@ -170,6 +181,9 @@ _LANGUAGE_MODEL_INFO: dict[LanguageModelId, LanguageModelInfo] = {
         supports_thinking=True,
         uses_adaptive_thinking=True,
         supports_1m_context_window=True,
+        # Opus 4.8 base id isn't supported by Bedrock CountTokens; count via the
+        # Sonnet 4.6 tokenizer (same family) so fit_text still measures exactly.
+        count_tokens_proxy=LanguageModelId.CLAUDE_V4_6_SONNET.value,
     ),
     # NOTE: add new models here
 }

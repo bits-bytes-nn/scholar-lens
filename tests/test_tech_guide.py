@@ -149,6 +149,71 @@ class TestParseSynopsisSections:
         out = gen._parse_synopsis_sections("1. [CONCEPT] [deep] Title")
         assert "DEEP section" in out[0].depth_directive
 
+    def test_spaced_hyphen_title_not_truncated(self) -> None:
+        # " - " inside a title must survive (only em/en dash separates desc).
+        gen = _make_generator()
+        out = gen._parse_synopsis_sections("1. [USAGE] [brief] Using gRPC - the basics")
+        assert out[0].title == "Using gRPC - the basics"
+
+    def test_unknown_leading_tag_stripped_from_title(self) -> None:
+        gen = _make_generator()
+        out = gen._parse_synopsis_sections("1. [Foo] Real Title — desc")
+        assert out[0].title == "Real Title"
+
+
+class TestParseQueries:
+    def test_drops_ellipsis_and_dedups(self) -> None:
+        raw = (
+            "1. argo cd architecture\n"
+            "- argo cd vs flux\n"
+            "...\n"
+            "Argo CD Architecture\n"  # case-dup of the first
+            "best practices"
+        )
+        assert TechGuideGenerator._parse_queries(raw) == [
+            "argo cd architecture",
+            "argo cd vs flux",
+            "best practices",
+        ]
+
+    def test_skips_tag_and_punctuation_lines(self) -> None:
+        assert TechGuideGenerator._parse_queries("<queries>\n…\n***\nreal query") == [
+            "real query"
+        ]
+
+
+class TestBuildSearchProvider:
+    """_build_search_provider prefers Tavily > Brave > Null."""
+
+    def _provider(self, monkeypatch, *, tavily=None, brave=None):  # type: ignore[no-untyped-def]
+        import scholar_lens.tech_guide_main as tg
+
+        for var in ("TAVILY_API_KEY", "BRAVE_API_KEY"):
+            monkeypatch.delenv(var, raising=False)
+        if tavily:
+            monkeypatch.setenv("TAVILY_API_KEY", tavily)
+        if brave:
+            monkeypatch.setenv("BRAVE_API_KEY", brave)
+        return tg._build_search_provider()
+
+    def test_prefers_tavily(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from scholar_lens.src.web_research import TavilySearchProvider
+
+        p = self._provider(monkeypatch, tavily="tvly-k", brave="brave-k")
+        assert isinstance(p, TavilySearchProvider)
+
+    def test_falls_back_to_brave(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from scholar_lens.src.web_research import BraveSearchProvider
+
+        p = self._provider(monkeypatch, brave="brave-k")
+        assert isinstance(p, BraveSearchProvider)
+
+    def test_null_when_no_keys(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from scholar_lens.src.web_research import NullSearchProvider
+
+        p = self._provider(monkeypatch)
+        assert isinstance(p, NullSearchProvider)
+
 
 class TestRelevanceGate:
     async def test_relevant_returns_topic(self) -> None:

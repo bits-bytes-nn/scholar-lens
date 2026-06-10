@@ -405,3 +405,40 @@ class TestFitText:
         factory.count_tokens(LanguageModelId.CLAUDE_V4_6_SONNET, "hi")
         assert captured["modelId"] == LanguageModelId.CLAUDE_V4_6_SONNET.value
         assert not captured["modelId"].startswith(("apac.", "global.", "us."))
+
+    def test_count_tokens_uses_proxy_for_unsupported_model(self) -> None:
+        # Regression: Opus 4.8's base id isn't supported by Bedrock CountTokens,
+        # so it must count via its same-family proxy (Sonnet 4.6), not its own id.
+        captured: dict = {}
+        factory = _make_factory()
+        factory._client.count_tokens = MagicMock(
+            side_effect=lambda **kw: captured.update(kw) or {"inputTokens": 1}
+        )
+        factory.count_tokens(LanguageModelId.CLAUDE_V4_8_OPUS, "hi")
+        assert captured["modelId"] == LanguageModelId.CLAUDE_V4_6_SONNET.value
+        assert "opus" not in captured["modelId"]
+
+    def test_within_budget_estimates_when_counting_unsupported(self) -> None:
+        # If CountTokens reports the model is unsupported (and there's no proxy),
+        # _within_budget falls back to a char estimate instead of re-raising, so
+        # the text is still bounded rather than passed through unfitted.
+        factory = _make_factory()
+
+        def unsupported(**kw):  # noqa: ANN003, ANN202
+            raise ClientError(
+                {
+                    "Error": {
+                        "Code": "ValidationException",
+                        "Message": "This model doesn't support counting tokens",
+                    }
+                },
+                "CountTokens",
+            )
+
+        factory._client.count_tokens = MagicMock(side_effect=unsupported)
+        factory._client.list_inference_profiles = MagicMock(
+            return_value={"inferenceProfileSummaries": []}
+        )
+        # 35 chars / 3.5 = 10 est tokens: within a 20-token budget, over a 5-token one.
+        assert factory._within_budget(LanguageModelId.CLAUDE_V3_HAIKU, "x" * 35, 20)
+        assert not factory._within_budget(LanguageModelId.CLAUDE_V3_HAIKU, "x" * 35, 5)

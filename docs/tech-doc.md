@@ -392,13 +392,13 @@ GUIDE 모드는 기술 문서 URL 목록으로부터 자체 학습 가이드를 
 
 **초기화** (`tech_guide_main.py:_run`)  
 `_run()` 함수는:
-1. WebResearcher를 초기화합니다. Brave API 키가 설정되면 BraveSearchProvider를, 아니면 NullSearchProvider를 사용합니다.
+1. WebResearcher를 초기화합니다. 검색 백엔드는 **Tavily > Brave > 없음** 순으로 선택됩니다(`_build_search_provider`): Tavily 키가 있으면 `TavilySearchProvider`(LLM 검색 특화 — 정제된 페이지 본문을 직접 반환), 없고 Brave 키만 있으면 `BraveSearchProvider`, 둘 다 없으면 `NullSearchProvider`.
 2. TechGuideGenerator를 생성합니다. 여기에는 relevance_chain, research_plan_chain, synopsis_chain, section_chain, evaluation_chain, grounding_chain이 포함됩니다. `auto_research`/`max_research_queries`/`min_quality_score`/`max_revision_attempts` 노브가 config(`TechGuide`)에서 주입됩니다.
 
 **딥리서치 플래닝** (`tech_guide.py:_plan_research`)  
 `generate()`는 먼저 시드 URL(및 선택적 하위 페이지)을 **한 번** 크롤링해 ResearchCorpus를 만든 뒤:
 1. 명시적 `search_queries`가 없고 `auto_research=True`이면, TechGuideResearchPlanPrompt로 시드 문서에서 토픽과 웹 검색 쿼리(개념/원리·사용법·비교·함정 등 다른 각도)를 자동 생성합니다.
-2. 생성된(또는 명시된) 쿼리를 `WebResearcher.run_searches(..., fetch_top=N)`로 실행합니다. 검색 결과 목록뿐 아니라 상위 N개(`fetch_top_results`, 기본 4) 결과 페이지를 실제로 fetch해 `corpus.pages`에 추가하므로, 모아온 자료가 목차 플래너뿐 아니라 **본문 작성기까지** 도달합니다(시드 페이지 재크롤링 없음; SSRF 가드 + 리다이렉트 후 호스트 재검증 통과).
+2. 생성된(또는 명시된) 쿼리를 `WebResearcher.run_searches(..., fetch_top=N)`로 실행합니다. 검색 결과 목록뿐 아니라 상위 N개(`fetch_top_results`, 기본 4) 결과를 `corpus.pages`에 추가하므로, 모아온 자료가 목차 플래너뿐 아니라 **본문 작성기까지** 도달합니다. Tavily 결과는 정제된 `content`를 직접 사용해 **재fetch 없이**(추가 SSRF 표면 없음) 코퍼스에 들어가고, Brave 결과처럼 `content`가 없으면 URL을 SSRF 가드(+리다이렉트 후 호스트 재검증)를 거쳐 fetch합니다. 시드 페이지는 재크롤링하지 않습니다. fetch된 본문은 프롬프트의 `<sources>` 펜스로 들어가기 전에 `neutralize_prompt_tags`로 펜스 태그가 무력화됩니다(태그 주입 방지).
 3. 검색 백엔드가 실제 결과를 줄 수 없으면(NullSearchProvider, `supports_search=False`) 플래너 LLM 호출 자체를 건너뜁니다. 플래닝 실패도 best-effort로 흡수되어 시드 URL만으로 진행합니다.
 
 **관련성 검증** (`tech_guide.py:_assert_relevant`)  
@@ -419,7 +419,7 @@ TechGuideSynopsisPrompt는 각 섹션에 **관심 영역**(CONCEPT/DETAIL/USAGE/
 `verify_grounding=True`일 경우 TechGuideGroundingPrompt로 작성된 섹션을 재검토하여 비근거 청구를 제거합니다(빈 결과 시 원본 유지 — 검증은 섹션을 개선만 할 뿐 삭제하지 않음).
 
 **발행** (`tech_guide_main.py`)  
-완성된 TechGuide는 `_format_guide()`에서 프론트매터 및 소스 링크와 함께 조합되어 Publisher를 거쳐 발행됩니다.
+완성된 TechGuide는 `_format_guide()`에서 프론트매터 및 소스 링크와 함께 조합되어 Publisher를 거쳐 발행됩니다. 완료 후 Slack 메시지의 제목은 **생성된 가이드 토픽**(예: "Getting Started with Argo CD")이며, 소스 URL은 토픽과 다를 때만 muted 서브라인으로, s3:// 경로는 작은 context 줄로 표시됩니다.
 
 > **다이어그램(향후 과제)**: "시각 요소"는 현재 표·소스 이미지·코드 블록으로 충족합니다. LLM 생성 다이어그램(Mermaid handDrawn→PNG / mingrammer `diagrams`로 실제 AWS 아이콘)은 HTTP 렌더로 기술적으로 가능함을 확인했으나(Chromium 불필요), 별도 과제로 보류되어 있습니다.
 
@@ -520,7 +520,7 @@ TechGuideSynopsisPrompt는 각 섹션에 **관심 영역**(CONCEPT/DETAIL/USAGE/
 **책임**: URL 목록을 조사하여 텍스트, 이미지, 링크를 추출하고, 선택적으로 동일 사이트 서브페이지 및 웹 검색 결과를 발견합니다.
 
 **주요 클래스/함수**:
-- `WebSearchProvider` (line 73): 추상 기본. `BraveSearchProvider` (line 87)는 Brave Search API 래퍼입니다.
+- `WebSearchProvider`: 추상 기본(`supports_search` 플래그 포함). 구현체: `TavilySearchProvider`(LLM 검색 특화, 정제 본문 반환 — 선호), `BraveSearchProvider`(일반 웹검색), `NullSearchProvider`(no-op). `neutralize_prompt_tags`는 fetch된 본문의 프롬프트 펜스 태그를 무력화합니다.
 - `WebResearcher` (line 130): `research(urls, discover_subpages, search_queries)` (line 166)은 각 URL을 페치(SSRF 가드 포함, line 209)하고 조사합니다. `_select_subpages()` (line 263)는 동일 호스트·경로 내 링크만 선택합니다.
 - `ResearchCorpus` (line 50): 페이지 목록, 검색 결과, 이미지 URL을 보유합니다. `combined_text()` (line 67)는 모든 페이지를 문자 예산 내에서 연결합니다.
 
@@ -726,7 +726,8 @@ Tech Guide 생성 모델 선택입니다 (`scholar_lens/configs/config.py:159–
 | 환경 변수 | 타입 | 필수 | 설명 |
 |-----------|------|------|------|
 | `AWS_PROFILE_NAME` | `str` | 선택 | AWS 프로필명 (config.yaml의 `profile_name`과 동일하게 작동) |
-| `BRAVE_API_KEY` | `str` | 선택 | Brave Search API 키 |
+| `TAVILY_API_KEY` | `str` | 선택 | Tavily Search API 키 (딥리서치, Brave보다 우선) |
+| `BRAVE_API_KEY` | `str` | 선택 | Brave Search API 키 (Tavily 미설정 시 폴백) |
 | `GITHUB_TOKEN` | `str` | 선택 | GitHub API 토큰 (GitHub Pages 배포 시 필수) |
 | `LANGCHAIN_API_KEY` | `str` | 선택 | LangChain 추적용 API 키 |
 | `LANGCHAIN_TRACING_V2` | `bool` | 선택 | LangChain 추적 활성화 여부 (예: `true`) |
@@ -1436,7 +1437,7 @@ EventBridge 규칙 (`scripts/deploy_infra.py:613–637`):
 python3 scripts/deploy_infra.py
 ```
 
-배포는 `Config.load()` (`scholar_lens/configs/config.py:219–224`)에서 `config.yaml` 및 환경 변수를 읽습니다. 필수 환경 변수는 `EnvVars` (`scholar_lens/src/constants.py:20–43`)에 나열됩니다 (GitHubToken, LangChain API Key, Upstage API Key, Brave API Key, Slack Bot Token).
+배포는 `Config.load()`에서 `config.yaml` 및 환경 변수를 읽습니다. 환경 변수는 `EnvVars` (`scholar_lens/src/constants.py`)에 나열됩니다 (GitHub Token, LangChain API Key, Upstage API Key, Tavily API Key, Brave API Key, Slack Bot Token). 비밀 값은 `put_secure_secrets`로 SSM SecureString에 기록됩니다.
 
 ## 10. 발행 & 블로그 PR (Publishing)
 
