@@ -591,11 +591,9 @@ class TestMainForwardsPrUrl:
         import scholar_lens.tech_guide_main as tg
 
         monkeypatch.setattr(tg.Config, "load", classmethod(lambda cls: MagicMock()))
-        monkeypatch.setattr(tg.boto3, "Session", lambda **kw: MagicMock())
         monkeypatch.setattr(tg, "is_running_in_aws", lambda: False)
-        # GuideContext is a pydantic model; bypass its validation with a stub.
-        monkeypatch.setattr(tg, "GuideContext", lambda **kw: MagicMock())
-        monkeypatch.setattr(tg, "S3Handler", lambda *a, **k: MagicMock())
+        # build_context builds boto sessions / S3 handler; stub it out entirely.
+        monkeypatch.setattr(tg, "build_context", lambda config: MagicMock())
         monkeypatch.setattr(
             tg,
             "_run",

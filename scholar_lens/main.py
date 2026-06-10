@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import boto3
-from pydantic import BaseModel, ConfigDict, HttpUrl
+from pydantic import HttpUrl
 
 sys.path.append(str(Path(__file__).parent.parent))
 
@@ -40,18 +40,23 @@ from scholar_lens.src import (
     PDFParser,
     Publisher,
     PublishRequest,
-    S3Handler,
     S3Paths,
     SSMParams,
     TokenUsageTracker,
     arg_as_bool,
     build_pr_body,
-    get_ssm_param_value,
     is_placeholder,
     is_running_in_aws,
     logger,
     plot_langchain_graph,
     resolve_paper_source,
+)
+from scholar_lens.src.runtime import (
+    RunContext,
+    build_context,
+    build_publisher,
+    load_secrets_from_ssm,
+    publish_sns,
 )
 
 ROOT_DIR: Path = Path("/tmp") if is_running_in_aws() else Path(__file__).parent.parent
@@ -68,13 +73,9 @@ class Mode:
     ALL = (REVIEW, SUMMARIZE)
 
 
-class AppContext(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
-    config: Config
-    default_boto_session: boto3.Session
-    bedrock_boto_session: boto3.Session
-    s3_handler: S3Handler | None = None
+# The per-run context is the shared RunContext (see scholar_lens.src.runtime);
+# kept under this name so the module's internal type annotations read locally.
+AppContext = RunContext
 
 
 def main(
@@ -85,26 +86,7 @@ def main(
     slack_channel: str | None = None,
     slack_thread_ts: str | None = None,
 ) -> None:
-    config = Config.load()
-    profile_name = (
-        os.getenv(EnvVars.AWS_PROFILE_NAME.value)
-        if is_running_in_aws()
-        else config.resources.profile_name
-    )
-
-    context = AppContext(
-        config=config,
-        default_boto_session=boto3.Session(
-            profile_name=profile_name, region_name=config.resources.default_region_name
-        ),
-        bedrock_boto_session=boto3.Session(
-            profile_name=profile_name, region_name=config.resources.bedrock_region_name
-        ),
-    )
-    if config.resources.s3_bucket_name:
-        context.s3_handler = S3Handler(
-            context.default_boto_session, config.resources.s3_bucket_name
-        )
+    context = build_context(Config.load())
 
     artifact_label = "summary" if mode == Mode.SUMMARIZE else "review"
 
@@ -294,27 +276,15 @@ async def _generate_summary(
 
 
 def _setup_aws_env(context: AppContext) -> None:
-    if not is_running_in_aws():
-        return
-
-    base_path = (
-        f"/{context.config.resources.project_name}/{context.config.resources.stage}"
+    load_secrets_from_ssm(
+        context,
+        {
+            SSMParams.GITHUB_TOKEN: EnvVars.GITHUB_TOKEN,
+            SSMParams.LANGCHAIN_API_KEY: EnvVars.LANGCHAIN_API_KEY,
+            SSMParams.UPSTAGE_API_KEY: EnvVars.UPSTAGE_API_KEY,
+            SSMParams.SLACK_BOT_TOKEN: EnvVars.SLACK_BOT_TOKEN,
+        },
     )
-    ssm_map = {
-        SSMParams.GITHUB_TOKEN: EnvVars.GITHUB_TOKEN,
-        SSMParams.LANGCHAIN_API_KEY: EnvVars.LANGCHAIN_API_KEY,
-        SSMParams.UPSTAGE_API_KEY: EnvVars.UPSTAGE_API_KEY,
-        SSMParams.SLACK_BOT_TOKEN: EnvVars.SLACK_BOT_TOKEN,
-    }
-    for ssm_param, env_var in ssm_map.items():
-        try:
-            value = get_ssm_param_value(
-                context.default_boto_session, f"{base_path}/{ssm_param.value}"
-            )
-            os.environ[env_var.value] = value
-            logger.info("Set env var '%s' from SSM.", env_var.value)
-        except Exception as e:
-            logger.error("Failed to set env var '%s' from SSM: %s", env_var.value, e)
 
 
 async def _prepare_paper_data(
@@ -690,13 +660,7 @@ def _format_summary(
 
 
 def _build_publisher(context: AppContext) -> Publisher:
-    return Publisher(
-        context.config.resources.github,
-        root_dir=ROOT_DIR,
-        s3_handler=context.s3_handler,
-        s3_bucket_name=context.config.resources.s3_bucket_name,
-        s3_prefix=context.config.resources.s3_prefix,
-    )
+    return build_publisher(context, ROOT_DIR)
 
 
 def _build_paper_publish_request(
@@ -748,13 +712,7 @@ def _send_sns_notification(
     if s3_url:
         message_lines.append(f"Output: {s3_url}")
 
-    try:
-        sns = session.client("sns")
-        sns.publish(
-            TopicArn=topic_arn, Subject=subject, Message="\n".join(message_lines)
-        )
-    except Exception as e:
-        logger.error("Failed to send SNS notification: %s", e)
+    publish_sns(session, topic_arn, subject=subject, lines=message_lines)
 
 
 if __name__ == "__main__":

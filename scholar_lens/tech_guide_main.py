@@ -15,9 +15,6 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-import boto3
-from pydantic import BaseModel, ConfigDict
-
 sys.path.append(str(Path(__file__).parent.parent))
 
 from scholar_lens.configs import Config
@@ -31,9 +28,7 @@ from scholar_lens.src import (
     LocalPaths,
     NotTechnicalContentError,
     NullSearchProvider,
-    Publisher,
     PublishRequest,
-    S3Handler,
     SSMParams,
     TavilySearchProvider,
     TechGuide,
@@ -43,23 +38,20 @@ from scholar_lens.src import (
     WebSearchProvider,
     arg_as_bool,
     build_pr_body,
-    get_ssm_param_value,
     is_running_in_aws,
     logger,
+)
+from scholar_lens.src.runtime import (
+    RunContext,
+    build_context,
+    build_publisher,
+    load_secrets_from_ssm,
+    publish_sns,
 )
 
 ROOT_DIR: Path = Path("/tmp") if is_running_in_aws() else Path(__file__).parent.parent
 
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
-
-
-class GuideContext(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
-    config: Config
-    default_boto_session: boto3.Session
-    bedrock_boto_session: boto3.Session
-    s3_handler: S3Handler | None = None
 
 
 def main(
@@ -70,25 +62,7 @@ def main(
     slack_channel: str | None = None,
     slack_thread_ts: str | None = None,
 ) -> str | None:
-    config = Config.load()
-    profile_name = (
-        os.getenv(EnvVars.AWS_PROFILE_NAME.value)
-        if is_running_in_aws()
-        else config.resources.profile_name
-    )
-    context = GuideContext(
-        config=config,
-        default_boto_session=boto3.Session(
-            profile_name=profile_name, region_name=config.resources.default_region_name
-        ),
-        bedrock_boto_session=boto3.Session(
-            profile_name=profile_name, region_name=config.resources.bedrock_region_name
-        ),
-    )
-    if config.resources.s3_bucket_name:
-        context.s3_handler = S3Handler(
-            context.default_boto_session, config.resources.s3_bucket_name
-        )
+    context = build_context(Config.load())
 
     s3_url: str | None = None
     pr_url: str | None = None
@@ -119,8 +93,15 @@ def main(
     finally:
         topic_arn = os.getenv(EnvVars.TOPIC_ARN.value)
         if is_running_in_aws() and topic_arn:
-            _send_guide_sns_notification(
-                context.default_boto_session, topic_arn, success, title, s3_url
+            status = "succeeded" if success else "failed"
+            lines = [f"Technical guide {status} for: {sources}"]
+            if s3_url:
+                lines.append(f"Output: {s3_url}")
+            publish_sns(
+                context.default_boto_session,
+                topic_arn,
+                subject=f"Tech Guide {status.title()}",
+                lines=lines,
             )
         post_slack_result(
             channel=slack_channel,
@@ -135,29 +116,8 @@ def main(
         )
 
 
-def _send_guide_sns_notification(
-    session: boto3.Session,
-    topic_arn: str,
-    success: bool,
-    sources: str,
-    s3_url: str | None,
-) -> None:
-    status = "succeeded" if success else "failed"
-    lines = [f"Technical guide {status} for: {sources}"]
-    if s3_url:
-        lines.append(f"Output: {s3_url}")
-    try:
-        session.client("sns").publish(
-            TopicArn=topic_arn,
-            Subject=f"Tech Guide {status.title()}",
-            Message="\n".join(lines),
-        )
-    except Exception as e:  # noqa: BLE001 - notification failure must not fail the job
-        logger.error("Failed to send SNS notification: %s", e)
-
-
 async def _run(
-    context: GuideContext,
+    context: RunContext,
     urls: list[str],
     *,
     discover_subpages: bool,
@@ -209,13 +169,7 @@ async def _run(
     work_dir.mkdir(parents=True, exist_ok=True)
 
     document = _format_guide(context.config.resources.github, guide)
-    publisher = Publisher(
-        context.config.resources.github,
-        root_dir=ROOT_DIR,
-        s3_handler=context.s3_handler,
-        s3_bucket_name=context.config.resources.s3_bucket_name,
-        s3_prefix=context.config.resources.s3_prefix,
-    )
+    publisher = build_publisher(context, ROOT_DIR)
     request = _build_request(guide, work_dir, document)
     s3_url, document_path = await publisher.publish(request)
     pr_url: str | None = None
@@ -224,25 +178,17 @@ async def _run(
     return s3_url, pr_url, guide.topic
 
 
-def _setup_aws_env(context: GuideContext) -> None:
+def _setup_aws_env(context: RunContext) -> None:
     """Load GitHub/search/Slack secrets from SSM into the environment (AWS only)."""
-    if not is_running_in_aws():
-        return
-    base = f"/{context.config.resources.project_name}/{context.config.resources.stage}"
-    ssm_map = {
-        SSMParams.GITHUB_TOKEN: EnvVars.GITHUB_TOKEN,
-        SSMParams.TAVILY_API_KEY: EnvVars.TAVILY_API_KEY,
-        SSMParams.BRAVE_API_KEY: EnvVars.BRAVE_API_KEY,
-        SSMParams.SLACK_BOT_TOKEN: EnvVars.SLACK_BOT_TOKEN,
-    }
-    for ssm_param, env_var in ssm_map.items():
-        try:
-            os.environ[env_var.value] = get_ssm_param_value(
-                context.default_boto_session, f"{base}/{ssm_param.value}"
-            )
-            logger.info("Set env var '%s' from SSM.", env_var.value)
-        except Exception as e:  # noqa: BLE001 - optional secret
-            logger.info("Could not set '%s' from SSM: %s", env_var.value, e)
+    load_secrets_from_ssm(
+        context,
+        {
+            SSMParams.GITHUB_TOKEN: EnvVars.GITHUB_TOKEN,
+            SSMParams.TAVILY_API_KEY: EnvVars.TAVILY_API_KEY,
+            SSMParams.BRAVE_API_KEY: EnvVars.BRAVE_API_KEY,
+            SSMParams.SLACK_BOT_TOKEN: EnvVars.SLACK_BOT_TOKEN,
+        },
+    )
 
 
 def _build_search_provider() -> WebSearchProvider:

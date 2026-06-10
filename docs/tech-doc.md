@@ -391,7 +391,7 @@ PaperSummarizer는:
 GUIDE 모드는 기술 문서 URL 목록으로부터 자체 학습 가이드를 생성합니다(`tech_guide_main.py`, `tech_guide.py`). 단일 문서 페이지를 번역하는 것이 아니라, 딥리서치로 보완 자료를 모으고 → 구조화 플래닝 → 섹션 작성 → 평가·재작성 → 사실 검증을 거치는 다단계 파이프라인입니다(논문 리뷰의 reflect-and-revise 패턴을 가이드에 이식).
 
 **초기화** (`tech_guide_main.py:_run`)  
-`_run()` 함수는:
+공통 부트스트랩(boto 세션·S3 핸들러 생성 `build_context`, SSM 비밀 로드 `load_secrets_from_ssm`, SNS 발행 `publish_sns`, Publisher 생성 `build_publisher`)은 `scholar_lens/src/runtime.py`의 공유 헬퍼로, review/summary 진입점(`main.py`)과 동일하게 사용합니다(이전엔 두 진입점에 중복돼 로그 레벨까지 갈라져 있었음). `_run()` 함수는:
 1. WebResearcher를 초기화합니다. 검색 백엔드는 **Tavily > Brave > 없음** 순으로 선택됩니다(`_build_search_provider`): Tavily 키가 있으면 `TavilySearchProvider`(LLM 검색 특화 — 정제된 페이지 본문을 직접 반환), 없고 Brave 키만 있으면 `BraveSearchProvider`, 둘 다 없으면 `NullSearchProvider`.
 2. TechGuideGenerator를 생성합니다. 여기에는 relevance_chain, research_plan_chain, synopsis_chain, section_chain, evaluation_chain, grounding_chain이 포함됩니다. `auto_research`/`max_research_queries`/`min_quality_score`/`max_revision_attempts` 노브가 config(`TechGuide`)에서 주입됩니다.
 
