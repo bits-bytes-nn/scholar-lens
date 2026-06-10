@@ -22,7 +22,8 @@ from bs4 import BeautifulSoup, Tag
 
 from .constants import EnvVars
 from .logger import logger
-from .url_guard import is_url_public
+from .pinned_transport import PinnedHTTPTransport
+from .url_guard import UnsafeUrlError, is_url_public
 from .utils import extract_text_from_html
 
 DEFAULT_TIMEOUT: int = 30
@@ -244,7 +245,14 @@ class WebResearcher:
     @property
     def client(self) -> httpx.Client:
         if self._client is None:
-            self._client = httpx.Client(timeout=self.timeout, follow_redirects=True)
+            # PinnedHTTPTransport closes the SSRF DNS-rebinding TOCTOU: each
+            # request (and redirect hop) is validated and connected to the exact
+            # validated IP rather than re-resolved.
+            self._client = httpx.Client(
+                timeout=self.timeout,
+                follow_redirects=True,
+                transport=PinnedHTTPTransport(),
+            )
         return self._client
 
     def close(self) -> None:
@@ -347,29 +355,25 @@ class WebResearcher:
         )
 
     def _fetch_page(self, url: str) -> PageContent | None:
-        # SSRF guard: every fetched URL (initial, discovered sub-page, search
-        # result, or link) flows through here, so block internal/metadata
-        # targets at this choke point.
+        # SSRF guard, two layers: a cheap pre-check here for a fast skip + clear
+        # log without opening a connection, and the authoritative check in
+        # PinnedHTTPTransport, which validates and pins EVERY request — including
+        # each redirect hop — to the exact validated IP (no DNS-rebinding window,
+        # no unchecked redirect target). The transport raises UnsafeUrlError if a
+        # hop targets a non-public address.
         if not is_url_public(url):
             logger.warning("Skipping non-public URL '%s' (SSRF guard).", url)
             return None
         try:
             response = self.client.get(url)
             response.raise_for_status()
+        except UnsafeUrlError as e:
+            logger.warning(
+                "Skipping '%s' — redirected to non-public target: %s", url, e
+            )
+            return None
         except httpx.HTTPError as e:
             logger.warning("Failed to fetch '%s': %s", url, e)
-            return None
-
-        # follow_redirects is on, so re-validate the FINAL host: a public URL can
-        # 30x-redirect to a private/metadata IP. This matters now that search
-        # results (externally-influenced URLs) are fetched, not just user input.
-        final_url = str(response.url)
-        if final_url != url and not is_url_public(final_url):
-            logger.warning(
-                "Skipping '%s' — redirected to non-public '%s' (SSRF guard).",
-                url,
-                final_url,
-            )
             return None
 
         content_type = response.headers.get("Content-Type", "").lower()

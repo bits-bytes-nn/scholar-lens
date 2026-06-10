@@ -117,3 +117,46 @@ def is_url_public(url: str) -> bool:
     except UnsafeUrlError as e:
         logger.debug("Blocked non-public URL '%s': %s", url, e)
         return False
+
+
+def resolve_validated_ip(url: str) -> str | None:
+    """Validate ``url`` and return ONE public IP to connect to (closing TOCTOU).
+
+    :func:`assert_url_is_public` resolves and validates the host, but a plain
+    client then resolves *again* independently — a DNS-rebinding window where the
+    second lookup can return a private IP. To eliminate that, a fetcher should
+    connect to the exact IP validated here (pinning the host to this address and
+    sending the original hostname as TLS SNI / Host header).
+
+    Returns the validated IP for a hostname; ``None`` for an IP literal (the
+    literal is itself the connection target and is already validated, so no
+    rewrite is needed). Raises :class:`UnsafeUrlError` exactly like
+    :func:`assert_url_is_public`.
+    """
+    assert_url_scheme_and_literal(url)
+    parts = urlsplit(url)
+    host = parts.hostname or ""
+    try:
+        ipaddress.ip_address(host)
+        return None  # literal: already validated, connect as-is
+    except ValueError:
+        pass
+    try:
+        infos = socket.getaddrinfo(host, parts.port or None, proto=socket.IPPROTO_TCP)
+    except socket.gaierror as e:
+        raise UnsafeUrlError(f"Could not resolve host '{host}': {e}") from e
+    addresses = [str(info[4][0]) for info in infos]
+    if not addresses:
+        raise UnsafeUrlError(f"Host '{host}' resolved to no addresses.")
+    # Every resolved address must be public (an attacker could otherwise round-
+    # robin a private one in); pin the first.
+    for addr in addresses:
+        try:
+            ip = ipaddress.ip_address(addr)
+        except ValueError:
+            continue
+        if _is_blocked_ip(ip):
+            raise UnsafeUrlError(
+                f"URL '{url}' resolves to a non-public address ({addr})."
+            )
+    return addresses[0]

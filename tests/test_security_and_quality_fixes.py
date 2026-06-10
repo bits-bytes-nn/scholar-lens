@@ -76,6 +76,71 @@ def test_ipv4_mapped_ipv6_loopback_blocked() -> None:
 
 
 # --------------------------------------------------------------------------- #
+# resolve_validated_ip + PinnedHTTPTransport (DNS-rebinding TOCTOU defence)
+# --------------------------------------------------------------------------- #
+
+
+def test_resolve_validated_ip_returns_validated_address(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import scholar_lens.src.url_guard as guard
+    from scholar_lens.src.url_guard import resolve_validated_ip
+
+    monkeypatch.setattr(
+        guard.socket,
+        "getaddrinfo",
+        lambda *a, **k: [(2, 1, 6, "", ("93.184.216.34", 0))],
+    )
+    assert resolve_validated_ip("https://example.com/x") == "93.184.216.34"
+
+
+def test_resolve_validated_ip_none_for_literal() -> None:
+    from scholar_lens.src.url_guard import resolve_validated_ip
+
+    # An IP literal is already the connection target — no rewrite needed.
+    assert resolve_validated_ip("https://1.1.1.1/x") is None
+
+
+def test_resolve_validated_ip_blocks_private_resolution(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import scholar_lens.src.url_guard as guard
+    from scholar_lens.src.url_guard import resolve_validated_ip
+
+    # A hostname that resolves to a private IP (the rebinding payload) is rejected.
+    monkeypatch.setattr(
+        guard.socket,
+        "getaddrinfo",
+        lambda *a, **k: [(2, 1, 6, "", ("169.254.169.254", 0))],
+    )
+    with pytest.raises(UnsafeUrlError):
+        resolve_validated_ip("https://evil.example.com/")
+
+
+def test_pinned_transport_rewrites_host_to_validated_ip(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The transport pins the connection to the validated IP while preserving the
+    # hostname for TLS SNI / Host — verified without opening a socket.
+    import httpx
+
+    import scholar_lens.src.pinned_transport as pt
+
+    monkeypatch.setattr(pt, "resolve_validated_ip", lambda url: "93.184.216.34")
+    request = httpx.Request("GET", "https://example.com/page")
+    pt._pin(request)
+    assert request.url.host == "93.184.216.34"
+    assert request.extensions["sni_hostname"] == "example.com"
+    assert request.headers["host"] == "example.com"  # Host header unchanged
+
+    # An IP literal (resolve returns None) is left untouched.
+    monkeypatch.setattr(pt, "resolve_validated_ip", lambda url: None)
+    literal_req = httpx.Request("GET", "https://1.1.1.1/x")
+    pt._pin(literal_req)
+    assert literal_req.url.host == "1.1.1.1"
+
+
+# --------------------------------------------------------------------------- #
 # HTMLTagOutputParser
 # --------------------------------------------------------------------------- #
 

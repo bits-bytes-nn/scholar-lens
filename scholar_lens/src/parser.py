@@ -18,6 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .constants import AppConstants, EnvVars, LanguageModelId, LocalPaths
 from .logger import logger
+from .pinned_transport import PinnedAsyncHTTPTransport
 from .prompts import FigureAnalysisPrompt
 from .url_guard import UnsafeUrlError, assert_url_is_public
 from .utils import (
@@ -111,10 +112,17 @@ class Figure(BaseModel, RetryableBase):
             except UnsafeUrlError as e:
                 raise FigureParseError(f"Unsafe image URL '{path}': {e}") from e
             try:
-                async with httpx.AsyncClient(timeout=DEFAULT_TIMEOUT) as client:
+                # PinnedAsyncHTTPTransport pins the connection to the validated
+                # IP (no DNS-rebinding window after the assert_url_is_public check
+                # above, and any redirect hop is re-validated).
+                async with httpx.AsyncClient(
+                    timeout=DEFAULT_TIMEOUT, transport=PinnedAsyncHTTPTransport()
+                ) as client:
                     response = await client.get(path)
                     response.raise_for_status()
                     image_bytes = response.content
+            except UnsafeUrlError as e:
+                raise FigureParseError(f"Unsafe image URL '{path}': {e}") from e
             except httpx.HTTPError as e:
                 raise FigureParseError(f"HTTP error for image '{path}': {e}") from e
         else:
