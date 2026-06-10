@@ -35,6 +35,7 @@ from scholar_lens.src import (
     PublishRequest,
     S3Handler,
     SSMParams,
+    TavilySearchProvider,
     TechGuide,
     TechGuideGenerator,
     TokenUsageTracker,
@@ -93,9 +94,13 @@ def main(
     pr_url: str | None = None
     success = False
     error_message: str | None = None
-    topic = ", ".join(urls)
+    sources = ", ".join(urls)
+    # Falls back to the source URL(s) until the generated topic is known; the
+    # pipeline overwrites this with the real guide title (e.g. "Getting Started
+    # with Argo CD") so Slack/SNS show that rather than a raw URL.
+    title = sources
     try:
-        s3_url, pr_url = asyncio.run(
+        s3_url, pr_url, generated_topic = asyncio.run(
             _run(
                 context,
                 urls,
@@ -103,6 +108,8 @@ def main(
                 search_queries=search_queries,
             )
         )
+        if generated_topic:
+            title = generated_topic
         success = True
         return s3_url
     except Exception as e:
@@ -113,17 +120,18 @@ def main(
         topic_arn = os.getenv(EnvVars.TOPIC_ARN.value)
         if is_running_in_aws() and topic_arn:
             _send_guide_sns_notification(
-                context.default_boto_session, topic_arn, success, topic, s3_url
+                context.default_boto_session, topic_arn, success, title, s3_url
             )
         post_slack_result(
             channel=slack_channel,
             thread_ts=slack_thread_ts,
             success=success,
             artifact_label="guide",
-            title=topic,
+            title=title,
             s3_url=s3_url,
             pr_url=pr_url,
             error=error_message,
+            sources=sources,
         )
 
 
@@ -154,7 +162,7 @@ async def _run(
     *,
     discover_subpages: bool,
     search_queries: list[str] | None,
-) -> tuple[str | None, str | None]:
+) -> tuple[str | None, str | None, str | None]:
     _setup_aws_env(context)
     tracker = TokenUsageTracker()
     researcher = WebResearcher(search_provider=_build_search_provider())
@@ -213,16 +221,17 @@ async def _run(
     pr_url: str | None = None
     if context.config.resources.github.enabled:
         pr_url = await publisher.create_pull_request(request, document_path)
-    return s3_url, pr_url
+    return s3_url, pr_url, guide.topic
 
 
 def _setup_aws_env(context: GuideContext) -> None:
-    """Load GitHub/Brave secrets from SSM into the environment (AWS only)."""
+    """Load GitHub/search/Slack secrets from SSM into the environment (AWS only)."""
     if not is_running_in_aws():
         return
     base = f"/{context.config.resources.project_name}/{context.config.resources.stage}"
     ssm_map = {
         SSMParams.GITHUB_TOKEN: EnvVars.GITHUB_TOKEN,
+        SSMParams.TAVILY_API_KEY: EnvVars.TAVILY_API_KEY,
         SSMParams.BRAVE_API_KEY: EnvVars.BRAVE_API_KEY,
         SSMParams.SLACK_BOT_TOKEN: EnvVars.SLACK_BOT_TOKEN,
     }
@@ -237,10 +246,15 @@ def _setup_aws_env(context: GuideContext) -> None:
 
 
 def _build_search_provider() -> WebSearchProvider:
+    # Prefer Tavily: it's built for LLM retrieval and returns cleaned page
+    # content directly. Fall back to Brave, then to no web search.
+    if os.getenv(EnvVars.TAVILY_API_KEY.value):
+        logger.info("Using Tavily Search for web research.")
+        return TavilySearchProvider()
     if os.getenv(EnvVars.BRAVE_API_KEY.value):
         logger.info("Using Brave Search for web research.")
         return BraveSearchProvider()
-    logger.info("No Brave API key set; researching supplied URLs only.")
+    logger.info("No search API key set; researching supplied URLs only.")
     return NullSearchProvider()
 
 

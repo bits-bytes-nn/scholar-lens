@@ -39,6 +39,7 @@ class EnvVars(str, Enum):
     # other users get a polite refusal — basic authorization for a bot that
     # spends Bedrock + AWS Batch budget.
     SLACK_ALLOWED_USER_IDS = "SLACK_ALLOWED_USER_IDS"
+    TAVILY_API_KEY = "TAVILY_API_KEY"
     TOPIC_ARN = "TOPIC_ARN"
     UPSTAGE_API_KEY = "UPSTAGE_API_KEY"
 
@@ -100,6 +101,7 @@ class SSMParams(AutoNamedEnum):
     GITHUB_TOKEN = "github-token"
     LANGCHAIN_API_KEY = "langchain-api-key"
     SLACK_BOT_TOKEN = "slack-bot-token"
+    TAVILY_API_KEY = "tavily-api-key"
     UPSTAGE_API_KEY = "upstage-api-key"
 
 

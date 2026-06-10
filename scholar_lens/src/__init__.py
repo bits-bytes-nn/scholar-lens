@@ -55,6 +55,7 @@ from .utils import (
 from .web_research import (
     BraveSearchProvider,
     NullSearchProvider,
+    TavilySearchProvider,
     WebResearcher,
     WebSearchProvider,
 )
@@ -102,6 +103,7 @@ __all__ = [
     "S3Handler",
     "S3Paths",
     "SSMParams",
+    "TavilySearchProvider",
     "TechGuide",
     "TechGuideGenerator",
     "TokenBudgetExceeded",

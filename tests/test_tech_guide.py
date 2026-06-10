@@ -534,7 +534,13 @@ class TestMainForwardsPrUrl:
         monkeypatch.setattr(
             tg,
             "_run",
-            AsyncMock(return_value=("s3://bucket/post.md", "https://gh/o/r/pull/7")),
+            AsyncMock(
+                return_value=(
+                    "s3://bucket/post.md",
+                    "https://gh/o/r/pull/7",
+                    "Getting Started with X",
+                )
+            ),
         )
 
         captured: dict = {}
@@ -545,3 +551,7 @@ class TestMainForwardsPrUrl:
         assert captured["pr_url"] == "https://gh/o/r/pull/7"
         assert captured["s3_url"] == "s3://bucket/post.md"
         assert captured["success"] is True
+        # The generated topic (not the source URL) becomes the Slack title; the
+        # source URL is passed separately for the muted sub-line.
+        assert captured["title"] == "Getting Started with X"
+        assert captured["sources"] == "https://docs.x.com"

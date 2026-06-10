@@ -218,9 +218,52 @@ class TestBuildResultMessage:
         )
         actions = next(b for b in blocks if b["type"] == "actions")
         urls = [e["url"] for e in actions["elements"]]
-        # PR button is present (and first); s3:// stays a code section, not a button.
+        # PR button is present (and first); s3:// stays a context line, not a button.
         assert "https://github.com/o/r/pull/42" in urls
         assert all(not u.startswith("s3://") for u in urls)
+
+    def test_s3_uri_shown_as_context_line(self) -> None:
+        # A non-clickable s3:// path goes in a muted context block, not a button
+        # and not a full-width section.
+        _, blocks = _build_result_message(
+            success=True,
+            artifact_label="guide",
+            title="Getting Started with Argo CD",
+            s3_url="s3://bucket/posts/argo.md",
+            error=None,
+        )
+        ctx = [b for b in blocks if b["type"] == "context"]
+        assert any("argo.md" in b["elements"][0]["text"] for b in ctx)
+        assert not any(b["type"] == "actions" for b in blocks)
+
+    def test_distinct_source_shown_as_subline(self) -> None:
+        # When the source differs from the title (a guide), it appears as a
+        # muted sub-line; when it matches the title it is omitted.
+        _, blocks = _build_result_message(
+            success=True,
+            artifact_label="guide",
+            title="Getting Started with Argo CD",
+            s3_url="s3://b/k.md",
+            sources="https://argo-cd.readthedocs.io/en/stable/",
+        )
+        ctx_text = " ".join(
+            b["elements"][0]["text"] for b in blocks if b["type"] == "context"
+        )
+        assert "argo-cd.readthedocs.io" in ctx_text
+
+    def test_matching_source_is_omitted(self) -> None:
+        _, blocks = _build_result_message(
+            success=True,
+            artifact_label="review",
+            title="Some Paper",
+            s3_url="https://blog/post",
+            sources="Some Paper",
+        )
+        # Source equals title → no redundant source sub-line.
+        ctx_text = " ".join(
+            b["elements"][0]["text"] for b in blocks if b["type"] == "context"
+        )
+        assert "Some Paper" not in ctx_text
 
     def test_short_collapses_and_caps(self) -> None:
         assert _short("a\n\n  b\tc") == "a b c"

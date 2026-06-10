@@ -28,6 +28,7 @@ DEFAULT_TIMEOUT: int = 30
 DEFAULT_MAX_SUBPAGES: int = 8
 DEFAULT_MAX_IMAGES_PER_PAGE: int = 12
 _BRAVE_WEB_SEARCH_URL = "https://api.search.brave.com/res/v1/web/search"
+_TAVILY_SEARCH_URL = "https://api.tavily.com/search"
 
 
 @dataclass(frozen=True)
@@ -35,6 +36,9 @@ class SearchResult:
     title: str
     url: str
     description: str = ""
+    # Cleaned, extracted page body when the search backend provides it (Tavily).
+    # Lets the corpus use the result directly instead of re-fetching the URL.
+    content: str = ""
 
 
 @dataclass
@@ -133,6 +137,57 @@ class BraveSearchProvider(WebSearchProvider):
         ]
 
 
+class TavilySearchProvider(WebSearchProvider):
+    """Tavily Search API provider (https://tavily.com).
+
+    Built for LLM/agent retrieval: it returns cleaned, extracted page content
+    alongside each result, so the corpus can use it directly without re-fetching
+    the URL (no extra SSRF surface) and with better signal than raw snippets.
+    """
+
+    def __init__(self, api_key: str | None = None, timeout: int = DEFAULT_TIMEOUT):
+        resolved = api_key or os.environ.get(EnvVars.TAVILY_API_KEY.value)
+        if not resolved:
+            raise ValueError(
+                f"{EnvVars.TAVILY_API_KEY.value} must be set to use Tavily Search."
+            )
+        self.api_key: str = resolved
+        self.timeout = timeout
+
+    def search(self, query: str, *, count: int = 5) -> list[SearchResult]:
+        payload: dict[str, object] = {
+            "query": query,
+            "max_results": count,
+            "search_depth": "advanced",
+            "include_raw_content": True,
+        }
+        try:
+            response = httpx.post(
+                _TAVILY_SEARCH_URL,
+                headers={"Authorization": f"Bearer {self.api_key}"},
+                json=payload,
+                timeout=self.timeout,
+            )
+            response.raise_for_status()
+            data = response.json()
+        except (httpx.HTTPError, ValueError) as e:
+            # ValueError covers JSONDecodeError on a malformed/truncated response.
+            logger.warning("Tavily search failed for '%s': %s", query, e)
+            return []
+        results = data.get("results", [])
+        return [
+            SearchResult(
+                title=r.get("title", ""),
+                url=r.get("url", ""),
+                description=r.get("content", ""),
+                # raw_content is the cleaned full page; fall back to the snippet.
+                content=(r.get("raw_content") or r.get("content") or ""),
+            )
+            for r in results
+            if r.get("url")
+        ]
+
+
 class WebResearcher:
     """Fetches pages, discovers in-scope sub-URLs, and extracts text + images."""
 
@@ -214,11 +269,13 @@ class WebResearcher:
         the seed pages once, derive queries from them, then broaden the corpus
         without re-fetching the seed URLs.
 
-        ``fetch_top`` > 0 also fetches that many of the highest-ranked, not-yet-
-        visited result URLs into ``corpus.pages`` so the gathered material
-        actually reaches the writer (search results alone are title+snippet
-        only). Fetches are deduped against pages already in the corpus and pass
-        through the same SSRF guard as every other fetch.
+        ``fetch_top`` > 0 also brings that many of the highest-ranked, not-yet-
+        visited results into ``corpus.pages`` so the gathered material actually
+        reaches the writer (a result list alone is title+snippet only). A result
+        that already carries cleaned ``content`` (Tavily) is used directly — no
+        re-fetch, so no extra SSRF surface; otherwise the URL is fetched through
+        the same SSRF guard as every other fetch (Brave). Deduped against pages
+        already in the corpus.
         """
         for query in queries:
             corpus.search_results.extend(self.search_provider.search(query))
@@ -227,20 +284,31 @@ class WebResearcher:
             return
 
         visited = {_normalize_url(p.url) for p in corpus.pages}
-        fetched = 0
+        added = 0
         for result in corpus.search_results:
-            if fetched >= fetch_top:
+            if added >= fetch_top:
                 break
             norm = _normalize_url(result.url)
             if not norm or norm in visited:
                 continue
             visited.add(norm)
+            if result.content:
+                # Backend already returned cleaned page content; use it directly.
+                corpus.pages.append(
+                    PageContent(
+                        url=result.url,
+                        title=result.title or result.url,
+                        text=result.content,
+                    )
+                )
+                added += 1
+                continue
             page = self._fetch_page(result.url)
             if page is not None:
                 corpus.pages.append(page)
-                fetched += 1
+                added += 1
         logger.info(
-            "Fetched %d/%d search-result pages into the corpus.", fetched, fetch_top
+            "Added %d/%d search-result pages into the corpus.", added, fetch_top
         )
 
     def _fetch_page(self, url: str) -> PageContent | None:

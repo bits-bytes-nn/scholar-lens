@@ -36,6 +36,7 @@ def post_slack_result(
     s3_url: str | None,
     pr_url: str | None = None,
     error: str | None = None,
+    sources: str | None = None,
     bot_token: str | None = None,
 ) -> None:
     """Best-effort post of a completion message to Slack.
@@ -59,6 +60,7 @@ def post_slack_result(
         s3_url=s3_url,
         pr_url=pr_url,
         error=error,
+        sources=sources,
     )
     try:
         from slack_sdk import WebClient
@@ -94,21 +96,29 @@ def _build_result_message(
     s3_url: str | None,
     pr_url: str | None = None,
     error: str | None = None,
+    sources: str | None = None,
 ) -> tuple[str, list[dict]]:
     """Build (fallback_text, Block Kit blocks) for a completion message."""
     emoji, nice = _ARTIFACT_META.get(
         artifact_label.lower(), (":robot_face:", artifact_label.capitalize())
     )
     safe_title = mrkdwn_safe(title)
+    # Show the source(s) as a muted sub-line only when they differ from the
+    # title (e.g. a guide's title is the generated topic, not its source URL).
+    source_line = None
+    if sources and mrkdwn_safe(sources) != safe_title:
+        source_line = mrkdwn_safe(sources)
 
     if success:
-        fallback = f"{nice} ready for {title}"
+        fallback = f"{nice} ready: {title}"
         blocks: list[dict] = [
             header(f"{emoji} {nice} ready"),
             section(f"*{safe_title}*"),
         ]
+        if source_line:
+            blocks.append(context(f":link: {source_line}"))
         # Clickable buttons for any https links (blog PR, http output); s3:// URIs
-        # aren't clickable so they're shown as code instead.
+        # aren't clickable, so they go in a muted context line instead.
         buttons = []
         if pr_url and pr_url.startswith(("http://", "https://")):
             buttons.append(_link_button(":github: View pull request", pr_url))
@@ -117,15 +127,15 @@ def _build_result_message(
         if buttons:
             blocks.append({"type": "actions", "elements": buttons})
         if s3_url and not s3_url.startswith(("http://", "https://")):
-            blocks.append(
-                section(f":open_file_folder: Output: `{mrkdwn_safe(s3_url)}`")
-            )
+            blocks.append(context(f":floppy_disk: `{mrkdwn_safe(s3_url)}`"))
     else:
-        fallback = f"{nice} failed for {title}"
+        fallback = f"{nice} failed: {title}"
         blocks = [
             header(f":x: {nice} couldn't be completed"),
             section(f"*{safe_title}*"),
         ]
+        if source_line:
+            blocks.append(context(f":link: {source_line}"))
         if error:
             blocks.append({"type": "divider"})
             blocks.append(
