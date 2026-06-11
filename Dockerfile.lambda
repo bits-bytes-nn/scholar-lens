@@ -7,6 +7,12 @@
 # runs in AWS Batch from the separate Dockerfile.
 FROM public.ecr.aws/lambda/python:3.12
 
+# GitPython is pulled in transitively (src.runtime -> publisher) but the worker
+# never runs a git command, and this slim image has no git binary. Without this,
+# `import git` fails at import time ("Bad git executable"). Quiet refresh lets the
+# import succeed; any actual git call (which the worker never makes) would error.
+ENV GIT_PYTHON_REFRESH=quiet
+
 # Install the worker's dependency subset into the Lambda task root.
 COPY scholar_lens/requirements-lambda.txt .
 RUN python3.12 -m pip install --no-cache-dir --upgrade pip setuptools wheel && \

@@ -132,7 +132,30 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     raw_body = _raw_body(event)
 
     if not verify_signature(raw_body, headers, _get_signing_secret()):
-        logger.warning("Slack signature verification failed.")
+        # Diagnostic detail (no secret leaked): a mismatch almost always means
+        # the raw body we hash differs from what Slack signed (encoding, trailing
+        # bytes, header casing). Log enough to pinpoint which.
+        ts = headers.get("x-slack-request-timestamp", "")
+        recomputed = (
+            "v0="
+            + hmac.new(
+                _get_signing_secret().encode(),
+                f"v0:{ts}:{raw_body}".encode(),
+                hashlib.sha256,
+            ).hexdigest()
+        )
+        logger.warning(
+            "Slack signature verification failed. "
+            "is_b64=%s body_len=%d ts=%r content_type=%r "
+            "recv_sig=%r computed_sig=%r body_head=%r",
+            event.get("isBase64Encoded"),
+            len(raw_body),
+            ts,
+            headers.get("content-type"),
+            headers.get("x-slack-signature"),
+            recomputed,
+            raw_body[:80],
+        )
         return {"statusCode": 401, "body": "invalid signature"}
 
     try:

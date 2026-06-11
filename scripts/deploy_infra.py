@@ -13,6 +13,12 @@ from aws_cdk import (
     Tags,
 )
 from aws_cdk import (
+    aws_apigatewayv2 as apigwv2,
+)
+from aws_cdk import (
+    aws_apigatewayv2_integrations as apigwv2_integrations,
+)
+from aws_cdk import (
     aws_batch as batch,
 )
 from aws_cdk import (
@@ -357,17 +363,26 @@ class PaperReviewStack(Stack):
             )
         )
 
-        # AWS Batch: submit jobs only to this stack's queue + job definition
+        # AWS Batch: submit jobs only to this stack's queue + job definitions
         # (needed when the bot/script triggers runs). SubmitJob supports
         # resource-level ARNs; DescribeJobs/ListJobs do not and require "*".
-        batch_name = self._get_resource_name("paper-review")
+        # The queue is named "<project>-<stage>-paper-review", but there are TWO
+        # job definitions ("...-paper-review" and "...-tech-guide") and job names
+        # like "...-review-*"/"...-guide-*". Scope to the whole "<project>-<stage>"
+        # prefix so guide submissions aren't denied (was pinned to paper-review*).
+        stack_prefix = f"{self.project_name}-{self.stage}"
         statements.append(
             iam.PolicyStatement(
                 sid="BatchSubmit",
                 actions=["batch:SubmitJob"],
                 resources=[
-                    self._aws_partition_arn("batch", f"job-queue/{batch_name}"),
-                    self._aws_partition_arn("batch", f"job-definition/{batch_name}*"),
+                    self._aws_partition_arn(
+                        "batch", f"job-queue/{stack_prefix}-paper-review"
+                    ),
+                    self._aws_partition_arn(
+                        "batch", f"job-definition/{stack_prefix}-*"
+                    ),
+                    self._aws_partition_arn("batch", f"job/{stack_prefix}-*"),
                 ],
             )
         )
@@ -762,16 +777,32 @@ class PaperReviewStack(Stack):
             )
         )
 
-        # Public Function URL — Slack cannot sign SigV4, so auth is NONE and
-        # security is the in-handler HMAC signature check. No CORS (server-to-
-        # server). Paste this URL into the Slack app's Event Subscriptions.
-        function_url = receiver_fn.add_function_url(
-            auth_type=lambda_.FunctionUrlAuthType.NONE
+        # Public ingress via HTTP API Gateway. We do NOT use a Lambda Function
+        # URL: this account's SCP guardrails block anonymous (Principal:*)
+        # lambda:InvokeFunctionUrl, so an auth-NONE Function URL returns 403.
+        # API Gateway (execute-api) is permitted and is the supported public
+        # entrypoint here. Slack cannot sign SigV4, so the route is unauthorized
+        # at the gateway and security is the in-handler HMAC signature check. The
+        # receiver already speaks API Gateway payload v2.0 (body/isBase64Encoded/
+        # lowercased headers, {statusCode, body} response).
+        http_api = apigwv2.HttpApi(
+            self,
+            "SlackHttpApi",
+            api_name=self._get_resource_name("slack-events"),
+            description="Slack Events API ingress for Paper Bot",
         )
+        http_api.add_routes(
+            path="/slack/events",
+            methods=[apigwv2.HttpMethod.POST],
+            integration=apigwv2_integrations.HttpLambdaIntegration(
+                "SlackReceiverIntegration", handler=receiver_fn
+            ),
+        )
+        request_url = f"{http_api.api_endpoint}/slack/events"
         CfnOutput(
             self,
             "SlackEventsRequestUrl",
-            value=function_url.url,
+            value=request_url,
             description="Slack Events API Request URL (paste into Event Subscriptions)",
         )
 
