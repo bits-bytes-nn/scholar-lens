@@ -233,10 +233,8 @@ class PaperReviewStack(Stack):
     def _aws_partition_arn(self, service: str, resource: str) -> str:
         return f"arn:{self.partition}:{service}:{self.region}:{self.account}:{resource}"
 
-    def _create_job_policy_statements(self) -> list[iam.PolicyStatement]:
-        """Least-privilege statements for the application running in-container."""
-        statements: list[iam.PolicyStatement] = []
-
+    def _bedrock_statements(self) -> list[iam.PolicyStatement]:
+        """Bedrock invoke + discovery (shared by the Batch job and Slack worker)."""
         # Bedrock: invoke foundation models and inference profiles in the
         # default region and the (cross-region) Bedrock region.
         bedrock_regions = {self.region}
@@ -259,7 +257,7 @@ class PaperReviewStack(Stack):
             bedrock_resources.append(
                 f"arn:{self.partition}:bedrock:{region}:{self.account}:inference-profile/*"
             )
-        statements.append(
+        return [
             iam.PolicyStatement(
                 sid="BedrockInvoke",
                 actions=[
@@ -270,13 +268,11 @@ class PaperReviewStack(Stack):
                     "bedrock:CountTokens",
                 ],
                 resources=bedrock_resources,
-            )
-        )
-        # Inference-profile/model discovery (used to resolve cross-region model
-        # IDs) are list/describe actions that do not support resource-level ARNs,
-        # so they require "*". We constrain them to the regions we actually call
-        # via an aws:RequestedRegion condition.
-        statements.append(
+            ),
+            # Inference-profile/model discovery (used to resolve cross-region model
+            # IDs) are list/describe actions that do not support resource-level
+            # ARNs, so they require "*". We constrain them to the regions we
+            # actually call via an aws:RequestedRegion condition.
             iam.PolicyStatement(
                 sid="BedrockDiscovery",
                 actions=[
@@ -288,8 +284,55 @@ class PaperReviewStack(Stack):
                 conditions={
                     "StringEquals": {"aws:RequestedRegion": sorted(bedrock_regions)}
                 },
-            )
+            ),
+        ]
+
+    def _ssm_read_statement(self) -> iam.PolicyStatement:
+        """Read only this project's SSM parameters (shared)."""
+        return iam.PolicyStatement(
+            sid="SsmReadParameters",
+            actions=["ssm:GetParameter", "ssm:GetParameters"],
+            resources=[
+                self._aws_partition_arn(
+                    "ssm", f"parameter/{self.project_name}/{self.stage}/*"
+                )
+            ],
         )
+
+    def _batch_statements(self) -> list[iam.PolicyStatement]:
+        """Submit/describe Batch jobs on this stack's queue + definitions (shared)."""
+        # AWS Batch: submit jobs only to this stack's queue + job definitions
+        # (needed when the bot/script triggers runs). SubmitJob supports
+        # resource-level ARNs; DescribeJobs/ListJobs do not and require "*".
+        # The queue is named "<project>-<stage>-paper-review", but there are TWO
+        # job definitions ("...-paper-review" and "...-tech-guide") and job names
+        # like "...-review-*"/"...-guide-*". Scope to the whole "<project>-<stage>"
+        # prefix so guide submissions aren't denied (was pinned to paper-review*).
+        stack_prefix = f"{self.project_name}-{self.stage}"
+        return [
+            iam.PolicyStatement(
+                sid="BatchSubmit",
+                actions=["batch:SubmitJob"],
+                resources=[
+                    self._aws_partition_arn(
+                        "batch", f"job-queue/{stack_prefix}-paper-review"
+                    ),
+                    self._aws_partition_arn(
+                        "batch", f"job-definition/{stack_prefix}-*"
+                    ),
+                    self._aws_partition_arn("batch", f"job/{stack_prefix}-*"),
+                ],
+            ),
+            iam.PolicyStatement(
+                sid="BatchDescribe",
+                actions=["batch:DescribeJobs", "batch:ListJobs"],
+                resources=["*"],
+            ),
+        ]
+
+    def _create_job_policy_statements(self) -> list[iam.PolicyStatement]:
+        """Least-privilege statements for the application running in-container."""
+        statements: list[iam.PolicyStatement] = list(self._bedrock_statements())
 
         # S3: read/write only within this project's bucket + prefix.
         if self.s3_bucket_name:
@@ -350,49 +393,9 @@ class PaperReviewStack(Stack):
             )
         )
 
-        # SSM: read only this project's parameters.
-        statements.append(
-            iam.PolicyStatement(
-                sid="SsmReadParameters",
-                actions=["ssm:GetParameter", "ssm:GetParameters"],
-                resources=[
-                    self._aws_partition_arn(
-                        "ssm", f"parameter/{self.project_name}/{self.stage}/*"
-                    )
-                ],
-            )
-        )
-
-        # AWS Batch: submit jobs only to this stack's queue + job definitions
-        # (needed when the bot/script triggers runs). SubmitJob supports
-        # resource-level ARNs; DescribeJobs/ListJobs do not and require "*".
-        # The queue is named "<project>-<stage>-paper-review", but there are TWO
-        # job definitions ("...-paper-review" and "...-tech-guide") and job names
-        # like "...-review-*"/"...-guide-*". Scope to the whole "<project>-<stage>"
-        # prefix so guide submissions aren't denied (was pinned to paper-review*).
-        stack_prefix = f"{self.project_name}-{self.stage}"
-        statements.append(
-            iam.PolicyStatement(
-                sid="BatchSubmit",
-                actions=["batch:SubmitJob"],
-                resources=[
-                    self._aws_partition_arn(
-                        "batch", f"job-queue/{stack_prefix}-paper-review"
-                    ),
-                    self._aws_partition_arn(
-                        "batch", f"job-definition/{stack_prefix}-*"
-                    ),
-                    self._aws_partition_arn("batch", f"job/{stack_prefix}-*"),
-                ],
-            )
-        )
-        statements.append(
-            iam.PolicyStatement(
-                sid="BatchDescribe",
-                actions=["batch:DescribeJobs", "batch:ListJobs"],
-                resources=["*"],
-            )
-        )
+        # SSM read + Batch submit/describe (shared with the Slack worker).
+        statements.append(self._ssm_read_statement())
+        statements.extend(self._batch_statements())
         return statements
 
     def _create_job_role(self) -> iam.Role:
@@ -709,7 +712,15 @@ class PaperReviewStack(Stack):
                 )
             ],
         )
-        for statement in self._create_job_policy_statements():
+        # Least privilege: the worker only parses intent (Bedrock), reads the bot
+        # token (SSM), and submits a Batch job. It does NOT touch S3/SNS/KMS/
+        # CloudWatch, so it gets just those three statement groups — not the full
+        # job policy.
+        for statement in (
+            *self._bedrock_statements(),
+            self._ssm_read_statement(),
+            *self._batch_statements(),
+        ):
             worker_role.add_to_policy(statement)
 
         worker_fn = lambda_.DockerImageFunction(

@@ -52,22 +52,27 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     user = inner.get("user")
     text = inner.get("text", "")
 
-    # Load the Slack bot token from SSM into the environment (AWS-only no-op
-    # guard lives inside load_secrets_from_ssm; Lambda counts as "in AWS").
-    run_context = build_context(Config.load())
-    load_secrets_from_ssm(
-        run_context, {SSMParams.SLACK_BOT_TOKEN: EnvVars.SLACK_BOT_TOKEN}
-    )
-
-    if not is_user_authorized(user):
-        logger.warning("Unauthorized Slack user '%s' attempted a job.", user)
-        if channel:
-            _post_message(channel, thread_ts, PaperBot._unauthorized_reply())
-        return {"ok": True}
-
-    bot = build_bot(run_context.config)
-    slack_context = SlackContext(channel=channel, thread_ts=thread_ts, user=user)
+    # The whole flow — secret load, bot build, intent parse, dispatch — is wrapped
+    # so ANY failure still surfaces in the thread. The receiver suppresses Slack
+    # retries and this Lambda has retry_attempts=0, so a silent crash here would
+    # leave the user with no response at all (which is exactly what an early
+    # import/SSM/Bedrock error would otherwise cause).
     try:
+        # Load the Slack bot token from SSM into the environment (AWS-only no-op
+        # guard lives inside load_secrets_from_ssm; Lambda counts as "in AWS").
+        run_context = build_context(Config.load())
+        load_secrets_from_ssm(
+            run_context, {SSMParams.SLACK_BOT_TOKEN: EnvVars.SLACK_BOT_TOKEN}
+        )
+
+        if not is_user_authorized(user):
+            logger.warning("Unauthorized Slack user '%s' attempted a job.", user)
+            if channel:
+                _post_message(channel, thread_ts, PaperBot._unauthorized_reply())
+            return {"ok": True}
+
+        bot = build_bot(run_context.config)
+        slack_context = SlackContext(channel=channel, thread_ts=thread_ts, user=user)
         reply = asyncio.run(bot.handle_message(text, slack_context=slack_context))
     except Exception as e:  # noqa: BLE001 - report failure to the thread, don't crash
         logger.error("Worker failed to handle message: %s", e, exc_info=True)

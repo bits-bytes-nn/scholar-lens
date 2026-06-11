@@ -1,4 +1,4 @@
-"""Slack Events API receiver (AWS Lambda behind a Function URL).
+"""Slack Events API receiver (AWS Lambda behind an HTTP API Gateway).
 
 This is the fast inbound edge of Paper Bot. Slack requires an HTTP 200 within
 three seconds; intent parsing is a Bedrock LLM call that can exceed that on a
@@ -6,6 +6,10 @@ cold start. So this receiver does only cheap, bounded work — verify the reques
 signature, answer the URL-verification handshake, drop Slack retries, and
 async-invoke the heavy worker Lambda — then returns 200 immediately. The worker
 (``lambda_worker.py``) does the intent parse + Batch dispatch off the 3s clock.
+
+It sits behind an API Gateway HTTP API (payload format v2.0), not a Lambda
+Function URL: this account's SCP guardrails block anonymous Function-URL invokes.
+The gateway leaves the route unauthorized and security is the HMAC check below.
 
 IMPORTANT: this module is packaged as a standalone Lambda zip and must NOT import
 the ``scholar_lens`` package — importing it would drag in langchain/boto-heavy
@@ -72,7 +76,7 @@ def _raw_body(event: dict[str, Any]) -> str:
     """Return the exact raw request body string.
 
     The HMAC must be computed over the bytes Slack sent, so we base64-decode when
-    the Function URL flags the body as encoded and never re-serialize the JSON.
+    the gateway flags the body as encoded and never re-serialize the JSON.
     """
     body = event.get("body") or ""
     if event.get("isBase64Encoded"):
@@ -127,34 +131,22 @@ def _invoke_worker(inner_event: dict[str, Any]) -> None:
 
 
 def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
-    """Lambda Function URL handler for Slack Events API requests."""
+    """API Gateway (HTTP API v2.0) handler for Slack Events API requests."""
     headers = _lower_headers(event.get("headers"))
     raw_body = _raw_body(event)
 
     if not verify_signature(raw_body, headers, _get_signing_secret()):
-        # Diagnostic detail (no secret leaked): a mismatch almost always means
-        # the raw body we hash differs from what Slack signed (encoding, trailing
-        # bytes, header casing). Log enough to pinpoint which.
-        ts = headers.get("x-slack-request-timestamp", "")
-        recomputed = (
-            "v0="
-            + hmac.new(
-                _get_signing_secret().encode(),
-                f"v0:{ts}:{raw_body}".encode(),
-                hashlib.sha256,
-            ).hexdigest()
-        )
+        # Metadata-only diagnostics (never the body or secret): a mismatch almost
+        # always means the raw body we hash differs from what Slack signed
+        # (encoding, header casing) or the secret in SSM is stale.
         logger.warning(
             "Slack signature verification failed. "
-            "is_b64=%s body_len=%d ts=%r content_type=%r "
-            "recv_sig=%r computed_sig=%r body_head=%r",
+            "is_b64=%s body_len=%d has_ts=%s has_sig=%s content_type=%r",
             event.get("isBase64Encoded"),
             len(raw_body),
-            ts,
+            bool(headers.get("x-slack-request-timestamp")),
+            bool(headers.get("x-slack-signature")),
             headers.get("content-type"),
-            headers.get("x-slack-signature"),
-            recomputed,
-            raw_body[:80],
         )
         return {"statusCode": 401, "body": "invalid signature"}
 
