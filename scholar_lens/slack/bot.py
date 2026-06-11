@@ -22,7 +22,7 @@ import boto3
 from ..configs import Config
 from ..src.aws_helpers import get_ssm_param_value
 from ..src.constants import EnvVars, LanguageModelId, SSMParams
-from ..src.logger import logger
+from ..src.logger import is_running_in_aws, logger
 from . import blocks
 from .dispatcher import JobDispatcher, SlackContext, utc_timestamp
 from .intent import IntentParser, ParsedIntent
@@ -205,8 +205,15 @@ class PaperBot:
 def build_bot(config: Config | None = None) -> PaperBot:
     """Construct a :class:`PaperBot` from configuration + SSM/Batch details."""
     config = config or Config.load()
-    profile_name = os.getenv(EnvVars.AWS_PROFILE_NAME.value) or (
-        config.resources.profile_name
+    # In AWS (Batch/Lambda) credentials come from the execution role, so the
+    # profile must be the env var (usually unset -> default chain), NOT the
+    # config's local profile — a configured profile has no ~/.aws on Lambda and
+    # would crash. Locally we fall back to the config profile. Mirrors
+    # runtime.build_context.
+    profile_name = (
+        os.getenv(EnvVars.AWS_PROFILE_NAME.value)
+        if is_running_in_aws()
+        else config.resources.profile_name
     )
     default_session = boto3.Session(
         profile_name=profile_name, region_name=config.resources.default_region_name

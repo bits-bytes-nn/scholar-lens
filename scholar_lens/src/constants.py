@@ -28,6 +28,14 @@ class EnvVars(str, Enum):
     LOG_LEVEL = "LOG_LEVEL"
     SLACK_BOT_TOKEN = "SLACK_BOT_TOKEN"
     SLACK_APP_TOKEN = "SLACK_APP_TOKEN"
+    # Slack app "Signing Secret" (Basic Information -> App Credentials). The
+    # Events API receiver verifies the HMAC of each inbound request with it. This
+    # is distinct from SLACK_BOT_TOKEN (xoxb-) and SLACK_APP_TOKEN (xapp-, Socket
+    # Mode only).
+    SLACK_SIGNING_SECRET = "SLACK_SIGNING_SECRET"
+    # Name of the worker Lambda that the Events API receiver async-invokes to do
+    # intent parsing + Batch dispatch (set on the receiver function by CDK).
+    WORKER_FUNCTION_NAME = "WORKER_FUNCTION_NAME"
     # Optional: the Slack app id this bot is allowed to bind to. When set, the
     # bot fails fast at startup if the SLACK_BOT_TOKEN belongs to a different app
     # (e.g. a token accidentally shared with another bot like OmniSummary), which
@@ -101,6 +109,7 @@ class SSMParams(AutoNamedEnum):
     GITHUB_TOKEN = "github-token"
     LANGCHAIN_API_KEY = "langchain-api-key"
     SLACK_BOT_TOKEN = "slack-bot-token"
+    SLACK_SIGNING_SECRET = "slack-signing-secret"
     TAVILY_API_KEY = "tavily-api-key"
     UPSTAGE_API_KEY = "upstage-api-key"
 

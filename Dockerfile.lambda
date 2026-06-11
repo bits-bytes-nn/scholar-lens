@@ -1,0 +1,19 @@
+# Slim image for the Slack worker Lambda (scholar_lens.slack.lambda_worker).
+#
+# Built on the official AWS Lambda Python base image so the Runtime Interface
+# Client is already wired up — no awslambdaric/entrypoint gymnastics. Uses the
+# slim requirements set (no faiss/pymupdf/etc.) since the worker only parses
+# intent and dispatches a Batch job. The heavy paper-processing pipeline still
+# runs in AWS Batch from the separate Dockerfile.
+FROM public.ecr.aws/lambda/python:3.12
+
+# Install the worker's dependency subset into the Lambda task root.
+COPY scholar_lens/requirements-lambda.txt .
+RUN python3.12 -m pip install --no-cache-dir --upgrade pip setuptools wheel && \
+    python3.12 -m pip install --no-cache-dir -r requirements-lambda.txt
+
+# Application code.
+COPY scholar_lens ${LAMBDA_TASK_ROOT}/scholar_lens
+
+# handler = module.function
+CMD ["scholar_lens.slack.lambda_worker.handler"]

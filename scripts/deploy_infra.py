@@ -6,6 +6,7 @@ from typing import Any
 import aws_cdk as core
 import boto3
 from aws_cdk import (
+    CfnOutput,
     Duration,
     RemovalPolicy,
     Stack,
@@ -39,6 +40,9 @@ from aws_cdk import (
     aws_kms as kms,
 )
 from aws_cdk import (
+    aws_lambda as lambda_,
+)
+from aws_cdk import (
     aws_logs as logs,
 )
 from aws_cdk import (
@@ -66,6 +70,7 @@ SECRET_SSM_PARAMS = {
     SSMParams.BRAVE_API_KEY,
     SSMParams.TAVILY_API_KEY,
     SSMParams.SLACK_BOT_TOKEN,
+    SSMParams.SLACK_SIGNING_SECRET,
 }
 
 
@@ -112,6 +117,7 @@ class PaperReviewStack(Stack):
         brave_api_key: str | None = None,
         tavily_api_key: str | None = None,
         slack_bot_token: str | None = None,
+        slack_signing_secret: str | None = None,
         s3_bucket_name: str | None = None,
         s3_prefix: str = "",
         bedrock_region_name: str | None = None,
@@ -149,10 +155,12 @@ class PaperReviewStack(Stack):
             brave_api_key=brave_api_key,
             tavily_api_key=tavily_api_key,
             slack_bot_token=slack_bot_token,
+            slack_signing_secret=slack_signing_secret,
             job_queue_name=job_queue.job_queue_name,
             job_definition_name=review_job_def.job_definition_name,
             guide_job_definition_name=guide_job_def.job_definition_name,
         )
+        self._create_slack_functions()
         self._create_observability()
 
     def _get_resource_name(self, suffix: str) -> str:
@@ -598,6 +606,7 @@ class PaperReviewStack(Stack):
         brave_api_key: str | None,
         tavily_api_key: str | None,
         slack_bot_token: str | None,
+        slack_signing_secret: str | None,
         job_queue_name: str,
         job_definition_name: str,
         guide_job_definition_name: str,
@@ -610,6 +619,7 @@ class PaperReviewStack(Stack):
             SSMParams.BRAVE_API_KEY: brave_api_key,
             SSMParams.TAVILY_API_KEY: tavily_api_key,
             SSMParams.SLACK_BOT_TOKEN: slack_bot_token,
+            SSMParams.SLACK_SIGNING_SECRET: slack_signing_secret,
             SSMParams.BATCH_JOB_QUEUE: job_queue_name,
             SSMParams.BATCH_JOB_DEFINITION: job_definition_name,
             SSMParams.GUIDE_JOB_QUEUE: job_queue_name,
@@ -623,6 +633,7 @@ class PaperReviewStack(Stack):
             SSMParams.BRAVE_API_KEY: "Brave Search API Key",
             SSMParams.TAVILY_API_KEY: "Tavily Search API Key",
             SSMParams.SLACK_BOT_TOKEN: "Slack Bot Token (chat.postMessage)",
+            SSMParams.SLACK_SIGNING_SECRET: "Slack Signing Secret (Events API request verification)",
             SSMParams.BATCH_JOB_QUEUE: "AWS Batch Job Queue for Scholar Lens",
             SSMParams.BATCH_JOB_DEFINITION: "AWS Batch Job Definition for paper review/summary",
             SSMParams.GUIDE_JOB_QUEUE: "AWS Batch Job Queue for Scholar Lens tech guides",
@@ -648,6 +659,121 @@ class PaperReviewStack(Stack):
                     description=descriptions[param_enum],
                     tier=ssm.ParameterTier.STANDARD,
                 )
+
+    def _create_slack_functions(self) -> None:
+        """Create the Slack Events API receiver + worker Lambdas.
+
+        Inbound Slack mentions hit a public Function URL on the *receiver* (a tiny
+        zip Lambda) which verifies the request signature and async-invokes the
+        *worker* (a container Lambda) to parse intent and dispatch a Batch job.
+        This replaces the old local Socket Mode process. Result posting stays on
+        the Batch side (notifier.post_slack_result), unchanged.
+        """
+        repo_root = str(Path(__file__).parent.parent)
+
+        # Worker: container Lambda on the slim Lambda image. It parses intent
+        # (Bedrock) and submits a Batch job, so it reuses the job-role policy
+        # (Bedrock invoke + SSM read + Batch submit). No VPC — Slack, Bedrock and
+        # SSM are public endpoints, and a VPC Lambda only adds ENI cold-start.
+        worker_log_group = logs.LogGroup(
+            self,
+            "SlackWorkerLogGroup",
+            log_group_name=f"/aws/lambda/{self._get_resource_name('slack-worker')}",
+            retention=logs.RetentionDays.ONE_MONTH,
+            removal_policy=RemovalPolicy.DESTROY,
+        )
+        worker_role = iam.Role(
+            self,
+            "SlackWorkerRole",
+            assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
+            description="Role for the Slack worker Lambda (intent parse + dispatch)",
+            role_name=self._get_resource_name("slack-worker"),
+            managed_policies=[
+                iam.ManagedPolicy.from_aws_managed_policy_name(
+                    "service-role/AWSLambdaBasicExecutionRole"
+                )
+            ],
+        )
+        for statement in self._create_job_policy_statements():
+            worker_role.add_to_policy(statement)
+
+        worker_fn = lambda_.DockerImageFunction(
+            self,
+            "SlackWorkerFunction",
+            function_name=self._get_resource_name("slack-worker"),
+            code=lambda_.DockerImageCode.from_image_asset(
+                directory=repo_root,
+                file="Dockerfile.lambda",
+                exclude=["cdk.out", ".venv", ".git", "**/__pycache__"],
+            ),
+            architecture=lambda_.Architecture.X86_64,
+            memory_size=2048,
+            timeout=Duration.seconds(120),
+            role=worker_role,
+            log_group=worker_log_group,
+            # No async retries: a failed invoke must NOT silently re-dispatch a
+            # (costly) Batch job. Slack-retry suppression lives in the receiver.
+            retry_attempts=0,
+            environment={EnvVars.LOG_LEVEL.value: "INFO"},
+        )
+
+        # Receiver: tiny zip Lambda (stdlib + runtime boto3). Packages ONLY
+        # lambda_receiver.py so it never imports the heavy scholar_lens package.
+        receiver_log_group = logs.LogGroup(
+            self,
+            "SlackReceiverLogGroup",
+            log_group_name=f"/aws/lambda/{self._get_resource_name('slack-receiver')}",
+            retention=logs.RetentionDays.ONE_MONTH,
+            removal_policy=RemovalPolicy.DESTROY,
+        )
+        receiver_fn = lambda_.Function(
+            self,
+            "SlackReceiverFunction",
+            function_name=self._get_resource_name("slack-receiver"),
+            runtime=lambda_.Runtime.PYTHON_3_12,
+            handler="lambda_receiver.handler",
+            code=lambda_.Code.from_asset(
+                str(Path(__file__).parent.parent / "scholar_lens" / "slack"),
+                exclude=["*", "!lambda_receiver.py"],
+            ),
+            memory_size=256,
+            timeout=Duration.seconds(10),
+            log_group=receiver_log_group,
+            environment={
+                EnvVars.WORKER_FUNCTION_NAME.value: worker_fn.function_name,
+                "PROJECT": self.project_name,
+                "STAGE": self.stage,
+                EnvVars.LOG_LEVEL.value: "INFO",
+            },
+        )
+        # Receiver may invoke the worker and read the signing secret from SSM.
+        worker_fn.grant_invoke(receiver_fn)
+        receiver_fn.add_to_role_policy(
+            iam.PolicyStatement(
+                sid="SsmReadSigningSecret",
+                actions=["ssm:GetParameter"],
+                resources=[
+                    self._aws_partition_arn(
+                        "ssm",
+                        f"parameter/{self.project_name}/{self.stage}/"
+                        f"{SSMParams.SLACK_SIGNING_SECRET.value}",
+                    )
+                ],
+            )
+        )
+
+        # Public Function URL — Slack cannot sign SigV4, so auth is NONE and
+        # security is the in-handler HMAC signature check. No CORS (server-to-
+        # server). Paste this URL into the Slack app's Event Subscriptions.
+        function_url = receiver_fn.add_function_url(
+            auth_type=lambda_.FunctionUrlAuthType.NONE
+        )
+        CfnOutput(
+            self,
+            "SlackEventsRequestUrl",
+            value=function_url.url,
+            description="Slack Events API Request URL (paste into Event Subscriptions)",
+        )
 
     def _create_observability(self) -> None:
         """Wire failure/error/cost alarms to the (email-subscribed) SNS topic."""
@@ -780,6 +906,7 @@ def main() -> None:
             brave_api_key=os.getenv(EnvVars.BRAVE_API_KEY.value),
             tavily_api_key=os.getenv(EnvVars.TAVILY_API_KEY.value),
             slack_bot_token=os.getenv(EnvVars.SLACK_BOT_TOKEN.value),
+            slack_signing_secret=os.getenv(EnvVars.SLACK_SIGNING_SECRET.value),
             s3_bucket_name=config.resources.s3_bucket_name,
             s3_prefix=config.resources.s3_prefix,
             bedrock_region_name=config.resources.bedrock_region_name,
@@ -801,6 +928,9 @@ def main() -> None:
                 SSMParams.BRAVE_API_KEY: os.getenv(EnvVars.BRAVE_API_KEY.value),
                 SSMParams.TAVILY_API_KEY: os.getenv(EnvVars.TAVILY_API_KEY.value),
                 SSMParams.SLACK_BOT_TOKEN: os.getenv(EnvVars.SLACK_BOT_TOKEN.value),
+                SSMParams.SLACK_SIGNING_SECRET: os.getenv(
+                    EnvVars.SLACK_SIGNING_SECRET.value
+                ),
             },
         )
 

@@ -1,0 +1,26 @@
+# Slim dependency set for the Slack worker Lambda (scholar_lens.slack.lambda_worker).
+#
+# The worker only parses intent (Bedrock via langchain) and dispatches a Batch
+# job — it does NOT parse papers or build FAISS indexes. So the heavy native
+# libraries from requirements.txt (faiss-cpu, pymupdf, pypdf, nltk, pillow,
+# numpy, arxiv) are intentionally omitted to keep the image small and the cold
+# start fast. Keep this in sync with the worker's import chain
+# (configs -> src.runtime/publisher -> slack.bot -> slack.intent -> src.utils).
+beautifulsoup4>=4.12.3
+boto3>=1.35.86
+defusedxml>=0.7.1
+gitpython>=3.1.43
+langchain>=0.3.13,<1.0
+langchain-aws>=0.2.10
+langchain-community>=0.3.13,<1.0
+langchain-core>=0.3.25,<1.0
+langchain-text-splitters>=0.3.0,<1.0
+langgraph>=0.2.60
+lxml>=6.0.2
+pydantic[email]>=2.10.5
+pygithub>=2.8.1
+python-dotenv>=1.0.1
+pytz>=2025.1
+slack-sdk>=3.33.0
+tenacity>=8.0.0
+tqdm>=4.67.1
