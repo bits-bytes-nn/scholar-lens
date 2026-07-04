@@ -35,9 +35,9 @@ Every artifact is clean, blog-ready Markdown that can be uploaded to S3 and open
 
 - **Any AI/ML paper** — accepts an arXiv ID *or* an arbitrary paper **PDF URL** (non-PDF URLs are rejected). arXiv is no longer required.
 - **Grounded, not hallucinated** — citations resolve through Crossref / Semantic Scholar with a title-similarity gate; the writer may only link URLs that appear in its sources. Tech guides run a per-section fact-check pass.
-- **Latest Claude** — Amazon Bedrock with Claude Opus 4.8 / Sonnet 4.6 / Haiku 4.5 and adaptive thinking, per-stage configurable.
+- **Latest Claude** — Amazon Bedrock with Claude Opus 4.8 / Sonnet 5 / Haiku 4.5 and adaptive thinking, per-stage configurable.
 - **Code-aware reviews** — optional GitHub repository analysis with FAISS semantic search.
-- **On-demand Slack bot** — mention it with a paper or doc URLs; it parses your *explicit* request with an LLM, runs a Batch job, and replies in-thread with a link to the result.
+- **On-demand Slack bot** — mention it with a paper or doc URLs; it parses your *explicit* request with an LLM, runs a Batch job, and replies in-thread with a link to the result. Hosted serverlessly on AWS (Slack Events API → Lambda), so it's always on with nothing to keep running locally.
 - **Scalable & observable** — AWS Batch (on-demand + spot), CloudWatch alarms, EventBridge→SNS failure alerts, encrypted SecureString secrets.
 
 ## Architecture
@@ -67,6 +67,8 @@ All work runs as a containerised job on AWS Batch; the same job is submitted by 
 | `code_retriever.py` | Clone repos and run semantic code search (FAISS). |
 | `publisher.py` | Artifact-agnostic S3 upload + Jekyll blog PR. |
 | `slack/` | The on-demand Paper Bot (intent parsing → Batch dispatch). |
+
+> 📖 For a deep dive into the internals — data flow, module reference, prompts, the citation pipeline, infra, and the Slack Lambda architecture — see the **[design doc](./docs/design.md)**.
 
 ## Tech stack
 
@@ -140,19 +142,26 @@ python scripts/run_batch.py --source 2505.09388 --mode review \
 
 ### Slack bot
 
-```bash
-# Socket Mode (needs SLACK_BOT_TOKEN / SLACK_APP_TOKEN)
-python -m scholar_lens.slack.bot
-```
+The bot runs **serverlessly on AWS** — `python scripts/deploy_infra.py` +
+`cdk deploy` provisions a receiver Lambda behind an API Gateway HTTP API plus a
+worker Lambda. Point your Slack app's **Event Subscriptions** Request URL at the
+receiver (its URL is a CDK output, `SlackEventsRequestUrl`), subscribe to
+`app_mention` + `message.im`, and set `SLACK_BOT_TOKEN` / `SLACK_SIGNING_SECRET`.
+There's nothing to keep running on a laptop.
 
 Then mention the bot with what you want done — e.g. `review 2401.06066`,
 `summarize https://arxiv.org/pdf/2401.06066`, or
 `guide https://docs.framework.io/start`. The result is saved to S3 / published to
 your blog, and the bot posts the status and a link back in the thread.
 
-> 💡 Run the bot on its own Slack app. If you also run another Socket Mode bot in
-> the same workspace, just give each one a separate app so they don't share an
-> app token.
+```bash
+# Local-dev fallback only: run the bot in Socket Mode instead of the Events API
+# (needs SLACK_BOT_TOKEN / SLACK_APP_TOKEN and Socket Mode enabled on the app).
+python -m scholar_lens.slack.bot
+```
+
+> 💡 Run the bot on its own dedicated Slack app so it never shares tokens with
+> another bot in the same workspace.
 
 ## Testing & quality
 

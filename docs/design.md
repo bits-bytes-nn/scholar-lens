@@ -1,8 +1,8 @@
-# Scholar-Lens — 기술 레퍼런스
+# Scholar-Lens — 설계 문서 (Design & Technical Reference)
 
-Scholar-Lens 시스템의 심층 기술 문서입니다. 모든 구체적 서술은 현재 코드의
+Scholar-Lens 시스템의 심층 설계·기술 문서입니다. 모든 구체적 서술은 현재 코드의
 `파일:라인` 참조로 뒷받침되며, 경로는 별도 표기가 없는 한 리포지토리 루트 기준입니다.
-(이 문서는 현재 코드 기준으로 생성되었습니다.)
+라인 번호는 참조 시점의 코드 기준이므로, 큰 리팩터링 후에는 어긋날 수 있습니다.
 
 ## 목차
 
@@ -67,12 +67,12 @@ python scholar_lens/tech_guide_main.py \
 프로덕션 워크로드를 위한 컨테이너화 실행입니다. `main()` 함수와 `tech_guide_main.py:_run()`은 동일한 핵심 로직을 실행하며 (`main.py:80-152`), 선택적으로 SNS 알림 및 Slack 알림을 전송합니다 (`main.py:131-151`).
 
 #### Slack 봇 (Paper Bot)
-Socket Mode를 통한 이벤트 기반 디스패칭 (`scholar_lens/slack/bot.py`). 사용자가 Slack에서 봇을 멘션하거나 DM으로 논문 ID/URL 또는 기술 문서 URL을 제공하면:
+Slack Events API를 통한 이벤트 기반 디스패칭. 프로덕션에서는 AWS Lambda(리시버 + 워커)로 호스팅되며(`scholar_lens/slack/lambda_receiver.py`, `lambda_worker.py`), `run_socket_mode()`(`scholar_lens/slack/bot.py`)는 로컬 개발용 폴백입니다. 사용자가 Slack에서 봇을 멘션하거나 DM으로 논문 ID/URL 또는 기술 문서 URL을 제공하면:
 1. LLM이 사용자의 의도를 파싱 (`scholar_lens/slack/intent.py`의 `ParsedIntent`).
 2. AWS Batch 작업으로 디스패치 (`scholar_lens/slack/dispatcher.py`).
 3. 완료 후 Slack 채널 또는 스레드로 결과 보고.
 
-**Slack 앱 격리**: Paper Bot은 전용 Slack 앱에서 실행하는 것이 좋습니다. 두 개의 Socket Mode 프로세스가 동일한 앱을 공유하면 Slack이 이벤트를 둘 중 하나로만 무작위로 라우팅하므로 멘션이 무시될 수 있습니다. `SLACK_EXPECTED_APP_ID` 환경 변수로 앱 ID를 검증할 수 있습니다.
+자세한 두-Lambda 아키텍처는 [11. Slack 봇](#11-slack-봇-paper-bot)을 참고하세요.
 
 ### 1.4 데이터 흐름 개요
 
@@ -734,9 +734,11 @@ Tech Guide 생성 모델 선택입니다 (`scholar_lens/configs/config.py:159–
 | `LANGCHAIN_ENDPOINT` | `str` | 선택 | LangChain 엔드포인트 URL |
 | `LANGCHAIN_PROJECT` | `str` | 선택 | LangChain 프로젝트명 |
 | `LOG_LEVEL` | `str` | 선택 | 로깅 레벨 (예: `INFO`, `DEBUG`) |
-| `SLACK_BOT_TOKEN` | `str` | 선택 | Slack Bot 토큰 (Socket Mode 통합 필수) |
-| `SLACK_APP_TOKEN` | `str` | 선택 | Slack App 토큰 (Socket Mode 통합 필수) |
-| `SLACK_EXPECTED_APP_ID` | `str` | 선택 | 허용되는 Slack App ID (예: `A12345XYZ`). 설정 시 시스템은 `SLACK_BOT_TOKEN`이 지정된 앱에 속하는지 검증하고, 다른 앱의 토큰이면 시작 시 실패합니다. Socket Mode 프로세스 충돌 방지 (예: 다른 봇과 토큰 공유) 용도입니다. |
+| `SLACK_BOT_TOKEN` | `str` | 선택 | Slack Bot 토큰 (xoxb-, `chat.postMessage`용). Events API·Socket Mode 양쪽에서 사용. |
+| `SLACK_SIGNING_SECRET` | `str` | 선택 | Slack Signing Secret. Events API 리시버가 인바운드 요청의 HMAC 서명을 검증하는 데 사용 (프로덕션 필수). |
+| `SLACK_APP_TOKEN` | `str` | 선택 | Slack App 토큰 (xapp-, Socket Mode 전용 — 로컬 개발 폴백에서만 필요). |
+| `SLACK_EXPECTED_APP_ID` | `str` | 선택 | 허용되는 Slack App ID (예: `A12345XYZ`). 설정 시 Socket Mode 폴백이 `SLACK_APP_TOKEN`이 지정된 앱에 속하는지 검증하고, 다른 앱의 토큰이면 기동을 거부합니다. |
+| `WORKER_FUNCTION_NAME` | `str` | 선택 | 리시버 Lambda가 비동기로 호출하는 워커 Lambda 이름 (CDK가 리시버 환경변수로 주입). |
 | `SLACK_ALLOWED_USER_IDS` | `str` | 선택 | 쉼표 구분 Slack 사용자 ID 허용 목록 (예: `U123ABC,U456DEF`). 설정 시 허용 목록에 없는 사용자는 작업 트리거 거부. 미설정 시 모든 워크스페이스 멤버가 트리거 가능하지만 기록됩니다. |
 | `TOPIC_ARN` | `str` | 선택 | AWS SNS 토픽 ARN (알림/메시징 용도) |
 | `UPSTAGE_API_KEY` | `str` | 선택 | Upstage Document AI API 키 (PDF 문서 파싱 시 필수) |
@@ -785,10 +787,10 @@ resources:
 
 paper:
   figure_analysis_model_id: anthropic.claude-3-haiku-20240307-v1:0
-  citation_extraction_model_id: anthropic.claude-sonnet-4-6
+  citation_extraction_model_id: anthropic.claude-sonnet-5
   attributes_extraction_model_id: anthropic.claude-haiku-4-5-20251001-v1:0
-  table_of_contents_model_id: anthropic.claude-sonnet-4-6
-  output_fixing_model_id: anthropic.claude-sonnet-4-6
+  table_of_contents_model_id: anthropic.claude-sonnet-5
+  output_fixing_model_id: anthropic.claude-sonnet-5
 
 code:
   code_analysis_model_id: anthropic.claude-haiku-4-5-20251001-v1:0
@@ -803,10 +805,10 @@ citations:
   prefer_full_text: false
 
 explanation:
-  paper_analysis_model_id: anthropic.claude-sonnet-4-6
-  paper_enrichment_model_id: anthropic.claude-sonnet-4-6
+  paper_analysis_model_id: anthropic.claude-sonnet-5
+  paper_enrichment_model_id: anthropic.claude-sonnet-5
   paper_finalization_model_id: anthropic.claude-haiku-4-5-20251001-v1:0
-  paper_reflection_model_id: anthropic.claude-sonnet-4-6
+  paper_reflection_model_id: anthropic.claude-sonnet-5
   paper_synthesis_model_id: anthropic.claude-opus-4-8
   reflector_enable_thinking: true
   synthesizer_enable_thinking: true
@@ -820,7 +822,7 @@ summary:
 
 tech_guide:
   relevance_model_id: anthropic.claude-haiku-4-5-20251001-v1:0
-  synopsis_model_id: anthropic.claude-sonnet-4-6
+  synopsis_model_id: anthropic.claude-sonnet-5
   writing_model_id: anthropic.claude-opus-4-8
   writer_enable_thinking: true
   thinking_effort: medium
@@ -846,7 +848,7 @@ output_language: Korean
 
 ## 6. 모델 사용 (Model Usage)
 
-Scholar-Lens는 논문 분석의 각 단계에서 서로 다른 Claude/Titan 모델을 사용하도록 설정합니다. 모든 모델 ID는 Bedrock 런타임을 통해 관리되며, 설정은 YAML 기반 구성(`scholar_lens/configs/config.py:178-209`) 및 모델 정보 사전(`scholar_lens/src/utils/models.py:71-167`)에 정의됩니다.
+Scholar-Lens는 논문 분석의 각 단계에서 서로 다른 Claude/Titan 모델을 사용하도록 설정합니다. 모든 모델 ID는 Bedrock 런타임을 통해 관리되며, 설정은 YAML 기반 구성(`scholar_lens/configs/config.py:78-219`) 및 모델 정보 사전(`scholar_lens/src/utils/models.py:80-204`)에 정의됩니다.
 
 ### 기본 모델 선택
 
@@ -855,31 +857,31 @@ Scholar-Lens는 논문 분석의 각 단계에서 서로 다른 Claude/Titan 모
 | 단계 | 컴포넌트 | 기본 모델 | 모델 ID |
 |------|---------|---------|--------|
 | **논문 파싱** | 그림 분석 | Claude 3 Haiku | `anthropic.claude-3-haiku-20240307-v1:0` |
-| | 인용문 추출 | Claude 4.5 Sonnet | `anthropic.claude-sonnet-4-5-20250929-v1:0` |
+| | 인용문 추출 | Claude 5 Sonnet | `anthropic.claude-sonnet-5` |
 | | 속성 추출 | Claude 4.5 Haiku | `anthropic.claude-haiku-4-5-20251001-v1:0` |
-| | 목차 추출 | Claude 4.5 Sonnet | `anthropic.claude-sonnet-4-5-20250929-v1:0` |
-| | 출력 수정 | Claude 4.5 Sonnet | `anthropic.claude-sonnet-4-5-20250929-v1:0` |
+| | 목차 추출 | Claude 5 Sonnet | `anthropic.claude-sonnet-5` |
+| | 출력 수정 | Claude 5 Sonnet | `anthropic.claude-sonnet-5` |
 | **코드 분석** | 코드 분석 | Claude 4.5 Haiku | `anthropic.claude-haiku-4-5-20251001-v1:0` |
 | | 코드 요약 | Claude 4.5 Haiku | `anthropic.claude-haiku-4-5-20251001-v1:0` |
 | | 임베딩 | Titan Embed V2 | `amazon.titan-embed-text-v2:0` |
 | **인용 처리** | 인용 요약 | Claude 4.5 Haiku | `anthropic.claude-haiku-4-5-20251001-v1:0` |
 | | 인용 분석 | Claude 4.5 Haiku | `anthropic.claude-haiku-4-5-20251001-v1:0` |
-| **리뷰 생성** | 논문 분석 | Claude 4.5 Sonnet | `anthropic.claude-sonnet-4-5-20250929-v1:0` |
-| | 논문 보강 | Claude 4.5 Sonnet | `anthropic.claude-sonnet-4-5-20250929-v1:0` |
+| **리뷰 생성** | 논문 분석 | Claude 5 Sonnet | `anthropic.claude-sonnet-5` |
+| | 논문 보강 | Claude 5 Sonnet | `anthropic.claude-sonnet-5` |
 | | 논문 최종화 | Claude 4.5 Haiku | `anthropic.claude-haiku-4-5-20251001-v1:0` |
-| | 논문 반영 | Claude 4.5 Sonnet | `anthropic.claude-sonnet-4-5-20250929-v1:0` |
-| | 논문 합성 | Claude 4.5 Sonnet | `anthropic.claude-sonnet-4-5-20250929-v1:0` |
+| | 논문 반영 | Claude 5 Sonnet | `anthropic.claude-sonnet-5` |
+| | 논문 합성 | Claude 5 Sonnet | `anthropic.claude-sonnet-5` |
 | **요약 생성** | 요약 모델 | Claude 4.8 Opus | `anthropic.claude-opus-4-8` |
 | **기술 가이드** | 관련성 판단 | Claude 4.5 Haiku | `anthropic.claude-haiku-4-5-20251001-v1:0` |
-| | 개요 작성 | Claude 4.6 Sonnet | `anthropic.claude-sonnet-4-6` |
+| | 개요 작성 | Claude 5 Sonnet | `anthropic.claude-sonnet-5` |
 | | 가이드 작성 | Claude 4.8 Opus | `anthropic.claude-opus-4-8` |
 | | 근거 검증 (선택) | Claude 4.8 Opus | `anthropic.claude-opus-4-8` |
 
-이 기본값은 각 단계의 복잡성에 맞춰 최적화되었습니다: 빠른 단계(속성/인용 추출)는 Haiku를 사용하고, 복잡한 추론(리뷰 분석, 기술 가이드 작성)은 Sonnet 또는 Opus를 사용합니다.
+이 기본값은 각 단계의 복잡성에 맞춰 최적화되었습니다: 빠른 단계(속성/인용 요약·분석, 관련성 판단, 논문 최종화)는 Haiku를 사용하고, 복잡한 추론(인용문/목차 추출, 리뷰 분석·보강·반영·합성, 기술 가이드 개요)은 Sonnet-티어(현재 Claude 5 Sonnet)를, 가장 무거운 장문 생성(요약·가이드 작성·근거 검증)은 Opus 4.8을 사용합니다. Sonnet-티어 단계의 기본 모델은 최근 **Claude 5 Sonnet**(`LanguageModelId.CLAUDE_V5_SONNET`, `scholar_lens/src/constants.py:67`)으로 상향되었으며, 각 단계의 기본값은 `scholar_lens/configs/config.py`의 `Paper`(citation_extraction/table_of_contents/output_fixing: 82·88·91행), `Explanation`(paper_analysis/enrichment/reflection/synthesis: 132·135·139·142행), `TechGuide`(synopsis: 163행)에 정의됩니다.
 
-### 적응형 사고(Adaptive Thinking) — Opus 4.8+
+### 적응형 사고(Adaptive Thinking) — Sonnet 5 / Opus 4.7+
 
-Claude 4.8 Opus와 이후 모델들은 **적응형 사고** API를 사용하여, 쿼리 복잡도에 따라 사고 토큰 할당을 자동으로 조정합니다(`scholar_lens/src/utils/models.py:40-48`). 이전의 고정 예산 방식(`thinking.type='enabled' + budget_tokens`)과는 달리, 적응형 방식(`thinking.type='adaptive' + output_config.effort`)은 세 가지 노력 수준을 제공합니다(`scholar_lens/configs/config.py:14-17`):
+Claude 5 Sonnet과 Opus 4.7 이후 모델들은 **적응형 사고** API를 사용하여, 쿼리 복잡도에 따라 사고 토큰 할당을 자동으로 조정합니다(`scholar_lens/src/utils/models.py:40-48`). 이전의 고정 예산 방식(`thinking.type='enabled' + budget_tokens`)과는 달리, 적응형 방식(`thinking.type='adaptive' + output_config.effort`)은 세 가지 노력 수준을 제공합니다(`scholar_lens/configs/config.py:14-17`):
 
 - **`low`**: 신속한 답변을 위해 적은 사고 토큰 사용 (빠른 확인/스크리닝용)
 - **`medium`** (기본값): 균형 잡힌 추론 (대부분의 생성 작업용)
@@ -922,9 +924,9 @@ explainer = ExplainerGraph(
 
 #### 온도 및 컨텍스트 윈도우 처리
 
-적응형 사고 모델(Opus 4.8+)에서 온도 매개변수는 더 이상 사용되지 않습니다. 대신 `output_config.effort`로 추론 깊이를 제어합니다(`scholar_lens/src/utils/factories.py:406-413`). 따라서 팩토리는:
+적응형 사고 모델(Sonnet 5 / Opus 4.7+)에서 온도 매개변수는 더 이상 사용되지 않습니다. 대신 `output_config.effort`로 추론 깊이를 제어합니다(`scholar_lens/src/utils/factories.py:435-450`, `516-524`). 따라서 팩토리는:
 
-- Opus 4.8+에서 온도를 설정하지 않음 (`model_info.uses_adaptive_thinking == True`일 때)
+- 적응형 사고 모델에서 온도를 설정하지 않음 (`model_info.uses_adaptive_thinking == True`일 때)
 - 이전 모델에서는 온도를 기본값 0.0으로 설정 (결정론적 생성)
 - 사고 활성화 시 온도를 1.0으로 강제 설정 (레거시 모델에만)
 
@@ -940,7 +942,7 @@ explainer = ExplainerGraph(
 
 ### 모델 정보 조회 및 팩토리 패턴
 
-`BedrockLanguageModelFactory`(`scholar_lens/src/utils/factories.py:276-457`)는 단일 팩토리로부터 모든 언어 모델을 생성합니다. 모델 정보는 정적 사전(`_LANGUAGE_MODEL_INFO`)에 저장되어, 각 모델의 컨텍스트 윈도우 크기, 최대 출력 토큰, 사고/캐싱 지원 여부를 조회할 수 있습니다. 팩토리는:
+`BedrockLanguageModelFactory`(`scholar_lens/src/utils/factories.py:249-534`)는 단일 팩토리로부터 모든 언어 모델을 생성합니다. 모델 정보는 정적 사전(`_LANGUAGE_MODEL_INFO`, `scholar_lens/src/utils/models.py:80-204`)에 저장되어, 각 모델의 컨텍스트 윈도우 크기, 최대 출력 토큰, 사고/캐싱 지원 여부, 적응형 사고 사용 여부(`uses_adaptive_thinking`), 1M 컨텍스트 지원, `CountTokens` 프록시(`count_tokens_proxy`)를 조회할 수 있습니다. 최근 추가된 **Claude 5 Sonnet**(`LanguageModelId.CLAUDE_V5_SONNET`, `scholar_lens/src/utils/models.py:139-153`)은 1M 컨텍스트 윈도우, 128K 최대 출력 토큰(`max_output_tokens=128000`)을 지원하며, Opus 4.7+와 마찬가지로 **적응형 사고**(`uses_adaptive_thinking=True`) API를 사용합니다(레거시 `budget_tokens`는 거부됨). 또한 Sonnet 5는 Bedrock `CountTokens`가 아직 지원하지 않는 신형 토크나이저 모델이므로, 같은 계열의 **Sonnet 4.6을 count_tokens_proxy로 지정**하여 `fit_text`가 여전히 정확히 측정하도록 합니다(신형 토크나이저를 약간 낮게 세지만, 1M 윈도우 + 예비 여유에 대한 안전한 하한으로는 충분함). 팩토리는:
 
 1. 요청된 모델 ID의 지원 여부 검증
 2. 크로스 리전 모델 ID 해석 (필요 시)
@@ -1460,11 +1462,13 @@ python3 scripts/deploy_infra.py
 
 발행 시 다음 변환이 순차적으로 적용됩니다 (scholar_lens/src/publisher.py:79-90):
 
-1. **수학 언더스코어 이스케이핑**: `normalize_math_underscores(markdown)` 호출 (scholar_lens/src/markdown_math.py:37-50). 이 함수는 LaTeX 수식 `$...$`와 `$$...$$` 내의 언더스코어를 `\_`로 이스케이프합니다. 이는 kramdown(GFM) 파서가 수식 렌더링 전에 언더스코어를 강조 구분자로 처리하는 것을 방지합니다. 코드 블록 (```...```) 과 인라인 코드 (`` `...` ``) 내 언더스코어는 보존됩니다 (scholar_lens/src/markdown_math.py:21-29의 정규식 순서 중요).
+1. **수학 정규화 + 언더스코어 이스케이핑**: `normalize_math_underscores(markdown)` 호출 (`scholar_lens/src/markdown_math.py`). 먼저 코드 밖의 과도-이스케이프된 수식 구분자(`\\(`/`\\)`/`\\[`/`\\]`)를 single-backslash 형태로 collapse해 실제로 수식으로 활성화되게 한 뒤(`_fix_double_backslash_delims`), LaTeX 수식 `\(...\)`와 `$$...$$` 내의 언더스코어를 `\_`로 이스케이프합니다. 이는 kramdown(GFM) 파서가 수식 렌더링 전에 언더스코어를 강조 구분자로 처리하는 것을 방지합니다. 코드 블록/인라인 코드 내 언더스코어는 보존됩니다(`SEGMENT_PATTERN` 정규식 순서상 코드가 먼저 매칭됨). 단일 `$...$`는 블로그가 `$`를 제거하므로 수식으로 취급하지 않습니다(가격/통화 오검출 방지).
 
-2. **로컬 이미지 경로 재작성** (request.rewrite_local_images가 true일 경우):
-   - `_rewrite_local_images(markdown, file_name)` (scholar_lens/src/publisher.py:95-104)
-   - 마크다운 이미지 패턴 `![alt](path)` 에서 상대 경로 (http(s):// 또는 /로 시작하지 않음) 는 블로그 자산 레이아웃 경로로 변환됩니다.
+2. **마크다운 린트 + 자동 수정**: `lint_markdown(markdown)` 호출 (`scholar_lens/src/markdown_lint.py`). 두 가지 무손실 자동 수정을 적용합니다 — (a) 이전 줄에 붙은 헤딩 앞에 빈 줄 삽입, (b) 본문에 노출된 `<placeholder>` 꺾쇠 토큰(`<none>`, `<server-host>`, `<your-namespace>` 등)을 `&lt;`/`&gt;`로 이스케이프해 kramdown이 이를 HTML 여는 태그로 파싱하고 섹션 경계마다 stray 닫는 태그를 뱉는 것을 방지합니다. 실제 인라인 HTML(`<br>`/`<sup>`/`<kbd>` 등)과 코드/수식 스팬은 건드리지 않습니다. 나머지 위험 항목(수식 내 bare `|`, 단일-$ 수식, 미정의 매크로, 비-URL 링크)은 경고만 로깅합니다.
+
+3. **로컬 이미지 경로 재작성** (request.rewrite_local_images가 true일 경우):
+   - `_rewrite_local_images(markdown, file_name)` (`scholar_lens/src/publisher.py`)
+   - 마크다운 이미지 `![alt](path)`에서 `http(s)://`이거나 이미 이 글의 자산 경로(`/assets/{file_name}/`)인 경우만 그대로 두고, 그 외(상대 경로 또는 PDF 파싱이 주입한 `/Users/.../figures/0.png` 같은 **절대 로컬 스크래치 경로**)는 모두 이 글의 자산 경로로 재작성합니다. 그림은 자산 디렉터리에 flat하게 업로드되므로 basename만 사용합니다.
    - 대상 경로: `/{S3Paths.ASSETS.value}/{file_name}/{image_filename}` 예: `/assets/2025-01-15-transformer-review/fig1.png`
 
 3. **로컬 파일 저장**: 마크다운을 `{work_dir}/{YYYY-MM-DD}-{slugified_title}.md` 형식으로 저장합니다 (scholar_lens/src/publisher.py:81, 89-90). 슬러그화는 제목의 비알파뉴메릭 문자를 하이픈으로 대체하고 120자 제한을 적용합니다 (scholar_lens/src/publisher.py:55-58의 `slugify` 함수).
@@ -1587,52 +1591,83 @@ use_math: true
 
 ## 11. Slack 봇 (Paper Bot)
 
-Scholar-Lens의 Slack 봇은 Paper Bot이라 불리며, 사용자가 Slack 채널이나 다이렉트 메시지에서 멘션하거나 메시지를 보내면 온디맨드로 작동합니다(`scholar_lens/slack/bot.py`). 봇의 핵심 역할은 자유형식의 채팅 메시지를 구조화된 액션(review, summarize, guide)으로 변환하고, 대응하는 AWS Batch 작업을 비동기로 디스패치하는 것입니다. 파이프라인 자체는 Batch에서 실행되며, 봇은 빠른 응답과 이벤트 라우팅만 담당합니다.
+Scholar-Lens의 Slack 봇은 Paper Bot이라 불리며, 사용자가 Slack 채널에서 멘션하거나 다이렉트 메시지를 보내면 온디맨드로 작동합니다. 봇의 핵심 역할은 자유형식의 채팅 메시지를 구조화된 액션(review, summarize, guide)으로 변환하고, 대응하는 AWS Batch 작업을 비동기로 디스패치하는 것입니다. 파이프라인 자체는 Batch에서 실행되며, 봇은 빠른 응답과 이벤트 라우팅만 담당합니다.
 
-### 아키텍처 및 흐름
+이전에는 로컬에서 상주하는 Socket Mode 프로세스(`run_socket_mode()`)로 동작했지만, 현재 **프로덕션 아키텍처는 AWS Lambda + Slack Events API**입니다. 봇은 두 개의 Lambda 함수 — 얇은 **리시버**(receiver)와 무거운 **워커**(worker) — 로 분리되어 있습니다. `run_socket_mode()`는 이제 로컬 개발용 폴백으로만 남아 있습니다.
 
-**온디맨드 모델**: 사용자의 Slack 멘션이나 DM이 Socket Mode 핸들러에 도착하면(`run_socket_mode()`, bot.py:221~277), 다음 단계를 거칩니다.
+### 두-Lambda 아키텍처 (Receiver + Worker)
 
-1. **이벤트 중복제거** (`_SeenEvents`, bot.py:44~68): Slack은 최소 한 번 이상 같은 이벤트를 재전송할 수 있으므로, 동일한 `client_msg_id` 또는 `event_ts`를 추적하는 512개 크기의 bounded 집합(스레드 안전 락 가드)으로 중복 Batch 작업 생성을 방지합니다.
+**왜 둘로 나누는가**: Slack Events API는 인바운드 요청에 대해 **3초 이내**에 HTTP 200을 요구합니다. 그런데 의도 파싱은 Bedrock LLM 호출이라 콜드 스타트 시 3초를 넘길 수 있고, 무거운 워커 이미지(langchain/boto 의존성)를 임포트하는 것만으로도 3초 예산을 소진할 수 있습니다. 그래서 응답 경로(ack path)는 가벼운 리시버가 담당하고, 값비싼 작업(의도 파싱 + Batch 디스패치)은 3초 시계에서 벗어난 워커로 넘깁니다(`scholar_lens/slack/lambda_receiver.py:1-23`, `lambda_worker.py:1-12`).
 
-2. **인증 확인** (`is_user_authorized()`, bot.py:31~41): 환경변수 `SLACK_ALLOWED_USER_IDS`(쉼표로 구분된 사용자 ID 목록)로 허용 목록을 관리합니다. 미설정 시 모든 워크스페이스 멤버가 작업을 트리거할 수 있으므로 (오픈 모드), 설정되면 목록의 사용자만 승인되고 나머지는 거부됩니다.
+**리시버 (`scholar_lens/slack/lambda_receiver.py`)**: API Gateway HTTP API(페이로드 v2.0) 뒤에 있는 작은 zip Lambda입니다. **`scholar_lens` 패키지를 임포트하지 않고** 표준 라이브러리 + 런타임 제공 `boto3`만 사용하므로(`lambda_receiver.py:14-23`), 콜드 스타트가 매우 빠릅니다. 필요한 소수의 문자열 상수(`WORKER_FUNCTION_NAME`, `slack-signing-secret`)는 `scholar_lens/src/constants.py`의 정의를 손으로 복제해 둡니다. 리시버는 다음의 값싸고 유한한 작업만 수행하고 즉시 200을 반환합니다(`handler()`, `lambda_receiver.py:133-184`):
 
-3. **의도 파싱** (`IntentParser.parse()`, intent.py:57~60): Claude Haiku 4.5 (`CLAUDE_V4_5_HAIKU`, bot.py:28)로 메시지를 `SlackIntentPrompt`(`prompts.py:2914~2958`)를 통해 분류합니다. 프롬프트는 사용자의 **명시적 요청**(동사: "review", "summarize", "guide", "리뷰", "요약", "가이드")을 기반으로 의도를 결정하며, 모호한 경우(예: bare arXiv ID) "unknown"으로 분류하여 봇이 사용자에게 명확히 물을 수 있게 합니다. 파싱 결과는 `ParsedIntent` 객체로 반환되며, intent, sources(arXiv ID 또는 URL), repo_urls(GitHub 링크), reason(분류 설명)을 포함합니다.
+1. **HMAC 서명 검증** (`verify_signature()`, `lambda_receiver.py:87-106`): Slack의 v0 서명을 상수 시간으로 검증합니다. basestring은 `v0:{timestamp}:{raw_body}`이고, 서명은 `v0=` + HMAC-SHA256(signing_secret, basestring)입니다. 요청 타임스탬프가 5분(`_MAX_REQUEST_AGE_SECONDS`, `lambda_receiver.py:49`)보다 오래되면 리플레이 공격 방지를 위해 거부합니다. HMAC은 Slack이 서명한 바이트 그대로에 대해 계산해야 하므로, 게이트웨이가 base64 인코딩 플래그를 세우면 디코드하고 JSON을 재직렬화하지 않습니다(`_raw_body()`, `lambda_receiver.py:75-84`).
+2. **url_verification 핸드셰이크** (`lambda_receiver.py:159-165`): Events API 최초 등록 시 Slack이 보내는 `url_verification` 요청에 `challenge` 값을 그대로 되돌려줍니다. (Slack이 이 요청도 서명하므로 서명 검증 이후에 처리합니다.)
+3. **Slack 재전송 억제 (dedup 메커니즘)** (`lambda_receiver.py:167-175`): 리시버가 항상 1초 이내에 200을 반환하므로, Slack이 재전송한다는 것(`x-slack-retry-num` 헤더)은 이미 성공적으로 접수했으나 다운스트림 워커 leg가 실패했다는 의미입니다. 재전송을 워커로 다시 디스패치하면 Batch 작업이 중복 제출되므로, 재전송 요청은 200으로 무시합니다. **이것이 과거의 인메모리 `_SeenEvents` 집합을 대체하는 새 중복제거 메커니즘입니다** — 상태 없는 Lambda에서는 프로세스 로컬 집합이 통하지 않으므로, Slack의 재전송 헤더 자체를 신호로 사용합니다.
+4. **이벤트 필터링** (`_is_actionable_event()`, `lambda_receiver.py:109-120`): 과거 Socket Mode 봇이 처리하던 것과 동일하게 `app_mention`과 DM(`message` + `channel_type=="im"`, `bot_id` 없음)만 통과시킵니다. 그 외 이벤트는 200으로 무시합니다.
+5. **워커 비동기 호출** (`_invoke_worker()`, `lambda_receiver.py:123-130`): 통과한 내부 Slack 이벤트를 `{"slack_event": <inner event>}` 페이로드로 워커 Lambda(`WORKER_FUNCTION_NAME` 환경변수)에 `InvocationType="Event"`(비동기)로 넘기고, 리시버는 결과를 기다리지 않고 200을 반환합니다.
 
-4. **작업 디스패치** (`JobDispatcher.dispatch()`, dispatcher.py:64~83): 파싱된 의도가 actionable하면(intent가 UNKNOWN이 아니고 sources가 있으면), 대응하는 Batch 작업을 제출합니다. Review/Summarize는 review job definition을 사용하고 Slack 컨텍스트를 파라미터로 전달합니다. Guide는 별도의 guide job definition(`guide_job_definition`, dispatcher.py:62)을 필수로 요구하며, 미설정 시 에러를 발생시킵니다.
+**워커 (`scholar_lens/slack/lambda_worker.py`)**: 슬림 이미지(`Dockerfile.lambda`)를 재사용하는 컨테이너 Lambda입니다. 3초 마감에서 자유로우므로 값비싼 부분을 수행합니다(`handler()`, `lambda_worker.py:47-85`):
 
-5. **결과 통지**: Batch 작업이 완료되면, 파이프라인은 Slack 컨텍스트(channel, thread_ts)를 통해 `post_slack_result()`(`notifier.py:43~92`)를 호출하여 스레드에 결과(성공/실패, 아티팩트 레이블, S3 URL)를 게시합니다. 봇이 사용자에게 "I'll post the result here when it's ready"라고 약속한 것을 이행합니다.
+1. **SSM 토큰 로드**: `build_context(Config.load())`로 런타임 컨텍스트를 만든 뒤 `load_secrets_from_ssm()`으로 `slack-bot-token`(SSM)을 `SLACK_BOT_TOKEN` 환경변수로 로드합니다(`lambda_worker.py:63-66`).
+2. **인증 확인**: `is_user_authorized(user)`로 허용 목록을 검사하고, 미승인 사용자에게는 스레드에 거부 메시지를 게시하고 종료합니다(`lambda_worker.py:68-72`).
+3. **`handle_message`**: `build_bot()`으로 `PaperBot`을 구성하고 `SlackContext`(channel/thread_ts/user)를 만들어 `bot.handle_message()`를 실행합니다(의도 파싱 + Batch 디스패치, `lambda_worker.py:74-76`).
+4. **ack 게시**: 결과 `SlackReply`를 `slack_sdk`의 `WebClient.chat_postMessage`로 원본 스레드에 게시합니다(`_post_message()`, `lambda_worker.py:28-44`). 전체 흐름이 `try/except`로 감싸여 있어(`lambda_worker.py:60-81`) 임포트/SSM/Bedrock 오류가 나도 스레드에 실패 메시지를 남깁니다 — 워커는 `retry_attempts=0`으로 배포되고 리시버가 Slack 재전송을 억제하므로, 조용한 크래시는 사용자에게 아무 응답도 남기지 않게 되기 때문입니다.
 
-### 앱 ID 보안 가드 (App-ID Guard)
+Batch 작업 **자체의 결과**는 나중에 파이프라인이 `notifier.post_slack_result`로 게시하며, 워커는 인바운드 ack만 담당합니다.
 
-**문제**: Paper Bot은 전용 Slack 앱에서 실행하는 것이 좋습니다. Socket Mode 핸들러가 같은 토큰으로 여러 봇(예: OmniSummary)을 실행하면 Slack이 이벤트를 무작위로 한 프로세스에만 전달하므로 멘션이 잘못된 봇으로 라우팅될 수 있기 때문입니다.
+### API Gateway 인그레스 (Function URL이 아님)
 
-**솔루션** (`verify_slack_app_identity()`, bot.py:185~218): 환경변수 `SLACK_EXPECTED_APP_ID`를 설정하면 앱 토큰의 형식 `xapp-1-<APP_ID>-...`에서 APP_ID를 추출하여(`_app_id_from_app_token()`, bot.py:172~182) Batch 작업 제출 전에 검증합니다. 토큰의 APP_ID가 기대값과 일치하지 않으면 `SlackAppMismatchError`를 발생시켜 시작을 거부합니다(bot.py:168). 미설정 시 검증을 건너뛰고 경고만 로깅합니다.
+퍼블릭 인그레스는 **Lambda Function URL이 아니라 API Gateway HTTP API**로 제공됩니다(`_create_slack_functions()`, `scripts/deploy_infra.py:799-811`). 이 계정의 SCP 가드레일이 익명(Principal:\*) `lambda:InvokeFunctionUrl`을 차단하므로, auth-NONE Function URL은 403을 반환합니다(`deploy_infra.py:791-798`). API Gateway(`execute-api`)는 허용되는 지원 경로입니다. Slack은 SigV4 서명을 할 수 없으므로 게이트웨이 라우트(`POST /slack/events`, `deploy_infra.py:805-811`)는 인증 없이 두고, 보안은 리시버 내부의 HMAC 서명 검증이 담당합니다. 리시버는 이미 API Gateway 페이로드 v2.0(body/isBase64Encoded/소문자 헤더, `{statusCode, body}` 응답)을 해석합니다. 배포 시 요청 URL(`{api_endpoint}/slack/events`)이 `SlackEventsRequestUrl` CfnOutput으로 출력되며, 이를 Slack 앱의 Event Subscriptions에 붙여넣습니다(`deploy_infra.py:812-818`).
+
+### 서명 시크릿 SSM 플러밍
+
+리시버가 HMAC을 검증하려면 Slack 앱의 **Signing Secret**이 필요합니다. 이는 `SLACK_BOT_TOKEN`(xoxb-)이나 `SLACK_APP_TOKEN`(xapp-, Socket Mode 전용)과는 별개의 값입니다(`EnvVars.SLACK_SIGNING_SECRET`, `scholar_lens/src/constants.py:35`). 시크릿은 SecureString SSM 파라미터 `/{project}/{stage}/slack-signing-secret`(`SSMParams.SLACK_SIGNING_SECRET`, `constants.py:113`)로 배포 시 out-of-band 저장되며(CDK/CloudFormation은 SecureString을 만들 수 없어 `put_secure_secrets`가 별도로 씀, `deploy_infra.py:661-666`), 리시버는 웜 인보케이션 간 캐시하여 SSM에서 한 번만 읽습니다(`_get_signing_secret()`, `lambda_receiver.py:57-67`). 리시버의 IAM은 이 파라미터 하나에 대한 `ssm:GetParameter`만 부여받고(`SsmReadSigningSecret`, `deploy_infra.py:777-789`), 워커에 대한 `grant_invoke`도 함께 부여됩니다(`deploy_infra.py:776`). 리시버 환경변수에는 `WORKER_FUNCTION_NAME`, `PROJECT`, `STAGE`가 세팅됩니다(`deploy_infra.py:768-773`).
+
+### 배포 구성 (`_create_slack_functions`)
+
+`scripts/deploy_infra.py:681-818`의 `_create_slack_functions()`가 두 Lambda와 게이트웨이를 만듭니다.
+
+- **워커** (`DockerImageFunction`, `deploy_infra.py:726-744`): `Dockerfile.lambda`로 빌드한 슬림 이미지, x86_64, 메모리 2048MB, 타임아웃 120초, `retry_attempts=0`(비동기 재시도 없음 — 실패한 인보크가 값비싼 Batch 작업을 조용히 재디스패치하지 못하게). VPC는 쓰지 않습니다(Slack/Bedrock/SSM은 퍼블릭 엔드포인트이며 VPC Lambda는 ENI 콜드 스타트만 추가). 최소 권한으로 `_bedrock_statements()`(Bedrock invoke + discovery + CountTokens, `deploy_infra.py:236-288`), `_ssm_read_statement()`(이 프로젝트 SSM 파라미터 읽기, `deploy_infra.py:290-300`), `_batch_statements()`(스택 큐/정의에 대한 SubmitJob + describe, `deploy_infra.py:302-331`) 세 그룹만 받고 S3/SNS/KMS/CloudWatch는 건드리지 않습니다(`deploy_infra.py:719-724`).
+- **리시버** (`Function`, `deploy_infra.py:755-774`): Python 3.12 zip Lambda, `lambda_receiver.py`만 패키징(`exclude=["*", "!lambda_receiver.py"]`)하여 `scholar_lens`를 임포트하지 않습니다. 메모리 256MB, 타임아웃 10초.
+- **HTTP API Gateway** (`deploy_infra.py:799-811`): 위의 "API Gateway 인그레스" 참조.
+
+### 슬림 워커 이미지 (`Dockerfile.lambda`)
+
+워커는 공식 AWS Lambda 베이스 이미지 `public.ecr.aws/lambda/python:3.12` 위에 빌드됩니다(`Dockerfile.lambda:8`). Runtime Interface Client이 이미 배선되어 있어 별도의 entrypoint 조작이 필요 없습니다. 워커는 의도 파싱과 Batch 디스패치만 하므로 무거운 네이티브 라이브러리(faiss/pymupdf/pypdf/nltk/pillow/numpy/arxiv)를 뺀 슬림 의존성 집합(`scholar_lens/requirements-lambda.txt`)만 설치합니다. GitPython이 `src.runtime → publisher`를 통해 전이적으로 딸려 오지만 이 슬림 이미지엔 git 바이너리가 없어 임포트 시 실패하므로, `ENV GIT_PYTHON_REFRESH=quiet`(`Dockerfile.lambda:14`)로 임포트를 통과시킵니다(워커는 실제 git 명령을 호출하지 않음). 핸들러는 `scholar_lens.slack.lambda_worker.handler`입니다(`Dockerfile.lambda:25`). 무거운 논문 처리 파이프라인은 여전히 별도의 `Dockerfile`로 AWS Batch에서 실행됩니다.
+
+### 의도 파싱 (Intent Parsing)
+
+워커의 `handle_message` 안에서 `IntentParser.parse()`(`intent.py:65~68`)가 메시지를 분류합니다. `IntentParser`(`intent.py:54~80`)는 `SlackIntentPrompt`(`prompts.py:3159~3208`) → Claude Haiku 4.5(`CLAUDE_V4_5_HAIKU`, `bot.py:30`) → `HTMLTagOutputParser`로 구성된 LangChain 체인입니다(`intent.py:57~63`). 프롬프트는 사용자의 **명시적 요청**(동사: "review", "summarize", "guide", "리뷰", "요약", "가이드")을 기반으로 의도를 결정하며, 링크나 arXiv ID의 존재만으로 review/summarize를 추측하지 않고 모호한 경우(예: bare arXiv ID) "unknown"으로 분류하여 봇이 사용자에게 되묻도록 합니다(`prompts.py:3180~3205`). Slack이 URL을 `<url>`/`<url|label>`로 감싸므로 파싱 전에 `_unwrap_slack_links()`(`intent.py:97~101`)로 장식을 벗깁니다. 파싱 결과는 `ParsedIntent`(`intent.py:39~51`)로 반환되며 intent, sources(arXiv ID 또는 URL), repo_urls(GitHub 링크), parse_pdf, reason을 담습니다. `is_actionable`은 intent가 UNKNOWN이 아니고 sources가 있을 때 True입니다.
+
+### 작업 디스패치 (Job Dispatch)
+
+`JobDispatcher.dispatch()`(`dispatcher.py:64~83`)는 actionable한 의도를 대응하는 Batch 작업으로 제출합니다. Review/Summarize는 review job definition을 사용하고 source/repo_urls/parse_pdf/mode와 Slack 컨텍스트를 파라미터로 전달합니다(`_dispatch_paper()`, `dispatcher.py:97~125`). Guide는 별도의 컨테이너 entrypoint(`tech_guide_main`)를 실행하므로 전용 `guide_job_definition`을 필수로 요구하며(리뷰 정의로 조용히 폴백하면 잘못된 프로그램을 실행하게 됨), 미설정 시 에러를 발생시킵니다(`_dispatch_guide()`, `dispatcher.py:127~155`). Slack 컨텍스트가 없으면(예: CLI 실행) channel/thread_ts는 `NULL_STRING`("null")로 채워집니다(`_slack_params()`, `dispatcher.py:85~95`).
+
+### 결과 통지 (Notifier)
+
+Batch 작업이 완료되면 파이프라인이 Slack 컨텍스트(channel, thread_ts)를 통해 `post_slack_result()`(`notifier.py:29~76`)를 호출하여 스레드에 결과(성공/실패, 아티팩트 레이블, 제목, S3/PR URL)를 게시합니다. Slack 컨텍스트나 봇 토큰이 없으면 no-op이며(`notifier.py:47~54`), Slack 실패가 파이프라인을 실패시키지 않도록 절대 예외를 던지지 않습니다. mrkdwn 제어문자는 `mrkdwn_safe()`로 이스케이프하고(`notifier.py:107·111`), `slack_sdk`는 비-Slack 실행/테스트에서 임포트되지 않도록 지연 임포트합니다. 이는 봇이 ack에서 약속한 "I'll post the result here when it's ready"(`bot.py:147`)를 이행하는 경로입니다.
 
 ### 사용자 승인 (Authorization Allowlist)
 
-`SLACK_ALLOWED_USER_IDS` 환경변수(쉼표로 구분된 Slack 사용자 ID: "U123, U456")로 작업 트리거 권한을 제어합니다. 미설정 시 모든 사용자가 허용되고, 설정되면 명시된 사용자만 가능하며 나머지는 `:lock: Sorry, you're not authorized to run Paper Bot jobs.` 메시지로 거부됩니다(bot.py:248~254). 허용 목록이 없으면 권한 부여는 이루어지지 않으므로 예산 관리가 필요한 환경에서는 반드시 설정해야 합니다.
+`SLACK_ALLOWED_USER_IDS` 환경변수(쉼표로 구분된 Slack 사용자 ID: "U123, U456")로 작업 트리거 권한을 제어합니다(`is_user_authorized()`, `bot.py:60~70`). 미설정 시 모든 워크스페이스 멤버가 허용되고(오픈 모드), 설정되면 명시된 사용자만 가능하며 나머지는 워커가 스레드에 `:lock: Sorry, you're not authorized to run jobs.` 메시지를 게시하고 종료합니다(`PaperBot._unauthorized_reply()`, `bot.py:192~202`; 워커 호출은 `lambda_worker.py:68~72`). 허용 목록이 없으면 권한 부여가 이루어지지 않으므로, Bedrock + AWS Batch 예산을 소비하는 봇 특성상 예산 관리가 필요한 환경에서는 반드시 설정해야 합니다.
 
-### 이벤트 중복제거 (_SeenEvents)
+### 앱 ID 보안 가드 및 Socket Mode 폴백
 
-`_SeenEvents` 클래스(`bot.py:44~68`)는 Slack의 최소 한 번 이상(at-least-once) 전달 정책에 대비하여 bounded 집합으로 구현됩니다. 용량 512개(기본값, `capacity` 파라미터로 조정 가능)의 dict(순서 유지)를 스레드 락으로 보호하며, 새로운 이벤트는 `false`를 반환하고 중복은 `true`를 반환합니다. 용량 초과 시 가장 오래된 항목(dict 삽입 순서로 첫 번째)을 제거하여 메모리를 유지합니다. Slack의 `client_msg_id`(메시지 고유 ID) 또는 `event_ts`(타임스탬프)를 dedup 키로 사용합니다(bot.py:241).
+로컬 개발 폴백인 `run_socket_mode()`(`bot.py:311~364`)는 `slack_bolt`가 설치되어 있고 `SLACK_BOT_TOKEN`(xoxb-) / `SLACK_APP_TOKEN`(xapp-1-) 환경변수가 있을 때 상주 프로세스로 봇을 실행합니다. 이 경로는 Socket Mode에서만 유효한 두 가지 방어를 유지합니다.
 
-### Socket Mode 및 전용 앱 권장 사항
+- **앱 ID 가드** (`verify_slack_app_identity()`, `bot.py:277~308`): Socket Mode는 하나의 앱이 하나의 연결만 지원하므로, 같은 토큰을 여러 Socket Mode 봇(예: OmniSummary)과 공유하면 Slack이 이벤트를 무작위로 한 프로세스에만 전달해 멘션이 잘못된 봇으로 라우팅됩니다. `SLACK_EXPECTED_APP_ID`를 설정하면 앱 토큰 형식 `xapp-1-<APP_ID>-...`에서 APP_ID를 추출해(`_app_id_from_app_token()`, `bot.py:264~274`) 시작 전에 검증하고, 불일치 시 `SlackAppMismatchError`(`bot.py:260~261`)를 던져 기동을 거부합니다. 미설정 시 검증을 건너뜁니다.
+- **인메모리 이벤트 중복제거** (`_SeenEvents`, `bot.py:73~97`): Socket Mode 핸들러가 동기 핸들러를 스레드 풀에서 디스패치하므로, 512개 크기의 bounded dict를 스레드 락으로 보호해 `client_msg_id` 또는 `event_ts`(`bot.py:331`) 기준으로 중복 Batch 작업을 방지합니다. **이 인메모리 dedup은 Socket Mode 경로에만 남아 있으며, 프로덕션 Lambda 경로에서는 리시버의 Slack 재전송 억제가 그 역할을 대신합니다**(상태 없는 Lambda에는 프로세스 로컬 집합이 통하지 않음).
 
-Paper Bot은 **Socket Mode** (`SocketModeHandler`, bot.py:276)에서만 작동하며, Slack의 실시간 이벤트 수신을 위해 다음 토큰이 필요합니다.
+이벤트 핸들러(`_on_mention()`, `_on_message()`, `bot.py:354~361`)는 프로덕션 리시버의 `_is_actionable_event()`와 동일하게 app_mention과 DM(`channel_type=="im"` + `bot_id` 없음)을 처리합니다.
 
-- **SLACK_BOT_TOKEN**: 봇 계정에 부여된 xoxb- 토큰 (메시지 송수신 권한)
-- **SLACK_APP_TOKEN**: xapp-1- 앱 레벨 토큰 (Socket Mode 연결용)
-- **전용 Slack 앱**: 다른 Socket Mode 봇과 토큰을 공유하지 않는 것이 좋습니다 (하나의 앱은 하나의 Socket Mode 연결만 지원).
+### 스택 및 구성 요약
 
-이벤트 핸들러 (`_on_mention()`, `_on_message()`, bot.py:266~273)는 app_mention(멘션) 및 message(DM, `channel_type=="im"` + `bot_id` 없음)를 처리합니다. Batch 작업이 성공해도 실패해도 Slack 컨텍스트가 없으면 `post_slack_result()`는 no-op이므로, Batch 매개변수로 channel/thread_ts가 전달되어야 결과가 스레드에 게시됩니다(dispatcher.py:86~95, 미설정 시 NULL_STRING "null").
-
-### 스택 및 구성
-
-- **IntentParser** (`intent.py:46~71`): Claude Haiku 4.5 + BedrockLanguageModelFactory로 구성된 LangChain chain (SlackIntentPrompt → 모델 → HTMLTagOutputParser)
-- **JobDispatcher** (`dispatcher.py:38~155`): review/summarize는 review_job_definition 사용, guide는 guide_job_definition(필수) 사용하여 Batch job 제출
-- **PaperBot** (`bot.py:71~117`): handle_message()에서 intent 파싱과 dispatcher를 조합하여 사용자 응답 생성
-- **Notifier** (`notifier.py`): Batch 파이프라인에서 호출되며, Slack mrkdwn 제어문자 이스케이프(`_mrkdwn_safe()`, notifier.py:30~40) 후 WebClient로 게시
+- **PaperBot** (`bot.py:100~202`): `handle_message()`가 intent 파싱과 dispatcher를 조합해 `SlackReply`(fallback text + Block Kit blocks)를 생성. `build_bot()`(`bot.py:205~248`)이 SSM에서 큐/정의 이름을 읽어 봇을 구성하며, AWS(Batch/Lambda) 실행 시 프로파일 대신 실행 역할 자격증명을 사용합니다(`bot.py:213~217`).
+- **IntentParser** (`intent.py:54~80`): SlackIntentPrompt → Claude Haiku 4.5 → HTMLTagOutputParser 체인.
+- **JobDispatcher** (`dispatcher.py:38~158`): review/summarize는 `review_job_definition`, guide는 `guide_job_definition`(필수) 사용.
+- **Notifier** (`notifier.py:29~148`): Batch 파이프라인에서 호출되며 mrkdwn 이스케이프 후 `WebClient`로 게시.
+- **lambda_receiver.py / lambda_worker.py**: 프로덕션 인바운드 엣지 두 Lambda.
 
 ## 12. 테스트, CI & 확장 (Testing, CI & Extending)
 

@@ -35,9 +35,9 @@ Scholar-Lens는 논문 또는 문서 URL 묶음으로부터 세 가지 산출물
 
 - **모든 AI/ML 논문** — arXiv ID *또는* 임의의 논문 **PDF URL**을 받습니다(PDF가 아닌 URL은 거부). arXiv 전용이 아닙니다.
 - **환각 없이 근거 기반** — 인용은 Crossref / Semantic Scholar로 해석하고 제목 유사도 게이트를 거칩니다. 작성기는 소스에 등장한 URL만 링크할 수 있고, 기술 가이드는 섹션별 사실 검증 패스를 돕니다.
-- **최신 Claude** — Amazon Bedrock의 Claude Opus 4.8 / Sonnet 4.6 / Haiku 4.5 + adaptive thinking, 단계별 설정 가능.
+- **최신 Claude** — Amazon Bedrock의 Claude Opus 4.8 / Sonnet 5 / Haiku 4.5 + adaptive thinking, 단계별 설정 가능.
 - **코드 인식 리뷰** — GitHub 저장소 분석 + FAISS 시맨틱 검색(선택).
-- **온디맨드 Slack 봇** — 논문이나 문서 URL과 함께 멘션하면, LLM이 *명시적* 요청을 파싱하고 Batch 작업을 실행한 뒤 스레드에 결과 링크를 회신합니다.
+- **온디맨드 Slack 봇** — 논문이나 문서 URL과 함께 멘션하면, LLM이 *명시적* 요청을 파싱하고 Batch 작업을 실행한 뒤 스레드에 결과 링크를 회신합니다. AWS에 서버리스(Slack Events API → Lambda)로 호스팅되어 로컬에서 상주 프로세스를 띄울 필요 없이 항상 동작합니다.
 - **확장성과 관찰성** — AWS Batch(온디맨드 + 스팟), CloudWatch 알람, EventBridge→SNS 실패 알림, 암호화 SecureString 시크릿.
 
 ## 아키텍처
@@ -67,6 +67,8 @@ Scholar-Lens는 논문 또는 문서 URL 묶음으로부터 세 가지 산출물
 | `code_retriever.py` | 저장소 클론 + 시맨틱 코드 검색(FAISS). |
 | `publisher.py` | 산출물 무관 S3 업로드 + Jekyll 블로그 PR. |
 | `slack/` | 온디맨드 Paper Bot(의도 파싱 → Batch 디스패치). |
+
+> 📖 데이터 흐름, 모듈 레퍼런스, 프롬프트, 인용 파이프라인, 인프라, Slack Lambda 아키텍처 등 내부 구조 심층 설명은 **[설계 문서](./docs/design.md)**를 참고하세요.
 
 ## 기술 스택
 
@@ -140,17 +142,23 @@ python scripts/run_batch.py --source 2505.09388 --mode review \
 
 ### Slack 봇
 
-```bash
-# Socket Mode (SLACK_BOT_TOKEN / SLACK_APP_TOKEN 필요)
-python -m scholar_lens.slack.bot
-```
+봇은 **AWS에 서버리스로** 실행됩니다 — `python scripts/deploy_infra.py` + `cdk deploy`가
+API Gateway HTTP API 뒤의 리시버 Lambda와 워커 Lambda를 프로비저닝합니다. Slack 앱의
+**Event Subscriptions** Request URL을 리시버 주소(CDK 출력 `SlackEventsRequestUrl`)로 지정하고,
+`app_mention` + `message.im`을 구독한 뒤 `SLACK_BOT_TOKEN` / `SLACK_SIGNING_SECRET`을 설정하면 됩니다.
+로컬에 상주 프로세스를 띄울 필요가 없습니다.
 
 원하는 작업과 함께 봇을 멘션하세요 — 예: `review 2401.06066`,
 `summarize https://arxiv.org/pdf/2401.06066`, `guide https://docs.framework.io/start`.
 결과는 S3에 저장되고 블로그에 발행되며, 봇은 스레드에 상태와 링크를 회신합니다.
 
-> 💡 봇은 전용 Slack 앱에서 실행하세요. 같은 워크스페이스에서 다른 Socket Mode 봇을
-> 함께 운영한다면, 두 봇이 같은 앱 토큰을 공유하지 않도록 각각 별도 앱으로 분리하면 됩니다.
+```bash
+# 로컬 개발용 폴백: Events API 대신 Socket Mode로 봇 실행
+# (SLACK_BOT_TOKEN / SLACK_APP_TOKEN 필요, 앱에서 Socket Mode 활성화)
+python -m scholar_lens.slack.bot
+```
+
+> 💡 봇은 전용 Slack 앱에서 실행하여 같은 워크스페이스의 다른 봇과 토큰을 공유하지 않도록 하세요.
 
 ## 테스트 & 품질
 
