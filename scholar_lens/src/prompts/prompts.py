@@ -1657,6 +1657,15 @@ class PaperSynthesisPrompt(BasePrompt):
       value, comment it as a choice rather than presenting it as the paper's. The
       SAME concept (e.g. an initialization scheme) must be implemented identically
       everywhere it appears; never show two contradicting versions.
+    - REPO GROUNDING: the ONLY source of actual repository code is the
+      `<code_examples>` input. If it is empty (no repository was retrieved), you
+      MUST NOT cite concrete source-tree artifacts — file paths (e.g.
+      `graphiti_core/prompts/extract_edges.py`), module/class/function names, or
+      line references — as if you had read them, and MUST NOT claim "코드에서 확인할
+      수 있듯이" / "the implementation shows". Any code you write is then
+      reconstructed FROM THE PAPER: label it as such (e.g. "개념적 의사코드") and
+      attribute it to no filename. Only when `<code_examples>` actually contains
+      code may you reference the specific files/symbols it came from.
     - COMPUTED vs REPORTED: clearly distinguish numbers YOU derive/estimate from
       numbers the paper reports. Never present your own calculation (e.g. a
       derived "99.97% frozen") as if it were an experimental result from the paper;
@@ -2884,6 +2893,12 @@ class TechGuideSynopsisPrompt(BasePrompt):
     - standard: a normal-importance topic — solid but not exhaustive
     - brief: an easy, routine, or peripheral topic — a few sentences; or drop it if it adds little
 
+    DISJOINT SCOPE — assign each concept to exactly ONE section. The outline is a partition, not overlapping essays:
+    each section owns a distinct slice of the topic, and no concept, definition, or component is the primary subject of
+    more than one section. If two candidate sections would both need to explain the same thing, either merge them or
+    decide which one owns it and have the other refer to it. This prevents the written sections from re-defining the
+    same idea repeatedly.
+
     Lean toward VISUAL aids: for each section note whether a table (comparisons/options), a source image
     (`![]` from available material), or a code block would genuinely help — use them generously where they aid
     understanding, "none" only when truly unnecessary.
@@ -2978,6 +2993,14 @@ class TechGuideSectionPrompt(BasePrompt):
       already presented there. Those are OFF-LIMITS: do not re-explain, re-define, or re-show them.
     - This section must add genuinely NEW material. If it naturally connects to earlier content, refer to it in one
       short phrase ("as introduced earlier") and move on — never restate it.
+
+    NO MECHANICAL FRAMING — the guide reads as one continuous document, not a series of stitched-together essays:
+    - Do NOT open the section with a recap of the previous chapter ("앞 장에서는 …를 살펴봤습니다", "이전 장에서
+      다룬 …"). Start directly with this section's own material.
+    - Do NOT close with a preview of the next chapter or a restated summary ("이어지는 장에서는 …", "정리하면 …",
+      "In the next section we will …"). End when the section's content is complete.
+    - A brief, substantive transition is fine when it genuinely aids flow; a formulaic recap-then-preview wrapper on
+      every section is not. When in doubt, omit the framing and let the content stand.
 
     Requirements:
     - Write in clean GitHub-flavored Markdown, starting with an appropriate '##' or '###' heading for this section.

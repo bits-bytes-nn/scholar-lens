@@ -57,3 +57,26 @@ def test_mixed_math_and_code_in_one_line() -> None:
     assert r"\(a\_b\)" in out
     assert "`c_d`" in out
     assert "e_f" in out  # plain prose underscore untouched
+
+
+def test_double_backslash_inline_delims_collapsed() -> None:
+    # \\( ... \\) renders as a literal backslash on the blog (math never
+    # activates). Collapse to \( ... \) AND escape underscores inside.
+    assert norm(r"노드 \\(\mathcal{N}_e\\)은") == r"노드 \(\mathcal{N}\_e\)은"
+
+
+def test_double_backslash_display_delims_collapsed() -> None:
+    # \\[ ... \\] -> \[ ... \] (delimiter activated).
+    assert norm(r"식 \\[ x \\] 끝") == r"식 \[ x \] 끝"
+
+
+def test_double_backslash_in_code_untouched() -> None:
+    assert norm(r"코드 `\\(raw)` 유지") == r"코드 `\\(raw)` 유지"
+    src = "```\n\\\\(x\\\\)\n```"
+    assert norm(src) == src
+
+
+def test_double_backslash_delim_idempotent() -> None:
+    once = norm(r"\\(a_b\\)")
+    assert once == r"\(a\_b\)"
+    assert norm(once) == once

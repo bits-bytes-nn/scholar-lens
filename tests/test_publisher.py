@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -112,6 +113,37 @@ class TestPublishLocal:
         )
         _, md_path = await pub.publish(request)
         assert "https://cdn.example.com/a.png" in md_path.read_text(encoding="utf-8")
+
+    async def test_absolute_local_scratch_path_rewritten(self, tmp_path: Path) -> None:
+        # Figure enrichment injects an ABSOLUTE local path as the image src for
+        # PDF-parsed papers (e.g. /Users/.../figures/0.png). It must be rewritten
+        # to this post's asset dir, not shipped verbatim (which 404s on the blog).
+        pub = Publisher(Github(), root_dir=tmp_path)
+        request = _request(
+            tmp_path,
+            markdown="# T\n\n![fig](/Users/me/papers/x/figures/0.png)\n",
+            rewrite_local_images=True,
+        )
+        _, md_path = await pub.publish(request)
+        content = md_path.read_text(encoding="utf-8")
+        assert "/Users/me/papers/x/figures/0.png" not in content
+        assert "/assets/" in content and "/0.png)" in content
+
+    async def test_already_hosted_asset_path_untouched(self, tmp_path: Path) -> None:
+        # A path already under THIS post's asset dir must be left as-is (idempotent
+        # re-publish), not double-prefixed.
+        file_name = f"{datetime.now().strftime('%Y-%m-%d')}-my-guide"
+        hosted = f"/assets/{file_name}/0.png"
+        pub = Publisher(Github(), root_dir=tmp_path)
+        request = _request(
+            tmp_path,
+            markdown=f"# T\n\n![fig]({hosted})\n",
+            rewrite_local_images=True,
+        )
+        _, md_path = await pub.publish(request)
+        content = md_path.read_text(encoding="utf-8")
+        assert content.count(hosted) == 1
+        assert f"/assets/{file_name}/{file_name}" not in content  # no double-prefix
 
 
 class TestPublishS3:

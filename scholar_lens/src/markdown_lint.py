@@ -5,10 +5,15 @@ one catches the *other* recurring blog-rendering failures. It reuses the same
 validated code/math-span splitter (:data:`markdown_math.SEGMENT_PATTERN`) so it
 never mistakes code for prose or math.
 
-Only ONE auto-fix is applied — one that is genuinely lossless:
+Two auto-fixes are applied — both genuinely lossless:
 
 * **Auto-fix** (deterministic, lossless): insert the blank line kramdown needs
   before a heading glued to the previous line (outside fenced code).
+* **Auto-fix** (deterministic, lossless): escape bare ``<placeholder>`` angle-
+  bracket tokens in prose (e.g. ``<none>``, ``<your-namespace>``,
+  ``<server-host>``) so kramdown does not parse them as HTML open tags and emit
+  a stray ``</...>`` closing tag at the next block boundary. Real inline HTML
+  (``<br>``, ``<sup>``, ``<kbd>``, …) and code/math spans are left untouched.
 
 Everything else is a **warning** (logged, never rewritten — a wrong rewrite
 would ship a new bug):
@@ -60,6 +65,70 @@ _MD_LINK = re.compile(r"(?<!\!)\[(?:[^\]]*)\]\(([^)]*)\)")
 _MACRO = re.compile(r"\\([a-zA-Z]+)")
 # A heading line that needs a blank line before it.
 _HEADING = re.compile(r"^#{1,6}[ \t]")
+
+# Real inline HTML tags a post may legitimately use; these must NOT be escaped.
+# Everything else that looks like <word ...> in prose is treated as a
+# placeholder token (e.g. <none>, <server-host>, <your-namespace>) that kramdown
+# would otherwise parse as an HTML open tag, emitting a stray closing tag later.
+_REAL_HTML_TAGS = frozenset(
+    {
+        "a",
+        "abbr",
+        "b",
+        "br",
+        "code",
+        "dd",
+        "del",
+        "details",
+        "div",
+        "dl",
+        "dt",
+        "em",
+        "figure",
+        "figcaption",
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6",
+        "hr",
+        "i",
+        "img",
+        "ins",
+        "kbd",
+        "li",
+        "mark",
+        "ol",
+        "p",
+        "pre",
+        "q",
+        "s",
+        "samp",
+        "small",
+        "span",
+        "strong",
+        "sub",
+        "summary",
+        "sup",
+        "table",
+        "tbody",
+        "td",
+        "tfoot",
+        "th",
+        "thead",
+        "tr",
+        "u",
+        "ul",
+        "var",
+    }
+)
+# An angle-bracket token: an opening/closing/self-closing tag-like run with no
+# embedded '<'/'>' and no whitespace-only body. group(1) = optional '/', group(2)
+# = the leading name token (letters/digits/_-). We only escape when that name is
+# not a real HTML tag, so <br>, <sup>, </table> stay intact but <none>,
+# <your-namespace>, <server-host> get escaped.
+_ANGLE_TOKEN = re.compile(r"<(/?)([A-Za-z][A-Za-z0-9._-]*)[^<>]*?/?>")
 # Constructs that render poorly on the blog's MathJax: the standalone amsmath
 # display environments (use \begin{aligned} inside $$...$$ instead) and \bm (use
 # \boldsymbol). Warn-only — fixing requires understanding the equation.
@@ -103,6 +172,39 @@ def _fix_headings(markdown: str) -> str:
             out.append("")
         out.append(line)
     return "\n".join(out)
+
+
+def _escape_placeholder_tags(markdown: str, regions: list[tuple[int, int, str]]) -> str:
+    """Escape bare ``<placeholder>`` tokens in prose so kramdown doesn't treat
+    them as HTML.
+
+    Tokens like ``<none>``, ``<server-host>``, ``<your-namespace>`` in body text
+    are parsed by kramdown as HTML open tags; since they're never closed, it
+    emits a stray ``</...>`` at the next block boundary, corrupting the render.
+    We escape the angle brackets (``<`` -> ``&lt;``, ``>`` -> ``&gt;``) for any
+    ``<name ...>`` whose name isn't a real HTML tag (:data:`_REAL_HTML_TAGS`).
+    Code spans and math spans are skipped, so shell redirs, generics, and
+    ``\\langle`` stay untouched.
+    """
+    protected = [
+        (s, e) for s, e, k in regions if k in ("fence", "icode", "display", "inline")
+    ]
+
+    def repl(m: re.Match[str]) -> str:
+        if m.group(2).lower() in _REAL_HTML_TAGS:
+            return m.group(0)
+        return m.group(0).replace("<", "&lt;").replace(">", "&gt;")
+
+    out: list[str] = []
+    pos = 0
+    for m in _ANGLE_TOKEN.finditer(markdown):
+        if any(s <= m.start() < e for s, e in protected):
+            continue
+        out.append(markdown[pos : m.start()])
+        out.append(repl(m))
+        pos = m.end()
+    out.append(markdown[pos:])
+    return "".join(out)
 
 
 def _warn_pipes_in_math(markdown: str, regions: list[tuple[int, int, str]]) -> None:
@@ -191,15 +293,20 @@ def _warn_non_url_links(markdown: str, regions: list[tuple[int, int, str]]) -> N
 
 
 def lint_markdown(markdown: str) -> str:
-    """Auto-fix the one safe blog-rendering issue and warn about risky ones.
+    """Auto-fix the safe blog-rendering issues and warn about risky ones.
 
     Auto-fixed (lossless): blank line before a heading glued to the previous
-    line. Warned (left untouched, since a rewrite could ship a new bug): bare
-    ``|`` in math, fragile amsmath envs / ``\\bm``, single-$ inline math,
-    known-undefined macros, and non-URL link targets. Returns the (heading-fixed)
-    Markdown.
+    line; bare ``<placeholder>`` angle-bracket tokens in prose escaped so
+    kramdown doesn't emit stray HTML closing tags. Warned (left untouched, since
+    a rewrite could ship a new bug): bare ``|`` in math, fragile amsmath envs /
+    ``\\bm``, single-$ inline math, known-undefined macros, and non-URL link
+    targets. Returns the fixed Markdown.
     """
     fixed = _fix_headings(markdown)
+
+    # Escape bare <placeholder> tokens before warnings run so region offsets are
+    # computed against the final text. Re-classify since escaping shifts offsets.
+    fixed = _escape_placeholder_tags(fixed, _classify_regions(fixed))
 
     regions = _classify_regions(fixed)
     _warn_pipes_in_math(fixed, regions)

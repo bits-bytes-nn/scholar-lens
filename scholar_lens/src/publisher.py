@@ -121,8 +121,17 @@ class Publisher:
 
         def repl(match: re.Match) -> str:
             alt_text, img = match.group(1), match.group(2)
-            if img.startswith(("http://", "https://", "/")):
+            # Remote images stay as-is.
+            if img.startswith(("http://", "https://")):
                 return match.group(0)
+            # Already pointing at this post's asset dir — leave it.
+            if img.startswith(f"{assets_path}/"):
+                return match.group(0)
+            # Everything else — a relative name, or an ABSOLUTE local scratch path
+            # like "/Users/.../figures/0.png" injected by figure enrichment — is a
+            # figure this post owns. All figures upload flat into `assets_path`, so
+            # rewrite to the hosted basename. (Previously any "/"-prefixed path was
+            # skipped, so absolute local paths shipped verbatim and 404'd.)
             return f"![{alt_text}]({assets_path}/{Path(img).name})"
 
         return re.sub(_MARKDOWN_IMAGE_PATTERN, repl, markdown)

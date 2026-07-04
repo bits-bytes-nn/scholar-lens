@@ -39,6 +39,39 @@ _SEGMENT = re.compile(
 SEGMENT_PATTERN = _SEGMENT
 
 
+# Double-backslashed math delimiters: ``\\(``/``\\)``/``\\[``/``\\]``. Some model
+# outputs emit these (a JSON/escaping artifact), but on the blog ``\\(`` renders
+# as a literal backslash followed by ``(`` — the math never activates. Collapse
+# to the single-backslash form the pipeline expects BEFORE segment-splitting, so
+# the spans are then recognised as math (and underscore-escaped). Only the four
+# math delimiters are collapsed; other ``\\`` (e.g. line breaks in math) stay.
+_DOUBLE_BS_DELIM = re.compile(r"\\\\([()\[\]])")
+
+
+def _fix_double_backslash_delims(markdown: str) -> str:
+    """Collapse ``\\\\(``/``\\\\)``/``\\\\[``/``\\\\]`` to a single backslash,
+    outside code spans, so the delimiters actually activate math."""
+
+    def repl(match: re.Match[str]) -> str:
+        seg = match.group(0)
+        if match.lastgroup in ("fence", "icode"):
+            return seg  # never touch code
+        return _DOUBLE_BS_DELIM.sub(r"\\\1", seg)
+
+    # Split on code spans only, then fix delimiters in the non-code gaps. We run
+    # _SEGMENT to protect code; math/prose gaps are handled by the else-branch of
+    # a manual walk rather than _SEGMENT.sub (which would miss prose gaps).
+    out: list[str] = []
+    pos = 0
+    for m in _SEGMENT.finditer(markdown):
+        if m.lastgroup in ("fence", "icode"):
+            out.append(_DOUBLE_BS_DELIM.sub(r"\\\1", markdown[pos : m.start()]))
+            out.append(m.group(0))  # code: untouched
+            pos = m.end()
+    out.append(_DOUBLE_BS_DELIM.sub(r"\\\1", markdown[pos:]))
+    return "".join(out)
+
+
 def _escape_underscores(math: str) -> str:
     """Escape unescaped underscores in a math span (``_`` -> ``\\_``)."""
     return re.sub(r"(?<!\\)_", r"\\_", math)
@@ -48,9 +81,14 @@ def normalize_math_underscores(markdown: str) -> str:
     """Escape underscores inside LaTeX math spans for kramdown+GFM safety.
 
     Leaves code (fenced or inline) and ordinary prose untouched; only the
-    contents of ``$...$`` and ``$$...$$`` are rewritten. Idempotent — already
+    contents of ``\\(...\\)`` and ``$$...$$`` are rewritten. Idempotent — already
     escaped ``\\_`` is preserved.
+
+    First collapses double-backslashed math delimiters (``\\\\(`` -> ``\\(`` etc.)
+    outside code, so spans that arrived over-escaped are recognised as math and
+    get underscore-escaped too.
     """
+    markdown = _fix_double_backslash_delims(markdown)
 
     def repl(match: re.Match[str]) -> str:
         if match.lastgroup in ("fence", "icode"):

@@ -42,6 +42,37 @@ class TestHeadingBlankLine:
         assert lint_markdown(src) == src
 
 
+class TestPlaceholderTagEscaping:
+    def test_bare_placeholder_escaped(self) -> None:
+        out = lint_markdown("namespace 값이 <none>으로 표시됩니다.")
+        assert "&lt;none&gt;" in out
+        assert "<none>" not in out
+
+    def test_multiple_placeholders_escaped(self) -> None:
+        out = lint_markdown("서버는 <server-host>:<port> 형태.")
+        assert "&lt;server-host&gt;" in out and "&lt;port&gt;" in out
+
+    def test_placeholder_with_space_escaped(self) -> None:
+        out = lint_markdown("kubectl --namespace <your namespace> 실행")
+        assert "&lt;your namespace&gt;" in out
+
+    def test_real_html_tags_untouched(self) -> None:
+        src = "줄바꿈 <br> 과 위첨자 <sup>2</sup> 와 <kbd>Ctrl</kbd>."
+        assert lint_markdown(src) == src
+
+    def test_placeholder_in_inline_code_untouched(self) -> None:
+        src = "값이 `<none>` 으로 표시됩니다."
+        assert lint_markdown(src) == src
+
+    def test_placeholder_in_code_fence_untouched(self) -> None:
+        src = "```\nserver: <server-host>\n```"
+        assert lint_markdown(src) == src
+
+    def test_less_than_in_inline_math_untouched(self) -> None:
+        src = r"부등식 \( a < b \) 는 그대로."
+        assert lint_markdown(src) == src
+
+
 @pytest.mark.usefixtures("_capture_app_logs")
 class TestPipeInMath:
     def test_bare_pipe_in_math_warns_not_rewritten(self, caplog) -> None:
