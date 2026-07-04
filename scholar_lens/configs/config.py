@@ -79,16 +79,16 @@ class Paper(BaseModel):
         default=LanguageModelId.CLAUDE_V3_HAIKU
     )
     citation_extraction_model_id: LanguageModelId = Field(
-        default=LanguageModelId.CLAUDE_V4_5_SONNET
+        default=LanguageModelId.CLAUDE_V5_SONNET
     )
     attributes_extraction_model_id: LanguageModelId = Field(
         default=LanguageModelId.CLAUDE_V4_5_HAIKU
     )
     table_of_contents_model_id: LanguageModelId = Field(
-        default=LanguageModelId.CLAUDE_V4_5_SONNET
+        default=LanguageModelId.CLAUDE_V5_SONNET
     )
     output_fixing_model_id: LanguageModelId = Field(
-        default=LanguageModelId.CLAUDE_V4_5_SONNET
+        default=LanguageModelId.CLAUDE_V5_SONNET
     )
 
 
@@ -129,17 +129,17 @@ class Citations(BaseModel):
 
 class Explanation(BaseModel):
     paper_analysis_model_id: LanguageModelId = Field(
-        default=LanguageModelId.CLAUDE_V4_5_SONNET
+        default=LanguageModelId.CLAUDE_V5_SONNET
     )
     paper_enrichment_model_id: LanguageModelId = Field(
-        default=LanguageModelId.CLAUDE_V4_5_SONNET
+        default=LanguageModelId.CLAUDE_V5_SONNET
     )
     paper_finalization_model_id: LanguageModelId
     paper_reflection_model_id: LanguageModelId = Field(
-        default=LanguageModelId.CLAUDE_V4_5_SONNET
+        default=LanguageModelId.CLAUDE_V5_SONNET
     )
     paper_synthesis_model_id: LanguageModelId = Field(
-        default=LanguageModelId.CLAUDE_V4_5_SONNET
+        default=LanguageModelId.CLAUDE_V5_SONNET
     )
     reflector_enable_thinking: bool = Field(default=False)
     synthesizer_enable_thinking: bool = Field(default=False)
@@ -160,9 +160,7 @@ class TechGuide(BaseModel):
     relevance_model_id: LanguageModelId = Field(
         default=LanguageModelId.CLAUDE_V4_5_HAIKU
     )
-    synopsis_model_id: LanguageModelId = Field(
-        default=LanguageModelId.CLAUDE_V4_6_SONNET
-    )
+    synopsis_model_id: LanguageModelId = Field(default=LanguageModelId.CLAUDE_V5_SONNET)
     writing_model_id: LanguageModelId = Field(default=LanguageModelId.CLAUDE_V4_8_OPUS)
     writer_enable_thinking: bool = Field(default=False)
     thinking_effort: ThinkingEffort = Field(default="medium")
@@ -193,10 +191,10 @@ class Config(BaseModel):
     paper: Paper = Field(
         default_factory=lambda: Paper(
             figure_analysis_model_id=LanguageModelId.CLAUDE_V3_HAIKU,
-            citation_extraction_model_id=LanguageModelId.CLAUDE_V4_5_SONNET,
+            citation_extraction_model_id=LanguageModelId.CLAUDE_V5_SONNET,
             attributes_extraction_model_id=LanguageModelId.CLAUDE_V4_5_HAIKU,
-            table_of_contents_model_id=LanguageModelId.CLAUDE_V4_5_SONNET,
-            output_fixing_model_id=LanguageModelId.CLAUDE_V4_5_SONNET,
+            table_of_contents_model_id=LanguageModelId.CLAUDE_V5_SONNET,
+            output_fixing_model_id=LanguageModelId.CLAUDE_V5_SONNET,
         )
     )
     code: Code = Field(
@@ -213,11 +211,11 @@ class Config(BaseModel):
     )
     explanation: Explanation = Field(
         default_factory=lambda: Explanation(
-            paper_analysis_model_id=LanguageModelId.CLAUDE_V4_5_SONNET,
-            paper_enrichment_model_id=LanguageModelId.CLAUDE_V4_5_SONNET,
+            paper_analysis_model_id=LanguageModelId.CLAUDE_V5_SONNET,
+            paper_enrichment_model_id=LanguageModelId.CLAUDE_V5_SONNET,
             paper_finalization_model_id=LanguageModelId.CLAUDE_V4_5_HAIKU,
-            paper_reflection_model_id=LanguageModelId.CLAUDE_V4_5_SONNET,
-            paper_synthesis_model_id=LanguageModelId.CLAUDE_V4_5_SONNET,
+            paper_reflection_model_id=LanguageModelId.CLAUDE_V5_SONNET,
+            paper_synthesis_model_id=LanguageModelId.CLAUDE_V5_SONNET,
         )
     )
     summary: Summary = Field(default_factory=Summary)

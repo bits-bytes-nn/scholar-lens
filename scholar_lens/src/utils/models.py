@@ -136,6 +136,21 @@ _LANGUAGE_MODEL_INFO: dict[LanguageModelId, LanguageModelInfo] = {
         supports_thinking=True,
         supports_1m_context_window=True,
     ),
+    LanguageModelId.CLAUDE_V5_SONNET: LanguageModelInfo(
+        context_window_size=200000,
+        max_output_tokens=128000,
+        supports_prompt_caching=True,
+        supports_thinking=True,
+        # Sonnet 5 uses the adaptive-thinking API (thinking.type='adaptive' +
+        # output_config.effort), like Opus 4.7+. budget_tokens is rejected.
+        uses_adaptive_thinking=True,
+        supports_1m_context_window=True,
+        # Sonnet 5 isn't supported by Bedrock CountTokens, and no new-tokenizer
+        # model is (Opus 4.7/4.8 aren't either). Proxy to Sonnet 4.6 like they do
+        # — it slightly undercounts the newer tokenizer, but fit_text only needs a
+        # safe lower bound against a 1M window plus reserve, so this is fine.
+        count_tokens_proxy=LanguageModelId.CLAUDE_V4_6_SONNET.value,
+    ),
     LanguageModelId.CLAUDE_V4_OPUS: LanguageModelInfo(
         context_window_size=200000,
         max_output_tokens=64000,
