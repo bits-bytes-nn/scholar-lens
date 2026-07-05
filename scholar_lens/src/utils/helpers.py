@@ -14,19 +14,33 @@ from ..logger import logger
 def parse_quality_score(raw: Any) -> int:
     """Parse a 0-100 evaluator quality score robustly.
 
-    Shared by the review and tech-guide evaluate-and-revise
-    loops. The prompt asks for a bare integer, but a model may still emit "85",
-    "85/100", or "N/A". Prefer a clean integer; otherwise take the FIRST number
-    in a leading "<n>/<total>" form (so "85/100" -> 85, not 100); a non-numeric
-    value falls back to 0, which forces another attempt rather than crashing.
+    Shared by the review and tech-guide evaluate-and-revise loops. The prompt
+    asks for a bare integer, but a model may still pad it: "85", "85/100",
+    "Score: 85", "85 (excellent)", "9/10", or "N/A". Precedence:
+
+    1. a clean integer;
+    2. otherwise a leading ``<n>/<total>`` fraction -> the NUMERATOR ("85/100" ->
+       85, not 100);
+    3. otherwise the FIRST integer anywhere in the string (so "Score: 85" -> 85,
+       not 0 — an anchored match here would mis-score and force a wasted revision).
+
+    The result is clamped to 0-100; a non-numeric value falls back to 0, which
+    forces another attempt rather than crashing.
     """
     text = str(raw if raw is not None else "").strip()
+
+    def clamp(n: int) -> int:
+        return max(0, min(100, n))
+
     try:
-        return int(text)
+        return clamp(int(text))
     except ValueError:
         pass
-    match = re.match(r"-?\d+", text)
-    return int(match.group()) if match else 0
+    fraction = re.search(r"(\d+)\s*/\s*\d+", text)
+    if fraction:
+        return clamp(int(fraction.group(1)))
+    match = re.search(r"\d+", text)
+    return clamp(int(match.group())) if match else 0
 
 
 def arg_as_bool(value: Any) -> bool:

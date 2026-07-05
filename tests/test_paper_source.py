@@ -218,3 +218,97 @@ class TestPdfUrlSourceDownload:
         src = PdfUrlSource(PDF_URL)
         with pytest.raises(NotAPdfError):
             src.download_pdf(tmp_papers_dir)
+
+    @responses.activate
+    def test_declared_content_length_over_cap_rejected(self, tmp_papers_dir) -> None:
+        # A Content-Length above the 100 MB cap is rejected up front (no download).
+        from scholar_lens.src.paper_source import _MAX_PDF_BYTES
+
+        responses.add(
+            responses.HEAD, PDF_URL, headers={"Content-Type": "application/pdf"}
+        )
+        responses.add(
+            responses.GET,
+            PDF_URL,
+            body=b"%PDF-1.4 short",
+            headers={"Content-Length": str(_MAX_PDF_BYTES + 1)},
+            status=200,
+        )
+        src = PdfUrlSource(PDF_URL)
+        with pytest.raises(PaperSourceError, match="exceeds"):
+            src.download_pdf(tmp_papers_dir)
+
+    @responses.activate
+    def test_body_streamed_past_cap_rejected_and_partial_cleaned_up(
+        self, tmp_papers_dir, monkeypatch
+    ) -> None:
+        # A body that streams past the cap (no/lying Content-Length) is aborted
+        # mid-download AND the partial file is unlinked (no half-PDF left behind).
+        import scholar_lens.src.paper_source as ps
+
+        monkeypatch.setattr(ps, "_MAX_PDF_BYTES", 10)  # tiny cap for the test
+        responses.add(
+            responses.HEAD, PDF_URL, headers={"Content-Type": "application/pdf"}
+        )
+        responses.add(responses.GET, PDF_URL, body=b"%PDF-" + b"x" * 1000, status=200)
+        src = PdfUrlSource(PDF_URL)
+        with pytest.raises(PaperSourceError, match="limit"):
+            src.download_pdf(tmp_papers_dir)
+        pdf_path = tmp_papers_dir / src.source_id / f"{src.source_id}.pdf"
+        assert not pdf_path.exists()  # partial file cleaned up
+
+    @responses.activate
+    def test_too_many_redirects_rejected(self, tmp_papers_dir) -> None:
+        # A redirect chain longer than _MAX_REDIRECTS is rejected (not followed
+        # forever) — a DoS / loop guard. All hops stay on public hosts.
+        from scholar_lens.src.paper_source import _MAX_REDIRECTS
+
+        responses.add(
+            responses.HEAD, PDF_URL, headers={"Content-Type": "application/pdf"}
+        )
+        # Chain: PDF_URL -> /r0 -> /r1 -> ... , always one more hop than allowed.
+        for i in range(_MAX_REDIRECTS + 2):
+            here = PDF_URL if i == 0 else f"https://example.com/r{i - 1}"
+            responses.add(
+                responses.GET,
+                here,
+                status=302,
+                headers={"Location": f"https://example.com/r{i}"},
+            )
+        src = PdfUrlSource(PDF_URL)
+        with pytest.raises(PaperSourceError, match="[Tt]oo many redirects"):
+            src.download_pdf(tmp_papers_dir)
+
+    @responses.activate
+    def test_public_redirect_is_followed(
+        self, tmp_papers_dir, minimal_pdf_bytes
+    ) -> None:
+        # A 302 to another PUBLIC location is followed and the PDF downloads (the
+        # happy path the per-hop re-validation must not break). Uses a resolvable
+        # host so the SSRF guard's real DNS lookup succeeds.
+        final = "https://example.com/cdn/paper.pdf"
+        responses.add(
+            responses.HEAD, PDF_URL, headers={"Content-Type": "application/pdf"}
+        )
+        responses.add(responses.GET, PDF_URL, status=302, headers={"Location": final})
+        responses.add(
+            responses.GET,
+            final,
+            body=minimal_pdf_bytes,
+            content_type="application/pdf",
+            status=200,
+        )
+        src = PdfUrlSource(PDF_URL)
+        path = src.download_pdf(tmp_papers_dir)
+        assert path.exists()
+        assert path.read_bytes().startswith(b"%PDF-")
+
+    @responses.activate
+    def test_redirect_with_empty_location_rejected(self, tmp_papers_dir) -> None:
+        responses.add(
+            responses.HEAD, PDF_URL, headers={"Content-Type": "application/pdf"}
+        )
+        responses.add(responses.GET, PDF_URL, status=302, headers={"Location": ""})
+        src = PdfUrlSource(PDF_URL)
+        with pytest.raises(PaperSourceError):
+            src.download_pdf(tmp_papers_dir)

@@ -535,6 +535,31 @@ class TestEvaluateAndRevise:
         gen.evaluation_chain.ainvoke.assert_not_awaited()
         assert out == "## Draft\nbody"
 
+    async def test_low_score_with_empty_feedback_still_revises(self) -> None:
+        # A below-threshold section with EMPTY feedback must NOT be accepted just
+        # because feedback is blank (empty feedback only means "excellent" when the
+        # score is also high). It should revise with a generic directive.
+        gen = _make_generator(min_quality_score=80, max_revision_attempts=1)
+        gen.evaluation_chain.ainvoke = AsyncMock(
+            return_value={"quality_score": "40", "improvement_feedback": ""}
+        )
+        gen.section_chain.ainvoke = AsyncMock(
+            return_value={"section_markdown": "## Revised\nmore depth"}
+        )
+        await gen._evaluate_and_revise(
+            topic="X",
+            planned=PlannedSection(title="Intro"),
+            section_label="1. Intro",
+            markdown="## Thin\nbody",
+            section_number=1,
+            total_sections=1,
+            previous_sections="",
+            sources="src",
+            available_images="(none)",
+            final_outline="1. Intro",
+        )
+        gen.section_chain.ainvoke.assert_awaited()  # revision happened
+
     def test_parse_quality_score_robust(self) -> None:
         # The score parser is now the shared helper used by both the review and
         # tech-guide evaluate loops.
@@ -619,6 +644,42 @@ class TestTokenBudget:
         assert "## S" in body
         gen.evaluation_chain.ainvoke.assert_not_awaited()
         gen.grounding_chain.ainvoke.assert_not_awaited()
+
+    async def test_hard_abort_stops_writing_remaining_sections(self) -> None:
+        # Past the 1.5x hard ceiling, _write_sections must STOP issuing writer
+        # calls (not merely soft-degrade): the 2nd section's writer is never
+        # awaited once the 1st pushes spend past the hard cap. This is the exact
+        # guarantee the two-tier budget exists to provide.
+        from scholar_lens.src.metrics import TokenBudgetExceeded
+
+        gen = _make_generator(min_quality_score=80, max_revision_attempts=0)
+        gen.max_total_tokens = 1000  # hard ceiling = 1500
+
+        tracker = MagicMock()
+        tracker.total_tokens = 0
+
+        # The hard-budget check calls tracker.check_budget(1500); make it raise
+        # only once spend has crossed the ceiling. Simulate the 1st section's
+        # write pushing spend over by bumping total_tokens on each writer call.
+        def check_budget(ceiling: int) -> None:
+            if tracker.total_tokens > ceiling:
+                raise TokenBudgetExceeded("over hard cap")
+
+        tracker.check_budget = MagicMock(side_effect=check_budget)
+        gen._token_tracker = tracker
+
+        async def write(*args, **kwargs):
+            tracker.total_tokens += 2000  # one section blows past 1.5x
+            return {"section_markdown": "## S\nbody"}
+
+        gen.section_chain.ainvoke = AsyncMock(side_effect=write)
+
+        with pytest.raises(TokenBudgetExceeded):
+            await gen._write_sections(
+                "X", "1. [CONCEPT] [deep] A\n2. [CONCEPT] [deep] B", _corpus()
+            )
+        # Exactly one writer call: the loop aborted before section 2.
+        assert gen.section_chain.ainvoke.await_count == 1
 
 
 class TestMainForwardsPrUrl:

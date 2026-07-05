@@ -299,6 +299,25 @@ class PaperReviewStack(Stack):
             ],
         )
 
+    def _ssm_read_named_statement(self, param_names: list[str]) -> iam.PolicyStatement:
+        """Read ONLY the named SSM params under this project/stage.
+
+        Used for the Slack worker so a worker compromise (it sits behind the
+        public API Gateway ingress) can't decrypt every provider secret — only
+        the bot token + Batch queue/definition params it actually needs. Contrast
+        :meth:`_ssm_read_statement`, whose ``/*`` wildcard the in-container job
+        role legitimately needs (it uses all provider keys)."""
+        return iam.PolicyStatement(
+            sid="SsmReadNamedParameters",
+            actions=["ssm:GetParameter", "ssm:GetParameters"],
+            resources=[
+                self._aws_partition_arn(
+                    "ssm", f"parameter/{self.project_name}/{self.stage}/{name}"
+                )
+                for name in param_names
+            ],
+        )
+
     def _batch_statements(self) -> list[iam.PolicyStatement]:
         """Submit/describe Batch jobs on this stack's queue + definitions (shared)."""
         # AWS Batch: submit jobs only to this stack's queue + job definitions
@@ -713,12 +732,23 @@ class PaperReviewStack(Stack):
             ],
         )
         # Least privilege: the worker only parses intent (Bedrock), reads the bot
-        # token (SSM), and submits a Batch job. It does NOT touch S3/SNS/KMS/
-        # CloudWatch, so it gets just those three statement groups — not the full
-        # job policy.
+        # token + Batch queue/definition params (SSM), and submits a Batch job. It
+        # does NOT touch S3/SNS/KMS/CloudWatch, so it gets just those statement
+        # groups — not the full job policy. The SSM read is scoped to the exact
+        # params it uses (NOT the /* wildcard) so a worker compromise behind the
+        # public ingress can't decrypt the github/upstage/brave/tavily/langchain
+        # secrets it never touches.
         for statement in (
             *self._bedrock_statements(),
-            self._ssm_read_statement(),
+            self._ssm_read_named_statement(
+                [
+                    SSMParams.SLACK_BOT_TOKEN.value,
+                    SSMParams.BATCH_JOB_QUEUE.value,
+                    SSMParams.BATCH_JOB_DEFINITION.value,
+                    SSMParams.GUIDE_JOB_QUEUE.value,
+                    SSMParams.GUIDE_JOB_DEFINITION.value,
+                ]
+            ),
             *self._batch_statements(),
         ):
             worker_role.add_to_policy(statement)
@@ -817,6 +847,13 @@ class PaperReviewStack(Stack):
             description="Slack Events API Request URL (paste into Event Subscriptions)",
         )
 
+        # Include the Slack Lambda log groups in the ERROR-line alarm sweep
+        # (_create_observability iterates self.log_groups). Otherwise ERRORs in
+        # the inbound half — intent-parse/Bedrock/SSM/dispatch failures the worker
+        # logs with exc_info — would never raise the CloudWatch alarm or email.
+        self.log_groups.append(worker_log_group)
+        self.log_groups.append(receiver_log_group)
+
     def _create_observability(self) -> None:
         """Wire failure/error/cost alarms to the (email-subscribed) SNS topic."""
         sns_action = cw_actions.SnsAction(self.topic)
@@ -878,18 +915,24 @@ class PaperReviewStack(Stack):
             alarm.add_alarm_action(sns_action)
 
         # 3) Estimated-cost guardrail on the custom metric emitted by the app
-        #    (ScholarLens/EstimatedCostUSD). Alarms if a single 1h window's total
-        #    estimated spend crosses the threshold.
+        #    (ScholarLens/EstimatedCostUSD). The app emits this metric WITH a
+        #    `Mode` dimension (review/summary/guide), so a plain dimensionless
+        #    Metric would match zero datapoints and never fire. Use a SEARCH
+        #    metric-math expression to SUM across every Mode into one hourly total.
+        cost_expression = cloudwatch.MathExpression(
+            expression=(
+                "SUM(SEARCH('{ScholarLens,Mode} MetricName=\"EstimatedCostUSD\"', "
+                "'Sum', 3600))"
+            ),
+            label="EstimatedCostUSD (all modes)",
+            period=Duration.hours(1),
+            using_metrics={},
+        )
         cost_alarm = cloudwatch.Alarm(
             self,
             "EstimatedCostAlarm",
             alarm_name=self._get_resource_name("estimated-cost"),
-            metric=cloudwatch.Metric(
-                namespace="ScholarLens",
-                metric_name="EstimatedCostUSD",
-                statistic="Sum",
-                period=Duration.hours(1),
-            ),
+            metric=cost_expression,
             threshold=50,
             evaluation_periods=1,
             comparison_operator=(cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD),

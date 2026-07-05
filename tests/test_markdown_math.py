@@ -80,3 +80,22 @@ def test_double_backslash_delim_idempotent() -> None:
     once = norm(r"\\(a_b\\)")
     assert once == r"\(a\_b\)"
     assert norm(once) == once
+
+
+def test_row_break_with_spacing_in_display_math_preserved() -> None:
+    # Regression: `\\[2pt]` inside $$...$$ is a LaTeX row break with spacing, NOT
+    # an over-escaped display delimiter — the collapse must not touch it (it would
+    # break aligned/array/cases environments).
+    src = r"$$\begin{aligned} a &= b \\[2pt] c &= d \end{aligned}$$"
+    assert norm(src) == src
+
+
+def test_plain_row_break_in_display_math_preserved() -> None:
+    src = r"$$a \\ b$$"
+    assert norm(src) == src
+
+
+def test_row_break_with_spacing_in_inline_math_preserved() -> None:
+    # `\\` inside an active \(...\) span is a row break; leave it.
+    src = r"\(a \\[1em] b\)"
+    assert norm(src) == src

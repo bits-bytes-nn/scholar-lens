@@ -134,7 +134,12 @@ class Explanation(BaseModel):
     paper_enrichment_model_id: LanguageModelId = Field(
         default=LanguageModelId.CLAUDE_V5_SONNET
     )
-    paper_finalization_model_id: LanguageModelId
+    # Default matches the sibling fields (all Explanation model IDs have one) so a
+    # partial `explanation:` YAML block that omits this field doesn't crash config
+    # load. Haiku is the fast tier used for the key-takeaways summarization step.
+    paper_finalization_model_id: LanguageModelId = Field(
+        default=LanguageModelId.CLAUDE_V4_5_HAIKU
+    )
     # EVALUATOR for the review pipeline — scores each synthesized section (0-100)
     # and gates the evaluate-and-revise loop, mirroring TechGuide.evaluation_model_id
     # for guides. Keep it on Opus 4.8 for stable, well-calibrated scoring —

@@ -40,33 +40,30 @@ SEGMENT_PATTERN = _SEGMENT
 
 
 # Double-backslashed math delimiters: ``\\(``/``\\)``/``\\[``/``\\]``. Some model
-# outputs emit these (a JSON/escaping artifact), but on the blog ``\\(`` renders
-# as a literal backslash followed by ``(`` — the math never activates. Collapse
-# to the single-backslash form the pipeline expects BEFORE segment-splitting, so
-# the spans are then recognised as math (and underscore-escaped). Only the four
-# math delimiters are collapsed; other ``\\`` (e.g. line breaks in math) stay.
+# outputs emit these (a JSON/escaping artifact) in PROSE, but on the blog ``\\(``
+# renders as a literal backslash followed by ``(`` — the math never activates.
+# Collapse to the single-backslash form the pipeline expects BEFORE segment-
+# splitting, so the spans are then recognised as math (and underscore-escaped).
 _DOUBLE_BS_DELIM = re.compile(r"\\\\([()\[\]])")
+
+# Spans where ``\\`` must NEVER be collapsed: code (literal) and — critically —
+# ALREADY-ACTIVE math (``$$…$$`` / ``\(…\)``), where ``\\`` is a row break and
+# ``\\[2pt]`` / ``\\[1em]`` is a row break with spacing. Collapsing there would
+# corrupt aligned/array/cases environments. Only prose gaps are fixed.
+_PROTECTED_SPANS = frozenset({"fence", "icode", "display", "inline"})
 
 
 def _fix_double_backslash_delims(markdown: str) -> str:
-    """Collapse ``\\\\(``/``\\\\)``/``\\\\[``/``\\\\]`` to a single backslash,
-    outside code spans, so the delimiters actually activate math."""
-
-    def repl(match: re.Match[str]) -> str:
-        seg = match.group(0)
-        if match.lastgroup in ("fence", "icode"):
-            return seg  # never touch code
-        return _DOUBLE_BS_DELIM.sub(r"\\\1", seg)
-
-    # Split on code spans only, then fix delimiters in the non-code gaps. We run
-    # _SEGMENT to protect code; math/prose gaps are handled by the else-branch of
-    # a manual walk rather than _SEGMENT.sub (which would miss prose gaps).
+    """Collapse ``\\\\(``/``\\\\)``/``\\\\[``/``\\\\]`` to a single backslash in
+    PROSE only, so double-escaped delimiters activate math — while leaving code
+    and already-active math spans (where ``\\\\`` is a legitimate row break)
+    untouched."""
     out: list[str] = []
     pos = 0
     for m in _SEGMENT.finditer(markdown):
-        if m.lastgroup in ("fence", "icode"):
+        if m.lastgroup in _PROTECTED_SPANS:
             out.append(_DOUBLE_BS_DELIM.sub(r"\\\1", markdown[pos : m.start()]))
-            out.append(m.group(0))  # code: untouched
+            out.append(m.group(0))  # code or active math: untouched
             pos = m.end()
     out.append(_DOUBLE_BS_DELIM.sub(r"\\\1", markdown[pos:]))
     return "".join(out)

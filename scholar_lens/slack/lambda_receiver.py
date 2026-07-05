@@ -135,7 +135,17 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     headers = _lower_headers(event.get("headers"))
     raw_body = _raw_body(event)
 
-    if not verify_signature(raw_body, headers, _get_signing_secret()):
+    # Secret fetch can fail transiently (SSM throttle / IAM drift / cold start).
+    # We haven't invoked the worker yet, so returning 500 (letting Slack retry) is
+    # safe — no double-dispatch — and far better than raising an unhandled 502 that
+    # gets silently dropped once the secret later caches.
+    try:
+        signing_secret = _get_signing_secret()
+    except Exception:
+        logger.exception("Could not load the Slack signing secret from SSM.")
+        return {"statusCode": 500, "body": "configuration error"}
+
+    if not verify_signature(raw_body, headers, signing_secret):
         # Metadata-only diagnostics (never the body or secret): a mismatch almost
         # always means the raw body we hash differs from what Slack signed
         # (encoding, header casing) or the secret in SSM is stale.
@@ -179,6 +189,13 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         logger.info("Ignoring non-actionable Slack event '%s'.", inner.get("type"))
         return _OK
 
-    _invoke_worker(inner)
+    try:
+        _invoke_worker(inner)
+    except Exception:
+        # The async invoke itself failed (throttle/permission). Return 500 so Slack
+        # retries rather than silently losing the request; since the worker was
+        # never invoked, the retry is the first real dispatch, not a duplicate.
+        logger.exception("Failed to invoke the worker Lambda.")
+        return {"statusCode": 500, "body": "dispatch error"}
     logger.info("Dispatched Slack event '%s' to worker.", inner.get("type"))
     return _OK

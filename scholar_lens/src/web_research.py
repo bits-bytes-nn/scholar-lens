@@ -41,6 +41,7 @@ _TAVILY_SEARCH_URL = "https://api.tavily.com/search"
 # matches the delimiter. Only the prompt fence tags are touched, so legitimate
 # markup/code in the source is left intact.
 _PROMPT_FENCE_TAGS = (
+    # Tech-guide fences.
     "sources",
     "source",
     "search_results",
@@ -49,6 +50,21 @@ _PROMPT_FENCE_TAGS = (
     "section_to_write",
     "section",
     "depth_directive",
+    # Review / summary / extraction fences wrapping untrusted paper content, so
+    # the same defang protects those pipelines (a paper body is attacker-supplied
+    # via the Slack bot just like a web page is).
+    "paper",
+    "paper_content",
+    "current_content",
+    "current_explanation",
+    "previous_explanation",
+    "citation_summaries",
+    "codebase_summary",
+    "official_codebase_summary",
+    "numbered_sentences",
+    "citations",
+    "existing_citations",
+    "existing_keywords",
 )
 _FENCE_TAG_RE = re.compile(
     r"<(/?)(" + "|".join(_PROMPT_FENCE_TAGS) + r")\s*>", re.IGNORECASE

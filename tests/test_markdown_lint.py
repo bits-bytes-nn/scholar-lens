@@ -72,6 +72,22 @@ class TestPlaceholderTagEscaping:
         src = r"부등식 \( a < b \) 는 그대로."
         assert lint_markdown(src) == src
 
+    def test_url_autolink_not_escaped(self) -> None:
+        # A GFM autolink is valid Markdown that renders as a link; escaping it
+        # produces dead literal text. Must survive the placeholder escaper.
+        src = "See <https://example.com/docs> for details."
+        assert lint_markdown(src) == src
+
+    def test_email_autolink_not_escaped(self) -> None:
+        src = "Contact <user@example.com> please."
+        assert lint_markdown(src) == src
+
+    def test_placeholder_still_escaped_alongside_autolink(self) -> None:
+        # The autolink survives; a real placeholder on the same line is escaped.
+        out = lint_markdown("Use <your-namespace> at <https://ex.com>.")
+        assert "&lt;your-namespace&gt;" in out
+        assert "<https://ex.com>" in out
+
 
 @pytest.mark.usefixtures("_capture_app_logs")
 class TestPipeInMath:

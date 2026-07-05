@@ -80,7 +80,11 @@ class CitationSummarizer(RetryableBase):
             CitationSummaryPrompt.get_prompt() | summarizing_llm | StrOutputParser()
         )
         self.arxiv_handler = ArxivHandler(max_retries=max_retries)
-        self.html_parser = HTMLParser(timeout=timeout)
+        # Timeout for per-call HTMLParser instances. A parser is NOT shared across
+        # tasks: summarize() resolves up to `max_concurrency` identifiers at once,
+        # and the parser's __aexit__ closes its httpx client — a shared instance
+        # would close the client out from under a concurrent task's in-flight GET.
+        self._parser_timeout = timeout
 
     def _fit_summary_inputs(
         self, reference_content: str, original_content: str
@@ -339,8 +343,10 @@ class CitationSummarizer(RetryableBase):
         return await self._parse_pdf_content(arxiv_id)
 
     async def _parse_html_content(self, arxiv_id: str) -> Content | None:
-        async with self.html_parser:
-            result = await self.html_parser.parse(arxiv_id, extract_text=True)
+        # Fresh parser per call: concurrent tasks must not share one httpx client
+        # (its __aexit__ close would abort another task's in-flight request).
+        async with HTMLParser(timeout=self._parser_timeout) as parser:
+            result = await parser.parse(arxiv_id, extract_text=True)
             if result.content and result.content.text:
                 return result.content
         return None

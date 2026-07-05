@@ -223,10 +223,11 @@ class TestEvaluatePaper:
         assert "best_explanation" not in result
 
     def test_non_numeric_quality_score_does_not_crash(self) -> None:
-        # The LLM may return "85/100", "N/A", "", or prose — must not raise.
-        # A clean int or a leading "<n>/<total>" parses; anything that doesn't
-        # START with a number falls back to 0 (rather than scraping a number from
-        # mid-string, which could grab the wrong value e.g. "out of 100, 85").
+        # The LLM may return "85/100", "N/A", "", or prose ("Score: 85") — must
+        # not raise. A clean int or a leading "<n>/<total>" fraction parses to the
+        # numerator; otherwise the FIRST integer anywhere is taken (so a padded
+        # "Score: 7" yields 7, not a spurious 0 that forces a wasted revision);
+        # non-numeric falls back to 0. Result is clamped to 0-100.
         g = _bare_graph()
         g.language = "Korean"
         g.translation_guideline = []
@@ -236,7 +237,8 @@ class TestEvaluatePaper:
             ("85/100", 85),
             ("N/A", 0),
             ("", 0),
-            ("score: 7", 0),
+            ("score: 7", 7),
+            ("150", 100),
         ]:
             g.evaluator.invoke.return_value = {"quality_score": raw}
             result = g.evaluate_paper(self._state())
@@ -294,6 +296,22 @@ class TestSynthesizePaper:
         out = g.synthesize_paper(self._state())
         assert g._synthesize_paper.call_count == 1
         assert out["explanations"][0] == "chunk"
+
+    def test_does_not_reset_enrichment_context(self) -> None:
+        # Regression: synthesize must NOT null citation_summaries/code — the
+        # following `evaluate` node scores the draft against them, and a retry
+        # re-enters synthesize needing them. Resetting here stripped the context
+        # from both. The next section's `enrich` overwrites them anyway.
+        g = _bare_graph()
+        g.max_continuations = 8
+        g._token_tracker = None
+        g.max_total_tokens = None
+        g._synthesize_paper = MagicMock(
+            return_value={"explanation": "chunk", "has_more": "n"}
+        )
+        out = g.synthesize_paper(self._state())
+        assert "citation_summaries" not in out  # not force-nulled
+        assert "code" not in out
 
 
 class TestEnforceTokenBudget:

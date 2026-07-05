@@ -191,16 +191,35 @@ def test_parser_dict_mode_multiple_tags() -> None:
 
 
 @pytest.mark.parametrize(
-    "url,expected",
+    "url,prefix",
     [
-        ("https://github.com/microsoft/LoRA", "LoRA"),
-        ("https://github.com/microsoft/LoRA/", "LoRA"),  # trailing slash
-        ("https://github.com/org/repo.git", "repo"),
-        ("https://github.com/org/repo.git/", "repo"),
+        ("https://github.com/microsoft/LoRA", "LoRA-"),
+        ("https://github.com/microsoft/LoRA/", "LoRA-"),  # trailing slash
+        ("https://github.com/org/repo.git", "repo-"),
+        ("https://github.com/org/repo.git/", "repo-"),
     ],
 )
-def test_repo_dir_name(url: str, expected: str) -> None:
-    assert CodeRetriever._repo_dir_name(url) == expected
+def test_repo_dir_name(url: str, prefix: str) -> None:
+    # The dir name keeps the human-readable basename, then a short URL hash to
+    # avoid collisions (see test_repo_dir_name_disambiguates_same_basename).
+    name = CodeRetriever._repo_dir_name(url)
+    assert name.startswith(prefix)
+    assert len(name) > len(prefix)  # hash suffix present
+
+
+def test_repo_dir_name_disambiguates_same_basename() -> None:
+    # The collision fix: two repos with the same basename must map to distinct
+    # cache dirs, or concurrent rmtree+clone would race on one directory.
+    a = CodeRetriever._repo_dir_name("https://github.com/orgA/model")
+    b = CodeRetriever._repo_dir_name("https://github.com/orgB/model")
+    assert a != b
+    assert a.startswith("model-") and b.startswith("model-")
+
+
+def test_repo_dir_name_is_deterministic() -> None:
+    # Same URL → same dir (cache reuse across runs).
+    url = "https://github.com/microsoft/LoRA"
+    assert CodeRetriever._repo_dir_name(url) == CodeRetriever._repo_dir_name(url)
 
 
 @pytest.mark.parametrize(

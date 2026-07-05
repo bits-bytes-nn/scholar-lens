@@ -766,11 +766,16 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    repo_urls = (
-        args.repo_urls
-        if args.repo_urls and args.repo_urls != [AppConstants.NULL_STRING]
-        else None
-    )
+    # The Slack dispatcher passes repo URLs as ONE space-joined Batch parameter
+    # (Ref::repo_urls), which Batch substitutes as a single argv token — so with
+    # nargs="*" two repos arrive as ["urlA urlB"], one bogus string. Split on
+    # whitespace and drop the NULL sentinel (parity with tech_guide_main._flatten).
+    flattened_repo_urls: list[str] = []
+    for value in args.repo_urls or []:
+        flattened_repo_urls.extend(value.split())
+    repo_urls = [
+        url for url in flattened_repo_urls if url and url != AppConstants.NULL_STRING
+    ] or None
     source = args.source or args.arxiv_id
     logger.info(
         "Starting paper %s process: source=%s repo_urls=%s parse_pdf=%s",

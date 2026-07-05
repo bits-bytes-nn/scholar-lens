@@ -12,6 +12,7 @@ import argparse
 import asyncio
 import os
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -26,6 +27,7 @@ from scholar_lens.src import (
     EnvVars,
     LanguageModelId,
     LocalPaths,
+    MetricsEmitter,
     NotTechnicalContentError,
     NullSearchProvider,
     PublishRequest,
@@ -129,6 +131,8 @@ async def _run(
 ) -> tuple[str | None, str | None, str | None]:
     _setup_aws_env(context)
     tracker = TokenUsageTracker()
+    started = time.monotonic()
+    gen_success = False
     researcher = WebResearcher(search_provider=_build_search_provider())
     generator = TechGuideGenerator(
         relevance_model_id=LanguageModelId(
@@ -161,6 +165,7 @@ async def _run(
             discover_subpages=discover_subpages,
             search_queries=search_queries,
         )
+        gen_success = True
     finally:
         # Release the researcher's HTTP connection pool regardless of outcome.
         researcher.close()
@@ -171,6 +176,17 @@ async def _run(
             tracker.total_tokens,
             tracker.estimated_cost_usd(),
             tracker.call_count,
+        )
+        # Emit run metrics (tokens/cost/duration) — the guide is the most
+        # expensive pipeline, so it MUST feed the same CloudWatch cost guardrail
+        # as review/summary (previously it emitted nothing).
+        MetricsEmitter(
+            context.default_boto_session, enabled=is_running_in_aws()
+        ).emit_run(
+            mode="guide",
+            success=gen_success,
+            duration_seconds=time.monotonic() - started,
+            tracker=tracker,
         )
 
     work_dir = ROOT_DIR / LocalPaths.PAPERS_DIR.value / _guide_slug(guide.topic)

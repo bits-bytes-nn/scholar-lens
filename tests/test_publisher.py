@@ -154,6 +154,38 @@ class TestPublishLocal:
         assert "/Users/me/papers/x/figures/0.png" not in content
         assert "/assets/" in content and "/0.png)" in content
 
+    async def test_remote_image_url_with_parens_not_truncated(
+        self, tmp_path: Path
+    ) -> None:
+        # A URL containing parens (Wikipedia/arXiv style) must not be truncated at
+        # the first ')': the tail would leak as prose and the image would break.
+        url = "https://upload.wikimedia.org/File_(diagram).png"
+        pub = Publisher(Github(), root_dir=tmp_path)
+        request = _request(
+            tmp_path,
+            markdown=f"# T\n\n![arch]({url})\n",
+            rewrite_local_images=True,
+        )
+        _, md_path = await pub.publish(request)
+        content = md_path.read_text(encoding="utf-8")
+        assert f"![arch]({url})" in content  # intact, remote → untouched
+
+    async def test_local_image_path_with_parens_rewritten_whole(
+        self, tmp_path: Path
+    ) -> None:
+        # A local path with parens must be rewritten using its FULL basename, not
+        # a truncated one (which would 404 on the blog).
+        pub = Publisher(Github(), root_dir=tmp_path)
+        request = _request(
+            tmp_path,
+            markdown="# T\n\n![x](/tmp/figures/fig_(a).png)\n",
+            rewrite_local_images=True,
+        )
+        _, md_path = await pub.publish(request)
+        content = md_path.read_text(encoding="utf-8")
+        assert "/tmp/figures/fig_(a).png" not in content
+        assert "fig_(a).png)" in content  # full basename preserved in the rewrite
+
     async def test_already_hosted_asset_path_untouched(self, tmp_path: Path) -> None:
         # A path already under THIS post's asset dir must be left as-is (idempotent
         # re-publish), not double-prefixed.

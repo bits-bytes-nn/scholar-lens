@@ -5,7 +5,7 @@ import json
 import os
 from collections.abc import Coroutine, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, Self
 
 import boto3
 import fitz
@@ -257,7 +257,7 @@ class BaseParser:
             )
         return self._async_client
 
-    async def __aenter__(self) -> "BaseParser":
+    async def __aenter__(self) -> Self:
         return self
 
     async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:

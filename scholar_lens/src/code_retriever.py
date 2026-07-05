@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import os
 import shutil
 from pathlib import Path
@@ -112,15 +113,22 @@ class CodeRetriever(RetryableBase):
 
     @staticmethod
     def _repo_dir_name(url: str) -> str:
-        """Derive a safe cache subdirectory name from a repo URL.
+        """Derive a safe, collision-free cache subdirectory name from a repo URL.
 
         Strips trailing slashes/``.git`` and any path noise so a URL like
         ``https://github.com/org/repo/`` does not yield an empty component (which
         would make the cache path collapse onto ``repo_cache_dir`` itself — and a
         later ``rmtree`` would wipe the whole cache).
+
+        A short hash of the *full* URL is appended so two repos with the same
+        basename (``orgA/model`` and ``orgB/model``) map to distinct dirs.
+        ``download_repositories`` clones concurrently and each clone does
+        ``rmtree`` + ``clone_from`` on its dir; without the hash both would race
+        on one path, corrupting the checkout or raising GitCommandError.
         """
-        name = url.rstrip("/").split("/")[-1].removesuffix(".git").strip()
-        return name or "repo"
+        name = url.rstrip("/").split("/")[-1].removesuffix(".git").strip() or "repo"
+        digest = hashlib.sha1(url.encode("utf-8")).hexdigest()[:8]
+        return f"{name}-{digest}"
 
     async def download_repositories(self, repo_urls: list[str]) -> list[Path]:
         candidate_paths = [

@@ -34,7 +34,12 @@ if TYPE_CHECKING:
     from ..configs import Github as GithubConfig
 
 _IMAGE_EXTENSIONS = [".gif", ".jpg", ".jpeg", ".png", ".svg", ".webp"]
-_MARKDOWN_IMAGE_PATTERN = r"!\[(.*?)\]\((.*?)\)"
+# Image target tolerates one level of parens in the URL/path (e.g. Wikipedia's
+# ``File_(diagram).png`` or a scratch path ``fig_(a).png``). A naive ``(.*?)``
+# stops at the first ``)``, truncating the URL — the tail leaks as prose and the
+# rewritten local path 404s. The balanced group ``[^()]*(\([^()]*\)[^()]*)*``
+# still stops at the real closing paren, so multiple images per line split fine.
+_MARKDOWN_IMAGE_PATTERN = r"!\[(.*?)\]\(([^()]*(?:\([^()]*\)[^()]*)*)\)"
 
 
 @dataclass
@@ -166,6 +171,7 @@ class Publisher:
         if not repo_config.repo_name:
             logger.error("GitHub repository not configured.")
             return None
+        repo_name = repo_config.repo_name  # narrowed to str for the closures below
         token = os.getenv(EnvVars.GITHUB_TOKEN.value)
         if not token:
             logger.error(
@@ -186,13 +192,19 @@ class Publisher:
                 markdown_path,
             )
             logger.info("Creating a pull request on GitHub...")
-            gh_repo = Github(auth=Auth.Token(token)).get_repo(repo_config.repo_name)
+            # PyGithub is synchronous (blocking HTTP); run off the event loop so
+            # it doesn't stall other coroutines — mirrors the git-ops call above.
+            gh_repo = await asyncio.to_thread(
+                lambda: Github(auth=Auth.Token(token)).get_repo(repo_name)
+            )
             try:
-                pull = gh_repo.create_pull(
-                    title=request.pr_title,
-                    body=request.pr_body,
-                    head=branch_name,
-                    base=repo_config.base_branch,
+                pull = await asyncio.to_thread(
+                    lambda: gh_repo.create_pull(
+                        title=request.pr_title,
+                        body=request.pr_body,
+                        head=branch_name,
+                        base=repo_config.base_branch,
+                    )
                 )
                 logger.info("Successfully created a pull request: '%s'", pull.html_url)
                 return pull.html_url

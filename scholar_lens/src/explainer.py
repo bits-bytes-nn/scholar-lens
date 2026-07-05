@@ -36,6 +36,7 @@ from .utils import (
     measure_execution_time,
     parse_quality_score,
 )
+from .web_research import neutralize_prompt_tags
 
 ROOT_DIR: Path = (
     Path("/tmp")
@@ -348,7 +349,11 @@ class ExplainerGraph(RetryableBase, TokenBudgetGuard):
     @RetryableBase._retry("paper_analysis")
     def analyze_paper(self, state: ExplainerState) -> dict[str, Any]:
         self._enforce_token_budget()
-        text = state["paper"].content.text
+        # Defang prompt-fence tags in the untrusted paper body once, at the single
+        # point it enters the pipeline: the derived sentences/paragraphs flow into
+        # every downstream fence (numbered_sentences, current_content, text, …), so
+        # a literal "</paper>"/"</current_content>" in the source can't break out.
+        text = neutralize_prompt_tags(state["paper"].content.text)
         sentences = nltk.sent_tokenize(text)
 
         numbered_sentences_str = "\n".join(f"{i}: {s}" for i, s in enumerate(sentences))
@@ -467,13 +472,16 @@ class ExplainerGraph(RetryableBase, TokenBudgetGuard):
             str(citation) for citation in state["paper"].citations
         )
 
+        # current_paragraph is already defanged (neutralized in analyze_paper);
+        # citations and the codebase summary are also untrusted, so defang them too.
         result = await self.enricher.ainvoke(
             {
                 "text": current_paragraph,
                 "analysis": current_analysis,
-                "citations": citations_text,
-                "codebase_summary": state["paper"].codebase_summary
-                or "No codebase summary available",
+                "citations": neutralize_prompt_tags(citations_text),
+                "codebase_summary": neutralize_prompt_tags(
+                    state["paper"].codebase_summary or "No codebase summary available"
+                ),
             }
         )
 
@@ -643,11 +651,12 @@ class ExplainerGraph(RetryableBase, TokenBudgetGuard):
 
         explanations[current_index] = final_explanation_for_paragraph.strip()
 
-        return {
-            "explanations": explanations,
-            "citation_summaries": None,
-            "code": None,
-        }
+        # Do NOT reset citation_summaries/code here. This node is followed by
+        # `evaluate` (which scores the draft against those same references) and,
+        # on a low score, a retry that re-enters this node — both need the
+        # enrichment context. The next section's `enrich` unconditionally
+        # overwrites both keys, so a reset here is redundant as well as harmful.
+        return {"explanations": explanations}
 
     @RetryableBase._retry("paper_synthesis")
     def _synthesize_paper(

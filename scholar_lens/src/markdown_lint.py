@@ -129,6 +129,10 @@ _REAL_HTML_TAGS = frozenset(
 # not a real HTML tag, so <br>, <sup>, </table> stay intact but <none>,
 # <your-namespace>, <server-host> get escaped.
 _ANGLE_TOKEN = re.compile(r"<(/?)([A-Za-z][A-Za-z0-9._-]*)[^<>]*?/?>")
+# GFM autolinks — ``<https://…>`` / ``<mailto:…>`` / ``<user@host>`` — are valid
+# Markdown that kramdown renders as links; escaping them produces dead literal
+# text. Recognise and leave them alone (distinct from ``<placeholder>`` tokens).
+_AUTOLINK = re.compile(r"<(?:[A-Za-z][A-Za-z0-9+.-]*://[^<>\s]+|[^<>\s@]+@[^<>\s@]+)>")
 # Constructs that render poorly on the blog's MathJax: the standalone amsmath
 # display environments (use \begin{aligned} inside $$...$$ instead) and \bm (use
 # \boldsymbol). Warn-only — fixing requires understanding the equation.
@@ -199,6 +203,9 @@ def _escape_placeholder_tags(markdown: str, regions: list[tuple[int, int, str]])
     pos = 0
     for m in _ANGLE_TOKEN.finditer(markdown):
         if any(s <= m.start() < e for s, e in protected):
+            continue
+        # A valid GFM autolink (URL/email) must render as a link, not be escaped.
+        if _AUTOLINK.fullmatch(m.group(0)):
             continue
         out.append(markdown[pos : m.start()])
         out.append(repl(m))

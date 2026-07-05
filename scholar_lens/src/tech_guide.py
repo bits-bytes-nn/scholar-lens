@@ -23,6 +23,7 @@ It reuses the project's Bedrock factory, prompt conventions, and the
 
 from __future__ import annotations
 
+import asyncio
 import re
 from dataclasses import dataclass, field
 from typing import Any
@@ -211,12 +212,17 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
             supports_1m_context_window=True,
         )
         # Lightweight chain reused if structured parsing of a section fails.
+        # Must request the 1M window like `section_chain` above: the sources are
+        # fitted to the 1M budget, so a fallback on the legacy ~200k window would
+        # raise "prompt is too long" on large corpora — exactly the wrapper-tag-
+        # missing case this fallback exists to rescue.
         self._section_str_chain: Runnable = (
             TechGuideSectionPrompt.get_prompt()
             | self.llm_factory.get_model(
                 writing_model_id,
                 temperature=0.0,
                 callbacks=self.callbacks or None,
+                supports_1m_context_window=True,
             )
             | StrOutputParser()
         )
@@ -282,8 +288,10 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
         if not urls:
             raise ValueError("At least one source URL is required.")
 
-        # Fetch the seed URLs (+ in-scope sub-pages) once.
-        corpus = self.researcher.research(
+        # Fetch the seed URLs (+ in-scope sub-pages) once. WebResearcher is
+        # synchronous (blocking HTTP crawl); run it off the event loop.
+        corpus = await asyncio.to_thread(
+            self.researcher.research,
             urls,
             discover_subpages=discover_subpages,
             search_queries=None,
@@ -306,8 +314,11 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
         if queries and can_search:
             # Fetch the top results into the corpus so the gathered material
             # actually reaches the writer, not just the outline planner.
-            self.researcher.run_searches(
-                corpus, queries, fetch_top=self.fetch_top_results
+            await asyncio.to_thread(
+                self.researcher.run_searches,
+                corpus,
+                queries,
+                fetch_top=self.fetch_top_results,
             )
         elif queries:
             logger.info(
@@ -458,6 +469,17 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
                 depth_directive=planned.depth_directive,
             )
             if not markdown:
+                # A dropped section leaves a hole: `final_outline`/`total` (fixed
+                # before writing) still list it, so later sections may reference a
+                # number that won't render. Rare (writer returned nothing), but
+                # log it so the gap is visible rather than silent.
+                logger.warning(
+                    "Section %d/%d (%s) produced no content; skipping. Later "
+                    "sections may reference it — review the guide.",
+                    index,
+                    total,
+                    planned.title,
+                )
                 continue
             # Skip the expensive evaluate/revise + grounding passes once the
             # token budget is spent — still WRITE every section, just without
@@ -541,14 +563,25 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
             previous_sections=previous_sections,
         )
         for attempt in range(1, self.max_revision_attempts + 1):
-            if best_score >= self.min_quality_score or not feedback:
+            # Accept once the score clears the threshold. Do NOT accept a
+            # below-threshold section just because feedback is empty: the prompt
+            # only omits feedback when a section is genuinely excellent (90+), so
+            # empty feedback paired with a low score is a model slip — fall back
+            # to a generic "raise depth/quality" directive and still revise.
+            if best_score >= self.min_quality_score:
                 logger.info(
-                    "Section %d scored %d (>= %d or no feedback) - accepting.",
+                    "Section %d scored %d (>= %d) - accepting.",
                     section_number,
                     best_score,
                     self.min_quality_score,
                 )
                 return best_markdown
+            if not feedback:
+                feedback = (
+                    "The section scored below the quality bar. Increase technical "
+                    "depth and concrete detail, tighten structure, and remove any "
+                    "redundancy with earlier sections."
+                )
             logger.info(
                 "Section %d scored %d (< %d) - revising (attempt %d/%d).",
                 section_number,

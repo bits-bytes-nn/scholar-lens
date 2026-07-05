@@ -25,6 +25,7 @@ from .utils import (
     RetryableBase,
     measure_execution_time,
 )
+from .web_research import neutralize_prompt_tags
 
 DEFAULT_LANGUAGE: str = "Korean"
 # Language-neutral sentinel for "no code repository was provided"; the summary
@@ -117,10 +118,14 @@ class PaperSummarizer(RetryableBase, TokenBudgetGuard):
         content = self.llm_factory.fit_text(
             self.summary_model_id, content, label="summary content"
         )
+        # Defang prompt-fence tags in the untrusted paper/codebase text so a
+        # literal "</paper>" in the source can't break out of the data fence.
         return await self.summary_chain.ainvoke(
             {
-                "content": content,
-                "codebase_summary": codebase_summary or _NO_CODEBASE,
+                "content": neutralize_prompt_tags(content),
+                "codebase_summary": neutralize_prompt_tags(
+                    codebase_summary or _NO_CODEBASE
+                ),
                 "language": self.language,
                 "translation_guideline": str(self.translation_guideline),
             }
