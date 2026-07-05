@@ -154,6 +154,20 @@ class TestPdfUrlSourceDownload:
             src.download_pdf(tmp_papers_dir)
 
     @responses.activate
+    def test_redirect_to_internal_host_is_blocked(self, tmp_papers_dir) -> None:
+        # A 302 to an internal target (SSRF via redirect) must be rejected: the
+        # download path re-validates every hop against the SSRF guard.
+        responses.add(
+            responses.HEAD,
+            PDF_URL,
+            status=302,
+            headers={"Location": "http://169.254.169.254/latest/meta-data/"},
+        )
+        src = PdfUrlSource(PDF_URL)
+        with pytest.raises(PaperSourceError):
+            src.download_pdf(tmp_papers_dir)
+
+    @responses.activate
     def test_accepts_pdf_content_type_and_downloads(
         self, tmp_papers_dir, minimal_pdf_bytes
     ) -> None:

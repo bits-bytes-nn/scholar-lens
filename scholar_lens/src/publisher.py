@@ -236,7 +236,12 @@ class Publisher:
         if not token:
             return error
         scrubbed = str(error).replace(token, "***")
-        return type(error)(scrubbed)
+        # Return a plain RuntimeError rather than reconstructing the original
+        # class. Exceptions like GitCommandError / GithubException take structured
+        # constructor args, so type(error)(scrubbed) would raise TypeError inside
+        # redaction and mask the failure. Keep the original class name in the text
+        # for debuggability; the token is what must never survive.
+        return RuntimeError(f"{type(error).__name__}: {scrubbed}")
 
     def _git_operations_inner(
         self,

@@ -9,14 +9,37 @@ RETRY_MAX_WAIT: int = 120
 RETRY_MULTIPLIER: int = 30
 
 # Exceptions that are terminal and must NOT be retried — retrying them only
-# burns backoff time before the same failure reraises. Matched by class name to
-# avoid importing those modules here (keeps this leaf util dependency-free).
-# TokenBudgetExceeded is a hard cost guardrail: a single raise must abort now.
-_NON_RETRYABLE_NAMES: frozenset[str] = frozenset({"TokenBudgetExceeded"})
+# burns backoff time (up to ~10 min across MAX_RETRIES × RETRY_MAX_WAIT) before
+# the same failure reraises. Matched by class name to avoid importing those
+# modules here (keeps this leaf util dependency-free). We keep a deny-list rather
+# than an allow-list so a genuinely transient error we didn't foresee still gets
+# retried; the entries below are the deterministic failures seen in practice:
+#   - TokenBudgetExceeded: a hard cost guardrail — a single raise must abort now.
+#   - Validation/parse/type errors: the same input will fail identically on retry
+#     (pydantic ValidationError, our output-parser errors, ValueError/TypeError/
+#     KeyError, and the domain "not a PDF / not technical / no python files"
+#     rejections that are decisions, not glitches).
+_NON_RETRYABLE_NAMES: frozenset[str] = frozenset(
+    {
+        "TokenBudgetExceeded",
+        "ValidationError",
+        "ValueError",
+        "TypeError",
+        "KeyError",
+        "OutputParserException",
+        "NotAPdfError",
+        "NotTechnicalContentError",
+        "NoPythonFilesError",
+        "UnsafeUrlError",
+    }
+)
 
 
 def _is_retryable(exc: BaseException) -> bool:
-    return type(exc).__name__ not in _NON_RETRYABLE_NAMES
+    # Walk the MRO by name so subclasses of a non-retryable type are also caught
+    # (e.g. a custom ValueError subclass) without importing the classes here.
+    names = {klass.__name__ for klass in type(exc).__mro__}
+    return names.isdisjoint(_NON_RETRYABLE_NAMES)
 
 
 class RetryableBase:

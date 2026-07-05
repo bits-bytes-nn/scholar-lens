@@ -75,6 +75,11 @@ _FETCH_TOP_RESULTS: int = 4
 # Section quality gate (mirrors the review pipeline's evaluate loop).
 _MIN_QUALITY_SCORE: int = 75
 _MAX_REVISION_ATTEMPTS: int = 2
+# Hard-abort multiple of max_total_tokens. The budget is two-tier: at 1x the
+# guide soft-degrades (skips evaluate/revise/grounding but keeps writing so the
+# guide is complete); past this multiple it hard-aborts like the review/summary
+# pipelines, so a runaway can't keep spending on writer calls indefinitely.
+_HARD_BUDGET_MULTIPLE: float = 1.5
 
 # Per-depth writing directive injected into the section prompt. Keeps the
 # "depth is set per section, not by a fixed length" principle in one place.
@@ -426,6 +431,11 @@ class TechGuideGenerator(RetryableBase):
 
         written: list[str] = []
         for index, planned in enumerate(sections, start=1):
+            # Hard ceiling: past _HARD_BUDGET_MULTIPLE × the budget, abort like
+            # the review/summary pipelines rather than keep spending on the
+            # (expensive) writer calls — the soft-degrade below is the earlier,
+            # gentler tier.
+            self._enforce_hard_token_budget()
             logger.info("Writing section %d/%d: %s", index, total, planned.title)
             # Bound the accumulated previous-sections context: it grows every
             # section and, with the fitted sources, could otherwise overflow the
@@ -472,6 +482,19 @@ class TechGuideGenerator(RetryableBase):
                     markdown = await self._ground_section(markdown, sources, total)
             written.append(markdown)
         return "\n\n".join(written)
+
+    def _enforce_hard_token_budget(self) -> None:
+        """Raise ``TokenBudgetExceeded`` once spend passes the hard ceiling.
+
+        The soft tier (:meth:`_budget_exhausted`) only skips refinement; this is
+        the true cap so a runaway can't keep issuing writer calls forever —
+        parity with the review/summary hard budget guards.
+        """
+        if self._token_tracker is None or not self.max_total_tokens:
+            return
+        self._token_tracker.check_budget(
+            int(self.max_total_tokens * _HARD_BUDGET_MULTIPLE)
+        )
 
     def _budget_exhausted(self) -> bool:
         """Whether the run has hit its total-token ceiling (if one is set)."""

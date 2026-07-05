@@ -206,8 +206,9 @@ class TechGuide(BaseModel):
     # sections scoring below the threshold are revised up to N times.
     min_quality_score: int = Field(default=75, ge=0, le=100)
     max_revision_attempts: int = Field(default=2, ge=0)
-    # Hard total-token ceiling for one guide run (None = no limit). Guards the
-    # per-section write + evaluate/revise + grounding loop against runaway cost.
+    # Total-token ceiling for one guide run (None = no limit). Two-tier: at 1x the
+    # guide soft-degrades (skips evaluate/revise/grounding but finishes writing);
+    # past ~1.5x it hard-aborts, so runaway writer-call cost is truly bounded.
     max_total_tokens: int | None = Field(default=None, gt=0)
 
 

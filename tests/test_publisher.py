@@ -20,6 +20,31 @@ from scholar_lens.src.publisher import (
 )
 
 
+class TestRedactToken:
+    def test_scrubs_token_from_plain_exception(self) -> None:
+        err = RuntimeError("clone failed for https://oauth2:ghp_secret@github.com/x")
+        redacted = Publisher._redact_token(err, "ghp_secret")
+        assert "ghp_secret" not in str(redacted)
+        assert "***" in str(redacted)
+
+    def test_structured_exception_does_not_crash_redaction(self) -> None:
+        # GitPython's GitCommandError takes structured args; the old
+        # type(error)(scrubbed) reconstruction raised TypeError here.
+        from git import GitCommandError
+
+        err = GitCommandError(
+            ["git", "clone", "https://oauth2:ghp_secret@github.com/x"], 128
+        )
+        redacted = Publisher._redact_token(err, "ghp_secret")
+        assert isinstance(redacted, RuntimeError)
+        assert "ghp_secret" not in str(redacted)
+        assert "GitCommandError" in str(redacted)  # original type preserved in text
+
+    def test_no_token_returns_original(self) -> None:
+        err = ValueError("boom")
+        assert Publisher._redact_token(err, None) is err
+
+
 class TestBuildPrBody:
     def test_renders_header_fields_footer(self) -> None:
         body = build_pr_body(

@@ -23,7 +23,7 @@ import re
 from abc import ABC, abstractmethod
 from datetime import UTC, datetime
 from pathlib import Path
-from urllib.parse import unquote, urlparse
+from urllib.parse import unquote, urljoin, urlparse
 
 import requests
 from pydantic import HttpUrl
@@ -46,6 +46,8 @@ _ARXIV_HOST_PATTERN = re.compile(r"(^|\.)arxiv\.org$", re.IGNORECASE)
 _PDF_DOWNLOAD_TIMEOUT_SECONDS = 30
 _PDF_PROBE_TIMEOUT_SECONDS = 15
 _PDF_MAGIC_BYTES = b"%PDF-"
+# Max redirect hops to follow manually (each re-validated against the SSRF guard).
+_MAX_REDIRECTS = 5
 # Cap PDF downloads so a hostile/oversized URL cannot exhaust disk or memory.
 _MAX_PDF_BYTES = 100 * 1024 * 1024  # 100 MB
 
@@ -187,14 +189,47 @@ class PdfUrlSource(PaperSource):
             pdf_url=self._url,
         )
 
+    def _safe_request(
+        self, method: str, url: str, **kwargs: object
+    ) -> requests.Response:
+        """Issue a request that re-validates every URL against the SSRF guard.
+
+        Auto-redirects are disabled and followed manually so each hop's target is
+        DNS-resolved and checked (``assert_url_is_public``) before we connect to
+        it — closing both the follow-a-3xx-to-internal-host hole and the
+        validate-then-reconnect (TOCTOU) window a plain ``requests`` session
+        leaves open. ``stream`` is forced on; callers read/close the response.
+        """
+        kwargs.pop("allow_redirects", None)
+        current = url
+        for _ in range(_MAX_REDIRECTS + 1):
+            try:
+                assert_url_is_public(current)
+            except UnsafeUrlError as e:
+                raise PaperSourceError(str(e)) from e
+            response = self._session.request(
+                method, current, allow_redirects=False, stream=True, **kwargs
+            )
+            if response.is_redirect and response.next is not None:
+                location = response.headers.get("Location", "")
+                response.close()
+                if not location:
+                    raise PaperSourceError(f"Redirect from '{current}' had no target.")
+                current = urljoin(current, location)
+                continue
+            return response
+        raise PaperSourceError(
+            f"Too many redirects (> {_MAX_REDIRECTS}) fetching '{url}'."
+        )
+
     def download_pdf(self, papers_dir: Path) -> Path:
         self._assert_is_pdf()
         paper_dir = papers_dir / self.source_id
         paper_dir.mkdir(parents=True, exist_ok=True)
         pdf_path = paper_dir / f"{self.source_id}.pdf"
         try:
-            with self._session.get(
-                self._raw_url, timeout=_PDF_DOWNLOAD_TIMEOUT_SECONDS, stream=True
+            with self._safe_request(
+                "GET", self._raw_url, timeout=_PDF_DOWNLOAD_TIMEOUT_SECONDS
             ) as response:
                 response.raise_for_status()
                 # Reject oversized downloads up front when the server declares a
@@ -264,17 +299,13 @@ class PdfUrlSource(PaperSource):
         probe. Only if every signal is inconclusive do we defer to the
         post-download magic-byte check in :meth:`download_pdf`.
         """
-        # Full SSRF check (resolves DNS) right before the first real request.
+        # The HEAD request re-validates the URL and every redirect hop against
+        # the SSRF guard (see _safe_request), so no separate pre-check is needed.
         try:
-            assert_url_is_public(self._raw_url)
-        except UnsafeUrlError as e:
-            raise PaperSourceError(str(e)) from e
-        try:
-            head = self._session.head(
-                self._raw_url,
-                timeout=_PDF_PROBE_TIMEOUT_SECONDS,
-                allow_redirects=True,
+            head = self._safe_request(
+                "HEAD", self._raw_url, timeout=_PDF_PROBE_TIMEOUT_SECONDS
             )
+            head.close()
             content_type = head.headers.get("Content-Type", "").lower()
             if "application/pdf" in content_type:
                 return
@@ -291,10 +322,10 @@ class PdfUrlSource(PaperSource):
 
     def _probe_magic_bytes(self) -> bool:
         try:
-            with self._session.get(
+            with self._safe_request(
+                "GET",
                 self._raw_url,
                 timeout=_PDF_PROBE_TIMEOUT_SECONDS,
-                stream=True,
                 headers={"Range": "bytes=0-7"},
             ) as response:
                 response.raise_for_status()

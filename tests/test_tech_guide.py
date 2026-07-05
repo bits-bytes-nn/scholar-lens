@@ -565,6 +565,43 @@ class TestTokenBudget:
         gen._token_tracker = MagicMock(total_tokens=2000)
         assert gen._budget_exhausted() is False
 
+    def test_hard_budget_aborts_past_multiple(self) -> None:
+        # Soft tier trips at 1x (skip refinement); the hard tier RAISES past
+        # _HARD_BUDGET_MULTIPLE x so a runaway can't keep writing sections.
+        from scholar_lens.src.metrics import TokenBudgetExceeded
+        from scholar_lens.src.tech_guide import _HARD_BUDGET_MULTIPLE
+
+        gen = _make_generator()
+        gen.max_total_tokens = 1000
+        tracker = MagicMock()
+        # Real check_budget semantics: raise only when over the passed ceiling.
+        tracker.total_tokens = int(1000 * _HARD_BUDGET_MULTIPLE) + 1
+
+        def _check(ceiling: int | None) -> None:
+            if ceiling and tracker.total_tokens > ceiling:
+                raise TokenBudgetExceeded("over")
+
+        tracker.check_budget.side_effect = _check
+        gen._token_tracker = tracker
+        with pytest.raises(TokenBudgetExceeded):
+            gen._enforce_hard_token_budget()
+
+    def test_hard_budget_ok_below_multiple(self) -> None:
+        from scholar_lens.src.metrics import TokenBudgetExceeded
+
+        gen = _make_generator()
+        gen.max_total_tokens = 1000
+        tracker = MagicMock()
+        tracker.total_tokens = 1200  # over 1x (soft) but under 1.5x (hard)
+
+        def _check(ceiling: int | None) -> None:
+            if ceiling and tracker.total_tokens > ceiling:
+                raise TokenBudgetExceeded("over")
+
+        tracker.check_budget.side_effect = _check
+        gen._token_tracker = tracker
+        gen._enforce_hard_token_budget()  # must NOT raise
+
     async def test_over_budget_skips_eval_and_grounding(self) -> None:
         # When the budget is spent, sections are still WRITTEN but the expensive
         # evaluate/revise + grounding passes are skipped.

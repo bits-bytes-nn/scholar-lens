@@ -16,6 +16,7 @@ from tqdm import tqdm
 from .constants import EmbeddingModelId, LanguageModelId, LocalPaths
 from .logger import logger
 from .prompts import CodeAnalysisPrompt, CodebaseSummaryPrompt
+from .url_guard import UnsafeUrlError, assert_url_is_public
 from .utils import (
     BatchProcessor,
     BedrockEmbeddingModelFactory,
@@ -158,8 +159,24 @@ class CodeRetriever(RetryableBase):
         return self.repo_paths
 
     @staticmethod
+    def _assert_clonable(url: str) -> None:
+        """Reject unsafe repo URLs before handing them to ``git clone``.
+
+        ``git`` will act on ``file://`` (local exfiltration into the indexed
+        corpus), ``ssh://``, and internal ``http://`` targets. Repo URLs come
+        from untrusted Slack input, so allow only ``https://`` to a public host
+        (SSRF guard) — no scheme is trusted by default.
+        """
+        if not url.lower().startswith("https://"):
+            raise UnsafeUrlError(
+                f"Repository URL '{url}' must use https:// (got a non-https scheme)."
+            )
+        assert_url_is_public(url)
+
+    @staticmethod
     async def _clone_repo(url: str, path: Path) -> None:
         try:
+            CodeRetriever._assert_clonable(url)
             if path.exists():
                 await asyncio.to_thread(shutil.rmtree, path)
             await asyncio.to_thread(git.Repo.clone_from, url, str(path), depth=1)
