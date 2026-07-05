@@ -14,7 +14,7 @@ from ..logger import logger
 def parse_quality_score(raw: Any) -> int:
     """Parse a 0-100 evaluator quality score robustly.
 
-    Shared by the review (reflect) and tech-guide (evaluate) score-and-revise
+    Shared by the review and tech-guide evaluate-and-revise
     loops. The prompt asks for a bare integer, but a model may still emit "85",
     "85/100", or "N/A". Prefer a clean integer; otherwise take the FIRST number
     in a leading "<n>/<total>" form (so "85/100" -> 85, not 100); a non-numeric

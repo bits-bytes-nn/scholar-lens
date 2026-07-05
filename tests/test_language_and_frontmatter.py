@@ -10,8 +10,8 @@ from scholar_lens.src.content_extractor import Attributes
 from scholar_lens.src.explainer import Paper
 from scholar_lens.src.parser import Content
 from scholar_lens.src.prompts import (
+    PaperEvaluationPrompt,
     PaperFinalizationPrompt,
-    PaperReflectionPrompt,
     PaperSynthesisPrompt,
 )
 
@@ -61,7 +61,7 @@ class TestBuildFrontMatter:
 class TestReviewPromptsCarryLanguage:
     PROMPTS = [
         PaperSynthesisPrompt,
-        PaperReflectionPrompt,
+        PaperEvaluationPrompt,
         PaperFinalizationPrompt,
     ]
 

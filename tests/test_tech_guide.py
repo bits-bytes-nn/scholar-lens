@@ -439,7 +439,7 @@ class TestResearchPlanning:
 
 
 class TestEvaluateAndRevise:
-    """The reflect-and-revise loop (ported from the review pipeline)."""
+    """The evaluate-and-revise loop (ported from the review pipeline)."""
 
     async def test_better_revision_is_kept(self) -> None:
         # Draft scores 50 (< 80); the revision scores higher (70), so it's kept.

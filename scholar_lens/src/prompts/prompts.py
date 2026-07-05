@@ -1069,7 +1069,7 @@ class PaperFinalizationPrompt(BasePrompt):
     """
 
 
-class PaperReflectionPrompt(BasePrompt):
+class PaperEvaluationPrompt(BasePrompt):
     input_variables: list[str] = [
         "current_content",
         "current_explanation",
@@ -1271,7 +1271,7 @@ class PaperReflectionPrompt(BasePrompt):
 
     2. **Within-section repetition is the focus here.** (Cross-section duplication
        is prevented upstream by the synthesizer, which sees prior sections — the
-       reflector only has the current section, so judge repetition WITHIN it.)
+       evaluator only has the current section, so judge repetition WITHIN it.)
 
     **Focus on CONCRETE CONTENT and EXPRESSION:**
     - WITHIN same section: Same information repeated → ZERO
@@ -3080,7 +3080,7 @@ class TechGuideGroundingPrompt(BasePrompt):
 class TechGuideEvaluationPrompt(BasePrompt):
     """Scores a drafted section 0-100 and returns actionable revision feedback.
 
-    The tech-guide analogue of PaperReflectionPrompt: a separate evaluation
+    The tech-guide analogue of PaperEvaluationPrompt: a separate evaluation
     agent that gates each section on depth, structure, style, non-duplication,
     and visual richness, driving a score-and-revise loop.
     """

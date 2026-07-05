@@ -23,8 +23,8 @@ from .prompts import (
     BasePrompt,
     PaperAnalysisPrompt,
     PaperEnrichmentPrompt,
+    PaperEvaluationPrompt,
     PaperFinalizationPrompt,
-    PaperReflectionPrompt,
     PaperSynthesisPrompt,
 )
 from .utils import (
@@ -123,7 +123,7 @@ class ExplainerGraph(RetryableBase):
         paper_analysis_model_id: LanguageModelId,
         paper_enrichment_model_id: LanguageModelId,
         paper_finalization_model_id: LanguageModelId,
-        paper_reflection_model_id: LanguageModelId,
+        paper_evaluation_model_id: LanguageModelId,
         paper_synthesis_model_id: LanguageModelId,
         output_fixing_model_id: LanguageModelId,
         boto_session: boto3.Session,
@@ -135,7 +135,7 @@ class ExplainerGraph(RetryableBase):
         max_synthesis_attempts: int = ExplainerConfig.MAX_SYNTHESIS_ATTEMPTS,
         min_quality_score: int = ExplainerConfig.MIN_QUALITY_SCORE,
         enable_output_fixing: bool = False,
-        reflector_enable_thinking: bool = False,
+        evaluator_enable_thinking: bool = False,
         synthesizer_enable_thinking: bool = False,
         thinking_effort: str = "medium",
         language: str = "Korean",
@@ -167,11 +167,11 @@ class ExplainerGraph(RetryableBase):
             paper_analysis_model_id,
             paper_enrichment_model_id,
             paper_finalization_model_id,
-            paper_reflection_model_id,
+            paper_evaluation_model_id,
             paper_synthesis_model_id,
             output_fixing_model_id,
             enable_output_fixing,
-            reflector_enable_thinking=reflector_enable_thinking,
+            evaluator_enable_thinking=evaluator_enable_thinking,
             synthesizer_enable_thinking=synthesizer_enable_thinking,
             thinking_effort=thinking_effort,
         )
@@ -182,12 +182,12 @@ class ExplainerGraph(RetryableBase):
         analysis_id: LanguageModelId,
         enrichment_id: LanguageModelId,
         finalization_id: LanguageModelId,
-        reflection_id: LanguageModelId,
+        evaluation_id: LanguageModelId,
         synthesis_id: LanguageModelId,
         output_fixing_model_id: LanguageModelId,
         enable_output_fixing: bool,
         *,
-        reflector_enable_thinking: bool = False,
+        evaluator_enable_thinking: bool = False,
         synthesizer_enable_thinking: bool = False,
         thinking_effort: str = "medium",
     ) -> None:
@@ -216,11 +216,11 @@ class ExplainerGraph(RetryableBase):
             finalization_id,
             HTMLTagOutputParser(tag_names=PaperFinalizationPrompt.output_variables),
         )
-        self.reflector = self._create_chain(
-            PaperReflectionPrompt,
-            reflection_id,
-            HTMLTagOutputParser(tag_names=PaperReflectionPrompt.output_variables),
-            enable_thinking=reflector_enable_thinking,
+        self.evaluator = self._create_chain(
+            PaperEvaluationPrompt,
+            evaluation_id,
+            HTMLTagOutputParser(tag_names=PaperEvaluationPrompt.output_variables),
+            enable_thinking=evaluator_enable_thinking,
             thinking_effort=thinking_effort,
         )
         self.synthesizer = self._create_chain(
@@ -245,7 +245,7 @@ class ExplainerGraph(RetryableBase):
 
     def _create_workflow(self) -> CompiledStateGraph:
         def check_continue_node(state: ExplainerState) -> dict[str, Any]:
-            # The reflect loop has exited for this section. Commit the best-scoring
+            # The evaluate loop has exited for this section. Commit the best-scoring
             # draft seen across retries (the last synthesis may have scored lower
             # than an earlier attempt), then reset the per-section best trackers.
             best = state.get("best_explanation", "")
@@ -316,7 +316,7 @@ class ExplainerGraph(RetryableBase):
         workflow.add_node("analyze", self.analyze_paper)
         workflow.add_node("enrich", self.enrich_paper)
         workflow.add_node("finalize", self.finalize_paper)
-        workflow.add_node("reflect", self.reflect_paper)
+        workflow.add_node("evaluate", self.evaluate_paper)
         workflow.add_node("synthesize", self.synthesize_paper)
         workflow.add_node("check_continue", check_continue_node)
         workflow.add_node("update_index", update_index_node)
@@ -325,10 +325,10 @@ class ExplainerGraph(RetryableBase):
 
         workflow.add_edge("analyze", "enrich")
         workflow.add_edge("enrich", "synthesize")
-        workflow.add_edge("synthesize", "reflect")
+        workflow.add_edge("synthesize", "evaluate")
 
         workflow.add_conditional_edges(
-            "reflect",
+            "evaluate",
             should_retry_synthesis,
             {
                 "go_retry_synthesis": "synthesize",
@@ -540,8 +540,8 @@ class ExplainerGraph(RetryableBase):
             line.strip() for line in reference_identifiers.splitlines() if line.strip()
         ]
 
-    @RetryableBase._retry("paper_reflection")
-    def reflect_paper(self, state: ExplainerState) -> dict[str, Any]:
+    @RetryableBase._retry("paper_evaluation")
+    def evaluate_paper(self, state: ExplainerState) -> dict[str, Any]:
         self._enforce_token_budget()
         current_index = state["current_index"]
         current_explanation = state["explanations"][current_index]
@@ -567,7 +567,7 @@ class ExplainerGraph(RetryableBase):
                 "synthesis_attempts": state["synthesis_attempts"] + 1,
             }
 
-        result = self.reflector.invoke(
+        result = self.evaluator.invoke(
             {
                 "current_content": current_paragraph,
                 "current_explanation": current_explanation,

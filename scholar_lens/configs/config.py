@@ -135,23 +135,21 @@ class Explanation(BaseModel):
         default=LanguageModelId.CLAUDE_V5_SONNET
     )
     paper_finalization_model_id: LanguageModelId
-    # EVALUATOR for the review pipeline. The "reflection" stage IS the review
-    # pipeline's evaluator — it scores each synthesized section (0-100) and gates
-    # the reflect-and-revise loop, exactly like TechGuide.evaluation_model_id does
-    # for guides ("reflection" and "evaluation" are the same concept under two
-    # historical names). Keep it on Opus 4.8 for stable, well-calibrated scoring —
+    # EVALUATOR for the review pipeline — scores each synthesized section (0-100)
+    # and gates the evaluate-and-revise loop, mirroring TechGuide.evaluation_model_id
+    # for guides. Keep it on Opus 4.8 for stable, well-calibrated scoring —
     # Sonnet 5 as evaluator tends to score more harshly, inflating the loop even
     # when the draft is fine.
-    paper_reflection_model_id: LanguageModelId = Field(
+    paper_evaluation_model_id: LanguageModelId = Field(
         default=LanguageModelId.CLAUDE_V4_8_OPUS
     )
     paper_synthesis_model_id: LanguageModelId = Field(
         default=LanguageModelId.CLAUDE_V5_SONNET
     )
-    reflector_enable_thinking: bool = Field(default=False)
+    evaluator_enable_thinking: bool = Field(default=False)
     synthesizer_enable_thinking: bool = Field(default=False)
     thinking_effort: ThinkingEffort = Field(default="medium")
-    # Per-section reflect-and-revise loop (mirrors the tech-guide evaluator gate):
+    # Per-section evaluate-and-revise loop (mirrors the tech-guide evaluator gate):
     # a section scoring below the threshold is re-synthesized up to N times.
     # Previously hardcoded in ExplainerConfig; surfaced here for parity with
     # TechGuide.min_quality_score / max_revision_attempts.
@@ -189,7 +187,7 @@ class TechGuide(BaseModel):
     )
     writer_enable_thinking: bool = Field(default=False)
     # Thinking for the evaluator chain, independent of the writer (parity with
-    # the review pipeline's separate reflector/synthesizer flags). None → inherit
+    # the review pipeline's separate evaluator/synthesizer flags). None → inherit
     # writer_enable_thinking, preserving prior single-flag behaviour.
     evaluator_enable_thinking: bool | None = Field(default=None)
     thinking_effort: ThinkingEffort = Field(default="medium")
@@ -204,7 +202,7 @@ class TechGuide(BaseModel):
     # How many top search-result pages to fetch into the corpus so the gathered
     # material reaches the section writer (not just the outline planner).
     fetch_top_results: int = Field(default=4, ge=0)
-    # Per-section evaluate-and-revise loop (the review pipeline's reflect gate):
+    # Per-section evaluate-and-revise loop (the review pipeline's evaluate gate):
     # sections scoring below the threshold are revised up to N times.
     min_quality_score: int = Field(default=75, ge=0, le=100)
     max_revision_attempts: int = Field(default=2, ge=0)
@@ -243,7 +241,7 @@ class Config(BaseModel):
             paper_analysis_model_id=LanguageModelId.CLAUDE_V5_SONNET,
             paper_enrichment_model_id=LanguageModelId.CLAUDE_V5_SONNET,
             paper_finalization_model_id=LanguageModelId.CLAUDE_V4_5_HAIKU,
-            paper_reflection_model_id=LanguageModelId.CLAUDE_V4_8_OPUS,
+            paper_evaluation_model_id=LanguageModelId.CLAUDE_V4_8_OPUS,
             paper_synthesis_model_id=LanguageModelId.CLAUDE_V5_SONNET,
         )
     )

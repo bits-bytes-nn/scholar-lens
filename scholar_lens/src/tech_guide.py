@@ -14,7 +14,7 @@ Given a list of URLs (library/framework/platform docs), this agent:
    source images, honouring each section's depth directive and avoiding
    duplication of earlier sections.
 5. Evaluates each drafted section (a 0-100 score + feedback) and revises it
-   below a quality threshold — the review pipeline's reflect-and-revise loop
+   below a quality threshold — the review pipeline's evaluate-and-revise loop
    applied to guides — then optionally fact-checks it against the sources.
 
 It reuses the project's Bedrock factory, prompt conventions, and the
@@ -72,7 +72,7 @@ _MAX_RESEARCH_QUERIES: int = 6
 # Default number of top search-result pages fetched into the corpus so the
 # gathered material reaches the writer (not just the outline planner).
 _FETCH_TOP_RESULTS: int = 4
-# Section quality gate (mirrors the review pipeline's reflect loop).
+# Section quality gate (mirrors the review pipeline's evaluate loop).
 _MIN_QUALITY_SCORE: int = 75
 _MAX_REVISION_ATTEMPTS: int = 2
 
@@ -161,7 +161,7 @@ class TechGuideGenerator(RetryableBase):
         self.language = language
         self.max_sections = max_sections
         # When True, each drafted section is fact-checked against the sources to
-        # strip ungrounded claims (the review pipeline's reflect-and-revise idea
+        # strip ungrounded claims (the review pipeline's evaluate-and-revise idea
         # applied to guides). Cheap insurance against hallucinated APIs/flags.
         self.verify_grounding = verify_grounding
         # When True (and no explicit queries are supplied), the planner derives
@@ -219,12 +219,12 @@ class TechGuideGenerator(RetryableBase):
             | StrOutputParser()
         )
         # Evaluation pass: scores a drafted section 0-100 and returns feedback,
-        # driving a score-and-revise loop (the review pipeline's reflect node).
+        # driving a score-and-revise loop (the review pipeline's evaluate node).
         # Uses its own model (Opus 4.8 by default) rather than the synopsis model
         # so scoring stays well-calibrated independent of the drafting tier, and
         # its own thinking flag (defaults to the writer's when unset) so the
         # evaluator can think independently of drafting — parity with the review
-        # pipeline's separate reflector/synthesizer thinking flags.
+        # pipeline's separate evaluator/synthesizer thinking flags.
         evaluator_thinking = (
             enable_thinking
             if evaluator_enable_thinking is None
@@ -503,7 +503,7 @@ class TechGuideGenerator(RetryableBase):
     ) -> str:
         """Score a section and revise it while it stays below the threshold.
 
-        Mirrors the review pipeline's reflect loop, but keeps the BEST-scoring
+        Mirrors the review pipeline's evaluate loop, but keeps the BEST-scoring
         draft: every revision is re-scored, and a revision is only kept if it
         beats the best so far — so a feedback-driven rewrite can never make the
         section worse than the draft it replaced.

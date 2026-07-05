@@ -52,9 +52,9 @@ explanation:
   paper_analysis_model_id: anthropic.claude-sonnet-5
   paper_enrichment_model_id: anthropic.claude-sonnet-5
   paper_finalization_model_id: anthropic.claude-haiku-4-5-20251001-v1:0
-  paper_reflection_model_id: anthropic.claude-opus-4-8
+  paper_evaluation_model_id: anthropic.claude-opus-4-8
   paper_synthesis_model_id: anthropic.claude-opus-4-8
-  reflector_enable_thinking: True
+  evaluator_enable_thinking: True
   synthesizer_enable_thinking: True
   # Adaptive-thinking effort (low|medium|high) for Opus 4.8+. 'low' is much
   # faster/cheaper for the per-paragraph synthesis loop; raise for max depth.

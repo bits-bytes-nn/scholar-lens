@@ -225,8 +225,8 @@ async def _generate_review(
         paper_finalization_model_id=LanguageModelId(
             context.config.explanation.paper_finalization_model_id
         ),
-        paper_reflection_model_id=LanguageModelId(
-            context.config.explanation.paper_reflection_model_id
+        paper_evaluation_model_id=LanguageModelId(
+            context.config.explanation.paper_evaluation_model_id
         ),
         paper_synthesis_model_id=LanguageModelId(
             context.config.explanation.paper_synthesis_model_id
@@ -241,7 +241,7 @@ async def _generate_review(
             [translation_guideline] if translation_guideline else None
         ),
         enable_output_fixing=True,
-        reflector_enable_thinking=context.config.explanation.reflector_enable_thinking,
+        evaluator_enable_thinking=context.config.explanation.evaluator_enable_thinking,
         synthesizer_enable_thinking=context.config.explanation.synthesizer_enable_thinking,
         thinking_effort=context.config.explanation.thinking_effort,
         language=context.config.output_language,

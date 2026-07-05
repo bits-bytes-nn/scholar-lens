@@ -153,7 +153,7 @@ class TestFinalizePaper:
         assert payload["language"] == "Korean"
 
 
-class TestReflectPaper:
+class TestEvaluatePaper:
     def _state(self, explanation: str = "an explanation") -> dict[str, Any]:
         paper = MagicMock()
         paper.table_of_contents = {}
@@ -174,12 +174,12 @@ class TestReflectPaper:
         g = _bare_graph()
         g.language = "Korean"
         g.translation_guideline = []
-        g.reflector = MagicMock()
-        g.reflector.invoke.return_value = {
+        g.evaluator = MagicMock()
+        g.evaluator.invoke.return_value = {
             "quality_score": "85",
             "improvement_feedback": "fix",
         }
-        result = g.reflect_paper(self._state())
+        result = g.evaluate_paper(self._state())
 
         assert result["quality_score"] == 85
         assert result["synthesis_attempts"] == 2
@@ -189,20 +189,20 @@ class TestReflectPaper:
         g = _bare_graph()
         g.language = "Korean"
         g.translation_guideline = []
-        g.reflector = MagicMock()
-        g.reflector.invoke.return_value = {"quality_score": "100"}
-        result = g.reflect_paper(self._state())
+        g.evaluator = MagicMock()
+        g.evaluator.invoke.return_value = {"quality_score": "100"}
+        result = g.evaluate_paper(self._state())
         assert result["quality_score"] == 100
 
     def test_higher_score_adopts_draft_as_best(self) -> None:
-        # First reflection (best_quality_score defaults to -1): the current draft
+        # First evaluation (best_quality_score defaults to -1): the current draft
         # becomes the tracked best.
         g = _bare_graph()
         g.language = "Korean"
         g.translation_guideline = []
-        g.reflector = MagicMock()
-        g.reflector.invoke.return_value = {"quality_score": "80"}
-        result = g.reflect_paper(self._state(explanation="draft A"))
+        g.evaluator = MagicMock()
+        g.evaluator.invoke.return_value = {"quality_score": "80"}
+        result = g.evaluate_paper(self._state(explanation="draft A"))
         assert result["best_quality_score"] == 80
         assert result["best_explanation"] == "draft A"
 
@@ -212,12 +212,12 @@ class TestReflectPaper:
         g = _bare_graph()
         g.language = "Korean"
         g.translation_guideline = []
-        g.reflector = MagicMock()
-        g.reflector.invoke.return_value = {"quality_score": "40"}
+        g.evaluator = MagicMock()
+        g.evaluator.invoke.return_value = {"quality_score": "40"}
         state = self._state(explanation="worse retry")
         state["best_quality_score"] = 80
         state["best_explanation"] = "draft A"
-        result = g.reflect_paper(state)
+        result = g.evaluate_paper(state)
         assert result["quality_score"] == 40
         assert "best_quality_score" not in result  # best unchanged
         assert "best_explanation" not in result
@@ -230,7 +230,7 @@ class TestReflectPaper:
         g = _bare_graph()
         g.language = "Korean"
         g.translation_guideline = []
-        g.reflector = MagicMock()
+        g.evaluator = MagicMock()
         for raw, expected in [
             ("85", 85),
             ("85/100", 85),
@@ -238,21 +238,21 @@ class TestReflectPaper:
             ("", 0),
             ("score: 7", 0),
         ]:
-            g.reflector.invoke.return_value = {"quality_score": raw}
-            result = g.reflect_paper(self._state())
+            g.evaluator.invoke.return_value = {"quality_score": raw}
+            result = g.evaluate_paper(self._state())
             assert result["quality_score"] == expected, raw
 
     def test_empty_explanation_returns_zero_and_feedback(self) -> None:
         g = _bare_graph()
         g.language = "Korean"
         g.translation_guideline = []
-        g.reflector = MagicMock()  # must not be called
-        result = g.reflect_paper(self._state(explanation="   "))
+        g.evaluator = MagicMock()  # must not be called
+        result = g.evaluate_paper(self._state(explanation="   "))
 
         assert result["quality_score"] == 0
         assert result["synthesis_attempts"] == 2
         assert any("concise" in f for f in result["accumulated_feedback"])
-        g.reflector.invoke.assert_not_called()
+        g.evaluator.invoke.assert_not_called()
 
 
 class TestSynthesizePaper:
