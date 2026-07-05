@@ -590,7 +590,7 @@ TechGuideSynopsisPrompt는 각 섹션에 **관심 영역**(CONCEPT/DETAIL/USAGE/
 - `TokenUsageTracker`: LangChain 콜백. 모든 LLM 호출의 입력·출력 토큰을 누적합니다. `estimated_cost_usd()`는 모델별 가격 테이블(opus/sonnet/haiku)로 비용을 추정합니다.
 - `TokenBudgetExceeded`: 총 토큰 예산을 초과하면 발생합니다.
 - `TokenBudgetGuard`: 세 제너레이터(ExplainerGraph/PaperSummarizer/TechGuideGenerator)가 상속하는 믹스인. 콜백 목록에서 `TokenUsageTracker`를 찾아 보관(`_init_token_budget`)하고 `_enforce_token_budget()`으로 예산 초과 시 중단합니다(중복 제거된 단일 구현).
-- `MetricsEmitter`: CloudWatch에 InputTokens/OutputTokens/EstimatedCostUSD/DurationSeconds/Success를 **`Mode` 차원(review/summary/guide)과 함께** 발행합니다. 세 파이프라인(main.py의 review/summary, tech_guide_main.py의 guide) 모두에서 호출됩니다. 비용 알람은 이 `Mode` 차원 때문에 차원 없는 조회로는 매칭되지 않으므로, CDK에서 `SEARCH` 메트릭 수식으로 전 모드를 합산합니다. 오프라인이거나 boto 불가시 No-op입니다.
+- `MetricsEmitter`: CloudWatch에 InputTokens/OutputTokens/EstimatedCostUSD/DurationSeconds/Success를 발행합니다 — 각 메트릭을 **`Mode` 차원(review/summary/guide)과 함께, 그리고 차원 없이** 이중으로 emit합니다. 세 파이프라인(main.py의 review/summary, tech_guide_main.py의 guide) 모두에서 호출됩니다. 비용 알람은 **차원 없는** 집계 시계열을 감시합니다(CloudWatch 알람은 단일 시계열만 감시 가능하며 `SEARCH`/여러 시계열을 반환하는 수식은 거부됨). 오프라인이거나 boto 불가시 No-op입니다.
 
 ---
 

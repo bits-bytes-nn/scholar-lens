@@ -915,24 +915,23 @@ class PaperReviewStack(Stack):
             alarm.add_alarm_action(sns_action)
 
         # 3) Estimated-cost guardrail on the custom metric emitted by the app
-        #    (ScholarLens/EstimatedCostUSD). The app emits this metric WITH a
-        #    `Mode` dimension (review/summary/guide), so a plain dimensionless
-        #    Metric would match zero datapoints and never fire. Use a SEARCH
-        #    metric-math expression to SUM across every Mode into one hourly total.
-        cost_expression = cloudwatch.MathExpression(
-            expression=(
-                "SUM(SEARCH('{ScholarLens,Mode} MetricName=\"EstimatedCostUSD\"', "
-                "'Sum', 3600))"
-            ),
-            label="EstimatedCostUSD (all modes)",
-            period=Duration.hours(1),
-            using_metrics={},
-        )
+        #    (ScholarLens/EstimatedCostUSD). The app emits this metric BOTH with a
+        #    `Mode` dimension (per-pipeline breakdown) AND dimensionless (a
+        #    stack-wide aggregate). The alarm watches the dimensionless series — a
+        #    CloudWatch alarm can only watch one time series (SEARCH/metric-math
+        #    that returns many series is rejected: "SEARCH is not supported on
+        #    Metric Alarms"). Alarms if a single 1h window's total spend crosses
+        #    the threshold.
         cost_alarm = cloudwatch.Alarm(
             self,
             "EstimatedCostAlarm",
             alarm_name=self._get_resource_name("estimated-cost"),
-            metric=cost_expression,
+            metric=cloudwatch.Metric(
+                namespace="ScholarLens",
+                metric_name="EstimatedCostUSD",
+                statistic="Sum",
+                period=Duration.hours(1),
+            ),
             threshold=50,
             evaluation_periods=1,
             comparison_operator=(cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD),

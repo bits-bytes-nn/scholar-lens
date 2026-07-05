@@ -170,6 +170,30 @@ class TestMetricsEmitter:
         client.put_metric_data.assert_called_once()
         assert client.put_metric_data.call_args.kwargs["Namespace"] == METRICS_NAMESPACE
 
+    def test_cost_emitted_both_dimensioned_and_dimensionless(self) -> None:
+        # The alarm watches a dimensionless series (a CloudWatch alarm can't
+        # SEARCH across dimensions), so every metric must be emitted BOTH with the
+        # Mode dimension and without.
+        session = MagicMock()
+        client = session.client.return_value
+        emitter = MetricsEmitter(boto_session=session)
+        tracker = TokenUsageTracker()
+        tracker.on_llm_end(_llm_output_response("opus", 100, 50))
+        emitter.emit_run(
+            mode="guide",
+            success=True,
+            duration_seconds=1.0,
+            tracker=tracker,
+        )
+        data = client.put_metric_data.call_args.kwargs["MetricData"]
+        cost_entries = [e for e in data if e["MetricName"] == "EstimatedCostUSD"]
+        assert len(cost_entries) == 2
+        assert any("Dimensions" not in e for e in cost_entries)  # aggregate
+        assert any(
+            e.get("Dimensions") == [{"Name": "Mode", "Value": "guide"}]
+            for e in cost_entries
+        )  # per-mode
+
     def test_client_failure_is_swallowed(self) -> None:
         session = MagicMock()
         client = session.client.return_value

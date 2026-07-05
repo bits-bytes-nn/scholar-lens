@@ -208,11 +208,24 @@ class MetricsEmitter:
         if not self._client:
             return
         try:
+            # Emit each metric TWICE: once with the Mode dimension (per-pipeline
+            # breakdown) and once with NO dimensions (a stack-wide aggregate). A
+            # CloudWatch alarm can only watch a single time series — it can't
+            # SEARCH/SUM across dimensions — so the dimensionless copy is what the
+            # cost/error alarms actually alarm on.
             self._client.put_metric_data(
                 Namespace=self.namespace,
                 MetricData=[
-                    {"MetricName": name, "Value": float(value), "Dimensions": dims}
+                    entry
                     for name, value in metrics.items()
+                    for entry in (
+                        {
+                            "MetricName": name,
+                            "Value": float(value),
+                            "Dimensions": dims,
+                        },
+                        {"MetricName": name, "Value": float(value)},
+                    )
                 ],
             )
         except Exception as e:  # noqa: BLE001 - metric emission must not fail the job
