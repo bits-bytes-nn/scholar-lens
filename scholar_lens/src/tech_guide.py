@@ -33,7 +33,7 @@ from langchain_core.runnables import Runnable
 
 from .constants import LanguageModelId
 from .logger import logger
-from .metrics import TokenUsageTracker
+from .metrics import TokenBudgetGuard
 from .prompts import (
     BasePrompt,
     TechGuideEvaluationPrompt,
@@ -137,7 +137,7 @@ class TechGuide:
     source_urls: list[str] = field(default_factory=list)
 
 
-class TechGuideGenerator(RetryableBase):
+class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
     """Generates a self-study technical guide from a list of source URLs."""
 
     def __init__(
@@ -180,11 +180,8 @@ class TechGuideGenerator(RetryableBase):
         # Hard total-token ceiling for one guide run (None = no limit). The
         # evaluate-and-revise + grounding loop multiplies per-section calls, so
         # this guards against runaway cost the way the review pipeline does.
-        self.max_total_tokens = max_total_tokens
         self.callbacks = callbacks or []
-        self._token_tracker = next(
-            (cb for cb in self.callbacks if isinstance(cb, TokenUsageTracker)), None
-        )
+        self._init_token_budget(self.callbacks, max_total_tokens)
         self.researcher = researcher or WebResearcher()
         self.llm_factory = BedrockLanguageModelFactory(boto_session=boto_session)
         self.synopsis_model_id = synopsis_model_id

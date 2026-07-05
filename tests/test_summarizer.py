@@ -40,6 +40,10 @@ def _make_summarizer_with_stub_chain(chain_result: dict[str, str]) -> PaperSumma
     summarizer.language = "Korean"
     summarizer.translation_guideline = []
     summarizer.summary_model_id = LanguageModelId.CLAUDE_V4_5_HAIKU
+    # __new__ bypasses __init__, so set the TokenBudgetGuard attrs directly
+    # (no budget wired for these chain-stub tests).
+    summarizer._token_tracker = None
+    summarizer.max_total_tokens = None
     # fit_text would call Bedrock CountTokens; stub it to a pass-through.
     factory = MagicMock()
     factory.fit_text = MagicMock(side_effect=lambda model_id, text, **kw: text)

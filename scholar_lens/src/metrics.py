@@ -18,6 +18,7 @@ nothing here may fail the job.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -82,6 +83,39 @@ class TokenUsageTracker(BaseCallbackHandler):
                 f"Token budget exceeded: {self.total_tokens} > {max_total_tokens} "
                 f"(across {self.call_count} calls)."
             )
+
+
+class TokenBudgetGuard:
+    """Shared total-token budget wiring for the generation pipelines.
+
+    All three generators (``ExplainerGraph``, ``PaperSummarizer``,
+    ``TechGuideGenerator``) locate the run's :class:`TokenUsageTracker` in their
+    callback list and abort once cumulative spend passes ``max_total_tokens``.
+    That lookup and guard were previously copy-pasted verbatim in each; this
+    mixin holds the single copy. Subclasses call :meth:`_init_token_budget` from
+    ``__init__`` and :meth:`_enforce_token_budget` at each expensive step. The
+    tech-guide's soft-degrade / hard-abort tiers build on ``_token_tracker`` and
+    ``max_total_tokens`` set here.
+    """
+
+    _token_tracker: TokenUsageTracker | None
+    max_total_tokens: int | None
+
+    def _init_token_budget(
+        self,
+        callbacks: Sequence[BaseCallbackHandler] | None,
+        max_total_tokens: int | None,
+    ) -> None:
+        self._token_tracker = next(
+            (cb for cb in (callbacks or []) if isinstance(cb, TokenUsageTracker)),
+            None,
+        )
+        self.max_total_tokens = max_total_tokens
+
+    def _enforce_token_budget(self) -> None:
+        """Abort the run if the configured total-token budget is exceeded."""
+        if self._token_tracker is not None and self.max_total_tokens:
+            self._token_tracker.check_budget(self.max_total_tokens)
 
 
 def _extract_usage(response: Any) -> tuple[int, int, str]:  # noqa: ANN401

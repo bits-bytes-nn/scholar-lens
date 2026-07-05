@@ -17,7 +17,7 @@ from .code_retriever import CodeRetriever
 from .constants import LanguageModelId
 from .content_extractor import Attributes, Citation
 from .logger import is_running_in_aws, logger
-from .metrics import TokenUsageTracker
+from .metrics import TokenBudgetGuard
 from .parser import Content, Figure
 from .prompts import (
     BasePrompt,
@@ -105,7 +105,6 @@ class ExplainerState(TypedDict):
     citation_summaries: list[str] | None
     code: list[dict[str, float | str]] | None
     synthesis_attempts: int
-    improvement_feedback: str
     quality_score: int
     accumulated_feedback: list[str]
     structure_index_offset: int
@@ -116,7 +115,7 @@ class ExplainerState(TypedDict):
     best_quality_score: int
 
 
-class ExplainerGraph(RetryableBase):
+class ExplainerGraph(RetryableBase, TokenBudgetGuard):
     def __init__(
         self,
         paper: Paper,
@@ -148,12 +147,9 @@ class ExplainerGraph(RetryableBase):
         self.paper = paper
         self.language = language
         self.callbacks = callbacks or []
-        self.max_total_tokens = max_total_tokens
         self.max_continuations = max_continuations
         # Locate a token tracker among the callbacks for budget enforcement.
-        self._token_tracker = next(
-            (cb for cb in self.callbacks if isinstance(cb, TokenUsageTracker)), None
-        )
+        self._init_token_budget(self.callbacks, max_total_tokens)
         self.citation_summarizer = citation_summarizer
         self.code_retriever = code_retriever
         self.translation_guideline = translation_guideline or []
@@ -305,7 +301,6 @@ class ExplainerGraph(RetryableBase):
                 "current_index": state["current_index"] + 1,
                 "synthesis_attempts": 0,
                 "quality_score": 100,
-                "improvement_feedback": "",
                 "accumulated_feedback": [],
                 "best_explanation": "",
                 "best_quality_score": -1,
@@ -385,7 +380,6 @@ class ExplainerGraph(RetryableBase):
             "explanations": [],
             "synthesis_attempts": 0,
             "quality_score": 100,
-            "improvement_feedback": "",
             "accumulated_feedback": [],
             "best_explanation": "",
             "best_quality_score": -1,
@@ -599,11 +593,6 @@ class ExplainerGraph(RetryableBase):
             update["best_quality_score"] = quality_score
         return update
 
-    def _enforce_token_budget(self) -> None:
-        """Abort the run if the configured total-token budget is exceeded."""
-        if self._token_tracker is not None and self.max_total_tokens:
-            self._token_tracker.check_budget(self.max_total_tokens)
-
     def synthesize_paper(self, state: ExplainerState) -> dict[str, Any]:
         current_index = state["current_index"]
         current_paragraph = state["paragraphs"][current_index]
@@ -718,7 +707,6 @@ class ExplainerGraph(RetryableBase):
             "code": None,
             "synthesis_attempts": 0,
             "quality_score": 100,
-            "improvement_feedback": "",
             "accumulated_feedback": [],
             "structure_index_offset": 0,
             "best_explanation": "",

@@ -16,6 +16,7 @@ from scholar_lens.src.metrics import (
     METRICS_NAMESPACE,
     MetricsEmitter,
     TokenBudgetExceeded,
+    TokenBudgetGuard,
     TokenUsageTracker,
     _extract_usage,
     _rate_for,
@@ -94,6 +95,45 @@ class TestCheckBudget:
     def test_none_no_raise(self) -> None:
         tracker = TokenUsageTracker(input_tokens=10_000, output_tokens=10_000)
         tracker.check_budget(None)
+
+
+class TestTokenBudgetGuard:
+    """The mixin shared verbatim by all three generators (extract tracker from
+    callbacks, then abort past the ceiling)."""
+
+    def _guard(
+        self, callbacks: list[Any] | None, max_total_tokens: int | None
+    ) -> TokenBudgetGuard:
+        guard = TokenBudgetGuard()
+        guard._init_token_budget(callbacks, max_total_tokens)
+        return guard
+
+    def test_finds_tracker_among_callbacks(self) -> None:
+        tracker = TokenUsageTracker()
+        guard = self._guard([MagicMock(), tracker, MagicMock()], 1000)
+        assert guard._token_tracker is tracker
+        assert guard.max_total_tokens == 1000
+
+    def test_no_tracker_present(self) -> None:
+        guard = self._guard([MagicMock()], 1000)
+        assert guard._token_tracker is None
+        guard._enforce_token_budget()  # no tracker → no-op, must not raise
+
+    def test_enforce_raises_when_over(self) -> None:
+        tracker = TokenUsageTracker(input_tokens=900, output_tokens=200)
+        guard = self._guard([tracker], 1000)
+        with pytest.raises(TokenBudgetExceeded):
+            guard._enforce_token_budget()
+
+    def test_enforce_noop_when_under(self) -> None:
+        tracker = TokenUsageTracker(input_tokens=100, output_tokens=100)
+        guard = self._guard([tracker], 1000)
+        guard._enforce_token_budget()
+
+    def test_enforce_noop_when_no_ceiling(self) -> None:
+        tracker = TokenUsageTracker(input_tokens=10_000, output_tokens=10_000)
+        guard = self._guard([tracker], None)
+        guard._enforce_token_budget()  # ceiling None → no-op
 
 
 class TestMetricsEmitter:

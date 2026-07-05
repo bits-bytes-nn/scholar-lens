@@ -1,20 +1,24 @@
-from .prompts import (
+from .base import BasePrompt
+from .extraction import (
     AttributesExtractionPrompt,
-    BasePrompt,
     CitationAnalysisPrompt,
     CitationExtractionPrompt,
     CitationSummaryPrompt,
     CodeAnalysisPrompt,
     CodebaseSummaryPrompt,
     FigureAnalysisPrompt,
+    TableOfContentsPrompt,
+)
+from .review import (
     PaperAnalysisPrompt,
     PaperEnrichmentPrompt,
     PaperEvaluationPrompt,
     PaperFinalizationPrompt,
-    PaperSummaryPrompt,
     PaperSynthesisPrompt,
-    SlackIntentPrompt,
-    TableOfContentsPrompt,
+)
+from .slack import SlackIntentPrompt
+from .summary import PaperSummaryPrompt
+from .tech_guide import (
     TechGuideEvaluationPrompt,
     TechGuideGroundingPrompt,
     TechGuideRelevancePrompt,

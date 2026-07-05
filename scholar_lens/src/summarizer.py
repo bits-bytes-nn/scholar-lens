@@ -17,7 +17,7 @@ from langchain_core.runnables import Runnable
 from .constants import LanguageModelId
 from .explainer import Paper
 from .logger import logger
-from .metrics import TokenUsageTracker
+from .metrics import TokenBudgetGuard
 from .prompts import PaperSummaryPrompt
 from .utils import (
     BedrockLanguageModelFactory,
@@ -32,7 +32,7 @@ DEFAULT_LANGUAGE: str = "Korean"
 _NO_CODEBASE: str = "(no code repository provided)"
 
 
-class PaperSummarizer(RetryableBase):
+class PaperSummarizer(RetryableBase, TokenBudgetGuard):
     """Generates a structured five-section summary for a :class:`Paper`."""
 
     def __init__(
@@ -53,11 +53,7 @@ class PaperSummarizer(RetryableBase):
         # Hard total-token ceiling (None = no limit). Checked before the summary
         # call so an already-exhausted budget (from data prep) aborts rather than
         # spending more — parity with the review/guide token guards.
-        self.max_total_tokens = max_total_tokens
-        self._token_tracker = next(
-            (cb for cb in (callbacks or []) if isinstance(cb, TokenUsageTracker)),
-            None,
-        )
+        self._init_token_budget(callbacks, max_total_tokens)
         self.llm_factory = BedrockLanguageModelFactory(boto_session=boto_session)
         self.summary_chain: Runnable = self._build_chain(
             summary_model_id,
@@ -111,13 +107,6 @@ class PaperSummarizer(RetryableBase):
             "tags": result.get("tags", "").strip(),
             "urls": result.get("urls", "").strip(),
         }
-
-    def _enforce_token_budget(self) -> None:
-        """Abort before summarizing if the configured total-token budget (across
-        this run's prior data-prep calls) is already exceeded."""
-        tracker = getattr(self, "_token_tracker", None)
-        if tracker is not None and getattr(self, "max_total_tokens", None):
-            tracker.check_budget(self.max_total_tokens)
 
     @RetryableBase._retry("paper_summarization")
     async def _summarize(
