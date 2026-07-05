@@ -40,7 +40,7 @@ Scholar-Lens는 다음 세 가지 아티팩트를 생성합니다 (`scholar_lens
 Scholar-Lens는 arXiv ID 또는 임의의 논문 PDF URL을 수용합니다 (`scholar_lens/src/paper_source.py`의 `PaperSource` 인터페이스 기반):
 
 - **arXiv 소스** (`ArxivSource`, `paper_source.py:96-124`): arXiv ID (예: `2312.11805` 또는 `2312.11805v2`) 또는 `arxiv.org` URL (abs/pdf/html 형식) 입력; arXiv API를 통해 풍부한 메타데이터 제공.
-- **PDF URL 소스** (`PdfUrlSource`, `paper_source.py:126-315`): 임의의 HTTPS URL이 PDF를 제공해야 함. Content-Type 검증 및 PDF 매직 바이트 확인을 통해 비 PDF URL 거부 (`paper_source.py:256-290`); SSRF 공격 방어를 위한 URL 가드 적용 (`paper_source.py:141-144`, `paper_source.py:268-271`).
+- **PDF URL 소스** (`PdfUrlSource`, `paper_source.py`): 임의의 HTTPS URL이 PDF를 제공해야 함. Content-Type 검증 및 PDF 매직 바이트 확인을 통해 비 PDF URL 거부; SSRF 공격 방어를 위한 URL 가드 적용(`_safe_request`가 리다이렉트 홉마다 `assert_url_is_public` 재검증) + 100MB 크기 상한.
 
 메타데이터 해석: arXiv 소스는 제목, 저자, 카테고리 등 완전한 메타데이터를 제공합니다. 임의 PDF URL 소스는 다운로드된 PDF의 임베딩 메타데이터에서 제목을 추출하고 (`paper_source.py:241-254`), 나머지 속성(카테고리, 키워드)은 LLM 속성 추출 단계에서 채워집니다 (`main.py:354-369`의 `ContentExtractor`).
 
@@ -227,6 +227,8 @@ _SEMANTIC_SCHOLAR_LIMITER = RateLimiter(rate=1.0, per=1.0, name="semantic-schola
 **리다이렉트 TOCTOU 방어**: 검증 시점과 fetch 시점 사이에 DNS가 재해석되거나 302 리다이렉트로 내부 호스트(예: 169.254.169.254)로 우회하는 것을 막기 위해, `PdfUrlSource`는 `requests` 기본 세션 대신 `_safe_request()`를 사용합니다 — `allow_redirects=False`로 리다이렉트를 수동으로 따라가며 **매 홉마다 `assert_url_is_public()`을 재검증**하고(`_MAX_REDIRECTS=5`), 다운로드 GET·HEAD 프로브·매직 바이트 GET을 모두 이 경로로 라우팅합니다. `code_retriever._clone_repo`도 신뢰할 수 없는 `repo_url`에 대해 clone 전에 `_assert_clonable()`(https 전용 + `assert_url_is_public`)을 호출해 `file://`/`ssh://`/내부 http 우회를 차단합니다.
 
 **사용처**: `PdfUrlSource.__init__()` / `_safe_request()`, `code_retriever._clone_repo`, `WebResearcher`, 기술 가이드 크롤링
+
+**프롬프트 주입 방어(펜스 태그 무력화)**: 사용자 제공 논문/웹 본문은 프롬프트의 데이터 펜스(`<sources>`, `<paper>`, `<current_content>` 등) 안에 들어가므로, 본문에 리터럴 닫는 태그(`</paper>`)가 있으면 펜스를 탈출해 지시를 주입할 수 있습니다. `neutralize_prompt_tags`(`web_research.py`)가 펜스 태그의 `<` 뒤에 zero-width space를 삽입해 무력화하며(렌더링은 동일), **세 파이프라인 모두**(가이드의 웹 본문, 리뷰의 논문 본문/인용/코드베이스 요약, 요약의 논문/코드베이스 텍스트)에 일관되게 적용됩니다. 펜스 태그 목록은 `web_research._PROMPT_FENCE_TAGS`에 중앙화되어 있습니다.
 
 #### 5. 수식 마크다운 (`scholar_lens/src/markdown_math.py`)
 
@@ -455,10 +457,10 @@ TechGuideSynopsisPrompt는 각 섹션에 **관심 영역**(CONCEPT/DETAIL/USAGE/
 **책임**: 이질적인 논문 출처(arXiv ID, arXiv URL, 임의 PDF URL)를 추상화하여 통합 인터페이스를 제공합니다.
 
 **주요 클래스/함수**:
-- `PaperSource` (line 61): 추상 베이스, `source_id`, `pdf_url`, `fetch_metadata()`, `download_pdf()` 계약을 정의합니다.
-- `ArxivSource` (line 96): `ArxivHandler`에 위임하는 구현체.
-- `PdfUrlSource` (line 126): 임의 URL에서 PDF를 검증하고 다운로드합니다. SSRF 가드 (line 142 `assert_url_scheme_and_literal`, line 269 `assert_url_is_public`)로 악의적 URL을 거부하며, 내장된 PDF 문서 메타데이터에서 제목을 추출합니다 (line 241).
-- `resolve_paper_source(source, arxiv_handler)` (line 332): 사용자 입력을 파싱하여 올바른 `PaperSource` 하위 클래스를 선택합니다.
+- `PaperSource`: 추상 베이스. `source_id`, `fetch_metadata()`, `download_pdf()`를 계약으로 정의합니다(`arxiv_html_id`는 기본값 `None`을 갖는 구체 프로퍼티).
+- `ArxivSource`: `ArxivHandler`에 위임하는 구현체.
+- `PdfUrlSource`: 임의 URL에서 PDF를 검증하고 다운로드합니다. 구성 시 `assert_url_scheme_and_literal`, 요청 시 `_safe_request`가 홉마다 `assert_url_is_public`을 재검증(리다이렉트 우회 방어)하며, 100MB 크기 상한(선언 Content-Length + 스트리밍 중 강제, 초과 시 부분 파일 정리)과 `_MAX_REDIRECTS` 제한을 적용합니다. 내장 PDF 메타데이터에서 제목을 추출합니다.
+- `resolve_paper_source(source, arxiv_handler)`: 사용자 입력을 파싱하여 올바른 `PaperSource` 하위 클래스를 선택합니다.
 
 ---
 
@@ -560,11 +562,13 @@ TechGuideSynopsisPrompt는 각 섹션에 **관심 영역**(CONCEPT/DETAIL/USAGE/
 ### `tech_guide.py`
 **책임**: URL 목록 기반 자학 기술 가이드 생성(관련성 게이트, 개요, 섹션별 작성, 사실 확인).
 
-**주요 클래스/함수**:
-- `TechGuideGenerator` (line 63): `generate(urls, discover_subpages, search_queries)` (line 134)은 연구(line 145), 관련성 확인(line 155), 개요 초안(line 156), 섹션 작성(line 157)을 수행합니다.
-- `_assert_relevant()` (line 167): 소스가 기술 문서인지 확인하거나 `NotTechnicalContentError`를 발생시킵니다 (line 50).
-- `_write_sections()` (line 199): 각 섹션을 작성하고(선택적으로 사실 확인, line 239), 최대 16섹션으로 제한합니다 (line 47).
-- `_ground_section()` (line 245): 섹션을 소스 자료에 대해 재작성하여 근거 없는 주장을 제거합니다.
+**주요 클래스/함수** (`TokenBudgetGuard` 상속):
+- `TechGuideGenerator`: `generate(urls, discover_subpages, search_queries)`는 연구(딥리서치 플래닝 포함), 관련성 확인, 개요 초안, 섹션 작성을 수행합니다. 동기 크롤/검색 호출은 `asyncio.to_thread`로 오프로드됩니다.
+- `_plan_research()`: 시드 페이지에서 웹 검색 쿼리(와 초기 토픽 추정)를 도출합니다(검색 백엔드가 결과를 줄 수 있을 때만).
+- `_assert_relevant()`: 소스가 기술 문서인지 확인하거나 `NotTechnicalContentError`를 발생시킵니다.
+- `_write_sections()`: 각 섹션을 작성하고, 예산 내에서 평가·재작성 및 근거 검증을 수행합니다. **2단계 토큰 가드**: soft(1x, `_budget_exhausted()`)에서 정제를 건너뛰고, hard(1.5x, `_enforce_hard_token_budget()`)에서 `TokenBudgetExceeded`로 중단합니다.
+- `_evaluate_and_revise()`: 섹션을 채점(`parse_quality_score`)하고 임계값 미만이면 재작성하며 **best-of** 초안을 유지합니다. 임계값을 넘겨야만 채택하고, 저점수+빈 피드백은 일반 지시문으로 재작성합니다.
+- `_ground_section()`: 섹션을 소스 자료에 대해 재작성하여 근거 없는 주장을 제거합니다.
 
 ---
 
@@ -583,9 +587,10 @@ TechGuideSynopsisPrompt는 각 섹션에 **관심 영역**(CONCEPT/DETAIL/USAGE/
 **책임**: Bedrock 토큰 사용률을 추적하고, 예산을 시행하고, CloudWatch로 메트릭을 방출합니다.
 
 **주요 클래스/함수**:
-- `TokenUsageTracker` (line 46): LangChain 콜백. 모든 LLM 호출의 입력·출력 토큰을 누적합니다 (line 58). `estimated_cost_usd()` (line 70)는 모델별 가격 테이블을 사용하여 비용을 추정합니다 (line 34-38, opus/sonnet/haiku).
-- `TokenBudgetExceeded` (line 41): 총 토큰 예산을 초과하면 발생합니다.
-- `MetricsEmitter` (line 123): CloudWatch에 InputTokens, OutputTokens, EstimatedCostUSD, DurationSeconds, Success를 발행합니다 (line 150-161). 오프라인이거나 boto 불가시 No-op입니다.
+- `TokenUsageTracker`: LangChain 콜백. 모든 LLM 호출의 입력·출력 토큰을 누적합니다. `estimated_cost_usd()`는 모델별 가격 테이블(opus/sonnet/haiku)로 비용을 추정합니다.
+- `TokenBudgetExceeded`: 총 토큰 예산을 초과하면 발생합니다.
+- `TokenBudgetGuard`: 세 제너레이터(ExplainerGraph/PaperSummarizer/TechGuideGenerator)가 상속하는 믹스인. 콜백 목록에서 `TokenUsageTracker`를 찾아 보관(`_init_token_budget`)하고 `_enforce_token_budget()`으로 예산 초과 시 중단합니다(중복 제거된 단일 구현).
+- `MetricsEmitter`: CloudWatch에 InputTokens/OutputTokens/EstimatedCostUSD/DurationSeconds/Success를 **`Mode` 차원(review/summary/guide)과 함께** 발행합니다. 세 파이프라인(main.py의 review/summary, tech_guide_main.py의 guide) 모두에서 호출됩니다. 비용 알람은 이 `Mode` 차원 때문에 차원 없는 조회로는 매칭되지 않으므로, CDK에서 `SEARCH` 메트릭 수식으로 전 모드를 합산합니다. 오프라인이거나 boto 불가시 No-op입니다.
 
 ---
 
@@ -1297,15 +1302,15 @@ _ARXIV_RATE_LIMITER = RateLimiter(rate=1.0, per=3.0, name="arxiv")
 
 **`PdfUrlSource`** (라인 126-314):
 - 임의 URL → PDF 다운로드 경로 구현
-- **SSRF 보호** (라인 138-144, 268-271):
-  - 구성 시: `assert_url_scheme_and_literal()` — 스키마/IP 리터럴 검증 (오프라인)
-  - 다운로드 시: `assert_url_is_public()` — DNS 검증 포함 전체 체크
-  - `url_guard.py`에서 제공 (내부 IP, 루프백, 비표준 포트 거부)
-- **PDF 검증** (라인 256-290):
+- **SSRF 보호**:
+  - 구성 시: `assert_url_scheme_and_literal()` — 스키마(http/https)/IP 리터럴 검증 (오프라인)
+  - 다운로드 시: `_safe_request()`가 리다이렉트를 수동으로 따라가며 매 홉마다 `assert_url_is_public()` — DNS 해석 + 모든 해석 IP 검증 — 을 재실행 (TOCTOU/리다이렉트 우회 방어)
+  - `url_guard.py`에서 제공 (내부 IP(RFC-1918), 루프백, 링크로컬/메타데이터 169.254.169.254 거부). 포트는 필터링하지 않음(스킴과 호스트 IP만 검증)
+- **PDF 검증**:
   - `Content-Type: application/pdf` 확인
   - `Content-Type: text/html` 명시 → 거부
-  - 의심스러운 경우 매직 바이트 `%PDF-` 프로브 (라인 292-302)
-- **다운로드 제한** (라인 46-50):
+  - 의심스러운 경우 매직 바이트 `%PDF-` 프로브
+- **다운로드 제한**:
   - 타임아웃: 30초 다운로드, 15초 프로브
   - 최대 크기: 100 MB (`_MAX_PDF_BYTES`)
   - `Content-Length` 선언 시 미리 확인 (라인 201-207)
@@ -1742,8 +1747,9 @@ poetry run pytest tests/
   --cov=scholar_lens
   --cov-report=term-missing
   --cov-report=xml
+  --cov-fail-under=65
 ```
-pytest는 `asyncio_mode="auto"`로 설정되어 비동기 테스트를 자동으로 처리합니다 (`pyproject.toml:54-59`). 커버리지는 `scholar_lens` 패키지에서만 수집되고, 테스트와 프롬프트 파일은 제외됩니다.
+pytest는 `asyncio_mode="auto"`로 설정되어 비동기 테스트를 자동으로 처리합니다 (`pyproject.toml:54-59`). 커버리지는 `scholar_lens` 패키지에서만 수집되고, 테스트와 프롬프트 파일은 제외됩니다. `--cov-fail-under=65`로 커버리지가 65% 미만이면 CI가 실패합니다.
 
 **CDK 합성 검증 (Python 3.12, Node 20):**
 `scripts/ci_synth_check.py`는 실제 AWS 자격증명 없이 가짜 계정/리전에 대해 PaperReviewStack을 합성합니다 (`scripts/ci_synth_check.py:22-50`). 이는 구성 오류를 조기에 감지하고 IAM/보안 배선을 검증합니다.
