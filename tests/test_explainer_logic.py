@@ -194,6 +194,34 @@ class TestReflectPaper:
         result = g.reflect_paper(self._state())
         assert result["quality_score"] == 100
 
+    def test_higher_score_adopts_draft_as_best(self) -> None:
+        # First reflection (best_quality_score defaults to -1): the current draft
+        # becomes the tracked best.
+        g = _bare_graph()
+        g.language = "Korean"
+        g.translation_guideline = []
+        g.reflector = MagicMock()
+        g.reflector.invoke.return_value = {"quality_score": "80"}
+        result = g.reflect_paper(self._state(explanation="draft A"))
+        assert result["best_quality_score"] == 80
+        assert result["best_explanation"] == "draft A"
+
+    def test_lower_score_keeps_prior_best(self) -> None:
+        # A retried draft that scores lower than the best seen must NOT overwrite
+        # the tracked best (the check_continue node commits the best draft).
+        g = _bare_graph()
+        g.language = "Korean"
+        g.translation_guideline = []
+        g.reflector = MagicMock()
+        g.reflector.invoke.return_value = {"quality_score": "40"}
+        state = self._state(explanation="worse retry")
+        state["best_quality_score"] = 80
+        state["best_explanation"] = "draft A"
+        result = g.reflect_paper(state)
+        assert result["quality_score"] == 40
+        assert "best_quality_score" not in result  # best unchanged
+        assert "best_explanation" not in result
+
     def test_non_numeric_quality_score_does_not_crash(self) -> None:
         # The LLM may return "85/100", "N/A", "", or prose — must not raise.
         # A clean int or a leading "<n>/<total>" parses; anything that doesn't

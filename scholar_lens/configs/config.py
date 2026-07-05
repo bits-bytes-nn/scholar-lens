@@ -135,8 +135,15 @@ class Explanation(BaseModel):
         default=LanguageModelId.CLAUDE_V5_SONNET
     )
     paper_finalization_model_id: LanguageModelId
+    # EVALUATOR for the review pipeline. The "reflection" stage IS the review
+    # pipeline's evaluator — it scores each synthesized section (0-100) and gates
+    # the reflect-and-revise loop, exactly like TechGuide.evaluation_model_id does
+    # for guides ("reflection" and "evaluation" are the same concept under two
+    # historical names). Keep it on Opus 4.8 for stable, well-calibrated scoring —
+    # Sonnet 5 as evaluator tends to score more harshly, inflating the loop even
+    # when the draft is fine.
     paper_reflection_model_id: LanguageModelId = Field(
-        default=LanguageModelId.CLAUDE_V5_SONNET
+        default=LanguageModelId.CLAUDE_V4_8_OPUS
     )
     paper_synthesis_model_id: LanguageModelId = Field(
         default=LanguageModelId.CLAUDE_V5_SONNET
@@ -144,6 +151,12 @@ class Explanation(BaseModel):
     reflector_enable_thinking: bool = Field(default=False)
     synthesizer_enable_thinking: bool = Field(default=False)
     thinking_effort: ThinkingEffort = Field(default="medium")
+    # Per-section reflect-and-revise loop (mirrors the tech-guide evaluator gate):
+    # a section scoring below the threshold is re-synthesized up to N times.
+    # Previously hardcoded in ExplainerConfig; surfaced here for parity with
+    # TechGuide.min_quality_score / max_revision_attempts.
+    min_quality_score: int = Field(default=70, ge=0, le=100)
+    max_synthesis_attempts: int = Field(default=3, ge=0)
     # Hard total-token ceiling for one review run (None = no limit). Guards
     # against runaway cost on the per-paragraph synthesis loop. Must be positive
     # when set — a non-positive ceiling would trip the budget guard immediately.
@@ -154,6 +167,11 @@ class Summary(BaseModel):
     summary_model_id: LanguageModelId = Field(default=LanguageModelId.CLAUDE_V4_8_OPUS)
     summarizer_enable_thinking: bool = Field(default=False)
     thinking_effort: ThinkingEffort = Field(default="medium")
+    # Hard total-token ceiling for one summary run (None = no limit). A summary is
+    # a single LLM call so the runaway risk is lower than review/guide, but the
+    # knob is provided for parity so all three workflows can be cost-capped the
+    # same way. Must be positive when set.
+    max_total_tokens: int | None = Field(default=None, gt=0)
 
 
 class TechGuide(BaseModel):
@@ -162,7 +180,18 @@ class TechGuide(BaseModel):
     )
     synopsis_model_id: LanguageModelId = Field(default=LanguageModelId.CLAUDE_V5_SONNET)
     writing_model_id: LanguageModelId = Field(default=LanguageModelId.CLAUDE_V4_8_OPUS)
+    # The per-section evaluator (0-100 score + feedback) that gates the revise
+    # loop. Opus 4.8 for stable, well-calibrated scoring — Sonnet 5 as evaluator
+    # tends to score more harshly, inflating the revise loop even for good
+    # drafts. Distinct from synopsis_model_id (which it previously shared).
+    evaluation_model_id: LanguageModelId = Field(
+        default=LanguageModelId.CLAUDE_V4_8_OPUS
+    )
     writer_enable_thinking: bool = Field(default=False)
+    # Thinking for the evaluator chain, independent of the writer (parity with
+    # the review pipeline's separate reflector/synthesizer flags). None → inherit
+    # writer_enable_thinking, preserving prior single-flag behaviour.
+    evaluator_enable_thinking: bool | None = Field(default=None)
     thinking_effort: ThinkingEffort = Field(default="medium")
     # Fact-check each drafted section against the sources to remove ungrounded
     # claims (hallucinated APIs/flags). Adds one LLM call per section.
@@ -214,7 +243,7 @@ class Config(BaseModel):
             paper_analysis_model_id=LanguageModelId.CLAUDE_V5_SONNET,
             paper_enrichment_model_id=LanguageModelId.CLAUDE_V5_SONNET,
             paper_finalization_model_id=LanguageModelId.CLAUDE_V4_5_HAIKU,
-            paper_reflection_model_id=LanguageModelId.CLAUDE_V5_SONNET,
+            paper_reflection_model_id=LanguageModelId.CLAUDE_V4_8_OPUS,
             paper_synthesis_model_id=LanguageModelId.CLAUDE_V5_SONNET,
         )
     )

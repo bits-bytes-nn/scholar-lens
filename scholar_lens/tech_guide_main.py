@@ -136,10 +136,14 @@ async def _run(
         ),
         synopsis_model_id=LanguageModelId(context.config.tech_guide.synopsis_model_id),
         writing_model_id=LanguageModelId(context.config.tech_guide.writing_model_id),
+        evaluation_model_id=LanguageModelId(
+            context.config.tech_guide.evaluation_model_id
+        ),
         boto_session=context.bedrock_boto_session,
         researcher=researcher,
         language=context.config.output_language,
         enable_thinking=context.config.tech_guide.writer_enable_thinking,
+        evaluator_enable_thinking=context.config.tech_guide.evaluator_enable_thinking,
         thinking_effort=context.config.tech_guide.thinking_effort,
         verify_grounding=context.config.tech_guide.verify_grounding,
         auto_research=context.config.tech_guide.auto_research,

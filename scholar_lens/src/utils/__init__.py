@@ -14,6 +14,7 @@ from .helpers import (
     is_affirmative,
     is_placeholder,
     measure_execution_time,
+    parse_quality_score,
 )
 from .models import (
     _EMBEDDING_MODEL_INFO,
@@ -43,6 +44,7 @@ __all__ = [
     "is_affirmative",
     "is_placeholder",
     "measure_execution_time",
+    "parse_quality_score",
     "plot_langchain_graph",
     "create_robust_xml_output_parser",
     # Internal model registries, re-exported for backward compatibility.

@@ -34,6 +34,7 @@ from .utils import (
     create_robust_xml_output_parser,
     is_affirmative,
     measure_execution_time,
+    parse_quality_score,
 )
 
 ROOT_DIR: Path = (
@@ -108,6 +109,11 @@ class ExplainerState(TypedDict):
     quality_score: int
     accumulated_feedback: list[str]
     structure_index_offset: int
+    # Best (highest-scoring) draft seen for the current section across retries.
+    # A retried synthesis can score lower than an earlier attempt; we keep the
+    # best rather than blindly using the last (mirrors the tech-guide evaluator).
+    best_explanation: str
+    best_quality_score: int
 
 
 class ExplainerGraph(RetryableBase):
@@ -239,7 +245,28 @@ class ExplainerGraph(RetryableBase):
 
     def _create_workflow(self) -> CompiledStateGraph:
         def check_continue_node(state: ExplainerState) -> dict[str, Any]:
-            return {}
+            # The reflect loop has exited for this section. Commit the best-scoring
+            # draft seen across retries (the last synthesis may have scored lower
+            # than an earlier attempt), then reset the per-section best trackers.
+            best = state.get("best_explanation", "")
+            current_index = state["current_index"]
+            explanations = state["explanations"]
+            if best and 0 <= current_index < len(explanations):
+                if explanations[current_index] != best:
+                    explanations = explanations.copy()
+                    explanations[current_index] = best
+                    logger.info(
+                        "Section %d: kept best draft (score %d) over the last "
+                        "synthesis.",
+                        current_index,
+                        state.get("best_quality_score", 0),
+                    )
+                    return {
+                        "explanations": explanations,
+                        "best_explanation": "",
+                        "best_quality_score": -1,
+                    }
+            return {"best_explanation": "", "best_quality_score": -1}
 
         def decide_next_step(
             state: ExplainerState,
@@ -280,6 +307,8 @@ class ExplainerGraph(RetryableBase):
                 "quality_score": 100,
                 "improvement_feedback": "",
                 "accumulated_feedback": [],
+                "best_explanation": "",
+                "best_quality_score": -1,
             }
 
         workflow = StateGraph(ExplainerState)
@@ -358,6 +387,8 @@ class ExplainerGraph(RetryableBase):
             "quality_score": 100,
             "improvement_feedback": "",
             "accumulated_feedback": [],
+            "best_explanation": "",
+            "best_quality_score": -1,
         }
 
     @staticmethod
@@ -553,30 +584,20 @@ class ExplainerGraph(RetryableBase):
             accumulated_feedback.append(feedback)
             logger.debug("Improvement feedback: '%s'", feedback)
 
-        quality_score = self._parse_quality_score(result.get("quality_score"))
+        quality_score = parse_quality_score(result.get("quality_score"))
 
-        return {
+        # Keep the best-scoring draft across retries: a lower-scoring rewrite must
+        # not silently replace a better earlier attempt. On a strict improvement
+        # (or the first attempt) adopt the current draft as the best.
+        update: dict[str, Any] = {
             "accumulated_feedback": accumulated_feedback,
             "quality_score": quality_score,
             "synthesis_attempts": state["synthesis_attempts"] + 1,
         }
-
-    @staticmethod
-    def _parse_quality_score(raw: Any) -> int:
-        """Parse the reflector's 0-100 quality score robustly.
-
-        The reflection prompt asks for a bare integer, but a model may still emit
-        "85", "85/100", or "N/A". Prefer a clean integer; otherwise take the FIRST
-        number in a leading "<n>/<total>" form (so "85/100" -> 85, not 100); a
-        non-numeric value falls back to 0, which triggers another synthesis pass
-        rather than crashing the review."""
-        text = str(raw if raw is not None else "").strip()
-        try:
-            return int(text)
-        except ValueError:
-            pass
-        match = re.match(r"-?\d+", text)
-        return int(match.group()) if match else 0
+        if quality_score > state.get("best_quality_score", -1):
+            update["best_explanation"] = current_explanation
+            update["best_quality_score"] = quality_score
+        return update
 
     def _enforce_token_budget(self) -> None:
         """Abort the run if the configured total-token budget is exceeded."""
@@ -700,6 +721,8 @@ class ExplainerGraph(RetryableBase):
             "improvement_feedback": "",
             "accumulated_feedback": [],
             "structure_index_offset": 0,
+            "best_explanation": "",
+            "best_quality_score": -1,
         }
         final_state = await self.workflow.ainvoke(
             initial_state,

@@ -17,6 +17,7 @@ from langchain_core.runnables import Runnable
 from .constants import LanguageModelId
 from .explainer import Paper
 from .logger import logger
+from .metrics import TokenUsageTracker
 from .prompts import PaperSummaryPrompt
 from .utils import (
     BedrockLanguageModelFactory,
@@ -43,11 +44,20 @@ class PaperSummarizer(RetryableBase):
         translation_guideline: list[dict[str, Any]] | None = None,
         enable_thinking: bool = False,
         thinking_effort: str = "medium",
+        max_total_tokens: int | None = None,
         callbacks: list[Any] | None = None,
     ) -> None:
         self.language = language
         self.translation_guideline = translation_guideline or []
         self.summary_model_id = summary_model_id
+        # Hard total-token ceiling (None = no limit). Checked before the summary
+        # call so an already-exhausted budget (from data prep) aborts rather than
+        # spending more — parity with the review/guide token guards.
+        self.max_total_tokens = max_total_tokens
+        self._token_tracker = next(
+            (cb for cb in (callbacks or []) if isinstance(cb, TokenUsageTracker)),
+            None,
+        )
         self.llm_factory = BedrockLanguageModelFactory(boto_session=boto_session)
         self.summary_chain: Runnable = self._build_chain(
             summary_model_id,
@@ -86,6 +96,7 @@ class PaperSummarizer(RetryableBase):
         is a comma-separated keyword list; ``urls`` is a comma-separated markdown
         link list. All three are LLM-extracted from the paper content.
         """
+        self._enforce_token_budget()
         result = await self._summarize(paper.content.text, paper.codebase_summary)
         summary = result.get("summary", "").strip()
         if not summary:
@@ -100,6 +111,13 @@ class PaperSummarizer(RetryableBase):
             "tags": result.get("tags", "").strip(),
             "urls": result.get("urls", "").strip(),
         }
+
+    def _enforce_token_budget(self) -> None:
+        """Abort before summarizing if the configured total-token budget (across
+        this run's prior data-prep calls) is already exceeded."""
+        tracker = getattr(self, "_token_tracker", None)
+        if tracker is not None and getattr(self, "max_total_tokens", None):
+            tracker.check_budget(self.max_total_tokens)
 
     @RetryableBase._retry("paper_summarization")
     async def _summarize(

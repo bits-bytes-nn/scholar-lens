@@ -50,6 +50,7 @@ from .utils import (
     is_affirmative,
     is_placeholder,
     measure_execution_time,
+    parse_quality_score,
 )
 from .web_research import ResearchCorpus, WebResearcher, neutralize_prompt_tags
 
@@ -139,11 +140,13 @@ class TechGuideGenerator(RetryableBase):
         relevance_model_id: LanguageModelId,
         synopsis_model_id: LanguageModelId,
         writing_model_id: LanguageModelId,
+        evaluation_model_id: LanguageModelId,
         boto_session: boto3.Session,
         *,
         researcher: WebResearcher | None = None,
         language: str = DEFAULT_LANGUAGE,
         enable_thinking: bool = False,
+        evaluator_enable_thinking: bool | None = None,
         thinking_effort: str = "medium",
         max_sections: int = _MAX_SECTIONS,
         verify_grounding: bool = True,
@@ -181,6 +184,7 @@ class TechGuideGenerator(RetryableBase):
         self.llm_factory = BedrockLanguageModelFactory(boto_session=boto_session)
         self.synopsis_model_id = synopsis_model_id
         self.writing_model_id = writing_model_id
+        self.evaluation_model_id = evaluation_model_id
 
         # The relevance gate and research planner are cheap and reuse the
         # relevance model tier (no thinking / 1M context).
@@ -216,10 +220,20 @@ class TechGuideGenerator(RetryableBase):
         )
         # Evaluation pass: scores a drafted section 0-100 and returns feedback,
         # driving a score-and-revise loop (the review pipeline's reflect node).
+        # Uses its own model (Opus 4.8 by default) rather than the synopsis model
+        # so scoring stays well-calibrated independent of the drafting tier, and
+        # its own thinking flag (defaults to the writer's when unset) so the
+        # evaluator can think independently of drafting — parity with the review
+        # pipeline's separate reflector/synthesizer thinking flags.
+        evaluator_thinking = (
+            enable_thinking
+            if evaluator_enable_thinking is None
+            else evaluator_enable_thinking
+        )
         self.evaluation_chain = self._build_chain(
             TechGuideEvaluationPrompt,
-            synopsis_model_id,
-            enable_thinking=enable_thinking,
+            evaluation_model_id,
+            enable_thinking=evaluator_thinking,
             thinking_effort=thinking_effort,
             supports_1m_context_window=True,
         )
@@ -583,7 +597,7 @@ class TechGuideGenerator(RetryableBase):
                 "language": self.language,
             }
         )
-        score = self._parse_quality_score((result or {}).get("quality_score"))
+        score = parse_quality_score((result or {}).get("quality_score"))
         feedback = ((result or {}).get("improvement_feedback") or "").strip()
         return score, feedback
 
@@ -728,22 +742,6 @@ class TechGuideGenerator(RetryableBase):
             seen.add(key)
             queries.append(stripped)
         return queries
-
-    @staticmethod
-    def _parse_quality_score(raw: object) -> int:
-        """Parse the evaluator's 0-100 score robustly.
-
-        Accepts a bare integer, a "85/100" form (takes 85, not 100), or junk;
-        a non-numeric value falls back to 0, which forces a revision attempt
-        rather than crashing the run.
-        """
-        text = str(raw if raw is not None else "").strip()
-        try:
-            return int(text)
-        except ValueError:
-            pass
-        match = re.match(r"-?\d+", text)
-        return int(match.group()) if match else 0
 
     @staticmethod
     def _sources_digest(corpus: ResearchCorpus, max_chars: int = 6000) -> str:

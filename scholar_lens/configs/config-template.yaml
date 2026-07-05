@@ -52,7 +52,7 @@ explanation:
   paper_analysis_model_id: anthropic.claude-sonnet-5
   paper_enrichment_model_id: anthropic.claude-sonnet-5
   paper_finalization_model_id: anthropic.claude-haiku-4-5-20251001-v1:0
-  paper_reflection_model_id: anthropic.claude-sonnet-5
+  paper_reflection_model_id: anthropic.claude-opus-4-8
   paper_synthesis_model_id: anthropic.claude-opus-4-8
   reflector_enable_thinking: True
   synthesizer_enable_thinking: True
@@ -71,6 +71,7 @@ tech_guide:
   relevance_model_id: anthropic.claude-haiku-4-5-20251001-v1:0
   synopsis_model_id: anthropic.claude-sonnet-5
   writing_model_id: anthropic.claude-opus-4-8
+  evaluation_model_id: anthropic.claude-opus-4-8
   writer_enable_thinking: True
   thinking_effort: medium
   verify_grounding: True

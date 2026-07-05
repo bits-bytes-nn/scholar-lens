@@ -245,6 +245,8 @@ async def _generate_review(
         synthesizer_enable_thinking=context.config.explanation.synthesizer_enable_thinking,
         thinking_effort=context.config.explanation.thinking_effort,
         language=context.config.output_language,
+        min_quality_score=context.config.explanation.min_quality_score,
+        max_synthesis_attempts=context.config.explanation.max_synthesis_attempts,
         max_total_tokens=context.config.explanation.max_total_tokens,
     )
     _save_workflow_graph(explainer)
@@ -269,6 +271,7 @@ async def _generate_summary(
         translation_guideline=translation_guideline,
         enable_thinking=context.config.summary.summarizer_enable_thinking,
         thinking_effort=context.config.summary.thinking_effort,
+        max_total_tokens=context.config.summary.max_total_tokens,
         callbacks=[tracker],
     )
     result = await summarizer.summarize(paper)

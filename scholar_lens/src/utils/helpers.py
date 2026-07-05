@@ -11,6 +11,24 @@ from bs4 import BeautifulSoup, NavigableString, Tag
 from ..logger import logger
 
 
+def parse_quality_score(raw: Any) -> int:
+    """Parse a 0-100 evaluator quality score robustly.
+
+    Shared by the review (reflect) and tech-guide (evaluate) score-and-revise
+    loops. The prompt asks for a bare integer, but a model may still emit "85",
+    "85/100", or "N/A". Prefer a clean integer; otherwise take the FIRST number
+    in a leading "<n>/<total>" form (so "85/100" -> 85, not 100); a non-numeric
+    value falls back to 0, which forces another attempt rather than crashing.
+    """
+    text = str(raw if raw is not None else "").strip()
+    try:
+        return int(text)
+    except ValueError:
+        pass
+    match = re.match(r"-?\d+", text)
+    return int(match.group()) if match else 0
+
+
 def arg_as_bool(value: Any) -> bool:
     if isinstance(value, bool):
         return value

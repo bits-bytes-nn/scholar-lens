@@ -536,10 +536,14 @@ class TestEvaluateAndRevise:
         assert out == "## Draft\nbody"
 
     def test_parse_quality_score_robust(self) -> None:
-        assert TechGuideGenerator._parse_quality_score("85") == 85
-        assert TechGuideGenerator._parse_quality_score("85/100") == 85
-        assert TechGuideGenerator._parse_quality_score("N/A") == 0
-        assert TechGuideGenerator._parse_quality_score(None) == 0
+        # The score parser is now the shared helper used by both the review and
+        # tech-guide evaluate loops.
+        from scholar_lens.src.utils import parse_quality_score
+
+        assert parse_quality_score("85") == 85
+        assert parse_quality_score("85/100") == 85
+        assert parse_quality_score("N/A") == 0
+        assert parse_quality_score(None) == 0
 
 
 class TestTokenBudget:
