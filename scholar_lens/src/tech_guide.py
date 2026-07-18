@@ -56,9 +56,11 @@ from .utils import (
 from .web_research import ResearchCorpus, WebResearcher, neutralize_prompt_tags
 
 DEFAULT_LANGUAGE: str = "Korean"
-# Headroom reserved from the writer model's window when fitting the source
-# corpus, leaving room for the prompt template, the model's output, and the
-# previous-sections context that grows as sections are written.
+# Headroom reserved from the writer model's window for the prompt template and
+# the model's OWN output when fitting the source corpus. The previous-sections
+# budget is reserved ON TOP of this at fit time (see _write_sections) so the two
+# contexts, which share one section prompt, compose instead of double-counting
+# the window.
 _SECTION_CONTEXT_RESERVE_TOKENS: int = 80_000
 # Reserve used when bounding the accumulated previous-sections context. The
 # writer is a 1M-window model, so this caps that context at ~150k tokens
@@ -421,11 +423,19 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
                 [s.title for s in all_sections[self.max_sections :]],
             )
         # Fit the corpus to the writer model's window, reserving headroom for the
-        # prompt plus the previous-sections context that accumulates per section.
+        # prompt/output PLUS the accumulated previous-sections context that shares
+        # the SAME section prompt. The two must compose: previous-sections is
+        # independently allowed up to `previous_budget` tokens, so sources must
+        # leave that much room on top of the output headroom, or a large corpus +
+        # many long earlier sections can jointly overflow the 1M window ("prompt
+        # is too long"). previous_budget mirrors the fit below (window minus the
+        # previous-sections reserve).
+        window = self.llm_factory.effective_context_window(self.writing_model_id)
+        previous_budget = max(window - _PREVIOUS_SECTIONS_RESERVE_TOKENS, 0)
         sources = self.llm_factory.fit_text(
             self.writing_model_id,
             corpus.combined_text(),
-            reserve_tokens=_SECTION_CONTEXT_RESERVE_TOKENS,
+            reserve_tokens=_SECTION_CONTEXT_RESERVE_TOKENS + previous_budget,
             label="section sources",
         )
         available_images = "\n".join(corpus.image_urls) or "(none)"
@@ -599,9 +609,17 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
                 previous_sections=previous_sections,
                 sources=sources,
                 available_images=available_images,
+                # Show the writer the concrete draft being revised (not just the
+                # feedback), so it edits the actual text the feedback refers to
+                # rather than re-drafting blind — at temperature 0 a blind rewrite
+                # tends to reproduce the same rejected draft and waste the
+                # (expensive) writer+evaluator calls.
                 depth_directive=(
-                    f"{planned.depth_directive}\n\nREVISION FEEDBACK to address: "
-                    f"{feedback}"
+                    f"{planned.depth_directive}\n\nYou are REVISING an existing "
+                    f"draft of this section that scored below the quality bar. "
+                    f"Address this feedback: {feedback}\n\n"
+                    f"CURRENT DRAFT to improve (rewrite it, keeping what works):\n"
+                    f"{best_markdown}"
                 ),
             )
             if not revised:

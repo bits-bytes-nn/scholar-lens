@@ -35,12 +35,15 @@ def _llm_output_response(model_id: str, input_tokens: int, output_tokens: int) -
     )
 
 
-def _usage_metadata_response(input_tokens: int, output_tokens: int) -> Any:
+def _usage_metadata_response(
+    input_tokens: int, output_tokens: int, model_name: str | None = None
+) -> Any:
     message = SimpleNamespace(
         usage_metadata={
             "input_tokens": input_tokens,
             "output_tokens": output_tokens,
-        }
+        },
+        response_metadata=({"model_name": model_name} if model_name else {}),
     )
     gen = SimpleNamespace(message=message)
     return SimpleNamespace(llm_output={}, generations=[[gen]])
@@ -63,6 +66,20 @@ class TestOnLLMEnd:
         assert tracker.output_tokens == 60
         assert tracker.total_tokens == 200
         assert tracker.call_count == 2
+
+    def test_converse_model_attributed_from_response_metadata(self) -> None:
+        # Regression (code-0): the Converse path returns no llm_output, so the
+        # model id must be recovered from message.response_metadata["model_name"].
+        # Otherwise everything buckets under "unknown" and the cost estimate falls
+        # back to the Sonnet rate — ~5x under-reporting Opus spend.
+        tracker = TokenUsageTracker()
+        tracker.on_llm_end(
+            _usage_metadata_response(1000, 1000, model_name="claude-opus-4-8")
+        )
+        assert "unknown" not in tracker.per_model
+        assert "claude-opus-4-8" in tracker.per_model
+        # Opus rate 0.015 in + 0.075 out per 1K -> 0.09 (NOT 0.018 at Sonnet rate).
+        assert tracker.estimated_cost_usd() == pytest.approx(0.09)
 
 
 class TestEstimatedCost:

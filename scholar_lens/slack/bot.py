@@ -24,7 +24,7 @@ from ..src.aws_helpers import get_ssm_param_value
 from ..src.constants import EnvVars, LanguageModelId, SSMParams
 from ..src.logger import is_running_in_aws, logger
 from . import blocks
-from .dispatcher import JobDispatcher, SlackContext, utc_timestamp
+from .dispatcher import DispatchResult, JobDispatcher, SlackContext, utc_timestamp
 from .intent import IntentParser, ParsedIntent
 
 _INTENT_MODEL = LanguageModelId.CLAUDE_V4_5_HAIKU
@@ -128,14 +128,19 @@ class PaperBot:
         except Exception as e:  # noqa: BLE001 - surface any dispatch error to the user
             logger.error("Dispatch failed: %s", e, exc_info=True)
             return self._dispatch_error_reply(e)
-        return self._ack_reply(parsed, result.intent.value)
+        return self._ack_reply(parsed, result)
 
     @staticmethod
-    def _ack_reply(parsed: ParsedIntent, intent_value: str) -> SlackReply:
+    def _ack_reply(parsed: ParsedIntent, result: DispatchResult) -> SlackReply:
+        intent_value = result.intent.value
         emoji, nice = _INTENT_LABELS.get(
             intent_value, (":rocket:", intent_value.capitalize())
         )
-        sources = ", ".join(parsed.sources)
+        # Echo exactly the source(s) that were dispatched, not everything parsed:
+        # review/summarize run only the first paper, so promising all of
+        # parsed.sources would tell the user about work that never started.
+        acked = result.dispatched_sources or parsed.sources
+        sources = ", ".join(acked)
         extras = []
         if parsed.repo_urls:
             extras.append(f":link: code: {', '.join(parsed.repo_urls)}")

@@ -45,81 +45,109 @@ def _make_structure(*start_numbers: int) -> dict[str, Any]:
     }
 
 
+def _titles(sections: list[dict[str, Any]]) -> list[str]:
+    return [s["section"][0]["section_title"] for s in sections]
+
+
 class TestExtractParagraphsByIndices:
     def test_valid_indices_split_with_zero_first(self) -> None:
         sentences = [f"s{i}" for i in range(6)]
         structure = _make_structure(0, 3)
-        paragraphs, prepended = ExplainerGraph._extract_paragraphs_by_indices(
+        paragraphs, sections = ExplainerGraph._extract_paragraphs_by_indices(
             sentences, structure
         )
-        assert prepended is False
         assert paragraphs == ["s0 s1 s2", "s3 s4 s5"]
+        assert _titles(sections) == ["Section 0", "Section 1"]
 
     def test_non_zero_first_index_prepends_zero(self) -> None:
         sentences = [f"s{i}" for i in range(5)]
         structure = _make_structure(2)
-        paragraphs, prepended = ExplainerGraph._extract_paragraphs_by_indices(
+        paragraphs, sections = ExplainerGraph._extract_paragraphs_by_indices(
             sentences, structure
         )
-        assert prepended is True
         assert paragraphs == ["s0 s1", "s2 s3 s4"]
+        # A synthetic empty section covers the prepended index-0 paragraph.
+        assert _titles(sections) == ["", "Section 0"]
 
     def test_out_of_bounds_indices_skipped(self) -> None:
         sentences = [f"s{i}" for i in range(3)]
         # 99 is out of range and dropped; 1 remains -> 0 prepended.
         structure = _make_structure(1, 99)
-        paragraphs, prepended = ExplainerGraph._extract_paragraphs_by_indices(
+        paragraphs, sections = ExplainerGraph._extract_paragraphs_by_indices(
             sentences, structure
         )
-        assert prepended is True
         assert paragraphs == ["s0", "s1 s2"]
+        # The section aligned to "s1 s2" is the start-1 one (Section 0), NOT the
+        # dropped out-of-bounds start-99 section — the alignment must survive a
+        # skipped index.
+        assert _titles(sections) == ["", "Section 0"]
+
+    def test_reordered_indices_keep_section_alignment(self) -> None:
+        # Regression (algo-0): analyzer emits sections out of order. The old
+        # positional lookup paired paragraphs with the wrong section; the paired
+        # sort must keep each paragraph with its own section metadata.
+        sentences = [f"s{i}" for i in range(6)]
+        # Section 0 -> start 0, Section 1 -> start 4, Section 2 -> start 2.
+        structure = _make_structure(0, 4, 2)
+        paragraphs, sections = ExplainerGraph._extract_paragraphs_by_indices(
+            sentences, structure
+        )
+        assert paragraphs == ["s0 s1", "s2 s3", "s4 s5"]
+        # Sorted by start: 0 (Section 0), 2 (Section 2), 4 (Section 1).
+        assert _titles(sections) == ["Section 0", "Section 2", "Section 1"]
+
+    def test_duplicate_start_index_deduped_keeping_first(self) -> None:
+        sentences = [f"s{i}" for i in range(4)]
+        # Two sections claim start 2; the first (Section 1) wins, lengths stay 1:1.
+        structure = _make_structure(0, 2, 2)
+        paragraphs, sections = ExplainerGraph._extract_paragraphs_by_indices(
+            sentences, structure
+        )
+        assert len(paragraphs) == len(sections) == 2
+        assert paragraphs == ["s0 s1", "s2 s3"]
+        assert _titles(sections) == ["Section 0", "Section 1"]
 
     def test_no_paper_structure_single_paragraph(self) -> None:
         sentences = ["a", "b", "c"]
-        paragraphs, prepended = ExplainerGraph._extract_paragraphs_by_indices(
+        paragraphs, sections = ExplainerGraph._extract_paragraphs_by_indices(
             sentences, {}
         )
-        assert prepended is False
         assert paragraphs == ["a b c"]
+        assert _titles(sections) == [""]
 
     def test_all_indices_invalid_single_paragraph(self) -> None:
         sentences = ["a", "b"]
         structure = _make_structure(50)
-        paragraphs, prepended = ExplainerGraph._extract_paragraphs_by_indices(
+        paragraphs, sections = ExplainerGraph._extract_paragraphs_by_indices(
             sentences, structure
         )
-        assert prepended is False
         assert paragraphs == ["a b"]
+        assert _titles(sections) == [""]
 
 
 class TestGetSectionAnalysis:
-    def _state(self, offset: int = 0) -> dict[str, Any]:
-        return {
-            "structure": _make_structure(0, 5, 10),
-            "structure_index_offset": offset,
-        }
+    def _state(self, *start_numbers: int) -> dict[str, Any]:
+        sentences = [f"s{i}" for i in range(max(start_numbers, default=0) + 3)]
+        paragraphs, sections = ExplainerGraph._extract_paragraphs_by_indices(
+            sentences, _make_structure(*start_numbers)
+        )
+        return {"paragraphs": paragraphs, "aligned_sections": sections}
 
     def test_in_range_returns_section(self) -> None:
-        state = self._state()
+        state = self._state(0, 5, 10)
         section = ExplainerGraph._get_section_analysis(state, 1)
         assert section["section"][0]["section_title"] == "Section 1"
 
-    def test_offset_applied(self) -> None:
-        state = self._state(offset=1)
-        # current_index 2 -> structure_index 1
-        section = ExplainerGraph._get_section_analysis(state, 2)
-        assert section["section"][0]["section_title"] == "Section 1"
-
     def test_out_of_range_returns_default(self) -> None:
-        state = self._state()
+        state = self._state(0, 5, 10)
         section = ExplainerGraph._get_section_analysis(state, 99)
         # Empty title (not a fabricated "Introduction") so a non-English review
         # doesn't get an English heading leaked in.
         assert section == {"section": [{"section_title": "", "key_points": []}]}
 
-    def test_negative_structure_index_returns_default(self) -> None:
-        state = self._state(offset=5)
-        section = ExplainerGraph._get_section_analysis(state, 0)
+    def test_negative_index_returns_default(self) -> None:
+        state = self._state(0, 5)
+        section = ExplainerGraph._get_section_analysis(state, -1)
         assert section["section"][0]["section_title"] == ""
 
 
@@ -162,7 +190,7 @@ class TestEvaluatePaper:
             "explanations": [explanation],
             "paragraphs": ["a paragraph"],
             "structure": _make_structure(0),
-            "structure_index_offset": 0,
+            "aligned_sections": _make_structure(0)["paper_structure"],
             "accumulated_feedback": [],
             "synthesis_attempts": 1,
             "citation_summaries": None,
@@ -266,7 +294,7 @@ class TestSynthesizePaper:
             "paragraphs": ["a paragraph"],
             "explanations": [],
             "structure": _make_structure(0),
-            "structure_index_offset": 0,
+            "aligned_sections": _make_structure(0)["paper_structure"],
             "accumulated_feedback": [],
             "synthesis_attempts": 0,
             "citation_summaries": None,

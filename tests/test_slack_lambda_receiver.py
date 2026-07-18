@@ -143,3 +143,28 @@ class TestEventFiltering:
         resp = lambda_receiver.handler(_event(body), None)
         assert resp["statusCode"] == 200
         mock_lambda.invoke.assert_not_called()
+
+
+class TestWorkerInvokeRetry:
+    def test_transient_invoke_failure_is_retried_then_succeeds(
+        self, mock_lambda: MagicMock, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Regression (arch-1): a Slack retry after a 500 is dropped by the
+        # retry-num guard, so the receiver can't rely on Slack re-delivery. It must
+        # retry the async invoke in-handler instead.
+        monkeypatch.setattr(lambda_receiver.time, "sleep", lambda _s: None)
+        mock_lambda.invoke.side_effect = [RuntimeError("throttled"), None]
+        body = json.dumps({"event": {"type": "app_mention", "text": "hi"}})
+        resp = lambda_receiver.handler(_event(body), None)
+        assert resp["statusCode"] == 200
+        assert mock_lambda.invoke.call_count == 2
+
+    def test_persistent_invoke_failure_returns_500(
+        self, mock_lambda: MagicMock, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(lambda_receiver.time, "sleep", lambda _s: None)
+        mock_lambda.invoke.side_effect = RuntimeError("still throttled")
+        body = json.dumps({"event": {"type": "app_mention", "text": "hi"}})
+        resp = lambda_receiver.handler(_event(body), None)
+        assert resp["statusCode"] == 500
+        assert mock_lambda.invoke.call_count == lambda_receiver._INVOKE_MAX_ATTEMPTS

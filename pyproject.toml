@@ -11,18 +11,18 @@ arxiv = ">=2.1.3"
 aws-cdk-lib = "^2.238.0"
 beautifulsoup4 = ">=4.12.3"
 black = "^26.1.0"
-boto3 = ">=1.35.86"
+boto3 = ">=1.35.86,<2.0"
 boto3-stubs = ">=1.42.44"
 constructs = "^10.4.5"
 defusedxml = ">=0.7.1"
 faiss-cpu = ">=1.9.0.post1"
 gitpython = ">=3.1.43"
 langchain = ">=0.3.13,<1.0"
-langchain-aws = ">=0.2.10"
+langchain-aws = ">=0.2.10,<1.0"
 langchain-community = ">=0.3.13,<1.0"
 langchain-core = ">=0.3.25,<1.0"
 langchain-text-splitters = ">=0.3.0,<1.0"
-langgraph = ">=0.2.60"
+langgraph = ">=0.2.60,<2.0"
 lxml = ">=6.0.2"
 nltk = ">=3.9.1"
 numpy = ">=1.26.4"
@@ -34,6 +34,7 @@ pypdf = ">=5.1.0"
 python-dotenv = ">=1.0.1"
 pytz = ">=2025.1"
 slack-bolt = ">=1.20.0"
+tenacity = ">=8.0.0"
 tqdm = ">=4.67.1"
 
 [tool.poetry.group.dev.dependencies]
@@ -96,7 +97,7 @@ no_implicit_optional = true
 warn_redundant_casts = true
 explicit_package_bases = true
 namespace_packages = true
-files = ["scholar_lens"]
+files = ["scholar_lens", "scripts"]
 exclude = "(cdk\\.out|logs|papers)"
 # Suppress framework-typing noise so mypy can be a real (blocking) signal:
 # - call-overload: boto3-stubs Session.client() only matches literal service

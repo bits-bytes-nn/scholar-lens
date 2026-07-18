@@ -10,6 +10,7 @@ from .factories import (
 from .graph import plot_langchain_graph
 from .helpers import (
     arg_as_bool,
+    escape_yaml_double_quoted,
     extract_text_from_html,
     is_affirmative,
     is_placeholder,
@@ -40,6 +41,7 @@ __all__ = [
     "RetryableBase",
     "BatchProcessor",
     "arg_as_bool",
+    "escape_yaml_double_quoted",
     "extract_text_from_html",
     "is_affirmative",
     "is_placeholder",

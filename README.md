@@ -117,8 +117,14 @@ See [`scholar_lens/configs/config-template.yaml`](./scholar_lens/configs/config-
 ```bash
 poetry install --with dev          # dependencies + dev/test tools
 cp .env.template .env               # then fill in tokens (see .env.template)
-python scripts/deploy_infra.py      # deploy AWS infrastructure (CDK)
+python scripts/deploy_infra.py      # synthesize the CDK template + push SSM secrets
+cdk deploy                          # provision the AWS infrastructure (uses the script above as the CDK app)
 ```
+
+> `python scripts/deploy_infra.py` only **synthesizes** the CloudFormation
+> template (to `cdk.out/`) and writes secrets to SSM — it does not create any AWS
+> resources. `cdk deploy` (which runs this script as its `app`, per `cdk.json`) is
+> what actually provisions the stack.
 
 ### Generate artifacts (CLI)
 

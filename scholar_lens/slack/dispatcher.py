@@ -8,7 +8,7 @@ itself only submits jobs — it performs no LLM work.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 import boto3
@@ -33,6 +33,10 @@ class DispatchResult:
     job_id: str
     job_name: str
     intent: SlackIntent
+    # The source(s) actually submitted for this job. Review/summarize dispatch a
+    # single paper (sources[0]); guides consume every URL. The ack echoes exactly
+    # this so it never promises work that wasn't dispatched.
+    dispatched_sources: list[str] = field(default_factory=list)
 
 
 class JobDispatcher:
@@ -105,6 +109,18 @@ class JobDispatcher:
         repo_urls = (
             " ".join(parsed.repo_urls) if parsed.repo_urls else AppConstants.NULL_STRING
         )
+        # Review/summarize process exactly one paper. If the parser returned more
+        # than one source, only the first runs — log the dropped ones so the ack
+        # (which echoes dispatched_sources) and reality can't diverge silently.
+        if len(parsed.sources) > 1:
+            logger.warning(
+                "%s request had %d sources; dispatching only the first (%s). "
+                "Dropped: %s",
+                parsed.intent.value,
+                len(parsed.sources),
+                parsed.sources[0],
+                parsed.sources[1:],
+            )
         parameters = {
             "source": parsed.sources[0],
             "repo_urls": repo_urls,
@@ -122,7 +138,12 @@ class JobDispatcher:
         logger.info(
             "Dispatched %s job '%s' (id=%s)", parsed.intent.value, job_name, job_id
         )
-        return DispatchResult(job_id=job_id, job_name=job_name, intent=parsed.intent)
+        return DispatchResult(
+            job_id=job_id,
+            job_name=job_name,
+            intent=parsed.intent,
+            dispatched_sources=[parsed.sources[0]],
+        )
 
     def _dispatch_guide(
         self,
@@ -152,7 +173,12 @@ class JobDispatcher:
             parameters=parameters,
         )
         logger.info("Dispatched guide job '%s' (id=%s)", job_name, job_id)
-        return DispatchResult(job_id=job_id, job_name=job_name, intent=parsed.intent)
+        return DispatchResult(
+            job_id=job_id,
+            job_name=job_name,
+            intent=parsed.intent,
+            dispatched_sources=list(parsed.sources),
+        )
 
     def _job_name(self, action: str, timestamp: str) -> str:
         return f"{self.project_name}-{self.stage}-{action}-{timestamp}"

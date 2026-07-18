@@ -100,6 +100,8 @@ class ExplainerState(TypedDict):
     paper: Paper
     paragraphs: list[str]
     structure: dict[str, Any]
+    # Analyzer section metadata aligned 1:1 with `paragraphs` (same length/order).
+    aligned_sections: list[dict[str, Any]]
     explanations: list[str]
     key_takeaways: str
     current_index: int
@@ -108,7 +110,6 @@ class ExplainerState(TypedDict):
     synthesis_attempts: int
     quality_score: int
     accumulated_feedback: list[str]
-    structure_index_offset: int
     # Best (highest-scoring) draft seen for the current section across retries.
     # A retried synthesis can score lower than an earlier attempt; we keep the
     # best rather than blindly using the last (mirrors the tech-guide evaluator).
@@ -366,22 +367,23 @@ class ExplainerGraph(RetryableBase, TokenBudgetGuard):
 
         structure = self.analyzer.invoke({"numbered_sentences": numbered_sentences_str})
 
-        paragraphs, prepended_zero = self._extract_paragraphs_by_indices(
+        paragraphs, aligned_sections = self._extract_paragraphs_by_indices(
             sentences, structure
         )
-        structure_index_offset = 1 if prepended_zero else 0
 
         logger.info(
-            "Extracted %d paragraphs based on sentence indices (offset: %d).",
+            "Extracted %d paragraphs based on sentence indices.",
             len(paragraphs),
-            structure_index_offset,
         )
         logger.debug("Structure: '%s'", pformat(structure))
 
         return {
             "paragraphs": paragraphs,
             "structure": structure,
-            "structure_index_offset": structure_index_offset,
+            # Section metadata aligned 1:1 with `paragraphs` (same length, same
+            # order). Built alongside the paragraphs so reordered/duplicated/
+            # out-of-bounds analyzer indices can't misalign the two lists.
+            "aligned_sections": aligned_sections,
             "explanations": [],
             "synthesis_attempts": 0,
             "quality_score": 100,
@@ -390,17 +392,31 @@ class ExplainerGraph(RetryableBase, TokenBudgetGuard):
             "best_quality_score": -1,
         }
 
+    _EMPTY_SECTION: dict[str, Any] = {
+        "section": [{"section_title": "", "key_points": []}]
+    }
+
     @staticmethod
     def _extract_paragraphs_by_indices(
         sentences: list[str], structure: dict[str, Any]
-    ) -> tuple[list[str], bool]:
-        start_indices = []
+    ) -> tuple[list[str], list[dict[str, Any]]]:
+        """Slice the paper into paragraphs and return per-paragraph section meta.
+
+        Returns ``(paragraphs, aligned_sections)`` where the two lists are the
+        same length and ``aligned_sections[i]`` is the analyzer section object
+        that owns ``paragraphs[i]``. We pair each valid start index with its
+        section object BEFORE sorting/deduping, so reordered, duplicated, or
+        out-of-bounds analyzer indices can never misalign the metadata from the
+        text (the previous positional ``paper_structure[i - offset]`` lookup broke
+        whenever the raw sections weren't already ascending, unique, and in-range).
+        """
+        pairs: list[tuple[int, dict[str, Any]]] = []
         for section in structure.get("paper_structure", []):
             try:
                 start_num_str = section["section"][0]["starting_sentence_number"]
                 start_index = int(start_num_str)
                 if 0 <= start_index < len(sentences):
-                    start_indices.append(start_index)
+                    pairs.append((start_index, section))
                 else:
                     logger.warning(
                         "LLM returned an out-of-bounds sentence index: %d. Skipping.",
@@ -413,54 +429,59 @@ class ExplainerGraph(RetryableBase, TokenBudgetGuard):
                     e,
                 )
 
-        if not start_indices:
+        if not pairs:
             logger.warning(
                 "No valid section start indices found. Treating entire text as one section."
             )
-            return [" ".join(sentences)], False
+            return [" ".join(sentences)], [ExplainerGraph._EMPTY_SECTION]
 
-        unique_indices = sorted(list(set(start_indices)))
+        # Sort by start index and drop duplicate starts (keep the first section
+        # that claimed each index), keeping the section object paired throughout.
+        pairs.sort(key=lambda p: p[0])
+        deduped: list[tuple[int, dict[str, Any]]] = []
+        seen_starts: set[int] = set()
+        for start_index, section in pairs:
+            if start_index not in seen_starts:
+                seen_starts.add(start_index)
+                deduped.append((start_index, section))
 
-        prepended_zero = False
-        if unique_indices[0] != 0:
-            unique_indices.insert(0, 0)
-            prepended_zero = True
+        # Prepend a synthetic index-0 section (empty metadata) when the first real
+        # section doesn't start at sentence 0, so the opening text is still covered.
+        if deduped[0][0] != 0:
+            deduped.insert(0, (0, ExplainerGraph._EMPTY_SECTION))
             logger.debug("Prepended sentence index 0 to ensure full coverage.")
 
-        paragraphs = []
-        for i in range(len(unique_indices)):
-            start_idx = unique_indices[i]
-            end_idx = (
-                unique_indices[i + 1] if i + 1 < len(unique_indices) else len(sentences)
-            )
-            section_sentences = sentences[start_idx:end_idx]
-            paragraphs.append(" ".join(section_sentences))
+        paragraphs: list[str] = []
+        aligned_sections: list[dict[str, Any]] = []
+        for i, (start_idx, section) in enumerate(deduped):
+            end_idx = deduped[i + 1][0] if i + 1 < len(deduped) else len(sentences)
+            paragraphs.append(" ".join(sentences[start_idx:end_idx]))
+            aligned_sections.append(section)
 
-        return paragraphs, prepended_zero
+        return paragraphs, aligned_sections
 
     @staticmethod
     def _get_section_analysis(
         state: ExplainerState, current_index: int
     ) -> dict[str, Any]:
-        """Safely get section analysis accounting for structure index offset."""
-        offset = state.get("structure_index_offset", 0)
-        structure_index = current_index - offset
-        paper_structure = state["structure"].get("paper_structure", [])
+        """Return the section metadata aligned with paragraph ``current_index``.
 
-        if structure_index < 0 or structure_index >= len(paper_structure):
-            logger.info(
-                "No matching section analysis for index %d (structure_index: %d, "
-                "offset: %d); using an empty section title.",
-                current_index,
-                structure_index,
-                offset,
-            )
-            # Empty title rather than a fabricated "Introduction" (which both
-            # mislabels mid-paper sections and leaks an English word into a
-            # non-English review). The synthesizer derives the heading itself.
-            return {"section": [{"section_title": "", "key_points": []}]}
-
-        return paper_structure[structure_index]
+        ``aligned_sections`` is built 1:1 with ``paragraphs`` in
+        :meth:`_extract_paragraphs_by_indices`, so this is a direct positional
+        lookup with no offset arithmetic.
+        """
+        aligned_sections = state.get("aligned_sections", [])
+        if 0 <= current_index < len(aligned_sections):
+            return aligned_sections[current_index]
+        logger.info(
+            "No matching section analysis for paragraph index %d; using an empty "
+            "section title.",
+            current_index,
+        )
+        # Empty title rather than a fabricated "Introduction" (which both
+        # mislabels mid-paper sections and leaks an English word into a
+        # non-English review). The synthesizer derives the heading itself.
+        return ExplainerGraph._EMPTY_SECTION
 
     @RetryableBase._retry("paper_enrichment")
     async def enrich_paper(self, state: ExplainerState) -> dict[str, Any]:
@@ -709,6 +730,7 @@ class ExplainerGraph(RetryableBase, TokenBudgetGuard):
             "paper": self.paper,
             "paragraphs": [],
             "structure": {},
+            "aligned_sections": [],
             "explanations": [],
             "key_takeaways": "",
             "current_index": 0,
@@ -717,7 +739,6 @@ class ExplainerGraph(RetryableBase, TokenBudgetGuard):
             "synthesis_attempts": 0,
             "quality_score": 100,
             "accumulated_feedback": [],
-            "structure_index_offset": 0,
             "best_explanation": "",
             "best_quality_score": -1,
         }

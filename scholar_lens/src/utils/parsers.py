@@ -3,7 +3,6 @@ import re
 from collections import defaultdict
 from typing import Any
 
-from bs4 import BeautifulSoup
 from langchain_core.output_parsers import BaseOutputParser, XMLOutputParser
 from lxml import etree
 
@@ -41,27 +40,49 @@ class HTMLTagOutputParser(BaseOutputParser):
     def _clean(content: str) -> str:
         """Normalise extracted tag content for Markdown/plaintext output.
 
-        ``decode_contents()`` keeps HTML entities (``&amp;``, ``&gt;``) escaped,
-        which then leak verbatim into Markdown bodies; unescape them. Also drop a
-        trailing run of orphan closing tags the model sometimes appends.
+        The body is sliced out by string search (not HTML-parsed), so raw
+        angle-bracket tokens — generics like ``Vec<u8>`` / ``HashMap<String,i32>``,
+        comparisons like ``a < b``, code fences — survive verbatim. We still drop
+        a trailing run of orphan closing tags the model appends, and unescape HTML
+        entities (``&amp;`` -> ``&``, ``&lt;kbd&gt;`` -> ``<kbd>``) the model emits
+        for genuinely intended inline markup.
         """
         content = HTMLTagOutputParser._strip_orphan_close_tags(content)
         return html.unescape(content).strip()
 
+    @staticmethod
+    def _extract_tag_body(text: str, tag_name: str) -> str | None:
+        """Slice the body between the first ``<tag ...>`` and its matching close.
+
+        Extracts the wrapper's inner content by string search on the known tag
+        name — NOT by HTML parsing — so angle-bracket tokens inside the body
+        (generics, comparisons, code fences) survive untouched. Uses the LAST
+        matching ``</tag>`` so a stray closing tag inside the body doesn't cut it
+        short.
+        """
+        open_match = re.search(
+            rf"<{re.escape(tag_name)}(?:\s[^>]*)?>", text, re.IGNORECASE
+        )
+        if not open_match:
+            return None
+        body_start = open_match.end()
+        close_pattern = re.compile(rf"</{re.escape(tag_name)}\s*>", re.IGNORECASE)
+        closes = list(close_pattern.finditer(text, body_start))
+        if closes:
+            return text[body_start : closes[-1].start()]
+        return text[body_start:]
+
     def parse(self, text: str) -> str | dict[str, str]:
         if not text:
             return {} if isinstance(self.tag_names, list) else ""
-        soup = BeautifulSoup(text, "html.parser")
         parsed: dict[str, str] = {}
         tag_list = (
             self.tag_names if isinstance(self.tag_names, list) else [self.tag_names]
         )
         for tag_name in tag_list:
-            if tag := soup.find(tag_name):
-                if hasattr(tag, "decode_contents"):
-                    parsed[tag_name] = self._clean(str(tag.decode_contents()))
-                else:
-                    parsed[tag_name] = self._clean(str(tag))
+            body = self._extract_tag_body(text, tag_name)
+            if body is not None:
+                parsed[tag_name] = self._clean(body)
         if isinstance(self.tag_names, list):
             return parsed
         return next(iter(parsed.values()), "")
@@ -284,6 +305,24 @@ class RobustXMLOutputParser(XMLOutputParser):
             )
 
         cleaned = "".join(char for char in text if is_valid_xml_char(char))
+        # Escape bare ampersands in text nodes BEFORE the lxml recover pass. A raw
+        # "&" in content (e.g. a section title "Training & Inference", "R&D") makes
+        # lxml's recovery silently DROP the "&" and surrounding text; escaping it
+        # first preserves the content through recovery. Only touches text strictly
+        # between ">" and "<" (never tag structure), reusing the already-tested
+        # regex from _aggressively_clean_xml, so it can't corrupt real markup. The
+        # genuinely ambiguous stray-"<" case is left to the later cascade stages.
+        cleaned = re.sub(
+            r">([^<]*)<",
+            lambda m: ">"
+            + re.sub(
+                r"&(?!(?:amp|lt|gt|quot|apos|#\d+|#x[0-9a-fA-F]+);)",
+                "&amp;",
+                m.group(1),
+            )
+            + "<",
+            cleaned,
+        )
         return cleaned.strip().encode("utf-8")
 
     @staticmethod

@@ -151,7 +151,10 @@ class BatchProcessor(BaseModel):
                     task_name,
                     e,
                 )
-                continue
+                # Preserve positional alignment: append a None placeholder rather
+                # than skipping, so len(results) == len(inputs) and callers that
+                # zip results back to inputs don't shift onto the wrong item.
+                results.append(None)
         logger.info(
             "Sequential processing completed for '%s': %d/%d items processed successfully",
             task_name,
@@ -275,11 +278,17 @@ class BatchProcessor(BaseModel):
         results = await async_tqdm.gather(
             *tasks, disable=not show_progress, desc=progress_desc
         )
-        successful_results = [res for res in results if res is not None]
+        # Keep failed items as None placeholders rather than dropping them: the
+        # batch path returns exactly one result per input, and callers (e.g.
+        # code_retriever._augment_documents) zip the results back against their
+        # inputs positionally. Filtering out failures here would shorten the list
+        # and silently shift every downstream item onto the wrong input.
+        results = list(results)
+        successful_count = sum(1 for res in results if res is not None)
         logger.info(
             "Concurrent sequential processing completed for '%s': %d/%d items processed successfully",
             task_name,
-            len(successful_results),
+            successful_count,
             len(inputs),
         )
-        return successful_results
+        return results

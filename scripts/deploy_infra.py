@@ -470,6 +470,14 @@ class PaperReviewStack(Stack):
             alias=self._get_resource_name("paper-review-sns"),
         )
         self.topic_key = topic_key
+        # CloudWatch alarms (SnsAction) publish to this topic on ALARM. Unlike
+        # EventBridge's SnsTopic target, cw_actions.SnsAction does NOT auto-grant
+        # KMS, so without this the alarm enters ALARM but CloudWatch is denied
+        # GenerateDataKey/Decrypt and the notification is silently dropped —
+        # defeating both the error alerting and the cost guardrail.
+        topic_key.grant_encrypt_decrypt(
+            iam.ServicePrincipal("cloudwatch.amazonaws.com")
+        )
         topic = sns.Topic(
             self,
             "PaperReviewTopic",
@@ -603,21 +611,21 @@ class PaperReviewStack(Stack):
             compute_environments=[],
         )
 
-        compute_env_config = {
-            "instance_role": self.instance_role,
-            "instance_types": [ec2.InstanceType("optimal")],
-            "vpc": self.vpc,
-            "security_groups": [self.security_group],
-            "vpc_subnets": self.vpc_subnets,
-        }
-
+        # Passed explicitly (not via **dict) to both constructors: a
+        # `dict[str, object]` splat is invariant, so mypy rejects every unpacked
+        # kwarg against the typed signatures — 26 spurious errors that would block
+        # type-checking this file. Explicit kwargs keep mypy a real signal here.
         ondemand_env = batch.ManagedEc2EcsComputeEnvironment(
             self,
             "PaperReviewOnDemandComputeEnv",
             allocation_strategy=batch.AllocationStrategy.BEST_FIT_PROGRESSIVE,
             compute_environment_name=self._get_resource_name("paper-review-ondemand"),
             maxv_cpus=4,
-            **compute_env_config,
+            instance_role=self.instance_role,
+            instance_types=[ec2.InstanceType("optimal")],
+            vpc=self.vpc,
+            security_groups=[self.security_group],
+            vpc_subnets=self.vpc_subnets,
         )
         job_queue.add_compute_environment(ondemand_env, 1)
 
@@ -628,7 +636,11 @@ class PaperReviewStack(Stack):
             compute_environment_name=self._get_resource_name("paper-review-spot"),
             spot=True,
             maxv_cpus=8,
-            **compute_env_config,
+            instance_role=self.instance_role,
+            instance_types=[ec2.InstanceType("optimal")],
+            vpc=self.vpc,
+            security_groups=[self.security_group],
+            vpc_subnets=self.vpc_subnets,
         )
         job_queue.add_compute_environment(spot_env, 2)
 

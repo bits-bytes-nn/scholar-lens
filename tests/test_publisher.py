@@ -202,6 +202,45 @@ class TestPublishLocal:
         assert content.count(hosted) == 1
         assert f"/assets/{file_name}/{file_name}" not in content  # no double-prefix
 
+    async def test_code_body_with_generics_survives_publish(
+        self, tmp_path: Path
+    ) -> None:
+        # Regression (quality-3): a body with real code / angle-bracket tokens
+        # (Rust/C++/TS generics, comparisons) must publish verbatim — no HTML
+        # mangling (Vec<u8> -> Vec<u8></u8>, String -> string) and no stray
+        # auto-closed tags leaking into the file.
+        body = (
+            "# Guide\n\n"
+            "Use `Vec<u8>` and `HashMap<String, i32>` for storage.\n\n"
+            "```rust\n"
+            "let m: HashMap<String, i32> = HashMap::new();\n"
+            "let v: Vec<u8> = vec![];\n"
+            "```\n\n"
+            "The invariant `a < b` must hold, and `List<T>` is generic.\n"
+        )
+        pub = Publisher(Github(), root_dir=tmp_path)
+        request = _request(tmp_path, markdown=body, rewrite_local_images=False)
+        _, md_path = await pub.publish(request)
+        content = md_path.read_text(encoding="utf-8")
+        assert "Vec<u8>" in content
+        assert "HashMap<String, i32>" in content
+        assert "List<T>" in content
+        assert "a < b" in content
+        assert "</u8>" not in content  # no synthetic auto-closed tag
+        assert "</string" not in content.lower()
+
+    async def test_unterminated_code_fence_does_not_hang(self, tmp_path: Path) -> None:
+        # Regression (data-0 ReDoS): a model post that opens a code fence and never
+        # closes it must not hang the publish path in catastrophic regex
+        # backtracking. This body would previously never return; now it completes.
+        body = "# Guide\n\n```python\n" + "".join(
+            f"line_{i} = {i}\n" for i in range(400)
+        )
+        pub = Publisher(Github(), root_dir=tmp_path)
+        request = _request(tmp_path, markdown=body, rewrite_local_images=False)
+        _, md_path = await pub.publish(request)  # must return promptly
+        assert md_path.exists()
+
 
 class TestPublishS3:
     async def test_publish_uploads_post_and_returns_s3_url(

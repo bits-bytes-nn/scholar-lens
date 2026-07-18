@@ -35,7 +35,7 @@ jobs:
       - name: Black (format check)
         run: poetry run black --check scholar_lens scripts tests
       - name: Mypy (type check)
-        run: poetry run mypy scholar_lens
+        run: poetry run mypy scholar_lens scripts
 
   test:
     name: Test (py${{ matrix.python-version }})
@@ -76,6 +76,24 @@ jobs:
           name: coverage-xml
           path: coverage.xml
           if-no-files-found: ignore
+
+  docker-build:
+    name: Docker images build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Batch image
+        run: docker build -f Dockerfile -t scholar-lens-batch:ci .
+      - name: Build Slack worker Lambda image
+        run: docker build -f Dockerfile.lambda -t scholar-lens-worker:ci .
+      - name: Smoke-import the worker handler in the slim Lambda image
+        # Proves the slim requirements-lambda.txt set actually covers the worker's
+        # transitive import chain — a package present in requirements.txt but
+        # omitted here would otherwise ship undetected (synth + deploy don't
+        # import the handler) and fail only at Lambda invocation.
+        run: >-
+          docker run --rm --entrypoint python scholar-lens-worker:ci
+          -c "import scholar_lens.slack.lambda_worker as w; assert hasattr(w, 'handler')"
 
   cdk-synth:
     name: CDK synth (infra validation)

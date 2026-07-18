@@ -30,6 +30,7 @@ from pydantic import HttpUrl
 
 from .arxiv_handler import ArxivHandler, ArxivMetadata
 from .logger import logger
+from .pinned_transport import PinnedRequestsAdapter
 from .url_guard import (
     UnsafeUrlError,
     assert_url_is_public,
@@ -145,6 +146,15 @@ class PdfUrlSource(PaperSource):
         except UnsafeUrlError as e:
             raise PaperSourceError(str(e)) from e
         self._session = session or requests.Session()
+        # Pin every hop to the SSRF-validated IP so a low-TTL DNS name can't
+        # rebind to an internal/metadata address between the guard check and the
+        # actual connect (the TOCTOU window a plain requests.Session leaves open).
+        # Skipped when the caller injected its own session (tests use `responses`,
+        # which stubs the transport).
+        if session is None:
+            pinned_adapter = PinnedRequestsAdapter()
+            self._session.mount("https://", pinned_adapter)
+            self._session.mount("http://", pinned_adapter)
         self._discovered_title: str | None = None
 
     @property

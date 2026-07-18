@@ -26,7 +26,7 @@ import re
 # math here and must be left as prose.
 _SEGMENT = re.compile(
     r"""
-    (?P<fence>^[ \t]*(?P<ff>```|~~~).*?\n(?:.*?\n)*?[ \t]*(?P=ff)[ \t]*$)
+    (?P<fence>^[ \t]*(?P<ff>```|~~~)[^\n]*\n(?:[^\n]*\n)*?[ \t]*(?P=ff)[ \t]*$)
     | (?P<icode>`+[^`]*`+)
     | (?P<display>\$\$.+?\$\$)
     | (?P<inline>\\\((?:\\.|[^\n\\])+?\\\))

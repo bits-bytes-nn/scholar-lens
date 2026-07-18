@@ -128,6 +128,19 @@ def test_strip_jats_removes_tags_and_collapses_whitespace() -> None:
     assert _strip_jats("   ") is None
 
 
+def test_strip_jats_preserves_inequality_prose() -> None:
+    # Regression (data-1): a greedy <[^>]+> strip treated "x < y and a >" as a tag
+    # and deleted the clause. A real parser keeps inequality signs in prose.
+    text = "<jats:p>We prove that for all x < y and a > b, the bound holds.</jats:p>"
+    out = _strip_jats(text)
+    assert out == "We prove that for all x < y and a > b, the bound holds."
+
+
+def test_strip_jats_decodes_entities() -> None:
+    # Escaped markup must be decoded to real characters, not leaked as entities.
+    assert _strip_jats("<jats:p>R&amp;D rose &gt; 5%</jats:p>") == "R&D rose > 5%"
+
+
 def test_reference_metadata_helpers() -> None:
     md = ReferenceMetadata(title="T", authors=["A B", "C D"], abstract="x")
     assert md.author_str == "A B, C D"
@@ -487,3 +500,33 @@ def test_looks_like_arxiv_id() -> None:
     assert CitationSummarizer._looks_like_arxiv_id("2301.00001")
     assert CitationSummarizer._looks_like_arxiv_id("2301.00001v2")
     assert not CitationSummarizer._looks_like_arxiv_id("Attention Is All You Need")
+
+
+class TestCitationDedupKey:
+    def test_distinct_same_title_works_kept_apart(self) -> None:
+        # Regression (data-2): two different references sharing a title (different
+        # authors/year, no arXiv id) must NOT collapse to one dedup key.
+        from scholar_lens.src.content_extractor import Citation, ContentExtractor
+
+        a = Citation(authors="Smith", year=2020, title="Deep Learning", arxiv_id=None)
+        b = Citation(authors="Jones", year=2023, title="Deep Learning", arxiv_id=None)
+        assert ContentExtractor._dedup_key(a) != ContentExtractor._dedup_key(b)
+
+    def test_author_formatting_variant_collapses(self) -> None:
+        from scholar_lens.src.content_extractor import Citation, ContentExtractor
+
+        a = Citation(authors="Smith", year=2020, title="Deep Learning", arxiv_id=None)
+        c = Citation(
+            authors="Smith, J., et al.",
+            year=2020,
+            title="Deep Learning",
+            arxiv_id=None,
+        )
+        assert ContentExtractor._dedup_key(a) == ContentExtractor._dedup_key(c)
+
+    def test_arxiv_id_dominates_identity(self) -> None:
+        from scholar_lens.src.content_extractor import Citation, ContentExtractor
+
+        d = Citation(authors="X", year=None, title="T", arxiv_id="2401.06066")
+        e = Citation(authors="Y", year=2021, title="Other", arxiv_id="2401.06066")
+        assert ContentExtractor._dedup_key(d) == ContentExtractor._dedup_key(e)

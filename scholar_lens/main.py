@@ -45,6 +45,7 @@ from scholar_lens.src import (
     TokenUsageTracker,
     arg_as_bool,
     build_pr_body,
+    escape_yaml_double_quoted,
     is_placeholder,
     is_running_in_aws,
     logger,
@@ -347,6 +348,7 @@ async def _prepare_paper_data(
         bucket_name=context.config.resources.s3_bucket_name,
         s3_prefix=context.config.resources.s3_prefix,
         enable_output_fixing=True,
+        callbacks=callbacks,
     )
     if needs_citations_and_toc:
         citations, attributes, table_of_contents = await asyncio.gather(
@@ -358,7 +360,7 @@ async def _prepare_paper_data(
         attributes = await content_extractor.extract_attributes(content.text)
         citations, table_of_contents = [], {}
     codebase_summary, code_retriever = await _process_code(
-        context, paper_dir, repo_urls
+        context, paper_dir, repo_urls, callbacks
     )
     citation_summarizer = (
         CitationSummarizer(
@@ -442,7 +444,10 @@ async def _parse_pdf(
 
 
 async def _process_code(
-    context: AppContext, paper_dir: Path, repo_urls: list[str] | None
+    context: AppContext,
+    paper_dir: Path,
+    repo_urls: list[str] | None,
+    callbacks: list[Any] | None = None,
 ) -> tuple[str | None, CodeRetriever | None]:
     if not repo_urls:
         return None, None
@@ -456,6 +461,7 @@ async def _process_code(
             boto_session=context.bedrock_boto_session,
             chunk_size=context.config.code.chunk_size,
             chunk_overlap=context.config.code.chunk_overlap,
+            callbacks=callbacks,
         )
 
         await code_retriever.download_repositories(repo_urls)
@@ -464,6 +470,14 @@ async def _process_code(
         return summary, code_retriever
     except NoPythonFilesError:
         logger.warning("No Python files in repos; skipping code analysis.")
+        return None, None
+    except Exception as e:  # noqa: BLE001
+        # Code grounding is supplementary ("cheap insurance"): the explainer
+        # already degrades gracefully when code search fails. A transient Bedrock
+        # throttle, FAISS/embedding error, or git failure during code prep must
+        # not fail an otherwise-complete review, so degrade to "no codebase
+        # summary" rather than aborting the whole run.
+        logger.warning("Code analysis failed; continuing without it: %s", e)
         return None, None
 
 
@@ -570,10 +584,12 @@ use_math: true
     )
 
     return front_matter_template.format(
-        title=paper.title.replace('"', '\\"'),
+        # arXiv/LLM titles carry raw LaTeX (\mathcal, \nabla); a double-quoted
+        # YAML scalar treats a bare backslash as an escape, so escape properly.
+        title=escape_yaml_double_quoted(paper.title),
         # Use the paper's own publication date as the post date.
         date=paper.published.strftime("%Y-%m-%d %H:%M:%S"),
-        author=author.replace('"', '\\"'),
+        author=escape_yaml_double_quoted(author),
         categories=categories_str,
         tags=keywords_str,
         cover_image=cover_image,

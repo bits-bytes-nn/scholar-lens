@@ -120,14 +120,45 @@ def _is_actionable_event(inner: dict[str, Any]) -> bool:
     return False
 
 
+# Bounded in-handler retries for the async worker invoke. Slack only retries a
+# delivery on a non-2xx/timeout, but the receiver drops any retry (see handler)
+# to avoid double-dispatch — so a transient throttle on the invoke can't rely on
+# Slack re-delivering. We retry here instead; the async invoke returns in a few
+# ms, so a couple of short backoffs stay well within the 3s ack budget.
+_INVOKE_MAX_ATTEMPTS = 3
+_INVOKE_BACKOFF_SECONDS = 0.2
+
+
 def _invoke_worker(inner_event: dict[str, Any]) -> None:
-    """Async-invoke the worker Lambda with the inner Slack event."""
+    """Async-invoke the worker Lambda with the inner Slack event.
+
+    Retries a transient failure (e.g. TooManyRequestsException) in-handler so the
+    request isn't lost when Slack's own retry would be dropped downstream.
+    """
     function_name = os.environ[_WORKER_FUNCTION_NAME_ENV]
-    boto3.client("lambda").invoke(
-        FunctionName=function_name,
-        InvocationType="Event",  # async; receiver returns 200 without waiting
-        Payload=json.dumps({"slack_event": inner_event}).encode("utf-8"),
-    )
+    payload = json.dumps({"slack_event": inner_event}).encode("utf-8")
+    client = boto3.client("lambda")
+    last_error: Exception | None = None
+    for attempt in range(1, _INVOKE_MAX_ATTEMPTS + 1):
+        try:
+            client.invoke(
+                FunctionName=function_name,
+                InvocationType="Event",  # async; receiver returns 200 without waiting
+                Payload=payload,
+            )
+            return
+        except Exception as e:  # noqa: BLE001 - retry then re-raise for the 500 path
+            last_error = e
+            if attempt < _INVOKE_MAX_ATTEMPTS:
+                logger.warning(
+                    "Worker invoke attempt %d/%d failed: %s. Retrying.",
+                    attempt,
+                    _INVOKE_MAX_ATTEMPTS,
+                    e,
+                )
+                time.sleep(_INVOKE_BACKOFF_SECONDS * attempt)
+    assert last_error is not None
+    raise last_error
 
 
 def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
@@ -192,10 +223,12 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     try:
         _invoke_worker(inner)
     except Exception:
-        # The async invoke itself failed (throttle/permission). Return 500 so Slack
-        # retries rather than silently losing the request; since the worker was
-        # never invoked, the retry is the first real dispatch, not a duplicate.
-        logger.exception("Failed to invoke the worker Lambda.")
+        # The async invoke still failed after in-handler retries. Return 500 as a
+        # last resort: a Slack retry would be dropped by the retry-num guard above
+        # (we never dispatched, so no double-submit), but at least surfaces the
+        # failure in logs/metrics. _invoke_worker's own retries are the real
+        # recovery — Slack re-delivery cannot help here by design.
+        logger.exception("Failed to invoke the worker Lambda after retries.")
         return {"statusCode": 500, "body": "dispatch error"}
     logger.info("Dispatched Slack event '%s' to worker.", inner.get("type"))
     return _OK

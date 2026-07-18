@@ -78,6 +78,9 @@ def _make_generator(
     # fit_text would call Bedrock CountTokens; stub it to a pass-through.
     factory = MagicMock()
     factory.fit_text = MagicMock(side_effect=lambda model_id, text, **kw: text)
+    # _write_sections composes the source + previous-sections reserves against the
+    # writer's window; return a realistic 1M so the arithmetic uses a real int.
+    factory.effective_context_window = MagicMock(return_value=1_000_000)
     gen.llm_factory = factory
     return gen
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+import requests
 import responses
 
 from scholar_lens.src.paper_source import (
@@ -115,7 +116,7 @@ class TestArxivSource:
 
 class TestPdfUrlSourceSlug:
     def test_source_id_uses_stem_plus_hash(self) -> None:
-        src = PdfUrlSource(PDF_URL)
+        src = PdfUrlSource(PDF_URL, session=requests.Session())
         assert src.source_id.startswith("great-paper-")
         assert len(src.source_id.rsplit("-", 1)[1]) == 8  # sha1[:8]
 
@@ -149,7 +150,7 @@ class TestPdfUrlSourceDownload:
             headers={"Content-Type": "text/html; charset=utf-8"},
             status=200,
         )
-        src = PdfUrlSource(PDF_URL)
+        src = PdfUrlSource(PDF_URL, session=requests.Session())
         with pytest.raises(NotAPdfError):
             src.download_pdf(tmp_papers_dir)
 
@@ -163,7 +164,7 @@ class TestPdfUrlSourceDownload:
             status=302,
             headers={"Location": "http://169.254.169.254/latest/meta-data/"},
         )
-        src = PdfUrlSource(PDF_URL)
+        src = PdfUrlSource(PDF_URL, session=requests.Session())
         with pytest.raises(PaperSourceError):
             src.download_pdf(tmp_papers_dir)
 
@@ -184,7 +185,7 @@ class TestPdfUrlSourceDownload:
             content_type="application/pdf",
             status=200,
         )
-        src = PdfUrlSource(PDF_URL)
+        src = PdfUrlSource(PDF_URL, session=requests.Session())
         path = src.download_pdf(tmp_papers_dir)
         assert path.exists()
         assert path.read_bytes().startswith(b"%PDF-")
@@ -196,7 +197,7 @@ class TestPdfUrlSourceDownload:
         # No content-type on HEAD -> falls back to ranged magic-byte GET probe.
         responses.add(responses.HEAD, PDF_URL, status=200)
         responses.add(responses.GET, PDF_URL, body=minimal_pdf_bytes, status=200)
-        src = PdfUrlSource(PDF_URL)
+        src = PdfUrlSource(PDF_URL, session=requests.Session())
         path = src.download_pdf(tmp_papers_dir)
         assert path.exists()
 
@@ -204,7 +205,7 @@ class TestPdfUrlSourceDownload:
     def test_rejects_non_pdf_body_without_content_type(self, tmp_papers_dir) -> None:
         responses.add(responses.HEAD, PDF_URL, status=200)
         responses.add(responses.GET, PDF_URL, body=b"<html>nope</html>", status=200)
-        src = PdfUrlSource(PDF_URL)
+        src = PdfUrlSource(PDF_URL, session=requests.Session())
         with pytest.raises(NotAPdfError):
             src.download_pdf(tmp_papers_dir)
 
@@ -215,7 +216,7 @@ class TestPdfUrlSourceDownload:
             responses.HEAD, PDF_URL, headers={"Content-Type": "application/pdf"}
         )
         responses.add(responses.GET, PDF_URL, body=b"junk-bytes", status=200)
-        src = PdfUrlSource(PDF_URL)
+        src = PdfUrlSource(PDF_URL, session=requests.Session())
         with pytest.raises(NotAPdfError):
             src.download_pdf(tmp_papers_dir)
 
@@ -234,7 +235,7 @@ class TestPdfUrlSourceDownload:
             headers={"Content-Length": str(_MAX_PDF_BYTES + 1)},
             status=200,
         )
-        src = PdfUrlSource(PDF_URL)
+        src = PdfUrlSource(PDF_URL, session=requests.Session())
         with pytest.raises(PaperSourceError, match="exceeds"):
             src.download_pdf(tmp_papers_dir)
 
@@ -251,7 +252,7 @@ class TestPdfUrlSourceDownload:
             responses.HEAD, PDF_URL, headers={"Content-Type": "application/pdf"}
         )
         responses.add(responses.GET, PDF_URL, body=b"%PDF-" + b"x" * 1000, status=200)
-        src = PdfUrlSource(PDF_URL)
+        src = PdfUrlSource(PDF_URL, session=requests.Session())
         with pytest.raises(PaperSourceError, match="limit"):
             src.download_pdf(tmp_papers_dir)
         pdf_path = tmp_papers_dir / src.source_id / f"{src.source_id}.pdf"
@@ -275,7 +276,7 @@ class TestPdfUrlSourceDownload:
                 status=302,
                 headers={"Location": f"https://example.com/r{i}"},
             )
-        src = PdfUrlSource(PDF_URL)
+        src = PdfUrlSource(PDF_URL, session=requests.Session())
         with pytest.raises(PaperSourceError, match="[Tt]oo many redirects"):
             src.download_pdf(tmp_papers_dir)
 
@@ -298,7 +299,7 @@ class TestPdfUrlSourceDownload:
             content_type="application/pdf",
             status=200,
         )
-        src = PdfUrlSource(PDF_URL)
+        src = PdfUrlSource(PDF_URL, session=requests.Session())
         path = src.download_pdf(tmp_papers_dir)
         assert path.exists()
         assert path.read_bytes().startswith(b"%PDF-")
@@ -309,6 +310,28 @@ class TestPdfUrlSourceDownload:
             responses.HEAD, PDF_URL, headers={"Content-Type": "application/pdf"}
         )
         responses.add(responses.GET, PDF_URL, status=302, headers={"Location": ""})
-        src = PdfUrlSource(PDF_URL)
+        src = PdfUrlSource(PDF_URL, session=requests.Session())
         with pytest.raises(PaperSourceError):
             src.download_pdf(tmp_papers_dir)
+
+
+class TestPdfUrlSourceSsrfPinning:
+    def test_default_session_mounts_pinned_adapter(self) -> None:
+        # The arbitrary-PDF-URL path is the primary SSRF vector, so a source built
+        # without an injected session must pin every hop to an SSRF-validated IP
+        # (closing the DNS-rebinding TOCTOU window a plain requests.Session leaves).
+        from scholar_lens.src.pinned_transport import PinnedRequestsAdapter
+
+        src = PdfUrlSource(PDF_URL)
+        for scheme in ("https://", "http://"):
+            assert isinstance(src._session.adapters[scheme], PinnedRequestsAdapter)
+
+    def test_injected_session_is_left_untouched(self) -> None:
+        # An explicitly injected session (e.g. the `responses` transport stub used
+        # in the hermetic download tests) must NOT be re-mounted.
+        from scholar_lens.src.pinned_transport import PinnedRequestsAdapter
+
+        session = requests.Session()
+        src = PdfUrlSource(PDF_URL, session=session)
+        assert src._session is session
+        assert not isinstance(src._session.adapters["https://"], PinnedRequestsAdapter)

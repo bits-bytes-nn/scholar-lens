@@ -2,11 +2,13 @@ import asyncio
 import hashlib
 import os
 import shutil
+from collections.abc import Sequence
 from pathlib import Path
 
 import boto3
 import git
 from langchain_community.vectorstores.faiss import FAISS
+from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.documents import Document
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.output_parsers import StrOutputParser
@@ -52,10 +54,14 @@ class CodeRetriever(RetryableBase):
         region_name: str | None = None,
         profile_name: str | None = None,
         boto_session: boto3.Session | None = None,
+        callbacks: Sequence[BaseCallbackHandler] | None = None,
     ) -> None:
         self.boto_session = boto_session or boto3.Session(
             region_name=region_name, profile_name=profile_name
         )
+        # Route the run's TokenUsageTracker into the code-analysis and codebase-
+        # summary calls so they count toward the token budget and cost metric.
+        self._callbacks = list(callbacks) if callbacks else None
         self.llm_factory = BedrockLanguageModelFactory(boto_session=self.boto_session)
         self.embedding_factory = BedrockEmbeddingModelFactory(
             boto_session=self.boto_session
@@ -65,10 +71,10 @@ class CodeRetriever(RetryableBase):
         self.vector_store: VectorStore | None = None
 
         code_analysis_llm = self.llm_factory.get_model(
-            code_analysis_model_id, temperature=0.0
+            code_analysis_model_id, temperature=0.0, callbacks=self._callbacks
         )
         code_summarization_llm = self.llm_factory.get_model(
-            code_summarization_model_id, temperature=0.0
+            code_summarization_model_id, temperature=0.0, callbacks=self._callbacks
         )
         self._initialize_chains(code_analysis_llm, code_summarization_llm)
         self._initialize_embeddings(embed_model_id)
@@ -244,7 +250,13 @@ class CodeRetriever(RetryableBase):
         file_path: Path, base_path: Path
     ) -> Document | None:
         try:
-            content = await asyncio.to_thread(file_path.read_text, encoding="utf-8")
+            # errors="replace" so a file that is valid Python but stored in
+            # latin-1/cp1252 (or has a stray non-UTF-8 byte in a comment/string)
+            # degrades to mostly-intact text rather than raising UnicodeDecodeError
+            # and being dropped wholesale from the index + codebase summary.
+            content = await asyncio.to_thread(
+                file_path.read_text, encoding="utf-8", errors="replace"
+            )
             return Document(
                 page_content=content,
                 metadata={"source": os.path.relpath(file_path, base_path)},
@@ -348,8 +360,10 @@ class CodeRetriever(RetryableBase):
                 break
             for py_file in repo_path.rglob("*.py"):
                 try:
+                    # errors="replace" (see _read_file_as_document): don't drop a
+                    # non-UTF-8-clean source file from the codebase summary.
                     content = await asyncio.to_thread(
-                        py_file.read_text, encoding="utf-8"
+                        py_file.read_text, encoding="utf-8", errors="replace"
                     )
                     if total_chars + len(content) > self.MAX_CHARS:
                         logger.warning(

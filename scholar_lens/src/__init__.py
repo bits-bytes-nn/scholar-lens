@@ -103,6 +103,7 @@ if TYPE_CHECKING:
     from .utils import (
         create_robust_xml_output_parser as create_robust_xml_output_parser,
     )
+    from .utils import escape_yaml_double_quoted as escape_yaml_double_quoted
     from .utils import is_affirmative as is_affirmative
     from .utils import is_placeholder as is_placeholder
     from .utils import plot_langchain_graph as plot_langchain_graph
@@ -158,6 +159,7 @@ _SYMBOL_MODULES: dict[str, str] = {
     "TechGuideGenerator": "tech_guide",
     "arg_as_bool": "utils",
     "create_robust_xml_output_parser": "utils",
+    "escape_yaml_double_quoted": "utils",
     "is_affirmative": "utils",
     "is_placeholder": "utils",
     "plot_langchain_graph": "utils",

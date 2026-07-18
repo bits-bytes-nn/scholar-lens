@@ -196,6 +196,27 @@ class TestBuildResultMessage:
         assert "AccessDeniedException" in err_section["text"]["text"]
         assert any(b["type"] == "context" for b in blocks)
 
+    def test_over_long_title_capped_to_slack_section_limit(self) -> None:
+        # Regression (ui-2): a guide whose title falls back to 40+ joined URLs can
+        # exceed Slack's 3000-char section limit, making chat.postMessage reject
+        # the WHOLE message (so the user gets no completion/failure notice). Every
+        # section/context block text must stay within the limit.
+        huge_title = ", ".join(f"https://docs.example.com/page-{i}" for i in range(80))
+        _, blocks = _build_result_message(
+            success=False,
+            artifact_label="guide",
+            title=huge_title,
+            s3_url=None,
+            sources=huge_title,
+            error=None,
+        )
+        for b in blocks:
+            if b["type"] == "section":
+                assert len(b["text"]["text"]) <= 3000
+            if b["type"] == "context":
+                for el in b["elements"]:
+                    assert len(el["text"]) <= 3000
+
     def test_https_url_renders_button(self) -> None:
         _, blocks = _build_result_message(
             success=True,

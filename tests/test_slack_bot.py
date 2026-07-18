@@ -75,6 +75,26 @@ class TestHandleMessage:
         assert "github.com/x/y" in text
         assert "PDF parsing on" in text
 
+    async def test_ack_echoes_only_dispatched_sources(self) -> None:
+        # Regression (ui-1): a multi-source review parses 2 papers but dispatches
+        # only the first. The ack must echo exactly what was dispatched, not
+        # promise the dropped second paper.
+        parsed = ParsedIntent(
+            intent=SlackIntent.REVIEW, sources=["2401.06066", "2405.04434"]
+        )
+        dispatch = MagicMock(
+            return_value=DispatchResult(
+                job_id="j1",
+                job_name="n",
+                intent=SlackIntent.REVIEW,
+                dispatched_sources=["2401.06066"],
+            )
+        )
+        reply = await _bot(parsed, dispatch=dispatch).handle_message("...")
+        text = _blocks_text(reply)
+        assert "2401.06066" in text
+        assert "2405.04434" not in text
+
     async def test_unknown_returns_help(self) -> None:
         parsed = ParsedIntent(
             intent=SlackIntent.UNKNOWN, sources=[], reason="just chatting"

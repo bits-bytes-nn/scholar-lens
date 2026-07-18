@@ -697,7 +697,7 @@ Paper Review 생성 (ExplainerGraph) 모델 선택입니다 (`scholar_lens/confi
 |------|------|--------|------|
 | `paper_analysis_model_id` | `LanguageModelId` | `CLAUDE_V5_SONNET` | 논문 초기 분석용 모델 |
 | `paper_enrichment_model_id` | `LanguageModelId` | `CLAUDE_V5_SONNET` | 정보 보강 단계용 모델 |
-| `paper_finalization_model_id` | `LanguageModelId` | (필수) | 누적된 설명을 바탕으로 4개 섹션의 핵심 요약(`key_takeaways`)을 생성하는 모델 (기본값 없음, 반드시 지정 필요) |
+| `paper_finalization_model_id` | `LanguageModelId` | `CLAUDE_V4_5_HAIKU` | 누적된 설명을 바탕으로 4개 섹션의 핵심 요약(`key_takeaways`)을 생성하는 모델 |
 | `paper_evaluation_model_id` | `LanguageModelId` | `CLAUDE_V4_8_OPUS` | 리뷰 파이프라인의 **평가자(evaluator)** — 합성된 각 섹션을 0~100으로 채점하고 evaluate-and-revise 루프를 게이팅합니다(가이드의 `evaluation_model_id`와 대칭). Sonnet 5는 평가자로 쓰면 과도하게 낮게 채점해 루프를 부풀리므로, 안정적·잘 보정된 채점을 위해 Opus 4.8을 기본으로 둡니다. |
 | `paper_synthesis_model_id` | `LanguageModelId` | `CLAUDE_V5_SONNET` | 단락별 종합 및 마무리용 모델 |
 | `evaluator_enable_thinking` | `bool` | `false` | Paper Evaluation 단계의 확장 사고(thinking) 활성화 여부 |
@@ -742,7 +742,7 @@ Tech Guide 생성 모델 선택입니다 (`scholar_lens/configs/config.py:159–
 
 | 필드 | 타입 | 기본값 | 설명 |
 |------|------|--------|------|
-| `output_language` | `str` | `"Korean"` | 아티팩트 생성 언어 (현재 시스템에서는 Korean 고정) |
+| `output_language` | `str` | `"Korean"` | 아티팩트 생성 언어. 기본값이자 가장 잘 검증된 언어는 Korean이지만, 프롬프트가 언어 비종속적으로 작성되어 있어 다른 언어(예: `English`)도 설정 가능 |
 
 ### 환경 변수 (EnvVars)
 

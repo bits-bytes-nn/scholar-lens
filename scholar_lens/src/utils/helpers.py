@@ -87,6 +87,21 @@ def is_placeholder(value: str | None) -> bool:
     return not value or value.strip().lower() in _PLACEHOLDER
 
 
+def escape_yaml_double_quoted(value: str) -> str:
+    """Escape a string for use inside a double-quoted YAML scalar (``"..."``).
+
+    arXiv/LLM-extracted titles routinely carry raw LaTeX (``\\mathcal``,
+    ``\\nabla``, accented ``\\"o``). A double-quoted YAML scalar treats ``\\`` as
+    an escape introducer, so an unescaped backslash either aborts the Jekyll/
+    kramdown build (``\\mathcal`` -> unknown-escape ScannerError) or silently
+    corrupts the value (``\\nabla`` -> literal newline). Escape backslashes FIRST,
+    then double quotes, then the control chars YAML would otherwise mangle.
+    """
+    value = value.replace("\\", "\\\\").replace('"', '\\"')
+    value = value.replace("\n", "\\n").replace("\t", "\\t").replace("\r", "\\r")
+    return value
+
+
 def extract_text_from_html(html_content: str) -> str:
     if not html_content:
         return ""

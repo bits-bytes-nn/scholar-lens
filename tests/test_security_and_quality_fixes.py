@@ -185,6 +185,40 @@ def test_parser_dict_mode_multiple_tags() -> None:
     assert out == {"summary": "body & more", "tags": "A, B"}
 
 
+def test_parser_preserves_generics_and_comparisons() -> None:
+    # Regression (quality-0): the body is Markdown/code and may contain raw
+    # angle-bracket tokens. It must NOT be HTML-parsed (which lowercased tag
+    # names, injected junk attributes, and appended synthetic close tags).
+    p = HTMLTagOutputParser(tag_names="summary")
+    out = p.parse(
+        "<summary>Returns a Vector<float> and a Map<str,int>; a < b holds.</summary>"
+    )
+    assert out == "Returns a Vector<float> and a Map<str,int>; a < b holds."
+    assert "</float>" not in out
+    assert "</str" not in out
+
+
+def test_parser_preserves_code_fence_with_generics() -> None:
+    p = HTMLTagOutputParser(tag_names="section_markdown")
+    body = (
+        "```rust\n"
+        "let m: HashMap<String, i32> = HashMap::new();\n"
+        "let v: Vec<u8> = vec![];\n"
+        "```"
+    )
+    out = p.parse(f"<section_markdown>{body}</section_markdown>")
+    assert out == body
+    assert "HashMap<String, i32>" in out  # not lowercased, no injected attrs
+    assert 'i32=""' not in out
+
+
+def test_parser_preserves_list_generic_takeaway() -> None:
+    p = HTMLTagOutputParser(tag_names="key_takeaways")
+    out = p.parse("<key_takeaways>- Handles List<T> generics</key_takeaways>")
+    assert out == "- Handles List<T> generics"
+    assert "</t>" not in out.lower()
+
+
 # --------------------------------------------------------------------------- #
 # code_retriever repo-name derivation (blocker fix)
 # --------------------------------------------------------------------------- #

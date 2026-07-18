@@ -40,26 +40,36 @@ class TestRobustXMLOutputParserHappyPath:
 
 
 class TestRobustXMLOutputParserSanitization:
-    def test_unescaped_ampersand_recovers_via_lxml(self) -> None:
-        # Standard XML parsing chokes on the bare ``&``; lxml recover mode
-        # salvages the structure but DROPS the offending ``&`` character.
+    def test_unescaped_ampersand_is_preserved(self) -> None:
+        # Standard XML parsing chokes on the bare ``&``; the recovery path escapes
+        # bare ampersands in text nodes BEFORE the lxml pass, so the ``&`` and its
+        # surrounding text survive (previously lxml recover silently dropped them).
         parser = RobustXMLOutputParser()
         result = parser.parse("<note>Tom & Jerry & Co</note>")
-        # POTENTIAL SOURCE BUG: lxml recover silently strips bare ampersands
-        # rather than escaping them, so the text loses the ``&`` characters.
-        # See scholar_lens/src/utils/parsers.py:255 (_try_lxml_recover_parse).
-        assert result == {"note": "Tom  Jerry  Co"}
+        assert result == {"note": "Tom & Jerry & Co"}
+
+    def test_ampersand_in_section_title_preserved(self) -> None:
+        # The real-world case: a TOC section titled "Training & Inference" must not
+        # lose the ampersand (it feeds the review synthesizer as grounding).
+        parser = RobustXMLOutputParser()
+        result = parser.parse(
+            "<table_of_contents><section>Training & Inference</section>"
+            "</table_of_contents>"
+        )
+        assert result == {"table_of_contents": {"section": "Training & Inference"}}
 
     def test_stray_angle_bracket_recovers(self) -> None:
-        # A stray ``<`` inside text content is not valid XML; lxml recovery
-        # salvages the element but loses the malformed fragment.
+        # A stray ``<`` inside text content is genuinely ambiguous (real tag vs
+        # literal ``<``): a regex can't safely distinguish them, so recovery still
+        # loses the ``< ... >`` fragment. The ampersand fix does NOT address this
+        # case; it's left to the later cascade/output-fixing stages.
         parser = RobustXMLOutputParser()
         result = parser.parse("<root><expr>a < b and c > d</expr></root>")
         assert result == {"root": {"expr": "a  b and c > d"}}
 
     def test_multiple_sections_with_ampersand(self) -> None:
         # Two top-level sections; section preservation forces a fallback that
-        # wraps leaf text under the ``#text`` key.
+        # wraps leaf text under the ``#text`` key. Ampersands are preserved.
         parser = RobustXMLOutputParser()
         result = parser.parse("<summary>R&D and Q&A</summary><title>Hello</title>")
         assert result == {

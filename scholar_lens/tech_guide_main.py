@@ -40,6 +40,7 @@ from scholar_lens.src import (
     WebSearchProvider,
     arg_as_bool,
     build_pr_body,
+    escape_yaml_double_quoted,
     is_running_in_aws,
     logger,
 )
@@ -247,11 +248,11 @@ use_math: true
 ---
 """
     cover_image = github_config.cover_image_for("tech-guides")
-    category = github_config.tech_guide_category.replace('"', '\\"')
+    category = escape_yaml_double_quoted(github_config.tech_guide_category)
     front_matter = front_matter_template.format(
-        title=guide.topic.replace('"', '\\"'),
+        title=escape_yaml_double_quoted(guide.topic),
         date=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        author=github_config.author_name,
+        author=escape_yaml_double_quoted(github_config.author_name),
         categories=f'"{category}"',
         tags="",
         cover_image=cover_image,

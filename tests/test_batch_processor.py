@@ -110,13 +110,16 @@ class TestExecuteWithFallbackSync:
         )
         assert result == [10, 20, 30]
 
-    def test_sequential_failure_skips_item(self, processor: BatchProcessor) -> None:
-        # Batch raises, then each sequential item also raises. The fallback
-        # logs and skips failed items rather than propagating -> empty result.
+    def test_sequential_failure_keeps_none_placeholder(
+        self, processor: BatchProcessor
+    ) -> None:
+        # Batch raises, then each sequential item also raises. The fallback logs
+        # and substitutes a None placeholder (NOT drops), preserving 1:1 length
+        # so callers that zip results back to inputs stay aligned.
         result = processor.execute_with_fallback(
             [1, 2, 3], _prepare, _batch_fail, _seq_fail, "task", show_progress=False
         )
-        assert result == []
+        assert result == [None, None, None]
 
     def test_run_config_overrides_batch_size(self, processor: BatchProcessor) -> None:
         # run_config batch_size of 2 still processes every item.
@@ -164,10 +167,11 @@ class TestAExecuteWithFallbackAsync:
         # Concurrent fallback gathers results; order is preserved by gather.
         assert result == [10, 20, 30]
 
-    async def test_sequential_failure_skips_item(
+    async def test_sequential_failure_keeps_none_placeholder(
         self, processor: BatchProcessor
     ) -> None:
-        # Failed items return None and are filtered out -> empty result.
+        # Failed items resolve to None placeholders and are KEPT (not filtered),
+        # so len(results) == len(inputs) and positional alignment holds.
         result = await processor.aexecute_with_fallback(
             [1, 2, 3],
             _prepare,
@@ -176,7 +180,30 @@ class TestAExecuteWithFallbackAsync:
             "task",
             show_progress=False,
         )
-        assert result == []
+        assert result == [None, None, None]
+
+    async def test_partial_sequential_failure_preserves_alignment(
+        self, processor: BatchProcessor
+    ) -> None:
+        # Regression (code-2): the middle item fails in the fallback. The result
+        # must be [10, None, 30] — same length/positions as the input — so a
+        # consumer zipping results to inputs pairs each with the RIGHT item
+        # instead of shifting every later item onto the wrong input.
+        async def _aseq_middle_fail(payload: dict[str, Any]) -> int:
+            n = payload["x"]
+            if n == 2:
+                raise RuntimeError("item 2 fails")
+            return n * 10
+
+        result = await processor.aexecute_with_fallback(
+            [1, 2, 3],
+            _prepare,
+            _abatch_fail,
+            _aseq_middle_fail,
+            "task",
+            show_progress=False,
+        )
+        assert result == [10, None, 30]
 
 
 class TestBatchProcessorValidation:

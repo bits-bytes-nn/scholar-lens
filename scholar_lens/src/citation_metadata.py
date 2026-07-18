@@ -14,11 +14,11 @@ the caller can fall back. Network access goes through a shared rate limiter.
 
 from __future__ import annotations
 
-import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 import httpx
+from bs4 import BeautifulSoup
 
 from .logger import logger
 from .rate_limiter import RateLimiter
@@ -184,9 +184,16 @@ class ChainedMetadataResolver:
 
 
 def _strip_jats(abstract: str | None) -> str | None:
-    """Crossref abstracts are JATS XML; strip the tags to plain text."""
+    """Crossref abstracts are JATS XML; extract plain text.
+
+    Parse with an XML/HTML parser rather than a ``<[^>]+>`` regex: many real
+    Crossref records contain raw inequality signs in prose ("for all x < y and
+    a > b"), which a greedy tag-strip would treat as a tag and delete, silently
+    dropping the clause between them. The parser also decodes entities
+    (``&amp;`` -> ``&``) so the summarizer sees clean text.
+    """
     if not abstract:
         return None
-    text = re.sub(r"<[^>]+>", " ", abstract)
+    text = BeautifulSoup(abstract, "html.parser").get_text(separator=" ")
     text = " ".join(text.split())
     return text or None

@@ -19,6 +19,18 @@ _MRKDWN_SUBSTITUTIONS = str.maketrans({"`": "ʼ", "*": "∗"})
 # flood the channel. Shared by the bot and notifier.
 DEFAULT_DETAIL_LIMIT = 600
 
+# Slack's hard per-field character limits. Exceeding them makes chat.postMessage
+# reject the whole message (invalid_blocks), which the notifier swallows — so a
+# job with an over-long title/source list (e.g. a guide whose title falls back to
+# 40+ joined URLs) would post NOTHING. Enforce the caps in the builders so no
+# caller can construct an over-limit block.
+_SECTION_TEXT_LIMIT = 3000
+_HEADER_TEXT_LIMIT = 150
+
+
+def _truncate(text: str, limit: int) -> str:
+    return text if len(text) <= limit else text[: limit - 1] + "…"
+
 
 def mrkdwn_safe(value: str) -> str:
     """Neutralise Slack mrkdwn control chars in user-influenced text and collapse
@@ -38,15 +50,25 @@ def header(text: str) -> dict:
     """A header block (plain_text only; standard emoji are still rendered)."""
     return {
         "type": "header",
-        "text": {"type": "plain_text", "text": text, "emoji": True},
+        "text": {
+            "type": "plain_text",
+            "text": _truncate(text, _HEADER_TEXT_LIMIT),
+            "emoji": True,
+        },
     }
 
 
 def section(text: str) -> dict:
-    """A mrkdwn section block."""
-    return {"type": "section", "text": {"type": "mrkdwn", "text": text}}
+    """A mrkdwn section block (text capped to Slack's 3000-char limit)."""
+    return {
+        "type": "section",
+        "text": {"type": "mrkdwn", "text": _truncate(text, _SECTION_TEXT_LIMIT)},
+    }
 
 
 def context(text: str) -> dict:
-    """A mrkdwn context block (smaller, muted text)."""
-    return {"type": "context", "elements": [{"type": "mrkdwn", "text": text}]}
+    """A mrkdwn context block (smaller, muted text; capped to Slack's limit)."""
+    return {
+        "type": "context",
+        "elements": [{"type": "mrkdwn", "text": _truncate(text, _SECTION_TEXT_LIMIT)}],
+    }

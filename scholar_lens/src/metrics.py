@@ -127,15 +127,27 @@ def _extract_usage(response: Any) -> tuple[int, int, str]:  # noqa: ANN401
         usage = llm_output.get("usage") or llm_output.get("token_usage") or {}
         model = str(llm_output.get("model_id") or llm_output.get("model_name") or model)
         # Fall back to per-generation usage_metadata (Converse via langchain-aws).
+        # ChatBedrockConverse._generate returns a ChatResult with NO llm_output,
+        # so both the tokens AND the model id must come from the generation: the
+        # id lives in message.response_metadata["model_name"] (set by langchain-
+        # aws). Without this the whole run buckets under "unknown", and the cost
+        # estimate falls back to the Sonnet rate — ~5x under-reporting Opus spend
+        # and defeating the EstimatedCostUSD alarm.
         if not usage:
             for gen_list in getattr(response, "generations", []) or []:
                 for gen in gen_list:
-                    meta = getattr(
-                        getattr(gen, "message", None), "usage_metadata", None
-                    )
+                    message = getattr(gen, "message", None)
+                    meta = getattr(message, "usage_metadata", None)
                     if meta:
                         in_tok += int(meta.get("input_tokens", 0))
                         out_tok += int(meta.get("output_tokens", 0))
+                    if model == "unknown":
+                        resp_meta = getattr(message, "response_metadata", None) or {}
+                        gen_model = resp_meta.get("model_name") or resp_meta.get(
+                            "model_id"
+                        )
+                        if gen_model:
+                            model = str(gen_model)
         else:
             in_tok = int(usage.get("input_tokens") or usage.get("prompt_tokens") or 0)
             out_tok = int(
