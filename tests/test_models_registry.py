@@ -39,6 +39,29 @@ class TestLanguageModelRegistry:
         assert info.supports_prompt_caching is True
         assert info.supports_thinking is True
 
+    @pytest.mark.parametrize(
+        ("model", "model_id"),
+        [
+            (LanguageModelId.CLAUDE_V5_5_OPUS, "anthropic.claude-opus-5-5"),
+            (LanguageModelId.CLAUDE_V5_5_SONNET, "anthropic.claude-sonnet-5-5"),
+            (LanguageModelId.CLAUDE_V5_5_HAIKU, "anthropic.claude-haiku-5-5"),
+            (LanguageModelId.CLAUDE_V5_1_FABLE, "anthropic.claude-fable-5-1"),
+        ],
+    )
+    def test_latest_models_registered(
+        self, model: LanguageModelId, model_id: str
+    ) -> None:
+        # Bedrock base ids carry no date/version suffix for these models.
+        assert model.value == model_id
+        assert LanguageModelId(model_id) is model
+        info = _LANGUAGE_MODEL_INFO[model]
+        assert info.uses_adaptive_thinking is True
+        assert info.supports_thinking is True
+        assert info.supports_1m_context_window is True
+        assert info.max_output_tokens == 128000
+        # Not CountTokens-capable; counted via the same-family proxy.
+        assert info.count_tokens_proxy == LanguageModelId.CLAUDE_V4_6_SONNET.value
+
     def test_positive_token_limits(self) -> None:
         for model, info in _LANGUAGE_MODEL_INFO.items():
             assert info.context_window_size > 0, model

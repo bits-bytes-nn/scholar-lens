@@ -36,6 +36,10 @@ _COST_PER_1K: dict[str, tuple[float, float]] = {
     "opus": (0.015, 0.075),
     "sonnet": (0.003, 0.015),
     "haiku": (0.0008, 0.004),
+    # Fable lists above Opus on Anthropic pricing. No Bedrock rate is recorded
+    # here, so reuse the top (Opus) tier rather than the Sonnet-rate default,
+    # which would under-report its spend and weaken the EstimatedCostUSD alarm.
+    "fable": (0.015, 0.075),
 }
 
 

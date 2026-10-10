@@ -43,7 +43,8 @@ class LanguageModelInfo(BaseModel):
             "Whether the model uses the newer adaptive thinking API "
             "(thinking.type='adaptive' + output_config.effort) instead of the "
             "legacy thinking.type='enabled' + budget_tokens. Opus 4.8+ requires "
-            "the adaptive form."
+            "the adaptive form. These models also reject sampling parameters "
+            "(temperature/top_k), so the factory never sends them."
         ),
     )
     supports_1m_context_window: bool = Field(
@@ -103,6 +104,18 @@ _LANGUAGE_MODEL_INFO: dict[LanguageModelId, LanguageModelInfo] = {
         supports_prompt_caching=True,
         supports_thinking=True,
     ),
+    LanguageModelId.CLAUDE_V5_5_HAIKU: LanguageModelInfo(
+        context_window_size=200000,
+        max_output_tokens=128000,
+        supports_prompt_caching=True,
+        supports_thinking=True,
+        # Adaptive-only: budget_tokens is rejected. Omitting `thinking` still runs
+        # adaptive thinking (effort defaults to 'medium'), so enable_thinking=False
+        # just leaves the request field unset.
+        uses_adaptive_thinking=True,
+        supports_1m_context_window=True,
+        count_tokens_proxy=LanguageModelId.CLAUDE_V4_6_SONNET.value,
+    ),
     LanguageModelId.CLAUDE_V3_5_SONNET: LanguageModelInfo(
         context_window_size=200000, max_output_tokens=8192
     ),
@@ -149,6 +162,17 @@ _LANGUAGE_MODEL_INFO: dict[LanguageModelId, LanguageModelInfo] = {
         # model is (Opus 4.7/4.8 aren't either). Proxy to Sonnet 4.6 like they do
         # — it slightly undercounts the newer tokenizer, but fit_text only needs a
         # safe lower bound against a 1M window plus reserve, so this is fine.
+        count_tokens_proxy=LanguageModelId.CLAUDE_V4_6_SONNET.value,
+    ),
+    LanguageModelId.CLAUDE_V5_5_SONNET: LanguageModelInfo(
+        context_window_size=200000,
+        max_output_tokens=128000,
+        supports_prompt_caching=True,
+        supports_thinking=True,
+        # Adaptive-only; thinking.type='disabled' is rejected, so thinking still
+        # runs (effort 'high' by default) when enable_thinking=False.
+        uses_adaptive_thinking=True,
+        supports_1m_context_window=True,
         count_tokens_proxy=LanguageModelId.CLAUDE_V4_6_SONNET.value,
     ),
     LanguageModelId.CLAUDE_V4_OPUS: LanguageModelInfo(
@@ -198,6 +222,27 @@ _LANGUAGE_MODEL_INFO: dict[LanguageModelId, LanguageModelInfo] = {
         supports_1m_context_window=True,
         # Opus 4.8 base id isn't supported by Bedrock CountTokens; count via the
         # Sonnet 4.6 tokenizer (same family) so fit_text still measures exactly.
+        count_tokens_proxy=LanguageModelId.CLAUDE_V4_6_SONNET.value,
+    ),
+    LanguageModelId.CLAUDE_V5_5_OPUS: LanguageModelInfo(
+        context_window_size=200000,
+        max_output_tokens=128000,
+        supports_prompt_caching=True,
+        supports_thinking=True,
+        # Thinking can't be turned off (thinking.type='disabled' is rejected);
+        # omitting it runs adaptive thinking at effort 'medium' by default.
+        uses_adaptive_thinking=True,
+        supports_1m_context_window=True,
+        count_tokens_proxy=LanguageModelId.CLAUDE_V4_6_SONNET.value,
+    ),
+    LanguageModelId.CLAUDE_V5_1_FABLE: LanguageModelInfo(
+        context_window_size=200000,
+        max_output_tokens=128000,
+        supports_prompt_caching=True,
+        supports_thinking=True,
+        # Thinking is always on, like Opus 5.5 (effort 'high' by default).
+        uses_adaptive_thinking=True,
+        supports_1m_context_window=True,
         count_tokens_proxy=LanguageModelId.CLAUDE_V4_6_SONNET.value,
     ),
     # NOTE: add new models here

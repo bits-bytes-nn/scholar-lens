@@ -282,6 +282,121 @@ class TestBuildModelConfigFeatures:
         )
 
 
+_LATEST_MODELS = [
+    LanguageModelId.CLAUDE_V5_5_OPUS,
+    LanguageModelId.CLAUDE_V5_5_SONNET,
+    LanguageModelId.CLAUDE_V5_5_HAIKU,
+    LanguageModelId.CLAUDE_V5_1_FABLE,
+]
+_SAMPLING_KEYS = ("temperature", "top_k", "top_p")
+
+
+def _request_fields(config: dict, is_cross_region: bool) -> dict:
+    """The model-request fields a config sends, for either code path."""
+    if is_cross_region:
+        return {**config, **config.get("additional_model_request_fields", {})}
+    kwargs = config["model_kwargs"]
+    return {**kwargs, **kwargs.get("additionalModelRequestFields", {})}
+
+
+class TestLatestModelsRequestConfig:
+    """Opus 5.5 / Sonnet 5.5 / Haiku 5.5 / Fable 5.1 return a 400 on sampling
+    parameters, on thinking.type='enabled' + budget_tokens, and (except Haiku
+    5.5) on thinking.type='disabled'. The factory must send none of them."""
+
+    @pytest.mark.parametrize("model", _LATEST_MODELS)
+    @pytest.mark.parametrize("is_cross_region", [True, False])
+    @pytest.mark.parametrize("enable_thinking", [True, False])
+    def test_no_sampling_params(
+        self, model: LanguageModelId, is_cross_region: bool, enable_thinking: bool
+    ) -> None:
+        factory = _make_factory()
+        config = factory._build_model_config(
+            _LANGUAGE_MODEL_INFO[model],
+            model.value,
+            is_cross_region=is_cross_region,
+            temperature=0.0,
+            enable_thinking=enable_thinking,
+        )
+        fields = _request_fields(config, is_cross_region)
+        for key in _SAMPLING_KEYS:
+            assert key not in fields, key
+        assert fields["max_tokens"] == 128000
+
+    @pytest.mark.parametrize("model", _LATEST_MODELS)
+    @pytest.mark.parametrize("is_cross_region", [True, False])
+    @pytest.mark.parametrize("effort", ["low", "medium", "high", "xhigh", "max"])
+    def test_thinking_enabled_is_adaptive_with_effort(
+        self, model: LanguageModelId, is_cross_region: bool, effort: str
+    ) -> None:
+        factory = _make_factory()
+        config = factory._build_model_config(
+            _LANGUAGE_MODEL_INFO[model],
+            model.value,
+            is_cross_region=is_cross_region,
+            enable_thinking=True,
+            thinking_effort=effort,
+        )
+        fields = _request_fields(config, is_cross_region)
+        assert fields["thinking"] == {"type": "adaptive"}
+        assert fields["output_config"] == {"effort": effort}
+
+    @pytest.mark.parametrize("model", _LATEST_MODELS)
+    @pytest.mark.parametrize("is_cross_region", [True, False])
+    def test_thinking_off_omits_thinking_field(
+        self, model: LanguageModelId, is_cross_region: bool
+    ) -> None:
+        # "Off" must mean "don't send thinking", never thinking.type='disabled'.
+        factory = _make_factory()
+        config = factory._build_model_config(
+            _LANGUAGE_MODEL_INFO[model],
+            model.value,
+            is_cross_region=is_cross_region,
+            enable_thinking=False,
+        )
+        fields = _request_fields(config, is_cross_region)
+        assert "thinking" not in fields
+        assert "output_config" not in fields
+
+    @pytest.mark.parametrize("model", _LATEST_MODELS)
+    def test_get_model_passes_no_sampling_params(
+        self, model: LanguageModelId, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import scholar_lens.src.utils.factories as fac
+
+        factory = _make_factory()
+        monkeypatch.setattr(
+            fac.BedrockCrossRegionModelHelper,
+            "get_cross_region_model_id",
+            staticmethod(lambda *a, **k: f"global.{model.value}"),
+        )
+        captured: dict = {}
+        monkeypatch.setattr(
+            fac, "ChatBedrockConverse", lambda **kw: captured.update(kw) or kw
+        )
+        factory.get_model(
+            model,
+            temperature=0.0,
+            enable_thinking=True,
+            thinking_effort="high",
+            supports_1m_context_window=True,
+        )
+        assert captured["model_id"] == f"global.{model.value}"
+        for key in _SAMPLING_KEYS:
+            assert key not in captured, key
+        fields = captured["additional_model_request_fields"]
+        assert fields["thinking"] == {"type": "adaptive"}
+        assert fields["output_config"] == {"effort": "high"}
+
+    def test_legacy_model_keeps_top_k_on_invoke_model_path(self) -> None:
+        # Dropping top_k is limited to adaptive-thinking models.
+        factory = _make_factory()
+        config = factory._build_model_config(
+            _HAIKU_V3, "anthropic.claude-3-haiku", is_cross_region=False
+        )
+        assert config["model_kwargs"]["top_k"] == factory.DEFAULT_TOP_K
+
+
 class TestGetModelInfo:
     def test_known_model_returns_info(self) -> None:
         factory = _make_factory()

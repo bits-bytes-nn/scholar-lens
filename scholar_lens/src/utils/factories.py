@@ -443,8 +443,8 @@ class BedrockLanguageModelFactory(
         final_max_tokens = self._validate_max_tokens(
             kwargs.get("max_tokens"), model_info
         )
-        # Newer models (Opus 4.8+) deprecate the temperature parameter entirely;
-        # only send max_tokens for them.
+        # Adaptive-thinking models (Opus 4.7+, Sonnet 5+, Haiku 5.5, Fable 5.1)
+        # reject sampling parameters with a 400; only send max_tokens for them.
         token_config: dict[str, Any] = {"max_tokens": final_max_tokens}
         if not model_info.uses_adaptive_thinking:
             token_config["temperature"] = final_temperature
@@ -452,6 +452,8 @@ class BedrockLanguageModelFactory(
         if is_cross_region:
             config.update(token_config)
         else:
+            if model_info.uses_adaptive_thinking:
+                config["model_kwargs"].pop("top_k", None)
             config["model_kwargs"].update(token_config)
         if supports_1m_context_window and model_info.supports_1m_context_window:
             # get_model forces the Converse path when the 1M window is requested,
@@ -516,6 +518,8 @@ class BedrockLanguageModelFactory(
         if self._should_enable_thinking(enable_think, model_info):
             if model_info.uses_adaptive_thinking:
                 # Opus 4.8+ API: thinking.type='adaptive' + output_config.effort.
+                # thinking.type='disabled' is never sent: Opus 5.5, Sonnet 5.5 and
+                # Fable 5.1 reject it, so "no thinking" means omitting the field.
                 effort = kwargs.get("thinking_effort", self.DEFAULT_THINKING_EFFORT)
                 think_config = {
                     "thinking": {"type": "adaptive"},

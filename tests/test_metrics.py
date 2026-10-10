@@ -226,6 +226,15 @@ class TestMetricsEmitter:
 
 
 class TestRateAndExtractUsageEdges:
+    @pytest.mark.parametrize(
+        "model_id",
+        ["anthropic.claude-fable-5-1", "global.anthropic.claude-fable-5-1"],
+    )
+    def test_fable_not_billed_at_default_rate(self, model_id: str) -> None:
+        # Fable has no family-specific Bedrock rate here; it must reuse the top
+        # (Opus) tier instead of falling back to the lower Sonnet-rate default.
+        assert _rate_for(model_id) == _rate_for("anthropic.claude-opus-5-5")
+
     def test_unknown_model_uses_default_rate(self) -> None:
         assert _rate_for("some-random-model") == (0.003, 0.015)
 

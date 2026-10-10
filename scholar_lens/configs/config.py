@@ -11,10 +11,10 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 from scholar_lens.src.constants import EmbeddingModelId, LanguageModelId
 
-# Effort level for adaptive-thinking models (e.g. Opus 4.8). Lower effort means
-# shorter reasoning traces — faster and cheaper. Ignored by legacy thinking
-# models, which use a fixed token budget instead.
-ThinkingEffort = Literal["low", "medium", "high"]
+# Effort level for adaptive-thinking models (e.g. Opus 4.8, Opus 5.5). Lower
+# effort means shorter reasoning traces — faster and cheaper. Ignored by legacy
+# thinking models, which use a fixed token budget instead.
+ThinkingEffort = Literal["low", "medium", "high", "xhigh", "max"]
 
 
 class Github(BaseModel):

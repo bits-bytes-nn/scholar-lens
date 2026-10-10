@@ -35,7 +35,7 @@ Every artifact is clean, blog-ready Markdown that can be uploaded to S3 and open
 
 - **Any AI/ML paper** — accepts an arXiv ID *or* an arbitrary paper **PDF URL** (non-PDF URLs are rejected). arXiv is no longer required.
 - **Grounded, not hallucinated** — citations resolve through Crossref / Semantic Scholar with a title-similarity gate; the writer may only link URLs that appear in its sources. Tech guides run a per-section fact-check pass.
-- **Latest Claude** — Amazon Bedrock with Claude Opus 4.8 / Sonnet 5 / Haiku 4.5 and adaptive thinking, per-stage configurable.
+- **Latest Claude** — Amazon Bedrock with Claude Opus 4.8 / Sonnet 5 / Haiku 4.5 by default and adaptive thinking, per-stage configurable; Claude Opus 5.5 / Sonnet 5.5 / Haiku 5.5 / Fable 5.1 are also selectable.
 - **Code-aware reviews** — optional GitHub repository analysis with FAISS semantic search.
 - **On-demand Slack bot** — mention it with a paper or doc URLs; it parses your *explicit* request with an LLM, runs a Batch job, and replies in-thread with a link to the result. Hosted serverlessly on AWS (Slack Events API → Lambda), so it's always on with nothing to keep running locally.
 - **Scalable & observable** — AWS Batch (on-demand + spot), CloudWatch alarms, EventBridge→SNS failure alerts, encrypted SecureString secrets.
@@ -98,7 +98,7 @@ resources:
     tech_guide_category: Tech Guides
 
 explanation:
-  paper_synthesis_model_id: anthropic.claude-opus-4-8   # newest Claude Opus
+  paper_synthesis_model_id: anthropic.claude-opus-4-8   # or anthropic.claude-opus-5-5
 summary:
   summary_model_id: anthropic.claude-opus-4-8
 tech_guide:

@@ -100,6 +100,47 @@ class TestConfigLoading:
         config = Config.from_yaml(str(cfg_file))
         assert config.resources.project_name == "scholar-lens"
 
+    @pytest.mark.parametrize(
+        "model_id",
+        [
+            "anthropic.claude-opus-5-5",
+            "anthropic.claude-sonnet-5-5",
+            "anthropic.claude-haiku-5-5",
+            "anthropic.claude-fable-5-1",
+        ],
+    )
+    @pytest.mark.parametrize("effort", ["low", "medium", "high", "xhigh", "max"])
+    def test_latest_models_and_efforts_selectable(
+        self, tmp_path: Path, model_id: str, effort: str
+    ) -> None:
+        cfg_file = tmp_path / "config.yaml"
+        cfg_file.write_text(
+            f"summary:\n  summary_model_id: {model_id}\n  thinking_effort: {effort}\n",
+            encoding="utf-8",
+        )
+        config = Config.from_yaml(str(cfg_file))
+        assert config.summary.summary_model_id.value == model_id
+        assert config.summary.thinking_effort == effort
+
+    def test_unknown_effort_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            Explanation(thinking_effort="extreme")  # type: ignore[arg-type]
+
+    def test_latest_models_are_not_defaults(self) -> None:
+        # Adding models must not change any stage's default selection.
+        latest = {
+            LanguageModelId.CLAUDE_V5_5_OPUS,
+            LanguageModelId.CLAUDE_V5_5_SONNET,
+            LanguageModelId.CLAUDE_V5_5_HAIKU,
+            LanguageModelId.CLAUDE_V5_1_FABLE,
+        }
+        config = Config()
+        for section in config.model_dump().values():
+            if isinstance(section, dict):
+                for key, value in section.items():
+                    if key.endswith("_model_id"):
+                        assert value not in latest, key
+
     def test_invalid_model_id_rejected(self, tmp_path: Path) -> None:
         cfg_file = tmp_path / "config.yaml"
         cfg_file.write_text(

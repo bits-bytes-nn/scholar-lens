@@ -35,7 +35,7 @@ Scholar-Lens는 논문 또는 문서 URL 묶음으로부터 세 가지 산출물
 
 - **모든 AI/ML 논문** — arXiv ID *또는* 임의의 논문 **PDF URL**을 받습니다(PDF가 아닌 URL은 거부). arXiv 전용이 아닙니다.
 - **환각 없이 근거 기반** — 인용은 Crossref / Semantic Scholar로 해석하고 제목 유사도 게이트를 거칩니다. 작성기는 소스에 등장한 URL만 링크할 수 있고, 기술 가이드는 섹션별 사실 검증 패스를 돕니다.
-- **최신 Claude** — Amazon Bedrock의 Claude Opus 4.8 / Sonnet 5 / Haiku 4.5 + adaptive thinking, 단계별 설정 가능.
+- **최신 Claude** — Amazon Bedrock의 Claude Opus 4.8 / Sonnet 5 / Haiku 4.5(기본값) + adaptive thinking, 단계별 설정 가능. Claude Opus 5.5 / Sonnet 5.5 / Haiku 5.5 / Fable 5.1도 선택할 수 있습니다.
 - **코드 인식 리뷰** — GitHub 저장소 분석 + FAISS 시맨틱 검색(선택).
 - **온디맨드 Slack 봇** — 논문이나 문서 URL과 함께 멘션하면, LLM이 *명시적* 요청을 파싱하고 Batch 작업을 실행한 뒤 스레드에 결과 링크를 회신합니다. AWS에 서버리스(Slack Events API → Lambda)로 호스팅되어 로컬에서 상주 프로세스를 띄울 필요 없이 항상 동작합니다.
 - **확장성과 관찰성** — AWS Batch(온디맨드 + 스팟), CloudWatch 알람, EventBridge→SNS 실패 알림, 암호화 SecureString 시크릿.
@@ -98,7 +98,7 @@ resources:
     tech_guide_category: Tech Guides
 
 explanation:
-  paper_synthesis_model_id: anthropic.claude-opus-4-8   # 최신 Claude Opus
+  paper_synthesis_model_id: anthropic.claude-opus-4-8   # 또는 anthropic.claude-opus-5-5
 summary:
   summary_model_id: anthropic.claude-opus-4-8
 tech_guide:

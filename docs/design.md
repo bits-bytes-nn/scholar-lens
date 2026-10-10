@@ -780,6 +780,7 @@ Tech Guide 생성 모델 선택입니다 (`scholar_lens/configs/config.py:159–
 - `CLAUDE_V5_SONNET` (Sonnet 5 — 1M 컨텍스트, 적응형 사고, count_tokens 프록시=Sonnet 4.6)
 - `CLAUDE_V4_5_HAIKU` (Haiku 4.5)
 - `CLAUDE_V4_OPUS`, `CLAUDE_V4_1_OPUS`, `CLAUDE_V4_5_OPUS`, `CLAUDE_V4_6_OPUS`, `CLAUDE_V4_7_OPUS`, `CLAUDE_V4_8_OPUS` (Opus 4 시리즈)
+- `CLAUDE_V5_5_OPUS`, `CLAUDE_V5_5_SONNET`, `CLAUDE_V5_5_HAIKU`, `CLAUDE_V5_1_FABLE` (Opus 5.5 / Sonnet 5.5 / Haiku 5.5 / Fable 5.1 — 1M 컨텍스트, 128K 출력, 적응형 사고 전용, count_tokens 프록시=Sonnet 4.6. 어느 단계의 기본값도 아니며 설정에서 선택해 사용)
 
 **Embedding Models**:
 - `EMBED_MULTILINGUAL_V3`, `EMBED_ENGLISH_V3` (Cohere)
@@ -914,11 +915,14 @@ Scholar-Lens는 논문 분석의 각 단계에서 서로 다른 Claude/Titan 모
 
 ### 적응형 사고(Adaptive Thinking) — Sonnet 5 / Opus 4.7+
 
-Claude 5 Sonnet과 Opus 4.7 이후 모델들은 **적응형 사고** API를 사용하여, 쿼리 복잡도에 따라 사고 토큰 할당을 자동으로 조정합니다(`scholar_lens/src/utils/models.py:40-48`). 이전의 고정 예산 방식(`thinking.type='enabled' + budget_tokens`)과는 달리, 적응형 방식(`thinking.type='adaptive' + output_config.effort`)은 세 가지 노력 수준을 제공합니다(`scholar_lens/configs/config.py:14-17`):
+Claude 5 Sonnet과 Opus 4.7 이후 모델들은 **적응형 사고** API를 사용하여, 쿼리 복잡도에 따라 사고 토큰 할당을 자동으로 조정합니다(`scholar_lens/src/utils/models.py:40-48`). 이전의 고정 예산 방식(`thinking.type='enabled' + budget_tokens`)과는 달리, 적응형 방식(`thinking.type='adaptive' + output_config.effort`)은 다음 노력 수준을 제공합니다(`scholar_lens/configs/config.py:14-17`):
 
 - **`low`**: 신속한 답변을 위해 적은 사고 토큰 사용 (빠른 확인/스크리닝용)
 - **`medium`** (기본값): 균형 잡힌 추론 (대부분의 생성 작업용)
 - **`high`**: 광범위한 추론을 위해 많은 사고 토큰 사용 (복잡한 분석/합성용)
+- **`xhigh`**, **`max`**: `high`보다 더 깊은 추론. 비용과 지연이 가장 큼
+
+Opus 5.5 / Sonnet 5.5 / Haiku 5.5 / Fable 5.1은 `thinking` 필드를 생략해도 적응형 사고를 실행하고, `thinking.type='disabled'`는 거부합니다(Haiku 5.5만 effort `high` 이하에서 허용). 그래서 팩토리는 `enable_thinking=False`일 때 `thinking` 필드를 생략할 뿐 `disabled` 값은 보내지 않습니다. 이 경우에도 사고는 실행되며, 노력 수준은 모델 기본값(Opus 5.5·Haiku 5.5는 `medium`, Sonnet 5.5·Fable 5.1은 `high`)을 따릅니다.
 
 #### 적응형 사고 구성
 
@@ -959,7 +963,7 @@ explainer = ExplainerGraph(
 
 적응형 사고 모델(Sonnet 5 / Opus 4.7+)에서 온도 매개변수는 더 이상 사용되지 않습니다. 대신 `output_config.effort`로 추론 깊이를 제어합니다(`scholar_lens/src/utils/factories.py:435-450`, `516-524`). 따라서 팩토리는:
 
-- 적응형 사고 모델에서 온도를 설정하지 않음 (`model_info.uses_adaptive_thinking == True`일 때)
+- 적응형 사고 모델에서 온도와 `top_k`를 설정하지 않음 (`model_info.uses_adaptive_thinking == True`일 때, InvokeModel 경로 포함)
 - 이전 모델에서는 온도를 기본값 0.0으로 설정 (결정론적 생성)
 - 사고 활성화 시 온도를 1.0으로 강제 설정 (레거시 모델에만)
 
