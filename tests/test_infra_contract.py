@@ -7,11 +7,11 @@ from typing import Any
 
 import pytest
 
-from scholar_lens.cli import build_parser
+from scholar_lens.cli import APP_REPORTED_EXIT_CODES, build_parser
 from scholar_lens.src.jobs import JobRequest
 from scripts import check_post_conventions as conventions
 from scripts.ci_synth_check import check_template, resources_of_type, synth_template
-from scripts.deploy_infra import JOB_COMMAND
+from scripts.deploy_infra import JOB_COMMAND, check_deployable
 
 
 @pytest.fixture(scope="module")
@@ -72,13 +72,42 @@ class TestStackWiring:
         assert "s3:DeleteObject" not in actions
         assert "s3:PutObjectAcl" not in actions  # public_assets is off
 
-    def test_single_error_alarm(self, template: dict[str, Any]) -> None:
+    def test_only_the_cost_alarm(self, template: dict[str, Any]) -> None:
+        # Run outcomes are reported by the app and the failed-job rule; a log
+        # alarm would repeat them.
         alarms = resources_of_type(template, "AWS::CloudWatch::Alarm")
         names = sorted(a["Properties"]["AlarmName"] for a in alarms)
-        assert names == [
-            "scholar-lens-dev-estimated-cost",
-            "scholar-lens-dev-log-errors",
+        assert names == ["scholar-lens-dev-estimated-cost"]
+
+    def test_failed_job_rule_skips_only_app_reported_exits(
+        self, template: dict[str, Any]
+    ) -> None:
+        (rule,) = resources_of_type(template, "AWS::Events::Rule")
+        detail = rule["Properties"]["EventPattern"]["detail"]
+        assert detail["status"] == ["FAILED"]
+        assert detail["$or"] == [
+            {"container": {"exitCode": [{"anything-but": [10, 11]}]}},
+            # A lost host or a job that never started has no exit code.
+            {"container": {"exitCode": [{"exists": False}]}},
         ]
+        # Not 1/2: those are also a Python crash / argparse error.
+        assert list(APP_REPORTED_EXIT_CODES) == [10, 11]
+
+
+class TestDeployPreconditions:
+    def test_missing_config_file_stops_the_deploy(self, tmp_path: Path) -> None:
+        from scholar_lens.configs import Config
+
+        with pytest.raises(SystemExit, match="missing"):
+            check_deployable(tmp_path / "config.yaml", Config())
+
+    def test_bucket_is_required(self, tmp_path: Path) -> None:
+        from scholar_lens.configs import Config
+
+        path = tmp_path / "config.yaml"
+        path.write_text("{}", encoding="utf-8")
+        with pytest.raises(SystemExit, match="s3_bucket_name"):
+            check_deployable(path, Config())
 
 
 class TestPostConventionsCheck:
@@ -99,9 +128,18 @@ class TestPostConventionsCheck:
             conventions.check(local, lambda: "max_tags: 3\n", out=lambda _m: None) == 1
         )
 
-    def test_missing_canonical_skips(self, tmp_path: Path) -> None:
+    def test_missing_canonical_skips_without_a_token(self, tmp_path: Path) -> None:
         local = self._local(tmp_path, "max_tags: 5\n")
         assert conventions.check(local, lambda: None, out=lambda _m: None) == 0
+
+    def test_missing_canonical_fails_with_a_token(self, tmp_path: Path) -> None:
+        local = self._local(tmp_path, "max_tags: 5\n")
+        assert (
+            conventions.check(
+                local, lambda: None, out=lambda _m: None, authenticated=True
+            )
+            == 2  # cannot verify (missing file or no access), not drift
+        )
 
     def test_no_repo_configured_skips(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("BLOG_REPO", raising=False)

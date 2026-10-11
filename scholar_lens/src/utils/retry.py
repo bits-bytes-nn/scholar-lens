@@ -25,6 +25,9 @@ from botocore.exceptions import (
 from ..logger import logger
 
 MAX_RETRIES: int = 5
+# A read timeout means a long generation ran past the client timeout; each
+# retry repeats that whole (billable, untracked) call, so it gets one retry.
+READ_TIMEOUT_MAX_ATTEMPTS: int = 2
 RETRY_MAX_WAIT: int = 120
 RETRY_MULTIPLIER: int = 30
 
@@ -134,6 +137,25 @@ def _is_retryable(exc: BaseException) -> bool:
     return True in verdicts
 
 
+def is_transient_error(exc: BaseException) -> bool:
+    """Whether ``exc`` is a known-transient failure (throttling, 5xx, timeout,
+    dropped connection) under this policy — for callers that poll or degrade
+    instead of retrying."""
+    return _is_retryable(exc)
+
+
+def _should_stop(retry_state: tenacity.RetryCallState) -> bool:
+    if retry_state.attempt_number >= MAX_RETRIES:
+        return True
+    outcome = retry_state.outcome
+    error = outcome.exception() if outcome is not None and outcome.failed else None
+    return (
+        error is not None
+        and retry_state.attempt_number >= READ_TIMEOUT_MAX_ATTEMPTS
+        and any(isinstance(link, ReadTimeoutError) for link in _cause_chain(error))
+    )
+
+
 class RetryableBase:
     @staticmethod
     def _retry(operation_name: str) -> Callable:
@@ -143,7 +165,7 @@ class RetryableBase:
             wait=tenacity.wait_exponential_jitter(
                 initial=RETRY_MULTIPLIER, max=RETRY_MAX_WAIT
             ),
-            stop=tenacity.stop_after_attempt(MAX_RETRIES),
+            stop=_should_stop,
             retry=tenacity.retry_if_exception(_is_retryable),
             before_sleep=lambda retry_state: logger.warning(
                 "Retrying '%s' (attempt %d failed: %s). Waiting %.1fs",

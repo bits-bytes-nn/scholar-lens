@@ -3,7 +3,7 @@ from pathlib import Path
 
 import boto3
 from boto3.s3.transfer import TransferConfig
-from botocore.exceptions import ClientError
+from botocore.exceptions import BotoCoreError, ClientError
 
 from .logger import logger
 
@@ -62,18 +62,21 @@ class S3Handler:
             self._s3_client.put_object(
                 Bucket=self.bucket_name, Key=s3_key, Body=text.encode("utf-8")
             )
-        except ClientError as e:
+        except (ClientError, BotoCoreError) as e:
             raise S3OperationError(f"Failed to write '{s3_key}'") from e
 
     def get_text(self, s3_key: str) -> str | None:
         """Return the object's text, or None when it does not exist."""
         try:
             body = self._s3_client.get_object(Bucket=self.bucket_name, Key=s3_key)
+            data: bytes = body["Body"].read()
         except ClientError as e:
             if e.response["Error"]["Code"] in ("NoSuchKey", "404"):
                 return None
             raise S3OperationError(f"Failed to read '{s3_key}'") from e
-        return body["Body"].read().decode("utf-8")
+        except BotoCoreError as e:  # connection / read timeout (transient)
+            raise S3OperationError(f"Failed to read '{s3_key}'") from e
+        return data.decode("utf-8")
 
     def upload_directory(
         self,

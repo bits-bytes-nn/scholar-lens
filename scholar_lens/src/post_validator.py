@@ -16,7 +16,7 @@ from urllib.parse import urlparse
 
 import yaml
 
-from .markdown_lint import ENVELOPE_TAGS, NUMBERED_REF
+from .markdown_lint import ENVELOPE_TAGS, mostly_hangul
 from .markdown_math import TEXT_COMMAND, has_math
 from .post_conventions import PostConventions
 from .tags import format_tag
@@ -35,7 +35,6 @@ _IMAGE = re.compile(
     r"!\[[^\]]*\]\(([^()\s]*(?:\([^()]*\)[^()\s]*)*)(?:\s+\"[^\"]*\")?\)"
 )
 _ENVELOPE = re.compile(rf"</?(?:{'|'.join(ENVELOPE_TAGS)})>")
-_NUMBERED_REF = NUMBERED_REF
 _TABLE_SEPARATOR = re.compile(r"^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$")
 # A cell holding a value ("63.6", "1,820", "37.4%", "5.3±0.2"), not a label
 # that merely contains a digit ("pass@1").
@@ -294,6 +293,36 @@ def _check_headings(lines, offset, kind, add) -> None:  # type: ignore[no-untype
         previous = level
     if first and kind != "guide":
         add("error", "headings", offset, "a paper post starts with '## TL;DR'")
+    if kind != "guide":
+        _check_tldr(lines, offset, kind, add)
+
+
+def _check_tldr(lines, offset, kind, add) -> None:  # type: ignore[no-untyped-def]
+    """The ``## TL;DR`` section has prose (and, in a review, its ``###``
+    questions): an empty one means the finalizer failed."""
+    start = next((i for i, line in lines if line.strip() == "## TL;DR"), None)
+    if start is None:
+        return  # reported above
+    prose = questions = 0
+    for i, line in lines:
+        if i <= start:
+            continue
+        stripped = line.strip()
+        if stripped.startswith("## ") or stripped == "- - -":
+            break
+        if stripped.startswith("### "):
+            questions += 1
+        elif stripped:
+            prose += 1
+    if not prose:
+        add("error", "headings", offset + start, "the '## TL;DR' section is empty")
+    elif kind == "review" and not questions:
+        add(
+            "error",
+            "headings",
+            offset + start,
+            "the review's '## TL;DR' has no '###' questions",
+        )
 
 
 def _is_display_line(line: str) -> bool:
@@ -461,8 +490,21 @@ def _check_tables(lines, offset, add) -> None:  # type: ignore[no-untyped-def]
         index += 1
 
 
+_IMAGE_ALT = re.compile(r"!\[([^\]]*)\]\(")
+
+
 def _check_images(lines, offset, add) -> None:  # type: ignore[no-untyped-def]
+    korean = mostly_hangul("\n".join(line for _, line in lines))
     for i, line in lines:
+        if korean:
+            for alt in _IMAGE_ALT.findall(_INLINE_CODE.sub("", line)):
+                if not _HANGUL.search(alt):
+                    add(
+                        "warning",
+                        "image-alt",
+                        offset + i,
+                        f"image alt text is not Korean: '{alt[:60]}'",
+                    )
         for src in _IMAGE.findall(line):
             host = urlparse(src).hostname or ""
             if src.startswith(("http://", "https://")):
@@ -516,11 +558,4 @@ def _check_text(lines, offset, add) -> None:  # type: ignore[no-untyped-def]
                 "envelope",
                 offset + i,
                 "internal figure marker leaked into the post",
-            )
-        if (m := _NUMBERED_REF.search(_INLINE_MATH.sub("", prose))) is not None:
-            add(
-                "warning",
-                "numbered-ref",
-                offset + i,
-                f"numbered reference '{m.group(0)}'",
             )

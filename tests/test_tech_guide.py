@@ -65,6 +65,7 @@ def _make_generator(
     gen.max_revision_attempts = max_revision_attempts
     gen.max_total_tokens = None
     gen._token_tracker = None
+    gen.notes = []
     gen.researcher = MagicMock()
     gen.relevance_chain = MagicMock()
     gen.research_plan_chain = MagicMock()
@@ -135,7 +136,7 @@ class TestParseSynopsisSections:
         gen = _make_generator()
         out = gen._parse_synopsis_sections("1. [DETAIL] [deep] X — y (visuals: table)")
         assert out[0].visuals == "table"
-        assert "table" in out[0].depth_directive
+        assert "table" in out[0].depth_directive("Korean")
 
     def test_unknown_tags_default_gracefully(self) -> None:
         # A loosely-formatted line without recognised tags still yields a title
@@ -149,7 +150,8 @@ class TestParseSynopsisSections:
     def test_depth_directive_maps_to_text(self) -> None:
         gen = _make_generator()
         out = gen._parse_synopsis_sections("1. [CONCEPT] [deep] Title")
-        assert "DEEP section" in out[0].depth_directive
+        assert "DEEP section" in out[0].depth_directive("Korean")
+        assert "about 12,500 characters" in out[0].depth_directive("English")
 
     def test_spaced_hyphen_title_not_truncated(self) -> None:
         # " - " inside a title must survive (only em/en dash separates desc).
@@ -316,7 +318,7 @@ class TestGrounding:
         gen.grounding_chain.ainvoke = AsyncMock(
             return_value={"grounded_markdown": "   "}
         )
-        out = await gen._ground_section("## Original\nbody", "src", 1)
+        out = await gen._ground_section("## Original\nbody", "src")
         assert out == "## Original\nbody"
 
     async def test_grounding_skipped_when_disabled(self) -> None:
@@ -457,6 +459,7 @@ class TestEvaluateAndRevise:
             section_number=1,
             total_sections=1,
             previous_sections="",
+            already_in_guide="- nothing yet",
             sources="src",
             available_images="(none)",
             final_outline="1. Intro",
@@ -485,11 +488,40 @@ class TestEvaluateAndRevise:
             section_number=1,
             total_sections=1,
             previous_sections="",
+            already_in_guide="- nothing yet",
             sources="src",
             available_images="(none)",
             final_outline="1. Intro",
         )
         assert out == "## Draft\noriginal"  # original kept, not the worse rewrite
+
+    async def test_unparsable_score_never_beats_a_scored_draft(self) -> None:
+        # A one-slip 60 is kept over a revision whose score failed to parse (0).
+        gen = _make_generator(min_quality_score=80, max_revision_attempts=1)
+        gen.language = "Korean"
+        gen.evaluation_chain.ainvoke = AsyncMock(
+            side_effect=[
+                {"quality_score": "60", "improvement_feedback": "깊이를 더합니다."},
+                {"quality_score": "garbage"},
+            ]
+        )
+        gen.section_chain.ainvoke = AsyncMock(
+            return_value={"section_markdown": "## 설치\n\n설치합니다."}
+        )
+        out = await gen._evaluate_and_revise(
+            topic="X",
+            planned=PlannedSection(title="설치", depth="deep"),
+            section_label="1. 설치",
+            markdown="## 설치\n\n이 절에서 설치합니다.",
+            section_number=1,
+            total_sections=1,
+            previous_sections="",
+            already_in_guide="- nothing yet",
+            sources="src",
+            available_images="(none)",
+            final_outline="1. 설치",
+        )
+        assert out == "## 설치\n\n이 절에서 설치합니다."
 
     async def test_high_score_accepts_without_revision(self) -> None:
         gen = _make_generator(min_quality_score=70, max_revision_attempts=2)
@@ -505,6 +537,7 @@ class TestEvaluateAndRevise:
             section_number=1,
             total_sections=1,
             previous_sections="",
+            already_in_guide="- nothing yet",
             sources="src",
             available_images="(none)",
             final_outline="1. Intro",
@@ -524,6 +557,7 @@ class TestEvaluateAndRevise:
             section_number=1,
             total_sections=1,
             previous_sections="",
+            already_in_guide="- nothing yet",
             sources="src",
             available_images="(none)",
             final_outline="1. Intro",
@@ -550,11 +584,78 @@ class TestEvaluateAndRevise:
             section_number=1,
             total_sections=1,
             previous_sections="",
+            already_in_guide="- nothing yet",
             sources="src",
             available_images="(none)",
             final_outline="1. Intro",
         )
         gen.section_chain.ainvoke.assert_awaited()  # revision happened
+
+    async def test_rejected_revision_keeps_the_generic_directive(self) -> None:
+        # Low score with empty feedback, then a worse revision: the next prompt
+        # still carries the generic directive instead of an empty list.
+        gen = _make_generator(min_quality_score=80, max_revision_attempts=2)
+        gen.evaluation_chain.ainvoke = AsyncMock(
+            side_effect=[
+                {"quality_score": "50", "improvement_feedback": ""},
+                {"quality_score": "30", "improvement_feedback": ""},
+            ]
+            + [{"quality_score": "90", "improvement_feedback": ""}] * 5
+        )
+        gen.section_chain.ainvoke = AsyncMock(
+            return_value={"section_markdown": "## Revised\nmore depth"}
+        )
+        await gen._evaluate_and_revise(
+            topic="X",
+            planned=PlannedSection(title="Intro"),
+            section_label="1. Intro",
+            markdown="## Thin\nbody",
+            section_number=1,
+            total_sections=1,
+            previous_sections="",
+            already_in_guide="- nothing yet",
+            sources="src",
+            available_images="(none)",
+            final_outline="1. Intro",
+        )
+        second = gen.section_chain.ainvoke.await_args_list[1].args[0]
+        feedback = second["depth_directive"]
+        assert "below the quality bar" in feedback
+        assert feedback.count("below the quality bar") == 1
+        assert "rejected (score 30" in feedback
+
+    async def test_rejected_revision_lists_its_rule_slips(self) -> None:
+        # Same feedback for the kept and the rejected draft: the note must not
+        # end on a bare colon, and the rejected draft's slips are listed.
+        gen = _make_generator(min_quality_score=80, max_revision_attempts=2)
+        gen.evaluation_chain.ainvoke = AsyncMock(
+            side_effect=[
+                {"quality_score": "60", "improvement_feedback": "더 깊게"},
+                {"quality_score": "40", "improvement_feedback": "더 깊게"},
+            ]
+            + [{"quality_score": "90", "improvement_feedback": ""}] * 5
+        )
+        gen.section_chain.ainvoke = AsyncMock(
+            side_effect=[{"section_markdown": "## Revised\n이 절에서 설명합니다."}]
+            + [{"section_markdown": "## Fine\n본문입니다."}] * 5
+        )
+        await gen._evaluate_and_revise(
+            topic="X",
+            planned=PlannedSection(title="Intro"),
+            section_label="1. Intro",
+            markdown="## Thin\nbody",
+            section_number=1,
+            total_sections=1,
+            previous_sections="",
+            already_in_guide="- nothing yet",
+            sources="src",
+            available_images="(none)",
+            final_outline="1. Intro",
+        )
+        second = gen.section_chain.ainvoke.await_args_list[1].args[0]
+        feedback = second["depth_directive"]
+        assert not feedback.rstrip().endswith(":")
+        assert "self-reference" in feedback
 
     def test_parse_quality_score_robust(self) -> None:
         # The score parser is now the shared helper used by both the review and
@@ -703,3 +804,61 @@ class TestPlannedScopeAndOverview:
 
     def test_overview_skipped_for_short_guides(self) -> None:
         assert _make_generator()._overview("1. A\n2. B") == ""
+
+
+class TestGuideLengthAndRules:
+    def test_length_report_measures_prose_against_the_depth_target(self) -> None:
+        from scholar_lens.src.tech_guide import length_report
+
+        md = "## 제목\n\n" + "가" * 1200 + "\n\n```python\n" + "x" * 5000 + "\n```"
+        report = length_report(md, "brief", "Korean")
+        assert "1,206 characters" in report and "at most 1,000" in report
+        assert "about 12,500" in length_report(md, "deep", "English")
+
+    async def test_rule_violation_forces_a_revision_despite_a_high_score(self) -> None:
+        gen = _make_generator(min_quality_score=75, max_revision_attempts=2)
+        gen.language = "Korean"
+        gen.evaluation_chain.ainvoke = AsyncMock(
+            return_value={"quality_score": "90", "improvement_feedback": ""}
+        )
+        gen.section_chain.ainvoke = AsyncMock(
+            return_value={"section_markdown": "## 설치\n\n도구를 설치합니다."}
+        )
+        out = await gen._evaluate_and_revise(
+            topic="X",
+            planned=PlannedSection(title="설치"),
+            section_label="1. 설치",
+            markdown="## 설치\n\n이 절에서는 도구를 install합니다.",
+            section_number=1,
+            total_sections=1,
+            previous_sections="",
+            already_in_guide="- nothing yet",
+            sources="src",
+            available_images="(none)",
+            final_outline="1. 설치",
+        )
+        assert out == "## 설치\n\n도구를 설치합니다."
+        directive = gen.section_chain.ainvoke.await_args.args[0]["depth_directive"]
+        assert "self-reference" in directive and "install합니다" in directive
+        assert gen.notes == []
+
+    async def test_section_left_below_the_bar_is_noted(self) -> None:
+        gen = _make_generator(min_quality_score=80, max_revision_attempts=1)
+        gen.evaluation_chain.ainvoke = AsyncMock(
+            return_value={"quality_score": "50", "improvement_feedback": "deeper"}
+        )
+        gen.section_chain.ainvoke = AsyncMock(return_value={"section_markdown": ""})
+        await gen._evaluate_and_revise(
+            topic="X",
+            planned=PlannedSection(title="Intro"),
+            section_label="1. Intro",
+            markdown="## Intro\nbody",
+            section_number=1,
+            total_sections=1,
+            previous_sections="",
+            already_in_guide="- nothing yet",
+            sources="src",
+            available_images="(none)",
+            final_outline="1. Intro",
+        )
+        assert any("'Intro' kept below the bar" in n for n in gen.notes)

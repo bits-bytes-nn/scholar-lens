@@ -11,7 +11,8 @@
    (or with missing items) are revised from the best draft.
 4. **Edit** — one pass over the whole article returns targeted edits for
    terminology, cross-section repetition, transitions and coverage gaps,
-   applied exact-match in code; a second round runs only for reported gaps.
+   applied exact-match in code; a second round runs only when the first
+   reported gaps or had edits skipped.
 5. **Finalize** — subtitle, TL;DR and the closing assessment.
 """
 
@@ -35,9 +36,12 @@ from .citation_summarizer import CitationSummarizer
 from .code_retriever import CodeRetriever
 from .constants import LanguageModelId
 from .content_extractor import Attributes, Citation
+from .formatting import same_as_title
 from .logger import is_running_in_aws, logger
+from .markdown_lint import writing_issues
 from .metrics import TokenBudgetGuard
 from .parser import Content, Figure
+from .prompt_safety import neutralize_prompt_tags
 from .prompts import (
     BasePrompt,
     PaperEditPrompt,
@@ -56,6 +60,7 @@ from .review_plan import (
     article_ledger,
     check_plan_shape,
     concepts_owned_elsewhere,
+    draft_rank,
     ensure_section_heading,
     figure_catalog,
     marker_src,
@@ -65,6 +70,7 @@ from .review_plan import (
     parse_lines,
     parse_plan,
     previous_context,
+    rejected_revision_note,
     render_brief,
     render_closing_points,
     render_coverage,
@@ -81,7 +87,6 @@ from .utils import (
     measure_execution_time,
     parse_quality_score,
 )
-from .web_research import neutralize_prompt_tags
 
 ROOT_DIR: Path = (
     Path("/tmp")
@@ -96,11 +101,18 @@ _TAG_EXPLANATION = "explanation"
 
 
 def _ensure_nltk_data() -> None:
+    """Use the installed ``punkt_tab`` (e.g. baked into the image via
+    ``NLTK_DATA``); download it only when it is missing."""
     try:
         nltk.data.find("tokenizers/punkt_tab")
+        return
     except LookupError:
         logger.info("NLTK resource 'punkt_tab' not found. Downloading...")
-        nltk.download("punkt_tab", download_dir=ROOT_DIR)
+    if not nltk.download("punkt_tab", download_dir=str(ROOT_DIR), quiet=True):
+        raise RuntimeError(
+            "NLTK resource 'punkt_tab' is missing and could not be downloaded; "
+            "install it (python -m nltk.downloader punkt_tab) or set NLTK_DATA."
+        )
 
 
 class Paper(BaseModel):
@@ -140,6 +152,9 @@ class ReviewText(NamedTuple):
     key_takeaways: str
     closing: str
     subtitle: str = ""
+    # Degraded-output notes (sections skipped or below the bar, unusable
+    # finalization) for the PR checklist and the job result.
+    notes: tuple[str, ...] = ()
 
 
 @dataclass
@@ -147,14 +162,25 @@ class SectionCheck:
     score: int
     missing: list[str] = field(default_factory=list)
     feedback: str = ""
+    # Blocking defects (the checker's repetition, wrong derived numbers and
+    # unsupported claims, plus deterministic rule slips): a section never
+    # passes with any.
+    must_fix: list[str] = field(default_factory=list)
 
     def passes(self, min_score: int) -> bool:
-        return self.score >= min_score and not self.missing
+        return self.score >= min_score and not self.missing and not self.must_fix
 
-    def better_than(self, other: SectionCheck | None) -> bool:
+    def better_than(self, other: SectionCheck | None, min_score: int) -> bool:
         if other is None:
             return True
-        return (self.score, -len(self.missing)) > (other.score, -len(other.missing))
+        return self._rank(min_score) > other._rank(min_score)
+
+    def _rank(self, min_score: int) -> tuple[bool, int, int]:
+        return draft_rank(
+            passes=self.passes(min_score),
+            blocking=len(self.missing) + len(self.must_fix),
+            score=self.score,
+        )
 
 
 @dataclass
@@ -213,6 +239,7 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
         self.max_edit_rounds = max_edit_rounds
         self.max_code_results = max_code_results
         self.planning_model_id = planning_model_id
+        self.notes: list[str] = []
         self.llm_factory = BedrockLanguageModelFactory(boto_session=boto_session)
 
         self.planner = self._chain(
@@ -451,6 +478,7 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
             score=parse_quality_score(result.get("quality_score")),
             missing=parse_lines(result.get("missing_items")),
             feedback=(result.get("improvement_feedback") or "").strip(),
+            must_fix=parse_lines(result.get("must_fix")),
         )
 
     async def _section(
@@ -487,32 +515,63 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
                 logger.warning(
                     "Section '%s': empty draft (attempt %d).", section.title, attempt
                 )
-                feedback = "The previous draft was empty. Write the full section."
+                empty = "The previous draft was empty. Write the full section."
+                # Revising the kept draft: its checker feedback still applies.
+                feedback = "\n\n".join(
+                    part for part in (_revision_feedback(best_check), empty) if part
+                )
                 continue
             check = await self._check(
                 base, draft, section.target_words, section.difficulty, missing_source
             )
-            # Items the source cannot support are not the writer's to fix.
-            check.missing = _without(check.missing, missing_source)
+            # Deterministic rule slips are the writer's to fix (one owner: this
+            # loop); the checker itself weighs the writer's unsupported items.
+            check.must_fix += writing_issues(draft)
             logger.info(
-                "Section %d '%s' attempt %d: score %d, %d missing item(s).",
+                "Section %d '%s' attempt %d: score %d, %d missing, %d must-fix.",
                 index + 1,
                 section.title,
                 attempt,
                 check.score,
                 len(check.missing),
+                len(check.must_fix),
             )
-            if check.better_than(best_check):
-                best_draft, best_check = draft, check
+            for problem in [*check.missing, *check.must_fix]:
+                logger.info("  - %s", problem[:200])
+            # A passing draft always wins, even over a higher-scoring one that
+            # still has blocking defects.
             if check.passes(self.min_quality_score):
+                best_draft, best_check = draft, check
                 break
+            worse = best_check is not None and not check.better_than(
+                best_check, self.min_quality_score
+            )
+            if not worse:
+                best_draft, best_check = draft, check
             draft_to_revise = best_draft
             feedback = _revision_feedback(best_check)
+            if worse:
+                # Revising the same draft with the same feedback would repeat
+                # the failed attempt; say what went wrong in it.
+                note = rejected_revision_note(
+                    check.score, len(check.missing) + len(check.must_fix)
+                )
+                rejected = _revision_feedback(check)
+                feedback += f"\n\n{note}" + (
+                    f"\n{rejected}" if rejected and rejected != feedback else ""
+                )
+        if best_check is not None and not best_check.passes(self.min_quality_score):
+            self.notes.append(
+                f"Review section '{section.title}' kept below the quality bar "
+                f"(score {best_check.score}, {len(best_check.missing)} missing, "
+                f"{len(best_check.must_fix)} must-fix): check it."
+            )
         return ensure_section_heading(best_draft, section.title) if best_draft else ""
 
     async def _edit(self, plan: ReviewPlan, article: str, paper_text: str) -> str:
-        round_note = ""
+        notes: list[str] = []
         for round_number in range(1, self.max_edit_rounds + 1):
+            round_note = "\n\n".join(notes)
             reserve = len(article) // 2 + 40_000
             raw = await self._call(
                 self.editor,
@@ -566,7 +625,6 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
                     "from the current article:\n"
                     + "\n".join(f"- {r}" for r in skipped[:20])
                 )
-            round_note = "\n\n".join(notes)
         return article
 
     def _closing_points(self, plan: ReviewPlan) -> str:
@@ -590,24 +648,42 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
             "repair_note": "",
             "language": self.language,
         }
+        # Each part is kept from the first attempt where it is well formed, so
+        # a repair never replaces a valid part with a worse one.
         final: dict[str, str] = {}
+        problems: dict[str, str] = {}
         for attempt in range(2):
             result = await self._call(self.finalizer, payload)
-            final = {
-                k: (result.get(k) or "").strip()
-                for k in ("subtitle", "key_takeaways", "closing")
-            }
-            final["key_takeaways"] = _strip_tldr_heading(final["key_takeaways"])
-            problems = _finalization_problems(final)
+            answer = {k: (result.get(k) or "").strip() for k in _FINAL_PARTS}
+            answer["key_takeaways"] = _strip_tldr_heading(answer["key_takeaways"])
+            found = _finalization_problems(answer, self.paper.title)
+            for part in _FINAL_PARTS:
+                # Replace a kept part only with a well-formed one, or an empty
+                # kept part with anything.
+                if part not in final or (
+                    part in problems and (part not in found or not final[part])
+                ):
+                    final[part] = answer[part]
+                    if part in found:
+                        problems[part] = found[part]
+                    else:
+                        problems.pop(part, None)
             if not problems:
                 break
             logger.warning(
-                "Finalization attempt %d unusable: %s", attempt + 1, "; ".join(problems)
+                "Finalization attempt %d unusable: %s",
+                attempt + 1,
+                "; ".join(problems.values()),
             )
             payload["repair_note"] = (
                 "Your previous answer could not be used: "
-                + "; ".join(problems)
+                + "; ".join(problems.values())
                 + ". Return all three parts again in the exact format."
+            )
+        else:
+            self.notes.append(
+                "Review finalization still malformed after a repair attempt: "
+                + "; ".join(problems.values())
             )
         return final
 
@@ -636,6 +712,10 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
                 written.append(text)
             else:
                 logger.warning("Section '%s' produced no text; skipped.", section.title)
+                self.notes.append(
+                    f"Review section '{section.title}' produced no text and was "
+                    "skipped: its must-cover items are missing."
+                )
         if not written:
             raise RuntimeError("The review produced no sections.")
 
@@ -648,6 +728,7 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
             key_takeaways=final["key_takeaways"],
             closing=final["closing"],
             subtitle=final["subtitle"],
+            notes=tuple(self.notes),
         )
 
 
@@ -662,8 +743,11 @@ def _split_writer_output(raw: str) -> tuple[str, bool]:
         text = body.group(1)
     else:
         text = re.sub(
-            r"<(has_more|missing_source)>.*?</\1>", "", raw or "", flags=re.DOTALL
-        )
+            r"<(has_more|missing_source)>(?:.*?</\1>|.*\Z)",
+            "",
+            raw or "",
+            flags=re.DOTALL,
+        )  # an unclosed tag runs to the end: drop its value too
         text = re.sub(r"</?(?:explanation|has_more|missing_source)>", "", text)
     # Entities would leak into the post and break the editor's exact matching.
     text = html.unescape(text)
@@ -676,14 +760,6 @@ def _strip_repeated_heading(chunk: str, title: str) -> str:
     if match and match.group(1).strip() == title.strip():
         return chunk[match.end() :]
     return chunk
-
-
-def _without(items: list[str], unsupported: list[str]) -> list[str]:
-    """``items`` minus those the writer reported as absent from the source."""
-    blocked = [u.lower() for u in unsupported]
-    return [
-        i for i in items if not any(b in i.lower() or i.lower() in b for b in blocked)
-    ]
 
 
 def render_code(code: list[dict[str, Any]]) -> str:
@@ -704,17 +780,27 @@ def _strip_tldr_heading(text: str) -> str:
     return _TLDR_HEADING.sub("", text)
 
 
-def _finalization_problems(final: dict[str, str]) -> list[str]:
-    problems = []
+_FINAL_PARTS = ("subtitle", "key_takeaways", "closing")
+
+
+def _finalization_problems(final: dict[str, str], title: str) -> dict[str, str]:
+    """Structural problems of the finalizer's answer, by part."""
+    problems: dict[str, str] = {}
+    if not final["subtitle"]:
+        problems["subtitle"] = "subtitle is empty"
+    elif same_as_title(final["subtitle"], title):
+        problems["subtitle"] = (
+            "subtitle only repeats the title; write a short descriptive subtitle"
+        )
     questions = re.findall(r"^###\s+\S", final["key_takeaways"], re.MULTILINE)
     if len(questions) != 4:
-        problems.append(
+        problems["key_takeaways"] = (
             f"key_takeaways must have exactly four ### questions (found {len(questions)})"
         )
     if not final["closing"]:
-        problems.append("closing is empty")
+        problems["closing"] = "closing is empty"
     elif not re.match(r"##\s+\S", final["closing"].lstrip()):
-        problems.append("closing must start with its own '## ' heading")
+        problems["closing"] = "closing must start with its own '## ' heading"
     return problems
 
 
@@ -722,6 +808,11 @@ def _revision_feedback(check: SectionCheck | None) -> str:
     if check is None:
         return ""
     parts = [check.feedback] if check.feedback else []
+    if check.must_fix:
+        parts.append(
+            "Blocking defects (fix every one):\n"
+            + "\n".join(f"- {m}" for m in check.must_fix)
+        )
     if check.missing:
         parts.append(
             "Missing must-cover items (add each with the depth it needs):\n"

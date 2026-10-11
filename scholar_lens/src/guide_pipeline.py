@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 from pathlib import Path
+from urllib.parse import urlparse
 
 from .constants import EnvVars, LanguageModelId, LocalPaths
 from .formatting import build_post_meta, format_guide
 from .jobs import JobRequest
 from .logger import logger
+from .markdown_lint import fill_image_alts
 from .metrics import TokenUsageTracker
 from .publisher import PublishRequest, build_pr_body, slugify
 from .runtime import ROOT_DIR, PipelineOutcome, RunContext, publish_artifact
@@ -19,6 +22,7 @@ from .web_research import (
     TavilySearchProvider,
     WebResearcher,
     WebSearchProvider,
+    normalize_url,
 )
 
 
@@ -74,16 +78,20 @@ async def run_guide_pipeline(
         proposed_seo_title=taxonomy.get("seo_title"),
         spec=spec,
         known_tags=context.require_blog_tags(),
+        source_text=guide.source_text,
     )
     slug = slugify(guide.topic, max_length=80)
     work_dir = ROOT_DIR / LocalPaths.PAPERS_DIR.value / f"guide-{slug}"
     work_dir.mkdir(parents=True, exist_ok=True)
-    document = format_guide(github, guide, meta=meta)
-    return await publish_artifact(
-        context,
-        _build_publish_request(guide, work_dir, document, slug),
-        create_pr=request.create_pr,
+    document = fill_image_alts(format_guide(github, guide, meta=meta), {}, guide.topic)
+    publish_request = _build_publish_request(
+        guide, work_dir, document, branch_id=guide_branch_id(request.urls)
     )
+    publish_request.review_notes += [*meta.notes, *guide.notes]
+    outcome = await publish_artifact(
+        context, publish_request, create_pr=request.create_pr
+    )
+    return outcome
 
 
 def _split_list(value: str) -> list[str]:
@@ -102,8 +110,22 @@ def build_search_provider() -> WebSearchProvider:
     return NullSearchProvider()
 
 
+def guide_branch_id(urls: list[str]) -> str:
+    """A guide's branch is keyed by its source URLs, not the model-chosen
+    title, so rerunning the same request reuses the branch and pull request."""
+    key = "\n".join(sorted({_source_key(url) for url in urls}))
+    return f"guide-{hashlib.sha256(key.encode()).hexdigest()[:12]}"
+
+
+def _source_key(url: str) -> str:
+    """:func:`normalize_url` plus the query, which can select the page
+    (``view?id=intro``); the fragment never does."""
+    query = urlparse(url).query
+    return normalize_url(url) + (f"?{query}" if query else "")
+
+
 def _build_publish_request(
-    guide: TechGuide, work_dir: Path, document: str, slug: str
+    guide: TechGuide, work_dir: Path, document: str, *, branch_id: str
 ) -> PublishRequest:
     pr_body = build_pr_body(
         kind="technical guide",
@@ -117,7 +139,7 @@ def _build_publish_request(
         title=guide.topic,
         markdown=document,
         work_dir=work_dir,
-        branch_id=f"guide-{slug}",
+        branch_id=branch_id,
         pr_title=f"Tech Guide: {guide.topic}",
         pr_body=pr_body,
         commit_message=f"feat: add technical guide for '{guide.topic}'",

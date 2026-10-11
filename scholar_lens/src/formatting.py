@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING
 
 from .markdown_math import has_math, normalize_math
 from .post_conventions import PostConventions
-from .tags import normalize_tags
+from .tags import normalize_tags, off_topic_tags
 from .utils import escape_yaml_double_quoted, is_placeholder
 
 if TYPE_CHECKING:
@@ -105,6 +105,8 @@ class PostMeta:
     tags: list[str]
     seo_title: str | None = None
     new_tags: list[str] = field(default_factory=list)
+    # Reviewer notes on taxonomy decisions (e.g. a dropped off-topic tag).
+    notes: list[str] = field(default_factory=list)
 
 
 def resolve_topic(raw: str, spec: PostConventions) -> str | None:
@@ -139,16 +141,31 @@ def build_post_meta(
     proposed_seo_title: str | None,
     spec: PostConventions,
     known_tags: list[str] | None = None,
+    source_text: str | None = None,
 ) -> PostMeta:
     """Normalize tags, resolve the topic/cover and pick a ``seo_title``.
 
-    Anything that still breaks a convention (no controlled tag, unknown topic)
-    is left for the post validator to reject, never silently patched.
+    With ``source_text`` (the paper or the guide's sources), a controlled tag
+    the source barely mentions is dropped while another controlled tag
+    remains. Anything that still breaks a convention (no controlled tag,
+    unknown topic) is left for the post validator to reject, never silently
+    patched.
     """
     topic = resolve_topic(proposed_topic, spec)
     selection = normalize_tags(
         specific_tags, controlled_tags, title=title, spec=spec, known_tags=known_tags
     )
+    notes = []
+    if source_text:
+        off = off_topic_tags(selection.controlled, source_text)
+        kept = [t for t in selection.controlled if t not in off]
+        if off and kept:
+            selection.controlled = kept
+            selection.tags = [*selection.specific, *kept]
+            notes = [
+                f"Dropped the controlled tag '{t}': the source barely mentions it."
+                for t in off
+            ]
     limit = spec.seo_title_max_length
     seo = (proposed_seo_title or "").strip() or None
     if len(title) <= limit:
@@ -166,6 +183,7 @@ def build_post_meta(
         tags=selection.tags,
         seo_title=seo,
         new_tags=new_tags,
+        notes=notes,
     )
 
 
@@ -185,6 +203,7 @@ def paper_post_meta(
         proposed_seo_title=attributes.seo_title,
         spec=spec,
         known_tags=known_tags,
+        source_text=paper.content.text,
     )
 
 
@@ -227,9 +246,82 @@ def _paper_references(paper: Paper, extra_links: list[tuple[str, str]]) -> str:
     return "\n\n- - -\n### References\n" + "\n".join(lines) + "\n"
 
 
-def _subtitle(explicit: str | None, h1: str | None, title: str) -> str | None:
-    for candidate in (explicit, h1):
-        if candidate and candidate.strip() and candidate.strip() != title.strip():
+def same_as_title(candidate: str, title: str) -> bool:
+    """A subtitle that only repeats the title (case and spacing ignored)."""
+    return " ".join(candidate.split()).casefold() == " ".join(title.split()).casefold()
+
+
+# A derived subtitle keeps a whole first sentence up to _SUBTITLE_MAX
+# characters; longer ones are cut near _SUBTITLE_CUT (clause or word boundary)
+# and end with "…".
+_SUBTITLE_MAX = 80
+_SUBTITLE_CUT = 60
+_ABBREVIATIONS = re.compile(r"\b(?:e\.g|i\.e|et al|vs|cf|etc)\.$", re.IGNORECASE)
+_QUESTION_LABEL = re.compile(r"^\*\*[^*\n]*\?\*\*\s*")
+_LABEL = re.compile(r"^\*\*[^*\n]{1,30}:\*\*\s*|^\*\*[^*\n]{1,30}\*\*:\s*")
+
+
+def _plain(text: str) -> str:
+    """Inline Markdown reduced to plain text: links keep their text, code
+    keeps its content, paired emphasis markers go (an intraword ``_`` stays)."""
+    text = re.sub(r"!?\[([^\]]*)\]\([^)]*\)", r"\1", text)
+    text = re.sub(r"`+([^`]*)`+", r"\1", text)
+    text = re.sub(r"\*\*(.+?)\*\*|__(.+?)__", lambda m: m.group(1) or m.group(2), text)
+    text = re.sub(r"(?<![\w*])\*(?!\s)(.+?)(?<!\s)\*(?![\w*])", r"\1", text)
+    return " ".join(text.split())
+
+
+def _first_sentence(text: str) -> str:
+    for match in re.finditer(r"[.!?。](?=\s)", text):
+        if not _ABBREVIATIONS.search(text[: match.end()]):
+            return text[: match.end()]
+    return text
+
+
+def _shorten_subtitle(text: str) -> str:
+    if len(text) <= _SUBTITLE_MAX:
+        return text
+    head = text[: _SUBTITLE_MAX + 1]
+    for boundary in (", ", "; ", " "):
+        cut = head.rfind(boundary, _SUBTITLE_CUT // 2, _SUBTITLE_MAX)
+        if cut > 0:
+            return head[:cut].rstrip(" ,;:") + "…"
+    return head[:_SUBTITLE_CUT].rstrip(" ,;:") + "…"
+
+
+def _lead_sentence(markdown: str) -> str:
+    """The first prose sentence of ``markdown`` as plain text (headings,
+    tables, math and labels skipped): a last-resort subtitle."""
+    for line in markdown.splitlines():
+        text = line.strip()
+        if not text or text.startswith(("#", "|", "!", "```", "~~~", "- - -")):
+            continue
+        if "$" in text:
+            continue  # a subtitle is plain text; math would leave holes
+        text = re.sub(r"^(?:>\s*|[-*]\s+|\d+[.)]\s+)", "", text)
+        text = _QUESTION_LABEL.sub("", text)
+        text = _LABEL.sub("", text)
+        text = _first_sentence(_plain(text)).rstrip(".!?。 ")
+        if text:
+            return _shorten_subtitle(text)
+    return ""
+
+
+def derived_subtitle(explicit: str | None, h1: str | None, title: str) -> bool:
+    """True when neither the model's subtitle nor the body's H1 is usable, so
+    the post falls back to its first sentence (worth a reviewer's look)."""
+    return not any(
+        c and c.strip() and not same_as_title(c, title) for c in (explicit, h1)
+    )
+
+
+def _subtitle(
+    explicit: str | None, h1: str | None, title: str, fallback: str = ""
+) -> str | None:
+    """The subtitle: the model's, else the body's H1, else the first sentence
+    of ``fallback`` (the TL;DR); never one that just repeats the title."""
+    for candidate in (explicit, h1, _lead_sentence(fallback)):
+        if candidate and candidate.strip() and not same_as_title(candidate, title):
             return candidate.strip()
     return None
 
@@ -252,7 +344,9 @@ def format_review(
         github_config.review_category,
         meta,
         body=content,
-        subtitle=_subtitle(review.subtitle, h1, paper.title),
+        subtitle=_subtitle(
+            review.subtitle, h1, paper.title, fallback=review.key_takeaways
+        ),
     )
     return f"{front_matter}{content}{_paper_references(paper, [])}"
 
@@ -290,7 +384,7 @@ def format_summary(
         github_config.summary_category,
         meta,
         body=content,
-        subtitle=_subtitle(result.get("subtitle"), h1, paper.title),
+        subtitle=_subtitle(result.get("subtitle"), h1, paper.title, fallback=content),
     )
     links = _MD_LINK.findall(result.get("urls", ""))
     return f"{front_matter}{content}{_paper_references(paper, links)}"

@@ -167,6 +167,15 @@ class TestBody:
         post = make_post().replace("## TL;DR\n", "## 요약\n")
         assert "headings" in rules(post)
 
+    def test_empty_tldr_is_an_error(self) -> None:
+        empty = make_post().replace("### 왜 필요한가?\n짧은 답입니다.\n", "")
+        assert "headings" in rules(empty)
+        assert "headings" in rules(empty, kind="summarize")
+        no_questions = make_post().replace("### 왜 필요한가?\n", "")
+        assert "headings" in rules(no_questions)
+        assert "headings" not in rules(no_questions, kind="summarize")
+        assert "headings" not in rules(make_post())
+
     def test_display_math_needs_blank_lines(self) -> None:
         assert "math" in rules(make_post("문장입니다.\n$$ x^2 $$\n다음 문장"))
         assert "math" not in rules(make_post("문장입니다.\n\n$$ x^2 $$\n\n다음 문장"))
@@ -195,9 +204,6 @@ class TestBody:
 
     def test_envelope_tag_leak(self) -> None:
         assert "envelope" in rules(make_post("본문</explanation>"))
-
-    def test_numbered_reference_warns(self) -> None:
-        assert "numbered-ref" in rules(make_post("Table 3에서 보듯"), level="warning")
 
     def test_code_blocks_are_ignored(self) -> None:
         body = "```python\n# comment\n$$ x\\_1 $$\n| a |\n```"

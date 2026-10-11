@@ -6,6 +6,7 @@ from .base import (
     HEADING_STRUCTURE_RULES,
     IMAGE_PATH_RULES,
     MATH_RULES,
+    PAPER_TABLE_RULES,
     STYLE_RULES,
     SUMMARY_DEPTH_RULES,
     SUPPLEMENTARY_CONTEXT_RULES,
@@ -51,9 +52,8 @@ class PaperSummaryPrompt(BasePrompt):
        the key idea, and the headline result with its setting
        (Korean: start with "> **요약:** "). Plain prose only — no math in this
        blockquote; the blog uses it as the post's search description.
-    2. Then exactly these five `##` sections. Use the Korean headings verbatim
-       when {language} is Korean; otherwise translate them, keeping emoji and
-       order:
+    2. Then exactly these five `##` sections (a Korean post uses the headings
+       verbatim; any other language translates them, keeping emoji and order):
        ## 🔍 이 연구는 왜 필요합니까?
        ## 💡 어떤 해결책을 제시합니까?
        ## ⚙️ 제안한 방법은 어떻게 구현되었습니까?
@@ -63,19 +63,18 @@ class PaperSummaryPrompt(BasePrompt):
     Depth per section follows the paper, not a fixed ratio:
     - Motivation: brief — the gap in prior approaches, in a few sentences.
     - Solution and implementation: where most method papers need the most
-      words — the core mechanism with intuition, its key equation, the main
-      architecture figure if one exists, and concrete specifics
-      (hyper-parameters, algorithm steps, data). When an official codebase
-      summary is provided, use it to make the implementation concrete
-      (modules, defaults); never contradict the paper with it.
+      words — the core mechanism with intuition and its key equation. When an
+      official codebase summary is provided, use it to make the
+      implementation concrete (modules, defaults); never contradict the paper
+      with it. Once the key equation is defined, every later mention (a
+      callout included) uses that same form.
     - Results: the evidence for the main claim — one distilled Markdown table
-      of the headline numbers when the paper has comparative results, the
-      setting that produced them, and the ablation that supports the core
-      claim. For benchmark or empirical papers this section carries the most
-      weight.
-    - Significance and limits: why it matters, at least one concrete
+      of the headline numbers when the paper has comparative results, and the
+      1-2 settings needed to read the result. For benchmark or empirical
+      papers this section carries the most weight.
+    - Significance and limits: why it matters and at least one concrete
       limitation grounded in the paper (an assumption, an evaluation gap, a
-      cost), and directions the authors or the evidence suggest.
+      cost).
     Skip a section only if the paper has nothing for it.
     """
         + SUMMARY_DEPTH_RULES
@@ -83,15 +82,16 @@ class PaperSummaryPrompt(BasePrompt):
         + CITATION_KEY_RULES
         + HEADING_STRUCTURE_RULES
         + VISUAL_RULES
+        + PAPER_TABLE_RULES
         + IMAGE_PATH_RULES
         + MATH_RULES
         + STYLE_RULES
         + EXCLUDED_CONTENT_RULES
         + """
     Other outputs:
-    - <subtitle>: the paper title rendered naturally in {language}, keeping
-      model and method names (for English, a short descriptive subtitle that
-      differs from the title).
+    - <subtitle>: the paper title translated into {language}, keeping model
+      and method names (if {language} is the title's own language, or the
+      translation would equal the title, a short descriptive subtitle instead).
     - <urls>: links the paper itself gives (code, data, project page) as
       `[text](url)`, comma-separated, URLs copied verbatim from the paper; leave
       it empty if there are none.
@@ -107,3 +107,33 @@ class PaperSummaryPrompt(BasePrompt):
     <urls>...</urls>
     """
     )
+
+
+class PaperSummaryShortenPrompt(BasePrompt):
+    """One bounded pass that cuts an over-long summary down to size."""
+
+    input_variables: list[str] = ["summary", "max_hangul", "language"]
+    output_variables: list[str] = ["summary"]
+
+    system_prompt_template: str = """
+    You are a technical editor who shortens blog summaries without losing what
+    matters: the core mechanism, its key equation and the headline result.
+    """
+
+    human_prompt_template: str = """
+    The summary below is too long. Shorten its prose to at most {max_hangul}
+    Hangul syllables. Cut secondary details and list items first, then trim
+    sentences. Keep unchanged: the opening blockquote, every `##` heading,
+    every image line, every $$ math expression, the results table and all
+    numbers. Do not add anything new. Keep the {language} language, register
+    and Markdown.
+
+    <summary>
+    {summary}
+    </summary>
+
+    Output exactly:
+    <summary>
+    the shortened summary
+    </summary>
+    """

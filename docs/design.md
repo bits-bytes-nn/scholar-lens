@@ -82,7 +82,9 @@ stdout에는 JSON 객체 하나만 출력하고 로그는 stderr로 보냅니다
 | `failed` | 생성 실패, 블로그 규칙 위반(`violations`), 중단 | 1 |
 | `rejected` | 입력 거부: PDF가 아님, 안전하지 않은 URL, 없는 arXiv ID, 기술 문서가 아님 | 2 |
 
-`--remote`는 `SubmittedJob`을 출력하고 0으로 끝납니다. `status`는 결과 manifest가 있으면 그 상태의 종료 코드를 돌려줍니다. 없으면 Batch가 `FAILED`일 때 1, 아직 끝나지 않았거나 `--wait`가 시간 초과되면 3, `SUCCEEDED`인데 manifest가 없으면 0입니다.
+`--remote`는 `SubmittedJob`을 출력하고 0으로 끝납니다. `status`는 결과 manifest가 있으면 그 상태의 종료 코드를 돌려줍니다. 없으면 Batch가 `FAILED`일 때 1, 아직 끝나지 않았거나 `--wait`가 시간 초과되면 3, `SUCCEEDED`인데 manifest가 없으면 0입니다. `--wait` 중 Batch 조회나 결과 manifest 읽기의 throttling·5xx·네트워크 오류는 건너뛰고 계속 조회합니다.
+
+CLI 자체가 실패하면(자격 증명, 설정, Batch·S3 API 오류) `{"status": "error"}`와 종료 코드 4를 냅니다. 작업 실패(1)와 구분하기 위해서이며, 이때 원격 작업의 상태는 알 수 없습니다.
 
 ### 2.2 JobRequest와 JobResult
 
@@ -109,11 +111,13 @@ stdout에는 JSON 객체 하나만 출력하고 로그는 stderr로 보냅니다
 3. 파이프라인을 실행합니다. 입력 오류는 `rejected`, `PostValidationError`는 `failed`와 `violations`, 그 밖의 예외는 `failed`로 기록합니다. `SystemExit`·`KeyboardInterrupt`는 정리 후 다시 던집니다.
 4. `finally`에서 지표를 보내고, AWS 안에서 `TOPIC_ARN`이 있으면 성공·실패 모두 SNS로 알리며(`format_result_notification`), Batch 실행이면 결과 매니페스트를 저장합니다.
 
-worker는 SIGTERM을 `SystemExit`로 바꿔(`cli.py::_raise_on_sigterm`) Batch 시간 초과나 스팟 회수 때도 4단계가 실행되게 합니다.
+worker는 SIGTERM을 `SystemExit`로 바꿔(`cli.py::_raise_on_sigterm`) Batch 시간 초과나 스팟 회수 때도 4단계가 실행되게 합니다. 파이프라인은 `asyncio.run` 대신 `runtime.py::run_coroutine`으로 돌려, 중단 시 작업자 스레드에서 진행 중인 Bedrock 호출을 기다리지 않고 바로 정리 단계로 갑니다(Batch는 SIGTERM 약 30초 뒤 SIGKILL). 이때는 매니페스트만 저장하고(`INTERRUPTED_ERROR`) SNS 실패 알림은 보내지 않습니다. 정상 종료는 인터프리터가 남은 작업자 스레드를 기다리므로, worker는 정리 뒤 `os._exit(143)`으로 바로 끝납니다(`cli.py::_work`). 스팟 회수면 Batch가 재시도하고, 최종 실패면 EventBridge 규칙이 알립니다.
+
+`run_job` 밖의 실패(잘못된 요청 JSON, 런타임 모듈 import 실패 등)는 `cli.py::_work`가 받아 `runtime.py::record_unstarted_run`으로 알림과 매니페스트를 남깁니다. worker는 실패 알림을 보낸 뒤 로컬 CLI와 다른 종료 코드 10(실패)·11(거부)(`APP_REPORTED_EXIT_CODES`)로 끝납니다. 1·2는 worker 코드가 돌기 전의 Python 오류·인자 오류와 겹치기 때문입니다. 실패 알림을 보내지 못하면(`run_job` 안이든 밖이든, `JobResult.notification_failed`) 4로 끝나 EventBridge 규칙이 대신 알립니다.
 
 ## 3. 리뷰 워크플로
 
-`explainer.py::PaperReviewer.run`은 계획 → 보강 → 집필·검수 → 편집 → 마무리 다섯 단계입니다. 독자는 일반 DS/MLE로 고정하며(`prompts/review.py`의 `READER_PROFILE`), 모든 단계가 같은 독자 정의를 공유합니다.
+`explainer.py::PaperReviewer.run`은 계획 → 보강 → 집필·검수 → 편집 → 마무리 다섯 단계입니다. 독자는 일반 DS/MLE로 고정하며(`prompts/base.py`의 `READER_PROFILE`), 모든 단계가 같은 독자 정의를 공유합니다.
 
 ### 3.1 계획
 
@@ -130,7 +134,8 @@ worker는 SIGTERM을 `SystemExit`로 바꿔(`cli.py::_raise_on_sigterm`) Batch �
 - 그림 하나는 한 절에만 배정하고, 모르는 ID는 버립니다.
 - 개념 하나는 한 절만 맡습니다. 다른 절은 그 개념을 참조만 합니다.
 - `max_sections`를 넘는 절은 마지막 절로 합칩니다.
-- 목표 분량은 `review_plan.py::target_words`가 난이도 기본값(200/500/1100단어)에 중요도 계수(0.6/1.0/1.4)를 곱해 정합니다.
+- 목표 분량은 `review_plan.py::target_words`가 항목 난이도 기본값(쉬움 60, 중간 200, 어려움 450단어 상당)의 합에 중요도 계수(0.8/1.0/1.3)를 곱해 정하며, 절마다 최소 250단어입니다.
+- 리뷰 전체 예산은 `7000 × (1 + 0.6 × 어려운 항목 비율)`입니다(`review_word_budget`). 넘치면 쉬움·중간 항목만 한 비율로 줄이고(최대 절반까지), 어려운 항목은 줄이지 않으므로 어려운 논문은 예산을 넘을 수 있습니다.
 
 ### 3.2 보강
 
@@ -146,14 +151,15 @@ LLM 라우팅 호출 없이 계획을 따릅니다(`PaperReviewer._enrich`). 참
 
 쉬운 항목은 한두 문장으로, 어려운 항목은 직관 → `$$` 수식 → 작은 예제 → 그림 순으로 씁니다. 길이 때문에 끊을 때만 `has_more`로 이어 쓰며 최대 `MAX_CONTINUATIONS`(4)번입니다.
 
-검수(`_check`)는 지시서, 원문, 측정한 분량과 목표 분량을 보고 0–100점과 빠진 항목(`missing_items`), 개선 의견을 돌려줍니다. 배점은 누락 없음 30, 깊이 25, 원문 충실도 25, 흐름 20이며, 빠진 항목이 하나라도 있으면 점수 상한은 69입니다. `min_quality_score` 미만이거나 빠진 항목이 있으면, 지금까지 가장 좋은 초안과 지적을 함께 넘겨 고쳐 쓰게 합니다. 초안 수는 `max_synthesis_attempts`가 상한이고, 가장 좋은 초안을 남기며, 절은 계획된 `##` 제목으로 시작하게 맞춥니다(`ensure_section_heading`).
+검수(`_check`)는 지시서, 원문, 측정한 분량과 목표 분량을 보고 0–100점과 빠진 항목(`missing_items`), 반드시 고칠 결함(`must_fix`: 반복, 다시 계산하면 틀리는 수치, 근거 없는 주장·그림 설명), 개선 의견을 돌려줍니다. 배점은 누락 없음 30, 깊이 25, 원문 충실도 25, 흐름 20이며, 빠진 항목이 하나라도 있으면 점수 상한은 69입니다. 코드가 찾은 규칙 위반(`markdown_lint.py::writing_issues`: 원 논문 번호 참조, 영어 어간+한국어 어미, 글 자체 지칭, 단일 `$` 수식)도 `must_fix`에 더합니다. 절은 점수가 `min_quality_score` 이상이고 빠진 항목과 `must_fix`가 없을 때만 통과하며, 그렇지 않으면 지금까지 가장 좋은 초안과 지적을 함께 넘겨 고쳐 쓰게 합니다. 초안 순위는 통과 여부 → 막는 결함 수 → 점수 순이고(`review_plan.py::draft_rank`, 가이드 루프와 공유), 기각된 수정본의 문제도 다음 지적에 붙입니다. 초안 수는 `max_synthesis_attempts`가 상한이고, 절은 계획된 `##` 제목으로 시작하게 맞춥니다(`ensure_section_heading`).
 
 ### 3.4 전체 편집
 
-절을 모두 이은 글 전체를 한 번 편집합니다(`_edit`, 기획 모델 사용). 입력은 글, 논문 원문, 계획의 핵심 항목 목록, 용어집입니다. 출력은 `find`/`replace` JSON 편집 목록이고, `review_plan.py::apply_edits`가 다음 조건에서만 적용합니다.
+절을 모두 이은 글 전체를 한 번 편집합니다(`_edit`, 기획 모델 사용). 입력은 글, 논문 원문, 계획의 핵심 항목 목록, 용어집입니다. 출력은 `<edit><find>…</find><replace>…</replace></edit>` 블록 목록이고(LaTeX와 `&`를 그대로 담기 위해 JSON이 아닌 태그 형식), `review_plan.py::apply_edits`가 다음 조건에서만 적용합니다.
 
 - `find`가 현재 글에 정확히 한 번 나와야 합니다.
-- 헤딩을 지우는 편집은 거부합니다.
+- `## ` 헤딩은 지우거나 바꾸거나 강등할 수 없습니다. 중복된 `###`·`####` 소절은 통째로 지울 수 있습니다.
+- 그림, 디스플레이 수식, 표의 유일한 사본을 지우는 편집은 거부합니다.
 - 편집은 `MAX_EDITS`(40)개까지입니다.
 
 편집자가 누락 항목을 보고하면 그 목록을 붙여 한 번 더 편집하며, 횟수는 `max_edit_rounds`(기본 2, 0이면 편집 생략)가 상한입니다.
@@ -261,7 +267,7 @@ LLM 라우팅 호출 없이 계획을 따릅니다(`PaperReviewer._enrich`). 참
 - **front matter 조립**(`formatting.py`): `author`는 쓰지 않습니다. 논문 글은 `paper_author`(발행 조직)와 `subtitle`(번역 제목, 본문 첫 H1이 있으면 그것)을 둡니다. `seo_title`은 제목이 70자를 넘을 때만 넣으며, 모델 후보가 없거나 길면 콜론 앞부분이나 단어 경계에서 자릅니다(`shorten_title`). 카테고리 주제와 표지는 spec에서 정하고(`resolve_topic`, `PostConventions.cover_for`), `use_math`는 `$$`가 있을 때만 켭니다. `date`는 논문 발행일입니다.
 - **태그**(`tags.py::normalize_tags`): 공백·`_`는 하이픈, `&`는 `and`, `/`와 따옴표는 삭제, 연속 하이픈 축약, 첫 단어가 아닌 기능어는 소문자로 바꿉니다. 그다음 별칭을 대체 태그로 바꾸고, 대소문자를 무시해 중복을 없애며, 제목 전체·콜론 앞·콜론 뒤와 같은 태그를 지웁니다. 통제 태그는 닫힌 목록만 남기고, 세부 태그 중 통제 태그와 같은 것은 통제 쪽으로 옮깁니다. 발행 순서는 세부 태그 다음 통제 태그입니다.
 - **수식**(`markdown_math.py::normalize_math`): `\(…\)`·`\\(…\\)`는 `$$…$$`로, `\[…\]`는 앞뒤 빈 줄을 둔 디스플레이 `$$`로 바꿉니다. `$$` 안의 `\_`는 `\text{}`·`\texttt{}` 안을 빼고 `_`로 되돌리고, 한 줄 전체가 `$$`인 수식 앞뒤에 빈 줄을 넣습니다(표·목록 제외). 코드와 단일 `$`는 건드리지 않습니다.
-- **Markdown**(`markdown_lint.py::lint_markdown`): 헤딩 앞 빈 줄, 생성용 envelope 태그 제거, 본문에 H1이 있으면 모든 헤딩 한 단계 강등, 가짜 HTML 태그 이스케이프를 처리합니다. `drop_unknown_images`는 논문 그림이 아닌 이미지를 지우고, `fill_image_alts`는 빈 alt를 그림 캡션으로 채웁니다.
+- **Markdown**(`markdown_lint.py::lint_markdown`): 헤딩 앞 빈 줄, 생성용 envelope 태그 제거, H1을 H2로 올리고 한 단계 넘게 깊어진 헤딩을 앞 헤딩 바로 아래 단계로 올리기, 네 번째부터의 콜아웃(`> **라벨:** …`)을 일반 문단으로 풀기, 가짜 HTML 태그 이스케이프를 처리합니다. `drop_unknown_images`는 논문 그림이 아닌 이미지를 지우고, `fill_image_alts`는 빈 alt를 그림 캡션으로 채우며, 한국어 글의 영어 alt는 가장 가까운 헤딩으로 바꿉니다. 원 논문 번호 참조 같은 규칙 위반(`writing_issues`)은 게시 직전 본문에서 다시 찾아 PR 체크리스트에 올립니다.
 
 ### 6.3 검증 규칙
 
@@ -289,7 +295,6 @@ LLM 라우팅 호출 없이 계획을 따릅니다(`PaperReviewer._enrich`). 참
 | `image` | warning | 그 밖의 외부 이미지 |
 | `description` | warning | 첫 문단(검색 설명)에 수식 |
 | `envelope` | error | 생성용 태그(`</explanation>` 등) 누출 |
-| `numbered-ref` | warning | 본문의 "Figure 3", "표 2" 같은 원 논문 번호 참조 |
 
 `Publisher._validate`가 이 함수를 호출합니다. error가 하나라도 있으면 저장·업로드·PR을 모두 하지 않고, 글과 위반 목록을 작업 폴더의 `<slug>.rejected.md`에 남긴 뒤 `PostValidationError`를 던집니다. warning은 `PublishRequest.validation_warnings`에 담겨 PR 본문의 `- [ ]` 체크리스트가 됩니다.
 
@@ -297,20 +302,22 @@ LLM 라우팅 호출 없이 계획을 따릅니다(`PaperReviewer._enrich`). 참
 
 `publisher.py::Publisher.publish` 순서입니다.
 
-1. `normalize_math`와 `lint_markdown`을 적용합니다.
-2. `ImageLocalizer`가 이미지를 블로그 규칙에 맞게 옮깁니다. arXiv 계열 호스트(`arxiv.org`, `ar5iv.org`, `ar5iv.labs.arxiv.org`와 하위 도메인) 이미지는 URL 검사와 IP 고정 전송을 거쳐 내려받고(30초, 리디렉션 5회, 20MB 상한), PDF에서 뽑은 로컬 그림도 같은 방식으로 처리합니다. PNG·JPEG만 받으며 매직 바이트로 확인합니다. 저장 이름은 첫 등장 순서대로 `<slug>-<n>.<ext>`이고, 본문 경로는 `/assets/images/<slug>-<n>.<ext>`로 바꿉니다. 실패하면 `PostAssetError`입니다. 그 밖의 외부 이미지는 링크로 남깁니다.
+1. 모델이 입력에서 그대로 옮긴 방어용 태그 표식(`prompt_safety.py::strip_defanging`)을 front matter와 본문 모두에서 지우고, 본문에 `normalize_math`와 `lint_markdown`을 적용합니다.
+2. `ImageLocalizer`가 이미지를 블로그 규칙에 맞게 옮깁니다. arXiv 계열 호스트(`arxiv.org`, `ar5iv.org`, `ar5iv.labs.arxiv.org`와 하위 도메인) 이미지는 URL 검사와 IP 고정 전송을 거쳐 내려받고(30초, 리디렉션 5회, 20MB 상한), PDF에서 뽑은 로컬 그림도 같은 방식으로 처리합니다. PNG·JPEG는 매직 바이트로 확인하고, SVG는 PNG로 래스터화합니다(`utils/images.py::svg_to_png`). 래스터화 전에 `sanitize_svg`가 `#id`와 래스터 `data:image/…`가 아닌 `href`, 문서 밖을 가리키는 CSS `url(…)`·`@import`를 지웁니다. resvg가 로컬 파일 경로를 그대로 읽기 때문입니다. 내부 DTD(엔티티 선언)가 있거나 XML이 깨진 SVG는 거부합니다. 루트의 `width`·`height`·`viewBox`(단위 포함)로 캔버스 크기를 먼저 계산해 긴 변이 4096px를 넘지 않도록 확대율을 낮춥니다. `viewBox`와 절대 크기가 모두 있지 않으면 resvg가 그려진 내용의 경계로 캔버스를 잡으므로, 계산한 크기를 루트에 절대값으로 적고 `viewBox`를 붙여 브라우저처럼 그 상자로 자릅니다. 크기가 유한하지 않거나 터무니없으면 거부하고, `data:` URL로 넣은 래스터가 5천만 화소를 넘어도(헤더만 읽어 판단) 거부합니다. 캔버스가 작아도 패턴 타일, 필터 영역, `feMorphology` 반경처럼 내부 요소가 메모리를 수 GB 쓰거나 CPU를 몇 시간 쓸 수 있으므로, 렌더링은 자식 프로세스(`python -I -c`)에서 60초 제한으로 실행하고, 동시에 2개까지만 돌려 그림이 많아도 전체 메모리와 CPU가 작업 한도 안에 머물게 합니다. Linux(Batch)에서는 자식에 `RLIMIT_AS` 2GiB를 걸어 할당 실패로 즉시 끝나고, macOS는 이 제한이 걸리지 않아 시간 제한만 적용됩니다. 시간 초과·비정상 종료는 `ValueError`이고, 그림 1개당 추가 비용은 프로세스 기동 약 20~30ms입니다. 그 밖의 형식은 거부합니다. 저장 이름은 첫 등장 순서대로 `<slug>-<n>.<ext>`이고, 본문 경로는 `/assets/images/<slug>-<n>.<ext>`로 바꿉니다. 파일은 `<work_dir>/blog-images/<slug>/`에 모읍니다. 같은 논문의 요약과 리뷰가 작업 폴더를 같이 쓰므로, 재실행은 자기 슬러그 폴더만 비우고 S3 업로드와 PR에도 자기 이미지만 넣습니다. 실패하면 `PostAssetError`입니다. 그 밖의 외부 이미지는 링크로 남깁니다.
 3. 검증합니다(6.3).
-4. `<work_dir>/<YYYY-MM-DD>-<slug>.md`로 저장합니다. 파일명 날짜는 게시일입니다. `slugify`는 ASCII 슬러그를 만들고, ASCII 글자가 없는 제목은 `untitled-<8자리 해시>`로 바꿉니다.
+4. `<work_dir>/<YYYY-MM-DD>-<slug>.md`로 저장합니다. 파일명 날짜는 게시일(UTC)이고, front matter `date`는 논문 발행 시각입니다(가이드는 생성 시각). Jekyll은 미래 날짜 글을 건너뛰므로 두 날짜 모두 UTC로 씁니다. `slugify`는 ASCII 슬러그를 만들고, ASCII 글자가 없는 제목은 `untitled-<8자리 해시>`로 바꿉니다.
 5. S3 버킷이 있으면 글은 `<prefix>/posts/`, 이미지는 `<prefix>/assets/images/`에 올립니다. 이미지 하나라도 실패하면 오류입니다. `public_assets`가 켜져 있을 때만 public-read ACL을 씁니다.
 
 `runtime.py::publish_artifact`는 `create_pr`이고 GitHub 연동이 켜져 있으면 `create_pull_request`를 호출합니다. PR 실패(`PublishError`)는 실행을 실패시키지 않고 `warnings`에 남깁니다.
 
 `publisher.py::BlogBranchSync`는 clone 없이 GitHub API로 커밋합니다.
 
-- 브랜치는 `<branch_prefix>/<branch_id>`로 고정됩니다(리뷰 `review-<id>`, 요약 `summary-<id>`, 가이드 `guide-<slug>`). 같은 글을 다시 실행하면 같은 브랜치와 PR을 갱신합니다.
-- 새 커밋은 브랜치 head 위에 쌓아 PR에서 손으로 고친 다른 파일을 지킵니다. 이미 기준 브랜치에 병합된 브랜치는 기준 브랜치에서 다시 시작합니다.
-- blob SHA를 로컬에서 계산해 바뀐 파일만 올리고, 내용이 같으면 커밋하지 않습니다. 기준 브랜치가 이미 같은 글을 갖고 있으면 PR을 만들지 않습니다.
-- 이 브랜치에만 있는 같은 글의 예전 날짜 사본과 더 이상 쓰지 않는 번호 이미지는 지웁니다.
+- 브랜치는 `<branch_prefix>/<branch_id>`로 고정됩니다(리뷰 `review-<id>`, 요약 `summary-<id>`, 가이드 `guide-<URL 해시>`). 같은 입력으로 다시 실행하면 같은 브랜치와 PR을 갱신합니다. 가이드 브랜치는 정규화한 입력 URL(쿼리 포함, 프래그먼트 제외) 집합의 해시라 모델이 고른 제목과 무관합니다. 다만 다시 실행한 가이드의 제목이 바뀌면 열린 PR에 이전 글이 함께 남으므로 직접 지워야 합니다.
+- 열린 PR이 있으면 새 커밋을 브랜치 head 위에 쌓아 PR에서 손으로 고친 다른 파일을 지킵니다. 열린 PR이 없으면(병합, squash 병합, 닫힘) 기준 브랜치에서 다시 시작합니다.
+- blob SHA를 로컬에서 계산해 바뀐 파일만 올리고, 내용이 같으면 커밋하지 않습니다. 기준 브랜치가 이미 같은 글을 갖고 있으면 PR을 만들지 않습니다. 저장소 트리는 동기화마다 한 번씩 읽고, 목록이 잘렸으면(`truncated`) 실패합니다.
+- 이 브랜치에만 있는 예전 글 사본과 그 글들의 번호 이미지 중 이번 실행이 만들지 않은 것은 지웁니다. 예전 사본은 슬러그가 같거나(게시일만 다름), front matter `date`(논문 발행 시각)와 종류가 같은 글(새 arXiv 버전에서 제목이 바뀐 이전 슬러그)입니다. 요약 슬러그는 `-summary`로 끝나므로 같은 논문의 리뷰와 요약은 서로 지우지 않습니다. 같은 종류이고 발행 시각까지 같은 글을 손으로 추가했다면 예전 사본으로 보고 지웁니다.
+- 알려진 한계: 병합된 뒤 새 arXiv 버전에서 제목이 바뀌면 기준 브랜치의 예전 글을 슬러그로 찾지 못해 새 URL의 글이 하나 더 생깁니다. 다시 실행한 글의 이미지가 줄어도 기준 브랜치에 있던 남는 번호 이미지는 지우지 않습니다.
+- 같은 슬러그의 글이 이미 기준 브랜치에 있으면 그 파일을 갱신하고, PR 체크리스트에 "Replaces the published post" 항목을 넣어 손으로 고친 내용이 사라지지 않는지 확인하게 합니다.
 - 열린 PR이 있으면 제목과 본문을 갱신하고 URL을 돌려줍니다. 클라이언트는 30초 제한 시간과 `GithubRetry(total=3)`을 쓰고, 오류 메시지에서 토큰을 지웁니다.
 
 PR 본문(`build_pr_body`)에는 논문 ID, PDF URL, 파싱 방식, 글자 수, 저장소, 블로그에 아직 없는 새 태그, 검증 warning 체크리스트가 들어갑니다.
@@ -332,7 +339,7 @@ PR 본문(`build_pr_body`)에는 논문 ID, PDF URL, 파싱 방식, 글자 수, 
 
 ### 8.2 재시도와 제한 시간
 
-재시도는 한 계층만 소유합니다. botocore는 standard 모드에서 1회만 시도하고(연결 30초, 읽기 900초), `utils/retry.py::RetryableBase._retry`가 tenacity로 throttling, 5xx, 연결·읽기 시간 초과만 지수 백오프와 지터로 재시도합니다. AccessDenied, ValidationException, ResourceNotFound, 예산 초과, 입력 검증 오류는 바로 실패합니다. `utils/batch.py::BatchProcessor`(코드 분석 일괄 처리)는 실패한 항목만 다시 처리합니다.
+재시도는 한 계층만 소유합니다. botocore는 standard 모드에서 1회만 시도하고(연결 30초, 읽기 3600초: 비스트리밍 호출이 출력 128k 토큰을 끝까지 생성하는 시간), `utils/retry.py::RetryableBase._retry`가 tenacity로 throttling, 5xx, 연결·읽기 시간 초과만 지수 백오프와 지터로 재시도합니다. 읽기 시간 초과는 긴 생성 전체를 다시 과금하므로 한 번만 재시도합니다. AccessDenied, ValidationException, ResourceNotFound, 예산 초과, 입력 검증 오류는 바로 실패합니다. `utils/batch.py::BatchProcessor`(코드 분석 일괄 처리)는 실패한 항목만 다시 처리합니다.
 
 ### 8.3 예산과 비용
 
@@ -351,7 +358,7 @@ PR 본문(`build_pr_body`)에는 논문 ID, PDF URL, 파싱 방식, 글자 수, 
 | `profile_name` | 없음 | 로컬 AWS 프로필 |
 | `default_region_name` | `ap-northeast-2` | 스택·S3·SNS 리전 |
 | `bedrock_region_name` | `us-west-2` | Bedrock 리전 |
-| `s3_bucket_name` | 없음 | 글·이미지·결과 매니페스트 버킷 |
+| `s3_bucket_name` | 없음 | 글·이미지·결과 매니페스트 버킷. 미리 만들어 둔 버킷이어야 하며 배포에 필수 |
 | `s3_prefix` | `scholar-lens` | S3 키 접두어 |
 | `vpc_id`, `subnet_ids` | 없음 | 기존 VPC 사용(없으면 스택이 생성) |
 | `email_address` | 없음 | SNS 이메일 구독 |
@@ -396,14 +403,14 @@ PR 본문(`build_pr_body`)에는 논문 ID, PDF URL, 파싱 방식, 글자 수, 
 | `max_synthesis_attempts` | 3 | 절당 초안 수(1–6) |
 | `max_sections` | 20 | 절 상한(1–60) |
 | `max_edit_rounds` | 2 | 전체 편집 횟수(0–3, 0이면 생략) |
-| `max_total_tokens` | 없음 | 실행당 토큰 상한 |
+| `max_total_tokens` | 8,000,000 | 실행당 토큰 상한(LoRA 길이 논문 약 140만 토큰) |
 
 ### `summary`, `tech_guide`, `output_language`
 
 | 키 | 기본값 |
 | --- | --- |
 | `summary.summary_model_id` | Opus 5.5 |
-| `summary.summarizer_enable_thinking`, `summary.thinking_effort`, `summary.max_total_tokens` | `false`, `medium`, 없음 |
+| `summary.summarizer_enable_thinking`, `summary.thinking_effort`, `summary.max_total_tokens` | `false`, `medium`, 1,000,000 |
 | `tech_guide.relevance_model_id` | Haiku 5.5(관련성, 조사 계획, 분류) |
 | `tech_guide.synopsis_model_id` | Sonnet 5.5 |
 | `tech_guide.writing_model_id`, `tech_guide.evaluation_model_id` | Opus 5.5 |
@@ -431,7 +438,8 @@ PR 본문(`build_pr_body`)에는 논문 ID, PDF URL, 파싱 방식, 글자 수, 
   - SNS 게시와 토픽 KMS 키 사용
   - `cloudwatch:PutMetricData`(`ScholarLens` 네임스페이스 조건)
   - SSM 비밀값 5개 읽기(`SECRET_SSM_PARAMS`)
-- **SSM**: 스택은 `batch-job-queue`, `batch-job-definition`(String)을 씁니다. 비밀값(SecureString)은 CloudFormation이 만들 수 없으므로 `scripts/put_secrets.py`로 따로 기록합니다. `cdk synth`/`diff`는 비밀값을 건드리지 않습니다.
+- **SSM**: 스택은 `batch-job-queue`, `batch-job-definition`(String)을 씁니다. 비밀값(SecureString)은 CloudFormation이 만들 수 없으므로 `scripts/put_secrets.py`로 따로 기록합니다. `cdk synth`/`diff`는 비밀값을 건드리지 않습니다. 실행 시 기록되지 않은 비밀값(`ParameterNotFound`)은 조용히 건너뛰고, 권한 오류 등은 warning으로 남깁니다.
+- **설정 파일**: 이미지에는 배포하는 체크아웃의 `scholar_lens/configs/config.yaml`이 들어갑니다. 설정을 고치면 `cdk deploy`를 다시 해야 Batch에 반영됩니다. `deploy_infra.py::check_deployable`은 이 파일이나 `s3_bucket_name`이 없으면 배포를 멈춥니다. `cdk` 명령에는 `resources.profile_name`과 같은 `--profile`을 넘깁니다.
 - **알림**: KMS 암호화 SNS 토픽(SSL 강제)에 이메일을 구독합니다. 토픽 정책은 EventBridge와 CloudWatch(`aws:SourceAccount` 조건)의 게시를 허용합니다.
 
 ## 11. 관측성
@@ -439,9 +447,9 @@ PR 본문(`build_pr_body`)에는 논문 ID, PDF URL, 파싱 방식, 글자 수, 
 - **로그**: `logger.py`가 stderr로 쓰고, 로컬에서는 `logs/`에도 남깁니다. 모든 실행 끝에 `run_metrics` 한 줄(종류, 성공, 토큰, 호출 수, 비용, 시간)을 남깁니다.
 - **지표**: `metrics.py::MetricsEmitter.emit_run`이 `ScholarLens` 네임스페이스에 `InputTokens`, `OutputTokens`, `TotalTokens`, `LLMCalls`, `EstimatedCostUSD`, `DurationSeconds`, `Success`, `Failure`를 `Mode` 차원이 있는 것과 없는 것 두 벌로 보냅니다(AWS 안에서만).
 - **경보**:
-  - 작업 로그의 `ERROR` 한 건 이상(5분), 경보 1개
   - 1시간 추정 비용 합계 50달러 이상, 경보 1개
-  - EventBridge의 Batch `FAILED` 이벤트를 SNS로 전달. 앱이 직접 알린 "Essential container…exited" 실패는 제외
+  - EventBridge의 Batch `FAILED` 이벤트를 SNS로 전달. 앱이 직접 알리고 종료 코드 10·11로 끝난 작업은 제외하고, 그 밖의 종료 코드(시간 초과·중단 143, OOM·비정상 종료, worker 실행 전 Python·인자 오류 1·2, 알림 실패 4)와 종료 코드가 없는 경우(호스트 유실)는 알림
+  - 실행 결과는 앱 알림과 이 규칙이 다루므로 로그 `ERROR` 경보는 두지 않습니다. 실행을 멈추지 않는 문제는 warning 로그로 남깁니다. PR 생성 실패처럼 결과에 남는 경고는 알림에 모두 적고, 알림·매니페스트 저장 실패는 로그에만 남습니다(실패 실행의 알림 실패는 위의 종료 코드 4로 보고). 성공한 실행의 알림이 실패하면 작업은 0으로 끝나 아무도 알리지 않지만, 결과 매니페스트가 있어 `status`로 결과를 볼 수 있습니다.
 - **결과 매니페스트**: 원격 실행의 최종 상태는 S3 매니페스트와 `status` 명령으로 확인합니다.
 
 ## 12. 테스트와 CI
@@ -450,10 +458,10 @@ PR 본문(`build_pr_body`)에는 논문 ID, PDF URL, 파싱 방식, 글자 수, 
 
 | 파일 | 대상 |
 | --- | --- |
-| `test_jobs.py`, `test_runtime.py`, `test_infra_contract.py` | CLI·작업 계약, 실행 수명주기, CDK 작업 명령과 CLI 파서의 일치 |
+| `test_jobs.py`, `test_cli.py`, `test_runtime.py`, `test_infra_contract.py` | CLI·작업 계약과 종료 코드, worker 실패 보고, 실행 수명주기, CDK 작업 명령·실패 알림 규칙과 CLI의 일치 |
 | `test_review_plan.py`, `test_paper_reviewer.py` | 계획 보정, 리뷰 오케스트레이션(가짜 체인) |
 | `test_e2e_pipeline.py` | 요약·리뷰·가이드 전 과정. 실제 모델이 내는 결함을 섞은 가짜 출력이 블로그 규칙을 통과하는 글이 되는지, 고칠 수 없는 글은 막히는지 |
-| `test_post_validator.py`, `test_tags.py` | 검증 규칙과 태그 정규화. `tests/fixtures/blog_defects/`의 블로그 결함 원본은 error, 수정본은 통과 |
+| `test_post_validator.py`, `test_tags.py`, `test_post_conventions.py` | 검증 규칙, 태그 정규화, 블로그 규칙·기존 태그 읽기. `tests/fixtures/blog_defects/`의 블로그 결함 원본은 error, 수정본은 통과 |
 | `test_publisher.py` | 이미지 로컬화, 검증 관문, GitHub 브랜치·PR 동기화 |
 | `test_markdown_math.py`, `test_markdown_lint.py`, `test_utils_helpers.py`, `test_parser_figures.py` | 후처리, HTML 표·수식 직렬화, 그림 처리 |
 
@@ -463,13 +471,13 @@ CI(`.github/workflows/ci.yml`)는 Action을 커밋 SHA로 고정하고 다음 �
 | --- | --- |
 | `lint` | ruff, black `--check`, mypy(`scholar_lens`, `scripts`) |
 | `test` | Python 3.12·3.13, pytest와 커버리지(`scholar_lens`, `scripts`) |
-| `docker-build` | Batch 이미지 빌드, 이미지 안에서 `python3 -m scholar_lens --help` |
+| `docker-build` | Batch 이미지 빌드, 이미지 안에서 `python3 -m scholar_lens --help`와 모든 파이프라인 모듈 import |
 | `cdk-synth` | `scripts/ci_synth_check.py`: 가짜 계정 synth, 작업 정의 1개·명령 일치·재시도 규칙·Lambda 없음 확인 |
-| `post-conventions` | `scripts/check_post_conventions.py`: 사본과 블로그 정본 비교. `vars.BLOG_REPO`가 없거나 정본이 아직 없으면 건너뜀 |
+| `post-conventions` | `scripts/check_post_conventions.py`: 사본과 블로그 정본 비교. `vars.BLOG_REPO`가 없으면 건너뜀. 토큰이 있는데 정본이 없으면(404) 실패하고, 토큰이 없으면 비공개 저장소와 구분할 수 없어 건너뜀 |
 
-`workflow-lint.yml`은 체크섬을 검증한 actionlint로 워크플로를 검사하고, Dependabot은 GitHub Actions, pip, Docker를 매주 확인합니다.
+CI는 `main` push, 모든 PR, 매주 월요일 일정(블로그 규칙 변경 감지)에 돕니다. `workflow-lint.yml`은 체크섬을 검증한 actionlint로 워크플로를 검사하고, Dependabot은 GitHub Actions, pip, Docker를 매주 확인합니다.
 
-Docker 이미지(`Dockerfile`)는 `python:3.12-slim` 기반 2단계 빌드입니다. 의존성은 `poetry.lock`에서 `--only main`으로 설치하고, 런타임에는 `git`과 `tzdata`만 더하며 non-root로 실행합니다. `.dockerignore`는 허용 목록 방식이라 `pyproject.toml`, `poetry.lock`, `README.md`, `assets/post_conventions.yml`, `scholar_lens/`만 빌드 컨텍스트에 들어갑니다.
+Docker 이미지(`Dockerfile`)는 `python:3.12-slim` 기반 2단계 빌드입니다. 의존성은 `poetry.lock`에서 `--only main`으로 설치하고, 런타임에는 `git`, `tzdata`, `fonts-dejavu-core`(SVG 그림 래스터화용 글꼴)를 더하며, NLTK `punkt_tab`을 빌드 때 받아 `NLTK_DATA`로 지정하고 non-root로 실행합니다. `.dockerignore`는 허용 목록 방식이라 `pyproject.toml`, `poetry.lock`, `README.md`, `assets/post_conventions.yml`, `scholar_lens/`만 빌드 컨텍스트에 들어갑니다.
 
 ## 13. 확장 지점
 

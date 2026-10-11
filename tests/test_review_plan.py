@@ -38,7 +38,6 @@ MARKER_B = (
 
 def _plan_json(**overrides: object) -> str:
     plan = {
-        "paper_type": "method",
         "glossary": {"low-rank adaptation": "저랭크 적응"},
         "excluded_ranges": [[18, 19]],
         "sections": [
@@ -251,6 +250,8 @@ class TestHelpers:
     def test_parse_lines(self) -> None:
         assert parse_lines("- a\n* b\nnone\n\n") == ["a", "b"]
         assert parse_lines("none") == []
+        for none in ("해당 없음", "없습니다.", "(none)", '"none"', "None."):
+            assert parse_lines(none) == [], none
 
     def test_heading_enforced(self) -> None:
         assert ensure_section_heading("본문입니다.", "방법").startswith("## 방법\n\n")
@@ -426,6 +427,8 @@ def test_conclusion_ranges_leave_body_sections() -> None:
         ("4.0.1 Limitations of scaling laws.", False),
         ("2.2 Limitations of Existing Methods", False),
         ("Jumping to Conclusions: X", False),
+        ("7 CONCLUSION AND FUTURE W ORK", True),
+        ("B Related Work", False),
     ],
 )
 def test_closing_heading_must_be_the_whole_title(heading: str, closing: bool) -> None:

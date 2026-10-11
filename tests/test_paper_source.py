@@ -78,6 +78,10 @@ class TestExtractArxivIdFromUrl:
             ("https://arxiv.org/pdf/2401.06066v2.pdf", "2401.06066v2"),
             ("https://arxiv.org/html/2401.06066", "2401.06066"),
             ("http://www.arxiv.org/abs/2312.56789v3", "2312.56789v3"),
+            ("https://ar5iv.org/abs/2106.09685", "2106.09685"),
+            ("https://ar5iv.labs.arxiv.org/html/2106.09685", "2106.09685"),
+            ("https://www.alphaxiv.org/abs/2106.09685v2", "2106.09685v2"),
+            ("https://www.alphaxiv.org/overview/2106.09685", "2106.09685"),
         ],
     )
     def test_extracts_from_arxiv_urls(self, url: str, expected: str) -> None:
@@ -112,6 +116,18 @@ class TestResolvePaperSource:
         src = resolve_paper_source("https://arxiv.org/pdf/2401.06066")
         assert isinstance(src, ArxivSource)
         assert src.arxiv_html_id == "2401.06066"
+
+    @pytest.mark.parametrize(
+        "typed", ["arxiv.org/abs/2106.09685", "www.alphaxiv.org/abs/2106.09685"]
+    )
+    def test_url_without_scheme(self, typed: str) -> None:
+        src = resolve_paper_source(typed)
+        assert isinstance(src, ArxivSource) and src.arxiv_html_id == "2106.09685"
+
+    def test_pdf_url_without_scheme(self) -> None:
+        src = resolve_paper_source("openreview.net/pdf?id=nZeVKeeFYf9")
+        assert isinstance(src, PdfUrlSource)
+        assert str(src.pdf_url).startswith("https://openreview.net/pdf")
 
     def test_generic_url_to_pdf_url_source(self) -> None:
         src = resolve_paper_source(PDF_URL)
@@ -149,9 +165,14 @@ class TestPdfUrlSourceSlug:
         b = PdfUrlSource("https://b.com/y/p.pdf")
         assert a.source_id != b.source_id  # same stem, different hash
 
+    def test_openreview_id_names_the_paper(self) -> None:
+        src = PdfUrlSource("https://openreview.net/pdf?id=nZeVKeeFYf9")
+        assert src.source_id.startswith("nzevkeefyf9-")
+        assert src._fallback_title() == "Nzevkeefyf9"
+
     def test_no_stem_falls_back_to_paper_hash(self) -> None:
-        src = PdfUrlSource("https://openreview.net/pdf?id=abc")
-        assert src.source_id.startswith("pdf-") or src.source_id.startswith("paper-")
+        src = PdfUrlSource("https://example.com/")
+        assert src.source_id.startswith("paper-")
 
     def test_fallback_title_humanises_stem(self) -> None:
         src = PdfUrlSource("https://x.com/v1/attention-is-all-you-need.pdf")
@@ -405,3 +426,11 @@ class TestArxivIdRules:
             authors="Hu", title="LoRA", arxiv_id="https://arxiv.org/pdf/2106.09685.pdf"
         )
         assert cite.arxiv_id == "2106.09685"
+
+
+@pytest.mark.parametrize(
+    "url", ["https://xn--arxiv-.org/abs/2106.09685", "https://[::1/x.pdf"]
+)
+def test_malformed_url_is_a_source_error(url: str) -> None:
+    with pytest.raises(PaperSourceError, match="not a valid URL"):
+        resolve_paper_source(url)

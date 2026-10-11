@@ -27,6 +27,7 @@ import asyncio
 import re
 from dataclasses import dataclass, field
 from typing import Any
+from urllib.parse import urlparse
 
 import boto3
 from langchain_core.output_parsers import StrOutputParser
@@ -34,7 +35,10 @@ from langchain_core.runnables import Runnable, RunnableLambda
 
 from .constants import LanguageModelId
 from .logger import logger
+from .markdown_lint import close_open_fence, writing_issues
+from .markdown_math import SEGMENT_PATTERN
 from .metrics import TokenBudgetGuard
+from .prompt_safety import neutralize_prompt_tags
 from .prompts import (
     BasePrompt,
     TechGuideEvaluationPrompt,
@@ -44,8 +48,17 @@ from .prompts import (
     TechGuideSectionPrompt,
     TechGuideSynopsisPrompt,
 )
-from .prompts.tech_guide import TechGuideTaxonomyPrompt
-from .review_plan import digest_sections
+from .prompts.tech_guide import (
+    DEPTH_CHARS,
+    NON_KOREAN_CHAR_FACTOR,
+    TechGuideTaxonomyPrompt,
+)
+from .review_plan import (
+    article_ledger,
+    digest_sections,
+    draft_rank,
+    rejected_revision_note,
+)
 from .utils import (
     BedrockLanguageModelFactory,
     HTMLTagOutputParser,
@@ -55,7 +68,7 @@ from .utils import (
     measure_execution_time,
     parse_quality_score,
 )
-from .web_research import ResearchCorpus, WebResearcher, neutralize_prompt_tags
+from .web_research import ResearchCorpus, WebResearcher
 
 DEFAULT_LANGUAGE: str = "Korean"
 # Upper bound on guide sections. The synopsis is told this budget so it plans a
@@ -79,27 +92,51 @@ _MAX_REVISION_ATTEMPTS: int = 2
 # pipelines, so a runaway can't keep spending on writer calls indefinitely.
 _HARD_BUDGET_MULTIPLE: float = 1.5
 
-# Per-depth writing directive injected into the section prompt. Keeps the
-# "depth is set per section, not by a fixed length" principle in one place.
-_DEPTH_DIRECTIVES: dict[str, str] = {
+# Section directives and the evaluator's length report use DEPTH_CHARS (one
+# source with the synopsis budget).
+_DEPTH_GUIDANCE: dict[str, str] = {
     "deep": (
-        "DEEP section: this is a conceptually central or hard topic. Explain it "
-        "thoroughly across multiple substantial paragraphs, build intuition, and "
-        "include worked examples / code / a table where they aid understanding. "
-        "Do not gloss over the hard parts — this is where the reader should learn "
-        "the most."
+        "a conceptually central or hard topic. Explain it thoroughly across "
+        "several substantial paragraphs, build intuition, and include worked "
+        "examples / code / a table where they aid understanding. Do not gloss "
+        "over the hard parts — this is where the reader should learn the most."
     ),
     "standard": (
-        "STANDARD section: normal importance. Cover it solidly and clearly, but "
-        "do not pad — be complete without exhaustive detail."
+        "normal importance. Cover it solidly and clearly, but do not pad — be "
+        "complete without exhaustive detail."
     ),
     "brief": (
-        "BRIEF section: an easy, routine, or peripheral topic. Keep it short — a "
-        "few sentences or a small example. Do not over-explain well-known basics."
+        "an easy, routine, or peripheral topic. A few sentences or a small "
+        "example. Do not over-explain well-known basics."
     ),
 }
+
+
+def _depth_target(depth: str, language: str) -> tuple[str, int]:
+    """``(bound, characters)`` of prose for a section of ``depth``."""
+    factor = 1.0 if language == "Korean" else NON_KOREAN_CHAR_FACTOR
+    bound = "at most" if depth == "brief" else "about"
+    return bound, round(DEPTH_CHARS[depth] * factor)
+
+
 _DEFAULT_DEPTH: str = "standard"
 _VALID_AREAS: frozenset[str] = frozenset({"CONCEPT", "DETAIL", "USAGE", "APPLICATION"})
+
+
+def prose_chars(markdown: str) -> int:
+    """Characters of prose (whitespace collapsed, code blocks excluded)."""
+    prose = re.sub(r"```.*?```", " ", markdown, flags=re.DOTALL)
+    return len(" ".join(prose.split()))
+
+
+def length_report(markdown: str, depth: str, language: str) -> str:
+    """Measured length against the depth's target, for the evaluator."""
+    depth = depth if depth in DEPTH_CHARS else _DEFAULT_DEPTH
+    bound, target = _depth_target(depth, language)
+    return (
+        f"Measured: {prose_chars(markdown):,} characters of prose (code blocks "
+        f"excluded). Target for a {depth} section: {bound} {target:,}."
+    )
 
 
 class NotTechnicalContentError(Exception):
@@ -133,9 +170,13 @@ class PlannedSection:
         line = f"{index}. {self.title}"
         return f"{line} — {self.description}" if self.description else line
 
-    @property
-    def depth_directive(self) -> str:
-        directive = _DEPTH_DIRECTIVES.get(self.depth, _DEPTH_DIRECTIVES[_DEFAULT_DEPTH])
+    def depth_directive(self, language: str) -> str:
+        depth = self.depth if self.depth in DEPTH_CHARS else _DEFAULT_DEPTH
+        bound, target = _depth_target(depth, language)
+        directive = (
+            f"{depth.upper()} section ({bound} {target:,} characters of prose, "
+            f"code excluded): {_DEPTH_GUIDANCE[depth]}"
+        )
         if self.visuals and self.visuals != "none":
             directive += (
                 f"\nPlanned visual aid for this section: {self.visuals}. Include it "
@@ -151,10 +192,17 @@ class TechGuide:
     body: str
     image_urls: list[str] = field(default_factory=list)
     source_urls: list[str] = field(default_factory=list)
+    # Degraded-output notes for the PR checklist and the job result.
+    notes: list[str] = field(default_factory=list)
+    # Text of every fetched page (taxonomy checks read it).
+    source_text: str = field(default="", repr=False)
 
 
 class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
     """Generates a self-study technical guide from a list of source URLs."""
+
+    # Hosts of the requested URLs: the authority for flags and defaults.
+    _official_hosts: frozenset[str] = frozenset()
 
     def __init__(
         self,
@@ -198,6 +246,7 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
         # this guards against runaway cost the way the review pipeline does.
         self.callbacks = callbacks or []
         self._init_token_budget(self.callbacks, max_total_tokens)
+        self.notes: list[str] = []
         self.researcher = researcher or WebResearcher()
         self.llm_factory = BedrockLanguageModelFactory(boto_session=boto_session)
         self.synopsis_model_id = synopsis_model_id
@@ -298,6 +347,8 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
     ) -> TechGuide:
         if not urls:
             raise ValueError("At least one source URL is required.")
+        # The requested sites are the authority for flags, defaults and names.
+        self._official_hosts = frozenset(urlparse(u).hostname or "" for u in urls)
 
         # Fetch the seed URLs (+ in-scope sub-pages) once. WebResearcher is
         # synchronous (blocking HTTP crawl); run it off the event loop.
@@ -340,6 +391,13 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
         synopsis = await self._draft_synopsis(topic, corpus)
         body = await self._write_sections(topic, synopsis, corpus)
         body = self._overview(synopsis) + body
+        unverified = unverified_identifiers(body, *official_reference(urls, corpus))
+        if unverified:
+            self.notes.append(
+                "Flags/metrics the official pages fetched for this guide never "
+                "mention; verify them against the current reference: "
+                + ", ".join(unverified)
+            )
 
         return TechGuide(
             topic=topic,
@@ -347,6 +405,8 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
             body=body,
             image_urls=corpus.image_urls,
             source_urls=[p.url for p in corpus.pages],
+            notes=list(self.notes),
+            source_text="\n\n".join(p.text for p in corpus.pages),
         )
 
     @RetryableBase._retry("tech_guide_taxonomy")
@@ -446,6 +506,7 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
         synopsis = result.get("synopsis", "").strip()
         if not synopsis:
             raise ValueError("Synopsis generation returned empty output.")
+        logger.info("Guide type: %s", (result.get("guide_type") or "?").strip())
         return synopsis
 
     async def _write_sections(
@@ -494,6 +555,7 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
             sources = corpus.relevant_text(
                 f"{topic} {planned.title} {planned.description}",
                 max_chars=_SECTION_SOURCE_CHARS,
+                official_hosts=self._official_hosts,
             )
             markdown = await self._write_one_section(
                 topic=topic,
@@ -502,9 +564,10 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
                 section_number=index,
                 total_sections=total,
                 previous_sections=previous,
+                already_in_guide=article_ledger(written),
                 sources=sources,
                 available_images=available_images,
-                depth_directive=planned.depth_directive,
+                depth_directive=planned.depth_directive(self.language),
             )
             if not markdown:
                 # A dropped section leaves a hole: `final_outline`/`total` (fixed
@@ -517,6 +580,10 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
                     index,
                     total,
                     planned.title,
+                )
+                self.notes.append(
+                    f"Guide section '{planned.title}' produced no content and was "
+                    "skipped; the overview still lists it."
                 )
                 continue
             # Skip the expensive evaluate/revise + grounding passes once the
@@ -531,13 +598,14 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
                     section_number=index,
                     total_sections=total,
                     previous_sections=previous,
+                    already_in_guide=article_ledger(written),
                     sources=sources,
                     available_images=available_images,
                     final_outline=final_outline,
                 )
                 if self.verify_grounding:
-                    markdown = await self._ground_section(markdown, sources, total)
-            written.append(markdown)
+                    markdown = await self._ground_section(markdown, sources)
+            written.append(close_open_fence(markdown))
         return "\n\n".join(written)
 
     def _enforce_hard_token_budget(self) -> None:
@@ -558,6 +626,12 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
         if self._token_tracker is None or not self.max_total_tokens:
             return False
         if self._token_tracker.total_tokens >= self.max_total_tokens:
+            note = (
+                "Token budget reached: later guide sections were written without "
+                "evaluation, revision or grounding."
+            )
+            if note not in self.notes:
+                self.notes.append(note)
             logger.warning(
                 "Token budget reached (%d >= %d); writing remaining sections "
                 "without evaluate/revise/grounding.",
@@ -577,36 +651,46 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
         section_number: int,
         total_sections: int,
         previous_sections: str,
+        already_in_guide: str,
         sources: str,
         available_images: str,
         final_outline: str,
     ) -> str:
-        """Score a section and revise it while it stays below the threshold.
+        """Score a section and revise it while it stays below the threshold or
+        breaks a deterministic writing rule (:func:`writing_issues`).
 
-        Mirrors the review pipeline's evaluate loop, but keeps the BEST-scoring
-        draft: every revision is re-scored, and a revision is only kept if it
-        beats the best so far — so a feedback-driven rewrite can never make the
-        section worse than the draft it replaced.
+        Mirrors the review pipeline's evaluate loop, but keeps the BEST draft:
+        every revision is re-scored, and a revision is only kept if it ranks
+        above the best so far (:func:`review_plan.draft_rank`) — so a feedback-driven rewrite can never make the section worse
+        than the draft it replaced.
         """
         if self.max_revision_attempts <= 0:
             # No revision budget: skip evaluation entirely (no wasted LLM call).
             return markdown
-        best_markdown = markdown
+
+        def rank(score: int, issues: list[str]) -> tuple[bool, int, int]:
+            return draft_rank(
+                passes=score >= self.min_quality_score and not issues,
+                blocking=len(issues),
+                score=score,
+            )
+
+        best_markdown, best_issues = markdown, writing_issues(markdown)
         best_score, feedback = await self._evaluate_section(
             topic=topic,
             planned=planned,
             section_label=section_label,
             markdown=markdown,
-            total_sections=total_sections,
             previous_sections=previous_sections,
         )
+        feedback = best_feedback = self._feedback_or_generic(best_score, feedback)
         for attempt in range(1, self.max_revision_attempts + 1):
-            # Accept once the score clears the threshold. Do NOT accept a
-            # below-threshold section just because feedback is empty: the prompt
-            # only omits feedback when a section is genuinely excellent (90+), so
-            # empty feedback paired with a low score is a model slip — fall back
-            # to a generic "raise depth/quality" directive and still revise.
-            if best_score >= self.min_quality_score:
+            # Accept once the score clears the threshold and no rule is broken.
+            # Do NOT accept a below-threshold section just because feedback is
+            # empty: the prompt only omits feedback when a section is genuinely
+            # excellent (90+), so empty feedback with a low score is a model
+            # slip — fall back to a generic directive and still revise.
+            if best_score >= self.min_quality_score and not best_issues:
                 logger.info(
                     "Section %d scored %d (>= %d) - accepting.",
                     section_number,
@@ -614,17 +698,23 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
                     self.min_quality_score,
                 )
                 return best_markdown
-            if not feedback:
-                feedback = (
-                    "The section scored below the quality bar. Increase technical "
-                    "depth and concrete detail, tighten structure, and remove any "
-                    "redundancy with earlier sections."
+            if best_issues:
+                feedback = "\n\n".join(
+                    part
+                    for part in (
+                        feedback,
+                        "Fix every one of these rule violations:\n"
+                        + "\n".join(f"- {i}" for i in best_issues),
+                    )
+                    if part
                 )
             logger.info(
-                "Section %d scored %d (< %d) - revising (attempt %d/%d).",
+                "Section %d scored %d (min %d), %d rule violation(s) - revising "
+                "(attempt %d/%d).",
                 section_number,
                 best_score,
                 self.min_quality_score,
+                len(best_issues),
                 attempt,
                 self.max_revision_attempts,
             )
@@ -635,6 +725,7 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
                 section_number=section_number,
                 total_sections=total_sections,
                 previous_sections=previous_sections,
+                already_in_guide=already_in_guide,
                 sources=sources,
                 available_images=available_images,
                 # Show the writer the concrete draft being revised (not just the
@@ -643,8 +734,8 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
                 # tends to reproduce the same rejected draft and waste the
                 # (expensive) writer+evaluator calls.
                 depth_directive=(
-                    f"{planned.depth_directive}\n\nYou are REVISING an existing "
-                    f"draft of this section that scored below the quality bar. "
+                    f"{planned.depth_directive(self.language)}\n\nYou are REVISING an existing "
+                    f"draft of this section that did not pass review. "
                     f"Address this feedback: {feedback}\n\n"
                     f"CURRENT DRAFT to improve (rewrite it, keeping what works):\n"
                     f"{best_markdown}"
@@ -657,21 +748,48 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
                 planned=planned,
                 section_label=section_label,
                 markdown=revised,
-                total_sections=total_sections,
                 previous_sections=previous_sections,
             )
-            # Keep the revision only if it scored higher than the best so far;
+            feedback = self._feedback_or_generic(score, feedback)
+            issues = writing_issues(revised)
+            # Keep the revision only if it ranks above the best so far;
             # otherwise discard it (a rewrite can regress).
-            if score > best_score:
-                best_markdown, best_score = revised, score
+            if rank(score, issues) > rank(best_score, best_issues):
+                best_markdown, best_score, best_issues = revised, score, issues
+                best_feedback = feedback
             else:
                 logger.info(
-                    "Section %d revision scored %d (<= best %d) - keeping prior draft.",
+                    "Section %d revision scored %d (best %d) - keeping prior draft.",
                     section_number,
                     score,
                     best_score,
                 )
+                # The next revision starts from the kept draft again: give its
+                # own feedback plus what went wrong in the rejected attempt.
+                rejected = feedback if feedback != best_feedback else ""
+                rejected += "".join(f"\n- {issue}" for issue in issues)
+                note = rejected_revision_note(score, len(issues))
+                if not rejected.strip():
+                    note = note.removesuffix(":") + "."
+                feedback = f"{best_feedback}\n\n{note} {rejected}".strip()
+        if best_score < self.min_quality_score or best_issues:
+            self.notes.append(
+                f"Guide section '{planned.title}' kept below the bar (score "
+                f"{best_score}, {len(best_issues)} rule violation(s)): check it."
+            )
         return best_markdown
+
+    def _feedback_or_generic(self, score: int, feedback: str) -> str:
+        """Evaluator feedback, or a generic directive when a below-bar score
+        came without any (the prompt only omits feedback for 90+ sections, so
+        empty feedback with a low score is a model slip)."""
+        if feedback or score >= self.min_quality_score:
+            return feedback
+        return (
+            "The section scored below the quality bar. Increase technical "
+            "depth and concrete detail, tighten structure, and remove any "
+            "redundancy with earlier sections."
+        )
 
     @RetryableBase._retry("tech_guide_evaluation")
     async def _evaluate_section(
@@ -681,7 +799,6 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
         planned: PlannedSection,
         section_label: str,
         markdown: str,
-        total_sections: int,
         previous_sections: str,
     ) -> tuple[int, str]:
         """Return (quality_score 0-100, improvement_feedback) for a section."""
@@ -690,9 +807,9 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
                 "topic": topic,
                 "section": markdown,
                 "section_to_write": section_label,
-                "depth_directive": planned.depth_directive,
+                "depth_directive": planned.depth_directive(self.language),
                 "previous_sections": previous_sections,
-                "total_sections": total_sections,
+                "length_report": length_report(markdown, planned.depth, self.language),
                 "language": self.language,
             }
         )
@@ -701,9 +818,7 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
         return score, feedback
 
     @RetryableBase._retry("tech_guide_grounding")
-    async def _ground_section(
-        self, section_markdown: str, sources: str, total_sections: int
-    ) -> str:
+    async def _ground_section(self, section_markdown: str, sources: str) -> str:
         """Fact-check a drafted section, returning the cleaned version.
 
         Falls back to the original draft if the grounding pass returns nothing,
@@ -713,7 +828,6 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
             {
                 "section": section_markdown,
                 "sources": sources,
-                "total_sections": total_sections,
                 "language": self.language,
             }
         )
@@ -730,6 +844,7 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
         section_number: int,
         total_sections: int,
         previous_sections: str,
+        already_in_guide: str,
         sources: str,
         available_images: str,
         depth_directive: str,
@@ -741,6 +856,7 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
             "section_number": section_number,
             "total_sections": total_sections,
             "previous_sections": previous_sections,
+            "already_in_guide": already_in_guide,
             "sources": sources,
             "available_images": available_images,
             "depth_directive": depth_directive,
@@ -806,7 +922,7 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
             token = match.group(1)
             if token.upper() in _VALID_AREAS:
                 area = token.upper()
-            elif token.lower() in _DEPTH_DIRECTIVES:
+            elif token.lower() in DEPTH_CHARS:
                 depth = token.lower()
             body = body[match.end() :]
         # Capture the planned visual aid, e.g. "(visuals: table)".
@@ -865,3 +981,73 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
                 for r in corpus.search_results
             )
         )
+
+
+# Identifiers a reader copies verbatim: CLI flags and Prometheus-style metric
+# names ("vllm:time_to_first_token_seconds", "..._requests_total").
+_FLAG = re.compile(r"(?<![\w-])--[a-z][a-z0-9]*(?:-[a-z0-9]+)*")
+_METRIC = re.compile(
+    r"\b[a-z][a-z0-9]*(?::[a-z0-9]+(?:_[a-z0-9]+)+"
+    r"|(?:_[a-z0-9]+)+_(?:total|seconds|bytes|count|bucket|sum))\b"
+)
+_HOST_NOISE = frozenset({"docs", "www", "doc", "api", "readthedocs", "github", "io"})
+MAX_UNVERIFIED = 10
+
+
+def official_reference(urls: list[str], corpus: ResearchCorpus) -> tuple[str, str]:
+    """(text of the fetched pages on the requested hosts, product name taken
+    from the first host: ``docs.vllm.ai`` → ``vllm``)."""
+    hosts = {urlparse(u).hostname or "" for u in urls}
+    text = "\n".join(
+        p.text
+        for p in corpus.pages
+        if (urlparse(p.final_url or p.url).hostname or "") in hosts
+    )
+    labels = (
+        [
+            label
+            for label in (urlparse(urls[0]).hostname or "").split(".")[:-1]
+            if label not in _HOST_NOISE
+        ]
+        if urls
+        else []
+    )
+    return text, labels[0] if labels else ""
+
+
+def unverified_identifiers(body: str, official_text: str, product: str) -> list[str]:
+    """CLI flags of ``product`` commands and metric names the guide shows in
+    code that the official pages never mention (a stale or invented flag is
+    the costliest guide error: readers paste it). Flags count only after the
+    product's name on a command line, so ``docker``/``curl`` options are not
+    checked. Note-only: an empty ``official_text`` checks nothing."""
+    if not official_text.strip():
+        return []
+    known = official_text.lower()
+    found: list[str] = []
+
+    def check(token: str, variants: list[str]) -> None:
+        mentioned = any(
+            re.search(rf"(?<![\w-]){re.escape(v)}(?![\w-])", known) for v in variants
+        )
+        if token not in found and not mentioned:
+            found.append(token)
+
+    for match in SEGMENT_PATTERN.finditer(body):
+        if match.lastgroup not in ("fence", "icode"):
+            continue
+        code = re.sub(r"\\\n\s*", " ", match.group(0))  # join continued lines
+        for line in code.splitlines():
+            lowered = line.lower()
+            start = lowered.find(product) if product else 0
+            if match.lastgroup == "fence" and start < 0:
+                continue
+            for flag in _FLAG.findall(line[max(start, 0) :]):
+                # Python APIs spell the same option with underscores.
+                check(
+                    flag,
+                    [flag, flag[2:].replace("-", "_")] if "-" in flag[2:] else [flag],
+                )
+            for metric in _METRIC.findall(line):
+                check(metric, [metric, metric.replace(":", "_")])
+    return found[:MAX_UNVERIFIED]

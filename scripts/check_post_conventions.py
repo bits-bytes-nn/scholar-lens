@@ -7,10 +7,14 @@ copy in the job image. The check compares the parsed YAML of both::
 
 Repository and branch default to ``BLOG_REPO`` / ``BLOG_BRANCH`` (branch
 ``main``). ``GITHUB_TOKEN`` is used when set (private repositories). When no
-repository is configured or the canonical file does not exist yet, the check
-prints a notice and passes.
+repository is configured the check prints a notice and passes. A missing
+canonical file (HTTP 404) fails with exit 2 when a token is set (GitHub answers
+404 both for a missing file and for a repository the token cannot read);
+without a token a private repository also answers 404, so the check only
+prints a notice.
 
-Exit codes: 0 in sync or skipped, 1 drift, 2 fetch error.
+Exit codes: 0 in sync or skipped, 1 drift, 2 the canonical copy could not be
+read.
 """
 
 from __future__ import annotations
@@ -52,10 +56,21 @@ def check(
     local_path: Path,
     fetch: Callable[[], str | None],
     out: Callable[[str], object] = print,
+    *,
+    authenticated: bool = False,
 ) -> int:
     canonical = fetch()
     if canonical is None:
-        out(f"notice: canonical {CANONICAL_PATH} not found; skipping drift check.")
+        if authenticated:
+            out(
+                f"error: {CANONICAL_PATH} not found: the branch lacks it or the "
+                "token cannot read the repository."
+            )
+            return 2
+        out(
+            f"notice: {CANONICAL_PATH} not found (or the repository is private "
+            "and no token is set); skipping drift check."
+        )
         return 0
     if not local_path.exists():
         out(f"error: {local_path} is missing; copy the blog's {CANONICAL_PATH}.")
@@ -87,6 +102,7 @@ def main(argv: list[str] | None = None) -> int:
         return check(
             args.local,
             lambda: fetch_canonical(args.repo, args.branch, args.path, token),
+            authenticated=token is not None,
         )
     except requests.RequestException as e:
         print(f"error: could not fetch {args.repo}:{args.path}: {e}")

@@ -11,7 +11,7 @@ from moto import mock_aws
 from pydantic import ValidationError
 
 from scholar_lens import cli
-from scholar_lens.src.aws_helpers import BatchJobError, S3Handler
+from scholar_lens.src.aws_helpers import BatchJobError, S3Handler, S3OperationError
 from scholar_lens.src.jobs import (
     JobRequest,
     JobResult,
@@ -105,7 +105,7 @@ class TestCliMapping:
         self, capsys: pytest.CaptureFixture
     ) -> None:
         code = cli.main(["worker", "--request", '{"kind": "review"}'])
-        assert code == cli.EXIT_REJECTED
+        assert code == cli.WORKER_REPORTED_REJECTED
         assert json.loads(capsys.readouterr().out)["status"] == "rejected"
 
     @pytest.mark.parametrize(
@@ -202,6 +202,12 @@ class TestSubmitAndDescribe:
             with pytest.raises(BatchJobError, match="not found"):
                 describe_job(aws, "nope", s3_handler=None, s3_prefix="")
 
+    def test_malformed_manifest_is_a_storage_error(self, aws: boto3.Session) -> None:
+        handler = S3Handler(aws, BUCKET)
+        handler.put_text(result_manifest_key("p", "job-x"), '{"status": "done"}')
+        with pytest.raises(S3OperationError, match="Malformed"):
+            read_result_manifest(handler, "p", "job-x")
+
     def test_manifest_missing_returns_none(self, aws: boto3.Session) -> None:
         assert read_result_manifest(S3Handler(aws, BUCKET), "p", "job-x") is None
         assert result_manifest_key("", "job-x") == "results/job-x.json"
@@ -232,3 +238,29 @@ class TestWaitForJob:
             clock=lambda: next(now),
         )
         assert report.batch_status == "RUNNING"
+
+    def test_transient_manifest_read_is_polled_again(self) -> None:
+        from botocore.exceptions import ClientError
+
+        from scholar_lens.src.aws_helpers import S3OperationError
+
+        slow_down = ClientError(
+            {
+                "Error": {"Code": "SlowDown"},
+                "ResponseMetadata": {"HTTPStatusCode": 503},
+            },
+            "GetObject",
+        )
+        calls = 0
+
+        def describe() -> JobStatusReport:
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                raise S3OperationError("read failed") from slow_down
+            return JobStatusReport(job_id="j", batch_status="SUCCEEDED")
+
+        report = wait_for_job(
+            describe, timeout_seconds=100, sleep=lambda _s: None, clock=lambda: 0.0
+        )
+        assert calls == 2 and report.batch_status == "SUCCEEDED"

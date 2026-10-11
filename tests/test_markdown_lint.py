@@ -72,6 +72,14 @@ class TestPlaceholderTagEscaping:
         src = r"부등식 \( a < b \) 는 그대로."
         assert lint_markdown(src) == src
 
+    def test_markdown_escaped_placeholder_untouched(self) -> None:
+        src = r"출력은 \<ANSWER\> 형식입니다."
+        assert lint_markdown(src) == src
+
+    def test_adjacent_inline_code_spans_are_protected(self) -> None:
+        src = "태그 `<think>``</think>` 사이"
+        assert lint_markdown(src) == src
+
     def test_url_autolink_not_escaped(self) -> None:
         # A GFM autolink is valid Markdown that renders as a link; escaping it
         # produces dead literal text. Must survive the placeholder escaper.
@@ -191,11 +199,6 @@ class TestBodyAutoFixes:
         src = "## A\n\n```python\n# comment\n```"
         assert lint_markdown(src) == src
 
-    def test_numbered_reference_warns(self, caplog) -> None:
-        with caplog.at_level(logging.WARNING, logger="app"):
-            lint_markdown("As Figure 3 shows, 그림 2와 3.2절에서")
-        assert any("numbering" in r.message for r in caplog.records)
-
 
 class TestDropUnknownImages:
     def test_keeps_known_and_drops_invented(self) -> None:
@@ -255,3 +258,10 @@ def test_marker_in_table_row_stays_on_the_row() -> None:
 
     row = '| [Image: alt="cat", src="https://x/a.png", caption="c"] | A cat |'
     assert figure_markers_to_images(row) == "| ![cat](https://x/a.png) | A cat |"
+
+
+def test_heading_level_jumps_are_closed() -> None:
+    src = "## TL;DR\n\n#### Deep\n\n##### Deeper\n\n## Next\n\n```\n#### code\n```"
+    out = lint_markdown(src)
+    assert "\n### Deep\n" in out and "\n#### Deeper\n" in out
+    assert "#### code" in out and out.startswith("## TL;DR")

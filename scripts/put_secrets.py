@@ -18,6 +18,7 @@ import boto3
 sys.path.append(str(Path(__file__).parent.parent))
 from scholar_lens.configs import Config
 from scholar_lens.src.constants import RUN_SECRETS, SSMParams
+from scholar_lens.src.jobs import ssm_base
 from scholar_lens.src.logger import logger
 from scripts.deploy_infra import deploy_session
 
@@ -36,7 +37,7 @@ def put_secure_secrets(
     for param, value in secrets.items():
         if not value:
             continue
-        name = f"/{project_name}/{stage}/{param.value}"
+        name = f"{ssm_base(project_name, stage)}/{param.value}"
         ssm_client.put_parameter(
             Name=name, Value=value, Type="SecureString", Overwrite=True
         )

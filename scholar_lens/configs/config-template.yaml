@@ -1,5 +1,7 @@
 # Copy to config.yaml (gitignored) and fill in the resource values. Every key
 # below shows the code default; omit a key to keep it. Unknown keys are errors.
+# `cdk deploy` bakes this file into the Batch image: re-run `cdk deploy` after
+# editing it, or Batch jobs keep the old values.
 
 resources:
   project_name: scholar-lens
@@ -7,7 +9,7 @@ resources:
   profile_name:                    # local AWS profile (Batch uses its job role)
   default_region_name: ap-northeast-2
   bedrock_region_name: us-west-2
-  s3_bucket_name:                  # required for Batch runs and `status`
+  s3_bucket_name:                  # existing bucket; required for `cdk deploy`, Batch runs and `status`
   s3_prefix: scholar-lens
   vpc_id:
   subnet_ids:
@@ -16,7 +18,7 @@ resources:
     enabled: false
     repo_name:                     # owner/owner.github.io
     base_branch: main
-    branch_prefix: paper-reviews   # PR branches: <prefix>/<kind>-<id>
+    branch_prefix: paper-reviews   # PR branches: <prefix>/review-<id>, summary-<id>, guide-<url-hash>
     author_name: Scholar Lens Bot
     author_email:
     # Lead category written to each post's front matter, per artifact type.
@@ -66,15 +68,16 @@ explanation:
   min_quality_score: 70
   max_synthesis_attempts: 3
   max_sections: 20
-  max_edit_rounds: 2              # 2nd round only for reported coverage gaps
-  # Hard total-token ceiling for one run (omit / null = no limit).
-  # max_total_tokens: 8000000
+  max_edit_rounds: 2              # 2nd round for coverage gaps or skipped edits
+  # Hard total-token ceiling for one run (null = no limit); a LoRA-length
+  # paper uses ~1.4M.
+  max_total_tokens: 8000000
 
 summary:
   summary_model_id: anthropic.claude-opus-5-5
   summarizer_enable_thinking: false
   thinking_effort: medium
-  # max_total_tokens: 1500000
+  max_total_tokens: 1000000        # hard ceiling (null = no limit)
 
 tech_guide:
   relevance_model_id: anthropic.claude-haiku-5-5

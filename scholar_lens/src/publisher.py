@@ -35,7 +35,7 @@ from github import InputGitTreeElement as TreeElement
 from .aws_helpers import S3Handler
 from .constants import EnvVars, LocalPaths, S3Paths
 from .logger import logger
-from .markdown_lint import lint_markdown
+from .markdown_lint import lint_markdown, writing_notes
 from .markdown_math import SEGMENT_PATTERN, normalize_math
 from .pinned_transport import PinnedHTTPTransport
 from .post_conventions import PostConventions, load_local_conventions
@@ -45,6 +45,7 @@ from .post_validator import (
     PostValidationError,
     validate_post,
 )
+from .prompt_safety import strip_defanging
 from .url_guard import UnsafeUrlError, assert_url_is_public
 from .utils.images import is_svg, svg_to_png
 
@@ -56,8 +57,10 @@ if TYPE_CHECKING:
 # Blog image convention: one flat folder, referenced by absolute path.
 BLOG_IMAGES_DIR = "assets/images"
 # Scratch folder (inside the artifact's work_dir) holding the localized images
-# that are uploaded to S3 and committed to the blog.
+# that are uploaded to S3 and committed to the blog, one sub-folder per post
+# slug: a paper's summary and review share the work_dir.
 _STAGED_IMAGES_DIRNAME = "blog-images"
+SUMMARY_SLUG_SUFFIX = "-summary"
 # Hosts whose images must be copied into the blog (remote arXiv/ar5iv links
 # break when paper versions change and get no layout dimensions).
 _ARXIV_HOSTS = ARXIV_IMAGE_HOSTS
@@ -108,7 +111,6 @@ class PublishRequest:
     commit_message: str
     # Artifact kind the post is validated as ("review" | "summarize" | "guide").
     kind: ArtifactKind = "review"
-    figures_dirname: str = LocalPaths.FIGURES_DIR.value
     # Pipeline-side findings for the reviewer (e.g. a tag the paper never
     # mentions); shown in the PR checklist with the validator's warnings.
     review_notes: list[str] = field(default_factory=list)
@@ -121,10 +123,17 @@ class PublishRequest:
         """Post slug: a summary and a review of one paper must not share a
         file name, image names or URL."""
         base = slugify(self.title)
-        return f"{base}-summary" if self.kind == "summarize" else base
+        return f"{base}{SUMMARY_SLUG_SUFFIX}" if self.kind == "summarize" else base
 
-    def pr_body_with_checklist(self) -> str:
-        return with_review_checklist(self.pr_body, self.validation_warnings)
+    @property
+    def staged_images_dir(self) -> Path:
+        """This post's localized images; a rerun replaces only these."""
+        return self.work_dir / _STAGED_IMAGES_DIRNAME / self.slug
+
+    def pr_body_with_checklist(self, extra_notes: Sequence[str] = ()) -> str:
+        return with_review_checklist(
+            self.pr_body, [*self.validation_warnings, *extra_notes]
+        )
 
 
 def _split_front_matter(markdown: str) -> tuple[str, str]:
@@ -253,7 +262,8 @@ class ImageLocalizer:
 
     def localize(self, markdown: str) -> str:
         if self.staging_dir.exists():
-            shutil.rmtree(self.staging_dir)  # our scratch; drop a previous run's
+            # This post's own scratch folder: drop a previous run's images.
+            shutil.rmtree(self.staging_dir)
         self.staging_dir.mkdir(parents=True)
         hosted: dict[str, str] = {}
         failures: list[str] = []
@@ -353,14 +363,17 @@ class Publisher:
         file_name = f"{datetime.now(UTC).strftime('%Y-%m-%d')}-{slug}"
         # Body-only passes: the front matter is already YAML-escaped and must
         # not be math-normalized or HTML-escaped.
-        front_matter, body = _split_front_matter(request.markdown)
+        # Defanged prompt tags a model copied from its input get their plain
+        # "<" back everywhere (titles too; harmless inside YAML strings).
+        front_matter, body = _split_front_matter(strip_defanging(request.markdown))
         # Blog math rules ($$ only, no \_ in math, blank lines around display
         # blocks), then the other kramdown/MathJax auto-fixes.
-        markdown = front_matter + lint_markdown(normalize_math(body))
+        body = lint_markdown(normalize_math(body))
+        markdown = front_matter + body
         localizer = ImageLocalizer(
             slug=slug,
-            figures_dir=request.work_dir / request.figures_dirname,
-            staging_dir=request.work_dir / _STAGED_IMAGES_DIRNAME,
+            figures_dir=request.work_dir / LocalPaths.FIGURES_DIR.value,
+            staging_dir=request.staged_images_dir,
             download_external=self.download_external_images,
             fetch=self.fetch_image,
         )
@@ -368,6 +381,8 @@ class Publisher:
         try:
             request.validation_warnings = [
                 *request.review_notes,
+                # Rule slips the generators could not fix, on the final text.
+                *writing_notes(body),
                 *self._validate(markdown, request),
             ]
         except PostValidationError as e:
@@ -381,7 +396,7 @@ class Publisher:
                         f"s3://{self.s3_bucket_name}/{key}/{Path(e.rejected_path).name}"
                     )
                 except Exception as upload_error:  # noqa: BLE001
-                    logger.error("Could not copy the rejected post: %s", upload_error)
+                    logger.warning("Could not copy the rejected post: %s", upload_error)
             raise
 
         markdown_path = request.work_dir / f"{file_name}.md"
@@ -400,7 +415,12 @@ class Publisher:
         violations = validate_post(markdown, self.conventions, request.kind)
         if blocking := [v for v in violations if v.level == "error"]:
             rejected = request.work_dir / f"{request.slug}.rejected.md"
-            report = "\n".join(f"- {v}" for v in violations)
+            report = "\n".join(
+                [
+                    *(f"- {v}" for v in violations),
+                    *(f"- note: {n}" for n in request.review_notes),
+                ]
+            )
             rejected.write_text(
                 f"{markdown}\n\n<!-- violations\n{report}\n-->\n", encoding="utf-8"
             )
@@ -422,7 +442,7 @@ class Publisher:
         images_key = f"{prefix}/{BLOG_IMAGES_DIR}".lstrip("/")
         await self.s3_handler.upload_file_async(markdown_path, posts_key)
 
-        staged = request.work_dir / _STAGED_IMAGES_DIRNAME
+        staged = request.staged_images_dir
         if staged.is_dir() and any(staged.iterdir()):
             await asyncio.to_thread(
                 self.s3_handler.upload_directory,
@@ -491,9 +511,29 @@ def _git_blob_sha(data: bytes) -> str:
     return hashlib.sha1(b"blob %d\0" % len(data) + data).hexdigest()
 
 
+# The `date:` key inside the leading front matter block.
+_FRONT_MATTER_DATE = re.compile(r"\A---\n(?:(?!---).*\n)*?date: *(?P<date>.+)\n")
+
+
+def _front_matter_date(markdown: str) -> str | None:
+    match = _FRONT_MATTER_DATE.match(markdown)
+    return match.group("date").strip() if match else None
+
+
 def _post_slug(stem: str) -> str:
     match = _DATED_POST.match(stem)
     return match.group("slug") if match else stem
+
+
+def _same_post(slug: str, other: str) -> bool:
+    """Slugs naming the same post: older posts kept the double hyphen an
+    earlier slugify left for ": " ("direct-preference-optimization--your-…")."""
+    return re.sub(r"-{2,}", "-", slug) == re.sub(r"-{2,}", "-", other)
+
+
+def _is_summary_slug(slug: str) -> bool:
+    """Summary posts carry this suffix (see :attr:`PublishRequest.slug`)."""
+    return slug.endswith(SUMMARY_SLUG_SUFFIX)
 
 
 class BlogBranchSync:
@@ -501,9 +541,9 @@ class BlogBranchSync:
 
     The branch is ``<branch_prefix>/<branch_id>`` — deterministic, so a rerun
     (Batch retry, regenerated post) updates the same branch and PR instead of
-    opening a duplicate. New commits build on the branch head, preserving any
-    manual edits made to other files on the PR; a branch whose work is already
-    merged into the base is restarted from the base.
+    opening a duplicate. While the PR is open, new commits build on the branch
+    head, preserving manual edits made on it; otherwise (merged, squash-merged
+    or closed) the branch is restarted from the base.
     """
 
     def __init__(self, repo: Repository, config: GithubConfig) -> None:
@@ -514,31 +554,28 @@ class BlogBranchSync:
         branch = f"{self.config.branch_prefix}/{request.branch_id}"
         base_sha = self.repo.get_git_ref(f"heads/{self.config.base_branch}").object.sha
         head_ref = self._find_ref(branch)
+        open_pull = self._open_pull(branch) if head_ref is not None else None
         parent_sha = base_sha
         restart_from_base = False
         if head_ref is not None:
             head_sha = head_ref.object.sha
-            if self.repo.compare(base_sha, head_sha).ahead_by > 0:
+            if open_pull is not None and self.repo.compare(base_sha, head_sha).ahead_by:
                 parent_sha = head_sha
             else:
                 restart_from_base = head_sha != base_sha
 
-        parent_tree = self.repo.get_git_tree(
-            self.repo.get_git_commit(parent_sha).tree.sha, recursive=True
-        )
+        base_tree = self._tree(base_sha)
+        parent_tree = base_tree if parent_sha == base_sha else self._tree(parent_sha)
+        on_base = {e.path: e.sha for e in base_tree.tree if e.type == "blob"}
         existing = {e.path: e.sha for e in parent_tree.tree if e.type == "blob"}
         files = self._artifact_files(request, markdown_path)
-        files = self._keep_published_path(files, markdown_path, base_sha)
+        files, notes = self._keep_published_path(files, markdown_path, on_base)
         changes = [
             path
             for path, data in files.items()
             if existing.get(path) != _git_blob_sha(data)
         ]
-        deletions = (
-            self._stale_paths(markdown_path, existing, base_sha, files)
-            if parent_sha != base_sha
-            else []
-        )
+        deletions = self._stale_paths(markdown_path, existing, on_base, files)
 
         if changes or deletions:
             elements = [
@@ -565,7 +602,7 @@ class BlogBranchSync:
             if head_ref is None:
                 self.repo.create_git_ref(f"refs/heads/{branch}", commit.sha)
             else:
-                # Fast-forward, except when restarting a merged branch from base.
+                # Fast-forward, except when restarting the branch from base.
                 head_ref.edit(commit.sha, force=restart_from_base)
             logger.info(
                 "Committed %d file(s), removed %d stale file(s) on '%s'.",
@@ -580,7 +617,7 @@ class BlogBranchSync:
             )
         else:
             logger.info("Branch '%s' already has this exact content.", branch)
-        return self._open_or_update_pull(branch, request)
+        return self._open_or_update_pull(branch, request, open_pull, notes)
 
     def _find_ref(self, branch: str) -> Any:
         try:
@@ -590,31 +627,46 @@ class BlogBranchSync:
                 return None
             raise
 
+    def _tree(self, commit_sha: str) -> Any:
+        tree = self.repo.get_git_tree(
+            self.repo.get_git_commit(commit_sha).tree.sha, recursive=True
+        )
+        if tree.raw_data.get("truncated"):
+            # A partial listing would hide published posts and stale files.
+            raise PublishError("The blog repository tree is too large to list.")
+        return tree
+
     def _keep_published_path(
-        self, files: dict[str, bytes], markdown_path: Path, base_sha: str
-    ) -> dict[str, bytes]:
+        self, files: dict[str, bytes], markdown_path: Path, on_base: dict[str, str]
+    ) -> tuple[dict[str, bytes], list[str]]:
         """A post already on the base branch keeps its file name (and so its
-        date prefix and URL): a rerun updates it instead of adding a copy."""
+        date prefix and URL): a rerun updates it instead of adding a copy.
+
+        Returns the files and a PR note naming the post that is replaced.
+        """
         posts = LocalPaths.POSTS_DIR.value
         new_path = f"{posts}/{markdown_path.name}"
         slug = _post_slug(markdown_path.stem)
-        base_tree = self.repo.get_git_tree(
-            self.repo.get_git_commit(base_sha).tree.sha, recursive=True
-        )
         published = sorted(
-            e.path
-            for e in base_tree.tree
-            if e.path.startswith(f"{posts}/")
-            and e.path.count("/") == 1
-            and e.path.endswith(".md")
-            and _post_slug(Path(e.path).stem) == slug
+            path
+            for path in on_base
+            if path.startswith(f"{posts}/")
+            and path.count("/") == 1
+            and path.endswith(".md")
+            and _same_post(_post_slug(Path(path).stem), slug)
         )
-        if not published or new_path in published:
-            return files
+        if not published:
+            return files, []
+        note = (
+            f"Replaces the published post `{published[0]}`; "
+            "check that no hand edits to it are lost."
+        )
+        if new_path in published:
+            return files, [note]
         renamed = dict(files)
         renamed[published[0]] = renamed.pop(new_path)
         logger.info("Updating the published post '%s' in place.", published[0])
-        return renamed
+        return renamed, [note]
 
     @staticmethod
     def _artifact_files(
@@ -624,7 +676,7 @@ class BlogBranchSync:
         files = {
             f"{LocalPaths.POSTS_DIR.value}/{markdown_path.name}": markdown_path.read_bytes()
         }
-        staged = request.work_dir / _STAGED_IMAGES_DIRNAME
+        staged = request.staged_images_dir
         if staged.is_dir():
             for path in sorted(staged.iterdir()):
                 if path.is_file():
@@ -635,38 +687,56 @@ class BlogBranchSync:
         self,
         markdown_path: Path,
         branch_files: dict[str, str],
-        base_sha: str,
+        on_base: dict[str, str],
         new_files: dict[str, bytes],
     ) -> list[str]:
-        """Files of earlier runs of this post that exist only on our branch:
-        older dated copies of the post, and numbered images this run no longer
-        produces."""
-        slug = _post_slug(markdown_path.stem)
+        """Files of earlier runs that exist only on this artifact's branch:
+        older copies of the post and numbered images this run no longer
+        produces.
+
+        An older copy has the post's slug or, after a retitled arXiv version,
+        the same front-matter ``date`` (the paper's publication time) and the
+        same kind (a summary slug ends in ``-summary``, so a review and a
+        summary of one paper never replace each other). Any other post on the
+        branch was added by hand and is kept; a hand-added post of the same
+        kind with that exact timestamp would be taken for an older copy.
+        """
         posts = LocalPaths.POSTS_DIR.value
-        own_image = re.compile(
-            rf"^{re.escape(BLOG_IMAGES_DIR)}/{re.escape(slug)}-\d+\.(png|jpg)$"
-        )
-        candidates = [
+        slug = _post_slug(markdown_path.stem)
+        date = _front_matter_date(markdown_path.read_text(encoding="utf-8"))
+        branch_only = [
             path
             for path in branch_files
-            if path not in new_files
+            if path not in on_base and path not in new_files
+        ]
+        old_posts = [
+            path
+            for path in branch_only
+            if path.startswith(f"{posts}/")
+            and path.count("/") == 1
+            and path.endswith(".md")
             and (
-                own_image.match(path)
+                _post_slug(Path(path).stem) == slug
                 or (
-                    path.startswith(f"{posts}/")
-                    and path.endswith(".md")
-                    and path.count("/") == 1
-                    and _post_slug(Path(path).stem) == slug
+                    date is not None
+                    and _is_summary_slug(_post_slug(Path(path).stem))
+                    == _is_summary_slug(slug)
+                    and _front_matter_date(self._blob_text(branch_files[path])) == date
                 )
             )
         ]
-        if not candidates:
-            return []
-        base_tree = self.repo.get_git_tree(
-            self.repo.get_git_commit(base_sha).tree.sha, recursive=True
+        slugs = {slug} | {_post_slug(Path(path).stem) for path in old_posts}
+        own_image = re.compile(
+            rf"^{re.escape(BLOG_IMAGES_DIR)}/"
+            rf"(?:{'|'.join(re.escape(slug) for slug in sorted(slugs))})-\d+\.(png|jpg)$"
         )
-        on_base = {e.path for e in base_tree.tree}
-        return sorted(p for p in candidates if p not in on_base)
+        return sorted(
+            [*old_posts, *(path for path in branch_only if own_image.match(path))]
+        )
+
+    def _blob_text(self, sha: str) -> str:
+        blob = self.repo.get_git_blob(sha)
+        return base64.b64decode(blob.content).decode("utf-8", errors="replace")
 
     def _identity(self) -> dict[str, InputGitAuthor]:
         """Author/committer from config; without an email GitHub attributes the
@@ -676,17 +746,25 @@ class BlogBranchSync:
         actor = InputGitAuthor(self.config.author_name, str(self.config.author_email))
         return {"author": actor, "committer": actor}
 
-    def _open_or_update_pull(self, branch: str, request: PublishRequest) -> str:
+    def _open_pull(self, branch: str) -> Any:
         owner = self.repo.full_name.split("/")[0]
         for pull in self.repo.get_pulls(
             state="open", head=f"{owner}:{branch}", base=self.config.base_branch
         ):
-            pull.edit(title=request.pr_title, body=request.pr_body_with_checklist())
+            return pull
+        return None
+
+    def _open_or_update_pull(
+        self, branch: str, request: PublishRequest, pull: Any, notes: list[str]
+    ) -> str:
+        body = request.pr_body_with_checklist(notes)
+        if pull is not None:
+            pull.edit(title=request.pr_title, body=body)
             logger.info("Updated the existing pull request: %s", pull.html_url)
             return pull.html_url
         pull = self.repo.create_pull(
             title=request.pr_title,
-            body=request.pr_body_with_checklist(),
+            body=body,
             head=branch,
             base=self.config.base_branch,
         )

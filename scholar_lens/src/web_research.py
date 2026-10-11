@@ -14,6 +14,7 @@ from __future__ import annotations
 import os
 import re
 from abc import ABC, abstractmethod
+from collections.abc import Collection
 from dataclasses import dataclass, field
 from urllib.parse import urljoin, urlparse
 
@@ -23,6 +24,7 @@ from bs4 import BeautifulSoup, Tag, UnicodeDammit
 from .constants import EnvVars
 from .logger import logger
 from .pinned_transport import PinnedHTTPTransport
+from .prompt_safety import neutralize_prompt_tags
 from .url_guard import UnsafeUrlError, is_url_public
 from .utils import extract_text_from_html
 
@@ -32,51 +34,15 @@ DEFAULT_MAX_IMAGES_PER_PAGE: int = 12
 # Pages larger than this are skipped (a docs page is far smaller); the cap is
 # enforced while streaming so an oversized body is never fully downloaded.
 MAX_PAGE_BYTES: int = 5 * 1024 * 1024
+# A <meta refresh> is followed only on a stub page this small (a real docs page
+# with an incidental refresh tag keeps its own content), and at most this often.
+_META_REFRESH_MAX_BYTES = 16 * 1024
+MAX_META_REFRESH_HOPS = 3
+_META_REFRESH_URL = re.compile(
+    r"^\s*\d+(?:\.\d*)?\s*[;,]\s*(?:url\s*=\s*)?['\"]?([^'\"\s]+)", re.I
+)
 _BRAVE_WEB_SEARCH_URL = "https://api.search.brave.com/res/v1/web/search"
 _TAVILY_SEARCH_URL = "https://api.tavily.com/search"
-
-# Fetched page/search text is interpolated into prompt XML fences (<sources>,
-# <search_results>, ...). A malicious page body containing a literal closing tag
-# could break out of the data fence and inject instructions, so the prompts'
-# "treat as untrusted DATA" framing is only sound if the delimiter itself can't
-# appear in the data. Neutralise any "</tag>" / "<tag>" fence sequence by
-# inserting a zero-width space after "<", which renders identically but no longer
-# matches the delimiter. Only the prompt fence tags are touched, so legitimate
-# markup/code in the source is left intact.
-_PROMPT_FENCE_TAGS = (
-    # Tech-guide fences.
-    "sources",
-    "source",
-    "search_results",
-    "available_images",
-    "previously_written_sections",
-    "section_to_write",
-    "section",
-    "depth_directive",
-    # Review / summary / extraction fences wrapping untrusted paper content, so
-    # the same defang protects those pipelines (a paper body is attacker-supplied
-    # by whoever submits the job, just like a web page is).
-    "paper",
-    "paper_content",
-    "current_content",
-    "current_explanation",
-    "previous_explanation",
-    "citation_summaries",
-    "codebase_summary",
-    "official_codebase_summary",
-    "numbered_sentences",
-    "citations",
-    "existing_citations",
-    "existing_keywords",
-)
-_FENCE_TAG_RE = re.compile(
-    r"<(/?)(" + "|".join(_PROMPT_FENCE_TAGS) + r")\s*>", re.IGNORECASE
-)
-
-
-def neutralize_prompt_tags(text: str) -> str:
-    """Defang prompt-fence tags in untrusted text so it can't break the fence."""
-    return _FENCE_TAG_RE.sub(lambda m: f"<​{m.group(1)}{m.group(2)}>", text)
 
 
 @dataclass(frozen=True)
@@ -96,6 +62,9 @@ class PageContent:
     text: str
     image_urls: list[str] = field(default_factory=list)
     links: list[str] = field(default_factory=list)
+    # Where the page actually lives after HTTP and <meta refresh> redirects
+    # (sub-page scope is taken from it); empty when it is ``url`` itself.
+    final_url: str = ""
 
 
 @dataclass
@@ -116,10 +85,18 @@ class ResearchCorpus:
                     ordered.append(url)
         return ordered
 
-    def relevant_text(self, query: str, *, max_chars: int) -> str:
+    def relevant_text(
+        self,
+        query: str,
+        *,
+        max_chars: int,
+        official_hosts: Collection[str] | None = None,
+    ) -> str:
         """The pages most relevant to ``query`` (word overlap with title and
         body), most relevant first, within ``max_chars``. Each section of a
-        guide reads only the material it needs instead of the whole corpus."""
+        guide reads only the material it needs instead of the whole corpus.
+        With ``official_hosts``, each source is labelled official or
+        third-party so the writer knows which one decides a flag or default."""
         words = {w for w in re.findall(r"[a-z0-9][a-z0-9_.-]{2,}", query.lower())}
 
         def score(page: PageContent) -> float:
@@ -131,8 +108,16 @@ class ResearchCorpus:
         ranked = sorted(self.pages, key=score, reverse=True)
         blocks, used = [], 0
         for page in ranked:
+            label = ""
+            if official_hosts is not None:
+                host = urlparse(page.final_url or page.url).hostname or ""
+                label = (
+                    " (official documentation)"
+                    if host in official_hosts
+                    else " (third-party)"
+                )
             block = (
-                f"## Source: {neutralize_prompt_tags(page.url)}\n"
+                f"## Source{label}: {neutralize_prompt_tags(page.url)}\n"
                 f"# {neutralize_prompt_tags(page.title)}\n\n"
                 f"{neutralize_prompt_tags(page.text)}"
             )
@@ -330,16 +315,16 @@ class WebResearcher:
             if page is None:
                 continue
             corpus.pages.append(page)
-            visited.add(_normalize_url(url))
+            visited.add(normalize_url(url))
 
             if discover_subpages:
-                for sub_url in self._select_subpages(page, url):
-                    if _normalize_url(sub_url) in visited:
+                for sub_url in self._select_subpages(page, page.final_url or url):
+                    if normalize_url(sub_url) in visited:
                         continue
                     sub_page = self._fetch_page(sub_url)
                     if sub_page is not None:
                         corpus.pages.append(sub_page)
-                        visited.add(_normalize_url(sub_url))
+                        visited.add(normalize_url(sub_url))
 
         self.run_searches(corpus, search_queries or [])
 
@@ -374,12 +359,12 @@ class WebResearcher:
         if fetch_top <= 0:
             return
 
-        visited = {_normalize_url(p.url) for p in corpus.pages}
+        visited = {normalize_url(p.url) for p in corpus.pages}
         added = 0
         for result in corpus.search_results:
             if added >= fetch_top:
                 break
-            norm = _normalize_url(result.url)
+            norm = normalize_url(result.url)
             if not norm or norm in visited:
                 continue
             visited.add(norm)
@@ -428,9 +413,9 @@ class WebResearcher:
 
         soup = BeautifulSoup(html, "html.parser")
         title = soup.title.get_text(strip=True) if soup.title else url
-        text = extract_text_from_html(html)
-        # Relative links resolve against where the page actually lives (after
-        # redirects), not the URL we asked for.
+        # Relative links and image markers resolve against where the page
+        # actually lives (after redirects), not the URL we asked for.
+        text = extract_text_from_html(html, base_url=final_url)
         image_urls = self._extract_images(soup, final_url)
         links = self._extract_links(soup, final_url)
         return PageContent(
@@ -439,9 +424,29 @@ class WebResearcher:
             text=text,
             image_urls=image_urls,
             links=links,
+            final_url=final_url if final_url != url else "",
         )
 
     def _get_html(self, url: str) -> tuple[str, str] | None:
+        """Fetch ``url`` like :meth:`_get_page`, also following a small
+        stub page's ``<meta http-equiv="refresh">`` (docs sites such as
+        ``/stable/`` aliases use it instead of an HTTP redirect) for at most
+        :data:`MAX_META_REFRESH_HOPS` hops. Every hop goes through the same
+        pinned, SSRF-guarded client."""
+        fetched = self._get_page(url)
+        for _ in range(MAX_META_REFRESH_HOPS):
+            if fetched is None:
+                return None
+            target = _meta_refresh_target(*fetched)
+            if target is None:
+                break
+            if not is_url_public(target):
+                raise UnsafeUrlError(f"meta refresh to non-public '{target}'")
+            logger.info("Following meta refresh '%s' -> '%s'", fetched[1], target)
+            fetched = self._get_page(target)
+        return fetched
+
+    def _get_page(self, url: str) -> tuple[str, str] | None:
         """Stream ``url``; return (decoded HTML, final URL), or None when the
         resource is not HTML or exceeds :data:`MAX_PAGE_BYTES`."""
         with self.client.stream("GET", url) as response:
@@ -461,9 +466,13 @@ class WebResearcher:
             final_url = str(response.url)
             charset = response.charset_encoding
         raw = bytes(body)
+        html = None
         if charset:
-            html = raw.decode(charset, errors="replace")
-        else:
+            try:
+                html = raw.decode(charset, errors="replace")
+            except LookupError:  # unknown charset label: sniff instead
+                logger.debug("Unknown charset '%s' for '%s'", charset, url)
+        if html is None:
             # No charset header: honour <meta charset> / byte sniffing instead
             # of assuming UTF-8 (EUC-KR, Shift_JIS docs otherwise turn to noise).
             html = UnicodeDammit(raw, is_html=True).unicode_markup or ""
@@ -512,14 +521,36 @@ class WebResearcher:
                 continue
             if not (parsed.path.rstrip("/") + "/").startswith(scope):
                 continue
-            norm = _normalize_url(link)
-            if norm == _normalize_url(base_url) or norm in seen:
+            norm = normalize_url(link)
+            if norm == normalize_url(base_url) or norm in seen:
                 continue
             seen.add(norm)
             selected.append(link)
             if len(selected) >= self.max_subpages:
                 break
         return selected
+
+
+def _meta_refresh_target(html: str, base_url: str) -> str | None:
+    """Absolute http(s) target of a stub page's ``<meta http-equiv=refresh>``,
+    or None (no tag, a page with real content, or a self-refresh)."""
+    if len(html) > _META_REFRESH_MAX_BYTES:
+        return None
+    soup = BeautifulSoup(html, "html.parser")
+    for meta in soup.find_all("meta"):
+        if not isinstance(meta, Tag):
+            continue
+        if str(meta.get("http-equiv", "")).strip().lower() != "refresh":
+            continue
+        match = _META_REFRESH_URL.match(str(meta.get("content", "")))
+        if not match:
+            continue
+        target = urljoin(base_url, match.group(1).strip())
+        if target.lower().startswith(("http://", "https://")) and (
+            normalize_url(target) != normalize_url(base_url)
+        ):
+            return target
+    return None
 
 
 def _scope_prefix(path: str) -> str:
@@ -531,6 +562,7 @@ def _scope_prefix(path: str) -> str:
     return directory + "/"
 
 
-def _normalize_url(url: str) -> str:
+def normalize_url(url: str) -> str:
+    """Dedup key: scheme and host are case-insensitive, the path is not."""
     parsed = urlparse(url)
-    return f"{parsed.scheme}://{parsed.netloc}{parsed.path}".rstrip("/").lower()
+    return f"{parsed.scheme.lower()}://{parsed.netloc.lower()}{parsed.path}".rstrip("/")

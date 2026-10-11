@@ -100,43 +100,6 @@ class TestUnsupportedTags:
         ) == ["Paged-Optimizers"]
 
 
-class TestFetchBlogTags:
-    def test_counts_tags_across_posts(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        from scholar_lens.src import post_conventions
-
-        posts = {
-            "u1": '---\ntitle: "A"\ntags: ["GraphRAG", "Knowledge-Graph"]\n---\nbody',
-            "u2": '---\ntitle: "B"\ntags: ["GraphRAG"]\n---\nbody',
-        }
-
-        class Response:
-            def __init__(self, payload=None, text=""):  # type: ignore[no-untyped-def]
-                self._payload, self.text, self.status_code = payload, text, 200
-
-            def raise_for_status(self) -> None:
-                pass
-
-            def json(self):  # type: ignore[no-untyped-def]
-                return self._payload
-
-        def fake_get(url, **kwargs):  # type: ignore[no-untyped-def]
-            if url.endswith("/contents/_posts"):
-                return Response(
-                    [
-                        {"type": "file", "name": "a.md", "url": "u1"},
-                        {"type": "file", "name": "b.md", "url": "u2"},
-                        {"type": "dir", "name": "drafts", "url": "x"},
-                    ]
-                )
-            return Response(text=posts[url])
-
-        monkeypatch.setattr(post_conventions.requests, "get", fake_get)
-        assert post_conventions.fetch_blog_tags("o/r", "main", None) == [
-            "GraphRAG",
-            "Knowledge-Graph",
-        ]
-
-
 class TestSpellingAndStylizedNames:
     def test_reuses_blog_spelling_and_keeps_stylized_case(self) -> None:
         result = normalize_tags(

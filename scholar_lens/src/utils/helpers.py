@@ -5,8 +5,10 @@ import re
 import time
 from collections.abc import Callable
 from typing import Any
+from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup, NavigableString, Tag
+from bs4.element import PreformattedString
 
 from ..logger import logger
 
@@ -118,6 +120,19 @@ _DROPPED_TAGS = (
 # Dropped only at page level: inside <article>/<main> a <header> holds the
 # document title and an <aside> holds callouts/notes worth keeping.
 _PAGE_LEVEL_TAGS = ("header", "aside")
+# LaTeXML apparatus with no reading value: footnote marks and numbers, code
+# listing line numbers (algorithm step numbers are kept), and the base64
+# download link attached to every listing.
+_DROPPED_LATEXML = (
+    ".ltx_note_mark",
+    ".ltx_tag_note",
+    ".ltx_note_type",
+    ".ltx_lstlisting .ltx_tag_listingline",
+    ".ltx_listing_data",
+)
+# Itemize markers LaTeXML renders as a tag in each <li>.
+_BULLETS = frozenset({"•", "∙", "◦", "▪", "‣", "–", "-", "∗", "*", "⋅"})
+_LISTING_SPACE = re.compile(r"(<span[^>]*\bltx_lst_space\b[^>]*>)( +)(</span>)")
 # LaTeXML renders numbered display equations as tables; they are math, not data.
 _EQUATION_TABLE_CLASSES = ("ltx_equation", "ltx_eqn_table", "ltx_equationgroup")
 _MATH_SPAN = re.compile(r"\$\$.+?\$\$", re.DOTALL)
@@ -153,15 +168,19 @@ def _inline(text: str) -> str:
     return re.sub(r"\s+", " ", text)
 
 
-def _math_markdown(element: Tag) -> str:
-    """LaTeX for a MathML element, delimited the way the blog renders it:
-    ``$$…$$`` inline and display alike, display on its own paragraph."""
+def _math_tex(element: Tag) -> str:
+    """LaTeX source of a MathML element (alttext, else its TeX annotation)."""
     tex = str(element.get("alttext") or "").strip()
     if not tex:
         annotation = element.find("annotation", attrs={"encoding": "application/x-tex"})
         tex = annotation.get_text().strip() if isinstance(annotation, Tag) else ""
-    if not tex:
-        tex = _inline(element.get_text(" ")).strip()
+    return tex or _inline(element.get_text(" ")).strip()
+
+
+def _math_markdown(element: Tag) -> str:
+    """LaTeX for a MathML element, delimited the way the blog renders it:
+    ``$$…$$`` inline and display alike, display on its own paragraph."""
+    tex = _math_tex(element)
     if not tex:
         return ""
     if element.get("display") == "block":
@@ -196,22 +215,48 @@ def _escape_cell_pipes(cell: str) -> str:
     return "".join(out)
 
 
+def _classes(element: Tag) -> list[str]:
+    raw: Any = element.get("class") or []
+    return raw.split() if isinstance(raw, str) else [str(c) for c in raw]
+
+
+def _has_class(element: Tag, name: str) -> bool:
+    return name in _classes(element)
+
+
 def _is_equation_table(table: Tag) -> bool:
-    raw: Any = table.get("class") or []
-    classes: list[str] = raw.split() if isinstance(raw, str) else [str(c) for c in raw]
-    return any(c in _EQUATION_TABLE_CLASSES for c in classes)
+    return any(c in _EQUATION_TABLE_CLASSES for c in _classes(table))
+
+
+def _is_equation_cell(td: Tag) -> bool:
+    """Not the equation number or the centering padding around a row."""
+    return not any(c == "ltx_eqn_eqno" or "_pad" in c for c in _classes(td))
 
 
 def _equation_table_markdown(table: Tag) -> str:
-    """Display math for a LaTeXML equation table (equation numbers dropped)."""
-    blocks = []
-    for math in table.find_all("math"):
-        if math.find_parent(class_="ltx_eqn_eqno") is not None:
-            continue
-        tex = _math_markdown(math).strip().strip("$").strip()
-        if tex:
-            blocks.append(f"$$ {tex} $$")
-    return "\n\n" + "\n\n".join(blocks) + "\n\n" if blocks else ""
+    """One display equation for a LaTeXML equation table, equation numbers
+    dropped. ``align``/``eqnarray`` put each side of a row in its own cell;
+    the cells of a row are rejoined (``&`` keeps the alignment) and several
+    rows become one ``aligned`` block, so no fragment starts with ``=``."""
+    rows: list[list[str]] = []
+    for tr in _own_rows(table):
+        cells = [
+            " ".join(_math_tex(m) for m in td.find_all("math"))
+            for td in tr.find_all("td", recursive=False)
+            if _is_equation_cell(td)
+        ]
+        while cells and not cells[-1]:
+            cells.pop()
+        if any(cells):
+            rows.append(cells)
+    if not rows:
+        return ""
+    if len(rows) == 1:
+        tex = " ".join(c for c in rows[0] if c)
+    else:
+        lines = " \\\\ ".join(" & ".join(cells) for cells in rows)
+        tex = f"\\begin{{aligned}} {lines} \\end{{aligned}}"
+    return f"\n\n$$ {tex} $$\n\n"
 
 
 def _nested_table_text(table: Tag, render_cell: Callable[[Tag], str]) -> str:
@@ -227,16 +272,28 @@ def _nested_table_text(table: Tag, render_cell: Callable[[Tag], str]) -> str:
     return "; ".join(rows)
 
 
+def _body_cells(slot_row: list[tuple[str, bool] | None]) -> list[str]:
+    """Row texts; a single cell spanning the whole row (a group label) is kept
+    once instead of repeated across every column."""
+    texts = [slot[0] if slot else "" for slot in slot_row]
+    if len(slot_row) > 1 and all(slot and slot[1] for slot in slot_row[1:]):
+        return texts[:1] + [""] * (len(texts) - 1)
+    return texts
+
+
 def table_to_markdown(table: Tag, render_cell: Callable[[Tag], str]) -> str:
     """Serialise an HTML table into one complete GFM table.
 
     colspan/rowspan are expanded into a grid; stacked header rows are merged
     column-wise ("AIME 2024" over "pass@1" -> "AIME 2024 pass@1"); every row has
-    the header's width, empty cells become "-", and literal pipes are escaped.
+    the header's width, a value spanning columns is repeated in each (except a
+    full-width label row), empty cells become "-", and literal pipes are
+    escaped.
     """
     # Each slot holds (text, spanned): ``spanned`` marks the copies a colspan
-    # creates, which repeat in header rows and stay empty in body rows.
+    # creates.
     grid: list[list[tuple[str, bool] | None]] = []
+    first_row_span = 1
     is_th_row: list[bool] = []
     in_thead: list[bool] = []
     for r, tr in enumerate(_own_rows(table)):
@@ -252,6 +309,8 @@ def table_to_markdown(table: Tag, render_cell: Callable[[Tag], str]) -> str:
                 col += 1
             text = _inline(render_cell(cell)).strip()
             colspan, rowspan = _cell_span(cell, "colspan"), _cell_span(cell, "rowspan")
+            if r == 0:
+                first_row_span = max(first_row_span, rowspan)
             for dr in range(rowspan):
                 while len(grid) <= r + dr:
                     grid.append([])
@@ -268,10 +327,7 @@ def table_to_markdown(table: Tag, render_cell: Callable[[Tag], str]) -> str:
     slots = [grid[i] + [None] * (width - len(grid[i])) for i in keep]
     is_th_row = [is_th_row[i] if i < len(is_th_row) else False for i in keep]
     in_thead = [in_thead[i] if i < len(in_thead) else False for i in keep]
-    rows = [
-        [slot[0] if slot and not slot[1] else "" for slot in slot_row]
-        for slot_row in slots
-    ]
+    rows = [_body_cells(slot_row) for slot_row in slots]
 
     header_count = sum(1 for flag in in_thead[: len(rows)] if flag)
     if not header_count:
@@ -286,6 +342,9 @@ def table_to_markdown(table: Tag, render_cell: Callable[[Tag], str]) -> str:
             if any(_NUMERIC_CELL.match(c) for c in candidate):
                 header_count = max(1, i)
                 break
+        # A first-row cell spanning several rows ("Model" over a two-row
+        # header) marks those rows as header even when one looks numeric.
+        header_count = max(header_count, min(first_row_span, _MAX_HEADER_ROWS))
     header_count = max(1, min(header_count, len(rows) - 1)) if len(rows) > 1 else 1
 
     header: list[str] = []
@@ -317,45 +376,209 @@ def table_to_markdown(table: Tag, render_cell: Callable[[Tag], str]) -> str:
     return "\n\n" + prefix + "\n".join(lines) + "\n\n"
 
 
-def extract_text_from_html(html_content: str) -> str:
+def _is_source_indent(text: str) -> bool:
+    return text.isspace() and "\n" in text
+
+
+def _listing_code(listing: Tag) -> str:
+    """A LaTeXML code listing (``lstlisting``), one ``ltx_listingline`` per
+    line, verbatim."""
+    lines = listing.select(".ltx_listingline")
+    if not lines:
+        return listing.get_text()
+
+    def line_text(line: Tag) -> str:
+        # Whitespace runs with a newline between the line's spans are HTML
+        # source indentation, not code.
+        parts = (
+            child.get_text() if isinstance(child, Tag) else str(child)
+            for child in line.children
+            if isinstance(child, Tag)
+            or (isinstance(child, NavigableString) and not _is_source_indent(child))
+        )
+        return "".join(parts).replace("\xa0", " ").rstrip()
+
+    return "\n".join(line_text(line) for line in lines)
+
+
+def preserve_listing_spaces(html: str) -> str:
+    """Listing indentation as NBSPs, applied to raw HTML before any
+    BeautifulSoup parse: the parser collapses whitespace-only strings, which
+    would flatten the spaces LaTeXML puts in ``ltx_lst_space`` spans.
+    Idempotent."""
+    return _LISTING_SPACE.sub(
+        lambda m: m.group(1) + "\xa0" * len(m.group(2)) + m.group(3), html
+    )
+
+
+def _code_span(code: str) -> str:
+    """Inline code delimited by a backtick run longer than any inside it,
+    padded when the code starts or ends with a backtick (CommonMark), so it
+    can never read as a fence opener."""
+    longest = max((len(run) for run in re.findall(r"`+", code)), default=0)
+    ticks = "`" * (longest + 1)
+    pad = " " if code.startswith("`") or code.endswith("`") else ""
+    return f"{ticks}{pad}{code}{pad}{ticks}"
+
+
+_FENCE_OPEN = re.compile(r"^[ \t]*(`{3,}|~{3,})(.*)$", re.MULTILINE)
+_LIST_MARKER = re.compile(r"^[ \t]*(?:[-*+]|\d+[.)])[ \t]")
+
+
+def _fence_toggle(line: str, open_fence: str | None) -> str | None:
+    """The fence still open after ``line``, given the one open before it. A
+    fence closes on a bare run of its own character at least as long
+    (CommonMark)."""
+    match = _FENCE_OPEN.match(line)
+    if open_fence is None:
+        if match and match.group(1)[0] == "`" and "`" in match.group(2):
+            return None  # a code span such as ```` ``` ````, not a fence
+        return match.group(1) if match else None
+    closes = (
+        match is not None
+        and match.group(1)[0] == open_fence[0]
+        and len(match.group(1)) >= len(open_fence)
+        and not match.group(2).strip()
+    )
+    return None if closes else open_fence
+
+
+def _code_fence(code: str) -> str:
+    """``code`` fenced with a marker none of its own lines can close: ```` ``` ````,
+    else ``~~~``, else a backtick run longer than any inside."""
+    runs = [m.group(1) for m in _FENCE_OPEN.finditer(code)]
+    if not any(run[0] == "`" for run in runs):
+        marker = "```"
+    elif not any(run[0] == "~" for run in runs):
+        marker = "~~~"
+    else:
+        marker = "`" * (max(len(run) for run in runs if run[0] == "`") + 1)
+    return f"\n\n{marker}\n{code}\n{marker}\n\n"
+
+
+def _list_line(line: str, in_list: bool) -> tuple[str, bool]:
+    """A prose line outside fences, and whether a list item is still open.
+
+    Item markers and the indented continuation lines right after them keep
+    their indentation (paragraphs, tables or headings inside an item); any
+    other line is stripped, so stray source indentation never reads as an
+    indented code block.
+    """
+    if _LIST_MARKER.match(line) or (in_list and line[:1] in (" ", "\t")):
+        indent = line[: len(line) - len(line.lstrip(" \t"))]
+        return indent + re.sub(r"[ \t]+", " ", line).strip(), True
+    return re.sub(r"[ \t]+", " ", line).strip(), False
+
+
+def _tighten_outside_fences(text: str) -> str:
+    """Drop blank lines (and the indentation around them) outside code fences,
+    so a list item's paragraphs stay on its lines; fenced code and the
+    indentation of nested list items are kept."""
+    lines: list[str] = []
+    fence: str | None = None
+    in_list = False
+    for line in text.split("\n"):
+        was_open = fence is not None
+        fence = _fence_toggle(line, fence)
+        if was_open and fence is not None:
+            lines.append(line)  # code
+        elif was_open or fence is not None:
+            lines.append(line.strip())  # a fence line
+        elif line.strip():
+            kept, in_list = _list_line(line, in_list)
+            lines.append(kept)
+    return "\n".join(lines)
+
+
+def _list_item(item_text: str, marker: str) -> str:
+    """One Markdown list item: continuation lines (paragraphs, nested items)
+    indented under the marker; fenced code stays at the margin."""
+    lines = _tighten_outside_fences(item_text.strip()).split("\n")
+    if lines and _FENCE_OPEN.match(lines[0]):
+        lines.insert(0, "")  # a fence must open on its own line
+    pad = " " * len(marker)
+    out: list[str] = [f"{marker}{lines[0]}" if lines else marker.rstrip()]
+    fence: str | None = None
+    for line in lines[1:]:
+        was_open = fence is not None
+        fence = _fence_toggle(line, fence)
+        in_code = was_open or fence is not None
+        out.append(line if in_code or not line else pad + line)
+    return "\n" + "\n".join(out) + "\n"
+
+
+def _list_start(element: Tag) -> int:
+    try:
+        return int(str(element.get("start", "1")).strip())
+    except ValueError:
+        return 1
+
+
+def extract_text_from_html(html_content: str, *, base_url: str | None = None) -> str:
     """Convert paper/doc HTML into compact Markdown-like text for the models.
 
     Keeps the structure the writers need: headings (``##``), paragraphs, list
-    items, fenced ``<pre>`` code, ``$$``-delimited LaTeX from MathML, complete
-    GFM tables, and ``[Image: alt=…, src=…]`` figure markers. Page chrome
-    (nav/header/footer/aside, scripts) is dropped.
+    items, fenced ``<pre>`` and LaTeXML listing code, ``$$``-delimited LaTeX
+    from MathML, complete GFM tables, footnotes in place, and
+    ``[Image: alt=…, src=…]`` figure markers (``src`` resolved against
+    ``base_url`` when given). Page chrome (nav/header/footer/aside, scripts) is
+    dropped.
     """
     if not html_content:
         return ""
 
+    html_content = preserve_listing_spaces(html_content)
     soup = BeautifulSoup(html_content, "html.parser")
     for tag_name in _DROPPED_TAGS:
         for tag in soup.find_all(tag_name):
             tag.decompose()
+    for tag in soup.select(", ".join(_DROPPED_LATEXML)):
+        tag.decompose()
     for tag_name in _PAGE_LEVEL_TAGS:
         for tag in soup.find_all(tag_name):
             if tag.find_parent(["article", "main"]) is None:
                 tag.decompose()
 
+    def resolve(src: str) -> str:
+        return urljoin(base_url, src) if base_url and src else src
+
     def children(element: Tag) -> str:
         return "".join(parse(child) for child in element.children)
 
+    def list_item(element: Tag, marker: str) -> str:
+        # LaTeXML items carry their marker as a tag: a bullet glyph is
+        # dropped, an enumerate label ("(a)", "1.") is kept after "- ".
+        label = element.find(class_="ltx_tag_item")
+        if isinstance(label, Tag):
+            text = label.get_text(strip=True)
+            marker = "- " if text in _BULLETS else f"- {text} "
+            label.decompose()
+        return _list_item(children(element), marker)
+
     def parse(element: Any) -> str:
+        if isinstance(element, PreformattedString):
+            return ""  # comments, doctype, CDATA, processing instructions
         if isinstance(element, NavigableString):
             return _inline(str(element))
         if not isinstance(element, Tag):
             return ""
         name = element.name
         if name == "img":
+            src = str(element.get("src") or element.get("data-src") or "").strip()
+            if src.lower().startswith("data:"):
+                return ""  # inline bitmap: nothing a writer could reference
             alt = _inline(str(element.get("alt", ""))).strip()
-            return f"[Image: alt={alt}, src={element.get('src', '')}]"
+            return f"[Image: alt={alt}, src={resolve(src)}]"
         if (
             name == "object"
             and element.get("data")
             and "svg" in str(element.get("type", ""))
         ):
             # arXiv renders vector figures (often the main diagram) this way.
-            return f"[Image: alt=, src={element.get('data')}]"
+            data = str(element.get("data")).strip()
+            if data.lower().startswith("data:"):
+                return ""  # inline SVG payload, as for <img>
+            return f"[Image: alt=, src={resolve(data)}]"
         if name == "math":
             return _math_markdown(element)
         if name == "table":
@@ -364,25 +587,53 @@ def extract_text_from_html(html_content: str) -> str:
             if element.find_parent("table") is not None:
                 return _nested_table_text(element, children)
             return table_to_markdown(element, children)
-        if name == "pre":
-            code = element.get_text().strip("\n")
-            return f"\n\n```\n{code}\n```\n\n" if code.strip() else ""
+        # (The <figure> around a listing carries ``ltx_lstlisting`` too.)
+        is_listing = name in ("div", "span") and _has_class(element, "ltx_listing")
+        if name == "pre" or (is_listing and _has_class(element, "ltx_lstlisting")):
+            code = (
+                element.get_text() if name == "pre" else _listing_code(element)
+            ).strip("\n")
+            return _code_fence(code) if code.strip() else ""
+        if is_listing:
+            # An algorithm (``algorithmic``): numbered steps whose math must
+            # stay LaTeX, so it is prose line by line, not a code fence.
+            steps = (
+                _inline(children(line)).strip()
+                for line in element.select(".ltx_listingline")
+            )
+            text = "\n".join(step for step in steps if step)
+            return f"\n\n{text}\n\n" if text else children(element)
         if name == "code":
             code = _inline(element.get_text()).strip()
-            return f"`{code}`" if code else ""
+            return _code_span(code) if code else ""
         if name == "br":
             return "\n"
         if name in _HEADING_TAGS:
             text = _inline(children(element)).strip()
             return f"\n\n{'#' * max(2, _HEADING_TAGS[name])} {text}\n\n" if text else ""
-        if name == "li":
-            return f"\n- {children(element).strip()}\n"
+        if name in ("ul", "ol"):
+            number = _list_start(element)
+            parts: list[str] = []
+            for child in element.children:
+                if isinstance(child, Tag) and child.name == "li":
+                    marker = f"{number}. " if name == "ol" else "- "
+                    parts.append(list_item(child, marker))
+                    number += 1
+                else:
+                    parts.append(parse(child))
+            return f"\n\n{''.join(parts)}\n\n"
+        if name == "li":  # outside a list
+            return list_item(element, "- ")
+        if _has_class(element, "ltx_note"):
+            content = element.find(class_="ltx_note_content")
+            note = _inline(children(content) if isinstance(content, Tag) else "")
+            return f" (footnote: {note.strip()})" if note.strip() else ""
         if name == "a":
             text = children(element)
             href = str(element.get("href", ""))
             if (
                 not href
-                or href.startswith(("#", "javascript:"))
+                or href.strip().lower().startswith(("#", "javascript:", "data:"))
                 or href == text.strip()
             ):
                 return text
@@ -396,15 +647,16 @@ def extract_text_from_html(html_content: str) -> str:
     for artifact in ("\\AND", "footnotemark:"):
         text = text.replace(artifact, "")
     lines: list[str] = []
-    in_fence = False
+    fence: str | None = None
+    in_list = False
     for line in text.split("\n"):
-        if line.startswith("```"):
-            in_fence = not in_fence
-            lines.append(line)
-        elif in_fence:
-            lines.append(line)
+        was_open = fence is not None
+        fence = _fence_toggle(line, fence)
+        if was_open or fence is not None:
+            lines.append(line)  # code (and its fence lines)
         else:
-            lines.append(re.sub(r"[ \t]+", " ", line).strip())
+            kept, in_list = _list_line(line, in_list)
+            lines.append(kept)
     return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
 
 

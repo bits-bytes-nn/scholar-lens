@@ -23,7 +23,7 @@ import re
 from abc import ABC, abstractmethod
 from datetime import UTC, datetime
 from pathlib import Path
-from urllib.parse import unquote, urljoin, urlparse
+from urllib.parse import parse_qs, unquote, urljoin, urlparse
 
 import requests
 from pydantic import HttpUrl
@@ -38,8 +38,14 @@ from .url_guard import (
     assert_url_scheme_and_literal,
 )
 
-_ARXIV_HOST_PATTERN = re.compile(r"(^|\.)arxiv\.org$", re.IGNORECASE)
-_ARXIV_URL_ID = re.compile(rf"/(?:abs|pdf|html)/({ARXIV_ID_BODY})(?:\.pdf)?/?$")
+# arXiv and the mirrors that serve the same paper under its arXiv id
+# (ar5iv.labs.arxiv.org already matches arxiv.org).
+_ARXIV_HOST_PATTERN = re.compile(r"(^|\.)(arxiv|ar5iv|alphaxiv)\.org$", re.IGNORECASE)
+_ARXIV_URL_ID = re.compile(
+    rf"/(?:abs|pdf|html|overview)/({ARXIV_ID_BODY})(?:\.pdf)?/?$"
+)
+# "arxiv.org/abs/2106.09685" or "openreview.net/pdf?id=…" typed without a scheme.
+_SCHEMELESS_URL = re.compile(r"^[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}/", re.IGNORECASE)
 
 _PDF_DOWNLOAD_TIMEOUT_SECONDS = 30
 _PDF_PROBE_TIMEOUT_SECONDS = 15
@@ -167,11 +173,16 @@ class PdfUrlSource(PaperSource):
         Uses the PDF filename stem when present, disambiguated by a short hash
         of the full URL so distinct URLs never collide.
         """
-        parsed = urlparse(self._raw_url)
-        stem = Path(unquote(parsed.path)).stem
-        slug = re.sub(r"[^a-zA-Z0-9]+", "-", stem).strip("-").lower()
+        slug = re.sub(r"[^a-zA-Z0-9]+", "-", self._url_stem()).strip("-").lower()
         digest = hashlib.sha1(self._raw_url.encode("utf-8")).hexdigest()[:8]
         return f"{slug}-{digest}" if slug else f"paper-{digest}"
+
+    def _url_stem(self) -> str:
+        """The paper's name in its URL: the file stem, or the ``id`` query value
+        for endpoints such as OpenReview's ``/pdf?id=nZeVKeeFYf9``."""
+        parsed = urlparse(self._raw_url)
+        paper_ids = parse_qs(parsed.query).get("id")
+        return paper_ids[0] if paper_ids else Path(unquote(parsed.path)).stem
 
     @property
     def pdf_url(self) -> HttpUrl:
@@ -185,9 +196,7 @@ class PdfUrlSource(PaperSource):
 
     def _fallback_title(self) -> str:
         """Human-readable title from the URL stem when no better one exists."""
-        parsed = urlparse(self._raw_url)
-        stem = Path(unquote(parsed.path)).stem
-        words = re.sub(r"[^a-zA-Z0-9]+", " ", stem).strip()
+        words = re.sub(r"[^a-zA-Z0-9]+", " ", self._url_stem()).strip()
         return words.title() if words else self.source_id
 
     def fetch_metadata(self) -> ArxivMetadata:
@@ -389,18 +398,26 @@ def resolve_paper_source(
 ) -> PaperSource:
     """Resolve a raw ``--source`` argument to a concrete :class:`PaperSource`.
 
-    Accepts a bare arXiv ID, an ``arxiv.org`` URL (any of abs/pdf/html), or an
-    arbitrary URL pointing at a paper PDF. Arbitrary non-PDF URLs are rejected
-    later, at download time, via :class:`NotAPdfError`.
+    Accepts a bare arXiv ID, an arXiv (or ar5iv/alphaXiv) URL, or an arbitrary
+    URL pointing at a paper PDF, with or without the ``https://`` scheme.
+    Arbitrary non-PDF URLs are rejected later, at download time, via
+    :class:`NotAPdfError`.
     """
     source = source.strip()
     if arxiv_id := normalize_arxiv_id(source):
         return ArxivSource(arxiv_id, handler=arxiv_handler)
+    if _SCHEMELESS_URL.match(source):
+        source = f"https://{source}"
     if source.lower().startswith(("http://", "https://")):
-        if arxiv_id := extract_arxiv_id_from_url(source):
-            logger.info("Detected arXiv ID '%s' from URL.", arxiv_id)
-            return ArxivSource(arxiv_id, handler=arxiv_handler)
-        return PdfUrlSource(source)
+        try:
+            if arxiv_id := extract_arxiv_id_from_url(source):
+                logger.info("Detected arXiv ID '%s' from URL.", arxiv_id)
+                return ArxivSource(arxiv_id, handler=arxiv_handler)
+            return PdfUrlSource(source)
+        # A pydantic ValidationError (e.g. an invalid internationalized host) is
+        # a ValueError, as is urlparse's "Invalid IPv6 URL".
+        except ValueError as e:
+            raise PaperSourceError(f"'{source}' is not a valid URL: {e}") from e
     raise PaperSourceError(
         f"Could not resolve '{source}' to an arXiv ID or a URL. Provide a valid "
         "arXiv ID (e.g. 2401.06066) or a URL to a paper PDF."

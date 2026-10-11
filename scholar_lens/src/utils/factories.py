@@ -46,8 +46,9 @@ class BaseBedrockWrapper:
 
 class BaseBedrockModelFactory(Generic[ModelIdT, ModelInfoT, WrapperT], ABC):
     # A non-streaming call returns nothing until generation ends, so the read
-    # timeout must cover a full long response (~32k tokens), not a socket gap.
-    BOTO_READ_TIMEOUT: ClassVar[int] = 900
+    # timeout must cover the longest response asked for (128k output tokens,
+    # thinking included, at a few dozen tokens per second), not a socket gap.
+    BOTO_READ_TIMEOUT: ClassVar[int] = 3600
     BOTO_CONNECT_TIMEOUT: ClassVar[int] = 30
     # One attempt: RetryableBase (utils.retry) is the single retry layer, so
     # botocore must not multiply it.

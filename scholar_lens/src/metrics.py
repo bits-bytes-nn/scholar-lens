@@ -1,8 +1,7 @@
 """Token-usage accounting, cost estimation, and CloudWatch metric emission.
 
-The pipeline makes many Bedrock calls (especially the per-section synthesis
-loop). Without instrumentation this is the most
-expensive — and previously invisible — part of the system. This module adds:
+The pipelines make many Bedrock calls (especially the per-section writing
+loops), the most expensive part of the system. This module provides:
 
 * :class:`TokenUsageTracker` — a LangChain callback that accumulates input/output
   token counts across every model call in a run.
@@ -84,11 +83,10 @@ class TokenUsageTracker(BaseCallbackHandler):
 class TokenBudgetGuard:
     """Shared total-token budget wiring for the generation pipelines.
 
-    All three generators (``ExplainerGraph``, ``PaperSummarizer``,
+    All three generators (``PaperReviewer``, ``PaperSummarizer``,
     ``TechGuideGenerator``) locate the run's :class:`TokenUsageTracker` in their
     callback list and abort once cumulative spend passes ``max_total_tokens``.
-    That lookup and guard were previously copy-pasted verbatim in each; this
-    mixin holds the single copy. Subclasses call :meth:`_init_token_budget` from
+    Subclasses call :meth:`_init_token_budget` from
     ``__init__`` and :meth:`_enforce_token_budget` at each expensive step. The
     tech-guide's soft-degrade / hard-abort tiers build on ``_token_tracker`` and
     ``max_total_tokens`` set here.

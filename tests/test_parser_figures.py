@@ -11,6 +11,7 @@ from pathlib import Path
 
 import fitz
 import pytest
+import tenacity
 
 from scholar_lens.src.parser import (
     Content,
@@ -19,6 +20,7 @@ from scholar_lens.src.parser import (
     _is_valid_region,
     extract_figures_from_pdf,
 )
+from scholar_lens.src.utils.retry import MAX_RETRIES
 
 # A simple rectangle covering most of the page (normalised corner coords).
 SQUARE_COORDS: list[dict[str, float]] = [
@@ -251,6 +253,46 @@ class TestAttachFigureContext:
             == '[Image: alt="Figure 1: router", src="3.png", caption="Figure 1: router"]'
         )
 
+    def test_paper_caption_comes_first_and_analysis_is_marked_approximate(
+        self,
+    ) -> None:
+        # The vision analysis misreads plots (e.g. a colormap's direction); the
+        # writer must see the paper's caption as the authority.
+        from scholar_lens.src.parser import attach_figure_context
+
+        fig = self._figure(
+            "/w/figures/3.png",
+            caption="Figure 1: Latency overhead.",
+            analysis="A heatmap; darker is slower.",
+        )
+        out = attach_figure_context(
+            "[Image: alt=, src=3.png]", [fig], is_pdf_parsed=True
+        )
+        assert out.endswith(
+            'caption="Figure 1: Latency overhead. (Figure analysis, approximate: '
+            'A heatmap; darker is slower.)"]'
+        )
+
+    def test_placeholder_caption_yields_to_the_analysis(self) -> None:
+        from scholar_lens.src.parser import attach_figure_context
+
+        fig = self._figure(
+            "/w/figures/3.png", caption="Refer to caption", analysis="A bar chart."
+        )
+        out = attach_figure_context(
+            "[Image: alt=, src=3.png]", [fig], is_pdf_parsed=True
+        )
+        assert out.endswith('caption="A bar chart."]')
+
+    def test_placeholder_alt_is_not_a_marker_alt(self) -> None:
+        from scholar_lens.src.parser import attach_figure_context
+
+        fig = self._figure("/w/figures/3.png", caption="Refer to caption")
+        out = attach_figure_context(
+            "[Image: alt=Refer to caption, src=3.png]", [fig], is_pdf_parsed=True
+        )
+        assert out.startswith('[Image: alt="", src="3.png"')
+
     def test_markers_without_source_are_not_filled_by_order(self) -> None:
         # Regression: empty-alt markers used to be filled with figures in order,
         # attaching captions to the wrong images.
@@ -335,3 +377,99 @@ class TestEmptyDocumentParse:
         pdf = tmp_path / "p.pdf"
         await parser._get_or_parse_document(pdf, use_cache=True)
         assert not (tmp_path / LocalPaths.PARSED_FILE.value).exists()
+
+
+class TestFigureAnalysisFailure:
+    @staticmethod
+    def _analyser(error: Exception):  # type: ignore[no-untyped-def]
+        class Analyser:
+            async def ainvoke(self, _inputs):  # type: ignore[no-untyped-def]
+                raise error
+
+        return Analyser()
+
+    @pytest.fixture(autouse=True)
+    def _no_backoff(self, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        # The backoff policy is bound when decorating; swap in no wait.
+        monkeypatch.setattr(Figure._analyse.retry, "wait", tenacity.wait_none())
+
+    @staticmethod
+    def _image(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        async def data(_path: str) -> str:
+            return "aGk="
+
+        monkeypatch.setattr(Figure, "_get_image_data", staticmethod(data))
+
+    def test_exhausted_throttling_keeps_the_figure_unanalysed(self, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        import asyncio
+
+        from botocore.exceptions import ClientError
+
+        self._image(monkeypatch)
+        throttled = ClientError({"Error": {"Code": "ThrottlingException"}}, "Converse")
+        calls = 0
+        error_then_ok = self._analyser(throttled)
+
+        class Counting:
+            async def ainvoke(self, inputs):  # type: ignore[no-untyped-def]
+                nonlocal calls
+                calls += 1
+                return await error_then_ok.ainvoke(inputs)
+
+        figure = asyncio.run(
+            Figure.from_llm(Counting(), "1", "/p/1.png", "Figure 1: X.")
+        )
+        assert figure.caption == "Figure 1: X." and figure.analysis is None
+        assert calls == MAX_RETRIES  # retried before giving up
+
+    def test_one_throttle_is_retried_not_skipped(self, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        import asyncio
+
+        from botocore.exceptions import ClientError
+
+        self._image(monkeypatch)
+        calls = 0
+
+        class Flaky:
+            async def ainvoke(self, _inputs):  # type: ignore[no-untyped-def]
+                nonlocal calls
+                calls += 1
+                if calls == 1:
+                    raise ClientError(
+                        {"Error": {"Code": "ThrottlingException"}}, "Converse"
+                    )
+                return "A bar chart."
+
+        figure = asyncio.run(Figure.from_llm(Flaky(), "1", "/p/1.png"))
+        assert calls == 2 and figure.analysis == "A bar chart."
+
+    def test_model_error_keeps_the_figure_unanalysed(self, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        import asyncio
+
+        from botocore.exceptions import ClientError
+
+        self._image(monkeypatch)
+        denied = ClientError(
+            {
+                "Error": {"Code": "AccessDeniedException"},
+                "ResponseMetadata": {"HTTPStatusCode": 403},
+            },
+            "Converse",
+        )
+        figure = asyncio.run(
+            Figure.from_llm(self._analyser(denied), "1", "/p/1.png", "Figure 1: X.")
+        )
+        assert figure.caption == "Figure 1: X." and figure.analysis is None
+
+    def test_token_budget_breach_still_stops_the_run(self, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        import asyncio
+
+        from scholar_lens.src.metrics import TokenBudgetExceeded
+
+        self._image(monkeypatch)
+        with pytest.raises(TokenBudgetExceeded):
+            asyncio.run(
+                Figure.from_llm(
+                    self._analyser(TokenBudgetExceeded("over budget")), "1", "/p/1.png"
+                )
+            )

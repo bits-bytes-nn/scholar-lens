@@ -147,19 +147,19 @@ class Explanation(_Section):
     # Whole-article edit passes; a second pass runs only for reported coverage
     # gaps. 0 disables editing.
     max_edit_rounds: int = Field(default=2, ge=0, le=3)
-    # Hard total-token ceiling for one review run (None = no limit).
-    max_total_tokens: int | None = Field(default=None, gt=0)
+    # Hard total-token ceiling for one review run (None = no limit). The default
+    # leaves ~6x headroom over a LoRA-length paper (~1.4M tokens, ~$6 on Opus
+    # 5.5) and stops a runaway run near $40.
+    max_total_tokens: int | None = Field(default=8_000_000, gt=0)
 
 
 class Summary(_Section):
     summary_model_id: LanguageModelId = Field(default=LanguageModelId.CLAUDE_V5_5_OPUS)
     summarizer_enable_thinking: bool = Field(default=False)
     thinking_effort: ThinkingEffort = Field(default="medium")
-    # Hard total-token ceiling for one summary run (None = no limit). A summary is
-    # a single LLM call so the runaway risk is lower than review/guide, but the
-    # knob is provided for parity so all three workflows can be cost-capped the
-    # same way. Must be positive when set.
-    max_total_tokens: int | None = Field(default=None, gt=0)
+    # Hard total-token ceiling for one summary run (None = no limit); a typical
+    # summary uses ~0.13M tokens.
+    max_total_tokens: int | None = Field(default=1_000_000, gt=0)
 
 
 class TechGuide(_Section):
@@ -195,9 +195,6 @@ class TechGuide(_Section):
     # sections scoring below the threshold are revised up to N times.
     min_quality_score: int = Field(default=75, ge=0, le=100)
     max_revision_attempts: int = Field(default=2, ge=0)
-    # Total-token ceiling for one guide run (None = no limit). Two-tier: at 1x the
-    # guide soft-degrades (skips evaluate/revise/grounding but finishes writing);
-    # past ~1.5x it hard-aborts, so runaway writer-call cost is truly bounded.
     # Soft limit on one guide run (None = no limit); default keeps a run near
     # $15 on Opus 5.5. Past it the remaining sections skip evaluate/revise/
     # grounding; past 1.5x the run aborts.

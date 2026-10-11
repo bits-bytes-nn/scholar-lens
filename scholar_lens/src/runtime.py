@@ -10,19 +10,24 @@ records metrics, sends the SNS notification, and (for Batch runs) stores the
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
 import time
+from collections.abc import Coroutine
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import boto3
+from botocore.exceptions import ClientError
 from pydantic import BaseModel, ConfigDict
 
 from ..configs import Config
 from .aws_helpers import S3Handler, get_ssm_param_value
 from .constants import RUN_SECRETS, EnvVars, SSMParams
-from .jobs import JobRequest, JobResult, write_result_manifest
+from .jobs import JobRequest, JobResult, ssm_base, write_result_manifest
 from .logger import is_running_in_aws, logger
 from .metrics import MetricsEmitter, TokenUsageTracker
 from .post_conventions import PostConventions, fetch_blog_tags, load_conventions
@@ -77,7 +82,7 @@ def build_context(config: Config) -> RunContext:
     """Build a :class:`RunContext` (boto sessions + optional S3 handler).
 
     The AWS profile comes from the env in Batch (instance role / ``AWS_PROFILE``)
-    and from config locally — matching the previous per-entrypoint behaviour.
+    and from config locally.
     """
     profile_name = (
         os.getenv(EnvVars.AWS_PROFILE_NAME.value)
@@ -105,12 +110,14 @@ def load_secrets_from_ssm(
 ) -> None:
     """Load the given SSM SecureString params into ``os.environ`` (AWS only).
 
-    Best-effort per secret: a missing/optional secret is logged and skipped so a
-    run that doesn't need it still proceeds.
+    Every secret is optional: one that was never written is skipped quietly; any
+    other failure (e.g. AccessDenied) is logged as a warning and the run goes on
+    without it.
     """
     if not is_running_in_aws():
         return
-    base = f"/{context.config.resources.project_name}/{context.config.resources.stage}"
+    resources = context.config.resources
+    base = ssm_base(resources.project_name, resources.stage)
     for ssm_param, env_var in ssm_map.items():
         try:
             os.environ[env_var.value] = get_ssm_param_value(
@@ -118,7 +125,22 @@ def load_secrets_from_ssm(
             )
             logger.info("Set env var '%s' from SSM.", env_var.value)
         except Exception as e:  # noqa: BLE001 - optional secret; never abort the run
-            logger.info("Could not set '%s' from SSM: %s", env_var.value, e)
+            if _is_parameter_not_found(e):
+                logger.info("SSM secret for '%s' is not set.", env_var.value)
+            else:
+                logger.warning("Could not read '%s' from SSM: %s", env_var.value, e)
+
+
+def _is_parameter_not_found(error: BaseException) -> bool:
+    current: BaseException | None = error
+    while current is not None:
+        if (
+            isinstance(current, ClientError)
+            and current.response.get("Error", {}).get("Code") == "ParameterNotFound"
+        ):
+            return True
+        current = current.__cause__
+    return False
 
 
 PROJECT = "scholar-lens"
@@ -168,14 +190,19 @@ def format_alarm(
 
 def publish_sns(
     session: boto3.Session, topic_arn: str, *, subject: str, message: str
-) -> None:
-    """Publish a plain-text SNS notification; a failure must not fail the job."""
+) -> bool:
+    """Publish a plain-text SNS notification; a failure must not fail the job.
+
+    Returns whether the notification was sent.
+    """
     try:
         session.client("sns").publish(
             TopicArn=topic_arn, Subject=subject, Message=message
         )
+        return True
     except Exception as e:  # noqa: BLE001 - notification failure must not fail the job
-        logger.error("Failed to send SNS notification: %s", e)
+        logger.warning("Failed to send SNS notification: %s", e)
+        return False
 
 
 def load_run_conventions(config: Config) -> PostConventions:
@@ -233,19 +260,33 @@ async def publish_artifact(
 ) -> PipelineOutcome:
     """Save + upload the document, then open the blog PR when enabled.
 
+    The outcome's warnings are the post's checklist (review notes, rule slips,
+    validator warnings), so ``--no-pr`` runs report them too.
+
     A PR failure does not fail the run (the artifact already exists locally and
     in S3); it is reported as a warning on the result instead.
     """
     publisher = build_publisher(context)
-    s3_uri, markdown_path = await publisher.publish(request)
+    try:
+        s3_uri, markdown_path = await publisher.publish(request)
+    except Exception as e:
+        # The generators' notes (skipped sections, degraded parts) still
+        # belong on the failed run's result.
+        e.run_notes = list(request.review_notes)  # type: ignore[attr-defined]
+        raise
     outcome = PipelineOutcome(
-        title=request.title, markdown_path=markdown_path, s3_uri=s3_uri
+        title=request.title,
+        markdown_path=markdown_path,
+        s3_uri=s3_uri,
+        # Review notes, rule slips and validator warnings: the PR checklist,
+        # and the job result for runs without a PR.
+        warnings=list(request.validation_warnings),
     )
     if create_pr and context.config.resources.github.enabled:
         try:
             outcome.pr_url = await publisher.create_pull_request(request, markdown_path)
         except PublishError as e:
-            logger.error("Blog PR failed: %s", e)
+            logger.warning("Blog PR failed: %s", e)
             outcome.warnings.append(f"Blog PR not created: {e}")
     return outcome
 
@@ -289,13 +330,13 @@ def run_job(request: JobRequest, *, job_id: str | None = None) -> JobResult:
     except Exception as e:  # noqa: BLE001 - reported, the job cannot start
         result.error = f"{type(e).__name__}: {e}"
         logger.error("Run could not start: %s", e)
-        notify_without_context(result)
+        result.notification_failed = not record_unstarted_run(result)
         return result
     load_secrets_from_ssm(context, RUN_SECRETS)
     tracker = TokenUsageTracker()
     started = time.monotonic()
     try:
-        outcome = asyncio.run(_run_pipeline(context, request, tracker))
+        outcome = run_coroutine(_run_pipeline(context, request, tracker))
         result.status = "succeeded"
         result.title = outcome.title
         result.markdown_path = str(outcome.markdown_path)
@@ -312,34 +353,76 @@ def run_job(request: JobRequest, *, job_id: str | None = None) -> JobResult:
         result.violations = [str(v) for v in e.violations]
         result.markdown_path = e.rejected_path
         result.s3_uri = e.rejected_s3_uri
+        result.warnings = list(getattr(e, "run_notes", []))
         logger.error("Post failed validation: %s", e)
     except Exception as e:
         result.error = f"{type(e).__name__}: {e}"
+        result.warnings = list(getattr(e, "run_notes", []))
         logger.error("Run failed: %s", e, exc_info=True)
     finally:
-        if result.status == "failed" and result.error is None:
-            result.error = "Interrupted before completion."
+        # Neither returned nor raised an Exception: SIGTERM (Batch timeout,
+        # cancel, spot reclaim) or Ctrl-C.
+        interrupted = result.status == "failed" and result.error is None
+        if interrupted:
+            result.error = INTERRUPTED_ERROR
         result.duration_seconds = round(time.monotonic() - started, 1)
         result.input_tokens = tracker.input_tokens
         result.output_tokens = tracker.output_tokens
         result.estimated_cost_usd = round(tracker.estimated_cost_usd(), 4)
-        _finish(context, result, tracker)
+        _finish(context, result, tracker, notify=not interrupted)
     return result
 
 
-def _finish(context: RunContext, result: JobResult, tracker: TokenUsageTracker) -> None:
+# SIGTERM (Batch timeout, cancel, spot reclaim) or Ctrl-C. Batch may still
+# retry an interrupted job, so the run does not announce a failure; Batch's
+# own FAILED event reports a terminal one.
+INTERRUPTED_ERROR = "Interrupted before completion."
+
+
+def run_coroutine[T](coroutine: Coroutine[Any, Any, T]) -> T:
+    """``asyncio.run`` that does not wait for executor threads on the way out.
+
+    ``asyncio.run`` joins the default executor before returning, so after a
+    SIGTERM the cleanup (manifest) would wait for an in-flight Bedrock call in
+    a worker thread, minutes past Batch's ~30 s SIGKILL. Here an interrupted
+    run cancels its tasks and returns at once. The interpreter would still
+    join abandoned threads at exit, so the Batch worker leaves through
+    ``os._exit`` after a SIGTERM (``cli._work``).
+    """
+    loop = asyncio.new_event_loop()
+    executor = ThreadPoolExecutor(thread_name_prefix="scholar-lens")
+    loop.set_default_executor(executor)
+    task = loop.create_task(coroutine)
+    try:
+        return loop.run_until_complete(task)
+    finally:
+        if not task.done():
+            task.cancel()
+            with contextlib.suppress(BaseException):
+                loop.run_until_complete(task)
+        executor.shutdown(wait=False, cancel_futures=True)
+        loop.close()
+
+
+def _finish(
+    context: RunContext,
+    result: JobResult,
+    tracker: TokenUsageTracker,
+    *,
+    notify: bool = True,
+) -> None:
     """Metrics, notification and result manifest; each is best-effort."""
     in_aws = is_running_in_aws()
     MetricsEmitter(context.default_boto_session, enabled=in_aws).emit_run(
-        mode=result.kind,
+        mode=result.kind or "unknown",
         success=result.status == "succeeded",
         duration_seconds=result.duration_seconds,
         tracker=tracker,
     )
     topic_arn = os.getenv(EnvVars.TOPIC_ARN.value)
-    if in_aws and topic_arn:
+    if notify and in_aws and topic_arn:
         subject, message = format_result_notification(result)
-        publish_sns(
+        result.notification_failed = not publish_sns(
             context.default_boto_session, topic_arn, subject=subject, message=message
         )
     if result.job_id and context.s3_handler is not None:
@@ -348,17 +431,42 @@ def _finish(context: RunContext, result: JobResult, tracker: TokenUsageTracker) 
                 context.s3_handler, context.config.resources.s3_prefix, result
             )
         except Exception as e:  # noqa: BLE001 - the run itself already finished
-            logger.error("Failed to store the result manifest: %s", e)
+            logger.warning("Failed to store the result manifest: %s", e)
 
 
-def notify_without_context(result: JobResult) -> None:
-    """SNS for a run that failed before a context existed (bad config or
-    request): the default credential chain and region of the Batch job."""
+def record_unstarted_run(result: JobResult) -> bool:
+    """Store the manifest and notify for a Batch run that failed before a
+    context existed (bad config or request, startup crash).
+
+    Uses the job's default credential chain; the topic's region comes from its
+    ARN. Returns False only when a notification was due but could not be sent
+    (outside AWS, or without a topic, there is nothing to send).
+    """
     topic_arn = os.getenv(EnvVars.TOPIC_ARN.value)
-    if not (is_running_in_aws() and topic_arn):
-        return
+    region = (
+        topic_arn.split(":")[3] if topic_arn and topic_arn.count(":") >= 5 else None
+    )
+    due = is_running_in_aws() and bool(topic_arn)
+    try:
+        session = boto3.Session(region_name=region or None)
+    except Exception as e:  # noqa: BLE001 - e.g. the AWS profile that broke startup
+        logger.warning("No AWS session to report the failed start: %s", e)
+        return not due
+    if result.job_id:  # set only inside a Batch job
+        try:
+            resources = Config.load().resources
+            if resources.s3_bucket_name:
+                write_result_manifest(
+                    S3Handler(session, resources.s3_bucket_name),
+                    resources.s3_prefix,
+                    result,
+                )
+        except Exception as e:  # noqa: BLE001 - the notification still goes out
+            logger.warning("Failed to store the result manifest: %s", e)
+    if not (due and topic_arn):
+        return True
     subject, message = format_result_notification(result)
-    publish_sns(boto3.Session(), topic_arn, subject=subject, message=message)
+    return publish_sns(session, topic_arn, subject=subject, message=message)
 
 
 _KIND_LABELS = {
@@ -380,10 +488,9 @@ def format_result_notification(result: JobResult) -> tuple[str, str]:
     if result.job_id:
         fields["Batch job"] = result.job_id
     fields["Cost (est.)"] = f"${result.estimated_cost_usd:.2f}"
-    for warning in result.warnings:
-        fields.setdefault("Warning", warning)
+    if result.warnings:
+        fields["Warnings"] = "\n".join(f"- {w}" for w in result.warnings)
     if result.error:
         fields["Error"] = result.error
-    return format_alarm(
-        event=_KIND_LABELS[result.kind], status=result.status.upper(), fields=fields
-    )
+    label = _KIND_LABELS.get(result.kind or "", "Scholar Lens Job")
+    return format_alarm(event=label, status=result.status.upper(), fields=fields)

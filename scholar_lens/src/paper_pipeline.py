@@ -40,6 +40,10 @@ from .summarizer import PaperSummarizer
 from .tags import unsupported_tags
 from .utils import is_placeholder
 
+# The blog's most-used tags shown to the tagging prompt (all of them are
+# still used to match spellings).
+MAX_TAG_HINTS = 200
+
 
 async def run_paper_pipeline(
     context: RunContext, request: JobRequest, tracker: TokenUsageTracker
@@ -49,6 +53,8 @@ async def run_paper_pipeline(
     source = resolve_paper_source(request.source)
     code_retriever: CodeRetriever | None = None
     try:
+        # Loaded first: an S3 failure here must not follow the paid stages.
+        translation_guideline = await _load_translation_guideline(context)
         paper_dir = ROOT_DIR / LocalPaths.PAPERS_DIR.value / source.source_id
         # Arbitrary PDF-URL sources have no arXiv HTML rendering.
         parse_pdf = request.parse_pdf or source.arxiv_html_id is None
@@ -61,14 +67,13 @@ async def run_paper_pipeline(
             tracker,
             needs_citations=request.kind == "review",
         )
-        translation_guideline = await _load_translation_guideline(context)
         if request.kind == "summarize":
-            document = await _generate_summary(
+            document, degraded = await _generate_summary(
                 context, paper, translation_guideline, tracker
             )
         else:
             assert citation_summarizer is not None
-            document = await _generate_review(
+            document, degraded = await _generate_review(
                 context,
                 paper,
                 citation_summarizer,
@@ -76,22 +81,24 @@ async def run_paper_pipeline(
                 translation_guideline,
                 tracker,
             )
+        degraded += _unanalysed_figure_notes(paper)
         # Keep only images that are real figures of this paper.
         document = figure_markers_to_images(document)
         document = drop_unknown_images(document, _figure_sources(paper))
         document = fill_image_alts(document, _figure_captions(paper), paper.title)
-        return await publish_artifact(
-            context,
-            _build_publish_request(
-                paper,
-                paper_dir,
-                document,
-                request.kind,
-                known_tags=set(context.require_blog_tags())
-                | set(context.require_conventions().tags.controlled),
-            ),
-            create_pr=request.create_pr,
+        publish_request = _build_publish_request(
+            paper,
+            paper_dir,
+            document,
+            request.kind,
+            known_tags=set(context.require_blog_tags())
+            | set(context.require_conventions().tags.controlled),
         )
+        publish_request.review_notes += degraded
+        outcome = await publish_artifact(
+            context, publish_request, create_pr=request.create_pr
+        )
+        return outcome
     finally:
         if code_retriever is not None:
             await code_retriever.delete_index()
@@ -105,7 +112,7 @@ async def _generate_review(
     code_retriever: CodeRetriever | None,
     translation_guideline: list[dict[str, Any]] | None,
     tracker: TokenUsageTracker,
-) -> str:
+) -> tuple[str, list[str]]:
     cfg = context.config.explanation
     reviewer = PaperReviewer(
         paper,
@@ -138,7 +145,10 @@ async def _generate_review(
         context.require_conventions(),
         known_tags=context.require_blog_tags(),
     )
-    return format_review(github, paper, review, meta=meta)
+    return format_review(github, paper, review, meta=meta), [
+        *meta.notes,
+        *review.notes,
+    ]
 
 
 async def _generate_summary(
@@ -146,7 +156,7 @@ async def _generate_summary(
     paper: Paper,
     translation_guideline: list[dict[str, Any]] | None,
     tracker: TokenUsageTracker,
-) -> str:
+) -> tuple[str, list[str]]:
     cfg = context.config.summary
     summarizer = PaperSummarizer(
         LanguageModelId(cfg.summary_model_id),
@@ -167,7 +177,10 @@ async def _generate_summary(
         context.require_conventions(),
         known_tags=context.require_blog_tags(),
     )
-    return format_summary(github, paper, result, meta=meta)
+    return format_summary(github, paper, result, meta=meta), [
+        *meta.notes,
+        *summarizer.notes,
+    ]
 
 
 async def _prepare_paper_data(
@@ -210,7 +223,7 @@ async def _prepare_paper_data(
         callbacks=callbacks,
         category_options=list(context.require_conventions().topics),
         controlled_tags=context.require_conventions().tags.controlled,
-        existing_keywords=context.require_blog_tags(),
+        existing_keywords=context.require_blog_tags()[:MAX_TAG_HINTS],
     )
     if needs_citations:
         # The review planner reads the whole paper itself, so only citations
@@ -343,20 +356,27 @@ async def _write_json(path: Path, data: Any) -> None:
 async def _load_translation_guideline(
     context: RunContext,
 ) -> list[dict[str, Any]] | None:
+    """The glossary-style translation guideline: the local file when present,
+    else the S3 copy. It is optional, so a missing object yields ``None``; any
+    other S3 error still raises (before any paid stage runs)."""
     guideline_path = (
         ROOT_DIR
         / LocalPaths.ASSETS_DIR.value
         / LocalPaths.TRANSLATION_GUIDELINE_FILE.value
     )
-    if context.s3_handler and not guideline_path.exists():
-        s3_key = (
-            f"{context.config.resources.s3_prefix}/"
-            f"{S3Paths.TRANSLATION_GUIDELINE.value}/{guideline_path.name}"
-        ).lstrip("/")
-        await context.s3_handler.download_file_async(s3_key, guideline_path)
     if guideline_path.exists():
         return json.loads(await asyncio.to_thread(guideline_path.read_text, "utf-8"))
-    return None
+    if not context.s3_handler:
+        return None
+    s3_key = (
+        f"{context.config.resources.s3_prefix}/"
+        f"{S3Paths.TRANSLATION_GUIDELINE.value}/{guideline_path.name}"
+    ).lstrip("/")
+    text = await asyncio.to_thread(context.s3_handler.get_text, s3_key)
+    if text is None:
+        logger.info("No translation guideline at '%s'; continuing without.", s3_key)
+        return None
+    return json.loads(text)
 
 
 def backfill_metadata(
@@ -385,10 +405,20 @@ def _figure_sources(paper: Paper) -> set[str]:
 def _figure_captions(paper: Paper) -> dict[str, str]:
     captions: dict[str, str] = {}
     for fig in paper.figures:
-        caption = fig.caption or fig.analysis or ""
+        caption = fig.caption if fig.caption != "Refer to caption" else ""
+        caption = caption or fig.analysis or ""  # arXiv's placeholder is no caption
         captions[str(fig.path)] = caption
         captions[Path(str(fig.path)).name] = caption
     return captions
+
+
+def _unanalysed_figure_notes(paper: Paper) -> list[str]:
+    """A note when figure analysis gave up on some figures (they were written
+    about from their captions only)."""
+    count = sum(fig.analysis is None for fig in paper.figures)
+    if not count:
+        return []
+    return [f"{count} figure(s) were not analysed (captions only): check them."]
 
 
 def _tag_notes(paper: Paper, document: str) -> list[str]:

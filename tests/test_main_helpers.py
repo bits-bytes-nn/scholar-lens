@@ -112,9 +112,21 @@ class TestFormatExplanation:
         assert out.index("## 한계와") < out.index("### References")
         assert "use_math: true" in out
 
-    def test_subtitle_equal_to_title_dropped(self, sample_paper: Paper) -> None:
+    def test_subtitle_equal_to_title_falls_back_to_the_tldr(
+        self, sample_paper: Paper
+    ) -> None:
         out = _format_explanation(
-            Github(), sample_paper, "body", "T", subtitle=sample_paper.title
+            Github(),
+            sample_paper,
+            "body",
+            "### Q\n결과는 기존 기법과 대등합니다. 둘째 문장.",
+            subtitle=f"  {sample_paper.title.upper()} ",
+        )
+        assert 'subtitle: "결과는 기존 기법과 대등합니다"' in out
+
+    def test_no_usable_subtitle_leaves_it_out(self, sample_paper: Paper) -> None:
+        out = _format_explanation(
+            Github(), sample_paper, "body", "### Q", subtitle=sample_paper.title
         )
         assert "subtitle:" not in out
 

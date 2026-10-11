@@ -39,6 +39,11 @@ class TestConfigValidation:
         )
         assert e.max_total_tokens is None
 
+    def test_every_artifact_has_a_default_token_cap(self) -> None:
+        config = Config()
+        for section in (config.explanation, config.summary, config.tech_guide):
+            assert section.max_total_tokens
+
     def test_category_labels_default_and_override(self) -> None:
         assert Github().review_category == "Paper Reviews"
         assert Github().summary_category == "Paper Summaries"
@@ -116,5 +121,5 @@ class TestConfigLoading:
             "explanation:\n" "  paper_finalization_model_id: not-a-real-model\n",
             encoding="utf-8",
         )
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError, match="paper_finalization_model_id"):
             Config.from_yaml(str(cfg_file))

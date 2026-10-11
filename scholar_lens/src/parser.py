@@ -20,6 +20,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .constants import AppConstants, EnvVars, LanguageModelId, LocalPaths
 from .logger import logger
+from .metrics import TokenBudgetExceeded
 from .pinned_transport import PinnedAsyncHTTPTransport
 from .prompts import FigureAnalysisPrompt
 from .url_guard import UnsafeUrlError, assert_url_is_public
@@ -28,7 +29,9 @@ from .utils import (
     RetryableBase,
     extract_text_from_html,
 )
+from .utils.helpers import preserve_listing_spaces
 from .utils.images import is_svg, svg_to_png
+from .utils.retry import is_transient_error
 
 DEFAULT_RESIZE_QUALITY: int = 85
 DEFAULT_TIMEOUT: int = 60
@@ -69,6 +72,15 @@ class Content(BaseModel):
         return v.strip() if isinstance(v, str) else ""
 
 
+def _is_budget_breach(error: BaseException | None) -> bool:
+    """A token-budget stop anywhere in the cause chain: the run must end."""
+    while error is not None:
+        if isinstance(error, TokenBudgetExceeded):
+            return True
+        error = error.__cause__ or error.__context__
+    return False
+
+
 class Figure(BaseModel, RetryableBase):
     model_config = ConfigDict(frozen=True)
     figure_id: str
@@ -83,7 +95,6 @@ class Figure(BaseModel, RetryableBase):
         )
 
     @classmethod
-    @RetryableBase._retry("figure_analysing")
     async def from_llm(
         cls,
         figure_analyser: Runnable,
@@ -91,20 +102,34 @@ class Figure(BaseModel, RetryableBase):
         path: str,
         caption: str | None = None,
     ) -> "Figure":
-        analysis = None
         try:
             image_data = await cls._get_image_data(path)
-            analysis = await figure_analyser.ainvoke(
-                {"caption": caption, "image_data": image_data}
-            )
         except FigureParseError as e:
             logger.warning("Failed to get image data for figure '%s': %s", figure_id, e)
+            return cls(figure_id=figure_id, path=path, caption=caption)
+        try:
+            analysis = await cls._analyse(figure_analyser, caption, image_data)
         except Exception as e:
-            raise RuntimeError(
-                f"LLM failed to analyze figure '{figure_id}': {e}"
-            ) from e
-
+            if _is_budget_breach(e):
+                raise
+            # Retries exhausted, or the model refused the image: the figure (and
+            # its caption) still belongs in the post, unanalysed (the pipeline
+            # notes unanalysed figures on the PR).
+            kind = "transient" if is_transient_error(e) else "model"
+            logger.warning(
+                "Figure '%s' left unanalysed (%s error): %s", figure_id, kind, e
+            )
+            return cls(figure_id=figure_id, path=path, caption=caption)
         return cls(figure_id=figure_id, path=path, caption=caption, analysis=analysis)
+
+    @staticmethod
+    @RetryableBase._retry("figure_analysing")
+    async def _analyse(
+        figure_analyser: Runnable, caption: str | None, image_data: str
+    ) -> str:
+        return await figure_analyser.ainvoke(
+            {"caption": caption, "image_data": image_data}
+        )
 
     @staticmethod
     async def _get_image_data(path: str) -> str:
@@ -141,7 +166,8 @@ class Figure(BaseModel, RetryableBase):
         # Vector figures are rasterized first (the vision model takes bitmaps).
         if is_svg(image_bytes):
             try:
-                image_bytes = svg_to_png(image_bytes)
+                # Off the event loop: the render waits on a child process.
+                image_bytes = await asyncio.to_thread(svg_to_png, image_bytes)
             except (ValueError, UnicodeDecodeError) as e:
                 raise FigureParseError(f"Could not render SVG '{path}': {e}") from e
         # Normalise to JPEG so the data URI's declared "image/jpeg" media type is
@@ -316,7 +342,7 @@ class HTMLParser(BaseParser):
 
     async def parse(self, arxiv_id: str, extract_text: bool = True) -> HTMLParseResult:
         html_content, _ = await self._fetch_html_with_fallback(arxiv_id)
-        soup = BeautifulSoup(html_content, "html.parser")
+        soup = BeautifulSoup(preserve_listing_spaces(html_content), "html.parser")
         content = self._extract_content(soup, extract_text)
         return HTMLParseResult(content=content)
 
@@ -359,7 +385,7 @@ class HTMLRichParser(RichParser, HTMLParser):
         try:
             html_content, base_url = await self._fetch_html_with_fallback(arxiv_id)
             self.url = base_url
-            soup = BeautifulSoup(html_content, "html.parser")
+            soup = BeautifulSoup(preserve_listing_spaces(html_content), "html.parser")
 
             figures = await self._extract_figures(soup)
             content = self._extract_content(soup, extract_text)
@@ -391,56 +417,27 @@ class HTMLRichParser(RichParser, HTMLParser):
         return urljoin(self.url, img_src)
 
     async def _extract_figures(self, soup: BeautifulSoup) -> list[Figure]:
+        # Every image the text extraction turns into a marker: bitmaps and SVG
+        # <object> panels alike, including the second panel of a figure and
+        # figures nested inside another figure.
+        root = soup.select_one(".ltx_page_main") or soup
         figure_tasks: list[Coroutine[Any, Any, Figure]] = []
-        seen_srcs = set()
-
-        for i, figure_tag in enumerate(soup.select(".ltx_figure")):
-            img = figure_tag.select_one('img, object[type="image/svg+xml"]')
-            caption_tag = figure_tag.select_one("figcaption")
-            src_attr = (
-                "data" if isinstance(img, Tag) and img.name == "object" else "src"
+        seen_srcs: set[str] = set()
+        for media in root.select(_FIGURE_MEDIA):
+            src = media.get("data" if media.name == "object" else "src")
+            if not isinstance(src, str) or not src or src.startswith("data:"):
+                continue
+            if src in seen_srcs:
+                continue
+            seen_srcs.add(src)
+            figure_tasks.append(
+                Figure.from_llm(
+                    self.figure_analyser,
+                    str(len(figure_tasks)),
+                    self._construct_figure_url(src),
+                    _figure_caption(media),
+                )
             )
-            if (
-                isinstance(img, Tag)
-                and img.get(src_attr)
-                and isinstance(caption_tag, Tag)
-            ):
-                src = img.get(src_attr)
-                if isinstance(src, str):
-                    path = self._construct_figure_url(src)
-                    caption = caption_tag.get_text(strip=True)
-                    figure_tasks.append(
-                        Figure.from_llm(self.figure_analyser, str(i), path, caption)
-                    )
-                    seen_srcs.add(src)
-
-        offset = len(figure_tasks)
-        for i, img in enumerate(
-            soup.select(".ltx_td > img.ltx_graphics"), start=offset
-        ):
-            if isinstance(img, Tag) and (src := img.get("src")):
-                if isinstance(src, str) and src not in seen_srcs:
-                    path = self._construct_figure_url(src)
-                    alt_text_raw = img.get("alt", "Refer to caption")
-                    alt_text = str(alt_text_raw) if alt_text_raw else "Refer to caption"
-                    caption = alt_text.strip()
-                    figure_tasks.append(
-                        Figure.from_llm(self.figure_analyser, str(i), path, caption)
-                    )
-                    seen_srcs.add(src)
-
-        offset = len(figure_tasks)
-        for i, img in enumerate(soup.select("img.ltx_graphics"), start=offset):
-            if isinstance(img, Tag) and (src := img.get("src")):
-                if isinstance(src, str) and src not in seen_srcs:
-                    path = self._construct_figure_url(src)
-                    alt_text_raw = img.get("alt", "Refer to caption")
-                    alt_text = str(alt_text_raw) if alt_text_raw else "Refer to caption"
-                    caption = alt_text.strip()
-                    figure_tasks.append(
-                        Figure.from_llm(self.figure_analyser, str(i), path, caption)
-                    )
-                    seen_srcs.add(src)
 
         all_figures = await asyncio.gather(*figure_tasks, return_exceptions=True)
 
@@ -462,6 +459,57 @@ class HTMLRichParser(RichParser, HTMLParser):
             )
 
         return unique_figures
+
+
+_FIGURE_MEDIA = 'img.ltx_graphics, .ltx_figure img, object[type="image/svg+xml"]'
+
+
+def _own_caption(figure: Tag, media: Tag) -> Tag | None:
+    """The caption of ``figure`` that belongs to ``media``: the figure's own
+    caption, or, when one LaTeXML figure holds several captioned figures
+    (``\\includegraphics; \\caption; \\includegraphics; \\caption``), the
+    first of its captions after the image."""
+    captions = figure.find_all("figcaption", recursive=False)
+    if len(captions) <= 1:
+        return captions[0] if captions else None
+    following = media.find_next("figcaption")
+    return following if following in captions else captions[-1]
+
+
+def _figure_caption(media: Tag) -> str:
+    """Caption text for an image: its nearest captioned figure, with the
+    enclosing figure's caption first when that one is only a sub-caption
+    ("(a) ..."); else the image's alt text."""
+    parts: list[str] = []
+    for figure in media.find_parents("figure"):
+        caption = _own_caption(figure, media)
+        if caption is None:
+            continue
+        text = _caption_text(caption)
+        parts.insert(0, text)
+        if not _is_subfigure(figure, text):
+            break
+    if any(parts):
+        return " ".join(p for p in parts if p)
+    alt = str(media.get("alt") or "").strip()
+    return alt or _PLACEHOLDER_CAPTION
+
+
+# LaTeXML ids sub-figures "<figure id>.sfN"; their captions read "(a) ...".
+_SUBFIGURE_ID = re.compile(r"\.sf\d+$")
+_SUBCAPTION = re.compile(r"^\(?[a-z]\)\s")
+
+
+def _is_subfigure(figure: Tag, caption: str) -> bool:
+    return (
+        "ltx_figure_panel" in (figure.get("class") or [])
+        or bool(_SUBFIGURE_ID.search(str(figure.get("id") or "")))
+        or bool(_SUBCAPTION.match(caption))
+    )
+
+
+def _caption_text(caption: Tag) -> str:
+    return " ".join(extract_text_from_html(str(caption)).split())
 
 
 class PDFParser(RichParser):
@@ -783,18 +831,35 @@ def _marker_text(value: str) -> str:
     return flat.replace('"', "'")
 
 
+_PLACEHOLDER_CAPTION = "Refer to caption"  # arXiv's alt/caption placeholder
+
+
+def _real_text(value: str | None) -> str:
+    text = (value or "").strip()
+    return "" if text == _PLACEHOLDER_CAPTION else text
+
+
+def _figure_description(figure: Figure) -> str:
+    caption = _real_text(figure.caption)
+    analysis = (figure.analysis or "").strip()
+    if caption and analysis:
+        return f"{caption} (Figure analysis, approximate: {analysis})"
+    return caption or analysis
+
+
 def attach_figure_context(
     text: str, figures: list[Figure], *, is_pdf_parsed: bool
 ) -> str:
     """Rewrite ``[Image: ...]`` markers into figure references the writers can
     cite: the image path (file name for PDF-parsed papers, whose figures are
-    published with the post) plus the best available description (the figure
-    analysis, else the caption). Markers matching no extracted figure are
-    removed; no marker is ever paired with a figure by position."""
+    published with the post) plus a description: the paper's own caption
+    first, then the vision analysis labeled as approximate (writers must not
+    take its readings as the paper's numbers). Markers matching no extracted
+    figure are removed; no marker is ever paired with a figure by position."""
     figure_map = {Path(fig.path).name: fig for fig in figures}
 
     def repl(match: re.Match) -> str:
-        alt_value = " ".join(match.group(1).split()).strip("[]")
+        alt_value = _real_text(" ".join(match.group(1).split()).strip("[]"))
         src_value = match.group(2).strip()
         matched = figure_map.get(Path(src_value).name) if src_value else None
         if matched is None:
@@ -802,8 +867,8 @@ def attach_figure_context(
                 logger.warning("No extracted figure for image src '%s'", src_value)
             return ""
         path = Path(matched.path).name if is_pdf_parsed else matched.path
-        alt_text = _marker_text(alt_value or matched.caption or "")
-        description = _marker_text(matched.analysis or matched.caption or alt_value)
+        alt_text = _marker_text(alt_value or _real_text(matched.caption))
+        description = _marker_text(_figure_description(matched) or alt_value)
         return f'[Image: alt="{alt_text}", src="{path}", caption="{description}"]'
 
     return _IMAGE_MARKER.sub(repl, text)

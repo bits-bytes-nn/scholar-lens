@@ -144,3 +144,35 @@ def unsupported_tags(tags: list[str], text: str) -> list[str]:
             continue
         missing.append(tag)
     return missing
+
+
+# Tag words that name no topic on their own ("Multimodal-Models" is about
+# multimodality, not "models").
+_GENERIC_TAG_WORDS = frozenset({"model", "models", "ai"})
+# Without its phrase or acronym, a controlled tag counts as the text's topic
+# only if each of its topic words recurs this often (a passing mention is not
+# a topic).
+MIN_TOPIC_MENTIONS = 3
+
+
+def off_topic_tags(tags: list[str], text: str) -> list[str]:
+    """Controlled tags ``text`` gives no grounds for: neither the phrase nor
+    its acronym appears, and a topic word of the tag is (nearly) absent.
+
+    Deliberately weaker than :func:`unsupported_tags`: broad category tags
+    rarely appear verbatim ("Efficient-Attention" for a sliding-window paper),
+    so only a tag whose own words the text barely uses is off topic.
+    """
+    lowered = text.lower()
+    off = []
+    for tag in unsupported_tags(tags, text):
+        words = [
+            w.lower() for w in tag.split("-") if w.lower() not in _GENERIC_TAG_WORDS
+        ]
+        if any(
+            len(re.findall(rf"(?<![a-z]){re.escape(word)}", lowered))
+            < MIN_TOPIC_MENTIONS
+            for word in words
+        ):
+            off.append(tag)
+    return off

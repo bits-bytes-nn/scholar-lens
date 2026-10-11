@@ -12,17 +12,13 @@ from .base import (
     HEADING_STRUCTURE_RULES,
     IMAGE_PATH_RULES,
     MATH_RULES,
+    PAPER_TABLE_RULES,
+    READER_PROFILE,
     STYLE_RULES,
     SUPPLEMENTARY_CONTEXT_RULES,
     VISUAL_RULES,
     BasePrompt,
 )
-
-READER_PROFILE: str = """
-The reader is a general data scientist or ML engineer: fluent in standard deep
-learning (Transformers, attention, embeddings, Adam, cross-entropy, fine-tuning,
-common benchmarks and metrics) but not a specialist in this paper's area.
-"""
 
 
 class PaperPlanningPrompt(BasePrompt):
@@ -76,11 +72,12 @@ class PaperPlanningPrompt(BasePrompt):
     1. Coverage comes first. Every major element of the paper must appear in
        some section's must_cover: the problem and why existing approaches fall
        short; each contribution; every key equation or objective (named in
-       words, with its role); algorithm or architecture steps; training and
-       evaluation setup (data, baselines, key hyper-parameters); the headline
-       results with the settings that produced them; ablations and analyses that
-       support the claims. Be specific ("the alpha/r scaling and why it avoids
-       retuning the learning rate"), never generic ("method details"). Give
+       words, with its role); algorithm or architecture steps; only the setup
+       needed to read the results (data, baselines, the one or two settings
+       that matter — never a hyper-parameter list); the headline results with
+       the settings that produced them; ablations and analyses that support the
+       claims. Be specific ("how the loss down-weights easy negatives"),
+       never generic ("method details"). Give
        every must_cover item its own difficulty (see 3): the writer's length
        budget is computed from these.
     2. Order sections the way that best teaches the paper — usually problem,
@@ -88,14 +85,15 @@ class PaperPlanningPrompt(BasePrompt):
        analysis. Do not mirror the paper's sections one to one: merge thin
        parts, split dense ones, and fold material that is easy for the reader
        into a neighbouring section instead of giving it a section of its own.
-       Typically 5-12 sections; more only for very long papers. Do NOT plan a
+       Do NOT plan a
        conclusion, limitations or future-work section: put the paper's stated
        limitations and future directions in closing_points instead (they go
        into the review's single closing assessment).
     3. Difficulty is judged for the reader described above: easy = material
        they already know; medium = new but straightforward; hard = the novel
        mechanism, dense math, non-obvious results, or prerequisites outside
-       common knowledge. Give a one-line reason for the section. Importance:
+       common knowledge (a main theorem: cover its statement and assumptions).
+       Give a one-line reason for the section. Importance:
        core (the paper's contribution), supporting, or context.
     4. Prerequisites: concepts the reader needs but the paper assumes (a matrix
        decomposition, a statistical test, the prior method this one modifies).
@@ -111,18 +109,19 @@ class PaperPlanningPrompt(BasePrompt):
        section draws on. Together with excluded_ranges they must cover the whole
        paper. Exclude only references, acknowledgments, author lists, funding
        and boilerplate; a substantive appendix belongs to a section.
-    8. glossary: 10-30 key terms with the exact rendering to use throughout in
+    8. glossary: the key terms with the exact rendering to use throughout in
        {language}, following the translation guideline; keep established English
-       names (Transformer, LoRA, BLEU) as they are.
+       names (Transformer, LoRA, BLEU) as they are. Include every compared
+       baseline and method name.
     9. needs_code: true where code from the paper's repository would make the
        section concrete (implementation, algorithm, architecture).
-    10. Titles are in {language}, descriptive, without numbers. purpose is one
-        line saying what the reader gets from the section.
+    10. Titles are in {language}, descriptive, without numbers; names stay as
+        they are, but no English connectives ("on", "vs", "with"). purpose is
+        one line saying what the reader gets from the section.
 
     Output only the plan as JSON inside <plan> tags:
     <plan>
-    {{"paper_type": "method | empirical study | system | theory | benchmark | survey",
-     "narrative": "one paragraph: the story the review tells",
+    {{"narrative": "one paragraph: the story the review tells",
      "glossary": {{"term": "rendering"}},
      "excluded_ranges": [[0, 0]],
      "closing_points": ["a limitation or future direction the paper states"],
@@ -190,17 +189,24 @@ class PaperSectionPrompt(BasePrompt):
     - Concepts owned by earlier sections: refer back in a short phrase, never
       re-explain. Concepts owned by later sections: use them plainly if you
       must, without explaining them and without promising they come later.
-    - already_in_article lists headings, equations, tables and figures the
-      article already shows: never show any of them again; refer back
+    - already_in_article lists headings, equations, tables, figures, code
+      blocks and callouts the article already shows: never show any of them
+      again (count its callouts against the cap); refer back
       descriptively. Continue the flow of previous_sections without recap.
     - Use the glossary rendering for every glossary term, in prose and in
       table cells alike. Place only the figures listed in the brief, where
-      their content is discussed; the image alt text is a short description in
-      the target language (under about 80 characters), never the English
-      figure analysis.
+      their content is discussed.
+    - Setup is given only as far as the reader needs it to read the results
+      (tables hold results, never hyper-parameter lists); explain a metric in
+      one sentence where it is first used.
+    - A caveat about how far a result can be trusted gets at most one sentence,
+      right beside that result. Never write a caveat, summary or conclusion
+      `###` subsection; the review has one closing section for that.
     - What a figure shows must come from the paper's text. A detail you only
       see in the figure analysis may be described as what the figure looks
-      like, never turned into a claim or a mechanism.
+      like, never turned into a claim or a mechanism; give no value, colour
+      meaning or trend read off a figure that neither the paper text nor the
+      analysis states.
     - If draft_to_revise is not empty, revise it according to
       improvement_feedback (which may list missing must-cover items): keep what
       works, fix what is named, and return the complete revised section.
@@ -220,6 +226,7 @@ class PaperSectionPrompt(BasePrompt):
     """
         + HEADING_STRUCTURE_RULES
         + VISUAL_RULES
+        + PAPER_TABLE_RULES
         + IMAGE_PATH_RULES
         + """
     Math:
@@ -320,6 +327,7 @@ class PaperSectionCheckPrompt(BasePrompt):
     output_variables: list[str] = [
         "quality_score",
         "missing_items",
+        "must_fix",
         "improvement_feedback",
     ]
 
@@ -343,10 +351,13 @@ class PaperSectionCheckPrompt(BasePrompt):
        defect. Never ask to cut a required item.
     3. Fidelity: nothing contradicts the source; no invented results, links or
        code provenance. Clearly illustrative toy values in a worked example
-       ("예를 들어 $$d=4$$라면 …") are allowed and are not results.
+       ("예를 들어 입력이 3개라면 …") are allowed and are not results. Every
+       comparison or causal claim holds for the conditions compared (a gap
+       "explained" by a factor both sides share is wrong); a figure description stays within the paper text
+       and the figure analysis; nothing contradicts already_in_article.
     4. No repetition: nothing listed in already_in_article (headings,
-       equations, tables, figures) is shown again; concepts owned elsewhere
-       are not re-explained; nothing repeats inside the section.
+       equations, tables, figures, code, callouts) is shown again; concepts owned
+       elsewhere are not re-explained; nothing repeats inside the section.
     5. Consistency and flow: glossary terms used as given; natural prose;
        figures placed where discussed and introduced.
     6. The writing rules below.
@@ -354,6 +365,7 @@ class PaperSectionCheckPrompt(BasePrompt):
         + DEPTH_RULES
         + SUPPLEMENTARY_CONTEXT_RULES
         + VISUAL_RULES
+        + PAPER_TABLE_RULES
         + HEADING_STRUCTURE_RULES
         + CITATION_KEY_RULES
         + MATH_RULES
@@ -371,11 +383,22 @@ class PaperSectionCheckPrompt(BasePrompt):
     In the feedback, put the most important fixes first, quote the passage each
     refers to, and say what to do instead; keep what already works.
 
+    must_fix lists the defects that block the section regardless of score, one
+    per line with the quoted passage and the fix:
+    - an explanation, equation, table, figure or code block already listed in
+      already_in_article, shown or explained again;
+    - a derived number (ratio, reduction, difference) that is wrong when you
+      recompute it from its stated inputs, or an own estimate presented as the
+      paper's number;
+    - a comparison or causal claim the compared conditions do not support, or
+      a figure detail the paper text and figure analysis do not state.
+
     Output exactly:
     <quality_score>an integer from 0 to 100</quality_score>
     <missing_items>
     one missing must-cover item per line, copied from the brief, or "none"
     </missing_items>
+    <must_fix>one blocking defect per line, or "none"</must_fix>
     <improvement_feedback>...</improvement_feedback>
     """
     )
@@ -482,15 +505,20 @@ class PaperEditPrompt(BasePrompt):
     4. Coverage-plan items missing from the whole article: add the missing
        content in the section where it belongs, faithful to the paper text, at
        the depth the plan implies.
-    5. Leftover rule violations: references to the paper's figure, table or
-       section numbers, math not written as $$…$$, an H1 heading.
+    5. Statements that contradict each other across sections (a number, a
+       cause, which experiment a result comes from): keep the one the paper
+       text supports.
+    6. References to the paper's figure, table, theorem or section numbers:
+       rephrase them descriptively.
 
     Each edit replaces one exact passage. <find> is copied character for
     character from the article (backslashes, $$ and all) and occurs there
     exactly once — a whole sentence or paragraph is safest; <replace> is the
     new text. To insert, set find to the sentence after which the new text goes
     and replace it with that sentence followed by the new text. Never change or
-    remove headings. Use at most {max_edits} edits, the most valuable first; if
+    remove a `## ` heading; a redundant `###` or `####` subsection (a repeated
+    caveat, summary or conclusion) may be removed whole, heading included, when
+    its point is already made elsewhere. Use at most {max_edits} edits, the most valuable first; if
     nothing needs fixing, output no <edit> blocks. Write new text in {language}
     under the article's rules:
     """
@@ -549,26 +577,32 @@ class PaperFinalizationPrompt(BasePrompt):
 
     {repair_note}
 
-    1. Subtitle (inside <subtitle>): the paper title rendered naturally in
-       {language}, keeping model and method names as they are. If {language} is
-       English, write a short descriptive subtitle that differs from the title.
+    1. Subtitle (inside <subtitle>): the paper title translated into
+       {language}, keeping model and method names as they are; if {language}
+       is the title's own language, or the translation would equal the title
+       (e.g. a bare model name), a short descriptive subtitle instead.
 
     2. TL;DR (inside <key_takeaways>): exactly four `###` headings, each
-       followed by a short answer: 2-4 sentences or 2-4 one-line bullets. Use these questions, translated into
-       {language} (Korean shown, use it verbatim when {language} is Korean):
+       followed by a short answer: 2-4 sentences or 2-4 one-line bullets. Use these questions
+       (a Korean post uses them verbatim; any other language translates them):
        ### 이 연구를 시작하게 된 배경과 동기는 무엇입니까?
        ### 이 연구에서 제시하는 새로운 해결 방법은 무엇입니까?
        ### 제안된 방법은 어떻게 구현되었습니까?
        ### 이 연구의 결과가 가지는 의미는 무엇입니까?
        Be concrete: name the core mechanism, and in the last answer give the
        2-3 headline results with the setting that produced them and who
-       benefits most. No bullet walls, no restating the title. The first
+       benefits most; attribute each result to the experiment (model,
+       benchmark) the review reports it for. No bullet walls, no restating the
+       title. The first
        answer must open with a plain-prose sentence (no math, no list): the blog
        uses it as the post's search description.
 
     3. Closing assessment (inside <closing>): a `##` heading in {language}
        meaning "Limitations and Takeaways" (Korean: "## 한계와 시사점"), then
-       2-4 short paragraphs (a short list is fine for limitations):
+       2-3 short paragraphs or a few bullets, each point made once: about
+       600-1,200 Hangul syllables in Korean (the same reading time in other
+       languages), longer only when the paper has a whole future-directions
+       section to cover:
        - strengths that matter in practice;
        - limitations: unstated assumptions, evaluation gaps, cost or
          engineering trade-offs, settings where the method may not hold —
@@ -576,8 +610,11 @@ class PaperFinalizationPrompt(BasePrompt):
        - practical implications: when to use it and when not;
        - well-known follow-up work only if you are certain it exists, named in
          plain text without links or new numbers; otherwise omit it.
-       Cover the paper's own stated limitations and future work listed above;
-       this is the article's only limitations section.
+       Cover the paper's own stated limitations and future work listed above
+       once each; this is the article's only limitations section. Do not
+       restate the review's conclusions. A limitation or caveat the review body
+       already states is named in one clause at most, never explained again;
+       spend the words on what the body has not said.
 
     Rules for all parts:
     - Use the glossary renderings for its terms, as the review does.

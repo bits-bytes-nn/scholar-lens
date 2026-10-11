@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from .constants import LanguageModelId, arxiv_id_from_reference
 from .logger import logger
+from .prompt_safety import neutralize_prompt_tags
 from .prompts import (
     AttributesExtractionPrompt,
     CitationExtractionPrompt,
@@ -20,7 +21,6 @@ from .utils import (
     is_affirmative,
     is_placeholder,
 )
-from .web_research import neutralize_prompt_tags
 
 
 class Attributes(BaseModel):

@@ -15,7 +15,7 @@ from .review import (
     PaperSectionCheckPrompt,
     PaperSectionPrompt,
 )
-from .summary import PaperSummaryPrompt
+from .summary import PaperSummaryPrompt, PaperSummaryShortenPrompt
 from .tech_guide import (
     TechGuideEvaluationPrompt,
     TechGuideGroundingPrompt,
@@ -40,6 +40,7 @@ __all__ = [
     "PaperSectionCheckPrompt",
     "PaperSectionPrompt",
     "PaperSummaryPrompt",
+    "PaperSummaryShortenPrompt",
     "TechGuideEvaluationPrompt",
     "TechGuideGroundingPrompt",
     "TechGuideRelevancePrompt",

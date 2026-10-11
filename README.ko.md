@@ -61,17 +61,17 @@ poetry run python -m scholar_lens summarize 2106.09685 --no-pr
 
 `scholar_lens/configs/config.yaml`(Git 제외)은 엄격하게 검증하며, 모르는 키가 있으면 오류입니다. 템플릿에 모든 키와 기본값이 있습니다. 주로 바꾸는 값은 다음과 같습니다.
 
-- `resources`: `profile_name`, `bedrock_region_name`, `s3_bucket_name`(Batch 실행과 `status`에 필요), `email_address`(SNS 알림)
+- `resources`: `profile_name`, `bedrock_region_name`, `s3_bucket_name`(`cdk deploy`, Batch 실행, `status`에 필요), `email_address`(SNS 알림)
 - `resources.github`: `enabled`, `repo_name`(예: `owner/owner.github.io`), `base_branch`, `branch_prefix`, 산출물 유형별 카테고리 이름
-- 단계별 `*_model_id`, `thinking_effort`, 품질 기준, 선택 사항인 `max_total_tokens` 비용 상한
+- 단계별 `*_model_id`, `thinking_effort`, 품질 기준, `max_total_tokens` 비용 상한(기본값: 리뷰 800만, 요약 100만, 가이드 300만 토큰)
 - `output_language`(기본값 `Korean`)
 
 ## CLI
 
 ```bash
-poetry run python -m scholar_lens review 2106.09685 --repo-url https://github.com/microsoft/LoRA
-poetry run python -m scholar_lens summarize https://openreview.net/pdf?id=nZeVKeeFYf9 --no-pr
-poetry run python -m scholar_lens guide https://docs.vllm.ai/en/latest/ --search-query "vLLM paged attention"
+poetry run python -m scholar_lens review 2106.09685 --repo-url "https://github.com/microsoft/LoRA"
+poetry run python -m scholar_lens summarize "https://openreview.net/pdf?id=nZeVKeeFYf9" --no-pr
+poetry run python -m scholar_lens guide "https://docs.vllm.ai/en/latest/" --search-query "vLLM paged attention"
 poetry run python -m scholar_lens review 2106.09685 --remote     # AWS Batch에 제출
 poetry run python -m scholar_lens status <job-id> --wait         # 원격 작업 조회
 ```
@@ -86,7 +86,7 @@ poetry run python -m scholar_lens status <job-id> --wait         # 원격 작업
 | `--remote` | review, summarize, guide | AWS Batch에 제출하고 작업 ID를 돌려줍니다 |
 | `--wait`, `--timeout S` | status | 작업이 끝나거나 `S`초가 지날 때까지 조회합니다 |
 
-모든 명령은 stdout에 JSON 객체 하나를 출력하고, 로그는 stderr로 보냅니다. 실행 결과는 `JobResult`(`status`, `title`, `markdown_path`, `s3_uri`, `pr_url`, `warnings`, `violations`, `error`, `estimated_cost_usd` 등)입니다. `--remote`는 `job_id`를, `status`는 Batch 상태와 완료 후 저장된 결과를 돌려줍니다. 종료 코드는 `0` 성공 또는 제출, `1` 실패(블로그 규칙 검사에서 거부된 경우 포함), `2` 입력 거부(PDF 아님, 안전하지 않은 URL, 없는 arXiv ID, 기술 문서가 아닌 페이지), `3` 진행 중(`status`, 또는 `status --wait` 시간 초과)입니다.
+모든 명령은 stdout에 JSON 객체 하나를 출력하고, 로그는 stderr로 보냅니다. 실행 결과는 `JobResult`(`status`, `title`, `markdown_path`, `s3_uri`, `pr_url`, `warnings`, `violations`, `error`, `estimated_cost_usd` 등)입니다. `--remote`는 `job_id`를, `status`는 Batch 상태와 완료 후 저장된 결과를 돌려줍니다. 종료 코드는 `0` 성공 또는 제출, `1` 실패(블로그 규칙 검사에서 거부된 경우 포함), `2` 입력 거부(PDF 아님, 안전하지 않은 URL, 없는 arXiv ID, 기술 문서가 아닌 페이지), `3` 진행 중(`status`, 또는 `status --wait` 시간 초과), `4` 명령 자체의 실패(`"status": "error"`: 자격 증명, 설정, AWS API 오류. 작업 상태는 알 수 없음)입니다. URL은 따옴표로 감쌉니다. zsh에서는 따옴표 없는 URL의 `?`가 glob으로 해석되어 명령이 실패합니다.
 
 ## 에이전트에서 쓰기(OpenClaw, Claude Code, Codex)
 
@@ -98,15 +98,17 @@ poetry run python -m scholar_lens status <job-id> --wait         # 원격 작업
 
 ## AWS 배포
 
-위 조건에 더해 Node.js, Docker, AWS CDK CLI가 필요합니다.
+위 조건에 더해 Node.js, Docker, AWS CDK CLI와 `resources.s3_bucket_name`에 적은 기존 S3 버킷이 필요합니다(스택은 버킷을 만들지 않습니다). `resources.profile_name`과 같은 프로필을 넘깁니다.
 
 ```bash
-cdk bootstrap                                    # 계정·리전당 한 번
-cdk deploy                                       # cdk.json: poetry run python scripts/deploy_infra.py
+cdk bootstrap --profile <profile_name>           # 계정·리전당 한 번
+cdk deploy --profile <profile_name>              # cdk.json: poetry run python scripts/deploy_infra.py
 poetry run python scripts/put_secrets.py         # .env의 비밀값을 SSM SecureString에 기록
 ```
 
-스택은 Batch 작업 정의 하나(`python3 -m scholar_lens worker --request Ref::request`)를 온디맨드와 스팟 컴퓨팅에서 실행합니다. 결과는 `s3://<bucket>/<prefix>/results/<job_id>.json`에 저장하고, 성공과 실패를 모두 SNS로 알립니다. `cdk synth`와 `cdk diff`는 비밀값을 건드리지 않습니다.
+이미지에는 체크아웃의 `scholar_lens/configs/config.yaml`이 들어가므로 Batch 작업은 마지막 배포 시점의 설정을 씁니다. 설정을 고치면 `cdk deploy`를 다시 실행합니다. 이 파일이나 `s3_bucket_name`이 없으면 배포가 멈춥니다.
+
+스택은 Batch 작업 정의 하나(`python3 -m scholar_lens worker --request Ref::request`)를 온디맨드와 스팟 컴퓨팅에서 실행합니다. 결과는 `s3://<bucket>/<prefix>/results/<job_id>.json`에 저장하고, 성공과 실패를 모두 SNS로 알립니다. 앱이 직접 알리지 못하고 끝난 작업(시간 초과, 비정상 종료, 호스트 유실)은 EventBridge 규칙이 알립니다. 중단된 시도는 Batch가 재시도할 수 있으므로 실패 알림을 보내지 않습니다. `cdk synth`와 `cdk diff`는 비밀값을 건드리지 않습니다.
 
 ## 개발
 

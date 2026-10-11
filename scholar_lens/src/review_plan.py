@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections import Counter
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
@@ -22,6 +23,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from .logger import logger
+from .markdown_lint import callout_lines, close_open_fence, writing_issues
 
 Difficulty = Literal["easy", "medium", "hard"]
 Importance = Literal["core", "supporting", "context"]
@@ -32,6 +34,13 @@ Importance = Literal["core", "supporting", "context"]
 _ITEM_WORDS: dict[str, int] = {"easy": 60, "medium": 200, "hard": 450}
 _IMPORTANCE_FACTOR: dict[str, float] = {"context": 0.8, "supporting": 1.0, "core": 1.3}
 MIN_SECTION_WORDS = 250
+# Whole-review budget in English-word equivalents (≈2.5 Hangul syllables
+# each), growing smoothly with the share of hard items. Only easy and medium
+# items are shortened to fit, never below half their size: hard items keep
+# their full build-up, so a hard-heavy paper may run past the budget.
+REVIEW_WORD_BUDGET = 7_000
+_HARD_SHARE_BONUS = 0.6
+MIN_LENGTH_SCALE = 0.5
 # Sentences of context added on each side of a planned range, so evidence just
 # outside an LLM-estimated anchor still reaches the writer.
 RANGE_PADDING = 3
@@ -62,6 +71,20 @@ _IMAGE_MARKER = re.compile(r'\[Image:[^\n]*?src="([^"]+)"[^\n]*?"\]')
 _JSON_FENCE = re.compile(r"^```(?:json)?\s*|\s*```$")
 _HANGUL = re.compile(r"[가-힣]")
 _LATIN_WORD = re.compile(r"[A-Za-z0-9]+(?:[-'][A-Za-z0-9]+)*")
+
+
+def _is_closing_heading(title: str) -> bool:
+    """Closing-section heading, tolerating an OCR split such as "FUTURE W ORK"
+    (a lone letter glued back onto the next word)."""
+    if _CLOSING_HEADING.match(title):
+        return True
+    words = title.split()
+    for k, word in enumerate(words[:-1]):
+        if len(word) == 1 and word.isalpha():
+            joined = " ".join(words[:k] + [word + words[k + 1]] + words[k + 2 :])
+            if _CLOSING_HEADING.match(joined):
+                return True
+    return False
 
 
 def coerce_ranges(value: Any) -> list[tuple[int, int]]:
@@ -124,6 +147,8 @@ class PlannedSection(BaseModel):
     # "F<n>" ids from the figure list shown to the planner, resolved to srcs.
     figures: list[str] = Field(default_factory=list)
     needs_code: bool = False
+    # Set by normalize_plan so the whole review fits its budget.
+    length_scale: float = 1.0
 
     @field_validator("sentence_ranges", mode="before")
     @classmethod
@@ -144,13 +169,12 @@ class PlannedSection(BaseModel):
 
     @property
     def target_words(self) -> int:
-        return target_words(self.must_cover, self.importance)
+        return target_words(self.must_cover, self.importance, self.length_scale)
 
 
 class ReviewPlan(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
-    paper_type: str = ""
     narrative: str = ""
     glossary: dict[str, str] = Field(default_factory=dict)
     sections: list[PlannedSection] = Field(min_length=1)
@@ -177,11 +201,52 @@ class ReviewPlan(BaseModel):
         return value or {}
 
 
-def target_words(items: Sequence[CoverItem], importance: str) -> int:
+def target_words(
+    items: Sequence[CoverItem], importance: str, scale: float = 1.0
+) -> int:
     """Section length from what it must carry: per-item budgets by
-    difficulty, scaled by importance, never below the floor."""
-    words = sum(_ITEM_WORDS[i.difficulty] for i in items)
+    difficulty (easy and medium ones times ``scale``, hard ones never
+    shortened), scaled by importance, never below the floor."""
+    words = sum(
+        _ITEM_WORDS[i.difficulty] * (1.0 if i.difficulty == "hard" else scale)
+        for i in items
+    )
     return max(MIN_SECTION_WORDS, round(words * _IMPORTANCE_FACTOR[importance]))
+
+
+def review_word_budget(plan: ReviewPlan) -> int:
+    """The whole review's length budget, larger when more items are hard."""
+    items = [c for s in plan.sections for c in s.must_cover]
+    hard_share = sum(c.difficulty == "hard" for c in items) / len(items) if items else 0
+    return round(REVIEW_WORD_BUDGET * (1 + _HARD_SHARE_BONUS * hard_share))
+
+
+def _fit_budget(plan: ReviewPlan) -> None:
+    """Shorten the easy and medium items (one scale for the whole review,
+    floors included in the total) until the targets fit the budget or reach
+    :data:`MIN_LENGTH_SCALE`."""
+
+    def total(scale: float) -> int:
+        for section in plan.sections:
+            section.length_scale = scale
+        return sum(s.target_words for s in plan.sections)
+
+    budget = review_word_budget(plan)
+    if total(1.0) <= budget:
+        return
+    low, high = MIN_LENGTH_SCALE, 1.0
+    if total(low) < budget:
+        for _ in range(20):  # bisection: the total is monotone in the scale
+            mid = (low + high) / 2
+            low, high = (mid, high) if total(mid) <= budget else (low, mid)
+    fitted = total(low)
+    logger.info(
+        "Review targets: easy/medium items x%.2f, %d words for a %d-word budget%s.",
+        low,
+        fitted,
+        budget,
+        "" if fitted <= budget else " (over: hard items are never shortened)",
+    )
 
 
 def approx_words(text: str) -> int:
@@ -323,7 +388,7 @@ class SourceText:
         i = 0
         while i < len(units):
             match = _UNIT_HEADING.match(units[i].strip())
-            if match and _CLOSING_HEADING.match(match.group(2).strip()):
+            if match and _is_closing_heading(match.group(2).strip()):
                 level = len(match.group(1))
                 j = i + 1
                 while j < len(units):
@@ -508,7 +573,11 @@ def normalize_plan(
             owner.title,
         )
         owner.sentence_ranges = sorted([*owner.sentence_ranges, run])
-    return plan.model_copy(update={"sections": sections, "excluded_ranges": excluded})
+    normalized = plan.model_copy(
+        update={"sections": sections, "excluded_ranges": excluded}
+    )
+    _fit_budget(normalized)
+    return normalized
 
 
 def _dedupe_prerequisites(sections: list[PlannedSection]) -> None:
@@ -643,7 +712,7 @@ def render_brief(plan: ReviewPlan, index: int, figure_markers: dict[str, str]) -
             + (f" ({section.difficulty_reason})" if section.difficulty_reason else ""),
             f"Importance: {section.importance}",
             f"Target length: about {section.target_words} English words "
-            f"(about {round(section.target_words * 2.5)} characters in Korean); "
+            f"(about {round(section.target_words * 2.5)} Hangul syllables in Korean); "
             "spend them on the hard items; never drop a required item to "
             "meet it.",
             "Must cover (every item; its difficulty sets its depth):",
@@ -680,8 +749,9 @@ def render_coverage(plan: ReviewPlan) -> str:
 
 
 def ensure_section_heading(text: str, title: str) -> str:
-    """A section starts with exactly its ``##`` heading."""
-    body = text.strip()
+    """A section starts with exactly its ``##`` heading (and closes any code
+    fence it left open)."""
+    body = close_open_fence(text.strip())
     if body.startswith("## "):
         return body
     body = re.sub(r"^#{1,6}\s+[^\n]*\n+", "", body) if body.startswith("#") else body
@@ -723,10 +793,36 @@ def parse_edits(raw: str) -> list[Edit]:
     ]
 
 
+def draft_rank(*, passes: bool, blocking: int, score: int) -> tuple[bool, int, int]:
+    """Order of two drafts of a section (higher is better), shared by the
+    review and guide loops: passing first, then the score, then fewer
+    blocking defects (missing items, must-fix, rule slips). A slip never
+    outweighs the score: a faithful draft with one slip beats an invented one."""
+    return passes, score, -blocking
+
+
+def rejected_revision_note(score: int, blocking: int) -> str:
+    """Feedback line for a revision that did not replace the kept draft."""
+    return (
+        f"A previous revision of this draft was rejected (score {score}, "
+        f"{blocking} blocking problem(s)); avoid its problems:"
+    )
+
+
 def tag_body(raw: str, tag: str) -> str | None:
     """Raw body of the last ``<tag>…</tag>`` in ``raw`` (no unescaping)."""
     matches = re.findall(rf"<{tag}>(.*?)</{tag}>", raw or "", re.DOTALL)
     return matches[-1] if matches else None
+
+
+def _added_slips(before: str, after: str) -> list[str]:
+    """Writing-rule hits (rule and offending text) an edit would add, even
+    when it also fixes another."""
+
+    def keys(text: str) -> Counter[str]:
+        return Counter(issue.split(":", 1)[0] for issue in writing_issues(text))
+
+    return list((keys(after) - keys(before)).elements())
 
 
 def apply_edits(
@@ -736,8 +832,11 @@ def apply_edits(
 
     Returns ``(text, applied, skipped_reasons)``. Ambiguous or missing anchors
     are skipped rather than guessed, so an edit can never land in the wrong
-    place; headings cannot be removed (a replacement must keep every ``##``
-    line the anchor contained).
+    place. Top-level ``## `` headings cannot be added, removed, demoted or
+    renamed (the edited text must keep the same list of them); a
+    redundant ``###``/``####`` subsection may be (level jumps are repaired at
+    publish time). An edit may drop a repeated figure, display equation or
+    table, never its only copy, and may not add a writing-rule slip.
     """
     applied, skipped = 0, []
     for edit in edits[:max_edits]:
@@ -748,23 +847,68 @@ def apply_edits(
         if count != 1:
             skipped.append(f"find occurs {count} times: {edit.find[:60]!r}")
             continue
-        headings = re.findall(r"^#{2,6} .*$", edit.find, re.MULTILINE)
-        if any(h not in edit.replace for h in headings):
-            skipped.append(f"would remove a heading: {edit.find[:60]!r}")
+        edited = text.replace(edit.find, edit.replace, 1)
+        if _TOP_HEADING.findall(edited) != _TOP_HEADING.findall(text):
+            skipped.append(f"would change a heading: {edit.find[:60]!r}")
             continue
-        text = text.replace(edit.find, edit.replace, 1)
+        if lost := _lost_assets(edit.find, text, edited):
+            skipped.append(f"would remove the only {lost}: {edit.find[:60]!r}")
+            continue
+        if added := _added_slips(text, edited):
+            skipped.append(
+                f"would add a writing-rule slip ({added[0]}): {edit.find[:60]!r}"
+            )
+            continue
+        text = edited
         applied += 1
     if len(edits) > max_edits:
         skipped.append(f"{len(edits) - max_edits} edits over the cap")
     return text, applied, skipped
 
 
+def _lost_assets(find: str, text: str, edited: str) -> str:
+    """The kind of figure, display equation or table the edit removes without
+    another copy left ("" when none): fixing one in place keeps the count and
+    is fine; dropping a repeated copy leaves the other in ``edited``."""
+    for kind, pattern in (
+        ("figure", _IMAGE_SRC),
+        ("equation", _DISPLAY_MATH),
+        ("table", _TABLE_HEADER),
+    ):
+        fewer = len(pattern.findall(edited)) < len(pattern.findall(text))
+        if fewer and any(item not in edited for item in pattern.findall(find)):
+            return kind
+    return ""
+
+
+_NONE_ANSWERS = {
+    "none",
+    "n/a",
+    "nothing missing",
+    "없음",
+    "해당 없음",
+    "없습니다",
+    "",
+}
+
+
+def _bare_answer(item: str) -> str:
+    """``item`` without list numbering, emphasis, punctuation, a trailing
+    dash or parenthetical ("1. None —", "none (all covered)" → "none")."""
+    bare = re.sub(r"^\d+[.)]\s*", "", item.lower())
+    bare = re.sub(r"\s*(?:\([^)]*\)|[-—–]+)\s*$", "", bare)
+    # "None — all items are covered", "없음: 모두 반영됨"
+    bare = re.sub(r"^(none|n/a|없음|해당 없음)\s*[-—–:].*$", r"\1", bare)
+    return bare.strip("\"'`()[]{}.!。*_ ")
+
+
 def parse_lines(raw: str | None) -> list[str]:
-    """Non-empty bullet/plain lines of a tag body ("none" means empty)."""
+    """Non-empty bullet/plain lines of a tag body ("none" means empty, with or
+    without trailing punctuation)."""
     lines = []
     for line in (raw or "").splitlines():
         item = line.strip().lstrip("-*•").strip()
-        if item and item.lower() not in {"none", "n/a", "없음", "-"}:
+        if item and _bare_answer(item) not in _NONE_ANSWERS:
             lines.append(item)
     return lines
 
@@ -775,14 +919,29 @@ _DISPLAY_MATH = re.compile(
     r"^\$\$[ \t]*\n.*?\n[ \t]*\$\$[ \t]*$|^\$\$(?:(?!\$\$)[^\n])+\$\$[ \t]*$",
     re.MULTILINE | re.DOTALL,
 )
-_TABLE_HEADER = re.compile(r"^(\|[^\n]*\|)\n\|\s*:?-{3,}", re.MULTILINE)
+_TABLE_HEADER = re.compile(r"^(\|[^\n]*\|)[ \t]*\n\|[ \t]*:?-+", re.MULTILINE)
 _IMAGE_SRC = re.compile(r"!\[[^\]]*\]\(([^)\s]+)")
+_TOP_HEADING = re.compile(r"^## .*$", re.MULTILINE)
 _SECTION_HEADING = re.compile(r"^#{2,3} [^\n]+", re.MULTILINE)
+
+
+def _code_first_lines(text: str) -> list[str]:
+    """The first non-empty line of every fenced code block."""
+    lines, firsts, in_fence, first = text.splitlines(), [], False, ""
+    for line in lines:
+        if _FENCE_LINE.match(line):
+            if in_fence and first:
+                firsts.append(first)
+            in_fence, first = not in_fence, ""
+        elif in_fence and not first and line.strip():
+            first = line.strip()
+    return firsts
 
 
 def article_ledger(sections: Sequence[str]) -> str:
     """What the article already shows, extracted in code: headings, display
-    equations, table headers and images — none may appear again."""
+    equations, table headers, images, code blocks and callouts — none may
+    appear again (callouts are listed so writers can keep within the cap)."""
     text = "\n\n".join(sections)
     lines = [f"- heading: {h}" for h in _SECTION_HEADING.findall(text)]
     lines += [
@@ -791,6 +950,8 @@ def article_ledger(sections: Sequence[str]) -> str:
     ]
     lines += [f"- table: {h[:160]}" for h in _TABLE_HEADER.findall(text)]
     lines += [f"- figure: {src}" for src in _IMAGE_SRC.findall(text)]
+    lines += [f"- code: {first[:160]}" for first in _code_first_lines(text)]
+    lines += [f"- callout: {c[:160]}" for c in callout_lines(text)]
     return "\n".join(lines) or "- nothing yet"
 
 

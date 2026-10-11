@@ -121,7 +121,7 @@ def _fake_paper_data(paper: Paper):  # type: ignore[no-untyped-def]
 def _fake_summarizer(output: str):  # type: ignore[no-untyped-def]
     class FakeSummarizer:
         def __init__(self, *args, **kwargs) -> None:  # type: ignore[no-untyped-def]
-            pass
+            self.notes: list[str] = []
 
         async def summarize(self, paper: Paper) -> dict[str, str]:
             return {
@@ -343,3 +343,92 @@ async def test_tags_the_paper_never_mentions_become_pr_notes(
     notes = captured[0].review_notes
     assert any("Direct-Preference-Optimization" in n for n in notes)
     assert not any("Low-Rank-Adaptation" in n for n in notes)
+
+
+async def test_degraded_output_reaches_pr_notes_and_job_warnings(
+    pipeline_env, monkeypatch: pytest.MonkeyPatch  # type: ignore[no-untyped-def]
+) -> None:
+    context, _ = pipeline_env
+    monkeypatch.setattr(
+        paper_pipeline, "_prepare_paper_data", _fake_paper_data(_paper())
+    )
+    fake = _fake_summarizer(SUMMARY_FROM_MODEL)
+
+    class NotingSummarizer(fake):  # type: ignore[misc, valid-type]
+        def __init__(self, *args, **kwargs) -> None:  # type: ignore[no-untyped-def]
+            super().__init__(*args, **kwargs)
+            self.notes = ["Summary is still long (4,000 Hangul characters)."]
+
+    monkeypatch.setattr(paper_pipeline, "PaperSummarizer", NotingSummarizer)
+    captured: list = []
+    real = runtime.publish_artifact
+
+    async def spy(context, request, *, create_pr):  # type: ignore[no-untyped-def]
+        captured.append(request)
+        return await real(context, request, create_pr=create_pr)
+
+    monkeypatch.setattr(paper_pipeline, "publish_artifact", spy)
+    outcome = await paper_pipeline.run_paper_pipeline(
+        context, JobRequest(kind="summarize", source="2106.09685"), TokenUsageTracker()
+    )
+    assert any("still long" in w for w in outcome.warnings)
+    assert any("still long" in n for n in captured[0].review_notes)
+
+
+class _FakeS3:
+    def __init__(self, result: object) -> None:
+        self.result = result
+        self.keys: list[str] = []
+
+    def get_text(self, key: str) -> str | None:
+        self.keys.append(key)
+        if isinstance(self.result, Exception):
+            raise self.result
+        return self.result  # type: ignore[return-value]
+
+
+def _guideline_context(s3: _FakeS3):  # type: ignore[no-untyped-def]
+    from types import SimpleNamespace
+
+    return SimpleNamespace(
+        s3_handler=s3,
+        config=SimpleNamespace(resources=SimpleNamespace(s3_prefix="sl")),
+    )
+
+
+async def test_translation_guideline_is_optional(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from scholar_lens.src.aws_helpers import S3OperationError
+
+    monkeypatch.setattr(paper_pipeline, "ROOT_DIR", tmp_path)
+    load = paper_pipeline._load_translation_guideline
+    missing = _FakeS3(None)
+    assert await load(_guideline_context(missing)) is None  # type: ignore[arg-type]
+    assert missing.keys and missing.keys[0].startswith("sl/")
+    found = _FakeS3('[{"term": "rank", "rendering": "랭크"}]')
+    assert await load(_guideline_context(found)) == [  # type: ignore[arg-type]
+        {"term": "rank", "rendering": "랭크"}
+    ]
+    with pytest.raises(S3OperationError):
+        await load(_guideline_context(_FakeS3(S3OperationError("denied"))))  # type: ignore[arg-type]
+
+
+async def test_guideline_failure_stops_before_paid_stages(
+    pipeline_env, monkeypatch: pytest.MonkeyPatch  # type: ignore[no-untyped-def]
+) -> None:
+    context, _ = pipeline_env
+    prepare = MagicMock()
+
+    async def broken(_context):  # type: ignore[no-untyped-def]
+        raise RuntimeError("s3 down")
+
+    monkeypatch.setattr(paper_pipeline, "_load_translation_guideline", broken)
+    monkeypatch.setattr(paper_pipeline, "_prepare_paper_data", prepare)
+    with pytest.raises(RuntimeError, match="s3 down"):
+        await paper_pipeline.run_paper_pipeline(
+            context,
+            JobRequest(kind="summarize", source="2106.09685"),
+            TokenUsageTracker(),
+        )
+    prepare.assert_not_called()

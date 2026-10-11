@@ -123,3 +123,37 @@ class TestRetryPredicate:
         from scholar_lens.src.utils.retry import _is_retryable
 
         assert _is_retryable(ReadTimeoutError(endpoint_url="https://bedrock"))
+
+
+class TestRetryBudget:
+    @pytest.fixture(autouse=True)
+    def _no_backoff(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # The backoff is capped by RETRY_MAX_WAIT, read when decorating.
+        monkeypatch.setattr("scholar_lens.src.utils.retry.RETRY_MAX_WAIT", 0)
+
+    @staticmethod
+    def _call_failing_with(error: BaseException) -> int:
+        from scholar_lens.src.utils.retry import RetryableBase
+
+        calls = 0
+
+        @RetryableBase._retry("test")
+        def call() -> None:
+            nonlocal calls
+            calls += 1
+            raise error
+
+        with pytest.raises(type(error)):
+            call()
+        return calls
+
+    def test_read_timeout_is_retried_once(self) -> None:
+        from botocore.exceptions import ReadTimeoutError
+
+        error = ReadTimeoutError(endpoint_url="https://bedrock")
+        assert self._call_failing_with(error) == 2
+
+    def test_other_transient_errors_use_the_full_budget(self) -> None:
+        from scholar_lens.src.utils.retry import MAX_RETRIES
+
+        assert self._call_failing_with(ConnectionError("reset")) == MAX_RETRIES

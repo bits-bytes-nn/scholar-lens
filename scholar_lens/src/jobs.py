@@ -16,12 +16,19 @@ from datetime import UTC, datetime
 from typing import Any, Literal
 
 import boto3
-from botocore.exceptions import ClientError
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from botocore.exceptions import ClientError, HTTPClientError
+from botocore.exceptions import ConnectionError as BotoConnectionError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from .aws_helpers import BatchJobError, S3Handler, get_ssm_param_value
+from .aws_helpers import (
+    BatchJobError,
+    S3Handler,
+    S3OperationError,
+    get_ssm_param_value,
+)
 from .constants import S3Paths, SSMParams
 from .logger import logger
+from .utils.retry import is_transient_error
 
 ArtifactKind = Literal["review", "summarize", "guide"]
 JobStatus = Literal["succeeded", "failed", "rejected"]
@@ -70,7 +77,8 @@ class JobResult(BaseModel):
     """Outcome of one run. ``warnings`` lists non-fatal problems (e.g. a PR
     that could not be opened even though the artifact was generated)."""
 
-    kind: ArtifactKind
+    # None only for a Batch request too malformed to name its kind.
+    kind: ArtifactKind | None
     status: JobStatus = "failed"
     input: str
     title: str | None = None
@@ -86,6 +94,9 @@ class JobResult(BaseModel):
     input_tokens: int = 0
     output_tokens: int = 0
     estimated_cost_usd: float = 0.0
+    # A failure notification was due but SNS rejected it; the worker then
+    # exits with a code the stack's EventBridge rule reports instead.
+    notification_failed: bool = Field(default=False, exclude=True)
 
 
 class SubmittedJob(BaseModel):
@@ -107,7 +118,8 @@ class JobStatusReport(BaseModel):
     result: JobResult | None = None
 
 
-def _ssm_base(project_name: str, stage: str) -> str:
+def ssm_base(project_name: str, stage: str) -> str:
+    """Prefix of every SSM parameter of one deployment."""
     return f"/{project_name}/{stage}"
 
 
@@ -128,8 +140,14 @@ def write_result_manifest(
 def read_result_manifest(
     s3_handler: S3Handler, s3_prefix: str, job_id: str
 ) -> JobResult | None:
-    text = s3_handler.get_text(result_manifest_key(s3_prefix, job_id))
-    return JobResult.model_validate_json(text) if text is not None else None
+    key = result_manifest_key(s3_prefix, job_id)
+    text = s3_handler.get_text(key)
+    if text is None:
+        return None
+    try:
+        return JobResult.model_validate_json(text)
+    except ValidationError as e:  # a broken manifest is not a rejected input
+        raise S3OperationError(f"Malformed result manifest '{key}': {e}") from e
 
 
 def submit_job(
@@ -140,7 +158,7 @@ def submit_job(
     stage: str,
 ) -> SubmittedJob:
     """Submit ``request`` to the project's Batch queue and return its id."""
-    base = _ssm_base(project_name, stage)
+    base = ssm_base(project_name, stage)
     job_queue = get_ssm_param_value(
         session, f"{base}/{SSMParams.BATCH_JOB_QUEUE.value}"
     )
@@ -183,7 +201,7 @@ def describe_job(
     """Report a Batch job's state; attach the stored result once it finished."""
     try:
         jobs = session.client("batch").describe_jobs(jobs=[job_id]).get("jobs", [])
-    except ClientError as e:
+    except (ClientError, HTTPClientError, BotoConnectionError) as e:
         raise BatchJobError(f"Failed to describe Batch job '{job_id}': {e}") from e
     if not jobs:
         raise BatchJobError(f"Batch job '{job_id}' not found.")
@@ -211,11 +229,23 @@ def wait_for_job(
 ) -> JobStatusReport:
     """Poll ``describe`` until the job is terminal or ``timeout_seconds`` pass.
 
-    Returns the last report either way; the caller checks ``batch_status``.
+    Returns the last report either way; the caller checks ``batch_status``. A
+    throttled, 5xx or network-failed ``describe`` or result-manifest read (the
+    shared retry policy's transient errors) is skipped — the job keeps running — unless no report
+    was obtained before the deadline; any other error propagates.
     """
     deadline = clock() + timeout_seconds
-    report = describe()
-    while report.batch_status not in TERMINAL_BATCH_STATES and clock() < deadline:
+    report: JobStatusReport | None = None
+    while True:
+        try:
+            report = describe()
+        except (BatchJobError, S3OperationError) as e:
+            if not is_transient_error(e) or (report is None and clock() >= deadline):
+                raise
+            logger.warning("Transient error polling the job; retrying: %s", e)
+            if report is not None and clock() >= deadline:
+                return report
+        else:
+            if report.batch_status in TERMINAL_BATCH_STATES or clock() >= deadline:
+                return report
         sleep(min(poll_seconds, max(0.0, deadline - clock())))
-        report = describe()
-    return report

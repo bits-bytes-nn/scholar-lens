@@ -162,6 +162,26 @@ class TestPublishLocal:
         content = md_path.read_text(encoding="utf-8")
         assert "intro line\n\n## Section" in content  # blank line inserted
 
+    async def test_defanged_prompt_tags_are_restored(self, tmp_path: Path) -> None:
+        # A model may copy a tag defanged in its (untrusted) input.
+        pub = Publisher(Github(), root_dir=tmp_path)
+        request = _request(
+            tmp_path, markdown="## T\n\n```html\n<​summary>x<​/summary>\n```\n"
+        )
+        _, md_path = await pub.publish(request)
+        content = md_path.read_text(encoding="utf-8")
+        assert "​" not in content and "<summary>x</summary>" in content
+
+    async def test_defanged_tags_are_restored_in_front_matter(
+        self, tmp_path: Path
+    ) -> None:
+        pub = Publisher(Github(), root_dir=tmp_path)
+        request = _request(
+            tmp_path, markdown='---\ntitle: "Why <​code> tags"\n---\n## T\n'
+        )
+        _, md_path = await pub.publish(request)
+        assert 'title: "Why <code> tags"' in md_path.read_text(encoding="utf-8")
+
     async def test_code_body_with_generics_survives_publish(
         self, tmp_path: Path
     ) -> None:
@@ -221,7 +241,10 @@ class TestImageLocalization:
     async def _publish(self, tmp_path: Path, markdown: str, **publisher_kwargs: Any):  # type: ignore[no-untyped-def]
         pub = Publisher(Github(), root_dir=tmp_path, **publisher_kwargs)
         _, md_path = await pub.publish(_request(tmp_path, markdown=markdown))
-        return md_path.read_text(encoding="utf-8"), tmp_path / "blog-images"
+        return (
+            md_path.read_text(encoding="utf-8"),
+            tmp_path / "blog-images" / "my-guide",
+        )
 
     async def test_local_figures_get_flat_numbered_names(self, tmp_path: Path) -> None:
         _figures(tmp_path, **{"0.png": PNG, "fig_(a).png": JPEG})
@@ -316,9 +339,30 @@ class TestImageLocalization:
         assert content.count("/assets/images/other-1.png") == 1
         assert not any(staged.iterdir())
 
+    async def test_review_keeps_the_same_papers_summary_images(
+        self, tmp_path: Path
+    ) -> None:
+        # A paper's summary and review share the work dir; the review slug is
+        # a prefix of the summary slug.
+        _figures(tmp_path, **{"0.png": PNG})
+        pub = Publisher(Github(), root_dir=tmp_path)
+        summary = _request(tmp_path, kind="summarize", markdown="![a](0.png)\n")
+        await pub.publish(summary)
+        review = _request(tmp_path, kind="review", markdown="![a](0.png)\n")
+        await pub.publish(review)
+        assert (summary.staged_images_dir / "my-guide-summary-1.png").exists()
+        assert (review.staged_images_dir / "my-guide-1.png").exists()
+        post = tmp_path / "2026-10-11-my-guide.md"
+        post.write_text("# Post\n", encoding="utf-8")
+        # The review's PR carries only its own images.
+        assert sorted(BlogBranchSync._artifact_files(review, post)) == [
+            "_posts/2026-10-11-my-guide.md",
+            "assets/images/my-guide-1.png",
+        ]
+
     async def test_rerun_clears_previous_staged_images(self, tmp_path: Path) -> None:
-        stale = tmp_path / "blog-images"
-        stale.mkdir()
+        stale = tmp_path / "blog-images" / "my-guide"
+        stale.mkdir(parents=True)
         (stale / "my-guide-9.png").write_bytes(PNG)
         _, staged = await self._publish(tmp_path, "# no images\n")
         assert not any(staged.iterdir())
@@ -428,6 +472,7 @@ class FakeRepo:
         self.refs: dict[str, str] = {}
         self.ref_edits: list[tuple[str, str, bool]] = []
         self.pulls: list[FakePull] = []
+        self.truncated = False
         for data in base_files.values():
             self.blobs[_blob_sha(data)] = data
         tree = self._new_tree({p: _blob_sha(d) for p, d in base_files.items()})
@@ -479,7 +524,12 @@ class FakeRepo:
             SimpleNamespace(path=p, sha=b, type="blob")
             for p, b in self.trees[sha].items()
         ]
-        return SimpleNamespace(sha=sha, tree=elements)
+        return SimpleNamespace(
+            sha=sha, tree=elements, raw_data={"truncated": self.truncated}
+        )
+
+    def get_git_blob(self, sha: str) -> SimpleNamespace:
+        return SimpleNamespace(content=base64.b64encode(self.blobs[sha]).decode())
 
     def create_git_blob(self, content: str, encoding: str) -> SimpleNamespace:
         assert encoding == "base64"
@@ -514,15 +564,19 @@ class FakeRepo:
 
 
 def _post(
-    work_dir: Path, name: str, body: str = "# Post\n", images: dict | None = None
+    work_dir: Path,
+    name: str,
+    body: str = "# Post\n",
+    images: dict | None = None,
+    slug: str = "my-guide",
 ) -> Path:
     """A published post plus the localized images Publisher.publish staged."""
     work_dir.mkdir(parents=True, exist_ok=True)
     markdown_path = work_dir / f"{name}.md"
     markdown_path.write_text(body, encoding="utf-8")
     if images:
-        staged = work_dir / "blog-images"
-        staged.mkdir(exist_ok=True)
+        staged = work_dir / "blog-images" / slug
+        staged.mkdir(parents=True, exist_ok=True)
         for file_name, data in images.items():
             (staged / file_name).write_bytes(data)
     return markdown_path
@@ -648,6 +702,113 @@ class TestBlogBranchSync:
         url = sync.sync(_request(tmp_path), md)
         assert url == "https://github.com/owner/blog/pull/1"
         assert repo.compare(repo.refs["heads/main"], repo.refs[_BRANCH]).ahead_by == 1
+
+    def test_squash_merged_branch_restarts_from_base(self, tmp_path: Path) -> None:
+        repo = FakeRepo({"README.md": b"blog"})
+        sync = BlogBranchSync(repo, _CONFIG)
+        md = _post(tmp_path, "2026-10-11-my-guide")
+        sync.sync(_request(tmp_path), md)
+        # Squash merge: main gets the branch's tree in a new, unrelated commit,
+        # so the old branch head still counts as "ahead".
+        squashed = repo._new_commit(
+            repo.commits[repo.refs[_BRANCH]][0], [repo.refs["heads/main"]], {}
+        )
+        repo.refs["heads/main"] = squashed
+        repo.pulls.clear()
+
+        md.write_text("# Post v2\n", encoding="utf-8")
+        sync.sync(_request(tmp_path), md)
+        assert repo.ref_edits[-1][2] is True  # restarted, not stacked
+        assert repo.commits[repo.refs[_BRANCH]][1] == [squashed]
+
+    def test_retitled_post_replaces_the_old_slug_on_an_open_pr(
+        self, tmp_path: Path
+    ) -> None:
+        repo = FakeRepo({"README.md": b"blog"})
+        sync = BlogBranchSync(repo, _CONFIG)
+        # Same paper (front-matter date = publication time), new arXiv title.
+        front = "---\ntitle: x\ndate: 2021-06-17 17:37:18\n---\n# Post\n"
+        for version, title in (("v1", "Old Title"), ("v2", "New Title")):
+            slug = title.lower().replace(" ", "-")
+            sync.sync(
+                _request(tmp_path / version, title=title),
+                _post(
+                    tmp_path / version,
+                    f"2026-10-1{version[1]}-{slug}",
+                    body=front,
+                    images={f"{slug}-1.png": PNG},
+                    slug=slug,
+                ),
+            )
+        files = repo.files_at(_BRANCH)
+        assert "_posts/2026-10-11-old-title.md" not in files
+        assert "assets/images/old-title-1.png" not in files
+        assert "_posts/2026-10-12-new-title.md" in files
+        assert files["README.md"] == b"blog"
+
+    def test_summary_on_the_same_branch_keeps_the_review(self, tmp_path: Path) -> None:
+        # Same paper, same front-matter date, different kind: not an old copy.
+        repo = FakeRepo({"README.md": b"blog"})
+        sync = BlogBranchSync(repo, _CONFIG)
+        front = "---\ntitle: x\ndate: 2021-06-17 17:37:18\n---\n# Post\n"
+        for name, slug in (("review", "lora"), ("summary", "lora-summary")):
+            sync.sync(
+                _request(tmp_path / name, title="LoRA"),
+                _post(
+                    tmp_path / name,
+                    f"2026-10-11-{slug}",
+                    body=front,
+                    images={f"{slug}-1.png": PNG},
+                    slug=slug,
+                ),
+            )
+        files = repo.files_at(_BRANCH)
+        assert "_posts/2026-10-11-lora.md" in files
+        assert "assets/images/lora-1.png" in files
+        assert "_posts/2026-10-11-lora-summary.md" in files
+
+    def test_hand_added_post_on_the_branch_survives_a_rerun(
+        self, tmp_path: Path
+    ) -> None:
+        repo = FakeRepo({"README.md": b"blog"})
+        sync = BlogBranchSync(repo, _CONFIG)
+        md = _post(tmp_path, "2026-10-11-my-guide", body="---\ndate: 2021-01-01\n---\n")
+        sync.sync(_request(tmp_path), md)
+        tree = dict(repo.trees[repo.commits[repo.refs[_BRANCH]][0]])
+        other = b"---\ndate: 2024-05-05\n---\nnotes\n"
+        repo.blobs[_blob_sha(other)] = other
+        tree["_posts/2026-10-11-related-notes.md"] = _blob_sha(other)
+        repo.refs[_BRANCH] = repo._new_commit(
+            repo._new_tree(tree), [repo.refs[_BRANCH]], {}
+        )
+        md.write_text("---\ndate: 2021-01-01\n---\nv2\n", encoding="utf-8")
+        sync.sync(_request(tmp_path), md)
+        assert "_posts/2026-10-11-related-notes.md" in repo.files_at(_BRANCH)
+
+    def test_replacing_a_published_post_is_flagged(self, tmp_path: Path) -> None:
+        repo = FakeRepo({"_posts/2025-01-01-my-guide.md": b"hand written"})
+        md = _post(tmp_path, "2026-10-11-my-guide")
+        BlogBranchSync(repo, _CONFIG).sync(_request(tmp_path), md)
+        assert "Replaces the published post `_posts/2025-01-01-my-guide.md`" in (
+            repo.pulls[0].body
+        )
+
+    def test_older_double_hyphen_slug_is_the_same_post(self, tmp_path: Path) -> None:
+        old = "_posts/2025-10-19-direct-preference-optimization--your-model.md"
+        repo = FakeRepo({old: b"older review"})
+        md = _post(tmp_path, "2026-10-11-direct-preference-optimization-your-model")
+        BlogBranchSync(repo, _CONFIG).sync(_request(tmp_path), md)
+        posts = [p for p in repo.files_at(_BRANCH) if p.startswith("_posts/")]
+        assert posts == [old]
+        assert f"Replaces the published post `{old}`" in repo.pulls[0].body
+
+    def test_truncated_tree_is_an_error(self, tmp_path: Path) -> None:
+        repo = FakeRepo({"README.md": b"blog"})
+        repo.truncated = True
+        with pytest.raises(PublishError, match="too large"):
+            BlogBranchSync(repo, _CONFIG).sync(
+                _request(tmp_path), _post(tmp_path, "2026-10-11-my-guide")
+            )
 
     def test_rerun_after_merge_updates_the_published_file(self, tmp_path: Path) -> None:
         # Merged yesterday as 2026-10-10-…; a rerun today must edit that file,
@@ -785,7 +946,7 @@ class TestValidationGate:
         pub = Publisher(Github(), root_dir=tmp_path)
         request = _request(tmp_path, markdown=post)
         await pub.publish(request)
-        assert any("numbered-ref" in w for w in request.validation_warnings)
+        assert any("numbered reference" in w for w in request.validation_warnings)
         assert "- [ ]" in request.pr_body_with_checklist()
 
 
@@ -851,7 +1012,7 @@ class TestSvgFigures:
         assert "![arch](/assets/images/my-guide-1.png)" in md_path.read_text(
             encoding="utf-8"
         )
-        staged = tmp_path / "blog-images" / "my-guide-1.png"
+        staged = tmp_path / "blog-images" / "my-guide" / "my-guide-1.png"
         assert staged.read_bytes().startswith(b"\x89PNG")
 
 

@@ -82,6 +82,7 @@ def test_checker_outputs_only_what_is_parsed() -> None:
     assert PaperSectionCheckPrompt.output_variables == [
         "quality_score",
         "missing_items",
+        "must_fix",
         "improvement_feedback",
     ]
 

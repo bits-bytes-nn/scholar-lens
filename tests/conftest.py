@@ -6,6 +6,7 @@ incur zero cost. AWS is faked with ``moto``; HTTP with ``responses``.
 
 from __future__ import annotations
 
+import logging
 import os
 import socket
 from pathlib import Path
@@ -19,6 +20,14 @@ os.environ.setdefault("AWS_SECRET_ACCESS_KEY", "testing")
 os.environ.setdefault("AWS_SECURITY_TOKEN", "testing")
 os.environ.setdefault("AWS_SESSION_TOKEN", "testing")
 os.environ.setdefault("AWS_DEFAULT_REGION", "us-east-1")
+
+# Test output must not land in the repository's logs/ directory. The app's file
+# handler opens its file lazily, so dropping it here leaves no file behind.
+from scholar_lens.src.logger import logger as _app_logger  # noqa: E402
+
+for _handler in [h for h in _app_logger.handlers if isinstance(h, logging.FileHandler)]:
+    _app_logger.removeHandler(_handler)
+    _handler.close()
 
 # A minimal valid PDF: header + EOF marker. ``%PDF-`` magic bytes make the
 # PdfUrlSource validation pass; PyMuPDF can open it.

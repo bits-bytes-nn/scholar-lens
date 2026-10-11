@@ -13,8 +13,8 @@ from scholar_lens.src.web_research import (
     SearchResult,
     TavilySearchProvider,
     WebResearcher,
-    _normalize_url,
     neutralize_prompt_tags,
+    normalize_url,
 )
 
 DOCS_HTML = """
@@ -57,11 +57,16 @@ def _researcher(routes: dict[str, tuple[int, str, str]], **kwargs) -> WebResearc
 
 
 class TestNormalizeUrl:
-    def test_strips_scheme_case_and_trailing_slash(self) -> None:
-        assert _normalize_url("HTTPS://Ex.com/Path/") == "https://ex.com/path"
+    def test_lowercases_scheme_and_host_only(self) -> None:
+        assert normalize_url("HTTPS://Ex.com/Path/") == "https://ex.com/Path"
+
+    def test_paths_differing_in_case_are_distinct_pages(self) -> None:
+        assert normalize_url("https://x.com/guide/Sub") != normalize_url(
+            "https://x.com/guide/sub"
+        )
 
     def test_drops_query_and_fragment(self) -> None:
-        assert _normalize_url("https://x.com/a?b=1#c") == "https://x.com/a"
+        assert normalize_url("https://x.com/a?b=1#c") == "https://x.com/a"
 
 
 class TestNullSearchProvider:
@@ -97,6 +102,8 @@ class TestWebResearcherFetch:
         # Relative image resolved to absolute; external kept.
         assert "https://fastapi.tiangolo.com/img/logo.png" in page.image_urls
         assert "https://cdn.example.com/diagram.svg" in page.image_urls
+        # The text markers name the same absolute URLs the writers may use.
+        assert "src=https://fastapi.tiangolo.com/img/logo.png]" in page.text
 
     def test_non_html_resource_skipped(self) -> None:
         url = "https://x.com/file.pdf"
@@ -437,6 +444,66 @@ class TestHardenedFetch:
         )
         page = WebResearcher(client=client)._fetch_page("https://docs.x.dev/old")
         assert page is not None and page.links == ["https://docs.x.dev/new/page"]
+
+    def test_meta_refresh_stub_is_followed_and_scopes_subpages(self) -> None:
+        stub = (
+            "<html><head><meta http-equiv='refresh' "
+            "content='0; url=../../2.14/notes/cuda.html'></head>"
+            "<body>Redirecting...</body></html>"
+        )
+        real = "<p>CUDA semantics.</p><a href='amp.html'>AMP</a>"
+        researcher = _researcher(
+            {
+                "https://docs.x.dev/docs/stable/notes/cuda.html": (
+                    200,
+                    "text/html",
+                    stub,
+                ),
+                "https://docs.x.dev/docs/2.14/notes/cuda.html": (
+                    200,
+                    "text/html",
+                    real,
+                ),
+                "https://docs.x.dev/docs/2.14/notes/amp.html": (
+                    200,
+                    "text/html",
+                    "<p>AMP.</p>",
+                ),
+            }
+        )
+        corpus = researcher.research(["https://docs.x.dev/docs/stable/notes/cuda.html"])
+        assert [p.text for p in corpus.pages] == [
+            "CUDA semantics.\n\nAMP (amp.html)",
+            "AMP.",
+        ]
+        assert (
+            corpus.pages[0].final_url == "https://docs.x.dev/docs/2.14/notes/cuda.html"
+        )
+
+    def test_meta_refresh_loop_stops_after_the_hop_limit(self) -> None:
+        a = "<meta http-equiv='refresh' content='0;url=/b'>"
+        b = "<meta http-equiv='refresh' content='0;url=/a'>"
+        researcher = _researcher(
+            {
+                "https://docs.x.dev/a": (200, "text/html", a),
+                "https://docs.x.dev/b": (200, "text/html", b),
+            }
+        )
+        assert researcher._fetch_page("https://docs.x.dev/a") is not None
+
+    def test_unknown_charset_falls_back_to_sniffing(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                headers={"Content-Type": "text/html; charset=x-user-defined-bogus"},
+                content="<p>문서</p>".encode(),
+            )
+
+        researcher = WebResearcher(
+            client=httpx.Client(transport=httpx.MockTransport(handler))
+        )
+        page = researcher._fetch_page("https://docs.x.dev/cs")
+        assert page is not None and "문서" in page.text
 
 
 class TestPinnedTransportKeepsHostnames:

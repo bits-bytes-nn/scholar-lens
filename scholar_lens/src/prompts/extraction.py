@@ -63,8 +63,9 @@ class AttributesExtractionPrompt(BasePrompt):
     5. CATEGORY: exactly one of these values, copied verbatim:
        {category_options}
     6. CONTROLLED_TAGS: 1-3 values from this closed list, copied verbatim,
-       comma-separated. Always give at least one — the closest fit when none is
-       exact:
+       comma-separated, each naming the paper's own topic (not a neighbouring
+       field it only mentions). Always give at least one — the closest fit when
+       none is exact:
        {controlled_tags}
     7. KEYWORDS: at most 5 specific tags for the paper's own contributions
        (1-4 words each, e.g. "Low-Rank Adaptation", "Paged Attention"). Reuse an
@@ -457,8 +458,11 @@ class FigureAnalysisPrompt(BasePrompt):
     Provide exactly 3 sentences:
 
     1. What type of visualization is this? (e.g., line plot, architecture diagram, bar chart, logo, decorative image)
-    2. What key information does it show? (specific metrics, components, relationships, or "non-technical content")
-    3. What is its research significance? (main finding, contribution, or "not research-relevant")
+    2. What does it encode and show? Name the axes, the legend and, for a heatmap or colour scale, which colour
+    means high and which low; give specific metrics, components or relationships. Mark any value you read off the
+    image as approximate ("about 0.5").
+    3. What is its research significance according to the caption? (main finding, contribution, or "not
+    research-relevant"); do not claim more than the caption and the image support.
 
     If the figure appears to be a logo, header image, or decorative element unrelated to research content, state this
     clearly in sentence 1 and keep sentences 2-3 brief.

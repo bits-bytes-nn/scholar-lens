@@ -12,9 +12,16 @@ from langchain_core.prompts import (
 # states one concern once; prompts compose the blocks they need instead of
 # restating them, so the rules cannot drift between artifacts.
 
+READER_PROFILE: str = """
+The reader is a general data scientist or ML engineer: fluent in standard deep
+learning (Transformers, attention, embeddings, Adam, cross-entropy, fine-tuning,
+common benchmarks and metrics) but not a specialist in this topic.
+"""
+
+
 SUMMARY_DEPTH_RULES: str = """
-A summary is short: about 2,000-3,000 Korean characters in total (more only
-for a dense paper), readable in five minutes.
+A summary is short: about 2,000-3,000 Hangul syllables of prose in Korean
+(the same reading time in other languages), readable in five minutes.
 - Spend the words on the core mechanism: its intuition, its key equation with
   symbols defined, and at most one small worked example.
 - Results: one distilled table plus at most three findings, each with its
@@ -30,17 +37,10 @@ Spend words where the difficulty is, not evenly.
 - Hard material (the paper's novel mechanism, dense math, non-obvious
   derivations, counter-intuitive results): build it up in this order —
   (1) the intuition in plain words, (2) the formal statement with every symbol
-  defined, (3) a small worked example or numeric walk-through, (4) the paper's
-  figure or a table where it helps. Say briefly why the point is subtle.
+  defined, (3) a small worked example or numeric walk-through where it helps
+  (for a theorem, the idea of the proof), (4) the paper's figure or a table
+  where it helps. Say briefly why the point is subtle.
 - Simplify the exposition, never the facts.
-"""
-
-SECTION_SCOPE_RULES: str = """
-Section metadata sets scope, not length: STANDARD = cover the core ideas only;
-DETAILED = mention every technical element of the section. ADVANCED depth =
-explain derivations and design trade-offs; INTERMEDIATE = add background and
-an example; BASIC = follow the paper's own explanation. Within any scope, the
-length per element still follows its difficulty.
 """
 
 SUPPLEMENTARY_CONTEXT_RULES: str = """
@@ -51,8 +51,12 @@ Context beyond the paper makes the text useful, but must be honest:
 - Never invent numbers, benchmark results, attributions, or links that are not
   in the inputs. Mark your own derivations or estimates as such (e.g. "a rough
   calculation gives …" / "대략 계산하면 …"). Toy values in a worked example
-  are fine when clearly illustrative ("예를 들어 $$d=4$$, $$r=1$$이라면 …");
-  never present them as the paper's numbers.
+  are fine when clearly illustrative ("예를 들어 입력이 3개라면 …"); never
+  present them as the paper's numbers.
+- Copy the paper's numbers verbatim. A derived number (a ratio, a reduction,
+  a difference) shows its inputs inline: "1,200ms에서 300ms로, 75% 감소".
+  Compare numbers only on the same benchmark, metric and evaluation setting;
+  if the compared models differ in size, say so.
 - Code: quote or adapt code only from the provided code examples. Without them,
   write code only when it clarifies something an equation cannot, label it as
   pseudocode reconstructed from the paper, and never cite file paths or symbol
@@ -97,29 +101,38 @@ VISUAL_RULES: str = """
   and explain what to look at. Show each figure, table, code block and equation
   only once in the whole post; afterwards refer to it descriptively ("the loss
   defined above" / "앞서 정의한 손실 함수").
-- Refer to figures, tables, equations and sections descriptively, never by the
-  paper's numbers ("Figure 3", "Table 2", "Eq. (4)", "Section 3.2", "그림 3",
-  "3.2절"): those numbers do not exist in this post.
-- Tables are real Markdown tables, never images. Copy header labels, cells
-  and numbers verbatim from the source table. Use exactly one header row
+- Refer to figures, tables, equations, theorems and sections descriptively,
+  never by the source's numbers ("Figure 3", "Table 2", "Eq. (4)", "Theorem 1",
+  "Section 3.2", "그림 3", "3.2절"): those numbers do not exist in this post.
+- Every image has alt text in the post's language that says what the figure
+  shows ("인코더-디코더 구조도"), never an English caption, a file name or
+  "Figure 3".
+- Tables are real Markdown tables, never images. Use exactly one header row
   (merge multi-level headers per column as "Parent Child", e.g. "AIME 2024
   pass@1"), give every row the same number of cells, and leave no header cell
-  empty except the first. To shorten a long table, omit whole rows (keep the
-  main method and the strongest baselines) and add one line saying that some
-  rows were omitted — name an omitted row only if you are certain it was
-  omitted; never drop or merge individual cells.
+  empty except the first. A comparison of many numbers goes in one table; the
+  prose interprets it, repeating only a derived number's inputs.
 - Prose is the default. Use a short list only for genuinely parallel items
-  (algorithm steps, three or more options), and at most one callout per hard
-  concept, e.g. "> **핵심:** …" / "> **Key idea:** …".
+  (algorithm steps, three or more options). Use a callout ("> **핵심:** …" /
+  "> **Key idea:** …") only for a non-obvious insight, at most three in the
+  whole post.
 - Never emit Mermaid, Graphviz or PlantUML blocks; they do not render.
+"""
+
+PAPER_TABLE_RULES: str = """
+- A table from the paper has at most 8 rows and 7 columns. Copy cells and
+  numbers verbatim from the source table; label method/model rows with the
+  names used in the prose. To shorten a long table, omit whole rows or columns
+  (keep the main method and the strongest baselines) and add one line saying
+  that some were omitted; never drop or merge individual cells.
 """
 
 MATH_RULES: str = r"""
 - Write ALL math, inline and display, between $$ and $$ — the blog renders
-  nothing else (no \( \), no \[ \], no single $). Inline: "the weight
-  $$W_0$$ stays frozen". Display: $$ ... $$ on its own line with a blank line
+  nothing else (no \( \), no \[ \], no single $). Inline: "the loss
+  $$\mathcal{{L}}$$ decreases". Display: $$ ... $$ on its own line with a blank line
   before and after.
-- Do not escape underscores inside math ($$W_0$$, not $$W\_0$$); only inside
+- Do not escape underscores inside math ($$x_t$$, not $$x\_t$$); only inside
   \text{{...}} or \texttt{{...}} write \_. Never put Korean (or other non-Latin)
   text inside math; keep words outside or in English inside \text{{...}}.
 - Inside inline math never use a bare | (it breaks tables): use
@@ -129,7 +142,7 @@ MATH_RULES: str = r"""
   gather environments. Use \boldsymbol, not \bm; \text{{...}}, not \rm.
 - A dollar amount in prose stays plain text ("$5 per hour"), never math.
 - Superscripts and subscripts exist only inside math: write
-  $$\text{{Adapter}}^{{L}}$$, never "Adapter^L" in prose.
+  $$\text{{Model}}^{{L}}$$, never "Model^L" in prose.
 """
 
 STYLE_RULES: str = """
@@ -139,12 +152,16 @@ STYLE_RULES: str = """
 - Prefer impersonal phrasing; avoid "we"/"I" ("우리"/"저").
 - Do not announce what a section will do ("This section explains …" / "이 절에서는
   …를 살펴봅니다"), recap the previous one, or promise later content; start with
-  the substance and stop when it is complete.
+  the substance and stop when it is complete. Never refer to the post's own
+  parts ("이 절", "이 장", "앞 절", "첫 절에서" / "this section").
 - Keep established English technical terms when the target language has no
   clear equivalent (e.g. BERT, Transformer); otherwise use the target
   language's standard terms.
 - WHEN THE OUTPUT LANGUAGE IS KOREAN: use the "입니다" register throughout and
-  standard translated terms ("손실 함수", "경사 하강법", "사전 학습").
+  standard translated terms ("손실 함수", "경사 하강법", "사전 학습"). Never
+  glue a Korean ending to an English stem ("fine-tune합니다", "freeze된");
+  write "미세 조정합니다", "동결된" or keep the English noun with a Korean
+  verb ("Adam을 사용합니다").
 """
 
 

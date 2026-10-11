@@ -4,18 +4,23 @@ Every command prints one JSON object on stdout (logs go to stderr), so agents
 and scripts can parse the outcome directly::
 
     scholar-lens summarize 2106.09685
-    scholar-lens review https://openreview.net/pdf?id=nZeVKeeFYf9 --remote
-    scholar-lens guide https://docs.vllm.ai/en/latest/ --search-query "vLLM paged attention"
+    scholar-lens review "https://openreview.net/pdf?id=nZeVKeeFYf9" --remote
+    scholar-lens guide "https://docs.vllm.ai/en/latest/" --search-query "vLLM paged attention"
     scholar-lens status <job-id> --wait
 
 Exit codes: 0 succeeded (or submitted), 1 failed, 2 rejected input,
-3 still running (``status``).
+3 still running (``status``), 4 the command itself failed (``"status":
+"error"``: AWS credentials, config, Batch/S3 API errors), so the job's state
+is unknown. The Batch ``worker`` exits 10 (failed) or 11 (rejected) once it
+has sent its own notification, and 4 when that notification could not be sent.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import logging
+import math
 import os
 import signal
 import sys
@@ -26,16 +31,38 @@ from pydantic import BaseModel, ValidationError
 
 from scholar_lens.src.jobs import JobRequest, JobResult
 
-EXIT_OK, EXIT_FAILED, EXIT_REJECTED, EXIT_PENDING = 0, 1, 2, 3
+EXIT_OK, EXIT_FAILED, EXIT_REJECTED, EXIT_PENDING, EXIT_ERROR = 0, 1, 2, 3, 4
 _EXIT_BY_STATUS = {
     "succeeded": EXIT_OK,
     "failed": EXIT_FAILED,
     "rejected": EXIT_REJECTED,
 }
+# The Batch worker exits with these after it has sent its own failure
+# notification. They differ from 1/2 so that a Python crash (1) or an argparse
+# error (2) before the worker code runs is still reported by the stack's
+# EventBridge rule, which notifies on every other failed job.
+WORKER_REPORTED_FAILED, WORKER_REPORTED_REJECTED = 10, 11
+APP_REPORTED_EXIT_CODES = (WORKER_REPORTED_FAILED, WORKER_REPORTED_REJECTED)
+_WORKER_EXIT_BY_STATUS = {
+    "succeeded": EXIT_OK,
+    "failed": WORKER_REPORTED_FAILED,
+    "rejected": WORKER_REPORTED_REJECTED,
+}
 
-# How long `status --wait` polls before returning the current state. Batch jobs
-# are capped at 3 hours by the job definition.
+# How long `status --wait` polls before returning the current state: one
+# 3-hour Batch attempt plus queueing time.
 DEFAULT_WAIT_SECONDS = 4 * 60 * 60
+
+
+def _seconds(value: str) -> float:
+    """A finite, non-negative number of seconds (``nan`` would never expire)."""
+    try:
+        seconds = float(value)
+    except ValueError as e:
+        raise argparse.ArgumentTypeError(f"not a number: {value!r}") from e
+    if not math.isfinite(seconds) or seconds < 0:
+        raise argparse.ArgumentTypeError(f"must be finite and >= 0: {value!r}")
+    return seconds
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -108,7 +135,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     status.add_argument(
         "--timeout",
-        type=float,
+        type=_seconds,
         default=DEFAULT_WAIT_SECONDS,
         help="Seconds to wait with --wait (default: %(default)s).",
     )
@@ -192,63 +219,129 @@ def _status(job_id: str, *, wait: bool, timeout: float) -> int:
     return EXIT_PENDING  # not finished yet: ask again later
 
 
-def _run(request: JobRequest, *, job_id: str | None = None) -> int:
+def _run(request: JobRequest, *, job_id: str | None = None) -> JobResult:
     from scholar_lens.src.runtime import run_job
 
     result: JobResult = run_job(request, job_id=job_id)
     _emit(result)
-    return _EXIT_BY_STATUS[result.status]
+    return result
 
 
-def _notify_bad_request(raw: str, error: ValidationError) -> None:
-    """A Batch job whose request does not parse still notifies (SNS)."""
-    from scholar_lens.src.runtime import notify_without_context
+def _worker_exit(result: JobResult, *, reported: bool) -> int:
+    """A failed run whose notification did not go out exits 4, which the
+    stack's EventBridge rule reports instead."""
+    if result.status != "succeeded" and not reported:
+        return EXIT_ERROR
+    return _WORKER_EXIT_BY_STATUS[result.status]
 
-    notify_without_context(
-        JobResult(
-            kind="review",
-            input=raw[:200],
-            status="rejected",
-            error=f"Invalid job request: {error}",
-            job_id=os.getenv("AWS_BATCH_JOB_ID"),
+
+def _raw_kind(raw: str) -> Any:
+    """The request's ``kind`` when it is a known one, for labelling failures."""
+    try:
+        kind = json.loads(raw).get("kind")
+    except (ValueError, AttributeError):
+        return None
+    return kind if kind in {"review", "summarize", "guide"} else None
+
+
+def _report_worker_failure(result: JobResult) -> int:
+    """Notify (and store the manifest) for a Batch run that failed outside
+    ``run_job``. The exit code tells the stack's alarm whether the app's own
+    notification went out (see ``APP_REPORTED_EXIT_CODES``)."""
+    _emit(result)
+    try:
+        from scholar_lens.src.runtime import record_unstarted_run
+
+        reported = record_unstarted_run(result)
+    except Exception as e:  # noqa: BLE001 - e.g. the runtime stack fails to import
+        sys.stderr.write(f"Could not report the failure: {type(e).__name__}: {e}\n")
+        reported = False
+    return _worker_exit(result, reported=reported)
+
+
+def _work(raw: str) -> int:
+    """Batch entrypoint: run the JSON request; every failure is reported.
+
+    After a SIGTERM (cleanup and manifest already done inside ``run_job``) the
+    process ends at once with 143: a normal interpreter exit would join the
+    worker thread of an in-flight model call, past Batch's ~30 s SIGKILL.
+    """
+    _raise_on_sigterm()
+    try:
+        return _work_request(raw)
+    except SystemExit as e:
+        if e.code != _SIGTERM_EXIT:
+            raise
+        logging.shutdown()
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os._exit(_SIGTERM_EXIT)
+
+
+def _work_request(raw: str) -> int:
+    job_id = os.getenv("AWS_BATCH_JOB_ID")
+    try:
+        request = JobRequest.model_validate_json(raw)
+    except ValidationError as e:
+        return _report_worker_failure(
+            JobResult(
+                kind=_raw_kind(raw),
+                input=raw[:200],
+                status="rejected",
+                error=f"Invalid job request: {e}",
+                job_id=job_id,
+            )
         )
-    )
+    try:
+        result = _run(request, job_id=job_id)
+    except Exception as e:  # noqa: BLE001 - run_job reports its own errors
+        return _report_worker_failure(
+            JobResult(
+                kind=request.kind,
+                input=request.describe(),
+                error=f"{type(e).__name__}: {e}",
+                job_id=job_id,
+            )
+        )
+    return _worker_exit(result, reported=not result.notification_failed)
 
 
 def _raise_on_sigterm() -> None:
     """Batch stops a job with SIGTERM (timeout, cancel, spot reclaim). Turn it
-    into SystemExit so cleanup, metrics and the result manifest still run."""
+    into SystemExit so cleanup, metrics and the result manifest still run
+    (``runtime.run_coroutine`` does not wait for in-flight model calls)."""
 
-    def handler(signum: int, _frame: Any) -> None:
-        raise SystemExit(128 + signum)
+    def handler(_signum: int, _frame: Any) -> None:
+        raise SystemExit(_SIGTERM_EXIT)
 
     signal.signal(signal.SIGTERM, handler)
 
 
+_SIGTERM_EXIT = 128 + signal.SIGTERM
+
+
 def main(argv: Sequence[str] | None = None) -> int:
-    os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")  # FAISS + torch OpenMP clash
+    # faiss-cpu bundles its own OpenMP runtime; tolerate a second copy loaded
+    # by another native wheel instead of aborting.
+    os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
     args = build_parser().parse_args(argv)
+    if args.command == "worker":
+        return _work(args.request)
+    if args.command != "status":
+        try:
+            request = _request_from_args(args)
+        except ValidationError as e:
+            _emit({"status": "rejected", "error": str(e)})
+            return EXIT_REJECTED
     try:
         if args.command == "status":
             return _status(args.job_id, wait=args.wait, timeout=args.timeout)
-        if args.command == "worker":
-            _raise_on_sigterm()
-            try:
-                request = JobRequest.model_validate_json(args.request)
-            except ValidationError as e:
-                _notify_bad_request(args.request, e)
-                raise
-            return _run(request, job_id=os.getenv("AWS_BATCH_JOB_ID"))
-        request = _request_from_args(args)
         if args.remote:
             return _submit(request)
-    except ValidationError as e:
-        _emit({"status": "rejected", "error": str(e)})
-        return EXIT_REJECTED
     except Exception as e:  # noqa: BLE001 - report AWS/config errors as JSON
-        _emit({"status": "failed", "error": f"{type(e).__name__}: {e}"})
-        return EXIT_FAILED
-    return _run(request)
+        _emit({"status": "error", "error": f"{type(e).__name__}: {e}"})
+        return EXIT_ERROR
+    return _EXIT_BY_STATUS[_run(request).status]
 
 
 if __name__ == "__main__":

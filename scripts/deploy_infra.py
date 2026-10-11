@@ -61,9 +61,12 @@ from aws_cdk.aws_ecr_assets import DockerImageAsset, Platform
 from constructs import Construct
 
 sys.path.append(str(Path(__file__).parent.parent))
+from scholar_lens.cli import APP_REPORTED_EXIT_CODES
 from scholar_lens.configs import Config
+from scholar_lens.configs.config import CONFIG_PATH
 from scholar_lens.src.aws_helpers import get_account_id
 from scholar_lens.src.constants import RUN_SECRETS, EnvVars, SSMParams
+from scholar_lens.src.jobs import ssm_base
 from scholar_lens.src.logger import logger
 from scholar_lens.src.metrics import METRICS_NAMESPACE
 
@@ -239,7 +242,7 @@ class PaperReviewStack(Stack):
         object_arn = (
             f"{bucket_arn}/{self.s3_prefix}/*" if self.s3_prefix else f"{bucket_arn}/*"
         )
-        # Posts, figures, keywords, the translation guideline and the result
+        # Posts, figures, the translation guideline and the result
         # manifest (<prefix>/results/<job id>.json) all live under the prefix.
         object_actions = ["s3:GetObject", "s3:PutObject"]
         if self.public_assets:
@@ -285,7 +288,7 @@ class PaperReviewStack(Stack):
                 resources=[
                     self._aws_partition_arn(
                         "ssm",
-                        f"parameter/{self.project_name}/{self.stage}/{param.value}",
+                        f"parameter{ssm_base(self.project_name, self.stage)}/{param.value}",
                     )
                     for param in SECRET_SSM_PARAMS
                 ],
@@ -503,18 +506,21 @@ class PaperReviewStack(Stack):
             ssm.StringParameter(
                 self,
                 f"SsmParam{param.name}",
-                parameter_name=f"/{self.project_name}/{self.stage}/{param.value}",
+                parameter_name=f"{ssm_base(self.project_name, self.stage)}/{param.value}",
                 string_value=value,
                 description=description,
                 tier=ssm.ParameterTier.STANDARD,
             )
 
     def _create_observability(self) -> None:
-        """Failure/error/cost alarms to the (email-subscribed) SNS topic.
+        """Failure and cost alarms to the (email-subscribed) SNS topic.
 
-        The job itself notifies on success and on application failure; the
-        rule below covers jobs that die without reaching that code (timeout,
-        OOM kill, lost host), so app-handled failures are not reported twice.
+        The worker notifies on success and failure itself and then exits 10
+        (failed) or 11 (rejected); see ``APP_REPORTED_EXIT_CODES``. The rule
+        below covers every other terminal failure: a timeout or interruption
+        (SIGTERM, exit 143), an OOM kill or native crash, a Python crash or
+        argument error before the worker ran (1, 2), a lost host (no exit
+        code), or a worker that could not send its own notification (4).
         """
         sns_action = cw_actions.SnsAction(self.topic)
         events.Rule(
@@ -528,12 +534,15 @@ class PaperReviewStack(Stack):
                 detail={
                     "status": ["FAILED"],
                     "jobQueue": [self.job_queue.job_queue_arn],
-                    "statusReason": [
+                    "$or": [
                         {
-                            "anything-but": {
-                                "prefix": "Essential container in task exited"
+                            "container": {
+                                "exitCode": [
+                                    {"anything-but": list(APP_REPORTED_EXIT_CODES)}
+                                ]
                             }
-                        }
+                        },
+                        {"container": {"exitCode": [{"exists": False}]}},
                     ],
                 },
             ),
@@ -549,30 +558,6 @@ class PaperReviewStack(Stack):
                 )
             ],
         )
-
-        metric_filter = logs.MetricFilter(
-            self,
-            "ErrorMetricFilter",
-            log_group=self.log_group,
-            metric_namespace=f"{self.project_name}/{self.stage}",
-            metric_name="LogErrors",
-            filter_pattern=logs.FilterPattern.any_term("ERROR"),
-            metric_value="1",
-            default_value=0,
-        )
-        error_alarm = cloudwatch.Alarm(
-            self,
-            "LogErrorsAlarm",
-            alarm_name=self._get_resource_name("log-errors"),
-            metric=metric_filter.metric(statistic="Sum", period=Duration.minutes(5)),
-            threshold=1,
-            evaluation_periods=1,
-            comparison_operator=(
-                cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD
-            ),
-            treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
-        )
-        error_alarm.add_alarm_action(sns_action)
 
         # The app emits EstimatedCostUSD both per Mode and dimensionless; an
         # alarm can watch only one series, so it uses the dimensionless total.
@@ -605,9 +590,21 @@ def deploy_session(config: Config) -> boto3.Session:
     )
 
 
+def check_deployable(config_path: Path, config: Config) -> None:
+    """The image bakes in ``config.yaml`` and every job needs the bucket, so a
+    deploy without either would yield jobs that all fail."""
+    if not config_path.exists():
+        raise SystemExit(
+            f"{config_path} is missing; copy config-template.yaml and fill it in."
+        )
+    if not config.resources.s3_bucket_name:
+        raise SystemExit("resources.s3_bucket_name must name an existing S3 bucket.")
+
+
 def main() -> None:
     try:
         config = Config.load()
+        check_deployable(CONFIG_PATH, config)
         resources = config.resources
         logger.info(
             "Synthesizing infrastructure for '%s' (%s stage)",

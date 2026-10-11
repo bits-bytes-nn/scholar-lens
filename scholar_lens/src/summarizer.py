@@ -1,6 +1,6 @@
 """Paper summary generation.
 
-A lighter-weight counterpart to :class:`ExplainerGraph`: one call produces a
+A lighter-weight counterpart to :class:`PaperReviewer`: one call produces a
 structured summary — a lead blockquote and five question sections (motivation,
 solution, implementation, results, significance and limits) — with figures,
 tables and math, using the same writing rules as the review.
@@ -8,6 +8,7 @@ tables and math, using the same writing rules as the review.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 import boto3
@@ -15,21 +16,46 @@ from langchain_core.runnables import Runnable
 
 from .constants import LanguageModelId
 from .explainer import Paper
+from .formatting import derived_subtitle, split_leading_h1
 from .logger import logger
-from .metrics import TokenBudgetGuard
-from .prompts import PaperSummaryPrompt
+from .metrics import TokenBudgetExceeded, TokenBudgetGuard
+from .prompt_safety import neutralize_prompt_tags
+from .prompts import BasePrompt, PaperSummaryPrompt, PaperSummaryShortenPrompt
 from .utils import (
     BedrockLanguageModelFactory,
     HTMLTagOutputParser,
     RetryableBase,
     measure_execution_time,
 )
-from .web_research import neutralize_prompt_tags
 
 DEFAULT_LANGUAGE: str = "Korean"
 # Language-neutral sentinel for "no code repository was provided"; the summary
 # prompt keys off this exact string to decide whether to use a codebase.
 _NO_CODEBASE: str = "(no code repository provided)"
+# A summary over this many Hangul syllables gets one shortening pass down to
+# the top of the range SUMMARY_DEPTH_RULES asks for (2,000-3,000).
+MAX_SUMMARY_HANGUL: int = 3_500
+SHORTEN_TARGET_HANGUL: int = 3_000
+_HANGUL = re.compile(r"[가-힣]")
+_IMAGE_SRC = re.compile(r"!\[[^\]]*\]\(([^)\s]+)")
+# A display-equation line: a lone $$ or a whole-line $$ … $$.
+_DISPLAY_MATH = re.compile(r"^[ \t]*\$\$(?:[^\n]*\$\$)?[ \t]*$", re.MULTILINE)
+
+
+def hangul_length(text: str) -> int:
+    return len(_HANGUL.findall(text))
+
+
+def _skeleton(summary: str) -> tuple[bool, list[str], list[str], int]:
+    """What shortening must keep: the lead blockquote, the ``##`` headings,
+    the images and the display equations (inline math may go with a cut
+    list item)."""
+    return (
+        summary.lstrip().startswith(">"),
+        re.findall(r"^##\s.*$", summary, re.MULTILINE),
+        _IMAGE_SRC.findall(summary),
+        len(_DISPLAY_MATH.findall(summary)),
+    )
 
 
 class PaperSummarizer(RetryableBase, TokenBudgetGuard):
@@ -50,6 +76,7 @@ class PaperSummarizer(RetryableBase, TokenBudgetGuard):
         self.language = language
         self.translation_guideline = translation_guideline or []
         self.summary_model_id = summary_model_id
+        self.notes: list[str] = []
         # Hard total-token ceiling (None = no limit). Checked before the summary
         # call so an already-exhausted budget (from data prep) aborts rather than
         # spending more — parity with the review/guide token guards.
@@ -61,6 +88,13 @@ class PaperSummarizer(RetryableBase, TokenBudgetGuard):
             thinking_effort=thinking_effort,
             callbacks=callbacks,
         )
+        self.shorten_chain: Runnable = self._build_chain(
+            summary_model_id,
+            enable_thinking=False,
+            thinking_effort=thinking_effort,
+            callbacks=callbacks,
+            prompt_cls=PaperSummaryShortenPrompt,
+        )
 
     def _build_chain(
         self,
@@ -69,6 +103,7 @@ class PaperSummarizer(RetryableBase, TokenBudgetGuard):
         enable_thinking: bool,
         thinking_effort: str,
         callbacks: list[Any] | None = None,
+        prompt_cls: type[BasePrompt] = PaperSummaryPrompt,
     ) -> Runnable:
         llm = self.llm_factory.get_model(
             model_id,
@@ -79,9 +114,9 @@ class PaperSummarizer(RetryableBase, TokenBudgetGuard):
             callbacks=callbacks or None,
         )
         return (
-            PaperSummaryPrompt.get_prompt()
+            prompt_cls.get_prompt()
             | llm
-            | HTMLTagOutputParser(tag_names=PaperSummaryPrompt.output_variables)
+            | HTMLTagOutputParser(tag_names=prompt_cls.output_variables or [])
         )
 
     @measure_execution_time
@@ -98,11 +133,60 @@ class PaperSummarizer(RetryableBase, TokenBudgetGuard):
         if not summary:
             raise ValueError("Summarizer returned an empty summary.")
         logger.info("Generated summary (%d chars).", len(summary))
+        summary = await self._shorten_if_long(summary)
+        subtitle = result.get("subtitle", "").strip()
+        if derived_subtitle(subtitle, split_leading_h1(summary)[0], paper.title):
+            self.notes.append(
+                "Summary subtitle was missing or repeated the title; it was "
+                "derived from the first sentence: check it."
+            )
         return {
-            "subtitle": result.get("subtitle", "").strip(),
+            "subtitle": subtitle,
             "summary": summary,
             "urls": result.get("urls", "").strip(),
         }
+
+    async def _shorten_if_long(self, summary: str) -> str:
+        """One bounded shortening call for an over-long summary (never a
+        loop). The shorter text is kept only when it is shorter and keeps the
+        summary's structure; any failure keeps the original."""
+        length = hangul_length(summary)
+        if length <= MAX_SUMMARY_HANGUL:
+            return summary
+        logger.info("Summary has %d Hangul syllables; shortening once.", length)
+        try:
+            self._enforce_token_budget()
+            result = await self._shorten(summary)
+            shorter = (result.get("summary") or "").strip()
+        except TokenBudgetExceeded:
+            raise  # an exhausted budget fails fast
+        except Exception as e:  # noqa: BLE001 - the long summary is still usable
+            logger.warning("Summary shortening failed: %s", e)
+            shorter = ""
+        if (
+            shorter
+            and hangul_length(shorter) < length
+            and _skeleton(shorter) == _skeleton(summary)
+        ):
+            summary, length = shorter, hangul_length(shorter)
+        elif shorter:
+            logger.warning("Shortened summary dropped structure; kept the original.")
+        if length > MAX_SUMMARY_HANGUL:
+            self.notes.append(
+                f"Summary is still long ({length:,} Hangul syllables; target "
+                f"{SHORTEN_TARGET_HANGUL:,}): trim it."
+            )
+        return summary
+
+    @RetryableBase._retry("paper_summary_shortening")
+    async def _shorten(self, summary: str) -> dict[str, str]:
+        return await self.shorten_chain.ainvoke(
+            {
+                "summary": summary,
+                "max_hangul": f"{SHORTEN_TARGET_HANGUL:,}",
+                "language": self.language,
+            }
+        )
 
     @RetryableBase._retry("paper_summarization")
     async def _summarize(

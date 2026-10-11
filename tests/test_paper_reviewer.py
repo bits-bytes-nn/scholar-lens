@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from datetime import datetime
 from typing import Any
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -55,7 +55,6 @@ class FakeFactory:
 
 def _plan(**overrides: Any) -> str:
     plan = {
-        "paper_type": "method",
         "glossary": {"low-rank adaptation": "저랭크 적응"},
         "excluded_ranges": [[7, 7]],
         "sections": [
@@ -142,6 +141,7 @@ def _reviewer(
     r.callbacks = []
     r._token_tracker = None
     r.max_total_tokens = None
+    r.notes = []
     r.citation_summarizer = AsyncMock(spec=CitationSummarizer)
     r.citation_summarizer.summarize.return_value = ["[R] Rank summary."]
     r.code_retriever = code_retriever
@@ -268,6 +268,31 @@ async def test_best_draft_kept_when_attempts_run_out() -> None:
     assert review.body.startswith("## t\n\n초안 A")  # 60 beat 40 and 50
 
 
+async def test_a_rule_slip_never_loses_to_an_invented_low_score_draft() -> None:
+    # 85 with one numbered-reference slip beats a 40 with no blocking defect.
+    replies = iter(
+        ["충실한 설명입니다. Table 2와 같습니다.", "지어낸 결과 99.9%입니다."]
+    )
+
+    def write(payload: dict[str, Any]) -> str:
+        text = _writer(payload)
+        if "LoRA의 핵심" not in payload["section_brief"]:
+            return text
+        return text.replace("본문입니다.", next(replies, "지어낸 결과 2입니다."))
+
+    def check(payload: dict[str, Any]) -> dict[str, str]:
+        if "충실한" in payload["draft"]:
+            return {"quality_score": "85", "missing_items": "none"}
+        if "지어낸" in payload["draft"]:
+            return {"quality_score": "40", "missing_items": "none"}
+        return _pass(payload)
+
+    reviewer = _reviewer(writer=FakeChain(write), checker=FakeChain(check))
+    review = await reviewer.run()
+    assert "충실한 설명입니다." in review.body
+    assert "99.9%" not in review.body
+
+
 async def test_continuations_are_joined() -> None:
     def write(payload: dict[str, Any]) -> str:
         if not payload["current_explanation"]:
@@ -283,6 +308,38 @@ async def test_unbalanced_writer_tags_are_stripped() -> None:
     reviewer = _reviewer(writer=FakeChain("<explanation>## x\n\n잘린 본문"))
     review = await reviewer.run()
     assert "<explanation>" not in review.body and "잘린 본문" in review.body
+
+
+def test_an_unclosed_has_more_tag_does_not_leak_its_value() -> None:
+    from scholar_lens.src.explainer import _split_writer_output
+
+    assert _split_writer_output("충분합니다.<has_more>n") == ("충분합니다.", False)
+
+
+async def test_empty_draft_keeps_the_checker_feedback() -> None:
+    drafts = iter(["초안 A", "", "초안 B"] + ["초안 C"] * 10)
+    scores = iter(["60"] + ["90"] * 10)
+
+    def write(payload: dict[str, Any]) -> str:
+        draft = next(drafts)
+        return (
+            f"<explanation>## t\n\n{draft}</explanation><has_more>n</has_more>"
+            if draft
+            else ""
+        )
+
+    def check(_: dict[str, Any]) -> dict[str, str]:
+        return {
+            "quality_score": next(scores),
+            "missing_items": "none",
+            "improvement_feedback": "예시를 더합니다.",
+        }
+
+    reviewer = _reviewer(writer=FakeChain(write), checker=FakeChain(check))
+    await reviewer.run()
+    after_empty = reviewer.writer.calls[2]  # type: ignore[attr-defined]
+    assert "예시를 더합니다." in after_empty["improvement_feedback"]
+    assert "empty" in after_empty["improvement_feedback"]
 
 
 async def test_plan_repair_then_failure() -> None:
@@ -391,6 +448,24 @@ async def test_missing_source_items_do_not_force_revision() -> None:
     assert not any(c["draft_to_revise"] for c in reviewer.writer.calls)  # type: ignore[attr-defined]
 
 
+async def test_a_writer_claim_cannot_excuse_a_checker_missing_item() -> None:
+    def write(payload: dict[str, Any]) -> str:
+        return _writer(payload) + "<missing_source>실험</missing_source>"
+
+    def check(payload: dict[str, Any]) -> dict[str, str]:
+        if "실험 결과" in payload["section_brief"].splitlines()[0]:
+            return {
+                "quality_score": "88",
+                "missing_items": "- 실험 결과 표",
+                "improvement_feedback": "",
+            }
+        return _pass(payload)
+
+    reviewer = _reviewer(writer=FakeChain(write), checker=FakeChain(check))
+    await reviewer.run()
+    assert any(c["draft_to_revise"] for c in reviewer.writer.calls)  # type: ignore[attr-defined]
+
+
 async def test_continuation_does_not_repeat_the_heading() -> None:
     def write(payload: dict[str, Any]) -> str:
         title = payload["section_brief"].splitlines()[0].split(": ", 1)[1]
@@ -448,3 +523,176 @@ async def test_finalizer_gets_glossary_and_closing_points_and_is_repaired() -> N
     assert "no batching across tasks" in first["closing_points"]
     assert "four ### questions" in second["repair_note"]
     assert review.key_takeaways.startswith("### 질문 1")
+
+
+async def test_must_fix_blocks_a_passing_score_until_fixed() -> None:
+    def check(payload: dict[str, Any]) -> dict[str, str]:
+        result = _pass(payload)
+        if "fine-tune합니다" in payload["draft"]:
+            result["must_fix"] = "- 'fine-tune합니다' → '미세 조정합니다'"
+        return result
+
+    def write(payload: dict[str, Any]) -> str:
+        text = _writer(payload)
+        if "LoRA의 핵심" in payload["section_brief"] and not payload["draft_to_revise"]:
+            return text.replace("본문입니다.", "모델을 fine-tune합니다.")
+        return text
+
+    reviewer = _reviewer(writer=FakeChain(write), checker=FakeChain(check))
+    review = await reviewer.run()
+    revision = next(
+        c for c in reviewer.writer.calls if c["draft_to_revise"]  # type: ignore[attr-defined]
+    )
+    assert "Blocking defects" in revision["improvement_feedback"]
+    assert "fine-tune합니다" not in review.body
+    assert review.notes == ()
+
+
+async def test_a_passing_revision_beats_a_higher_scoring_blocked_draft() -> None:
+    def check(payload: dict[str, Any]) -> dict[str, str]:
+        if "fine-tune합니다" in payload["draft"]:
+            return {
+                "quality_score": "95",
+                "missing_items": "none",
+                "must_fix": "- 'fine-tune합니다' → '파인튜닝합니다'",
+            }
+        return {"quality_score": "80", "missing_items": "none"}
+
+    def write(payload: dict[str, Any]) -> str:
+        text = _writer(payload)
+        if "LoRA의 핵심" in payload["section_brief"] and not payload["draft_to_revise"]:
+            return text.replace("본문입니다.", "모델을 fine-tune합니다.")
+        return text
+
+    reviewer = _reviewer(writer=FakeChain(write), checker=FakeChain(check))
+    review = await reviewer.run()
+    assert "fine-tune합니다" not in review.body
+    assert review.notes == ()
+
+
+async def test_rule_slips_block_the_section_and_degraded_output_is_noted() -> None:
+    def write(payload: dict[str, Any]) -> str:
+        return _writer(payload).replace("본문입니다.", "이 절에서는 본문을 봅니다.")
+
+    reviewer = _reviewer(
+        writer=FakeChain(write),
+        finalizer=FakeChain({"subtitle": "s", "key_takeaways": "", "closing": ""}),
+        max_synthesis_attempts=2,
+    )
+    review = await reviewer.run()
+    revision = reviewer.writer.calls[1]  # type: ignore[attr-defined]
+    assert "self-reference '이 절'" in revision["improvement_feedback"]
+    assert sum("below the quality bar" in n for n in review.notes) == 3
+    assert any("finalization still malformed" in n for n in review.notes)
+
+
+async def test_a_worse_revision_is_named_in_the_next_feedback() -> None:
+    scores = iter(["60", "40", "75"])
+
+    def check(_: dict[str, Any]) -> dict[str, str]:
+        return {
+            "quality_score": next(scores, "75"),
+            "missing_items": "none",
+            "improvement_feedback": "고칠 점",
+        }
+
+    reviewer = _reviewer(checker=FakeChain(check))
+    await reviewer.run()
+    third = reviewer.writer.calls[2]  # type: ignore[attr-defined]
+    assert "rejected (score 40" in third["improvement_feedback"]
+
+
+async def test_finalization_repair_keeps_parts_that_were_already_valid() -> None:
+    answers = iter(
+        [
+            {"subtitle": "좋은 부제", "key_takeaways": TLDR, "closing": "no heading"},
+            {
+                "subtitle": "",
+                "key_takeaways": "### 하나",
+                "closing": "## 한계와 시사점\n\n평가입니다.",
+            },
+        ]
+    )
+    reviewer = _reviewer(finalizer=FakeChain(lambda _: next(answers)))
+    review = await reviewer.run()
+    assert review.subtitle == "좋은 부제"
+    assert review.key_takeaways == TLDR
+    assert review.closing.startswith("## 한계와 시사점")
+    assert review.notes == ()
+
+
+@pytest.mark.parametrize(
+    "first,second,part",
+    [
+        # A usable TL;DR with too few questions is not replaced by an empty one.
+        (
+            {
+                "subtitle": "부제",
+                "key_takeaways": "### 하나\n답",
+                "closing": "## 한계와 시사점\n\n평가",
+            },
+            {
+                "subtitle": "부제",
+                "key_takeaways": "",
+                "closing": "## 한계와 시사점\n\n평가",
+            },
+            "key_takeaways",
+        ),
+        # A closing missing its heading is not replaced by an empty one.
+        (
+            {"subtitle": "부제", "key_takeaways": TLDR, "closing": "한계입니다."},
+            {"subtitle": "부제", "key_takeaways": TLDR, "closing": ""},
+            "closing",
+        ),
+    ],
+)
+async def test_finalization_repair_never_swaps_in_an_empty_part(
+    first: dict[str, str], second: dict[str, str], part: str
+) -> None:
+    answers = iter([first, second])
+    reviewer = _reviewer(finalizer=FakeChain(lambda _: next(answers)))
+    review = await reviewer.run()
+    assert getattr(review, part) == first[part].strip()
+
+
+def test_nltk_data_is_used_when_present_and_a_failed_download_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from scholar_lens.src import explainer
+
+    download = MagicMock(return_value=True)
+    monkeypatch.setattr(explainer.nltk, "download", download)
+    monkeypatch.setattr(explainer.nltk.data, "find", lambda _: "found")
+    explainer._ensure_nltk_data()
+    download.assert_not_called()
+
+    def missing(_: str) -> None:
+        raise LookupError
+
+    monkeypatch.setattr(explainer.nltk.data, "find", missing)
+    download.return_value = False
+    with pytest.raises(RuntimeError, match="punkt_tab"):
+        explainer._ensure_nltk_data()
+
+
+def test_finalization_problems_are_structural_only() -> None:
+    from scholar_lens.src.explainer import _finalization_problems
+
+    long_closing = "## 한계와 시사점\n\n" + "한계를 설명합니다. " * 120
+    final = {"subtitle": "s", "key_takeaways": TLDR, "closing": long_closing}
+    assert _finalization_problems(final, "Title") == {}
+    final["closing"] = "한계입니다."
+    assert set(_finalization_problems(final, "Title")) == {"closing"}
+
+
+def test_subtitle_that_repeats_the_title_is_a_problem() -> None:
+    # A bare model name ("Pixtral 12B") "translates" to itself; the repair
+    # round must ask for a descriptive subtitle instead.
+    from scholar_lens.src.explainer import _finalization_problems
+
+    final = {
+        "subtitle": "pixtral  12B",
+        "key_takeaways": TLDR,
+        "closing": "## 한계\n\n끝.",
+    }
+    assert set(_finalization_problems(final, "Pixtral 12B")) == {"subtitle"}

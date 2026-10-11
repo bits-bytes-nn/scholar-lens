@@ -45,6 +45,7 @@ def _make_summarizer_with_stub_chain(chain_result: dict[str, str]) -> PaperSumma
     # (no budget wired for these chain-stub tests).
     summarizer._token_tracker = None
     summarizer.max_total_tokens = None
+    summarizer.notes = []
     # fit_text would call Bedrock CountTokens; stub it to a pass-through.
     factory = MagicMock()
     factory.fit_text = MagicMock(side_effect=lambda model_id, text, **kw: text)
@@ -93,6 +94,7 @@ class TestPaperSummarizer:
         assert result["summary"].startswith("> ")
         assert result["subtitle"] == "부제"
         assert result["urls"] == "[Repo](https://github.com/x/y)"
+        assert summarizer.notes == []
 
     async def test_codebase_summary_passed_to_chain(self, sample_paper: Paper) -> None:
         # When the paper carries a codebase summary, it must reach the prompt so
@@ -206,3 +208,141 @@ class TestFormatSummary:
             gh, sample_paper, {"summary": "x", "tags": "", "urls": ""}
         )
         assert f"[{sample_paper.title}]({sample_paper.pdf_url})" in out
+
+    def test_subtitle_that_repeats_the_title_falls_back_to_the_lead(
+        self, sample_paper: Paper
+    ) -> None:
+        result = {
+            "summary": "> **요약:** 이 모델은 적은 연산으로 큰 모델과 대등합니다. 다음.\n\n## 🔍 동기",
+            "subtitle": sample_paper.title,
+            "urls": "",
+        }
+        out = _format_summary(Github(), sample_paper, result)
+        assert 'subtitle: "이 모델은 적은 연산으로 큰 모델과 대등합니다"' in out
+
+
+class TestSummaryLength:
+    LONG = "## 🔍 질문\n\n" + "가나다라마 " * 800  # 4,000 Hangul syllables
+    SHORT = "## 🔍 질문\n\n" + "가나다라마 " * 500
+
+    def _summarizer(self, shortened: str) -> PaperSummarizer:
+        summarizer = _make_summarizer_with_stub_chain(
+            {"summary": self.LONG, "subtitle": "s", "urls": ""}
+        )
+        summarizer.notes = []
+        summarizer.shorten_chain = MagicMock()
+        summarizer.shorten_chain.ainvoke = AsyncMock(
+            return_value={"summary": shortened}
+        )
+        return summarizer
+
+    async def test_long_summary_is_shortened_once(self, sample_paper: Paper) -> None:
+        summarizer = self._summarizer(self.SHORT)
+        result = await summarizer.summarize(sample_paper)
+        assert result["summary"] == self.SHORT.strip()
+        summarizer.shorten_chain.ainvoke.assert_awaited_once()
+        assert summarizer.notes == []
+
+    async def test_failed_shortening_keeps_the_original_and_notes_it(
+        self, sample_paper: Paper
+    ) -> None:
+        summarizer = self._summarizer("")
+        result = await summarizer.summarize(sample_paper)
+        assert result["summary"] == self.LONG.strip()
+        summarizer.shorten_chain.ainvoke.assert_awaited_once()
+        assert any("still long" in n for n in summarizer.notes)
+
+    @pytest.mark.parametrize(
+        "shortened",
+        [
+            "가나다라마 " * 500,  # lost the ## heading
+            "## 🔍 질문\n\n" + "가나다라마 " * 500 + "\n\n![a](/x.png)",  # new image
+        ],
+    )
+    async def test_shortening_that_drops_structure_is_rejected(
+        self, sample_paper: Paper, shortened: str
+    ) -> None:
+        summarizer = self._summarizer(shortened)
+        result = await summarizer.summarize(sample_paper)
+        assert result["summary"] == self.LONG.strip()
+        assert any("still long" in n for n in summarizer.notes)
+
+    async def test_shortening_error_keeps_the_original(
+        self, sample_paper: Paper, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        summarizer = self._summarizer(self.SHORT)
+
+        async def boom(_: str) -> dict[str, str]:
+            raise RuntimeError("throttled")
+
+        monkeypatch.setattr(summarizer, "_shorten", boom)
+        result = await summarizer.summarize(sample_paper)
+        assert result["summary"] == self.LONG.strip()
+        assert any("still long" in n for n in summarizer.notes)
+
+    async def test_exhausted_budget_during_shortening_fails_fast(
+        self, sample_paper: Paper, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from scholar_lens.src.metrics import TokenBudgetExceeded
+
+        summarizer = self._summarizer(self.SHORT)
+
+        async def over(_: str) -> dict[str, str]:
+            raise TokenBudgetExceeded("budget")
+
+        monkeypatch.setattr(summarizer, "_shorten", over)
+        with pytest.raises(TokenBudgetExceeded):
+            await summarizer.summarize(sample_paper)
+
+    async def test_short_summary_makes_no_extra_call(self, sample_paper: Paper) -> None:
+        summarizer = self._summarizer(self.SHORT)
+        summarizer.summary_chain.ainvoke = AsyncMock(
+            return_value={"summary": self.SHORT, "subtitle": "s", "urls": ""}
+        )
+        await summarizer.summarize(sample_paper)
+        summarizer.shorten_chain.ainvoke.assert_not_awaited()
+
+
+def test_shortening_may_cut_inline_math_but_not_display_equations() -> None:
+    from scholar_lens.src.summarizer import _skeleton
+
+    text = "> 요약\n\n## 방법\n\n$$\nh = Wx\n$$\n\n- $$r$$은 랭크입니다.\n- $$\\alpha$$는 배율입니다."
+    cut_inline = text.rsplit("\n", 1)[0]
+    cut_display = text.replace("$$\nh = Wx\n$$\n\n", "")
+    assert _skeleton(cut_inline) == _skeleton(text)
+    assert _skeleton(cut_display) != _skeleton(text)
+
+
+@pytest.mark.parametrize(
+    "line,expected",
+    [
+        (
+            "- **질문?** `top_k`와 [vLLM](https://x) 설정을 쓰면 *빠릅니다*. 다음.",
+            "top_k와 vLLM 설정을 쓰면 빠릅니다",
+        ),
+        (
+            "예를 들어 e.g. 이런 경우가 있습니다. 둘째.",
+            "예를 들어 e.g. 이런 경우가 있습니다",
+        ),
+        ("$$x$$를 쓰는 문장입니다.\n\n수식 없는 문장입니다.", "수식 없는 문장입니다"),
+    ],
+)
+def test_lead_sentence_is_plain_text(line: str, expected: str) -> None:
+    from scholar_lens.src.formatting import _lead_sentence
+
+    assert _lead_sentence(line) == expected
+
+
+def test_long_lead_sentence_is_cut_with_an_ellipsis() -> None:
+    from scholar_lens.src.formatting import _SUBTITLE_MAX, _lead_sentence
+
+    text = _lead_sentence("가" * 30 + " " + "나" * 30 + ", " + "다" * 30 + " 라.")
+    assert text.endswith("…") and len(text) <= _SUBTITLE_MAX + 1
+
+
+async def test_derived_subtitle_is_noted(sample_paper: Paper) -> None:
+    summarizer = _make_summarizer_with_stub_chain(
+        {"subtitle": sample_paper.title, "summary": "> **요약:** x\n\nbody", "urls": ""}
+    )
+    await summarizer.summarize(sample_paper)
+    assert any("Summary subtitle" in n for n in summarizer.notes)
