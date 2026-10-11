@@ -1,174 +1,123 @@
 <div align="center">
 
-# 👩‍🏫 Scholar-Lens
+# Scholar-Lens
 
-**AI/ML 논문과 기술 문서를 발행 가능한 콘텐츠로 — 논문 리뷰, 요약, 기술 가이드.**
+**AI/ML 논문과 기술 문서를 블로그에 바로 올릴 수 있는 글로 바꿉니다. 심층 리뷰, 간결한 요약, 실습형 기술 가이드를 만듭니다.**
 
-CLI · AWS Batch · Slack 봇으로 구동 · Amazon Bedrock (Claude) 기반.
+로컬이나 AWS Batch에서 실행하며, 사람과 에이전트(OpenClaw, Claude Code, Codex)가 같은 CLI를 씁니다. Amazon Bedrock의 Claude로 동작합니다.
 
 [![CI](https://github.com/bits-bytes-nn/scholar-lens/actions/workflows/ci.yml/badge.svg)](https://github.com/bits-bytes-nn/scholar-lens/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.12%2B-blue)
 ![AWS CDK](https://img.shields.io/badge/IaC-AWS%20CDK-orange)
 ![Bedrock](https://img.shields.io/badge/LLM-Amazon%20Bedrock%20(Claude)-green)
 
-🇺🇸 [English README](./README.md)
+[English README](./README.md) · [설계 문서](./docs/design.md)
 
 ![Sample](./assets/sample.png)
 
 </div>
 
----
-
-## 무엇을 하나요
-
-Scholar-Lens는 논문 또는 문서 URL 묶음으로부터 세 가지 산출물을 생성합니다.
+## 하는 일
 
 | 산출물 | 입력 | 출력 |
 | --- | --- | --- |
-| 📝 **리뷰** | 논문 1개 (arXiv ID 또는 PDF URL) | 멀티 스테이지 LangGraph 워크플로우로 섹션별 심층 해설 (직관 → 형식화 → 코드) |
-| 📄 **요약** | 논문 1개 (arXiv ID 또는 PDF URL) | 다섯 섹션 간결 요약 (동기 · 해법 · 구현 · 결과 · 의의) |
-| 📚 **기술 가이드** | 문서 URL 1개 이상 | 출처에 근거한 실습형 기술 가이드 / 튜토리얼 |
+| **리뷰** | arXiv ID 또는 논문 PDF URL(코드 저장소 선택) | 일반 DS/MLE 독자를 위한 절별 리뷰입니다. 쉬운 내용은 짧게, 어려운 내용은 직관 → 수식 → 작은 예제 순으로 쌓아 올리며 그림, 표, TL;DR, 한계와 시사점을 포함합니다 |
+| **요약** | arXiv ID 또는 논문 PDF URL | TL;DR과 다섯 개의 짧은 절(동기, 아이디어, 구현, 결과, 의의와 한계) |
+| **기술 가이드** | 문서 URL 하나 이상 | 하위 페이지와 웹 검색으로 조사한, 출처에 근거한 튜토리얼 |
 
-모든 산출물은 블로그에 바로 올릴 수 있는 깔끔한 Markdown이며, S3에 업로드하고 Jekyll 블로그에 PR로 발행할 수 있습니다.
+모든 글은 대상 블로그의 규칙을 따르는 Jekyll Markdown이며, 저장하기 전에 검사합니다. 규칙을 어긴 글은 게시하지 않고 거부합니다. 글은 로컬 파일로 저장되고, 설정에 따라 S3에 올라가며 블로그 저장소에 PR로 제안됩니다.
 
-## 핵심 특징
-
-- **모든 AI/ML 논문** — arXiv ID *또는* 임의의 논문 **PDF URL**을 받습니다(PDF가 아닌 URL은 거부). arXiv 전용이 아닙니다.
-- **환각 없이 근거 기반** — 인용은 Crossref / Semantic Scholar로 해석하고 제목 유사도 게이트를 거칩니다. 작성기는 소스에 등장한 URL만 링크할 수 있고, 기술 가이드는 섹션별 사실 검증 패스를 돕니다.
-- **최신 Claude** — Amazon Bedrock의 Claude Opus 4.8 / Sonnet 5 / Haiku 4.5(기본값) + adaptive thinking, 단계별 설정 가능. Claude Opus 5.5 / Sonnet 5.5 / Haiku 5.5 / Fable 5.1도 선택할 수 있습니다.
-- **코드 인식 리뷰** — GitHub 저장소 분석 + FAISS 시맨틱 검색(선택).
-- **온디맨드 Slack 봇** — 논문이나 문서 URL과 함께 멘션하면, LLM이 *명시적* 요청을 파싱하고 Batch 작업을 실행한 뒤 스레드에 결과 링크를 회신합니다. AWS에 서버리스(Slack Events API → Lambda)로 호스팅되어 로컬에서 상주 프로세스를 띄울 필요 없이 항상 동작합니다.
-- **확장성과 관찰성** — AWS Batch(온디맨드 + 스팟), CloudWatch 알람, EventBridge→SNS 실패 알림, 암호화 SecureString 시크릿.
-
-## 아키텍처
-
-### 생성 파이프라인
-
-세 산출물은 공통 프런트엔드(해석 → 파싱 → 추출)를 공유한 뒤 분기합니다.
+## 동작 방식
 
 ![생성 파이프라인](./docs/diagrams/pipeline.png)
 
-### AWS 인프라
-
-모든 작업은 AWS Batch에서 컨테이너 잡으로 실행되며, 동일한 잡을 CLI · Slack 봇 · `run_batch.py`가 제출합니다.
+- **리뷰**: 계획 단계가 논문 전체를 읽고 집필 계획을 만듭니다. 계획에는 절 구성, 반드시 다룰 항목, 난이도, 선수 개념, 개념별 담당 절, 그림 배정, 용어집이 들어갑니다. 각 절은 지시서대로 쓴 뒤 지시서에 비추어 검수하고, 빠진 항목이 없을 때까지 고칩니다. 마지막으로 글 전체를 한 번 편집해 용어, 중복, 누락을 바로잡습니다.
+- **요약**: 파싱한 논문 전체를 입력으로 한 번 호출합니다.
+- **가이드**: 조사 → 관련성 판정 → 개요 → 절별 작성·평가·사실 확인 순서입니다.
+- **발행**: 수식과 Markdown 정규화, 그림 로컬화, 블로그 규칙 검사를 거친 뒤 S3에 올리고, 글마다 고정된 브랜치로 GitHub PR을 엽니다.
 
 ![AWS 아키텍처](./docs/diagrams/aws-architecture.png)
 
-### 핵심 컴포넌트
+단계별 동작, 규칙, 설정 키는 [docs/design.md](./docs/design.md)에 있습니다.
 
-| 모듈 | 역할 |
-| --- | --- |
-| `paper_source.py` | arXiv ID 또는 논문 PDF URL을 `PaperSource`로 해석; URL 소스가 PDF를 제공하는지 검증(SSRF 가드 포함). |
-| `parser.py` · `content_extractor.py` | HTML/PDF 파싱 + 그림 추출; 인용 / 속성 / 목차 구조화 추출. |
-| `citation_metadata.py` · `citation_summarizer.py` | 추상 우선 참고문헌 해석(Crossref / Semantic Scholar), 속도 제한 + 제목 게이트. |
-| `explainer.py` | `ExplainerGraph` — 멀티 스테이지 LangGraph 리뷰 워크플로우. |
-| `summarizer.py` | `PaperSummarizer` — 다섯 섹션 요약. |
-| `tech_guide.py` · `web_research.py` | 문서 URL 조사(+ 하위 페이지 + 웹 검색) 후 근거 기반 가이드 작성. |
-| `code_retriever.py` | 저장소 클론 + 시맨틱 코드 검색(FAISS). |
-| `publisher.py` | 산출물 무관 S3 업로드 + Jekyll 블로그 PR. |
-| `slack/` | 온디맨드 Paper Bot(의도 파싱 → Batch 디스패치). |
+## 빠른 시작
 
-> 📖 데이터 흐름, 모듈 레퍼런스, 프롬프트, 인용 파이프라인, 인프라, Slack Lambda 아키텍처 등 내부 구조 심층 설명은 **[설계 문서](./docs/design.md)**를 참고하세요.
+사전 조건:
 
-## 기술 스택
+- Python 3.12 이상과 [Poetry](https://python-poetry.org/)
+- `bedrock_region_name` 리전에서 설정한 모델(기본값: Claude Opus 5.5, Sonnet 5.5, Haiku 5.5)에 접근할 수 있는 AWS 프로필
+- PDF 파싱용 `UPSTAGE_API_KEY`(arXiv가 아닌 소스와 HTML 대체 경로에 필요)
+- 선택: 가이드 웹 조사용 `TAVILY_API_KEY` 또는 `BRAVE_API_KEY`, 블로그 PR용 `GITHUB_TOKEN`
 
-Python 3.12+ · AWS CDK · Docker · Amazon Bedrock · LangChain / LangGraph · PyMuPDF · BeautifulSoup4 · FAISS · Pydantic.
+```bash
+git clone https://github.com/bits-bytes-nn/scholar-lens.git && cd scholar-lens
+poetry install --with dev
+cp scholar_lens/configs/config-template.yaml scholar_lens/configs/config.yaml   # 편집
+cp .env.template .env                                                           # 키 입력
+poetry run python -m scholar_lens summarize 2106.09685 --no-pr
+```
 
 ## 설정
 
-템플릿을 복사해 편집합니다.
+`scholar_lens/configs/config.yaml`(Git 제외)은 엄격하게 검증하며, 모르는 키가 있으면 오류입니다. 템플릿에 모든 키와 기본값이 있습니다. 주로 바꾸는 값은 다음과 같습니다.
+
+- `resources`: `profile_name`, `bedrock_region_name`, `s3_bucket_name`(Batch 실행과 `status`에 필요), `email_address`(SNS 알림)
+- `resources.github`: `enabled`, `repo_name`(예: `owner/owner.github.io`), `base_branch`, `branch_prefix`, 산출물 유형별 카테고리 이름
+- 단계별 `*_model_id`, `thinking_effort`, 품질 기준, 선택 사항인 `max_total_tokens` 비용 상한
+- `output_language`(기본값 `Korean`)
+
+## CLI
 
 ```bash
-cp scholar_lens/configs/config-template.yaml scholar_lens/configs/config.yaml
+poetry run python -m scholar_lens review 2106.09685 --repo-url https://github.com/microsoft/LoRA
+poetry run python -m scholar_lens summarize https://openreview.net/pdf?id=nZeVKeeFYf9 --no-pr
+poetry run python -m scholar_lens guide https://docs.vllm.ai/en/latest/ --search-query "vLLM paged attention"
+poetry run python -m scholar_lens review 2106.09685 --remote     # AWS Batch에 제출
+poetry run python -m scholar_lens status <job-id> --wait         # 원격 작업 조회
 ```
 
-```yaml
-resources:
-  project_name: scholar-lens
-  stage: dev
-  profile_name: your-profile
-  default_region_name: ap-northeast-2
-  bedrock_region_name: us-west-2
-  s3_bucket_name: your-bucket
-  github:
-    enabled: true
-    repo_name: owner/owner.github.io
-    review_category: Paper Reviews     # 블로그 카테고리 탭 라벨(설정 가능)
-    summary_category: Paper Summaries
-    tech_guide_category: Tech Guides
+| 옵션 | 명령 | 효과 |
+| --- | --- | --- |
+| `--repo-url URL` | review, summarize | 논문 코드에 근거해 서술합니다(반복 가능) |
+| `--parse-pdf` | review, summarize | arXiv HTML이 있어도 PDF를 파싱합니다 |
+| `--search-query Q` | guide | 웹 검색어를 추가합니다(반복 가능) |
+| `--no-subpages` | guide | 하위 페이지를 따라가지 않습니다 |
+| `--no-pr` | review, summarize, guide | 글은 저장(·업로드)하되 PR은 열지 않습니다 |
+| `--remote` | review, summarize, guide | AWS Batch에 제출하고 작업 ID를 돌려줍니다 |
+| `--wait`, `--timeout S` | status | 작업이 끝나거나 `S`초가 지날 때까지 조회합니다 |
 
-explanation:
-  paper_synthesis_model_id: anthropic.claude-opus-4-8   # 또는 anthropic.claude-opus-5-5
-summary:
-  summary_model_id: anthropic.claude-opus-4-8
-tech_guide:
-  writing_model_id: anthropic.claude-opus-4-8
-  verify_grounding: true               # 섹션별 사실 검증 패스
+모든 명령은 stdout에 JSON 객체 하나를 출력하고, 로그는 stderr로 보냅니다. 실행 결과는 `JobResult`(`status`, `title`, `markdown_path`, `s3_uri`, `pr_url`, `warnings`, `violations`, `error`, `estimated_cost_usd` 등)입니다. `--remote`는 `job_id`를, `status`는 Batch 상태와 완료 후 저장된 결과를 돌려줍니다. 종료 코드는 `0` 성공 또는 제출, `1` 실패(블로그 규칙 검사에서 거부된 경우 포함), `2` 입력 거부(PDF 아님, 안전하지 않은 URL, 없는 arXiv ID, 기술 문서가 아닌 페이지), `3` 진행 중(`status`, 또는 `status --wait` 시간 초과)입니다.
 
-output_language: Korean
-```
+## 에이전트에서 쓰기(OpenClaw, Claude Code, Codex)
 
-전체 스키마는 [`scholar_lens/configs/config-template.yaml`](./scholar_lens/configs/config-template.yaml)를 참고하세요.
+에이전트도 같은 CLI를 씁니다. `~/.openclaw/workspace/skills/scholar-lens/SKILL.md` 스킬이 호출 방법, `--remote`를 쓸 때, 사용자가 게시를 요청하지 않으면 `--no-pr`이 기본이라는 점을 안내합니다. MCP 서버 대신 CLI와 스킬을 택한 이유는 실행이 수 분에서 한 시간까지 걸리기 때문입니다. `--remote`와 `status`로 이미 비동기 계약이 있고, 스킬 디렉터리는 Claude Code와 Codex에도 공유됩니다.
 
-## 사용법
+## 블로그 규칙 검사
 
-### 준비
+블로그 규칙의 정본은 블로그의 `_data/post_conventions.yml`이고, `assets/post_conventions.yml`은 그 사본입니다. 둘이 다르면 CI가 실패하며, GitHub 연동이 켜져 있으면 실행 시 블로그 기준 브랜치의 정본을 읽습니다. 글을 저장하기 전에 `scholar_lens/src/post_validator.py`가 front matter(`paper_author`, `subtitle`, `seo_title`, 카테고리, 표지, 태그), 헤딩(`## TL;DR`, H1 금지), `$$` 수식, 표 모양, 이미지 위치, 생성용 태그 누출을 검사합니다. error가 있으면 게시를 멈추고, 글은 작업 폴더에 `*.rejected.md`로 남기며 `violations`에 기록합니다. warning은 PR 본문의 체크리스트가 됩니다.
+
+## AWS 배포
+
+위 조건에 더해 Node.js, Docker, AWS CDK CLI가 필요합니다.
 
 ```bash
-poetry install --with dev          # 의존성 + 개발/테스트 도구
-cp .env.template .env               # 토큰 채우기(.env.template 참고)
-python scripts/deploy_infra.py      # AWS 인프라 배포(CDK)
+cdk bootstrap                                    # 계정·리전당 한 번
+cdk deploy                                       # cdk.json: poetry run python scripts/deploy_infra.py
+poetry run python scripts/put_secrets.py         # .env의 비밀값을 SSM SecureString에 기록
 ```
 
-### 산출물 생성 (CLI)
+스택은 Batch 작업 정의 하나(`python3 -m scholar_lens worker --request Ref::request`)를 온디맨드와 스팟 컴퓨팅에서 실행합니다. 결과는 `s3://<bucket>/<prefix>/results/<job_id>.json`에 저장하고, 성공과 실패를 모두 SNS로 알립니다. `cdk synth`와 `cdk diff`는 비밀값을 건드리지 않습니다.
+
+## 개발
 
 ```bash
-# 리뷰 — --source 는 arXiv ID 또는 논문 PDF URL
-python scholar_lens/main.py --source 2312.11805 --parse-pdf True
-python scholar_lens/main.py --source https://openreview.net/pdf?id=XXXX
-
-# 요약(다섯 섹션 간결 형식)
-python scholar_lens/main.py --source 2312.11805 --mode summarize
-
-# 문서 URL로부터 기술 가이드
-python scholar_lens/tech_guide_main.py \
-  --urls https://docs.framework.io/start https://docs.framework.io/api \
-  --search-queries "framework.io best practices"
-
-# AWS Batch 잡으로 제출
-python scripts/run_batch.py --source 2505.09388 --mode review \
-  --repo-urls https://github.com/org/repo
-```
-
-### Slack 봇
-
-봇은 **AWS에 서버리스로** 실행됩니다 — `python scripts/deploy_infra.py` + `cdk deploy`가
-API Gateway HTTP API 뒤의 리시버 Lambda와 워커 Lambda를 프로비저닝합니다. Slack 앱의
-**Event Subscriptions** Request URL을 리시버 주소(CDK 출력 `SlackEventsRequestUrl`)로 지정하고,
-`app_mention` + `message.im`을 구독한 뒤 `SLACK_BOT_TOKEN` / `SLACK_SIGNING_SECRET`을 설정하면 됩니다.
-로컬에 상주 프로세스를 띄울 필요가 없습니다.
-
-원하는 작업과 함께 봇을 멘션하세요 — 예: `review 2401.06066`,
-`summarize https://arxiv.org/pdf/2401.06066`, `guide https://docs.framework.io/start`.
-결과는 S3에 저장되고 블로그에 발행되며, 봇은 스레드에 상태와 링크를 회신합니다.
-
-```bash
-# 로컬 개발용 폴백: Events API 대신 Socket Mode로 봇 실행
-# (SLACK_BOT_TOKEN / SLACK_APP_TOKEN 필요, 앱에서 Socket Mode 활성화)
-python -m scholar_lens.slack.bot
-```
-
-> 💡 봇은 전용 Slack 앱에서 실행하여 같은 워크스페이스의 다른 봇과 토큰을 공유하지 않도록 하세요.
-
-## 테스트 & 품질
-
-```bash
-poetry run pytest tests/ --cov=scholar_lens --cov-report=term-missing  # 모든 AWS/네트워크 모킹
+poetry run pytest                                # 단위·파이프라인 테스트(AWS·네트워크 없음)
 poetry run ruff check scholar_lens scripts tests
 poetry run black --check scholar_lens scripts tests
-poetry run mypy scholar_lens
-poetry run python scripts/ci_synth_check.py   # AWS 계정 없이 CDK synth 검증
+poetry run mypy scholar_lens scripts
+poetry run python scripts/ci_synth_check.py      # 가짜 계정으로 CDK synth
 ```
 
-CI(`.github/workflows/ci.yml`)는 푸시·PR마다 lint/format, pytest 매트릭스(Python 3.12 & 3.13),
-CDK synth 체크를 실행합니다.
+## 라이선스
+
+[LICENSE](./LICENSE)를 참고하세요.

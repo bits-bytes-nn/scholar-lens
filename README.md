@@ -1,183 +1,123 @@
 <div align="center">
 
-# 👩‍🏫 Scholar-Lens
+# Scholar-Lens
 
-**Turn AI/ML papers and documentation into publishable content — paper reviews, summaries, and technical guides.**
+**Turn AI/ML papers and documentation into blog-ready posts: in-depth reviews, concise summaries, and hands-on technical guides.**
 
-Driven from the CLI, AWS Batch, or a Slack bot · powered by Amazon Bedrock (Claude).
+Runs locally or on AWS Batch, driven by a CLI that people and agents (OpenClaw, Claude Code, Codex) share. Powered by Claude on Amazon Bedrock.
 
 [![CI](https://github.com/bits-bytes-nn/scholar-lens/actions/workflows/ci.yml/badge.svg)](https://github.com/bits-bytes-nn/scholar-lens/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.12%2B-blue)
 ![AWS CDK](https://img.shields.io/badge/IaC-AWS%20CDK-orange)
 ![Bedrock](https://img.shields.io/badge/LLM-Amazon%20Bedrock%20(Claude)-green)
 
-🇰🇷 [한국어 README](./README.ko.md)
+[한국어 README](./README.ko.md) · [Design reference](./docs/design.md)
 
 ![Sample](./assets/sample.png)
 
 </div>
 
----
-
 ## What it does
-
-Scholar-Lens produces three kinds of artifact from a paper or a set of documentation URLs:
 
 | Artifact | Input | Output |
 | --- | --- | --- |
-| 📝 **Review** | one paper (arXiv ID or PDF URL) | in-depth, section-by-section explanation (intuition → formalism → code) via a multi-stage LangGraph workflow |
-| 📄 **Summary** | one paper (arXiv ID or PDF URL) | a concise five-section summary (motivation · solution · implementation · results · significance) |
-| 📚 **Tech Guide** | one or more documentation URLs | a hands-on, source-grounded technical guide / tutorial |
+| **Review** | arXiv id or paper PDF URL (+ optional code repos) | Section-by-section review for a general DS/MLE reader: easy parts short, hard parts built up from intuition to math to a worked example, with figures, tables, a TL;DR and a limitations section |
+| **Summary** | arXiv id or paper PDF URL | A TL;DR plus five short sections (motivation, idea, implementation, results, significance and limits) |
+| **Tech guide** | One or more documentation URLs | A source-grounded tutorial, researched across sub-pages and web search |
 
-Every artifact is clean, blog-ready Markdown that can be uploaded to S3 and opened as a pull request against a Jekyll blog.
+Every post is Jekyll Markdown that follows the target blog's conventions, and is checked before it is saved: a post that breaks a rule is rejected instead of published. Posts go to a local file, optionally S3, and optionally a pull request on the blog repository.
 
-## Highlights
-
-- **Any AI/ML paper** — accepts an arXiv ID *or* an arbitrary paper **PDF URL** (non-PDF URLs are rejected). arXiv is no longer required.
-- **Grounded, not hallucinated** — citations resolve through Crossref / Semantic Scholar with a title-similarity gate; the writer may only link URLs that appear in its sources. Tech guides run a per-section fact-check pass.
-- **Latest Claude** — Amazon Bedrock with Claude Opus 4.8 / Sonnet 5 / Haiku 4.5 by default and adaptive thinking, per-stage configurable; Claude Opus 5.5 / Sonnet 5.5 / Haiku 5.5 / Fable 5.1 are also selectable.
-- **Code-aware reviews** — optional GitHub repository analysis with FAISS semantic search.
-- **On-demand Slack bot** — mention it with a paper or doc URLs; it parses your *explicit* request with an LLM, runs a Batch job, and replies in-thread with a link to the result. Hosted serverlessly on AWS (Slack Events API → Lambda), so it's always on with nothing to keep running locally.
-- **Scalable & observable** — AWS Batch (on-demand + spot), CloudWatch alarms, EventBridge→SNS failure alerts, encrypted SecureString secrets.
-
-## Architecture
-
-### Generation pipelines
-
-The three artifact types share a front-end (resolve → parse → extract) and then diverge:
+## How it works
 
 ![Generation pipelines](./docs/diagrams/pipeline.png)
 
-### AWS infrastructure
-
-All work runs as a containerised job on AWS Batch; the same job is submitted by the CLI, the Slack bot, or `run_batch.py`:
+- **Review:** a planner reads the whole paper and writes a coverage plan (sections, must-cover items, difficulty, prerequisites, concept ownership, figures, glossary). Each section is written from its brief, checked against it, and revised until nothing is missing; one editing pass then fixes terminology, repetition and gaps across the article.
+- **Summary:** one long-context call over the parsed paper.
+- **Guide:** research → relevance gate → outline → per-section write, evaluate and fact-check.
+- **Publishing:** math and Markdown normalization, figure localization, the blog-conventions gate, then S3 and a GitHub PR on a fixed branch per post.
 
 ![AWS architecture](./docs/diagrams/aws-architecture.png)
 
-### Core components
+See [docs/design.md](./docs/design.md) for every stage, rule and configuration key.
 
-| Module | Responsibility |
-| --- | --- |
-| `paper_source.py` | Resolve an arXiv ID or paper PDF URL to a `PaperSource`; validate that URL sources serve a PDF (with an SSRF guard). |
-| `parser.py` · `content_extractor.py` | HTML/PDF parsing + figure extraction; structured citation / attribute / TOC extraction. |
-| `citation_metadata.py` · `citation_summarizer.py` | Abstract-first reference resolution (Crossref / Semantic Scholar), rate-limited, title-gated. |
-| `explainer.py` | `ExplainerGraph` — the multi-stage LangGraph review workflow. |
-| `summarizer.py` | `PaperSummarizer` — the five-section summary. |
-| `tech_guide.py` · `web_research.py` | Research doc URLs (+ sub-pages + web search) and write a grounded guide. |
-| `code_retriever.py` | Clone repos and run semantic code search (FAISS). |
-| `publisher.py` | Artifact-agnostic S3 upload + Jekyll blog PR. |
-| `slack/` | The on-demand Paper Bot (intent parsing → Batch dispatch). |
+## Quick start
 
-> 📖 For a deep dive into the internals — data flow, module reference, prompts, the citation pipeline, infra, and the Slack Lambda architecture — see the **[design doc](./docs/design.md)**.
+Prerequisites:
 
-## Tech stack
+- Python 3.12+ and [Poetry](https://python-poetry.org/)
+- An AWS profile with Bedrock access to the configured models in `bedrock_region_name` (defaults: Claude Opus 5.5, Sonnet 5.5, Haiku 5.5)
+- `UPSTAGE_API_KEY` for PDF parsing (non-arXiv sources and the HTML fallback)
+- Optional: `TAVILY_API_KEY` or `BRAVE_API_KEY` for guide web research, `GITHUB_TOKEN` for blog PRs
 
-Python 3.12+ · AWS CDK · Docker · Amazon Bedrock · LangChain / LangGraph · PyMuPDF · BeautifulSoup4 · FAISS · Pydantic.
+```bash
+git clone https://github.com/bits-bytes-nn/scholar-lens.git && cd scholar-lens
+poetry install --with dev
+cp scholar_lens/configs/config-template.yaml scholar_lens/configs/config.yaml   # edit it
+cp .env.template .env                                                           # fill in keys
+poetry run python -m scholar_lens summarize 2106.09685 --no-pr
+```
 
 ## Configuration
 
-Copy the template and edit it:
+`scholar_lens/configs/config.yaml` (gitignored) is validated strictly: unknown keys are errors. The template lists every key with its default. The ones you usually set:
+
+- `resources`: `profile_name`, `bedrock_region_name`, `s3_bucket_name` (needed for Batch and `status`), `email_address` (SNS notifications)
+- `resources.github`: `enabled`, `repo_name` (e.g. `owner/owner.github.io`), `base_branch`, `branch_prefix`, and the category labels per artifact type
+- per-stage `*_model_id`, `thinking_effort`, quality thresholds and optional `max_total_tokens` cost caps
+- `output_language` (default `Korean`)
+
+## CLI
 
 ```bash
-cp scholar_lens/configs/config-template.yaml scholar_lens/configs/config.yaml
+poetry run python -m scholar_lens review 2106.09685 --repo-url https://github.com/microsoft/LoRA
+poetry run python -m scholar_lens summarize https://openreview.net/pdf?id=nZeVKeeFYf9 --no-pr
+poetry run python -m scholar_lens guide https://docs.vllm.ai/en/latest/ --search-query "vLLM paged attention"
+poetry run python -m scholar_lens review 2106.09685 --remote     # submit to AWS Batch
+poetry run python -m scholar_lens status <job-id> --wait         # poll a remote job
 ```
 
-```yaml
-resources:
-  project_name: scholar-lens
-  stage: dev
-  profile_name: your-profile
-  default_region_name: ap-northeast-2
-  bedrock_region_name: us-west-2
-  s3_bucket_name: your-bucket
-  github:
-    enabled: true
-    repo_name: owner/owner.github.io
-    review_category: Paper Reviews     # blog category tab labels (configurable)
-    summary_category: Paper Summaries
-    tech_guide_category: Tech Guides
+| Option | Commands | Effect |
+| --- | --- | --- |
+| `--repo-url URL` | review, summarize | Ground the text in the paper's code (repeatable) |
+| `--parse-pdf` | review, summarize | Parse the PDF even when arXiv HTML exists |
+| `--search-query Q` | guide | Extra web-search query (repeatable) |
+| `--no-subpages` | guide | Do not follow in-scope sub-pages |
+| `--no-pr` | review, summarize, guide | Save (and upload) the post but open no PR |
+| `--remote` | review, summarize, guide | Submit to AWS Batch and return the job id |
+| `--wait`, `--timeout S` | status | Poll until the job finishes or `S` seconds pass |
 
-explanation:
-  paper_synthesis_model_id: anthropic.claude-opus-4-8   # or anthropic.claude-opus-5-5
-summary:
-  summary_model_id: anthropic.claude-opus-4-8
-tech_guide:
-  writing_model_id: anthropic.claude-opus-4-8
-  verify_grounding: true               # per-section fact-check pass
+Every command prints one JSON object on stdout; logs go to stderr. A run returns a `JobResult` (`status`, `title`, `markdown_path`, `s3_uri`, `pr_url`, `warnings`, `violations`, `error`, `estimated_cost_usd`, …); `--remote` returns the `job_id`; `status` returns the Batch state and, once finished, the stored result. Exit codes: `0` succeeded or submitted, `1` failed (including a post rejected by the conventions gate), `2` rejected input (not a PDF, unsafe URL, unknown arXiv id, non-technical pages), `3` still running (`status`, or `status --wait` timed out).
 
-output_language: Korean
-```
+## Agents (OpenClaw, Claude Code, Codex)
 
-See [`scholar_lens/configs/config-template.yaml`](./scholar_lens/configs/config-template.yaml) for the full schema.
+The same CLI is the agent interface. The skill `~/.openclaw/workspace/skills/scholar-lens/SKILL.md` tells an agent how to call it, when to use `--remote`, and that `--no-pr` is the default unless the user asked to publish. A CLI plus skill was chosen over an MCP server because runs take minutes to an hour: `--remote` + `status` already gives an asynchronous contract, and the skill directory is shared with Claude Code and Codex.
 
-## Usage
+## Blog conventions gate
 
-### Setup
+The blog owns its rules in `_data/post_conventions.yml`; `assets/post_conventions.yml` is a copy (CI fails when they drift, and runs read the blog's base-branch copy when GitHub is enabled). Before a post is saved, `scholar_lens/src/post_validator.py` checks it: front matter (`paper_author`, `subtitle`, `seo_title`, categories, cover, tags), headings (`## TL;DR`, no H1), `$$` math, table shape, image locations, leaked generator tags. Errors stop publishing (the post is kept as `*.rejected.md` next to the work files and listed in `violations`); warnings become a checklist in the PR body.
+
+## Deploy to AWS
+
+Needs Node.js, Docker and the AWS CDK CLI in addition to the above.
 
 ```bash
-poetry install --with dev          # dependencies + dev/test tools
-cp .env.template .env               # then fill in tokens (see .env.template)
-python scripts/deploy_infra.py      # synthesize the CDK template + push SSM secrets
-cdk deploy                          # provision the AWS infrastructure (uses the script above as the CDK app)
+cdk bootstrap                                    # once per account/region
+cdk deploy                                       # cdk.json runs: poetry run python scripts/deploy_infra.py
+poetry run python scripts/put_secrets.py         # write .env secrets to SSM SecureString
 ```
 
-> `python scripts/deploy_infra.py` only **synthesizes** the CloudFormation
-> template (to `cdk.out/`) and writes secrets to SSM — it does not create any AWS
-> resources. `cdk deploy` (which runs this script as its `app`, per `cdk.json`) is
-> what actually provisions the stack.
+The stack runs one Batch job definition (`python3 -m scholar_lens worker --request Ref::request`) on on-demand and spot compute, writes results to `s3://<bucket>/<prefix>/results/<job_id>.json`, and notifies SNS on success and failure. `cdk synth`/`diff` never touch secrets.
 
-### Generate artifacts (CLI)
+## Development
 
 ```bash
-# REVIEW — --source accepts an arXiv ID or a paper PDF URL
-python scholar_lens/main.py --source 2312.11805 --parse-pdf True
-python scholar_lens/main.py --source https://openreview.net/pdf?id=XXXX
-
-# SUMMARY (concise five-section format)
-python scholar_lens/main.py --source 2312.11805 --mode summarize
-
-# TECH GUIDE from documentation URLs
-python scholar_lens/tech_guide_main.py \
-  --urls https://docs.framework.io/start https://docs.framework.io/api \
-  --search-queries "framework.io best practices"
-
-# Submit as an AWS Batch job
-python scripts/run_batch.py --source 2505.09388 --mode review \
-  --repo-urls https://github.com/org/repo
-```
-
-### Slack bot
-
-The bot runs **serverlessly on AWS** — `python scripts/deploy_infra.py` +
-`cdk deploy` provisions a receiver Lambda behind an API Gateway HTTP API plus a
-worker Lambda. Point your Slack app's **Event Subscriptions** Request URL at the
-receiver (its URL is a CDK output, `SlackEventsRequestUrl`), subscribe to
-`app_mention` + `message.im`, and set `SLACK_BOT_TOKEN` / `SLACK_SIGNING_SECRET`.
-There's nothing to keep running on a laptop.
-
-Then mention the bot with what you want done — e.g. `review 2401.06066`,
-`summarize https://arxiv.org/pdf/2401.06066`, or
-`guide https://docs.framework.io/start`. The result is saved to S3 / published to
-your blog, and the bot posts the status and a link back in the thread.
-
-```bash
-# Local-dev fallback only: run the bot in Socket Mode instead of the Events API
-# (needs SLACK_BOT_TOKEN / SLACK_APP_TOKEN and Socket Mode enabled on the app).
-python -m scholar_lens.slack.bot
-```
-
-> 💡 Run the bot on its own dedicated Slack app so it never shares tokens with
-> another bot in the same workspace.
-
-## Testing & quality
-
-```bash
-poetry run pytest tests/ --cov=scholar_lens --cov-report=term-missing  # all AWS/network mocked
+poetry run pytest                                # unit and pipeline tests, no AWS or network
 poetry run ruff check scholar_lens scripts tests
 poetry run black --check scholar_lens scripts tests
-poetry run mypy scholar_lens
-poetry run python scripts/ci_synth_check.py   # validate CDK synth, no AWS account needed
+poetry run mypy scholar_lens scripts
+poetry run python scripts/ci_synth_check.py      # CDK synth with a fake account
 ```
 
-CI (`.github/workflows/ci.yml`) runs lint/format, the pytest matrix (Python 3.12 & 3.13),
-and a CDK synth check on every push and PR.
+## License
+
+See [LICENSE](./LICENSE).
