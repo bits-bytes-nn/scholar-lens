@@ -1,10 +1,9 @@
 """Paper summary generation.
 
-A lighter-weight counterpart to :class:`ExplainerGraph`: instead of a
-section-by-section multi-stage review, this produces a single, structured
-*summary* in the proven five-question format (motivation / novel solution /
-implementation / results / significance), with inline images, tables, maths and
-code. It reuses the project's Bedrock factory and prompt conventions.
+A lighter-weight counterpart to :class:`ExplainerGraph`: one call produces a
+structured summary — a lead blockquote and five question sections (motivation,
+solution, implementation, results, significance and limits) — with figures,
+tables and math, using the same writing rules as the review.
 """
 
 from __future__ import annotations
@@ -87,25 +86,21 @@ class PaperSummarizer(RetryableBase, TokenBudgetGuard):
 
     @measure_execution_time
     async def summarize(self, paper: Paper) -> dict[str, str]:
-        """Return ``{"summary", "tags", "urls"}`` for the paper.
+        """Return ``{"subtitle", "summary", "urls"}`` for the paper.
 
-        ``summary`` is a Markdown fragment (the five emoji ``##`` sections); ``tags``
-        is a comma-separated keyword list; ``urls`` is a comma-separated markdown
-        link list. All three are LLM-extracted from the paper content.
+        ``summary`` is a Markdown fragment (a lead blockquote plus the five emoji
+        ``##`` sections); ``subtitle`` is the title in the output language;
+        ``urls`` is a comma-separated Markdown link list taken from the paper.
         """
         self._enforce_token_budget()
         result = await self._summarize(paper.content.text, paper.codebase_summary)
         summary = result.get("summary", "").strip()
         if not summary:
             raise ValueError("Summarizer returned an empty summary.")
-        logger.info(
-            "Generated summary (%d chars, %d tags).",
-            len(summary),
-            len(self._split_tags(result.get("tags", ""))),
-        )
+        logger.info("Generated summary (%d chars).", len(summary))
         return {
+            "subtitle": result.get("subtitle", "").strip(),
             "summary": summary,
-            "tags": result.get("tags", "").strip(),
             "urls": result.get("urls", "").strip(),
         }
 
@@ -130,7 +125,3 @@ class PaperSummarizer(RetryableBase, TokenBudgetGuard):
                 "translation_guideline": str(self.translation_guideline),
             }
         )
-
-    @staticmethod
-    def _split_tags(tags: str) -> list[str]:
-        return [t.strip() for t in tags.split(",") if t.strip()]

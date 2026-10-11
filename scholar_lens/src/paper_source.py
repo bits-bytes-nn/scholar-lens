@@ -29,6 +29,7 @@ import requests
 from pydantic import HttpUrl
 
 from .arxiv_handler import ArxivHandler, ArxivMetadata
+from .constants import ARXIV_ID_BODY, normalize_arxiv_id
 from .logger import logger
 from .pinned_transport import PinnedRequestsAdapter
 from .url_guard import (
@@ -37,12 +38,8 @@ from .url_guard import (
     assert_url_scheme_and_literal,
 )
 
-# arXiv IDs come in two shapes: new style "2401.06066" (optionally "v3") and the
-# legacy "math.GT/0309136" form. We only need to recognise the modern style plus
-# the obvious "arxiv.org/abs/..." URLs; everything else is treated as a generic
-# URL source.
-_ARXIV_ID_PATTERN = re.compile(r"^\d{4}\.\d{4,5}(v\d+)?$")
 _ARXIV_HOST_PATTERN = re.compile(r"(^|\.)arxiv\.org$", re.IGNORECASE)
+_ARXIV_URL_ID = re.compile(rf"/(?:abs|pdf|html)/({ARXIV_ID_BODY})(?:\.pdf)?/?$")
 
 _PDF_DOWNLOAD_TIMEOUT_SECONDS = 30
 _PDF_PROBE_TIMEOUT_SECONDS = 15
@@ -86,6 +83,12 @@ class PaperSource(ABC):
         """
         return None
 
+    @property
+    def title_is_fallback(self) -> bool:
+        """Whether the metadata title is a best-effort guess that a title parsed
+        from the paper text should replace."""
+        return False
+
     @abstractmethod
     def fetch_metadata(self) -> ArxivMetadata: ...
 
@@ -105,7 +108,7 @@ class ArxivSource(PaperSource):
 
     @property
     def source_id(self) -> str:
-        return self._arxiv_id.replace(".", "_")
+        return re.sub(r"[./]", "_", self._arxiv_id)
 
     @property
     def arxiv_html_id(self) -> str | None:
@@ -173,6 +176,12 @@ class PdfUrlSource(PaperSource):
     @property
     def pdf_url(self) -> HttpUrl:
         return self._url
+
+    @property
+    def title_is_fallback(self) -> bool:
+        # Embedded PDF titles are often junk ("Microsoft Word - draft.docx") and
+        # the URL stem is a guess; the title read from the first page wins.
+        return True
 
     def _fallback_title(self) -> str:
         """Human-readable title from the URL stem when no better one exists."""
@@ -316,7 +325,11 @@ class PdfUrlSource(PaperSource):
                 "HEAD", self._raw_url, timeout=_PDF_PROBE_TIMEOUT_SECONDS
             )
             head.close()
-            content_type = head.headers.get("Content-Type", "").lower()
+            # A failed HEAD (405/403 with an HTML error page) says nothing about
+            # the GET response, so only trust its content type when it is OK.
+            content_type = (
+                head.headers.get("Content-Type", "").lower() if head.ok else ""
+            )
             if "application/pdf" in content_type:
                 return
             if content_type and "html" in content_type:
@@ -356,17 +369,18 @@ class PdfUrlSource(PaperSource):
 
 
 def is_arxiv_id(value: str) -> bool:
-    """True if ``value`` looks like a modern arXiv identifier (not a URL)."""
-    return bool(_ARXIV_ID_PATTERN.match(value.strip()))
+    """True if ``value`` is an arXiv identifier (modern or legacy, optionally
+    prefixed with ``arXiv:``), not a URL."""
+    return normalize_arxiv_id(value) is not None
 
 
 def extract_arxiv_id_from_url(url: str) -> str | None:
     """Return the arXiv ID embedded in an arxiv.org URL, else ``None``."""
     parsed = urlparse(url)
-    if not _ARXIV_HOST_PATTERN.search(parsed.netloc):
+    if not _ARXIV_HOST_PATTERN.search(parsed.hostname or ""):
         return None
-    # Matches /abs/2401.06066, /pdf/2401.06066v2, /pdf/2401.06066v2.pdf
-    match = re.search(r"/(?:abs|pdf|html)/(\d{4}\.\d{4,5}(?:v\d+)?)", parsed.path)
+    # /abs/2401.06066, /pdf/2401.06066v2.pdf, /abs/hep-th/9901001
+    match = _ARXIV_URL_ID.search(parsed.path)
     return match.group(1) if match else None
 
 
@@ -380,8 +394,8 @@ def resolve_paper_source(
     later, at download time, via :class:`NotAPdfError`.
     """
     source = source.strip()
-    if is_arxiv_id(source):
-        return ArxivSource(source, handler=arxiv_handler)
+    if arxiv_id := normalize_arxiv_id(source):
+        return ArxivSource(arxiv_id, handler=arxiv_handler)
     if source.lower().startswith(("http://", "https://")):
         if arxiv_id := extract_arxiv_id_from_url(source):
             logger.info("Detected arXiv ID '%s' from URL.", arxiv_id)

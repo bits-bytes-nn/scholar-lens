@@ -102,59 +102,310 @@ def escape_yaml_double_quoted(value: str) -> str:
     return value
 
 
+# Page chrome that carries no paper/doc content (running heads, nav menus).
+_DROPPED_TAGS = (
+    "head",
+    "meta",
+    "script",
+    "style",
+    "title",
+    "noscript",
+    "nav",
+    "footer",
+    "button",
+    "form",
+)
+# Dropped only at page level: inside <article>/<main> a <header> holds the
+# document title and an <aside> holds callouts/notes worth keeping.
+_PAGE_LEVEL_TAGS = ("header", "aside")
+# LaTeXML renders numbered display equations as tables; they are math, not data.
+_EQUATION_TABLE_CLASSES = ("ltx_equation", "ltx_eqn_table", "ltx_equationgroup")
+_MATH_SPAN = re.compile(r"\$\$.+?\$\$", re.DOTALL)
+_BLOCK_TAGS = frozenset(
+    {
+        "p",
+        "div",
+        "section",
+        "article",
+        "main",
+        "figure",
+        "figcaption",
+        "blockquote",
+        "ul",
+        "ol",
+        "dl",
+        "dt",
+        "dd",
+        "body",
+        "html",
+    }
+)
+_HEADING_TAGS = {f"h{n}": n for n in range(1, 7)}
+_NUMERIC_CELL = re.compile(
+    r"^[-+−]?(\d[\d,]*(\.\d+)?|\.\d+)\s*(%|±\s*[\d.]+|[kKMB×x])?$"
+)
+# Header rows detected by content (no <thead>/<th>) are capped so a text-only
+# table can't swallow its body into the header.
+_MAX_HEADER_ROWS = 3
+
+
+def _inline(text: str) -> str:
+    return re.sub(r"\s+", " ", text)
+
+
+def _math_markdown(element: Tag) -> str:
+    """LaTeX for a MathML element, delimited the way the blog renders it:
+    ``$$…$$`` inline and display alike, display on its own paragraph."""
+    tex = str(element.get("alttext") or "").strip()
+    if not tex:
+        annotation = element.find("annotation", attrs={"encoding": "application/x-tex"})
+        tex = annotation.get_text().strip() if isinstance(annotation, Tag) else ""
+    if not tex:
+        tex = _inline(element.get_text(" ")).strip()
+    if not tex:
+        return ""
+    if element.get("display") == "block":
+        return f"\n\n$$ {tex} $$\n\n"
+    return f"$${tex}$$"
+
+
+def _cell_span(cell: Tag, attr: str) -> int:
+    try:
+        return max(1, min(int(str(cell.get(attr) or 1)), 50))
+    except ValueError:
+        return 1
+
+
+def _own_rows(table: Tag) -> list[Tag]:
+    """``<tr>`` rows of ``table`` itself, excluding rows of nested tables."""
+    return [tr for tr in table.find_all("tr") if tr.find_parent("table") is table]
+
+
+def _escape_cell_pipes(cell: str) -> str:
+    """Make a table cell pipe-safe without changing its meaning: prose pipes are
+    escaped (``\\|``); inside ``$$…$$`` a norm ``\\|`` becomes ``\\Vert`` and a
+    bare ``|`` becomes ``\\vert`` (escaping them would turn ``|x|`` into a norm
+    or ``\\|W\\|`` into a line break)."""
+    out, pos = [], 0
+    for m in _MATH_SPAN.finditer(cell):
+        out.append(cell[pos : m.start()].replace("|", "\\|"))
+        math = m.group(0).replace("\\|", "\\Vert ")
+        out.append(re.sub(r"(?<!\\)\|", r"\\vert ", math))
+        pos = m.end()
+    out.append(cell[pos:].replace("|", "\\|"))
+    return "".join(out)
+
+
+def _is_equation_table(table: Tag) -> bool:
+    raw: Any = table.get("class") or []
+    classes: list[str] = raw.split() if isinstance(raw, str) else [str(c) for c in raw]
+    return any(c in _EQUATION_TABLE_CLASSES for c in classes)
+
+
+def _equation_table_markdown(table: Tag) -> str:
+    """Display math for a LaTeXML equation table (equation numbers dropped)."""
+    blocks = []
+    for math in table.find_all("math"):
+        if math.find_parent(class_="ltx_eqn_eqno") is not None:
+            continue
+        tex = _math_markdown(math).strip().strip("$").strip()
+        if tex:
+            blocks.append(f"$$ {tex} $$")
+    return "\n\n" + "\n\n".join(blocks) + "\n\n" if blocks else ""
+
+
+def _nested_table_text(table: Tag, render_cell: Callable[[Tag], str]) -> str:
+    """A table inside a table cell, flattened: cells ' / ', rows '; '."""
+    rows = []
+    for tr in _own_rows(table):
+        cells = [
+            _inline(render_cell(c)).strip()
+            for c in tr.find_all(["td", "th"], recursive=False)
+        ]
+        if any(cells):
+            rows.append(" / ".join(c for c in cells if c))
+    return "; ".join(rows)
+
+
+def table_to_markdown(table: Tag, render_cell: Callable[[Tag], str]) -> str:
+    """Serialise an HTML table into one complete GFM table.
+
+    colspan/rowspan are expanded into a grid; stacked header rows are merged
+    column-wise ("AIME 2024" over "pass@1" -> "AIME 2024 pass@1"); every row has
+    the header's width, empty cells become "-", and literal pipes are escaped.
+    """
+    # Each slot holds (text, spanned): ``spanned`` marks the copies a colspan
+    # creates, which repeat in header rows and stay empty in body rows.
+    grid: list[list[tuple[str, bool] | None]] = []
+    is_th_row: list[bool] = []
+    in_thead: list[bool] = []
+    for r, tr in enumerate(_own_rows(table)):
+        while len(grid) <= r:
+            grid.append([])
+        row = grid[r]
+        cells = list(tr.find_all(["td", "th"], recursive=False))
+        is_th_row.append(bool(cells) and all(c.name == "th" for c in cells))
+        in_thead.append(tr.find_parent("thead") is not None)
+        col = 0
+        for cell in cells:
+            while col < len(row) and row[col] is not None:
+                col += 1
+            text = _inline(render_cell(cell)).strip()
+            colspan, rowspan = _cell_span(cell, "colspan"), _cell_span(cell, "rowspan")
+            for dr in range(rowspan):
+                while len(grid) <= r + dr:
+                    grid.append([])
+                target = grid[r + dr]
+                while len(target) < col + colspan:
+                    target.append(None)
+                for dc in range(colspan):
+                    target[col + dc] = (text, dc > 0)
+            col += colspan
+    keep = [i for i, row in enumerate(grid) if any(slot and slot[0] for slot in row)]
+    if not keep:
+        return ""
+    width = max(len(grid[i]) for i in keep)
+    slots = [grid[i] + [None] * (width - len(grid[i])) for i in keep]
+    is_th_row = [is_th_row[i] if i < len(is_th_row) else False for i in keep]
+    in_thead = [in_thead[i] if i < len(in_thead) else False for i in keep]
+    rows = [
+        [slot[0] if slot and not slot[1] else "" for slot in slot_row]
+        for slot_row in slots
+    ]
+
+    header_count = sum(1 for flag in in_thead[: len(rows)] if flag)
+    if not header_count:
+        header_count = next(
+            (i for i, flag in enumerate(is_th_row[: len(rows)]) if not flag), 0
+        )
+    if not header_count:
+        # Leading label rows are header rows only when a value row follows
+        # within the cap; a text-only table keeps its first row as the header.
+        header_count = 1
+        for i, candidate in enumerate(rows[: _MAX_HEADER_ROWS + 1]):
+            if any(_NUMERIC_CELL.match(c) for c in candidate):
+                header_count = max(1, i)
+                break
+    header_count = max(1, min(header_count, len(rows) - 1)) if len(rows) > 1 else 1
+
+    header: list[str] = []
+    for c in range(width):
+        parts: list[str] = []
+        for slot_row in slots[:header_count]:
+            slot = slot_row[c]
+            label = slot[0] if slot else ""
+            if label and (not parts or parts[-1] != label):
+                parts.append(label)
+        header.append(" ".join(parts))
+    body = rows[header_count:]
+
+    def fmt(cells: list[str], *, is_header: bool) -> str:
+        out = []
+        for i, cell in enumerate(cells):
+            if not cell and not (is_header and i == 0):
+                cell = "-"
+            out.append(_escape_cell_pipes(cell))
+        return "| " + " | ".join(out) + " |"
+
+    lines = [fmt(header, is_header=True), "| " + " | ".join(["---"] * width) + " |"]
+    lines.extend(fmt(row, is_header=False) for row in body)
+    caption = table.find("caption")
+    caption_text = (
+        _inline(render_cell(caption)).strip() if isinstance(caption, Tag) else ""
+    )
+    prefix = f"{caption_text}\n\n" if caption_text else ""
+    return "\n\n" + prefix + "\n".join(lines) + "\n\n"
+
+
 def extract_text_from_html(html_content: str) -> str:
+    """Convert paper/doc HTML into compact Markdown-like text for the models.
+
+    Keeps the structure the writers need: headings (``##``), paragraphs, list
+    items, fenced ``<pre>`` code, ``$$``-delimited LaTeX from MathML, complete
+    GFM tables, and ``[Image: alt=…, src=…]`` figure markers. Page chrome
+    (nav/header/footer/aside, scripts) is dropped.
+    """
     if not html_content:
         return ""
 
     soup = BeautifulSoup(html_content, "html.parser")
-
-    for tag_name in ["head", "meta", "script", "style", "title"]:
+    for tag_name in _DROPPED_TAGS:
         for tag in soup.find_all(tag_name):
             tag.decompose()
+    for tag_name in _PAGE_LEVEL_TAGS:
+        for tag in soup.find_all(tag_name):
+            if tag.find_parent(["article", "main"]) is None:
+                tag.decompose()
 
-    def parse_element(element) -> str:
+    def children(element: Tag) -> str:
+        return "".join(parse(child) for child in element.children)
+
+    def parse(element: Any) -> str:
         if isinstance(element, NavigableString):
-            return element.strip()
-
+            return _inline(str(element))
         if not isinstance(element, Tag):
             return ""
+        name = element.name
+        if name == "img":
+            alt = _inline(str(element.get("alt", ""))).strip()
+            return f"[Image: alt={alt}, src={element.get('src', '')}]"
+        if (
+            name == "object"
+            and element.get("data")
+            and "svg" in str(element.get("type", ""))
+        ):
+            # arXiv renders vector figures (often the main diagram) this way.
+            return f"[Image: alt=, src={element.get('data')}]"
+        if name == "math":
+            return _math_markdown(element)
+        if name == "table":
+            if _is_equation_table(element):
+                return _equation_table_markdown(element)
+            if element.find_parent("table") is not None:
+                return _nested_table_text(element, children)
+            return table_to_markdown(element, children)
+        if name == "pre":
+            code = element.get_text().strip("\n")
+            return f"\n\n```\n{code}\n```\n\n" if code.strip() else ""
+        if name == "code":
+            code = _inline(element.get_text()).strip()
+            return f"`{code}`" if code else ""
+        if name == "br":
+            return "\n"
+        if name in _HEADING_TAGS:
+            text = _inline(children(element)).strip()
+            return f"\n\n{'#' * max(2, _HEADING_TAGS[name])} {text}\n\n" if text else ""
+        if name == "li":
+            return f"\n- {children(element).strip()}\n"
+        if name == "a":
+            text = children(element)
+            href = str(element.get("href", ""))
+            if (
+                not href
+                or href.startswith(("#", "javascript:"))
+                or href == text.strip()
+            ):
+                return text
+            return f"{text} ({href})"
+        if name in _BLOCK_TAGS:
+            return f"\n\n{children(element)}\n\n"
+        return children(element)
 
-        if element.name == "img":
-            alt = element.get("alt", "")
-            src = element.get("src", "")
-            return f"[Image: alt={alt}, src={src}]"
-
-        if element.name == "a":
-            href = element.get("href", "")
-            link_text = "".join(parse_element(child) for child in element.children)
-            return f"{link_text} ({href})" if href else link_text
-
-        if element.name in ["table", "thead", "tbody", "tr", "td", "th"]:
-            content = "".join(parse_element(child) for child in element.children)
-            return content
-
-        if element.name in ["code", "pre"]:
-            code_content = "".join(parse_element(child) for child in element.children)
-            return f"`{code_content}`"
-
-        if element.name == "math":
-            math_content = "".join(parse_element(child) for child in element.children)
-            return f"$$ {math_content} $$"
-
-        return " ".join(parse_element(child) for child in element.children)
-
-    extracted_text = parse_element(soup)
-
-    # Strip a few LaTeXML extraction artifacts. NOTE: do NOT map "\times" -> "x"
-    # here — it corrupts real math (e.g. "a \times b"); math underscores/operators
-    # are handled downstream by markdown_math, not by lossy string replacement.
-    replacements = {"\\AND": "", "\\n": " ", "footnotemark:": ""}
-    for old, new in replacements.items():
-        extracted_text = extracted_text.replace(old, new)
-
-    extracted_text = re.sub(r"\s+", " ", extracted_text).strip()
-
-    return extracted_text
+    text = parse(soup)
+    # LaTeXML extraction artifacts (never touch real LaTeX such as "\times").
+    for artifact in ("\\AND", "footnotemark:"):
+        text = text.replace(artifact, "")
+    lines: list[str] = []
+    in_fence = False
+    for line in text.split("\n"):
+        if line.startswith("```"):
+            in_fence = not in_fence
+            lines.append(line)
+        elif in_fence:
+            lines.append(line)
+        else:
+            lines.append(re.sub(r"[ \t]+", " ", line).strip())
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
 
 
 def measure_execution_time(func: Callable) -> Callable:

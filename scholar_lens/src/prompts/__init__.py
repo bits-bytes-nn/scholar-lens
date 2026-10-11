@@ -7,16 +7,14 @@ from .extraction import (
     CodeAnalysisPrompt,
     CodebaseSummaryPrompt,
     FigureAnalysisPrompt,
-    TableOfContentsPrompt,
 )
 from .review import (
-    PaperAnalysisPrompt,
-    PaperEnrichmentPrompt,
-    PaperEvaluationPrompt,
+    PaperEditPrompt,
     PaperFinalizationPrompt,
-    PaperSynthesisPrompt,
+    PaperPlanningPrompt,
+    PaperSectionCheckPrompt,
+    PaperSectionPrompt,
 )
-from .slack import SlackIntentPrompt
 from .summary import PaperSummaryPrompt
 from .tech_guide import (
     TechGuideEvaluationPrompt,
@@ -36,14 +34,12 @@ __all__ = [
     "CodeAnalysisPrompt",
     "CodebaseSummaryPrompt",
     "FigureAnalysisPrompt",
-    "PaperAnalysisPrompt",
-    "PaperEnrichmentPrompt",
+    "PaperEditPrompt",
     "PaperFinalizationPrompt",
-    "PaperEvaluationPrompt",
+    "PaperPlanningPrompt",
+    "PaperSectionCheckPrompt",
+    "PaperSectionPrompt",
     "PaperSummaryPrompt",
-    "PaperSynthesisPrompt",
-    "SlackIntentPrompt",
-    "TableOfContentsPrompt",
     "TechGuideEvaluationPrompt",
     "TechGuideGroundingPrompt",
     "TechGuideRelevancePrompt",

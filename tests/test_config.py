@@ -49,27 +49,11 @@ class TestConfigValidation:
         assert gh.tech_guide_category == "Guides"
 
 
-class TestGithubCoverImages:
-    def test_known_category_maps_to_configured_image(self) -> None:
-        gh = Github(
-            cover_images={"language-models": "language-models.jpg"},
-            default_cover_image="default.jpg",
-        )
-        assert gh.cover_image_for("Language Models") == "language-models.jpg"
-
-    def test_slug_normalisation_is_case_and_space_insensitive(self) -> None:
-        gh = Github(cover_images={"multimodal-learning": "mm.jpg"})
-        assert gh.cover_image_for("  Multimodal   Learning ") == "mm.jpg"
-
-    def test_unknown_category_falls_back_to_default(self) -> None:
-        gh = Github(default_cover_image="fallback.jpg")
-        assert gh.cover_image_for("Quantum Widgets") == "fallback.jpg"
-
-    def test_none_cover_images_coerced_to_empty_dict(self) -> None:
-        # Mirrors a YAML key written as `cover_images:` with no value.
-        gh = Github(cover_images=None)  # type: ignore[arg-type]
-        assert gh.cover_images == {}
-        assert gh.cover_image_for("anything") == "default.jpg"
+class TestGithubConfig:
+    def test_cover_keys_are_gone(self) -> None:
+        # Covers come from the blog's post conventions now; stale keys fail.
+        with pytest.raises(ValueError):
+            Github(cover_images={"x": "y.jpg"})  # type: ignore[call-arg]
 
 
 class TestConfigLoading:
@@ -125,21 +109,6 @@ class TestConfigLoading:
     def test_unknown_effort_rejected(self) -> None:
         with pytest.raises(ValidationError):
             Explanation(thinking_effort="extreme")  # type: ignore[arg-type]
-
-    def test_latest_models_are_not_defaults(self) -> None:
-        # Adding models must not change any stage's default selection.
-        latest = {
-            LanguageModelId.CLAUDE_V5_5_OPUS,
-            LanguageModelId.CLAUDE_V5_5_SONNET,
-            LanguageModelId.CLAUDE_V5_5_HAIKU,
-            LanguageModelId.CLAUDE_V5_1_FABLE,
-        }
-        config = Config()
-        for section in config.model_dump().values():
-            if isinstance(section, dict):
-                for key, value in section.items():
-                    if key.endswith("_model_id"):
-                        assert value not in latest, key
 
     def test_invalid_model_id_rejected(self, tmp_path: Path) -> None:
         cfg_file = tmp_path / "config.yaml"

@@ -6,7 +6,7 @@ import logging
 
 import pytest
 
-from scholar_lens.src.markdown_lint import lint_markdown
+from scholar_lens.src.markdown_lint import drop_unknown_images, lint_markdown
 
 
 @pytest.fixture
@@ -38,7 +38,7 @@ class TestHeadingBlankLine:
 
     def test_first_line_heading_untouched(self) -> None:
         # No preceding line to glue to.
-        src = "# Title\n\nbody"
+        src = "## Title\n\nbody"
         assert lint_markdown(src) == src
 
 
@@ -94,8 +94,8 @@ class TestPipeInMath:
     def test_bare_pipe_in_math_warns_not_rewritten(self, caplog) -> None:
         # NOT auto-rewritten (\vert would break \left|, array{c|c}); warn instead.
         with caplog.at_level(logging.WARNING, logger="app"):
-            out = lint_markdown(r"prob \(P(a|b)\) here")
-        assert out == r"prob \(P(a|b)\) here"  # text unchanged
+            out = lint_markdown(r"prob $$P(a|b)$$ here")
+        assert out == r"prob $$P(a|b)$$ here"  # text unchanged
         assert any("bare '|'" in r.message for r in caplog.records)
 
     def test_left_right_delimiters_not_broken(self, caplog) -> None:
@@ -143,8 +143,14 @@ class TestWarnings:
 
     def test_known_undefined_macro_warns(self, caplog) -> None:
         with caplog.at_level(logging.WARNING, logger="app"):
-            lint_markdown(r"math \(\llbracket x \rrbracket\)")
-        assert any("llbracket" in r.message for r in caplog.records)
+            lint_markdown(r"math $$a \coloneqq b$$")
+        assert any("coloneqq" in r.message for r in caplog.records)
+
+    def test_blog_defined_macros_do_not_warn(self, caplog) -> None:
+        # \llbracket, \rrbracket and \textsc are defined in the blog's head.html.
+        with caplog.at_level(logging.WARNING, logger="app"):
+            lint_markdown(r"math $$\llbracket x \rrbracket \textsc{a}$$")
+        assert not any("does not define" in r.message for r in caplog.records)
 
     def test_non_url_link_target_warns(self, caplog) -> None:
         with caplog.at_level(logging.WARNING, logger="app"):
@@ -161,3 +167,91 @@ def test_lint_is_idempotent() -> None:
     src = "text\n## H\nbody with \\(P(a|b)\\)"
     once = lint_markdown(src)
     assert lint_markdown(once) == once
+
+
+@pytest.mark.usefixtures("_capture_app_logs")
+class TestBodyAutoFixes:
+    def test_envelope_tags_removed_outside_code(self) -> None:
+        out = lint_markdown("body\n</explanation>\n`<summary>` stays")
+        assert "</explanation>" not in out
+        assert "`<summary>`" in out
+
+    def test_h1_becomes_h2_and_other_levels_stay(self) -> None:
+        # Shifting every level would turn "## TL;DR" into "###" and fail the
+        # blog's "starts with ## TL;DR" rule.
+        out = lint_markdown("## TL;DR\n\n# Title\n\n## Part\n\ntext")
+        assert out.startswith("## TL;DR") and "\n## Title" in out
+        assert "\n## Part" in out and "###" not in out
+
+    def test_no_h1_leaves_headings(self) -> None:
+        src = "## A\n\n### B"
+        assert lint_markdown(src) == src
+
+    def test_hash_comment_in_code_is_not_a_heading(self) -> None:
+        src = "## A\n\n```python\n# comment\n```"
+        assert lint_markdown(src) == src
+
+    def test_numbered_reference_warns(self, caplog) -> None:
+        with caplog.at_level(logging.WARNING, logger="app"):
+            lint_markdown("As Figure 3 shows, 그림 2와 3.2절에서")
+        assert any("numbering" in r.message for r in caplog.records)
+
+
+class TestDropUnknownImages:
+    def test_keeps_known_and_drops_invented(self) -> None:
+        md = (
+            "![a](https://arxiv.org/html/2106.09685) ![b](fig_1.png) ![c](/x/fig_2.png)"
+        )
+        out = drop_unknown_images(md, {"/tmp/p/figures/fig_1.png", "fig_2.png"})
+        assert "arxiv.org/html" not in out
+        assert "![b](fig_1.png)" in out and "![c](/x/fig_2.png)" in out
+
+    def test_images_in_code_untouched(self) -> None:
+        md = "`![x](nowhere.png)`"
+        assert drop_unknown_images(md, set()) == md
+
+
+class TestFillImageAlts:
+    def test_caption_without_label_becomes_alt(self) -> None:
+        from scholar_lens.src.markdown_lint import fill_image_alts
+
+        out = fill_image_alts(
+            "![](https://arxiv.org/html/x/x1.png)\n![kept](/a.png)\n![](/u.png)",
+            {"x1.png": "Figure 6: Subspace similarity between A_r=8 and A_r=64."},
+            "LoRA",
+        )
+        assert (
+            "![Subspace similarity between A_r=8 and A_r=64.](https://arxiv.org/html/x/x1.png)"
+            in out
+        )
+        assert "![kept](/a.png)" in out
+        assert "![LoRA](/u.png)" in out
+
+
+class TestFigureMarkersToImages:
+    def test_marker_becomes_image_with_caption_alt(self) -> None:
+        from scholar_lens.src.markdown_lint import figure_markers_to_images
+
+        text = (
+            '앞 문장.\n[Image: alt="Refer to caption", src="https://arxiv.org/html/x/a.png", '
+            'caption="Subspace similarity between two ranks. More detail."]\n뒤 문장.'
+        )
+        out = figure_markers_to_images(text)
+        assert "[Image:" not in out
+        assert (
+            "![Subspace similarity between two ranks.](https://arxiv.org/html/x/a.png)"
+            in out
+        )
+
+    def test_markers_inside_code_are_kept(self) -> None:
+        from scholar_lens.src.markdown_lint import figure_markers_to_images
+
+        text = '`[Image: alt="a", src="b.png"]`'
+        assert figure_markers_to_images(text) == text
+
+
+def test_marker_in_table_row_stays_on_the_row() -> None:
+    from scholar_lens.src.markdown_lint import figure_markers_to_images
+
+    row = '| [Image: alt="cat", src="https://x/a.png", caption="c"] | A cat |'
+    assert figure_markers_to_images(row) == "| ![cat](https://x/a.png) | A cat |"

@@ -1,13 +1,4 @@
-"""Tests for utils.factories pure/offline logic (no live boto3/Bedrock).
-
-The boto3 ``Session`` is replaced with a ``MagicMock`` so the factory can be
-constructed without any network access; ``Session.client`` returns a mock and
-is never exercised against AWS here. Only deterministic, offline logic is
-tested: ``max_tokens`` validation, thinking/performance flag logic, config
-construction (including the 1M-context-window beta injection and forcing the
-Converse path), text fitting via a fake Bedrock CountTokens, and
-``get_model_info`` lookup.
-"""
+"""Tests for utils.factories offline logic (mocked boto3, no Bedrock calls)."""
 
 from __future__ import annotations
 
@@ -18,6 +9,7 @@ import pytest
 from botocore.exceptions import ClientError
 
 from scholar_lens.src.constants import LanguageModelId
+from scholar_lens.src.utils import factories as fac
 from scholar_lens.src.utils.factories import (
     BaseBedrockWrapper,
     BedrockLanguageModelFactory,
@@ -32,6 +24,13 @@ def _silence_logging() -> None:
     logging.disable(logging.NOTSET)
 
 
+@pytest.fixture(autouse=True)
+def _clear_profile_cache() -> None:
+    fac._resolve_inference_profile.cache_clear()
+    yield
+    fac._resolve_inference_profile.cache_clear()
+
+
 def _make_factory(profile_name: str = "default") -> BedrockLanguageModelFactory:
     """Build a factory backed by a fully mocked boto3 session (no network)."""
     session = MagicMock()
@@ -41,402 +40,184 @@ def _make_factory(profile_name: str = "default") -> BedrockLanguageModelFactory:
     return BedrockLanguageModelFactory(boto_session=session, region_name="us-east-1")
 
 
-# Reference model infos used across tests.
-_HAIKU_V3 = _LANGUAGE_MODEL_INFO[LanguageModelId.CLAUDE_V3_HAIKU]  # 4096, no thinking
-_HAIKU_V3_5 = _LANGUAGE_MODEL_INFO[
-    LanguageModelId.CLAUDE_V3_5_HAIKU
-]  # perf optimization
-_OPUS_V4_8 = _LANGUAGE_MODEL_INFO[
-    LanguageModelId.CLAUDE_V4_8_OPUS
-]  # 64000, adaptive thinking, 1m, temperature deprecated
-_SONNET_V4_5 = _LANGUAGE_MODEL_INFO[
-    LanguageModelId.CLAUDE_V4_5_SONNET
-]  # 64000, legacy (enabled+budget) thinking, 1m
+def _config(model: LanguageModelId, **kwargs) -> dict:  # type: ignore[no-untyped-def]
+    return _make_factory()._build_model_config(
+        _LANGUAGE_MODEL_INFO[model], model.value, **kwargs
+    )
 
 
-class TestValidateMaxTokens:
-    def test_caps_when_over_model_max(self) -> None:
-        assert (
-            BedrockLanguageModelFactory._validate_max_tokens(999_999, _HAIKU_V3)
-            == _HAIKU_V3.max_output_tokens
-        )
-
-    def test_returns_requested_when_under(self) -> None:
-        assert BedrockLanguageModelFactory._validate_max_tokens(100, _HAIKU_V3) == 100
-
-    def test_defaults_to_model_max_when_none(self) -> None:
-        assert (
-            BedrockLanguageModelFactory._validate_max_tokens(None, _HAIKU_V3)
-            == _HAIKU_V3.max_output_tokens
-        )
-
-
-class TestShouldEnableThinking:
-    def test_enabled_when_flag_and_support(self) -> None:
-        assert (
-            BedrockLanguageModelFactory._should_enable_thinking(True, _OPUS_V4_8)
-            is True
-        )
-
-    def test_disabled_without_flag(self) -> None:
-        assert (
-            BedrockLanguageModelFactory._should_enable_thinking(False, _OPUS_V4_8)
-            is False
-        )
-
-    def test_disabled_when_unsupported(self) -> None:
-        assert (
-            BedrockLanguageModelFactory._should_enable_thinking(True, _HAIKU_V3)
-            is False
-        )
-
-
-class TestShouldEnablePerformanceOptimization:
-    def test_enabled_when_flag_support_and_not_cross_region(self) -> None:
-        assert (
-            BedrockLanguageModelFactory._should_enable_performance_optimization(
-                True, _HAIKU_V3_5, False
-            )
-            is True
-        )
-
-    def test_disabled_when_cross_region(self) -> None:
-        assert (
-            BedrockLanguageModelFactory._should_enable_performance_optimization(
-                True, _HAIKU_V3_5, True
-            )
-            is False
-        )
-
-    def test_disabled_when_unsupported(self) -> None:
-        assert (
-            BedrockLanguageModelFactory._should_enable_performance_optimization(
-                True, _HAIKU_V3, False
-            )
-            is False
-        )
-
-
-class TestBuildBaseConfig:
-    def test_default_profile_omits_credentials(self) -> None:
-        factory = _make_factory(profile_name="default")
-        config = factory._build_base_config("m", is_cross_region=False)
-        assert "credentials_profile_name" not in config
-        assert config["model_id"] == "m"
-        assert config["region_name"] == "us-east-1"
-
-    def test_named_profile_sets_credentials(self) -> None:
-        factory = _make_factory(profile_name="myprofile")
-        config = factory._build_base_config("m", is_cross_region=False)
-        assert config["credentials_profile_name"] == "myprofile"
-
-    def test_non_cross_region_uses_model_kwargs(self) -> None:
-        factory = _make_factory()
-        config = factory._build_base_config("m", is_cross_region=False)
-        assert "model_kwargs" in config
-        assert config["model_kwargs"]["top_k"] == factory.DEFAULT_TOP_K
-        assert config["model_kwargs"]["stop_sequences"] == ["\n\nHuman:"]
-
-    def test_cross_region_inlines_common_params(self) -> None:
-        factory = _make_factory()
-        config = factory._build_base_config("m", is_cross_region=True)
-        assert "model_kwargs" not in config
-        assert config["stop_sequences"] == ["\n\nHuman:"]
-
-
-class TestBuildModelConfig1MContextWindow:
-    def test_cross_region_beta_header_present(self) -> None:
-        factory = _make_factory()
-        config = factory._build_model_config(
-            _OPUS_V4_8,
-            "global.anthropic.claude-opus-4-8",
-            is_cross_region=True,
-            supports_1m_context_window=True,
-        )
-        assert config["additional_model_request_fields"]["anthropic_beta"] == [
-            "context-1m-2025-08-07"
-        ]
-
-    def test_non_cross_region_beta_header_present(self) -> None:
-        factory = _make_factory()
-        config = factory._build_model_config(
-            _OPUS_V4_8,
-            "anthropic.claude-opus-4-8",
-            is_cross_region=False,
-            supports_1m_context_window=True,
-        )
-        beta = config["model_kwargs"]["additionalModelRequestFields"]["anthropic_beta"]
-        assert beta == ["context-1m-2025-08-07"]
-
-    def test_1m_request_forces_converse_path(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        # Regression: the 1M beta is a Converse-only field; if get_model picked
-        # the legacy ChatBedrock path it would be silently dropped. Requesting the
-        # 1M window must force ChatBedrockConverse even without thinking/cross-region.
-        import scholar_lens.src.utils.factories as fac
-
-        factory = _make_factory()
-        monkeypatch.setattr(
-            fac.BedrockCrossRegionModelHelper,
-            "get_cross_region_model_id",
-            staticmethod(lambda *a, **k: LanguageModelId.CLAUDE_V4_8_OPUS.value),
-        )
-        picked = {}
-        monkeypatch.setattr(
-            fac, "ChatBedrock", lambda **kw: picked.setdefault("cls", "ChatBedrock")
-        )
-        monkeypatch.setattr(
-            fac,
-            "ChatBedrockConverse",
-            lambda **kw: picked.setdefault("cls", "ChatBedrockConverse"),
-        )
-        factory.get_model(
-            LanguageModelId.CLAUDE_V4_8_OPUS,
-            supports_1m_context_window=True,
-            enable_thinking=False,
-        )
-        assert picked["cls"] == "ChatBedrockConverse"
-
-    def test_beta_header_absent_when_flag_off(self) -> None:
-        factory = _make_factory()
-        config = factory._build_model_config(
-            _OPUS_V4_8,
-            "anthropic.claude-opus-4-8",
-            is_cross_region=False,
-            supports_1m_context_window=False,
-        )
-        assert "additionalModelRequestFields" not in config["model_kwargs"]
-
-    def test_beta_header_absent_when_model_unsupported(self) -> None:
-        # Even with the kwarg on, a model that does not support 1M context
-        # must not get the beta header.
-        factory = _make_factory()
-        config = factory._build_model_config(
-            _HAIKU_V3,
-            "anthropic.claude-3-haiku",
-            is_cross_region=False,
-            supports_1m_context_window=True,
-        )
-        assert "additionalModelRequestFields" not in config["model_kwargs"]
-
-
-class TestBuildModelConfigFeatures:
-    def test_legacy_thinking_sets_temperature_and_budget_cross_region(self) -> None:
-        # Legacy thinking models (Sonnet 4.5) use enabled+budget and DO send
-        # temperature (forced to 1.0 in thinking mode).
-        factory = _make_factory()
-        config = factory._build_model_config(
-            _SONNET_V4_5,
-            "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
-            is_cross_region=True,
-            enable_thinking=True,
-        )
-        assert config["temperature"] == 1.0
-        assert config["max_tokens"] == _SONNET_V4_5.max_output_tokens
-        thinking = config["additional_model_request_fields"]["thinking"]
-        assert thinking["type"] == "enabled"
-        assert (
-            thinking["budget_tokens"]
-            == BedrockLanguageModelFactory.DEFAULT_THINKING_BUDGET_TOKENS
-        )
-
-    def test_adaptive_thinking_omits_temperature_cross_region(self) -> None:
-        # Opus 4.8 uses adaptive thinking + effort and DEPRECATES temperature,
-        # so the config must NOT include a temperature key.
-        factory = _make_factory()
-        config = factory._build_model_config(
-            _OPUS_V4_8,
-            "us.anthropic.claude-opus-4-8",
-            is_cross_region=True,
-            enable_thinking=True,
-        )
-        assert "temperature" not in config
-        assert config["max_tokens"] == _OPUS_V4_8.max_output_tokens
-        fields = config["additional_model_request_fields"]
-        assert fields["thinking"] == {"type": "adaptive"}
-        assert fields["output_config"]["effort"] == (
-            BedrockLanguageModelFactory.DEFAULT_THINKING_EFFORT
-        )
-
-    def test_no_thinking_keeps_default_temperature(self) -> None:
-        factory = _make_factory()
-        config = factory._build_model_config(
-            _HAIKU_V3, "anthropic.claude-3-haiku", is_cross_region=False
-        )
-        assert (
-            config["model_kwargs"]["temperature"]
-            == BedrockLanguageModelFactory.DEFAULT_TEMPERATURE
-        )
-
-    def test_performance_optimization_applied(self) -> None:
-        factory = _make_factory()
-        config = factory._build_model_config(
-            _HAIKU_V3_5,
-            "anthropic.claude-3-5-haiku",
-            is_cross_region=False,
-            enable_performance_optimization=True,
-        )
-        assert config["performanceConfig"]["latency"] == (
-            BedrockLanguageModelFactory.DEFAULT_LATENCY_MODE
-        )
-
-
-_LATEST_MODELS = [
+ALWAYS_ON = [
     LanguageModelId.CLAUDE_V5_5_OPUS,
     LanguageModelId.CLAUDE_V5_5_SONNET,
     LanguageModelId.CLAUDE_V5_5_HAIKU,
     LanguageModelId.CLAUDE_V5_1_FABLE,
 ]
-_SAMPLING_KEYS = ("temperature", "top_k", "top_p")
 
 
-def _request_fields(config: dict, is_cross_region: bool) -> dict:
-    """The model-request fields a config sends, for either code path."""
-    if is_cross_region:
-        return {**config, **config.get("additional_model_request_fields", {})}
-    kwargs = config["model_kwargs"]
-    return {**kwargs, **kwargs.get("additionalModelRequestFields", {})}
+class TestMaxTokens:
+    def test_default_is_bounded_not_model_max(self) -> None:
+        config = _config(LanguageModelId.CLAUDE_V5_5_OPUS)
+        assert config["max_tokens"] == BedrockLanguageModelFactory.DEFAULT_MAX_TOKENS
+        assert config["max_tokens"] < 128_000
+
+    def test_request_capped_at_model_max(self) -> None:
+        assert (
+            _config(LanguageModelId.CLAUDE_V3_HAIKU, max_tokens=999_999)["max_tokens"]
+            == 4096
+        )
 
 
-class TestLatestModelsRequestConfig:
-    """Opus 5.5 / Sonnet 5.5 / Haiku 5.5 / Fable 5.1 return a 400 on sampling
-    parameters, on thinking.type='enabled' + budget_tokens, and (except Haiku
-    5.5) on thinking.type='disabled'. The factory must send none of them."""
-
-    @pytest.mark.parametrize("model", _LATEST_MODELS)
-    @pytest.mark.parametrize("is_cross_region", [True, False])
-    @pytest.mark.parametrize("enable_thinking", [True, False])
-    def test_no_sampling_params(
-        self, model: LanguageModelId, is_cross_region: bool, enable_thinking: bool
+class TestAdaptiveModels:
+    @pytest.mark.parametrize("model", ALWAYS_ON)
+    def test_effort_sent_without_thinking_and_no_sampling(
+        self, model: LanguageModelId
     ) -> None:
-        factory = _make_factory()
-        config = factory._build_model_config(
-            _LANGUAGE_MODEL_INFO[model],
-            model.value,
-            is_cross_region=is_cross_region,
-            temperature=0.0,
-            enable_thinking=enable_thinking,
-        )
-        fields = _request_fields(config, is_cross_region)
-        for key in _SAMPLING_KEYS:
-            assert key not in fields, key
-        assert fields["max_tokens"] == 128000
+        config = _config(model, enable_thinking=False, thinking_effort="low")
+        fields = config["additional_model_request_fields"]
+        assert fields["output_config"] == {"effort": "low"}
+        assert "thinking" not in fields  # never send type='disabled'
+        assert "temperature" not in config
 
-    @pytest.mark.parametrize("model", _LATEST_MODELS)
-    @pytest.mark.parametrize("is_cross_region", [True, False])
-    @pytest.mark.parametrize("effort", ["low", "medium", "high", "xhigh", "max"])
-    def test_thinking_enabled_is_adaptive_with_effort(
-        self, model: LanguageModelId, is_cross_region: bool, effort: str
-    ) -> None:
-        factory = _make_factory()
-        config = factory._build_model_config(
-            _LANGUAGE_MODEL_INFO[model],
-            model.value,
-            is_cross_region=is_cross_region,
-            enable_thinking=True,
-            thinking_effort=effort,
-        )
-        fields = _request_fields(config, is_cross_region)
-        assert fields["thinking"] == {"type": "adaptive"}
-        assert fields["output_config"] == {"effort": effort}
-
-    @pytest.mark.parametrize("model", _LATEST_MODELS)
-    @pytest.mark.parametrize("is_cross_region", [True, False])
-    def test_thinking_off_omits_thinking_field(
-        self, model: LanguageModelId, is_cross_region: bool
-    ) -> None:
-        # "Off" must mean "don't send thinking", never thinking.type='disabled'.
-        factory = _make_factory()
-        config = factory._build_model_config(
-            _LANGUAGE_MODEL_INFO[model],
-            model.value,
-            is_cross_region=is_cross_region,
-            enable_thinking=False,
-        )
-        fields = _request_fields(config, is_cross_region)
-        assert "thinking" not in fields
-        assert "output_config" not in fields
-
-    @pytest.mark.parametrize("model", _LATEST_MODELS)
-    def test_get_model_passes_no_sampling_params(
-        self, model: LanguageModelId, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        import scholar_lens.src.utils.factories as fac
-
-        factory = _make_factory()
-        monkeypatch.setattr(
-            fac.BedrockCrossRegionModelHelper,
-            "get_cross_region_model_id",
-            staticmethod(lambda *a, **k: f"global.{model.value}"),
-        )
-        captured: dict = {}
-        monkeypatch.setattr(
-            fac, "ChatBedrockConverse", lambda **kw: captured.update(kw) or kw
-        )
-        factory.get_model(
-            model,
-            temperature=0.0,
-            enable_thinking=True,
-            thinking_effort="high",
-            supports_1m_context_window=True,
-        )
-        assert captured["model_id"] == f"global.{model.value}"
-        for key in _SAMPLING_KEYS:
-            assert key not in captured, key
-        fields = captured["additional_model_request_fields"]
+    @pytest.mark.parametrize("model", ALWAYS_ON)
+    def test_thinking_requested_is_adaptive(self, model: LanguageModelId) -> None:
+        fields = _config(model, enable_thinking=True, thinking_effort="high")[
+            "additional_model_request_fields"
+        ]
         assert fields["thinking"] == {"type": "adaptive"}
         assert fields["output_config"] == {"effort": "high"}
 
-    def test_legacy_model_keeps_top_k_on_invoke_model_path(self) -> None:
-        # Dropping top_k is limited to adaptive-thinking models.
-        factory = _make_factory()
-        config = factory._build_model_config(
-            _HAIKU_V3, "anthropic.claude-3-haiku", is_cross_region=False
+    def test_default_effort_when_unset(self) -> None:
+        fields = _config(LanguageModelId.CLAUDE_V5_5_SONNET)[
+            "additional_model_request_fields"
+        ]
+        assert fields["output_config"] == {"effort": "medium"}
+
+    def test_temperature_ignored_for_adaptive(self) -> None:
+        assert "temperature" not in _config(
+            LanguageModelId.CLAUDE_V4_8_OPUS, temperature=0.0
         )
-        assert config["model_kwargs"]["top_k"] == factory.DEFAULT_TOP_K
+
+
+class TestLegacyModels:
+    def test_thinking_uses_budget_and_temperature_one(self) -> None:
+        config = _config(LanguageModelId.CLAUDE_V4_5_HAIKU, enable_thinking=True)
+        assert config["temperature"] == 1.0
+        assert config["additional_model_request_fields"]["thinking"]["type"] == (
+            "enabled"
+        )
+
+    def test_no_thinking_keeps_requested_temperature(self) -> None:
+        config = _config(LanguageModelId.CLAUDE_V3_HAIKU, temperature=0.2)
+        assert config["temperature"] == 0.2
+        assert "additional_model_request_fields" not in config
+
+    def test_thinking_ignored_when_unsupported(self) -> None:
+        config = _config(LanguageModelId.CLAUDE_V3_HAIKU, enable_thinking=True)
+        assert config["temperature"] == 0.0
+
+
+class TestLongContextBeta:
+    def test_beta_sent_when_requested_and_supported(self) -> None:
+        fields = _config(
+            LanguageModelId.CLAUDE_V5_5_OPUS, supports_1m_context_window=True
+        )["additional_model_request_fields"]
+        assert fields["anthropic_beta"] == [
+            BedrockLanguageModelFactory.ANTHROPIC_1M_BETA
+        ]
+
+    def test_beta_absent_when_not_requested(self) -> None:
+        fields = _config(LanguageModelId.CLAUDE_V5_5_OPUS)[
+            "additional_model_request_fields"
+        ]
+        assert "anthropic_beta" not in fields
+
+    def test_beta_absent_for_unsupported_model(self) -> None:
+        config = _config(
+            LanguageModelId.CLAUDE_V3_HAIKU, supports_1m_context_window=True
+        )
+        assert "additional_model_request_fields" not in config
+
+
+class TestCredentials:
+    def test_default_profile_omits_credentials(self) -> None:
+        assert "credentials_profile_name" not in _config(
+            LanguageModelId.CLAUDE_V3_HAIKU
+        )
+
+    def test_named_profile_sets_credentials(self) -> None:
+        factory = _make_factory("research")
+        config = factory._build_model_config(
+            _LANGUAGE_MODEL_INFO[LanguageModelId.CLAUDE_V3_HAIKU], "id"
+        )
+        assert config["credentials_profile_name"] == "research"
+
+
+class TestInferenceProfiles:
+    def _session(self, profiles: list[str] | Exception) -> MagicMock:
+        client = MagicMock()
+        if isinstance(profiles, Exception):
+            client.list_inference_profiles.side_effect = profiles
+        else:
+            client.list_inference_profiles.return_value = {
+                "inferenceProfileSummaries": [
+                    {"inferenceProfileId": p} for p in profiles
+                ]
+            }
+        session = MagicMock()
+        session.client.return_value = client
+        return session
+
+    def test_prefers_global_profile(self) -> None:
+        model = LanguageModelId.CLAUDE_V5_5_OPUS
+        session = self._session([f"us.{model.value}", f"global.{model.value}"])
+        assert fac._resolve_inference_profile(session, model, "us-west-2") == (
+            f"global.{model.value}"
+        )
+
+    def test_regional_then_base(self) -> None:
+        model = LanguageModelId.CLAUDE_V5_5_HAIKU
+        session = self._session([f"apac.{model.value}"])
+        assert (
+            fac._resolve_inference_profile(session, model, "ap-northeast-2")
+            == f"apac.{model.value}"
+        )
+        assert (
+            fac._resolve_inference_profile(self._session([]), model, "eu-west-1")
+            == model.value
+        )
+
+    def test_lookup_is_cached(self) -> None:
+        model = LanguageModelId.CLAUDE_V5_5_SONNET
+        session = self._session([])
+        fac._resolve_inference_profile(session, model, "us-west-2")
+        fac._resolve_inference_profile(session, model, "us-west-2")
+        assert session.client.return_value.list_inference_profiles.call_count == 1
+
+    def test_lookup_failure_fails_closed(self) -> None:
+        error = ClientError({"Error": {"Code": "AccessDeniedException"}}, "List")
+        with pytest.raises(RuntimeError, match="inference profiles"):
+            fac._resolve_inference_profile(
+                self._session(error), LanguageModelId.CLAUDE_V5_5_OPUS, "us-west-2"
+            )
 
 
 class TestGetModelInfo:
     def test_known_model_returns_info(self) -> None:
         factory = _make_factory()
-        info = factory.get_model_info(LanguageModelId.CLAUDE_V4_8_OPUS)
-        assert info is _OPUS_V4_8
+        assert factory.get_model_info(LanguageModelId.CLAUDE_V3_HAIKU) is not None
 
     def test_supported_models_listed(self) -> None:
-        factory = _make_factory()
-        models = factory.get_supported_models()
-        assert LanguageModelId.CLAUDE_V4_8_OPUS in models
-        assert len(models) == len(_LANGUAGE_MODEL_INFO)
+        assert (
+            LanguageModelId.CLAUDE_V5_5_OPUS in _make_factory().get_supported_models()
+        )
 
 
 class TestBaseBedrockWrapperTruncation:
-    def test_no_limits_returns_unchanged(self) -> None:
-        wrapper = BaseBedrockWrapper()
-        assert wrapper._truncate_text("abc", None, None, "doc") == "abc"
+    def test_no_limit_returns_unchanged(self) -> None:
+        assert BaseBedrockWrapper()._truncate_text("abc", None, "doc") == "abc"
 
     def test_char_truncation(self) -> None:
-        wrapper = BaseBedrockWrapper()
-        out = wrapper._truncate_text(
-            "abcdefghij", max_chars=4, max_tokens=None, text_type="doc"
-        )
-        assert out == "abcd"
-
-    def test_char_limit_not_exceeded_returns_unchanged(self) -> None:
-        wrapper = BaseBedrockWrapper()
-        out = wrapper._truncate_text(
-            "abc", max_chars=100, max_tokens=None, text_type="doc"
-        )
-        assert out == "abc"
-
-    def test_max_tokens_is_ignored_only_char_cap_applies(self) -> None:
-        # Embedding truncation is char-only now (Bedrock CountTokens doesn't
-        # support embedding models); max_tokens is accepted but not enforced.
-        wrapper = BaseBedrockWrapper()
-        out = wrapper._truncate_text(
-            "abcdefghij", max_chars=None, max_tokens=2, text_type="doc"
-        )
-        assert out == "abcdefghij"
+        assert BaseBedrockWrapper()._truncate_text("abcdefghij", 4, "doc") == "abcd"
 
 
 class TestFitText:
@@ -557,3 +338,78 @@ class TestFitText:
         # 35 chars / 3.5 = 10 est tokens: within a 20-token budget, over a 5-token one.
         assert factory._within_budget(LanguageModelId.CLAUDE_V3_HAIKU, "x" * 35, 20)
         assert not factory._within_budget(LanguageModelId.CLAUDE_V3_HAIKU, "x" * 35, 5)
+
+
+class TestGetModel:
+    def test_builds_converse_model_for_resolved_profile(self) -> None:
+        factory = _make_factory()
+        model = LanguageModelId.CLAUDE_V5_5_OPUS
+        factory.boto_session.client.return_value.list_inference_profiles.return_value = {
+            "inferenceProfileSummaries": [
+                {"inferenceProfileId": f"global.{model.value}"}
+            ]
+        }
+        llm = factory.get_model(model, thinking_effort="low")
+        assert llm.model_id == f"global.{model.value}"
+        assert llm.temperature is None
+        assert llm.additional_model_request_fields == {
+            "output_config": {"effort": "low"}
+        }
+
+
+class TestTruncationGuard:
+    """A response that stopped at max_tokens must raise, never be parsed."""
+
+    def _result(self, stop_reason: str):  # type: ignore[no-untyped-def]
+        from langchain_core.messages import AIMessage
+        from langchain_core.outputs import ChatGeneration, ChatResult
+
+        message = AIMessage(
+            content="partial", response_metadata={"stopReason": stop_reason}
+        )
+        return ChatResult(generations=[ChatGeneration(message=message)])
+
+    def test_max_tokens_stop_raises(self) -> None:
+        import pytest
+
+        from scholar_lens.src.utils.factories import (
+            OutputTruncatedError,
+            _raise_if_truncated,
+        )
+
+        with pytest.raises(OutputTruncatedError, match="max_tokens=64000"):
+            _raise_if_truncated(
+                self._result("max_tokens"), "anthropic.claude-opus-5-5", 64000
+            )
+        _raise_if_truncated(self._result("end_turn"), "m", 10)  # no error
+
+    async def test_model_raises_through_a_chain(self, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        import pytest
+        from langchain_aws import ChatBedrockConverse
+        from langchain_core.output_parsers import StrOutputParser
+
+        from scholar_lens.src.utils.factories import (
+            CheckedChatBedrockConverse,
+            OutputTruncatedError,
+        )
+
+        monkeypatch.setattr(
+            ChatBedrockConverse,
+            "_generate",
+            lambda self, messages, stop=None, run_manager=None, **kw: self_result,
+        )
+        self_result = self._result("max_tokens")
+        model = CheckedChatBedrockConverse(
+            model_id="anthropic.claude-opus-5-5",
+            region_name="us-west-2",
+            max_tokens=100,
+        )
+        chain = model | StrOutputParser()
+        with pytest.raises(OutputTruncatedError):
+            await chain.ainvoke("hi")
+
+    def test_truncation_is_not_retried(self) -> None:
+        from scholar_lens.src.utils.factories import OutputTruncatedError
+        from scholar_lens.src.utils.retry import _is_retryable
+
+        assert _is_retryable(OutputTruncatedError("x")) is False

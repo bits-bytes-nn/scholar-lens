@@ -24,10 +24,35 @@ HTML_URL = "https://example.com/papers/landing"
 class TestArxivIdDetection:
     @pytest.mark.parametrize(
         "value",
-        ["2401.06066", "2401.06066v1", "2401.06066v12", "1234.56789"],
+        [
+            "2401.06066",
+            "2401.06066v1",
+            "2401.06066v12",
+            "2312.56789",
+            "arXiv:2401.06066",
+            "hep-th/9901001",
+            "math.GT/0309136v2",
+        ],
     )
-    def test_modern_ids_recognised(self, value: str) -> None:
+    def test_ids_recognised(self, value: str) -> None:
         assert is_arxiv_id(value)
+
+    @pytest.mark.parametrize(
+        ("url", "expected"),
+        [
+            ("https://arxiv.org/abs/hep-th/9901001", "hep-th/9901001"),
+            ("https://arxiv.org:443/abs/2401.06066", "2401.06066"),
+            ("https://arxiv.org/pdf/2401.06066v2.pdf", "2401.06066v2"),
+            ("https://export.arxiv.org/abs/2401.06066", "2401.06066"),
+        ],
+    )
+    def test_ids_extracted_from_arxiv_urls(self, url: str, expected: str) -> None:
+        assert extract_arxiv_id_from_url(url) == expected
+
+    def test_legacy_id_source_id_is_path_safe(self) -> None:
+        source = resolve_paper_source("hep-th/9901001")
+        assert source.source_id == "hep-th_9901001"
+        assert source.arxiv_html_id == "hep-th/9901001"
 
     @pytest.mark.parametrize(
         "value",
@@ -35,7 +60,6 @@ class TestArxivIdDetection:
             "https://arxiv.org/abs/2401.06066",
             "https://example.com/foo.pdf",
             "not-an-id",
-            "math.GT/0309136",  # legacy form intentionally unsupported
             "",
         ],
     )
@@ -53,7 +77,7 @@ class TestExtractArxivIdFromUrl:
             ("https://arxiv.org/abs/2401.06066", "2401.06066"),
             ("https://arxiv.org/pdf/2401.06066v2.pdf", "2401.06066v2"),
             ("https://arxiv.org/html/2401.06066", "2401.06066"),
-            ("http://www.arxiv.org/abs/1234.56789v3", "1234.56789v3"),
+            ("http://www.arxiv.org/abs/2312.56789v3", "2312.56789v3"),
         ],
     )
     def test_extracts_from_arxiv_urls(self, url: str, expected: str) -> None:
@@ -153,6 +177,28 @@ class TestPdfUrlSourceDownload:
         src = PdfUrlSource(PDF_URL, session=requests.Session())
         with pytest.raises(NotAPdfError):
             src.download_pdf(tmp_papers_dir)
+
+    @responses.activate
+    def test_failed_head_with_html_error_page_falls_back_to_magic_probe(
+        self, tmp_papers_dir
+    ) -> None:
+        # Regression: HEAD 405 + an HTML error page used to reject a URL whose
+        # GET serves a real PDF.
+        responses.add(
+            responses.HEAD,
+            PDF_URL,
+            headers={"Content-Type": "text/html"},
+            status=405,
+        )
+        responses.add(
+            responses.GET,
+            PDF_URL,
+            body=b"%PDF-1.4 rest",
+            headers={"Content-Type": "application/pdf"},
+            status=200,
+        )
+        src = PdfUrlSource(PDF_URL, session=requests.Session())
+        src._assert_is_pdf()  # no NotAPdfError
 
     @responses.activate
     def test_redirect_to_internal_host_is_blocked(self, tmp_papers_dir) -> None:
@@ -335,3 +381,27 @@ class TestPdfUrlSourceSsrfPinning:
         src = PdfUrlSource(PDF_URL, session=session)
         assert src._session is session
         assert not isinstance(src._session.adapters["https://"], PinnedRequestsAdapter)
+
+
+class TestArxivIdRules:
+    @pytest.mark.parametrize(
+        "value,expected",
+        [
+            ("1412.6980", "1412.6980"),  # 4-digit sequence before 2015
+            ("2401.0606", None),  # 4 digits after 2015-01 is not an arXiv id
+            ("1412.69801", None),  # 5 digits before 2015-01 neither
+            ("arXiv:2106.09685v2", "2106.09685v2"),
+        ],
+    )
+    def test_sequence_length_follows_the_date(self, value, expected) -> None:  # type: ignore[no-untyped-def]
+        from scholar_lens.src.constants import normalize_arxiv_id
+
+        assert normalize_arxiv_id(value) == expected
+
+    def test_reference_urls_are_reduced_to_ids(self) -> None:
+        from scholar_lens.src.content_extractor import Citation
+
+        cite = Citation(
+            authors="Hu", title="LoRA", arxiv_id="https://arxiv.org/pdf/2106.09685.pdf"
+        )
+        assert cite.arxiv_id == "2106.09685"

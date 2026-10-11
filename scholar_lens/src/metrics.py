@@ -1,7 +1,7 @@
 """Token-usage accounting, cost estimation, and CloudWatch metric emission.
 
-The pipeline makes many Bedrock calls (especially the per-paragraph synthesis
-loop with Opus 4.8 + thinking). Without instrumentation this is the most
+The pipeline makes many Bedrock calls (especially the per-section synthesis
+loop). Without instrumentation this is the most
 expensive — and previously invisible — part of the system. This module adds:
 
 * :class:`TokenUsageTracker` — a LangChain callback that accumulates input/output
@@ -26,21 +26,13 @@ import boto3
 from langchain_core.callbacks import BaseCallbackHandler
 
 from .logger import logger
+from .utils.models import model_info_for_invoked_id
 
 METRICS_NAMESPACE = "ScholarLens"
 
-# Rough USD per 1K tokens by model family (input, output). Used only for an
-# *estimate* metric/log line — billing is authoritative. Tune as pricing changes.
-_DEFAULT_RATE = (0.003, 0.015)
-_COST_PER_1K: dict[str, tuple[float, float]] = {
-    "opus": (0.015, 0.075),
-    "sonnet": (0.003, 0.015),
-    "haiku": (0.0008, 0.004),
-    # Fable lists above Opus on Anthropic pricing. No Bedrock rate is recorded
-    # here, so reuse the top (Opus) tier rather than the Sonnet-rate default,
-    # which would under-report its spend and weaken the EstimatedCostUSD alarm.
-    "fable": (0.015, 0.075),
-}
+# USD per million tokens (input, output) for a model id missing from the
+# registry: the Opus 4.x list price, so an unknown model is not under-counted.
+_FALLBACK_PRICE_PER_MTOK = (5.0, 25.0)
 
 
 class TokenBudgetExceeded(RuntimeError):
@@ -55,6 +47,8 @@ class TokenUsageTracker(BaseCallbackHandler):
     output_tokens: int = 0
     call_count: int = 0
     per_model: dict[str, dict[str, int]] = field(default_factory=dict)
+    # Priced per call, so tiered (long-prompt) rates apply to the right calls.
+    cost_usd: float = 0.0
 
     @property
     def total_tokens(self) -> int:
@@ -71,14 +65,12 @@ class TokenUsageTracker(BaseCallbackHandler):
         bucket["input_tokens"] += in_tok
         bucket["output_tokens"] += out_tok
         bucket["calls"] += 1
+        self.cost_usd += call_cost_usd(model, in_tok, out_tok)
 
     def estimated_cost_usd(self) -> float:
-        total = 0.0
-        for model, usage in self.per_model.items():
-            rate_in, rate_out = _rate_for(model)
-            total += usage["input_tokens"] / 1000 * rate_in
-            total += usage["output_tokens"] / 1000 * rate_out
-        return round(total, 4)
+        """Estimated spend from list prices of the models actually called.
+        Bedrock bills at its own rates, so treat this as an estimate."""
+        return round(self.cost_usd, 4)
 
     def check_budget(self, max_total_tokens: int | None) -> None:
         """Raise :class:`TokenBudgetExceeded` if over the configured budget."""
@@ -162,12 +154,27 @@ def _extract_usage(response: Any) -> tuple[int, int, str]:  # noqa: ANN401
     return in_tok, out_tok, model
 
 
-def _rate_for(model_id: str) -> tuple[float, float]:
-    lowered = model_id.lower()
-    for family, rate in _COST_PER_1K.items():
-        if family in lowered:
-            return rate
-    return _DEFAULT_RATE
+def call_cost_usd(model_id: str, input_tokens: int, output_tokens: int) -> float:
+    """List-price cost of one call, honouring tiered long-prompt pricing."""
+    info = model_info_for_invoked_id(model_id)
+    price_in, price_out = price_per_mtok(model_id)
+    if (
+        info is not None
+        and info.long_prompt_threshold is not None
+        and info.long_prompt_price_per_mtok is not None
+        and input_tokens > info.long_prompt_threshold
+    ):
+        price_in, price_out = info.long_prompt_price_per_mtok
+    return input_tokens / 1e6 * price_in + output_tokens / 1e6 * price_out
+
+
+def price_per_mtok(model_id: str) -> tuple[float, float]:
+    """(input, output) USD per million tokens for an invoked model id."""
+    info = model_info_for_invoked_id(model_id)
+    if info is None:
+        logger.debug("No price for model '%s'; using the fallback rate.", model_id)
+        return _FALLBACK_PRICE_PER_MTOK
+    return info.input_price_per_mtok, info.output_price_per_mtok
 
 
 class MetricsEmitter:

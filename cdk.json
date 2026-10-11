@@ -1,5 +1,5 @@
 {
-    "app": "python3 scripts/deploy_infra.py",
+    "app": "poetry run python scripts/deploy_infra.py",
     "watch": {
         "include": [
             "**"

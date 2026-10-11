@@ -1,15 +1,34 @@
+"""Paper review workflow: plan → enrich → write + check → edit → finalize.
+
+1. **Plan** — one call reads the whole paper and returns a :class:`ReviewPlan`:
+   ordered sections with must-cover items, difficulty for a general DS/MLE
+   reader, prerequisites, concept ownership, figures and a glossary. Code then
+   normalizes it (:func:`normalize_plan`).
+2. **Enrich** — per section, citation summaries for the planned prerequisites
+   and code snippets where the plan asks for them; no extra LLM routing call.
+3. **Write + check** — each section is written from its brief, the article so
+   far and the glossary, then checked against the brief; drafts below the bar
+   (or with missing items) are revised from the best draft.
+4. **Edit** — one pass over the whole article returns targeted edits for
+   terminology, cross-section repetition, transitions and coverage gaps,
+   applied exact-match in code; a second round runs only for reported gaps.
+5. **Finalize** — subtitle, TL;DR and the closing assessment.
+"""
+
+from __future__ import annotations
+
+import html
 import re
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from pprint import pformat
-from typing import Any, Literal, TypedDict
+from typing import Any, NamedTuple
 
 import boto3
 import nltk
 from langchain_core.output_parsers import BaseOutputParser, StrOutputParser
-from langchain_core.runnables import Runnable, RunnableConfig
-from langgraph.graph import END, StateGraph
-from langgraph.graph.state import CompiledStateGraph
+from langchain_core.runnables import Runnable
+from nltk.tokenize.punkt import PunktTokenizer
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator
 
 from .citation_summarizer import CitationSummarizer
@@ -21,17 +40,43 @@ from .metrics import TokenBudgetGuard
 from .parser import Content, Figure
 from .prompts import (
     BasePrompt,
-    PaperAnalysisPrompt,
-    PaperEnrichmentPrompt,
-    PaperEvaluationPrompt,
+    PaperEditPrompt,
     PaperFinalizationPrompt,
-    PaperSynthesisPrompt,
+    PaperPlanningPrompt,
+    PaperSectionCheckPrompt,
+    PaperSectionPrompt,
+)
+from .review_plan import (
+    RANGE_PADDING,
+    PlanError,
+    ReviewPlan,
+    SourceText,
+    apply_edits,
+    approx_words,
+    article_ledger,
+    check_plan_shape,
+    concepts_owned_elsewhere,
+    ensure_section_heading,
+    figure_catalog,
+    marker_src,
+    normalize_plan,
+    number_sentences,
+    parse_edits,
+    parse_lines,
+    parse_plan,
+    previous_context,
+    render_brief,
+    render_closing_points,
+    render_coverage,
+    render_glossary,
+    render_outline,
+    section_source,
+    tag_body,
 )
 from .utils import (
     BedrockLanguageModelFactory,
     HTMLTagOutputParser,
     RetryableBase,
-    create_robust_xml_output_parser,
     is_affirmative,
     measure_execution_time,
     parse_quality_score,
@@ -46,6 +91,9 @@ ROOT_DIR: Path = (
 
 nltk.data.path.append(str(ROOT_DIR))
 
+_NO_CODEBASE = "(no code repository provided)"
+_TAG_EXPLANATION = "explanation"
+
 
 def _ensure_nltk_data() -> None:
     try:
@@ -53,17 +101,6 @@ def _ensure_nltk_data() -> None:
     except LookupError:
         logger.info("NLTK resource 'punkt_tab' not found. Downloading...")
         nltk.download("punkt_tab", download_dir=ROOT_DIR)
-
-
-class ExplainerConfig:
-    MAX_ITERS: int = 20
-    MAX_SYNTHESIS_ATTEMPTS: int = 3
-    MIN_QUALITY_SCORE: int = 70
-    RECURSION_LIMIT: int = 200
-    SEARCH_RESULTS_LIMIT: int = 10
-    # Hard cap on the per-section has_more continuation loop, so a model that
-    # keeps emitting has_more=y cannot loop (and bill) forever.
-    MAX_CONTINUATIONS: int = 8
 
 
 class Paper(BaseModel):
@@ -76,7 +113,6 @@ class Paper(BaseModel):
     content: Content
     attributes: Attributes
     citations: list[Citation] = Field(default_factory=list)
-    table_of_contents: dict[str, Any] = Field(default_factory=dict)
     updated: datetime | None = None
     abstract: str | None = None
     journal_ref: str | None = None
@@ -96,655 +132,599 @@ class Paper(BaseModel):
         return [HttpUrl(url) for url in v]
 
 
-class ExplainerState(TypedDict):
-    paper: Paper
-    paragraphs: list[str]
-    structure: dict[str, Any]
-    # Analyzer section metadata aligned 1:1 with `paragraphs` (same length/order).
-    aligned_sections: list[dict[str, Any]]
-    explanations: list[str]
+class ReviewText(NamedTuple):
+    """The generated review: body sections, TL;DR, closing assessment, and the
+    title translated into the output language (the post's subtitle)."""
+
+    body: str
     key_takeaways: str
-    current_index: int
-    citation_summaries: list[str] | None
-    code: list[dict[str, float | str]] | None
-    synthesis_attempts: int
-    quality_score: int
-    accumulated_feedback: list[str]
-    # Best (highest-scoring) draft seen for the current section across retries.
-    # A retried synthesis can score lower than an earlier attempt; we keep the
-    # best rather than blindly using the last (mirrors the tech-guide evaluator).
-    best_explanation: str
-    best_quality_score: int
+    closing: str
+    subtitle: str = ""
 
 
-class ExplainerGraph(RetryableBase, TokenBudgetGuard):
+@dataclass
+class SectionCheck:
+    score: int
+    missing: list[str] = field(default_factory=list)
+    feedback: str = ""
+
+    def passes(self, min_score: int) -> bool:
+        return self.score >= min_score and not self.missing
+
+    def better_than(self, other: SectionCheck | None) -> bool:
+        if other is None:
+            return True
+        return (self.score, -len(self.missing)) > (other.score, -len(other.missing))
+
+
+@dataclass
+class Enrichment:
+    citation_summaries: list[str] = field(default_factory=list)
+    code: list[dict[str, Any]] = field(default_factory=list)
+
+
+# Output ceiling for the planner and editor (whole-paper inputs, high effort).
+_WHOLE_PAPER_MAX_TOKENS = 128_000
+
+
+class PaperReviewer(RetryableBase, TokenBudgetGuard):
+    """Generates a :class:`ReviewText` for one :class:`Paper`."""
+
+    MAX_CONTINUATIONS = 4
+    MAX_EDITS = 40
+    MAX_REFERENCES = 300
+
     def __init__(
         self,
         paper: Paper,
-        paper_analysis_model_id: LanguageModelId,
-        paper_enrichment_model_id: LanguageModelId,
-        paper_finalization_model_id: LanguageModelId,
-        paper_evaluation_model_id: LanguageModelId,
-        paper_synthesis_model_id: LanguageModelId,
-        output_fixing_model_id: LanguageModelId,
+        *,
+        planning_model_id: LanguageModelId,
+        synthesis_model_id: LanguageModelId,
+        evaluation_model_id: LanguageModelId,
+        finalization_model_id: LanguageModelId,
         boto_session: boto3.Session,
         citation_summarizer: CitationSummarizer,
         code_retriever: CodeRetriever | None = None,
-        translation_guideline: list[list[dict[str, str]]] | None = None,
-        max_results: int = ExplainerConfig.SEARCH_RESULTS_LIMIT,
-        max_iters: int = ExplainerConfig.MAX_ITERS,
-        max_synthesis_attempts: int = ExplainerConfig.MAX_SYNTHESIS_ATTEMPTS,
-        min_quality_score: int = ExplainerConfig.MIN_QUALITY_SCORE,
-        enable_output_fixing: bool = False,
+        translation_guideline: list[dict[str, Any]] | None = None,
+        language: str = "Korean",
+        min_quality_score: int = 70,
+        max_synthesis_attempts: int = 3,
+        max_sections: int = 20,
+        max_edit_rounds: int = 2,
+        thinking_effort: str = "medium",
+        planning_effort: str = "high",
         evaluator_enable_thinking: bool = False,
         synthesizer_enable_thinking: bool = False,
-        thinking_effort: str = "medium",
-        language: str = "Korean",
+        max_code_results: int = 8,
         callbacks: list[Any] | None = None,
         max_total_tokens: int | None = None,
-        max_continuations: int = ExplainerConfig.MAX_CONTINUATIONS,
     ) -> None:
         _ensure_nltk_data()
-
         self.paper = paper
         self.language = language
         self.callbacks = callbacks or []
-        self.max_continuations = max_continuations
-        # Locate a token tracker among the callbacks for budget enforcement.
         self._init_token_budget(self.callbacks, max_total_tokens)
         self.citation_summarizer = citation_summarizer
         self.code_retriever = code_retriever
         self.translation_guideline = translation_guideline or []
-        self.max_results = max_results
-        self.max_iters = max_iters
-        self.max_synthesis_attempts = max_synthesis_attempts
         self.min_quality_score = min_quality_score
-
+        self.max_synthesis_attempts = max(1, max_synthesis_attempts)
+        self.max_sections = max_sections
+        self.max_edit_rounds = max_edit_rounds
+        self.max_code_results = max_code_results
+        self.planning_model_id = planning_model_id
         self.llm_factory = BedrockLanguageModelFactory(boto_session=boto_session)
-        self._initialize_chains(
-            paper_analysis_model_id,
-            paper_enrichment_model_id,
-            paper_finalization_model_id,
-            paper_evaluation_model_id,
-            paper_synthesis_model_id,
-            output_fixing_model_id,
-            enable_output_fixing,
-            evaluator_enable_thinking=evaluator_enable_thinking,
-            synthesizer_enable_thinking=synthesizer_enable_thinking,
-            thinking_effort=thinking_effort,
-        )
-        self.workflow = self._create_workflow()
 
-    def _initialize_chains(
-        self,
-        analysis_id: LanguageModelId,
-        enrichment_id: LanguageModelId,
-        finalization_id: LanguageModelId,
-        evaluation_id: LanguageModelId,
-        synthesis_id: LanguageModelId,
-        output_fixing_model_id: LanguageModelId,
-        enable_output_fixing: bool,
-        *,
-        evaluator_enable_thinking: bool = False,
-        synthesizer_enable_thinking: bool = False,
-        thinking_effort: str = "medium",
-    ) -> None:
-        robust_xml_output_parser = create_robust_xml_output_parser(
-            self.llm_factory,
-            enable_output_fixing=enable_output_fixing,
-            output_fixing_model_id=output_fixing_model_id,
-        )
-        # The analyzer is the one node that legitimately receives the whole
-        # paper, so it gets the 1M window and its input is fitted to the model's
-        # budget at call time (see analyze_paper).
-        self.analysis_model_id = analysis_id
-        self.analyzer = self._create_chain(
-            PaperAnalysisPrompt,
-            analysis_id,
-            robust_xml_output_parser,
+        self.planner = self._chain(
+            PaperPlanningPrompt,
+            planning_model_id,
+            StrOutputParser(),
+            enable_thinking=True,
+            thinking_effort=planning_effort,
             supports_1m_context_window=True,
+            # Whole-paper calls with long thinking: allow the model's full
+            # output budget (capped to its maximum by the factory).
+            max_tokens=_WHOLE_PAPER_MAX_TOKENS,
         )
-        self.enricher = self._create_chain(
-            PaperEnrichmentPrompt,
-            enrichment_id,
-            HTMLTagOutputParser(tag_names=PaperEnrichmentPrompt.output_variables),
-        )
-        self.finalizer = self._create_chain(
-            PaperFinalizationPrompt,
-            finalization_id,
-            HTMLTagOutputParser(tag_names=PaperFinalizationPrompt.output_variables),
-        )
-        self.evaluator = self._create_chain(
-            PaperEvaluationPrompt,
-            evaluation_id,
-            HTMLTagOutputParser(tag_names=PaperEvaluationPrompt.output_variables),
-            enable_thinking=evaluator_enable_thinking,
-            thinking_effort=thinking_effort,
-        )
-        self.synthesizer = self._create_chain(
-            PaperSynthesisPrompt,
-            synthesis_id,
+        self.writer = self._chain(
+            PaperSectionPrompt,
+            synthesis_model_id,
             StrOutputParser(),
             enable_thinking=synthesizer_enable_thinking,
             thinking_effort=thinking_effort,
             supports_1m_context_window=True,
         )
+        self.checker = self._chain(
+            PaperSectionCheckPrompt,
+            evaluation_model_id,
+            HTMLTagOutputParser(tag_names=PaperSectionCheckPrompt.output_variables),
+            enable_thinking=evaluator_enable_thinking,
+            thinking_effort=thinking_effort,
+        )
+        # Raw text: edits are parsed verbatim (LaTeX backslashes, `&`).
+        self.editor = self._chain(
+            PaperEditPrompt,
+            planning_model_id,
+            StrOutputParser(),
+            enable_thinking=True,
+            thinking_effort=planning_effort,
+            supports_1m_context_window=True,
+            # Whole-paper calls with long thinking: allow the model's full
+            # output budget (capped to its maximum by the factory).
+            max_tokens=_WHOLE_PAPER_MAX_TOKENS,
+        )
+        self.finalizer = self._chain(
+            PaperFinalizationPrompt,
+            finalization_model_id,
+            HTMLTagOutputParser(tag_names=PaperFinalizationPrompt.output_variables),
+            supports_1m_context_window=True,
+        )
 
-    def _create_chain(
+    def _chain(
         self,
         prompt_cls: type[BasePrompt],
         model_id: LanguageModelId,
         output_parser: BaseOutputParser,
         **kwargs: Any,
     ) -> Runnable:
-        kwargs.setdefault("callbacks", self.callbacks or None)
-        llm = self.llm_factory.get_model(model_id, temperature=0.0, **kwargs)
+        llm = self.llm_factory.get_model(
+            model_id, temperature=0.0, callbacks=self.callbacks or None, **kwargs
+        )
         return prompt_cls.get_prompt() | llm | output_parser
 
-    def _create_workflow(self) -> CompiledStateGraph:
-        def check_continue_node(state: ExplainerState) -> dict[str, Any]:
-            # The evaluate loop has exited for this section. Commit the best-scoring
-            # draft seen across retries (the last synthesis may have scored lower
-            # than an earlier attempt), then reset the per-section best trackers.
-            best = state.get("best_explanation", "")
-            current_index = state["current_index"]
-            explanations = state["explanations"]
-            if best and 0 <= current_index < len(explanations):
-                if explanations[current_index] != best:
-                    explanations = explanations.copy()
-                    explanations[current_index] = best
-                    logger.info(
-                        "Section %d: kept best draft (score %d) over the last "
-                        "synthesis.",
-                        current_index,
-                        state.get("best_quality_score", 0),
-                    )
-                    return {
-                        "explanations": explanations,
-                        "best_explanation": "",
-                        "best_quality_score": -1,
-                    }
-            return {"best_explanation": "", "best_quality_score": -1}
+    @RetryableBase._retry("paper_review_llm_call")
+    async def _call(self, chain: Runnable, payload: dict[str, Any]) -> Any:
+        self._enforce_token_budget()
+        return await chain.ainvoke(payload)
 
-        def decide_next_step(
-            state: ExplainerState,
-        ) -> Literal["go_finalize", "go_update_index"]:
-            if state["current_index"] >= len(state["paragraphs"]) - 1:
-                logger.info("Processing complete - reached final paragraph")
-                return "go_finalize"
-            if state["current_index"] >= self.max_iters - 1:
-                logger.warning("Processing stopped - maximum iterations reached")
-                return "go_finalize"
-            return "go_update_index"
+    # ---- inputs -----------------------------------------------------------
 
-        def should_retry_synthesis(
-            state: ExplainerState,
-        ) -> Literal["go_continue", "go_retry_synthesis"]:
-            if state["synthesis_attempts"] >= self.max_synthesis_attempts:
-                logger.warning(
-                    "Maximum synthesis attempts reached (Quality score: %d) - continuing",
-                    state["quality_score"],
+    def _source(self) -> SourceText:
+        """The paper text split into anchorable units (sentences; headings,
+        tables, code and display math kept whole). Prompt-fence tags are
+        defanged once here: every downstream fence quotes this text."""
+        text = neutralize_prompt_tags(self.paper.content.text)
+        tokenizer = PunktTokenizer("english")
+        return SourceText.from_text(
+            text, lambda chunk: list(tokenizer.span_tokenize(chunk))
+        )
+
+    def _references(self) -> tuple[str, dict[str, str]]:
+        """Reference list shown to the planner, and ``R<n>`` → identifier
+        (arXiv id when known, else the title) for the citation summarizer."""
+        lines, ids = [], {}
+        for i, citation in enumerate(self.paper.citations[: self.MAX_REFERENCES], 1):
+            ref = f"R{i}"
+            ids[ref] = citation.arxiv_id or citation.title
+            year = f" ({citation.year})" if citation.year else ""
+            arxiv = f" [arXiv:{citation.arxiv_id}]" if citation.arxiv_id else ""
+            lines.append(f"{ref}: {citation.title} — {citation.authors}{year}{arxiv}")
+        return neutralize_prompt_tags("\n".join(lines) or "- none"), ids
+
+    def _guideline(self) -> str:
+        return str(self.translation_guideline or "")
+
+    # ---- stages -----------------------------------------------------------
+
+    async def _plan(
+        self, source: SourceText, figures: list[tuple[str, str]]
+    ) -> ReviewPlan:
+        references, _ = self._references()
+        numbered = self.llm_factory.fit_text(
+            self.planning_model_id, number_sentences(source), label="review plan"
+        )
+        payload = {
+            "title": self.paper.title,
+            "numbered_sentences": numbered,
+            "figures": "\n".join(f"{fid}: {marker}" for fid, marker in figures)
+            or "- none",
+            "references": references,
+            "codebase_summary": neutralize_prompt_tags(
+                self.paper.codebase_summary or _NO_CODEBASE
+            ),
+            "translation_guideline": self._guideline(),
+            "repair_note": "",
+            "language": self.language,
+        }
+        figure_ids = {fid: marker_src(marker) for fid, marker in figures}
+        last_error: PlanError | None = None
+        for attempt in range(2):
+            raw = await self._call(self.planner, payload)
+            try:
+                plan = parse_plan(raw)
+                check_plan_shape(plan, sentence_count=len(source))
+            except PlanError as e:
+                last_error = e
+                logger.warning("Review plan unusable (attempt %d): %s", attempt + 1, e)
+                payload["repair_note"] = (
+                    "Your previous plan could not be used: "
+                    f"{str(e)[:500]}. Return the complete plan again as valid "
+                    "JSON inside <plan> tags, following the schema exactly."
                 )
-                return "go_continue"
-            if state["quality_score"] >= self.min_quality_score:
-                logger.info(
-                    "Quality score %d meets threshold - continuing",
-                    state["quality_score"],
-                )
-                return "go_continue"
+                continue
+            plan = normalize_plan(
+                plan,
+                sentence_count=len(source),
+                figure_ids=figure_ids,
+                max_sections=self.max_sections,
+                closing_ranges=source.closing_ranges(),
+            )
             logger.info(
-                "Quality score %d below threshold - retrying synthesis",
-                state["quality_score"],
+                "Review plan: %d sections (%s).",
+                len(plan.sections),
+                ", ".join(s.difficulty for s in plan.sections),
             )
-            return "go_retry_synthesis"
+            return plan
+        raise PlanError(f"The planner did not return a usable plan: {last_error}")
 
-        def update_index_node(state: ExplainerState) -> dict[str, Any]:
-            return {
-                "current_index": state["current_index"] + 1,
-                "synthesis_attempts": 0,
-                "quality_score": 100,
-                "accumulated_feedback": [],
-                "best_explanation": "",
-                "best_quality_score": -1,
-            }
-
-        workflow = StateGraph(ExplainerState)
-
-        workflow.add_node("analyze", self.analyze_paper)
-        workflow.add_node("enrich", self.enrich_paper)
-        workflow.add_node("finalize", self.finalize_paper)
-        workflow.add_node("evaluate", self.evaluate_paper)
-        workflow.add_node("synthesize", self.synthesize_paper)
-        workflow.add_node("check_continue", check_continue_node)
-        workflow.add_node("update_index", update_index_node)
-
-        workflow.set_entry_point("analyze")
-
-        workflow.add_edge("analyze", "enrich")
-        workflow.add_edge("enrich", "synthesize")
-        workflow.add_edge("synthesize", "evaluate")
-
-        workflow.add_conditional_edges(
-            "evaluate",
-            should_retry_synthesis,
-            {
-                "go_retry_synthesis": "synthesize",
-                "go_continue": "check_continue",
-            },
-        )
-
-        workflow.add_conditional_edges(
-            "check_continue",
-            decide_next_step,
-            {
-                "go_update_index": "update_index",
-                "go_finalize": "finalize",
-            },
-        )
-
-        workflow.add_edge("update_index", "enrich")
-        workflow.add_edge("finalize", END)
-
-        return workflow.compile()
-
-    @RetryableBase._retry("paper_analysis")
-    def analyze_paper(self, state: ExplainerState) -> dict[str, Any]:
-        self._enforce_token_budget()
-        # Defang prompt-fence tags in the untrusted paper body once, at the single
-        # point it enters the pipeline: the derived sentences/paragraphs flow into
-        # every downstream fence (numbered_sentences, current_content, text, …), so
-        # a literal "</paper>"/"</current_content>" in the source can't break out.
-        text = neutralize_prompt_tags(state["paper"].content.text)
-        sentences = nltk.sent_tokenize(text)
-
-        numbered_sentences_str = "\n".join(f"{i}: {s}" for i, s in enumerate(sentences))
-        # Fit to the analyzer model's context window (exact, via CountTokens) so a
-        # very long paper drops trailing sentences instead of failing the call;
-        # the returned indices only reference sentences that were shown.
-        numbered_sentences_str = self.llm_factory.fit_text(
-            self.analysis_model_id, numbered_sentences_str, label="paper structure"
-        )
-
-        structure = self.analyzer.invoke({"numbered_sentences": numbered_sentences_str})
-
-        paragraphs, aligned_sections = self._extract_paragraphs_by_indices(
-            sentences, structure
-        )
-
-        logger.info(
-            "Extracted %d paragraphs based on sentence indices.",
-            len(paragraphs),
-        )
-        logger.debug("Structure: '%s'", pformat(structure))
-
-        return {
-            "paragraphs": paragraphs,
-            "structure": structure,
-            # Section metadata aligned 1:1 with `paragraphs` (same length, same
-            # order). Built alongside the paragraphs so reordered/duplicated/
-            # out-of-bounds analyzer indices can't misalign the two lists.
-            "aligned_sections": aligned_sections,
-            "explanations": [],
-            "synthesis_attempts": 0,
-            "quality_score": 100,
-            "accumulated_feedback": [],
-            "best_explanation": "",
-            "best_quality_score": -1,
-        }
-
-    _EMPTY_SECTION: dict[str, Any] = {
-        "section": [{"section_title": "", "key_points": []}]
-    }
-
-    @staticmethod
-    def _extract_paragraphs_by_indices(
-        sentences: list[str], structure: dict[str, Any]
-    ) -> tuple[list[str], list[dict[str, Any]]]:
-        """Slice the paper into paragraphs and return per-paragraph section meta.
-
-        Returns ``(paragraphs, aligned_sections)`` where the two lists are the
-        same length and ``aligned_sections[i]`` is the analyzer section object
-        that owns ``paragraphs[i]``. We pair each valid start index with its
-        section object BEFORE sorting/deduping, so reordered, duplicated, or
-        out-of-bounds analyzer indices can never misalign the metadata from the
-        text (the previous positional ``paper_structure[i - offset]`` lookup broke
-        whenever the raw sections weren't already ascending, unique, and in-range).
-        """
-        pairs: list[tuple[int, dict[str, Any]]] = []
-        for section in structure.get("paper_structure", []):
-            try:
-                start_num_str = section["section"][0]["starting_sentence_number"]
-                start_index = int(start_num_str)
-                if 0 <= start_index < len(sentences):
-                    pairs.append((start_index, section))
-                else:
-                    logger.warning(
-                        "LLM returned an out-of-bounds sentence index: %d. Skipping.",
-                        start_index,
-                    )
-            except (ValueError, KeyError, IndexError) as e:
-                logger.warning(
-                    "Could not parse starting_sentence_number from section: '%s'. Error: %s",
-                    section,
-                    e,
-                )
-
-        if not pairs:
-            logger.warning(
-                "No valid section start indices found. Treating entire text as one section."
-            )
-            return [" ".join(sentences)], [ExplainerGraph._EMPTY_SECTION]
-
-        # Sort by start index and drop duplicate starts (keep the first section
-        # that claimed each index), keeping the section object paired throughout.
-        pairs.sort(key=lambda p: p[0])
-        deduped: list[tuple[int, dict[str, Any]]] = []
-        seen_starts: set[int] = set()
-        for start_index, section in pairs:
-            if start_index not in seen_starts:
-                seen_starts.add(start_index)
-                deduped.append((start_index, section))
-
-        # Prepend a synthetic index-0 section (empty metadata) when the first real
-        # section doesn't start at sentence 0, so the opening text is still covered.
-        if deduped[0][0] != 0:
-            deduped.insert(0, (0, ExplainerGraph._EMPTY_SECTION))
-            logger.debug("Prepended sentence index 0 to ensure full coverage.")
-
-        paragraphs: list[str] = []
-        aligned_sections: list[dict[str, Any]] = []
-        for i, (start_idx, section) in enumerate(deduped):
-            end_idx = deduped[i + 1][0] if i + 1 < len(deduped) else len(sentences)
-            paragraphs.append(" ".join(sentences[start_idx:end_idx]))
-            aligned_sections.append(section)
-
-        return paragraphs, aligned_sections
-
-    @staticmethod
-    def _get_section_analysis(
-        state: ExplainerState, current_index: int
-    ) -> dict[str, Any]:
-        """Return the section metadata aligned with paragraph ``current_index``.
-
-        ``aligned_sections`` is built 1:1 with ``paragraphs`` in
-        :meth:`_extract_paragraphs_by_indices`, so this is a direct positional
-        lookup with no offset arithmetic.
-        """
-        aligned_sections = state.get("aligned_sections", [])
-        if 0 <= current_index < len(aligned_sections):
-            return aligned_sections[current_index]
-        logger.info(
-            "No matching section analysis for paragraph index %d; using an empty "
-            "section title.",
-            current_index,
-        )
-        # Empty title rather than a fabricated "Introduction" (which both
-        # mislabels mid-paper sections and leaks an English word into a
-        # non-English review). The synthesizer derives the heading itself.
-        return ExplainerGraph._EMPTY_SECTION
-
-    @RetryableBase._retry("paper_enrichment")
-    async def enrich_paper(self, state: ExplainerState) -> dict[str, Any]:
-        self._enforce_token_budget()
-        current_index = state["current_index"]
-        current_paragraph = state["paragraphs"][current_index]
-        current_analysis = self._get_section_analysis(state, current_index)
-        citations_text = "\n".join(
-            str(citation) for citation in state["paper"].citations
-        )
-
-        # current_paragraph is already defanged (neutralized in analyze_paper);
-        # citations and the codebase summary are also untrusted, so defang them too.
-        result = await self.enricher.ainvoke(
-            {
-                "text": current_paragraph,
-                "analysis": current_analysis,
-                "citations": neutralize_prompt_tags(citations_text),
-                "codebase_summary": neutralize_prompt_tags(
-                    state["paper"].codebase_summary or "No codebase summary available"
-                ),
-            }
-        )
-
-        reference_identifiers = self._parse_reference_identifiers(
-            result.get("reference_identifiers", "")
-        )
-        logger.debug("Reference identifiers: '%s'", reference_identifiers)
-        should_search_code = is_affirmative(result.get("should_search_code"))
-        logger.debug("Should search code: '%s'", should_search_code)
-
-        citation_summaries = None
-        if reference_identifiers:
-            try:
-                citation_summaries = await self.citation_summarizer.summarize(
-                    reference_identifiers, current_paragraph
-                )
-            except Exception as e:
-                # Degrade gracefully (mirrors the code-search path below): a
-                # citation failure — e.g. an arXiv 429 escaping the summarizer —
-                # must not crash the whole review.
-                logger.warning("Failed to summarize citations: '%s'", str(e))
-
-        code = None
-        if should_search_code and self.code_retriever:
-            try:
-                code = await self.code_retriever.search_similar_code(
-                    current_paragraph, k=self.max_results
-                )
-            except Exception as e:
-                logger.warning("Failed to search code: '%s'", str(e))
-
-        if citation_summaries:
-            logger.debug("Citation summaries: '%s'", pformat(citation_summaries))
-        if code:
-            logger.info("Found %d code snippets", len(code))
-            logger.debug("Code: '%s'", pformat(code))
-
-        return {
-            "citation_summaries": citation_summaries,
-            "code": code,
-        }
-
-    @RetryableBase._retry("paper_finalization")
-    def finalize_paper(self, state: ExplainerState) -> dict:
-        self._enforce_token_budget()
-        result = self.finalizer.invoke(
-            {
-                "explanation": "\n".join(state["explanations"]),
-                "language": self.language,
-            }
-        )
-        key_takeaways_str = result.get("key_takeaways", "").strip()
-        return {"key_takeaways": key_takeaways_str}
-
-    @staticmethod
-    def _parse_reference_identifiers(reference_identifiers: str) -> list[str]:
-        return [
-            line.strip() for line in reference_identifiers.splitlines() if line.strip()
+    async def _enrich(
+        self, plan: ReviewPlan, index: int, source: str, reference_ids: dict[str, str]
+    ) -> Enrichment:
+        section = plan.sections[index]
+        enrichment = Enrichment()
+        identifiers = [
+            reference_ids[p.reference.strip()]
+            for p in section.prerequisites
+            if p.reference and p.reference.strip() in reference_ids
         ]
-
-    @RetryableBase._retry("paper_evaluation")
-    def evaluate_paper(self, state: ExplainerState) -> dict[str, Any]:
-        self._enforce_token_budget()
-        current_index = state["current_index"]
-        current_explanation = state["explanations"][current_index]
-        current_paragraph = state["paragraphs"][current_index]
-        section_data = self._get_section_analysis(state, current_index)
-        current_analysis = section_data.get("section", [])
-
-        accumulated_feedback = state["accumulated_feedback"].copy()
-
-        if not current_explanation.strip():
-            feedback = (
-                "The generated explanation was empty or could not be processed. "
-                "Produce a more concise explanation for this section."
-            )
-            accumulated_feedback.append(feedback)
-            logger.warning(
-                "Empty current_paragraph detected. Adding length reduction feedback."
-            )
-
-            return {
-                "accumulated_feedback": accumulated_feedback,
-                "quality_score": 0,
-                "synthesis_attempts": state["synthesis_attempts"] + 1,
-            }
-
-        result = self.evaluator.invoke(
-            {
-                "current_content": current_paragraph,
-                "current_explanation": current_explanation,
-                "table_of_contents": str(state["paper"].table_of_contents or {}),
-                "citation_summaries": str(state.get("citation_summaries") or []),
-                "code": str(state.get("code") or []),
-                "analysis": current_analysis,
-                "translation_guideline": str(self.translation_guideline),
-                "language": self.language,
-            }
-        )
-
-        if feedback := result.get("improvement_feedback"):
-            accumulated_feedback.append(feedback)
-            logger.debug("Improvement feedback: '%s'", feedback)
-
-        quality_score = parse_quality_score(result.get("quality_score"))
-
-        # Keep the best-scoring draft across retries: a lower-scoring rewrite must
-        # not silently replace a better earlier attempt. On a strict improvement
-        # (or the first attempt) adopt the current draft as the best.
-        update: dict[str, Any] = {
-            "accumulated_feedback": accumulated_feedback,
-            "quality_score": quality_score,
-            "synthesis_attempts": state["synthesis_attempts"] + 1,
-        }
-        if quality_score > state.get("best_quality_score", -1):
-            update["best_explanation"] = current_explanation
-            update["best_quality_score"] = quality_score
-        return update
-
-    def synthesize_paper(self, state: ExplainerState) -> dict[str, Any]:
-        current_index = state["current_index"]
-        current_paragraph = state["paragraphs"][current_index]
-        explanations = state["explanations"].copy()
-
-        while len(explanations) <= current_index:
-            explanations.append("")
-
-        previous_explanation = "\n".join(explanations[:current_index])
-        section_data = self._get_section_analysis(state, current_index)
-        analysis = section_data.get("section", [])
-        final_explanation_for_paragraph = ""
-
-        logger.info(
-            "Synthesizing paper... (index: %d, attempt: %d)",
-            current_index,
-            state["synthesis_attempts"] + 1,
-        )
-
-        for continuation in range(self.max_continuations):
-            self._enforce_token_budget()
-            improvement_feedback = "\n".join(state["accumulated_feedback"])
-
-            result = self._synthesize_paper(
-                current_paragraph=current_paragraph,
-                previous_explanation=previous_explanation,
-                current_explanation=final_explanation_for_paragraph,
-                table_of_contents=state["paper"].table_of_contents or {},
-                citation_summaries=state.get("citation_summaries"),
-                code=state.get("code"),
-                analysis=analysis,
-                improvement_feedback=improvement_feedback,
-            )
-
-            logger.debug("Synthesized chunk:\n%s", result["explanation"])
-
-            if explanation_chunk := result.get("explanation", "").strip():
-                final_explanation_for_paragraph += explanation_chunk + "\n"
-
-            if not is_affirmative(result.get("has_more")):
-                break
-            if continuation == self.max_continuations - 1:
-                logger.warning(
-                    "Reached max continuations (%d) for section %d; stopping.",
-                    self.max_continuations,
-                    current_index,
+        if identifiers:
+            try:
+                summaries = await self.citation_summarizer.summarize(
+                    list(dict.fromkeys(identifiers)), source
                 )
+                enrichment.citation_summaries = [
+                    s for s in summaries if CitationSummarizer.FAILURE_STRING not in s
+                ]
+            except Exception as e:  # noqa: BLE001 - supplementary input
+                logger.warning(
+                    "Citation summaries failed for '%s': %s", section.title, e
+                )
+        if section.needs_code and self.code_retriever is not None:
+            try:
+                enrichment.code = await self.code_retriever.search_similar_code(
+                    source, k=self.max_code_results
+                )
+            except Exception as e:  # noqa: BLE001 - supplementary input
+                logger.warning("Code search failed for '%s': %s", section.title, e)
+        return enrichment
 
-        explanations[current_index] = final_explanation_for_paragraph.strip()
-
-        # Do NOT reset citation_summaries/code here. This node is followed by
-        # `evaluate` (which scores the draft against those same references) and,
-        # on a low score, a retry that re-enters this node — both need the
-        # enrichment context. The next section's `enrich` unconditionally
-        # overwrites both keys, so a reset here is redundant as well as harmful.
-        return {"explanations": explanations}
-
-    @RetryableBase._retry("paper_synthesis")
-    def _synthesize_paper(
+    async def _write(
         self,
+        base: dict[str, Any],
+        title: str,
         *,
-        current_paragraph: str,
-        previous_explanation: str,
-        current_explanation: str,
-        table_of_contents: dict[str, Any],
-        citation_summaries: list[str] | None,
-        code: list[dict[str, float | str]] | None,
-        analysis: dict[str, Any],
-        improvement_feedback: str,
-    ) -> dict[str, str]:
-        result = self.synthesizer.invoke(
-            {
-                "current_content": current_paragraph,
-                "previous_explanation": previous_explanation,
-                "current_explanation": current_explanation,
-                "table_of_contents": str(table_of_contents),
-                "citation_summaries": str(citation_summaries or []),
-                "code": str(code or []),
-                "analysis": analysis,
-                "translation_guideline": str(self.translation_guideline),
-                "improvement_feedback": improvement_feedback,
-                "language": self.language,
-            }
-        )
-        has_more_match = re.search(r"<has_more>(.*?)</has_more>", result, re.DOTALL)
-        explanation_match = re.search(
-            r"<explanation>(.*?)</explanation>", result, re.DOTALL
-        )
-        if explanation_match:
-            explanation = explanation_match.group(1).strip()
-        else:
-            # The model omitted the wrapper tag — don't drop the whole chunk; use
-            # the raw output minus any has_more tag so content isn't silently lost.
-            explanation = re.sub(
-                r"<has_more>.*?</has_more>", "", result, flags=re.DOTALL
-            ).strip()
+        draft_to_revise: str = "",
+        feedback: str = "",
+    ) -> tuple[str, list[str]]:
+        """One draft of a section, following has_more continuations; also the
+        must-cover items the writer reports the source cannot support."""
+        written, missing_source = "", []
+        for _ in range(self.MAX_CONTINUATIONS):
+            raw = await self._call(
+                self.writer,
+                {
+                    **base,
+                    "current_explanation": written,
+                    "draft_to_revise": draft_to_revise,
+                    "improvement_feedback": feedback,
+                },
+            )
+            chunk, has_more = _split_writer_output(raw)
+            missing_source += parse_lines(tag_body(raw, "missing_source"))
+            if written:
+                chunk = _strip_repeated_heading(chunk, title)
+            if chunk:
+                written = f"{written}\n\n{chunk}".strip()
+            if not has_more:
+                break
+        return written, list(dict.fromkeys(missing_source))
 
-        return {
-            "explanation": explanation,
-            "has_more": has_more_match.group(1).strip() if has_more_match else "n",
+    async def _check(
+        self,
+        base: dict[str, Any],
+        draft: str,
+        target_words: int,
+        difficulty: str,
+        unsupported: list[str],
+    ) -> SectionCheck:
+        result = await self._call(
+            self.checker,
+            {
+                "section_brief": base["section_brief"],
+                "source_text": base["source_text"],
+                "owned_elsewhere": base["owned_elsewhere"],
+                "already_in_article": base["already_in_article"],
+                "glossary": base["glossary"],
+                "length_report": (
+                    f"Draft: about {approx_words(draft)} English-word equivalents. "
+                    f"Target: about {target_words} for a {difficulty} section."
+                ),
+                "citation_summaries": base["citation_summaries"],
+                "code": base["code"],
+                "draft": draft,
+                "unsupported_items": "\n".join(f"- {i}" for i in unsupported)
+                or "- none",
+                "language": self.language,
+            },
+        )
+        return SectionCheck(
+            score=parse_quality_score(result.get("quality_score")),
+            missing=parse_lines(result.get("missing_items")),
+            feedback=(result.get("improvement_feedback") or "").strip(),
+        )
+
+    async def _section(
+        self,
+        plan: ReviewPlan,
+        index: int,
+        source: str,
+        enrichment: Enrichment,
+        previous: list[str],
+        figure_markers: dict[str, str],
+    ) -> str:
+        section = plan.sections[index]
+        base = {
+            "plan_outline": render_outline(plan),
+            "section_brief": render_brief(plan, index, figure_markers),
+            "source_text": source or "(no direct source text; see the brief)",
+            "citation_summaries": "\n\n".join(enrichment.citation_summaries)
+            or "- none",
+            "code": render_code(enrichment.code),
+            "glossary": render_glossary(plan),
+            "owned_elsewhere": concepts_owned_elsewhere(plan, index),
+            "already_in_article": article_ledger(previous),
+            "translation_guideline": self._guideline(),
+            "previous_sections": previous_context(previous),
+            "language": self.language,
         }
+        best_draft, best_check = "", None
+        draft_to_revise, feedback = "", ""
+        for attempt in range(1, self.max_synthesis_attempts + 1):
+            draft, missing_source = await self._write(
+                base, section.title, draft_to_revise=draft_to_revise, feedback=feedback
+            )
+            if not draft:
+                logger.warning(
+                    "Section '%s': empty draft (attempt %d).", section.title, attempt
+                )
+                feedback = "The previous draft was empty. Write the full section."
+                continue
+            check = await self._check(
+                base, draft, section.target_words, section.difficulty, missing_source
+            )
+            # Items the source cannot support are not the writer's to fix.
+            check.missing = _without(check.missing, missing_source)
+            logger.info(
+                "Section %d '%s' attempt %d: score %d, %d missing item(s).",
+                index + 1,
+                section.title,
+                attempt,
+                check.score,
+                len(check.missing),
+            )
+            if check.better_than(best_check):
+                best_draft, best_check = draft, check
+            if check.passes(self.min_quality_score):
+                break
+            draft_to_revise = best_draft
+            feedback = _revision_feedback(best_check)
+        return ensure_section_heading(best_draft, section.title) if best_draft else ""
+
+    async def _edit(self, plan: ReviewPlan, article: str, paper_text: str) -> str:
+        round_note = ""
+        for round_number in range(1, self.max_edit_rounds + 1):
+            reserve = len(article) // 2 + 40_000
+            raw = await self._call(
+                self.editor,
+                {
+                    "article": article,
+                    "paper_text": self.llm_factory.fit_text(
+                        self.planning_model_id,
+                        paper_text,
+                        reserve_tokens=reserve,
+                        label="review edit",
+                    ),
+                    "coverage_plan": render_coverage(plan),
+                    "glossary": render_glossary(plan),
+                    "round_note": round_note,
+                    "max_edits": str(self.MAX_EDITS),
+                    "language": self.language,
+                },
+            )
+            edits = parse_edits(raw)
+            article, applied, skipped = apply_edits(
+                article, edits, max_edits=self.MAX_EDITS
+            )
+            missing = parse_lines(tag_body(raw, "missing_coverage"))
+            logger.info(
+                "Edit round %d: %d of %d edit(s) applied, %d gap(s) reported.",
+                round_number,
+                applied,
+                len(edits),
+                len(missing),
+            )
+            if skipped:
+                logger.warning(
+                    "Edit round %d skipped %d edit(s): %s",
+                    round_number,
+                    len(skipped),
+                    "; ".join(skipped[:5]),
+                )
+            if not missing and not skipped:
+                break
+            notes = []
+            if missing:
+                notes.append(
+                    "A previous editing pass reported these plan items as still "
+                    "missing from the article. Add each where it belongs:\n"
+                    + "\n".join(f"- {m}" for m in missing)
+                )
+            if skipped:
+                notes.append(
+                    "These edits from the previous pass could not be applied; "
+                    "redo the ones still needed with a find copied exactly once "
+                    "from the current article:\n"
+                    + "\n".join(f"- {r}" for r in skipped[:20])
+                )
+            round_note = "\n\n".join(notes)
+        return article
+
+    def _closing_points(self, plan: ReviewPlan) -> str:
+        """The planner's closing points plus the paper's own conclusion text,
+        which no body section covers."""
+        source = self._source()
+        conclusion = "\n\n".join(
+            source.slice(a, b) for a, b in source.closing_ranges()
+        ).strip()
+        points = render_closing_points(plan)
+        if not conclusion:
+            return points
+        return f"{points}\n\nThe paper's own conclusion:\n{conclusion[:12000]}"
+
+    async def _finalize(self, plan: ReviewPlan, article: str) -> dict[str, str]:
+        payload = {
+            "explanation": article,
+            "title": self.paper.title,
+            "glossary": render_glossary(plan),
+            "closing_points": self._closing_points(plan),
+            "repair_note": "",
+            "language": self.language,
+        }
+        final: dict[str, str] = {}
+        for attempt in range(2):
+            result = await self._call(self.finalizer, payload)
+            final = {
+                k: (result.get(k) or "").strip()
+                for k in ("subtitle", "key_takeaways", "closing")
+            }
+            final["key_takeaways"] = _strip_tldr_heading(final["key_takeaways"])
+            problems = _finalization_problems(final)
+            if not problems:
+                break
+            logger.warning(
+                "Finalization attempt %d unusable: %s", attempt + 1, "; ".join(problems)
+            )
+            payload["repair_note"] = (
+                "Your previous answer could not be used: "
+                + "; ".join(problems)
+                + ". Return all three parts again in the exact format."
+            )
+        return final
 
     @measure_execution_time
-    async def run(self) -> tuple[str, str]:
-        initial_state: ExplainerState = {
-            "paper": self.paper,
-            "paragraphs": [],
-            "structure": {},
-            "aligned_sections": [],
-            "explanations": [],
-            "key_takeaways": "",
-            "current_index": 0,
-            "citation_summaries": None,
-            "code": None,
-            "synthesis_attempts": 0,
-            "quality_score": 100,
-            "accumulated_feedback": [],
-            "best_explanation": "",
-            "best_quality_score": -1,
-        }
-        final_state = await self.workflow.ainvoke(
-            initial_state,
-            RunnableConfig(recursion_limit=ExplainerConfig.RECURSION_LIMIT),
+    async def run(self) -> ReviewText:
+        paper = self._source()
+        figures = figure_catalog(paper.text)
+        figure_markers = {marker_src(m): m for _, m in figures}
+        plan = await self._plan(paper, figures)
+        _, reference_ids = self._references()
+
+        written: list[str] = []
+        for index, section in enumerate(plan.sections):
+            source = section_source(
+                section,
+                paper,
+                figure_markers,
+                excluded=plan.excluded_ranges,
+                pad=RANGE_PADDING,
+            )
+            enrichment = await self._enrich(plan, index, source, reference_ids)
+            text = await self._section(
+                plan, index, source, enrichment, written, figure_markers
+            )
+            if text:
+                written.append(text)
+            else:
+                logger.warning("Section '%s' produced no text; skipped.", section.title)
+        if not written:
+            raise RuntimeError("The review produced no sections.")
+
+        article = "\n\n".join(written)
+        if self.max_edit_rounds:
+            article = await self._edit(plan, article, paper.text)
+        final = await self._finalize(plan, article)
+        return ReviewText(
+            body=article,
+            key_takeaways=final["key_takeaways"],
+            closing=final["closing"],
+            subtitle=final["subtitle"],
         )
 
-        return "\n".join(final_state["explanations"]), final_state["key_takeaways"]
+
+def _split_writer_output(raw: str) -> tuple[str, bool]:
+    """``(section_markdown, has_more)`` from the writer's tagged output; a
+    missing or unbalanced wrapper keeps the content without the tags."""
+    has_more = re.search(r"<has_more>(.*?)</has_more>", raw or "", re.DOTALL)
+    body = re.search(
+        rf"<{_TAG_EXPLANATION}>(.*?)</{_TAG_EXPLANATION}>", raw or "", re.DOTALL
+    )
+    if body:
+        text = body.group(1)
+    else:
+        text = re.sub(
+            r"<(has_more|missing_source)>.*?</\1>", "", raw or "", flags=re.DOTALL
+        )
+        text = re.sub(r"</?(?:explanation|has_more|missing_source)>", "", text)
+    # Entities would leak into the post and break the editor's exact matching.
+    text = html.unescape(text)
+    return text.strip(), bool(has_more and is_affirmative(has_more.group(1).strip()))
+
+
+def _strip_repeated_heading(chunk: str, title: str) -> str:
+    """A continuation chunk must not restart the section with its heading."""
+    match = re.match(r"\s*##\s+([^\n]+)\n+", chunk)
+    if match and match.group(1).strip() == title.strip():
+        return chunk[match.end() :]
+    return chunk
+
+
+def _without(items: list[str], unsupported: list[str]) -> list[str]:
+    """``items`` minus those the writer reported as absent from the source."""
+    blocked = [u.lower() for u in unsupported]
+    return [
+        i for i in items if not any(b in i.lower() or i.lower() in b for b in blocked)
+    ]
+
+
+def render_code(code: list[dict[str, Any]]) -> str:
+    """Retrieved snippets as fenced blocks labelled with their source file."""
+    blocks = []
+    for item in code:
+        content = str(item.get("content", "")).strip()
+        if content:
+            source = item.get("source") or "repository"
+            blocks.append(f"# source: {source}\n```python\n{content}\n```")
+    return "\n\n".join(blocks) or "- none"
+
+
+_TLDR_HEADING = re.compile(r"\A\s*##\s*TL;?DR\s*\n+", re.IGNORECASE)
+
+
+def _strip_tldr_heading(text: str) -> str:
+    return _TLDR_HEADING.sub("", text)
+
+
+def _finalization_problems(final: dict[str, str]) -> list[str]:
+    problems = []
+    questions = re.findall(r"^###\s+\S", final["key_takeaways"], re.MULTILINE)
+    if len(questions) != 4:
+        problems.append(
+            f"key_takeaways must have exactly four ### questions (found {len(questions)})"
+        )
+    if not final["closing"]:
+        problems.append("closing is empty")
+    elif not re.match(r"##\s+\S", final["closing"].lstrip()):
+        problems.append("closing must start with its own '## ' heading")
+    return problems
+
+
+def _revision_feedback(check: SectionCheck | None) -> str:
+    if check is None:
+        return ""
+    parts = [check.feedback] if check.feedback else []
+    if check.missing:
+        parts.append(
+            "Missing must-cover items (add each with the depth it needs):\n"
+            + "\n".join(f"- {m}" for m in check.missing)
+        )
+    return "\n\n".join(parts)

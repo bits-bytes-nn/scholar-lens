@@ -54,7 +54,26 @@ def _block_network(monkeypatch: pytest.MonkeyPatch) -> None:
             "Mock it with `responses` or `moto`."
         )
 
+    def guarded_connect_ex(self, address):  # type: ignore[no-untyped-def]
+        guarded_connect(self, address)
+        return 0
+
+    real_getaddrinfo = socket.getaddrinfo
+
+    def fake_getaddrinfo(host, port, *args, **kwargs):  # type: ignore[no-untyped-def]
+        # Resolve every public name to a documentation-range address (RFC 5737
+        # TEST-NET-3 is not "global", so use a fixed public one) without real
+        # DNS: tests stay independent of the runner's resolver, and the
+        # connect guard above still blocks any actual connection.
+        if host in (None, "localhost", "127.0.0.1", "::1"):
+            return real_getaddrinfo(host, port, *args, **kwargs)
+        return [
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", port or 0))
+        ]
+
     monkeypatch.setattr(socket.socket, "connect", guarded_connect)
+    monkeypatch.setattr(socket.socket, "connect_ex", guarded_connect_ex)
+    monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
 
 
 @pytest.fixture

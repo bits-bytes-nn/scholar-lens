@@ -1,26 +1,22 @@
 import ast
 import re
 from collections.abc import Sequence
-from pathlib import Path
 from typing import Any
 
 import boto3
 from langchain_core.callbacks import BaseCallbackHandler
 from pydantic import BaseModel, Field, field_validator
 
-from .aws_helpers import S3Handler
-from .constants import LanguageModelId, LocalPaths, S3Paths
+from .constants import LanguageModelId, arxiv_id_from_reference
 from .logger import logger
 from .prompts import (
     AttributesExtractionPrompt,
     CitationExtractionPrompt,
-    TableOfContentsPrompt,
 )
 from .utils import (
     BedrockLanguageModelFactory,
     HTMLTagOutputParser,
     RetryableBase,
-    create_robust_xml_output_parser,
     is_affirmative,
     is_placeholder,
 )
@@ -35,6 +31,10 @@ class Attributes(BaseModel):
     # (e.g. arbitrary PDF URLs) that don't carry it. "N/A"/empty means unknown.
     title: str | None = Field(default=None)
     authors: list[str] = Field(default_factory=list)
+    # Blog taxonomy picked from the closed controlled-tag list, and a shorter
+    # title for search snippets when the real one exceeds ~70 characters.
+    controlled_tags: list[str] = Field(default_factory=list)
+    seo_title: str | None = Field(default=None)
 
 
 class Citation(BaseModel):
@@ -43,15 +43,20 @@ class Citation(BaseModel):
     title: str = Field(min_length=1)
     arxiv_id: str | None = Field(default=None)
 
-    @field_validator("arxiv_id")
+    @field_validator("arxiv_id", mode="before")
     @classmethod
-    def validate_arxiv_id(cls, v: str | None) -> str | None:
-        if v is None:
-            return None
-        cleaned_v = v.replace("arXiv:", "").strip()
-        if not re.match(r"^\d{4}\.\d{4,5}(v\d+)?$", cleaned_v):
-            raise ValueError(f"Invalid arXiv ID format: {v}")
-        return cleaned_v
+    def validate_arxiv_id(cls, v: Any) -> str | None:
+        # An unusable id ("N/A", a DOI) must not drop the whole citation.
+        return arxiv_id_from_reference(str(v)) if v is not None else None
+
+    @field_validator("year", mode="before")
+    @classmethod
+    def validate_year(cls, v: Any) -> int | None:
+        # Models write "2017a", "2020, July" or "n.d."; keep the 4-digit year.
+        if v is None or isinstance(v, int):
+            return v
+        match = re.search(r"(19|20)\d{2}", str(v))
+        return int(match.group()) if match else None
 
     def __repr__(self) -> str:
         return f"Citation(title='{self.title}', arxiv_id='{self.arxiv_id}')"
@@ -61,56 +66,44 @@ class ContentExtractor(RetryableBase):
     # Hard cap on the paginated citation-extraction loop, so a model that keeps
     # emitting has_more=y (or novel near-duplicate citations) cannot loop forever.
     MAX_CITATION_PAGES: int = 20
+    # Attributes-prompt taxonomy overrides (empty: the prompt's defaults apply).
+    _taxonomy: dict[str, str] = {}
 
     def __init__(
         self,
         citation_extraction_model_id: LanguageModelId,
         attributes_extraction_model_id: LanguageModelId,
-        table_of_contents_model_id: LanguageModelId,
-        output_fixing_model_id: LanguageModelId,
         boto_session: boto3.Session,
-        root_dir: Path | None = None,
-        bucket_name: str | None = None,
-        s3_prefix: str | None = None,
-        enable_output_fixing: bool = False,
         callbacks: Sequence[BaseCallbackHandler] | None = None,
+        category_options: list[str] | None = None,
+        controlled_tags: list[str] | None = None,
+        existing_keywords: list[str] | None = None,
     ) -> None:
+        # Taxonomy overrides for the attributes prompt; None keeps its defaults.
+        self._taxonomy: dict[str, str] = {}
+        if category_options:
+            self._taxonomy["category_options"] = ", ".join(category_options)
+        if controlled_tags:
+            self._taxonomy["controlled_tags"] = ", ".join(controlled_tags)
         self.boto_session = boto_session
         # Wire the run's TokenUsageTracker (passed as a callback) into every model
-        # so the full-text citation/attributes/TOC extraction — among the largest
+        # so the full-text citation/attributes extraction — among the largest
         # single inputs in a run — counts toward the token budget and cost metric,
         # not just the generation stage.
         self._callbacks = list(callbacks) if callbacks else None
-        self.s3_handler = S3Handler(boto_session, bucket_name) if bucket_name else None
-        self.s3_keywords_prefix = (
-            f"{s3_prefix}/{S3Paths.KEYWORDS.value}"
-            if s3_prefix
-            else S3Paths.KEYWORDS.value
-        )
-        self.keywords_path = (
-            (root_dir or Path.cwd())
-            / LocalPaths.ASSETS_DIR.value
-            / LocalPaths.KEYWORDS_FILE.value
-        )
-        self.existing_keywords: set[str] = set()
+        # Reuse candidates for keywords: the tags the blog's posts already use.
+        self.existing_keywords: list[str] = list(existing_keywords or [])
         self.llm_factory = BedrockLanguageModelFactory(boto_session=self.boto_session)
         self._initialize_chains(
-            citation_extraction_model_id,
-            attributes_extraction_model_id,
-            table_of_contents_model_id,
-            output_fixing_model_id,
-            enable_output_fixing,
+            citation_extraction_model_id, attributes_extraction_model_id
         )
 
     def _initialize_chains(
         self,
         citation_extraction_model_id: LanguageModelId,
         attributes_extraction_model_id: LanguageModelId,
-        table_of_contents_model_id: LanguageModelId,
-        output_fixing_model_id: LanguageModelId,
-        enable_output_fixing: bool,
     ) -> None:
-        # All three extractors are fed the full paper text, which for long papers
+        # Both extractors are fed the full paper text, which for long papers
         # (e.g. 500k+ chars) exceeds the 200k default context window. Enable the
         # 1M context window on each so long papers don't fail with
         # "prompt is too long" (no-op on models that don't support it). The text
@@ -128,22 +121,8 @@ class ContentExtractor(RetryableBase):
             supports_1m_context_window=True,
             callbacks=self._callbacks,
         )
-        table_of_contents_llm = self.llm_factory.get_model(
-            table_of_contents_model_id,
-            temperature=0.0,
-            supports_1m_context_window=True,
-            callbacks=self._callbacks,
-        )
         self._citation_model_id = citation_extraction_model_id
         self._attributes_model_id = attributes_extraction_model_id
-        self._toc_model_id = table_of_contents_model_id
-        robust_xml_output_parser = create_robust_xml_output_parser(
-            self.llm_factory,
-            enable_output_fixing=enable_output_fixing,
-            output_fixing_model_id=output_fixing_model_id,
-            callbacks=self._callbacks,
-        )
-
         self.citation_extractor = (
             CitationExtractionPrompt.get_prompt()
             | citation_llm
@@ -154,60 +133,43 @@ class ContentExtractor(RetryableBase):
             | attributes_llm
             | HTMLTagOutputParser(tag_names=AttributesExtractionPrompt.output_variables)
         )
-        self.table_of_contents_extractor = (
-            TableOfContentsPrompt.get_prompt()
-            | table_of_contents_llm
-            | robust_xml_output_parser
-        )
 
     @classmethod
     async def create(
         cls,
         citation_extraction_model_id: LanguageModelId,
         attributes_extraction_model_id: LanguageModelId,
-        table_of_contents_model_id: LanguageModelId,
-        output_fixing_model_id: LanguageModelId,
         boto_session: boto3.Session,
-        root_dir: Path | None = None,
-        bucket_name: str | None = None,
-        s3_prefix: str | None = None,
-        enable_output_fixing: bool = False,
         callbacks: Sequence[BaseCallbackHandler] | None = None,
+        category_options: list[str] | None = None,
+        controlled_tags: list[str] | None = None,
+        existing_keywords: list[str] | None = None,
     ) -> "ContentExtractor":
         extractor = cls(
             citation_extraction_model_id=citation_extraction_model_id,
             attributes_extraction_model_id=attributes_extraction_model_id,
-            table_of_contents_model_id=table_of_contents_model_id,
-            output_fixing_model_id=output_fixing_model_id,
             boto_session=boto_session,
-            root_dir=root_dir,
-            bucket_name=bucket_name,
-            s3_prefix=s3_prefix,
-            enable_output_fixing=enable_output_fixing,
             callbacks=callbacks,
+            category_options=category_options,
+            controlled_tags=controlled_tags,
+            existing_keywords=existing_keywords,
         )
-        await extractor._initialize_keywords()
         return extractor
-
-    async def _initialize_keywords(self) -> None:
-        s3_key = f"{self.s3_keywords_prefix}/{self.keywords_path.name}"
-        if self.s3_handler and self.s3_handler.exists(s3_key):
-            await self.s3_handler.download_file_async(s3_key, self.keywords_path)
-
-        if self.keywords_path.exists():
-            self.existing_keywords = set(
-                line.strip()
-                for line in self.keywords_path.read_text(encoding="utf-8").splitlines()
-                if line.strip()
-            )
 
     async def extract_citations(self, html_content: str) -> list[Citation]:
         citations = []
         existing_citations_str = ""
         seen_citations = set()
+        # Fit once: every pagination call sends the same paper text, and each fit
+        # is a CountTokens binary search.
+        text = neutralize_prompt_tags(
+            self.llm_factory.fit_text(
+                self._citation_model_id, html_content, label="citation text"
+            )
+        )
 
         for page in range(self.MAX_CITATION_PAGES):
-            result = await self._extract_citations(html_content, existing_citations_str)
+            result = await self._extract_citations(text, existing_citations_str)
             raw_citations_str = result.get("citations", "")
             if not raw_citations_str.strip():
                 break
@@ -243,20 +205,11 @@ class ContentExtractor(RetryableBase):
 
     @RetryableBase._retry("citation_extraction")
     async def _extract_citations(
-        self, html_content: str, existing_citations: str
+        self, text: str, existing_citations: str
     ) -> dict[str, str]:
+        """``text`` is already fitted and defanged by :meth:`extract_citations`."""
         return await self.citation_extractor.ainvoke(
-            {
-                # Defang injection: the untrusted paper body is fenced in the
-                # prompt, so a literal "</paper_content>…" in the source must not
-                # break out (parity with the summarizer/explainer paths).
-                "text": neutralize_prompt_tags(
-                    self.llm_factory.fit_text(
-                        self._citation_model_id, html_content, label="citation text"
-                    )
-                ),
-                "existing_citations": existing_citations,
-            }
+            {"text": text, "existing_citations": existing_citations}
         )
 
     @staticmethod
@@ -274,7 +227,8 @@ class ContentExtractor(RetryableBase):
             return f"arxiv:{cit.arxiv_id.lower()}"
 
         def _norm(value: str) -> str:
-            return re.sub(r"[^a-z0-9]+", " ", value.lower()).strip()
+            # \w keeps non-Latin titles distinct instead of collapsing to "".
+            return " ".join(re.sub(r"[^\w]+", " ", value.casefold()).split())
 
         first_author = re.split(r"[,;&]| and ", cit.authors, maxsplit=1)[0]
         # Reduce "Smith, J." / "John Smith" to a single surname-ish token so
@@ -291,11 +245,11 @@ class ContentExtractor(RetryableBase):
 
             return Citation(
                 authors=str(cit_tuple[0]).strip(),
-                year=int(cit_tuple[1]) if cit_tuple[1] else None,
+                year=cit_tuple[1] or None,
                 title=str(cit_tuple[2]).strip(),
                 arxiv_id=str(cit_tuple[3]).strip() if cit_tuple[3] else None,
             )
-        except (ValueError, SyntaxError, IndexError) as e:
+        except (ValueError, SyntaxError, IndexError, TypeError) as e:
             logger.warning("Failed to parse citation: '%s' - %s", citation_str, e)
             return None
 
@@ -308,14 +262,14 @@ class ContentExtractor(RetryableBase):
                         self._attributes_model_id, html_content, label="attributes text"
                     )
                 ),
-                "existing_keywords": ", ".join(sorted(list(self.existing_keywords))),
+                "existing_keywords": ", ".join(self.existing_keywords) or "(none)",
+                **self._taxonomy,
             }
         )
         keywords_str = result.get("keywords", "")
         extracted_keywords = [
             kw.strip() for kw in keywords_str.split(",") if kw.strip()
         ]
-        await self._update_keywords(extracted_keywords)
 
         def _clean_na(value: str) -> str:
             return "" if is_placeholder(value) else value.strip()
@@ -333,35 +287,10 @@ class ContentExtractor(RetryableBase):
             keywords=extracted_keywords,
             title=title,
             authors=authors,
-        )
-
-    async def _update_keywords(self, new_keywords: list[str]) -> None:
-        updated = False
-        for keyword in new_keywords:
-            if keyword and keyword not in self.existing_keywords:
-                self.existing_keywords.add(keyword)
-                updated = True
-
-        if not updated:
-            return
-
-        self.keywords_path.parent.mkdir(parents=True, exist_ok=True)
-        sorted_keywords = "\n".join(sorted(list(self.existing_keywords)))
-        self.keywords_path.write_text(sorted_keywords, encoding="utf-8")
-
-        if self.s3_handler:
-            await self.s3_handler.upload_file_async(
-                self.keywords_path, self.s3_keywords_prefix
-            )
-
-    @RetryableBase._retry("table_of_contents_extraction")
-    async def extract_table_of_contents(self, html_content: str) -> dict[str, Any]:
-        return await self.table_of_contents_extractor.ainvoke(
-            {
-                "paper_content": neutralize_prompt_tags(
-                    self.llm_factory.fit_text(
-                        self._toc_model_id, html_content, label="TOC text"
-                    )
-                )
-            }
+            controlled_tags=[
+                tag.strip()
+                for tag in result.get("controlled_tags", "").split(",")
+                if tag.strip()
+            ],
+            seo_title=_clean_na(result.get("seo_title", "")) or None,
         )

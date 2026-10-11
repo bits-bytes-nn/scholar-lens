@@ -5,15 +5,23 @@ from __future__ import annotations
 from datetime import datetime
 
 from scholar_lens.configs import Github
-from scholar_lens.main import _build_front_matter
 from scholar_lens.src.content_extractor import Attributes
 from scholar_lens.src.explainer import Paper
+from scholar_lens.src.formatting import paper_front_matter, paper_post_meta
 from scholar_lens.src.parser import Content
+from scholar_lens.src.post_conventions import load_local_conventions
 from scholar_lens.src.prompts import (
-    PaperEvaluationPrompt,
+    PaperEditPrompt,
     PaperFinalizationPrompt,
-    PaperSynthesisPrompt,
+    PaperPlanningPrompt,
+    PaperSectionCheckPrompt,
+    PaperSectionPrompt,
 )
+
+
+def _build_front_matter(_github: Github, paper: Paper, category_type: str, **kwargs):  # type: ignore[no-untyped-def]
+    meta = paper_post_meta(paper, category_type, load_local_conventions())
+    return paper_front_matter(paper, category_type, meta, **kwargs)
 
 
 class TestBuildFrontMatter:
@@ -36,17 +44,34 @@ class TestBuildFrontMatter:
         out = _build_front_matter(Github(), self._paper(), "Paper Reviews")
         assert "&amp;" not in out
 
-    def test_author_is_paper_author_not_affiliation(self) -> None:
-        # Regression: front matter must use the real author ("Ada"), never the
-        # affiliation ("ACME") as the author.
+    def test_paper_author_is_the_organization(self) -> None:
+        # The blog's feed reads `author` as the post author: paper posts name
+        # the publishing organization in `paper_author` and never set `author`.
         out = _build_front_matter(Github(), self._paper(), "Paper Reviews")
-        assert 'author: "Ada"' in out
-        assert "ACME" not in out
+        assert 'paper_author: "ACME"' in out
+        assert "\nauthor:" not in out
+        assert "Ada" not in out
 
-    def test_author_falls_back_to_affiliation_when_no_authors(self) -> None:
-        paper = self._paper().model_copy(update={"authors": ["Unknown"]})
+    def test_placeholder_organization_omitted(self) -> None:
+        paper = self._paper().model_copy(
+            update={"attributes": Attributes(affiliation="N/A", category="X")}
+        )
         out = _build_front_matter(Github(), paper, "Paper Reviews")
-        assert 'author: "ACME"' in out
+        assert "paper_author" not in out
+
+    def test_use_math_only_with_math(self) -> None:
+        assert "use_math" not in _build_front_matter(
+            Github(), self._paper(), "Paper Reviews", body="plain"
+        )
+        assert "use_math: true" in _build_front_matter(
+            Github(), self._paper(), "Paper Reviews", body="a $$x$$ b"
+        )
+
+    def test_subtitle_rendered_when_given(self) -> None:
+        out = _build_front_matter(
+            Github(), self._paper(), "Paper Reviews", subtitle='연구 "제목"'
+        )
+        assert 'subtitle: "연구 \\"제목\\""' in out
 
     def test_date_is_paper_published_date(self) -> None:
         # The post date is the paper's own publication date, not "now".
@@ -60,8 +85,10 @@ class TestBuildFrontMatter:
 
 class TestReviewPromptsCarryLanguage:
     PROMPTS = [
-        PaperSynthesisPrompt,
-        PaperEvaluationPrompt,
+        PaperPlanningPrompt,
+        PaperSectionPrompt,
+        PaperSectionCheckPrompt,
+        PaperEditPrompt,
         PaperFinalizationPrompt,
     ]
 

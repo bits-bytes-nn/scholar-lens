@@ -1,93 +1,101 @@
+# Copy to config.yaml (gitignored) and fill in the resource values. Every key
+# below shows the code default; omit a key to keep it. Unknown keys are errors.
+
 resources:
   project_name: scholar-lens
-  stage: dev
-  profile_name:
+  stage: dev                       # dev | prod
+  profile_name:                    # local AWS profile (Batch uses its job role)
   default_region_name: ap-northeast-2
   bedrock_region_name: us-west-2
-  s3_bucket_name:
+  s3_bucket_name:                  # required for Batch runs and `status`
   s3_prefix: scholar-lens
   vpc_id:
   subnet_ids:
-  email_address:
+  email_address:                   # SNS notifications (success and failure)
   github:
     enabled: false
-    repo_name:
+    repo_name:                     # owner/owner.github.io
     base_branch: main
-    branch_prefix: paper-reviews
+    branch_prefix: paper-reviews   # PR branches: <prefix>/<kind>-<id>
     author_name: Scholar Lens Bot
     author_email:
-    # Primary category label per artifact type — the value a blog's category
-    # tabs filter on. Override to match your blog (e.g. a Jekyll site whose
-    # summary tab reads site.categories['Summaries'] would set summary_category
-    # to "Summaries"). Defaults below are the generic labels.
+    # Lead category written to each post's front matter, per artifact type.
     review_category: Paper Reviews
     summary_category: Paper Summaries
     tech_guide_category: Tech Guides
-    # Cover image filename (under the blog's assets/images dir) used when no
-    # category-specific entry matches. Category slugs are lowercase, hyphenated.
-    default_cover_image: default.jpg
-    cover_images:
-      # language-models: language-models.jpg
-      # multimodal-learning: multimodal-learning.jpg
+    # Upload figures to S3 with a public-read ACL (blog images normally come
+    # from the blog repository, so keep this off).
+    public_assets: false
 
 # Any *_model_id accepts a LanguageModelId value (scholar_lens/src/constants.py),
-# including the latest anthropic.claude-opus-5-5, anthropic.claude-sonnet-5-5,
-# anthropic.claude-haiku-5-5 and anthropic.claude-fable-5-1.
+# e.g. anthropic.claude-fable-5-1 for the highest quality at a higher price.
 paper:
-  figure_analysis_model_id: anthropic.claude-3-haiku-20240307-v1:0
-  citation_extraction_model_id: anthropic.claude-sonnet-5
-  attributes_extraction_model_id: anthropic.claude-haiku-4-5-20251001-v1:0
-  table_of_contents_model_id: anthropic.claude-sonnet-5
-  output_fixing_model_id: anthropic.claude-sonnet-5
+  figure_analysis_model_id: anthropic.claude-haiku-5-5
+  citation_extraction_model_id: anthropic.claude-sonnet-5-5
+  attributes_extraction_model_id: anthropic.claude-haiku-5-5
 
 code:
-  code_analysis_model_id: anthropic.claude-haiku-4-5-20251001-v1:0
-  code_summarization_model_id: anthropic.claude-haiku-4-5-20251001-v1:0
+  code_analysis_model_id: anthropic.claude-haiku-5-5
+  code_summarization_model_id: anthropic.claude-haiku-5-5
   embed_model_id: amazon.titan-embed-text-v2:0
-  chunk_size: 8192
-  chunk_overlap: 1024
+  chunk_size: 1024
+  chunk_overlap: 256
+  # Index at most this many of the repos' most relevant Python files / chunks
+  # (vendored libraries, tests and files over 100 KB are skipped).
+  max_files: 150
+  max_chunks: 400
 
 citations:
-  citation_summarization_model_id: anthropic.claude-haiku-4-5-20251001-v1:0
-  citation_analysis_model_id: anthropic.claude-haiku-4-5-20251001-v1:0
+  citation_summarization_model_id: anthropic.claude-haiku-5-5
+  citation_analysis_model_id: anthropic.claude-haiku-5-5
+  # Read each cited paper's full text instead of its abstract (slow).
+  prefer_full_text: false
 
 explanation:
-  paper_analysis_model_id: anthropic.claude-sonnet-5
-  paper_enrichment_model_id: anthropic.claude-sonnet-5
-  paper_finalization_model_id: anthropic.claude-haiku-4-5-20251001-v1:0
-  paper_evaluation_model_id: anthropic.claude-opus-4-8
-  paper_synthesis_model_id: anthropic.claude-opus-4-8
-  evaluator_enable_thinking: True
-  synthesizer_enable_thinking: True
-  # Adaptive-thinking effort (low|medium|high|xhigh|max) for Opus 4.8+. 'low' is
-  # much faster/cheaper for the per-paragraph synthesis loop; raise for max depth.
-  thinking_effort: low
+  # Plans the review from the whole paper and edits the finished article.
+  paper_planning_model_id: anthropic.claude-opus-5-5
+  paper_finalization_model_id: anthropic.claude-opus-5-5
+  paper_evaluation_model_id: anthropic.claude-opus-5-5
+  paper_synthesis_model_id: anthropic.claude-opus-5-5
+  evaluator_enable_thinking: false
+  synthesizer_enable_thinking: false
+  # Thinking effort (low|medium|high|xhigh|max) for adaptive-thinking models.
+  # The 5.x models always think; effort is their cost/depth control.
+  thinking_effort: medium
+  planning_effort: high           # effort for planning and the edit pass
+  min_quality_score: 70
+  max_synthesis_attempts: 3
+  max_sections: 20
+  max_edit_rounds: 2              # 2nd round only for reported coverage gaps
+  # Hard total-token ceiling for one run (omit / null = no limit).
+  # max_total_tokens: 8000000
 
-# Concise paper-summary mode (--mode summarize)
 summary:
-  summary_model_id: anthropic.claude-opus-4-8
-  summarizer_enable_thinking: True
+  summary_model_id: anthropic.claude-opus-5-5
+  summarizer_enable_thinking: false
   thinking_effort: medium
+  # max_total_tokens: 1500000
 
-# Technical guide / tutorial generator (scholar_lens.tech_guide_main)
 tech_guide:
-  relevance_model_id: anthropic.claude-haiku-4-5-20251001-v1:0
-  synopsis_model_id: anthropic.claude-sonnet-5
-  writing_model_id: anthropic.claude-opus-4-8
-  evaluation_model_id: anthropic.claude-opus-4-8
-  writer_enable_thinking: True
+  relevance_model_id: anthropic.claude-haiku-5-5
+  synopsis_model_id: anthropic.claude-sonnet-5-5
+  writing_model_id: anthropic.claude-opus-5-5
+  evaluation_model_id: anthropic.claude-opus-5-5
+  writer_enable_thinking: false
+  evaluator_enable_thinking:       # null = same as writer_enable_thinking
   thinking_effort: medium
-  verify_grounding: True
-  # Deep research: derive web-search queries from the seed docs (needs Tavily or
-  # Brave) and fetch the top result pages into the corpus so they reach the writer.
-  auto_research: True
+  # Fact-check each section against the sources (one extra call per section).
+  verify_grounding: true
+  # Derive web-search queries from the seed docs (needs TAVILY_API_KEY or
+  # BRAVE_API_KEY) and fetch the top result pages into the corpus.
+  auto_research: true
   max_research_queries: 6
   fetch_top_results: 4
-  # Per-section evaluate-and-revise loop.
   min_quality_score: 75
   max_revision_attempts: 2
-  # Hard total-token ceiling for one guide run (omit / null = no limit).
-  # max_total_tokens: 4000000
+  # Soft limit: past it, remaining sections skip evaluate/revise/grounding;
+  # past 1.5x the run aborts.
+  max_total_tokens: 3000000
 
-# Output language for generated reviews/summaries/guides (e.g. Korean, English)
+# Language of every generated artifact (e.g. Korean, English).
 output_language: Korean

@@ -20,44 +20,55 @@ class EmbeddingModelInfo(BaseModel):
 
 class LanguageModelInfo(BaseModel):
     context_window_size: int = Field(
-        description="Maximum context window size in tokens that the model can handle."
+        description="Context window in tokens as invoked (native window, or 1M "
+        "when supports_1m_context_window enables the long-context beta)."
     )
     max_output_tokens: int = Field(
         description="Maximum number of tokens the model can generate in a single response."
     )
-    supports_performance_optimization: bool = Field(
-        default=False,
-        description="Whether the model supports performance optimization features.",
+    input_price_per_mtok: float = Field(
+        description="List price in USD per million input tokens (first-party "
+        "rate; Bedrock pricing can differ, so costs derived from it are estimates)."
     )
-    supports_prompt_caching: bool = Field(
-        default=False,
-        description="Whether the model supports prompt caching to improve performance.",
+    output_price_per_mtok: float = Field(
+        description="List price in USD per million output tokens."
     )
-    supports_thinking: bool = Field(
-        default=False,
-        description="Whether the model supports thinking/reasoning capabilities.",
+    long_prompt_threshold: int | None = Field(
+        default=None,
+        description="Prompt size (input tokens) above which a call is billed at "
+        "the long-prompt rates instead (tiered pricing); None = flat pricing.",
     )
+    long_prompt_price_per_mtok: tuple[float, float] | None = Field(
+        default=None,
+        description="(input, output) USD per million tokens for long prompts.",
+    )
+    supports_prompt_caching: bool = Field(default=False)
+    supports_thinking: bool = Field(default=False)
     uses_adaptive_thinking: bool = Field(
         default=False,
         description=(
-            "Whether the model uses the newer adaptive thinking API "
-            "(thinking.type='adaptive' + output_config.effort) instead of the "
-            "legacy thinking.type='enabled' + budget_tokens. Opus 4.8+ requires "
-            "the adaptive form. These models also reject sampling parameters "
-            "(temperature/top_k), so the factory never sends them."
+            "Uses thinking.type='adaptive' + output_config.effort instead of "
+            "budget_tokens, and rejects sampling parameters (temperature/top_k)."
+        ),
+    )
+    thinking_always_on: bool = Field(
+        default=False,
+        description=(
+            "Thinking cannot be disabled (thinking.type='disabled' is rejected); "
+            "effort is the only cost/depth control."
         ),
     )
     supports_1m_context_window: bool = Field(
         default=False,
-        description="Whether the model supports 1M context window.",
+        description="Needs the context-1m beta flag to reach a 1M window.",
     )
     count_tokens_proxy: str | None = Field(
         default=None,
         description=(
-            "Base model id to use for Bedrock CountTokens when this model is not "
-            "itself supported by the CountTokens API (e.g. Opus 4.6+). The proxy "
-            "must share the Claude tokenizer family so counts stay accurate. When "
-            "None, the model counts with its own id."
+            "Model id used for Bedrock CountTokens when this model is not itself "
+            "supported by it. Its tokenizer can differ (Opus 4.7+ and the 5.x "
+            "models emit up to ~1.35x as many tokens), so budgets computed from "
+            "proxy counts carry a safety factor (see fit_text)."
         ),
     )
 
@@ -78,172 +89,158 @@ _EMBEDDING_MODEL_INFO: dict[EmbeddingModelId, EmbeddingModelInfo] = {
     # NOTE: add new models here
 }
 
+_SONNET_4_6 = LanguageModelId.CLAUDE_V4_6_SONNET.value
+
+
+def _legacy(
+    ctx: int,
+    out: int,
+    price: tuple[float, float],
+    *,
+    supports_prompt_caching: bool = False,
+    supports_thinking: bool = False,
+    supports_1m_context_window: bool = False,
+) -> LanguageModelInfo:
+    """Pre-4.7 models: budget_tokens thinking and sampling parameters."""
+    return LanguageModelInfo(
+        context_window_size=ctx,
+        max_output_tokens=out,
+        input_price_per_mtok=price[0],
+        output_price_per_mtok=price[1],
+        supports_prompt_caching=supports_prompt_caching,
+        supports_thinking=supports_thinking,
+        supports_1m_context_window=supports_1m_context_window,
+    )
+
+
+def _adaptive(
+    price: tuple[float, float], *, always_on: bool, out: int = 128_000
+) -> LanguageModelInfo:
+    """Claude 4.7+ generation: 1M context (via the beta flag, as live-validated
+    on Bedrock), adaptive thinking."""
+    return LanguageModelInfo(
+        context_window_size=200_000,
+        supports_1m_context_window=True,
+        max_output_tokens=out,
+        input_price_per_mtok=price[0],
+        output_price_per_mtok=price[1],
+        supports_prompt_caching=True,
+        supports_thinking=True,
+        uses_adaptive_thinking=True,
+        thinking_always_on=always_on,
+        count_tokens_proxy=_SONNET_4_6,
+    )
+
+
+_HAIKU_3 = (0.25, 1.25)
+_SONNET_3 = (3.0, 15.0)
+_OPUS_LEGACY = (15.0, 75.0)
+_OPUS = (5.0, 25.0)
+
 _LANGUAGE_MODEL_INFO: dict[LanguageModelId, LanguageModelInfo] = {
-    LanguageModelId.CLAUDE_V3_HAIKU: LanguageModelInfo(
-        context_window_size=200000,
-        max_output_tokens=4096,
-        supports_prompt_caching=True,
+    LanguageModelId.CLAUDE_V3_HAIKU: _legacy(
+        200_000, 4096, _HAIKU_3, supports_prompt_caching=True
     ),
-    LanguageModelId.CLAUDE_V3_SONNET: LanguageModelInfo(
-        context_window_size=200000,
-        max_output_tokens=4096,
+    LanguageModelId.CLAUDE_V3_SONNET: _legacy(200_000, 4096, _SONNET_3),
+    LanguageModelId.CLAUDE_V3_OPUS: _legacy(200_000, 4096, _OPUS_LEGACY),
+    LanguageModelId.CLAUDE_V3_5_HAIKU: _legacy(
+        200_000, 8192, (0.8, 4.0), supports_prompt_caching=True
     ),
-    LanguageModelId.CLAUDE_V3_OPUS: LanguageModelInfo(
-        context_window_size=200000,
-        max_output_tokens=4096,
-    ),
-    LanguageModelId.CLAUDE_V3_5_HAIKU: LanguageModelInfo(
-        context_window_size=200000,
-        max_output_tokens=8192,
-        supports_performance_optimization=True,
-        supports_prompt_caching=True,
-    ),
-    LanguageModelId.CLAUDE_V4_5_HAIKU: LanguageModelInfo(
-        context_window_size=200000,
-        max_output_tokens=64000,
+    LanguageModelId.CLAUDE_V4_5_HAIKU: _legacy(
+        200_000,
+        64_000,
+        (1.0, 5.0),
         supports_prompt_caching=True,
         supports_thinking=True,
     ),
-    LanguageModelId.CLAUDE_V5_5_HAIKU: LanguageModelInfo(
-        context_window_size=200000,
-        max_output_tokens=128000,
-        supports_prompt_caching=True,
-        supports_thinking=True,
-        # Adaptive-only: budget_tokens is rejected. Omitting `thinking` still runs
-        # adaptive thinking (effort defaults to 'medium'), so enable_thinking=False
-        # just leaves the request field unset.
-        uses_adaptive_thinking=True,
-        supports_1m_context_window=True,
-        count_tokens_proxy=LanguageModelId.CLAUDE_V4_6_SONNET.value,
+    # Tiered: prompts over 100K input tokens bill at $0.50/$2.50 per MTok.
+    LanguageModelId.CLAUDE_V5_5_HAIKU: _adaptive(
+        (0.10, 0.50), always_on=True
+    ).model_copy(
+        update={
+            "long_prompt_threshold": 100_000,
+            "long_prompt_price_per_mtok": (0.50, 2.50),
+        }
     ),
-    LanguageModelId.CLAUDE_V3_5_SONNET: LanguageModelInfo(
-        context_window_size=200000, max_output_tokens=8192
+    LanguageModelId.CLAUDE_V3_5_SONNET: _legacy(200_000, 8192, _SONNET_3),
+    LanguageModelId.CLAUDE_V3_5_SONNET_V2: _legacy(
+        200_000, 8192, _SONNET_3, supports_prompt_caching=True
     ),
-    LanguageModelId.CLAUDE_V3_5_SONNET_V2: LanguageModelInfo(
-        context_window_size=200000, max_output_tokens=8192, supports_prompt_caching=True
+    LanguageModelId.CLAUDE_V3_7_SONNET: _legacy(
+        200_000, 64_000, _SONNET_3, supports_prompt_caching=True, supports_thinking=True
     ),
-    LanguageModelId.CLAUDE_V3_7_SONNET: LanguageModelInfo(
-        context_window_size=200000,
-        max_output_tokens=64000,
-        supports_prompt_caching=True,
-        supports_thinking=True,
-    ),
-    LanguageModelId.CLAUDE_V4_SONNET: LanguageModelInfo(
-        context_window_size=200000,
-        max_output_tokens=64000,
+    LanguageModelId.CLAUDE_V4_SONNET: _legacy(
+        200_000,
+        64_000,
+        _SONNET_3,
         supports_prompt_caching=True,
         supports_thinking=True,
         supports_1m_context_window=True,
     ),
-    LanguageModelId.CLAUDE_V4_5_SONNET: LanguageModelInfo(
-        context_window_size=200000,
-        max_output_tokens=64000,
+    LanguageModelId.CLAUDE_V4_5_SONNET: _legacy(
+        200_000,
+        64_000,
+        _SONNET_3,
         supports_prompt_caching=True,
         supports_thinking=True,
         supports_1m_context_window=True,
     ),
-    LanguageModelId.CLAUDE_V4_6_SONNET: LanguageModelInfo(
-        context_window_size=200000,
-        max_output_tokens=64000,
+    # The 4.6 models still accept budget_tokens and sampling params, so they
+    # keep the legacy request shape.
+    LanguageModelId.CLAUDE_V4_6_SONNET: _legacy(
+        200_000,
+        64_000,
+        _SONNET_3,
         supports_prompt_caching=True,
         supports_thinking=True,
         supports_1m_context_window=True,
     ),
-    LanguageModelId.CLAUDE_V5_SONNET: LanguageModelInfo(
-        context_window_size=200000,
-        max_output_tokens=128000,
+    LanguageModelId.CLAUDE_V5_SONNET: _adaptive((2.0, 10.0), always_on=False),
+    LanguageModelId.CLAUDE_V5_5_SONNET: _adaptive((2.0, 10.0), always_on=True),
+    LanguageModelId.CLAUDE_V4_OPUS: _legacy(
+        200_000,
+        32_000,
+        _OPUS_LEGACY,
         supports_prompt_caching=True,
         supports_thinking=True,
-        # Sonnet 5 uses the adaptive-thinking API (thinking.type='adaptive' +
-        # output_config.effort), like Opus 4.7+. budget_tokens is rejected.
-        uses_adaptive_thinking=True,
-        supports_1m_context_window=True,
-        # Sonnet 5 isn't supported by Bedrock CountTokens, and no new-tokenizer
-        # model is (Opus 4.7/4.8 aren't either). Proxy to Sonnet 4.6 like they do
-        # — it slightly undercounts the newer tokenizer, but fit_text only needs a
-        # safe lower bound against a 1M window plus reserve, so this is fine.
-        count_tokens_proxy=LanguageModelId.CLAUDE_V4_6_SONNET.value,
     ),
-    LanguageModelId.CLAUDE_V5_5_SONNET: LanguageModelInfo(
-        context_window_size=200000,
-        max_output_tokens=128000,
+    LanguageModelId.CLAUDE_V4_1_OPUS: _legacy(
+        200_000,
+        32_000,
+        _OPUS_LEGACY,
         supports_prompt_caching=True,
         supports_thinking=True,
-        # Adaptive-only; thinking.type='disabled' is rejected, so thinking still
-        # runs (effort 'high' by default) when enable_thinking=False.
-        uses_adaptive_thinking=True,
-        supports_1m_context_window=True,
-        count_tokens_proxy=LanguageModelId.CLAUDE_V4_6_SONNET.value,
     ),
-    LanguageModelId.CLAUDE_V4_OPUS: LanguageModelInfo(
-        context_window_size=200000,
-        max_output_tokens=64000,
-        supports_prompt_caching=True,
-        supports_thinking=True,
-        supports_1m_context_window=True,
-    ),
-    LanguageModelId.CLAUDE_V4_1_OPUS: LanguageModelInfo(
-        context_window_size=200000,
-        max_output_tokens=64000,
-        supports_prompt_caching=True,
-        supports_thinking=True,
-        supports_1m_context_window=True,
-    ),
-    LanguageModelId.CLAUDE_V4_5_OPUS: LanguageModelInfo(
-        context_window_size=200000,
-        max_output_tokens=64000,
-        supports_prompt_caching=True,
-        supports_thinking=True,
-        supports_1m_context_window=True,
+    LanguageModelId.CLAUDE_V4_5_OPUS: _legacy(
+        200_000, 64_000, _OPUS, supports_prompt_caching=True, supports_thinking=True
     ),
     LanguageModelId.CLAUDE_V4_6_OPUS: LanguageModelInfo(
-        context_window_size=200000,
-        max_output_tokens=64000,
+        context_window_size=200_000,
+        max_output_tokens=64_000,
+        input_price_per_mtok=_OPUS[0],
+        output_price_per_mtok=_OPUS[1],
         supports_prompt_caching=True,
         supports_thinking=True,
         supports_1m_context_window=True,
-        count_tokens_proxy=LanguageModelId.CLAUDE_V4_6_SONNET.value,
+        count_tokens_proxy=_SONNET_4_6,
     ),
-    LanguageModelId.CLAUDE_V4_7_OPUS: LanguageModelInfo(
-        context_window_size=200000,
-        max_output_tokens=64000,
-        supports_prompt_caching=True,
-        supports_thinking=True,
-        uses_adaptive_thinking=True,
-        supports_1m_context_window=True,
-        count_tokens_proxy=LanguageModelId.CLAUDE_V4_6_SONNET.value,
-    ),
-    LanguageModelId.CLAUDE_V4_8_OPUS: LanguageModelInfo(
-        context_window_size=200000,
-        max_output_tokens=64000,
-        supports_prompt_caching=True,
-        supports_thinking=True,
-        uses_adaptive_thinking=True,
-        supports_1m_context_window=True,
-        # Opus 4.8 base id isn't supported by Bedrock CountTokens; count via the
-        # Sonnet 4.6 tokenizer (same family) so fit_text still measures exactly.
-        count_tokens_proxy=LanguageModelId.CLAUDE_V4_6_SONNET.value,
-    ),
-    LanguageModelId.CLAUDE_V5_5_OPUS: LanguageModelInfo(
-        context_window_size=200000,
-        max_output_tokens=128000,
-        supports_prompt_caching=True,
-        supports_thinking=True,
-        # Thinking can't be turned off (thinking.type='disabled' is rejected);
-        # omitting it runs adaptive thinking at effort 'medium' by default.
-        uses_adaptive_thinking=True,
-        supports_1m_context_window=True,
-        count_tokens_proxy=LanguageModelId.CLAUDE_V4_6_SONNET.value,
-    ),
-    LanguageModelId.CLAUDE_V5_1_FABLE: LanguageModelInfo(
-        context_window_size=200000,
-        max_output_tokens=128000,
-        supports_prompt_caching=True,
-        supports_thinking=True,
-        # Thinking is always on, like Opus 5.5 (effort 'high' by default).
-        uses_adaptive_thinking=True,
-        supports_1m_context_window=True,
-        count_tokens_proxy=LanguageModelId.CLAUDE_V4_6_SONNET.value,
-    ),
+    LanguageModelId.CLAUDE_V4_7_OPUS: _adaptive(_OPUS, always_on=False),
+    LanguageModelId.CLAUDE_V4_8_OPUS: _adaptive(_OPUS, always_on=False),
+    LanguageModelId.CLAUDE_V5_5_OPUS: _adaptive((4.0, 20.0), always_on=True),
+    LanguageModelId.CLAUDE_V5_1_FABLE: _adaptive((10.0, 50.0), always_on=True),
     # NOTE: add new models here
 }
+
+
+def model_info_for_invoked_id(invoked_id: str) -> LanguageModelInfo | None:
+    """Registry entry for an id as Bedrock or LangChain reports it: with or
+    without an inference-profile prefix (``global.``/``us.``) or ``anthropic.``."""
+
+    def bare(value: str) -> str:
+        return value.rsplit("anthropic.", 1)[-1]
+
+    target = bare(invoked_id)
+    for model_id, info in _LANGUAGE_MODEL_INFO.items():
+        if bare(model_id.value) == target:
+            return info
+    return None

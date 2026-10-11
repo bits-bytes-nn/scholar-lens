@@ -4,21 +4,37 @@ from difflib import SequenceMatcher
 from pathlib import Path
 
 import arxiv
+import requests
 import tenacity
 from pydantic import BaseModel, Field, HttpUrl, ValidationInfo, field_validator
 
+from .constants import normalize_arxiv_id
 from .logger import logger
 from .rate_limiter import RateLimiter
 
-# App-level retry for transient arXiv API failures (e.g. HTTP 429). This sits on
-# top of the arxiv client's own num_retries and adds jittered backoff so a busy
-# pipeline does not abort a whole job on a momentary rate limit.
+# The only retry layer for arXiv API calls (the arxiv client itself makes one
+# attempt): jittered backoff so a momentary 429 does not abort a whole job.
 _ARXIV_FETCH_MAX_ATTEMPTS: int = 4
 _ARXIV_FETCH_INITIAL_WAIT: int = 5
 _ARXIV_FETCH_MAX_WAIT: int = 60
 # Fallback penalty when a 429 carries no Retry-After header (arXiv usually omits
 # it). Named so the assumption is visible alongside the other retry constants.
 _ARXIV_429_FALLBACK_RETRY_SECONDS: float = 30.0
+# (connect, read) timeouts for arXiv API and PDF requests; without them a stalled
+# connection would hang a Batch job until its 3-hour limit.
+_ARXIV_TIMEOUT: tuple[float, float] = (10.0, 60.0)
+_PDF_CHUNK_BYTES = 1 << 16
+_MAX_PDF_BYTES = 100 * 1024 * 1024
+
+
+class _TimeoutAdapter(requests.adapters.HTTPAdapter):
+    """Applies a default timeout to requests made by the arxiv client."""
+
+    def send(self, request, **kwargs):  # type: ignore[no-untyped-def,override]
+        if kwargs.get("timeout") is None:
+            kwargs["timeout"] = _ARXIV_TIMEOUT
+        return super().send(request, **kwargs)
+
 
 # A single process-wide limiter shared by ALL ArxivHandler instances, so the
 # concurrent citation stage cannot fan out into an arXiv 429 storm. arXiv asks
@@ -92,8 +108,8 @@ class ArxivMetadata(BaseModel):
         # it directly. A previous version made a doi.org round-trip "to validate"
         # on every metadata construction — wasteful and a 429/hang risk inside a
         # pydantic validator. The format is stable; no network call is needed.
-        if arxiv_id and re.match(r"^\d{4}\.\d{4,5}(v\d+)?$", arxiv_id):
-            clean_arxiv_id = arxiv_id.split("v")[0]
+        if normalize_arxiv_id(arxiv_id):
+            clean_arxiv_id = re.sub(r"v\d+$", "", str(arxiv_id))
             return f"10.48550/arXiv.{clean_arxiv_id}"
 
         return None
@@ -113,26 +129,28 @@ class ArxivMetadata(BaseModel):
 
 class ArxivHandler:
     DEFAULT_DELAY_SECONDS: int = 3
-    DEFAULT_MAX_RETRIES: int = 3
     DEFAULT_PAGE_SIZE: int = 100
 
-    def __init__(self, max_retries: int = DEFAULT_MAX_RETRIES):
+    def __init__(self) -> None:
         self.client = arxiv.Client(
             page_size=self.DEFAULT_PAGE_SIZE,
             delay_seconds=self.DEFAULT_DELAY_SECONDS,
-            num_retries=max_retries,
+            num_retries=0,
         )
+        session = getattr(self.client, "_session", None)
+        if isinstance(session, requests.Session):
+            adapter = _TimeoutAdapter()
+            session.mount("https://", adapter)
+            session.mount("http://", adapter)
 
     def download_paper(self, arxiv_id: str, papers_dir: Path) -> Path:
         try:
             paper = self._fetch_single_paper(arxiv_id)
-            safe_id = paper.get_short_id().replace(".", "_")
+            safe_id = re.sub(r"[./]", "_", paper.get_short_id())
             paper_dir = papers_dir / safe_id
             paper_dir.mkdir(parents=True, exist_ok=True)
-            filename = f"{safe_id}.pdf"
-            pdf_path = Path(
-                paper.download_pdf(dirpath=str(paper_dir), filename=filename)
-            )
+            pdf_path = paper_dir / f"{safe_id}.pdf"
+            self._download(str(paper.pdf_url), pdf_path)
             logger.info("Successfully downloaded PDF to: '%s'", pdf_path)
             return pdf_path
         except ArxivNotFoundError:
@@ -141,6 +159,22 @@ class ArxivHandler:
             raise ArxivDownloadError(
                 f"Failed to download paper '{arxiv_id}': {str(e)}"
             ) from e
+
+    @staticmethod
+    def _download(url: str, pdf_path: Path) -> None:
+        """Stream the PDF with timeouts and a size cap (``urlretrieve``, used
+        by the arxiv library, has neither)."""
+        written = 0
+        with requests.get(url, stream=True, timeout=_ARXIV_TIMEOUT) as response:
+            response.raise_for_status()
+            with pdf_path.open("wb") as fh:
+                for chunk in response.iter_content(chunk_size=_PDF_CHUNK_BYTES):
+                    written += len(chunk)
+                    if written > _MAX_PDF_BYTES:
+                        raise ArxivDownloadError(
+                            f"PDF at '{url}' exceeds the size cap."
+                        )
+                    fh.write(chunk)
 
     def fetch_metadata(self, arxiv_id: str) -> ArxivMetadata:
         try:

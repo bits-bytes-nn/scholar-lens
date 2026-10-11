@@ -1,10 +1,4 @@
-"""Tests for the AWS helper layer (S3, STS, SSM, Batch).
-
-All AWS access is faked with ``moto``; the Batch helpers are exercised with
-``unittest.mock`` because a full moto Batch setup (VPC + compute environment)
-is disproportionately heavy for these unit tests. No real AWS or network
-calls are made.
-"""
+"""Tests for the AWS helper layer (S3, STS, SSM), faked with ``moto``."""
 
 from __future__ import annotations
 
@@ -16,12 +10,10 @@ import pytest
 from moto import mock_aws
 
 from scholar_lens.src.aws_helpers import (
-    BatchJobError,
     S3Handler,
+    S3OperationError,
     get_account_id,
     get_ssm_param_value,
-    submit_batch_job,
-    wait_for_batch_job_completion,
 )
 
 BUCKET_NAME = "scholar-lens-test-bucket"
@@ -187,127 +179,36 @@ class TestAccountAndSsm:
         assert get_ssm_param_value(boto_session, "/scholar-lens/plain") == "plain-value"
 
 
-class TestSubmitBatchJob:
-    def test_returns_job_id_from_response(self, boto_session: boto3.Session) -> None:
-        fake_client = mock.Mock()
-        fake_client.submit_job.return_value = {"jobId": "job-123"}
-
-        with mock.patch.object(boto_session, "client", return_value=fake_client):
-            job_id = submit_batch_job(
-                boto_session,
-                job_name="my-job",
-                job_queue="my-queue",
-                job_definition="my-def",
-                parameters={"k": "v"},
-            )
-
-        assert job_id == "job-123"
-        fake_client.submit_job.assert_called_once_with(
-            jobName="my-job",
-            jobQueue="my-queue",
-            jobDefinition="my-def",
-            parameters={"k": "v"},
-        )
-
-    def test_defaults_parameters_to_empty_dict(
-        self, boto_session: boto3.Session
+class TestS3Text:
+    def test_put_then_get_round_trips_unicode(
+        self, boto_session: boto3.Session, s3_bucket: str
     ) -> None:
-        fake_client = mock.Mock()
-        fake_client.submit_job.return_value = {"jobId": "job-456"}
+        handler = S3Handler(boto_session, s3_bucket)
+        handler.put_text("results/job.json", '{"title": "리뷰"}')
+        assert handler.get_text("results/job.json") == '{"title": "리뷰"}'
 
-        with mock.patch.object(boto_session, "client", return_value=fake_client):
-            submit_batch_job(
-                boto_session,
-                job_name="j",
-                job_queue="q",
-                job_definition="d",
-            )
-
-        _, kwargs = fake_client.submit_job.call_args
-        assert kwargs["parameters"] == {}
-
-    def test_client_error_wrapped_in_batch_job_error(
-        self, boto_session: boto3.Session
+    def test_get_missing_returns_none(
+        self, boto_session: boto3.Session, s3_bucket: str
     ) -> None:
-        from botocore.exceptions import ClientError
-
-        fake_client = mock.Mock()
-        fake_client.submit_job.side_effect = ClientError(
-            {"Error": {"Code": "X", "Message": "boom"}}, "SubmitJob"
-        )
-
-        with mock.patch.object(boto_session, "client", return_value=fake_client):
-            with pytest.raises(BatchJobError):
-                submit_batch_job(
-                    boto_session,
-                    job_name="j",
-                    job_queue="q",
-                    job_definition="d",
-                )
+        assert S3Handler(boto_session, s3_bucket).get_text("nope.json") is None
 
 
-class TestWaitForBatchJobCompletion:
-    def test_returns_on_succeeded(self, boto_session: boto3.Session) -> None:
-        fake_client = mock.Mock()
-        fake_client.describe_jobs.return_value = {"jobs": [{"status": "SUCCEEDED"}]}
-
-        with mock.patch.object(boto_session, "client", return_value=fake_client):
-            # Should return None without raising.
-            assert wait_for_batch_job_completion(boto_session, "job-1") is None
-
-    def test_polls_until_succeeded(
-        self, boto_session: boto3.Session, monkeypatch: pytest.MonkeyPatch
+class TestUploadDirectoryPartialFailure:
+    def test_raises_when_a_file_fails(
+        self, boto_session: boto3.Session, s3_bucket: str, tmp_path: Path
     ) -> None:
-        fake_client = mock.Mock()
-        fake_client.describe_jobs.side_effect = [
-            {"jobs": [{"status": "RUNNING"}]},
-            {"jobs": [{"status": "RUNNABLE"}]},
-            {"jobs": [{"status": "SUCCEEDED"}]},
-        ]
-        # Avoid real sleeping during polling.
-        monkeypatch.setattr("scholar_lens.src.aws_helpers.time.sleep", lambda _s: None)
+        (tmp_path / "a.png").write_bytes(b"x")
+        (tmp_path / "b.png").write_bytes(b"y")
+        handler = S3Handler(boto_session, s3_bucket)
+        real_upload = handler._s3_client.upload_file
 
-        with mock.patch.object(boto_session, "client", return_value=fake_client):
-            wait_for_batch_job_completion(
-                boto_session, "job-1", poll_interval_seconds=0
-            )
+        def flaky(path, *args, **kwargs):  # type: ignore[no-untyped-def]
+            if path.endswith("b.png"):
+                from botocore.exceptions import ClientError
 
-        assert fake_client.describe_jobs.call_count == 3
+                raise ClientError({"Error": {"Code": "AccessDenied"}}, "PutObject")
+            return real_upload(path, *args, **kwargs)
 
-    @pytest.mark.parametrize("status", ["FAILED", "CANCELLED"])
-    def test_raises_on_terminal_failure(
-        self, boto_session: boto3.Session, status: str
-    ) -> None:
-        fake_client = mock.Mock()
-        fake_client.describe_jobs.return_value = {
-            "jobs": [{"status": status, "statusReason": "nope"}]
-        }
-
-        with mock.patch.object(boto_session, "client", return_value=fake_client):
-            with pytest.raises(BatchJobError):
-                wait_for_batch_job_completion(boto_session, "job-1")
-
-    def test_raises_when_job_not_found(self, boto_session: boto3.Session) -> None:
-        fake_client = mock.Mock()
-        fake_client.describe_jobs.return_value = {"jobs": []}
-
-        with mock.patch.object(boto_session, "client", return_value=fake_client):
-            with pytest.raises(BatchJobError):
-                wait_for_batch_job_completion(boto_session, "job-1")
-
-    def test_times_out(
-        self, boto_session: boto3.Session, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        fake_client = mock.Mock()
-        fake_client.describe_jobs.return_value = {"jobs": [{"status": "RUNNING"}]}
-        # Drive the monotonic clock forward so the timeout window elapses.
-        clock = iter([0.0, 1.0, 100.0, 200.0])
-        monkeypatch.setattr(
-            "scholar_lens.src.aws_helpers.time.monotonic",
-            lambda: next(clock),
-        )
-        monkeypatch.setattr("scholar_lens.src.aws_helpers.time.sleep", lambda _s: None)
-
-        with mock.patch.object(boto_session, "client", return_value=fake_client):
-            with pytest.raises(TimeoutError):
-                wait_for_batch_job_completion(boto_session, "job-1", timeout_seconds=10)
+        with mock.patch.object(handler._s3_client, "upload_file", side_effect=flaky):
+            with pytest.raises(S3OperationError, match="1 of 2"):
+                handler.upload_directory(tmp_path, "assets", [".png"])

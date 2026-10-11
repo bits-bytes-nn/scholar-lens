@@ -1,7 +1,9 @@
 """Prompts for the tech-guide pipeline: research planning, relevance, synopsis, section writing, grounding, and evaluation."""
 
 from .base import (
+    MATH_RULES,
     STYLE_RULES,
+    VISUAL_RULES,
     BasePrompt,
 )
 
@@ -207,7 +209,8 @@ class TechGuideSectionPrompt(BasePrompt):
     """
     )
 
-    human_prompt_template: str = """
+    human_prompt_template: str = (
+        """
     Write section {section_number} of {total_sections} of a technical guide on "{topic}".
 
     <full_outline>
@@ -249,23 +252,19 @@ class TechGuideSectionPrompt(BasePrompt):
       every section is not. When in doubt, omit the framing and let the content stand.
 
     Requirements:
-    - Write in clean GitHub-flavored Markdown, starting with an appropriate '##' or '###' heading for this section.
-      Headings must NOT contain section numbers (write "## How Reconciliation Works", never "## 1. How
-      Reconciliation Works" or "## Section 1").
-    - HONOUR THE <depth_directive>: spend the writing budget where the directive says. Go deep and detailed on
-      conceptually hard parts; stay brief on routine ones. This is a guide to be studied, not a translation — depth is
-      set per section, not by a fixed length.
+    - Start with exactly one `##` heading naming this section (no number: "## How Reconciliation Works", never
+      "## 1. How Reconciliation Works"); use `###` and `####` below it, never `#`.
+    - HONOUR THE <depth_directive>: go deep on conceptually hard parts and stay brief on routine ones. This is a
+      guide to be studied, not a translation; stay within the scope described for this section in the outline.
     - Ground all technical content in <sources>; do NOT invent APIs, flags, or behaviors not supported by them.
     - Include runnable code blocks (with language fences) where they aid understanding. For a section whose
       depth_directive plans a code/table visual, include it unless the sources genuinely do not support one.
-    - Render comparisons/options/parameters as actual GitHub-flavored Markdown tables (pipes and a header row), NEVER
-      as an image link to a table.
-    - For any math use LaTeX: \\( ... \\) inline / $$...$$ display. NEVER single-dollar $...$ inline. Do NOT use
-      standalone \\begin{{align}}/\\begin{{equation}}/\\begin{{gather}} — use \\begin{{aligned}} inside $$...$$. Write
-      \\boldsymbol, not \\bm; spell Greek letters as \\alpha, \\beta, etc.
-    - You MAY reference an image ONLY if its URL appears in <available_images>, using `![alt](url)`. Never invent image
-      URLs, and never alter a URL from <available_images>. Every image you embed MUST be referenced and explained in
-      the adjacent prose — if you would not discuss it, omit it. If no image fits, use none.
+    - You MAY reference an image ONLY if its URL appears in <available_images>, using `![alt](url)`, copied
+      exactly. Every image you embed MUST be explained in the adjacent prose; if no image fits, use none.
+    """
+        + VISUAL_RULES
+        + MATH_RULES
+        + """
     - CROSS-REFERENCES: This guide has EXACTLY {total_sections} sections, listed in <full_outline>. If you refer to
       another section, reference it ONLY by its title or its number within 1..{total_sections}. NEVER cite a section
       number greater than {total_sections}, and never promise content for a section that is not in <full_outline>.
@@ -279,6 +278,7 @@ class TechGuideSectionPrompt(BasePrompt):
     [The section in Markdown]
     </section_markdown>
     """
+    )
 
 
 class TechGuideGroundingPrompt(BasePrompt):
@@ -399,4 +399,51 @@ class TechGuideEvaluationPrompt(BasePrompt):
     Respond in exactly this format:
     <quality_score>An integer from 0 to 100</quality_score>
     <improvement_feedback>Concrete, actionable feedback for revising this section</improvement_feedback>
+    """
+
+
+class TechGuideTaxonomyPrompt(BasePrompt):
+    """Blog taxonomy for a finished guide: topic category and tags."""
+
+    input_variables: list[str] = [
+        "title",
+        "synopsis",
+        "category_options",
+        "controlled_tags",
+    ]
+    output_variables: list[str] = [
+        "category",
+        "controlled_tags",
+        "keywords",
+        "seo_title",
+    ]
+
+    system_prompt_template: str = """
+    You file technical blog posts into a fixed taxonomy. Choose only from the lists you are given.
+    """
+
+    human_prompt_template: str = """
+    Classify this technical guide for the blog.
+
+    <title>{title}</title>
+    <synopsis>
+    {synopsis}
+    </synopsis>
+
+    <category_options>{category_options}</category_options>
+    <controlled_tag_options>{controlled_tags}</controlled_tag_options>
+
+    Rules:
+    - category: exactly one value copied from category_options — the closest fit.
+    - controlled_tags: 1-3 values copied from controlled_tag_options that genuinely apply.
+    - keywords: up to 5 short reusable topic tags in English (1-4 words each, e.g. "Paged Attention",
+      "Inference Serving"); name techniques and tools the guide teaches, never restate the title.
+    - seo_title: only when the title is longer than 70 characters, a version of at most 70 characters that keeps
+      the product or technique name first; otherwise leave empty.
+
+    Respond in exactly this format:
+    <category>...</category>
+    <controlled_tags>Tag-One, Tag-Two</controlled_tags>
+    <keywords>Keyword One, Keyword Two</keywords>
+    <seo_title></seo_title>
     """

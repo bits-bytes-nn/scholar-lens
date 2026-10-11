@@ -30,7 +30,7 @@ from typing import Any
 
 import boto3
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.runnables import Runnable
+from langchain_core.runnables import Runnable, RunnableLambda
 
 from .constants import LanguageModelId
 from .logger import logger
@@ -44,6 +44,8 @@ from .prompts import (
     TechGuideSectionPrompt,
     TechGuideSynopsisPrompt,
 )
+from .prompts.tech_guide import TechGuideTaxonomyPrompt
+from .review_plan import digest_sections
 from .utils import (
     BedrockLanguageModelFactory,
     HTMLTagOutputParser,
@@ -56,20 +58,13 @@ from .utils import (
 from .web_research import ResearchCorpus, WebResearcher, neutralize_prompt_tags
 
 DEFAULT_LANGUAGE: str = "Korean"
-# Headroom reserved from the writer model's window for the prompt template and
-# the model's OWN output when fitting the source corpus. The previous-sections
-# budget is reserved ON TOP of this at fit time (see _write_sections) so the two
-# contexts, which share one section prompt, compose instead of double-counting
-# the window.
-_SECTION_CONTEXT_RESERVE_TOKENS: int = 80_000
-# Reserve used when bounding the accumulated previous-sections context. The
-# writer is a 1M-window model, so this caps that context at ~150k tokens
-# (1M - 850k) — enough for dedup/flow without crowding out sources + output.
-_PREVIOUS_SECTIONS_RESERVE_TOKENS: int = 850_000
 # Upper bound on guide sections. The synopsis is told this budget so it plans a
 # self-contained guide rather than over-proposing (which left the old vLLM guide
 # promising chapters 13-26 that were never written).
-_MAX_SECTIONS: int = 16
+_MAX_SECTIONS: int = 10
+# Source material handed to one section's writer/evaluator/grounding calls:
+# the most relevant pages only (about 15k tokens), not the whole corpus.
+_SECTION_SOURCE_CHARS: int = 60_000
 # Default number of web-search queries the research planner may propose.
 _MAX_RESEARCH_QUERIES: int = 6
 # Default number of top search-result pages fetched into the corpus so the
@@ -111,6 +106,18 @@ class NotTechnicalContentError(Exception):
     """Raised when the supplied URLs are not technical documentation."""
 
 
+# Heading of the opening section list, per output language (others: English).
+_OVERVIEW_HEADINGS = {"Korean": "이 가이드에서 다루는 것", "English": "In This Guide"}
+
+
+def parse_section_output(raw: str) -> dict[str, str]:
+    """Extract ``<section_markdown>`` from the writer output; if the wrapper is
+    missing or unbalanced, keep the text and drop stray tag fragments."""
+    match = re.search(r"<section_markdown>(.*?)</section_markdown>", raw, re.DOTALL)
+    text = match.group(1) if match else raw
+    return {"section_markdown": re.sub(r"</?section_markdown>", "", text).strip()}
+
+
 @dataclass
 class PlannedSection:
     """One outline entry: title, concern area, writing depth, and visual hint."""
@@ -119,6 +126,12 @@ class PlannedSection:
     area: str = ""
     depth: str = _DEFAULT_DEPTH
     visuals: str = ""
+    description: str = ""
+
+    def label(self, index: int) -> str:
+        """Outline line shown to the writer/evaluator: number, title, scope."""
+        line = f"{index}. {self.title}"
+        return f"{line} — {self.description}" if self.description else line
 
     @property
     def depth_directive(self) -> str:
@@ -199,6 +212,9 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
         self.research_plan_chain = self._build_chain(
             TechGuideResearchPlanPrompt, relevance_model_id
         )
+        self.taxonomy_chain = self._build_chain(
+            TechGuideTaxonomyPrompt, relevance_model_id
+        )
         self.synopsis_chain = self._build_chain(
             TechGuideSynopsisPrompt,
             synopsis_model_id,
@@ -206,27 +222,20 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
             thinking_effort=thinking_effort,
             supports_1m_context_window=True,
         )
-        self.section_chain = self._build_chain(
-            TechGuideSectionPrompt,
-            writing_model_id,
-            enable_thinking=enable_thinking,
-            thinking_effort=thinking_effort,
-            supports_1m_context_window=True,
-        )
-        # Lightweight chain reused if structured parsing of a section fails.
-        # Must request the 1M window like `section_chain` above: the sources are
-        # fitted to the 1M budget, so a fallback on the legacy ~200k window would
-        # raise "prompt is too long" on large corpora — exactly the wrapper-tag-
-        # missing case this fallback exists to rescue.
-        self._section_str_chain: Runnable = (
+        # Parsed leniently (one call): a missing wrapper tag falls back to the
+        # raw text instead of paying for a second full writer call.
+        self.section_chain = (
             TechGuideSectionPrompt.get_prompt()
             | self.llm_factory.get_model(
                 writing_model_id,
                 temperature=0.0,
                 callbacks=self.callbacks or None,
+                enable_thinking=enable_thinking,
+                thinking_effort=thinking_effort,
                 supports_1m_context_window=True,
             )
             | StrOutputParser()
+            | RunnableLambda(parse_section_output)
         )
         # Evaluation pass: scores a drafted section 0-100 and returns feedback,
         # driving a score-and-revise loop (the review pipeline's evaluate node).
@@ -330,6 +339,7 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
         topic = await self._assert_relevant(corpus, fallback_topic=planned_topic)
         synopsis = await self._draft_synopsis(topic, corpus)
         body = await self._write_sections(topic, synopsis, corpus)
+        body = self._overview(synopsis) + body
 
         return TechGuide(
             topic=topic,
@@ -338,6 +348,37 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
             image_urls=corpus.image_urls,
             source_urls=[p.url for p in corpus.pages],
         )
+
+    @RetryableBase._retry("tech_guide_taxonomy")
+    async def classify(
+        self,
+        guide: TechGuide,
+        *,
+        category_options: list[str],
+        controlled_tags: list[str],
+    ) -> dict[str, str]:
+        """Propose the blog topic, tags and SEO title for a finished guide (the
+        caller normalizes and validates them against the post conventions)."""
+        self._enforce_token_budget()
+        result: dict[str, str] = await self.taxonomy_chain.ainvoke(
+            {
+                "title": guide.topic,
+                "synopsis": guide.synopsis,
+                "category_options": ", ".join(category_options),
+                "controlled_tags": ", ".join(controlled_tags),
+            }
+        )
+        return result
+
+    def _overview(self, synopsis: str) -> str:
+        """Bulleted list of the planned section titles, opening the guide."""
+        titles = [
+            s.title for s in self._parse_synopsis_sections(synopsis, apply_cap=True)
+        ]
+        if len(titles) < 3:
+            return ""
+        bullets = "\n".join(f"- {t}" for t in titles)
+        return f"## {_OVERVIEW_HEADINGS.get(self.language, 'In This Guide')}\n\n{bullets}\n\n"
 
     async def _plan_research(
         self, corpus: ResearchCorpus
@@ -422,29 +463,11 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
                 self.max_sections,
                 [s.title for s in all_sections[self.max_sections :]],
             )
-        # Fit the corpus to the writer model's window, reserving headroom for the
-        # prompt/output PLUS the accumulated previous-sections context that shares
-        # the SAME section prompt. The two must compose: previous-sections is
-        # independently allowed up to `previous_budget` tokens, so sources must
-        # leave that much room on top of the output headroom, or a large corpus +
-        # many long earlier sections can jointly overflow the 1M window ("prompt
-        # is too long"). previous_budget mirrors the fit below (window minus the
-        # previous-sections reserve).
-        window = self.llm_factory.effective_context_window(self.writing_model_id)
-        previous_budget = max(window - _PREVIOUS_SECTIONS_RESERVE_TOKENS, 0)
-        sources = self.llm_factory.fit_text(
-            self.writing_model_id,
-            corpus.combined_text(),
-            reserve_tokens=_SECTION_CONTEXT_RESERVE_TOKENS + previous_budget,
-            label="section sources",
-        )
         available_images = "\n".join(corpus.image_urls) or "(none)"
 
         # Canonical numbered outline of ONLY the sections that will be written,
         # so the model never sees (and never references) dropped section numbers.
-        final_outline = "\n".join(
-            f"{i}. {s.title}" for i, s in enumerate(sections, start=1)
-        )
+        final_outline = "\n".join(s.label(i) for i, s in enumerate(sections, start=1))
         total = len(sections)
 
         written: list[str] = []
@@ -460,13 +483,18 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
             # window on a long guide. fit_text keeps the longest prefix — the
             # early sections where foundational concepts are defined, which is
             # what the dedup check most needs.
-            previous = self.llm_factory.fit_text(
-                self.writing_model_id,
-                "\n\n".join(written),
-                reserve_tokens=_PREVIOUS_SECTIONS_RESERVE_TOKENS,
-                label="previous sections",
+            # Earlier sections: the last two in full, a digest of the rest —
+            # enough to avoid repeats without resending the whole guide.
+            previous = "\n\n".join(
+                part
+                for part in (digest_sections(written[:-2]), "\n\n".join(written[-2:]))
+                if part
             )
-            section_label = f"{index}. {planned.title}"
+            section_label = planned.label(index)
+            sources = corpus.relevant_text(
+                f"{topic} {planned.title} {planned.description}",
+                max_chars=_SECTION_SOURCE_CHARS,
+            )
             markdown = await self._write_one_section(
                 topic=topic,
                 synopsis=final_outline,
@@ -719,17 +747,7 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
             "language": self.language,
         }
         result = await self.section_chain.ainvoke(payload)
-        markdown = (result or {}).get("section_markdown", "").strip()
-        if markdown:
-            return markdown
-        # Fallback: model omitted the wrapper tag — use raw text.
-        raw = (await self._section_str_chain.ainvoke(payload)).strip()
-        match = re.search(r"<section_markdown>(.*?)</section_markdown>", raw, re.DOTALL)
-        text = match.group(1) if match else raw
-        # Strip any stray wrapper tag fragments (e.g. an unclosed opening tag) so
-        # raw XML never leaks into the published Markdown.
-        text = re.sub(r"</?section_markdown>", "", text)
-        return text.strip()
+        return (result or {}).get("section_markdown", "").strip()
 
     def _parse_synopsis_sections(
         self, synopsis: str, *, apply_cap: bool = True
@@ -750,7 +768,13 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
             area, depth, visuals, title = self._extract_area_depth(body)
             if title:
                 sections.append(
-                    PlannedSection(title=title, area=area, depth=depth, visuals=visuals)
+                    PlannedSection(
+                        title=title,
+                        area=area,
+                        depth=depth,
+                        visuals=visuals,
+                        description=self._extract_description(body),
+                    )
                 )
         if not sections:
             # Fall back to non-empty lines if the model didn't number them.
@@ -794,6 +818,14 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
         # hyphen is left intact so titles like "Using gRPC - the basics" survive.
         title = re.split(r"\s+[—–]\s+|\(visuals?:", body, maxsplit=1)[0].strip()
         return area, depth, visuals, title or body.strip()
+
+    @staticmethod
+    def _extract_description(body: str) -> str:
+        """The planned scope after the em/en dash, minus the visuals hint."""
+        parts = re.split(r"\s+[—–]\s+", body, maxsplit=1)
+        if len(parts) < 2:
+            return ""
+        return re.split(r"\(visuals?:", parts[1], maxsplit=1, flags=re.I)[0].strip()
 
     @staticmethod
     def _parse_queries(raw: str) -> list[str]:

@@ -15,6 +15,7 @@ fetchers already treat as "skip this URL".
 
 from __future__ import annotations
 
+import threading
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
@@ -25,37 +26,46 @@ from requests.adapters import HTTPAdapter
 from .url_guard import resolve_validated_ip
 
 
-def _pin(request: httpx.Request) -> None:
+def _pin(request: httpx.Request) -> httpx.URL:
     """Validate the request URL and rewrite its host to the validated IP.
 
-    No-op for an IP literal (already validated, nothing to rewrite). Raises
-    :class:`UnsafeUrlError` for a non-public target.
+    Returns the original URL so the caller can restore it after sending (the
+    response, redirects and link resolution must see the hostname, never the
+    pinned IP). No rewrite for an IP literal. Raises :class:`UnsafeUrlError`
+    for a non-public target.
     """
-    host = request.url.host
-    pinned_ip = resolve_validated_ip(str(request.url))
+    original = request.url
+    pinned_ip = resolve_validated_ip(str(original))
     if pinned_ip is None:
-        return  # IP literal — connect as-is
+        return original  # IP literal — connect as-is
     # Connect to the validated IP, but keep the real hostname for TLS SNI and the
     # Host header so cert verification / vhosting still succeed.
-    request.url = request.url.copy_with(host=pinned_ip)
+    request.url = original.copy_with(host=pinned_ip)
     request.extensions = dict(request.extensions)
-    request.extensions["sni_hostname"] = host
+    request.extensions["sni_hostname"] = original.host
+    return original
 
 
 class PinnedHTTPTransport(httpx.HTTPTransport):
     """Sync transport that pins each request to an SSRF-validated IP."""
 
     def handle_request(self, request: httpx.Request) -> httpx.Response:
-        _pin(request)
-        return super().handle_request(request)
+        original = _pin(request)
+        try:
+            return super().handle_request(request)
+        finally:
+            request.url = original
 
 
 class PinnedAsyncHTTPTransport(httpx.AsyncHTTPTransport):
     """Async transport that pins each request to an SSRF-validated IP."""
 
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
-        _pin(request)
-        return await super().handle_async_request(request)
+        original = _pin(request)
+        try:
+            return await super().handle_async_request(request)
+        finally:
+            request.url = original
 
 
 class PinnedRequestsAdapter(HTTPAdapter):
@@ -71,6 +81,10 @@ class PinnedRequestsAdapter(HTTPAdapter):
 
     A non-public target raises :class:`~scholar_lens.src.url_guard.UnsafeUrlError`.
     """
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._local = threading.local()
 
     def send(
         self, request: requests.PreparedRequest, **kwargs: Any
@@ -90,8 +104,15 @@ class PinnedRequestsAdapter(HTTPAdapter):
             (parts.scheme, netloc, parts.path, parts.query, parts.fragment)
         )
         # Pin TLS SNI / cert verification to the real hostname, not the IP.
-        self._pinned_server_hostname = host
-        return super().send(request, **kwargs)
+        # Per-thread, so concurrent sends through one adapter never swap SNI.
+        self._local.server_hostname = host
+        try:
+            response = super().send(request, **kwargs)
+        finally:
+            self._local.server_hostname = None
+            request.url = url
+        response.url = url
+        return response
 
     def get_connection_with_tls_context(
         self,
@@ -103,7 +124,7 @@ class PinnedRequestsAdapter(HTTPAdapter):
         conn = super().get_connection_with_tls_context(
             request, verify, proxies=proxies, cert=cert
         )
-        host = getattr(self, "_pinned_server_hostname", None)
+        host = getattr(self._local, "server_hostname", None)
         if host and hasattr(conn, "conn_kw"):
             # Send the real hostname as TLS SNI so certificate verification and
             # virtual-hosting succeed even though we connect to the pinned IP.

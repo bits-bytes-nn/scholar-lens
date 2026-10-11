@@ -1,23 +1,61 @@
-"""Tests for the artifact-agnostic Publisher (S3 mocked, git stubbed)."""
+"""Tests for the artifact-agnostic Publisher (S3 mocked, GitHub API faked)."""
 
 from __future__ import annotations
 
-from datetime import datetime
+import base64
+import hashlib
+import itertools
 from pathlib import Path
-from unittest.mock import MagicMock
+from types import SimpleNamespace
+from typing import Any
 
 import boto3
+import httpx
 import pytest
+from github import GithubException
 from moto import mock_aws
 
 from scholar_lens.configs import Github
 from scholar_lens.src.aws_helpers import S3Handler
 from scholar_lens.src.publisher import (
+    BlogBranchSync,
+    PostAssetError,
     Publisher,
+    PublishError,
     PublishRequest,
     build_pr_body,
+    image_format,
+    is_arxiv_host,
     slugify,
 )
+
+
+@pytest.fixture
+def skip_validation(monkeypatch: pytest.MonkeyPatch) -> None:
+    """These tests exercise publishing mechanics on bare Markdown, not posts;
+    the conventions gate has its own tests (TestValidationGate)."""
+    monkeypatch.setattr(Publisher, "_validate", lambda self, markdown, request: [])
+
+
+class TestImageHelpers:
+    @pytest.mark.parametrize(
+        "url,expected",
+        [
+            ("https://arxiv.org/html/1/x.png", True),
+            ("https://ar5iv.labs.arxiv.org/html/1/x.png", True),
+            ("https://AR5IV.org/x.png", True),
+            ("https://notarxiv.org/x.png", False),
+            ("https://arxiv.org.evil.com/x.png", False),
+        ],
+    )
+    def test_is_arxiv_host(self, url: str, expected: bool) -> None:
+        assert is_arxiv_host(url) is expected
+
+    def test_image_format_by_magic_bytes(self) -> None:
+        assert image_format(b"\x89PNG\r\n\x1a\nrest") == "png"
+        assert image_format(b"\xff\xd8\xff\xe1rest") == "jpg"
+        assert image_format(b"GIF89a") is None
+        assert image_format(b"<svg") is None
 
 
 class TestRedactToken:
@@ -28,17 +66,13 @@ class TestRedactToken:
         assert "***" in str(redacted)
 
     def test_structured_exception_does_not_crash_redaction(self) -> None:
-        # GitPython's GitCommandError takes structured args; the old
-        # type(error)(scrubbed) reconstruction raised TypeError here.
-        from git import GitCommandError
-
-        err = GitCommandError(
-            ["git", "clone", "https://oauth2:ghp_secret@github.com/x"], 128
-        )
+        # GithubException takes structured args; re-constructing it with the
+        # scrubbed text would raise TypeError inside redaction.
+        err = GithubException(401, {"message": "Bad credentials ghp_secret"})
         redacted = Publisher._redact_token(err, "ghp_secret")
         assert isinstance(redacted, RuntimeError)
         assert "ghp_secret" not in str(redacted)
-        assert "GitCommandError" in str(redacted)  # original type preserved in text
+        assert "GithubException" in str(redacted)  # original type preserved in text
 
     def test_no_token_returns_original(self) -> None:
         err = ValueError("boom")
@@ -82,11 +116,19 @@ class TestSlugify:
     def test_slugify(self, title: str, expected: str) -> None:
         assert slugify(title) == expected
 
+    def test_non_ascii_titles_get_distinct_stable_slugs(self) -> None:
+        first, second = slugify("쿠버네티스 시작하기"), slugify(
+            "벡터 데이터베이스 가이드"
+        )
+        assert first.startswith("untitled-") and second.startswith("untitled-")
+        assert first != second
+        assert slugify("쿠버네티스 시작하기") == first
+
 
 def _request(work_dir: Path, **overrides) -> PublishRequest:
     base = dict(
         title="My Guide",
-        markdown="# Title\n\n![fig](figures/diagram.png)\n",
+        markdown="## Title\n\nBody.\n",
         work_dir=work_dir,
         branch_id="my-guide",
         pr_title="Tech Guide: My Guide",
@@ -97,23 +139,15 @@ def _request(work_dir: Path, **overrides) -> PublishRequest:
     return PublishRequest(**base)  # type: ignore[arg-type]
 
 
+@pytest.mark.usefixtures("skip_validation")
 class TestPublishLocal:
     async def test_publish_without_s3_writes_local_file(self, tmp_path: Path) -> None:
         pub = Publisher(Github(), root_dir=tmp_path)
-        request = _request(tmp_path, rewrite_local_images=False)
+        request = _request(tmp_path)
         s3_url, md_path = await pub.publish(request)
         assert s3_url is None
         assert md_path.exists()
-        assert md_path.read_text(encoding="utf-8").startswith("# Title")
-
-    async def test_local_images_rewritten_to_assets_path(self, tmp_path: Path) -> None:
-        pub = Publisher(Github(), root_dir=tmp_path)
-        request = _request(tmp_path, rewrite_local_images=True)
-        _, md_path = await pub.publish(request)
-        content = md_path.read_text(encoding="utf-8")
-        # Local "figures/diagram.png" becomes "/assets/<file>/diagram.png".
-        assert "/assets/" in content and "diagram.png" in content
-        assert "figures/diagram.png" not in content
+        assert md_path.read_text(encoding="utf-8").startswith("## Title")
 
     async def test_publish_applies_markdown_lint(self, tmp_path: Path) -> None:
         # publish() runs the lint pass for EVERY artifact (review/summary/guide
@@ -123,84 +157,10 @@ class TestPublishLocal:
         request = _request(
             tmp_path,
             markdown="intro line\n## Section\nbody\n",
-            rewrite_local_images=False,
         )
         _, md_path = await pub.publish(request)
         content = md_path.read_text(encoding="utf-8")
         assert "intro line\n\n## Section" in content  # blank line inserted
-
-    async def test_http_images_untouched(self, tmp_path: Path) -> None:
-        pub = Publisher(Github(), root_dir=tmp_path)
-        request = _request(
-            tmp_path,
-            markdown="![x](https://cdn.example.com/a.png)",
-            rewrite_local_images=True,
-        )
-        _, md_path = await pub.publish(request)
-        assert "https://cdn.example.com/a.png" in md_path.read_text(encoding="utf-8")
-
-    async def test_absolute_local_scratch_path_rewritten(self, tmp_path: Path) -> None:
-        # Figure enrichment injects an ABSOLUTE local path as the image src for
-        # PDF-parsed papers (e.g. /Users/.../figures/0.png). It must be rewritten
-        # to this post's asset dir, not shipped verbatim (which 404s on the blog).
-        pub = Publisher(Github(), root_dir=tmp_path)
-        request = _request(
-            tmp_path,
-            markdown="# T\n\n![fig](/Users/me/papers/x/figures/0.png)\n",
-            rewrite_local_images=True,
-        )
-        _, md_path = await pub.publish(request)
-        content = md_path.read_text(encoding="utf-8")
-        assert "/Users/me/papers/x/figures/0.png" not in content
-        assert "/assets/" in content and "/0.png)" in content
-
-    async def test_remote_image_url_with_parens_not_truncated(
-        self, tmp_path: Path
-    ) -> None:
-        # A URL containing parens (Wikipedia/arXiv style) must not be truncated at
-        # the first ')': the tail would leak as prose and the image would break.
-        url = "https://upload.wikimedia.org/File_(diagram).png"
-        pub = Publisher(Github(), root_dir=tmp_path)
-        request = _request(
-            tmp_path,
-            markdown=f"# T\n\n![arch]({url})\n",
-            rewrite_local_images=True,
-        )
-        _, md_path = await pub.publish(request)
-        content = md_path.read_text(encoding="utf-8")
-        assert f"![arch]({url})" in content  # intact, remote → untouched
-
-    async def test_local_image_path_with_parens_rewritten_whole(
-        self, tmp_path: Path
-    ) -> None:
-        # A local path with parens must be rewritten using its FULL basename, not
-        # a truncated one (which would 404 on the blog).
-        pub = Publisher(Github(), root_dir=tmp_path)
-        request = _request(
-            tmp_path,
-            markdown="# T\n\n![x](/tmp/figures/fig_(a).png)\n",
-            rewrite_local_images=True,
-        )
-        _, md_path = await pub.publish(request)
-        content = md_path.read_text(encoding="utf-8")
-        assert "/tmp/figures/fig_(a).png" not in content
-        assert "fig_(a).png)" in content  # full basename preserved in the rewrite
-
-    async def test_already_hosted_asset_path_untouched(self, tmp_path: Path) -> None:
-        # A path already under THIS post's asset dir must be left as-is (idempotent
-        # re-publish), not double-prefixed.
-        file_name = f"{datetime.now().strftime('%Y-%m-%d')}-my-guide"
-        hosted = f"/assets/{file_name}/0.png"
-        pub = Publisher(Github(), root_dir=tmp_path)
-        request = _request(
-            tmp_path,
-            markdown=f"# T\n\n![fig]({hosted})\n",
-            rewrite_local_images=True,
-        )
-        _, md_path = await pub.publish(request)
-        content = md_path.read_text(encoding="utf-8")
-        assert content.count(hosted) == 1
-        assert f"/assets/{file_name}/{file_name}" not in content  # no double-prefix
 
     async def test_code_body_with_generics_survives_publish(
         self, tmp_path: Path
@@ -219,7 +179,7 @@ class TestPublishLocal:
             "The invariant `a < b` must hold, and `List<T>` is generic.\n"
         )
         pub = Publisher(Github(), root_dir=tmp_path)
-        request = _request(tmp_path, markdown=body, rewrite_local_images=False)
+        request = _request(tmp_path, markdown=body)
         _, md_path = await pub.publish(request)
         content = md_path.read_text(encoding="utf-8")
         assert "Vec<u8>" in content
@@ -237,11 +197,170 @@ class TestPublishLocal:
             f"line_{i} = {i}\n" for i in range(400)
         )
         pub = Publisher(Github(), root_dir=tmp_path)
-        request = _request(tmp_path, markdown=body, rewrite_local_images=False)
+        request = _request(tmp_path, markdown=body)
         _, md_path = await pub.publish(request)  # must return promptly
         assert md_path.exists()
 
 
+PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 16
+JPEG = b"\xff\xd8\xff\xe0" + b"0" * 16
+SLUG = "my-guide"
+
+
+def _figures(work_dir: Path, **files: bytes) -> None:
+    figures = work_dir / "figures"
+    figures.mkdir(parents=True, exist_ok=True)
+    for name, data in files.items():
+        (figures / name).write_bytes(data)
+
+
+@pytest.mark.usefixtures("skip_validation")
+class TestImageLocalization:
+    """Blog convention: images live flat in /assets/images/<slug>-<n>.<ext>."""
+
+    async def _publish(self, tmp_path: Path, markdown: str, **publisher_kwargs: Any):  # type: ignore[no-untyped-def]
+        pub = Publisher(Github(), root_dir=tmp_path, **publisher_kwargs)
+        _, md_path = await pub.publish(_request(tmp_path, markdown=markdown))
+        return md_path.read_text(encoding="utf-8"), tmp_path / "blog-images"
+
+    async def test_local_figures_get_flat_numbered_names(self, tmp_path: Path) -> None:
+        _figures(tmp_path, **{"0.png": PNG, "fig_(a).png": JPEG})
+        content, staged = await self._publish(
+            tmp_path,
+            "# T\n\n![a](0.png)\n\n![b](/Users/me/x/figures/fig_(a).png)\n\n![a again](0.png)\n",
+        )
+        assert "![a](/assets/images/my-guide-1.png)" in content
+        assert "![b](/assets/images/my-guide-2.jpg)" in content
+        assert "![a again](/assets/images/my-guide-1.png)" in content  # reused
+        assert sorted(p.name for p in staged.iterdir()) == [
+            "my-guide-1.png",
+            "my-guide-2.jpg",
+        ]
+
+    async def test_arxiv_images_are_downloaded(self, tmp_path: Path) -> None:
+        fetched: list[str] = []
+
+        def fetch(url: str) -> bytes:
+            fetched.append(url)
+            return PNG
+
+        url = "https://arxiv.org/html/2502.17416v1/Media/looping.png"
+        content, staged = await self._publish(
+            tmp_path, f"![loop]({url})\n", fetch_image=fetch
+        )
+        assert fetched == [url]
+        assert "![loop](/assets/images/my-guide-1.png)" in content
+        assert url not in content
+        assert (staged / "my-guide-1.png").read_bytes() == PNG
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "https://ar5iv.labs.arxiv.org/html/2106.09685/assets/x1.png",
+            "https://ar5iv.org/html/2106.09685/assets/x1.png",
+            "https://export.arxiv.org/x.png",
+        ],
+    )
+    async def test_arxiv_family_hosts(self, tmp_path: Path, url: str) -> None:
+        content, _ = await self._publish(
+            tmp_path, f"![x]({url})\n", fetch_image=lambda u: PNG
+        )
+        assert url not in content
+
+    async def test_download_failure_blocks_publishing(self, tmp_path: Path) -> None:
+        def fetch(url: str) -> bytes:
+            raise httpx.ConnectError("boom")
+
+        pub = Publisher(Github(), root_dir=tmp_path, fetch_image=fetch)
+        with pytest.raises(PostAssetError, match="could not download"):
+            await pub.publish(
+                _request(tmp_path, markdown="![x](https://arxiv.org/html/1/x1.png)\n")
+            )
+        assert not list(tmp_path.glob("*.md"))  # nothing saved
+
+    async def test_non_image_payload_blocks_publishing(self, tmp_path: Path) -> None:
+        pub = Publisher(
+            Github(), root_dir=tmp_path, fetch_image=lambda u: b"<html>404</html>"
+        )
+        with pytest.raises(PostAssetError, match="not a PNG or JPEG"):
+            await pub.publish(
+                _request(tmp_path, markdown="![x](https://arxiv.org/html/1/x1.png)\n")
+            )
+
+    async def test_missing_local_figure_blocks_publishing(self, tmp_path: Path) -> None:
+        pub = Publisher(Github(), root_dir=tmp_path)
+        with pytest.raises(PostAssetError, match="not found"):
+            await pub.publish(_request(tmp_path, markdown="![x](missing.png)\n"))
+
+    async def test_other_external_images_stay_by_default(self, tmp_path: Path) -> None:
+        # Parenthesised URL must survive intact (not truncated at the first ')').
+        url = "https://upload.wikimedia.org/File_(diagram).png"
+        content, _ = await self._publish(tmp_path, f"# T\n\n![arch]({url})\n")
+        assert f"![arch]({url})" in content
+
+    async def test_other_external_images_downloaded_when_enabled(
+        self, tmp_path: Path
+    ) -> None:
+        content, _ = await self._publish(
+            tmp_path,
+            "![d](https://docs.example.com/a.png)\n",
+            download_external_images=True,
+            fetch_image=lambda u: PNG,
+        )
+        assert "![d](/assets/images/my-guide-1.png)" in content
+
+    async def test_already_hosted_images_untouched(self, tmp_path: Path) -> None:
+        content, staged = await self._publish(
+            tmp_path, "![a](/assets/images/other-1.png)\n"
+        )
+        assert content.count("/assets/images/other-1.png") == 1
+        assert not any(staged.iterdir())
+
+    async def test_rerun_clears_previous_staged_images(self, tmp_path: Path) -> None:
+        stale = tmp_path / "blog-images"
+        stale.mkdir()
+        (stale / "my-guide-9.png").write_bytes(PNG)
+        _, staged = await self._publish(tmp_path, "# no images\n")
+        assert not any(staged.iterdir())
+
+
+class TestValidationHook:
+    async def test_warnings_reach_the_pr_body_checklist(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        pub = Publisher(Github(), root_dir=tmp_path)
+        monkeypatch.setattr(
+            pub, "_validate", lambda markdown, request: ["Check tag 'LoRA'"]
+        )
+        request = _request(tmp_path)
+        await pub.publish(request)
+        assert request.validation_warnings == ["Check tag 'LoRA'"]
+        assert request.pr_body_with_checklist().endswith(
+            "### Review checklist\n- [ ] Check tag 'LoRA'"
+        )
+
+    async def test_blocking_violation_saves_nothing(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        pub = Publisher(Github(), root_dir=tmp_path)
+
+        def reject(markdown: str, request: PublishRequest) -> list[str]:
+            raise ValueError("forbidden key: author")
+
+        monkeypatch.setattr(pub, "_validate", reject)
+        with pytest.raises(ValueError, match="forbidden key"):
+            await pub.publish(_request(tmp_path))
+        assert not list(tmp_path.glob("*.md"))
+
+    def test_build_pr_body_without_warnings_has_no_checklist(self) -> None:
+        body = build_pr_body(kind="paper review", title="T", fields={})
+        assert "Review checklist" not in body
+        assert "- [ ] w" in build_pr_body(
+            kind="paper review", title="T", fields={}, warnings=["w"]
+        )
+
+
+@pytest.mark.usefixtures("skip_validation")
 class TestPublishS3:
     async def test_publish_uploads_post_and_returns_s3_url(
         self, tmp_path: Path
@@ -258,7 +377,7 @@ class TestPublishS3:
                 s3_bucket_name=BUCKET,
                 s3_prefix="scholar-lens",
             )
-            request = _request(tmp_path, rewrite_local_images=False)
+            request = _request(tmp_path)
             s3_url, _ = await pub.publish(request)
             assert s3_url is not None
             assert s3_url.startswith(f"s3://{BUCKET}/scholar-lens/posts/")
@@ -270,119 +389,480 @@ class TestPublishS3:
             assert any(k.endswith(".md") for k in keys)
 
 
-class TestCreatePullRequest:
-    async def test_skips_when_repo_not_configured(self, tmp_path: Path) -> None:
-        pub = Publisher(Github(repo_name=None), root_dir=tmp_path)
-        request = _request(tmp_path)
-        # Should return without raising (no repo configured).
-        await pub.create_pull_request(request, tmp_path / "x.md")
+def _blob_sha(data: bytes) -> str:
+    return hashlib.sha1(b"blob %d\0" % len(data) + data).hexdigest()
 
-    async def test_skips_when_token_missing(
+
+class FakeRef:
+    def __init__(self, repo: FakeRepo, name: str) -> None:
+        self.repo, self.name = repo, name
+
+    @property
+    def object(self) -> SimpleNamespace:
+        return SimpleNamespace(sha=self.repo.refs[self.name])
+
+    def edit(self, sha: str, force: bool = False) -> None:
+        self.repo.ref_edits.append((self.name, sha, force))
+        self.repo.refs[self.name] = sha
+
+
+class FakePull:
+    def __init__(self, number: int, head: str, title: str, body: str) -> None:
+        self.number, self.head, self.title, self.body = number, head, title, body
+        self.html_url = f"https://github.com/owner/blog/pull/{number}"
+
+    def edit(self, title: str, body: str) -> None:
+        self.title, self.body = title, body
+
+
+class FakeRepo:
+    """In-memory model of the Git Data + Pulls APIs used by BlogBranchSync."""
+
+    full_name = "owner/blog"
+
+    def __init__(self, base_files: dict[str, bytes]) -> None:
+        self._ids = itertools.count(1)
+        self.blobs: dict[str, bytes] = {}
+        self.trees: dict[str, dict[str, str]] = {}
+        self.commits: dict[str, tuple[str, list[str], dict[str, Any]]] = {}
+        self.refs: dict[str, str] = {}
+        self.ref_edits: list[tuple[str, str, bool]] = []
+        self.pulls: list[FakePull] = []
+        for data in base_files.values():
+            self.blobs[_blob_sha(data)] = data
+        tree = self._new_tree({p: _blob_sha(d) for p, d in base_files.items()})
+        self.refs["heads/main"] = self._new_commit(tree, [], {})
+
+    def _new_tree(self, entries: dict[str, str]) -> str:
+        sha = f"tree{next(self._ids)}"
+        self.trees[sha] = dict(entries)
+        return sha
+
+    def _new_commit(self, tree: str, parents: list[str], identity: dict) -> str:
+        sha = f"commit{next(self._ids)}"
+        self.commits[sha] = (tree, parents, identity)
+        return sha
+
+    def files_at(self, ref: str) -> dict[str, bytes]:
+        tree = self.trees[self.commits[self.refs[ref]][0]]
+        return {path: self.blobs[sha] for path, sha in tree.items()}
+
+    def _ancestors(self, sha: str) -> set[str]:
+        seen, stack = set(), [sha]
+        while stack:
+            current = stack.pop()
+            if current not in seen:
+                seen.add(current)
+                stack.extend(self.commits[current][1])
+        return seen
+
+    # --- PyGithub surface -------------------------------------------------
+    def get_git_ref(self, ref: str) -> FakeRef:
+        if ref not in self.refs:
+            raise GithubException(404, {"message": "Not Found"})
+        return FakeRef(self, ref)
+
+    def create_git_ref(self, ref: str, sha: str) -> FakeRef:
+        name = ref.removeprefix("refs/")
+        self.refs[name] = sha
+        return FakeRef(self, name)
+
+    def compare(self, base: str, head: str) -> SimpleNamespace:
+        ahead = self._ancestors(head) - self._ancestors(base)
+        return SimpleNamespace(ahead_by=len(ahead))
+
+    def get_git_commit(self, sha: str) -> SimpleNamespace:
+        return SimpleNamespace(sha=sha, tree=SimpleNamespace(sha=self.commits[sha][0]))
+
+    def get_git_tree(self, sha: str, recursive: bool = False) -> SimpleNamespace:
+        elements = [
+            SimpleNamespace(path=p, sha=b, type="blob")
+            for p, b in self.trees[sha].items()
+        ]
+        return SimpleNamespace(sha=sha, tree=elements)
+
+    def create_git_blob(self, content: str, encoding: str) -> SimpleNamespace:
+        assert encoding == "base64"
+        data = base64.b64decode(content)
+        self.blobs[_blob_sha(data)] = data
+        return SimpleNamespace(sha=_blob_sha(data))
+
+    def create_git_tree(
+        self, elements: list, base_tree: SimpleNamespace
+    ) -> SimpleNamespace:
+        entries = dict(self.trees[base_tree.sha])
+        for element in elements:
+            identity = element._identity
+            if identity["sha"] is None:
+                entries.pop(identity["path"])
+            else:
+                entries[identity["path"]] = identity["sha"]
+        return SimpleNamespace(sha=self._new_tree(entries))
+
+    def create_git_commit(self, message, tree, parents, **identity):  # type: ignore[no-untyped-def]
+        sha = self._new_commit(tree.sha, [p.sha for p in parents], identity)
+        return SimpleNamespace(sha=sha)
+
+    def get_pulls(self, state: str, head: str, base: str) -> list[FakePull]:
+        branch = head.split(":", 1)[1]
+        return [p for p in self.pulls if p.head == branch]
+
+    def create_pull(self, title: str, body: str, head: str, base: str) -> FakePull:
+        pull = FakePull(len(self.pulls) + 1, head, title, body)
+        self.pulls.append(pull)
+        return pull
+
+
+def _post(
+    work_dir: Path, name: str, body: str = "# Post\n", images: dict | None = None
+) -> Path:
+    """A published post plus the localized images Publisher.publish staged."""
+    work_dir.mkdir(parents=True, exist_ok=True)
+    markdown_path = work_dir / f"{name}.md"
+    markdown_path.write_text(body, encoding="utf-8")
+    if images:
+        staged = work_dir / "blog-images"
+        staged.mkdir(exist_ok=True)
+        for file_name, data in images.items():
+            (staged / file_name).write_bytes(data)
+    return markdown_path
+
+
+_CONFIG = Github(
+    enabled=True,
+    repo_name="owner/blog",
+    branch_prefix="paper-reviews",
+    author_name="Bot",
+    author_email="bot@example.com",
+)
+_BRANCH = "heads/paper-reviews/my-guide"
+
+
+class TestBlogBranchSync:
+    def test_new_branch_commits_post_and_images_and_opens_pr(
+        self, tmp_path: Path
+    ) -> None:
+        repo = FakeRepo({"README.md": b"blog"})
+        md = _post(
+            tmp_path,
+            "2026-10-11-my-guide",
+            images={"my-guide-1.png": PNG, "my-guide-2.jpg": JPEG},
+        )
+        request = _request(tmp_path)
+        request.validation_warnings = ["Check the tags"]
+        url = BlogBranchSync(repo, _CONFIG).sync(request, md)
+
+        assert url == "https://github.com/owner/blog/pull/1"
+        files = repo.files_at(_BRANCH)
+        assert files["_posts/2026-10-11-my-guide.md"] == b"# Post\n"
+        assert files["assets/images/my-guide-1.png"] == PNG  # flat blog layout
+        assert files["assets/images/my-guide-2.jpg"] == JPEG
+        assert files["README.md"] == b"blog"  # base content kept
+        assert repo.pulls[0].body.endswith("- [ ] Check the tags")
+        identity = repo.commits[repo.refs[_BRANCH]][2]
+        assert identity["author"]._identity == {
+            "name": "Bot",
+            "email": "bot@example.com",
+        }
+
+    def test_rerun_updates_same_branch_and_pr(self, tmp_path: Path) -> None:
+        repo = FakeRepo({"README.md": b"blog"})
+        sync = BlogBranchSync(repo, _CONFIG)
+        md = _post(tmp_path, "2026-10-11-my-guide")
+        first = sync.sync(_request(tmp_path), md)
+        md.write_text("# Post v2\n", encoding="utf-8")
+        second = sync.sync(_request(tmp_path, pr_title="Tech Guide: v2"), md)
+
+        assert first == second and len(repo.pulls) == 1
+        assert repo.pulls[0].title == "Tech Guide: v2"
+        assert repo.files_at(_BRANCH)["_posts/2026-10-11-my-guide.md"] == b"# Post v2\n"
+        assert repo.ref_edits[-1][2] is False  # fast-forward, no force
+
+    def test_identical_content_makes_no_commit(self, tmp_path: Path) -> None:
+        repo = FakeRepo({"README.md": b"blog"})
+        sync = BlogBranchSync(repo, _CONFIG)
+        md = _post(tmp_path, "2026-10-11-my-guide")
+        sync.sync(_request(tmp_path), md)
+        head_before, commits_before = repo.refs[_BRANCH], len(repo.commits)
+
+        assert sync.sync(_request(tmp_path), md) == repo.pulls[0].html_url
+        assert repo.refs[_BRANCH] == head_before
+        assert len(repo.commits) == commits_before
+
+    def test_rerun_on_another_day_replaces_the_older_copy(self, tmp_path: Path) -> None:
+        repo = FakeRepo(
+            {
+                "_posts/2025-01-01-other.md": b"keep",
+                "assets/images/other-1.png": PNG,
+            }
+        )
+        sync = BlogBranchSync(repo, _CONFIG)
+        sync.sync(
+            _request(tmp_path / "d1"),
+            _post(
+                tmp_path / "d1",
+                "2026-10-10-my-guide",
+                images={"my-guide-1.png": PNG, "my-guide-2.png": PNG + b"2"},
+            ),
+        )
+        sync.sync(
+            _request(tmp_path / "d2"),
+            _post(
+                tmp_path / "d2", "2026-10-11-my-guide", images={"my-guide-1.jpg": JPEG}
+            ),
+        )
+        files = repo.files_at(_BRANCH)
+        assert "_posts/2026-10-10-my-guide.md" not in files
+        assert "assets/images/my-guide-1.png" not in files  # no longer produced
+        assert "assets/images/my-guide-2.png" not in files
+        assert files["assets/images/my-guide-1.jpg"] == JPEG
+        assert files["_posts/2025-01-01-other.md"] == b"keep"
+        assert files["assets/images/other-1.png"] == PNG  # other posts untouched
+
+    def test_manual_edits_on_the_branch_survive_a_rerun(self, tmp_path: Path) -> None:
+        repo = FakeRepo({"README.md": b"blog"})
+        sync = BlogBranchSync(repo, _CONFIG)
+        md = _post(tmp_path, "2026-10-11-my-guide")
+        sync.sync(_request(tmp_path), md)
+        # Someone pushes an extra fix to the PR branch.
+        tree = dict(repo.trees[repo.commits[repo.refs[_BRANCH]][0]])
+        repo.blobs[_blob_sha(b"fix")] = b"fix"
+        tree["_data/fix.yml"] = _blob_sha(b"fix")
+        repo.refs[_BRANCH] = repo._new_commit(
+            repo._new_tree(tree), [repo.refs[_BRANCH]], {}
+        )
+
+        md.write_text("# Post v2\n", encoding="utf-8")
+        sync.sync(_request(tmp_path), md)
+        assert repo.files_at(_BRANCH)["_data/fix.yml"] == b"fix"
+
+    def test_merged_branch_restarts_from_base(self, tmp_path: Path) -> None:
+        repo = FakeRepo({"README.md": b"blog"})
+        sync = BlogBranchSync(repo, _CONFIG)
+        md = _post(tmp_path, "2026-10-11-my-guide")
+        sync.sync(_request(tmp_path), md)
+        repo.refs["heads/main"] = repo.refs[_BRANCH]  # fast-forward merge
+        repo.pulls.clear()
+
+        md.write_text("# Post v2\n", encoding="utf-8")
+        url = sync.sync(_request(tmp_path), md)
+        assert url == "https://github.com/owner/blog/pull/1"
+        assert repo.compare(repo.refs["heads/main"], repo.refs[_BRANCH]).ahead_by == 1
+
+    def test_rerun_after_merge_updates_the_published_file(self, tmp_path: Path) -> None:
+        # Merged yesterday as 2026-10-10-…; a rerun today must edit that file,
+        # not add a second post with the same URL.
+        repo = FakeRepo({"_posts/2026-10-10-my-guide.md": b"# Post v1\n"})
+        md = _post(tmp_path, "2026-10-11-my-guide")
+        BlogBranchSync(repo, _CONFIG).sync(_request(tmp_path), md)
+        files = repo.files_at(_BRANCH)
+        assert files["_posts/2026-10-10-my-guide.md"] == b"# Post\n"
+        assert "_posts/2026-10-11-my-guide.md" not in files
+
+    def test_already_published_unchanged_raises(self, tmp_path: Path) -> None:
+        md = _post(tmp_path, "2026-10-11-my-guide")
+        repo = FakeRepo({"_posts/2026-10-11-my-guide.md": b"# Post\n"})
+        with pytest.raises(PublishError, match="already contains this post"):
+            BlogBranchSync(repo, _CONFIG).sync(_request(tmp_path), md)
+        assert repo.pulls == []
+
+    def test_without_email_github_picks_the_identity(self, tmp_path: Path) -> None:
+        repo = FakeRepo({})
+        config = Github(repo_name="owner/blog", author_email=None)
+        BlogBranchSync(repo, config).sync(
+            _request(tmp_path), _post(tmp_path, "2026-10-11-my-guide")
+        )
+        branch = f"heads/{config.branch_prefix}/my-guide"
+        assert repo.commits[repo.refs[branch]][2] == {}
+
+
+class TestCreatePullRequest:
+    async def test_requires_repo_name(self, tmp_path: Path) -> None:
+        pub = Publisher(Github(repo_name=None), root_dir=tmp_path)
+        with pytest.raises(PublishError, match="repo_name"):
+            await pub.create_pull_request(_request(tmp_path), tmp_path / "x.md")
+
+    async def test_requires_token(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.delenv("GITHUB_TOKEN", raising=False)
         pub = Publisher(Github(repo_name="owner/blog"), root_dir=tmp_path)
-        request = _request(tmp_path)
-        await pub.create_pull_request(request, tmp_path / "x.md")  # no raise
+        with pytest.raises(PublishError, match="GITHUB_TOKEN"):
+            await pub.create_pull_request(_request(tmp_path), tmp_path / "x.md")
 
-
-class TestGitOperations:
-    """Exercise the real git flow against a LOCAL bare repo (no network).
-
-    Verifies the committer identity is set (regression: the Batch container has
-    no global git identity, so a commit failed with "empty ident name"), and
-    that extracted figures are copied into the blog's assets/<post>/ dir.
-    """
-
-    def _make_bare_remote(self, tmp_path: Path) -> Path:
-        from git import Repo
-
-        # A bare repo with an initial commit on `main` to branch from.
-        seed = tmp_path / "seed"
-        seed.mkdir()
-        seed_repo = Repo.init(seed, initial_branch="main")
-        with seed_repo.config_writer() as cfg:
-            cfg.set_value("user", "name", "seed")
-            cfg.set_value("user", "email", "seed@example.com")
-        (seed / "README.md").write_text("seed", encoding="utf-8")
-        seed_repo.git.add(all=True)
-        seed_repo.git.commit("-m", "init")
-        bare = tmp_path / "remote.git"
-        seed_repo.clone(bare, bare=True)
-        return bare
-
-    async def test_commit_succeeds_and_copies_figures(self, tmp_path: Path) -> None:
-        bare = self._make_bare_remote(tmp_path)
-
-        # A post with a figure that must travel into assets/<post>/.
-        work_dir = tmp_path / "work"
-        figures = work_dir / "figures"
-        figures.mkdir(parents=True)
-        (figures / "diagram.png").write_bytes(b"PNG")
-        markdown_path = work_dir / "2026-06-07-my-post.md"
-        markdown_path.write_text(
-            "# T\n\n![fig](/assets/2026-06-07-my-post/diagram.png)\n",
-            encoding="utf-8",
-        )
-
-        pub = Publisher(
-            Github(
-                repo_name="owner/blog",
-                base_branch="main",
-                author_name="Bot",
-                author_email="bot@example.com",
-            ),
-            root_dir=tmp_path,
-        )
-        clone_dir = tmp_path / "clone"
-        # Point the clone at the local bare repo instead of github.com.
-        pub._git_operations_inner(
-            clone_dir,
-            branch_name="paper-reviews/my-post",
-            commit_message="feat: add my post",
-            markdown_path=markdown_path,
-            repo_url=str(bare),
-        )
-
-        from git import Repo
-
-        repo = Repo(clone_dir)
-        # The commit landed (committer identity was set) with our author.
-        head = repo.head.commit
-        assert head.author.name == "Bot"
-        assert head.committer.email  # non-empty committer identity
-        # The figure was copied into the blog's assets/<post>/ layout.
-        copied = clone_dir / "assets" / markdown_path.stem / "diagram.png"
-        assert copied.exists()
-        # The post markdown is in _posts/.
-        assert (clone_dir / "_posts" / markdown_path.name).exists()
-
-    async def test_git_and_pr_invoked_when_configured(
+    async def test_api_failure_raises_without_token(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv("GITHUB_TOKEN", "fake-token")
-        pub = Publisher(Github(repo_name="owner/blog"), root_dir=tmp_path)
+        monkeypatch.setenv("GITHUB_TOKEN", "ghp_SECRET")
 
-        git_calls = MagicMock()
-        monkeypatch.setattr(pub, "_git_operations", git_calls)
+        class FailingGithub:
+            def __init__(self, *args: Any, **kwargs: Any) -> None:
+                self.kwargs = kwargs
 
-        created = {}
+            def get_repo(self, name: str) -> None:
+                raise GithubException(403, {"message": "token ghp_SECRET lacks scope"})
 
-        class FakeRepo:
-            def create_pull(self, **kwargs):  # type: ignore[no-untyped-def]
-                created.update(kwargs)
-
-        class FakeGithub:
-            def __init__(self, *a, **k) -> None:
+            def close(self) -> None:
                 pass
 
-            def get_repo(self, name):  # type: ignore[no-untyped-def]
-                return FakeRepo()
+        monkeypatch.setattr("scholar_lens.src.publisher.Github", FailingGithub)
+        pub = Publisher(Github(repo_name="owner/blog"), root_dir=tmp_path)
+        with pytest.raises(PublishError) as info:
+            await pub.create_pull_request(_request(tmp_path), tmp_path / "x.md")
+        assert "ghp_SECRET" not in str(info.value)
+        assert "lacks scope" in str(info.value)
+
+    async def test_end_to_end_with_fake_client(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("GITHUB_TOKEN", "ghp_x")
+        repo = FakeRepo({"README.md": b"blog"})
+        created: dict[str, Any] = {}
+
+        class FakeGithub:
+            def __init__(self, *args: Any, **kwargs: Any) -> None:
+                created.update(kwargs)
+
+            def get_repo(self, name: str) -> FakeRepo:
+                assert name == "owner/blog"
+                return repo
+
+            def close(self) -> None:
+                created["closed"] = True
 
         monkeypatch.setattr("scholar_lens.src.publisher.Github", FakeGithub)
-        request = _request(tmp_path)
-        await pub.create_pull_request(request, tmp_path / "x.md")
+        pub = Publisher(_CONFIG, root_dir=tmp_path)
+        md = _post(tmp_path, "2026-10-11-my-guide")
+        url = await pub.create_pull_request(_request(tmp_path), md)
+        assert url == "https://github.com/owner/blog/pull/1"
+        assert created["timeout"] > 0 and created["closed"] is True
 
-        git_calls.assert_called_once()
-        assert created["title"] == "Tech Guide: My Guide"
-        assert created["base"] == "main"
+
+VALID_POST = """---
+layout: post
+title: "LoRA: Low-Rank Adaptation of Large Language Models"
+subtitle: "LoRA: 대규모 언어 모델의 저랭크 적응"
+date: 2021-06-17 00:00:00
+paper_author: "Microsoft"
+categories: ["Paper Reviews", "Finetuning"]
+tags: ["Low-Rank-Adaptation", "Quantization"]
+cover: /assets/images/finetuning.jpg
+---
+## TL;DR
+### 왜 필요한가?
+Low-Rank Adaptation은 Quantization과 함께 쓰입니다.
+
+## 본문
+
+설명입니다.
+"""
+
+
+class TestValidationGate:
+    async def test_valid_post_is_published(self, tmp_path: Path) -> None:
+        pub = Publisher(Github(), root_dir=tmp_path)
+        _, md_path = await pub.publish(_request(tmp_path, markdown=VALID_POST))
+        assert md_path.exists()
+
+    async def test_invalid_post_is_rejected_and_kept(self, tmp_path: Path) -> None:
+        from scholar_lens.src.post_validator import PostValidationError
+
+        broken = VALID_POST.replace('paper_author: "Microsoft"', 'author: "Edward Hu"')
+        pub = Publisher(Github(), root_dir=tmp_path)
+        request = _request(tmp_path, markdown=broken)
+        with pytest.raises(PostValidationError) as info:
+            await pub.publish(request)
+        assert {v.rule for v in info.value.violations} >= {
+            "forbidden-key",
+            "paper-author",
+        }
+        assert not list(tmp_path.glob("20*.md"))  # nothing saved as a post
+        rejected = list(tmp_path.glob("*.rejected.md"))
+        assert rejected and "forbidden-key" in rejected[0].read_text(encoding="utf-8")
+
+    async def test_warnings_become_pr_checklist(self, tmp_path: Path) -> None:
+        post = VALID_POST.replace("설명입니다.", "Table 3에서 보듯 설명입니다.")
+        pub = Publisher(Github(), root_dir=tmp_path)
+        request = _request(tmp_path, markdown=post)
+        await pub.publish(request)
+        assert any("numbered-ref" in w for w in request.validation_warnings)
+        assert "- [ ]" in request.pr_body_with_checklist()
+
+
+class TestPostSlug:
+    def test_summary_and_review_never_share_a_slug(self, tmp_path: Path) -> None:
+        review = _request(tmp_path, title="LoRA: Low-Rank Adaptation", kind="review")
+        summary = _request(
+            tmp_path, title="LoRA: Low-Rank Adaptation", kind="summarize"
+        )
+        assert review.slug == "lora-low-rank-adaptation"
+        assert summary.slug == "lora-low-rank-adaptation-summary"
+
+    def test_long_titles_cut_at_a_word_boundary(self) -> None:
+        title = (
+            "Gemini 2.5: Pushing the Frontier with Advanced Reasoning, "
+            "Multimodality, Long Context, and Next Generation Agentic Capabilities"
+        )
+        slug = slugify(title)
+        assert len(slug) <= 80 and not slug.endswith("-")
+        assert slug.endswith("-long")  # whole words only
+
+
+@pytest.mark.usefixtures("skip_validation")
+class TestPublishBodyOnly:
+    async def test_front_matter_is_not_rewritten(self, tmp_path: Path) -> None:
+        post = (
+            '---\ntitle: "From <think> to <answer>: R\\_1"\nsubtitle: "<summary> 연구"\n---\n'
+            "## TL;DR\n\n본문 \\(x\\_1\\)\n"
+        )
+        pub = Publisher(Github(), root_dir=tmp_path)
+        _, md_path = await pub.publish(_request(tmp_path, markdown=post))
+        out = md_path.read_text(encoding="utf-8")
+        assert 'title: "From <think> to <answer>: R\\_1"' in out
+        assert 'subtitle: "<summary> 연구"' in out
+        assert "$$x_1$$" in out
+
+    async def test_images_inside_code_are_left_alone(self, tmp_path: Path) -> None:
+        body = "```markdown\n![logo](docs/logo.png)\n```\n\n`![alt](img.png)`\n"
+        pub = Publisher(Github(), root_dir=tmp_path)
+        _, md_path = await pub.publish(_request(tmp_path, markdown=body))
+        out = md_path.read_text(encoding="utf-8")
+        assert "![logo](docs/logo.png)" in out and "`![alt](img.png)`" in out
+
+    async def test_image_title_survives_localization(self, tmp_path: Path) -> None:
+        body = '![a](https://arxiv.org/html/1/x1.png "Figure 1")\n'
+        pub = Publisher(Github(), root_dir=tmp_path, fetch_image=lambda url: PNG)
+        _, md_path = await pub.publish(_request(tmp_path, markdown=body))
+        assert '![a](/assets/images/my-guide-1.png "Figure 1")' in md_path.read_text(
+            encoding="utf-8"
+        )
+
+
+@pytest.mark.usefixtures("skip_validation")
+class TestSvgFigures:
+    async def test_arxiv_svg_is_rasterized_to_png(self, tmp_path: Path) -> None:
+        svg = (
+            b'<svg xmlns="http://www.w3.org/2000/svg" width="20pt" height="10pt" '
+            b'viewBox="0 0 20 10"><rect width="20" height="10" fill="#f00"/></svg>'
+        )
+        body = "![arch](https://arxiv.org/html/2106.09685v2/figure1.svg)\n"
+        pub = Publisher(Github(), root_dir=tmp_path, fetch_image=lambda url: svg)
+        _, md_path = await pub.publish(_request(tmp_path, markdown=body))
+        assert "![arch](/assets/images/my-guide-1.png)" in md_path.read_text(
+            encoding="utf-8"
+        )
+        staged = tmp_path / "blog-images" / "my-guide-1.png"
+        assert staged.read_bytes().startswith(b"\x89PNG")
+
+
+def test_transparent_svg_renders_on_white_and_bom_is_detected() -> None:
+    from PIL import Image as PILImage
+
+    from scholar_lens.src.utils.images import is_svg, svg_to_png
+
+    svg = b'\xef\xbb\xbf<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"></svg>'
+    assert is_svg(svg)
+    import io
+
+    with PILImage.open(io.BytesIO(svg_to_png(svg))) as image:
+        assert image.convert("RGB").getpixel((5, 5)) == (255, 255, 255)

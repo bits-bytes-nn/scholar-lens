@@ -70,7 +70,6 @@ def _make_generator(
     gen.research_plan_chain = MagicMock()
     gen.synopsis_chain = MagicMock()
     gen.section_chain = MagicMock()
-    gen._section_str_chain = MagicMock()
     gen.evaluation_chain = MagicMock()
     gen.grounding_chain = MagicMock()
     gen.synopsis_model_id = LanguageModelId.CLAUDE_V4_5_HAIKU
@@ -186,10 +185,10 @@ class TestParseQueries:
 
 
 class TestBuildSearchProvider:
-    """_build_search_provider prefers Tavily > Brave > Null."""
+    """build_search_provider prefers Tavily > Brave > Null."""
 
     def _provider(self, monkeypatch, *, tavily=None, brave=None):  # type: ignore[no-untyped-def]
-        import scholar_lens.tech_guide_main as tg
+        from scholar_lens.src import guide_pipeline as tg
 
         for var in ("TAVILY_API_KEY", "BRAVE_API_KEY"):
             monkeypatch.delenv(var, raising=False)
@@ -197,7 +196,7 @@ class TestBuildSearchProvider:
             monkeypatch.setenv("TAVILY_API_KEY", tavily)
         if brave:
             monkeypatch.setenv("BRAVE_API_KEY", brave)
-        return tg._build_search_provider()
+        return tg.build_search_provider()
 
     def test_prefers_tavily(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from scholar_lens.src.web_research import TavilySearchProvider
@@ -277,24 +276,18 @@ class TestGenerateFlow:
         assert guide.body.count("## Section") == 2  # two synopsis sections
         assert guide.source_urls == ["https://docs.x.com"]
 
-    async def test_section_falls_back_to_raw_text(self) -> None:
-        gen = _make_generator()
-        gen.section_chain.ainvoke = AsyncMock(return_value={"section_markdown": ""})
-        gen._section_str_chain.ainvoke = AsyncMock(
-            return_value="<section_markdown>## Recovered\nbody</section_markdown>"
-        )
-        out = await gen._write_one_section(
-            topic="X",
-            synopsis="1. Intro",
-            section="1. Intro",
-            section_number=1,
-            total_sections=1,
-            previous_sections="",
-            sources="src",
-            available_images="(none)",
-            depth_directive="STANDARD section.",
-        )
-        assert out == "## Recovered\nbody"
+    @pytest.mark.parametrize(
+        "raw,expected",
+        [
+            ("<section_markdown>## A\nbody</section_markdown>", "## A\nbody"),
+            ("## A\nbody without wrapper", "## A\nbody without wrapper"),
+            ("<section_markdown>## A\ntruncated", "## A\ntruncated"),
+        ],
+    )
+    def test_section_output_parsed_leniently(self, raw: str, expected: str) -> None:
+        from scholar_lens.src.tech_guide import parse_section_output
+
+        assert parse_section_output(raw) == {"section_markdown": expected}
 
 
 class TestGrounding:
@@ -685,41 +678,28 @@ class TestTokenBudget:
         assert gen.section_chain.ainvoke.await_count == 1
 
 
-class TestMainForwardsPrUrl:
-    """Regression: the guide pipeline dropped the PR url before Slack.
-
-    `_run` returns (s3_url, pr_url); `main()` must unpack both and pass pr_url
-    through to `post_slack_result` so the completion message links the PR — the
-    same contract the paper review/summary path already has."""
-
-    def test_pr_url_reaches_slack(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        import scholar_lens.tech_guide_main as tg
-
-        monkeypatch.setattr(tg.Config, "load", classmethod(lambda cls: MagicMock()))
-        monkeypatch.setattr(tg, "is_running_in_aws", lambda: False)
-        # build_context builds boto sessions / S3 handler; stub it out entirely.
-        monkeypatch.setattr(tg, "build_context", lambda config: MagicMock())
-        monkeypatch.setattr(
-            tg,
-            "_run",
-            AsyncMock(
-                return_value=(
-                    "s3://bucket/post.md",
-                    "https://gh/o/r/pull/7",
-                    "Getting Started with X",
-                )
-            ),
+class TestPlannedScopeAndOverview:
+    def test_description_parsed_and_shown_in_label(self) -> None:
+        gen = _make_generator()
+        [section] = gen._parse_synopsis_sections(
+            "1. [CONCEPT] [deep] Reconciliation — how the controller diffs state "
+            "(visuals: table)"
+        )
+        assert section.title == "Reconciliation"
+        assert section.description == "how the controller diffs state"
+        assert section.label(1) == (
+            "1. Reconciliation — how the controller diffs state"
         )
 
-        captured: dict = {}
-        monkeypatch.setattr(tg, "post_slack_result", lambda **kw: captured.update(kw))
+    def test_label_without_description(self) -> None:
+        gen = _make_generator()
+        [section] = gen._parse_synopsis_sections("1. [USAGE] Install")
+        assert section.label(2) == "2. Install"
 
-        tg.main(["https://docs.x.com"], slack_channel="C1", slack_thread_ts="1.2")
+    def test_overview_lists_planned_sections(self) -> None:
+        gen = _make_generator()
+        overview = gen._overview("1. A — x\n2. B — y\n3. C — z")
+        assert overview.startswith("## In This Guide\n\n- A\n- B\n- C")
 
-        assert captured["pr_url"] == "https://gh/o/r/pull/7"
-        assert captured["s3_url"] == "s3://bucket/post.md"
-        assert captured["success"] is True
-        # The generated topic (not the source URL) becomes the Slack title; the
-        # source URL is passed separately for the muted sub-line.
-        assert captured["title"] == "Getting Started with X"
-        assert captured["sources"] == "https://docs.x.com"
+    def test_overview_skipped_for_short_guides(self) -> None:
+        assert _make_generator()._overview("1. A\n2. B") == ""

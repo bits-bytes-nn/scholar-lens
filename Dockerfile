@@ -1,44 +1,36 @@
-FROM public.ecr.aws/ubuntu/ubuntu:22.04
+# AWS Batch job image. Dependencies come from poetry.lock (the set CI tests);
+# the job definition supplies the command (`python3 -m scholar_lens worker ...`).
+ARG PYTHON_IMAGE=public.ecr.aws/docker/library/python:3.12-slim-bookworm
 
-ENV DEBIAN_FRONTEND=noninteractive \
-    TZ=Asia/Seoul \
-    LANG=ko_KR.UTF-8 \
-    LC_ALL=ko_KR.UTF-8
+FROM ${PYTHON_IMAGE} AS builder
+ENV PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    POETRY_VIRTUALENVS_CREATE=false \
+    VIRTUAL_ENV=/opt/venv \
+    PATH=/opt/venv/bin:$PATH
+RUN python -m venv /opt/venv-poetry \
+    && /opt/venv-poetry/bin/pip install "poetry==2.2.1" \
+    && python -m venv /opt/venv
+WORKDIR /build
+COPY pyproject.toml poetry.lock README.md ./
+RUN /opt/venv-poetry/bin/poetry install --only main --no-root --no-interaction
 
-# Install Python 3.12 (matches pyproject `^3.12` and the CI test matrix) from
-# the deadsnakes PPA; Ubuntu 22.04 ships only 3.10.
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends software-properties-common gnupg && \
-    add-apt-repository -y ppa:deadsnakes/ppa && \
-    apt-get update && \
-    apt-get install -y --no-install-recommends \
-    python3.12 \
-    python3.12-venv \
-    python3.12-dev \
-    git \
-    curl \
-    locales \
-    libgl1-mesa-glx \
-    libglib2.0-0 \
-    && locale-gen ko_KR.UTF-8 \
-    && curl -sS https://bootstrap.pypa.io/get-pip.py | python3.12 \
-    && ln -sf /usr/bin/python3.12 /usr/bin/python3 \
-    && ln -sf /usr/bin/python3.12 /usr/bin/python \
-    && apt-get clean \
+FROM ${PYTHON_IMAGE}
+# git: repository cloning for code-grounded reviews. tzdata: post timestamps.
+# fonts-dejavu-core: text in SVG figures rasterized for the blog.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git tzdata fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
-
+ENV TZ=Asia/Seoul \
+    LANG=C.UTF-8 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    VIRTUAL_ENV=/opt/venv \
+    PATH=/opt/venv/bin:$PATH
+COPY --from=builder /opt/venv /opt/venv
 WORKDIR /app
-
-COPY scholar_lens/requirements.txt .
-RUN python3.12 -m pip install --no-cache-dir --upgrade pip setuptools wheel && \
-    python3.12 -m pip install --no-cache-dir numpy numba && \
-    python3.12 -m pip install --no-cache-dir -r requirements.txt
-
+COPY assets/post_conventions.yml ./assets/post_conventions.yml
 COPY scholar_lens ./scholar_lens
-
-# Run as a non-root user (defense-in-depth: limits blast radius if the process
-# is compromised). Done after installs/copies so build steps keep root.
 RUN useradd --create-home --uid 10001 appuser && chown -R appuser:appuser /app
 USER appuser
-
-CMD ["python3", "-m", "scholar_lens.main"]
+CMD ["python3", "-m", "scholar_lens", "--help"]

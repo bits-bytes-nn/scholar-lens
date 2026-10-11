@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from urllib.parse import urljoin, urlparse
 
 import httpx
-from bs4 import BeautifulSoup, Tag
+from bs4 import BeautifulSoup, Tag, UnicodeDammit
 
 from .constants import EnvVars
 from .logger import logger
@@ -29,6 +29,9 @@ from .utils import extract_text_from_html
 DEFAULT_TIMEOUT: int = 30
 DEFAULT_MAX_SUBPAGES: int = 8
 DEFAULT_MAX_IMAGES_PER_PAGE: int = 12
+# Pages larger than this are skipped (a docs page is far smaller); the cap is
+# enforced while streaming so an oversized body is never fully downloaded.
+MAX_PAGE_BYTES: int = 5 * 1024 * 1024
 _BRAVE_WEB_SEARCH_URL = "https://api.search.brave.com/res/v1/web/search"
 _TAVILY_SEARCH_URL = "https://api.tavily.com/search"
 
@@ -52,7 +55,7 @@ _PROMPT_FENCE_TAGS = (
     "depth_directive",
     # Review / summary / extraction fences wrapping untrusted paper content, so
     # the same defang protects those pipelines (a paper body is attacker-supplied
-    # via the Slack bot just like a web page is).
+    # by whoever submits the job, just like a web page is).
     "paper",
     "paper_content",
     "current_content",
@@ -113,9 +116,38 @@ class ResearchCorpus:
                     ordered.append(url)
         return ordered
 
+    def relevant_text(self, query: str, *, max_chars: int) -> str:
+        """The pages most relevant to ``query`` (word overlap with title and
+        body), most relevant first, within ``max_chars``. Each section of a
+        guide reads only the material it needs instead of the whole corpus."""
+        words = {w for w in re.findall(r"[a-z0-9][a-z0-9_.-]{2,}", query.lower())}
+
+        def score(page: PageContent) -> float:
+            title = page.title.lower()
+            body = page.text.lower()
+            hits = sum(3 * (w in title) + min(body.count(w), 20) for w in words)
+            return hits / (1 + len(body) / 20_000)  # don't favour sheer length
+
+        ranked = sorted(self.pages, key=score, reverse=True)
+        blocks, used = [], 0
+        for page in ranked:
+            block = (
+                f"## Source: {neutralize_prompt_tags(page.url)}\n"
+                f"# {neutralize_prompt_tags(page.title)}\n\n"
+                f"{neutralize_prompt_tags(page.text)}"
+            )
+            room = max_chars - used
+            if room <= 2_000:
+                break
+            blocks.append(block[:room])
+            used += len(blocks[-1])
+        return "\n\n---\n\n".join(blocks)
+
     def combined_text(self, max_chars: int | None = None) -> str:
+        # URL and title are page-controlled too, so they are defanged as well.
         blocks = [
-            f"## Source: {p.url}\n# {p.title}\n\n{neutralize_prompt_tags(p.text)}"
+            f"## Source: {neutralize_prompt_tags(p.url)}\n"
+            f"# {neutralize_prompt_tags(p.title)}\n\n{neutralize_prompt_tags(p.text)}"
             for p in self.pages
         ]
         text = "\n\n---\n\n".join(blocks)
@@ -381,8 +413,7 @@ class WebResearcher:
             logger.warning("Skipping non-public URL '%s' (SSRF guard).", url)
             return None
         try:
-            response = self.client.get(url)
-            response.raise_for_status()
+            fetched = self._get_html(url)
         except UnsafeUrlError as e:
             logger.warning(
                 "Skipping '%s' — redirected to non-public target: %s", url, e
@@ -391,17 +422,17 @@ class WebResearcher:
         except httpx.HTTPError as e:
             logger.warning("Failed to fetch '%s': %s", url, e)
             return None
-
-        content_type = response.headers.get("Content-Type", "").lower()
-        if "html" not in content_type and "xml" not in content_type:
-            logger.debug("Skipping non-HTML resource '%s' (%s)", url, content_type)
+        if fetched is None:
             return None
+        html, final_url = fetched
 
-        soup = BeautifulSoup(response.text, "html.parser")
+        soup = BeautifulSoup(html, "html.parser")
         title = soup.title.get_text(strip=True) if soup.title else url
-        text = extract_text_from_html(response.text)
-        image_urls = self._extract_images(soup, url)
-        links = self._extract_links(soup, url)
+        text = extract_text_from_html(html)
+        # Relative links resolve against where the page actually lives (after
+        # redirects), not the URL we asked for.
+        image_urls = self._extract_images(soup, final_url)
+        links = self._extract_links(soup, final_url)
         return PageContent(
             url=url,
             title=title,
@@ -409,6 +440,34 @@ class WebResearcher:
             image_urls=image_urls,
             links=links,
         )
+
+    def _get_html(self, url: str) -> tuple[str, str] | None:
+        """Stream ``url``; return (decoded HTML, final URL), or None when the
+        resource is not HTML or exceeds :data:`MAX_PAGE_BYTES`."""
+        with self.client.stream("GET", url) as response:
+            response.raise_for_status()
+            content_type = response.headers.get("Content-Type", "").lower()
+            if "html" not in content_type and "xml" not in content_type:
+                logger.debug("Skipping non-HTML resource '%s' (%s)", url, content_type)
+                return None
+            body = bytearray()
+            for chunk in response.iter_bytes():
+                body.extend(chunk)
+                if len(body) > MAX_PAGE_BYTES:
+                    logger.warning(
+                        "Skipping '%s': larger than %d bytes.", url, MAX_PAGE_BYTES
+                    )
+                    return None
+            final_url = str(response.url)
+            charset = response.charset_encoding
+        raw = bytes(body)
+        if charset:
+            html = raw.decode(charset, errors="replace")
+        else:
+            # No charset header: honour <meta charset> / byte sniffing instead
+            # of assuming UTF-8 (EUC-KR, Shift_JIS docs otherwise turn to noise).
+            html = UnicodeDammit(raw, is_html=True).unicode_markup or ""
+        return html, final_url
 
     def _extract_images(self, soup: BeautifulSoup, base_url: str) -> list[str]:
         images: list[str] = []
@@ -425,8 +484,13 @@ class WebResearcher:
         return images
 
     def _extract_links(self, soup: BeautifulSoup, base_url: str) -> list[str]:
+        """Absolute links, those in the main content area first (navigation
+        menus would otherwise fill the sub-page budget)."""
         links: list[str] = []
-        for anchor in soup.find_all("a"):
+        main = soup.find("main") or soup.find("article")
+        anchors = list(main.find_all("a")) if isinstance(main, Tag) else []
+        anchors += [a for a in soup.find_all("a") if a not in anchors]
+        for anchor in anchors:
             if not isinstance(anchor, Tag):
                 continue
             href = anchor.get("href")
@@ -437,16 +501,16 @@ class WebResearcher:
         return links
 
     def _select_subpages(self, page: PageContent, base_url: str) -> list[str]:
-        """In-scope sub-URLs: same host and under the base path, deduped."""
+        """In-scope sub-URLs: same host and under the seed's path, deduped."""
         base = urlparse(base_url)
-        base_dir = base.path.rsplit("/", 1)[0]
+        scope = _scope_prefix(base.path)
         selected: list[str] = []
         seen: set[str] = set()
         for link in page.links:
             parsed = urlparse(link)
             if parsed.netloc != base.netloc:
                 continue
-            if not parsed.path.startswith(base_dir):
+            if not (parsed.path.rstrip("/") + "/").startswith(scope):
                 continue
             norm = _normalize_url(link)
             if norm == _normalize_url(base_url) or norm in seen:
@@ -456,6 +520,15 @@ class WebResearcher:
             if len(selected) >= self.max_subpages:
                 break
         return selected
+
+
+def _scope_prefix(path: str) -> str:
+    """Directory a seed URL scopes sub-page discovery to, with a trailing slash
+    so ``/guide/`` never matches ``/guidelines``. ``/docs/intro.html`` scopes
+    to ``/docs/``; ``/guide`` (a section index) scopes to ``/guide/``."""
+    last = path.rsplit("/", 1)[-1]
+    directory = path.rsplit("/", 1)[0] if "." in last else path.rstrip("/")
+    return directory + "/"
 
 
 def _normalize_url(url: str) -> str:

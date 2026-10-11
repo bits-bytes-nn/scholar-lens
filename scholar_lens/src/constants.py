@@ -1,4 +1,43 @@
+import re
 from enum import Enum, auto
+
+# arXiv identifiers: modern "2401.06066" and legacy "hep-th/9901001" /
+# "math.GT/0309136", each with an optional version suffix ("v2").
+ARXIV_ID_BODY = r"(?:\d{4}\.\d{4,5}|[a-z][a-z\-]*(?:\.[A-Za-z]{2,})?/\d{7})(?:v\d+)?"
+ARXIV_ID_PATTERN = re.compile(rf"^{ARXIV_ID_BODY}$")
+
+
+_ARXIV_URL = re.compile(
+    rf"^https?://(?:www\.|export\.)?arxiv\.org/(?:abs|pdf|html)/({ARXIV_ID_BODY})(?:\.pdf)?/?$",
+    re.IGNORECASE,
+)
+# New-style ids got a 5-digit sequence number from 2015-01 (YYMM 1501) on.
+_FIVE_DIGIT_SINCE_YYMM = 1501
+
+
+def arxiv_id_from_reference(value: str | None) -> str | None:
+    """Like :func:`normalize_arxiv_id`, but also accepts an arxiv.org
+    abs/pdf/html URL (how references often cite a paper)."""
+    if value and (url_match := _ARXIV_URL.match(value.strip())):
+        return normalize_arxiv_id(url_match.group(1))
+    return normalize_arxiv_id(value)
+
+
+def normalize_arxiv_id(value: str | None) -> str | None:
+    """Return the bare arXiv id in ``value`` (``arXiv:`` prefix stripped), or
+    None when it is not a valid arXiv id."""
+    if not value:
+        return None
+    candidate = value.strip()
+    if candidate.lower().startswith("arxiv:"):
+        candidate = candidate[len("arxiv:") :].strip()
+    if not ARXIV_ID_PATTERN.match(candidate):
+        return None
+    if modern := re.match(r"^(\d{4})\.(\d+)", candidate):
+        four_digit = len(modern.group(2)) == 4
+        if four_digit != (int(modern.group(1)) < _FIVE_DIGIT_SINCE_YYMM):
+            return None
+    return candidate
 
 
 class AutoNamedEnum(str, Enum):
@@ -26,27 +65,6 @@ class EnvVars(str, Enum):
     LANGCHAIN_ENDPOINT = "LANGCHAIN_ENDPOINT"
     LANGCHAIN_PROJECT = "LANGCHAIN_PROJECT"
     LOG_LEVEL = "LOG_LEVEL"
-    SLACK_BOT_TOKEN = "SLACK_BOT_TOKEN"
-    SLACK_APP_TOKEN = "SLACK_APP_TOKEN"
-    # Slack app "Signing Secret" (Basic Information -> App Credentials). The
-    # Events API receiver verifies the HMAC of each inbound request with it. This
-    # is distinct from SLACK_BOT_TOKEN (xoxb-) and SLACK_APP_TOKEN (xapp-, Socket
-    # Mode only).
-    SLACK_SIGNING_SECRET = "SLACK_SIGNING_SECRET"
-    # Name of the worker Lambda that the Events API receiver async-invokes to do
-    # intent parsing + Batch dispatch (set on the receiver function by CDK).
-    WORKER_FUNCTION_NAME = "WORKER_FUNCTION_NAME"
-    # Optional: the Slack app id this bot is allowed to bind to. When set, the
-    # bot fails fast at startup if the SLACK_BOT_TOKEN belongs to a different app
-    # (e.g. a token accidentally shared with another bot like OmniSummary), which
-    # would otherwise cause two Socket Mode processes to fight over one app's
-    # events. Find it under Slack app settings ("App ID", starts with 'A').
-    SLACK_EXPECTED_APP_ID = "SLACK_EXPECTED_APP_ID"
-    # Optional comma-separated allowlist of Slack user ids permitted to trigger
-    # jobs. When unset, any workspace member may trigger (logged). When set, all
-    # other users get a polite refusal — basic authorization for a bot that
-    # spends Bedrock + AWS Batch budget.
-    SLACK_ALLOWED_USER_IDS = "SLACK_ALLOWED_USER_IDS"
     TAVILY_API_KEY = "TAVILY_API_KEY"
     TOPIC_ARN = "TOPIC_ARN"
     UPSTAGE_API_KEY = "UPSTAGE_API_KEY"
@@ -82,7 +100,6 @@ class LocalPaths(str, Enum):
     ASSETS_DIR = "assets"
     FAISS_INDEX_DIR = "faiss_index"
     FIGURES_DIR = "figures"
-    GITHUB_CLONE_DIR = "github_clone"
     LOGS_DIR = "logs"
     PAPERS_DIR = "papers"
     POSTS_DIR = "_posts"
@@ -90,8 +107,6 @@ class LocalPaths(str, Enum):
     REPOS_DIR = "repos"
     CONTENT_FILE = "content.json"
     FIGURES_FILE = "figures.json"
-    GRAPH_FILE = "graph.png"
-    KEYWORDS_FILE = "keywords.txt"
     LOGS_FILE = "logs.txt"
     PAPER_FILE = "paper.json"
     PARSED_FILE = "parsed.json"
@@ -100,21 +115,17 @@ class LocalPaths(str, Enum):
 
 class S3Paths(AutoNamedEnum):
     ASSETS = auto()
-    KEYWORDS = auto()
     POSTS = auto()
+    RESULTS = auto()
     TRANSLATION_GUIDELINE = auto()
 
 
 class SSMParams(AutoNamedEnum):
     BATCH_JOB_DEFINITION = "batch-job-definition"
     BATCH_JOB_QUEUE = "batch-job-queue"
-    GUIDE_JOB_DEFINITION = "guide-job-definition"
-    GUIDE_JOB_QUEUE = "guide-job-queue"
     BRAVE_API_KEY = "brave-api-key"
     GITHUB_TOKEN = "github-token"
     LANGCHAIN_API_KEY = "langchain-api-key"
-    SLACK_BOT_TOKEN = "slack-bot-token"
-    SLACK_SIGNING_SECRET = "slack-signing-secret"
     TAVILY_API_KEY = "tavily-api-key"
     UPSTAGE_API_KEY = "upstage-api-key"
 
@@ -127,3 +138,15 @@ class AppConstants:
         AR5IV_LABS_HTML = "https://ar5iv.labs.arxiv.org/html"
         ARXIV_PDF = "https://arxiv.org/pdf"
         UPSTAGE_DOCUMENT_PARSE = "https://api.upstage.ai/v1/document-ai/document-parse"
+
+
+# Provider secrets every run may need: SSM SecureString name → environment
+# variable. One mapping for the job (runtime), IAM (deploy_infra) and the
+# writer script (put_secrets).
+RUN_SECRETS: dict[SSMParams, EnvVars] = {
+    SSMParams.GITHUB_TOKEN: EnvVars.GITHUB_TOKEN,
+    SSMParams.LANGCHAIN_API_KEY: EnvVars.LANGCHAIN_API_KEY,
+    SSMParams.UPSTAGE_API_KEY: EnvVars.UPSTAGE_API_KEY,
+    SSMParams.TAVILY_API_KEY: EnvVars.TAVILY_API_KEY,
+    SSMParams.BRAVE_API_KEY: EnvVars.BRAVE_API_KEY,
+}

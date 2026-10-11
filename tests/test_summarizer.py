@@ -8,11 +8,12 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from scholar_lens.configs import Github
-from scholar_lens.main import Mode, _format_summary
 from scholar_lens.src.constants import LanguageModelId
 from scholar_lens.src.content_extractor import Attributes
 from scholar_lens.src.explainer import Paper
+from scholar_lens.src.formatting import format_summary, paper_post_meta
 from scholar_lens.src.parser import Content
+from scholar_lens.src.post_conventions import load_local_conventions
 from scholar_lens.src.prompts import PaperSummaryPrompt
 from scholar_lens.src.summarizer import PaperSummarizer
 
@@ -54,6 +55,11 @@ def _make_summarizer_with_stub_chain(chain_result: dict[str, str]) -> PaperSumma
     return summarizer
 
 
+def _format_summary(github, paper, result):  # type: ignore[no-untyped-def]
+    meta = paper_post_meta(paper, github.summary_category, load_local_conventions())
+    return format_summary(github, paper, result, meta=meta)
+
+
 class TestPaperSummaryPrompt:
     def test_prompt_builds_with_required_variables(self) -> None:
         assert PaperSummaryPrompt.input_variables == [
@@ -62,7 +68,7 @@ class TestPaperSummaryPrompt:
             "language",
             "translation_guideline",
         ]
-        assert PaperSummaryPrompt.output_variables == ["summary", "tags", "urls"]
+        assert PaperSummaryPrompt.output_variables == ["subtitle", "summary", "urls"]
         # get_prompt must not raise (validates that every var is in a template).
         assert PaperSummaryPrompt.get_prompt() is not None
 
@@ -73,19 +79,19 @@ class TestPaperSummaryPrompt:
 
 
 class TestPaperSummarizer:
-    async def test_summarize_returns_summary_tags_urls(
+    async def test_summarize_returns_subtitle_summary_urls(
         self, sample_paper: Paper
     ) -> None:
         summarizer = _make_summarizer_with_stub_chain(
             {
-                "summary": "## 🔍 ...\n\nbody",
-                "tags": "Scaling Laws, Transformers",
+                "subtitle": "부제",
+                "summary": "> **요약:** x\n\n## 🔍 ...\n\nbody",
                 "urls": "[Repo](https://github.com/x/y)",
             }
         )
         result = await summarizer.summarize(sample_paper)
-        assert result["summary"].startswith("## ")
-        assert result["tags"] == "Scaling Laws, Transformers"
+        assert result["summary"].startswith("> ")
+        assert result["subtitle"] == "부제"
         assert result["urls"] == "[Repo](https://github.com/x/y)"
 
     async def test_codebase_summary_passed_to_chain(self, sample_paper: Paper) -> None:
@@ -119,10 +125,6 @@ class TestPaperSummarizer:
         )
         with pytest.raises(ValueError):
             await summarizer.summarize(sample_paper)
-
-    def test_split_tags(self) -> None:
-        assert PaperSummarizer._split_tags("A, B ,  C") == ["A", "B", "C"]
-        assert PaperSummarizer._split_tags("") == []
 
     async def test_over_budget_aborts_before_llm_call(
         self, sample_paper: Paper
@@ -167,9 +169,7 @@ class TestPaperSummarizer:
 
 class TestFormatSummary:
     def test_summary_front_matter_and_body(self, sample_paper: Paper) -> None:
-        gh = Github(
-            cover_images={"language-models": "lm.jpg"}, default_cover_image="d.jpg"
-        )
+        gh = Github()
         result = {
             "summary": "## 🔍 motivation",
             "tags": "Scaling Laws",
@@ -179,10 +179,26 @@ class TestFormatSummary:
         assert out.startswith("---")
         # Summaries land under the "Paper Summaries" primary category.
         assert '"Paper Summaries"' in out
-        assert "cover: /assets/images/lm.jpg" in out
+        # The cover comes from the blog conventions' topic list.
+        assert "cover: /assets/images/language-models.jpg" in out
         assert "## 🔍 motivation" in out
         assert "### References" in out
-        assert "[Repo](https://github.com/x/y)" in out
+        assert "* [Repo](https://github.com/x/y)" in out
+
+    def test_cited_urls_deduplicated_against_repos(self, sample_paper: Paper) -> None:
+        paper = sample_paper.model_copy(
+            update={"repo_urls": ["https://github.com/x/y"]}
+        )
+        out = _format_summary(
+            Github(),
+            paper,
+            {
+                "summary": "x",
+                "urls": "[Code](https://github.com/x/y), [Data](https://d.org/s)",
+            },
+        )
+        assert out.count("https://github.com/x/y") == 1
+        assert "* [Data](https://d.org/s)" in out
 
     def test_summary_without_urls_still_lists_paper(self, sample_paper: Paper) -> None:
         gh = Github()
@@ -190,10 +206,3 @@ class TestFormatSummary:
             gh, sample_paper, {"summary": "x", "tags": "", "urls": ""}
         )
         assert f"[{sample_paper.title}]({sample_paper.pdf_url})" in out
-
-
-class TestMode:
-    def test_modes(self) -> None:
-        assert Mode.REVIEW == "review"
-        assert Mode.SUMMARIZE == "summarize"
-        assert set(Mode.ALL) == {"review", "summarize"}

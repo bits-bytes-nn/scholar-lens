@@ -3,9 +3,11 @@ import base64
 import io
 import json
 import os
+import re
 from collections.abc import Coroutine, Sequence
 from pathlib import Path
 from typing import Any, Self
+from urllib.parse import urljoin
 
 import boto3
 import fitz
@@ -26,6 +28,7 @@ from .utils import (
     RetryableBase,
     extract_text_from_html,
 )
+from .utils.images import is_svg, svg_to_png
 
 DEFAULT_RESIZE_QUALITY: int = 85
 DEFAULT_TIMEOUT: int = 60
@@ -36,6 +39,9 @@ MIN_RESIZE_QUALITY: int = 10
 RESIZE_QUALITY_STEP: int = 10
 RESIZE_SCALE_FACTOR: float = 0.8
 MIN_RESIZE_DIMENSION: int = 100
+# A parse yielding less text than this is treated as failed (e.g. an arXiv
+# "conversion failed" page or an empty document-parse response).
+MIN_PARSED_TEXT_CHARS: int = 500
 
 
 class ParserError(Exception):
@@ -132,6 +138,12 @@ class Figure(BaseModel, RetryableBase):
             except OSError as e:
                 raise FigureParseError(f"Failed to read file '{path}': {e}") from e
 
+        # Vector figures are rasterized first (the vision model takes bitmaps).
+        if is_svg(image_bytes):
+            try:
+                image_bytes = svg_to_png(image_bytes)
+            except (ValueError, UnicodeDecodeError) as e:
+                raise FigureParseError(f"Could not render SVG '{path}': {e}") from e
         # Normalise to JPEG so the data URI's declared "image/jpeg" media type is
         # always accurate (figures may be PNG/WebP/etc.); then resize if needed.
         image_bytes = Figure._to_jpeg(image_bytes)
@@ -271,19 +283,23 @@ class RichParser(BaseParser):
         figure_analysis_model_id: LanguageModelId,
         boto_session: boto3.Session,
         timeout: int = DEFAULT_TIMEOUT,
+        callbacks: list[Any] | None = None,
     ) -> None:
         super().__init__(timeout=timeout)
         self.figure_analyser = self._initialize_chain(
-            figure_analysis_model_id, boto_session
+            figure_analysis_model_id, boto_session, callbacks
         )
 
     @staticmethod
     def _initialize_chain(
         model_id: LanguageModelId,
         boto_session: boto3.Session,
+        callbacks: list[Any] | None = None,
     ) -> Runnable:
         llm_factory = BedrockLanguageModelFactory(boto_session=boto_session)
-        figure_analyser_llm = llm_factory.get_model(model_id, temperature=0.0)
+        figure_analyser_llm = llm_factory.get_model(
+            model_id, temperature=0.0, callbacks=callbacks
+        )
 
         return (
             FigureAnalysisPrompt.get_prompt() | figure_analyser_llm | StrOutputParser()
@@ -345,9 +361,12 @@ class HTMLRichParser(RichParser, HTMLParser):
             self.url = base_url
             soup = BeautifulSoup(html_content, "html.parser")
 
-            is_ar5iv = "ar5iv" in self.url
-            figures = await self._extract_figures(soup, is_ar5iv)
+            figures = await self._extract_figures(soup)
             content = self._extract_content(soup, extract_text)
+            if extract_text and len(content.text) < MIN_PARSED_TEXT_CHARS:
+                raise ContentParseError(
+                    f"HTML rendering has only {len(content.text)} characters of text."
+                )
 
             logger.info("Extracted %d characters from HTML", len(content.text))
             logger.info("Extracted %d figures from HTML", len(figures))
@@ -357,32 +376,38 @@ class HTMLRichParser(RichParser, HTMLParser):
         except ContentParseError as e:
             raise ParserError(f"Failed to parse HTML for arXiv ID: '{arxiv_id}'") from e
 
-    def _construct_figure_url(self, img_src: str, is_ar5iv: bool) -> str:
+    def _construct_figure_url(self, img_src: str) -> str:
         if not self.url:
             raise ParserError(
                 "Base URL for the paper is not set. Cannot construct absolute figure URL."
             )
 
-        if is_ar5iv:
-            base = AppConstants.External.AR5IV_LABS_HTML.value.replace("/html", "")
-            return f"{base}/{img_src}"
+        # Resolve against the page URL per RFC 3986 — never concatenate. arXiv
+        # serves '.../html/<id>' (no trailing slash) with version-prefixed
+        # relative srcs ('<id>v1/Media/x.png'), so appending yields a doubled id
+        # segment that 404s; ar5iv uses root-relative srcs ('/html/<id>/...').
+        # urljoin handles both, and a 404 here silently strips every figure from
+        # the model's context (see attach_figure_context).
+        return urljoin(self.url, img_src)
 
-        base_url = self.url.rstrip("/")
-        return f"{base_url}/{img_src}"
-
-    async def _extract_figures(
-        self, soup: BeautifulSoup, is_ar5iv: bool
-    ) -> list[Figure]:
+    async def _extract_figures(self, soup: BeautifulSoup) -> list[Figure]:
         figure_tasks: list[Coroutine[Any, Any, Figure]] = []
         seen_srcs = set()
 
         for i, figure_tag in enumerate(soup.select(".ltx_figure")):
-            img = figure_tag.select_one("img")
+            img = figure_tag.select_one('img, object[type="image/svg+xml"]')
             caption_tag = figure_tag.select_one("figcaption")
-            if isinstance(img, Tag) and img.get("src") and isinstance(caption_tag, Tag):
-                src = img.get("src")
+            src_attr = (
+                "data" if isinstance(img, Tag) and img.name == "object" else "src"
+            )
+            if (
+                isinstance(img, Tag)
+                and img.get(src_attr)
+                and isinstance(caption_tag, Tag)
+            ):
+                src = img.get(src_attr)
                 if isinstance(src, str):
-                    path = self._construct_figure_url(src, is_ar5iv)
+                    path = self._construct_figure_url(src)
                     caption = caption_tag.get_text(strip=True)
                     figure_tasks.append(
                         Figure.from_llm(self.figure_analyser, str(i), path, caption)
@@ -395,7 +420,7 @@ class HTMLRichParser(RichParser, HTMLParser):
         ):
             if isinstance(img, Tag) and (src := img.get("src")):
                 if isinstance(src, str) and src not in seen_srcs:
-                    path = self._construct_figure_url(src, is_ar5iv)
+                    path = self._construct_figure_url(src)
                     alt_text_raw = img.get("alt", "Refer to caption")
                     alt_text = str(alt_text_raw) if alt_text_raw else "Refer to caption"
                     caption = alt_text.strip()
@@ -408,7 +433,7 @@ class HTMLRichParser(RichParser, HTMLParser):
         for i, img in enumerate(soup.select("img.ltx_graphics"), start=offset):
             if isinstance(img, Tag) and (src := img.get("src")):
                 if isinstance(src, str) and src not in seen_srcs:
-                    path = self._construct_figure_url(src, is_ar5iv)
+                    path = self._construct_figure_url(src)
                     alt_text_raw = img.get("alt", "Refer to caption")
                     alt_text = str(alt_text_raw) if alt_text_raw else "Refer to caption"
                     caption = alt_text.strip()
@@ -448,8 +473,9 @@ class PDFParser(RichParser):
         boto_session: boto3.Session,
         timeout: int = DEFAULT_TIMEOUT,
         api_key: str | None = None,
+        callbacks: list[Any] | None = None,
     ):
-        super().__init__(figure_analysis_model_id, boto_session, timeout)
+        super().__init__(figure_analysis_model_id, boto_session, timeout, callbacks)
         self.api_key = api_key or os.environ.get(EnvVars.UPSTAGE_API_KEY.value)
         if not self.api_key:
             raise ValueError(
@@ -471,15 +497,15 @@ class PDFParser(RichParser):
             figures_dir.mkdir(parents=True, exist_ok=True)
 
             figures = await self._extract_figures(elements, pdf_path, figures_dir)
-            content_html = response.get("content", {}).get("html", "").strip()
-
-            content = Content(
-                text=(
-                    extract_text_from_html(content_html)
-                    if extract_text
-                    else content_html
-                )
+            content_html = _bind_figure_sources(
+                response.get("content", {}).get("html", "").strip(), figures
             )
+            text = extract_text_from_html(content_html)
+            if len(text) < MIN_PARSED_TEXT_CHARS:
+                raise ContentParseError(
+                    f"Document parse returned only {len(text)} characters of text."
+                )
+            content = Content(text=text if extract_text else content_html)
             logger.info("Successfully extracted %d figures from PDF", len(figures))
             return figures, content
         except ParserError as e:
@@ -492,10 +518,15 @@ class PDFParser(RichParser):
     ) -> dict[str, Any]:
         parsed_path = pdf_path.parent / LocalPaths.PARSED_FILE.value
         if use_cache and parsed_path.exists():
-            return self._load_cached_response(parsed_path)
+            cached = self._load_cached_response(parsed_path)
+            if _has_content(cached):
+                return cached
+            logger.warning("Ignoring empty cached parse at '%s'.", parsed_path)
 
         response = await self._request_document_parse(pdf_path)
-        self._cache_response(parsed_path, response)
+        # Never cache an empty response: it would pin the failure for re-runs.
+        if _has_content(response):
+            self._cache_response(parsed_path, response)
         return response
 
     @staticmethod
@@ -568,6 +599,8 @@ class PDFParser(RichParser):
         regions = [Region(**fd) for fd in figure_data]
         paths = extract_figures_from_pdf(pdf_path, figures_dir, regions)
 
+        # ``paths`` is aligned with ``regions`` (None where a crop failed), so a
+        # skipped region can never shift captions onto the wrong image.
         tasks = [
             Figure.from_llm(
                 figure_analyser=self.figure_analyser,
@@ -575,7 +608,8 @@ class PDFParser(RichParser):
                 path=str(path),
                 caption=fd["caption"] or None,
             )
-            for i, (fd, path) in enumerate(zip(figure_data, paths, strict=False))
+            for i, (fd, path) in enumerate(zip(figure_data, paths, strict=True))
+            if path is not None
         ]
 
         all_figures = await asyncio.gather(*tasks, return_exceptions=True)
@@ -642,7 +676,9 @@ def extract_figures_from_pdf(
     zoom: int = 2,
     dpi: int = 300,
     figure_name_template: str = "{idx}.png",
-) -> list[Path]:
+) -> list[Path | None]:
+    """Crop each region to an image; the result is aligned with ``regions``
+    (``None`` for a region that could not be cropped)."""
     if not pdf_path.exists():
         raise FileNotFoundError(f"PDF file not found: {pdf_path}")
     figures_dir.mkdir(parents=True, exist_ok=True)
@@ -654,14 +690,10 @@ def extract_figures_from_pdf(
 
     with doc:
         return [
-            path
-            for path in (
-                _process_region(
-                    doc, region, idx, figures_dir, zoom, dpi, figure_name_template
-                )
-                for idx, region in enumerate(regions)
+            _process_region(
+                doc, region, idx, figures_dir, zoom, dpi, figure_name_template
             )
-            if path is not None
+            for idx, region in enumerate(regions)
         ]
 
 
@@ -714,3 +746,64 @@ def _process_region(
     except Exception as e:
         logger.warning("Error processing region %d: %s", idx, e)
         return None
+
+
+def _has_content(response: dict[str, Any]) -> bool:
+    html = response.get("content", {}).get("html", "")
+    return bool(response.get("elements")) and bool(str(html).strip())
+
+
+def _bind_figure_sources(html: str, figures: list[Figure]) -> str:
+    """Point each document-parse ``<figure id=N>`` image at its cropped file.
+
+    The parse output has no image sources; tying markers to figures by element
+    id (not by order) keeps every caption on the image it describes.
+    """
+    if not html or not figures:
+        return html
+    by_id = {fig.figure_id: Path(fig.path).name for fig in figures}
+    soup = BeautifulSoup(html, "html.parser")
+    for figure_tag in soup.find_all("figure"):
+        if not isinstance(figure_tag, Tag):
+            continue
+        name = by_id.get(str(figure_tag.get("id", "")))
+        img = figure_tag.find("img")
+        if name and isinstance(img, Tag):
+            img["src"] = name
+    return str(soup)
+
+
+_IMAGE_MARKER = re.compile(r"\[Image:\s*alt=(.*?),\s*src=(.*?)\]", re.DOTALL)
+
+
+def _marker_text(value: str) -> str:
+    """One line, no brackets or bare quotes: a figure marker must stay one
+    parseable token through sentence splitting and section slicing."""
+    flat = " ".join(value.split()).replace("[", "(").replace("]", ")")
+    return flat.replace('"', "'")
+
+
+def attach_figure_context(
+    text: str, figures: list[Figure], *, is_pdf_parsed: bool
+) -> str:
+    """Rewrite ``[Image: ...]`` markers into figure references the writers can
+    cite: the image path (file name for PDF-parsed papers, whose figures are
+    published with the post) plus the best available description (the figure
+    analysis, else the caption). Markers matching no extracted figure are
+    removed; no marker is ever paired with a figure by position."""
+    figure_map = {Path(fig.path).name: fig for fig in figures}
+
+    def repl(match: re.Match) -> str:
+        alt_value = " ".join(match.group(1).split()).strip("[]")
+        src_value = match.group(2).strip()
+        matched = figure_map.get(Path(src_value).name) if src_value else None
+        if matched is None:
+            if src_value:
+                logger.warning("No extracted figure for image src '%s'", src_value)
+            return ""
+        path = Path(matched.path).name if is_pdf_parsed else matched.path
+        alt_text = _marker_text(alt_value or matched.caption or "")
+        description = _marker_text(matched.analysis or matched.caption or alt_value)
+        return f'[Image: alt="{alt_text}", src="{path}", caption="{description}"]'
+
+    return _IMAGE_MARKER.sub(repl, text)

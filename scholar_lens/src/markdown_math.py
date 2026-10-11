@@ -1,95 +1,148 @@
-r"""Make LaTeX math survive the blog's kramdown(GFM) + MathJax pipeline.
+r"""Normalize LaTeX math to the blog's one delimiter: ``$$ ... $$``.
 
-The target Jekyll blog parses Markdown with ``kramdown`` in GFM mode. GFM treats
-``_`` as an emphasis delimiter, so a math span like ``\(W_0 + h_t\)`` can have
-its subscript underscores eaten (rendered as italics) before MathJax ever sees
-it. The fix the author applies by hand is to escape underscores inside math as
-``\_``. This module does that automatically, but ONLY inside math spans, and
-without touching code (fenced blocks or inline code), where ``_`` is literal and
-must be left alone.
+The target Jekyll blog (kramdown GFM + MathJax) renders ``$$...$$`` both inline
+and as display math, and nothing else: ``\( ... \)`` and ``\[ ... \]`` come out
+as literal "(x_i)", and a ``$$`` block glued to its neighbouring lines renders
+inline. kramdown passes math spans through untouched, so underscores inside
+``$$`` must NOT be escaped (``\_`` would show as a literal underscore) except
+inside ``\text{}``/``\texttt{}``, where they are text.
 
-Inline math uses ``\( ... \)`` (the blog strips single-``$`` delimiters to
-protect prose like prices, so ``$...$`` does not render and is not treated as
-math here); display math uses ``$$ ... $$``.
+:func:`normalize_math` rewrites, outside code only:
 
-:func:`normalize_math_underscores` is the entry point.
+* ``\( ... \)`` / ``\\( ... \\)`` → inline ``$$ ... $$``;
+* ``\[ ... \]`` / ``\\[ ... \\]`` → a display ``$$ ... $$`` block;
+* ``\_`` inside ``$$`` → ``_`` (kept within ``\text{}``/``\texttt{}``);
+* a ``$$`` span that fills whole lines → surrounded by blank lines.
+
+Single ``$`` is prose (currency) and is left alone. The function is idempotent.
 """
 
 from __future__ import annotations
 
 import re
 
-# Fenced code blocks (``` or ~~~), inline code (`...`), then display ($$...$$)
-# and inline (\( ... \)) math. Order matters: code is matched first so math
-# inside code is never rewritten. Single-$ spans are intentionally NOT matched:
-# the blog strips $ delimiters (to protect prose like prices), so $...$ is not
-# math here and must be left as prose.
+# Code first (never rewritten), then the math spans. ``display`` is any
+# ``$$...$$`` span, inline or block. Single ``$`` is deliberately not matched.
 _SEGMENT = re.compile(
     r"""
     (?P<fence>^[ \t]*(?P<ff>```|~~~)[^\n]*\n(?:[^\n]*\n)*?[ \t]*(?P=ff)[ \t]*$)
-    | (?P<icode>`+[^`]*`+)
+    | (?P<icode>`+[^`\n]*`+)
     | (?P<display>\$\$.+?\$\$)
-    | (?P<inline>\\\((?:\\.|[^\n\\])+?\\\))
+    | (?P<paren>\\{1,2}\((?:\\.|[^\n\\])+?\\{1,2}\))
+    | (?P<bracket>^[ \t]*\\{1,2}\[.+?\\{1,2}\][ \t]*$)
     """,
     re.VERBOSE | re.MULTILINE | re.DOTALL,
 )
 
-# Public alias: the markdown lint pass reuses this validated code/math-span
-# splitter so it classifies regions identically (code vs math vs prose).
+# Public alias: the lint pass classifies regions with the same splitter.
 SEGMENT_PATTERN = _SEGMENT
 
+_PAREN_DELIMS = re.compile(r"^\\{1,2}\(|\\{1,2}\)$")
+_BRACKET_DELIMS = re.compile(r"^\\{1,2}\[|\\{1,2}\]$")
+# Text-mode commands whose bodies keep a literal ``\_`` (one level of nested
+# braces). Shared with the post validator.
+TEXT_MODE_COMMANDS: tuple[str, ...] = (
+    "text",
+    "texttt",
+    "textrm",
+    "textit",
+    "textbf",
+    "mathrm",
+)
+TEXT_COMMAND = _TEXT_COMMAND = re.compile(
+    rf"\\(?:{'|'.join(TEXT_MODE_COMMANDS)})\{{(?:[^{{}}]|\{{[^{{}}]*\}})*\}}"
+)
+_ESCAPED_UNDERSCORE = re.compile(r"\\_")
 
-# Double-backslashed math delimiters: ``\\(``/``\\)``/``\\[``/``\\]``. Some model
-# outputs emit these (a JSON/escaping artifact) in PROSE, but on the blog ``\\(``
-# renders as a literal backslash followed by ``(`` — the math never activates.
-# Collapse to the single-backslash form the pipeline expects BEFORE segment-
-# splitting, so the spans are then recognised as math (and underscore-escaped).
-_DOUBLE_BS_DELIM = re.compile(r"\\\\([()\[\]])")
 
-# Spans where ``\\`` must NEVER be collapsed: code (literal) and — critically —
-# ALREADY-ACTIVE math (``$$…$$`` / ``\(…\)``), where ``\\`` is a row break and
-# ``\\[2pt]`` / ``\\[1em]`` is a row break with spacing. Collapsing there would
-# corrupt aligned/array/cases environments. Only prose gaps are fixed.
-_PROTECTED_SPANS = frozenset({"fence", "icode", "display", "inline"})
-
-
-def _fix_double_backslash_delims(markdown: str) -> str:
-    """Collapse ``\\\\(``/``\\\\)``/``\\\\[``/``\\\\]`` to a single backslash in
-    PROSE only, so double-escaped delimiters activate math — while leaving code
-    and already-active math spans (where ``\\\\`` is a legitimate row break)
-    untouched."""
+def _unescape_underscores(math: str) -> str:
+    """``\\_`` → ``_`` inside a math span, except within \\text/\\texttt."""
     out: list[str] = []
     pos = 0
-    for m in _SEGMENT.finditer(markdown):
-        if m.lastgroup in _PROTECTED_SPANS:
-            out.append(_DOUBLE_BS_DELIM.sub(r"\\\1", markdown[pos : m.start()]))
-            out.append(m.group(0))  # code or active math: untouched
-            pos = m.end()
-    out.append(_DOUBLE_BS_DELIM.sub(r"\\\1", markdown[pos:]))
+    for m in _TEXT_COMMAND.finditer(math):
+        out.append(_ESCAPED_UNDERSCORE.sub("_", math[pos : m.start()]))
+        out.append(m.group(0))
+        pos = m.end()
+    out.append(_ESCAPED_UNDERSCORE.sub("_", math[pos:]))
     return "".join(out)
 
 
-def _escape_underscores(math: str) -> str:
-    """Escape unescaped underscores in a math span (``_`` -> ``\\_``)."""
-    return re.sub(r"(?<!\\)_", r"\\_", math)
+def _as_display(body: str) -> str:
+    return f"\n\n$${body.strip()}$$\n\n"
 
 
-def normalize_math_underscores(markdown: str) -> str:
-    """Escape underscores inside LaTeX math spans for kramdown+GFM safety.
-
-    Leaves code (fenced or inline) and ordinary prose untouched; only the
-    contents of ``\\(...\\)`` and ``$$...$$`` are rewritten. Idempotent — already
-    escaped ``\\_`` is preserved.
-
-    First collapses double-backslashed math delimiters (``\\\\(`` -> ``\\(`` etc.)
-    outside code, so spans that arrived over-escaped are recognised as math and
-    get underscore-escaped too.
-    """
-    markdown = _fix_double_backslash_delims(markdown)
-
-    def repl(match: re.Match[str]) -> str:
-        if match.lastgroup in ("fence", "icode"):
-            return match.group(0)  # never touch code
-        return _escape_underscores(match.group(0))
+def _rewrite_spans(markdown: str) -> str:
+    def repl(m: re.Match[str]) -> str:
+        kind = m.lastgroup
+        text = m.group(0)
+        if kind in ("fence", "icode"):
+            return text
+        if kind == "paren":
+            return (
+                "$$" + _unescape_underscores(_PAREN_DELIMS.sub("", text)).strip() + "$$"
+            )
+        if kind == "bracket":
+            return _as_display(_unescape_underscores(_BRACKET_DELIMS.sub("", text)))
+        return _unescape_underscores(text)
 
     return _SEGMENT.sub(repl, markdown)
+
+
+def _is_table_or_list_line(line: str) -> bool:
+    stripped = line.lstrip()
+    return stripped.startswith("|") or bool(re.match(r"([-*+]|\d+\.)\s", stripped))
+
+
+def _isolate_display_blocks(markdown: str) -> str:
+    """Put blank lines around ``$$`` spans that occupy whole lines, so kramdown
+    renders them as display math; table rows and list items are left alone."""
+    out: list[str] = []
+    pos = 0
+    for m in _SEGMENT.finditer(markdown):
+        if m.lastgroup != "display":
+            continue
+        start, end = m.start(), m.end()
+        line_start = markdown.rfind("\n", 0, start) + 1
+        line_end = markdown.find("\n", end)
+        line_end = len(markdown) if line_end == -1 else line_end
+        before, after = markdown[line_start:start], markdown[end:line_end]
+        if before.strip() or after.strip():
+            continue  # inline math inside a sentence
+        if before or _is_table_or_list_line(markdown[line_start:line_end]):
+            continue  # indented (list continuation) or table row
+        prefix = markdown[pos:line_start]
+        out.append(prefix)
+        if prefix and not prefix.endswith("\n\n"):
+            out.append("\n")
+        out.append(markdown[line_start:end])
+        rest = markdown[end:]
+        if rest and not rest.startswith("\n\n"):
+            out.append("\n" if rest.startswith("\n") else "\n\n")
+        pos = end
+    out.append(markdown[pos:])
+    return "".join(out)
+
+
+def _collapse_blank_runs(markdown: str) -> str:
+    """Squeeze 3+ newlines (left by display conversion) outside code fences."""
+    out: list[str] = []
+    pos = 0
+    for m in _SEGMENT.finditer(markdown):
+        if m.lastgroup == "fence":
+            out.append(re.sub(r"\n{3,}", "\n\n", markdown[pos : m.start()]))
+            out.append(m.group(0))
+            pos = m.end()
+    out.append(re.sub(r"\n{3,}", "\n\n", markdown[pos:]))
+    return "".join(out)
+
+
+def normalize_math(markdown: str) -> str:
+    """Rewrite math delimiters and escaping to the blog's ``$$`` convention."""
+    text = _rewrite_spans(markdown)
+    text = _isolate_display_blocks(text)
+    return _collapse_blank_runs(text)
+
+
+def has_math(markdown: str) -> bool:
+    """Whether the (normalized) Markdown contains a ``$$`` math span outside code."""
+    return any(m.lastgroup == "display" for m in _SEGMENT.finditer(markdown))

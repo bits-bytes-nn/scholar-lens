@@ -268,30 +268,55 @@ class _StubProvider(MetadataProvider):
         return self._result
 
 
+_TITLE = "Attention Is All You Need"
+
+
 def test_chained_resolver_prefers_result_with_abstract() -> None:
-    no_abstract = ReferenceMetadata(title="A", authors=["x"], abstract=None)
-    with_abstract = ReferenceMetadata(title="B", authors=["y"], abstract="real")
+    no_abstract = ReferenceMetadata(title=_TITLE, authors=["x"], abstract=None)
+    with_abstract = ReferenceMetadata(title=_TITLE, authors=["y"], abstract="real")
     first = _StubProvider(no_abstract)
     second = _StubProvider(with_abstract)
     resolver = ChainedMetadataResolver([first, second])
 
-    result = resolver.resolve("q")
+    result = resolver.resolve(_TITLE)
     assert result is with_abstract
     assert first.calls == 1 and second.calls == 1
 
 
+def test_chained_resolver_stops_at_complete_match() -> None:
+    complete = ReferenceMetadata(
+        title=_TITLE, authors=["x"], abstract="abs", url="https://u"
+    )
+    later = _StubProvider(complete)
+    resolver = ChainedMetadataResolver([_StubProvider(complete), later])
+    assert resolver.resolve(_TITLE) is complete
+    assert later.calls == 0  # no second (rate-limited) provider call
+
+
+def test_chained_resolver_discards_other_papers() -> None:
+    # Regression: the top fuzzy hit for "Attention Is All You Need" can be a
+    # different paper; it must never be returned (and summarised) as this one.
+    wrong = ReferenceMetadata(
+        title="Attention Is All You Need In Speech Separation",
+        authors=["x"],
+        abstract="abs",
+        url="https://wrong",
+    )
+    assert ChainedMetadataResolver([_StubProvider(wrong)]).resolve(_TITLE) is None
+
+
 def test_chained_resolver_falls_back_to_first_hit_without_abstract() -> None:
-    only = ReferenceMetadata(title="A", authors=["x"], abstract=None)
+    only = ReferenceMetadata(title=_TITLE, authors=["x"], abstract=None)
     resolver = ChainedMetadataResolver([_StubProvider(only), _StubProvider(None)])
-    assert resolver.resolve("q") is only
+    assert resolver.resolve(_TITLE) is only
 
 
 def test_chained_resolver_swallows_provider_exceptions() -> None:
-    good = ReferenceMetadata(title="A", authors=["x"], abstract="z")
+    good = ReferenceMetadata(title=_TITLE, authors=["x"], abstract="z")
     resolver = ChainedMetadataResolver(
         [_StubProvider(None, raises=True), _StubProvider(good)]
     )
-    assert resolver.resolve("q") is good
+    assert resolver.resolve(_TITLE) is good
 
 
 # --------------------------------------------------------------------------- #
@@ -322,7 +347,15 @@ class _FakeResolver:
 
 
 @pytest.fixture
-def summarizer() -> CitationSummarizer:
+def summarizer(monkeypatch: pytest.MonkeyPatch) -> CitationSummarizer:
+    from scholar_lens.src.utils import factories
+
+    # Inference-profile lookup would call Bedrock; use the base model id.
+    monkeypatch.setattr(
+        factories,
+        "_resolve_inference_profile",
+        lambda session, model_id, region: model_id.value,
+    )
     session = boto3.Session(region_name="us-east-1")
     summ = CitationSummarizer(
         citation_summarizing_model_id=LanguageModelId.CLAUDE_V4_5_HAIKU,
@@ -355,11 +388,11 @@ async def test_summarize_resolves_from_metadata_abstract(
 
 
 @pytest.mark.asyncio
-async def test_summarize_drops_url_on_title_mismatch(
-    summarizer: CitationSummarizer,
+async def test_summarize_skips_abstract_of_a_different_paper(
+    summarizer: CitationSummarizer, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # Resolver returned a DIFFERENT paper than queried (fuzzy mis-match): the
-    # wrong URL must NOT be linked — keep the title as plain text.
+    # Resolver returned a DIFFERENT paper: its abstract must not be summarised
+    # under this citation; the summariser falls through to the title path.
     md = ReferenceMetadata(
         title="A Totally Different Paper",
         authors=["X"],
@@ -367,33 +400,62 @@ async def test_summarize_drops_url_on_title_mismatch(
         url="https://wrong",
     )
     summarizer.metadata_resolver = _FakeResolver(md)  # type: ignore[assignment]
-    summarizer.citation_summarizer = _FakeChain("summary")  # type: ignore[assignment]
+    abstract_chain = _FakeChain("summary of the wrong paper")
+    summarizer.citation_summarizer = abstract_chain  # type: ignore[assignment]
+    monkeypatch.setattr(summarizer.arxiv_handler, "search_by_title", lambda *a: None)
+
+    class _Analyzer:
+        async def ainvoke(self, _inputs: dict[str, Any]) -> dict[str, str]:
+            return {"analysis": "RoBERTa background."}
+
+    summarizer.citation_analyzer = _Analyzer()  # type: ignore[assignment]
 
     out = await summarizer.summarize(["RoBERTa Pretraining Approach"], "ctx")
-    assert len(out) == 1
-    assert "https://wrong" not in out[0]  # mis-attributed link suppressed
-    assert "A Totally Different Paper" in out[0]  # title still shown as text
+    assert abstract_chain.calls == 0
+    assert out == ["Title: [RoBERTa Pretraining Approach]\nRoBERTa background."]
 
 
-def test_title_matches_gate() -> None:
-    m = CitationSummarizer._title_matches
-    assert m("LoRA: Low-Rank Adaptation", "LoRA: Low-Rank Adaptation of LLMs")
-    assert m(
-        "Hu et al., LoRA: Low-Rank Adaptation of LLMs, 2021",
-        "LoRA: Low-Rank Adaptation of LLMs",
-    )
-    assert not m("RoBERTa Pretraining", "Unrelated Journal Article on Plants")
-    assert not m(None, "x")
-    assert not m("x", None)
-    # A short generic resolved title contained in a long citation must NOT match.
-    assert not m("Vaswani et al., Attention to Detail in Vision, 2021", "Attention")
+@pytest.mark.parametrize(
+    ("queried", "resolved", "expected"),
+    [
+        (
+            "LoRA: Low-Rank Adaptation of LLMs",
+            "LoRA: Low-Rank Adaptation of LLMs",
+            True,
+        ),
+        ("attention is all you need", "Attention Is All You Need.", True),
+        ("RoBERTa Pretraining", "Unrelated Journal Article on Plants", False),
+        # Regressions: near-miss titles of different papers.
+        (
+            "LoRA: Low-Rank Adaptation of Large Language Models",
+            "LoRA+: Efficient Low Rank Adaptation of Large Models",
+            False,
+        ),
+        (
+            "Attention Is All You Need",
+            "Attention Is All You Need In Speech Separation",
+            False,
+        ),
+        (
+            "Deep Residual Learning for Image Recognition",
+            "Deep Residual Learning: A Survey",
+            False,
+        ),
+        (None, "x", False),
+        ("x", None, False),
+    ],
+)
+def test_title_matches_gate(
+    queried: str | None, resolved: str | None, expected: bool
+) -> None:
+    assert CitationSummarizer._title_matches(queried, resolved) is expected
 
 
 @pytest.mark.asyncio
 async def test_summarize_caches_and_dedups_identifiers(
     summarizer: CitationSummarizer,
 ) -> None:
-    md = ReferenceMetadata(title="P", authors=["A"], abstract="abs", url=None)
+    md = ReferenceMetadata(title="dup", authors=["A"], abstract="abs", url=None)
     resolver = _FakeResolver(md)
     chain = _FakeChain("summary")
     summarizer.metadata_resolver = resolver  # type: ignore[assignment]
@@ -414,7 +476,7 @@ async def test_summarize_single_flight_across_concurrent_calls(
     # for the SAME identifier must share one resolution — not double the work.
     import asyncio as _asyncio
 
-    md = ReferenceMetadata(title="P", authors=["A"], abstract="abs", url=None)
+    md = ReferenceMetadata(title="dup", authors=["A"], abstract="abs", url=None)
 
     class _SlowResolver:
         def __init__(self) -> None:
@@ -495,11 +557,71 @@ async def test_arxiv_id_routes_to_arxiv_and_uses_abstract(
     assert resolver.calls == 0
 
 
-def test_looks_like_arxiv_id() -> None:
-    assert CitationSummarizer._looks_like_arxiv_id("arXiv:2301.00001")
-    assert CitationSummarizer._looks_like_arxiv_id("2301.00001")
-    assert CitationSummarizer._looks_like_arxiv_id("2301.00001v2")
-    assert not CitationSummarizer._looks_like_arxiv_id("Attention Is All You Need")
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("arXiv:2301.00001", "2301.00001"),
+        ("2301.00001v2", "2301.00001v2"),
+        ("hep-th/9901001", "hep-th/9901001"),
+        ("arXiv:math.GT/0309136v2", "math.GT/0309136v2"),
+        ("Attention Is All You Need", None),
+        ("N/A", None),
+    ],
+)
+def test_normalize_arxiv_id(value: str, expected: str | None) -> None:
+    from scholar_lens.src.constants import normalize_arxiv_id
+
+    assert normalize_arxiv_id(value) == expected
+
+
+@pytest.mark.asyncio
+async def test_arxiv_not_found_yields_no_summary(
+    summarizer: CitationSummarizer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Regression: a placeholder "Could not generate summary." used to reach the
+    # writer prompts as if it were a citation summary.
+    from scholar_lens.src.arxiv_handler import ArxivNotFoundError
+
+    def missing(_id: str) -> None:
+        raise ArxivNotFoundError("gone")
+
+    monkeypatch.setattr(summarizer.arxiv_handler, "fetch_metadata", missing)
+    assert await summarizer.summarize(["2301.99999"], "ctx") == []
+
+
+class TestCitationFieldCoercion:
+    """One malformed field must not drop the whole citation."""
+
+    @pytest.mark.parametrize(
+        ("arxiv_id", "expected"),
+        [("N/A", None), ("arXiv:hep-th/9802150", "hep-th/9802150"), (None, None)],
+    )
+    def test_arxiv_id_coerced(self, arxiv_id: str | None, expected: str | None) -> None:
+        from scholar_lens.src.content_extractor import Citation
+
+        cit = Citation(authors="A", title="T", arxiv_id=arxiv_id)
+        assert cit.arxiv_id == expected
+
+    @pytest.mark.parametrize(
+        ("year", "expected"), [("2017a", 2017), ("2020, July", 2020), ("n.d.", None)]
+    )
+    def test_year_coerced(self, year: str, expected: int | None) -> None:
+        from scholar_lens.src.content_extractor import Citation
+
+        assert Citation(authors="A", title="T", year=year).year == expected
+
+    def test_parse_citation_tuple_with_letter_year(self) -> None:
+        from scholar_lens.src.content_extractor import ContentExtractor
+
+        cit = ContentExtractor._parse_citation("('Hu et al.', '2021a', 'LoRA', 'N/A')")
+        assert cit is not None and cit.year == 2021 and cit.arxiv_id is None
+
+    def test_non_latin_titles_keep_distinct_keys(self) -> None:
+        from scholar_lens.src.content_extractor import Citation, ContentExtractor
+
+        a = Citation(authors="김", title="대규모 언어 모델", year=2024)
+        b = Citation(authors="김", title="강화 학습 개요", year=2024)
+        assert ContentExtractor._dedup_key(a) != ContentExtractor._dedup_key(b)
 
 
 class TestCitationDedupKey:
@@ -530,3 +652,70 @@ class TestCitationDedupKey:
         d = Citation(authors="X", year=None, title="T", arxiv_id="2401.06066")
         e = Citation(authors="Y", year=2021, title="Other", arxiv_id="2401.06066")
         assert ContentExtractor._dedup_key(d) == ContentExtractor._dedup_key(e)
+
+
+class TestContentExtractorSurface:
+    async def test_attributes_do_not_write_keyword_vocabulary(
+        self, tmp_path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:  # type: ignore[no-untyped-def]
+        # New keywords are no longer appended to assets/keywords.txt or S3; tag
+        # normalisation is deterministic downstream.
+        from scholar_lens.src.content_extractor import ContentExtractor
+
+        extractor = ContentExtractor.__new__(ContentExtractor)
+        extractor.existing_keywords = set()
+        extractor.keywords_path = tmp_path / "keywords.txt"
+        extractor._attributes_model_id = LanguageModelId.CLAUDE_V5_5_HAIKU
+        extractor.llm_factory = type(
+            "F", (), {"fit_text": staticmethod(lambda m, t, **k: t)}
+        )()
+
+        seen: dict[str, Any] = {}
+
+        class _Chain:
+            async def ainvoke(self, inputs: dict[str, Any]) -> dict[str, str]:
+                seen.update(inputs)
+                return {
+                    "keywords": "LoRA, PEFT",
+                    "category": "Language Models",
+                    "affiliation": "Microsoft",
+                    "controlled_tags": "Fine-Tuning , Efficient-Training",
+                    "seo_title": "",
+                }
+
+        extractor.attributes_extractor = _Chain()
+        extractor._taxonomy = {"controlled_tags": "Fine-Tuning, Efficient-Training"}
+        attrs = await extractor.extract_attributes("paper text")
+        assert attrs.keywords == ["LoRA", "PEFT"]
+        assert attrs.controlled_tags == ["Fine-Tuning", "Efficient-Training"]
+        assert attrs.seo_title is None
+        assert seen["controlled_tags"] == "Fine-Tuning, Efficient-Training"
+        assert "category_options" not in seen  # prompt default applies
+        assert not extractor.keywords_path.exists()
+
+
+class TestTitleGateSiblings:
+    @pytest.mark.parametrize(
+        "queried,resolved",
+        [
+            (
+                "LoRA: Low-Rank Adaptation of Large Language Models",
+                "LoRA+: Efficient Low Rank Adaptation of Large Models",
+            ),
+            ("GPT-4 Technical Report", "GPT-4o Technical Report"),
+            ("Qwen2 Technical Report", "Qwen2.5 Technical Report"),
+            (
+                "Gemma 2: Improving Open Language Models",
+                "Gemma 3: Improving Open Language Models",
+            ),
+        ],
+    )
+    def test_sibling_versions_do_not_match(self, queried: str, resolved: str) -> None:
+        from scholar_lens.src.citation_metadata import titles_match
+
+        assert titles_match(queried, resolved) is False
+
+    def test_same_title_with_punctuation_matches(self) -> None:
+        from scholar_lens.src.citation_metadata import titles_match
+
+        assert titles_match("Attention is All you Need", "Attention Is All You Need.")

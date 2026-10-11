@@ -281,3 +281,86 @@ def test_redact_token_scrubs_secret() -> None:
 def test_redact_token_noop_when_no_token() -> None:
     err = RuntimeError("some error")
     assert str(Publisher._redact_token(err, None)) == "some error"
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://100.100.100.200/latest/meta-data/",  # Alibaba metadata (CGNAT)
+        "http://100.64.0.1/",  # shared address space
+        "http://198.18.0.1/",  # benchmarking range
+    ],
+)
+def test_blocks_non_global_ranges(url: str) -> None:
+    assert is_url_public(url) is False
+
+
+def test_pinned_transport_restores_hostname_on_response(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The connection goes to the pinned IP, but the response (and so every link
+    # resolved against response.url) must keep the hostname.
+    import httpx
+
+    import scholar_lens.src.pinned_transport as pt
+
+    monkeypatch.setattr(pt, "resolve_validated_ip", lambda url: "93.184.216.34")
+    seen: list[str] = []
+
+    def fake_send(self, request):  # type: ignore[no-untyped-def]
+        seen.append(request.url.host)
+        return httpx.Response(200, request=request, text="ok")
+
+    monkeypatch.setattr(httpx.HTTPTransport, "handle_request", fake_send)
+    with httpx.Client(transport=pt.PinnedHTTPTransport()) as client:
+        response = client.get("https://docs.example.com/guide/")
+    assert seen == ["93.184.216.34"]
+    assert response.url.host == "docs.example.com"
+
+
+async def test_pinned_async_transport_restores_hostname(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import httpx
+
+    import scholar_lens.src.pinned_transport as pt
+
+    monkeypatch.setattr(pt, "resolve_validated_ip", lambda url: "93.184.216.34")
+
+    async def fake_send(self, request):  # type: ignore[no-untyped-def]
+        return httpx.Response(200, request=request, text="ok")
+
+    monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", fake_send)
+    async with httpx.AsyncClient(transport=pt.PinnedAsyncHTTPTransport()) as client:
+        response = await client.get("https://docs.example.com/guide/")
+    assert str(response.url) == "https://docs.example.com/guide/"
+
+
+def test_pinned_requests_adapter_sni_and_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    import requests
+    from requests.adapters import HTTPAdapter
+
+    import scholar_lens.src.pinned_transport as pt
+
+    monkeypatch.setattr(pt, "resolve_validated_ip", lambda url: "93.184.216.34")
+    adapter = pt.PinnedRequestsAdapter()
+    captured: dict = {}
+
+    def fake_send(self, request, **kwargs):  # type: ignore[no-untyped-def]
+        captured["url"] = request.url
+        captured["host"] = request.headers.get("Host")
+        captured["sni"] = getattr(self._local, "server_hostname", None)
+        response = requests.Response()
+        response.status_code = 200
+        response.url = request.url
+        return response
+
+    monkeypatch.setattr(HTTPAdapter, "send", fake_send)
+    prepared = requests.Request("GET", "https://papers.example.com/a.pdf").prepare()
+    response = adapter.send(prepared)
+    assert captured["url"] == "https://93.184.216.34/a.pdf"
+    assert captured["host"] == "papers.example.com"
+    assert captured["sni"] == "papers.example.com"
+    assert response.url == "https://papers.example.com/a.pdf"
+    assert prepared.url == "https://papers.example.com/a.pdf"
+    assert adapter._local.server_hostname is None

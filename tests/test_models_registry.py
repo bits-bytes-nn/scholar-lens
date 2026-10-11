@@ -72,3 +72,29 @@ class TestEmbeddingModelRegistry:
     def test_every_enum_member_has_registry_entry(self) -> None:
         missing = [m.name for m in EmbeddingModelId if m not in _EMBEDDING_MODEL_INFO]
         assert not missing, f"embedding models missing info: {missing}"
+
+
+class TestRequestShapeFlags:
+    @pytest.mark.parametrize(
+        ("model", "always_on", "price"),
+        [
+            (LanguageModelId.CLAUDE_V5_5_OPUS, True, (4.0, 20.0)),
+            (LanguageModelId.CLAUDE_V5_5_SONNET, True, (2.0, 10.0)),
+            (LanguageModelId.CLAUDE_V5_5_HAIKU, True, (0.10, 0.50)),
+            (LanguageModelId.CLAUDE_V5_1_FABLE, True, (10.0, 50.0)),
+            (LanguageModelId.CLAUDE_V4_8_OPUS, False, (5.0, 25.0)),
+            (LanguageModelId.CLAUDE_V5_SONNET, False, (2.0, 10.0)),
+        ],
+    )
+    def test_thinking_and_price(
+        self, model: LanguageModelId, always_on: bool, price: tuple[float, float]
+    ) -> None:
+        info = _LANGUAGE_MODEL_INFO[model]
+        assert info.thinking_always_on is always_on
+        assert (info.input_price_per_mtok, info.output_price_per_mtok) == price
+
+    def test_every_model_is_priced(self) -> None:
+        for model, info in _LANGUAGE_MODEL_INFO.items():
+            assert (
+                info.input_price_per_mtok > 0 and info.output_price_per_mtok > 0
+            ), model

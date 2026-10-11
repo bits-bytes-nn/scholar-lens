@@ -1,5 +1,4 @@
 import asyncio
-import time
 from pathlib import Path
 
 import boto3
@@ -7,12 +6,6 @@ from boto3.s3.transfer import TransferConfig
 from botocore.exceptions import ClientError
 
 from .logger import logger
-
-# Batch poll defaults. The timeout matches the longest job-definition timeout in
-# the CDK stack (3h) so the waiter does not abandon a job the platform would
-# still run; the poll interval trades latency for describe_jobs API volume.
-DEFAULT_BATCH_TIMEOUT_SECONDS = 3 * 60 * 60
-DEFAULT_BATCH_POLL_INTERVAL_SECONDS = 30
 
 
 class AWSHandlerError(Exception):
@@ -64,6 +57,24 @@ class S3Handler:
                 return False
             raise S3OperationError(f"Failed to check existence of '{s3_key}'") from e
 
+    def put_text(self, s3_key: str, text: str) -> None:
+        try:
+            self._s3_client.put_object(
+                Bucket=self.bucket_name, Key=s3_key, Body=text.encode("utf-8")
+            )
+        except ClientError as e:
+            raise S3OperationError(f"Failed to write '{s3_key}'") from e
+
+    def get_text(self, s3_key: str) -> str | None:
+        """Return the object's text, or None when it does not exist."""
+        try:
+            body = self._s3_client.get_object(Bucket=self.bucket_name, Key=s3_key)
+        except ClientError as e:
+            if e.response["Error"]["Code"] in ("NoSuchKey", "404"):
+                return None
+            raise S3OperationError(f"Failed to read '{s3_key}'") from e
+        return body["Body"].read().decode("utf-8")
+
     def upload_directory(
         self,
         local_dir: Path,
@@ -109,6 +120,12 @@ class S3Handler:
             upload_count,
             len(files_to_upload),
         )
+        if upload_count < len(files_to_upload):
+            # A partial upload publishes a post with broken images; surface it.
+            raise S3OperationError(
+                f"Uploaded only {upload_count} of {len(files_to_upload)} files "
+                f"from '{local_dir}'."
+            )
         return upload_count
 
     def upload_file(self, local_path: Path, s3_prefix: str | None = None):
@@ -156,63 +173,3 @@ def get_ssm_param_value(boto_session: boto3.Session, param_name: str) -> str:
         return response["Parameter"]["Value"]
     except ClientError as e:
         raise AWSHandlerError(f"Failed to get SSM parameter '{param_name}'") from e
-
-
-def submit_batch_job(
-    boto_session: boto3.Session,
-    job_name: str,
-    job_queue: str,
-    job_definition: str,
-    parameters: dict[str, str] | None = None,
-) -> str:
-    try:
-        batch_client = boto_session.client("batch")
-        response = batch_client.submit_job(
-            jobName=job_name,
-            jobQueue=job_queue,
-            jobDefinition=job_definition,
-            parameters=parameters or {},
-        )
-        job_id = response["jobId"]
-        logger.info(
-            "Successfully submitted batch job '%s' (Job ID: %s)", job_name, job_id
-        )
-        return job_id
-    except ClientError as e:
-        raise BatchJobError(f"Failed to submit batch job '{job_name}'") from e
-
-
-def wait_for_batch_job_completion(
-    boto_session: boto3.Session,
-    job_id: str,
-    timeout_seconds: int = DEFAULT_BATCH_TIMEOUT_SECONDS,
-    poll_interval_seconds: int = DEFAULT_BATCH_POLL_INTERVAL_SECONDS,
-):
-    batch_client = boto_session.client("batch")
-    start_time = time.monotonic()
-
-    logger.info(f"Waiting for Batch Job '{job_id}' to complete...")
-    while time.monotonic() - start_time < timeout_seconds:
-        try:
-            response = batch_client.describe_jobs(jobs=[job_id])
-            job = response["jobs"][0] if response.get("jobs") else None
-
-            if not job:
-                raise BatchJobError(f"Job '{job_id}' not found.")
-
-            status = job["status"]
-            if status == "SUCCEEDED":
-                logger.info(f"Job '{job_id}' completed successfully.")
-                return
-            elif status in ["FAILED", "CANCELLED"]:
-                reason = job.get("statusReason", "No reason provided.")
-                raise BatchJobError(
-                    f"Job '{job_id}' ended with status '{status}': {reason}"
-                )
-
-            time.sleep(poll_interval_seconds)
-
-        except ClientError as e:
-            raise BatchJobError(f"Error describing job '{job_id}'") from e
-
-    raise TimeoutError(f"Timed out waiting for job '{job_id}' to complete.")

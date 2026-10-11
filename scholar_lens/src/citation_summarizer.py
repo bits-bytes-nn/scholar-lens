@@ -1,6 +1,4 @@
 import asyncio
-import re
-from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
 
@@ -9,15 +7,14 @@ from langchain_core.output_parsers import StrOutputParser
 from pypdf import PdfReader
 
 from .arxiv_handler import ArxivHandler, ArxivNotFoundError
-from .citation_metadata import ChainedMetadataResolver, ReferenceMetadata
-from .constants import AppConstants, LanguageModelId, LocalPaths
+from .citation_metadata import ChainedMetadataResolver, ReferenceMetadata, titles_match
+from .constants import AppConstants, LanguageModelId, LocalPaths, normalize_arxiv_id
 from .logger import logger
 from .parser import Content, ContentParseError, HTMLParser
 from .prompts import CitationAnalysisPrompt, CitationSummaryPrompt
 from .utils import BedrockLanguageModelFactory, HTMLTagOutputParser, RetryableBase
 
 DEFAULT_MAX_CONCURRENCY: int = 5
-DEFAULT_MAX_RETRIES: int = 3
 DEFAULT_SEARCH_RESULTS_LIMIT: int = 10
 DEFAULT_TIMEOUT: int = 60
 
@@ -31,7 +28,6 @@ class CitationSummarizer(RetryableBase):
         citation_analysis_model_id: LanguageModelId,
         boto_session: boto3.Session,
         paper_dir: Path | None = None,
-        max_retries: int = DEFAULT_MAX_RETRIES,
         timeout: int = DEFAULT_TIMEOUT,
         max_concurrency: int = DEFAULT_MAX_CONCURRENCY,
         metadata_resolver: ChainedMetadataResolver | None = None,
@@ -79,7 +75,7 @@ class CitationSummarizer(RetryableBase):
         self.citation_summarizer = (
             CitationSummaryPrompt.get_prompt() | summarizing_llm | StrOutputParser()
         )
-        self.arxiv_handler = ArxivHandler(max_retries=max_retries)
+        self.arxiv_handler = ArxivHandler()
         # Timeout for per-call HTMLParser instances. A parser is NOT shared across
         # tasks: summarize() resolves up to `max_concurrency` identifiers at once,
         # and the parser's __aexit__ closes its httpx client — a shared instance
@@ -184,8 +180,7 @@ class CitationSummarizer(RetryableBase):
         self, identifier: str, original_content: str
     ) -> str | None:
         # Explicit arXiv id -> go straight to arXiv (we already have the id).
-        if self._looks_like_arxiv_id(identifier):
-            arxiv_id = identifier.replace("arXiv:", "").replace("arxiv:", "")
+        if arxiv_id := normalize_arxiv_id(identifier):
             return await self._process_arxiv_item(arxiv_id, original_content)
 
         # Otherwise resolve metadata/abstract from lenient providers FIRST; this
@@ -218,52 +213,8 @@ class CitationSummarizer(RetryableBase):
         return await self._process_title_item(identifier, original_content)
 
     @staticmethod
-    def _looks_like_arxiv_id(identifier: str) -> bool:
-        return bool(
-            identifier.lower().startswith("arxiv:")
-            or re.match(r"^\d{4}\.\d{4,5}(v\d+)?$", identifier)
-        )
-
-    # Minimum title similarity to trust a resolved metadata URL as the right
-    # paper. Below this we keep the title as plain text (no mis-attributed link).
-    TITLE_MATCH_THRESHOLD: float = 0.72
-    # Minimum normalised length of a contained title before substring containment
-    # is trusted, so a short generic title isn't matched inside a long citation.
-    MIN_CONTAINED_TITLE_CHARS: int = 16
-
-    @staticmethod
     def _title_matches(queried: str | None, resolved: str | None) -> bool:
-        """Whether a resolved title is close enough to the queried one to trust.
-
-        The queried identifier is often a raw citation string ("Smith et al.,
-        Foo Bar, 2021"); we compare on a normalised, lowercased basis and accept
-        either a high overall ratio or full containment of one normalised title
-        in the other (handles extra author/year noise around the title).
-        """
-        if not queried or not resolved:
-            return False
-
-        def _norm(s: str) -> str:
-            return re.sub(r"[^a-z0-9 ]+", " ", s.lower()).strip()
-
-        q, r = _norm(queried), _norm(resolved)
-        if not q or not r:
-            return False
-        # Strong overall similarity (incl. an exact match) is always trusted,
-        # regardless of length.
-        if (
-            SequenceMatcher(None, q, r).ratio()
-            >= CitationSummarizer.TITLE_MATCH_THRESHOLD
-        ):
-            return True
-        # Otherwise, proper containment handles author/year noise around the real
-        # title (e.g. the resolved title sits inside "Hu et al., <title>, 2021"),
-        # but only when the contained string is itself a substantial title — a
-        # short generic resolved title ("attention") inside a long citation must
-        # NOT auto-match. Real paper titles are well over this length.
-        if r in q or q in r:
-            return min(len(q), len(r)) >= CitationSummarizer.MIN_CONTAINED_TITLE_CHARS
-        return False
+        return titles_match(queried, resolved)
 
     @RetryableBase._retry("citation_metadata_summary")
     async def _summarize_from_metadata(
@@ -280,6 +231,15 @@ class CitationSummarizer(RetryableBase):
         title closely matches the queried title; otherwise keep the (queried)
         title as plain text so we never point at a wrong paper.
         """
+        if not self._title_matches(queried_identifier, metadata.title):
+            # A different paper's abstract would be summarised under this
+            # citation; let the caller fall through to the arXiv/title paths.
+            logger.info(
+                "Resolved title '%s' does not match '%s'; skipping its abstract.",
+                metadata.title,
+                queried_identifier,
+            )
+            return None
         reference_text = metadata.abstract or metadata.title
         if not reference_text.strip():
             return None
@@ -288,11 +248,7 @@ class CitationSummarizer(RetryableBase):
         )
         if not summary or self.FAILURE_STRING in summary:
             return None
-        trustworthy = self._title_matches(queried_identifier, metadata.title)
-        if metadata.url and trustworthy:
-            link = f"[{metadata.title}]({metadata.url})"
-        else:
-            link = metadata.title
+        link = f"[{metadata.title}]({metadata.url})" if metadata.url else metadata.title
         author_line = f"Authors: {metadata.author_str}\n" if metadata.authors else ""
         return f"Title: {link}\n{author_line}\n{summary}"
 
@@ -325,8 +281,10 @@ class CitationSummarizer(RetryableBase):
             url = f"{AppConstants.External.ARXIV_PDF.value}/{arxiv_id}"
             return f"Title: [{title}]({url})\nAuthors: {authors}\n\n{summary}"
         except (ArxivNotFoundError, ContentParseError) as e:
+            # Nothing usable: return no summary rather than a placeholder that
+            # would reach the writer prompts as if it were content.
             logger.error("Non-retryable error for arxiv_id '%s': %s", arxiv_id, e)
-            return f"[{arxiv_id}]\nCould not generate summary."
+            return None
         except Exception as e:
             logger.error("Error during processing arxiv_id '%s': %s", arxiv_id, e)
             raise
@@ -376,11 +334,13 @@ class CitationSummarizer(RetryableBase):
             raise ContentParseError(f"PDF parsing failed for {arxiv_id}") from e
 
     @RetryableBase._retry("title_item_processing")
-    async def _process_title_item(self, title: str, original_content: str) -> str:
+    async def _process_title_item(
+        self, title: str, original_content: str
+    ) -> str | None:
         analysis = await self.citation_analyzer.ainvoke(
             {"reference_title": title, "original_content": original_content}
         )
         analysis = analysis.get("analysis", "")
-        if not analysis or not analysis.strip():
-            return f"Title: [{title}]\n{self.FAILURE_STRING}"
+        if not analysis or not analysis.strip() or self.FAILURE_STRING in analysis:
+            return None
         return f"Title: [{title}]\n{analysis}"

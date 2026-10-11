@@ -19,7 +19,7 @@ from scholar_lens.src.metrics import (
     TokenBudgetGuard,
     TokenUsageTracker,
     _extract_usage,
-    _rate_for,
+    price_per_mtok,
 )
 
 
@@ -78,8 +78,8 @@ class TestOnLLMEnd:
         )
         assert "unknown" not in tracker.per_model
         assert "claude-opus-4-8" in tracker.per_model
-        # Opus rate 0.015 in + 0.075 out per 1K -> 0.09 (NOT 0.018 at Sonnet rate).
-        assert tracker.estimated_cost_usd() == pytest.approx(0.09)
+        # Opus 4.8 list price $5 in + $25 out per MTok -> 0.03.
+        assert tracker.estimated_cost_usd() == pytest.approx(0.03)
 
 
 class TestEstimatedCost:
@@ -88,14 +88,13 @@ class TestEstimatedCost:
         tracker.on_llm_end(
             _llm_output_response("anthropic.claude-opus-4-8", 1000, 1000)
         )
-        # opus: 0.015 in + 0.075 out per 1K -> 0.09
-        assert tracker.estimated_cost_usd() == pytest.approx(0.09)
+        assert tracker.estimated_cost_usd() == pytest.approx(0.03)
 
     def test_opus_costs_more_than_haiku(self) -> None:
         opus = TokenUsageTracker()
         opus.on_llm_end(_llm_output_response("claude-opus-4-8", 1000, 1000))
         haiku = TokenUsageTracker()
-        haiku.on_llm_end(_llm_output_response("claude-haiku", 1000, 1000))
+        haiku.on_llm_end(_llm_output_response("claude-haiku-5-5", 1000, 1000))
         assert opus.estimated_cost_usd() > haiku.estimated_cost_usd()
 
 
@@ -227,19 +226,23 @@ class TestMetricsEmitter:
 
 class TestRateAndExtractUsageEdges:
     @pytest.mark.parametrize(
-        "model_id",
-        ["anthropic.claude-fable-5-1", "global.anthropic.claude-fable-5-1"],
+        ("model_id", "price"),
+        [
+            ("anthropic.claude-fable-5-1", (10.0, 50.0)),
+            ("global.anthropic.claude-opus-5-5", (4.0, 20.0)),
+            ("us.anthropic.claude-sonnet-5-5", (2.0, 10.0)),
+            ("claude-haiku-5-5", (0.10, 0.50)),
+            ("apac.anthropic.claude-opus-4-8", (5.0, 25.0)),
+            ("anthropic.claude-opus-4-1-20250805-v1:0", (15.0, 75.0)),
+        ],
     )
-    def test_fable_not_billed_at_default_rate(self, model_id: str) -> None:
-        # Fable has no family-specific Bedrock rate here; it must reuse the top
-        # (Opus) tier instead of falling back to the lower Sonnet-rate default.
-        assert _rate_for(model_id) == _rate_for("anthropic.claude-opus-5-5")
+    def test_price_from_registry_for_invoked_ids(
+        self, model_id: str, price: tuple[float, float]
+    ) -> None:
+        assert price_per_mtok(model_id) == price
 
-    def test_unknown_model_uses_default_rate(self) -> None:
-        assert _rate_for("some-random-model") == (0.003, 0.015)
-
-    def test_known_family_matches(self) -> None:
-        assert _rate_for("anthropic.claude-opus-4-8") == (0.015, 0.075)
+    def test_unknown_model_uses_conservative_fallback(self) -> None:
+        assert price_per_mtok("some-random-model") == (5.0, 25.0)
 
     def test_malformed_response_returns_zeros(self) -> None:
         in_tok, out_tok, model = _extract_usage(object())
@@ -249,3 +252,26 @@ class TestRateAndExtractUsageEdges:
     def test_none_response_returns_zeros(self) -> None:
         in_tok, out_tok, model = _extract_usage(None)
         assert (in_tok, out_tok, model) == (0, 0, "unknown")
+
+
+class TestTieredPricing:
+    def test_haiku_55_long_prompts_use_the_higher_tier(self) -> None:
+        from scholar_lens.src.metrics import call_cost_usd
+
+        short = call_cost_usd("us.anthropic.claude-haiku-5-5", 100_000, 1_000)
+        long = call_cost_usd("us.anthropic.claude-haiku-5-5", 200_000, 1_000)
+        assert short == pytest.approx(100_000 / 1e6 * 0.10 + 1_000 / 1e6 * 0.50)
+        assert long == pytest.approx(200_000 / 1e6 * 0.50 + 1_000 / 1e6 * 2.50)
+
+    def test_tracker_prices_each_call(self) -> None:
+        from scholar_lens.src.metrics import TokenUsageTracker
+
+        tracker = TokenUsageTracker()
+        tracker.on_llm_end(
+            _llm_output_response("anthropic.claude-haiku-5-5", 50_000, 0)
+        )
+        tracker.on_llm_end(
+            _llm_output_response("anthropic.claude-haiku-5-5", 150_000, 0)
+        )
+        # Aggregating first (200K at one rate) would misprice both calls.
+        assert tracker.estimated_cost_usd() == pytest.approx(0.005 + 0.075)

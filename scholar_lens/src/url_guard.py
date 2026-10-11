@@ -33,7 +33,10 @@ class UnsafeUrlError(ValueError):
 
 def _is_blocked_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
     return (
-        ip.is_private
+        # not is_global also covers shared/CGNAT space (100.64.0.0/10, used by
+        # some cloud metadata endpoints) and other special-purpose ranges.
+        not ip.is_global
+        or ip.is_private
         or ip.is_loopback
         or ip.is_link_local
         or ip.is_multicast

@@ -1,15 +1,20 @@
-import re
-import sys
 from pathlib import Path
 from typing import Literal
 
 import yaml
 from dotenv import load_dotenv
-from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
-
-sys.path.append(str(Path(__file__).parent.parent))
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    EmailStr,
+    Field,
+    model_validator,
+)
 
 from scholar_lens.src.constants import EmbeddingModelId, LanguageModelId
+from scholar_lens.src.logger import is_running_in_aws
+
+CONFIG_PATH = Path(__file__).parent / "config.yaml"
 
 # Effort level for adaptive-thinking models (e.g. Opus 4.8, Opus 5.5). Lower
 # effort means shorter reasoning traces — faster and cheaper. Ignored by legacy
@@ -17,19 +22,19 @@ from scholar_lens.src.constants import EmbeddingModelId, LanguageModelId
 ThinkingEffort = Literal["low", "medium", "high", "xhigh", "max"]
 
 
-class Github(BaseModel):
+class _Section(BaseModel):
+    # Reject unknown keys so a YAML typo (e.g. ``max_total_token``) fails loudly
+    # instead of silently falling back to the default.
+    model_config = ConfigDict(extra="forbid")
+
+
+class Github(_Section):
     enabled: bool = Field(default=False)
     repo_name: str | None = Field(default=None)
     base_branch: str = Field(default="main")
     branch_prefix: str = Field(default="paper-reviews")
     author_name: str = Field(default="Scholar Lens Bot")
     author_email: EmailStr | None = Field(default=None)
-    cover_images: dict[str, str] = Field(
-        default_factory=dict,
-        description="Maps a category slug (lowercase, hyphenated) to a cover "
-        "image filename under the blog's assets/images directory.",
-    )
-    default_cover_image: str = Field(default="default.jpg")
     # Primary (lead) category label written to each artifact's front matter, by
     # artifact type. These are the values a blog's category tabs filter on, so
     # they are configurable to match the target blog without code changes.
@@ -44,23 +49,8 @@ class Github(BaseModel):
     # Access). Set True only if you intentionally serve assets straight from S3.
     public_assets: bool = Field(default=False)
 
-    @field_validator("cover_images", mode="before")
-    @classmethod
-    def _default_empty_mapping(cls, v: dict[str, str] | None) -> dict[str, str]:
-        return v or {}
 
-    def cover_image_for(self, category: str) -> str:
-        """Resolve the cover image for a category, falling back to the default.
-
-        The category is normalised to a slug (lowercase, runs of non-alphanumeric
-        characters collapsed to a single hyphen) so that ``"Multimodal Learning"``
-        and ``"multimodal-learning"`` resolve identically.
-        """
-        slug = re.sub(r"[^a-z0-9]+", "-", category.lower()).strip("-")
-        return self.cover_images.get(slug, self.default_cover_image)
-
-
-class Resources(BaseModel):
+class Resources(_Section):
     project_name: str = Field(min_length=1)
     stage: Literal["dev", "prod"] = Field(default="dev")
     profile_name: str | None = Field(default=None)
@@ -74,34 +64,31 @@ class Resources(BaseModel):
     github: Github = Field(default_factory=Github)
 
 
-class Paper(BaseModel):
+class Paper(_Section):
     figure_analysis_model_id: LanguageModelId = Field(
-        default=LanguageModelId.CLAUDE_V3_HAIKU
+        default=LanguageModelId.CLAUDE_V5_5_HAIKU
     )
     citation_extraction_model_id: LanguageModelId = Field(
-        default=LanguageModelId.CLAUDE_V5_SONNET
+        default=LanguageModelId.CLAUDE_V5_5_SONNET
     )
     attributes_extraction_model_id: LanguageModelId = Field(
-        default=LanguageModelId.CLAUDE_V4_5_HAIKU
-    )
-    table_of_contents_model_id: LanguageModelId = Field(
-        default=LanguageModelId.CLAUDE_V5_SONNET
-    )
-    output_fixing_model_id: LanguageModelId = Field(
-        default=LanguageModelId.CLAUDE_V5_SONNET
+        default=LanguageModelId.CLAUDE_V5_5_HAIKU
     )
 
 
-class Code(BaseModel):
+class Code(_Section):
     code_analysis_model_id: LanguageModelId = Field(
-        default=LanguageModelId.CLAUDE_V4_5_HAIKU
+        default=LanguageModelId.CLAUDE_V5_5_HAIKU
     )
     code_summarization_model_id: LanguageModelId = Field(
-        default=LanguageModelId.CLAUDE_V4_5_HAIKU
+        default=LanguageModelId.CLAUDE_V5_5_HAIKU
     )
     embed_model_id: EmbeddingModelId = Field(default=EmbeddingModelId.TITAN_EMBED_V2)
     chunk_size: int = Field(default=1024, gt=0, le=1_000_000)
     chunk_overlap: int = Field(default=256, ge=0)
+    # Bound indexing cost: the most relevant files and chunks of the repos.
+    max_files: int = Field(default=150, gt=0)
+    max_chunks: int = Field(default=400, gt=0)
 
     @model_validator(mode="after")
     def _check_overlap_lt_size(self) -> "Code":
@@ -114,12 +101,12 @@ class Code(BaseModel):
         return self
 
 
-class Citations(BaseModel):
+class Citations(_Section):
     citation_summarization_model_id: LanguageModelId = Field(
-        default=LanguageModelId.CLAUDE_V4_5_HAIKU
+        default=LanguageModelId.CLAUDE_V5_5_HAIKU
     )
     citation_analysis_model_id: LanguageModelId = Field(
-        default=LanguageModelId.CLAUDE_V4_5_HAIKU
+        default=LanguageModelId.CLAUDE_V5_5_HAIKU
     )
     # When True, download each cited paper's full text (slow, arXiv-heavy). When
     # False (default), summarise from the abstract resolved via Crossref/Semantic
@@ -127,47 +114,45 @@ class Citations(BaseModel):
     prefer_full_text: bool = Field(default=False)
 
 
-class Explanation(BaseModel):
-    paper_analysis_model_id: LanguageModelId = Field(
-        default=LanguageModelId.CLAUDE_V5_SONNET
+class Explanation(_Section):
+    # Plans the review from the whole paper and edits the assembled article.
+    paper_planning_model_id: LanguageModelId = Field(
+        default=LanguageModelId.CLAUDE_V5_5_OPUS
     )
-    paper_enrichment_model_id: LanguageModelId = Field(
-        default=LanguageModelId.CLAUDE_V5_SONNET
-    )
-    # Default matches the sibling fields (all Explanation model IDs have one) so a
-    # partial `explanation:` YAML block that omits this field doesn't crash config
-    # load. Haiku is the fast tier used for the key-takeaways summarization step.
-    paper_finalization_model_id: LanguageModelId = Field(
-        default=LanguageModelId.CLAUDE_V4_5_HAIKU
-    )
-    # EVALUATOR for the review pipeline — scores each synthesized section (0-100)
-    # and gates the evaluate-and-revise loop, mirroring TechGuide.evaluation_model_id
-    # for guides. Keep it on Opus 4.8 for stable, well-calibrated scoring —
-    # Sonnet 5 as evaluator tends to score more harshly, inflating the loop even
-    # when the draft is fine.
-    paper_evaluation_model_id: LanguageModelId = Field(
-        default=LanguageModelId.CLAUDE_V4_8_OPUS
-    )
+    # Writes each planned section.
     paper_synthesis_model_id: LanguageModelId = Field(
-        default=LanguageModelId.CLAUDE_V5_SONNET
+        default=LanguageModelId.CLAUDE_V5_5_OPUS
+    )
+    # Checks each section against its brief (0-100 + missing items) and gates
+    # the revise loop. An Opus-tier judge keeps scores stable.
+    paper_evaluation_model_id: LanguageModelId = Field(
+        default=LanguageModelId.CLAUDE_V5_5_OPUS
+    )
+    # Writes the subtitle, TL;DR and closing assessment from the edited review.
+    paper_finalization_model_id: LanguageModelId = Field(
+        default=LanguageModelId.CLAUDE_V5_5_OPUS
     )
     evaluator_enable_thinking: bool = Field(default=False)
     synthesizer_enable_thinking: bool = Field(default=False)
     thinking_effort: ThinkingEffort = Field(default="medium")
-    # Per-section evaluate-and-revise loop (mirrors the tech-guide evaluator gate):
-    # a section scoring below the threshold is re-synthesized up to N times.
-    # Previously hardcoded in ExplainerConfig; surfaced here for parity with
-    # TechGuide.min_quality_score / max_revision_attempts.
+    # Planning and whole-article editing decide coverage and consistency, so
+    # they think harder than the per-section calls.
+    planning_effort: ThinkingEffort = Field(default="high")
+    # A section scoring below min_quality_score, or missing a must-cover item,
+    # is revised; max_synthesis_attempts counts drafts per section.
     min_quality_score: int = Field(default=70, ge=0, le=100)
-    max_synthesis_attempts: int = Field(default=3, ge=0)
-    # Hard total-token ceiling for one review run (None = no limit). Guards
-    # against runaway cost on the per-paragraph synthesis loop. Must be positive
-    # when set — a non-positive ceiling would trip the budget guard immediately.
+    max_synthesis_attempts: int = Field(default=3, ge=1, le=6)
+    # Upper bound on planned sections; overflow is merged into the last one.
+    max_sections: int = Field(default=20, ge=1, le=60)
+    # Whole-article edit passes; a second pass runs only for reported coverage
+    # gaps. 0 disables editing.
+    max_edit_rounds: int = Field(default=2, ge=0, le=3)
+    # Hard total-token ceiling for one review run (None = no limit).
     max_total_tokens: int | None = Field(default=None, gt=0)
 
 
-class Summary(BaseModel):
-    summary_model_id: LanguageModelId = Field(default=LanguageModelId.CLAUDE_V4_8_OPUS)
+class Summary(_Section):
+    summary_model_id: LanguageModelId = Field(default=LanguageModelId.CLAUDE_V5_5_OPUS)
     summarizer_enable_thinking: bool = Field(default=False)
     thinking_effort: ThinkingEffort = Field(default="medium")
     # Hard total-token ceiling for one summary run (None = no limit). A summary is
@@ -177,18 +162,17 @@ class Summary(BaseModel):
     max_total_tokens: int | None = Field(default=None, gt=0)
 
 
-class TechGuide(BaseModel):
+class TechGuide(_Section):
     relevance_model_id: LanguageModelId = Field(
-        default=LanguageModelId.CLAUDE_V4_5_HAIKU
+        default=LanguageModelId.CLAUDE_V5_5_HAIKU
     )
-    synopsis_model_id: LanguageModelId = Field(default=LanguageModelId.CLAUDE_V5_SONNET)
-    writing_model_id: LanguageModelId = Field(default=LanguageModelId.CLAUDE_V4_8_OPUS)
-    # The per-section evaluator (0-100 score + feedback) that gates the revise
-    # loop. Opus 4.8 for stable, well-calibrated scoring — Sonnet 5 as evaluator
-    # tends to score more harshly, inflating the revise loop even for good
-    # drafts. Distinct from synopsis_model_id (which it previously shared).
+    synopsis_model_id: LanguageModelId = Field(
+        default=LanguageModelId.CLAUDE_V5_5_SONNET
+    )
+    writing_model_id: LanguageModelId = Field(default=LanguageModelId.CLAUDE_V5_5_OPUS)
+    # Per-section evaluator (0-100 score + feedback) gating the revise loop.
     evaluation_model_id: LanguageModelId = Field(
-        default=LanguageModelId.CLAUDE_V4_8_OPUS
+        default=LanguageModelId.CLAUDE_V5_5_OPUS
     )
     writer_enable_thinking: bool = Field(default=False)
     # Thinking for the evaluator chain, independent of the writer (parity with
@@ -214,49 +198,26 @@ class TechGuide(BaseModel):
     # Total-token ceiling for one guide run (None = no limit). Two-tier: at 1x the
     # guide soft-degrades (skips evaluate/revise/grounding but finishes writing);
     # past ~1.5x it hard-aborts, so runaway writer-call cost is truly bounded.
-    max_total_tokens: int | None = Field(default=None, gt=0)
+    # Soft limit on one guide run (None = no limit); default keeps a run near
+    # $15 on Opus 5.5. Past it the remaining sections skip evaluate/revise/
+    # grounding; past 1.5x the run aborts.
+    max_total_tokens: int | None = Field(default=3_000_000, gt=0)
 
 
-class Config(BaseModel):
+class Config(_Section):
     resources: Resources = Field(
         default_factory=lambda: Resources(project_name="scholar-lens")
     )
-    paper: Paper = Field(
-        default_factory=lambda: Paper(
-            figure_analysis_model_id=LanguageModelId.CLAUDE_V3_HAIKU,
-            citation_extraction_model_id=LanguageModelId.CLAUDE_V5_SONNET,
-            attributes_extraction_model_id=LanguageModelId.CLAUDE_V4_5_HAIKU,
-            table_of_contents_model_id=LanguageModelId.CLAUDE_V5_SONNET,
-            output_fixing_model_id=LanguageModelId.CLAUDE_V5_SONNET,
-        )
-    )
-    code: Code = Field(
-        default_factory=lambda: Code(
-            code_analysis_model_id=LanguageModelId.CLAUDE_V4_5_HAIKU,
-            code_summarization_model_id=LanguageModelId.CLAUDE_V4_5_HAIKU,
-        )
-    )
-    citations: Citations = Field(
-        default_factory=lambda: Citations(
-            citation_summarization_model_id=LanguageModelId.CLAUDE_V4_5_HAIKU,
-            citation_analysis_model_id=LanguageModelId.CLAUDE_V4_5_HAIKU,
-        )
-    )
-    explanation: Explanation = Field(
-        default_factory=lambda: Explanation(
-            paper_analysis_model_id=LanguageModelId.CLAUDE_V5_SONNET,
-            paper_enrichment_model_id=LanguageModelId.CLAUDE_V5_SONNET,
-            paper_finalization_model_id=LanguageModelId.CLAUDE_V4_5_HAIKU,
-            paper_evaluation_model_id=LanguageModelId.CLAUDE_V4_8_OPUS,
-            paper_synthesis_model_id=LanguageModelId.CLAUDE_V5_SONNET,
-        )
-    )
+    paper: Paper = Field(default_factory=Paper)
+    code: Code = Field(default_factory=Code)
+    citations: Citations = Field(default_factory=Citations)
+    explanation: Explanation = Field(default_factory=Explanation)
     summary: Summary = Field(default_factory=Summary)
     tech_guide: TechGuide = Field(default_factory=TechGuide)
     output_language: str = Field(default="Korean")
 
     @classmethod
-    def from_yaml(cls, file_path: str) -> "Config":
+    def from_yaml(cls, file_path: str | Path) -> "Config":
         with open(file_path, encoding="utf-8") as f:
             config_data = yaml.safe_load(f)
         return cls(**config_data if config_data else {})
@@ -264,7 +225,10 @@ class Config(BaseModel):
     @classmethod
     def load(cls) -> "Config":
         load_dotenv()
-        config_path = Path(__file__).parent / "config.yaml"
-        if not config_path.exists():
-            return cls()
-        return cls.from_yaml(str(config_path))
+        if CONFIG_PATH.exists():
+            return cls.from_yaml(CONFIG_PATH)
+        if is_running_in_aws():
+            # Defaults have no bucket and GitHub disabled: a job would "succeed"
+            # while publishing nothing. Fail instead.
+            raise FileNotFoundError(f"Config file not found: {CONFIG_PATH}")
+        return cls()

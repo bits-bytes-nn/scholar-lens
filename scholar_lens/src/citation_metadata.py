@@ -14,8 +14,10 @@ the caller can fall back. Network access goes through a shared rate limiter.
 
 from __future__ import annotations
 
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from difflib import SequenceMatcher
 
 import httpx
 from bs4 import BeautifulSoup
@@ -43,6 +45,36 @@ _CROSSREF_PRIMARY_TYPES = frozenset(
         "posted-content",  # preprints (arXiv, bioRxiv, …)
     }
 )
+
+
+# Minimum similarity between a queried and a returned title before the record
+# is accepted. Lower values (or substring containment) accept "LoRA+" for
+# "LoRA" or a survey for the paper it surveys.
+TITLE_MATCH_THRESHOLD: float = 0.9
+
+
+def titles_match(queried: str | None, resolved: str | None) -> bool:
+    """Whether two titles name the same paper (case/punctuation-insensitive)."""
+    if not queried or not resolved:
+        return False
+
+    def norm(value: str) -> str:
+        return " ".join(re.sub(r"[^\w ]+", " ", value.casefold()).split())
+
+    q, r = norm(queried), norm(resolved)
+    if not (q and r) or SequenceMatcher(None, q, r).ratio() < TITLE_MATCH_THRESHOLD:
+        return False
+    # Version-like tokens tell sibling papers apart even when the rest of the
+    # title is identical (GPT-4 vs GPT-4o, Qwen2 vs Qwen2.5, LoRA vs LoRA+).
+    return _distinguishing_tokens(queried) == _distinguishing_tokens(resolved)
+
+
+_TOKEN = re.compile(r"[\w.+]+")
+
+
+def _distinguishing_tokens(title: str) -> set[str]:
+    tokens = {t.strip(".").casefold() for t in _TOKEN.findall(title)}
+    return {t for t in tokens if any(ch.isdigit() for ch in t) or "+" in t}
 
 
 @dataclass
@@ -89,12 +121,14 @@ class CrossrefProvider(MetadataProvider):
             resp.raise_for_status()
             items = resp.json().get("message", {}).get("items", [])
         except (httpx.HTTPError, ValueError) as e:
-            logger.debug("Crossref lookup failed for '%s': %s", title, e)
+            logger.warning("Crossref lookup failed for '%s': %s", title, e)
             return None
         if not items:
             return None
         item = items[0]
-        found_title = " ".join(item.get("title") or []) or title
+        found_title = " ".join(item.get("title") or []).strip()
+        if not found_title:
+            return None  # a record without a title can't pass the title gate honestly
         authors = [
             " ".join(filter(None, [a.get("given"), a.get("family")]))
             for a in item.get("author", [])
@@ -128,13 +162,15 @@ class SemanticScholarProvider(MetadataProvider):
             resp.raise_for_status()
             data = resp.json().get("data", [])
         except (httpx.HTTPError, ValueError) as e:
-            logger.debug("Semantic Scholar lookup failed for '%s': %s", title, e)
+            logger.warning("Semantic Scholar lookup failed for '%s': %s", title, e)
             return None
         if not data:
             return None
         item = data[0]
+        if not (item.get("title") or "").strip():
+            return None
         return ReferenceMetadata(
-            title=item.get("title") or title,
+            title=item["title"],
             authors=[
                 a.get("name", "") for a in item.get("authors", []) if a.get("name")
             ],
@@ -159,27 +195,27 @@ class ChainedMetadataResolver:
         )
 
     def resolve(self, title: str) -> ReferenceMetadata | None:
+        """Return the best record whose title matches ``title``.
+
+        Stops at the first matching record that has both an abstract and its
+        own URL (later providers are not queried); otherwise prefers a matching
+        record with an abstract, then any matching record. Records for other
+        papers are discarded, and URLs are never grafted across records.
+        """
         hits: list[ReferenceMetadata] = []
         for provider in self.providers:
             try:
                 result = provider.lookup(title)
             except Exception as e:  # noqa: BLE001 - resolution must never raise
-                logger.debug("Provider %s raised for '%s': %s", provider, title, e)
+                logger.warning("Provider %s raised for '%s': %s", provider, title, e)
                 continue
-            if result is not None:
-                hits.append(result)
+            if result is None or not titles_match(title, result.title):
+                continue
+            if result.has_abstract and result.url:
+                return result
+            hits.append(result)
         if not hits:
             return None
-
-        # Prefer a single coherent hit that has BOTH an abstract (for
-        # summarising) and its OWN URL (for linking); then any hit with an
-        # abstract; then the first hit. We never graft a URL from a different
-        # provider's result onto another's metadata — that could surface a URL
-        # for a different paper. Final link trust is still gated by title
-        # similarity in the summariser.
-        for h in hits:
-            if h.has_abstract and h.url:
-                return h
         return next((h for h in hits if h.has_abstract), hits[0])
 
 
