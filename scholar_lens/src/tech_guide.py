@@ -68,7 +68,7 @@ from .utils import (
     measure_execution_time,
     parse_quality_score,
 )
-from .web_research import ResearchCorpus, WebResearcher
+from .web_research import OfficialDocs, ResearchCorpus, WebResearcher, normalize_url
 
 DEFAULT_LANGUAGE: str = "Korean"
 # Upper bound on guide sections. The synopsis is told this budget so it plans a
@@ -78,6 +78,8 @@ _MAX_SECTIONS: int = 10
 # Source material handed to one section's writer/evaluator/grounding calls:
 # the most relevant pages only (about 15k tokens), not the whole corpus.
 _SECTION_SOURCE_CHARS: int = 60_000
+# Official reference excerpt put ahead of a section's sources for grounding.
+_REFERENCE_SOURCE_CHARS: int = 20_000
 # Default number of web-search queries the research planner may propose.
 _MAX_RESEARCH_QUERIES: int = 6
 # Default number of top search-result pages fetched into the corpus so the
@@ -201,8 +203,9 @@ class TechGuide:
 class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
     """Generates a self-study technical guide from a list of source URLs."""
 
-    # Hosts of the requested URLs: the authority for flags and defaults.
-    _official_hosts: frozenset[str] = frozenset()
+    # The requested docs (hosts and versions): the authority for flags and defaults.
+    _official: OfficialDocs = OfficialDocs(frozenset(), frozenset())
+    _source_urls: tuple[str, ...] = ()
 
     def __init__(
         self,
@@ -348,7 +351,8 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
         if not urls:
             raise ValueError("At least one source URL is required.")
         # The requested sites are the authority for flags, defaults and names.
-        self._official_hosts = frozenset(urlparse(u).hostname or "" for u in urls)
+        self._official = OfficialDocs.from_urls(urls)
+        self._source_urls = tuple(urls)
 
         # Fetch the seed URLs (+ in-scope sub-pages) once. WebResearcher is
         # synchronous (blocking HTTP crawl); run it off the event loop.
@@ -499,6 +503,7 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
                     label="synopsis sources",
                 ),
                 "search_results": self._search_digest(corpus),
+                "input_outline": input_outline(corpus, self._source_urls),
                 "max_sections": self.max_sections,
                 "language": self.language,
             }
@@ -532,6 +537,7 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
         total = len(sections)
 
         written: list[str] = []
+        to_ground: list[tuple[int, str]] = []  # (index in written, its sources)
         for index, planned in enumerate(sections, start=1):
             # Hard ceiling: past _HARD_BUDGET_MULTIPLE × the budget, abort like
             # the review/summary pipelines rather than keep spending on the
@@ -555,7 +561,7 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
             sources = corpus.relevant_text(
                 f"{topic} {planned.title} {planned.description}",
                 max_chars=_SECTION_SOURCE_CHARS,
-                official_hosts=self._official_hosts,
+                official=self._official,
             )
             markdown = await self._write_one_section(
                 topic=topic,
@@ -604,9 +610,45 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
                     final_outline=final_outline,
                 )
                 if self.verify_grounding:
-                    markdown = await self._ground_section(markdown, sources)
+                    to_ground.append((len(written), sources))
             written.append(close_open_fence(markdown))
+        if to_ground:
+            await self._ground_sections(written, to_ground, corpus)
         return "\n\n".join(written)
+
+    async def _ground_sections(
+        self,
+        written: list[str],
+        to_ground: list[tuple[int, str]],
+        corpus: ResearchCorpus,
+    ) -> None:
+        """Fact-check the drafted sections in place. Flags and metric names the
+        official pages fetched so far never mention first pull the official
+        reference pages that can settle them into each section's sources, so
+        a stale flag is corrected instead of hedged."""
+        official_text, product = official_reference(list(self._source_urls), corpus)
+        unchecked = unverified_identifiers("\n\n".join(written), official_text, product)
+        reference = ResearchCorpus()
+        if unchecked:
+            reference.pages = await asyncio.to_thread(
+                self.researcher.add_official_reference,
+                corpus,
+                self._official,
+                unchecked,
+                product=product,
+            )
+        for index, sources in to_ground:
+            self._enforce_hard_token_budget()
+            if reference.pages:
+                excerpt = reference.relevant_text(
+                    " ".join(unchecked) + " " + written[index][:2_000],
+                    max_chars=_REFERENCE_SOURCE_CHARS,
+                    official=self._official,
+                )
+                sources = f"{excerpt}\n\n---\n\n{sources}"
+            written[index] = close_open_fence(
+                await self._ground_section(written[index], sources)
+            )
 
     def _enforce_hard_token_budget(self) -> None:
         """Raise ``TokenBudgetExceeded`` once spend passes the hard ceiling.
@@ -994,14 +1036,32 @@ _HOST_NOISE = frozenset({"docs", "www", "doc", "api", "readthedocs", "github", "
 MAX_UNVERIFIED = 10
 
 
+_OUTLINE_HEADING = re.compile(r"^##[ \t]+(.+?)[ \t#]*$", re.MULTILINE)
+_MAX_OUTLINE_HEADINGS = 40
+
+
+def input_outline(corpus: ResearchCorpus, urls: tuple[str, ...] | list[str]) -> str:
+    """The ``##`` headings of the requested pages (not sub-pages or search
+    results), one per line: the topics a getting-started guide must cover."""
+    wanted = {normalize_url(u) for u in urls}
+    headings: list[str] = []
+    for page in corpus.pages:
+        if normalize_url(page.url) not in wanted:
+            continue
+        for title in _OUTLINE_HEADING.findall(page.text):
+            if title not in headings:
+                headings.append(title)
+    lines = [f"- {neutralize_prompt_tags(h)}" for h in headings[:_MAX_OUTLINE_HEADINGS]]
+    return "\n".join(lines) or "(none)"
+
+
 def official_reference(urls: list[str], corpus: ResearchCorpus) -> tuple[str, str]:
-    """(text of the fetched pages on the requested hosts, product name taken
-    from the first host: ``docs.vllm.ai`` → ``vllm``)."""
-    hosts = {urlparse(u).hostname or "" for u in urls}
+    """(text of the fetched pages of the requested docs — same hosts and a
+    compatible docs version — and the product name taken from the first host:
+    ``docs.vllm.ai`` → ``vllm``)."""
+    official = OfficialDocs.from_urls(urls)
     text = "\n".join(
-        p.text
-        for p in corpus.pages
-        if (urlparse(p.final_url or p.url).hostname or "") in hosts
+        p.text for p in corpus.pages if official.covers(p.final_url or p.url)
     )
     labels = (
         [

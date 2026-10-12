@@ -3,11 +3,18 @@ official docs (deterministic checks, no LLM calls)."""
 
 from __future__ import annotations
 
+import pytest
+
 from scholar_lens.src.formatting import build_post_meta
 from scholar_lens.src.post_conventions import load_local_conventions
 from scholar_lens.src.tags import off_topic_tags
 from scholar_lens.src.tech_guide import official_reference, unverified_identifiers
-from scholar_lens.src.web_research import PageContent, ResearchCorpus
+from scholar_lens.src.web_research import (
+    OfficialDocs,
+    PageContent,
+    ResearchCorpus,
+    docs_version,
+)
 
 PREFERENCE_PAPER = (
     "We fine-tune language models from human preferences. Alignment of the "
@@ -99,8 +106,57 @@ def test_sources_are_labelled_by_authority() -> None:
         ]
     )
     text = corpus.relevant_text(
-        "paged attention", max_chars=10_000, official_hosts={"docs.vllm.ai"}
+        "paged attention",
+        max_chars=10_000,
+        official=OfficialDocs.from_urls(["https://docs.vllm.ai/"]),
     )
     assert "## Source (official documentation): https://docs.vllm.ai/a" in text
     assert "## Source (third-party): https://x.io/b" in text
     assert "## Source: " in corpus.relevant_text("paged attention", max_chars=10_000)
+
+
+@pytest.mark.parametrize(
+    "url,version",
+    [
+        ("https://docs.vllm.ai/en/latest/quickstart.html", "latest"),
+        ("https://docs.vllm.ai/en/v0.6.0/automatic_prefix_caching.html", "v0.6.0"),
+        ("https://pytorch.org/docs/stable/notes/cuda.html", "stable"),
+        ("https://pytorch.org/docs/2.4/notes/cuda.html", "2.4"),
+        ("https://x.io/docs/0.6/guide", "0.6"),
+        ("https://x.io/api/v2/users", "v2"),
+        ("https://blog.x.io/2024/05/post", None),
+        ("https://docs.x.io/en/guide/", None),
+    ],
+)
+def test_docs_version(url: str, version: str | None) -> None:
+    assert docs_version(url) == version
+
+
+def test_official_docs_are_version_aware() -> None:
+    latest = OfficialDocs.from_urls(["https://docs.vllm.ai/en/latest/quickstart/"])
+    assert latest.covers("https://docs.vllm.ai/en/latest/engine_args.html")
+    assert latest.covers("https://docs.vllm.ai/en/stable/engine_args.html")
+    assert latest.covers("https://docs.vllm.ai/usage/metrics/")
+    assert not latest.covers("https://docs.vllm.ai/en/v0.6.0/engine_args.html")
+    assert not latest.covers("https://x.io/en/latest/engine_args.html")
+    pinned = OfficialDocs.from_urls(["https://docs.vllm.ai/en/v0.6.0/quickstart.html"])
+    assert pinned.covers("https://docs.vllm.ai/en/v0.6.0/engine_args.html")
+    assert not pinned.covers("https://docs.vllm.ai/en/latest/engine_args.html")
+    assert not pinned.covers("https://docs.vllm.ai/en/v0.7.0/engine_args.html")
+
+
+def test_older_docs_version_is_labelled_and_not_official() -> None:
+    corpus = _corpus(
+        [
+            ("https://docs.vllm.ai/en/latest/a", "prefix caching"),
+            ("https://docs.vllm.ai/en/v0.6.0/b", "prefix caching"),
+        ]
+    )
+    official = OfficialDocs.from_urls(["https://docs.vllm.ai/en/latest/quickstart/"])
+    text = corpus.relevant_text("prefix caching", max_chars=10_000, official=official)
+    assert "(official documentation): https://docs.vllm.ai/en/latest/a" in text
+    assert "(older docs version): https://docs.vllm.ai/en/v0.6.0/b" in text
+    reference, _ = official_reference(
+        ["https://docs.vllm.ai/en/latest/quickstart/"], corpus
+    )
+    assert reference.count("prefix caching") == 1

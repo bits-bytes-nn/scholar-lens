@@ -118,6 +118,7 @@ class TechGuideSynopsisPrompt(BasePrompt):
         "topic",
         "sources",
         "search_results",
+        "input_outline",
         "max_sections",
         "language",
     ]
@@ -147,10 +148,15 @@ class TechGuideSynopsisPrompt(BasePrompt):
     {search_results}
     </search_results>
 
+    <input_outline>
+    {input_outline}
+    </input_outline>
+
     First decide the GUIDE TYPE from the topic and the sources:
     - getting-started: the reader wants to install, run and use the tool. Section 1 or 2 covers installation and the
       first runnable example. Internals (architecture, how it works inside) get at most 2 sections, placed after the
-      usage sections, and never [deep].
+      usage sections, and never [deep]. Every heading in <input_outline> (the requested pages) is covered by a
+      section of its own or folded into one.
     - explainer: the reader wants to understand how something works; concepts and mechanics lead, usage follows.
 
     """
@@ -231,11 +237,11 @@ class TechGuideSectionPrompt(BasePrompt):
     and LaTeX math where appropriate. You ground every claim in the provided sources and never fabricate APIs.
 
     GROUNDING: Every API name, CLI flag, configuration option, default value, and behavioral claim MUST be traceable
-    to <sources>. If the sources do not specify a detail, say so or omit it — never guess plausible-sounding APIs,
+    to <sources>. If the sources do not specify a detail, omit it — never guess plausible-sounding APIs,
     flags, or numbers. It is better to be brief and correct than comprehensive and wrong.
     AUTHORITY: sources marked "(official documentation)" decide flags, defaults, environment variables and metric
-    names; a "(third-party)" source may add an opinion or a benchmark (named as such) but never overrides them, and
-    a flag or default only a third-party source gives is left out or explicitly marked as unverified.
+    names; a "(third-party)" or "(older docs version)" source may add an opinion or a benchmark (named as such) but never overrides them, and
+    a flag or default only a third-party source gives is left out (never hedged as "unverified" in the text).
     The reader is a developer new to this tool; for ML topics:"""
         + READER_PROFILE
         + """
@@ -362,7 +368,8 @@ class TechGuideGroundingPrompt(BasePrompt):
     - Remove or correct any API name, CLI flag, option, default value, version number, or behavioral claim that is NOT
       supported by <sources>. Do not invent replacements — delete the unsupported clause or soften it to what the
       sources actually support. Where sources disagree, a source marked "(official documentation)" wins; a flag,
-      default or metric name backed only by a "(third-party)" source is removed or marked as unverified.
+      default or metric name backed only by a "(third-party)" or "(older docs version)" source is replaced by what an official source says, or
+      removed. Never leave a reader-facing hedge such as "(unverified)" or "check the official docs".
     - Remove any leftover XML/HTML tags, stray closing tags, or escaped entities (e.g. &amp;, &gt;) — output clean
       GitHub-flavored Markdown.
     - Preserve correct, well-grounded content, code blocks, tables, and the heading. Do NOT add new claims.

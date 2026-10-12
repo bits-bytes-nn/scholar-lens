@@ -41,8 +41,67 @@ MAX_META_REFRESH_HOPS = 3
 _META_REFRESH_URL = re.compile(
     r"^\s*\d+(?:\.\d*)?\s*[;,]\s*(?:url\s*=\s*)?['\"]?([^'\"\s]+)", re.I
 )
+# Official reference pages fetched to check a guide's flags and metric names
+# (engine arguments, CLI, configuration, metrics): at most this many searches
+# and pages per guide.
+MAX_REFERENCE_SEARCHES = 3
+MAX_REFERENCE_PAGES = 6
+_REFERENCE_LINK = re.compile(
+    r"(?:^|[/_.-])(?:cli|args?|arguments?|engine[_-]?args|config(?:uration)?|"
+    r"metrics?|optimi[sz]ation|reference|parameters?|options?|settings?|env(?:ironment)?)"
+    r"(?:$|[/_.-])",
+    re.I,
+)
+# A docs version in a URL path: a rolling alias or a pinned release such as
+# "v0.6.0", "0.6" or "v2" (a bare number like a year is not a version).
+_ROLLING_DOCS_VERSIONS = frozenset({"latest", "stable", "main", "dev", "nightly"})
+_PINNED_DOCS_VERSION = re.compile(r"v\d+(?:\.\d+)*|\d+(?:\.\d+)+", re.I)
 _BRAVE_WEB_SEARCH_URL = "https://api.search.brave.com/res/v1/web/search"
 _TAVILY_SEARCH_URL = "https://api.tavily.com/search"
+
+
+def docs_version(url: str) -> str | None:
+    """The first path segment that names a docs version (``latest``,
+    ``stable``, ``v0.6.0``, ``0.6`` …), lower-cased; ``None`` when there is none."""
+    for segment in urlparse(url).path.split("/"):
+        lowered = segment.lower()
+        if lowered in _ROLLING_DOCS_VERSIONS or _PINNED_DOCS_VERSION.fullmatch(lowered):
+            return lowered
+    return None
+
+
+@dataclass(frozen=True)
+class OfficialDocs:
+    """The documentation the user asked for: its hosts and docs versions. A page
+    on those hosts is official only for a compatible version, so an old pinned
+    release (``/en/v0.6.0/``) does not override the current docs."""
+
+    hosts: frozenset[str]
+    versions: frozenset[str | None]
+
+    @classmethod
+    def from_urls(cls, urls: Collection[str]) -> OfficialDocs:
+        return cls(
+            hosts=frozenset(h for u in urls if (h := urlparse(u).hostname)),
+            versions=frozenset(docs_version(u) for u in urls),
+        )
+
+    def on_host(self, url: str) -> bool:
+        return (urlparse(url).hostname or "") in self.hosts
+
+    def covers(self, url: str) -> bool:
+        if not self.on_host(url):
+            return False
+        version = docs_version(url)
+        if version is None or version in self.versions:
+            return True
+        if version in _ROLLING_DOCS_VERSIONS:
+            # Rolling aliases describe the current release, like an
+            # unversioned input does.
+            return not self.versions or any(
+                v is None or v in _ROLLING_DOCS_VERSIONS for v in self.versions
+            )
+        return False  # a pinned release none of the inputs asked for
 
 
 @dataclass(frozen=True)
@@ -90,13 +149,13 @@ class ResearchCorpus:
         query: str,
         *,
         max_chars: int,
-        official_hosts: Collection[str] | None = None,
+        official: OfficialDocs | None = None,
     ) -> str:
         """The pages most relevant to ``query`` (word overlap with title and
         body), most relevant first, within ``max_chars``. Each section of a
         guide reads only the material it needs instead of the whole corpus.
-        With ``official_hosts``, each source is labelled official or
-        third-party so the writer knows which one decides a flag or default."""
+        With ``official``, each source is labelled official, older docs version
+        or third-party so the writer knows which one decides a flag or default."""
         words = {w for w in re.findall(r"[a-z0-9][a-z0-9_.-]{2,}", query.lower())}
 
         def score(page: PageContent) -> float:
@@ -109,13 +168,14 @@ class ResearchCorpus:
         blocks, used = [], 0
         for page in ranked:
             label = ""
-            if official_hosts is not None:
-                host = urlparse(page.final_url or page.url).hostname or ""
-                label = (
-                    " (official documentation)"
-                    if host in official_hosts
-                    else " (third-party)"
-                )
+            if official is not None:
+                url = page.final_url or page.url
+                if official.covers(url):
+                    label = " (official documentation)"
+                elif official.on_host(url):
+                    label = " (older docs version)"
+                else:
+                    label = " (third-party)"
             block = (
                 f"## Source{label}: {neutralize_prompt_tags(page.url)}\n"
                 f"# {neutralize_prompt_tags(page.title)}\n\n"
@@ -147,7 +207,10 @@ class WebSearchProvider(ABC):
     supports_search: bool = True
 
     @abstractmethod
-    def search(self, query: str, *, count: int = 5) -> list[SearchResult]: ...
+    def search(
+        self, query: str, *, count: int = 5, domains: Collection[str] = ()
+    ) -> list[SearchResult]:
+        """Results for ``query``; ``domains`` restricts them to those hosts."""
 
 
 class NullSearchProvider(WebSearchProvider):
@@ -155,7 +218,9 @@ class NullSearchProvider(WebSearchProvider):
 
     supports_search: bool = False
 
-    def search(self, query: str, *, count: int = 5) -> list[SearchResult]:
+    def search(
+        self, query: str, *, count: int = 5, domains: Collection[str] = ()
+    ) -> list[SearchResult]:
         return []
 
 
@@ -171,11 +236,15 @@ class BraveSearchProvider(WebSearchProvider):
         self.api_key: str = resolved
         self.timeout = timeout
 
-    def search(self, query: str, *, count: int = 5) -> list[SearchResult]:
+    def search(
+        self, query: str, *, count: int = 5, domains: Collection[str] = ()
+    ) -> list[SearchResult]:
         headers: dict[str, str] = {
             "Accept": "application/json",
             "X-Subscription-Token": self.api_key,
         }
+        if domains:
+            query = " OR ".join(f"site:{d}" for d in domains) + f" {query}"
         params: dict[str, str | int] = {"q": query, "count": count}
         try:
             response = httpx.get(
@@ -221,13 +290,17 @@ class TavilySearchProvider(WebSearchProvider):
         self.api_key: str = resolved
         self.timeout = timeout
 
-    def search(self, query: str, *, count: int = 5) -> list[SearchResult]:
+    def search(
+        self, query: str, *, count: int = 5, domains: Collection[str] = ()
+    ) -> list[SearchResult]:
         payload: dict[str, object] = {
             "query": query,
             "max_results": count,
             "search_depth": "advanced",
             "include_raw_content": True,
         }
+        if domains:
+            payload["include_domains"] = list(domains)
         try:
             response = httpx.post(
                 _TAVILY_SEARCH_URL,
@@ -386,6 +459,73 @@ class WebResearcher:
         logger.info(
             "Added %d/%d search-result pages into the corpus.", added, fetch_top
         )
+
+    def add_official_reference(
+        self,
+        corpus: ResearchCorpus,
+        official: OfficialDocs,
+        identifiers: list[str],
+        *,
+        product: str = "",
+    ) -> list[PageContent]:
+        """Fetch reference pages of the ``official`` docs that can settle the
+        given flags and metric names, add them to ``corpus`` and return them.
+
+        Candidates are search results restricted to those hosts (one query per
+        batch of identifiers, at most :data:`MAX_REFERENCE_SEARCHES`), then
+        reference-like links (CLI, arguments, configuration, metrics …) of the
+        official pages already fetched. At most :data:`MAX_REFERENCE_PAGES` are
+        added, each through the same SSRF-guarded fetch.
+        """
+        hosts = sorted(official.hosts)
+        if not hosts or not identifiers:
+            return []
+        visited = {normalize_url(p.final_url or p.url) for p in corpus.pages}
+        visited |= {normalize_url(p.url) for p in corpus.pages}
+        candidates: list[SearchResult] = []
+        if self.search_provider.supports_search:
+            searches = min(MAX_REFERENCE_SEARCHES, len(identifiers))
+            size = -(-len(identifiers) // searches)
+            for i in range(searches):
+                batch = " ".join(identifiers[i * size : (i + 1) * size])
+                query = f"{product} {batch}".strip()
+                candidates += self.search_provider.search(query, domains=hosts)
+        for seen in corpus.pages:
+            if not official.covers(seen.final_url or seen.url):
+                continue
+            candidates += [
+                SearchResult(title="", url=link)
+                for link in seen.links
+                if official.covers(link) and _REFERENCE_LINK.search(urlparse(link).path)
+            ]
+        added: list[PageContent] = []
+        for result in candidates:
+            if len(added) >= MAX_REFERENCE_PAGES:
+                break
+            norm = normalize_url(result.url)
+            if not norm or norm in visited:
+                continue
+            if not official.covers(result.url):
+                continue  # off-host (a backend ignoring the filter) or an old release
+            visited.add(norm)
+            page: PageContent | None
+            if result.content:
+                page = PageContent(
+                    url=result.url,
+                    title=result.title or result.url,
+                    text=result.content,
+                )
+            else:
+                page = self._fetch_page(result.url)
+            if page is not None and official.covers(page.final_url or page.url):
+                added.append(page)
+        corpus.pages.extend(added)
+        logger.info(
+            "Added %d official reference page(s) for %d identifier(s).",
+            len(added),
+            len(identifiers),
+        )
+        return added
 
     def _fetch_page(self, url: str) -> PageContent | None:
         # SSRF guard, two layers: a cheap pre-check here for a fast skip + clear

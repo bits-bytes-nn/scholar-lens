@@ -566,13 +566,24 @@ def _snippet(text: str, start: int, end: int) -> str:
     return " ".join(line[a:b].split())
 
 
+# A reader-facing note about the writer's own sources ("(미검증)", "제공된 자료에는
+# 나와 있지 않습니다"): the pipeline's doubt leaking into the post instead of the
+# claim being fixed or dropped.
+_VERIFICATION_HEDGE = re.compile(
+    r"미검증|\(\s*unverified\s*\)|\bnot (?:yet )?verified\b"
+    r"|(?:공식 문서|자료|출처)(?:에서는|에서|에는|에)\s*(?:는\s*)?확인되지 않"
+    r"|(?:자료|문서|출처)(?:에는|에서는|에서|에)\s*(?:나와 있지|나오지) 않"
+)
+
+
 def writing_issues(markdown: str) -> list[str]:
     """Deterministic writing-rule violations in a generated post, one line
     each with the offending text, for an editor or reviser to fix.
 
     Covers references to the paper's numbering, an English stem with a Korean
     verb ending ("fine-tune합니다"), the post referring to its own parts
-    ("이 절에서") and single-``$`` math. Code and math are ignored; image alt text
+    ("이 절에서"), reader-facing verification hedges ("(미검증)") and single-``$``
+    math. Code and math are ignored; image alt text
     and callouts are fixed in post-processing instead.
     """
     # Link and image targets are copied verbatim (a file named "Figure1.png"
@@ -602,6 +613,11 @@ def writing_issues(markdown: str) -> list[str]:
     for m in _SELF_REFERENCE.finditer(prose):
         issues.append(
             f"self-reference '{m.group(0).strip()}': "
+            f"{_snippet(markdown, m.start(), m.end())}"
+        )
+    for m in _VERIFICATION_HEDGE.finditer(prose):
+        issues.append(
+            "verification hedge (fix the claim from an official source or drop it): "
             f"{_snippet(markdown, m.start(), m.end())}"
         )
     code = _masked(markdown, ("fence", "icode", "display"))
