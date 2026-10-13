@@ -454,3 +454,17 @@ def test_section_plan_keeps_only_corpus_urls() -> None:
         2: ([], []),
         3: (["https://blog.example.com/a"], ["tuning"]),
     }
+
+
+def test_source_list_names_one_spelling_of_a_page() -> None:
+    from scholar_lens.src.guide_authority import used_source_urls
+
+    pages = [
+        PageContent(QUICKSTART, "Q", "x"),
+        PageContent(QUICKSTART.removesuffix(".html"), "Q", "x"),
+        PageContent(QUICKSTART.replace("/latest/", "/stable/"), "Q", "x"),
+    ]
+    used = used_source_urls(
+        "", ResearchCorpus(pages=pages), [QUICKSTART], OFFICIAL, [], []
+    )
+    assert used == [QUICKSTART]

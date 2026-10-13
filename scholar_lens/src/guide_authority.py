@@ -13,7 +13,13 @@ from collections.abc import Collection, Sequence
 from .markdown_math import segments
 from .prompt_safety import neutralize_prompt_tags
 from .review_plan import parse_lines
-from .web_research import OfficialDocs, PageContent, ResearchCorpus, normalize_url
+from .web_research import (
+    OfficialDocs,
+    PageContent,
+    ResearchCorpus,
+    docs_version,
+    normalize_url,
+)
 
 # Identifiers a reader copies verbatim: CLI flags and Prometheus-style metric
 # names ("vllm:time_to_first_token_seconds", "..._requests_total").
@@ -221,6 +227,7 @@ def used_source_urls(
     }
     linked = {normalize_url(u) for u in re.findall(r"\]\((https?://[^)\s]+)", body)}
     used: list[str] = []
+    seen: set[str] = set()
     for page in corpus.pages:
         norm = normalize_url(page.url)
         where = page.final_url or page.url
@@ -239,6 +246,15 @@ def used_source_urls(
                 or norm in linked
                 or any(u in body for u in page.image_urls)
             )
-        if keep and page.url not in used:
+        if keep and _same_page_key(page.url) not in seen:
+            seen.add(_same_page_key(page.url))
             used.append(page.url)
     return used
+
+
+def _same_page_key(url: str) -> str:
+    """One key for the spellings of one docs page: with or without ``.html``,
+    under ``latest`` or ``stable``."""
+    key = normalize_url(url).removesuffix(".html")
+    version = docs_version(url)
+    return key.replace(f"/{version}/", "/{v}/", 1) if version else key
