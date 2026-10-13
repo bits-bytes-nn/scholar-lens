@@ -8,6 +8,7 @@ the pull request as a review checklist item. All checks are deterministic.
 
 from __future__ import annotations
 
+import itertools
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -17,7 +18,12 @@ from urllib.parse import urlparse
 import yaml
 
 from .front_matter import split_front_matter_text
-from .markdown_lint import ENVELOPE_TAG, mostly_hangul
+from .markdown_lint import (
+    BLOG_HTML_ELEMENTS,
+    BLOG_NEEDS_ATTRIBUTES,
+    ENVELOPE_TAG,
+    mostly_hangul,
+)
 from .markdown_math import (
     ESCAPED_UNDERSCORE,
     HANGUL,
@@ -135,7 +141,7 @@ def _math_lines(body: str) -> list[tuple[int, str]]:
     return out
 
 
-_LINT_TEXT_GROUP = re.compile(r"\\(?:text\w*|mathrm|operatorname)\{")
+_LINT_TEXT_GROUP = re.compile(r"\\(?:text\w*|mathrm|mathtt|operatorname)\{")
 _LINT_TABLE_PIPE = re.compile(r"\A\$\$(?:(?!\$\$).)+\$\$\Z")
 
 
@@ -246,6 +252,98 @@ def _check_all_math(front, body, lines, offset, add) -> None:  # type: ignore[no
             )
 
 
+_LINT_TAG = re.compile(r"(?<!\\)<(/?)([a-zA-Z][\w-]*)(\s[^<>]*)?/?>")
+_LINT_RAW = re.compile(r"(\{%-?\s*(?:end)?raw\s*-?%\})")
+_LINT_FENCE_INFO = re.compile(r"\A(`{3,}|~{3,})\s*\S+\s+\S")
+_LINT_TABLE_RULE = re.compile(r"\A\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\Z")
+_DESCRIPTION_MARKUP = re.compile(r"\$\$|\*\S[^*]*\*|`|\]\(|<[a-zA-Z/]|\{[{%]")
+
+
+def unknown_html_tag(text: str) -> str | None:
+    """The first ``<name>`` in prose ``text`` the browser would drop, as the
+    blog lint finds it (code spans and ``$$`` spans removed), or None."""
+    text = re.sub(r"\$\$.*?\$\$", "", re.sub(r"`[^`]*`", "", _unquote(text)))
+    for close, name, attrs in _LINT_TAG.findall(text):
+        lowered = name.lower()
+        if lowered not in BLOG_HTML_ELEMENTS or (
+            not close and not attrs.strip() and lowered in BLOG_NEEDS_ATTRIBUTES
+        ):
+            return name
+    return None
+
+
+def _check_blog_markup(front, body, offset, add) -> None:  # type: ignore[no-untyped-def]
+    """The blog lint's markup rules (script/lint-posts.rb) as it applies them:
+    Liquid outside raw tags, tags the browser drops, fence info strings
+    kramdown does not read, and a | inside $$ on a table row."""
+    lines = body.split("\n")
+    fence: str | None = None
+    raw = False
+    liquid = front.get("render_with_liquid") is not False
+    for i, line in enumerate(lines):
+        if liquid:
+            hit = False
+            for part in _LINT_RAW.split(line):
+                tag = re.fullmatch(r"\{%-?\s*((?:end)?raw)\s*-?%\}", part)
+                if tag:
+                    raw = tag.group(1) == "raw"
+                elif not raw and re.search(r"\{\{|\{%", part):
+                    hit = True
+            if hit:
+                add(
+                    "error",
+                    "liquid",
+                    offset + i,
+                    "Liquid tag in the body; wrap it in {% raw %} ... {% endraw %}",
+                )
+        if m := _LINT_FENCE.match(line):
+            if fence is None:
+                fence = m.group(1)
+                if _LINT_FENCE_INFO.match(line.strip()):
+                    add(
+                        "error",
+                        "code",
+                        offset + i,
+                        "code fence info has a space; write just the language",
+                    )
+            elif re.fullmatch(f"{re.escape(fence[0])}{{{len(fence)},}}", line.strip()):
+                fence = None
+            continue
+        if fence:
+            continue
+        if html_tag := unknown_html_tag(line):
+            add(
+                "error",
+                "html",
+                offset + i,
+                f"<{html_tag}> is read as HTML and does not show; write it in `code`",
+            )
+        starts_table = (
+            line.lstrip().startswith("|")
+            and i + 1 < len(lines)
+            and _LINT_TABLE_RULE.match(lines[i + 1].strip())
+            and (i == 0 or not lines[i - 1].lstrip().startswith("|"))
+        )
+        if starts_table:
+            rows = [i] + [
+                k
+                for k in itertools.takewhile(
+                    lambda k: lines[k].lstrip().startswith("|"),
+                    range(i + 2, len(lines)),
+                )
+            ]
+            for k in rows:
+                spans = re.findall(r"\$\$(.*?)\$\$", re.sub(r"`[^`]*`", "", lines[k]))
+                if any("|" in m for m in spans):
+                    add(
+                        "error",
+                        "table",
+                        offset + k,
+                        "a | inside $$ in a table breaks it; write \\mid, "
+                        "\\lvert...\\rvert or \\lVert...\\rVert",
+                    )
+
+
 def _unclosed_fence_line(body: str) -> int | None:
     """0-based line of the opener of a fence that never closes, if any."""
     lines = body.split("\n")
@@ -259,9 +357,14 @@ def _unclosed_fence_line(body: str) -> int | None:
 
 
 def validate_post(
-    markdown: str, spec: PostConventions, kind: ArtifactKind
+    markdown: str,
+    spec: PostConventions,
+    kind: ArtifactKind,
+    *,
+    file_name: str | None = None,
 ) -> list[Violation]:
-    """Check ``markdown`` against ``spec`` for an artifact of ``kind``."""
+    """Check ``markdown`` against ``spec`` for an artifact of ``kind``; with
+    ``file_name`` (the post's file name) also its date prefix."""
     found: list[Violation] = []
 
     def add(level: Level, rule: str, line: int, message: str) -> None:
@@ -277,12 +380,15 @@ def validate_post(
     if unclosed is not None:
         add("error", "code", offset + unclosed, "a code fence is never closed")
     _check_front_matter(front, body, spec, kind, add)
+    if file_name is not None:
+        _check_file_date(file_name, front.get("date"), add)
     _check_headings(lines, offset, kind, add)
     _check_all_math(front, body, lines, offset, add)
     _check_tables(lines, offset, add)
     _check_images(lines, offset, add)
     _check_text(lines, offset, add)
     _check_description(lines, offset, add)
+    _check_blog_markup(front, body, offset, add)
     return found
 
 
@@ -301,6 +407,7 @@ def body_errors(markdown: str) -> list[str]:
         add("error", "code", 1 + unclosed, "a code fence is never closed")
     _check_all_math({}, markdown, lines, 1, add)
     _check_tables(lines, 1, add)
+    _check_blog_markup({}, markdown, 1, add)
     return found
 
 
@@ -365,12 +472,54 @@ def _check_front_matter(front, body, spec, kind, add) -> None:  # type: ignore[n
 
     _check_tags(front.get("tags"), body, spec, add)
 
+    description = front.get("description")
+    if description is not None and _DESCRIPTION_MARKUP.search(str(description)):
+        add(
+            "error",
+            "description",
+            1,
+            "description is plain text; no $$, *emphasis*, backticks, links or tags",
+        )
+
     lang = front.get("lang")
+    languages = " or ".join(spec.languages)
     if lang is not None:
-        if lang not in ("ko", "en"):
-            add("error", "translation", 1, "lang must be 'ko' or 'en'")
+        if lang not in spec.languages:
+            add("error", "translation", 1, f"lang must be {languages}")
         if not front.get("translation_id"):
             add("error", "translation", 1, "a translated post needs translation_id")
+    elif front.get("translation_id"):
+        add(
+            "error",
+            "translation",
+            1,
+            f"a post with translation_id must set lang ({languages})",
+        )
+
+
+def _check_file_date(file_name: str, date: Any, add) -> None:  # type: ignore[no-untyped-def]
+    """Jekyll skips a post without the date prefix and builds a ``date:``
+    after the file's day (UTC) into a permanent URL. The file name carries
+    the posting day; ``date:`` is the paper's own date, never later."""
+    m = re.match(r"(\d{4}-\d{2}-\d{2})-", file_name)
+    if not m:
+        add("error", "date", 1, "the file name starts with YYYY-MM-DD-")
+        return
+    if isinstance(date, str):
+        try:
+            date = datetime.fromisoformat(date)
+        except ValueError:
+            return
+    if isinstance(date, datetime):
+        day = (date if date.tzinfo else date.replace(tzinfo=UTC)).astimezone(UTC).date()
+        posted = datetime.strptime(m.group(1), "%Y-%m-%d").date()
+        if day > posted:
+            add(
+                "error",
+                "date",
+                1,
+                f"date {day} (UTC) is after the file name's {m.group(1)}",
+            )
 
 
 def _check_paper_author(value: Any, add) -> None:  # type: ignore[no-untyped-def]

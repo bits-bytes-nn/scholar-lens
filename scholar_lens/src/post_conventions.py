@@ -74,6 +74,8 @@ class PostConventions(BaseModel):
     tags: TagSpec
     # Titles longer than this need a shorter ``seo_title``.
     seo_title_max_length: int = 70
+    # A translation is one post in each of these ``lang`` values.
+    languages: list[str] = Field(default_factory=lambda: ["ko", "en"])
 
     def is_paper_type(self, category_type: str) -> bool:
         spec = self.types.get(category_type)

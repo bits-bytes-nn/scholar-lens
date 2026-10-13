@@ -355,7 +355,10 @@ class PaperSectionCheckPrompt(BasePrompt):
        and the figure analysis; nothing contradicts already_in_article. A
        formula from outside the paper is exactly right; derivation steps agree
        in signs and variable definitions; "all"/"모든" about a setting holds in
-       every experiment.
+       every experiment. Each number belongs to the exact model, variant and
+       row it is reported for; a relative gain is not percentage points;
+       "best" keeps the paper's qualifier ("among open models"); a claim
+       credited to a cited work or method is the source's own.
     4. No repetition: nothing listed in already_in_article (headings,
        equations, tables, figures, code, callouts) is shown again; concepts owned
        elsewhere are not re-explained; nothing repeats inside the section.

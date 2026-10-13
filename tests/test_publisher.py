@@ -34,7 +34,9 @@ from scholar_lens.src.publisher import (
 def skip_validation(monkeypatch: pytest.MonkeyPatch) -> None:
     """These tests exercise publishing mechanics on bare Markdown, not posts;
     the conventions gate has its own tests (TestValidationGate)."""
-    monkeypatch.setattr(Publisher, "_validate", lambda self, markdown, request: [])
+    monkeypatch.setattr(
+        Publisher, "_validate", lambda self, markdown, request, file_name: []
+    )
 
 
 class TestImageHelpers:

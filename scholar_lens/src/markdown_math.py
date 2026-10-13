@@ -230,7 +230,7 @@ _QUOTE_PREFIX = re.compile(r"^[ \t]*(?:>[ \t]?)+")
 # three levels): every \text… command, \mathrm and \operatorname, as the blog
 # lint treats them. Shared with the post validator.
 _NESTED_BRACES = r"\{(?:[^{}]|\{(?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*\})*\}"
-TEXT_COMMAND = re.compile(r"\\(?:text\w*|mathrm|operatorname)" + _NESTED_BRACES)
+TEXT_COMMAND = re.compile(r"\\(?:text\w*|mathrm|mathtt|operatorname)" + _NESTED_BRACES)
 ESCAPED_UNDERSCORE = re.compile(r"\\_")
 
 

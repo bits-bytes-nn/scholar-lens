@@ -273,7 +273,7 @@ class Publisher:
                 *request.review_notes,
                 # Rule slips the generators could not fix, on the final text.
                 *writing_notes(body),
-                *self._validate(markdown, request),
+                *self._validate(markdown, request, f"{file_name}.md"),
             ]
         except PostValidationError as e:
             if e.rejected_path and self.s3_handler:
@@ -295,14 +295,18 @@ class Publisher:
         s3_url = await self._upload_to_s3(request, markdown_path)
         return s3_url, markdown_path
 
-    def _validate(self, markdown: str, request: PublishRequest) -> list[str]:
+    def _validate(
+        self, markdown: str, request: PublishRequest, file_name: str
+    ) -> list[str]:
         """Check the finished post against the blog conventions.
 
         Errors stop publishing (nothing saved, uploaded or proposed); the post
         is kept in the work dir as ``*.rejected.md`` with the violations so
         it can be inspected. Warnings are returned for the PR checklist.
         """
-        violations = validate_post(markdown, self.conventions, request.kind)
+        violations = validate_post(
+            markdown, self.conventions, request.kind, file_name=file_name
+        )
         if blocking := [v for v in violations if v.level == "error"]:
             rejected = request.work_dir / f"{request.slug}.rejected.md"
             report = "\n".join(

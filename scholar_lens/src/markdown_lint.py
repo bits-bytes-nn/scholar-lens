@@ -118,60 +118,19 @@ _LATEX_LIKE = re.compile(r"[\\^_{]")
 # Everything else that looks like <word ...> in prose is treated as a
 # placeholder token (e.g. <none>, <server-host>, <your-namespace>) that kramdown
 # would otherwise parse as an HTML open tag, emitting a stray closing tag later.
-_REAL_HTML_TAGS = frozenset(
-    {
-        "a",
-        "abbr",
-        "b",
-        "br",
-        "code",
-        "dd",
-        "del",
-        "details",
-        "div",
-        "dl",
-        "dt",
-        "em",
-        "figure",
-        "figcaption",
-        "h1",
-        "h2",
-        "h3",
-        "h4",
-        "h5",
-        "h6",
-        "hr",
-        "i",
-        "img",
-        "ins",
-        "kbd",
-        "li",
-        "mark",
-        "ol",
-        "p",
-        "pre",
-        "q",
-        # No "s": in an ML post "<s>"/"</s>" are the BOS/EOS tokens, and as a
-        # tag they would strike through the rest of the sentence.
-        "samp",
-        "small",
-        "span",
-        "strong",
-        "sub",
-        "summary",
-        "sup",
-        "table",
-        "tbody",
-        "td",
-        "tfoot",
-        "th",
-        "thead",
-        "tr",
-        "u",
-        "ul",
-        "var",
-    }
+# The HTML a post writes, as the blog lint knows it (script/lint-posts.rb
+# ``HTML_ELEMENTS``): any other ``<name>`` is passed through by kramdown and
+# dropped by the browser, so a prompt token (<think>, <input>, <s>) would
+# vanish. The last row is an inline <svg>'s children.
+BLOG_HTML_ELEMENTS = frozenset(
+    """a abbr audio b blockquote br caption center cite code col colgroup dd del
+    details div dl dt em figcaption figure h1 h2 h3 h4 h5 h6 hr i iframe img ins
+    kbd li mark ol p picture pre script section small source span strong sub
+    summary sup svg table tbody td tfoot th thead tr ul video wbr
+    circle defs g line path polygon polyline rect text tspan use""".split()
 )
+# Elements that mean nothing bare: <img> or <a> alone is a token, not markup.
+BLOG_NEEDS_ATTRIBUTES = frozenset("a audio iframe img script source video".split())
 # An angle-bracket token: an opening/closing/self-closing tag-like run with no
 # embedded '<'/'>' or line break and no whitespace-only body. group(1) = optional '/', group(2)
 # = the leading name token (letters/digits/_-). We only escape when that name is
@@ -304,7 +263,7 @@ def _escape_placeholder_tags(markdown: str, regions: list[tuple[int, int, str]])
     are parsed by kramdown as HTML open tags; since they're never closed, it
     emits a stray ``</...>`` at the next block boundary, corrupting the render.
     We escape the angle brackets (``<`` -> ``&lt;``, ``>`` -> ``&gt;``) for any
-    ``<name ...>`` whose name isn't a real HTML tag (:data:`_REAL_HTML_TAGS`).
+    ``<name ...>`` whose name isn't a real HTML tag (:data:`BLOG_HTML_ELEMENTS`).
     Code spans and math spans are skipped, so shell redirs, generics, and
     ``\\langle`` stay untouched.
     """
@@ -312,7 +271,9 @@ def _escape_placeholder_tags(markdown: str, regions: list[tuple[int, int, str]])
     in_code = indented_code_test(markdown)  # an indented code block
 
     def repl(m: re.Match[str]) -> str:
-        if m.group(2).lower() in _REAL_HTML_TAGS:
+        name = m.group(2).lower()
+        bare = not m.group(1) and not m.group(0)[len(m.group(2)) + 1 : -1].strip(" /")
+        if name in BLOG_HTML_ELEMENTS and not (bare and name in BLOG_NEEDS_ATTRIBUTES):
             return m.group(0)
         return m.group(0).replace("<", "&lt;").replace(">", "&gt;")
 
@@ -823,11 +784,75 @@ def lint_markdown(markdown: str, *, warn: bool = True) -> str:
     return fixed
 
 
+_FENCE_INFO = re.compile(r"^(\s*(?:>\s?)*\s*(?:`{3,}|~{3,}))\s*(\S+)\s+\S.*$")
+
+
+def _bare_fence_info(markdown: str) -> str:
+    """Keep only the language word of a fence's info string: kramdown's GFM
+    fence takes one word, and with more (```python title="a.py") it renders
+    the block as inline code."""
+    lines = markdown.split("\n")
+    for i, role in enumerate(fence_roles(lines)):
+        if role == "open" and (m := _FENCE_INFO.match(lines[i])):
+            lines[i] = m.group(1) + m.group(2)
+    return "\n".join(lines)
+
+
+_RAW_TAG = re.compile(r"(\{%-?\s*(?:end)?raw\s*-?%\})")
+_LIQUID = re.compile(r"\{\{.*?\}\}|\{%.*?%\}|\{\{|\{%")
+
+
+def _wrap_liquid(markdown: str) -> str:
+    """Wrap Liquid-looking text in ``{% raw %}``: Jekyll renders a post as
+    Liquid first, so a prompt template's ``{{ question }}`` (even in code)
+    would render as nothing. A code block gets raw lines around it; anything
+    else is wrapped where it stands. Already-raw text is left alone."""
+    lines = markdown.split("\n")
+    roles = fence_roles(lines)
+    out: list[str] = []
+    i = 0
+    while i < len(lines):
+        if roles[i] == "open":
+            end = i + 1
+            while end < len(lines) and roles[end] == "code":
+                end += 1
+            block = lines[i : end + 1]
+            before = out[-1].strip() if out else ""
+            needs = any(_LIQUID.search(line) for line in block[1:-1] or block)
+            if needs and not re.fullmatch(r"\{%-?\s*raw\s*-?%\}", before):
+                indent = re.match(r"[ \t>]*", lines[i]).group(0)  # type: ignore[union-attr]
+                out += [f"{indent}{{% raw %}}", *block, f"{indent}{{% endraw %}}"]
+            else:
+                out += block
+            i = end + 1
+            continue
+        out.append(lines[i])
+        i += 1
+    raw = False
+    wrapped: list[str] = []
+    for line in out:
+        parts = []
+        for part in _RAW_TAG.split(line):
+            tag = re.fullmatch(r"\{%-?\s*((?:end)?raw)\s*-?%\}", part)
+            if tag:
+                raw = tag.group(1) == "raw"
+            elif not raw:
+                part = _LIQUID.sub(
+                    lambda m: "{% raw %}" + m.group(0) + "{% endraw %}", part
+                )
+            parts.append(part)
+        wrapped.append("".join(parts))
+    return "\n".join(wrapped)
+
+
 def publish_body(markdown: str, *, warn: bool = True) -> str:
     """The publisher's body pipeline, in one place: an open fence closed,
     callouts over the cap unboxed (before the math pass, so a display left in
     an unboxed callout is isolated too), the blog math rules applied, then the
-    other auto-fixes of :func:`lint_markdown`. Idempotent."""
-    return lint_markdown(
-        normalize_math(limit_callouts(close_open_fence(markdown))), warn=warn
+    other auto-fixes of :func:`lint_markdown`, fence info strings cut to the
+    language and Liquid-looking text wrapped in ``{% raw %}``. Idempotent."""
+    linted = lint_markdown(
+        normalize_math(limit_callouts(_bare_fence_info(close_open_fence(markdown)))),
+        warn=warn,
     )
+    return _wrap_liquid(linted)

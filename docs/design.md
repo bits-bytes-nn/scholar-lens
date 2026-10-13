@@ -279,7 +279,7 @@ LLM 라우팅 호출 없이 계획을 따릅니다(`PaperReviewer._enrich`). 참
 | `paper-author` | error | 논문 글에서 비었거나 `et al.` 또는 사람 이름 나열, 가이드에 있음 |
 | `subtitle` | error | 논문 글에서 비었거나 제목과 같음 |
 | `seo-title` | error | 제목이 70자 초과인데 없음, 또는 `seo_title`이 70자 초과 |
-| `translation` | error | `lang`이 `ko`/`en`이 아니거나 번역본에 `translation_id`가 없음 |
+| `translation` | error | `lang`이 spec의 `languages`(`ko`/`en`)가 아님, 번역본에 `translation_id`가 없음, `translation_id`가 있는데 `lang`이 없음 |
 | `tags` | error | 비어 있음, 정규화되지 않은 태그, 퇴역 태그, 통제 태그 없음, 세부 태그 상한 초과 |
 | `tags` | warning | 통제 태그 3개 초과(논문에 없는 태그 구절은 `paper_pipeline.py::_tag_notes`가 PR 메모로 남김) |
 | `headings` | error | 본문 H1, 헤딩 레벨 건너뜀, 논문 글이 `## TL;DR`로 시작하지 않음, TL;DR이 비어 있음, 리뷰 TL;DR에 `###` 질문이 없음 |
@@ -289,11 +289,16 @@ LLM 라우팅 호출 없이 계획을 따릅니다(`PaperReviewer._enrich`). 참
 | `table` | warning | 같은 헤더 라벨이 바로 옆에 반복 |
 | `image` | error | arXiv 계열 원격 이미지 잔존, `/assets/images/<파일>`이 아닌 로컬 경로 |
 | `image` | warning | 그 밖의 외부 이미지 |
-| `description` | warning | 첫 문단(검색 설명)에 수식 |
+| `description` | warning/error | 첫 문단(검색 설명)에 수식(warning), front matter `description`에 `$$`·강조·백틱·링크·태그·`{{`(error) |
 | `envelope` | error | 생성용 태그(`</explanation>` 등) 누출 |
 | `code` | error | 닫히지 않은 코드 펜스 |
 | `image-alt` | warning | 한국어 글의 이미지 alt에 한글이 없음 |
 | `list` | warning | 디스플레이 수식 뒤에서 번호 목록이 2 이상으로 다시 시작함(목록이 끊김) |
+| `liquid` | error | `{% raw %}` 밖의 `{{ }}`·`{% %}`(코드 블록 포함; 게시 단계가 자동으로 감쌈) |
+| `html` | error | 브라우저가 지우는 태그(`<think>`, `<s>`, `<input>`, 속성 없는 `<img>`; 게시 단계가 자동 이스케이프) |
+| `code` | error | 코드 블록 언어 표시에 공백(게시 단계가 첫 단어만 남김), 닫히지 않은 코드 블록 |
+| `table` | error | 표 행의 `$$` 안 막대 기호(게시 단계가 `\vert`·`\Vert`로 바꿈) |
+| `date` | error | 파일명이 `YYYY-MM-DD-`로 시작하지 않거나 `date:`가 파일명 날짜보다 늦음(UTC) |
 
 `Publisher._validate`가 이 함수를 호출합니다. error가 하나라도 있으면 저장·업로드·PR을 모두 하지 않고, 글과 위반 목록을 작업 폴더의 `<slug>.rejected.md`에 남기며 S3 버킷이 있으면 `<prefix>/rejected/<slug>.rejected.md`에도 올린 뒤 `PostValidationError`를 던집니다. warning은 `PublishRequest.validation_warnings`에 담겨 PR 본문의 `- [ ]` 체크리스트가 됩니다.
 
