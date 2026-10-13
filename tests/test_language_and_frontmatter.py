@@ -60,6 +60,13 @@ class TestBuildFrontMatter:
             Github(), self._paper(), "Paper Reviews"
         )
 
+    def test_an_arxiv_paper_uses_its_arxiv_doi(self) -> None:
+        paper = self._paper().model_copy(
+            update={"arxiv_id": "2305.18290v3", "doi": "10.52202/075280-2338"}
+        )
+        out = _build_front_matter(Github(), paper, "Paper Reviews")
+        assert 'paper_doi: "10.48550/arXiv.2305.18290"' in out
+
     def test_placeholder_organization_omitted(self) -> None:
         paper = self._paper().model_copy(
             update={"attributes": Attributes(affiliation="N/A", category="X")}

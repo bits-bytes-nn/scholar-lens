@@ -20,6 +20,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from urllib.parse import quote
 
+from .constants import normalize_arxiv_id
 from .markdown_math import has_math, normalize_math
 from .post_conventions import PostConventions
 from .tags import normalize_tags
@@ -124,6 +125,16 @@ def _paper_author(paper: Paper) -> str | None:
     """The organization that published the paper (never people's names)."""
     affiliation = html.unescape(paper.attributes.affiliation).strip()
     return None if is_placeholder(affiliation) else affiliation
+
+
+def _paper_doi(paper: Paper) -> str | None:
+    """The DOI the blog looks the citation count up by: the arXiv DOI for an
+    arXiv paper (the blog backfills older posts the same way), else the
+    paper's own DOI."""
+    arxiv_id = normalize_arxiv_id(paper.arxiv_id)
+    if arxiv_id:
+        return f"10.48550/arXiv.{re.sub(r'v\d+$', '', arxiv_id)}"
+    return paper.doi
 
 
 @dataclass
@@ -246,7 +257,7 @@ def paper_front_matter(
         date=paper.published,
         paper_author=_paper_author(paper),
         # The blog looks up the paper's live citation count by it.
-        paper_doi=paper.doi,
+        paper_doi=_paper_doi(paper),
         description=description,
         categories=categories,
         tags=meta.tags,
