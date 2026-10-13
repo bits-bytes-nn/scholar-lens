@@ -50,9 +50,9 @@ class PaperSummaryPrompt(BasePrompt):
 
     Structure (Markdown inside <summary>):
     1. Open with a blockquote of 2-3 lines in {language}: what the paper does,
-       the key idea, and the headline result with its setting. Plain prose
-       only — no math in this blockquote; the blog uses it as the post's
-       search description.
+       the key idea, and the headline result with its setting. It is published
+       as the post's `## TL;DR` paragraph, which the blog also uses as the
+       search description: plain prose only, no math, no label.
     2. Then exactly these five `##` sections (a Korean post uses the headings
        verbatim; any other language translates them, keeping emoji and order):
        ## 🔍 이 연구는 왜 필요합니까?

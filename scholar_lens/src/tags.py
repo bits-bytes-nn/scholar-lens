@@ -96,7 +96,13 @@ def normalize_tags(
         key = _key(tag)
         if key in seen:
             return
-        if key in title_keys:
+        # A tag restating the title is dropped unless the blog already uses
+        # it: "vLLM" for a "vLLM: …" guide still links to the other vLLM posts.
+        if (
+            key in title_keys
+            and key not in spelling
+            and key not in canonical_controlled
+        ):
             selection.dropped.append(tag)
             return
         if key in canonical_controlled:

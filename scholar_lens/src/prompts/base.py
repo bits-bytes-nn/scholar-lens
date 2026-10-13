@@ -38,7 +38,9 @@ Spend words where the difficulty is, not evenly.
   (1) the intuition in plain words, (2) the formal statement with every symbol
   defined, (3) a small worked example or numeric walk-through where it helps
   (for a theorem, the idea of the proof), (4) the paper's figure or a table
-  where it helps. Say briefly why the point is subtle.
+  where it helps. Say briefly why the point is subtle. Each step adds
+  something new; never restate the previous one, and a callout replaces the
+  sentence it highlights instead of repeating it.
 - Simplify the exposition, never the facts.
 """
 
@@ -48,9 +50,11 @@ Context beyond the paper makes the text useful, but must be honest:
   textbook-level knowledge (what a standard technique is, why a known problem
   matters). Phrase it as explanation, not as a claim about this paper.
 - Never invent numbers, benchmark results, attributions, or links that are not
-  in the inputs. Mark your own derivations or estimates as such ("대략
-  계산하면 …"). Clearly illustrative toy values in a worked example are fine;
+  in the inputs. Clearly illustrative toy values in a worked example are fine;
   never present them as the paper's numbers.
+- Claim only as strongly as the paper does: keep its hedges ("we believe",
+  "suggests"), and never turn a conjecture into a fact, one setting into a
+  general rule, or an unexplained difference into a stated cause.
 - Copy the paper's numbers verbatim. A derived number (a ratio, a reduction,
   a difference) shows its inputs inline: "1,200ms에서 300ms로, 75% 감소".
   Compare numbers only on the same benchmark, metric and evaluation setting;

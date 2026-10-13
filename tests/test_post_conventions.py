@@ -50,10 +50,8 @@ class TestFetchBlogTags:
             return _Response(text=posts[sha]) if sha in posts else _Response(status=500)
 
         monkeypatch.setattr(post_conventions.requests, "get", fake_get)
-        assert post_conventions.fetch_blog_tags("o/r", "main", None) == [
-            "GraphRAG",
-            "Knowledge-Graph",
-        ]
+        tags = post_conventions.fetch_blog_tags("o/r", "main", None)
+        assert list(tags.items()) == [("GraphRAG", 2), ("Knowledge-Graph", 1)]
         assert not any(url.endswith("/r") for url in requested)
 
 

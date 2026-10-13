@@ -277,6 +277,15 @@ def test_heading_level_jumps_are_closed() -> None:
     assert "#### code" in out and out.startswith("## TL;DR")
 
 
+def test_heading_moves_are_silent_with_warn_off(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    with caplog.at_level(logging.WARNING):
+        out = lint_markdown("## TL;DR\n\n#### Deep", warn=False)
+    assert "\n### Deep" in out
+    assert "moved to level" not in caplog.text
+
+
 def test_a_same_named_image_on_another_host_is_dropped() -> None:
     known = {
         "https://docs.x.io/img/arch.png",

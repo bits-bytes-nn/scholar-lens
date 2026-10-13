@@ -16,6 +16,7 @@ from .constants import EmbeddingModelId, LanguageModelId, LocalPaths, S3Paths
 from .content_extractor import Attributes, ContentExtractor
 from .explainer import Paper, PaperReviewer
 from .formatting import format_review, format_summary, paper_post_meta
+from .front_matter import split_front_matter
 from .jobs import JobRequest
 from .logger import logger
 from .markdown_lint import (
@@ -33,7 +34,7 @@ from .parser import (
     PDFParser,
     attach_figure_context,
 )
-from .post_validator import split_front_matter, unsourced_table_numbers
+from .post_validator import unsourced_table_numbers
 from .publisher import PublishRequest, build_pr_body
 from .runtime import ROOT_DIR, PipelineOutcome, RunContext, publish_artifact
 from .summarizer import PaperSummarizer
@@ -152,6 +153,7 @@ async def _generate_review(
     return format_review(github, paper, review, meta=meta), [
         *meta.notes,
         *review.notes,
+        *_citation_notes(citation_summarizer),
     ]
 
 
@@ -212,12 +214,6 @@ async def _prepare_paper_data(
     )
 
     paper_dir.mkdir(parents=True, exist_ok=True)
-    await asyncio.gather(
-        _write_json(paper_dir / LocalPaths.CONTENT_FILE.value, content.model_dump()),
-        _write_json(
-            paper_dir / LocalPaths.FIGURES_FILE.value, [f.model_dump() for f in figures]
-        ),
-    )
     metadata = source.fetch_metadata()
     paper_cfg = context.config.paper
     content_extractor = await ContentExtractor.create(
@@ -227,7 +223,7 @@ async def _prepare_paper_data(
         callbacks=callbacks,
         category_options=list(context.require_conventions().topics),
         controlled_tags=context.require_conventions().tags.controlled,
-        existing_keywords=context.require_blog_tags()[:MAX_TAG_HINTS],
+        existing_keywords=context.blog_tag_hints(MAX_TAG_HINTS),
     )
     if needs_citations:
         # The review planner reads the whole paper itself, so only citations
@@ -422,6 +418,20 @@ def _unanalysed_figure_notes(paper: Paper) -> list[str]:
     if not count:
         return []
     return [f"{count} figure(s) were not analysed (captions only): check them."]
+
+
+def _citation_notes(citation_summarizer: CitationSummarizer) -> list[str]:
+    """A note when some prerequisite references had no abstract or text to
+    summarize (the sections citing them were written without the summary)."""
+    missing = citation_summarizer.unsourced_references()
+    if not missing:
+        return []
+    shown = ", ".join(f"'{ident[:80]}'" for ident in missing[:5])
+    more = f" and {len(missing) - 5} more" if len(missing) > 5 else ""
+    return [
+        f"{len(missing)} cited reference(s) had no abstract or text to "
+        f"summarize: {shown}{more}."
+    ]
 
 
 def _code_notes(paper: Paper) -> list[str]:

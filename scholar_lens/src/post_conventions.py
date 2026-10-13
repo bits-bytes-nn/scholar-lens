@@ -163,9 +163,9 @@ def _front_matter_tags(text: str) -> list[str]:
     return [str(t) for t in tags] if isinstance(tags, list) else []
 
 
-def fetch_blog_tags(repo_name: str, branch: str, token: str | None) -> list[str]:
-    """Every tag the blog's posts already use, most used first — the
-    candidates a new post should reuse before inventing one.
+def fetch_blog_tags(repo_name: str, branch: str, token: str | None) -> dict[str, int]:
+    """Every tag the blog's posts already use with its post count, most used
+    first — the candidates a new post should reuse before inventing one.
 
     One recursive tree listing finds every post under ``_posts/`` (also in
     sub-folders); the posts are then read in parallel. A post that cannot be
@@ -215,4 +215,4 @@ def fetch_blog_tags(repo_name: str, branch: str, token: str | None) -> list[str]
     for text in texts:
         for tag in _front_matter_tags(text or ""):
             counts[tag] = counts.get(tag, 0) + 1
-    return sorted(counts, key=lambda t: (-counts[t], t))
+    return {t: counts[t] for t in sorted(counts, key=lambda t: (-counts[t], t))}

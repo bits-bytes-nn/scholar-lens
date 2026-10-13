@@ -62,6 +62,30 @@ _REFERENCE_LINK = re.compile(
     r"(?:$|[/_.-])",
     re.I,
 )
+_ARGUMENT_WORDS = frozenset(
+    {"cli", "arg", "args", "arguments", "options", "parameters"}
+)
+_METRIC_WORDS = frozenset({"metric", "metrics"})
+
+
+def _path_words(url: str) -> set[str]:
+    return {w for w in re.split(r"[/_.-]+", urlparse(url).path.lower()) if w}
+
+
+def _reference_words(identifiers: list[str]) -> set[str]:
+    """Path words of a reference page that settles ``identifiers``: the kind
+    of page (arguments for flags, metrics for metric names) and the
+    identifiers' own words (``--gpu-memory-utilization`` → "memory")."""
+    words: set[str] = set()
+    for identifier in identifiers:
+        is_metric = ":" in identifier or identifier.endswith(
+            ("_total", "_seconds", "_bytes", "_count", "_bucket", "_sum")
+        )
+        words |= _METRIC_WORDS if is_metric else _ARGUMENT_WORDS
+        words |= {w for w in re.split(r"[-_:=]+", identifier.lower()) if len(w) > 2}
+    return words
+
+
 # A docs version in a URL path: a rolling alias or a pinned release such as
 # "v0.6.0", "0.6" or "v2" (a bare number like a year is not a version). Aliases
 # and dotted releases count at any depth (/deeplearning/nemo/user-guide/docs/en/
@@ -330,12 +354,14 @@ class ResearchCorpus:
         *,
         max_chars: int,
         official: OfficialDocs | None = None,
+        included: set[str] | None = None,
     ) -> str:
         """The pages most relevant to ``query`` (word overlap with title and
         body), most relevant first, within ``max_chars``. Each section of a
         guide reads only the material it needs instead of the whole corpus.
         With ``official``, each source is labelled official, older docs version
-        or third-party so the writer knows which one decides a flag or default."""
+        or third-party so the writer knows which one decides a flag or default.
+        The URL of each page that made the cut is added to ``included``."""
         words = {w for w in re.findall(r"[a-z0-9][a-z0-9_.-]{2,}", query.lower())}
 
         def score(page: PageContent) -> float:
@@ -366,6 +392,8 @@ class ResearchCorpus:
                 break
             blocks.append(_cut(block, room))
             used += len(blocks[-1])
+            if included is not None:
+                included.add(page.url)
         return "\n\n---\n\n".join(blocks)
 
     def combined_text(self, max_chars: int | None = None) -> str:
@@ -662,40 +690,46 @@ class WebResearcher:
         identifiers: list[str],
         *,
         product: str = "",
+        max_searches: int = MAX_REFERENCE_SEARCHES,
+        max_pages: int = MAX_REFERENCE_PAGES,
     ) -> list[PageContent]:
         """Fetch reference pages of the ``official`` docs that can settle the
         given flags and metric names, add them to ``corpus`` and return them.
 
         Candidates are search results restricted to those hosts (one query per
-        batch of identifiers, at most :data:`MAX_REFERENCE_SEARCHES`), then
-        reference-like links (CLI, arguments, configuration, metrics …) of the
-        official pages already fetched. At most :data:`MAX_REFERENCE_PAGES` are
-        added, each through the same SSRF-guarded fetch.
+        batch of identifiers, at most ``max_searches``), then reference-like
+        links (CLI, arguments, configuration, metrics …) of the official pages
+        already fetched, those whose path fits the identifiers first. At most
+        ``max_pages`` are added, each through the same SSRF-guarded fetch.
         """
         hosts = sorted(official.hosts)
-        if not hosts or not identifiers:
+        if not hosts or not identifiers or max_pages <= 0:
             return []
         visited = {normalize_url(p.final_url or p.url) for p in corpus.pages}
         visited |= {normalize_url(p.url) for p in corpus.pages}
         candidates: list[SearchResult] = []
-        if self.search_provider.supports_search:
-            searches = min(MAX_REFERENCE_SEARCHES, len(identifiers))
+        if self.search_provider.supports_search and max_searches > 0:
+            searches = min(max_searches, len(identifiers))
             size = -(-len(identifiers) // searches)
             for i in range(searches):
                 batch = " ".join(identifiers[i * size : (i + 1) * size])
                 query = f"{product} {batch}".strip()
                 candidates += self.search_provider.search(query, domains=hosts)
-        for seen in corpus.pages:
-            if not official.covers(seen.final_url or seen.url):
-                continue
-            candidates += [
-                SearchResult(title="", url=link)
-                for link in seen.links
-                if official.covers(link) and _REFERENCE_LINK.search(urlparse(link).path)
-            ]
+        links = [
+            link
+            for seen in corpus.pages
+            if official.covers(seen.final_url or seen.url)
+            for link in seen.links
+            if official.covers(link) and _REFERENCE_LINK.search(urlparse(link).path)
+        ]
+        # Navigation order lists "metrics" before "engine_args"; a stable sort
+        # by fit keeps that order only among equally fitting pages.
+        wanted = _reference_words(identifiers)
+        links.sort(key=lambda link: -len(_path_words(link) & wanted))
+        candidates += [SearchResult(title="", url=link) for link in links]
         added: list[PageContent] = []
         for result in candidates:
-            if len(added) >= MAX_REFERENCE_PAGES:
+            if len(added) >= max_pages:
                 break
             norm = normalize_url(result.url)
             if not norm or norm in visited:
@@ -783,10 +817,15 @@ class WebResearcher:
         title = soup.title.get_text(strip=True) if soup.title else url
         # Relative links and image markers resolve against where the page
         # actually lives (after redirects), not the URL we asked for.
+        main = _main_content(soup)
         text = extract_text_from_html(
-            _main_content(soup) or html, base_url=final_url, skip_page_furniture=True
+            main or html, base_url=final_url, skip_page_furniture=True
         )
-        image_urls = self._extract_images(soup, final_url)
+        # Images from the same scope as the text, so sidebar logos and badges
+        # never become figures the writer may cite.
+        image_urls = self._extract_images(
+            BeautifulSoup(main, "html.parser") if main else soup, final_url
+        )
         links = self._extract_links(soup, final_url)
         return PageContent(
             url=url,
@@ -887,12 +926,13 @@ class WebResearcher:
     def _select_subpages(self, page: PageContent, base_url: str) -> list[str]:
         """In-scope sub-URLs: same host and under the seed's path, deduped. A
         leaf page without an extension (``/docs/peft/guides/lora``) has no
-        children, so its siblings are in scope instead."""
+        children, so its siblings are in scope instead — only when they share
+        a topic directory (``/en/latest/`` alone is the whole docs version)."""
         base = urlparse(base_url)
         scope = _scope_prefix(base.path)
         selected = self._links_under(page, base_url, scope)
         parent = scope.rstrip("/").rsplit("/", 1)[0] + "/"
-        if not selected and parent.count("/") > 2:
+        if not selected and _is_topic_directory(parent):
             selected = self._links_under(page, base_url, parent)
         return selected
 
@@ -984,6 +1024,20 @@ def _scope_prefix(path: str) -> str:
     last = path.rsplit("/", 1)[-1]
     directory = path.rsplit("/", 1)[0] if "." in last else path.rstrip("/")
     return directory + "/"
+
+
+def _is_topic_directory(path: str) -> bool:
+    """Whether ``path`` names a section below the site root: at least two
+    segments, and at least one after a docs version (``/en/latest/`` and
+    ``/v2/`` are a whole release, ``/docs/peft/`` is a section)."""
+    segments = [s for s in path.split("/") if s]
+    if len(segments) < 2:
+        return False
+    version = docs_version(path)
+    if version is None:
+        return True
+    index = [s.lower() for s in segments].index(version)
+    return index < len(segments) - 1
 
 
 def normalize_url(url: str) -> str:

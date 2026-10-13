@@ -122,8 +122,6 @@ class LocalPaths(str, Enum):
     POSTS_DIR = "_posts"
     REFERENCES_DIR = "references"
     REPOS_DIR = "repos"
-    CONTENT_FILE = "content.json"
-    FIGURES_FILE = "figures.json"
     LOGS_FILE = "logs.txt"
     PAPER_FILE = "paper.json"
     PARSED_FILE = "parsed.json"

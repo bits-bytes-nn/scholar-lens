@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from scholar_lens.src.post_conventions import load_local_conventions
-from scholar_lens.src.post_validator import errors, validate_post, warnings
+from scholar_lens.src.post_validator import Violation, errors, validate_post
 
 FIXTURES = Path(__file__).parent / "fixtures" / "blog_defects"
 SPEC = load_local_conventions()
@@ -51,6 +51,10 @@ def make_post(
         "" if kind == "guide" else "## TL;DR\n### 왜 필요한가?\n짧은 답입니다.\n\n"
     )
     return f"---\n{header}\n---\n{opening}## 본문\n\n{body}\n"
+
+
+def warnings(found: list[Violation]) -> list[Violation]:
+    return [v for v in found if v.level == "warning"]
 
 
 def rules(markdown: str, kind: str = "review", level: str = "error") -> set[str]:

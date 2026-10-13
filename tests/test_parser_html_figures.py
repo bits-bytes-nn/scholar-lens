@@ -132,3 +132,15 @@ def test_listing_indentation_survives_the_html_parser_path(monkeypatch) -> None:
     monkeypatch.setattr(HTMLParser, "_fetch_html_with_fallback", fetch)
     result = asyncio.run(HTMLParser().parse("2501.12948v2"))
     assert "def f(x):\n    if x:\n        return 1" in result.content.text
+
+
+def test_latexml_layout_macros_are_stripped_from_table_headers() -> None:
+    html = (
+        "<table><tr><th>\\rotate Accuracy</th><th>\\rotatebox</th>"
+        "<th>$\\times$ 2</th></tr></table>"
+    )
+    text = extract_text_from_html(html)
+    assert "\\rotate " not in text
+    assert "Accuracy" in text
+    assert "\\rotatebox" in text  # a different macro, left untouched
+    assert "\\times" in text

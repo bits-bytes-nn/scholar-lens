@@ -56,7 +56,7 @@ Batch worker ┘                                    │     (수집 → 생성 �
 | `src/formatting.py`, `src/tags.py`, `src/markdown_math.py`, `src/markdown_lint.py` | 글 조립, 태그 정규화, 수식·Markdown 후처리 |
 | `src/post_conventions.py`, `src/post_validator.py`, `src/front_matter.py` | 블로그 규칙 로드, 최종 검증, front matter 분리 |
 | `src/publisher.py`, `src/blog_sync.py`, `src/publish_types.py` | 이미지 로컬화, 저장, S3 / GitHub 브랜치·PR 동기화 / 발행 요청·오류·슬러그 |
-| `src/utils/` | 모델 팩토리, 모델 레지스트리, 재시도, 배치 처리, 공용 파서 |
+| `src/utils/` | 모델 팩토리, 모델 레지스트리, 재시도, 배치 처리, 공용 파서, 그림 검사·SVG 래스터화(`images.py`) |
 | `src/metrics.py` | 토큰·비용 집계, 예산 가드, CloudWatch 지표 |
 | `src/url_guard.py`, `src/pinned_transport.py`, `src/rate_limiter.py`, `src/prompt_safety.py` | SSRF 방지, IP 고정 전송, 속도 제한, 프롬프트 펜스 태그 무력화 |
 | `src/aws_helpers.py`, `src/constants.py`, `src/logger.py` | S3·SSM·계정 헬퍼, 공용 상수·경로, 로거 |
@@ -130,7 +130,7 @@ worker는 SIGTERM을 `SystemExit`로 바꿔(`cli.py::_raise_on_sigterm`) Batch �
 - 개념 하나는 한 절만 맡습니다. 다른 절은 그 개념을 참조만 합니다.
 - `max_sections`를 넘는 절은 마지막 절로 합칩니다.
 - 목표 분량은 `review_plan.py::target_words`가 항목 난이도 기본값(쉬움 60, 중간 200, 어려움 450단어 상당)의 합에 중요도 계수(0.8/1.0/1.3)를 곱해 정하며, 절마다 최소 250단어입니다.
-- 리뷰 전체 예산은 `7000 × (1 + 0.6 × 어려운 항목 비율)`입니다(`review_word_budget`). 넘치면 쉬움·중간 항목만 한 비율로 줄이고(최대 절반까지), 어려운 항목은 줄이지 않으므로 어려운 논문은 예산을 넘을 수 있습니다.
+- 리뷰 전체 예산은 `7000 × (1 + 0.6 × 어려운 항목 비율)`입니다(`review_word_budget`). 넘치면 쉬움·중간 항목만 한 비율로 줄이고(최대 절반까지), 어려운 항목은 그래도 예산의 1.3배를 넘을 때만 1.3배 쪽으로 줄이되 기본값의 0.8배(항목당 360단어) 아래로는 줄이지 않으므로 어려운 논문은 예산을 넘을 수 있습니다.
 
 ### 3.2 보강
 
@@ -187,7 +187,7 @@ LLM 라우팅 호출 없이 계획을 따릅니다(`PaperReviewer._enrich`). 참
 2. 관련성 판정(`TechGuideRelevancePrompt`)을 시드 페이지와 그 하위 페이지만으로 먼저 합니다. 통과하지 못하면 `NotTechnicalContentError`로 거부하므로 검색 비용이 들지 않습니다.
 3. 검색 제공자가 있고 검색어가 주어지지 않았으면 계획 단계가 검색어를 만들고(`auto_research`, `max_research_queries`), 검색어마다 번갈아 고른 상위 결과 페이지를 말뭉치에 넣습니다(`fetch_top_results`). 가이드 주제는 계획 단계의 주제를 씁니다.
 4. 개요를 만들고(최대 10개 절) 절마다 깊이(deep/standard/brief)를 정합니다.
-5. 절마다 작성 → 평가(0–100) → 기준 미달 시 수정(`max_revision_attempts`) 순서로 진행하고, 모든 절을 쓴 뒤 사실 확인(`verify_grounding`)을 합니다. 사실 확인 전에, 공식 페이지에 없는 CLI 플래그·메트릭 이름이 있으면 같은 공식 문서(같은 호스트, 호환되는 버전)에서 레퍼런스 페이지를 최대 3번 검색해 6쪽까지 더해 근거로 씁니다(`WebResearcher.add_official_reference`). 그래도 확인되지 않은 식별자는 PR 체크리스트에 올립니다. 각 절의 호출에는 말뭉치 전체가 아니라 절 제목·설명과 가장 관련 있는 페이지만 약 6만 자까지 넣고(`ResearchCorpus.relevant_text`), 앞선 절은 직전 두 절 전문과 그 이전 절의 요약만 넘깁니다.
+5. 절마다 작성 → 평가(0–100, 평가자도 절의 근거 자료와 전체 목차를 봅니다) → 기준 미달 시 수정(`max_revision_attempts`) 순서로 진행합니다. 수정본이 3점 미만으로 오르고 규칙 위반도 줄지 않으면 수정을 멈춥니다. 모든 절을 쓴 뒤 사실 확인(`verify_grounding`)을 합니다. 공식 페이지에 없는 CLI 플래그·Python 인자(`gpu_memory_utilization=`)·메트릭 이름은 같은 공식 문서(같은 호스트, 호환되는 버전)의 레퍼런스 페이지로 확인합니다. 집필 전에는 서드파티 페이지에만 나오는 식별자를, 사실 확인 전에는 초안에 새로 나온 식별자를 찾으며, 두 조회를 합쳐 검색 3번, 6쪽까지 씁니다(`WebResearcher.add_official_reference`, 식별자와 맞는 경로의 링크를 먼저 씁니다). 사실 확인용 몫을 남기도록 집필 전 조회는 검색 2번, 4쪽까지만 씁니다. 그래도 확인되지 않은 식별자는 PR 체크리스트에 올립니다. 출처 목록에는 요청한 페이지와 같은 공식 문서(호환되는 버전)의 페이지를 넣고, 그 밖의 페이지는 어느 절의 근거 자료에 실제로 들어갔거나 본문이 링크하거나 이미지를 가져온 경우에만 넣습니다. 레퍼런스 페이지는 본문에 남은 식별자를 담은 경우에만 넣고, 이전 버전 문서는 넣지 않습니다(`used_source_urls`). 각 절의 호출에는 말뭉치 전체가 아니라 절 제목·설명과 가장 관련 있는 페이지만 약 6만 자까지 넣고(`ResearchCorpus.relevant_text`), 앞선 절은 직전 두 절 전문과 그 이전 절의 요약만 넘깁니다.
 6. 절이 셋 이상이면 개요에서 "이 가이드에서 다루는 것"을 만듭니다(추가 호출 없음).
 
 가이드 파이프라인(`guide_pipeline.py`)은 완성된 가이드를 `TechGuideGenerator.classify`로 분류해 블로그 주제 하나, 통제 태그, 세부 태그, `seo_title` 후보를 받고, `formatting.py::build_post_meta`가 spec에 맞게 확정합니다. 문서 사이트의 이미지는 외부 링크로 남기고 검증에서 warning으로 표시합니다.
@@ -222,7 +222,7 @@ LLM 라우팅 호출 없이 계획을 따릅니다(`PaperReviewer._enrich`). 참
 - 속성(`extract_attributes`): 제목, 저자, 발행 조직(`affiliation`), spec 주제 중 하나(`category`), 통제 태그, 세부 키워드, `seo_title`. 키워드 재사용 후보로 블로그 글에 이미 쓰인 태그를 넘깁니다(`runtime.py::RunContext.require_blog_tags`).
 - 인용(`extract_citations`, 리뷰만): 참고문헌을 페이지 단위로 추출하며 최대 `MAX_CITATION_PAGES`(20)회입니다.
 
-인용 요약(`citation_summarizer.py::CitationSummarizer`)은 초록을 우선합니다. Crossref와 Semantic Scholar로 메타데이터를 찾고(`citation_metadata.py`, 속도 제한 포함), 제목 유사도 0.9 이상만 같은 논문으로 인정합니다. 맞지 않는 초록은 요약하지 않습니다. `prefer_full_text: true`면 arXiv 전문을 받습니다.
+인용 요약(`citation_summarizer.py::CitationSummarizer`)은 초록을 우선합니다. Crossref, OpenAlex, Semantic Scholar(API 키가 있을 때만), arXiv 순서로 메타데이터를 찾고(`citation_metadata.py`, 속도 제한 포함, `Retry-After`가 60초를 넘으면 그 실행 동안 해당 제공자를 건너뜀), 제목 유사도 0.9 이상이고 버전 표기와 단어가 바뀌지 않은 경우(하이픈·영국식 철자 차이는 같은 단어)만 같은 논문으로 인정합니다(OpenAlex는 상위 5건 중 첫 일치 결과). 제목의 내용어를 하나도 담지 않은 초록은 다른 논문의 것으로 보고 버리며, OpenAlex의 arXiv 레코드 초록은 믿지 않고 DOI의 arXiv ID로 arXiv에서 받습니다. 맞지 않는 초록은 요약하지 않으며, 초록도 본문도 찾지 못한 인용은 리뷰 노트(PR 체크리스트)에 올립니다. `prefer_full_text: true`면 arXiv 전문을 받습니다.
 
 ### 5.5 코드 저장소
 
@@ -250,6 +250,7 @@ LLM 라우팅 호출 없이 계획을 따릅니다(`PaperReviewer._enrich`). 참
 | `tags.controlled` | 통제 태그 목록. 관련 글 연결의 기준 |
 | `tags.lowercase_words` | 태그 안에서 소문자로 쓰는 기능어 |
 | `tags.aliases` | 퇴역 태그 → 대체 태그 |
+| `languages` | front matter `lang`에 쓸 수 있는 언어(기본 `ko`, `en`) |
 
 블로그 파일에 아직 없는 생성기 쪽 한도는 코드 기본값을 씁니다. 세부 태그 검증 상한은 10개(`TagSpec.max_specific`)이고 생성 목표는 5개(`GENERATED_SPECIFIC_TAGS`)입니다. 통제 태그는 생성 시 최대 3개(`max_controlled`)이며, `seo_title` 기준 길이는 70자입니다. 블로그 파일의 `math` 항목(정의 매크로 목록)은 읽지 않습니다. YAML 1.1 파서가 `on`을 불리언으로 읽는 문제는 `TagSpec._unbool`이 되돌립니다.
 
@@ -272,7 +273,7 @@ LLM 라우팅 호출 없이 계획을 따릅니다(`PaperReviewer._enrich`). 참
 | --- | --- | --- |
 | `front-matter` | error | front matter가 없거나 YAML이 아님 |
 | `forbidden-key` | error | `forbidden_keys`의 키가 있음(`author`, 그리고 블로그가 파일명 날짜로 채우는 `last_modified_at`) |
-| `date` | error | front matter `date`가 UTC 기준 미래(Jekyll이 글을 건너뜀) |
+| `date` | error | front matter `date`가 UTC 기준 미래(Jekyll이 글을 건너뜀), 파일명이 `YYYY-MM-DD-`로 시작하지 않거나 `date:`가 파일명 날짜보다 늦음(UTC) |
 | `title` | error | 제목이 비어 있음 |
 | `categories` | error | `[<유형>, <주제>]`가 아님, 모르는 유형·주제, 산출물 종류와 유형의 `paper` 여부 불일치 |
 | `cover` | error | `cover_for(유형, 주제)`와 다름 |
@@ -284,21 +285,18 @@ LLM 라우팅 호출 없이 계획을 따릅니다(`PaperReviewer._enrich`). 참
 | `tags` | warning | 통제 태그 3개 초과(논문에 없는 태그 구절은 `paper_pipeline.py::_tag_notes`가 PR 메모로 남김) |
 | `headings` | error | 본문 H1, 헤딩 레벨 건너뜀, 논문 글이 `## TL;DR`로 시작하지 않음, TL;DR이 비어 있음, 리뷰 TL;DR에 `###` 질문이 없음 |
 | `use-math` | error | `use_math`와 `$$` 존재 여부가 다름 |
-| `math` | error | 블로그 `script/lint-posts.rb`와 같은 규칙(인용문 안 포함): `\(…\)`·`\\[…\\]` 잔존, 단일 `$` 옆의 TeX(`}$`, `$\명령`), 문단 안에서 짝 없는 `$$`, 닫히지 않은 여러 줄 `$$` 블록, 디스플레이 `$$` 앞뒤 빈 줄 없음, `$$` 안 `\_`(`\text` 밖), 인라인 수식 안 한글, 인라인 수식이 여럿인 줄이나 표 행의 수식 안 맨 `|` |
-| `table` | error | 구분선 셀 수가 헤더와 다름, 데이터 행 셀이 헤더보다 많음(적으면 kramdown이 채우는 그룹 라벨 행), 첫 열 외 빈 헤더, 첫 데이터 행이 하위 헤더(첫 셀이 비고 값 셀이 없음), 바로 위 행과 같은 행 |
+| `math` | error | kramdown이 글로 보여 주는 줄(인용문 안 포함)에 블로그 `script/lint-posts.rb`와 같은 규칙. 블로그 lint가 코드 줄까지 읽는 차이는 블로그 PR CI가 판단: `\(…\)`·`\\[…\\]` 잔존, 단일 `$` 옆의 TeX(`}$`, `$\명령`), 문단 안에서 짝 없는 `$$`, 닫히지 않은 여러 줄 `$$` 블록, 디스플레이 `$$` 앞뒤 빈 줄 없음, `$$` 안 `\_`(`\text` 밖), 인라인 수식 안 한글, 인라인 수식이 여럿인 줄이나 표 행의 수식 안 맨 `|` |
+| `table` | error | 구분선 셀 수가 헤더와 다름, 데이터 행 셀이 헤더보다 많음(적으면 kramdown이 채우는 그룹 라벨 행), 첫 열 외 빈 헤더, 첫 데이터 행이 하위 헤더(첫 셀이 비고 값 셀이 없음), 바로 위 행과 같은 행, 표 행의 `$$` 안 막대 기호(게시 단계가 `\vert`·`\Vert`로 바꿈) |
 | `table` | warning | 같은 헤더 라벨이 바로 옆에 반복 |
 | `image` | error | arXiv 계열 원격 이미지 잔존, `/assets/images/<파일>`이 아닌 로컬 경로 |
 | `image` | warning | 그 밖의 외부 이미지 |
 | `description` | warning/error | 첫 문단(검색 설명)에 수식(warning), front matter `description`에 `$$`·강조·백틱·링크·태그·`{{`(error) |
 | `envelope` | error | 생성용 태그(`</explanation>` 등) 누출 |
-| `code` | error | 닫히지 않은 코드 펜스 |
 | `image-alt` | warning | 한국어 글의 이미지 alt에 한글이 없음 |
 | `list` | warning | 디스플레이 수식 뒤에서 번호 목록이 2 이상으로 다시 시작함(목록이 끊김) |
 | `liquid` | error | `{% raw %}` 밖의 `{{ }}`·`{% %}`(코드 블록 포함; 게시 단계가 자동으로 감쌈) |
 | `html` | error | 브라우저가 지우는 태그(`<think>`, `<s>`, `<input>`, 속성 없는 `<img>`; 게시 단계가 자동 이스케이프) |
-| `code` | error | 코드 블록 언어 표시에 공백(게시 단계가 첫 단어만 남김), 닫히지 않은 코드 블록 |
-| `table` | error | 표 행의 `$$` 안 막대 기호(게시 단계가 `\vert`·`\Vert`로 바꿈) |
-| `date` | error | 파일명이 `YYYY-MM-DD-`로 시작하지 않거나 `date:`가 파일명 날짜보다 늦음(UTC) |
+| `code` | error | 닫히지 않은 코드 펜스, 코드 블록 언어 표시에 공백(게시 단계가 첫 단어만 남김) |
 
 `Publisher._validate`가 이 함수를 호출합니다. error가 하나라도 있으면 저장·업로드·PR을 모두 하지 않고, 글과 위반 목록을 작업 폴더의 `<slug>.rejected.md`에 남기며 S3 버킷이 있으면 `<prefix>/rejected/<slug>.rejected.md`에도 올린 뒤 `PostValidationError`를 던집니다. warning은 `PublishRequest.validation_warnings`에 담겨 PR 본문의 `- [ ]` 체크리스트가 됩니다.
 
@@ -332,12 +330,12 @@ PR 본문(`build_pr_body`)에는 논문 ID, PDF URL, 파싱 방식, 글자 수, 
 
 `utils/factories.py::BedrockLanguageModelFactory.get_model`이 모든 채팅 모델을 `ChatBedrockConverse`로 만들고, 리전별 inference profile을 찾아 캐시합니다. 프로필 조회 자체가 실패하면 기본 ID로 대체하지 않고 오류를 냅니다. 모델 특성은 `utils/models.py`의 레지스트리에 있습니다.
 
-| 모델 | 단계 기본값 | thinking |
-| --- | --- | --- |
-| Claude Opus 5.5 | 리뷰 계획·집필·검수·편집·마무리, 요약, 가이드 작성·평가 | 적응형, effort로 조절 |
-| Claude Sonnet 5.5 | 인용 추출, 가이드 개요 | 적응형, effort로 조절 |
-| Claude Haiku 5.5 | 그림 분석, 속성 추출, 인용 요약, 코드 분석, 가이드 관련성·분류 | 적응형, effort로 조절 |
-| Claude Fable 5.1 | 선택 사항 | 적응형, effort로 조절 |
+| 모델 | 단계 기본값 |
+| --- | --- |
+| Claude Opus 5.5 | 리뷰 계획·집필·검수·편집·마무리, 요약, 가이드 작성·평가 |
+| Claude Sonnet 5.5 | 인용 추출, 가이드 개요 |
+| Claude Haiku 5.5 | 그림 분석, 속성 추출, 인용 요약, 코드 분석, 가이드 관련성·분류 |
+| Claude Fable 5.1 | 선택 사항 |
 
 `uses_adaptive_thinking` 모델(위 네 모델 모두)에는 설정한 effort(`output_config.effort`)를 보내고, 사고를 켠 호출(`enable_thinking`)에는 `thinking: {type: adaptive}`도 보내며, temperature는 보내지 않습니다. 구형 모델은 `budget_tokens` 방식을 씁니다. 호출당 출력 상한 기본값은 64,000토큰(`DEFAULT_MAX_TOKENS`)입니다.
 
@@ -351,18 +349,15 @@ PR 본문(`build_pr_body`)에는 논문 ID, PDF URL, 파싱 방식, 글자 수, 
 
 ## 9. 설정 참조
 
-`scholar_lens/configs/config.yaml`을 `config.py::Config.load`가 읽습니다. 모든 섹션은 `extra="forbid"`라 모르는 키는 오류입니다. AWS 안에서 파일이 없으면 실패하고, 로컬에서는 기본값을 씁니다. `config-template.yaml`이 모든 키와 기본값을 보여 줍니다.
-
-키별 기본값과 설명은 `config-template.yaml`의 주석이 정본입니다. 이 문서에서는 동작에 영향이 큰 것만 짚습니다.
+`scholar_lens/configs/config.yaml`을 `config.py::Config.load`가 읽습니다. 모든 섹션은 `extra="forbid"`라 모르는 키는 오류입니다. AWS 안에서 파일이 없으면 실패하고, 로컬에서는 기본값을 씁니다. 키별 기본값과 설명은 `config-template.yaml`의 주석이 정본이고, 이 문서에서는 동작에 영향이 큰 것만 짚습니다.
 
 - `resources.s3_bucket_name`: 글·이미지·결과 매니페스트 버킷. 미리 만들어 둔 버킷이어야 하며 배포에 필수입니다. 없으면 `status`는 저장된 결과 없이 Batch 상태만 보여 줍니다.
 - `resources.github.*_category`: `categories[0]`이 되므로 블로그 spec의 `types`에 있어야 합니다.
-- `max_total_tokens`: 리뷰 800만, 요약 100만은 하드 상한이고, 가이드 300만은 소프트 상한입니다(8.3절).
 - `explanation.max_synthesis_attempts`·`max_edit_rounds`, `tech_guide.max_revision_attempts`: 호출 수와 비용을 정하는 반복 상한입니다.
 
 ### 환경 변수
 
-`.env.template`에 있습니다. `GITHUB_TOKEN`(블로그 저장소 contents·pull requests 쓰기), `UPSTAGE_API_KEY`(PDF 파싱), `TAVILY_API_KEY`·`BRAVE_API_KEY`(선택), `CROSSREF_MAILTO`·`SEMANTIC_SCHOLAR_API_KEY`(선택, 인용 조회 한도 완화), `LANGCHAIN_*`(선택), `LOG_LEVEL`, `AWS_PROFILE_NAME`(배포·비밀값 기록 시 `profile_name`이 없을 때)입니다. Batch에서는 같은 비밀값을 SSM에서 읽고, `TOPIC_ARN`은 스택이 주입합니다.
+키 목록과 용도는 `.env.template`이 정본입니다. Batch에서는 같은 비밀값을 SSM에서 읽고(`RUN_SECRETS`), `TOPIC_ARN`은 스택이 주입합니다.
 
 ## 10. 인프라
 

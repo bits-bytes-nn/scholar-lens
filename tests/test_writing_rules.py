@@ -17,6 +17,8 @@ from scholar_lens.src.markdown_lint import (
 from scholar_lens.src.post_conventions import load_local_conventions
 from scholar_lens.src.post_validator import validate_post
 from scholar_lens.src.review_plan import (
+    HARD_OVERRUN,
+    MIN_HARD_SCALE,
     MIN_SECTION_WORDS,
     REVIEW_WORD_BUDGET,
     CoverItem,
@@ -208,12 +210,22 @@ class TestReviewBudget:
         total = lambda p: sum(s.target_words for s in p.sections)  # noqa: E731
         assert total(hard) > total(medium)
 
-    def test_hard_items_are_never_shortened(self) -> None:
+    def test_hard_items_are_kept_within_the_overrun(self) -> None:
         sections = self._sections("medium") + self._sections("hard", n=2)
         plan = _normalized(_plan(sections))
         assert plan.sections[0].length_scale < 1.0
         hard = plan.sections[-1]
         assert hard.target_words == target_words(hard.must_cover, "core")
+
+    def test_hard_items_shrink_a_bounded_amount_far_over_budget(self) -> None:
+        plan = _normalized(_plan(self._sections("hard", n=12)))
+        total = sum(s.target_words for s in plan.sections)
+        assert all(s.hard_scale == pytest.approx(MIN_HARD_SCALE) for s in plan.sections)
+        assert total > HARD_OVERRUN * review_word_budget(plan)  # bounded shrink
+        mild = _normalized(_plan(self._sections("hard", n=7)))
+        assert MIN_HARD_SCALE < mild.sections[0].hard_scale < 1.0
+        mild_total = sum(s.target_words for s in mild.sections)
+        assert mild_total <= HARD_OVERRUN * review_word_budget(mild)
 
     def test_budget_grows_smoothly_with_the_hard_share(self) -> None:
         def budget(hard: int) -> int:

@@ -504,13 +504,22 @@ class TestBlogTagFilter:
         monkeypatch.setattr(
             runtime,
             "load_run_blog_tags",
-            lambda config: [controlled, retired, "vLLM", "Paged Attention", "a/b"],
+            lambda config: {
+                controlled: 5,
+                retired: 4,
+                "vLLM": 1,
+                "Paged Attention": 3,
+                "a/b": 2,
+                "LoRA": 2,
+            },
         )
         context = runtime.RunContext.model_construct(
             config=MagicMock(), conventions=spec, blog_tags=None
         )
         # Controlled and retired tags, and spellings a post may not use, are out.
-        assert context.require_blog_tags() == ["vLLM"]
+        assert context.require_blog_tags() == ["vLLM", "LoRA"]
+        # Only tags shared by two or more posts are offered as hints.
+        assert context.blog_tag_hints(10) == ["LoRA"]
 
 
 class TestRunCoroutine:

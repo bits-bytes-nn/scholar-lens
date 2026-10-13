@@ -825,14 +825,29 @@ def _element_text(element: dict[str, Any]) -> str:
 
 
 def _pdf_figure_caption(elements: list[dict[str, Any]], index: int) -> str:
-    """The "Figure N …" caption or paragraph right after a figure element (the
-    figure's own ``alt`` is OCR text from inside the image), else ""."""
-    for element in elements[index + 1 : index + 1 + _CAPTION_LOOKAHEAD]:
+    """The "Figure N …" caption after a figure element (the figure's own
+    ``alt`` is OCR text from inside the image), else "".
+
+    Adjacent figure elements on the same page are the other panels of a
+    multi-panel figure, so up to ``_CAPTION_LOOKAHEAD`` of them are skipped
+    rather than ending the search; a figure on another page (or past that cap)
+    ends it, so a logo or uncaptioned figure ahead of a figure run does not take
+    the run's caption. Only the text elements count toward the lookahead.
+    """
+    page = elements[index].get("page")
+    seen = panels = 0
+    for element in elements[index + 1 :]:
         if element.get("category", "").lower() in PDFParser.FIGURE_CATEGORIES:
-            break
+            panels += 1
+            if element.get("page") != page or panels > _CAPTION_LOOKAHEAD:
+                break
+            continue
         text = _element_text(element)
         if _CAPTION_START.match(text):
             return text
+        seen += 1
+        if seen >= _CAPTION_LOOKAHEAD:
+            break
     soup = BeautifulSoup(
         elements[index].get("content", {}).get("html", ""), "html.parser"
     )
@@ -866,13 +881,9 @@ def _bind_figure_sources(html: str, figures: list[Figure]) -> str:
     return str(soup)
 
 
-# Quoted, as written by ``extract_text_from_html`` (whose alt never holds a
-# double quote); the unquoted form of older caches is still read.
-_IMAGE_MARKER = re.compile(
-    r'\[Image:\s*alt="(?P<q_alt>[^"]*)",\s*src="(?P<q_src>[^"]*)"\]'
-    r"|\[Image:\s*alt=(?P<alt>.*?),\s*src=(?P<src>.*?)\]",
-    re.DOTALL,
-)
+# As written by ``extract_text_from_html`` (whose alt never holds a double
+# quote); the text is always extracted fresh, so no older form is read.
+_IMAGE_MARKER = re.compile(r'\[Image:\s*alt="(?P<alt>[^"]*)",\s*src="(?P<src>[^"]*)"\]')
 
 
 def _marker_text(value: str) -> str:
@@ -924,21 +935,29 @@ def attach_figure_context(
             return exact[0]
         return candidates[0] if len(candidates) == 1 else None
 
+    sourceless = 0
+
     def repl(match: re.Match) -> str:
-        if match.group("q_src") is not None:
-            alt_raw, src_value = match.group("q_alt"), match.group("q_src").strip()
-        else:  # unquoted legacy marker
-            alt_raw = match.group("alt").strip("[]")
-            src_value = match.group("src").strip()
-        alt_value = _real_text(" ".join(alt_raw.split()))
+        nonlocal sourceless
+        src_value = match.group("src").strip()
+        alt_value = _real_text(" ".join(match.group("alt").split()))
         matched = find(src_value) if src_value else None
         if matched is None:
             if src_value:
                 logger.warning("No extracted figure for image src '%s'", src_value)
+            else:
+                sourceless += 1
             return ""
         path = Path(matched.path).name if is_pdf_parsed else matched.path
         alt_text = _marker_text(alt_value or _real_text(matched.caption))
         description = _marker_text(_figure_description(matched) or alt_value)
         return f'[Image: alt="{alt_text}", src="{path}", caption="{description}"]'
 
-    return _IMAGE_MARKER.sub(repl, text)
+    text = _IMAGE_MARKER.sub(repl, text)
+    if sourceless:
+        # e.g. a PDF parser that files a figure inside a table element: the
+        # caption stays as text, the image itself is not available.
+        logger.warning(
+            "Dropped %d image(s) without a source (captions kept).", sourceless
+        )
+    return text

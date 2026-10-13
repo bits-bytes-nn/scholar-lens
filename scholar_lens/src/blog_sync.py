@@ -17,8 +17,8 @@ from github import GithubException, InputGitAuthor
 from github import InputGitTreeElement as TreeElement
 
 from .constants import LocalPaths
+from .front_matter import split_front_matter
 from .logger import logger
-from .post_validator import split_front_matter
 from .publish_types import (
     BLOG_IMAGES_DIR,
     SUMMARY_SLUG_SUFFIX,

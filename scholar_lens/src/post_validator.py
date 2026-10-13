@@ -12,39 +12,47 @@ import itertools
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, Literal
+from typing import Any, Literal, Protocol
 from urllib.parse import urlparse
 
-import yaml
-
-from .front_matter import split_front_matter_text
+from .front_matter import split_front_matter
 from .markdown_lint import (
     BLOG_HTML_ELEMENTS,
     BLOG_NEEDS_ATTRIBUTES,
     ENVELOPE_TAG,
+    TABLE_DELIMITER,
     mostly_hangul,
 )
 from .markdown_math import (
     ESCAPED_UNDERSCORE,
     HANGUL,
+    QUOTE_PREFIX,
     TEXT_COMMAND,
     fence_roles,
     has_math,
     image_sources,
     indented_code_lines,
+    open_fence_line,
 )
 from .post_conventions import PostConventions
 from .tags import format_tag
 
 ArtifactKind = Literal["review", "summarize", "guide"]
 Level = Literal["error", "warning"]
+Lines = list[tuple[int, str]]
+
+
+class Add(Protocol):
+    """Records one finding; each ``_check_*`` reports through it."""
+
+    def __call__(self, level: Level, rule: str, line: int, message: str) -> None: ...
+
 
 ARXIV_IMAGE_HOSTS = ("arxiv.org", "ar5iv.org", "ar5iv.labs.arxiv.org")
 
 _HEADING = re.compile(r"^(#{1,6})\s+(.*\S)\s*$")
 _INLINE_MATH = re.compile(r"\$\$(.+?)\$\$")
 _INLINE_CODE = re.compile(r"`[^`]*`")
-_TABLE_SEPARATOR = re.compile(r"^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$")
 # A cell holding a value ("63.6", "1,820", "37.4%", "5.3±0.2"), not a label
 # that merely contains a digit ("pass@1").
 _NUMERIC_CELL = re.compile(
@@ -79,34 +87,17 @@ class PostValidationError(Exception):
         # Where the rejected post was kept for inspection (set by the publisher).
         self.rejected_path: str | None = None
         self.rejected_s3_uri: str | None = None
-        errors = [v for v in violations if v.level == "error"]
-        summary = "; ".join(str(v) for v in errors[:10])
-        more = f" (+{len(errors) - 10} more)" if len(errors) > 10 else ""
-        super().__init__(f"{len(errors)} convention error(s): {summary}{more}")
+        blocking = errors(violations)
+        summary = "; ".join(str(v) for v in blocking[:10])
+        more = f" (+{len(blocking) - 10} more)" if len(blocking) > 10 else ""
+        super().__init__(f"{len(blocking)} convention error(s): {summary}{more}")
 
 
 def errors(violations: list[Violation]) -> list[Violation]:
     return [v for v in violations if v.level == "error"]
 
 
-def warnings(violations: list[Violation]) -> list[Violation]:
-    return [v for v in violations if v.level == "warning"]
-
-
-def split_front_matter(markdown: str) -> tuple[dict[str, Any] | None, str, int]:
-    """Return ``(front_matter, body, body_start_line)``; ``None`` if absent or
-    unparsable."""
-    front, body = split_front_matter_text(markdown)
-    if not front:
-        return None, markdown, 1
-    try:
-        data = yaml.safe_load(front[4:-5])
-    except yaml.YAMLError:
-        return None, markdown, 1
-    return (data if isinstance(data, dict) else None), body, front.count("\n") + 1
-
-
-def _prose_lines(body: str) -> list[tuple[int, str]]:
+def _prose_lines(body: str) -> Lines:
     """Body lines outside fenced and indented code, as (offset, text)."""
     lines = body.split("\n")
     code = indented_code_lines(lines)
@@ -120,138 +111,6 @@ def _prose_lines(body: str) -> list[tuple[int, str]]:
 _LINT_FENCE = re.compile(r"^\s*(`{3,}|~{3,})")
 
 
-def _math_lines(body: str) -> list[tuple[int, str]]:
-    """Body lines the blog lint checks for math (script/lint-posts.rb): those
-    outside its code fences, which it finds with ``FENCE = /\\A\\s*(`{3,}|~{3,})/``
-    (a fence inside a blockquote is not one, and indented code is checked).
-    The math rules run on these lines so a post the blog's CI would reject is
-    never passed here."""
-    out: list[tuple[int, str]] = []
-    fence: str | None = None
-    for i, line in enumerate(body.split("\n")):
-        m = _LINT_FENCE.match(line)
-        if m:
-            if fence is None:
-                fence = m.group(1)
-            elif set(line.strip()) == {fence[0]} and len(line.strip()) >= len(fence):
-                fence = None
-            continue
-        if fence is None:
-            out.append((i, line))
-    return out
-
-
-_LINT_TEXT_GROUP = re.compile(r"\\(?:text\w*|mathrm|mathtt|operatorname)\{")
-_LINT_TABLE_PIPE = re.compile(r"\A\$\$(?:(?!\$\$).)+\$\$\Z")
-
-
-def _lint_without_text_groups(math: str) -> str:
-    out, rest = [], math
-    while m := _LINT_TEXT_GROUP.search(rest):
-        out.append(rest[: m.start()])
-        depth, k = 1, m.end()
-        while k < len(rest) and depth:
-            depth += {"{": 1, "}": -1}.get(rest[k], 0)
-            k += 1
-        rest = rest[k:]
-    out.append(rest)
-    return "".join(out)
-
-
-def _lint_span_findings(spans: list[str]) -> list[str]:
-    spans = [_lint_without_text_groups(m) for m in spans]
-    found = []
-    if any("\\_" in m for m in spans):
-        found.append(r"no \_ inside $$ (only within \text{})")
-    if any(HANGUL.search(m) for m in spans):
-        found.append("Korean text inside $$; a currency sign written $$ opens math")
-    return found
-
-
-def _lint_after_display(line: str | None) -> bool:
-    rest = _unquote(line or "").strip()
-    return not rest or rest.startswith("{:")
-
-
-def _blog_lint_math(body: str) -> list[tuple[int, str]]:
-    """The blog lint's math findings (``script/lint-posts.rb``, ``body`` and
-    ``math``) as ``(line index, message)``: ported as written, so the lines
-    it reads as prose but kramdown shows as code are judged its way."""
-    lines = body.split("\n")
-    found: list[tuple[int, str]] = []
-    fence: str | None = None
-    block: int | None = None
-    span: int | None = None
-    for i, line in enumerate(lines):
-        if m := _LINT_FENCE.match(line):
-            if fence is None:
-                fence = m.group(1)
-            elif re.fullmatch(f"{re.escape(fence[0])}{{{len(fence)},}}", line.strip()):
-                fence = None
-            continue
-        if fence:
-            continue
-        bare = _unquote(line)
-        odd = re.sub(r"`[^`]*`", "", bare).count("$$") % 2 == 1
-        if span is not None and not bare.strip():
-            found.append((span, "unbalanced $$ in the paragraph"))
-            span = None
-        if block is not None or (
-            odd and span is None and bare.lstrip().startswith("$$")
-        ):
-            found += [(i, f) for f in _lint_span_findings([line.replace("$", "")])]
-            if odd and block is not None:
-                if not _lint_after_display(
-                    lines[i + 1] if i + 1 < len(lines) else None
-                ):
-                    found.append((i, "display $$ needs a blank line after it"))
-            elif odd and i > 0 and _unquote(lines[i - 1]).strip():
-                found.append((i, "display $$ needs a blank line before it"))
-            if odd:
-                block = None if block is not None else i
-            continue
-        if odd:
-            span = None if span is not None else i
-        prose = re.sub(r"`[^`]*`", "", bare)
-        found += [
-            (i, f) for f in _lint_span_findings(re.findall(r"\$\$(.+?)\$\$", prose))
-        ]
-        outside = re.sub(r"\$\$.+?\$\$", "", prose)
-        if re.search(r"\\\\[(\[]", outside):
-            found.append((i, "math written \\\\( or \\\\[; write $$ … $$"))
-        if re.search(r"\}\$(?!\$)|(?<!\$)\$\\[a-zA-Z]", outside):
-            found.append((i, "TeX next to a single `$`; write the formula as $$ … $$"))
-        if _LINT_TABLE_PIPE.match(prose.strip()) and not prose.lstrip().startswith("|"):
-            before = i == 0 or not _unquote(lines[i - 1]).strip()
-            after = _lint_after_display(lines[i + 1] if i + 1 < len(lines) else None)
-            if not (before and after):
-                found.append((i, "display $$ needs a blank line before and after"))
-    if block is not None:
-        found.append((block, "$$ block never closed"))
-    if span is not None:
-        found.append((span, "unbalanced $$ in the paragraph"))
-    return found
-
-
-def _check_all_math(front, body, lines, offset, add) -> None:  # type: ignore[no-untyped-def]
-    """The math rules on the prose ``lines``, plus the blog lint's own math
-    findings on the lines it reads as prose although kramdown shows them as
-    code (a fence inside a blockquote, an indented code block): its CI would
-    reject those, so they must not pass here either."""
-    _check_math(front, body, lines, offset, add)
-    code_only = {i for i, _ in _math_lines(body)} - {i for i, _ in lines}
-    if not code_only:
-        return
-    for i, message in _blog_lint_math(body):
-        if i in code_only:
-            add(
-                "error",
-                "math",
-                offset + i,
-                f"{message} (the blog lint reads this code as prose)",
-            )
-
-
 _LINT_TAG = re.compile(r"(?<!\\)<(/?)([a-zA-Z][\w-]*)(\s[^<>]*)?/?>")
 _LINT_RAW = re.compile(r"(\{%-?\s*(?:end)?raw\s*-?%\})")
 _LINT_FENCE_INFO = re.compile(r"\A(`{3,}|~{3,})\s*\S+\s+\S")
@@ -262,7 +121,7 @@ _DESCRIPTION_MARKUP = re.compile(r"\$\$|\*\S[^*]*\*|`|\]\(|<[a-zA-Z/]|\{[{%]")
 def unknown_html_tag(text: str) -> str | None:
     """The first ``<name>`` in prose ``text`` the browser would drop, as the
     blog lint finds it (code spans and ``$$`` spans removed), or None."""
-    text = re.sub(r"\$\$.*?\$\$", "", re.sub(r"`[^`]*`", "", _unquote(text)))
+    text = re.sub(r"\$\$.*?\$\$", "", _INLINE_CODE.sub("", _unquote(text)))
     for close, name, attrs in _LINT_TAG.findall(text):
         lowered = name.lower()
         if lowered not in BLOG_HTML_ELEMENTS or (
@@ -272,7 +131,7 @@ def unknown_html_tag(text: str) -> str | None:
     return None
 
 
-def _check_blog_markup(front, body, offset, add) -> None:  # type: ignore[no-untyped-def]
+def _check_blog_markup(front: dict[str, Any], body: str, offset: int, add: Add) -> None:
     """The blog lint's markup rules (script/lint-posts.rb) as it applies them:
     Liquid outside raw tags, tags the browser drops, fence info strings
     kramdown does not read, and a | inside $$ on a table row."""
@@ -333,7 +192,7 @@ def _check_blog_markup(front, body, offset, add) -> None:  # type: ignore[no-unt
                 )
             ]
             for k in rows:
-                spans = re.findall(r"\$\$(.*?)\$\$", re.sub(r"`[^`]*`", "", lines[k]))
+                spans = re.findall(r"\$\$(.*?)\$\$", _INLINE_CODE.sub("", lines[k]))
                 if any("|" in m for m in spans):
                     add(
                         "error",
@@ -342,18 +201,6 @@ def _check_blog_markup(front, body, offset, add) -> None:  # type: ignore[no-unt
                         "a | inside $$ in a table breaks it; write \\mid, "
                         "\\lvert...\\rvert or \\lVert...\\rVert",
                     )
-
-
-def _unclosed_fence_line(body: str) -> int | None:
-    """0-based line of the opener of a fence that never closes, if any."""
-    lines = body.split("\n")
-    opened: int | None = None
-    for i, role in enumerate(fence_roles(lines)):
-        if role == "open":
-            opened = i
-        elif role == "close":
-            opened = None
-    return opened
 
 
 def validate_post(
@@ -376,14 +223,14 @@ def validate_post(
         return found
 
     lines = _prose_lines(body)
-    unclosed = _unclosed_fence_line(body)
+    unclosed = open_fence_line(body.split("\n"))
     if unclosed is not None:
         add("error", "code", offset + unclosed, "a code fence is never closed")
     _check_front_matter(front, body, spec, kind, add)
     if file_name is not None:
         _check_file_date(file_name, front.get("date"), add)
     _check_headings(lines, offset, kind, add)
-    _check_all_math(front, body, lines, offset, add)
+    _check_math(front, body, lines, offset, add)
     _check_tables(lines, offset, add)
     _check_images(lines, offset, add)
     _check_text(lines, offset, add)
@@ -402,16 +249,22 @@ def body_errors(markdown: str) -> list[str]:
             found.append(f"{rule}: {message} (line {line})")
 
     lines = _prose_lines(markdown)
-    unclosed = _unclosed_fence_line(markdown)
+    unclosed = open_fence_line(markdown.split("\n"))
     if unclosed is not None:
         add("error", "code", 1 + unclosed, "a code fence is never closed")
-    _check_all_math({}, markdown, lines, 1, add)
+    _check_math({}, markdown, lines, 1, add)
     _check_tables(lines, 1, add)
     _check_blog_markup({}, markdown, 1, add)
     return found
 
 
-def _check_front_matter(front, body, spec, kind, add) -> None:  # type: ignore[no-untyped-def]
+def _check_front_matter(
+    front: dict[str, Any],
+    body: str,
+    spec: PostConventions,
+    kind: ArtifactKind,
+    add: Add,
+) -> None:
     for key in spec.forbidden_keys:
         if key in front:
             add("error", "forbidden-key", 1, f"front matter must not contain '{key}'")
@@ -497,7 +350,7 @@ def _check_front_matter(front, body, spec, kind, add) -> None:  # type: ignore[n
         )
 
 
-def _check_file_date(file_name: str, date: Any, add) -> None:  # type: ignore[no-untyped-def]
+def _check_file_date(file_name: str, date: Any, add: Add) -> None:
     """Jekyll skips a post without the date prefix and builds a ``date:``
     after the file's day (UTC) into a permanent URL. The file name carries
     the posting day; ``date:`` is the paper's own date, never later."""
@@ -522,7 +375,7 @@ def _check_file_date(file_name: str, date: Any, add) -> None:  # type: ignore[no
             )
 
 
-def _check_paper_author(value: Any, add) -> None:  # type: ignore[no-untyped-def]
+def _check_paper_author(value: Any, add: Add) -> None:
     author = str(value or "").strip()
     if not author:
         add(
@@ -541,7 +394,7 @@ def _check_paper_author(value: Any, add) -> None:  # type: ignore[no-untyped-def
         add("error", "paper-author", 1, f"paper_author lists people: '{author}'")
 
 
-def _check_tags(tags: Any, body: str, spec: PostConventions, add) -> None:  # type: ignore[no-untyped-def]
+def _check_tags(tags: Any, body: str, spec: PostConventions, add: Add) -> None:
     if not isinstance(tags, list) or not tags:
         add("error", "tags", 1, "tags must be a non-empty list")
         return
@@ -578,7 +431,7 @@ def _check_tags(tags: Any, body: str, spec: PostConventions, add) -> None:  # ty
         add("error", "tags", 1, f"at most {spec.tags.max_specific} specific tags")
 
 
-def _check_headings(lines, offset, kind, add) -> None:  # type: ignore[no-untyped-def]
+def _check_headings(lines: Lines, offset: int, kind: ArtifactKind, add: Add) -> None:
     previous = 1
     first = True
     for i, line in lines:
@@ -605,7 +458,7 @@ def _check_headings(lines, offset, kind, add) -> None:  # type: ignore[no-untype
         _check_tldr(lines, offset, kind, add)
 
 
-def _check_tldr(lines, offset, kind, add) -> None:  # type: ignore[no-untyped-def]
+def _check_tldr(lines: Lines, offset: int, kind: ArtifactKind, add: Add) -> None:
     """The ``## TL;DR`` section has prose (and, in a review, its ``###``
     questions): an empty one means the finalizer failed."""
     start = next((i for i, line in lines if line.strip() == "## TL;DR"), None)
@@ -633,7 +486,6 @@ def _check_tldr(lines, offset, kind, add) -> None:  # type: ignore[no-untyped-de
         )
 
 
-_QUOTE = re.compile(r"^\s*(?:>\s?)+")
 # Math the Markdown reads first: `\\(`/`\\[` reach MathJax only after `*` and
 # `_` inside them turned into <em>. (A single `\(` is a Markdown escape for a
 # literal parenthesis; normalize_math has already turned `\(x\)` math into $$.)
@@ -666,10 +518,12 @@ _BRACKET_BLOCK = re.compile(
 
 def _unquote(line: str) -> str:
     """The text of a line after any blockquote markers."""
-    return _QUOTE.sub("", line)
+    return QUOTE_PREFIX.sub("", line)
 
 
-def _check_math(front, body, lines, offset, add) -> None:  # type: ignore[no-untyped-def]
+def _check_math(
+    front: dict[str, Any], body: str, lines: Lines, offset: int, add: Add
+) -> None:
     """The blog's math rules (script/lint-posts.rb), blockquotes included:
     only ``$$`` delimiters; a display block opens on a line starting with
     ``$$`` and closes on the next line with an odd number of them, with blank
@@ -827,7 +681,9 @@ def _check_math(front, body, lines, offset, add) -> None:  # type: ignore[no-unt
 _ORDERED_ITEM = re.compile(r"(\d+)[.)][ \t]")
 
 
-def _check_list_restarts(lines, bare_by_index, offset, add) -> None:  # type: ignore[no-untyped-def]
+def _check_list_restarts(
+    lines: Lines, bare_by_index: dict[int, str], offset: int, add: Add
+) -> None:
     """An ordered item numbered above 1 after a display indented less than the
     item's content (at the margin, or glued and under-indented), with or
     without a paragraph between them: the display ended the list, so kramdown
@@ -873,7 +729,9 @@ def _check_list_restarts(lines, bare_by_index, offset, add) -> None:  # type: ig
             )
 
 
-def _check_bracket_blocks(lines, bare_by_index, offset, add) -> None:  # type: ignore[no-untyped-def]
+def _check_bracket_blocks(
+    lines: Lines, bare_by_index: dict[int, str], offset: int, add: Add
+) -> None:
     """A "\\[ … \\]" display written over lines (kramdown shows it as text)."""
     paragraph: list[int] = []
 
@@ -895,7 +753,9 @@ def _check_bracket_blocks(lines, bare_by_index, offset, add) -> None:  # type: i
     flush()
 
 
-def _check_math_span(math: str, line: int, add, *, inline: bool, row: bool = False) -> None:  # type: ignore[no-untyped-def]
+def _check_math_span(
+    math: str, line: int, add: Add, *, inline: bool, row: bool = False
+) -> None:
     outside_text = TEXT_COMMAND.sub("", math)
     if ESCAPED_UNDERSCORE.search(outside_text):
         add("error", "math", line, r"no \_ inside $$ (only within \text{})")
@@ -934,12 +794,12 @@ def _split_cells(row: str) -> list[str]:
     return [c.strip() for c in cells]
 
 
-def _check_tables(lines, offset, add) -> None:  # type: ignore[no-untyped-def]
+def _check_tables(lines: Lines, offset: int, add: Add) -> None:
     index = 0
     while index < len(lines):
         i, line = lines[index]
         nxt = lines[index + 1][1] if index + 1 < len(lines) else ""
-        if line.lstrip().startswith("|") and _TABLE_SEPARATOR.match(nxt.strip()):
+        if line.lstrip().startswith("|") and TABLE_DELIMITER.match(nxt.strip()):
             header = _split_cells(line)
             width = len(header)
             block = [(i, line)]
@@ -1045,7 +905,7 @@ def unsourced_table_numbers(markdown: str, source_text: str) -> list[str]:
     known = set().union(*source_rows) if source_rows else set()
     missing: list[str] = []
     for _, line in _prose_lines(body):
-        if not line.lstrip().startswith("|") or _TABLE_SEPARATOR.match(line.strip()):
+        if not line.lstrip().startswith("|") or TABLE_DELIMITER.match(line.strip()):
             continue
         cells = _split_cells(_INLINE_MATH.sub(" ", _INLINE_CODE.sub(" ", line)))
         tokens = [
@@ -1067,7 +927,7 @@ def unsourced_table_numbers(markdown: str, source_text: str) -> list[str]:
 _IMAGE_ALT = re.compile(r"!\[([^\]]*)\]\(")
 
 
-def _check_images(lines, offset, add) -> None:  # type: ignore[no-untyped-def]
+def _check_images(lines: Lines, offset: int, add: Add) -> None:
     korean = mostly_hangul("\n".join(line for _, line in lines))
     for i, line in lines:
         if korean:
@@ -1102,7 +962,7 @@ def _check_images(lines, offset, add) -> None:  # type: ignore[no-untyped-def]
                 )
 
 
-def _check_description(lines, offset, add) -> None:  # type: ignore[no-untyped-def]
+def _check_description(lines: Lines, offset: int, add: Add) -> None:
     """The blog derives the post description from the first prose paragraph
     and strips math from it, so math there leaves a broken sentence."""
     for i, line in lines:
@@ -1121,7 +981,7 @@ def _check_description(lines, offset, add) -> None:  # type: ignore[no-untyped-d
         return
 
 
-def _check_text(lines, offset, add) -> None:  # type: ignore[no-untyped-def]
+def _check_text(lines: Lines, offset: int, add: Add) -> None:
     for i, line in lines:
         prose = _INLINE_CODE.sub("", line)
         if ENVELOPE_TAG.search(prose):

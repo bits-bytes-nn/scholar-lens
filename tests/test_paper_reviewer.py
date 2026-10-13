@@ -149,6 +149,8 @@ def _reviewer(
     r._token_tracker = None
     r.max_total_tokens = None
     r.notes = []
+    r.open_defects = []
+    r.open_gaps = []
     r.citation_summarizer = AsyncMock(spec=CitationSummarizer)
     r.citation_summarizer.summarize.return_value = ["[R] Rank summary."]
     r.code_retriever = code_retriever
@@ -589,7 +591,7 @@ async def test_rule_slips_block_the_section_and_degraded_output_is_noted() -> No
     review = await reviewer.run()
     revision = reviewer.writer.calls[1]  # type: ignore[attr-defined]
     assert "self-reference '이 절'" in revision["improvement_feedback"]
-    assert sum("below the quality bar" in n for n in review.notes) == 3
+    assert sum("open must-fix/missing item" in n for n in review.notes) == 3
     assert any("finalization still malformed" in n for n in review.notes)
 
 
@@ -719,7 +721,7 @@ async def test_revisions_stop_when_must_fix_items_do_not_shrink() -> None:
     review = await reviewer.run()
     sections = len(json.loads(_plan()[6:-7])["sections"])
     assert len(reviewer.checker.calls) == 2 * sections  # type: ignore[attr-defined]
-    note = next(n for n in review.notes if "below the quality bar" in n)
+    note = next(n for n in review.notes if "open must-fix/missing item" in n)
     assert "Open: 'A' 표현을 바꿉니다" in note
 
 
@@ -831,3 +833,30 @@ def test_finalization_part_that_the_validator_would_reject_is_a_problem() -> Non
     closing = "## 한계와 시사점\n\n| 방법 | |\n| --- | --- |\n| A | 1 |\n"
     final = {"subtitle": "s", "key_takeaways": TLDR, "closing": closing}
     assert set(_finalization_problems(final, "Title")) == {"closing"}
+
+
+async def test_open_must_fix_items_reach_the_editor() -> None:
+    def check(_: dict[str, Any]) -> dict[str, str]:
+        return {
+            "score": "85",
+            "missing_items": "none",
+            "must_fix": "- '틀린 문장' 고칩니다",
+        }
+
+    reviewer = _reviewer(checker=FakeChain(check), max_synthesis_attempts=2)
+    await reviewer.run()
+    first_edit = reviewer.editor.calls[0]  # type: ignore[attr-defined]
+    assert "'틀린 문장' 고칩니다" in first_edit["round_note"]
+
+
+async def test_open_missing_items_reach_the_editor_as_conditional_additions() -> None:
+    # Regression: missing items were listed under "the quoted text is from the
+    # article", though they quote nothing and may not belong in the review.
+    def check(_: dict[str, Any]) -> dict[str, str]:
+        return {"score": "85", "missing_items": "- 순위 4 실험", "must_fix": "none"}
+
+    reviewer = _reviewer(checker=FakeChain(check), max_synthesis_attempts=2)
+    await reviewer.run()
+    note = reviewer.editor.calls[0]["round_note"]  # type: ignore[attr-defined]
+    assert "순위 4 실험" in note
+    assert "quoted text" not in note and "paper supports" in note

@@ -579,6 +579,38 @@ def test_relevant_text_picks_matching_pages_within_budget() -> None:
     assert len(text) <= 5_000 + 20
 
 
+def test_relevant_text_records_the_pages_it_includes() -> None:
+    from scholar_lens.src.web_research import PageContent, ResearchCorpus
+
+    corpus = ResearchCorpus(
+        pages=[
+            PageContent(url="https://d.dev/a", title="A", text="kv cache " * 600),
+            PageContent(url="https://d.dev/b", title="B", text="kv cache " * 600),
+        ]
+    )
+    included: set[str] = set()
+    corpus.relevant_text("kv cache", max_chars=7_000, included=included)
+    assert included == {"https://d.dev/a"}  # the second page found no room
+
+
+@pytest.mark.parametrize(
+    ("path", "expected"),
+    [
+        ("/v2/x/", True),  # a section of a pinned release
+        ("/V2/x/", True),
+        ("/v2/", False),  # the whole release
+        ("/en/latest/", False),
+        ("/en/latest/features/", True),
+        ("/docs/peft/", True),
+        ("/peft/", False),
+    ],
+)
+def test_is_topic_directory(path: str, expected: bool) -> None:
+    from scholar_lens.src.web_research import _is_topic_directory
+
+    assert _is_topic_directory(path) is expected
+
+
 class TestOfficialDocsAfterRedirects:
     """Regression: the official host and version came only from the typed URL,
     so a docs site that redirects left every page "third-party"."""
@@ -776,6 +808,32 @@ class TestPageExtraction:
         )
         corpus = researcher.research([seed])
         assert [p.text for p in corpus.pages][1] == "IA3."
+
+    def test_a_leaf_never_takes_the_whole_docs_version_as_siblings(self) -> None:
+        seed = "https://docs.x.dev/en/latest/quickstart"
+        html = "<p>Start.</p><a href='/en/latest/blog/news'>News</a>"
+        researcher = _researcher(
+            {
+                seed: (200, "text/html", html),
+                "https://docs.x.dev/en/latest/blog/news": (
+                    200,
+                    "text/html",
+                    "<p>N</p>",
+                ),
+            }
+        )
+        assert [p.url for p in researcher.research([seed]).pages] == [seed]
+
+    def test_images_come_from_the_main_content_only(self) -> None:
+        url = "https://docs.x.dev/guide/intro.html"
+        html = (
+            "<html><body><div class='sidebar'><img src='/badge.png'></div>"
+            "<article><p>Text.</p><img src='/fig.png'></article></body></html>"
+        )
+        corpus = _researcher({url: (200, "text/html", html)}).research(
+            [url], discover_subpages=False
+        )
+        assert corpus.pages[0].image_urls == ["https://docs.x.dev/fig.png"]
 
     def test_relevant_text_never_cuts_inside_a_code_fence(self) -> None:
         body = "Intro.\n\n```python\n" + "x = 1\n" * 2000 + "```\n\nAfter."

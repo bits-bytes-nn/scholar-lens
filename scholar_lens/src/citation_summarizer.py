@@ -9,7 +9,7 @@ import fitz
 from langchain_core.output_parsers import StrOutputParser
 
 from .arxiv_handler import ArxivHandler, ArxivPaperError
-from .citation_metadata import ChainedMetadataResolver
+from .citation_metadata import ChainedMetadataResolver, arxiv_id_from_doi
 from .constants import AppConstants, LanguageModelId, LocalPaths, normalize_arxiv_id
 from .logger import logger
 from .parser import Content, ContentParseError, HTMLParser
@@ -146,6 +146,11 @@ class CitationSummarizer(RetryableBase):
         )
         return summaries
 
+    def unsourced_references(self) -> list[str]:
+        """References looked up this run that no source (metadata abstract or
+        arXiv text) was found for; their summaries were skipped."""
+        return [ident for ident, source in self._source_cache.items() if source is None]
+
     async def _source(self, identifier: str) -> ReferenceSource | None:
         async with self._cache_lock:
             if identifier in self._source_cache:
@@ -190,7 +195,10 @@ class CitationSummarizer(RetryableBase):
             )
             if not self.prefer_full_text:
                 return abstract
-        found_arxiv_id = await asyncio.to_thread(
+        # A resolved arXiv DOI names the paper; otherwise search arXiv by title.
+        found_arxiv_id = arxiv_id_from_doi(
+            metadata.url if metadata else None
+        ) or await asyncio.to_thread(
             self.arxiv_handler.search_by_title,
             identifier,
             DEFAULT_SEARCH_RESULTS_LIMIT,

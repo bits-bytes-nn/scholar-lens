@@ -66,6 +66,7 @@ def _make_generator(
     gen.max_total_tokens = None
     gen._token_tracker = None
     gen.notes = []
+    gen._section_source_urls = set()
     gen.researcher = MagicMock()
     gen.relevance_chain = MagicMock()
     gen.research_plan_chain = MagicMock()
@@ -613,71 +614,54 @@ class TestEvaluateAndRevise:
         )
         gen.section_chain.ainvoke.assert_awaited()  # revision happened
 
-    async def test_rejected_revision_keeps_the_generic_directive(self) -> None:
-        # Low score with empty feedback, then a worse revision: the next prompt
-        # still carries the generic directive instead of an empty list.
-        gen = _make_generator(min_quality_score=80, max_revision_attempts=2)
-        gen.evaluation_chain.ainvoke = AsyncMock(
-            side_effect=[
-                {"quality_score": "50", "improvement_feedback": ""},
-                {"quality_score": "30", "improvement_feedback": ""},
-            ]
-            + [{"quality_score": "90", "improvement_feedback": ""}] * 5
-        )
-        gen.section_chain.ainvoke = AsyncMock(
-            return_value={"section_markdown": "## Revised\nmore depth"}
-        )
-        await gen._evaluate_and_revise(
+    @staticmethod
+    async def _revise(gen, markdown: str = "## Thin\nbody") -> str:  # type: ignore[no-untyped-def]
+        return await gen._evaluate_and_revise(
             topic="X",
             planned=PlannedSection(title="Intro"),
             section_label="1. Intro",
-            markdown="## Thin\nbody",
+            markdown=markdown,
             section_number=1,
             total_sections=1,
             previous_sections="",
             already_in_guide="- nothing yet",
-            sources="src",
+            sources="the sources",
             available_images="(none)",
-            final_outline="1. Intro",
+            final_outline="1. Intro\n2. Serving",
         )
-        second = gen.section_chain.ainvoke.await_args_list[1].args[0]
-        feedback = second["depth_directive"]
-        assert "below the quality bar" in feedback
-        assert feedback.count("below the quality bar") == 1
-        assert "rejected (score 30" in feedback
 
-    async def test_rejected_revision_lists_its_rule_slips(self) -> None:
-        # Same feedback for the kept and the rejected draft: the note must not
-        # end on a bare colon, and the rejected draft's slips are listed.
+    @pytest.mark.parametrize(
+        ("scores", "revisions"),
+        [
+            (["50", "30"], 1),  # a worse revision ends the loop
+            (["50", "52"], 1),  # so does one gaining under 3 points
+            (["50", "60", "70"], 2),  # real gains keep revising
+        ],
+    )
+    async def test_revisions_stop_once_they_stall(
+        self, scores: list[str], revisions: int
+    ) -> None:
         gen = _make_generator(min_quality_score=80, max_revision_attempts=2)
         gen.evaluation_chain.ainvoke = AsyncMock(
             side_effect=[
-                {"quality_score": "60", "improvement_feedback": "더 깊게"},
-                {"quality_score": "40", "improvement_feedback": "더 깊게"},
+                {"quality_score": s, "improvement_feedback": "더 깊게"} for s in scores
             ]
-            + [{"quality_score": "90", "improvement_feedback": ""}] * 5
         )
         gen.section_chain.ainvoke = AsyncMock(
-            side_effect=[{"section_markdown": "## Revised\n이 절에서 설명합니다."}]
-            + [{"section_markdown": "## Fine\n본문입니다."}] * 5
+            return_value={"section_markdown": "## Revised\n본문입니다."}
         )
-        await gen._evaluate_and_revise(
-            topic="X",
-            planned=PlannedSection(title="Intro"),
-            section_label="1. Intro",
-            markdown="## Thin\nbody",
-            section_number=1,
-            total_sections=1,
-            previous_sections="",
-            already_in_guide="- nothing yet",
-            sources="src",
-            available_images="(none)",
-            final_outline="1. Intro",
+        await self._revise(gen)
+        assert gen.section_chain.ainvoke.await_count == revisions
+
+    async def test_evaluator_sees_the_sources_and_the_outline(self) -> None:
+        gen = _make_generator(min_quality_score=70, max_revision_attempts=1)
+        gen.evaluation_chain.ainvoke = AsyncMock(
+            return_value={"quality_score": "90", "improvement_feedback": ""}
         )
-        second = gen.section_chain.ainvoke.await_args_list[1].args[0]
-        feedback = second["depth_directive"]
-        assert not feedback.rstrip().endswith(":")
-        assert "self-reference" in feedback
+        await self._revise(gen, "## Good\nbody")
+        inputs = gen.evaluation_chain.ainvoke.await_args.args[0]
+        assert inputs["sources"] == "the sources"
+        assert inputs["outline"] == "1. Intro\n2. Serving"
 
     def test_parse_quality_score_robust(self) -> None:
         # The score parser is now the shared helper used by both the review and

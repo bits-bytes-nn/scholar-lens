@@ -50,12 +50,15 @@ _ITEM_WORDS: dict[str, int] = {"easy": 60, "medium": 200, "hard": 450}
 _IMPORTANCE_FACTOR: dict[str, float] = {"context": 0.8, "supporting": 1.0, "core": 1.3}
 MIN_SECTION_WORDS = 250
 # Whole-review budget in English-word equivalents (≈2.5 Hangul syllables
-# each), growing smoothly with the share of hard items. Only easy and medium
-# items are shortened to fit, never below half their size: hard items keep
-# their full build-up, so a hard-heavy paper may run past the budget.
+# each), growing smoothly with the share of hard items. Easy and medium items
+# are shortened first, never below half their size. Hard items keep their full
+# build-up unless the review would still run past 1.3x the budget; then they
+# shrink toward that bound, never below 0.8x, so the overrun stays bounded.
 REVIEW_WORD_BUDGET = 7_000
 _HARD_SHARE_BONUS = 0.6
 MIN_LENGTH_SCALE = 0.5
+HARD_OVERRUN = 1.3
+MIN_HARD_SCALE = 0.8
 # Sentences of context added on each side of a planned range, so evidence just
 # outside an LLM-estimated anchor still reaches the writer.
 RANGE_PADDING = 3
@@ -162,6 +165,7 @@ class PlannedSection(BaseModel):
     needs_code: bool = False
     # Set by normalize_plan so the whole review fits its budget.
     length_scale: float = 1.0
+    hard_scale: float = 1.0
 
     @field_validator("sentence_ranges", mode="before")
     @classmethod
@@ -182,7 +186,9 @@ class PlannedSection(BaseModel):
 
     @property
     def target_words(self) -> int:
-        return target_words(self.must_cover, self.importance, self.length_scale)
+        return target_words(
+            self.must_cover, self.importance, self.length_scale, self.hard_scale
+        )
 
 
 class ReviewPlan(BaseModel):
@@ -215,13 +221,16 @@ class ReviewPlan(BaseModel):
 
 
 def target_words(
-    items: Sequence[CoverItem], importance: str, scale: float = 1.0
+    items: Sequence[CoverItem],
+    importance: str,
+    scale: float = 1.0,
+    hard_scale: float = 1.0,
 ) -> int:
     """Section length from what it must carry: per-item budgets by
-    difficulty (easy and medium ones times ``scale``, hard ones never
-    shortened), scaled by importance, never below the floor."""
+    difficulty (easy and medium ones times ``scale``, hard ones times
+    ``hard_scale``), scaled by importance, never below the floor."""
     words = sum(
-        _ITEM_WORDS[i.difficulty] * (1.0 if i.difficulty == "hard" else scale)
+        _ITEM_WORDS[i.difficulty] * (hard_scale if i.difficulty == "hard" else scale)
         for i in items
     )
     return max(MIN_SECTION_WORDS, round(words * _IMPORTANCE_FACTOR[importance]))
@@ -237,28 +246,41 @@ def review_word_budget(plan: ReviewPlan) -> int:
 def _fit_budget(plan: ReviewPlan) -> None:
     """Shorten the easy and medium items (one scale for the whole review,
     floors included in the total) until the targets fit the budget or reach
-    :data:`MIN_LENGTH_SCALE`."""
+    :data:`MIN_LENGTH_SCALE`; if the review is still over
+    :data:`HARD_OVERRUN` times the budget, shorten the hard items toward that
+    bound, down to :data:`MIN_HARD_SCALE`."""
 
-    def total(scale: float) -> int:
+    def total(scale: float, hard: float = 1.0) -> int:
         for section in plan.sections:
-            section.length_scale = scale
+            section.length_scale, section.hard_scale = scale, hard
         return sum(s.target_words for s in plan.sections)
+
+    def fit(set_total: Callable[[float], int], low: float, cap: float) -> float:
+        # Bisection for the largest scale in [low, 1] whose total fits ``cap``
+        # (the total is monotone in the scale); ``low`` if none does.
+        if set_total(low) > cap:
+            return low
+        high = 1.0
+        for _ in range(20):
+            mid = (low + high) / 2
+            low, high = (mid, high) if set_total(mid) <= cap else (low, mid)
+        return low
 
     budget = review_word_budget(plan)
     if total(1.0) <= budget:
         return
-    low, high = MIN_LENGTH_SCALE, 1.0
-    if total(low) < budget:
-        for _ in range(20):  # bisection: the total is monotone in the scale
-            mid = (low + high) / 2
-            low, high = (mid, high) if total(mid) <= budget else (low, mid)
-    fitted = total(low)
+    scale = fit(total, MIN_LENGTH_SCALE, budget)
+    hard = 1.0
+    if total(scale) > HARD_OVERRUN * budget:
+        hard = fit(lambda h: total(scale, h), MIN_HARD_SCALE, HARD_OVERRUN * budget)
+    fitted = total(scale, hard)
     logger.info(
-        "Review targets: easy/medium items x%.2f, %d words for a %d-word budget%s.",
-        low,
+        "Review targets: easy/medium items x%.2f, hard items x%.2f, %d words "
+        "for a %d-word budget.",
+        scale,
+        hard,
         fitted,
         budget,
-        "" if fitted <= budget else " (over: hard items are never shortened)",
     )
 
 

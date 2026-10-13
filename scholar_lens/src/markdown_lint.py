@@ -46,11 +46,11 @@ from .logger import logger
 from .markdown_math import (
     HANGUL,
     IMAGE,
-    _indent_width,
-    _list_column,
     fence_roles,
+    indent_width,
     indented_code_lines,
     indented_code_test,
+    list_column,
     normalize_math,
     open_fence,
     segments,
@@ -159,7 +159,7 @@ def _classify_regions(markdown: str) -> list[tuple[int, int, str]]:
 
 
 _TABLE_ROW = re.compile(r"^[ \t]*\|")
-_TABLE_DELIMITER = re.compile(
+TABLE_DELIMITER = re.compile(
     r"^[ \t]*\|?[ \t]*:?-{3,}:?[ \t]*(?:\|[ \t]*:?-{3,}:?[ \t]*)*\|?[ \t]*$"
 )
 
@@ -185,7 +185,7 @@ def _separate_tables(markdown: str) -> str:
     out: list[str] = []
     i = 0
     while i < len(lines):
-        if not (row(i) and row(i + 1) and _TABLE_DELIMITER.match(lines[i + 1])):
+        if not (row(i) and row(i + 1) and TABLE_DELIMITER.match(lines[i + 1])):
             out.append(lines[i])
             i += 1
             continue
@@ -196,8 +196,8 @@ def _separate_tables(markdown: str) -> str:
         if before.strip() and not before.lstrip().startswith(">"):
             out.append("")
         rows = lines[i:end]
-        column = _list_column(lines, i) if before.strip() else None
-        if column is not None and _indent_width(lines[i]) < column:
+        column = list_column(lines, i) if before.strip() else None
+        if column is not None and indent_width(lines[i]) < column:
             rows = [" " * column + r.lstrip(" \t") for r in rows]  # stay in the item
         out.extend(rows)
         after = lines[end] if end < len(lines) else ""
@@ -407,7 +407,7 @@ def _remove_envelope_tags(markdown: str) -> str:
     )
 
 
-def _level_headings(markdown: str) -> str:
+def _level_headings(markdown: str, *, warn: bool = True) -> str:
     """Body headings (outside code) on valid levels: an H1 becomes H2 (other
     levels are kept, so the post still opens with ``## TL;DR``), and a heading
     more than one level below the previous one is raised to the next level."""
@@ -419,7 +419,7 @@ def _level_headings(markdown: str) -> str:
         if match and not any(s <= offset < e for s, e in fences):
             hashes = len(match.group(1))
             level = min(max(hashes, 2), previous + 1)
-            if level != hashes:
+            if warn and level != hashes:
                 logger.warning(
                     "Markdown lint: heading '%s' moved to level %d.", line, level
                 )
@@ -764,7 +764,7 @@ def lint_markdown(markdown: str, *, warn: bool = True) -> str:
     """
     fixed = _remove_envelope_tags(markdown)
     fixed = limit_callouts(fixed)
-    fixed = _level_headings(fixed)
+    fixed = _level_headings(fixed, warn=warn)
     fixed = _fix_headings(fixed)
     fixed = _separate_tables(fixed)
     fixed = _code_chat_tokens(fixed)

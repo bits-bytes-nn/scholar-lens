@@ -42,7 +42,7 @@ class TestSlugify:
 
 class TestEnrichContentWithFigures:
     def test_removes_image_markers_when_no_figures(self) -> None:
-        text = "before [Image: alt=x, src=y] after"
+        text = 'before [Image: alt="x", src="y"] after'
         assert attach_figure_context(text, [], is_pdf_parsed=False) == "before  after"
 
     def test_injects_analysis_caption_for_matched_figure(self, tmp_path) -> None:
@@ -50,14 +50,14 @@ class TestEnrichContentWithFigures:
         fig = Figure(
             figure_id="0", path=fig_path, caption="Figure 1", analysis="A bar chart."
         )
-        text = "[Image: alt=Figure 1, src=fig1.png]"
+        text = '[Image: alt="Figure 1", src="fig1.png"]'
         out = attach_figure_context(text, [fig], is_pdf_parsed=False)
         assert "A bar chart." in out
         assert fig_path in out
 
     def test_unmatched_src_is_dropped(self) -> None:
         fig = Figure(figure_id="0", path="/tmp/known.png", analysis="x")
-        text = "[Image: alt=, src=unknown.png]"
+        text = '[Image: alt="", src="unknown.png"]'
         assert attach_figure_context(text, [fig], is_pdf_parsed=False) == ""
 
 
@@ -189,7 +189,7 @@ def test_figure_marker_stays_one_parseable_token() -> None:
         analysis='1. Shows "A".\n2. Range [0, 1].\n3. Done.',
     )
     text = attach_figure_context(
-        "Text [Image: alt=, src=x1.png] more.", [fig], is_pdf_parsed=False
+        'Text [Image: alt="", src="x1.png"] more.', [fig], is_pdf_parsed=False
     )
     assert "\n" not in text and "[0, 1]" not in text
     assert figure_catalog(text)  # the planner still sees the figure

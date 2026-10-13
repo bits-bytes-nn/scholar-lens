@@ -54,8 +54,9 @@ class RunContext(BaseModel):
     # The blog's post conventions, loaded once per run (see load_run_conventions).
     conventions: PostConventions | None = None
 
-    # Tags the blog already uses (reuse candidates); loaded on first use.
-    blog_tags: list[str] | None = None
+    # Tags the blog already uses (reuse candidates) with their post counts,
+    # most used first; loaded on first use.
+    blog_tags: dict[str, int] | None = None
 
     def require_conventions(self) -> PostConventions:
         if self.conventions is None:
@@ -68,14 +69,21 @@ class RunContext(BaseModel):
             retired = {k.lower() for k in spec.tags.aliases}
             controlled = set(spec.tags.controlled)
             words = spec.tags.lowercase_words
-            self.blog_tags = [
-                t
-                for t in load_run_blog_tags(self.config)
+            self.blog_tags = {
+                t: n
+                for t, n in load_run_blog_tags(self.config).items()
                 if t.lower() not in retired
                 and t not in controlled
                 and format_tag(t, words) == t  # only spellings a post may use
-            ]
-        return self.blog_tags
+            }
+        return list(self.blog_tags)
+
+    def blog_tag_hints(self, limit: int) -> list[str]:
+        """The most used blog tags worth suggesting: a tag on a single post is
+        often a one-off, so only tags shared by two or more posts are hints."""
+        tags = self.require_blog_tags()
+        counts = self.blog_tags or {}
+        return [t for t in tags if counts[t] >= 2][:limit]
 
 
 def build_context(config: Config) -> RunContext:
@@ -217,19 +225,20 @@ def load_run_conventions(config: Config) -> PostConventions:
     )
 
 
-def load_run_blog_tags(config: Config) -> list[str]:
-    """The blog's existing tags, or none when GitHub is not configured or the
-    listing fails (the model then proposes fresh short tags)."""
+def load_run_blog_tags(config: Config) -> dict[str, int]:
+    """The blog's existing tags with their post counts, or none when GitHub is
+    not configured or the listing fails (the model then proposes fresh short
+    tags)."""
     github = config.resources.github
     if not (github.enabled and github.repo_name):
-        return []
+        return {}
     try:
         return fetch_blog_tags(
             github.repo_name, github.base_branch, os.getenv(EnvVars.GITHUB_TOKEN.value)
         )
     except Exception as e:  # noqa: BLE001 - reuse hints only; never fail the run
         logger.warning("Could not list the blog's tags: %s", e)
-        return []
+        return {}
 
 
 def build_publisher(context: RunContext) -> Publisher:

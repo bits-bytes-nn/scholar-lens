@@ -183,6 +183,42 @@ async def test_arxiv_id_routes_to_arxiv_and_uses_abstract(
 
 
 @pytest.mark.asyncio
+async def test_resolved_arxiv_doi_fetches_the_paper_by_id(
+    summarizer: CitationSummarizer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # OpenAlex drops its (unreliable) abstract for arXiv records; the DOI's id
+    # then fetches the paper from arXiv without a title search.
+    record = ReferenceMetadata(
+        title="Scaling Laws for Neural Language Models",
+        authors=["Jared Kaplan"],
+        abstract=None,
+        url="https://doi.org/10.48550/arxiv.2001.08361",
+    )
+    summarizer.metadata_resolver = _FakeResolver(record)  # type: ignore[assignment]
+    fetched: list[str] = []
+
+    def fetch(arxiv_id: str) -> ArxivMetadata:
+        fetched.append(arxiv_id)
+        return ArxivMetadata(
+            arxiv_id=arxiv_id,
+            title=record.title,
+            authors=["Jared Kaplan"],
+            published="2020-01-23T00:00:00Z",  # type: ignore[arg-type]
+            updated="2020-01-23T00:00:00Z",  # type: ignore[arg-type]
+            abstract="We study empirical scaling laws for language model loss.",
+        )
+
+    def no_search(*_: Any) -> None:
+        raise AssertionError("title search should not run")
+
+    monkeypatch.setattr(summarizer.arxiv_handler, "fetch_metadata", fetch)
+    monkeypatch.setattr(summarizer.arxiv_handler, "search_by_title", no_search)
+    summarizer.citation_summarizer = _FakeChain("ok")  # type: ignore[assignment]
+    out = await summarizer.summarize([record.title], "ctx")
+    assert fetched == ["2001.08361"] and len(out) == 1
+
+
+@pytest.mark.asyncio
 async def test_arxiv_not_found_yields_no_summary(
     summarizer: CitationSummarizer, monkeypatch: pytest.MonkeyPatch
 ) -> None:

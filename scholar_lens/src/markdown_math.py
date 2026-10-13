@@ -144,16 +144,24 @@ def fence_roles(lines: list[str]) -> list[str]:
     return roles
 
 
+def open_fence_line(lines: list[str]) -> int | None:
+    """Index of the opener of a fence left unclosed at the end, if any."""
+    opened: int | None = None
+    for i, role in enumerate(fence_roles(lines)):
+        if role == "open":
+            opened = i
+        elif role == "close":
+            opened = None
+    return opened
+
+
 def open_fence(markdown: str) -> str:
     """The opening run of a fence left unclosed at the end ("" when none)."""
     lines = markdown.splitlines()
-    opener = ""
-    for line, role in zip(lines, fence_roles(lines), strict=True):
-        if role == "open":
-            opener = _FENCE_LINE.match(line).group(1)  # type: ignore[union-attr]
-        elif role == "close":
-            opener = ""
-    return opener
+    opened = open_fence_line(lines)
+    if opened is None:
+        return ""
+    return _FENCE_LINE.match(lines[opened]).group(1)  # type: ignore[union-attr]
 
 
 def fence_spans(markdown: str) -> list[tuple[int, int]]:
@@ -224,8 +232,10 @@ def segments(markdown: str) -> list[Segment]:
 
 _TEX_COMMAND = re.compile(r"\\[A-Za-z]")
 _PAREN_DELIMS = re.compile(r"^\\{1,2}\(|\\{1,2}\)$")
+# Letters only, so "\(s\)" after a word is a suffix, not math.
+_WORD_SUFFIX = re.compile(r"[A-Za-z]{1,3}")
 _BRACKET_DELIMS = re.compile(r"^[ \t]*\\{1,2}\[|\\{1,2}\][ \t]*$")
-_QUOTE_PREFIX = re.compile(r"^[ \t]*(?:>[ \t]?)+")
+QUOTE_PREFIX = re.compile(r"^[ \t]*(?:>[ \t]?)+")
 # Text-mode commands whose bodies keep a literal ``\_`` (braces nested up to
 # three levels): every \text… command, \mathrm and \operatorname, as the blog
 # lint treats them. Shared with the post validator.
@@ -308,7 +318,7 @@ def _as_display(
     """A display block; ``indent`` keeps it inside a list item, ``quote``
     (blockquote markers) inside a quote. A kramdown attribute line right
     after it (``attr_follows``) stays glued to it."""
-    lines = [_QUOTE_PREFIX.sub("", line).strip() for line in body.strip().splitlines()]
+    lines = [QUOTE_PREFIX.sub("", line).strip() for line in body.strip().splitlines()]
     lines = [line for line in lines if line] or [""]
     if quote:
         bar = quote.rstrip()
@@ -345,7 +355,7 @@ def _on_table_row(markdown: str, start: int) -> bool:
     pipe-less row of a table whose delimiter row (``--- | ---``) is in the
     same block of lines."""
     line_start = markdown.rfind("\n", 0, start) + 1
-    before = _QUOTE_PREFIX.sub("", markdown[line_start:start])
+    before = QUOTE_PREFIX.sub("", markdown[line_start:start])
     if before.lstrip().startswith("|"):
         return True
     line_end = markdown.find("\n", start)
@@ -361,14 +371,11 @@ def _on_table_row(markdown: str, start: int) -> bool:
     )
 
 
-_LIST_ITEM = re.compile(r"^[ \t]*(?:[-*+]|\d+[.)])[ \t]+")
-
-
 def _columns(indent: str) -> int:
     return len(indent.expandtabs(4))
 
 
-def _indent_width(line: str) -> int:
+def indent_width(line: str) -> int:
     return _columns(line[: len(line) - len(line.lstrip(" \t"))])
 
 
@@ -389,11 +396,11 @@ def _list_indent(markdown: str, start: int, text: str) -> str:
         if not line.strip():
             glued = False
             continue
-        item = _LIST_ITEM.match(line)
+        item = _LIST_MARKER.match(line)
         if item:
             column = _columns(item.group(0))
             return " " * column if width >= column or glued else indent
-        if _indent_width(line) == 0:
+        if indent_width(line) == 0:
             return ""  # a paragraph at the margin: not in a list
     return ""
 
@@ -424,7 +431,7 @@ def _fills_lines(markdown: str, start: int, end: int) -> bool:
     line_start = markdown.rfind("\n", 0, start) + 1
     line_end = markdown.find("\n", end)
     line_end = len(markdown) if line_end == -1 else line_end
-    before = _QUOTE_PREFIX.sub("", markdown[line_start:start])
+    before = QUOTE_PREFIX.sub("", markdown[line_start:start])
     return not (before + markdown[end:line_end]).strip()
 
 
@@ -451,7 +458,7 @@ def _unreadable(markdown: str, start: int, end: int) -> bool:
     if "\n" not in text:
         return False
     line_start = markdown.rfind("\n", 0, start) + 1
-    lead = _QUOTE_PREFIX.sub("", markdown[line_start:start]).lstrip()
+    lead = QUOTE_PREFIX.sub("", markdown[line_start:start]).lstrip()
     if lead.startswith("|") or _NEW_HEADING_LINE.search(text):
         return True
     in_item = _LIST_MARKER.match(lead) is not None
@@ -504,9 +511,14 @@ def _rewrite_spans(markdown: str) -> str:
             body = _PAREN_DELIMS.sub("", text)
             if HANGUL.search(body) and not _TEX_COMMAND.search(body):
                 continue  # Markdown-escaped parentheses around prose: "\(약 3달러\)"
+            if (
+                _WORD_SUFFIX.fullmatch(body)
+                and markdown[seg.start - 1 : seg.start].isalpha()
+            ):
+                continue  # a plural glued to its word: "model\(s\)"
             text = "$$" + _fix_bars(_unescape_underscores(body)).strip() + "$$"
         elif seg.kind == "bracket":
-            quote_match = _QUOTE_PREFIX.match(text)
+            quote_match = QUOTE_PREFIX.match(text)
             quote = quote_match.group(0) if quote_match else ""
             if quote:
                 # The indent before ">" keeps a quote inside its list item.
@@ -635,8 +647,8 @@ def _is_display_block(markdown: str, start: int, end: int) -> bool:
         markdown[: max(line_start - 1, 0)].rsplit("\n", 1)[-1] if line_start else ""
     )
     after = "" if line_end == -1 else markdown[line_end + 1 :].split("\n", 1)[0]
-    return not _QUOTE_PREFIX.sub("", before).strip() and not (
-        _QUOTE_PREFIX.sub("", after).strip()
+    return not QUOTE_PREFIX.sub("", before).strip() and not (
+        QUOTE_PREFIX.sub("", after).strip()
     )
 
 
@@ -703,10 +715,10 @@ def _isolate_nested_displays(markdown: str) -> str:
             i += 1
             continue
         block = lines[i : last + 1]
-        quote = _QUOTE_PREFIX.match(line)
+        quote = QUOTE_PREFIX.match(line)
         prefix = quote.group(0) if quote else line[: len(line) - len(line.lstrip())]
         rest = line[len(prefix) :]
-        if quote and not all(_QUOTE_PREFIX.match(other) for other in block):
+        if quote and not all(QUOTE_PREFIX.match(other) for other in block):
             quote = None  # a lazy continuation, not a quoted block
         if not (quote or prefix):
             out.extend(block)
@@ -714,7 +726,7 @@ def _isolate_nested_displays(markdown: str) -> str:
             continue
         if not quote:
             # A list continuation: only at the item's own content column.
-            column = _list_column(lines, i)
+            column = list_column(lines, i)
             if column is None or len(prefix.expandtabs(4)) != column:
                 out.extend(block)
                 i = last + 1
@@ -723,8 +735,8 @@ def _isolate_nested_displays(markdown: str) -> str:
             # Glued under a list item that goes on inside the quote: at the
             # item's column, so the list does not split around it.
             lo, hi = max(0, i - _MAX_SCAN), min(len(lines), last + 1 + _MAX_SCAN)
-            inner = [_QUOTE_PREFIX.sub("", other) for other in lines[lo:hi]]
-            column = _list_column(inner, i - lo)
+            inner = [QUOTE_PREFIX.sub("", other) for other in lines[lo:hi]]
+            column = list_column(inner, i - lo)
             goes_on = _LIST_MARKER.match(
                 next((t for t in inner[last + 1 - lo :] if t.strip()), "")
             )
@@ -734,7 +746,7 @@ def _isolate_nested_displays(markdown: str) -> str:
                 and len(rest.expandtabs(4)) - len(rest.lstrip()) < column
             ):
                 block = [
-                    prefix + " " * column + _QUOTE_PREFIX.sub("", b).lstrip()
+                    prefix + " " * column + QUOTE_PREFIX.sub("", b).lstrip()
                     for b in block
                 ]
         separator = prefix.rstrip() if quote else ""
@@ -753,11 +765,11 @@ def _has_text(lines: list[str], j: int, quoted: bool) -> bool:
     """Whether line ``j`` exists and holds text (after quote markers)."""
     if not 0 <= j < len(lines):
         return False
-    other = _QUOTE_PREFIX.sub("", lines[j]) if quoted else lines[j]
+    other = QUOTE_PREFIX.sub("", lines[j]) if quoted else lines[j]
     return bool(other.strip())
 
 
-def _list_column(lines: list[str], i: int) -> int | None:
+def list_column(lines: list[str], i: int) -> int | None:
     """Content column of the list item line ``i`` continues, if any: back
     over its glued lines, and over blank lines when everything after them is
     indented to the item's content (an indented heading or paragraph)."""
@@ -774,7 +786,7 @@ def _list_column(lines: list[str], i: int) -> int | None:
             return column
         if not line[:1].isspace():
             return None
-        width = _indent_width(line)
+        width = indent_width(line)
         least = width if least is None else min(least, width)
     return None
 
@@ -803,7 +815,7 @@ def _owning_items(lines: list[str], i: int) -> list[int]:
         line = lines[j]
         if not line.strip() or line.lstrip().startswith(">"):
             break
-        indent = _indent_width(line)
+        indent = indent_width(line)
         if _LIST_MARKER.match(line) and (least is None or indent < least):
             found.append(j)
             least = indent
@@ -830,8 +842,8 @@ def _list_goes_on(item: str, other: str) -> bool:
     a, b = _LIST_MARKER.match(item), _LIST_MARKER.match(other)
     if not (a and b):
         return False
-    if _indent_width(other) != _indent_width(item):
-        return _indent_width(other) > _indent_width(item)
+    if indent_width(other) != indent_width(item):
+        return indent_width(other) > indent_width(item)
     first, second = (m.group(0).strip()[0] for m in (a, b))
     return first == second or (first.isdigit() and second.isdigit())
 
@@ -920,7 +932,7 @@ def _item_display_tail(
         last < len(lines)
         and lines[last].strip()
         and roles[last] == "prose"
-        and _indent_width(lines[last]) < column
+        and indent_width(lines[last]) < column
         and not _LIST_MARKER.match(lines[last])
         and not _not_prose(lines[last])
         and not _opens_display(lines[last])
@@ -981,7 +993,7 @@ def _fold_glued_runs(markdown: str) -> str:
         item = going[0] if going else items[0]
         marker = _LIST_MARKER.match(lines[item])
         column = _columns(marker.group(0))  # type: ignore[union-attr]
-        width = _indent_width(line)
+        width = indent_width(line)
         if width >= column or not (goes_on or width > 0):
             out.append(line)
             i += 1

@@ -472,6 +472,7 @@ def _code_span(code: str) -> str:
 
 _FENCE_OPEN = re.compile(r"^[ \t]*(`{3,}|~{3,})(.*)$", re.MULTILINE)
 _LIST_MARKER = re.compile(r"^[ \t]*(?:[-*+]|\d+[.)])[ \t]")
+_LATEXML_ARTIFACT = re.compile(r"\\AND|\\rotate(?![A-Za-z])")
 
 
 def _fence_toggle(line: str, open_fence: str | None) -> str | None:
@@ -706,9 +707,9 @@ def extract_text_from_html(
         return children(element)
 
     text = parse(soup)
-    # LaTeXML extraction artifacts (never touch real LaTeX such as "\times").
-    for artifact in ("\\AND", "footnotemark:"):
-        text = text.replace(artifact, "")
+    # LaTeXML extraction artifacts: the author separator and layout macros left
+    # as text in table headers (never touch real LaTeX such as "\times").
+    text = _LATEXML_ARTIFACT.sub("", text.replace("footnotemark:", ""))
     lines: list[str] = []
     fence: str | None = None
     in_list = False

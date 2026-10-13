@@ -163,7 +163,7 @@ def test_unbalanced_dollars_across_sibling_items_are_reported() -> None:
 
 
 def test_ordered_list_restarting_after_a_display_warns() -> None:
-    from scholar_lens.src.post_validator import warnings
+    from tests.test_post_validator import warnings
 
     post = make_post("1. 첫째\n\n$$x$$\n\n2. 둘째")
     found = [
@@ -184,7 +184,7 @@ def test_ordered_list_restarting_after_a_display_warns() -> None:
     ],
 )
 def test_list_restart_after_a_display_and_paragraph_warns(body: str) -> None:
-    from scholar_lens.src.post_validator import warnings
+    from tests.test_post_validator import warnings
 
     found = [
         v
@@ -195,7 +195,7 @@ def test_list_restart_after_a_display_and_paragraph_warns(body: str) -> None:
 
 
 def test_inline_math_starting_a_continuation_line_is_no_display() -> None:
-    from scholar_lens.src.post_validator import warnings
+    from tests.test_post_validator import warnings
 
     post = make_post("1. 첫째\n$$x$$는 값입니다\n2. 둘째")
     assert not [
@@ -203,18 +203,11 @@ def test_inline_math_starting_a_continuation_line_is_no_display() -> None:
     ]
 
 
-@pytest.mark.parametrize(
-    "body,message",
-    [  # the blog lint reads these as prose although kramdown shows code
-        ("> ```bash\n> echo $$\n> ```", "unbalanced $$"),
-        ('> ```bash\n> echo "${HOME}$PATH"\n> ```', "TeX next to a single"),
-        ("앞 문단.\n\n    echo $$ > pid", "unbalanced $$"),
-    ],
-)
-def test_code_the_blog_lint_reads_as_prose_gets_its_math_rules(
-    body: str, message: str
-) -> None:
-    assert any(m.startswith(message) for m in math_errors(body))
+def test_code_that_kramdown_renders_as_code_is_not_math() -> None:
+    # The blog lint also reads these as prose; its own CI on the blog PR
+    # judges them, so the validator only checks what kramdown shows as text.
+    for body in ("> ```bash\n> echo $$\n> ```", "앞 문단.\n\n    echo $$ > pid"):
+        assert math_errors(body) == []
 
 
 def test_fenced_code_and_our_own_rules_are_not_applied_to_code() -> None:
@@ -231,7 +224,7 @@ def test_bare_pipe_on_a_continuation_line_renders_and_passes() -> None:
 
 
 def test_callout_inside_a_numbered_step_is_no_list_restart() -> None:
-    from scholar_lens.src.post_validator import warnings
+    from tests.test_post_validator import warnings
 
     post = make_post("1. 첫\n   > **핵심:** 식입니다.\n   > $$x$$\n2. 둘째")
     assert not [
@@ -267,7 +260,7 @@ def test_korean_jamo_inside_inline_math_is_reported() -> None:
 
 
 def test_list_inside_a_quote_does_not_warn() -> None:
-    from scholar_lens.src.post_validator import warnings
+    from tests.test_post_validator import warnings
 
     post = make_post("> 1. 첫\n>\n>    $$x$$\n>\n> 2. 둘")
     assert not [

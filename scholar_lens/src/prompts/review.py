@@ -203,9 +203,9 @@ class PaperSectionPrompt(BasePrompt):
     - A caveat about how far a result can be trusted gets at most one sentence,
       right beside that result. Never write a caveat, summary or conclusion
       `###` subsection; the review has one closing section for that.
-    - What a figure shows comes from the paper text. A detail only in the
-      figure analysis describes how the figure looks, never a claim,
-      mechanism, value, colour meaning or trend.
+    - Numbers and trends come from the paper text. Never quote a value read
+      off a figure, and never mention the figure analysis, a caption or a
+      mismatch between them: follow the paper text silently.
     - If draft_to_revise is not empty, revise it per improvement_feedback:
       keep what works, fix what is named, return the complete section.
     - If the source text truly lacks the material for a must-cover item, do not
@@ -351,8 +351,9 @@ class PaperSectionCheckPrompt(BasePrompt):
     3. Fidelity: nothing contradicts the source; no invented results, links or
        code provenance (illustrative toy values are not results). Every
        comparison or causal claim holds for the conditions compared (a gap
-       "explained" by a factor both sides share is wrong); a figure description stays within the paper text
-       and the figure analysis; nothing contradicts already_in_article. A
+       "explained" by a factor both sides share is wrong); no value read off a
+       figure and no comment on the figure analysis, captions or their
+       mismatch; nothing contradicts already_in_article. A
        formula from outside the paper is exactly right; derivation steps agree
        in signs and variable definitions; "all"/"모든" about a setting holds in
        every experiment. Each number belongs to the exact model, variant and
@@ -373,8 +374,8 @@ class PaperSectionCheckPrompt(BasePrompt):
         + CITATION_KEY_RULES
         + STYLE_RULES
         + """
-    Headings, math syntax and table shape are checked in code; do not score
-    or list them.
+    Headings, math syntax, table shape and the callout cap are
+    checked in code; do not score or list them.
 
     Score out of 100: coverage 30, depth calibration 25, fidelity 25,
     repetition, consistency and flow 20. Caps: any missing must-cover item caps
@@ -388,15 +389,17 @@ class PaperSectionCheckPrompt(BasePrompt):
     In the feedback, put the most important fixes first, quote the passage each
     refers to, and say what to do instead; keep what already works.
 
-    must_fix lists the defects that block the section regardless of score, one
-    per line with the quoted passage and the fix:
+    must_fix lists only text that is wrong as written and blocks the section
+    regardless of score, one per line with the quoted passage and the fix
+    (a suggestion, a preference or text you find correct goes in the feedback):
     - an equation, table, figure or code block listed in already_in_article
       shown again;
     - a derived number (ratio, reduction, difference) that is wrong when you
       recompute it from its stated inputs, or an own estimate presented as the
       paper's number;
-    - a comparison or causal claim the compared conditions do not support, or
-      a figure detail the paper text and figure analysis do not state;
+    - a comparison or causal claim the compared conditions do not support, a
+      claim stronger than the paper states, a value read off a figure, or a
+      comment on the figure analysis or captions;
     - a wrong formula, a sign or variable that contradicts another step, or a
       setting claimed for all experiments that one of them does not use.
 

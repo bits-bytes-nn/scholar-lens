@@ -72,6 +72,19 @@ class TestNormalizeTags:
         assert result.specific == ["Multi-Step-Learning-Rate-Scheduler"]
         assert result.controlled == ["DeepSeek"]
 
+    def test_title_head_kept_when_the_blog_uses_it(self) -> None:
+        result = normalize_tags(
+            ["vLLM", "PagedAttention"],
+            [],
+            title="vLLM: Serving LLMs Fast",
+            spec=SPEC,
+            known_tags=["vLLM"],
+        )
+        assert result.specific == ["vLLM", "PagedAttention"]
+        assert normalize_tags(
+            ["vLLM", "PagedAttention"], [], title="vLLM: Serving LLMs Fast", spec=SPEC
+        ).specific == ["PagedAttention"]
+
     def test_caps(self) -> None:
         result = normalize_tags(
             [f"Specific-Tag-{i}" for i in range(9)],

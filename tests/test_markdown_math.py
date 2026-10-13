@@ -487,6 +487,11 @@ def test_escaped_parentheses_around_korean_prose_stay_text() -> None:
     assert "\\(약 3달러\\)" in out and "$$x$$" in out and "$$\\alpha 값$$" in out
 
 
+def test_escaped_plural_suffix_stays_text() -> None:
+    out = norm("the model\\(s\\) run; let \\(s\\) and value\\(x+1\\)")
+    assert "model\\(s\\)" in out and "$$s$$" in out and "value$$x+1$$" in out
+
+
 @pytest.mark.parametrize(
     "src,expected",
     [

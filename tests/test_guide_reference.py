@@ -145,7 +145,7 @@ async def test_stale_flag_pulls_the_official_reference_into_grounding() -> None:
         text="--speculative-config JSON speculative decoding settings",
     )
 
-    def add_reference(corpus, hosts, identifiers, *, product=""):  # type: ignore[no-untyped-def]
+    def add_reference(corpus, hosts, identifiers, *, product="", **_):  # type: ignore[no-untyped-def]
         assert "--preemption-mode" in identifiers and product == "example"
         corpus.pages.append(engine_args)
         return [engine_args]
@@ -203,3 +203,127 @@ def test_reference_lookup_skips_an_older_docs_version() -> None:
     )
     added = researcher.add_official_reference(corpus, OFFICIAL, ["--x"], product="vllm")
     assert [p.url for p in added] == [ENGINE_ARGS]
+
+
+def test_python_arguments_count_as_identifiers() -> None:
+    from scholar_lens.src.tech_guide import unverified_identifiers
+
+    official = "Pass --gpu-memory-utilization to vllm serve."
+    body = (
+        "```python\nfrom vllm import LLM\n"
+        "llm = LLM(model='m', gpu_memory_utilization=0.8, max_num_seqs=64)\n```\n\n"
+        "Set `max_model_len=4096` too; `json.dumps(x, ensure_ascii=False)` too."
+    )
+    found = unverified_identifiers(body, official, ["vllm"])
+    assert "gpu_memory_utilization" not in found  # its flag spelling is official
+    assert "max_num_seqs" in found and "max_model_len" in found
+    assert "ensure_ascii" not in found  # inline code that is not a bare argument
+
+
+def test_third_party_flags_seed_the_reference_lookup() -> None:
+    from scholar_lens.src.tech_guide import third_party_identifiers
+
+    corpus = ResearchCorpus(
+        pages=[
+            PageContent(
+                QUICKSTART,
+                "Q",
+                "```bash\nvllm serve m --port 8000\nvllm serve m --host h\n```",
+            ),
+            PageContent(
+                "https://blog.example.com/tuning",
+                "Blog",
+                "```bash\nvllm serve m --max-model-len 4096 --port 8000\n```",
+            ),
+        ]
+    )
+    assert third_party_identifiers(corpus, [QUICKSTART]) == ["--max-model-len"]
+
+
+def test_reference_links_that_fit_the_identifiers_come_first() -> None:
+    researcher = WebResearcher()  # no search backend
+    researcher._fetch_page = lambda url: PageContent(  # type: ignore[method-assign]
+        url=url, title=url, text="reference"
+    )
+    metrics = f"https://{HOST}/en/latest/usage/metrics.html"
+    memory = f"https://{HOST}/en/latest/configuration/conserving_memory.html"
+    corpus = ResearchCorpus(
+        pages=[
+            PageContent(
+                url=QUICKSTART,
+                title="Quickstart",
+                text="vllm serve",
+                links=[metrics, memory, ENGINE_ARGS],
+            )
+        ]
+    )
+    added = researcher.add_official_reference(
+        corpus, OFFICIAL, ["--gpu-memory-utilization"], max_pages=2
+    )
+    assert [p.url for p in added] == [memory, ENGINE_ARGS]
+
+
+async def test_reference_lookups_share_the_per_guide_caps() -> None:
+    gen = _make_generator()
+    gen._reference_pages, gen._reference_ids = [], []
+    gen._source_urls = (QUICKSTART,)
+    gen._official = OFFICIAL
+    calls: list[dict] = []
+
+    def add_reference(corpus, official, identifiers, **kwargs):  # type: ignore[no-untyped-def]
+        calls.append({"ids": identifiers, **kwargs})
+        return [PageContent(url=f"{ENGINE_ARGS}?{len(calls)}", title="", text="")] * 4
+
+    gen.researcher.add_official_reference = MagicMock(side_effect=add_reference)
+    gen.researcher.search_provider.supports_search = True
+    corpus = ResearchCorpus()
+    # The pre-writing lookup stops short of the caps, leaving grounding room.
+    await gen._add_reference(corpus, ["--a"], max_pages=4, max_searches=2)
+    await gen._add_reference(corpus, ["--z"], max_pages=4, max_searches=2)
+    await gen._add_reference(corpus, ["--a", "--b"])
+    await gen._add_reference(corpus, ["--c"])  # page cap reached: no lookup
+    assert [c["ids"] for c in calls] == [["--a"], ["--b"]]
+    assert (calls[0]["max_pages"], calls[0]["max_searches"]) == (4, 2)
+    assert calls[1]["max_pages"] == MAX_REFERENCE_PAGES - 4
+    assert calls[1]["max_searches"] == MAX_REFERENCE_SEARCHES - 1
+
+
+def test_pre_writing_lookup_leaves_part_of_the_budget_for_grounding() -> None:
+    from scholar_lens.src import tech_guide
+
+    assert 0 < tech_guide._PRE_WRITE_REFERENCE_PAGES < MAX_REFERENCE_PAGES
+    assert 0 < tech_guide._PRE_WRITE_REFERENCE_SEARCHES < MAX_REFERENCE_SEARCHES
+
+
+def test_source_list_names_only_the_pages_the_body_uses() -> None:
+    from scholar_lens.src.tech_guide import used_source_urls
+
+    old = f"https://{HOST}/en/v0.6.0/serve.html"
+    blog_used = "https://blog.example.com/used"
+    blog_unused = "https://blog.example.com/unused"
+    blog_image = "https://blog.example.com/diagram"
+    image = "https://blog.example.com/arch.png"
+    reference_unused = f"https://{HOST}/en/latest/usage/metrics.html"
+    subpage = f"https://{HOST}/en/latest/features/fp8.html"
+    corpus = ResearchCorpus(
+        pages=[
+            PageContent(QUICKSTART, "Q", "vllm serve m"),
+            PageContent(subpage, "FP8", "E4M3 has 3 mantissa bits."),
+            PageContent(old, "Old", "vllm serve m --max-model-len 4096"),
+            PageContent(blog_used, "B", "from vllm import SamplingParams"),
+            PageContent(blog_unused, "U", "An unrelated benchmark story."),
+            PageContent(blog_image, "D", "A diagram.", image_urls=[image]),
+            PageContent(ENGINE_ARGS, "Args", "--max-model-len: context length"),
+            PageContent(reference_unused, "M", "vllm:num_requests_running"),
+        ]
+    )
+    body = (
+        "```python\nfrom vllm import SamplingParams\n```\n\n"
+        "```bash\nvllm serve m --max-model-len 4096\n```\n\n"
+        f"![Architecture]({image})"
+    )
+    references = [p for p in corpus.pages if p.url in (ENGINE_ARGS, reference_unused)]
+    # A page that fed a section counts even when the body paraphrases it.
+    fed = {QUICKSTART, blog_used, old, reference_unused}
+    used = used_source_urls(body, corpus, [QUICKSTART], OFFICIAL, references, fed)
+    assert used == [QUICKSTART, subpage, blog_used, blog_image, ENGINE_ARGS]

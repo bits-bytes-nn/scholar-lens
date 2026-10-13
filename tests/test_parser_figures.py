@@ -260,7 +260,7 @@ class TestAttachFigureContext:
 
         fig = self._figure("/w/figures/3.png", caption="Figure 1: router")
         out = attach_figure_context(
-            "[Image: alt=, src=3.png]", [fig], is_pdf_parsed=True
+            '[Image: alt="", src="3.png"]', [fig], is_pdf_parsed=True
         )
         assert (
             out
@@ -280,7 +280,7 @@ class TestAttachFigureContext:
             analysis="A heatmap; darker is slower.",
         )
         out = attach_figure_context(
-            "[Image: alt=, src=3.png]", [fig], is_pdf_parsed=True
+            '[Image: alt="", src="3.png"]', [fig], is_pdf_parsed=True
         )
         assert out.endswith(
             'caption="Figure 1: Latency overhead. (Figure analysis, approximate: '
@@ -294,7 +294,7 @@ class TestAttachFigureContext:
             "/w/figures/3.png", caption="Refer to caption", analysis="A bar chart."
         )
         out = attach_figure_context(
-            "[Image: alt=, src=3.png]", [fig], is_pdf_parsed=True
+            '[Image: alt="", src="3.png"]', [fig], is_pdf_parsed=True
         )
         assert out.endswith('caption="A bar chart."]')
 
@@ -303,7 +303,7 @@ class TestAttachFigureContext:
 
         fig = self._figure("/w/figures/3.png", caption="Refer to caption")
         out = attach_figure_context(
-            "[Image: alt=Refer to caption, src=3.png]", [fig], is_pdf_parsed=True
+            '[Image: alt="Refer to caption", src="3.png"]', [fig], is_pdf_parsed=True
         )
         assert out.startswith('[Image: alt="", src="3.png"')
 
@@ -314,19 +314,34 @@ class TestAttachFigureContext:
 
         fig = self._figure("/w/figures/7.png", analysis="A bar chart.")
         out = attach_figure_context(
-            "a [Image: alt=, src=] b [Image: alt=x, src=7.png]",
+            'a [Image: alt="", src=""] b [Image: alt="x", src="7.png"]',
             [fig],
             is_pdf_parsed=True,
         )
         assert out.startswith("a  b ")
         assert 'src="7.png", caption="A bar chart."' in out
 
+    def test_sourceless_markers_are_counted_and_captions_kept(self) -> None:
+        # A table cell holding image markers without a src: no image is
+        # invented, the caption text stays, and one warning gives the count.
+        from unittest.mock import patch
+
+        from scholar_lens.src.parser import attach_figure_context
+
+        text = '| [Image: alt="", src=""] Table 2: panels | [Image: alt="", src=""] |'
+        with patch("scholar_lens.src.parser.logger") as log:
+            out = attach_figure_context(text, [], is_pdf_parsed=True)
+        assert "[Image:" not in out
+        assert "Table 2: panels" in out
+        log.warning.assert_called_once()
+        assert log.warning.call_args.args[1] == 2
+
     def test_html_figures_keep_absolute_url(self) -> None:
         from scholar_lens.src.parser import attach_figure_context
 
         url = "https://arxiv.org/html/2502.17416v1/x1.png"
         out = attach_figure_context(
-            "[Image: alt=Fig, src=x1.png]",
+            '[Image: alt="Fig", src="x1.png"]',
             [self._figure(url, analysis="Loss curve.")],
             is_pdf_parsed=False,
         )
@@ -594,6 +609,39 @@ class TestPdfFigureCaption:
         ]
         assert _pdf_figure_caption(elements, 0) == ""
 
+    def test_multi_panel_figure_shares_the_caption_after_its_panels(self) -> None:
+        from scholar_lens.src.parser import _pdf_figure_caption
+
+        elements = [
+            self._element("figure", "<figure><img alt='(a)'></figure>"),
+            self._element("figure", "<figure><img alt='(b)'></figure>"),
+            self._element("figure", "<figure><img alt='(c)'></figure>"),
+            self._element("caption", "<p>Figure 2: Three panels.</p>"),
+        ]
+        assert _pdf_figure_caption(elements, 0) == "Figure 2: Three panels."
+        assert _pdf_figure_caption(elements, 1) == "Figure 2: Three panels."
+
+    def test_a_figure_does_not_take_the_caption_of_a_later_figure_run(
+        self,
+    ) -> None:
+        # Regression: every adjacent figure was skipped, so a logo at the end
+        # of one page (or a long run of figures) inherited the next caption.
+        from scholar_lens.src.parser import _pdf_figure_caption
+
+        def figure(page: int) -> dict:
+            return {**self._element("figure", "<figure></figure>"), "page": page}
+
+        caption = {
+            **self._element("caption", "<p>Figure 3: Results.</p>"),
+            "page": 2,
+        }
+        elements = [figure(1), figure(2), figure(2), caption]
+        assert _pdf_figure_caption(elements, 0) == ""
+        assert _pdf_figure_caption(elements, 1) == "Figure 3: Results."
+        run = [figure(2) for _ in range(5)] + [caption]
+        assert _pdf_figure_caption(run, 0) == ""
+        assert _pdf_figure_caption(run, 1) == "Figure 3: Results."
+
 
 class TestFigureMarkerMatching:
     def test_same_file_name_in_two_folders_never_swaps(self) -> None:
@@ -606,7 +654,7 @@ class TestFigureMarkerMatching:
             Figure(figure_id="0", path=base + "figs/a/curve.png", caption="First."),
             Figure(figure_id="1", path=base + "figs/b/curve.png", caption="Second."),
         ]
-        text = "[Image: alt=, src=figs/a/curve.png] and [Image: alt=, src=figs/b/curve.png]"
+        text = '[Image: alt="", src="figs/a/curve.png"] and [Image: alt="", src="figs/b/curve.png"]'
         out = attach_figure_context(text, figures, is_pdf_parsed=False)
         assert out.index("First.") < out.index("Second.")
         assert out.count("figs/a/curve.png") == 1

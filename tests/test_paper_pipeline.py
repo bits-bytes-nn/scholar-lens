@@ -40,6 +40,19 @@ def test_unanalysed_figures_are_noted() -> None:
     assert _unanalysed_figure_notes(SimpleNamespace(figures=figures[1:])) == []  # type: ignore[arg-type]
 
 
+def test_unsourced_citations_reach_the_review_notes() -> None:
+    from scholar_lens.src.citation_summarizer import CitationSummarizer
+    from scholar_lens.src.paper_pipeline import _citation_notes
+
+    summarizer = CitationSummarizer.__new__(CitationSummarizer)
+    summarizer._source_cache = {"found": object(), "a": None, "b": None}  # type: ignore[dict-item]
+    notes = _citation_notes(summarizer)
+    assert len(notes) == 1 and notes[0].startswith("2 cited reference(s)")
+    assert "'a'" in notes[0] and "'found'" not in notes[0]
+    summarizer._source_cache = {"found": object()}  # type: ignore[dict-item]
+    assert _citation_notes(summarizer) == []
+
+
 def test_code_note_only_when_a_given_repository_yielded_nothing() -> None:
     from scholar_lens.src.paper_pipeline import _code_notes
 

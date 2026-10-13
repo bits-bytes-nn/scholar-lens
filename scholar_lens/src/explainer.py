@@ -247,6 +247,10 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
         self.max_code_results = max_code_results
         self.planning_model_id = planning_model_id
         self.notes: list[str] = []
+        # Defects a below-bar section still carries, quoted for the editor,
+        # and the coverage it still lacks (nothing to quote).
+        self.open_defects: list[str] = []
+        self.open_gaps: list[str] = []
         self.llm_factory = BedrockLanguageModelFactory(boto_session=boto_session)
 
         self.planner = self._chain(
@@ -576,18 +580,37 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
                     f"\n{rejected}" if rejected and rejected != feedback else ""
                 )
         if best_check is not None and not best_check.passes(self.min_quality_score):
-            open_items = "; ".join(
-                item[:120] for item in [*best_check.missing, *best_check.must_fix][:3]
-            )
+            open_items = [*best_check.missing, *best_check.must_fix]
+            self.open_defects += [
+                f"[{section.title}] {item}" for item in best_check.must_fix
+            ]
+            self.open_gaps += [
+                f"[{section.title}] {item}" for item in best_check.missing
+            ]
             self.notes.append(
-                f"Review section '{section.title}' kept below the quality bar "
-                f"(score {best_check.score}, {len(best_check.missing)} missing, "
-                f"{len(best_check.must_fix)} must-fix): check it. Open: {open_items}"
+                f"Review section '{section.title}' was kept with "
+                f"{len(open_items)} open must-fix/missing item(s) (score "
+                f"{best_check.score}); the editor was asked to fix them: check it. "
+                "Open: " + "; ".join(item[:120] for item in open_items[:3])
             )
         return ensure_section_heading(best_draft, section.title) if best_draft else ""
 
     async def _edit(self, plan: ReviewPlan, article: str, paper_text: str) -> str:
         notes: list[str] = []
+        if self.open_defects:
+            # The section loop ran out of attempts on these: they are still in
+            # the article, and the edit pass is the last chance to fix them.
+            notes.append(
+                "These defects a section checker found are still in the article; "
+                "fix each with an edit (the quoted text is from the article):\n"
+                + "\n".join(f"- {d[:400]}" for d in self.open_defects[:20])
+            )
+        if self.open_gaps:
+            notes.append(
+                "A section checker found these points missing from the article; "
+                "add each only where the paper supports it, otherwise leave it out:\n"
+                + "\n".join(f"- {d[:400]}" for d in self.open_gaps[:20])
+            )
         for round_number in range(1, self.max_edit_rounds + 1):
             round_note = "\n\n".join(notes)
             reserve = len(article) // 2 + 40_000
