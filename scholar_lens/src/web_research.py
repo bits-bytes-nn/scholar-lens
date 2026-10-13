@@ -92,7 +92,10 @@ def _reference_words(identifiers: list[str]) -> set[str]:
 # v1.23.0/); a bare "vN" only right after the root or a language, since deeper
 # it is an API version ("/reference/rest/v1/"), not a docs release.
 _ROLLING_DOCS_VERSIONS = frozenset({"latest", "stable", "main", "dev", "nightly"})
-_DOTTED_DOCS_VERSION = re.compile(r"v?\d+(?:\.\d+)+", re.I)
+# A release with an optional PEP 440 suffix: v0.6.0, 0.6, v0.4.0.post1, 2.0rc1.
+_DOTTED_DOCS_VERSION = re.compile(
+    r"v?\d+(?:\.\d+)+(?:[.-]?(?:post|dev|rc|a|b)\d*)*", re.I
+)
 _BARE_DOCS_VERSION = re.compile(r"v\d+", re.I)
 _BARE_VERSION_SEGMENTS = 2  # "v2" only right after the root or a language
 # A product named by a docs path: huggingface.co/docs/<product>/…

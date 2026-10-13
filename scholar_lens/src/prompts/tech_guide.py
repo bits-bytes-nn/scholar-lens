@@ -448,10 +448,11 @@ class TechGuideEvaluationPrompt(BasePrompt):
     - Most first drafts have at least one fixable weakness; reserve 90+ for sections you genuinely cannot improve.
     - HARD CAP: if this section substantially re-explains content already in <previously_written_sections> (a
       duplicated concept, example, table, or image), the TOTAL score must not exceed 40, regardless of other merits.
-    - SOURCE CAP: a flag, API, default or number that <sources> does not support caps the score at 60; name each one
-      in the feedback. A source marked "(official documentation)" wins over a "(third-party)" one, and a flag or
-      default only a "(third-party)" or "(older docs version)" source gives counts as unsupported. Exempt: the toy
-      numbers of one simulation labelled as illustrative in a deep section.
+    - SOURCES: name in the feedback each flag, API, default or number that <sources> does not support, and score it
+      under Accuracy. <sources> is an excerpt, so an identifier missing from it is not proof it is wrong: a later
+      check verifies identifiers against the full official docs. A source marked "(official documentation)" wins over
+      a "(third-party)" one; a flag or default only a "(third-party)" or "(older docs version)" source gives is
+      unsupported. Exempt: the toy numbers of one simulation labelled as illustrative in a deep section.
     - Material another section of <full_outline> covers counts as duplication (Non-duplication), not as depth.
 
     Then give specific, actionable feedback the writer can apply to improve THIS section, tied to the lowest-scoring

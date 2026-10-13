@@ -55,6 +55,7 @@ def render_front_matter(
     use_math: bool,
     subtitle: str | None = None,
     paper_author: str | None = None,
+    paper_doi: str | None = None,
     seo_title: str | None = None,
 ) -> str:
     """Render Jekyll front matter; every scalar is YAML-escaped and optional
@@ -67,6 +68,8 @@ def render_front_matter(
     lines.append(f"date: {date.strftime('%Y-%m-%d %H:%M:%S')}")
     if paper_author:
         lines.append(f"paper_author: {_quoted(paper_author)}")
+    if paper_doi:
+        lines.append(f"paper_doi: {_quoted(paper_doi)}")
     lines += [
         f"categories: [{_quoted_list(categories)}]",
         f"tags: [{_quoted_list(tags)}]",
@@ -224,6 +227,8 @@ def paper_front_matter(
         subtitle=subtitle,
         date=paper.published,
         paper_author=_paper_author(paper),
+        # The blog looks up the paper's live citation count by it.
+        paper_doi=paper.doi,
         categories=categories,
         tags=meta.tags,
         cover=meta.cover,

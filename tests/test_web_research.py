@@ -665,6 +665,9 @@ class TestOfficialDocsAfterRedirects:
                 "v0.21.0",
             ),
             ("https://huggingface.co/docs/transformers/main/en/index", "main"),
+            # Read the Docs PDF of a post-release (regression: kept as current).
+            ("https://docs.vllm.ai/_/downloads/en/v0.4.0.post1/pdf", "v0.4.0.post1"),
+            ("https://docs.x.dev/en/2.0rc1/guide", "2.0rc1"),
         ],
     )
     def test_api_path_segments_are_not_docs_versions(

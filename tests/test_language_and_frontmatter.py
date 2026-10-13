@@ -52,6 +52,14 @@ class TestBuildFrontMatter:
         assert "\nauthor:" not in out
         assert "Ada" not in out
 
+    def test_paper_doi_is_recorded_for_the_citation_count(self) -> None:
+        paper = self._paper().model_copy(update={"doi": "10.48550/arXiv.2401.06066"})
+        out = _build_front_matter(Github(), paper, "Paper Reviews")
+        assert 'paper_doi: "10.48550/arXiv.2401.06066"' in out
+        assert "paper_doi" not in _build_front_matter(
+            Github(), self._paper(), "Paper Reviews"
+        )
+
     def test_placeholder_organization_omitted(self) -> None:
         paper = self._paper().model_copy(
             update={"attributes": Attributes(affiliation="N/A", category="X")}
