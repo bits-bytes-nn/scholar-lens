@@ -36,6 +36,7 @@ async def run_guide_pipeline(
 ) -> PipelineOutcome:
     """Generate and publish a guide; raises ``NotTechnicalContentError`` when
     the URLs are not technical documentation."""
+    sources = [*request.urls, *request.reference_urls]
     cfg = context.config.tech_guide
     researcher = WebResearcher(search_provider=build_search_provider())
     generator = TechGuideGenerator(
@@ -49,6 +50,7 @@ async def run_guide_pipeline(
         enable_thinking=cfg.writer_enable_thinking,
         evaluator_enable_thinking=cfg.evaluator_enable_thinking,
         thinking_effort=cfg.thinking_effort,
+        max_sections=cfg.max_sections,
         verify_grounding=cfg.verify_grounding,
         auto_research=cfg.auto_research,
         max_research_queries=cfg.max_research_queries,
@@ -63,6 +65,7 @@ async def run_guide_pipeline(
     try:
         guide = await generator.generate(
             request.urls,
+            reference_urls=request.reference_urls,
             discover_subpages=request.discover_subpages,
             search_queries=request.search_queries or None,
         )
@@ -92,7 +95,7 @@ async def run_guide_pipeline(
     work_dir.mkdir(parents=True, exist_ok=True)
     document = guide_document(format_guide(github, guide, meta=meta), guide)
     publish_request = _build_publish_request(
-        guide, work_dir, document, branch_id=guide_branch_id(request.urls)
+        guide, work_dir, document, branch_id=guide_branch_id(sources)
     )
     publish_request.review_notes += guide.notes
     outcome = await publish_artifact(
@@ -127,8 +130,9 @@ def build_search_provider() -> WebSearchProvider:
 
 
 def guide_branch_id(urls: list[str]) -> str:
-    """A guide's branch is keyed by its source URLs, not the model-chosen
-    title, so rerunning the same request reuses the branch and pull request."""
+    """A guide's branch is keyed by its source URLs (documentation and
+    reference material), not the model-chosen title, so rerunning the same
+    request reuses the branch and pull request."""
     key = "\n".join(sorted({_source_key(url) for url in urls}))
     return f"guide-{hashlib.sha256(key.encode()).hexdigest()[:12]}"
 

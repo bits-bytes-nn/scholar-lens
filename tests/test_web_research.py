@@ -30,6 +30,16 @@ DOCS_HTML = """
 </body></html>
 """
 
+# An arXiv HTML rendering with the paper's text (a rendering under the
+# parser's readable-text threshold is a failed conversion's stub).
+PAPER_HTML = (
+    "<html><head><title>Paper</title></head><body><article><p>Full text.</p>"
+    + "<p>"
+    + "The method trains with adaptive moment estimates. " * 20
+    + "</p>"
+    + "</article></body></html>"
+)
+
 SUBPAGE_HTML = """
 <html><head><title>Tutorial</title></head>
 <body><p>Step by step tutorial content.</p></body></html>
@@ -607,6 +617,35 @@ def test_relevant_text_puts_preferred_pages_first() -> None:
     assert included == {"https://d.dev/b"}
 
 
+def test_relevant_text_gives_preferred_pages_fair_shares_in_plan_order() -> None:
+    paper = PageContent("https://arxiv.org/abs/1", "Paper", "kv cache " * 20_000)
+    docs = PageContent("https://d.dev/a", "Docs", "flag " * 600)
+    other = PageContent("https://d.dev/c", "Other", "kv cache " * 600)
+    corpus = ResearchCorpus(pages=[other, paper, docs])
+    included: set[str] = set()
+    text = corpus.relevant_text(
+        "kv cache",
+        max_chars=20_000,
+        included=included,
+        prefer=["https://d.dev/a", "https://arxiv.org/abs/1"],
+    )
+    # Plan order, and the long paper leaves the official page whole.
+    assert text.index("# Docs") < text.index("# Paper")
+    assert text.count("flag") == 600
+    assert included == {"https://d.dev/a", "https://arxiv.org/abs/1"}
+    # The room the short page left goes to the cut paper first.
+    assert len(text) > 18_000
+
+
+def test_relevant_text_hands_leftover_room_out_by_rank() -> None:
+    preferred = PageContent("https://d.dev/a", "A", "flag " * 100)
+    ranked = PageContent("https://d.dev/b", "B", "kv cache " * 300)
+    unrelated = PageContent("https://d.dev/c", "C", "other " * 300)
+    corpus = ResearchCorpus(pages=[unrelated, ranked, preferred])
+    text = corpus.relevant_text("kv cache", max_chars=9_000, prefer=["https://d.dev/a"])
+    assert text.index("# A") < text.index("# B") < text.index("# C")
+
+
 @pytest.mark.parametrize(
     ("path", "expected"),
     [
@@ -905,3 +944,329 @@ def test_cut_keeps_the_closing_dollar_of_inline_math() -> None:
 
     text = "The attention cost grows as $O(n^2)$\n\nNext paragraph " + "x " * 40
     assert _cut(text, 40).endswith("$O(n^2)$")
+
+
+class TestReferenceMaterialAndPapers:
+    """User reference material is labelled apart from official docs, and an
+    arXiv link is read from the paper's HTML rendering."""
+
+    def test_reference_material_is_labelled_but_official_pages_stay_official(
+        self,
+    ) -> None:
+        from scholar_lens.src.web_research import OfficialDocs
+
+        corpus = ResearchCorpus(
+            pages=[
+                PageContent("https://docs.x.dev/a", "A", "x", user_reference=True),
+                PageContent("https://blog.x.io/b", "B", "y", user_reference=True),
+                PageContent("https://other.io/c", "C", "z"),
+            ]
+        )
+        text = corpus.relevant_text(
+            "x",
+            max_chars=50_000,
+            official=OfficialDocs.from_urls(["https://docs.x.dev/"]),
+        )
+        assert "## Source (official documentation): https://docs.x.dev/a" in text
+        assert "## Source (reference material): https://blog.x.io/b" in text
+        assert "## Source (third-party): https://other.io/c" in text
+
+    def test_without_docs_nothing_is_official(self) -> None:
+        from scholar_lens.src.web_research import OfficialDocs, source_label
+
+        page = PageContent("https://docs.x.dev/a", "A", "x")
+        assert source_label(page, OfficialDocs.from_urls([])) == "third-party"
+
+    @pytest.mark.parametrize(
+        "url,expected",
+        [
+            (
+                "https://arxiv.org/abs/2309.06180",
+                (
+                    "https://arxiv.org/html/2309.06180",
+                    "https://arxiv.org/abs/2309.06180",
+                ),
+            ),
+            (
+                "https://arxiv.org/pdf/2309.06180v2.pdf",
+                (
+                    "https://arxiv.org/html/2309.06180v2",
+                    "https://arxiv.org/abs/2309.06180v2",
+                ),
+            ),
+            (
+                "https://arxiv.org/html/2309.06180",
+                (
+                    "https://arxiv.org/html/2309.06180",
+                    "https://arxiv.org/abs/2309.06180",
+                ),
+            ),
+            ("https://arxiv.org/list/cs.LG/recent", None),
+            ("https://github.com/vllm-project/vllm", None),
+        ],
+    )
+    def test_arxiv_paper_urls(self, url: str, expected: tuple[str, str] | None) -> None:
+        from scholar_lens.src.web_research import arxiv_paper_urls
+
+        assert arxiv_paper_urls(url) == expected
+
+    def test_arxiv_abstract_link_reads_the_html_paper(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "scholar_lens.src.web_research.is_url_public", lambda url: True
+        )
+        researcher = _researcher(
+            {"https://arxiv.org/html/2309.06180": (200, "text/html", PAPER_HTML)}
+        )
+        page = researcher._fetch_page("https://arxiv.org/abs/2309.06180")
+        assert page is not None and "Full text." in page.text
+        assert page.url == "https://arxiv.org/abs/2309.06180"
+        assert page.final_url == "https://arxiv.org/html/2309.06180"
+
+    def test_arxiv_pdf_link_falls_back_to_the_abstract_page(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "scholar_lens.src.web_research.is_url_public", lambda url: True
+        )
+        abstract = (
+            "<html><head><title>Abs</title></head><body><p>Abstract.</p></body></html>"
+        )
+        researcher = _researcher(
+            {
+                "https://arxiv.org/abs/2309.06180": (200, "text/html", abstract),
+                "https://arxiv.org/pdf/2309.06180": (200, "application/pdf", "%PDF"),
+            }
+        )
+        page = researcher._fetch_page("https://arxiv.org/pdf/2309.06180")
+        assert page is not None and "Abstract." in page.text
+        assert page.final_url == "https://arxiv.org/abs/2309.06180"
+
+    def test_search_result_on_arxiv_is_fetched_over_backend_content(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "scholar_lens.src.web_research.is_url_public", lambda url: True
+        )
+        provider = _StubProvider(content="abstract only")
+        provider.search = lambda q, *, count=5: [  # type: ignore[method-assign]
+            SearchResult(
+                title="T",
+                url="https://arxiv.org/abs/2309.06180",
+                content="abstract only",
+            ),
+            SearchResult(
+                title="T", url="https://arxiv.org/abs/2401.00001", content="kept"
+            ),
+        ]
+        researcher = _researcher(
+            {"https://arxiv.org/html/2309.06180": (200, "text/html", PAPER_HTML)},
+            search_provider=provider,
+        )
+        corpus = ResearchCorpus()
+        researcher.run_searches(corpus, ["q"], fetch_top=2)
+        texts = [p.text for p in corpus.pages]
+        assert "Full text." in texts[0]
+        # Nothing readable on arXiv for the second: the backend's content stays.
+        assert texts[1] == "kept"
+
+
+def _arxiv_researcher(
+    responses: dict[str, httpx.Response | Exception],
+    monkeypatch: pytest.MonkeyPatch,
+) -> tuple[WebResearcher, list[str]]:
+    """A researcher whose client answers each arXiv URL from ``responses``
+    (404 otherwise), and the URLs it was asked for, in order."""
+    monkeypatch.setattr("scholar_lens.src.web_research.is_url_public", lambda u: True)
+    requested: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        url = str(request.url)
+        requested.append(url)
+        answer = responses.get(url, httpx.Response(404, text="not found"))
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    return WebResearcher(client=client), requested
+
+
+def _html(body: str) -> httpx.Response:
+    return httpx.Response(200, headers={"Content-Type": "text/html"}, text=body)
+
+
+class TestArxivFetching:
+    HTML = "https://arxiv.org/html/1412.6980"
+    ABS = "https://arxiv.org/abs/1412.6980"
+
+    @pytest.mark.parametrize(
+        "failure",
+        [
+            httpx.Response(429, text="slow down"),
+            httpx.Response(503, text="unavailable"),
+            httpx.ReadTimeout("timed out"),
+            httpx.ConnectError("refused"),
+        ],
+    )
+    def test_a_rate_limit_server_error_or_timeout_is_a_recorded_failure(
+        self, failure: httpx.Response | Exception, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        researcher, requested = _arxiv_researcher({self.HTML: failure}, monkeypatch)
+        failures: list[BaseException] = []
+        assert researcher._fetch_page(self.ABS, failures=failures) is None
+        assert requested == [self.HTML]  # no fallback, no retry here
+        assert len(failures) == 1
+
+    def test_a_reference_paper_behind_a_429_is_an_outage(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from scholar_lens.src.web_research import SourceFetchError
+
+        researcher, _ = _arxiv_researcher(
+            {self.HTML: httpx.Response(429, text="slow down")}, monkeypatch
+        )
+        with pytest.raises(SourceFetchError):
+            researcher.research(
+                ["https://arxiv.org/pdf/1412.6980"], discover_subpages=False
+            )
+
+    def test_an_arxiv_429_holds_back_later_arxiv_requests(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from scholar_lens.src import rate_limiter
+
+        penalties: list[float] = []
+        monkeypatch.setattr(
+            rate_limiter.ARXIV_RATE_LIMITER, "penalize", penalties.append
+        )
+        researcher, _ = _arxiv_researcher(
+            {
+                self.HTML: httpx.Response(
+                    429, headers={"Retry-After": "7"}, text="slow down"
+                )
+            },
+            monkeypatch,
+        )
+        researcher._fetch_page(self.ABS, failures=[])
+        assert penalties == [7.0]
+
+    def test_every_arxiv_request_waits_for_the_shared_limiter(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from scholar_lens.src import rate_limiter
+
+        waits: list[None] = []
+        monkeypatch.setattr(
+            rate_limiter.ARXIV_RATE_LIMITER, "acquire", lambda: waits.append(None)
+        )
+        researcher, requested = _arxiv_researcher(
+            {self.ABS: _html("<p>Abstract.</p>")}, monkeypatch
+        )
+        researcher._fetch_page("https://arxiv.org/pdf/1412.6980")
+        assert len(waits) == len(requested) == 2
+
+    def test_a_conversion_stub_is_replaced_by_the_abstract_page(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        stub = "<html><body><p>See pages 1-last of main.pdf</p></body></html>"
+        abstract = '<p>Adam abstract.</p><img src="/static/reddit.png">'
+        researcher, requested = _arxiv_researcher(
+            {self.HTML: _html(stub), self.ABS: _html(abstract)},
+            monkeypatch,
+        )
+        page = researcher._fetch_page(self.ABS)
+        assert page is not None and "Adam abstract." in page.text
+        assert page.image_urls == []  # an abstract page's icons are no figures
+        assert "main.pdf" not in page.text
+        assert requested == [self.HTML, self.ABS]  # the abstract page once
+
+    def test_a_missing_abstract_page_is_not_fetched_again(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        researcher, requested = _arxiv_researcher({}, monkeypatch)
+        failures: list[BaseException] = []
+        assert researcher._fetch_page(self.ABS, failures=failures) is None
+        assert requested == [self.HTML, self.ABS]
+        assert len(failures) == 1
+
+    def test_svg_figures_are_images_and_markers_match_the_image_list(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        figures = "".join(
+            f'<figure><object type="image/svg+xml" data="1412.6980v9/f{i}.svg">'
+            "</object></figure>"
+            for i in range(3)
+        )
+        html = PAPER_HTML.replace("</article>", f"{figures}</article>")
+        researcher, _ = _arxiv_researcher({self.HTML: _html(html)}, monkeypatch)
+        researcher.max_images_per_page = 2
+        page = researcher._fetch_page(self.ABS)
+        assert page is not None
+        assert page.image_urls == [
+            "https://arxiv.org/html/1412.6980v9/f0.svg",
+            "https://arxiv.org/html/1412.6980v9/f1.svg",
+        ]
+        assert "f1.svg" in page.text and "f2.svg" not in page.text
+
+
+class TestPaperDedup:
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "https://arxiv.org/pdf/2309.06180v2",
+            "https://arxiv.org/pdf/2309.06180.pdf",
+            "https://arxiv.org/abs/2309.06180v1",
+            "https://arxiv.org/html/2309.06180",
+        ],
+    )
+    def test_a_search_result_for_a_held_paper_is_skipped(
+        self, url: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "scholar_lens.src.web_research.is_url_public", lambda u: True
+        )
+        provider = _StubProvider()
+        provider.search = lambda q, *, count=5: [  # type: ignore[method-assign]
+            SearchResult(title="T", url=url, content="")
+        ]
+        researcher = _researcher({}, search_provider=provider)
+        held = PageContent(
+            "https://arxiv.org/abs/2309.06180",
+            "P",
+            "Full paper text.",
+            final_url="https://arxiv.org/html/2309.06180",
+            user_reference=True,
+        )
+        corpus = ResearchCorpus(pages=[held])
+        researcher.run_searches(corpus, ["vllm paper"], fetch_top=6)
+        assert corpus.pages == [held]
+
+    def test_a_result_that_lands_on_a_held_page_is_skipped(self) -> None:
+        provider = _StubProvider()
+        provider.search = lambda q, *, count=5: [  # type: ignore[method-assign]
+            SearchResult(title="T", url="https://x.dev/old", content="")
+        ]
+        researcher = _researcher({}, search_provider=provider)
+        researcher._fetch_page = lambda url, **kw: PageContent(  # type: ignore[method-assign]
+            url, "T", "moved", final_url="https://docs.x.dev/a"
+        )
+        held = PageContent("https://docs.x.dev/a", "A", "docs")
+        corpus = ResearchCorpus(pages=[held])
+        researcher.run_searches(corpus, ["q"], fetch_top=6)
+        assert corpus.pages == [held]
+
+    def test_page_key_strips_the_arxiv_version_and_form(self) -> None:
+        from scholar_lens.src.web_research import page_key
+
+        keys = {
+            page_key(u)
+            for u in (
+                "https://arxiv.org/abs/2309.06180",
+                "https://arxiv.org/pdf/2309.06180v2.pdf",
+                "https://www.arxiv.org/html/2309.06180v1/",
+            )
+        }
+        assert keys == {"arxiv:2309.06180"}
+        assert page_key("HTTPS://Docs.X.dev/a/") == "https://docs.x.dev/a"

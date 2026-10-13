@@ -23,7 +23,7 @@ Runs locally or on AWS Batch, driven by a CLI that people and agents (OpenClaw, 
 | --- | --- | --- |
 | **Review** | arXiv id or paper PDF URL (+ optional code repos) | Section-by-section review for a general DS/MLE reader: easy parts short, hard parts built up from intuition to math to a worked example, with figures, tables, a TL;DR and a limitations section |
 | **Summary** | arXiv id or paper PDF URL | A TL;DR plus five short sections (motivation, idea, implementation, results, significance and limits) |
-| **Tech guide** | One or more documentation URLs | A source-grounded tutorial, researched across sub-pages and web search |
+| **Tech guide** | Documentation URLs and/or reference material (papers, design docs, deep-dive posts) | A source-grounded guide covering installation and usage, how the internals work and why, what each major feature means, and how to fit the tool into a larger system; researched across sub-pages and web search |
 
 Every post is Jekyll Markdown that follows the target blog's conventions, and is checked before it is saved: a post that breaks a rule is rejected instead of published. Posts go to a local file, optionally S3, and optionally a pull request on the blog repository.
 
@@ -33,7 +33,7 @@ Every post is Jekyll Markdown that follows the target blog's conventions, and is
 
 - **Review:** a planner reads the whole paper and writes a coverage plan (sections, must-cover items, difficulty, prerequisites, concept ownership, figures, glossary). Each section is written from its brief, checked against it, and revised until nothing is missing; one editing pass then fixes terminology, repetition and gaps across the article.
 - **Summary:** one long-context call over the parsed paper.
-- **Guide:** research → relevance gate → outline → per-section write, evaluate and fact-check.
+- **Guide:** research (the docs, the reference material, and web searches for usage, internals and design, and production integration) → relevance gate → outline → per-section write, evaluate and fact-check. Official docs decide commands, flags and defaults; papers, design docs and reputable write-ups may ground concepts, internals and architecture.
 - **Publishing:** math and Markdown normalization, figure localization, the blog-conventions gate, then S3 and a GitHub PR on a fixed branch per post.
 
 ![AWS architecture](./docs/diagrams/aws-architecture.png)
@@ -47,7 +47,7 @@ Prerequisites:
 - Python 3.12+ and [Poetry](https://python-poetry.org/)
 - An AWS profile with Bedrock access to the configured models in `bedrock_region_name` (defaults: Claude Opus 5.5, Sonnet 5.5, Haiku 5.5)
 - `UPSTAGE_API_KEY` for PDF parsing (non-arXiv sources and the HTML fallback)
-- Optional: `TAVILY_API_KEY` or `BRAVE_API_KEY` for guide web research, `GITHUB_TOKEN` for blog PRs, `CROSSREF_MAILTO` (Crossref and OpenAlex polite pools) and `SEMANTIC_SCHOLAR_API_KEY` (adds Semantic Scholar to citation lookups; skipped without a key)
+- Optional: `TAVILY_API_KEY` or `BRAVE_API_KEY` for guide web research, `GITHUB_TOKEN` for blog PRs, `CROSSREF_MAILTO` (Crossref and OpenAlex polite pools), `OPENALEX_API_KEY` (raises OpenAlex's keyless budget of about 100 searches per day per IP) and `SEMANTIC_SCHOLAR_API_KEY` (adds Semantic Scholar to citation lookups; skipped without a key)
 
 ```bash
 git clone https://github.com/bits-bytes-nn/scholar-lens.git && cd scholar-lens
@@ -71,7 +71,10 @@ poetry run python -m scholar_lens summarize 2106.09685 --no-pr
 ```bash
 poetry run python -m scholar_lens review 2106.09685 --repo-url "https://github.com/microsoft/LoRA"
 poetry run python -m scholar_lens summarize "https://openreview.net/pdf?id=nZeVKeeFYf9" --no-pr
-poetry run python -m scholar_lens guide "https://docs.vllm.ai/en/latest/" --search-query "vLLM paged attention"
+poetry run python -m scholar_lens guide "https://docs.vllm.ai/en/latest/getting_started/quickstart.html" \
+  "https://docs.vllm.ai/en/latest/serving/openai_compatible_server.html" \
+  --reference "https://arxiv.org/abs/2309.06180" \
+  --reference "https://blog.vllm.ai/2025/01/27/v1-alpha-release.html"
 poetry run python -m scholar_lens review 2106.09685 --remote     # submit to AWS Batch
 poetry run python -m scholar_lens status <job-id> --wait         # poll a remote job
 ```
@@ -80,7 +83,8 @@ poetry run python -m scholar_lens status <job-id> --wait         # poll a remote
 | --- | --- | --- |
 | `--repo-url URL` | review, summarize | Ground the text in the paper's code (repeatable) |
 | `--parse-pdf` | review, summarize | Parse the PDF even when arXiv HTML exists |
-| `--search-query Q` | guide | Extra web-search query (repeatable) |
+| `--reference URL` | guide | Reference material to build on (repeatable, next to zero or more positional docs URLs, before or after them; a URL given as both counts as docs, listed once): a paper, design doc, deep-dive post or talk page as an HTML page or an arXiv link (other PDFs are not read); always used and listed, never treated as official docs |
+| `--search-query Q` | guide | Web-search query (repeatable); replaces the queries the guide would plan itself |
 | `--no-subpages` | guide | Do not follow in-scope sub-pages |
 | `--no-pr` | review, summarize, guide | Save (and upload) the post but open no PR |
 | `--remote` | review, summarize, guide | Submit to AWS Batch and return the job id |
@@ -124,6 +128,12 @@ actionlint                                       # lint the GitHub workflows
 
 ## Changelog
 
+- After upgrading, redeploy (`cdk deploy`) before using `--remote`: the Batch image runs the code of the last deploy, and an older worker rejects a request with a field it does not know (such as `--reference`).
+- Guides go deeper and broader: usage, how the internals work and why, and how to fit the tool into a larger system. An outline-level section plan assigns each concept to one owning section, the evaluator's blocking issues (factual errors, contradictions, unsupported flags or defaults) force a revision, and `tech_guide.max_revision_attempts` now defaults to one revision. A run costs more than before.
+- `guide --reference URL` (repeatable) adds reference material (papers, design docs, deep-dive posts) next to the docs URLs, and a guide can be built from references alone. Docs URLs may now come before or after the options.
+- New guide defaults: `tech_guide.fetch_top_results` is now 12 (was 4) and `tech_guide.max_sections` caps the outline. A `config.yaml` copied from an older template keeps its old values; edit them to pick up the new defaults.
+- Paper posts carry the paper's DOI as `paper_doi` front matter when one is known.
+- Citation lookups: OpenAlex follows Crossref in the chain (keyless use allows about 100 searches per day per IP; set the optional `OPENALEX_API_KEY` to raise it), Crossref picks the matching record among its top five hits, and Semantic Scholar is queried only when `SEMANTIC_SCHOLAR_API_KEY` is set.
 - Removed `citations.citation_analysis_model_id`: delete it from an existing `config.yaml`, or loading fails with `extra_forbidden`.
 
 ## License

@@ -4,8 +4,8 @@ The citation stage used to hit the arXiv API up to three times per reference
 (title search + content fetch + title/author fetch), which is both slow and the
 direct cause of arXiv 429 storms. This module resolves a citation's title,
 authors, abstract, and URL from APIs with generous rate limits — Crossref first
-(no key, abstract often present), OpenAlex second (no key, broad abstract
-coverage), Semantic Scholar last and only with an API key (its keyless pool is
+(no key, abstract often present), OpenAlex second (optional key, broad
+abstract coverage), Semantic Scholar last and only with an API key (its keyless pool is
 shared and mostly answers 429) — and exposes the result so the summariser can work from an *abstract* instead of downloading the
 full paper. arXiv stays available as a fallback in the summariser.
 
@@ -42,8 +42,8 @@ _SEMANTIC_SCHOLAR_URL = "https://api.semanticscholar.org/graph/v1/paper/search"
 _CROSSREF_LIMITER = RateLimiter(rate=1.0, per=1.0, name="crossref")
 _CROSSREF_CONCURRENCY = threading.Lock()
 _OPENALEX_LIMITER = RateLimiter(rate=2.0, per=1.0, name="openalex")
-# OpenAlex results scanned for a matching record (one request either way).
-_OPENALEX_CANDIDATES = 5
+# Search results scanned for a matching record (one request either way).
+_SEARCH_CANDIDATES = 5
 _SEMANTIC_SCHOLAR_LIMITER = RateLimiter(rate=1.0, per=1.0, name="semantic-scholar")
 # A 429 without Retry-After waits this long before the single retry.
 _DEFAULT_RETRY_AFTER = 5.0
@@ -244,7 +244,7 @@ class CrossrefProvider(MetadataProvider):
     def lookup(self, title: str) -> ReferenceMetadata | None:
         params = {
             "query.bibliographic": title,
-            "rows": "1",
+            "rows": str(_SEARCH_CANDIDATES),
             "select": "title,author,abstract,URL,type",
         }
         if self.mailto:
@@ -261,12 +261,17 @@ class CrossrefProvider(MetadataProvider):
         except (httpx.HTTPError, ValueError) as e:
             logger.warning("Crossref lookup failed for '%s': %s", title, e)
             return None
-        if not items:
+        # The top fuzzy hit is often another paper (a survey of ResNet ranks
+        # above ResNet itself); take the matching record whose title is
+        # closest to the queried one, the earliest on a tie.
+        matches = [
+            (" ".join(item.get("title") or []).strip(), item)
+            for item in items
+            if titles_match(title, " ".join(item.get("title") or []))
+        ]
+        if not matches:
             return None
-        item = items[0]
-        found_title = " ".join(item.get("title") or []).strip()
-        if not found_title:
-            return None  # a record without a title can't pass the title gate honestly
+        found_title, item = max(matches, key=lambda m: title_similarity(title, m[0]))
         authors = [
             " ".join(filter(None, [a.get("given"), a.get("family")]))
             for a in item.get("author", [])
@@ -303,18 +308,27 @@ def _inverted_index_text(index: Any) -> str | None:
 
 
 class OpenAlexProvider(MetadataProvider):
-    """OpenAlex works search — no key, broad coverage, abstracts for most
-    papers. ``mailto`` (the Crossref contact) joins its polite pool."""
+    """OpenAlex works search — broad coverage, abstracts for most papers.
+    Works without a key on a small daily budget per IP; an optional API key
+    (sent as a Bearer token, never in the URL) raises it. ``mailto`` (the
+    Crossref contact) identifies the caller."""
 
-    def __init__(self, *, timeout: float = _TIMEOUT, mailto: str | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        timeout: float = _TIMEOUT,
+        mailto: str | None = None,
+        api_key: str | None = None,
+    ) -> None:
         self.timeout = timeout
         self.mailto = mailto or os.environ.get(EnvVars.CROSSREF_MAILTO.value)
+        self.api_key = api_key or os.environ.get(EnvVars.OPENALEX_API_KEY.value)
 
     def lookup(self, title: str) -> ReferenceMetadata | None:
         # Commas and colons are filter syntax in OpenAlex's search parameter.
         params = {
             "search": " ".join(re.sub(r"[,:]", " ", title).split()),
-            "per-page": str(_OPENALEX_CANDIDATES),
+            "per-page": str(_SEARCH_CANDIDATES),
             "select": "title,authorships,abstract_inverted_index,doi,id",
         }
         if self.mailto:
@@ -325,6 +339,11 @@ class OpenAlexProvider(MetadataProvider):
                 params=params,
                 limiter=_OPENALEX_LIMITER,
                 timeout=self.timeout,
+                headers=(
+                    {"Authorization": f"Bearer {self.api_key}"}
+                    if self.api_key
+                    else None
+                ),
             ).get("results", [])
         except (httpx.HTTPError, ValueError) as e:
             logger.warning("OpenAlex lookup failed for '%s': %s", title, e)

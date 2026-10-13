@@ -10,6 +10,7 @@ import pytest
 
 from scholar_lens.src.guide_authority import input_outline
 from scholar_lens.src.markdown_lint import writing_issues
+from scholar_lens.src.prompts.tech_guide import OFFICIAL_LABEL
 from scholar_lens.src.web_research import (
     MAX_REFERENCE_PAGES,
     MAX_REFERENCE_SEARCHES,
@@ -171,7 +172,7 @@ async def test_stale_flag_pulls_the_official_reference_into_grounding() -> None:
     )
     guide = await gen.generate([QUICKSTART], discover_subpages=False)
     sources = gen.grounding_chain.ainvoke.await_args.args[0]["sources"]
-    assert "Engine Arguments" in sources and "(official documentation)" in sources
+    assert "Engine Arguments" in sources and f"({OFFICIAL_LABEL})" in sources
     assert "--preemption-mode" not in guide.body
     assert not any("--preemption-mode" in note for note in guide.notes)
     synopsis_inputs = gen.synopsis_chain.ainvoke.await_args.args[0]
@@ -433,6 +434,33 @@ async def test_title_lookups_leave_grounding_a_share_of_the_budget() -> None:
     before = len(gen._reference_pages)
     await gen._add_reference(corpus, ["--gpu-memory-utilization"])
     assert len(gen._reference_pages) == MAX_REFERENCE_PAGES > before
+
+
+async def test_identifier_lookup_leaves_the_title_searches_a_share() -> None:
+    from scholar_lens.src.tech_guide import (
+        _IDENTIFIER_REFERENCE_PAGES,
+        _IDENTIFIER_REFERENCE_SEARCHES,
+        _PRE_WRITE_REFERENCE_PAGES,
+        PlannedSection,
+    )
+
+    results = [
+        SearchResult(title=f"p{i}", url=f"https://{HOST}/en/latest/p{i}.html")
+        for i in range(10)
+    ]
+    gen, corpus = _budget_generator(results)
+    # The pre-writing identifier lookup, as generate() runs it.
+    await gen._add_reference(
+        corpus,
+        ["--max-model-len", "--tensor-parallel-size"],
+        max_pages=_IDENTIFIER_REFERENCE_PAGES,
+        max_searches=_IDENTIFIER_REFERENCE_SEARCHES,
+    )
+    assert len(gen._reference_pages) == _IDENTIFIER_REFERENCE_PAGES
+    section = PlannedSection("배포하기")
+    await gen._find_official_source(corpus, section)
+    assert section.official_source and section.sources
+    assert len(gen._reference_pages) == _PRE_WRITE_REFERENCE_PAGES
 
 
 def test_section_plan_keeps_only_corpus_urls() -> None:

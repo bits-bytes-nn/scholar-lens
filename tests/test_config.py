@@ -9,6 +9,7 @@ import pytest
 from pydantic import ValidationError
 
 from scholar_lens.configs import Code, Config, Explanation, Github
+from scholar_lens.configs import TechGuide as TechGuideConfig
 from scholar_lens.src.constants import LanguageModelId
 
 
@@ -43,6 +44,20 @@ class TestConfigValidation:
         config = Config()
         for section in (config.explanation, config.summary, config.tech_guide):
             assert section.max_total_tokens
+
+    def test_guide_research_defaults_read_the_top_results_of_each_query(
+        self,
+    ) -> None:
+        # Pages are taken round-robin across the queries, so this many reads
+        # each planned query's (each research intent's) top results.
+        guide = Config().tech_guide
+        assert guide.fetch_top_results >= 2 * guide.max_research_queries
+
+    @pytest.mark.parametrize("value", [2, 31])
+    def test_guide_max_sections_is_bounded(self, value: int) -> None:
+        with pytest.raises(ValidationError):
+            TechGuideConfig(max_sections=value)
+        assert TechGuideConfig(max_sections=20).max_sections == 20
 
     def test_category_labels_default_and_override(self) -> None:
         assert Github().review_category == "Paper Reviews"

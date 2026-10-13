@@ -30,6 +30,22 @@ def arxiv_id_from_url(url: str | None) -> str | None:
     return normalize_arxiv_id(match.group(1)) if match else None
 
 
+def arxiv_paper_key(url: str | None) -> str | None:
+    """The arXiv id of an arXiv URL without its version: the abs, pdf and
+    html links of a paper and all its versions share it. None for any other
+    URL."""
+    arxiv_id = arxiv_id_from_url(url)
+    return re.sub(r"v\d+$", "", arxiv_id) if arxiv_id else None
+
+
+def is_arxiv_host(url: str) -> bool:
+    """Whether ``url`` is served by arXiv itself (arxiv.org or a subdomain
+    such as export.arxiv.org and ar5iv.labs.arxiv.org), whose rate limit
+    every request there shares."""
+    host = (urlparse(url).hostname or "").lower()
+    return host == "arxiv.org" or host.endswith(".arxiv.org")
+
+
 def arxiv_id_from_reference(value: str | None) -> str | None:
     """Like :func:`normalize_arxiv_id`, but also accepts an arXiv URL (how
     references often cite a paper)."""
@@ -73,8 +89,8 @@ class EmbeddingModelId(str, Enum):
 class EnvVars(str, Enum):
     AWS_PROFILE_NAME = "AWS_PROFILE_NAME"
     BRAVE_API_KEY = "BRAVE_API_KEY"
-    # Optional: Crossref's "polite pool" (a contact address) and a Semantic
-    # Scholar key, both for higher rate limits on reference lookups.
+    # Optional: Crossref's "polite pool" (a contact address), an OpenAlex key
+    # and a Semantic Scholar key, all for higher limits on reference lookups.
     CROSSREF_MAILTO = "CROSSREF_MAILTO"
     GITHUB_TOKEN = "GITHUB_TOKEN"
     LANGCHAIN_API_KEY = "LANGCHAIN_API_KEY"
@@ -82,6 +98,7 @@ class EnvVars(str, Enum):
     LANGCHAIN_ENDPOINT = "LANGCHAIN_ENDPOINT"
     LANGCHAIN_PROJECT = "LANGCHAIN_PROJECT"
     LOG_LEVEL = "LOG_LEVEL"
+    OPENALEX_API_KEY = "OPENALEX_API_KEY"
     SEMANTIC_SCHOLAR_API_KEY = "SEMANTIC_SCHOLAR_API_KEY"
     TAVILY_API_KEY = "TAVILY_API_KEY"
     TOPIC_ARN = "TOPIC_ARN"
@@ -141,6 +158,7 @@ class SSMParams(AutoNamedEnum):
     CROSSREF_MAILTO = "crossref-mailto"
     GITHUB_TOKEN = "github-token"
     LANGCHAIN_API_KEY = "langchain-api-key"
+    OPENALEX_API_KEY = "openalex-api-key"
     SEMANTIC_SCHOLAR_API_KEY = "semantic-scholar-api-key"
     TAVILY_API_KEY = "tavily-api-key"
     UPSTAGE_API_KEY = "upstage-api-key"
@@ -166,5 +184,6 @@ RUN_SECRETS: dict[SSMParams, EnvVars] = {
     SSMParams.TAVILY_API_KEY: EnvVars.TAVILY_API_KEY,
     SSMParams.BRAVE_API_KEY: EnvVars.BRAVE_API_KEY,
     SSMParams.CROSSREF_MAILTO: EnvVars.CROSSREF_MAILTO,
+    SSMParams.OPENALEX_API_KEY: EnvVars.OPENALEX_API_KEY,
     SSMParams.SEMANTIC_SCHOLAR_API_KEY: EnvVars.SEMANTIC_SCHOLAR_API_KEY,
 }

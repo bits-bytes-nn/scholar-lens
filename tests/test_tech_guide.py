@@ -13,7 +13,17 @@ from scholar_lens.src.prompts import (
     TechGuideSectionPrompt,
     TechGuideSynopsisPrompt,
 )
+from scholar_lens.src.prompts.tech_guide import (
+    OFFICIAL_LABEL,
+    REFERENCE_LABEL,
+    SOURCE_AUTHORITY,
+    TechGuideGroundingPrompt,
+)
 from scholar_lens.src.tech_guide import (
+    _DEPTH_GUIDANCE,
+    _GETTING_STARTED_SCOPE,
+    _NO_DOCS_NOTE,
+    _NO_OFFICIAL_SOURCE,
     NotTechnicalContentError,
     PlannedSection,
     TechGuideGenerator,
@@ -35,6 +45,19 @@ class TestPromptsBuild:
     def test_get_prompt_does_not_raise(self) -> None:
         for prompt in self.PROMPTS:
             assert prompt.get_prompt() is not None, prompt.__name__
+
+    @pytest.mark.parametrize(
+        "prompt",
+        [TechGuideSectionPrompt, TechGuideEvaluationPrompt, TechGuideGroundingPrompt],
+    )
+    def test_source_authority_reaches_every_judging_prompt(
+        self, prompt: type[TechGuideSectionPrompt]
+    ) -> None:
+        messages = prompt.get_prompt().format_messages(
+            **{name: "x" for name in prompt.input_variables}
+        )
+        rendered = " ".join(" ".join(str(m.content) for m in messages).split())
+        assert " ".join(SOURCE_AUTHORITY.split()) in rendered
 
     def test_section_prompt_carries_depth_directive(self) -> None:
         assert "depth_directive" in TechGuideSectionPrompt.input_variables
@@ -452,13 +475,60 @@ class TestResearchPlanning:
         assert order == ["gate", "search"]
         assert guide.topic == "Getting Started with X"
 
-    def test_getting_started_scope_reaches_the_writer(self) -> None:
+    def test_getting_started_scope_keeps_a_deep_internals_section_deep(
+        self,
+    ) -> None:
         gen = _make_generator()
         section = gen._parse_synopsis_sections("1. [deep] Internals — x")[0]
-        assert "getting-started guide" in section.depth_directive(
-            "English", "getting-started"
+        directive = section.depth_directive("English", "getting-started")
+        assert _GETTING_STARTED_SCOPE in directive
+        assert directive.startswith("DEEP section")
+        assert _DEPTH_GUIDANCE["deep"] in directive
+        assert _GETTING_STARTED_SCOPE not in section.depth_directive("English")
+
+    async def test_the_outline_title_names_the_guide(self) -> None:
+        gen = _make_generator(auto_research=True)
+        gen.researcher.research = MagicMock(return_value=_corpus())
+        gen.researcher.run_searches = MagicMock()
+        gen.relevance_chain.ainvoke = AsyncMock(
+            return_value={"is_relevant": "yes", "topic": "X", "reason": "ok"}
         )
-        assert "getting-started guide" not in section.depth_directive("English")
+        gen.research_plan_chain.ainvoke = AsyncMock(
+            return_value={"topic": "X serving", "queries": "q1"}
+        )
+        gen.synopsis_chain.ainvoke = AsyncMock(
+            return_value={
+                "title": "X: Serving, Internals and Production Integration",
+                "synopsis": "1. Intro",
+            }
+        )
+        gen.section_chain.ainvoke = AsyncMock(
+            return_value={"section_markdown": "## S\nbody"}
+        )
+        guide = await gen.generate(["https://docs.x.com"], discover_subpages=False)
+        title = "X: Serving, Internals and Production Integration"
+        assert gen.synopsis_chain.ainvoke.await_args.args[0]["topic"] == "X serving"
+        assert gen.section_chain.ainvoke.await_args.args[0]["topic"] == title
+        assert guide.topic == title
+
+    async def test_an_unclosed_title_falls_back_to_the_topic(self) -> None:
+        gen = _make_generator(auto_research=True)
+        gen.researcher.research = MagicMock(return_value=_corpus())
+        gen.researcher.run_searches = MagicMock()
+        gen.relevance_chain.ainvoke = AsyncMock(
+            return_value={"is_relevant": "yes", "topic": "X", "reason": "ok"}
+        )
+        gen.research_plan_chain.ainvoke = AsyncMock(
+            return_value={"topic": "X serving", "queries": "q1"}
+        )
+        gen.synopsis_chain.ainvoke = AsyncMock(
+            return_value={"title": "X <synopsis>1. Intro", "synopsis": "1. Intro"}
+        )
+        gen.section_chain.ainvoke = AsyncMock(
+            return_value={"section_markdown": "## S\nbody"}
+        )
+        guide = await gen.generate(["https://docs.x.com"], discover_subpages=False)
+        assert guide.topic == "X serving"
 
 
 class TestEvaluateAndRevise:
@@ -980,7 +1050,7 @@ class TestSectionPlan:
         lookup = gen.researcher.add_official_reference.call_args
         assert lookup.args[2] == ["B"]
         second = gen.section_chain.ainvoke.await_args_list[1].args[0]
-        assert "No official documentation page" in second["depth_directive"]
+        assert _NO_OFFICIAL_SOURCE in second["depth_directive"]
 
     async def test_plan_sources_and_a_found_page_lead_the_section_sources(
         self,
@@ -1046,8 +1116,8 @@ class TestSectionPlan:
         # Only section 2 lacks an official page: it is looked up by its title.
         lookup = gen.researcher.add_official_reference.call_args
         assert lookup.args[2] == ["B"]
-        assert "No official documentation page" in second["depth_directive"]
-        assert "No official documentation page" not in first["depth_directive"]
+        assert _NO_OFFICIAL_SOURCE in second["depth_directive"]
+        assert _NO_OFFICIAL_SOURCE not in first["depth_directive"]
 
     async def test_classify_reads_the_finished_body(self) -> None:
         from scholar_lens.src.tech_guide import TechGuide
@@ -1083,3 +1153,237 @@ class TestSectionPlan:
         )
         await gen._assert_relevant(corpus)
         assert gen._products == ("uv", "uvx")
+
+
+class TestReferenceMaterial:
+    """Reference URLs feed the guide and its source list but never become
+    the official authority; without docs no page is official."""
+
+    DOCS = "https://docs.x.com"
+    BLOG = "https://blog.x.io/deep-dive"
+
+    def _generator(self, pages: dict[str, PageContent]) -> TechGuideGenerator:
+        return _reference_generator(pages, [self.BLOG])
+
+    def _pages(self) -> dict[str, PageContent]:
+        return {
+            self.DOCS: PageContent(self.DOCS, "X Docs", "How to use X."),
+            self.BLOG: PageContent(self.BLOG, "Deep dive", "How the scheduler works."),
+        }
+
+    async def test_references_feed_the_guide_without_becoming_official(
+        self,
+    ) -> None:
+        gen = self._generator(self._pages())
+        guide = await gen.generate(
+            [self.DOCS], reference_urls=[self.BLOG], discover_subpages=False
+        )
+        second = gen.researcher.research.call_args_list[1]
+        assert second.args[0] == [self.BLOG]
+        assert second.kwargs["discover_subpages"] is False
+        assert gen._official.hosts == frozenset({"docs.x.com"})
+        # The gate reads the docs alone.
+        gate_sources = gen.relevance_chain.ainvoke.await_args.args[0]["sources"]
+        assert self.BLOG not in gate_sources
+        synopsis_sources = gen.synopsis_chain.ainvoke.await_args.args[0]["sources"]
+        assert f"## Source ({REFERENCE_LABEL}): {self.BLOG}" in synopsis_sources
+        writer_sources = gen.section_chain.ainvoke.await_args.args[0]["sources"]
+        assert writer_sources.index("scheduler works") < writer_sources.index(
+            "How to use X"
+        )
+        assert guide.source_urls == [self.DOCS, self.BLOG]
+        assert not gen.notes
+
+    async def test_an_unreadable_reference_is_noted(self) -> None:
+        gen = self._generator(self._pages())
+        missing = "https://gone.example/post"
+        guide = await gen.generate(
+            [self.DOCS], reference_urls=[missing], discover_subpages=False
+        )
+        assert guide.source_urls == [self.DOCS]
+        assert any(missing in n for n in gen.notes)
+
+    async def test_no_readable_reference_and_no_docs_is_rejected(self) -> None:
+        gen = self._generator({})
+        with pytest.raises(NotTechnicalContentError):
+            await gen.generate([], reference_urls=["https://gone.example/post"])
+
+    async def test_one_paper_given_several_ways_is_read_once(self) -> None:
+        pages = {
+            self.DOCS: PageContent(self.DOCS, "X Docs", "How to use X."),
+            "https://arxiv.org/abs/2309.06180": PageContent(
+                "https://arxiv.org/abs/2309.06180", "Paper", "Paged KV cache."
+            ),
+        }
+        gen = self._generator(pages)
+        guide = await gen.generate(
+            [self.DOCS],
+            reference_urls=[
+                "https://arxiv.org/abs/2309.06180",
+                "https://arxiv.org/pdf/2309.06180v2.pdf",
+                "https://arxiv.org/abs/2309.06180v1",
+            ],
+            discover_subpages=False,
+        )
+        second = gen.researcher.research.call_args_list[1]
+        assert second.args[0] == ["https://arxiv.org/abs/2309.06180"]
+        assert guide.source_urls == [self.DOCS, "https://arxiv.org/abs/2309.06180"]
+
+    async def test_a_reference_the_docs_crawl_landed_on_is_not_added_twice(
+        self,
+    ) -> None:
+        landed = "https://docs.x.com/en/stable/"
+        pages = {
+            self.DOCS: PageContent(self.DOCS, "X Docs", "Docs.", final_url=landed),
+            landed: PageContent(landed, "X Docs", "Docs."),
+        }
+        gen = self._generator(pages)
+        await gen.generate(
+            [self.DOCS], reference_urls=[landed], discover_subpages=False
+        )
+        sources = gen.synopsis_chain.ainvoke.await_args.args[0]["sources"]
+        assert sources.count("# X Docs") == 1
+        assert not gen.notes
+
+
+def _reference_generator(
+    pages: dict[str, PageContent], plan_sources: list[str]
+) -> TechGuideGenerator:
+    """A generator whose researcher returns ``pages`` for the URLs it is given
+    (no search backend) and whose one-section outline rests on
+    ``plan_sources``."""
+    gen = _make_generator()
+    gen.researcher.search_provider.supports_search = False
+
+    def research(urls: list[str], *, discover_subpages: bool) -> ResearchCorpus:
+        return ResearchCorpus(pages=[pages[u] for u in urls if u in pages])
+
+    gen.researcher.research = MagicMock(side_effect=research)
+    gen.relevance_chain.ainvoke = AsyncMock(
+        return_value={"is_relevant": "yes", "topic": "Using X", "reason": "ok"}
+    )
+    gen.synopsis_chain.ainvoke = AsyncMock(
+        return_value={
+            "synopsis": "1. Internals — how X works",
+            "section_plan": f"1 | sources: {', '.join(plan_sources)} | owns: a",
+        }
+    )
+    gen.section_chain.ainvoke = AsyncMock(
+        return_value={"section_markdown": "## Internals\n\nbody"}
+    )
+    return gen
+
+
+def test_planner_digest_gives_docs_and_references_fair_shares() -> None:
+    docs = [PageContent(f"https://docs.x.com/{i}", "D", "d " * 400) for i in range(20)]
+    blogs = [
+        PageContent(f"https://blog.x.io/{i}", "Deep", "b " * 400, user_reference=True)
+        for i in range(20)
+    ]
+    digest = TechGuideGenerator._sources_digest(
+        ResearchCorpus(pages=[*docs, *blogs]), max_chars=6_000
+    )
+    assert digest.startswith(f"- https://blog.x.io/0 ({REFERENCE_LABEL})")
+    assert "https://docs.x.com/0" in digest
+    assert len(digest) <= 6_000
+    # A short reference list leaves the rest to the docs.
+    short = TechGuideGenerator._sources_digest(
+        ResearchCorpus(pages=[*docs, blogs[0]]), max_chars=6_000
+    )
+    assert short.count("https://docs.x.com/") > digest.count("https://docs.x.com/")
+
+
+DOCS = ["https://docs.x.com/install", "https://docs.x.com/serve"]
+REFS = ["https://blog.x.io/scheduler", "https://arxiv.org/abs/2309.06180"]
+
+
+@pytest.fixture
+def several_inputs() -> TechGuideGenerator:
+    """A generator over two docs pages and two references (a post and a
+    paper) whose one section rests on the references."""
+    pages = {
+        DOCS[0]: PageContent(DOCS[0], "Install", "pip install x"),
+        DOCS[1]: PageContent(DOCS[1], "Serve", "x serve model"),
+        REFS[0]: PageContent(REFS[0], "Sched", "The scheduler batches."),
+        REFS[1]: PageContent(REFS[1], "Paper", "Paged KV cache blocks."),
+    }
+    return _reference_generator(pages, REFS)
+
+
+class TestSeveralDocsAndReferences:
+    async def test_every_input_is_labelled_preferred_and_listed(
+        self, several_inputs: TechGuideGenerator
+    ) -> None:
+        gen = several_inputs
+        guide = await gen.generate(
+            list(DOCS), reference_urls=list(REFS), discover_subpages=False
+        )
+        assert gen.researcher.research.call_args_list[0].args[0] == DOCS
+        assert gen.researcher.research.call_args_list[1].args[0] == REFS
+        labelled = gen.synopsis_chain.ainvoke.await_args.args[0]["sources"]
+        for url in DOCS:
+            assert f"## Source ({OFFICIAL_LABEL}): {url}" in labelled
+        for url in REFS:
+            assert f"## Source ({REFERENCE_LABEL}): {url}" in labelled
+        sources = gen.section_chain.ainvoke.await_args.args[0]["sources"]
+        last_reference = max(
+            sources.index("scheduler batches"), sources.index("KV cache")
+        )
+        assert last_reference < sources.index("pip install x")
+        assert guide.source_urls == [*DOCS, *REFS]
+
+    async def test_a_url_given_as_both_is_docs_and_listed_once(
+        self, several_inputs: TechGuideGenerator
+    ) -> None:
+        gen = several_inputs
+        guide = await gen.generate(
+            list(DOCS),
+            reference_urls=[DOCS[1] + "/", *REFS],
+            discover_subpages=False,
+        )
+        assert gen.researcher.research.call_args_list[1].args[0] == REFS
+        labelled = gen.synopsis_chain.ainvoke.await_args.args[0]["sources"]
+        assert f"## Source ({OFFICIAL_LABEL}): {DOCS[1]}" in labelled
+        assert guide.source_urls == [*DOCS, *REFS]
+
+    async def test_references_without_docs(
+        self, several_inputs: TechGuideGenerator
+    ) -> None:
+        gen = several_inputs
+        guide = await gen.generate([], reference_urls=list(REFS))
+        assert gen.researcher.research.call_count == 1
+        assert not gen._official.hosts
+        labelled = gen.synopsis_chain.ainvoke.await_args.args[0]["sources"]
+        assert f"({OFFICIAL_LABEL})" not in labelled
+        # No docs: nothing to look up, and the writer is told so.
+        gen.researcher.add_official_reference.assert_not_called()
+        directive = gen.section_chain.ainvoke.await_args.args[0]["depth_directive"]
+        assert _NO_OFFICIAL_SOURCE in directive
+        gate_sources = gen.relevance_chain.ainvoke.await_args.args[0]["sources"]
+        assert all(url in gate_sources for url in REFS)
+        assert guide.source_urls == REFS
+        assert _NO_DOCS_NOTE in gen.notes
+
+    async def test_references_are_planned_from_and_searched_beyond(
+        self, several_inputs: TechGuideGenerator
+    ) -> None:
+        gen = several_inputs
+        gen.auto_research = True
+        gen.researcher.search_provider.supports_search = True
+        gen.researcher.run_searches = MagicMock()
+        gen.research_plan_chain.ainvoke = AsyncMock(
+            return_value={"topic": "X", "queries": "x scheduler design\nx metrics"}
+        )
+        await gen.generate(
+            list(DOCS), reference_urls=list(REFS), discover_subpages=False
+        )
+        digest = gen.research_plan_chain.ainvoke.await_args.args[0]["sources"]
+        for url in REFS:
+            assert f"{url} ({REFERENCE_LABEL})" in digest
+        searched_corpus, queries = gen.researcher.run_searches.call_args.args
+        assert queries == ["x scheduler design", "x metrics"]
+        assert gen.researcher.run_searches.call_args.kwargs["fetch_top"] == (
+            gen.fetch_top_results
+        )
+        held = [p.url for p in searched_corpus.pages if p.user_reference]
+        assert held == REFS

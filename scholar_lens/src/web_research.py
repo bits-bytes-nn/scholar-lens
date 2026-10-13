@@ -22,12 +22,20 @@ from urllib.parse import urljoin, urlparse
 import httpx
 from bs4 import BeautifulSoup, Tag, UnicodeDammit
 
-from .constants import EnvVars
+from .constants import EnvVars, arxiv_id_from_url, arxiv_paper_key, is_arxiv_host
 from .logger import logger
-from .markdown_lint import close_open_fence
+from .markdown_lint import FIGURE_MARKER, close_open_fence
 from .markdown_math import segments
+from .parser import MIN_PARSED_TEXT_CHARS, _readable_chars
 from .pinned_transport import PinnedHTTPTransport
 from .prompt_safety import neutralize_prompt_tags
+from .prompts.tech_guide import (
+    OFFICIAL_LABEL,
+    OLDER_DOCS_LABEL,
+    REFERENCE_LABEL,
+    THIRD_PARTY_LABEL,
+)
+from .rate_limiter import ARXIV_RATE_LIMITER, arxiv_retry_after_seconds
 from .review_plan import parse_lines
 from .url_guard import (
     UnsafeUrlError,
@@ -48,6 +56,8 @@ MAX_PAGE_BYTES: int = 5 * 1024 * 1024
 # with an incidental refresh tag keeps its own content), and at most this often.
 _META_REFRESH_MAX_BYTES = 16 * 1024
 MAX_META_REFRESH_HOPS = 3
+# A page joins a prompt's sources only with more room than this left.
+_MIN_SOURCE_ROOM = 2_000
 _META_REFRESH_URL = re.compile(
     r"^\s*\d+(?:\.\d*)?\s*[;,]\s*(?:url\s*=\s*)?['\"]?([^'\"\s]+)", re.I
 )
@@ -115,6 +125,24 @@ def docs_version(url: str) -> str | None:
         if index < _BARE_VERSION_SEGMENTS and _BARE_DOCS_VERSION.fullmatch(lowered):
             return lowered
     return None
+
+
+def arxiv_paper_urls(url: str) -> tuple[str, str] | None:
+    """For a link to an arXiv paper (abs, pdf or html, on arXiv or a mirror),
+    the paper's HTML rendering (the full text; the abstract page holds only
+    the abstract and a PDF is not read) and its abstract page, the fallback;
+    None for any other URL."""
+    arxiv_id = arxiv_id_from_url(url)
+    if arxiv_id is None:
+        return None
+    return f"https://arxiv.org/html/{arxiv_id}", f"https://arxiv.org/abs/{arxiv_id}"
+
+
+def page_key(url: str) -> str:
+    """Dedup key of a page: one per arXiv paper (its abs, pdf and html links
+    and every version), else :func:`normalize_url`."""
+    paper = arxiv_paper_key(url)
+    return f"arxiv:{paper}" if paper else normalize_url(url)
 
 
 def _is_current(version: str | None) -> bool:
@@ -245,6 +273,9 @@ class PageContent:
     # Where the page actually lives after HTTP and <meta refresh> redirects
     # (sub-page scope is taken from it); empty when it is ``url`` itself.
     final_url: str = ""
+    # Explanatory material the user passed with the request (a paper, design
+    # doc or deep-dive post): labelled reference material, never official.
+    user_reference: bool = False
 
 
 @dataclass
@@ -275,11 +306,15 @@ class ResearchCorpus:
         prefer: Collection[str] = (),
     ) -> str:
         """The pages most relevant to ``query`` (word overlap with title and
-        body), most relevant first, within ``max_chars``; the pages whose URL
-        is in ``prefer`` come before all others. Each section of a guide reads
-        only the material it needs instead of the whole corpus.
-        With ``official``, each source is labelled official, older docs version
-        or third-party so the writer knows which one decides a flag or default.
+        body), most relevant first, within ``max_chars``. The pages whose URL
+        is in ``prefer`` (the section plan's) come first, in that order, each
+        with an equal share of ``max_chars`` so a long paper cannot push an
+        official page out; the room they leave goes to the other pages by
+        rank, a cut preferred page first. Each section of a guide reads only
+        the material it needs instead of the whole corpus.
+        With ``official``, each source is labelled official, older docs
+        version, reference material or third-party so the writer knows which
+        one decides a flag or default.
         The URL of each page that made the cut is added to ``included``."""
         words = {w for w in re.findall(r"[a-z0-9][a-z0-9_.-]{2,}", query.lower())}
 
@@ -289,21 +324,31 @@ class ResearchCorpus:
             hits = sum(3 * (w in title) + min(body.count(w), 20) for w in words)
             return hits / (1 + len(body) / 20_000)  # don't favour sheer length
 
-        preferred = set(prefer)
-        ranked = sorted(
-            self.pages, key=lambda p: (p.url in preferred, score(p)), reverse=True
+        by_url = {page.url: page for page in reversed(self.pages)}
+        preferred = [by_url[url] for url in dict.fromkeys(prefer) if url in by_url]
+        chosen = {id(page) for page in preferred}
+        others = sorted(
+            (p for p in self.pages if id(p) not in chosen), key=score, reverse=True
         )
-        blocks, used = [], 0
-        for page in ranked:
-            block = _source_block(page, official)
-            room = max_chars - used
-            if room <= 2_000:
+        ordered = preferred + others
+        blocks = [_source_block(page, official) for page in ordered]
+        share = max_chars // len(preferred) if preferred else 0
+        cuts = [_cut(blocks[i], share) for i in range(len(preferred))]
+        cuts += [""] * len(others)
+        used = sum(map(len, cuts))
+        for i, block in enumerate(blocks):
+            if max_chars - used <= _MIN_SOURCE_ROOM:
                 break
-            blocks.append(_cut(block, room))
-            used += len(blocks[-1])
-            if included is not None:
-                included.add(page.url)
-        return "\n\n---\n\n".join(blocks)
+            if len(cuts[i]) < len(block):
+                longer = _cut(block, max_chars - used + len(cuts[i]))
+                if len(longer) > len(cuts[i]):
+                    used += len(longer) - len(cuts[i])
+                    cuts[i] = longer
+        if included is not None:
+            included.update(
+                page.url for page, cut in zip(ordered, cuts, strict=True) if cut
+            )
+        return "\n\n---\n\n".join(cut for cut in cuts if cut)
 
     def combined_text(self, official: OfficialDocs | None = None) -> str:
         """Every page, labelled by authority like :meth:`relevant_text`."""
@@ -312,22 +357,27 @@ class ResearchCorpus:
 
 def _source_block(page: PageContent, official: OfficialDocs | None) -> str:
     """One page for a prompt: URL, title and text, defanged (all three are
-    page-controlled), labelled official documentation, older docs version or
-    third-party when ``official`` is given."""
-    label = ""
-    if official is not None:
-        url = page.final_url or page.url
-        if official.covers(url):
-            label = " (official documentation)"
-        elif official.on_host(url):
-            label = " (older docs version)"
-        else:
-            label = " (third-party)"
+    page-controlled), labelled by :func:`source_label` when ``official`` is
+    given."""
+    label = f" ({source_label(page, official)})" if official is not None else ""
     return (
         f"## Source{label}: {neutralize_prompt_tags(page.url)}\n"
         f"# {neutralize_prompt_tags(page.title)}\n\n"
         f"{neutralize_prompt_tags(page.text)}"
     )
+
+
+def source_label(page: PageContent, official: OfficialDocs) -> str:
+    """How a prompt labels ``page``: a current page of the requested docs is
+    official (also when the user passed it as reference material), another
+    version of them is an older docs version, and any other page is reference
+    material when the user passed it, else third-party."""
+    url = page.final_url or page.url
+    if official.covers(url):
+        return OFFICIAL_LABEL
+    if official.on_host(url):
+        return OLDER_DOCS_LABEL
+    return REFERENCE_LABEL if page.user_reference else THIRD_PARTY_LABEL
 
 
 class WebSearchProvider(ABC):
@@ -575,27 +625,35 @@ class WebResearcher:
             for results in per_query
             if i < len(results)
         ]
-        visited = {normalize_url(p.url) for p in corpus.pages}
+        visited = {page_key(u) for p in corpus.pages for u in (p.url, p.final_url) if u}
         added = 0
         for result in interleaved:
             if added >= fetch_top:
                 break
-            norm = normalize_url(result.url)
-            if not norm or norm in visited:
+            key = page_key(result.url)
+            if not urlparse(result.url).hostname or key in visited:
                 continue
-            visited.add(norm)
-            if result.content:
+            visited.add(key)
+            # An arXiv link is read from the paper's HTML rendering: the
+            # backend's content of an abstract page is the abstract alone.
+            page = (
+                self._fetch_page(result.url)
+                if arxiv_paper_urls(result.url) or not result.content
+                else None
+            )
+            if page is None and result.content:
                 # Backend already returned cleaned page content; use it directly.
-                corpus.pages.append(
-                    PageContent(
-                        url=result.url,
-                        title=result.title or result.url,
-                        text=result.content,
-                    )
+                page = PageContent(
+                    url=result.url,
+                    title=result.title or result.url,
+                    text=result.content,
                 )
-                added += 1
-                continue
-            page = self._fetch_page(result.url)
+            if page is not None and page.final_url:
+                # A redirect to a page the corpus already holds.
+                landed = page_key(page.final_url)
+                if landed != key and landed in visited:
+                    continue
+                visited.add(landed)
             if page is not None:
                 corpus.pages.append(page)
                 added += 1
@@ -745,8 +803,19 @@ class WebResearcher:
         )
         # Images from the same scope as the text, so sidebar logos and badges
         # never become figures the writer may cite.
-        image_urls = self._extract_images(
-            BeautifulSoup(main, "html.parser") if main else soup, final_url
+        # An arXiv abstract page has no figures, only site icons.
+        image_urls = (
+            []
+            if is_arxiv_host(final_url) and "/abs/" in urlparse(final_url).path
+            else self._extract_images(
+                BeautifulSoup(main, "html.parser") if main else soup, final_url
+            )
+        )
+        # The writer cites only listed images: drop the markers of the others
+        # (over the per-page cap, or furniture).
+        kept = set(image_urls)
+        text = FIGURE_MARKER.sub(
+            lambda m: m.group(0) if m.group("src") in kept else "", text
         )
         links = self._extract_links(soup, final_url)
         return PageContent(
@@ -762,9 +831,12 @@ class WebResearcher:
         """Fetch ``url`` like :meth:`_get_page`, also following a small
         stub page's ``<meta http-equiv="refresh">`` (docs sites such as
         ``/stable/`` aliases use it instead of an HTTP redirect) for at most
-        :data:`MAX_META_REFRESH_HOPS` hops. Every hop goes through the same
-        pinned, SSRF-guarded client."""
-        fetched = self._get_page(url)
+        :data:`MAX_META_REFRESH_HOPS` hops. An arXiv abstract or PDF link is
+        read from the paper's HTML rendering, else its abstract page
+        (:func:`arxiv_paper_urls`). Every hop goes through the same pinned,
+        SSRF-guarded client."""
+        paper = arxiv_paper_urls(url)
+        fetched = self._get_paper(*paper) if paper else self._get_page(url)
         for _ in range(MAX_META_REFRESH_HOPS):
             if fetched is None:
                 return None
@@ -777,11 +849,40 @@ class WebResearcher:
             fetched = self._get_page(target)
         return fetched
 
+    def _get_paper(self, html_url: str, abs_url: str) -> tuple[str, str] | None:
+        """An arXiv paper's HTML rendering, else its abstract page: when the
+        paper has no rendering (404) or the rendering is a failed conversion's
+        stub ("See pages 1-last of main.pdf", under the parser's
+        :data:`MIN_PARSED_TEXT_CHARS`). Any other error (429, 5xx, a timeout)
+        propagates, so the caller records it as a fetch failure."""
+        try:
+            fetched = self._get_page(html_url)
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code != 404:
+                raise
+            logger.info("No HTML rendering at '%s'; reading '%s'.", html_url, abs_url)
+            return self._get_page(abs_url)
+        if fetched is not None and _readable_chars(fetched[0]) >= MIN_PARSED_TEXT_CHARS:
+            return fetched
+        logger.info("'%s' has almost no text; reading '%s'.", html_url, abs_url)
+        return self._get_page(abs_url)
+
     def _get_page(self, url: str) -> tuple[str, str] | None:
         """Stream ``url``; return (decoded HTML, final URL), or None when the
-        resource is not HTML or exceeds :data:`MAX_PAGE_BYTES`."""
+        resource is not HTML or exceeds :data:`MAX_PAGE_BYTES`. A request to
+        arXiv waits for the process-wide arXiv rate limiter, and an arXiv 429
+        holds every later arXiv request back (no retry here: the failure is
+        recorded and the job fails retryably)."""
+        on_arxiv = is_arxiv_host(url)
+        if on_arxiv:
+            ARXIV_RATE_LIMITER.acquire()
         with self.client.stream("GET", url) as response:
-            response.raise_for_status()
+            try:
+                response.raise_for_status()
+            except httpx.HTTPStatusError as e:
+                if on_arxiv and response.status_code == 429:
+                    ARXIV_RATE_LIMITER.penalize(arxiv_retry_after_seconds(e))
+                raise
             content_type = response.headers.get("Content-Type", "").lower()
             if "html" not in content_type and "xml" not in content_type:
                 logger.debug("Skipping non-HTML resource '%s' (%s)", url, content_type)
@@ -810,13 +911,20 @@ class WebResearcher:
         return html, final_url
 
     def _extract_images(self, soup: BeautifulSoup, base_url: str) -> list[str]:
-        """Content images, deduped: tracking pixels and the logos in page
-        chrome (header, navigation, footer, ``<noscript>``) are skipped."""
+        """Content images, deduped: ``<img>`` and the SVG ``<object>``
+        figures arXiv renders (the elements the text's figure markers come
+        from); tracking pixels and the logos in page chrome (header,
+        navigation, footer, ``<noscript>``) are skipped."""
         images: list[str] = []
-        for img in soup.find_all("img"):
+        for img in soup.find_all(("img", "object")):
             if not isinstance(img, Tag) or is_page_furniture(img):
                 continue
-            src = img.get("src") or img.get("data-src")
+            if img.name == "object":
+                if "svg" not in str(img.get("type", "")):
+                    continue
+                src = img.get("data")
+            else:
+                src = img.get("src") or img.get("data-src")
             if isinstance(src, str) and src.strip():
                 absolute = urljoin(base_url, src.strip())
                 if (

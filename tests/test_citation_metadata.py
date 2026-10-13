@@ -114,6 +114,28 @@ def test_semantic_scholar_sends_its_api_key(monkeypatch: pytest.MonkeyPatch) -> 
     assert seen["headers"] == {"x-api-key": "k"}
 
 
+@pytest.mark.parametrize("key", ["oa-key", None])
+def test_openalex_sends_its_api_key_as_a_bearer_header(
+    monkeypatch: pytest.MonkeyPatch, key: str | None
+) -> None:
+    seen: dict[str, Any] = {}
+
+    def fake_get(
+        url: str, *, params: Any = None, headers: Any = None, **_: Any
+    ) -> httpx.Response:
+        seen.update(params=params, headers=headers)
+        return httpx.Response(
+            200, json={"results": []}, request=httpx.Request("GET", url)
+        )
+
+    monkeypatch.delenv("OPENALEX_API_KEY", raising=False)
+    monkeypatch.setattr("scholar_lens.src.citation_metadata.httpx.get", fake_get)
+    assert OpenAlexProvider(api_key=key).lookup("x") is None
+    expected = {"Authorization": f"Bearer {key}"} if key else None
+    assert seen["headers"] == expected
+    assert "api_key" not in seen["params"]  # never in the URL (logged on errors)
+
+
 def test_openalex_rebuilds_the_abstract_and_sends_mailto(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -365,7 +387,7 @@ def test_crossref_provider_parses_and_strips_abstract(
             }
         },
     )
-    md = CrossrefProvider().lookup("attention")
+    md = CrossrefProvider().lookup("Attention is all you need")
     assert md is not None
     assert md.title == "Attention Is All You Need"
     assert md.authors == ["Ashish Vaswani", "Noam Shazeer"]
@@ -398,6 +420,34 @@ def test_crossref_drops_url_for_book_chapter_type(
     assert md is not None
     assert md.title == "Attention Is All You Need"
     assert md.url is None  # book-chapter URL dropped
+
+
+def test_crossref_takes_the_closest_matching_record_not_the_top_hit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Crossref ranks unrelated papers and a survey above ResNet itself.
+    seen: dict[str, Any] = {}
+
+    def fake_get(url: str, *, params: Any = None, **_: Any) -> httpx.Response:
+        seen["params"] = params
+        items = [
+            {"title": ["Multiple butterflies recognition based on deep residual"]},
+            {"title": ["Deep Residual Learning for Image Recognition: A Survey"]},
+            {
+                "title": ["Deep Residual Learning for Image Recognition"],
+                "URL": "https://doi.org/10.1109/cvpr.2016.90",
+                "type": "proceedings-article",
+            },
+        ]
+        return httpx.Response(
+            200, json={"message": {"items": items}}, request=httpx.Request("GET", url)
+        )
+
+    monkeypatch.setattr("scholar_lens.src.citation_metadata.httpx.get", fake_get)
+    md = CrossrefProvider().lookup("Deep residual learning for image recognition")
+    assert md is not None
+    assert md.url == "https://doi.org/10.1109/cvpr.2016.90"
+    assert seen["params"]["rows"] == "5"
 
 
 def test_crossref_provider_returns_none_on_empty(

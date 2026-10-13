@@ -8,7 +8,7 @@ from unittest import mock
 import boto3
 import pytest
 from moto import mock_aws
-from pydantic import ValidationError
+from pydantic import BaseModel, ConfigDict, ValidationError
 
 from scholar_lens import cli
 from scholar_lens.src.aws_helpers import BatchJobError, S3Handler, S3OperationError
@@ -64,7 +64,7 @@ class TestJobRequest:
 
 class TestCliMapping:
     def _request(self, argv: list[str]) -> JobRequest:
-        return cli._request_from_args(cli.build_parser().parse_args(argv))
+        return cli._request_from_args(cli.parse_args(argv))
 
     def test_review_options(self) -> None:
         request = self._request(
@@ -264,3 +264,169 @@ class TestWaitForJob:
             describe, timeout_seconds=100, sleep=lambda _s: None, clock=lambda: 0.0
         )
         assert calls == 2 and report.batch_status == "SUCCEEDED"
+
+
+class TestReferenceMaterial:
+    def test_guide_from_reference_material_alone(self) -> None:
+        request = JobRequest(kind="guide", reference_urls=["https://blog.x.io/a"])
+        assert request.urls == [] and request.describe() == "https://blog.x.io/a"
+
+    def test_describe_lists_docs_then_references(self) -> None:
+        request = JobRequest(
+            kind="guide",
+            urls=["https://docs.x.dev"],
+            reference_urls=["https://arxiv.org/abs/2309.06180"],
+        )
+        assert request.describe() == (
+            "https://docs.x.dev, https://arxiv.org/abs/2309.06180"
+        )
+
+    def test_paper_request_rejects_reference_urls(self) -> None:
+        with pytest.raises(ValidationError):
+            JobRequest(
+                kind="review", source="2106.09685", reference_urls=["https://x.io"]
+            )
+
+    def test_json_round_trip_keeps_reference_urls(self) -> None:
+        request = JobRequest(
+            kind="guide",
+            urls=["https://docs.x.dev"],
+            reference_urls=["https://blog.x.io/a", "https://arxiv.org/abs/1"],
+        )
+        restored = JobRequest.model_validate_json(request.model_dump_json())
+        assert restored == request
+
+    def test_cli_maps_repeated_reference_options(self) -> None:
+        args = cli.parse_args(
+            [
+                "guide",
+                "https://docs.x.dev",
+                "https://docs.x.dev/serve",
+                "--reference",
+                "https://blog.x.io/a",
+                "--reference",
+                "https://arxiv.org/abs/2309.06180",
+            ]
+        )
+        request = cli._request_from_args(args)
+        assert request.urls == ["https://docs.x.dev", "https://docs.x.dev/serve"]
+        assert request.reference_urls == [
+            "https://blog.x.io/a",
+            "https://arxiv.org/abs/2309.06180",
+        ]
+
+    def test_cli_accepts_docs_urls_after_options(self) -> None:
+        args = cli.parse_args(
+            [
+                "guide",
+                "https://docs.x.dev",
+                "--reference",
+                "https://blog.x.io/a",
+                "https://docs.x.dev/serve",
+                "--search-query",
+                "x internals",
+                "https://docs.x.dev/api",
+            ]
+        )
+        request = cli._request_from_args(args)
+        assert request.urls == [
+            "https://docs.x.dev",
+            "https://docs.x.dev/serve",
+            "https://docs.x.dev/api",
+        ]
+        assert request.reference_urls == ["https://blog.x.io/a"]
+        assert request.search_queries == ["x internals"]
+
+    def test_cli_accepts_references_without_docs(self) -> None:
+        args = cli.parse_args(["guide", "--reference", "https://blog.x.io/a"])
+        request = cli._request_from_args(args)
+        assert request.urls == [] and request.reference_urls == ["https://blog.x.io/a"]
+
+    def test_cli_rejects_an_unknown_guide_option(
+        self, capsys: pytest.CaptureFixture
+    ) -> None:
+        with pytest.raises(SystemExit) as exit_info:
+            cli.parse_args(["guide", "https://docs.x.dev", "--bogus", "x"])
+        assert exit_info.value.code == cli.EXIT_REJECTED
+        assert json.loads(capsys.readouterr().out)["status"] == "rejected"
+
+    def test_cli_guide_without_any_url_is_rejected(
+        self, capsys: pytest.CaptureFixture
+    ) -> None:
+        assert cli.main(["guide"]) == cli.EXIT_REJECTED
+        assert json.loads(capsys.readouterr().out)["status"] == "rejected"
+
+
+def test_remote_guide_carries_every_url_to_the_worker(aws: boto3.Session) -> None:
+    batch = mock.MagicMock()
+    batch.submit_job.return_value = {"jobId": "job-1"}
+    real_client = aws.client
+    request = JobRequest(
+        kind="guide",
+        urls=["https://docs.x.dev/a", "https://docs.x.dev/b"],
+        reference_urls=["https://blog.x.io/a", "https://arxiv.org/abs/2309.06180"],
+    )
+    with mock.patch.object(
+        aws,
+        "client",
+        side_effect=lambda name, **kw: (
+            batch if name == "batch" else real_client(name, **kw)
+        ),
+    ):
+        submitted = submit_job(aws, request, project_name="p", stage="dev")
+    sent = batch.submit_job.call_args.kwargs["parameters"]["request"]
+    assert JobRequest.model_validate_json(sent) == request
+    assert "https://arxiv.org/abs/2309.06180" in submitted.input
+
+
+class _WorkerRequestDdd37c8(BaseModel):
+    """Static copy of the JobRequest fields a worker image built at ddd37c8
+    accepts; it forbids unknown fields, so a newer CLI must not send any."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: str
+    source: str | None = None
+    repo_urls: list[str] = []
+    parse_pdf: bool = False
+    urls: list[str] = []
+    search_queries: list[str] = []
+    discover_subpages: bool = True
+    create_pr: bool = True
+
+
+def _sent_request(aws: boto3.Session, request: JobRequest) -> str:
+    batch = mock.MagicMock()
+    batch.submit_job.return_value = {"jobId": "job-1"}
+    real_client = aws.client
+    with mock.patch.object(
+        aws,
+        "client",
+        side_effect=lambda name, **kw: (
+            batch if name == "batch" else real_client(name, **kw)
+        ),
+    ):
+        submit_job(aws, request, project_name="p", stage="dev")
+    return str(batch.submit_job.call_args.kwargs["parameters"]["request"])
+
+
+@pytest.mark.parametrize(
+    "request_",
+    [
+        JobRequest(kind="review", source="1706.03762", repo_urls=["https://g/x"]),
+        JobRequest(kind="summarize", source="https://x.org/p.pdf", parse_pdf=True),
+        JobRequest(
+            kind="guide",
+            urls=["https://docs.x.dev/a"],
+            search_queries=["x internals"],
+            discover_subpages=False,
+            create_pr=False,
+        ),
+    ],
+)
+def test_submitted_request_is_accepted_by_an_older_worker(
+    aws: boto3.Session, request_: JobRequest
+) -> None:
+    sent = _sent_request(aws, request_)
+    _WorkerRequestDdd37c8.model_validate_json(sent)
+    assert JobRequest.model_validate_json(sent) == request_

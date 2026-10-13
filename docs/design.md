@@ -26,7 +26,7 @@ Scholar-Lens는 세 종류의 글을 만듭니다.
 | --- | --- | --- | --- |
 | 논문 리뷰 | `review` | arXiv ID 또는 PDF URL, 선택적 코드 저장소 | `paper_pipeline.py::run_paper_pipeline` → `explainer.py::PaperReviewer` |
 | 논문 요약 | `summarize` | arXiv ID 또는 PDF URL | `paper_pipeline.py::run_paper_pipeline` → `summarizer.py::PaperSummarizer` |
-| 기술 가이드 | `guide` | 문서 URL 목록, 선택적 검색어 | `guide_pipeline.py::run_guide_pipeline` → `tech_guide.py::TechGuideGenerator` |
+| 기술 가이드 | `guide` | 문서 URL 목록, 참고 자료 URL(`--reference`), 선택적 검색어 | `guide_pipeline.py::run_guide_pipeline` → `tech_guide.py::TechGuideGenerator` |
 
 모든 실행은 같은 경로를 탑니다.
 
@@ -71,9 +71,11 @@ Batch worker ┘                                    │     (수집 → 생성 �
 | 명령 | 동작 |
 | --- | --- |
 | `review SOURCE`, `summarize SOURCE` | 논문 산출물을 로컬에서 실행하거나 `--remote`로 제출 |
-| `guide URL...` | 기술 가이드를 로컬에서 실행하거나 `--remote`로 제출 |
+| `guide [URL...] [--reference URL]...` | 기술 가이드를 로컬에서 실행하거나 `--remote`로 제출(문서 URL과 참고 자료 URL 중 하나 이상) |
 | `status JOB_ID [--wait] [--timeout S]` | Batch 상태와 결과 매니페스트 조회(`jobs.py::describe_job`, `wait_for_job`) |
 | `worker --request JSON` | Batch 진입점. `AWS_BATCH_JOB_ID`를 작업 ID로 사용 |
+
+`guide`의 문서 URL은 옵션 앞·사이·뒤 어디에 와도 됩니다(`guide DOC1 --reference R DOC2`). argparse는 하위 명령이 있는 파서에서 위치 인자와 옵션을 섞어 받지 못하므로 `cli.py::parse_args`가 `guide` 하위 파서로 `parse_intermixed_args`를 호출합니다.
 
 stdout에는 JSON 객체 하나만 출력하고 로그는 stderr로 보냅니다. 인자 누락 같은 사용법 오류도 사용법은 stderr로, `{"status": "rejected"}`는 stdout으로 내고 2로 끝납니다. 종료 코드의 정본은 `cli.py` 모듈 docstring이고, `JobResult.status`의 `succeeded`·`failed`·`rejected`가 각각 0·1·2입니다(`_EXIT_BY_STATUS`). 로컬 실행이 설정·자격 증명 문제로 시작하지 못해도 `failed`(1)입니다.
 
@@ -83,17 +85,17 @@ stdout에는 JSON 객체 하나만 출력하고 로그는 stderr로 보냅니다
 
 ### 2.2 JobRequest와 JobResult
 
-`jobs.py::JobRequest`는 실행 하나를 완전히 기술합니다. `extra="forbid"`이며, 논문 요청은 `source`를, 가이드 요청은 `urls`를 요구하고 섞어 쓰면 거부합니다.
+`jobs.py::JobRequest`는 실행 하나를 완전히 기술합니다. `extra="forbid"`이며, 논문 요청은 `source`를, 가이드 요청은 `urls`(문서)나 `reference_urls`(참고 자료) 중 하나 이상을 요구하고 섞어 쓰면 거부합니다.
 
 | 필드 | 대상 | 기본값 |
 | --- | --- | --- |
 | `kind` | 전체 | 필수(`review`, `summarize`, `guide`) |
 | `source` | review, summarize | 필수 |
 | `repo_urls`, `parse_pdf` | review, summarize | `[]`, `false` |
-| `urls`, `search_queries`, `discover_subpages` | guide | 필수, `[]`, `true` |
+| `urls`, `reference_urls`, `search_queries`, `discover_subpages` | guide | `[]`, `[]`(둘 중 하나 이상 필수), `[]`, `true` |
 | `create_pr` | 전체 | `true`(GitHub 연동이 켜져 있을 때만 의미) |
 
-로컬 CLI와 Batch worker는 같은 객체를 씁니다. `--remote`는 `JobRequest.model_dump_json()`을 Batch 파라미터 `request` 하나로 넘기고, 작업 정의의 명령은 `["python3", "-m", "scholar_lens", "worker", "--request", "Ref::request"]`입니다(`scripts/deploy_infra.py::JOB_COMMAND`). 두 경로가 같은 파서를 쓰므로 인자 계약이 어긋나지 않습니다.
+로컬 CLI와 Batch worker는 같은 객체를 씁니다. `--remote`는 `JobRequest.model_dump_json(exclude_defaults=True)`를 Batch 파라미터 `request` 하나로 넘기고, 작업 정의의 명령은 `["python3", "-m", "scholar_lens", "worker", "--request", "Ref::request"]`입니다(`scripts/deploy_infra.py::JOB_COMMAND`). 두 경로가 같은 파서를 쓰므로 인자 계약이 어긋나지 않습니다. 기본값인 필드는 보내지 않으므로, 새 필드를 쓰지 않는 요청은 그 필드가 생기기 전에 배포한 worker 이미지(`extra="forbid"`)도 받습니다. 새 필드(예: `reference_urls`)를 쓰는 요청은 `cdk deploy`로 이미지를 갱신한 뒤에만 원격 실행됩니다(`tests/test_jobs.py`가 ddd37c8 필드 집합으로 검증).
 
 `jobs.py::JobResult`에는 `status`, `title`, `markdown_path`, `s3_uri`, `pr_url`, `warnings`, `violations`, `error`, `job_id`, `duration_seconds`, 토큰 수, `estimated_cost_usd`가 들어갑니다. Batch 실행은 이 결과를 `s3://<bucket>/<s3_prefix>/results/<job_id>.json`에 저장하고(`jobs.py::write_result_manifest`), `status`가 이를 읽어 붙입니다.
 
@@ -183,11 +185,13 @@ LLM 라우팅 호출 없이 계획을 따릅니다(`PaperReviewer._enrich`). 참
 
 `tech_guide.py::TechGuideGenerator.generate` 순서입니다.
 
-1. 시드 URL과 범위 안 하위 페이지를 수집합니다(`web_research.py::WebResearcher.research`).
-2. 관련성 판정(`TechGuideRelevancePrompt`)을 시드 페이지와 그 하위 페이지만으로 먼저 합니다. 통과하지 못하면 `NotTechnicalContentError`로 거부하므로 검색 비용이 들지 않습니다. 같은 호출이 문서가 다루는 명령·패키지 이름(`<commands>`)도 돌려주며, 시드 페이지에 단어로 나오는 이름만 씁니다. 하나도 없으면 사이트 호스트 이름(`docs.vllm.ai` → `vllm`)을 씁니다(`web_research.py::product_names`).
-3. 검색 제공자가 있고 검색어가 주어지지 않았으면 계획 단계가 검색어를 만들고(`auto_research`, `max_research_queries`), 검색어마다 번갈아 고른 상위 결과 페이지를 말뭉치에 넣습니다(`fetch_top_results`). 가이드 주제는 계획 단계의 주제를 씁니다.
-4. 개요를 만들고(최대 10개 절) 절마다 깊이(deep/standard/brief)를 정합니다. 개요 호출은 절마다 그 절을 뒷받침하는 말뭉치 페이지 URL과 그 절이 맡는 개념도 돌려줍니다(`<section_plan>`). URL은 말뭉치에 있는 것만 남기고, 계획의 번호는 개요의 번호 매긴 줄과 맞춥니다(`guide_authority.py::parse_section_plan`). 계획 줄이 없거나 공식 문서 페이지가 하나도 없는 절은 집필 전에 절 제목으로 공식 사이트를 도메인 제한 검색합니다. 검색 결과로 찾은 페이지만 그 절의 공식 출처로 치며, 검색 백엔드가 없거나 찾지 못하면 집필자에게 출처가 보여 주는 내용만 쓰라고 알립니다. 계획이 그 절에 고른 페이지와 제목 조회로 찾은 페이지는 절의 근거 자료 맨 앞에 둡니다. 각 집필 호출에는 다른 절이 맡은 개념 목록(`owned_elsewhere`)을 넘겨 다시 정의하지 않게 합니다.
-5. 절마다 작성 → 평가 → 기준 미달 시 수정(`max_revision_attempts`, 기본 1회) 순서로 진행합니다. 평가자는 절의 근거 자료와 전체 목차를 보고 점수(0–100)와 차단 문제(`<blocking_issues>`: 사실 오류, 절 안의 모순, 출처에 없는 플래그·기본값, 다른 절을 이름이나 번호로 가리키는 표현)를 돌려줍니다. 점수가 기준 이상이고 차단 문제와 코드로 찾은 규칙 위반이 없어야 통과하며, 차단 문제는 수정 지시에 반드시 고칠 항목으로 들어갑니다. 수정본은 원래 초안보다 순위가 높을 때만 남기며, 순위는 통과 여부, 게시 가능 여부, 평가자의 차단 문제 수, 점수, 규칙 위반 수 순서로 비교합니다. 모든 절을 쓴 뒤 사실 확인(`verify_grounding`)을 합니다. 공식 페이지에 없는 CLI 플래그·Python 인자(`gpu_memory_utilization=`)·메트릭 이름은 같은 공식 문서(같은 호스트, 호환되는 버전)의 레퍼런스 페이지로 확인합니다. 집필 전에는 서드파티 페이지에만 나오는 식별자와 공식 출처가 없는 절의 제목을, 사실 확인 전에는 초안에 새로 나온 식별자를 찾으며, 모든 조회를 합쳐 검색 3번, 6쪽까지 씁니다(`WebResearcher.add_official_reference`, 식별자 조회는 검색 뒤에 식별자와 맞는 경로의 링크도 씁니다). 집필 전 조회(서드파티 식별자와 절 제목)는 합쳐서 검색 2번, 4쪽까지만 써서, 사실 확인에 검색 1번과 2쪽 이상이 남습니다. 그래도 확인되지 않은 식별자는 PR 체크리스트에 올립니다. 출처 목록에는 요청한 페이지와 같은 공식 문서(호환되는 버전)의 페이지를 넣고, 그 밖의 페이지는 어느 절의 근거 자료에 실제로 들어갔거나 본문이 링크하거나 이미지를 가져온 경우에만 넣습니다. 레퍼런스 페이지는 본문에 남은 식별자를 낱말 단위로 담은 경우에만 넣고, 이전 버전 문서는 넣지 않습니다(`guide_authority.py::used_source_urls`). 각 절의 호출에는 말뭉치 전체가 아니라 절 제목·설명과 가장 관련 있는 페이지만 약 6만 자까지 넣고(`ResearchCorpus.relevant_text`), 앞선 절은 직전 두 절 전문과 그 이전 절의 요약만 넘깁니다.
+1. 문서 URL(위치 인자, 0개 이상)과 범위 안 하위 페이지를 수집합니다(`web_research.py::WebResearcher.research`). 참고 자료 URL(`--reference`를 반복해 0개 이상, `JobRequest.reference_urls`: 논문, 설계 문서, 심층 분석 글, 발표 페이지)은 하위 페이지 없이 가져와 참고 자료로 표시합니다(`PageContent.user_reference`). 공식 문서의 호스트와 버전(`OfficialDocs`)은 문서 URL로만 정하므로 참고 자료는 공식 문서가 되지 않습니다. 단, 요청한 문서와 같은 호스트·호환 버전의 페이지는 참고 자료로 넘겨도 공식 문서로 다루고, 문서 URL과 같은 참고 자료 URL은 문서로만 다루고 출처 목록에도 한 번만 넣습니다. 같은 페이지를 여러 표기로 주거나(대소문자, 끝 `/`), 같은 arXiv 논문을 초록·PDF·HTML·버전별 링크로 주어도 한 번만 가져옵니다(`web_research.py::page_key`). 리디렉션으로 이미 가진 페이지에 도착한 참고 자료와 검색 결과도 다시 넣지 않습니다. 읽지 못한 참고 자료는 PR 체크리스트에 올립니다. 문서 URL 없이 참고 자료만 주면 공식 문서가 없는 가이드가 되며, 그 사실을 PR 체크리스트에 올리고 절 제목의 공식 사이트 조회를 하지 않습니다. arXiv 논문 링크(초록·PDF·HTML)는 검색 결과든 입력이든 논문의 HTML 렌더링(`arxiv.org/html/<id>`)으로 읽습니다(`web_research.py::arxiv_paper_urls`). 렌더링이 없거나(404) 변환 실패 안내문뿐이면(읽을 수 있는 글자가 파서의 `MIN_PARSED_TEXT_CHARS` 미만) 초록 페이지를 한 번 읽습니다. 429·5xx·시간 초과·연결 오류는 대체 페이지로 넘어가지 않고 가져오기 실패로 기록하므로, 모든 입력이 이런 이유로 실패하면 `SourceFetchError`(재시도 가능한 실패)가 됩니다. 이 계층은 재시도하지 않습니다. arXiv로 가는 모든 요청은 arXiv API 클라이언트와 같은 프로세스 전역 제한기(`rate_limiter.py::ARXIV_RATE_LIMITER`, 3초에 1회)를 거치고, 429를 받으면 이후 arXiv 요청을 `Retry-After`(없으면 30초)만큼 미룹니다. 논문의 SVG 그림(`<object type="image/svg+xml">`)도 `<img>`처럼 이미지 목록에 넣고, 본문 텍스트의 이미지 마커는 목록에 남은 이미지만 남깁니다. `--reference`는 HTML 페이지나 arXiv 링크여야 하며, arXiv가 아닌 PDF는 읽지 않습니다.
+2. 관련성 판정(`TechGuideRelevancePrompt`)을 문서 페이지와 그 하위 페이지만으로(문서 URL이 없으면 참고 자료로) 먼저 합니다. 통과하지 못하면 `NotTechnicalContentError`로 거부하므로 검색 비용이 들지 않습니다. 같은 호출이 문서가 다루는 명령·패키지 이름(`<commands>`)도 돌려주며, 시드 페이지에 단어로 나오는 이름만 씁니다. 하나도 없으면 사이트 호스트 이름(`docs.vllm.ai` → `vllm`)을 씁니다(`web_research.py::product_names`).
+3. 검색 제공자가 있고 검색어가 주어지지 않았으면 계획 단계가 문서와 참고 자료를 보고 검색어를 만들고(`auto_research`, `max_research_queries`, 기본 6개), 상위 결과 페이지를 말뭉치에 넣습니다(`fetch_top_results`, 기본 12). 결과는 모든 검색어의 i번째 결과를 i+1번째보다 먼저 고르므로, 기본값에서는 검색어마다 상위 두 결과(이미 가진 페이지는 건너뜀)가 들어옵니다. 계획 프롬프트는 검색어를 사용법(공식 문서), 내부 구조와 설계(논문, 설계 문서, 아키텍처 개요, 메인테이너의 심층 분석 글, 소스 해설), 운영 아키텍처와 연동(배포 패턴, 확장, 관측성, 장애 양상, 주변 시스템과의 인터페이스) 세 의도에 약 3분의 1씩 나누라고 지시하지만, 실제 배분은 모델이 정합니다. 참고 자료가 이미 설명한 내용은 다시 찾지 않습니다. 계획 단계와 관련성 판정이 보는 출처 요약(6,000자)은 참고 자료와 나머지 페이지가 각각 절반 이상을 쓸 수 있게 나눕니다. 계획 단계의 주제는 검색과 개요 입력에 쓰고, 가이드 제목은 개요 호출이 계획한 범위에 맞춰 돌려주는 `<title>`을 씁니다(없으면 계획 주제).
+4. 개요를 만들고(최대 `max_sections`개 절, 기본 14, 3–30) 절마다 깊이(deep/standard/brief)를 정합니다. 분량 기준은 가이드 전체 약 35,000–55,000자(한국어 기준, 코드 제외), deep 절 약 5,000자, standard 약 2,500자, brief 1,000자 이하입니다(`prompts/tech_guide.py::LENGTH_BUDGET`). 개요는 출처가 뒷받침하는 범위에서 폭과 깊이를 함께 다룹니다. 도구가 푸는 문제와 핵심 개념, 핵심 메커니즘의 동작 방식과 설계 이유, 주요 기능별 의미(푸는 문제, 동작, 장단점, 쓸 때), 설치와 사용법, 더 큰 시스템에의 통합(위치, 인터페이스, 확장, 관측성, 장애 양상, 권고 형태의 설계 조언)입니다. 쉬운 내용은 짧게, 어려운 메커니즘은 배경부터 깊게 쓰며, 설치는 한 절 이하로 두고 플랫폼별 차이는 표나 공식 페이지 링크로 줄입니다. getting-started 유형도 사용법을 앞에 두되 내부 구조와 통합 절을 뒤에 두며, 어려운 메커니즘에는 deep 절을 줍니다. 설치·사용·설정 절은 공식 문서에, 개념·내부 구조·통합 절은 공식 페이지가 없으면 참고 자료나 서드파티 설명 자료에 기대며, `<section_plan>`에 그 자료를 적습니다. 개요 호출은 절마다 그 절을 뒷받침하는 말뭉치 페이지 URL과 그 절이 맡는 개념도 돌려줍니다(`<section_plan>`). URL은 말뭉치에 있는 것만 남기고, 계획의 번호는 개요의 번호 매긴 줄과 맞춥니다(`guide_authority.py::parse_section_plan`). 계획 줄이 없거나 공식 문서 페이지가 하나도 없는 절은 집필 전에 절 제목으로 공식 사이트를 도메인 제한 검색합니다. 검색 결과로 찾은 페이지만 그 절의 공식 출처로 치며, 검색 백엔드가 없거나 찾지 못하면 집필자에게 출처가 보여 주는 내용만 쓰라고 알립니다. 계획이 그 절에 고른 페이지와 제목 조회로 찾은 페이지는 계획 순서대로 절의 근거 자료 맨 앞에 두고, 각각 근거 자료 상한의 같은 몫을 먼저 받아 긴 논문이 공식 페이지를 밀어내지 않습니다. 남은 자리는 관련도 순으로, 잘린 우선 페이지부터 나눕니다(`ResearchCorpus.relevant_text`). 각 집필 호출에는 다른 절이 맡은 개념 목록(`owned_elsewhere`)을 넘겨 다시 정의하지 않게 합니다.
+5. 절마다 작성 → 평가 → 기준 미달 시 수정(`max_revision_attempts`, 기본 1회) 순서로 진행합니다. 평가자는 절의 근거 자료와 전체 목차를 보고 점수(0–100)와 차단 문제(`<blocking_issues>`: 사실 오류, 절 안의 모순, 출처 권한이 요구하는 근거가 없는 플래그·기본값, 어느 출처도 뒷받침하지 않는 내부 구조·아키텍처 주장, 다른 절을 이름이나 번호로 가리키는 표현)를 돌려줍니다. 점수가 기준 이상이고 차단 문제와 코드로 찾은 규칙 위반이 없어야 통과하며, 차단 문제는 수정 지시에 반드시 고칠 항목으로 들어갑니다. 수정본은 원래 초안보다 순위가 높을 때만 남기며, 순위는 통과 여부, 게시 가능 여부, 평가자의 차단 문제 수, 점수, 규칙 위반 수 순서로 비교합니다. 모든 절을 쓴 뒤 사실 확인(`verify_grounding`)을 합니다. 공식 페이지에 없는 CLI 플래그·Python 인자(`gpu_memory_utilization=`)·메트릭 이름은 같은 공식 문서(같은 호스트, 호환되는 버전)의 레퍼런스 페이지로 확인합니다. 집필 전에는 서드파티 페이지에만 나오는 식별자와 공식 출처가 없는 절의 제목을, 사실 확인 전에는 초안에 새로 나온 식별자를 찾으며, 모든 조회를 합쳐 검색 3번, 6쪽까지 씁니다(`WebResearcher.add_official_reference`, 식별자 조회는 검색 뒤에 식별자와 맞는 경로의 링크도 씁니다). 집필 전 조회(서드파티 식별자와 절 제목)는 합쳐서 검색 2번, 4쪽까지만 써서, 사실 확인에 검색 1번과 2쪽 이상이 남습니다. 그중 서드파티 식별자 조회는 절반(검색 1번, 2쪽)까지만 써서 절 제목 조회의 몫을 남깁니다. 그래도 확인되지 않은 식별자는 PR 체크리스트에 올립니다. 출처 목록에는 요청한 페이지(문서와 참고 자료)와 같은 공식 문서(호환되는 버전)의 페이지를 넣고, 그 밖의 페이지는 어느 절의 근거 자료에 실제로 들어갔거나 본문이 링크하거나 이미지를 가져온 경우에만 넣습니다. 레퍼런스 페이지는 본문에 남은 식별자를 낱말 단위로 담은 경우에만 넣고, 이전 버전 문서는 넣지 않습니다(`guide_authority.py::used_source_urls`). 각 절의 호출에는 말뭉치 전체가 아니라 절 제목·설명과 가장 관련 있는 페이지만 약 6만 자까지 넣고(`ResearchCorpus.relevant_text`), 앞선 절은 직전 두 절 전문과 그 이전 절의 요약만 넘깁니다.
+
+출처 권한은 집필·평가·사실 확인 프롬프트가 공유합니다(`prompts/tech_guide.py::SOURCE_AUTHORITY`). 프롬프트의 각 출처는 공식 문서(official documentation), 이전 버전 문서(older docs version), 참고 자료(reference material), 서드파티(third-party)로 표시됩니다(`web_research.py::source_label`). 명령, 플래그, API 이름, 기본값, 설정 키, 환경 변수, 메트릭 이름, 버전·플랫폼 지원은 공식 문서가 정합니다. 참고 자료와 서드파티 페이지(논문, 설계 문서, 메인테이너 글, 엔지니어링 글, 소스 코드)는 개념, 내부 구조, 설계 이유, 장단점, 아키텍처·연동 패턴의 근거가 될 수 있고, 1차 자료가 일반 튜토리얼보다 우선하며 마케팅 글은 근거가 되지 않습니다. 현재 동작을 두고 공식 문서와 어긋나면 공식 문서가 이기고, 이전 버전 문서는 현재 동작을 정하지 않습니다. 근거 자료에 공식 페이지가 있으면 비공식 페이지에만 나오는 명령·플래그·기본값·설정 키는 쓰지 않고, 공식 페이지가 없으면 그 값을 보여 주는 페이지가 있어야 합니다. 평가자는 플래그·기본값에 이 근거를, 개념·내부 구조·아키텍처 주장에는 어느 출처든 근거나 교과서 수준 배경을 요구하며, 근거 없는 내부 구조·아키텍처 주장은 차단 문제입니다. 사실 확인은 출처가 뒷받침하는 개념 설명을 공식 페이지에 없다는 이유로 지우지 않고, 식별자는 계속 공식 문서로 확인합니다. 본문은 사실의 출처를 서술하지 않고, 의견, 벤치마크, 메커니즘이 나온 논문·설계 문서만 한 번 출처를 밝힙니다. 사실 확인이 절을 4분의 1 넘게 줄이면 로그(INFO)에 남깁니다. 참고 자료는 출처 목록에 항상 들어갑니다.
 
 가이드 파이프라인(`guide_pipeline.py`)은 완성된 가이드를 `TechGuideGenerator.classify`로 분류해 블로그 주제 하나, 통제 태그, 세부 태그, `seo_title` 후보를 받고, `formatting.py::build_post_meta`가 spec에 맞게 확정합니다. 분류는 개요가 아니라 완성된 본문의 헤딩과 문단 첫 문장으로 하므로 본문에 없는 내용을 태그로 달지 않습니다. 목차는 블로그 레이아웃이 만들므로 본문에 따로 넣지 않습니다. 문서 사이트의 이미지는 외부 링크로 남기고 검증에서 warning으로 표시합니다.
 
@@ -221,7 +225,7 @@ LLM 라우팅 호출 없이 계획을 따릅니다(`PaperReviewer._enrich`). 참
 - 속성(`extract_attributes`): 제목, 저자, 발행 조직(`affiliation`), 규칙 파일의 주제 중 하나(`category`), 통제 태그, 세부 키워드, `seo_title`. 키워드 재사용 후보로 블로그 글에 이미 쓰인 태그를 넘깁니다(`runtime.py::RunContext.require_blog_tags`).
 - 인용(`extract_citations`, 리뷰만): 참고문헌을 페이지 단위로 추출하며 최대 `MAX_CITATION_PAGES`(20)회입니다.
 
-인용 요약(`citation_summarizer.py::CitationSummarizer`)은 초록을 우선합니다. Crossref, OpenAlex, Semantic Scholar(API 키가 있을 때만), arXiv 순서로 메타데이터를 찾고(`citation_metadata.py`, 속도 제한 포함, `Retry-After`가 60초를 넘으면 그 실행 동안 해당 제공자를 건너뜀), 제목 유사도 0.9 이상이고 버전 표기와 단어가 바뀌지 않은 경우(하이픈·영국식 철자 차이는 같은 단어)만 같은 논문으로 인정합니다(OpenAlex는 상위 5건 중 첫 일치 결과). 제목의 내용어를 하나도 담지 않은 초록은 다른 논문의 것으로 보고 버리며, OpenAlex의 arXiv 레코드 초록은 믿지 않고 DOI의 arXiv ID로 arXiv에서 받습니다. 맞지 않는 초록은 요약하지 않으며, 초록도 본문도 찾지 못한 인용은 리뷰 노트(PR 체크리스트)에 올립니다. `prefer_full_text: true`면 arXiv 전문을 받습니다.
+인용 요약(`citation_summarizer.py::CitationSummarizer`)은 초록을 우선합니다. Crossref, OpenAlex(선택 API 키 `OPENALEX_API_KEY`를 `Authorization: Bearer`로 보냄. 키가 없으면 IP당 하루 약 100회 검색), Semantic Scholar(API 키가 있을 때만), arXiv 순서로 메타데이터를 찾고(`citation_metadata.py`, 속도 제한 포함, `Retry-After`가 60초를 넘으면 그 실행 동안 해당 제공자를 건너뜀), 제목 유사도 0.9 이상이고 버전 표기와 단어가 바뀌지 않은 경우(하이픈·영국식 철자 차이는 같은 단어)만 같은 논문으로 인정합니다(Crossref는 상위 5건 중 제목이 일치하는 레코드 가운데 제목 유사도가 가장 높은 것, OpenAlex는 상위 5건 중 첫 일치 결과). 제목의 내용어를 하나도 담지 않은 초록은 다른 논문의 것으로 보고 버리며, OpenAlex의 arXiv 레코드 초록은 믿지 않고 DOI의 arXiv ID로 arXiv에서 받습니다. 맞지 않는 초록은 요약하지 않으며, 초록도 본문도 찾지 못한 인용은 리뷰 노트(PR 체크리스트)에 올립니다. `prefer_full_text: true`면 arXiv 전문을 받습니다.
 
 ### 5.5 코드 저장소
 
@@ -313,7 +317,7 @@ LLM 라우팅 호출 없이 계획을 따릅니다(`PaperReviewer._enrich`). 참
 
 `blog_sync.py::BlogBranchSync`는 clone 없이 GitHub API로 커밋합니다.
 
-- 브랜치는 `<branch_prefix>/<branch_id>`로 고정됩니다(리뷰 `review-<id>`, 요약 `summary-<id>`, 가이드 `guide-<URL 해시>`). 같은 입력으로 다시 실행하면 같은 브랜치와 PR을 갱신합니다. 가이드 브랜치는 정규화한 입력 URL(쿼리 포함, 프래그먼트 제외) 집합의 해시라 모델이 고른 제목과 무관합니다. 다만 다시 실행한 가이드의 제목이 바뀌면 열린 PR에 이전 글이 함께 남으므로 직접 지워야 합니다.
+- 브랜치는 `<branch_prefix>/<branch_id>`로 고정됩니다(리뷰 `review-<id>`, 요약 `summary-<id>`, 가이드 `guide-<URL 해시>`). 같은 입력으로 다시 실행하면 같은 브랜치와 PR을 갱신합니다. 가이드 브랜치는 정규화한 입력 URL(문서와 참고 자료, 쿼리 포함, 프래그먼트 제외) 집합의 해시라 모델이 고른 제목과 무관합니다. 다만 다시 실행한 가이드의 제목이 바뀌면 열린 PR에 이전 글이 함께 남으므로 직접 지워야 합니다.
 - 열린 PR이 있으면 새 커밋을 브랜치 head 위에 쌓아 PR에서 손으로 고친 다른 파일을 지킵니다. 열린 PR이 없으면(병합, squash 병합, 닫힘) 기준 브랜치에서 다시 시작합니다.
 - blob SHA를 로컬에서 계산해 바뀐 파일만 올리고, 내용이 같으면 커밋하지 않습니다. 기준 브랜치가 이미 같은 글을 갖고 있으면 PR을 만들지 않습니다. 저장소 트리는 동기화마다 한 번씩 읽고, 목록이 잘렸으면(`truncated`) 실패합니다.
 - 이 브랜치에만 있는 예전 글 사본과 그 글들의 번호 이미지 중 이번 실행이 만들지 않은 것은 지웁니다. 예전 사본은 슬러그가 같거나(게시일만 다름), front matter `date`(논문 발행 시각)와 종류가 같은 글(새 arXiv 버전에서 제목이 바뀐 이전 슬러그)입니다. 요약 슬러그는 `-summary`로 끝나므로 같은 논문의 리뷰와 요약은 서로 지우지 않습니다. 같은 종류이고 발행 시각까지 같은 글을 손으로 추가했다면 예전 사본으로 보고 지웁니다.
@@ -370,7 +374,7 @@ PR 본문(`build_pr_body`)에는 논문 ID, PDF URL, 파싱 방식, 글자 수, 
   - S3 접두어 Get/Put과 버킷 전체 `s3:ListBucket`(조건 없음: 선택 파일인 번역 지침이 없을 때 403이 아니라 404로 보여야 하므로). 그래서 버킷은 이 프로젝트 전용이어야 합니다. `s3:PutObjectAcl`은 `public_assets`일 때만
   - SNS 게시와 토픽 KMS 키 사용
   - `cloudwatch:PutMetricData`(`ScholarLens` 네임스페이스 조건)
-  - SSM 비밀값 7개 읽기(`RUN_SECRETS`)
+  - SSM 비밀값 8개 읽기(`RUN_SECRETS`)
 - **SSM**: 스택은 `batch-job-queue`, `batch-job-definition`(String)을 씁니다. 비밀값(SecureString)은 CloudFormation이 만들 수 없으므로 `scripts/put_secrets.py`로 따로 기록합니다(이름을 주면 그 비밀값만). `cdk synth`/`diff`는 비밀값을 건드리지 않습니다. 실행 시 기록되지 않은 비밀값(`ParameterNotFound`)은 조용히 건너뛰고, 권한 오류 등은 warning으로 남깁니다.
 - **설정 파일**: 이미지에는 배포하는 체크아웃의 `scholar_lens/configs/config.yaml`이 들어갑니다. 설정을 고치면 `cdk deploy`를 다시 해야 Batch에 반영됩니다. `deploy_infra.py::check_deployable`은 이 파일이나 `s3_bucket_name`이 없으면 배포를 멈춥니다. `cdk` 명령에는 `resources.profile_name`과 같은 `--profile`을 넘깁니다.
 - **알림**: KMS 암호화 SNS 토픽(SSL 강제)에 이메일을 구독합니다. 토픽 정책은 이 계정의 CloudWatch 경보(`aws:SourceAccount`·`aws:SourceArn` 조건)와 실패 규칙 하나의 EventBridge 게시만 허용합니다. EventBridge 대상이 자동으로 만드는 허용은 조건이 없으므로, 그 규칙이 아닌 게시를 막는 Deny 문을 따로 둡니다. 토픽 KMS 키의 EventBridge 허용은 CDK가 만든 그대로입니다.

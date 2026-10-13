@@ -90,11 +90,17 @@ tech_guide:
   thinking_effort: medium
   # Fact-check each section against the sources (one extra call per section).
   verify_grounding: true
-  # Derive web-search queries from the seed docs (needs TAVILY_API_KEY or
-  # BRAVE_API_KEY) and fetch the top result pages into the corpus.
+  # Derive web-search queries from the docs and reference material (needs
+  # TAVILY_API_KEY or BRAVE_API_KEY) across three intents (usage, internals
+  # and design, production integration), and fetch the top result pages into
+  # the corpus, taken round-robin across the queries (12 = the top two results
+  # of each query). Each section reads at most ~60k characters of its most
+  # relevant pages, so more pages mainly grow the one outline call.
   auto_research: true
   max_research_queries: 6
-  fetch_top_results: 4
+  fetch_top_results: 12
+  # At most this many sections (3-30); the outline plans within it.
+  max_sections: 14
   min_quality_score: 75
   max_revision_attempts: 1
   # Soft limit: past it, remaining sections skip evaluate/revise/grounding;

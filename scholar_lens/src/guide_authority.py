@@ -204,7 +204,8 @@ def used_source_urls(
     section_sources: Collection[str],
 ) -> list[str]:
     """The pages the guide draws on, for its source list: the requested pages
-    and the official pages crawled with them, and any other page that fed a
+    (``urls``: documentation and reference material) and the official pages
+    crawled with them, and any other page that fed a
     section's sources (``section_sources``) or that the body links or shows
     an image from. A reference page counts only for an identifier it settled;
     an older docs version never counts."""

@@ -11,16 +11,13 @@ from .citation_metadata import title_similarity, titles_match
 from .constants import normalize_arxiv_id
 from .logger import logger
 from .pdf_download import CHUNK_BYTES, save_pdf
-from .rate_limiter import RateLimiter
+from .rate_limiter import ARXIV_RATE_LIMITER, arxiv_retry_after_seconds
 
 # The only retry layer for arXiv API calls (the arxiv client itself makes one
 # attempt): jittered backoff so a momentary 429 does not abort a whole job.
 _ARXIV_FETCH_MAX_ATTEMPTS: int = 4
 _ARXIV_FETCH_INITIAL_WAIT: int = 5
 _ARXIV_FETCH_MAX_WAIT: int = 60
-# Fallback penalty when a 429 carries no Retry-After header (arXiv usually omits
-# it). Named so the assumption is visible alongside the other retry constants.
-_ARXIV_429_FALLBACK_RETRY_SECONDS: float = 30.0
 # (connect, read) timeouts for arXiv API and PDF requests; without them a stalled
 # connection would hang a Batch job until its 3-hour limit.
 _ARXIV_TIMEOUT: tuple[float, float] = (10.0, 60.0)
@@ -35,26 +32,9 @@ class _TimeoutAdapter(requests.adapters.HTTPAdapter):
         return super().send(request, **kwargs)
 
 
-# A single process-wide limiter shared by ALL ArxivHandler instances, so the
-# concurrent citation stage cannot fan out into an arXiv 429 storm. arXiv asks
-# for ~1 request / 3s; we honour that globally.
-_ARXIV_RATE_LIMITER = RateLimiter(rate=1.0, per=3.0, name="arxiv")
-
-
-def _retry_after_seconds(error: Exception) -> float:
-    """Best-effort extraction of a Retry-After hint from an arXiv/HTTP error."""
-    response = getattr(error, "response", None)
-    headers = getattr(response, "headers", None) or {}
-    raw = headers.get("Retry-After") or headers.get("retry-after")
-    if raw:
-        try:
-            return float(raw)
-        except (TypeError, ValueError):
-            return 0.0
-    # arXiv 429s rarely include Retry-After; apply a conservative default.
-    if "429" in str(error):
-        return _ARXIV_429_FALLBACK_RETRY_SECONDS
-    return 0.0
+# The process-wide arXiv limiter (shared with the guide's arXiv page fetches),
+# so the concurrent citation stage cannot fan out into an arXiv 429 storm.
+_ARXIV_RATE_LIMITER = ARXIV_RATE_LIMITER
 
 
 class ArxivPaperError(Exception):
@@ -222,7 +202,7 @@ class ArxivHandler:
                 f"Paper not found for arXiv ID: '{arxiv_id}'"
             ) from e
         except Exception as e:
-            _ARXIV_RATE_LIMITER.penalize(_retry_after_seconds(e))
+            _ARXIV_RATE_LIMITER.penalize(arxiv_retry_after_seconds(e))
             raise ArxivPaperError(
                 f"An unexpected error occurred while fetching '{arxiv_id}': {e}"
             ) from e
@@ -267,7 +247,7 @@ class ArxivHandler:
                 if best is not None:
                     return best[1]
             except Exception as e:
-                _ARXIV_RATE_LIMITER.penalize(_retry_after_seconds(e))
+                _ARXIV_RATE_LIMITER.penalize(arxiv_retry_after_seconds(e))
                 logger.warning("Search query '%s' failed: %s", query, e)
                 continue
 

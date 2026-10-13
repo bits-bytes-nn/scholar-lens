@@ -187,8 +187,12 @@ class TechGuide(_Section):
     auto_research: bool = Field(default=True)
     max_research_queries: int = Field(default=6, gt=0)
     # How many top search-result pages to fetch into the corpus so the gathered
-    # material reaches the section writer (not just the outline planner).
-    fetch_top_results: int = Field(default=4, ge=0)
+    # material reaches the section writer (not just the outline planner); taken
+    # round-robin across the queries, so 12 reads the top two of each.
+    fetch_top_results: int = Field(default=12, ge=0)
+    # Upper bound on guide sections, told to the outline planner so it plans a
+    # self-contained guide (usage, internals and integration) within it.
+    max_sections: int = Field(default=14, ge=3, le=30)
     # Per-section evaluate-and-revise loop (the review pipeline's evaluate gate):
     # sections scoring below the threshold are revised up to N times.
     min_quality_score: int = Field(default=75, ge=0, le=100)

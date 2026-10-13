@@ -47,8 +47,11 @@ class JobRequest(BaseModel):
     source: str | None = None
     repo_urls: list[str] = Field(default_factory=list)
     parse_pdf: bool = False
-    # guide: documentation URLs plus optional extra web-search queries.
+    # guide: documentation URLs (the authority for commands, flags and
+    # defaults), reference material to build on (papers, design docs, deep-dive
+    # posts; never official) and optional extra web-search queries.
     urls: list[str] = Field(default_factory=list)
+    reference_urls: list[str] = Field(default_factory=list)
     search_queries: list[str] = Field(default_factory=list)
     discover_subpages: bool = True
     # Opens a blog PR when the GitHub integration is enabled in config.
@@ -57,20 +60,23 @@ class JobRequest(BaseModel):
     @model_validator(mode="after")
     def _check_inputs(self) -> JobRequest:
         if self.kind == "guide":
-            if not self.urls:
-                raise ValueError("A guide request needs at least one URL.")
+            if not self.urls and not self.reference_urls:
+                raise ValueError(
+                    "A guide request needs at least one URL (documentation "
+                    "or reference material)."
+                )
             if self.source or self.repo_urls:
                 raise ValueError("A guide request takes 'urls', not 'source'.")
         else:
             if not (self.source and self.source.strip()):
                 raise ValueError(f"A {self.kind} request needs a 'source'.")
-            if self.urls or self.search_queries:
+            if self.urls or self.reference_urls or self.search_queries:
                 raise ValueError(f"A {self.kind} request takes 'source', not 'urls'.")
         return self
 
     def describe(self) -> str:
         """Short human label of the input, for logs and notifications."""
-        return self.source or ", ".join(self.urls)
+        return self.source or ", ".join([*self.urls, *self.reference_urls])
 
 
 class JobResult(BaseModel):
@@ -172,7 +178,9 @@ def submit_job(
             jobName=job_name,
             jobQueue=job_queue,
             jobDefinition=job_definition,
-            parameters={"request": request.model_dump_json()},
+            # Defaults are left out so a worker image from before a newly added
+            # field (extra="forbid") still accepts requests that do not use it.
+            parameters={"request": request.model_dump_json(exclude_defaults=True)},
         )
     except ClientError as e:
         raise BatchJobError(f"Failed to submit Batch job '{job_name}': {e}") from e

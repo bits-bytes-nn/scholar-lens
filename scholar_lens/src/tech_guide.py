@@ -1,12 +1,16 @@
 """Technical guide / tutorial generator.
 
-Given a list of URLs (library/framework/platform docs), this agent:
-1. Plans deep research — derives the topic and a set of web-search queries from
-   the seed docs, then researches the seed URLs (+ in-scope sub-pages + the
-   planned/explicit search queries) into a corpus so the guide draws on broad,
-   complementary material rather than translating a single page.
-2. Gates on relevance — refuses to write if the sources are not technical
-   developer documentation (raises :class:`NotTechnicalContentError`).
+Given documentation URLs (library/framework/platform docs: the authority for
+commands, flags and defaults) and optional reference material (a paper, design
+doc or deep-dive post the user wants the guide to build on), this agent:
+1. Plans deep research — derives the topic and a set of web-search queries
+   (usage, internals and design, production integration) from the inputs, then
+   researches the docs URLs (+ in-scope sub-pages), the reference material and
+   the planned/explicit search queries into a corpus so the guide draws on
+   broad, complementary material rather than translating a single page.
+2. Gates on relevance — refuses to write if the docs (or, without docs, the
+   reference material) are not technical developer material (raises
+   :class:`NotTechnicalContentError`).
 3. Plans a structured synopsis: each section is tagged with a concern area
    (concept / detail / usage / application) and a depth (deep / standard /
    brief), so important parts go deep and peripheral parts stay short.
@@ -59,6 +63,7 @@ from .prompts import (
 from .prompts.tech_guide import (
     DEPTH_CHARS,
     NON_KOREAN_CHAR_FACTOR,
+    REFERENCE_LABEL,
     TechGuideTaxonomyPrompt,
 )
 from .review_plan import (
@@ -85,29 +90,28 @@ from .web_research import (
     OfficialDocs,
     PageContent,
     ResearchCorpus,
+    SourceFetchError,
     WebResearcher,
+    page_key,
     product_names,
 )
 
 DEFAULT_LANGUAGE: str = "Korean"
-# Upper bound on guide sections. The synopsis is told this budget so it plans a
-# self-contained guide rather than over-proposing (which left the old vLLM guide
-# promising chapters 13-26 that were never written).
-_MAX_SECTIONS: int = 10
 # Source material handed to one section's writer/evaluator/grounding calls:
 # the most relevant pages only (about 15k tokens), not the whole corpus.
 _SECTION_SOURCE_CHARS: int = 60_000
 # Official reference excerpt put ahead of a section's sources for grounding.
 _REFERENCE_SOURCE_CHARS: int = 20_000
-# The lookup before writing may use only part of the per-guide reference
-# budget; the rest stays for the identifiers the drafts introduce.
+# The lookups before writing may use only part of the per-guide reference
+# budget; the rest stays for the identifiers the drafts introduce. Of that
+# part, the third-party identifier lookup takes at most half, so the
+# per-section title searches keep a share.
 _PRE_WRITE_REFERENCE_PAGES: int = MAX_REFERENCE_PAGES * 2 // 3
 _PRE_WRITE_REFERENCE_SEARCHES: int = MAX_REFERENCE_SEARCHES * 2 // 3
-# Default number of web-search queries the research planner may propose.
-_MAX_RESEARCH_QUERIES: int = 6
-# Default number of top search-result pages fetched into the corpus so the
-# gathered material reaches the writer (not just the outline planner).
-_FETCH_TOP_RESULTS: int = 4
+_IDENTIFIER_REFERENCE_PAGES: int = _PRE_WRITE_REFERENCE_PAGES // 2
+_IDENTIFIER_REFERENCE_SEARCHES: int = _PRE_WRITE_REFERENCE_SEARCHES // 2
+# Grounding that cuts a section by more than this share is logged.
+_GROUNDING_CUT_LOGGED: float = 0.25
 # Section quality gate (mirrors the review pipeline's evaluate loop).
 _MIN_QUALITY_SCORE: int = 75
 _MAX_REVISION_ATTEMPTS: int = 1
@@ -149,9 +153,9 @@ def _depth_target(depth: str, language: str) -> tuple[str, int]:
 _DEFAULT_DEPTH: str = "standard"
 GETTING_STARTED = "getting-started"
 _GETTING_STARTED_SCOPE = (
-    "This is a getting-started guide: explain internals only as far as the "
-    "reader needs them to use and tune the tool (no simulators, derivations or "
-    "from-scratch reimplementations)."
+    "This is a getting-started guide: usage leads, and internals are explained "
+    "by how the mechanism works and why it is built that way, so the reader "
+    "understands what they run and tune."
 )
 
 
@@ -183,8 +187,13 @@ def parse_section_output(raw: str) -> dict[str, str]:
 
 
 _NO_OFFICIAL_SOURCE = (
-    "No official documentation page covers this section: state only what "
-    "<sources> show, and leave out any flag, default or command they do not."
+    "No official documentation page covers this section: it rests on the "
+    "explanatory sources in <sources>."
+)
+_NO_DOCS_NOTE = (
+    "No documentation URL was given, so no page counted as official: verify "
+    "the guide's commands, flags and defaults against the product's current "
+    "docs."
 )
 
 
@@ -282,11 +291,11 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
         enable_thinking: bool = False,
         evaluator_enable_thinking: bool | None = None,
         thinking_effort: str = "medium",
-        max_sections: int = _MAX_SECTIONS,
+        max_sections: int,
         verify_grounding: bool = True,
         auto_research: bool = True,
-        max_research_queries: int = _MAX_RESEARCH_QUERIES,
-        fetch_top_results: int = _FETCH_TOP_RESULTS,
+        max_research_queries: int,
+        fetch_top_results: int,
         min_quality_score: int = _MIN_QUALITY_SCORE,
         max_revision_attempts: int = _MAX_REVISION_ATTEMPTS,
         max_total_tokens: int | None = None,
@@ -407,34 +416,53 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
         self,
         urls: list[str],
         *,
+        reference_urls: list[str] | None = None,
         discover_subpages: bool = True,
         search_queries: list[str] | None = None,
     ) -> TechGuide:
-        if not urls:
+        """Write a guide from documentation ``urls`` (the authority for
+        commands, flags and defaults) and ``reference_urls``: explanatory
+        material to build on, always fetched and listed but never official.
+        Either may be empty, not both; without docs no page is official."""
+        # One spelling per page (and per arXiv paper: abs, pdf, any version).
+        held = {page_key(u) for u in urls}
+        references: list[str] = []
+        for url in reference_urls or []:
+            if (key := page_key(url)) not in held:
+                held.add(key)
+                references.append(url)
+        if not urls and not references:
             raise ValueError("At least one source URL is required.")
-        # The requested sites are the authority for flags, defaults and names.
+        # The requested docs are the authority for flags, defaults and names.
         self._official = OfficialDocs.from_urls(urls)
         self._source_urls = tuple(urls)
         self._reference_pages, self._reference_ids = [], []
         self._reference_searches = 0
         self._section_source_urls = set()
 
-        # Fetch the seed URLs (+ in-scope sub-pages) once. WebResearcher is
+        # Fetch the docs URLs (+ in-scope sub-pages) once. WebResearcher is
         # synchronous (blocking HTTP crawl); run it off the event loop.
-        corpus = await asyncio.to_thread(
-            self.researcher.research, urls, discover_subpages=discover_subpages
-        )
-        if not corpus.pages:
-            raise NotTechnicalContentError(
-                "None of the supplied URLs returned readable content."
+        corpus = ResearchCorpus()
+        if urls:
+            corpus = await asyncio.to_thread(
+                self.researcher.research, urls, discover_subpages=discover_subpages
             )
-        # Where the requested pages actually landed (redirects, a pinned
-        # version behind "stable") is official too.
-        self._official = OfficialDocs.from_research(urls, corpus.pages)
+            if not corpus.pages:
+                raise NotTechnicalContentError(
+                    "None of the supplied URLs returned readable content."
+                )
+            # Where the requested pages actually landed (redirects, a pinned
+            # version behind "stable") is official too.
+            self._official = OfficialDocs.from_research(urls, corpus.pages)
+        else:
+            self.notes.append(_NO_DOCS_NOTE)
+        docs = ResearchCorpus(pages=list(corpus.pages))
+        await self._add_material(corpus, references)
 
-        # Judge the seed pages alone: search results never redefine what the
-        # user asked for, and a rejected input spends nothing on searches.
-        gate_topic = await self._assert_relevant(corpus)
+        # Judge the docs alone (the reference material when there are none):
+        # search results never redefine what the user asked for, and a
+        # rejected input spends nothing on searches.
+        gate_topic = await self._assert_relevant(docs if docs.pages else corpus)
 
         # Deep-research planning: when no explicit queries are supplied, derive
         # search queries (and an early topic guess) from the seed pages so the
@@ -467,8 +495,8 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
         await self._add_reference(
             corpus,
             third_party_identifiers(corpus, self._official, self._products),
-            max_pages=_PRE_WRITE_REFERENCE_PAGES,
-            max_searches=_PRE_WRITE_REFERENCE_SEARCHES,
+            max_pages=_IDENTIFIER_REFERENCE_PAGES,
+            max_searches=_IDENTIFIER_REFERENCE_SEARCHES,
         )
 
         topic = (
@@ -476,7 +504,9 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
             if planned_topic and not is_placeholder(planned_topic)
             else gate_topic
         )
-        synopsis = await self._draft_synopsis(topic, corpus)
+        # The planned topic steers the searches and the outline; the title
+        # the outline comes with names the scope it actually planned.
+        topic, synopsis = await self._draft_synopsis(topic, corpus)
         body = await self._write_sections(topic, synopsis, corpus)
         unverified = unverified_identifiers(
             body, official_reference(self._official, corpus), self._products
@@ -494,7 +524,7 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
             source_urls=used_source_urls(
                 body,
                 corpus,
-                urls,
+                [*urls, *references],
                 self._official,
                 self._reference_pages,
                 self._section_source_urls,
@@ -502,6 +532,43 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
             notes=list(self.notes),
             image_urls=list(corpus.image_urls),
         )
+
+    async def _add_material(
+        self, corpus: ResearchCorpus, references: list[str]
+    ) -> None:
+        """Fetch the user's reference material (no sub-pages: a post's links
+        are other posts) into ``corpus``, marked so prompts label it
+        reference material. A page the docs crawl already holds stays as it
+        is. Pages that could not be read go to the notes; with no docs and no
+        readable reference the request has nothing to write from."""
+        if not references:
+            return
+        try:
+            fetched = await asyncio.to_thread(
+                self.researcher.research, references, discover_subpages=False
+            )
+        except SourceFetchError:
+            if not corpus.pages:
+                raise
+            fetched = ResearchCorpus()
+        held = {page_key(u) for p in corpus.pages for u in (p.url, p.final_url) if u}
+        for page in fetched.pages:
+            keys = {page_key(u) for u in (page.url, page.final_url) if u}
+            if not keys & held:
+                page.user_reference = True
+                corpus.pages.append(page)
+                held |= keys
+        if not corpus.pages:
+            raise NotTechnicalContentError(
+                "None of the supplied URLs returned readable content."
+            )
+        read = {page_key(p.url) for p in fetched.pages}
+        missing = [u for u in references if page_key(u) not in read]
+        if missing:
+            self.notes.append(
+                "Reference material that could not be read (left out): "
+                + ", ".join(missing)
+            )
 
     @RetryableBase._retry("tech_guide_taxonomy")
     async def classify(
@@ -546,9 +613,10 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
             topic = (result.get("topic") or "").strip()
             queries = self._parse_queries(result.get("queries", ""))
             logger.info(
-                "Research plan: topic='%s', %d queries.",
+                "Research plan: topic='%s', %d queries: %s",
                 topic,
                 len(queries),
+                queries,
             )
             return (topic or None), queries
         except Exception as e:  # noqa: BLE001 - planning is best-effort
@@ -577,7 +645,11 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
         )
         return topic
 
-    async def _draft_synopsis(self, topic: str, corpus: ResearchCorpus) -> str:
+    async def _draft_synopsis(
+        self, topic: str, corpus: ResearchCorpus
+    ) -> tuple[str, str]:
+        """The guide's title (``topic`` when the outline came without one)
+        and its outline."""
         result = await self.synopsis_chain.ainvoke(
             {
                 "topic": topic,
@@ -597,8 +669,12 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
             raise ValueError("Synopsis generation returned empty output.")
         self._guide_type = (result.get("guide_type") or "").strip().lower()
         self._section_plan = result.get("section_plan") or ""
-        logger.info("Guide type: %s", self._guide_type or "?")
-        return synopsis
+        title = " ".join((result.get("title") or "").split())
+        # An unclosed tag would make the rest of the output the title.
+        if not title or is_placeholder(title) or "<" in title or len(title) > 200:
+            title = topic
+        logger.info("Guide type: %s; title: '%s'", self._guide_type or "?", title)
+        return title, synopsis
 
     async def _write_sections(
         self, topic: str, synopsis: str, corpus: ResearchCorpus
@@ -620,7 +696,9 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
             # A section without a plan line has no official page either.
             urls, section.owns = plan.get(number, ([], []))
             section.sources = list(urls)
-            if not any(self._official.covers(u) for u in urls):
+            if not self._official.hosts:
+                section.official_source = False  # no docs: nothing to look up
+            elif not any(self._official.covers(u) for u in urls):
                 await self._find_official_source(corpus, section)
         available_images = "\n".join(corpus.image_urls) or "(none)"
 
@@ -767,6 +845,12 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
                 len(draft),
                 len(grounded),
             )
+            if len(grounded) < len(draft) * (1 - _GROUNDING_CUT_LOGGED):
+                logger.info(
+                    "Grounding cut section %d by %.0f%%: check what it removed.",
+                    index + 1,
+                    100 * (1 - len(grounded) / len(draft)),
+                )
             written[index] = grounded
 
     async def _find_official_source(
@@ -774,8 +858,8 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
     ) -> None:
         """Search the official site for the section's title when the synopsis
         named no official page for it, within the pre-write reference budget
-        (shared with the third-party identifier lookup, so grounding keeps the
-        rest). Only a search result counts: the reference links of the pages
+        (the third-party identifier lookup used at most half of it, and
+        grounding keeps the rest). Only a search result counts: the reference links of the pages
         already fetched say nothing about the section. Without a search
         backend, or when the search finds nothing, the section is written from
         what its sources show. Once the budget is spent the section is left as
@@ -1206,12 +1290,27 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
 
     @staticmethod
     def _sources_digest(corpus: ResearchCorpus, max_chars: int = 6000) -> str:
-        lines = []
-        for page in corpus.pages:
-            snippet = page.text[:500].replace("\n", " ")
-            lines.append(f"- {page.url}\n  {page.title}\n  {snippet}")
+        """URL, title and opening of each page within ``max_chars``: the
+        user's reference material (labelled) and then the other pages, each
+        group with at least half of ``max_chars`` when the other needs it, so
+        neither a long docs crawl nor many references push the other out."""
+
+        def digest(pages: list[PageContent], label: str) -> str:
+            return "\n".join(
+                f"- {page.url}{label}\n  {page.title}\n  "
+                + page.text[:500].replace("\n", " ")
+                for page in pages
+            )
+
+        references = digest(
+            [p for p in corpus.pages if p.user_reference], f" ({REFERENCE_LABEL})"
+        )
+        others = digest([p for p in corpus.pages if not p.user_reference], "")
+        references = references[: max(max_chars // 2, max_chars - len(others) - 1)]
+        others = others[: max_chars - len(references) - 1]
+        text = "\n".join(part for part in (references, others) if part)
         # Untrusted page text → defang prompt-fence tags before interpolation.
-        return neutralize_prompt_tags("\n".join(lines)[:max_chars])
+        return neutralize_prompt_tags(text)
 
     @staticmethod
     def _search_digest(corpus: ResearchCorpus) -> str:

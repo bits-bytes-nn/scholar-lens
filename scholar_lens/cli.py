@@ -6,6 +6,7 @@ and scripts can parse the outcome directly::
     scholar-lens summarize 2106.09685
     scholar-lens review "https://openreview.net/pdf?id=nZeVKeeFYf9" --remote
     scholar-lens guide "https://docs.vllm.ai/en/latest/" --search-query "vLLM paged attention"
+    scholar-lens guide "https://docs.vllm.ai/en/latest/" --reference "https://arxiv.org/abs/2309.06180"
     scholar-lens status <job-id> --wait
 
 Exit codes: 0 succeeded (or submitted), 1 failed, 2 rejected input,
@@ -121,15 +122,37 @@ def build_parser() -> argparse.ArgumentParser:
     guide = commands.add_parser(
         "guide",
         help="Hands-on technical guide from documentation URLs.",
-        description="Hands-on technical guide from documentation URLs.",
+        description=(
+            "Hands-on technical guide from documentation URLs and optional "
+            "reference material (at least one URL of either kind)."
+        ),
     )
-    guide.add_argument("urls", nargs="+", help="Documentation URLs.")
+    guide.add_argument(
+        "urls",
+        nargs="*",
+        help="Documentation URLs: the authority for commands, flags and defaults.",
+    )
+    guide.add_argument(
+        "--reference",
+        dest="reference_urls",
+        action="append",
+        default=[],
+        metavar="URL",
+        help=(
+            "Reference material to build on: a paper, design doc, deep-dive post "
+            "or talk page (repeatable; always used and listed, never treated as "
+            "official documentation)."
+        ),
+    )
     guide.add_argument(
         "--search-query",
         dest="search_queries",
         action="append",
         default=[],
-        help="Extra web-search query (repeatable; quote multi-word queries).",
+        help=(
+            "Web-search query (repeatable; quote multi-word queries); replaces "
+            "the queries the guide would plan itself."
+        ),
     )
     guide.add_argument(
         "--no-subpages",
@@ -158,11 +181,25 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    """Parse the command line. ``guide`` takes its documentation URLs before,
+    between or after its options (``guide DOC1 --reference R DOC2``): the URLs
+    argparse leaves over after an option are the guide's too."""
+    parser = build_parser()
+    args, extra = parser.parse_known_args(argv)
+    if extra and args.command == "guide" and not any(e.startswith("-") for e in extra):
+        args.urls += extra
+    elif extra:
+        parser.error(f"unrecognized arguments: {' '.join(extra)}")
+    return args
+
+
 def _request_from_args(args: argparse.Namespace) -> JobRequest:
     if args.command == "guide":
         return JobRequest(
             kind="guide",
             urls=args.urls,
+            reference_urls=args.reference_urls,
             search_queries=args.search_queries,
             discover_subpages=args.discover_subpages,
             create_pr=args.create_pr,
@@ -335,7 +372,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     # faiss-cpu bundles its own OpenMP runtime; tolerate a second copy loaded
     # by another native wheel instead of aborting.
     os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
-    args = build_parser().parse_args(argv)
+    args = parse_args(argv)
     if args.command == "worker":
         return _work(args.request)
     if args.command != "status":

@@ -82,3 +82,27 @@ class RateLimiter:
             return 0.0
         # Time for one more token to accrue.
         return (1 - self._tokens) * (self.per / self.rate)
+
+
+# arXiv asks for about one request every 3 seconds: one limiter for the whole
+# process (the arXiv API client, citation fetches and the guide's arXiv pages).
+ARXIV_RATE_LIMITER = RateLimiter(rate=1.0, per=3.0, name="arxiv")
+# Penalty when an arXiv 429 carries no Retry-After header (arXiv usually omits
+# it).
+_ARXIV_429_FALLBACK_RETRY_SECONDS: float = 30.0
+
+
+def arxiv_retry_after_seconds(error: Exception) -> float:
+    """Best-effort extraction of a Retry-After hint from an arXiv/HTTP error."""
+    response = getattr(error, "response", None)
+    headers = getattr(response, "headers", None) or {}
+    raw = headers.get("Retry-After") or headers.get("retry-after")
+    if raw:
+        try:
+            return float(raw)
+        except (TypeError, ValueError):
+            return 0.0
+    # arXiv 429s rarely include Retry-After; apply a conservative default.
+    if "429" in str(error):
+        return _ARXIV_429_FALLBACK_RETRY_SECONDS
+    return 0.0

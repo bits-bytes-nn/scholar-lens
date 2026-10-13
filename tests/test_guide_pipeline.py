@@ -34,3 +34,12 @@ def test_guide_document_converts_markers_and_drops_unoffered_images() -> None:
     assert "[Image:" not in out
     assert f"]({arch})" in out
     assert "logo.svg" not in out
+
+
+def test_branch_id_counts_reference_material() -> None:
+    docs = ["https://docs.vllm.ai/en/latest/"]
+    assert guide_branch_id(docs) != guide_branch_id(
+        [*docs, "https://arxiv.org/abs/2309.06180"]
+    )
+    # A guide from reference material alone still gets its own branch.
+    assert guide_branch_id(["https://blog.x.io/a"]) != guide_branch_id([])
