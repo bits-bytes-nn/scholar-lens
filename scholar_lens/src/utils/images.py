@@ -4,15 +4,19 @@ from __future__ import annotations
 
 import base64
 import binascii
+import hashlib
 import io
 import math
 import re
 import subprocess
 import sys
+import tarfile
 import threading
 import xml.etree.ElementTree as ET
+from pathlib import PurePosixPath
 
-from PIL import Image
+import fitz
+from PIL import Image, UnidentifiedImageError
 
 # Render scale for vector figures: 3x the SVG's CSS size gives a sharp PNG on
 # high-density screens without huge files.
@@ -255,6 +259,129 @@ def svg_to_png(data: bytes) -> bytes:
             return out.getvalue()
     except Image.DecompressionBombError as e:
         raise ValueError(f"SVG renders too large: {e}") from e
+
+
+def raster_to_png(data: bytes, max_side: int = MAX_RENDER_SIDE) -> bytes:
+    """PNG of a raster image in one of :data:`RASTER_FORMATS`: a format the
+    blog does not serve (WebP, AVIF, BMP, TIFF), or a PNG/JPEG to scale down;
+    the first frame of an animation. Larger than :data:`MAX_EMBEDDED_PIXELS`
+    is refused (read from the header, before decoding) and a side over
+    ``max_side`` is scaled down. A mode PNG cannot store (CMYK, YCbCr, ...)
+    is converted to RGBA.
+    Raises ``ValueError`` when the data is not a decodable image in those
+    formats."""
+    Image.init()  # registers the optional plugins (AVIF) before the check
+    formats = [name for name in RASTER_FORMATS if name in Image.OPEN]
+    try:
+        with Image.open(io.BytesIO(data), formats=formats) as opened:
+            width, height = opened.size
+            if width * height > MAX_EMBEDDED_PIXELS:
+                raise ValueError(f"a {width}x{height} image is too large")
+            image = opened if opened.mode in _PNG_MODES else opened.convert("RGBA")
+            image.thumbnail((max_side, max_side))
+            out = io.BytesIO()
+            image.save(out, format="PNG")
+            return out.getvalue()
+    except UnidentifiedImageError as e:
+        raise ValueError(
+            f"not a decodable image (expected one of {', '.join(formats)})"
+        ) from e
+    except (OSError, Image.DecompressionBombError) as e:
+        raise ValueError(f"not a decodable image: {e}") from e
+
+
+# Raster formats raster_to_png reads (AVIF only where Pillow has the plugin).
+RASTER_FORMATS = ("PNG", "JPEG", "WEBP", "AVIF", "BMP", "TIFF")
+_PNG_MODES = frozenset({"1", "L", "LA", "I", "I;16", "P", "RGB", "RGBA"})
+
+# ar5iv's stand-in for a figure it lost: a 325x400 "NO IMAGE AVAILABLE" PNG
+# served with HTTP 200.
+_AR5IV_PLACEHOLDER_MD5 = "ded85833de1226c2b391743296455b30"
+
+
+def is_ar5iv_placeholder(data: bytes) -> bool:
+    return hashlib.md5(data, usedforsecurity=False).hexdigest() == (
+        _AR5IV_PLACEHOLDER_MD5
+    )
+
+
+# Figure files in an arXiv source archive, in the order one is preferred when
+# a figure exists in several formats.
+SOURCE_FIGURE_FORMATS = (".png", ".jpg", ".jpeg", ".pdf", ".eps")
+# Bound on the bytes an archive unpacks to (its members are only read, never
+# written to disk).
+MAX_SOURCE_UNPACKED_BYTES = 1024**3
+# Render scale for a PDF figure: 2x its point size (144 dpi).
+PDF_FIGURE_ZOOM = 2
+
+
+def source_figure(archive: bytes, figure_path: str) -> bytes:
+    """The image for ``figure_path`` (the path an arXiv HTML figure URL has
+    after ``<id>v<N>/``, e.g. ``Media/overview.png``) from the paper's arXiv
+    source ``archive`` (tar, optionally gzipped): a PNG or JPEG file as it is,
+    a PDF figure rendered to PNG.
+
+    The file is the one at the same path in any of
+    :data:`SOURCE_FIGURE_FORMATS`, else the only one with the same file stem
+    (the HTML may flatten directories); among several formats the first in
+    that list wins. Raises ``ValueError`` when the archive is not a tar, no
+    file or several files match, or the match is EPS (no renderer).
+    """
+    wanted = PurePosixPath(figure_path)
+    try:
+        with tarfile.open(fileobj=io.BytesIO(archive), mode="r:*") as tar:
+            members: dict[PurePosixPath, tarfile.TarInfo] = {}
+            unpacked = 0
+            for member in tar:
+                unpacked += member.size
+                if unpacked > MAX_SOURCE_UNPACKED_BYTES:
+                    raise ValueError("the source archive unpacks too large")
+                path = PurePosixPath(member.name.removeprefix("./"))
+                if member.isfile() and path.suffix.lower() in SOURCE_FIGURE_FORMATS:
+                    members[path] = member
+            match = _pick_source_figure(members, wanted)
+            if match.suffix.lower() == ".eps":
+                raise ValueError(f"'{match}' is EPS, which cannot be rendered")
+            extracted = tar.extractfile(members[match])
+            if extracted is None:
+                raise ValueError(f"'{match}' cannot be read")
+            data = extracted.read()
+    except (tarfile.TarError, EOFError, OSError) as e:
+        raise ValueError(f"not a source archive: {e}") from e
+    return _pdf_to_png(data) if match.suffix.lower() == ".pdf" else data
+
+
+def _pick_source_figure(
+    members: dict[PurePosixPath, tarfile.TarInfo], wanted: PurePosixPath
+) -> PurePosixPath:
+    same_path = [p for p in members if p.with_suffix("") == wanted.with_suffix("")]
+    candidates = same_path or [p for p in members if p.stem == wanted.stem]
+    if not candidates:
+        raise ValueError(f"no figure file for '{wanted}' in the source")
+    rank = {suffix: i for i, suffix in enumerate(SOURCE_FIGURE_FORMATS)}
+    best = min(rank[p.suffix.lower()] for p in candidates)
+    chosen = sorted(p for p in candidates if rank[p.suffix.lower()] == best)
+    if len({p.with_suffix("") for p in chosen}) > 1:
+        raise ValueError(
+            f"several figure files for '{wanted}' in the source: "
+            + ", ".join(str(p) for p in chosen)
+        )
+    return chosen[0]
+
+
+def _pdf_to_png(data: bytes) -> bytes:
+    """The first page of a PDF figure as PNG, its longer side at most
+    :data:`MAX_RENDER_SIDE`."""
+    try:
+        with fitz.open(stream=data, filetype="pdf") as doc:
+            page = doc[0]
+            zoom = min(
+                PDF_FIGURE_ZOOM,
+                MAX_RENDER_SIDE / max(page.rect.width, page.rect.height),
+            )
+            return page.get_pixmap(matrix=fitz.Matrix(zoom, zoom)).tobytes("png")
+    except (RuntimeError, ValueError, IndexError, ZeroDivisionError) as e:
+        raise ValueError(f"the PDF figure cannot be rendered: {e}") from e
 
 
 def _render_isolated(text: str, zoom: float) -> bytes:

@@ -23,7 +23,7 @@ class PaperSummaryPrompt(BasePrompt):
         "language",
         "translation_guideline",
     ]
-    output_variables: list[str] = ["subtitle", "summary", "urls"]
+    output_variables: list[str] = ["subtitle", "description", "summary", "urls"]
 
     system_prompt_template: str = """
     You are an AI/ML researcher who writes concise but substantive paper
@@ -51,8 +51,8 @@ class PaperSummaryPrompt(BasePrompt):
     Structure (Markdown inside <summary>):
     1. Open with a blockquote of 2-3 lines in {language}: what the paper does,
        the key idea, and the headline result with its setting. It is published
-       as the post's `## TL;DR` paragraph, which the blog also uses as the
-       search description: plain prose only, no math, no label.
+       as the post's `## TL;DR` paragraph: plain prose only, no math, no
+       label, and every number one the paper states, as the paper states it.
     2. Then exactly these five `##` sections (a Korean post uses the headings
        verbatim; any other language translates them, keeping emoji and order):
        ## 🔍 이 연구는 왜 필요합니까?
@@ -93,12 +93,19 @@ class PaperSummaryPrompt(BasePrompt):
     - <subtitle>: the paper title translated into {language}, keeping model
       and method names (if {language} is the title's own language, or the
       translation would equal the title, a short descriptive subtitle instead).
+    - <description>: the post's search snippet, one plain text paragraph of
+      120-160 characters in {language}: no math, Markdown, links or tags. It
+      opens with the model or method name as the paper writes it ("Mistral
+      7B는 …"), never with a generic opener ("대규모 언어 모델의 발전으로 …"),
+      and says what the paper does and its headline result. Numbers only from
+      the opening blockquote or the paper's abstract.
     - <urls>: links the paper itself gives (code, data, project page) as
       `[text](url)`, comma-separated, URLs copied verbatim from the paper; leave
       it empty if there are none.
 
     Output exactly:
     <subtitle>...</subtitle>
+    <description>...</description>
     <summary>
     > ...
 

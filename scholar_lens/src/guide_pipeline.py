@@ -8,7 +8,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from .constants import EnvVars, LanguageModelId, LocalPaths
-from .formatting import build_post_meta, format_guide
+from .formatting import build_post_meta, cut_title, format_guide
 from .jobs import JobRequest
 from .logger import logger
 from .markdown_lint import (
@@ -19,7 +19,13 @@ from .markdown_lint import (
 from .metrics import TokenUsageTracker
 from .publish_types import slugify
 from .publisher import PublishRequest, build_pr_body
-from .runtime import ROOT_DIR, PipelineOutcome, RunContext, publish_artifact
+from .runtime import (
+    ROOT_DIR,
+    PipelineOutcome,
+    RunContext,
+    load_translation_guideline,
+    publish_artifact,
+)
 from .tech_guide import TechGuide, TechGuideGenerator
 from .web_research import (
     BraveSearchProvider,
@@ -38,7 +44,9 @@ async def run_guide_pipeline(
     the URLs are not technical documentation."""
     sources = [*request.urls, *request.reference_urls]
     cfg = context.config.tech_guide
+    translation_guideline = await load_translation_guideline(context)
     researcher = WebResearcher(search_provider=build_search_provider())
+    spec = context.require_conventions()
     generator = TechGuideGenerator(
         relevance_model_id=LanguageModelId(cfg.relevance_model_id),
         synopsis_model_id=LanguageModelId(cfg.synopsis_model_id),
@@ -51,6 +59,7 @@ async def run_guide_pipeline(
         evaluator_enable_thinking=cfg.evaluator_enable_thinking,
         thinking_effort=cfg.thinking_effort,
         max_sections=cfg.max_sections,
+        title_max_length=spec.seo_title_max_length,
         verify_grounding=cfg.verify_grounding,
         auto_research=cfg.auto_research,
         max_research_queries=cfg.max_research_queries,
@@ -58,9 +67,9 @@ async def run_guide_pipeline(
         min_quality_score=cfg.min_quality_score,
         max_revision_attempts=cfg.max_revision_attempts,
         max_total_tokens=cfg.max_total_tokens,
+        translation_guideline=translation_guideline,
         callbacks=[tracker],
     )
-    spec = context.require_conventions()
     github = context.config.resources.github
     try:
         guide = await generator.generate(
@@ -80,6 +89,9 @@ async def run_guide_pipeline(
         raise
     finally:
         researcher.close()
+    guide.topic = guide_title(
+        guide.topic, taxonomy.get("seo_title") or "", spec.seo_title_max_length
+    )
     meta = build_post_meta(
         title=guide.topic,
         category_type=github.tech_guide_category,
@@ -102,6 +114,19 @@ async def run_guide_pipeline(
         context, publish_request, create_pr=request.create_pr
     )
     return outcome
+
+
+def guide_title(title: str, seo_title: str, limit: int) -> str:
+    """``title`` when it fits the blog's ``seo_title`` limit, else the
+    taxonomy's ``seo_title`` (when it fits) or the title cut at a word
+    boundary: a guide title over the limit is a list of sections, not a name,
+    and the part before its colon ("vLLM") names the tool, not the guide."""
+    if len(title) <= limit:
+        return title
+    seo_title = " ".join(seo_title.split())
+    if seo_title and len(seo_title) <= limit:
+        return seo_title
+    return cut_title(title, limit)
 
 
 def guide_document(document: str, guide: TechGuide) -> str:

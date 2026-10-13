@@ -491,9 +491,14 @@ def test_generator_notes_survive_a_failed_publish(
     publisher = MagicMock()
 
     async def publish(request):  # type: ignore[no-untyped-def]
+        error: PostValidationError | PostAssetError
         if kind == "validation":
-            raise PostValidationError([Violation("error", "subtitle", 1, "missing")])
-        raise PostAssetError("figure missing")
+            error = PostValidationError([Violation("error", "subtitle", 1, "missing")])
+        else:
+            error = PostAssetError("figure missing")
+        error.rejected_path = "/work/post.rejected.md"
+        error.rejected_s3_uri = "s3://b/rejected/post.rejected.md"
+        raise error
 
     publisher.publish = publish
     monkeypatch.setattr(runtime, "build_publisher", lambda context: publisher)
@@ -507,34 +512,31 @@ def test_generator_notes_survive_a_failed_publish(
     result = runtime.run_job(JobRequest(kind="review", source="2106.09685"))
     assert result.status == "failed"
     assert result.warnings == ["Review section 'Method' produced no text"]
+    # The rejected draft is where the result points.
+    assert result.markdown_path == "/work/post.rejected.md"
+    assert result.s3_uri == "s3://b/rejected/post.rejected.md"
 
 
 class TestBlogTagFilter:
     def test_only_reusable_spellings_are_offered(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from scholar_lens.src.post_conventions import load_local_conventions
+        from scholar_lens.src.post_conventions import BlogPost, load_local_conventions
 
         spec = load_local_conventions()
         controlled = spec.tags.controlled[0]
         retired = next(iter(spec.tags.aliases))
-        monkeypatch.setattr(
-            runtime,
-            "load_run_blog_tags",
-            lambda config: {
-                controlled: 5,
-                retired: 4,
-                "vLLM": 1,
-                "Paged Attention": 3,
-                "a/b": 2,
-                "LoRA": 2,
-            },
-        )
+        posts = [
+            BlogPost(path="_posts/a.md", tags=[controlled, retired, "LoRA", "a/b"]),
+            BlogPost(path="_posts/b.md", tags=["LoRA", "Paged Attention", "a/b"]),
+            BlogPost(path="_posts/c.md", tags=["vLLM", "Paged Attention"]),
+        ]
+        monkeypatch.setattr(runtime, "load_run_blog_posts", lambda config: posts)
         context = runtime.RunContext.model_construct(
-            config=MagicMock(), conventions=spec, blog_tags=None
+            config=MagicMock(), conventions=spec, blog_posts=None, blog_tags=None
         )
         # Controlled and retired tags, and spellings a post may not use, are out.
-        assert context.require_blog_tags() == ["vLLM", "LoRA"]
+        assert context.require_blog_tags() == ["LoRA", "vLLM"]
         # Only tags shared by two or more posts are offered as hints.
         assert context.blog_tag_hints(10) == ["LoRA"]
 

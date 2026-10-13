@@ -16,10 +16,16 @@ from langchain_core.runnables import Runnable
 
 from .constants import LanguageModelId
 from .explainer import NO_CODEBASE, Paper
-from .formatting import derived_subtitle, split_leading_h1
+from .formatting import derived_subtitle, split_leading_h1, summary_lead
 from .logger import logger
 from .markdown_math import DISPLAY_MATH, HANGUL, image_sources
 from .metrics import TokenBudgetExceeded, TokenBudgetGuard
+from .post_validator import (
+    description_markup,
+    description_problems,
+    paper_page_title,
+    unsourced_numbers,
+)
 from .prompt_safety import neutralize_prompt_tags
 from .prompts import BasePrompt, PaperSummaryPrompt, PaperSummaryShortenPrompt
 from .review_plan import publish_blockers
@@ -124,11 +130,15 @@ class PaperSummarizer(RetryableBase, TokenBudgetGuard):
 
     @measure_execution_time
     async def summarize(self, paper: Paper) -> dict[str, str]:
-        """Return ``{"subtitle", "summary", "urls"}`` for the paper.
+        """Return ``{"subtitle", "description", "summary", "urls"}`` for the
+        paper.
 
         ``summary`` is a Markdown fragment (a lead blockquote plus the five emoji
         ``##`` sections); ``subtitle`` is the title in the output language;
+        ``description`` the search snippet (empty lets the blog derive one);
         ``urls`` is a comma-separated Markdown link list taken from the paper.
+        There is no repair round: numbers in the TL;DR the paper never states,
+        and a description that breaks its rules, become review notes.
         """
         self._enforce_token_budget()
         result = await self._summarize(paper.content.text, paper.codebase_summary)
@@ -143,8 +153,30 @@ class PaperSummarizer(RetryableBase, TokenBudgetGuard):
                 "Summary subtitle was missing or repeated the title; it was "
                 "derived from the first sentence: check it."
             )
+        tldr = summary_lead(summary)
+        if missing := unsourced_numbers(tldr, paper.content.text):
+            self.notes.append(
+                "Summary TL;DR numbers the paper never states (check each against "
+                "the paper; 1B is 10억, 1M is 100만): " + ", ".join(missing)
+            )
+        description = result.get("description", "").strip()
+        if problems := description_problems(
+            description, f"{tldr}\n{paper.abstract or ''}"
+        ):
+            self.notes.append("Summary " + "; ".join(problems) + ": fix it.")
+            if description_markup(description):
+                description = ""  # the blog fails markup; it derives one instead
+        page_title = paper_page_title(paper.title, korean=self.language == "Korean")
+        if description and len(" ".join(description.split())) <= len(page_title):
+            # The blog fails a description no longer than the page title.
+            self.notes.append(
+                "Summary description was not longer than the page title; dropped "
+                "so the blog derives one."
+            )
+            description = ""
         return {
             "subtitle": subtitle,
+            "description": description,
             "summary": summary,
             "urls": result.get("urls", "").strip(),
         }

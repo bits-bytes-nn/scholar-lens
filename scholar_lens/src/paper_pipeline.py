@@ -12,7 +12,7 @@ from pydantic import HttpUrl
 
 from .citation_summarizer import CitationSummarizer
 from .code_retriever import CodeRetriever, NoPythonFilesError
-from .constants import EmbeddingModelId, LanguageModelId, LocalPaths, S3Paths
+from .constants import EmbeddingModelId, LanguageModelId, LocalPaths
 from .content_extractor import Attributes, ContentExtractor
 from .explainer import Paper, PaperReviewer
 from .formatting import format_review, format_summary, paper_post_meta
@@ -36,7 +36,13 @@ from .parser import (
 )
 from .post_validator import unsourced_table_numbers
 from .publisher import PublishRequest, build_pr_body
-from .runtime import ROOT_DIR, PipelineOutcome, RunContext, publish_artifact
+from .runtime import (
+    ROOT_DIR,
+    PipelineOutcome,
+    RunContext,
+    load_translation_guideline,
+    publish_artifact,
+)
 from .summarizer import PaperSummarizer
 from .tags import unsupported_tags
 from .utils import is_placeholder
@@ -55,7 +61,7 @@ async def run_paper_pipeline(
     code_retriever: CodeRetriever | None = None
     try:
         # Loaded first: an S3 failure here must not follow the paid stages.
-        translation_guideline = await _load_translation_guideline(context)
+        translation_guideline = await load_translation_guideline(context)
         paper_dir = ROOT_DIR / LocalPaths.PAPERS_DIR.value / source.source_id
         # Arbitrary PDF-URL sources have no arXiv HTML rendering.
         parse_pdf = request.parse_pdf or source.arxiv_html_id is None
@@ -347,32 +353,6 @@ async def _process_code(
 async def _write_json(path: Path, data: Any) -> None:
     content = json.dumps(data, indent=2, ensure_ascii=False)
     await asyncio.to_thread(path.write_text, content, encoding="utf-8")
-
-
-async def _load_translation_guideline(
-    context: RunContext,
-) -> list[dict[str, Any]] | None:
-    """The glossary-style translation guideline: the local file when present,
-    else the S3 copy. It is optional, so a missing object yields ``None``; any
-    other S3 error still raises (before any paid stage runs)."""
-    guideline_path = (
-        ROOT_DIR
-        / LocalPaths.ASSETS_DIR.value
-        / LocalPaths.TRANSLATION_GUIDELINE_FILE.value
-    )
-    if guideline_path.exists():
-        return json.loads(await asyncio.to_thread(guideline_path.read_text, "utf-8"))
-    if not context.s3_handler:
-        return None
-    s3_key = (
-        f"{context.config.resources.s3_prefix}/"
-        f"{S3Paths.TRANSLATION_GUIDELINE.value}/{guideline_path.name}"
-    ).lstrip("/")
-    text = await asyncio.to_thread(context.s3_handler.get_text, s3_key)
-    if text is None:
-        logger.info("No translation guideline at '%s'; continuing without.", s3_key)
-        return None
-    return json.loads(text)
 
 
 def backfill_metadata(

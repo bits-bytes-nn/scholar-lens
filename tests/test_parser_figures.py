@@ -185,7 +185,7 @@ class TestFitzTextFallback:
 
 
 class TestConstructFigureUrl:
-    """arXiv/ar5iv figure srcs are *relative*; resolving them by concatenation
+    """arXiv figure srcs are *relative*; resolving them by concatenation
     produced a doubled id segment that 404'd, which silently stripped every
     figure from the model's context and left hallucinated image links in posts.
     """
@@ -212,13 +212,6 @@ class TestConstructFigureUrl:
         assert (
             parser._construct_figure_url("2502.17416v1/Media/looping.png")
             == "https://arxiv.org/html/2502.17416v1/Media/looping.png"
-        )
-
-    def test_ar5iv_root_relative_src(self) -> None:
-        parser = self._parser("https://ar5iv.labs.arxiv.org/html/2502.17416")
-        assert (
-            parser._construct_figure_url("/html/2502.17416/assets/Media/looping.png")
-            == "https://ar5iv.labs.arxiv.org/html/2502.17416/assets/Media/looping.png"
         )
 
     def test_absolute_src_is_left_alone(self) -> None:
@@ -661,19 +654,20 @@ class TestFigureMarkerMatching:
         assert out.count("figs/a/curve.png") == 1
 
 
-class TestThinHtmlFallsBackToAr5iv:
-    async def test_conversion_stub_tries_the_next_rendering(self, monkeypatch) -> None:
+class TestArxivHtmlOnly:
+    async def test_conversion_stub_is_a_parse_error(self, monkeypatch) -> None:
         # arXiv answers 200 with "See pages 1-last of main.pdf" when its
-        # conversion failed; the next rendering may have the paper.
-        from scholar_lens.src.parser import HTMLParser
+        # conversion failed; the pipeline then reads the PDF.
+        from scholar_lens.src.parser import ContentParseError, HTMLParser
 
-        stub = "<div class='ltx_page_main'>See pages 1-last of main.pdf</div>"
-        full = "<div class='ltx_page_main'>" + "<p>Real text.</p>" * 200 + "</div>"
-        pages = iter([stub, full])
+        urls: list[str] = []
 
         async def fake_fetch(self, url: str) -> str:  # type: ignore[no-untyped-def]
-            return next(pages)
+            urls.append(url)
+            return "<div class='ltx_page_main'>See pages 1-last of main.pdf</div>"
 
         monkeypatch.setattr(HTMLParser, "_fetch_html_from_url", fake_fetch)
-        html, url = await HTMLParser()._fetch_html_with_fallback("1412.6980")
-        assert html == full and "ar5iv" in url
+        with pytest.raises(ContentParseError, match="almost no text"):
+            await HTMLParser()._fetch_html("1412.6980")
+        # ar5iv serves placeholder images for figures it lost: never asked.
+        assert urls == ["https://arxiv.org/html/1412.6980"]

@@ -61,6 +61,14 @@ def _format_summary(github, paper, result):  # type: ignore[no-untyped-def]
     return format_summary(github, paper, result, meta=meta)
 
 
+# Plain text, 120-160 characters, no number the TL;DR or abstract lacks.
+DESCRIPTION = (
+    "LoRA는 사전 학습된 가중치를 고정하고 저랭크 행렬만 학습해, 전체 미세 조정과 같은 "
+    "성능을 내면서 학습할 파라미터와 메모리를 크게 줄입니다. 추론 지연도 없습니다. "
+    "저랭크 업데이트의 구조와 실험 결과를 정리합니다."
+)
+
+
 class TestPaperSummaryPrompt:
     def test_prompt_builds_with_required_variables(self) -> None:
         assert PaperSummaryPrompt.input_variables == [
@@ -69,7 +77,12 @@ class TestPaperSummaryPrompt:
             "language",
             "translation_guideline",
         ]
-        assert PaperSummaryPrompt.output_variables == ["subtitle", "summary", "urls"]
+        assert PaperSummaryPrompt.output_variables == [
+            "subtitle",
+            "description",
+            "summary",
+            "urls",
+        ]
         # get_prompt must not raise (validates that every var is in a template).
         assert PaperSummaryPrompt.get_prompt() is not None
 
@@ -86,6 +99,7 @@ class TestPaperSummarizer:
         summarizer = _make_summarizer_with_stub_chain(
             {
                 "subtitle": "부제",
+                "description": DESCRIPTION,
                 "summary": "> **요약:** x\n\n## 🔍 ...\n\nbody",
                 "urls": "[Repo](https://github.com/x/y)",
             }
@@ -93,8 +107,45 @@ class TestPaperSummarizer:
         result = await summarizer.summarize(sample_paper)
         assert result["summary"].startswith("> ")
         assert result["subtitle"] == "부제"
+        assert result["description"] == DESCRIPTION
         assert result["urls"] == "[Repo](https://github.com/x/y)"
         assert summarizer.notes == []
+
+    async def test_unsourced_tldr_numbers_and_description_slips_are_noted(
+        self, sample_paper: Paper
+    ) -> None:
+        summarizer = _make_summarizer_with_stub_chain(
+            {
+                "subtitle": "부제",
+                "description": f"`LoRA`는 {DESCRIPTION}",
+                "summary": "> **요약:** 파라미터를 31337배 줄입니다.\n\n## 🔍 ...",
+                "urls": "",
+            }
+        )
+        result = await summarizer.summarize(sample_paper)
+        assert result["description"] == ""  # the blog derives one instead
+        notes = " ".join(summarizer.notes)
+        assert "TL;DR numbers the paper never states" in notes and "31337" in notes
+        assert "description is plain text" in notes
+
+    async def test_description_no_longer_than_the_page_title_is_dropped(
+        self, sample_paper: Paper
+    ) -> None:
+        summarizer = _make_summarizer_with_stub_chain(
+            {
+                "subtitle": "부제",
+                "description": "LoRA는 저랭크 행렬만 학습합니다.",
+                "summary": "> **요약:** x\n\n## 🔍 ...",
+                "urls": "",
+            }
+        )
+        summarizer.language = "Korean"
+        paper = sample_paper.model_copy(
+            update={"title": "LoRA: Low-Rank Adaptation of Large Language Models"}
+        )
+        result = await summarizer.summarize(paper)
+        assert result["description"] == ""  # the blog derives one instead
+        assert any("not longer than the page title" in n for n in summarizer.notes)
 
     async def test_codebase_summary_passed_to_chain(self, sample_paper: Paper) -> None:
         # When the paper carries a codebase summary, it must reach the prompt so
@@ -227,7 +278,12 @@ class TestSummaryLength:
 
     def _summarizer(self, shortened: str) -> PaperSummarizer:
         summarizer = _make_summarizer_with_stub_chain(
-            {"summary": self.LONG, "subtitle": "s", "urls": ""}
+            {
+                "summary": self.LONG,
+                "subtitle": "s",
+                "description": DESCRIPTION,
+                "urls": "",
+            }
         )
         summarizer.notes = []
         summarizer.shorten_chain = MagicMock()

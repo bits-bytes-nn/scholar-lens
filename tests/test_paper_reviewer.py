@@ -41,6 +41,9 @@ SENTENCES = [
 ]
 
 
+SOURCE = " ".join(SENTENCES)
+
+
 class FakeChain:
     """Returns queued responses (or a function of the payload) and records
     each payload."""
@@ -106,12 +109,20 @@ def _pass(_: dict[str, Any]) -> dict[str, str]:
     return {"quality_score": "88", "missing_items": "none", "improvement_feedback": ""}
 
 
-TLDR = "\n\n".join(f"### 질문 {i}\n답입니다." for i in range(1, 5))
+TLDR = "\n\n".join(f"### 질문 {i}\n답입니다." for i in ("하나", "둘", "셋", "넷"))
+# A description the finalizer checks pass: plain text, 120-160 characters,
+# no number the TL;DR or the abstract lacks.
+DESCRIPTION = (
+    "LoRA는 사전 학습된 가중치를 고정하고 저랭크 행렬 B와 A만 학습해, 전체 미세 조정과 "
+    "같은 GLUE 성능을 내면서 학습할 파라미터와 메모리를 크게 줄입니다. 추론 지연도 "
+    "없습니다. 업데이트 구조와 실험 결과를 정리합니다."
+)
 
 
 def _final(_: dict[str, Any]) -> dict[str, str]:
     return {
         "subtitle": "LoRA: 저랭크 적응",
+        "description": DESCRIPTION,
         "key_takeaways": TLDR,
         "closing": "## 한계와 시사점\n\n한계입니다.",
     }
@@ -513,9 +524,15 @@ async def test_writer_output_entities_are_unescaped_and_code_is_fenced() -> None
 async def test_finalizer_gets_glossary_and_closing_points_and_is_repaired() -> None:
     answers = iter(
         [
-            {"subtitle": "s", "key_takeaways": "## TL;DR\n### 하나\n답", "closing": ""},
             {
                 "subtitle": "s",
+                "description": DESCRIPTION,
+                "key_takeaways": "## TL;DR\n### 하나\n답",
+                "closing": "",
+            },
+            {
+                "subtitle": "s",
+                "description": DESCRIPTION,
                 "key_takeaways": "## TL;DR\n" + TLDR,
                 "closing": "## 한계와 시사점\n\nx",
             },
@@ -531,7 +548,7 @@ async def test_finalizer_gets_glossary_and_closing_points_and_is_repaired() -> N
     assert "저랭크 적응" in first["glossary"]
     assert "no batching across tasks" in first["closing_points"]
     assert "four ### questions" in second["repair_note"]
-    assert review.key_takeaways.startswith("### 질문 1")
+    assert review.key_takeaways.startswith("### 질문 하나")
 
 
 async def test_must_fix_blocks_a_passing_score_until_fixed() -> None:
@@ -585,7 +602,14 @@ async def test_rule_slips_block_the_section_and_degraded_output_is_noted() -> No
 
     reviewer = _reviewer(
         writer=FakeChain(write),
-        finalizer=FakeChain({"subtitle": "s", "key_takeaways": "", "closing": ""}),
+        finalizer=FakeChain(
+            {
+                "subtitle": "s",
+                "description": DESCRIPTION,
+                "key_takeaways": "",
+                "closing": "",
+            }
+        ),
         max_synthesis_attempts=2,
     )
     review = await reviewer.run()
@@ -614,9 +638,15 @@ async def test_a_worse_revision_is_named_in_the_next_feedback() -> None:
 async def test_finalization_repair_keeps_parts_that_were_already_valid() -> None:
     answers = iter(
         [
-            {"subtitle": "좋은 부제", "key_takeaways": TLDR, "closing": "no heading"},
+            {
+                "subtitle": "좋은 부제",
+                "description": DESCRIPTION,
+                "key_takeaways": TLDR,
+                "closing": "no heading",
+            },
             {
                 "subtitle": "",
+                "description": DESCRIPTION,
                 "key_takeaways": "### 하나",
                 "closing": "## 한계와 시사점\n\n평가입니다.",
             },
@@ -637,11 +667,13 @@ async def test_finalization_repair_keeps_parts_that_were_already_valid() -> None
         (
             {
                 "subtitle": "부제",
+                "description": DESCRIPTION,
                 "key_takeaways": "### 하나\n답",
                 "closing": "## 한계와 시사점\n\n평가",
             },
             {
                 "subtitle": "부제",
+                "description": DESCRIPTION,
                 "key_takeaways": "",
                 "closing": "## 한계와 시사점\n\n평가",
             },
@@ -649,8 +681,18 @@ async def test_finalization_repair_keeps_parts_that_were_already_valid() -> None
         ),
         # A closing missing its heading is not replaced by an empty one.
         (
-            {"subtitle": "부제", "key_takeaways": TLDR, "closing": "한계입니다."},
-            {"subtitle": "부제", "key_takeaways": TLDR, "closing": ""},
+            {
+                "subtitle": "부제",
+                "description": DESCRIPTION,
+                "key_takeaways": TLDR,
+                "closing": "한계입니다.",
+            },
+            {
+                "subtitle": "부제",
+                "description": DESCRIPTION,
+                "key_takeaways": TLDR,
+                "closing": "",
+            },
             "closing",
         ),
     ],
@@ -688,10 +730,17 @@ def test_finalization_problems_are_structural_only() -> None:
     from scholar_lens.src.explainer import _finalization_problems
 
     long_closing = "## 한계와 시사점\n\n" + "한계를 설명합니다. " * 120
-    final = {"subtitle": "s", "key_takeaways": TLDR, "closing": long_closing}
-    assert _finalization_problems(final, "Title") == {}
+    final = {
+        "subtitle": "s",
+        "description": DESCRIPTION,
+        "key_takeaways": TLDR,
+        "closing": long_closing,
+    }
+    assert _finalization_problems(final, "Title", source=SOURCE, abstract="") == {}
     final["closing"] = "한계입니다."
-    assert set(_finalization_problems(final, "Title")) == {"closing"}
+    assert set(_finalization_problems(final, "Title", source=SOURCE, abstract="")) == {
+        "closing"
+    }
 
 
 def test_subtitle_that_repeats_the_title_is_a_problem() -> None:
@@ -701,10 +750,13 @@ def test_subtitle_that_repeats_the_title_is_a_problem() -> None:
 
     final = {
         "subtitle": "pixtral  12B",
+        "description": DESCRIPTION,
         "key_takeaways": TLDR,
         "closing": "## 한계\n\n끝.",
     }
-    assert set(_finalization_problems(final, "Pixtral 12B")) == {"subtitle"}
+    assert set(
+        _finalization_problems(final, "Pixtral 12B", source=SOURCE, abstract="")
+    ) == {"subtitle"}
 
 
 async def test_revisions_stop_when_must_fix_items_do_not_shrink() -> None:
@@ -831,8 +883,15 @@ def test_finalization_part_that_the_validator_would_reject_is_a_problem() -> Non
     from scholar_lens.src.explainer import _finalization_problems
 
     closing = "## 한계와 시사점\n\n| 방법 | |\n| --- | --- |\n| A | 1 |\n"
-    final = {"subtitle": "s", "key_takeaways": TLDR, "closing": closing}
-    assert set(_finalization_problems(final, "Title")) == {"closing"}
+    final = {
+        "subtitle": "s",
+        "description": DESCRIPTION,
+        "key_takeaways": TLDR,
+        "closing": closing,
+    }
+    assert set(_finalization_problems(final, "Title", source=SOURCE, abstract="")) == {
+        "closing"
+    }
 
 
 async def test_open_must_fix_items_reach_the_editor() -> None:
@@ -860,3 +919,67 @@ async def test_open_missing_items_reach_the_editor_as_conditional_additions() ->
     note = reviewer.editor.calls[0]["round_note"]  # type: ignore[attr-defined]
     assert "순위 4 실험" in note
     assert "quoted text" not in note and "paper supports" in note
+
+
+async def test_tldr_number_the_paper_never_states_is_repaired() -> None:
+    # "Rank 4" is in the paper; "랭크 40" is not (a copied or converted value).
+    wrong = TLDR.replace(
+        "### 질문 넷\n답입니다.", "### 질문 넷\n랭크 40이면 충분합니다."
+    )
+    right = TLDR.replace("### 질문 넷\n답입니다.", "### 질문 넷\n랭크 4면 충분합니다.")
+    answers = iter(
+        [
+            {**_final({}), "description": DESCRIPTION, "key_takeaways": wrong},
+            {**_final({}), "description": DESCRIPTION, "key_takeaways": right},
+        ]
+    )
+    finalizer = FakeChain(lambda _: next(answers))
+    review = await _reviewer(finalizer=finalizer).run()
+    assert "numbers the paper never states" in finalizer.calls[1]["repair_note"]
+    assert "40" in finalizer.calls[1]["repair_note"]
+    assert review.key_takeaways == right and review.notes == ()
+
+
+async def test_description_with_markup_left_after_repair_is_dropped() -> None:
+    marked = f"`LoRA`: {DESCRIPTION}"
+    reviewer = _reviewer(finalizer=FakeChain({**_final({}), "description": marked}))
+    review = await reviewer.run()
+    assert review.description == ""  # the blog derives one instead
+    assert any("description is plain text" in n for n in review.notes)
+
+
+async def test_finalizer_gets_the_abstract_it_may_take_numbers_from() -> None:
+    finalizer = FakeChain(_final)
+    reviewer = _reviewer(finalizer=finalizer)
+    reviewer.paper = reviewer.paper.model_copy(
+        update={"abstract": "LoRA reduces trainable parameters by 10,000 times."}
+    )
+    await reviewer.run()
+    assert "10,000 times" in finalizer.calls[0]["abstract"]
+
+
+async def test_description_numbers_are_checked_against_the_kept_tldr() -> None:
+    # The second TL;DR (malformed) is not kept, so the second description's
+    # "40", which only that TL;DR states, is unsourced in the post.
+    bad_tldr = "### 질문 하나\n랭크 40이면 충분합니다."
+    with_40 = DESCRIPTION.replace("B와 A만", "랭크 40의 B와 A만")
+    answers = iter(
+        [
+            {**_final({}), "description": f"`LoRA`: {DESCRIPTION}"},
+            {**_final({}), "description": with_40, "key_takeaways": bad_tldr},
+        ]
+    )
+    review = await _reviewer(finalizer=FakeChain(lambda _: next(answers))).run()
+    assert review.key_takeaways == TLDR
+    # The "40" one is not taken over the first; that one's markup drops it.
+    assert review.description == ""
+    assert any("description is plain text" in n for n in review.notes)
+
+
+async def test_description_no_longer_than_the_page_title_is_dropped() -> None:
+    # <title> is the paper title plus " 논문 리뷰" (57 characters).
+    short = "LoRA는 저랭크 행렬만 학습해 미세 조정 비용을 줄이는 방법입니다."
+    reviewer = _reviewer(finalizer=FakeChain({**_final({}), "description": short}))
+    review = await reviewer.run()
+    assert review.description == ""  # the blog derives one instead
+    assert any("not longer than the page title" in n for n in review.notes)

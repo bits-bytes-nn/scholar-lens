@@ -9,10 +9,18 @@ import pytest
 from scholar_lens.configs import Github
 from scholar_lens.src.content_extractor import Attributes
 from scholar_lens.src.explainer import Paper, ReviewText
-from scholar_lens.src.formatting import format_review, paper_post_meta
+from scholar_lens.src.formatting import (
+    PostMeta,
+    format_guide,
+    format_review,
+    link_list,
+    md_link_text,
+    paper_post_meta,
+)
 from scholar_lens.src.parser import Content, Figure, attach_figure_context
 from scholar_lens.src.post_conventions import load_local_conventions
 from scholar_lens.src.publish_types import slugify as _slugify
+from scholar_lens.src.tech_guide import TechGuide
 
 
 class TestSlugify:
@@ -97,6 +105,13 @@ class TestFormatExplanation:
         assert "## TL;DR\nTAKEAWAYS" in out
         assert "EXPLANATION" in out
         assert "use_math" not in out  # no math in this body
+        assert "description:" not in out  # none given: the blog derives one
+
+    def test_description_goes_to_the_front_matter(self, sample_paper: Paper) -> None:
+        meta = paper_post_meta(sample_paper, "Paper Reviews", load_local_conventions())
+        review = ReviewText("본문", "### Q\nA", "", "부제", description='A "B" C')
+        out = format_review(Github(), sample_paper, review, meta=meta)
+        assert 'description: "A \\"B\\" C"\n' in out.split("---", 2)[1]
 
     def test_layout_order_and_closing(self, sample_paper: Paper) -> None:
         out = _format_explanation(
@@ -193,3 +208,75 @@ def test_figure_marker_stays_one_parseable_token() -> None:
     )
     assert "\n" not in text and "[0, 1]" not in text
     assert figure_catalog(text)  # the planner still sees the figure
+
+
+class TestLinkLists:
+    def test_titles_link_and_missing_titles_show_the_url(self) -> None:
+        out = link_list(
+            [
+                ("Quickstart [vLLM]", "https://docs.example.org/quickstart"),
+                (None, "https://example.org/a"),
+                ("N/A", "https://example.org/b"),
+                ("https://example.org/c", "https://example.org/c"),
+            ]
+        )
+        assert out.splitlines() == [
+            "* [Quickstart &#91;vLLM&#93;](https://docs.example.org/quickstart)",
+            "* [https://example.org/a](https://example.org/a)",
+            "* [https://example.org/b](https://example.org/b)",
+            "* [https://example.org/c](https://example.org/c)",
+        ]
+
+    def test_one_line_per_url(self) -> None:
+        out = link_list([("A", "https://x.org/p/"), ("B", "https://x.org/p")])
+        assert out == "* [A](https://x.org/p/)"
+
+    def test_title_whitespace_collapses(self) -> None:
+        assert link_list([(" A\n  B ", "https://x.org")]) == "* [A B](https://x.org)"
+
+    @pytest.mark.parametrize(
+        "title,text",
+        [
+            # A | makes kramdown read the list item as a table.
+            ("Pods | Kubernetes", "Pods &#124; Kubernetes"),
+            # HTML in a page title stays text, never a live element.
+            ("<img src=x onerror=alert(1)>", "&lt;img src=x onerror=alert(1)&gt;"),
+            # Liquid delimiters would render as nothing (or fail the post).
+            ("{{ q }} {% raw %}", "&#123;&#123; q &#125;&#125; &#123;% raw %&#125;"),
+            # An entity already in the title is one character, not two.
+            ("AT&amp;T & co", "AT&amp;T &amp; co"),
+        ],
+    )
+    def test_title_markup_shows_as_text(self, title: str, text: str) -> None:
+        assert link_list([(title, "https://x.org")]) == f"* [{text}](https://x.org)"
+
+    @pytest.mark.parametrize(
+        "url,target",
+        [
+            ("https://x.org/a b", "https://x.org/a%20b"),
+            ("https://x.org/q?x=1|2&y=3", "https://x.org/q?x=1%7C2&y=3"),
+            ("https://x.org/wiki/F_(b", "https://x.org/wiki/F_%28b"),
+            ("https://x.org/%E3%85%8B#s", "https://x.org/%E3%85%8B#s"),
+        ],
+    )
+    def test_url_keeps_the_link_whole(self, url: str, target: str) -> None:
+        assert link_list([("A", url)]) == f"* [A]({target})"
+
+    def test_guide_sources_link_their_page_titles(self) -> None:
+        guide = TechGuide(
+            topic="X 시작하기",
+            body="## 설치\n본문",
+            source_urls=["https://docs.x.org/install", "https://blog.x.org/post"],
+            source_titles={"https://docs.x.org/install": "Installation — X"},
+        )
+        meta = PostMeta(topic=None, cover="/assets/images/default.jpg", tags=[])
+        out = format_guide(Github(), guide, meta=meta)
+        sources = out.split("### Sources\n", 1)[1]
+        assert sources == (
+            "* [Installation — X](https://docs.x.org/install)\n"
+            "* [https://blog.x.org/post](https://blog.x.org/post)\n"
+        )
+
+    def test_paper_references_use_the_paper_title(self, sample_paper: Paper) -> None:
+        out = _format_explanation(Github(), sample_paper, "E", "T")
+        assert f"* [{md_link_text(sample_paper.title)}]({sample_paper.pdf_url})" in out

@@ -91,10 +91,29 @@ class TestWritingIssues:
             ("이 섹션에서 봅니다.", "self-reference '이 섹션'"),
             ("저장소를 fork할 수 있습니다.", "'fork할'"),
             ("기저가 공간을 span하는 방식입니다.", "'span하는'"),
+            ("자기 토큰에만 attention하도록 합니다.", "'attention하도록'"),
+            ("일부 토큰만 prefill하면서 진행합니다.", "'prefill하면서'"),
+            ("요청은 swap-in되어 돌아옵니다.", "'swap-in되어'"),
+            ("첫 step에 일부만 prefill되고 끝납니다.", "'prefill되고'"),
+            ("같은 접두사를 prefill하므로 느립니다.", "'prefill하므로'"),
         ],
     )
     def test_more_slips_are_caught(self, text: str, needle: str) -> None:
         assert needle in "\n".join(writing_issues(f"## 방법\n\n{text}"))
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "API를 호출하고 vLLM이 응답합니다.",
+            "Claude Code한테 맡깁니다.",
+            "`prefill`하면서 `swap-in`되어 돌아옵니다.",
+            "[문서](https://docs.vllm.ai/prefill하면)를 봅니다.",
+            "<https://example.com/a하는> 링크입니다.",
+            "행렬을 SVD하면 됩니다.",
+        ],
+    )
+    def test_stem_check_leaves_proper_usage_alone(self, text: str) -> None:
+        assert writing_issues(f"## 방법\n\n{text}") == []
 
     def test_an_acronym_used_as_a_verb_is_fine(self) -> None:
         assert writing_issues("행렬을 SVD하고 비교합니다.") == []

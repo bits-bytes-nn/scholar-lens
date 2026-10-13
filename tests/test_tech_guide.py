@@ -18,6 +18,7 @@ from scholar_lens.src.prompts.tech_guide import (
     REFERENCE_LABEL,
     SOURCE_AUTHORITY,
     TechGuideGroundingPrompt,
+    TechGuideTaxonomyPrompt,
 )
 from scholar_lens.src.tech_guide import (
     _DEPTH_GUIDANCE,
@@ -79,7 +80,9 @@ def _make_generator(
     """
     gen = TechGuideGenerator.__new__(TechGuideGenerator)
     gen.language = "English"
+    gen.translation_guideline = []
     gen.max_sections = 12
+    gen.title_max_length = 70
     gen.verify_grounding = verify_grounding
     gen.auto_research = auto_research
     gen.max_research_queries = 6
@@ -341,7 +344,7 @@ class TestGrounding:
         gen.grounding_chain.ainvoke = AsyncMock(
             return_value={"grounded_markdown": "   "}
         )
-        out = await gen._ground_section("## Original\nbody", "src")
+        out = await gen._ground_section("## Original\nbody", "src", "- none")
         assert out == "## Original\nbody"
 
     async def test_grounding_skipped_when_disabled(self) -> None:
@@ -530,6 +533,42 @@ class TestResearchPlanning:
         guide = await gen.generate(["https://docs.x.com"], discover_subpages=False)
         assert guide.topic == "X serving"
 
+    async def test_the_translation_guideline_reaches_the_synopsis(self) -> None:
+        # The synopsis's glossary takes the guideline's renderings first.
+        gen = _make_generator()
+        gen.translation_guideline = [{"original": "attention", "translated": "어텐션"}]
+        gen.synopsis_chain.ainvoke = AsyncMock(return_value={"synopsis": "1. Intro"})
+        await gen._draft_synopsis("X", _corpus())
+        sent = gen.synopsis_chain.ainvoke.await_args.args[0]["translation_guideline"]
+        assert "어텐션" in sent
+
+    async def test_the_blogs_title_limit_reaches_synopsis_and_taxonomy(self) -> None:
+        from scholar_lens.src.tech_guide import TechGuide
+
+        gen = _make_generator()
+        gen.title_max_length = 55
+        gen.synopsis_chain.ainvoke = AsyncMock(return_value={"synopsis": "1. Intro"})
+        gen.taxonomy_chain = MagicMock()
+        gen.taxonomy_chain.ainvoke = AsyncMock(return_value={})
+        await gen._draft_synopsis("X", _corpus())
+        await gen.classify(
+            TechGuide(topic="X", body="## A\n\nb."),
+            category_options=["A"],
+            controlled_tags=["B"],
+        )
+        for chain, prompt in (
+            (gen.synopsis_chain, TechGuideSynopsisPrompt),
+            (gen.taxonomy_chain, TechGuideTaxonomyPrompt),
+        ):
+            sent = chain.ainvoke.await_args.args[0]
+            assert sent["title_max_length"] == 55
+            rendered = prompt.get_prompt().format_messages(
+                **sent
+                | {name: "x" for name in prompt.input_variables if name not in sent}
+            )
+            text = " ".join(str(m.content) for m in rendered)
+            assert "55 characters" in text and "70" not in text
+
 
 class TestEvaluateAndRevise:
     """The evaluate-and-revise loop (ported from the review pipeline)."""
@@ -559,6 +598,7 @@ class TestEvaluateAndRevise:
             available_images="(none)",
             final_outline="1. Intro",
             owned_elsewhere="- none",
+            glossary="- none",
         )
         gen.section_chain.ainvoke.assert_awaited()  # a revision happened
         assert out == "## Revised\ndeeper body"
@@ -589,6 +629,7 @@ class TestEvaluateAndRevise:
             available_images="(none)",
             final_outline="1. Intro",
             owned_elsewhere="- none",
+            glossary="- none",
         )
         assert out == "## Draft\noriginal"  # original kept, not the worse rewrite
 
@@ -618,6 +659,7 @@ class TestEvaluateAndRevise:
             available_images="(none)",
             final_outline="1. 설치",
             owned_elsewhere="- none",
+            glossary="- none",
         )
         assert out == "## 설치\n\n이 절에서 설치합니다."
 
@@ -640,6 +682,7 @@ class TestEvaluateAndRevise:
             available_images="(none)",
             final_outline="1. Intro",
             owned_elsewhere="- none",
+            glossary="- none",
         )
         gen.section_chain.ainvoke.assert_not_awaited()  # no revision needed
         assert out == "## Good\nbody"
@@ -661,6 +704,7 @@ class TestEvaluateAndRevise:
             available_images="(none)",
             final_outline="1. Intro",
             owned_elsewhere="- none",
+            glossary="- none",
         )
         gen.evaluation_chain.ainvoke.assert_not_awaited()
         assert out == "## Draft\nbody"
@@ -689,6 +733,7 @@ class TestEvaluateAndRevise:
             available_images="(none)",
             final_outline="1. Intro",
             owned_elsewhere="- none",
+            glossary="- none",
         )
         gen.section_chain.ainvoke.assert_awaited()  # revision happened
 
@@ -707,6 +752,7 @@ class TestEvaluateAndRevise:
             available_images="(none)",
             final_outline="1. Intro\n2. Serving",
             owned_elsewhere="- none",
+            glossary="- none",
         )
 
     @pytest.mark.parametrize(
@@ -914,6 +960,97 @@ class TestGuideLengthAndRules:
         assert "1,206 characters" in report and "at most 1,000" in report
         assert "about 12,500" in length_report(md, "deep", "English")
 
+    def test_tables_and_images_are_not_prose(self) -> None:
+        from scholar_lens.src.tech_guide import prose_chars
+
+        md = (
+            "## 제목\n\n"
+            + "가" * 100
+            + "\n\n| a | b |\n|---|---|\n| "
+            + "x" * 500
+            + " | y |\n\n![그림](https://x.io/a.png)\n"
+        )
+        assert prose_chars(md) == len("## 제목 " + "가" * 100)
+
+    @pytest.mark.parametrize(
+        ("markdown", "prose"),
+        [
+            ("> | a | b |\n> |---|---|\n> | " + "x" * 300 + " | y |\n", ""),
+            # A table without outer pipes.
+            ("a | b\n--- | ---\n" + "x" * 300 + " | y\n\n뒤 문단.\n", "뒤 문단."),
+            # A pipe in a sentence and a rule are prose.
+            ("a | b 비교입니다.\n\n---\n", "a | b 비교입니다. ---"),
+            ("[![logo](https://x.io/a.png)](https://x.io)\n", ""),
+            ("![그림](https://x.io/a.png) 설명입니다.\n", "설명입니다."),
+            ("> 인용문입니다.\n", "인용문입니다."),
+        ],
+    )
+    def test_quoted_tables_linked_images_and_text_beside_images(
+        self, markdown: str, prose: str
+    ) -> None:
+        from scholar_lens.src.tech_guide import prose_chars
+
+        assert prose_chars("본문 " + "\n" + markdown) == len(f"본문 {prose}".strip())
+
+    def test_writer_and_evaluator_state_the_same_unit(self) -> None:
+        from scholar_lens.src.prompts.tech_guide import PROSE_UNIT
+        from scholar_lens.src.tech_guide import length_report
+
+        assert PROSE_UNIT in PlannedSection(title="t").depth_directive("Korean")
+        assert PROSE_UNIT in length_report("body", "standard", "Korean")
+
+    async def test_revision_puts_blocking_issues_before_length_and_feedback(
+        self,
+    ) -> None:
+        gen = _make_generator(min_quality_score=75, max_revision_attempts=1)
+        gen.language = "Korean"
+        gen.evaluation_chain.ainvoke = AsyncMock(
+            return_value={
+                "quality_score": "70",
+                "blocking_issues": "wrong default",
+                "improvement_feedback": "cut the intro",
+            }
+        )
+        gen.section_chain.ainvoke = AsyncMock(
+            return_value={"section_markdown": "## 설치\n\n도구를 설치합니다."}
+        )
+        await gen._evaluate_and_revise(
+            topic="X",
+            planned=PlannedSection(title="설치", depth="brief"),
+            section_label="1. 설치",
+            markdown="## 설치\n\n" + "가" * 1500,
+            section_number=1,
+            total_sections=1,
+            previous_sections="",
+            already_in_guide="- nothing yet",
+            sources="src",
+            available_images="(none)",
+            final_outline="1. 설치",
+            owned_elsewhere="- none",
+            glossary="- none",
+        )
+        directive = gen.section_chain.ainvoke.await_args.args[0]["depth_directive"]
+        blocking = directive.index("wrong default")
+        length = directive.index("Measured: 1,506 ")
+        assert blocking < length < directive.index("cut the intro")
+
+    async def test_reference_lookup_logs_each_page_with_its_label(self) -> None:
+        from unittest.mock import patch
+
+        from scholar_lens.src.web_research import OfficialDocs
+
+        gen = _make_generator()
+        gen._official = OfficialDocs.from_urls(["https://docs.x.io/en/latest/"])
+        page = PageContent(
+            url="https://docs.x.io/en/latest/cli.html", title="t", text=""
+        )
+        gen.researcher.add_official_reference = MagicMock(return_value=[page])
+        with patch("scholar_lens.src.tech_guide.logger") as log:
+            await gen._add_reference(ResearchCorpus(), ["--flag"])
+        log.info.assert_any_call(
+            "Added %s page [%s] %s", "reference-lookup", OFFICIAL_LABEL, page.url
+        )
+
     async def test_rule_violation_forces_a_revision_despite_a_high_score(self) -> None:
         gen = _make_generator(min_quality_score=75, max_revision_attempts=2)
         gen.language = "Korean"
@@ -936,6 +1073,7 @@ class TestGuideLengthAndRules:
             available_images="(none)",
             final_outline="1. 설치",
             owned_elsewhere="- none",
+            glossary="- none",
         )
         assert out == "## 설치\n\n도구를 설치합니다."
         directive = gen.section_chain.ainvoke.await_args.args[0]["depth_directive"]
@@ -961,6 +1099,7 @@ class TestGuideLengthAndRules:
             available_images="(none)",
             final_outline="1. Intro",
             owned_elsewhere="- none",
+            glossary="- none",
         )
         assert any("'Intro' kept below the bar" in n for n in gen.notes)
 
@@ -1119,6 +1258,49 @@ class TestSectionPlan:
         assert _NO_OFFICIAL_SOURCE in second["depth_directive"]
         assert _NO_OFFICIAL_SOURCE not in first["depth_directive"]
 
+    def test_the_glossary_is_parsed_without_parentheticals(self) -> None:
+        from scholar_lens.src.tech_guide import parse_glossary
+
+        raw = (
+            "- continuous batching | 연속 배칭(continuous batching)\n"
+            "PagedAttention | PagedAttention\n"
+            "no separator line\n"
+            "prefill | 프리필\n"
+            "prefill | 사전 채움\n"
+        )
+        assert parse_glossary(raw) == {
+            "continuous batching": "연속 배칭",
+            "PagedAttention": "PagedAttention",
+            "prefill": "프리필",
+        }
+
+    async def test_writer_evaluator_and_grounding_see_which_terms_are_introduced(
+        self,
+    ) -> None:
+        gen = _make_generator(verify_grounding=True, max_revision_attempts=1)
+        gen._glossary = {"prefill": "프리필", "vLLM": "vLLM", "decode": "디코드"}
+        gen._section_plan = "1 | sources: none | owns: a\n2 | sources: none | owns: b"
+        corpus = ResearchCorpus(pages=[PageContent("https://d.dev", "D", "x")])
+        gen.section_chain.ainvoke = AsyncMock(
+            return_value={"section_markdown": "## S\n\n프리필(prefill)을 수행합니다."}
+        )
+        gen.evaluation_chain.ainvoke = AsyncMock(
+            return_value={"quality_score": "90", "blocking_issues": "none"}
+        )
+        gen.grounding_chain.ainvoke = AsyncMock(return_value={})
+        await gen._write_sections("X", "1. A — a\n2. B — b", corpus)
+        first, second = [c.args[0] for c in gen.section_chain.ainvoke.await_args_list]
+        assert first["glossary"] == (
+            "- 프리필 = prefill [new]\n- vLLM\n- 디코드 = decode [new]"
+        )
+        assert "- 프리필 = prefill [introduced]" in second["glossary"]
+        assert "- 디코드 = decode [new]" in second["glossary"]
+        evaluated = gen.evaluation_chain.ainvoke.await_args_list[1].args[0]
+        assert evaluated["glossary"] == second["glossary"]
+        assert evaluated["owned_elsewhere"] == "- earlier, 'A': a"
+        grounded = gen.grounding_chain.ainvoke.await_args_list[1].args[0]
+        assert grounded["glossary"] == second["glossary"]
+
     async def test_classify_reads_the_finished_body(self) -> None:
         from scholar_lens.src.tech_guide import TechGuide
 
@@ -1192,6 +1374,8 @@ class TestReferenceMaterial:
             "How to use X"
         )
         assert guide.source_urls == [self.DOCS, self.BLOG]
+        assert set(guide.source_titles) <= set(guide.source_urls)
+        assert all(guide.source_titles.values())
         assert not gen.notes
 
     async def test_an_unreadable_reference_is_noted(self) -> None:
@@ -1387,3 +1571,35 @@ class TestSeveralDocsAndReferences:
         )
         held = [p.url for p in searched_corpus.pages if p.user_reference]
         assert held == REFS
+
+
+class TestGlossaryAndOwnership:
+    def test_a_term_is_introduced_only_by_its_first_use_form(self) -> None:
+        from scholar_lens.src.tech_guide import glossary_view
+
+        glossary = {"continuous batching": "연속 배칭", "Prefill": "프리필"}
+        # A bare rendering (or the rendering inside a longer word) is no
+        # introduction; "rendering(English)" is, in any case, with or without
+        # a space before the parenthesis.
+        bare = glossary_view(glossary, ["연속 배칭과 프리필링을 씁니다."])
+        assert "[introduced]" not in bare
+        given = glossary_view(
+            glossary, ["연속 배칭 (Continuous Batching)과 프리필(prefill)을 씁니다."]
+        )
+        assert given.count("[introduced]") == 2
+
+    def test_a_section_is_not_told_its_own_concepts_are_owned_elsewhere(
+        self,
+    ) -> None:
+        from scholar_lens.src.tech_guide import owned_elsewhere
+
+        sections = [
+            PlannedSection("A", owns=["paging", "batching"]),
+            PlannedSection("B", owns=["batching"]),
+            PlannedSection("C", owns=["paging", "eviction"]),
+        ]
+        assert (
+            owned_elsewhere(sections, 1)
+            == "- earlier, 'A': paging\n- later, 'C': paging; eviction"
+        )
+        assert owned_elsewhere(sections, 0) == "- later, 'C': eviction"

@@ -32,7 +32,7 @@ DEFAULT_COVER = "/assets/images/default.jpg"
 # Specific (non-controlled) tags a generated post carries: short and reusable.
 GENERATED_SPECIFIC_TAGS = 5
 _FETCH_TIMEOUT_SECONDS = 20
-# Parallel reads of the blog's posts when collecting their tags.
+# Parallel reads of the blog's posts when collecting their front matter.
 _FETCH_WORKERS = 4  # stays clear of GitHub's secondary rate limits
 
 
@@ -151,21 +151,55 @@ def load_conventions(
     return blog
 
 
-def _front_matter_tags(text: str) -> list[str]:
+class BlogPost(BaseModel):
+    """What a new post must agree with in one of the blog's posts: its
+    tags (reused), its description (unique site-wide) and its translation
+    pairing."""
+
+    model_config = ConfigDict(frozen=True)
+    path: str
+    tags: list[str] = Field(default_factory=list)
+    description: str | None = None
+    lang: str | None = None
+    translation_id: str | None = None
+
+
+def _blog_post(path: str, text: str) -> BlogPost:
     front, _ = split_front_matter_text(text)
-    if not front:
-        return []
     try:
-        data = yaml.safe_load(front[4:-5])
+        data = yaml.safe_load(front[4:-5]) if front else None
     except yaml.YAMLError:
-        return []
-    tags = data.get("tags") if isinstance(data, dict) else None
-    return [str(t) for t in tags] if isinstance(tags, list) else []
+        data = None
+    if not isinstance(data, dict):
+        return BlogPost(path=path)
+    tags = data.get("tags")
+
+    def text_value(key: str) -> str | None:
+        value = data.get(key)
+        return None if value is None else str(value)
+
+    return BlogPost(
+        path=path,
+        tags=[str(t) for t in tags] if isinstance(tags, list) else [],
+        description=text_value("description"),
+        lang=text_value("lang"),
+        translation_id=text_value("translation_id"),
+    )
 
 
-def fetch_blog_tags(repo_name: str, branch: str, token: str | None) -> dict[str, int]:
-    """Every tag the blog's posts already use with its post count, most used
-    first — the candidates a new post should reuse before inventing one.
+def tag_counts(posts: list[BlogPost]) -> dict[str, int]:
+    """Every tag the posts use with its post count, most used first."""
+    counts: dict[str, int] = {}
+    for post in posts:
+        for tag in post.tags:
+            counts[tag] = counts.get(tag, 0) + 1
+    return {t: counts[t] for t in sorted(counts, key=lambda t: (-counts[t], t))}
+
+
+def fetch_blog_posts(repo_name: str, branch: str, token: str | None) -> list[BlogPost]:
+    """The front matter of every post on the blog's ``branch``: the tags a
+    new post should reuse before inventing one, and the descriptions and
+    translation ids it must not clash with.
 
     One recursive tree listing finds every post under ``_posts/`` (also in
     sub-folders); the posts are then read in parallel. A post that cannot be
@@ -185,14 +219,15 @@ def fetch_blog_tags(repo_name: str, branch: str, token: str | None) -> dict[str,
     listing.raise_for_status()
     tree = listing.json()
     if tree.get("truncated"):
-        logger.warning("The blog's file listing is truncated; some tags are missed.")
-    blob_urls = [
-        f"{api}/git/blobs/{entry['sha']}"
+        logger.warning("The blog's file listing is truncated; some posts are missed.")
+    entries = [
+        entry
         for entry in tree.get("tree", [])
         if entry.get("type") == "blob"
         and entry.get("path", "").startswith("_posts/")
         and entry["path"].endswith(".md")
     ]
+    blob_urls = [f"{api}/git/blobs/{entry['sha']}" for entry in entries]
     raw_headers = {**headers, "Accept": "application/vnd.github.raw+json"}
 
     def read(url: str) -> str | None:
@@ -211,8 +246,8 @@ def fetch_blog_tags(repo_name: str, branch: str, token: str | None) -> dict[str,
         if failed * 2 > len(texts):
             raise RuntimeError(f"could not read {failed} of {len(texts)} blog posts")
         logger.warning("Could not read %d of %d blog posts.", failed, len(texts))
-    counts: dict[str, int] = {}
-    for text in texts:
-        for tag in _front_matter_tags(text or ""):
-            counts[tag] = counts.get(tag, 0) + 1
-    return {t: counts[t] for t in sorted(counts, key=lambda t: (-counts[t], t))}
+    return [
+        _blog_post(entry["path"], text)
+        for entry, text in zip(entries, texts, strict=True)
+        if text is not None
+    ]

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from scholar_lens.src.markdown_lint import writing_issues
 from scholar_lens.src.prompts import (
     AttributesExtractionPrompt,
     PaperEditPrompt,
@@ -12,9 +13,10 @@ from scholar_lens.src.prompts import (
     PaperSectionCheckPrompt,
     PaperSectionPrompt,
     PaperSummaryPrompt,
+    TechGuideEvaluationPrompt,
     TechGuideSectionPrompt,
 )
-from scholar_lens.src.prompts.base import BasePrompt
+from scholar_lens.src.prompts.base import TERMINOLOGY_RULES, BasePrompt
 from scholar_lens.src.prompts.extraction import (
     DEFAULT_CATEGORY_OPTIONS,
     DEFAULT_CONTROLLED_TAGS,
@@ -102,6 +104,7 @@ def test_planner_asks_for_json_plan_with_ownership_and_figures() -> None:
 def test_finalizer_outputs_tldr_closing_and_subtitle() -> None:
     assert set(PaperFinalizationPrompt.output_variables) == {
         "subtitle",
+        "description",
         "key_takeaways",
         "closing",
     }
@@ -138,3 +141,32 @@ def test_summary_register_and_structure() -> None:
         "## 🔮 이 연구의 의의와 한계는 무엇입니까?",
     ):
         assert heading in text
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        PaperPlanningPrompt,
+        PaperSectionPrompt,
+        PaperSectionCheckPrompt,
+        PaperEditPrompt,
+        PaperFinalizationPrompt,
+        PaperSummaryPrompt,
+        TechGuideSectionPrompt,
+        TechGuideEvaluationPrompt,
+    ],
+)
+def test_one_terminology_rule_is_shared(prompt: type[BasePrompt]) -> None:
+    text = _render(prompt)
+    assert text.count(TERMINOLOGY_RULES.strip()) == 1
+
+
+def test_terminology_rule_examples_agree_with_the_stem_lint() -> None:
+    # The rule's bad example is what the lint flags; its fixes are not.
+    assert writing_issues("한 번에 prefill합니다.")
+    assert not writing_issues("한 번에 prefill을 수행합니다.")
+
+
+def test_translation_guideline_wins_over_the_general_term_rule() -> None:
+    # The guideline's curated renderings (some transliterated) take precedence.
+    assert "translation guideline lists takes its rendering" in TERMINOLOGY_RULES

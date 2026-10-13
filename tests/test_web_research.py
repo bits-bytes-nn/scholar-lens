@@ -646,6 +646,94 @@ def test_relevant_text_hands_leftover_room_out_by_rank() -> None:
     assert text.index("# A") < text.index("# B") < text.index("# C")
 
 
+def _long_reference_page() -> PageContent:
+    """A CLI reference far over a section's share, the flags a parallelism
+    section needs near its end, a code block among the options."""
+    options = [
+        f"#### `--option-{i}`\n\nTunes subsystem {i} of the server and the "
+        "engine. Default: `auto`.\n"
+        for i in range(600)
+    ]
+    options[550] = (
+        "#### `--tensor-parallel-size`, `-tp`\n\nNumber of tensor parallel "
+        "groups. Default: `1`.\n"
+    )
+    options[300] = "```bash\n# not a heading\nvllm serve m\n```\n"
+    return PageContent(
+        "https://d.dev/cli/serve", "serve", "## vllm serve\n\n" + "\n".join(options)
+    )
+
+
+def test_a_long_page_keeps_the_parts_about_the_query() -> None:
+    page = _long_reference_page()
+    assert len(page.text) > 50_000
+    corpus = ResearchCorpus(pages=[page])
+    text = corpus.relevant_text("tensor parallel size", max_chars=5_000)
+    assert len(text) <= 5_000
+    assert "--tensor-parallel-size" in text
+    assert text.startswith("## Source: https://d.dev/cli/serve\n# serve\n\n")
+    assert "\n\n…\n\n" in text  # the elided parts are marked
+    assert text.count("```") % 2 == 0
+
+
+def test_a_long_page_without_query_words_keeps_its_start() -> None:
+    corpus = ResearchCorpus(pages=[_long_reference_page()])
+    text = corpus.relevant_text("unrelated words", max_chars=5_000)
+    assert "## vllm serve" in text and "--tensor-parallel-size" not in text
+    assert text.endswith("…")
+
+
+def test_a_long_page_without_headings_is_split_into_paragraphs() -> None:
+    paragraphs = [f"Paragraph {i} about scheduling." for i in range(2_000)]
+    paragraphs[1_500] = "The preemption policy recomputes evicted requests."
+    corpus = ResearchCorpus(
+        pages=[PageContent("https://p.dev/a", "Paper", "\n\n".join(paragraphs))]
+    )
+    text = corpus.relevant_text("preemption recompute", max_chars=3_000)
+    assert "The preemption policy recomputes" in text and len(text) <= 3_000
+
+
+def test_a_kept_piece_of_a_long_section_brings_its_heading() -> None:
+    filler = [f"Option {i} sets the scheduler for batch {i}. " * 3 for i in range(200)]
+    filler[150] = "--swap-space sets the CPU swap space per GPU in GiB."
+    text = (
+        "## Serving\n\n"
+        + "\n\n".join(filler[:100])
+        + "\n\n## Deprecated options (removed in v0.10)\n\n"
+        + "\n\n".join(filler[100:])
+    )
+    corpus = ResearchCorpus(pages=[PageContent("https://d.dev/a", "A", text)])
+    out = corpus.relevant_text("swap space", max_chars=3_000)
+    assert len(out) <= 3_000
+    heading = out.index("## Deprecated options (removed in v0.10)")
+    assert heading < out.index("--swap-space")
+
+
+@pytest.mark.parametrize(
+    "block",
+    [
+        "x" * 5_000,  # no blank line between a header and a text
+        "## Source: https://d.dev/a\n" + "h" * 2_990 + "\n\nbody " * 100,  # no room
+    ],
+)
+def test_an_excerpt_without_room_for_parts_is_the_block_cut(block: str) -> None:
+    from scholar_lens.src.web_research import _cut, _excerpt
+
+    out = _excerpt(block, 3_000, {"body"})
+    assert out == _cut(block, 3_000) and len(out) <= 3_000
+
+
+def test_a_preferred_long_page_keeps_its_matching_parts_in_its_share() -> None:
+    docs = PageContent("https://d.dev/a", "Docs", "flag " * 600)
+    corpus = ResearchCorpus(pages=[_long_reference_page(), docs])
+    text = corpus.relevant_text(
+        "tensor parallel",
+        max_chars=12_000,
+        prefer=["https://d.dev/cli/serve", "https://d.dev/a"],
+    )
+    assert "--tensor-parallel-size" in text and text.count("flag") == 600
+
+
 @pytest.mark.parametrize(
     ("path", "expected"),
     [

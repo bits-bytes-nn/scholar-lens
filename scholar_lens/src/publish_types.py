@@ -19,6 +19,8 @@ BLOG_IMAGES_DIR = "assets/images"
 # slug: a paper's summary and review share the work_dir.
 _STAGED_IMAGES_DIRNAME = "blog-images"
 SUMMARY_SLUG_SUFFIX = "-summary"
+# Post files are named "<YYYY-MM-DD>-<slug>.md" (see Publisher.publish).
+_DATED_POST = re.compile(r"^(\d{4}-\d{2}-\d{2})-(?P<slug>.+)$")
 
 
 class PublishError(Exception):
@@ -88,3 +90,23 @@ def with_review_checklist(body: str, warnings: Sequence[str]) -> str:
         return body
     items = "\n".join(f"- [ ] {w}" for w in warnings)
     return f"{body}\n\n### Review checklist\n{items}"
+
+
+def post_slug(stem: str) -> str:
+    """A post file's stem without its date prefix."""
+    match = _DATED_POST.match(stem)
+    return match.group("slug") if match else stem
+
+
+def post_key(slug: str) -> tuple[bool, str]:
+    """``(is_summary, normalized base slug)`` naming one post across slugify
+    versions: older posts kept dots and the double hyphen left by ": "
+    ("gemini-2.5--pushing-…") and were cut at 120 characters, not at a word
+    boundary near 80."""
+    summary = slug.endswith(SUMMARY_SLUG_SUFFIX)
+    base = slug[: -len(SUMMARY_SLUG_SUFFIX)] if summary else slug
+    return summary, slugify(base)
+
+
+def same_post(slug: str, other: str) -> bool:
+    return post_key(slug) == post_key(other)

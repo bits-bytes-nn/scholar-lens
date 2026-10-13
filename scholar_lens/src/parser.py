@@ -346,7 +346,7 @@ class HTMLParser(BaseParser):
         self.url: str | None = None
 
     async def parse(self, arxiv_id: str, extract_text: bool = True) -> HTMLParseResult:
-        html_content, _ = await self._fetch_html_with_fallback(arxiv_id)
+        html_content, _ = await self._fetch_html(arxiv_id)
         soup = BeautifulSoup(preserve_listing_spaces(html_content), "html.parser")
         return HTMLParseResult(content=self._extract_content(soup, extract_text))
 
@@ -361,24 +361,17 @@ class HTMLParser(BaseParser):
                 return Content(text=text)
         return Content()
 
-    async def _fetch_html_with_fallback(self, arxiv_id: str) -> tuple[str, str]:
-        urls_to_try = [
-            f"{AppConstants.External.ARXIV_HTML.value}/{arxiv_id}",
-            f"{AppConstants.External.AR5IV_LABS_HTML.value}/{arxiv_id}",
-        ]
-        for url in urls_to_try:
-            try:
-                html = await self._fetch_html_from_url(url)
-            except ContentParseError:
-                logger.warning("Failed to fetch from '%s', trying next URL", url)
-                continue
-            # A failed conversion still answers 200 with a stub ("See pages
-            # 1-last of main.pdf"): the next rendering may have the paper.
-            if _readable_chars(html) < MIN_PARSED_TEXT_CHARS:
-                logger.warning("'%s' has almost no text, trying next URL", url)
-                continue
-            return html, url
-        raise ContentParseError(f"Failed to fetch HTML for arXiv ID: '{arxiv_id}'")
+    async def _fetch_html(self, arxiv_id: str) -> tuple[str, str]:
+        """The paper's arXiv HTML rendering and its URL. Only arxiv.org/html:
+        ar5iv answers a figure it lost with a "NO IMAGE AVAILABLE" PNG (HTTP
+        200), so a paper without an arXiv HTML version is read from its PDF."""
+        url = f"{AppConstants.External.ARXIV_HTML.value}/{arxiv_id}"
+        html = await self._fetch_html_from_url(url)
+        # A failed conversion still answers 200 with a stub ("See pages
+        # 1-last of main.pdf").
+        if _readable_chars(html) < MIN_PARSED_TEXT_CHARS:
+            raise ContentParseError(f"'{url}' has almost no text")
+        return html, url
 
     async def _fetch_html_from_url(self, url: str) -> str:
         try:
@@ -392,7 +385,7 @@ class HTMLParser(BaseParser):
 class HTMLRichParser(RichParser, HTMLParser):
     async def parse(self, arxiv_id: str, extract_text: bool = True) -> HTMLParseResult:
         try:
-            html_content, base_url = await self._fetch_html_with_fallback(arxiv_id)
+            html_content, base_url = await self._fetch_html(arxiv_id)
             self.url = base_url
             soup = BeautifulSoup(preserve_listing_spaces(html_content), "html.parser")
 
@@ -420,8 +413,7 @@ class HTMLRichParser(RichParser, HTMLParser):
         # Resolve against the page URL per RFC 3986 — never concatenate. arXiv
         # serves '.../html/<id>' (no trailing slash) with version-prefixed
         # relative srcs ('<id>v1/Media/x.png'), so appending yields a doubled id
-        # segment that 404s; ar5iv uses root-relative srcs ('/html/<id>/...').
-        # urljoin handles both, and a 404 here silently strips every figure from
+        # segment that 404s, and a 404 here silently strips every figure from
         # the model's context (see attach_figure_context).
         return urljoin(self.url, img_src)
 

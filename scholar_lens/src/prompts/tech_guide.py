@@ -7,6 +7,7 @@ from .base import (
     READER_PROFILE,
     STYLE_RULES,
     TABLE_RULES,
+    TERMINOLOGY_RULES,
     VISUAL_RULES,
     BasePrompt,
 )
@@ -18,14 +19,18 @@ OFFICIAL_LABEL = "official documentation"
 OLDER_DOCS_LABEL = "older docs version"
 REFERENCE_LABEL = "reference material"
 THIRD_PARTY_LABEL = "third-party"
-# Prose-length target per section depth, in Korean characters (code excluded).
-# Single source for the synopsis budget, the section directives and the
-# evaluator's length report.
+# Prose-length target per section depth, in Korean characters of prose as
+# ``tech_guide.prose_chars`` measures it (PROSE_UNIT). Single source for the
+# synopsis budget, the section directives and the evaluator's length report.
 DEPTH_CHARS: dict[str, int] = {"deep": 5_000, "standard": 2_500, "brief": 1_000}
 # Other languages need about this many times the characters for the same content.
 NON_KOREAN_CHAR_FACTOR: float = 2.5
+# What the length targets count: the writer is told the unit the evaluator measures.
+PROSE_UNIT = (
+    "characters of prose (spaces included; code blocks, tables and images excluded)"
+)
 LENGTH_BUDGET = (
-    "LENGTH BUDGET (characters of prose, code excluded; in a language other than Korean, about "
+    f"LENGTH BUDGET ({PROSE_UNIT}; in a language other than Korean, about "
     f"{NON_KOREAN_CHAR_FACTOR:g}x these numbers):\n"
     "    the whole guide is about 35,000-55,000; a deep section is about "
     f"{DEPTH_CHARS['deep']:,}, standard about {DEPTH_CHARS['standard']:,}, brief at most "
@@ -36,6 +41,13 @@ SOURCE_NARRATION = (
     "State facts plainly whichever source they came from; name a source only for an opinion, a benchmark or the "
     "paper or design doc a mechanism comes from, once; never explain which source a command came from."
 )
+# How the writer and the evaluator treat the synopsis's glossary (rendered by
+# ``tech_guide.glossary_view``).
+GLOSSARY_RULE = (
+    "Write each <glossary> term as its rendering, table cells included. A term marked [new] gets its English in "
+    'parentheses once, at its first use in the section ("연속 배칭(continuous batching)"); a term marked '
+    "[introduced] never does again; a term listed alone is written as listed."
+)
 # Which labelled source decides what (writer, fact-checker and evaluator).
 SOURCE_AUTHORITY = (
     f'Pages labelled "({OFFICIAL_LABEL})" decide commands, flags, API names, defaults, configuration keys, '
@@ -43,8 +55,11 @@ SOURCE_AUTHORITY = (
     f'"({REFERENCE_LABEL})" (chosen by the user) or "({THIRD_PARTY_LABEL})" — papers, design docs, maintainers\' '
     "posts, engineering write-ups, source code — may ground concepts, internals, design rationale, trade-offs and "
     "architecture or integration patterns; primary ones (a paper, the project's own design docs or blog) outweigh "
-    "generic tutorials, and marketing grounds nothing. Where such a page conflicts with an official page about "
-    f'current behaviour, the official page wins; an "({OLDER_DOCS_LABEL})" page never decides current behaviour. '
+    "generic tutorials, marketing grounds nothing, and a vendor's product page or tutorial grounds facts about its "
+    "own product only, never a comparison with other products. Where such a page conflicts with an official page "
+    f'about current behaviour, the official page wins; an "({OLDER_DOCS_LABEL})" page never decides current '
+    "behaviour. A mechanism that only a paper or an older design doc describes is presented as the design of the "
+    "version it describes (name the paper or the version it states), not as a current option, unless an official current page confirms it. "
     "When <sources> include an official page, a command, flag, default or configuration key that only a "
     "non-official page gives is left out; when they include none, such a detail needs a page that shows it."
 )
@@ -148,10 +163,18 @@ class TechGuideSynopsisPrompt(BasePrompt):
         "sources",
         "search_results",
         "input_outline",
+        "translation_guideline",
         "max_sections",
+        "title_max_length",
         "language",
     ]
-    output_variables: list[str] = ["guide_type", "title", "synopsis", "section_plan"]
+    output_variables: list[str] = [
+        "guide_type",
+        "title",
+        "synopsis",
+        "glossary",
+        "section_plan",
+    ]
 
     system_prompt_template: str = """
     You are an expert technical writer and educator. You design clear, well-structured learning paths for software
@@ -181,27 +204,35 @@ class TechGuideSynopsisPrompt(BasePrompt):
     {input_outline}
     </input_outline>
 
+    <translation_guideline>
+    {translation_guideline}
+    </translation_guideline>
+
     First decide the GUIDE TYPE from the topic and the sources:
     - getting-started: the reader wants to install, run and use the tool. Section 1 or 2 covers installation and the
-      first runnable example, and usage leads; internals and system integration follow the usage sections, a hard
-      mechanism with a deep section of its own. Every heading in <input_outline> (the requested pages) is covered by
+      first runnable example, and usage leads. Every heading in <input_outline> (the requested pages) is covered by
       a section of its own or folded into one.
-    - explainer: the reader wants to understand how something works; concepts and mechanics lead, usage follows.
+    - explainer: the reader wants to understand how something works; in each section mechanics lead, usage follows.
+
+    SPINE — the requested documentation is the guide's backbone: the outline follows its structure and reader journey
+    (the <input_outline> order). Reference material and search results deepen that spine, not chapters beside it: a
+    mechanism, its design rationale or an integration concern goes in the section where the reader meets the feature
+    or setting it explains (the memory mechanism where the memory and cache settings are configured). A mechanism
+    gets a section of its own only when it is central and too large to split without fragmenting it; never plan a
+    section that merely summarizes one reference.
 
     """
         + LENGTH_BUDGET
         + """
-    The guide is a curated learning path, not a translation of one doc page: it covers both breadth and depth, as
-    far as the sources support each of these:
-    - the mental model: what problem the tool solves and its core idea;
-    - architecture and internals: how the key mechanisms work and why they are built that way;
-    - what each major feature means: the problem it solves, how it works, its trade-off and when to use it;
-    - installation and usage: the runnable path from install to everyday workflows;
-    - integration into a larger system: where the tool sits, its interfaces with surrounding systems, scaling,
-      observability and failure modes, with design advice phrased as recommendations.
+    The guide is a curated learning path, not a translation of one doc page: within that spine it covers breadth and
+    depth as far as the sources support them — what problem the tool solves and its core idea; how the key mechanisms
+    work and why they are built that way; what each major feature means (the problem it solves, how it works, its
+    trade-off, when to use it); the runnable path from install to everyday workflows; and how the tool fits a larger
+    system (interfaces, scaling, observability, failure modes, design advice phrased as recommendations).
     Spend length where the difficulty is: an easy or routine topic gets a brief section or is folded into another;
-    a hard mechanism gets a deep section that builds up its background first. Installation never dominates: one
-    section at most, with per-platform variants condensed into a table or left to a link to the official page.
+    a section that explains a hard mechanism is deep and builds up its background first. Installation never
+    dominates: one section at most, with per-platform variants condensed into a table or left to a link to the
+    official page.
     Order the sections so understanding builds progressively. Give each section a depth: deep for a central or hard
     topic, standard for a normal one, brief for an easy or peripheral one (or drop it).
 
@@ -209,9 +240,9 @@ class TechGuideSynopsisPrompt(BasePrompt):
     no concept, definition, or component is the primary subject of more than one section. If two candidate sections
     would both need to explain the same thing, merge them or decide which one owns it.
 
-    SUPPORT — a section rests on the source pages that actually cover it: installation, usage and configuration
-    sections on official pages where any page is official, concept, internals and integration sections also on
-    explanatory pages. A section that only marketing or thin pages support is merged into another or dropped.
+    SUPPORT — a section rests on the source pages that actually cover it: official pages (where any page is official)
+    for its usage and configuration, and explanatory pages for the mechanism or integration material woven into it.
+    A section that only marketing or thin pages support is merged into another or dropped.
 
     Lean toward VISUAL aids: for each section note whether a table (comparisons/options), a source image
     (`![]` from available material), or a code block would genuinely help — use them generously where they aid
@@ -222,26 +253,38 @@ class TechGuideSynopsisPrompt(BasePrompt):
     follow-on chapters beyond the list. Prioritise the most important, source-supported topics, merging or dropping
     less essential ones so the outline is complete within {max_sections} sections.
 
-    Write section titles and descriptions in this language: {language} (keep established English technical terms
-    as-is). Keep the bracketed depth and visuals keywords in English exactly as shown.
+    Write section titles and descriptions in this language: {language}, with technical terms as these rules say:
+    """
+        + TERMINOLOGY_RULES
+        + """
+    Keep the bracketed depth and visuals keywords in English exactly as shown.
 
     FORMAT — each line is: a number, then ONE depth tag in brackets (deep, standard or brief), then the title, then
     " — " and a one-line description, then a "(visuals: ...)" hint, where visuals is one of: table, image, code, none.
     Example:
     1. [deep] How GitOps Reconciliation Works — the control loop and desired-state model (visuals: table)
 
+    Then the <glossary>: up to 15 key technical terms the guide uses, one per line as "English term | rendering",
+    the rendering being the term as the guide writes it in {language} per the rules above (the translation
+    guideline's rendering where it lists the term, else a natural translation, or the English itself for a proper
+    noun, product, API or code name or a term with no natural translation),
+    without the English in parentheses: the writers add it at first use.
+
     Then, for each section, its line in <section_plan>: the URLs of the pages in <sources> that support it (copied
-    exactly from their "## Source" lines, most important first, "none" if no page does; for a concept, internals or
-    integration section include the explanatory pages it draws on) and the concepts it owns (a short list, separated
-    by ";").
+    exactly from their "## Source" lines, most important first, "none" if no page does; include the explanatory pages
+    whose material the section weaves in) and the concepts it owns (a short list, separated by ";").
 
     Respond in this format (one line per section):
     <guide_type>getting-started or explainer</guide_type>
-    <title>The guide's title in English: the tool or technique and the scope this outline covers</title>
+    <title>The guide's title in English, at most about {title_max_length} characters: the tool or technique and the guide's angle, never a list of its sections</title>
     <synopsis>
     1. [standard] Section Title — one-line description (visuals: code)
     ...
     </synopsis>
+    <glossary>
+    continuous batching | 연속 배칭
+    ...
+    </glossary>
     <section_plan>
     1 | sources: https://first-url, https://second-url | owns: concept one; concept two
     ...
@@ -260,6 +303,7 @@ class TechGuideSectionPrompt(BasePrompt):
         "previous_sections",
         "already_in_guide",
         "owned_elsewhere",
+        "glossary",
         "sources",
         "available_images",
         "depth_directive",
@@ -284,8 +328,9 @@ class TechGuideSectionPrompt(BasePrompt):
         + READER_PROFILE
         + """
     CONTEXT AND CODE:
-    - Explain a mechanism by what problem it solves, how it works and why it is built that way, and a feature by its
-      trade-off and when to use it, as <sources> describe them.
+    - Weave reference material into the feature or setting this section covers, in the guide's own voice: the problem
+      it solves, how it works, why it is built that way, its trade-off, then how to use it here, as <sources>
+      describe them; no detached background block.
     - Architecture and integration advice (where the tool sits, its interfaces, scaling, observability, failure
       modes) rests on <sources> and is phrased as a recommendation; never invent components, capabilities or limits.
     - Textbook-level background is welcome as explanation; never invent numbers, versions, benchmark results or
@@ -332,6 +377,10 @@ class TechGuideSectionPrompt(BasePrompt):
     {owned_elsewhere}
     </concepts_owned_elsewhere>
 
+    <glossary>
+    {glossary}
+    </glossary>
+
     <sources>
     {sources}
     </sources>
@@ -361,7 +410,9 @@ class TechGuideSectionPrompt(BasePrompt):
         + """
     - Output ONLY the section content. Do NOT emit any XML/HTML tags other than the single required wrapper below, and
       do NOT append stray closing tags.
-    - Write in this language: {language} (keep established English technical terms as-is).
+    - Write in this language: {language}, with technical terms as the STYLE rules say. """
+        + GLOSSARY_RULE
+        + """
 
     Respond in this format:
     <section_markdown>
@@ -374,7 +425,7 @@ class TechGuideSectionPrompt(BasePrompt):
 class TechGuideGroundingPrompt(BasePrompt):
     """Verifies a drafted section against the sources and rewrites out ungrounded claims."""
 
-    input_variables: list[str] = ["section", "sources", "language"]
+    input_variables: list[str] = ["section", "sources", "glossary", "language"]
     output_variables: list[str] = ["grounded_markdown"]
 
     system_prompt_template: str = """
@@ -396,6 +447,10 @@ class TechGuideGroundingPrompt(BasePrompt):
     {sources}
     </sources>
 
+    <glossary>
+    {glossary}
+    </glossary>
+
     Editing rules:
     - Remove or correct any API name, CLI flag, option, default value, version number, or behavioral claim that is NOT
       supported by <sources>. Do not invent replacements — delete the unsupported clause or soften it to what the
@@ -415,7 +470,8 @@ class TechGuideGroundingPrompt(BasePrompt):
     - When you remove an item (a flag, a list entry, a table row, a code block), rewrite or drop the sentence that
       introduced it too: no lead-in to a missing block, no count ("three options") that no longer matches.
     - Preserve correct, well-grounded content, code blocks, tables, and the heading. Do NOT add new claims.
-    - Keep the original language: {language}.
+    - Keep the original language: {language}. Keep the section's terminology and the <glossary> renderings as
+      written; never introduce an English stem with a Korean ending ("prefill합니다").
 
     Return ONLY the cleaned section:
     <grounded_markdown>
@@ -442,6 +498,8 @@ class TechGuideEvaluationPrompt(BasePrompt):
         "sources",
         "depth_directive",
         "previous_sections",
+        "owned_elsewhere",
+        "glossary",
         "length_report",
         "language",
     ]
@@ -488,6 +546,14 @@ class TechGuideEvaluationPrompt(BasePrompt):
     {previous_sections}
     </previously_written_sections>
 
+    <concepts_owned_elsewhere>
+    {owned_elsewhere}
+    </concepts_owned_elsewhere>
+
+    <glossary>
+    {glossary}
+    </glossary>
+
     <length_report>
     {length_report}
     </length_report>
@@ -502,11 +568,15 @@ class TechGuideEvaluationPrompt(BasePrompt):
       how it works and why, an integration topic by its interfaces, scaling and failure modes. Use the measured
       <length_report>: far over the target is bloat to cut (name what to cut), far under on a deep section is a gap.
     - Structure & flow (20): Clear heading, logical progression, self-contained, no structural references to other
-      sections.
+      sections. A section that reads as a standalone summary of one reference, or explains a mechanism apart from
+      the feature it serves, loses here.
     - Accuracy (15): Every claim has the support SOURCES below requires; no statement contradicts another one in the
       section.
-    - Style & tone (5): Follows the shared STYLE rules and the target language register; clean Markdown.
-    - Non-duplication (20): Does NOT restate concepts/examples/tables/images already in <previously_written_sections>.
+    - Style & tone (5): Follows the shared STYLE rules and the target language register; clean Markdown. """
+        + GLOSSARY_RULE
+        + """
+    - Non-duplication (20): Does NOT restate concepts/examples/tables/images already in <previously_written_sections>,
+      nor explain a concept in <concepts_owned_elsewhere> (its owner explains it; using it is fine).
     - Visual & practical richness (10): Uses tables, code blocks, or source images where they genuinely aid learning,
       per the planned section's visual hint — not decoratively, not absent where clearly helpful.
 
@@ -515,7 +585,8 @@ class TechGuideEvaluationPrompt(BasePrompt):
       should fix. Below 60 = a significant gap (wrong depth, thin on a hard concept, missing planned visual).
     - Most first drafts have at least one fixable weakness; reserve 90+ for sections you genuinely cannot improve.
     - HARD CAP: if this section substantially re-explains content already in <previously_written_sections> (a
-      duplicated concept, example, table, or image), the TOTAL score must not exceed 40, regardless of other merits.
+      duplicated concept, example, table, or image) or explains a concept in <concepts_owned_elsewhere> at length,
+      the TOTAL score must not exceed 40, regardless of other merits.
     - SOURCES: """
         + SOURCE_AUTHORITY
         + """ A concept, internals or architecture claim needs a page in <sources> that supports it, or is
@@ -525,7 +596,8 @@ class TechGuideEvaluationPrompt(BasePrompt):
 
     BLOCKING ISSUES block the section whatever its score; list each with the quoted passage and the fix: a factual
     error, a statement that contradicts another one in the section, a claim without the support SOURCES requires,
-    and a structural reference to another part of the guide (its section name or number). A preference or
+    a structural reference to another part of the guide (its section name or number), and a substantial explanation
+    of a concept in <concepts_owned_elsewhere>. A preference or
     a weakness a score already reflects goes in the feedback instead.
 
     Then give specific, actionable feedback the writer can apply to improve THIS section, tied to the lowest-scoring
@@ -549,6 +621,7 @@ class TechGuideTaxonomyPrompt(BasePrompt):
         "outline",
         "category_options",
         "controlled_tags",
+        "title_max_length",
     ]
     output_variables: list[str] = [
         "category",
@@ -577,7 +650,7 @@ class TechGuideTaxonomyPrompt(BasePrompt):
     - controlled_tags: 1-3 values copied from controlled_tag_options naming what the guide teaches (not a neighbouring field).
     - keywords: up to 5 short reusable topic tags in English (1-4 words each, e.g. "Vector Search",
       "Container Orchestration"); name techniques and tools the guide teaches, never restate the title.
-    - seo_title: only when the title is longer than 70 characters, a version of at most 70 characters that keeps
+    - seo_title: only when the title is longer than {title_max_length} characters, a version of at most {title_max_length} characters that keeps
       the product or technique name first; otherwise leave empty.
 
     Respond in exactly this format:

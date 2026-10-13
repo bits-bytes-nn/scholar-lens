@@ -21,10 +21,11 @@ from .front_matter import split_front_matter
 from .logger import logger
 from .publish_types import (
     BLOG_IMAGES_DIR,
-    SUMMARY_SLUG_SUFFIX,
     PublishError,
     PublishRequest,
-    slugify,
+    post_key,
+    post_slug,
+    same_post,
 )
 
 if TYPE_CHECKING:
@@ -32,9 +33,10 @@ if TYPE_CHECKING:
 
     from ..configs import Github as GithubConfig
 
-# Post files are named "<YYYY-MM-DD>-<slug>.md" (see Publisher.publish).
-_DATED_POST = re.compile(r"^(\d{4}-\d{2}-\d{2})-(?P<slug>.+)$")
 _BLOB_MODE = "100644"
+# An image a post shows: any reference into the blog's image folder.
+_IMAGE_REF = re.compile(rf"/{re.escape(BLOG_IMAGES_DIR)}/([^\s)\"'<>?#]+)")
+_MAX_HAND_EDIT_NOTES = 10
 
 
 def _git_blob_sha(data: bytes) -> str:
@@ -47,25 +49,6 @@ def _front_matter_date(markdown: str) -> str | None:
     front, _, _ = split_front_matter(markdown)
     date = (front or {}).get("date")
     return None if date is None else str(date)
-
-
-def _post_slug(stem: str) -> str:
-    match = _DATED_POST.match(stem)
-    return match.group("slug") if match else stem
-
-
-def _post_key(slug: str) -> tuple[bool, str]:
-    """``(is_summary, normalized base slug)`` naming one post across slugify
-    versions: older posts kept dots and the double hyphen left by ": "
-    ("gemini-2.5--pushing-…") and were cut at 120 characters, not at a word
-    boundary near 80."""
-    summary = slug.endswith(SUMMARY_SLUG_SUFFIX)
-    base = slug[: -len(SUMMARY_SLUG_SUFFIX)] if summary else slug
-    return summary, slugify(base)
-
-
-def _same_post(slug: str, other: str) -> bool:
-    return _post_key(slug) == _post_key(other)
 
 
 class BlogBranchSync:
@@ -107,7 +90,11 @@ class BlogBranchSync:
             for path, data in files.items()
             if existing.get(path) != _git_blob_sha(data)
         ]
-        deletions = self._stale_paths(markdown_path, existing, on_base, files)
+        deletions = [
+            path
+            for path in self._stale_paths(markdown_path, existing, on_base, files)
+            if self._only_generated(path, parent_sha)
+        ]
 
         if changes or deletions:
             elements = [
@@ -206,31 +193,106 @@ class BlogBranchSync:
         """A post already on the base branch keeps its file name (and so its
         date prefix and URL): a rerun updates it instead of adding a copy.
 
-        Returns the files and a PR note naming the post that is replaced.
+        Returns the files and PR notes naming the post that is replaced and
+        the hand edits to it (or its images) since it was generated.
         """
         posts = LocalPaths.POSTS_DIR.value
         new_path = f"{posts}/{markdown_path.name}"
-        slug = _post_slug(markdown_path.stem)
+        slug = post_slug(markdown_path.stem)
         published = sorted(
             path
             for path in on_base
             if path.startswith(f"{posts}/")
             and path.count("/") == 1
             and path.endswith(".md")
-            and _same_post(_post_slug(Path(path).stem), slug)
+            and same_post(post_slug(Path(path).stem), slug)
         )
         if not published:
             return files, []
-        note = (
-            f"Replaces the published post `{published[0]}`; "
-            "check that no hand edits to it are lost."
-        )
+        old = published[0]
+        notes = [
+            f"Replaces the published post `{old}`.",
+            *self._hand_edits(old, on_base),
+        ]
         if new_path in published:
-            return files, [note]
+            return files, notes
         renamed = dict(files)
-        renamed[published[0]] = renamed.pop(new_path)
-        logger.info("Updating the published post '%s' in place.", published[0])
-        return renamed, [note]
+        renamed[old] = renamed.pop(new_path)
+        logger.info("Updating the published post '%s' in place.", old)
+        return renamed, notes
+
+    def _is_generator_commit(self, commit: Any) -> bool:
+        """Whether this tool made ``commit``: its author and committer are the
+        configured identity. Without an email the identity is the token's
+        account, which a person shares, so no commit counts as generated."""
+        if not self.config.author_email:
+            return False
+        identity = (self.config.author_name, str(self.config.author_email))
+        git = commit.commit
+        return all(
+            (person.name, person.email) == identity
+            for person in (git.author, git.committer)
+        )
+
+    def _generated_on_base(self, commit: Any) -> bool:
+        """A commit on the base branch came from this tool when it has the
+        tool's identity and reached the base through a pull request from one
+        of the tool's branches (a hand-fix PR uses another branch, even when a
+        person commits under the same identity)."""
+        prefix = f"{self.config.branch_prefix}/"
+        return self._is_generator_commit(commit) and any(
+            pull.head.ref.startswith(prefix) for pull in commit.get_pulls()
+        )
+
+    def _hand_edits(self, post_path: str, on_base: dict[str, str]) -> list[str]:
+        """PR notes for the commits on the base branch that touched the
+        published post, or an image it shows, after this tool last wrote it
+        (every commit when it never did): a rerun replaces the post, so each
+        hand fix must be carried over or re-applied."""
+        text = self._blob_text(on_base[post_path])
+        _, body, _ = split_front_matter(text)
+        images = sorted(
+            {
+                f"{BLOG_IMAGES_DIR}/{name}"
+                for name in _IMAGE_REF.findall(body)
+                if f"{BLOG_IMAGES_DIR}/{name}" in on_base
+            }
+        )
+        found: dict[str, tuple[Any, list[str]]] = {}
+        try:
+            for path in [post_path, *images]:
+                for commit in self.repo.get_commits(
+                    sha=self.config.base_branch, path=path
+                ):
+                    if self._generated_on_base(commit):
+                        break  # older commits predate the generated version
+                    found.setdefault(commit.sha, (commit, []))[1].append(path)
+        except GithubException as e:
+            return [
+                f"Could not list the commits to `{post_path}` ({e.status}); check "
+                "its history for hand edits this rerun drops."
+            ]
+        if not found:
+            return [f"No hand edits to `{post_path}` since it was generated."]
+        ordered = sorted(
+            found.values(), key=lambda item: item[0].commit.committer.date, reverse=True
+        )
+        notes = []
+        for commit, paths in ordered[:_MAX_HAND_EDIT_NOTES]:
+            git = commit.commit
+            headline = git.message.partition("\n")[0]
+            notes.append(
+                "Hand edit since generation, re-apply it if this post drops it: "
+                f'{commit.sha[:7]} "{headline}" '
+                f"({git.committer.date:%Y-%m-%d}) on {', '.join(paths)}: "
+                f"{commit.html_url}"
+            )
+        if len(ordered) > _MAX_HAND_EDIT_NOTES:
+            notes.append(
+                f"{len(ordered) - _MAX_HAND_EDIT_NOTES} older hand edit(s) to "
+                f"`{post_path}` not listed; see its history."
+            )
+        return notes
 
     @staticmethod
     def _artifact_files(
@@ -266,7 +328,7 @@ class BlogBranchSync:
         kind with that exact timestamp would be taken for an older copy.
         """
         posts = LocalPaths.POSTS_DIR.value
-        slug = _post_slug(markdown_path.stem)
+        slug = post_slug(markdown_path.stem)
         date = _front_matter_date(markdown_path.read_text(encoding="utf-8"))
         branch_only = [
             path
@@ -280,22 +342,32 @@ class BlogBranchSync:
             and path.count("/") == 1
             and path.endswith(".md")
             and (
-                _same_post(_post_slug(Path(path).stem), slug)
+                same_post(post_slug(Path(path).stem), slug)
                 or (
                     date is not None
-                    and _post_key(_post_slug(Path(path).stem))[0] == _post_key(slug)[0]
+                    and post_key(post_slug(Path(path).stem))[0] == post_key(slug)[0]
                     and _front_matter_date(self._blob_text(branch_files[path])) == date
                 )
             )
         ]
-        slugs = {slug} | {_post_slug(Path(path).stem) for path in old_posts}
+        slugs = {slug} | {post_slug(Path(path).stem) for path in old_posts}
         own_image = re.compile(
             rf"^{re.escape(BLOG_IMAGES_DIR)}/"
-            rf"(?:{'|'.join(re.escape(slug) for slug in sorted(slugs))})-\d+\.(png|jpg)$"
+            rf"(?:{'|'.join(re.escape(slug) for slug in sorted(slugs))})-\d+\.(png|jpg|gif)$"
         )
         return sorted(
             [*old_posts, *(path for path in branch_only if own_image.match(path))]
         )
+
+    def _only_generated(self, path: str, head_sha: str) -> bool:
+        """Whether every commit that touched ``path`` up to ``head_sha`` is
+        this tool's: a file a person added or edited on the branch is never
+        removed as stale."""
+        commits = list(self.repo.get_commits(sha=head_sha, path=path))
+        if commits and all(self._is_generator_commit(c) for c in commits):
+            return True
+        logger.info("Kept '%s': not (only) written by this tool.", path)
+        return False
 
     def _blob_text(self, sha: str) -> str:
         blob = self.repo.get_git_blob(sha)

@@ -24,12 +24,16 @@ class _Response:
         return self._payload
 
 
-class TestFetchBlogTags:
-    def test_counts_tags_across_posts_and_skips_unreadable_ones(
+class TestFetchBlogPosts:
+    def test_reads_front_matter_and_skips_unreadable_posts(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         posts = {
-            "a": '---\ntitle: "A"\ntags: ["GraphRAG", "Knowledge-Graph"]\n---\nbody',
+            "a": (
+                '---\ntitle: "A"\ntags: ["GraphRAG", "Knowledge-Graph"]\n'
+                "description: >-\n  Graph RAG는 전역 질문에 답합니다.\n"
+                "lang: ko\ntranslation_id: a\n---\nbody"
+            ),
             "b": '---\ntitle: "B"\ntags: ["GraphRAG"]\n---\nbody',
         }
         tree = [
@@ -50,8 +54,19 @@ class TestFetchBlogTags:
             return _Response(text=posts[sha]) if sha in posts else _Response(status=500)
 
         monkeypatch.setattr(post_conventions.requests, "get", fake_get)
-        tags = post_conventions.fetch_blog_tags("o/r", "main", None)
-        assert list(tags.items()) == [("GraphRAG", 2), ("Knowledge-Graph", 1)]
+        posts_read = post_conventions.fetch_blog_posts("o/r", "main", None)
+        assert [p.path for p in posts_read] == [
+            "_posts/2025-01-01-a.md",
+            "_posts/2024/2024-01-01-b.md",
+        ]
+        first = posts_read[0]
+        assert first.description == "Graph RAG는 전역 질문에 답합니다."
+        assert (first.lang, first.translation_id) == ("ko", "a")
+        assert posts_read[1].description is None
+        assert list(post_conventions.tag_counts(posts_read).items()) == [
+            ("GraphRAG", 2),
+            ("Knowledge-Graph", 1),
+        ]
         assert not any(url.endswith("/r") for url in requested)
 
 
@@ -99,7 +114,7 @@ class TestLoadConventions:
         assert blog != local and retired not in blog.tags.controlled
 
 
-def test_fetch_blog_tags_fails_when_most_posts_are_unreadable(
+def test_fetch_blog_posts_fails_when_most_posts_are_unreadable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     tree = [
@@ -118,5 +133,5 @@ def test_fetch_blog_tags_fails_when_most_posts_are_unreadable(
 
     monkeypatch.setattr(post_conventions.requests, "get", fake_get)
     with pytest.raises(RuntimeError, match="2 of 3"):
-        post_conventions.fetch_blog_tags("o/r", "feat/x", None)
+        post_conventions.fetch_blog_posts("o/r", "feat/x", None)
     assert requested[0].endswith("/git/trees/feat%2Fx")

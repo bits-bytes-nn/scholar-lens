@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import io
 import itertools
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -14,6 +16,7 @@ import httpx
 import pytest
 from github import GithubException
 from moto import mock_aws
+from PIL import Image
 
 from scholar_lens.configs import Github
 from scholar_lens.src.aws_helpers import S3Handler
@@ -26,7 +29,6 @@ from scholar_lens.src.publisher import (
     PublishRequest,
     build_pr_body,
     image_format,
-    is_arxiv_host,
 )
 
 
@@ -40,23 +42,11 @@ def skip_validation(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 class TestImageHelpers:
-    @pytest.mark.parametrize(
-        "url,expected",
-        [
-            ("https://arxiv.org/html/1/x.png", True),
-            ("https://ar5iv.labs.arxiv.org/html/1/x.png", True),
-            ("https://AR5IV.org/x.png", True),
-            ("https://notarxiv.org/x.png", False),
-            ("https://arxiv.org.evil.com/x.png", False),
-        ],
-    )
-    def test_is_arxiv_host(self, url: str, expected: bool) -> None:
-        assert is_arxiv_host(url) is expected
-
     def test_image_format_by_magic_bytes(self) -> None:
         assert image_format(b"\x89PNG\r\n\x1a\nrest") == "png"
         assert image_format(b"\xff\xd8\xff\xe1rest") == "jpg"
-        assert image_format(b"GIF89a") is None
+        assert image_format(b"GIF89a") == "gif"
+        assert image_format(b"RIFF\0\0\0\0WEBP") is None
         assert image_format(b"<svg") is None
 
 
@@ -278,36 +268,27 @@ class TestImageLocalization:
         assert url not in content
         assert (staged / "my-guide-1.png").read_bytes() == PNG
 
-    @pytest.mark.parametrize(
-        "url",
-        [
-            "https://ar5iv.labs.arxiv.org/html/2106.09685/assets/x1.png",
-            "https://ar5iv.org/html/2106.09685/assets/x1.png",
-            "https://export.arxiv.org/x.png",
-        ],
-    )
-    async def test_arxiv_family_hosts(self, tmp_path: Path, url: str) -> None:
-        content, _ = await self._publish(
-            tmp_path, f"![x]({url})\n", fetch_image=lambda u: PNG
-        )
-        assert url not in content
-
     async def test_download_failure_blocks_publishing(self, tmp_path: Path) -> None:
         def fetch(url: str) -> bytes:
             raise httpx.ConnectError("boom")
 
         pub = Publisher(Github(), root_dir=tmp_path, fetch_image=fetch)
-        with pytest.raises(PostAssetError, match="could not download"):
+        with pytest.raises(PostAssetError, match="could not download") as info:
             await pub.publish(
                 _request(tmp_path, markdown="![x](https://arxiv.org/html/1/x1.png)\n")
             )
-        assert not list(tmp_path.glob("*.md"))  # nothing saved
+        # Only the rejected draft is kept, with why it was not published.
+        assert [p.name for p in tmp_path.glob("*.md")] == ["my-guide.rejected.md"]
+        assert info.value.rejected_path == str(tmp_path / "my-guide.rejected.md")
+        draft = (tmp_path / "my-guide.rejected.md").read_text(encoding="utf-8")
+        assert "![x](https://arxiv.org/html/1/x1.png)" in draft
+        assert "- image: could not download" in draft
 
     async def test_non_image_payload_blocks_publishing(self, tmp_path: Path) -> None:
         pub = Publisher(
             Github(), root_dir=tmp_path, fetch_image=lambda u: b"<html>404</html>"
         )
-        with pytest.raises(PostAssetError, match="not a PNG or JPEG"):
+        with pytest.raises(PostAssetError, match="not an image"):
             await pub.publish(
                 _request(tmp_path, markdown="![x](https://arxiv.org/html/1/x1.png)\n")
             )
@@ -317,11 +298,102 @@ class TestImageLocalization:
         with pytest.raises(PostAssetError, match="not found"):
             await pub.publish(_request(tmp_path, markdown="![x](missing.png)\n"))
 
-    async def test_other_external_images_stay_by_default(self, tmp_path: Path) -> None:
-        # Parenthesised URL must survive intact (not truncated at the first ')').
-        url = "https://upload.wikimedia.org/File_(diagram).png"
-        content, _ = await self._publish(tmp_path, f"# T\n\n![arch]({url})\n")
-        assert f"![arch]({url})" in content
+    async def test_third_party_images_stay_links(self, tmp_path: Path) -> None:
+        # Someone else's image is linked, never copied (copyright); a
+        # parenthesised URL is kept whole (not cut at the first ')').
+        def fetch(url: str) -> bytes:
+            raise AssertionError(f"fetched {url}")
+
+        body = (
+            "# T\n\n![arch](https://upload.wikimedia.org/File_(diagram).png)\n\n"
+            "![docs](http://docs.example.com/a.png)\n"
+        )
+        content, staged = await self._publish(tmp_path, body, fetch_image=fetch)
+        assert body in content and not any(staged.iterdir())
+
+    async def test_http_url_is_fetched_over_https(self, tmp_path: Path) -> None:
+        fetched: list[str] = []
+
+        def fetch(url: str) -> bytes:
+            fetched.append(url)
+            return PNG
+
+        content, _ = await self._publish(
+            tmp_path, "![a](http://arxiv.org/html/1/x1.png)\n", fetch_image=fetch
+        )
+        assert fetched == ["https://arxiv.org/html/1/x1.png"]
+        assert "![a](/assets/images/my-guide-1.png)" in content
+
+    async def test_data_url_is_left_for_the_validator(self, tmp_path: Path) -> None:
+        url = "data:image/png;base64,iVBORw0KGgo="
+        content, staged = await self._publish(tmp_path, f"![a]({url})\n")
+        assert f"![a]({url})" in content and not list(staged.iterdir())
+
+    async def test_unrenderable_svg_blocks(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from scholar_lens.src import publisher
+
+        def broken(data: bytes) -> bytes:
+            raise ValueError("SVG rendering failed")
+
+        monkeypatch.setattr(publisher, "svg_to_png", broken)
+        svg = b'<svg xmlns="http://www.w3.org/2000/svg" width="2" height="2"/>'
+        pub = Publisher(Github(), root_dir=tmp_path, fetch_image=lambda u: svg)
+        url = "https://arxiv.org/html/2106.09685v2/figure1.svg"
+        with pytest.raises(PostAssetError, match="could not be rendered"):
+            await pub.publish(_request(tmp_path, markdown=f"![a]({url})\n"))
+
+    async def test_large_png_is_scaled_down(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from scholar_lens.src import publisher
+
+        big = io.BytesIO()
+        Image.effect_noise((3000, 100), 64).convert("RGB").save(big, format="PNG")
+        monkeypatch.setattr(publisher, "_MAX_STORED_BYTES", len(big.getvalue()) - 1)
+        _, staged = await self._publish(
+            tmp_path,
+            "![a](https://arxiv.org/html/1/x1.png)\n",
+            fetch_image=lambda u: big.getvalue(),
+        )
+        with Image.open(staged / "my-guide-1.png") as image:
+            assert image.size == (2048, 68)
+
+    async def test_large_gif_blocks(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from scholar_lens.src import publisher
+
+        monkeypatch.setattr(publisher, "_MAX_STORED_BYTES", 10)
+        pub = Publisher(
+            Github(), root_dir=tmp_path, fetch_image=lambda u: b"GIF89a" + b"0" * 16
+        )
+        request = _request(tmp_path, markdown="![a](https://arxiv.org/html/1/a.gif)\n")
+        with pytest.raises(PostAssetError, match="animated GIF"):
+            await pub.publish(request)
+
+    async def test_gif_keeps_its_format(self, tmp_path: Path) -> None:
+        gif = b"GIF89a" + b"0" * 16
+        content, staged = await self._publish(
+            tmp_path,
+            "![anim](https://arxiv.org/html/1/anim.gif)\n",
+            fetch_image=lambda u: gif,
+        )
+        assert "![anim](/assets/images/my-guide-1.gif)" in content
+        assert (staged / "my-guide-1.gif").read_bytes() == gif
+
+    async def test_other_raster_formats_become_png(self, tmp_path: Path) -> None:
+        webp = io.BytesIO()
+        Image.new("RGB", (4, 3), "red").save(webp, format="WEBP")
+        content, staged = await self._publish(
+            tmp_path,
+            "![w](https://arxiv.org/html/1/w.webp)\n",
+            fetch_image=lambda u: webp.getvalue(),
+        )
+        assert "![w](/assets/images/my-guide-1.png)" in content
+        with Image.open(staged / "my-guide-1.png") as image:
+            assert (image.format, image.size) == ("PNG", (4, 3))
 
     async def test_already_hosted_images_untouched(self, tmp_path: Path) -> None:
         content, staged = await self._publish(
@@ -437,6 +509,10 @@ class FakeRepo:
         self.refs: dict[str, str] = {}
         self.ref_edits: list[tuple[str, str, bool]] = []
         self.pulls: list[FakePull] = []
+        # Every pull request ever opened, with the base commit it started from
+        # (merged ones too): what GET /commits/{sha}/pulls reports.
+        self.all_pulls: list[tuple[FakePull, str]] = []
+        self.messages: dict[str, str] = {}
         self.truncated = False
         for data in base_files.values():
             self.blobs[_blob_sha(data)] = data
@@ -516,7 +592,67 @@ class FakeRepo:
 
     def create_git_commit(self, message, tree, parents, **identity):  # type: ignore[no-untyped-def]
         sha = self._new_commit(tree.sha, [p.sha for p in parents], identity)
+        self.messages[sha] = message
         return SimpleNamespace(sha=sha)
+
+    def commit_files(
+        self, parent: str, files: dict[str, bytes | None], message: str = "fix"
+    ) -> str:
+        """A commit by someone other than the tool on top of ``parent``
+        (a ``None`` value deletes the file)."""
+        tree = dict(self.trees[self.commits[parent][0]])
+        for path, data in files.items():
+            if data is None:
+                tree.pop(path)
+            else:
+                self.blobs[_blob_sha(data)] = data
+                tree[path] = _blob_sha(data)
+        sha = self._new_commit(self._new_tree(tree), [parent], {})
+        self.messages[sha] = message
+        return sha
+
+    def _view(self, sha: str) -> SimpleNamespace:
+        identity = self.commits[sha][2]
+        person = (
+            identity["author"]._identity
+            if "author" in identity
+            else {"name": "Someone", "email": "someone@example.com"}
+        )
+        date = datetime(2026, 1, 1, tzinfo=UTC) + timedelta(
+            minutes=int(sha.removeprefix("commit"))
+        )
+        actor = SimpleNamespace(**person, date=date)
+        pulls = [
+            SimpleNamespace(head=SimpleNamespace(ref=pull.head))
+            for pull, base in self.all_pulls
+            if sha in self._ancestors(self.refs[f"heads/{pull.head}"])
+            and sha not in self._ancestors(base)
+        ]
+        return SimpleNamespace(
+            sha=sha,
+            html_url=f"https://github.com/owner/blog/commit/{sha}",
+            commit=SimpleNamespace(
+                author=actor, committer=actor, message=self.messages.get(sha, "")
+            ),
+            get_pulls=lambda: pulls,
+        )
+
+    def get_commits(self, sha: str, path: str) -> list[SimpleNamespace]:
+        """Commits that changed ``path`` in the history of ``sha`` (a branch
+        name or a commit), newest first."""
+        head = self.refs.get(f"heads/{sha}", sha)
+
+        def blob(commit: str) -> str | None:
+            return self.trees[self.commits[commit][0]].get(path)
+
+        changed = [
+            c
+            for c in self._ancestors(head)
+            if blob(c) is not None
+            and all(blob(p) != blob(c) for p in self.commits[c][1])
+        ]
+        changed.sort(key=lambda c: int(c.removeprefix("commit")), reverse=True)
+        return [self._view(c) for c in changed]
 
     def get_pulls(self, state: str, head: str, base: str) -> list[FakePull]:
         branch = head.split(":", 1)[1]
@@ -525,6 +661,7 @@ class FakeRepo:
     def create_pull(self, title: str, body: str, head: str, base: str) -> FakePull:
         pull = FakePull(len(self.pulls) + 1, head, title, body)
         self.pulls.append(pull)
+        self.all_pulls.append((pull, self.refs[f"heads/{base}"]))
         return pull
 
 
@@ -757,6 +894,100 @@ class TestBlogBranchSync:
         assert "Replaces the published post `_posts/2025-01-01-my-guide.md`" in (
             repo.pulls[0].body
         )
+
+    def test_hand_edits_since_generation_are_listed(self, tmp_path: Path) -> None:
+        repo = FakeRepo({"README.md": b"blog"})
+        sync = BlogBranchSync(repo, _CONFIG)
+        post = "_posts/2026-10-10-my-guide.md"
+        sync.sync(_request(tmp_path / "d1"), _post(tmp_path / "d1", post[7:-3]))
+        repo.refs["heads/main"] = repo.refs[_BRANCH]  # merged
+        repo.pulls.clear()
+        # Hand fixes on main afterwards: the post, a figure it shows, and an
+        # unrelated file.
+        fixed = b"# Post\n\n![x](/assets/images/my-guide-arxiv-x1.png)\n"
+        image = "assets/images/my-guide-arxiv-x1.png"
+        fix = repo.commit_files(repo.refs["heads/main"], {post: fixed}, "Fix 7억")
+        figure = repo.commit_files(fix, {image: PNG}, "Replace ar5iv figure")
+        repo.refs["heads/main"] = repo.commit_files(figure, {"x.md": b"x"}, "Other")
+
+        sync.sync(
+            _request(tmp_path / "d2"), _post(tmp_path / "d2", "2026-10-12-my-guide")
+        )
+        notes = [
+            line
+            for line in repo.pulls[0].body.splitlines()
+            if "Hand edit since generation" in line
+        ]
+        assert len(notes) == 2  # not the generated commit, not "Other"
+        assert f'{figure[:7]} "Replace ar5iv figure"' in notes[0]
+        assert image in notes[0]
+        assert f'{fix[:7]} "Fix 7억"' in notes[1] and post in notes[1]
+        assert image in repo.files_at(_BRANCH)  # a published image is kept
+
+    def test_a_post_never_generated_lists_all_its_commits(self, tmp_path: Path) -> None:
+        repo = FakeRepo({"_posts/2025-01-01-my-guide.md": b"v1"})
+        md = _post(tmp_path, "2026-10-11-my-guide")
+        BlogBranchSync(repo, _CONFIG).sync(_request(tmp_path), md)
+        assert "Hand edit since generation" in repo.pulls[0].body
+
+    def test_no_hand_edits_is_said(self, tmp_path: Path) -> None:
+        repo = FakeRepo({"README.md": b"blog"})
+        sync = BlogBranchSync(repo, _CONFIG)
+        sync.sync(
+            _request(tmp_path / "a"), _post(tmp_path / "a", "2026-10-10-my-guide")
+        )
+        repo.refs["heads/main"] = repo.refs[_BRANCH]
+        repo.pulls.clear()
+        md = _post(tmp_path / "b", "2026-10-12-my-guide", body="# Post v2\n")
+        sync.sync(_request(tmp_path / "b"), md)
+        assert "No hand edits to `_posts/2026-10-10-my-guide.md`" in (
+            repo.pulls[0].body
+        )
+
+    def test_image_a_person_added_on_the_branch_is_never_removed(
+        self, tmp_path: Path
+    ) -> None:
+        repo = FakeRepo({"README.md": b"blog"})
+        sync = BlogBranchSync(repo, _CONFIG)
+        sync.sync(
+            _request(tmp_path / "a"),
+            _post(
+                tmp_path / "a",
+                "2026-10-11-my-guide",
+                images={"my-guide-1.png": PNG, "my-guide-2.png": PNG + b"2"},
+            ),
+        )
+        # A person fixes figure 2 and adds figure 3 on the open PR's branch.
+        repo.refs[_BRANCH] = repo.commit_files(
+            repo.refs[_BRANCH],
+            {
+                "assets/images/my-guide-2.png": PNG + b"fixed",
+                "assets/images/my-guide-3.png": PNG + b"3",
+            },
+        )
+        sync.sync(
+            _request(tmp_path / "b"),
+            _post(
+                tmp_path / "b", "2026-10-11-my-guide", images={"my-guide-1.png": PNG}
+            ),
+        )
+        files = repo.files_at(_BRANCH)
+        assert files["assets/images/my-guide-2.png"] == PNG + b"fixed"
+        assert files["assets/images/my-guide-3.png"] == PNG + b"3"
+
+    def test_without_an_identity_nothing_is_removed(self, tmp_path: Path) -> None:
+        # The token's account is a person's too: no file counts as generated.
+        repo = FakeRepo({"README.md": b"blog"})
+        config = Github(repo_name="owner/blog", author_email=None)
+        sync = BlogBranchSync(repo, config)
+        for day, images in (("10", {"my-guide-1.png": PNG}), ("11", {})):
+            work = tmp_path / day
+            sync.sync(
+                _request(work), _post(work, f"2026-10-{day}-my-guide", images=images)
+            )
+        files = repo.files_at(f"heads/{config.branch_prefix}/my-guide")
+        assert "_posts/2026-10-10-my-guide.md" in files
+        assert "assets/images/my-guide-1.png" in files
 
     def test_older_double_hyphen_slug_is_the_same_post(self, tmp_path: Path) -> None:
         old = "_posts/2025-10-19-direct-preference-optimization--your-model.md"
@@ -1141,6 +1372,89 @@ class TestRejectedCopy:
         assert info.value.rejected_path and Path(info.value.rejected_path).exists()
 
 
+PLACEHOLDER = (
+    Path(__file__).parent / "fixtures" / "ar5iv_placeholder.png"
+).read_bytes()
+
+
+def _source_archive(files: dict[str, bytes]) -> bytes:
+    import tarfile
+
+    out = io.BytesIO()
+    with tarfile.open(fileobj=out, mode="w:gz") as tar:
+        for name, data in files.items():
+            info = tarfile.TarInfo(name)
+            info.size = len(data)
+            tar.addfile(info, io.BytesIO(data))
+    return out.getvalue()
+
+
+@pytest.mark.usefixtures("skip_validation")
+class TestPlaceholderFigures:
+    """A figure that comes back as ar5iv's "NO IMAGE AVAILABLE" PNG is taken
+    from the paper's arXiv source (one download per paper)."""
+
+    BODY = (
+        "![a](https://arxiv.org/html/2106.09685v2/Media/overview.png)\n\n"
+        "![b](https://arxiv.org/html/2106.09685v2/Media/loss.png)\n"
+    )
+
+    async def test_figures_come_from_the_source(self, tmp_path: Path) -> None:
+        sources: list[str] = []
+
+        def fetch_source(url: str) -> bytes:
+            sources.append(url)
+            return _source_archive({"Media/overview.png": PNG, "Media/loss.jpg": JPEG})
+
+        pub = Publisher(
+            Github(),
+            root_dir=tmp_path,
+            fetch_image=lambda u: PLACEHOLDER,
+            fetch_source=fetch_source,
+        )
+        _, md_path = await pub.publish(_request(tmp_path, markdown=self.BODY))
+        content = md_path.read_text(encoding="utf-8")
+        assert "![a](/assets/images/my-guide-1.png)" in content
+        assert "![b](/assets/images/my-guide-2.jpg)" in content
+        staged = tmp_path / "blog-images" / "my-guide"
+        assert (staged / "my-guide-1.png").read_bytes() == PNG
+        assert sources == ["https://arxiv.org/e-print/2106.09685v2"]
+
+    async def test_figure_missing_from_the_source_blocks(self, tmp_path: Path) -> None:
+        pub = Publisher(
+            Github(),
+            root_dir=tmp_path,
+            fetch_image=lambda u: PLACEHOLDER,
+            fetch_source=lambda u: _source_archive({"Media/overview.png": PNG}),
+        )
+        with pytest.raises(PostAssetError, match="no usable figure") as info:
+            await pub.publish(_request(tmp_path, markdown=self.BODY))
+        assert "Media/loss.png" in str(info.value)
+        assert info.value.rejected_path
+
+    async def test_source_download_failure_blocks(self, tmp_path: Path) -> None:
+        def fetch_source(url: str) -> bytes:
+            raise httpx.ConnectError("boom")
+
+        pub = Publisher(
+            Github(),
+            root_dir=tmp_path,
+            fetch_image=lambda u: PLACEHOLDER,
+            fetch_source=fetch_source,
+        )
+        with pytest.raises(PostAssetError, match="could not be downloaded"):
+            await pub.publish(_request(tmp_path, markdown=self.BODY))
+
+    async def test_placeholder_outside_arxiv_html_blocks(self, tmp_path: Path) -> None:
+        def no_source(url: str) -> bytes:
+            raise AssertionError("only arXiv HTML figures have a source path")
+
+        _figures(tmp_path, **{"x1.png": PLACEHOLDER})
+        pub = Publisher(Github(), root_dir=tmp_path, fetch_source=no_source)
+        with pytest.raises(PostAssetError, match="NO IMAGE AVAILABLE"):
+            await pub.publish(_request(tmp_path, markdown="![a](x1.png)\n"))
+
+
 class TestDownloadImage:
     # An IP literal passes the SSRF check without DNS (sockets are blocked).
     PUBLIC_URL = "https://93.184.216.34/figure.png"
@@ -1185,6 +1499,58 @@ class TestDownloadImage:
         monkeypatch.setattr(publisher, "PinnedHTTPTransport", no_transport)
         with pytest.raises(UnsafeUrlError):
             publisher.download_image(url)
+
+    def test_redirect_to_a_private_address_is_refused(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from scholar_lens.src import publisher
+        from scholar_lens.src.url_guard import UnsafeUrlError
+
+        hops: list[str] = []
+
+        def handle(self, request: httpx.Request) -> httpx.Response:  # type: ignore[no-untyped-def]
+            hops.append(str(request.url))
+            return httpx.Response(
+                302, headers={"Location": "http://169.254.169.254/latest/meta-data"}
+            )
+
+        # The pinned transport validates each hop before its parent sends it.
+        monkeypatch.setattr(httpx.HTTPTransport, "handle_request", handle)
+        with pytest.raises(UnsafeUrlError):
+            publisher.download_image(self.PUBLIC_URL)
+        assert hops == [self.PUBLIC_URL]
+
+    def test_sends_the_tool_user_agent(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from scholar_lens.src import publisher
+
+        agents: list[str] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            agents.append(request.headers["User-Agent"])
+            return httpx.Response(200, content=b"\x89PNG")
+
+        monkeypatch.setattr(
+            publisher, "PinnedHTTPTransport", lambda: httpx.MockTransport(handler)
+        )
+        publisher.download_image(self.PUBLIC_URL)
+        assert agents and agents[0].startswith("scholar-lens (+https://")
+
+    def test_slow_download_hits_the_deadline(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from scholar_lens.src import publisher
+
+        ticks = itertools.count(0.0, 25.0)  # each read takes 25 s
+        monkeypatch.setattr(publisher, "_clock", lambda: next(ticks))
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, content=iter([b"\x89PNG"] * 5))
+
+        monkeypatch.setattr(
+            publisher, "PinnedHTTPTransport", lambda: httpx.MockTransport(handler)
+        )
+        with pytest.raises(ValueError, match="took over 60 s"):
+            publisher.download_image(self.PUBLIC_URL)
 
 
 class TestPostSlug:

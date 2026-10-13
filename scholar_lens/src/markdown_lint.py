@@ -164,7 +164,7 @@ def _classify_regions(markdown: str) -> list[tuple[int, int, str]]:
     return [(seg.start, seg.end, seg.kind) for seg in segments(markdown)]
 
 
-_TABLE_ROW = re.compile(r"^[ \t]*\|")
+TABLE_ROW = re.compile(r"^[ \t]*\|")
 TABLE_DELIMITER = re.compile(
     r"^[ \t]*\|?[ \t]*:?-{3,}:?[ \t]*(?:\|[ \t]*:?-{3,}:?[ \t]*)*\|?[ \t]*$"
 )
@@ -185,7 +185,7 @@ def _separate_tables(markdown: str) -> str:
             0 <= k < len(lines)
             and roles[k] == "prose"
             and k not in code
-            and bool(_TABLE_ROW.match(lines[k]))
+            and bool(TABLE_ROW.match(lines[k]))
         )
 
     out: list[str] = []
@@ -589,9 +589,12 @@ def fill_image_alts(markdown: str, captions: dict[str, str], fallback: str) -> s
 
 
 _LATIN = re.compile(r"[A-Za-z]")
+# An English word used as a Korean verb or adjective: its stem followed by a
+# 하다/되다 form ("prefill하면서", "swap-in되어", "attention하도록"); the
+# particle 한테 ("Claude Code한테") is not one.
 _ENGLISH_STEM_ENDING = re.compile(
     r"(?<![A-Za-z0-9_./-])([A-Za-z][A-Za-z-]*)"
-    r"(합니다|하는|하여|하고|하면|한|할|했습니다|했다|된다|됩니다|된|되는)(?![가-힣])"
+    r"(?!한테)([하한할함합해했되된될됨됩됐돼][가-힣]*)"
 )
 # "장" and "섹션" also name chapters and config-file sections ("다음 섹션을
 # 추가", "다음 섹션에 키를 추가"), so "섹션" counts only with 에서/은/는 and

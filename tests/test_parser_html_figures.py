@@ -129,7 +129,7 @@ def test_listing_indentation_survives_the_html_parser_path(monkeypatch) -> None:
     async def fetch(self, arxiv_id):  # type: ignore[no-untyped-def]
         return listing, BASE
 
-    monkeypatch.setattr(HTMLParser, "_fetch_html_with_fallback", fetch)
+    monkeypatch.setattr(HTMLParser, "_fetch_html", fetch)
     result = asyncio.run(HTMLParser().parse("2501.12948v2"))
     assert "def f(x):\n    if x:\n        return 1" in result.content.text
 

@@ -34,7 +34,7 @@ Every post is Jekyll Markdown that follows the target blog's conventions, and is
 - **Review:** a planner reads the whole paper and writes a coverage plan (sections, must-cover items, difficulty, prerequisites, concept ownership, figures, glossary). Each section is written from its brief, checked against it, and revised until nothing is missing; one editing pass then fixes terminology, repetition and gaps across the article.
 - **Summary:** one long-context call over the parsed paper.
 - **Guide:** research (the docs, the reference material, and web searches for usage, internals and design, and production integration) → relevance gate → outline → per-section write, evaluate and fact-check. Official docs decide commands, flags and defaults; papers, design docs and reputable write-ups may ground concepts, internals and architecture.
-- **Publishing:** math and Markdown normalization, figure localization, the blog-conventions gate, then S3 and a GitHub PR on a fixed branch per post.
+- **Publishing:** math and Markdown normalization, copying the paper's own figures into the blog (any other image stays a link to its source), the blog-conventions gate, then S3 and a GitHub PR on a fixed branch per post.
 
 ![AWS architecture](./docs/diagrams/aws-architecture.png)
 
@@ -135,6 +135,14 @@ actionlint                                       # lint the GitHub workflows
 - Paper posts carry the paper's DOI as `paper_doi` front matter when one is known.
 - Citation lookups: OpenAlex follows Crossref in the chain (keyless use allows about 100 searches per day per IP; set the optional `OPENALEX_API_KEY` to raise it), Crossref picks the matching record among its top five hits, and Semantic Scholar is queried only when `SEMANTIC_SCHOLAR_API_KEY` is set.
 - Removed `citations.citation_analysis_model_id`: delete it from an existing `config.yaml`, or loading fails with `extra_forbidden`.
+- Only the paper's own figures are copied into the blog (arXiv HTML figures, figures recovered from the arXiv source, figures cropped from the PDF). Any other image (docs sites, blogs, reference material) stays a link to its source and is listed on the PR checklist as `remote image not localized`. A paper figure that cannot be stored blocks the post; the run result's `markdown_path` and `s3_uri` then point to the rejected draft.
+- ar5iv is never used: an ar5iv link fails validation, and an arXiv figure that comes back as ar5iv's "NO IMAGE AVAILABLE" placeholder is taken from the paper's arXiv source (`/e-print`).
+- A `glightbox` link must open its own image (`href` equal to the inner `src`), or the post is rejected.
+- Paper posts carry a generated `description` (120-160 characters of plain text that open with the model or method name and are unique on the blog). Its numbers are checked against the TL;DR and the abstract, and the TL;DR's numbers against the paper; a mismatch feeds the review's repair attempt or becomes a PR note, and only a description that is not unique on the blog blocks the post. Scaled and combined Korean numbers are compared as quantities (`12만 8천` matches `128K`); a `만` read as the particle "only" (`5만 사용`, `10만큼`) is not a unit.
+- Rerunning a published post lists on the PR the hand edits made to it or its images since it was generated, so they can be carried over.
+- Reference and source lists are `[title](url)` lines, one per URL; a guide's sources use the fetched page titles.
+- Guide section lengths count prose only: code, table rows and images are excluded.
+- One terminology rule in every prompt: the translation guideline's rendering wins for each term it lists (guides now receive the guideline too); other terms are translated where natural, with the English in parentheses at first use. The lint flags any 하다/되다 form glued to an English word (`prefill하면서`, `swap-in되어`).
 
 ## License
 

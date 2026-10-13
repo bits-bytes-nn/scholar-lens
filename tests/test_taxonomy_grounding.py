@@ -154,3 +154,15 @@ def test_underscore_flag_is_not_excused_by_a_python_argument() -> None:
     body = "```bash\nhf download repo --local_dir out\n```"
     official = "hf download repo --local-dir out\n\nhf_hub_download(local_dir=...)"
     assert unverified_identifiers(body, official, ["hf"]) == ["--local_dir"]
+
+
+def test_fence_language_tag_does_not_name_the_product() -> None:
+    """A "```python" fence is not a `python` command: an illustrative
+    simulation's arguments are not the product's API."""
+    body = (
+        "```python\nalloc = BlockAllocator(num_blocks=8)\n```\n\n"
+        "```bash\npython -m vllm.entrypoints.openai.api_server --stale-flag\n```"
+    )
+    assert unverified_identifiers(body, "nothing", ["vllm", "python"]) == [
+        "--stale-flag"
+    ]

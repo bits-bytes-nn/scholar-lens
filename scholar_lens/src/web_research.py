@@ -11,12 +11,15 @@ The search provider is an abstraction so deployments can choose their backend
 
 from __future__ import annotations
 
+import math
 import os
 import re
 import socket
 from abc import ABC, abstractmethod
+from bisect import bisect_right
 from collections.abc import Collection
 from dataclasses import dataclass, field
+from itertools import pairwise
 from urllib.parse import urljoin, urlparse
 
 import httpx
@@ -306,7 +309,8 @@ class ResearchCorpus:
         prefer: Collection[str] = (),
     ) -> str:
         """The pages most relevant to ``query`` (word overlap with title and
-        body), most relevant first, within ``max_chars``. The pages whose URL
+        body), most relevant first, within ``max_chars``; a page over its room
+        keeps its most relevant parts (:func:`_excerpt`). The pages whose URL
         is in ``prefer`` (the section plan's) come first, in that order, each
         with an equal share of ``max_chars`` so a long paper cannot push an
         official page out; the room they leave goes to the other pages by
@@ -333,14 +337,14 @@ class ResearchCorpus:
         ordered = preferred + others
         blocks = [_source_block(page, official) for page in ordered]
         share = max_chars // len(preferred) if preferred else 0
-        cuts = [_cut(blocks[i], share) for i in range(len(preferred))]
+        cuts = [_excerpt(blocks[i], share, words) for i in range(len(preferred))]
         cuts += [""] * len(others)
         used = sum(map(len, cuts))
         for i, block in enumerate(blocks):
             if max_chars - used <= _MIN_SOURCE_ROOM:
                 break
             if len(cuts[i]) < len(block):
-                longer = _cut(block, max_chars - used + len(cuts[i]))
+                longer = _excerpt(block, max_chars - used + len(cuts[i]), words)
                 if len(longer) > len(cuts[i]):
                     used += len(longer) - len(cuts[i])
                     cuts[i] = longer
@@ -353,6 +357,98 @@ class ResearchCorpus:
     def combined_text(self, official: OfficialDocs | None = None) -> str:
         """Every page, labelled by authority like :meth:`relevant_text`."""
         return "\n\n---\n\n".join(_source_block(p, official) for p in self.pages)
+
+
+_HEADING_LINE = re.compile(r"^#{1,6}[ \t]", re.MULTILINE)
+_PARAGRAPH_BREAK = re.compile(r"\n[ \t]*\n")
+_ELISION = "\n\n…\n\n"
+
+
+def _parts(text: str, limit: int) -> list[tuple[str, int | None]]:
+    """``text`` split at its heading lines, a part still over ``limit`` at its
+    paragraph breaks; never inside a code fence or a ``$$`` span. Each part
+    comes with the index of its heading section's first part (the one with
+    the heading line), ``None`` before the first heading."""
+    protected = [
+        (seg.start, seg.end)
+        for seg in segments(text)
+        if seg.kind in ("fence", "display")
+    ]
+    starts = [start for start, _ in protected]
+
+    def free(pos: int) -> bool:
+        i = bisect_right(starts, pos) - 1
+        return i < 0 or pos >= protected[i][1] or pos == protected[i][0]
+
+    def spans(start: int, end: int, cuts: list[int]) -> list[tuple[int, int]]:
+        bounds = [start, *(c for c in cuts if start < c < end), end]
+        return list(pairwise(bounds))
+
+    headings = [m.start() for m in _HEADING_LINE.finditer(text) if free(m.start())]
+    breaks = [m.end() for m in _PARAGRAPH_BREAK.finditer(text) if free(m.end())]
+    heading_starts = set(headings)
+    parts: list[tuple[str, int | None]] = []
+    for start, end in spans(0, len(text), headings):
+        pieces = spans(start, end, breaks) if end - start > limit else [(start, end)]
+        first = len(parts) if start in heading_starts else None
+        parts += [(text[a:b], first) for a, b in pieces if text[a:b].strip()]
+    return parts
+
+
+def _excerpt(block: str, limit: int, words: Collection[str]) -> str:
+    """A source block within ``limit``: whole when it fits, else its header
+    (the source and title lines) and the parts of its text (:func:`_parts`)
+    that hold the most of ``words``, each weighted by how few parts hold it
+    (inverse document frequency), in page order, each gap marked by a "…"
+    line; a kept piece of a long section brings the section's heading piece
+    ("Deprecated options (removed in v0.10)") along. A reference page lists
+    the flags a section needs anywhere on it, so keeping only its start
+    would drop them."""
+    if len(block) <= limit:
+        return block
+    header, sep, text = block.partition("\n\n")
+    # Room for the parts, each with a join and a "…" line, and a last "…".
+    room = limit - len(header) - len(sep) - len(_ELISION)
+    if not sep or room <= len(_ELISION):
+        return _cut(block, limit)
+    pieces = _parts(text, room)
+    parts = [part for part, _ in pieces]
+    lowered = [part.lower() for part in parts]
+    # A word in every part (the product's name, "and") picks none of them; a
+    # word in few parts (a flag's) picks those.
+    weight = {
+        w: math.log(len(parts) / df)
+        for w in words
+        if (df := sum(w in part for part in lowered))
+    }
+
+    def score(i: int) -> float:
+        return sum(v for w, v in weight.items() if w in lowered[i])
+
+    ranked = sorted(range(len(parts)), key=lambda i: (-score(i), i))
+    kept: dict[int, str] = {}
+    for i in ranked:
+        if i in kept:
+            continue
+        first = pieces[i][1]
+        wanted = [j for j in (first, i) if j is not None and j not in kept]
+        cost = sum(len(parts[j]) + len(_ELISION) for j in set(wanted))
+        if cost <= room:
+            kept.update((j, parts[j]) for j in wanted)
+            room -= cost
+        elif not kept:  # the best part alone is too long: its start
+            kept[i] = _cut(parts[i], room - len(_ELISION))
+            room = 0
+    out: list[str] = []
+    previous = -1
+    for i in sorted(kept):
+        if i != previous + 1:
+            out.append(_ELISION.strip("\n"))
+        out.append(kept[i].strip("\n"))
+        previous = i
+    if previous != len(parts) - 1:
+        out.append(_ELISION.strip("\n"))
+    return header + sep + "\n\n".join(part for part in out if part)
 
 
 def _source_block(page: PageContent, official: OfficialDocs | None) -> str:

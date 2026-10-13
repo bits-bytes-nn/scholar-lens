@@ -179,6 +179,39 @@ async def test_stale_flag_pulls_the_official_reference_into_grounding() -> None:
     assert "- Installation" in synopsis_inputs["input_outline"]
 
 
+async def test_only_a_section_with_an_unchecked_flag_gets_the_reference() -> None:
+    gen = _make_generator(verify_grounding=True)
+    quickstart = PageContent(QUICKSTART, "Quickstart", "vllm serve MODEL")
+    gen.researcher.research = MagicMock(return_value=ResearchCorpus(pages=[quickstart]))
+    engine_args = PageContent(ENGINE_ARGS, "Engine Arguments", "--preemption-mode")
+
+    def add_reference(corpus, hosts, identifiers, *, follow_links=True, **_):  # type: ignore[no-untyped-def]
+        if not follow_links:
+            return []
+        corpus.pages.append(engine_args)
+        return [engine_args]
+
+    gen.researcher.add_official_reference = MagicMock(side_effect=add_reference)
+    gen.relevance_chain.ainvoke = AsyncMock(
+        return_value={"is_relevant": "yes", "topic": "Using X", "reason": "docs"}
+    )
+    gen.synopsis_chain.ainvoke = AsyncMock(
+        return_value={"synopsis": "1. Serving - run\n2. Concepts - why"}
+    )
+    gen.section_chain.ainvoke = AsyncMock(
+        side_effect=[
+            {"section_markdown": "## Serving\n\n`example serve m --preemption-mode x`"},
+            {"section_markdown": "## Concepts\n\nPlain prose."},
+        ]
+    )
+    gen.grounding_chain.ainvoke = AsyncMock(return_value={})
+    await gen.generate([QUICKSTART], discover_subpages=False)
+    serving, concepts = [
+        c.args[0]["sources"] for c in gen.grounding_chain.ainvoke.await_args_list
+    ]
+    assert "# Engine Arguments" in serving and "# Engine Arguments" not in concepts
+
+
 def test_input_outline_lists_only_the_requested_pages() -> None:
     corpus = ResearchCorpus(
         pages=[

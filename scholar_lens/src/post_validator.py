@@ -10,11 +10,15 @@ from __future__ import annotations
 
 import itertools
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from datetime import date as date_type
+from decimal import Decimal
+from pathlib import Path
 from typing import Any, Literal, Protocol
-from urllib.parse import urlparse
 
+from .constants import is_arxiv_host
 from .front_matter import split_front_matter
 from .markdown_lint import (
     BLOG_HTML_ELEMENTS,
@@ -34,7 +38,8 @@ from .markdown_math import (
     indented_code_lines,
     open_fence_line,
 )
-from .post_conventions import PostConventions
+from .post_conventions import BlogPost, PostConventions
+from .publish_types import post_slug, same_post
 from .tags import format_tag
 
 ArtifactKind = Literal["review", "summarize", "guide"]
@@ -47,8 +52,6 @@ class Add(Protocol):
 
     def __call__(self, level: Level, rule: str, line: int, message: str) -> None: ...
 
-
-ARXIV_IMAGE_HOSTS = ("arxiv.org", "ar5iv.org", "ar5iv.labs.arxiv.org")
 
 _HEADING = re.compile(r"^(#{1,6})\s+(.*\S)\s*$")
 _INLINE_MATH = re.compile(r"\$\$(.+?)\$\$")
@@ -107,7 +110,52 @@ _LINT_TAG = re.compile(r"(?<!\\)<(/?)([a-zA-Z][\w-]*)(\s[^<>]*)?/?>")
 _LINT_RAW = re.compile(r"(\{%-?\s*(?:end)?raw\s*-?%\})")
 _LINT_FENCE_INFO = re.compile(r"\A(`{3,}|~{3,})\s*\S+\s+\S")
 _LINT_TABLE_RULE = re.compile(r"\A\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\Z")
+_LINT_CODE_SPAN = re.compile(r"(`+).*?\1")
 _DESCRIPTION_MARKUP = re.compile(r"\$\$|\*\S[^*]*\*|`|\]\(|<[a-zA-Z/]|\{[{%]")
+# A description's length: the blog's <meta name="description"> keeps 160
+# characters (post_description.rb META_LIMIT); the hand-written ones on the
+# blog run 120-160.
+DESCRIPTION_LENGTH = range(120, 161)
+# What head.html appends to a Korean paper post's <title> ("… 논문 리뷰" or
+# "… 논문 요약", the same length); the blog fails a description no longer
+# than the page title.
+_PAPER_TITLE_SUFFIX = " 논문 리뷰"
+
+
+def paper_page_title(title: str, *, korean: bool) -> str:
+    """The longest ``<title>`` head.html gives a paper post: the title plus
+    the Korean suffix on a Korean post (a ``seo_title`` only shortens it)."""
+    return f"{title}{_PAPER_TITLE_SUFFIX}" if korean else title
+
+
+def description_markup(description: str) -> bool:
+    """Whether ``description`` has markup the blog would show literally."""
+    return bool(_DESCRIPTION_MARKUP.search(description))
+
+
+def description_problems(description: str, sources: str) -> list[str]:
+    """What a writer must fix in a generated ``description``: plain text of
+    the right length whose every number is in ``sources`` (the post's TL;DR
+    and the paper's abstract)."""
+    if not description:
+        return ["description is empty"]
+    problems = []
+    if description_markup(description):
+        problems.append(
+            "description is plain text: no $$, *emphasis*, backticks, links, "
+            "tags or {{"
+        )
+    if len(description) not in DESCRIPTION_LENGTH:
+        problems.append(
+            f"description has {len(description)} characters; write "
+            f"{DESCRIPTION_LENGTH.start}-{DESCRIPTION_LENGTH.stop - 1}"
+        )
+    if missing := unsourced_numbers(description, sources):
+        problems.append(
+            "description numbers not in the TL;DR or the abstract: "
+            + ", ".join(missing)
+        )
+    return problems
 
 
 def unknown_html_tag(text: str) -> str | None:
@@ -126,7 +174,9 @@ def unknown_html_tag(text: str) -> str | None:
 def _check_blog_markup(front: dict[str, Any], body: str, offset: int, add: Add) -> None:
     """The blog lint's markup rules (script/lint-posts.rb) as it applies them:
     Liquid outside raw tags, tags the browser drops, fence info strings
-    kramdown does not read, and a | inside $$ on a table row."""
+    kramdown does not read, a | inside $$ on a table row, ar5iv links and
+    lightbox links that do not open their image."""
+    _check_lightbox(body, offset, add)
     lines = body.split("\n")
     fence: str | None = None
     raw = False
@@ -162,6 +212,15 @@ def _check_blog_markup(front: dict[str, Any], body: str, offset: int, add: Add) 
             continue
         if fence:
             continue
+        # ar5iv answers a figure it lost with a "NO IMAGE AVAILABLE" PNG and
+        # HTTP 200, so no link check notices.
+        if "ar5iv." in _LINT_CODE_SPAN.sub("", _unquote(line)):
+            add(
+                "error",
+                "link",
+                offset + i,
+                "ar5iv link; use arxiv.org/html or a copy in /assets/images/",
+            )
         if html_tag := unknown_html_tag(line):
             add(
                 "error",
@@ -195,15 +254,52 @@ def _check_blog_markup(front: dict[str, Any], body: str, offset: int, add: Add) 
                     )
 
 
+# A hand-written zoomable figure: <a class="glightbox" ...><img ...>. Attribute
+# values may hold ">" (a caption "A -> B"), so runs skip quoted text.
+_LINT_ATTRS = r"""(?:[^>"']|"[^"]*"|'[^']*')*"""
+_LIGHTBOX = re.compile(
+    rf"""<a\b{_LINT_ATTRS}\bclass=["'][^"']*\bglightbox\b[^"']*["']{_LINT_ATTRS}>"""
+    rf"""\s*<img\b{_LINT_ATTRS}>""",
+    re.IGNORECASE | re.DOTALL,
+)
+_LINT_FENCED_BLOCK = re.compile(
+    r"^\s*(`{3,}|~{3,}).*?^\s*\1[^\n]*", re.MULTILINE | re.DOTALL
+)
+
+
+def _check_lightbox(body: str, offset: int, add: Add) -> None:
+    """A lightbox opens its href: a page there (the figure's source) loads
+    in an iframe the site refuses, an empty box. The href must be the image."""
+    # Fenced code keeps its line count, so line numbers after it hold.
+    text = _LINT_FENCED_BLOCK.sub(lambda m: "\n" * m.group(0).count("\n"), body)
+    for match in _LIGHTBOX.finditer(text):
+        href = re.search(r"""\shref=["']([^"']+)""", match.group(0), re.IGNORECASE)
+        src = re.search(
+            r"""<img\b[^>]*\ssrc=["']([^"']+)""", match.group(0), re.IGNORECASE
+        )
+        if href and src and href.group(1) != src.group(1):
+            add(
+                "error",
+                "lightbox",
+                offset + text.count("\n", 0, match.start()),
+                f"a glightbox link opens {href.group(1)}, not its image; "
+                f"set href to {src.group(1)} and name the source in the caption",
+            )
+
+
 def validate_post(
     markdown: str,
     spec: PostConventions,
     kind: ArtifactKind,
     *,
     file_name: str | None = None,
+    site_posts: Sequence[BlogPost] = (),
 ) -> list[Violation]:
     """Check ``markdown`` against ``spec`` for an artifact of ``kind``; with
-    ``file_name`` (the post's file name) also its date prefix."""
+    ``file_name`` (the post's file name) also its date prefix and its
+    translation name, and against ``site_posts`` (the blog's posts; the one
+    this post replaces is left out) that its description is unique and a
+    translation of it stays paired."""
     found: list[Violation] = []
 
     def add(level: Level, rule: str, line: int, message: str) -> None:
@@ -221,12 +317,15 @@ def validate_post(
     _check_front_matter(front, body, spec, kind, add)
     if file_name is not None:
         _check_file_date(file_name, front.get("date"), add)
+        _check_translation_name(file_name, front, add)
+        _check_site(file_name, front, site_posts, add)
     _check_headings(lines, offset, kind, add)
     _check_math(front, body, lines, offset, add)
     _check_tables(lines, offset, add)
     _check_images(lines, offset, add)
     _check_text(lines, offset, add)
-    _check_description(lines, offset, add)
+    if front.get("description") is None:
+        _check_description(lines, offset, add)
     _check_blog_markup(front, body, offset, add)
     return found
 
@@ -264,17 +363,6 @@ def _check_front_matter(
     title = str(front.get("title") or "").strip()
     if not title:
         add("error", "title", 1, "title is empty")
-    date = front.get("date")
-    if isinstance(date, datetime):
-        stamp = date if date.tzinfo else date.replace(tzinfo=UTC)
-        if stamp > datetime.now(UTC):
-            # Jekyll (timezone UTC, no `future`) skips future-dated posts.
-            add(
-                "error",
-                "date",
-                1,
-                f"date {date} is in the future (UTC); the post would not appear",
-            )
 
     categories = front.get("categories")
     if not (isinstance(categories, list) and len(categories) == 2):
@@ -317,14 +405,7 @@ def _check_front_matter(
 
     _check_tags(front.get("tags"), body, spec, add)
 
-    description = front.get("description")
-    if description is not None and _DESCRIPTION_MARKUP.search(str(description)):
-        add(
-            "error",
-            "description",
-            1,
-            "description is plain text; no $$, *emphasis*, backticks, links or tags",
-        )
+    _check_description_field(front, spec, kind, add)
 
     lang = front.get("lang")
     languages = " or ".join(spec.languages)
@@ -342,6 +423,125 @@ def _check_front_matter(
         )
 
 
+def _check_description_field(
+    front: dict[str, Any], spec: PostConventions, kind: ArtifactKind, add: Add
+) -> None:
+    """The search snippet (README "description:"): plain text, longer than
+    the page's <title>; the blog derives one when it is missing."""
+    description = front.get("description")
+    if description is None:
+        if kind != "guide":
+            add(
+                "warning",
+                "description",
+                1,
+                "no description; the blog derives one from the first paragraph",
+            )
+        return
+    text = " ".join(str(description).split())
+    if description_markup(text):
+        add(
+            "error",
+            "description",
+            1,
+            "description is plain text; no $$, *emphasis*, backticks, links or tags",
+        )
+    title = str(front.get("title") or "")
+    categories = front.get("categories") or [""]
+    # head.html gives a paper post in the site's language (Korean) its
+    # seo_title and the suffix; any other page keeps its plain title.
+    if (
+        front.get("paper_author")
+        and front.get("lang", "ko") == "ko"
+        and spec.is_paper_type(str(categories[0]))
+    ):
+        title = paper_page_title(str(front.get("seo_title") or title), korean=True)
+    if len(text) <= len(title):
+        add(
+            "error",
+            "description",
+            1,
+            f"description ({len(text)} characters) must be longer than the page "
+            f"title '{title}' ({len(title)})",
+        )
+    elif len(text) not in DESCRIPTION_LENGTH:
+        add(
+            "warning",
+            "description",
+            1,
+            f"description has {len(text)} characters; the blog's descriptions run "
+            f"{DESCRIPTION_LENGTH.start}-{DESCRIPTION_LENGTH.stop - 1}",
+        )
+
+
+def _check_translation_name(file_name: str, front: dict[str, Any], add: Add) -> None:
+    """A translation lives at ``<id>.md`` (Korean) and ``<id>-en.md``
+    (English) after the date; an ``-en`` post always has a translation_id."""
+    slug = post_slug(Path(file_name).stem)
+    translation_id = front.get("translation_id")
+    if not translation_id:
+        if slug.endswith("-en"):
+            add("error", "translation", 1, "an -en post must set translation_id")
+        return
+    expected = (
+        f"{translation_id}-en" if front.get("lang") == "en" else str(translation_id)
+    )
+    if slug != expected:
+        add(
+            "error",
+            "translation",
+            1,
+            f"a post with translation_id {translation_id} is named {expected}.md "
+            f"(after the date), not {slug}.md",
+        )
+
+
+def _check_site(
+    file_name: str, front: dict[str, Any], site_posts: Sequence[BlogPost], add: Add
+) -> None:
+    """Against the blog's other posts: no other post has the description
+    (the blog fails duplicates), and a published translation of this post
+    keeps its pair (one post per language with its translation_id)."""
+    slug = post_slug(Path(file_name).stem)
+    others = [
+        post
+        for post in site_posts
+        if not same_post(post_slug(Path(post.path).stem), slug)
+    ]
+    description = " ".join(str(front.get("description") or "").split())
+    for post in others:
+        if description and " ".join((post.description or "").split()) == description:
+            add(
+                "error",
+                "description",
+                1,
+                f"description is the same as {post.path}'s; the blog fails duplicates",
+            )
+    translation_id = str(front.get("translation_id") or slug)
+    twins = [
+        post
+        for post in others
+        if post.translation_id and same_post(post.translation_id, translation_id)
+    ]
+    if twins and not front.get("translation_id"):
+        add(
+            "error",
+            "translation",
+            1,
+            f"{twins[0].path} is this post's translation; set translation_id: "
+            f"{twins[0].translation_id} and lang",
+        )
+    for twin in twins:
+        if twin.lang == front.get("lang"):
+            add(
+                "error",
+                "translation",
+                1,
+                f"{twin.path} already has lang {twin.lang} for translation_id "
+                f"{translation_id}",
+            )
+
+
 def _check_file_date(file_name: str, date: Any, add: Add) -> None:
     """Jekyll skips a post without the date prefix and builds a ``date:``
     after the file's day (UTC) into a permanent URL. The file name carries
@@ -356,7 +556,9 @@ def _check_file_date(file_name: str, date: Any, add: Add) -> None:
         except ValueError:
             return
     if isinstance(date, datetime):
-        day = (date if date.tzinfo else date.replace(tzinfo=UTC)).astimezone(UTC).date()
+        date = (date if date.tzinfo else date.replace(tzinfo=UTC)).astimezone(UTC)
+    if isinstance(date, date_type):  # a datetime is one too
+        day = date.date() if isinstance(date, datetime) else date
         posted = datetime.strptime(m.group(1), "%Y-%m-%d").date()
         if day > posted:
             add(
@@ -911,6 +1113,110 @@ def unsourced_table_numbers(markdown: str, source_text: str) -> list[str]:
     return missing[:MAX_UNSOURCED_NUMBERS]
 
 
+# A number with the scale word or letter right after it. Korean units are a
+# closed set (천 10^3, 만 10^4, 백만 10^6, 천만 10^7, 억 10^8, 조 10^12), and so
+# are the English ones a paper writes (K, M, B, T and the words). A letter
+# right before the number makes it part of a name ("H800", "Qwen3"); a
+# letter right after a unit letter makes it a word ("4MB").
+_SCALED_NUMBER = re.compile(
+    r"(?<![A-Za-z0-9.])(?P<value>\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)"
+    r"(?:(?P<letter>[KkMBT])(?![A-Za-z])"
+    r"|\s?(?P<word>thousand|million|billion|trillion)\b"
+    r"|(?P<korean>천만|백만|천|만|억|조))?"
+)
+_SCALES = {
+    "k": 3, "K": 3, "M": 6, "B": 9, "T": 12,
+    "thousand": 3, "million": 6, "billion": 9, "trillion": 12,
+    "천": 3, "만": 4, "백만": 6, "천만": 7, "억": 8, "조": 12,
+}  # fmt: skip
+
+
+@dataclass(frozen=True)
+class _Number:
+    text: str
+    value: Decimal  # as written ("7" in "7B")
+    absolute: Decimal  # with its unit applied (7E+9)
+    scaled: bool
+
+
+# The next part of a combined Korean number ("12만 8천", "1억 2000만").
+_KOREAN_PART = re.compile(r"\s?(\d+(?:\.\d+)?)(천만|백만|천|만|억|조)")
+# A bare 만 after a number is also the particle "only" ("5만 사용") and starts
+# 만큼 ("10만큼"). It is the unit 10^4 only when what follows is, by this
+# closed rule: the end of the text; a character that is neither Hangul nor
+# a space (punctuation, a digit, a letter); a particle "only" never comes
+# before (의, 에, 에서, 으로, 로, 까지, 부터: "only" follows them, "5에서만");
+# or, after at most one space,
+# a digit, a non-Hangul word ("10만 tokens"), a larger unit (억, 조) or a
+# counter from the list below that ends there or takes a particle
+# ("5만 명", "10만 개의"; not "5만 개선").
+_COUNTERS = (
+    "명|개|건|원|달러|장|회|번|권|쌍|편|배|줄|행|쪽|자|단어|토큰|문장|문서|"
+    "샘플|스텝|단계|시간|페이지|이미지|파라미터|억|조"
+)
+_PARTICLES = "의|이|가|을|를|은|는|에|으로|로|과|와|씩|당|도|만"
+_MAN_UNIT = re.compile(
+    r"\Z|[^\s가-힣]|의|에|으로|로|까지|부터"
+    rf"|\s?(?:[^\s가-힣]|(?:{_COUNTERS})(?:(?:{_PARTICLES})(?![가-힣])|(?![가-힣])))"
+)
+
+
+def _numbers(text: str) -> list[_Number]:
+    found = []
+    pos = 0
+    while m := _SCALED_NUMBER.search(text, pos):
+        value = Decimal(m.group("value").replace(",", ""))
+        unit = m.group("letter") or m.group("word") or m.group("korean")
+        end = m.end()
+        if unit == "만" and not _MAN_UNIT.match(text, end):
+            unit, end = None, m.start("korean")  # "only", not 10^4
+        absolute = value.scaleb(_SCALES[unit]) if unit else value
+        if unit and m.group("korean"):
+            # Smaller Korean units right after add up: 12만 8천 is 128,000.
+            scale = _SCALES[unit]
+            while (part := _KOREAN_PART.match(text, end)) and (
+                _SCALES[part.group(2)] < scale
+            ):
+                scale = _SCALES[part.group(2)]
+                absolute += Decimal(part.group(1)).scaleb(scale)
+                end = part.end()
+            if end != m.end():
+                value = absolute  # as written, the parts are one quantity
+        found.append(
+            _Number(
+                text[m.start() : end],
+                value.normalize(),
+                absolute.normalize(),
+                bool(unit),
+            )
+        )
+        pos = max(end, m.start() + 1)
+    return found
+
+
+def unsourced_numbers(text: str, source: str) -> list[str]:
+    """The numbers of ``text`` (a TL;DR, a description) that ``source`` (the
+    paper) never states, in order, each once.
+
+    Thousands separators, trailing zeros, signs and a trailing % are
+    ignored. A number with a unit matches only the same quantity in the
+    source, so 70억 matches 7B or 7 billion and 7억 does not (a combined
+    Korean number is one quantity: 12만 8천 matches 128K); a bare number
+    matches the same digits anywhere in the source ("87.3" in "87.3%").
+    """
+    known = _numbers(source)
+    values = {n.value for n in known}
+    quantities = {n.absolute for n in known}
+    missing: list[str] = []
+    for number in _numbers(text):
+        found = (
+            number.absolute in quantities if number.scaled else number.value in values
+        )
+        if not found and number.text not in missing:
+            missing.append(number.text)
+    return missing
+
+
 _IMAGE_ALT = re.compile(r"!\[([^\]]*)\]\(")
 
 
@@ -927,11 +1233,8 @@ def _check_images(lines: Lines, offset: int, add: Add) -> None:
                         f"image alt text is not Korean: '{alt[:60]}'",
                     )
         for src in image_sources(line):
-            host = urlparse(src).hostname or ""
             if src.startswith(("http://", "https://")):
-                if host in ARXIV_IMAGE_HOSTS or host.endswith(
-                    tuple("." + h for h in ARXIV_IMAGE_HOSTS)
-                ):
+                if is_arxiv_host(src):
                     add(
                         "error",
                         "image",
@@ -939,7 +1242,21 @@ def _check_images(lines: Lines, offset: int, add: Add) -> None:
                         f"arXiv image not localized: {src}",
                     )
                 else:
-                    add("warning", "image", offset + i, f"external image: {src}")
+                    # Someone else's image is linked, not copied: check it
+                    # still loads and its source is credited.
+                    add(
+                        "warning",
+                        "image",
+                        offset + i,
+                        f"remote image not localized (linked to its source): {src}",
+                    )
+            elif src.startswith("data:"):
+                add(
+                    "error",
+                    "image",
+                    offset + i,
+                    "inline data: image; store it as a file in /assets/images/",
+                )
             elif not re.fullmatch(r"/assets/images/[^/]+", src):
                 add(
                     "error",
@@ -950,8 +1267,9 @@ def _check_images(lines: Lines, offset: int, add: Add) -> None:
 
 
 def _check_description(lines: Lines, offset: int, add: Add) -> None:
-    """The blog derives the post description from the first prose paragraph
-    and strips math from it, so math there leaves a broken sentence."""
+    """Without a ``description:`` the blog derives one from the first prose
+    paragraph and strips math from it, so math there leaves a broken
+    sentence."""
     for i, line in lines:
         stripped = line.strip()
         if not stripped or stripped.startswith(("#", ">", "|", "-", "*", "!", "$$")):

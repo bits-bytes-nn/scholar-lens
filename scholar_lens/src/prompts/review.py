@@ -12,12 +12,14 @@ from .base import (
     HEADING_STRUCTURE_RULES,
     IMAGE_PATH_RULES,
     MATH_RULES,
+    NUMBER_RULES,
     PAPER_TABLE_RULES,
     READER_PROFILE,
     STYLE_RULES,
     SUPPLEMENTARY_CONTEXT_RULES,
     TABLE_RULES,
     TABLE_SIZE_RULE,
+    TERMINOLOGY_RULES,
     VISUAL_RULES,
     BasePrompt,
 )
@@ -45,7 +47,8 @@ class PaperPlanningPrompt(BasePrompt):
     writer can produce a complete, consistent article section by section.
     """ + READER_PROFILE
 
-    human_prompt_template: str = """
+    human_prompt_template: str = (
+        """
     Plan the review of "{title}". The review will be written in {language}.
 
     <numbered_sentences>
@@ -112,14 +115,17 @@ class PaperPlanningPrompt(BasePrompt):
        paper. Exclude only references, acknowledgments, author lists, funding
        and boilerplate; a substantive appendix belongs to a section.
     8. glossary: the key terms with the exact rendering to use throughout in
-       {language}, following the translation guideline; keep established English
-       names (Transformer, Adam, BLEU) as they are. Include every compared
+       {language}, per the terminology rules below. Include every compared
        baseline and method name.
     9. needs_code: true where code from the paper's repository would make the
        section concrete (implementation, algorithm, architecture).
     10. Titles are in {language}, descriptive, without numbers. purpose is one
         line saying what the reader gets from the section.
 
+    Terminology rules:
+    """
+        + TERMINOLOGY_RULES
+        + """
     Output only the plan as JSON inside <plan> tags:
     <plan>
     {{"narrative": "one paragraph: the story the review tells",
@@ -136,6 +142,7 @@ class PaperPlanningPrompt(BasePrompt):
      ]}}
     </plan>
     """
+    )
 
 
 class PaperSectionPrompt(BasePrompt):
@@ -164,38 +171,34 @@ class PaperSectionPrompt(BasePrompt):
         """
     You are an AI/ML researcher writing one section of an in-depth paper review
     for a technical blog. A plan fixes what each section covers; you make your
-    section complete, accurate and genuinely easy to understand: hard parts
-    explained patiently with the background they need, easy parts kept short.
+    section complete, accurate and genuinely easy to understand.
     """
         + READER_PROFILE
         + """
     How to write a section:
     - Start with exactly `## ` followed by the section title from the brief; use
       `###` for sub-parts when the section holds several distinct ideas. When
-      current_explanation is not empty you are continuing the same section:
-      do not repeat its heading, continue right after it.
+      current_explanation is not empty, continue right after it without
+      repeating its heading.
     - Cover every must-cover item of the brief, in the order that builds
       understanding, at the depth its difficulty tag asks for. The source text
       is the authority on the paper: never contradict its methods, claims or
       numbers. Figure markers look like [Image: alt="…", src="…", caption="…"];
       the caption is an analysis of the figure for you, not text to copy. To
-      show a figure, write a Markdown image `![<short description in the
-      target language>](<src copied exactly>)` — never output the marker.
-    - The target length is a guide for the whole section: spend most of it on
-      the hard items, keep easy ones to a sentence or two. Padding easy
-      material is as wrong as a thin treatment of hard material; never drop a
-      required item to stay short.
-    - Prerequisites in the brief: explain each briefly where it is first
-      needed, as background, so the reader can follow the hard part.
+      show a figure, write a Markdown image `![alt](<src copied exactly>)` —
+      never output the marker.
+    - The target length is for the whole section, spent mostly on the hard
+      items; never drop a required item to stay short.
+    - Explain each prerequisite in the brief briefly, as background, where it
+      is first needed.
     - Concepts owned by earlier sections: refer back in a short phrase, never
       re-explain. Concepts owned by later sections: use them plainly if you
-      must, without explaining them and without promising they come later.
-    - already_in_article lists headings, equations, tables, figures, code
-      blocks and callouts the article already shows: never show any of them
-      again (count its callouts against the cap); refer back
-      descriptively. Continue the flow of previous_sections without recap.
-    - Use the glossary rendering for every glossary term, in prose and in
-      table cells alike. Place only the figures listed in the brief, where
+      must, unexplained and without promising they come later.
+    - Never show again anything already_in_article lists (count its callouts
+      against the cap); refer back descriptively. Continue the flow of
+      previous_sections without recap.
+    - Use the glossary rendering for every glossary term, table cells
+      included. Place only the figures listed in the brief, where
       their content is discussed.
     - Setup is given only as far as the reader needs it to read the results
       (tables hold results, never hyper-parameter lists); explain a metric in
@@ -203,9 +206,8 @@ class PaperSectionPrompt(BasePrompt):
     - A caveat about how far a result can be trusted gets at most one sentence,
       right beside that result. Never write a caveat, summary or conclusion
       `###` subsection; the review has one closing section for that.
-    - Numbers and trends come from the paper text. Never quote a value read
-      off a figure, and never mention the figure analysis, a caption or a
-      mismatch between them: follow the paper text silently.
+    - Never quote a value read off a figure, nor mention the figure analysis,
+      a caption or their mismatch.
     - If draft_to_revise is not empty, revise it per improvement_feedback:
       keep what works, fix what is named, return the complete section.
     - If the source text truly lacks the material for a must-cover item, do not
@@ -237,9 +239,9 @@ class PaperSectionPrompt(BasePrompt):
         + STYLE_RULES
         + EXCLUDED_CONTENT_RULES
         + """
-    Length: if the section is very long, stop at a paragraph boundary, close the
-    tag and set has_more to y; the next turn continues from there. Set has_more
-    to y ONLY when must-cover items remain unwritten; otherwise n.
+    Length: if the section runs very long, stop at a paragraph boundary and set
+    has_more to y (the next turn continues); y ONLY when must-cover items
+    remain unwritten, otherwise n.
 
     Output exactly:
     <explanation>
@@ -356,10 +358,9 @@ class PaperSectionCheckPrompt(BasePrompt):
        mismatch; nothing contradicts already_in_article. A
        formula from outside the paper is exactly right; derivation steps agree
        in signs and variable definitions; "all"/"모든" about a setting holds in
-       every experiment. Each number belongs to the exact model, variant and
-       row it is reported for; a relative gain is not percentage points;
-       "best" keeps the paper's qualifier ("among open models"); a claim
-       credited to a cited work or method is the source's own.
+       every experiment. Numbers follow the rules below; "best" keeps
+       the paper's qualifier ("among open models"); a claim credited to a
+       cited work or method is the source's own.
     4. No repetition: nothing listed in already_in_article (headings,
        equations, tables, figures, code, callouts) is shown again; concepts owned
        elsewhere are not re-explained; nothing repeats inside the section.
@@ -397,9 +398,15 @@ class PaperSectionCheckPrompt(BasePrompt):
     - a derived number (ratio, reduction, difference) that is wrong when you
       recompute it from its stated inputs, or an own estimate presented as the
       paper's number;
+    - a number that breaks a number rule (unit, %p, exponent as a share,
+      another model's or cell's value, ablation setting as the setup, "all
+      benchmarks" against a loss, an invented acronym expansion);
     - a comparison or causal claim the compared conditions do not support, a
-      claim stronger than the paper states, a value read off a figure, or a
-      comment on the figure analysis or captions;
+      claim or method description stronger than the paper's ("inspired by X"
+      written as "uses X"), a value read off a figure, or a comment on the
+      figure analysis or captions;
+    - a quantity whose meaning changed (a share of outputs written as a
+      rate) or a formula's input reported as its result;
     - a wrong formula, a sign or variable that contradicts another step, or a
       setting claimed for all experiments that one of them does not use.
 
@@ -549,18 +556,24 @@ class PaperEditPrompt(BasePrompt):
 
 
 class PaperFinalizationPrompt(BasePrompt):
-    """Writes the TL;DR that opens the review, the closing assessment, and the
-    translated title used as the post subtitle."""
+    """Writes the TL;DR that opens the review, the closing assessment, the
+    translated title used as the post subtitle and the search description."""
 
     input_variables: list[str] = [
         "explanation",
         "title",
         "glossary",
         "closing_points",
+        "abstract",
         "repair_note",
         "language",
     ]
-    output_variables: list[str] = ["subtitle", "key_takeaways", "closing"]
+    output_variables: list[str] = [
+        "subtitle",
+        "description",
+        "key_takeaways",
+        "closing",
+    ]
 
     system_prompt_template: str = """
     You are a senior AI/ML researcher and technical editor. Given a finished
@@ -585,6 +598,10 @@ class PaperFinalizationPrompt(BasePrompt):
     {closing_points}
     </paper_stated_limitations_and_future_work>
 
+    <abstract>
+    {abstract}
+    </abstract>
+
     {repair_note}
 
     1. Subtitle (inside <subtitle>): the paper title translated into
@@ -603,11 +620,19 @@ class PaperFinalizationPrompt(BasePrompt):
        2-3 headline results with the setting that produced them and who
        benefits most; attribute each result to the experiment (model,
        benchmark) the review reports it for. No bullet walls, no restating the
-       title. The first
-       answer must open with a plain-prose sentence (no math, no list): the blog
-       uses it as the post's search description.
+       title. Every number in it is one the paper states, as the paper states
+       it (a derived number stays in the body).
 
-    3. Closing assessment (inside <closing>): a `##` heading in {language}
+    3. Description (inside <description>): the post's search snippet, one plain
+       text paragraph of 120-160 characters in {language}: no math, Markdown,
+       links or tags. It opens with the model or method name as the paper
+       writes it ("Mistral 7B는 …", "DPO는 …"), never with a generic opener
+       ("대규모 언어 모델의 발전으로 …"), says what the paper does and its
+       headline result, and may end with what the review covers ("… 구조와
+       학습 과정을 정리합니다."). Numbers only from the TL;DR above or the
+       paper's <abstract>.
+
+    4. Closing assessment (inside <closing>): a `##` heading in {language}
        meaning "Limitations and Takeaways" (Korean: "## 한계와 시사점"), then
        2-3 short paragraphs or a few bullets, each point made once: about
        600-1,200 Hangul syllables in Korean (the same reading time in other
@@ -634,11 +659,13 @@ class PaperFinalizationPrompt(BasePrompt):
     - Synthesize; do not copy the review's sentences.
     - Never mention the writing process or skipped sections.
     """
+        + NUMBER_RULES
         + STYLE_RULES
         + MATH_RULES
         + """
     Output exactly:
     <subtitle>...</subtitle>
+    <description>...</description>
     <key_takeaways>
     ### ...
     ...

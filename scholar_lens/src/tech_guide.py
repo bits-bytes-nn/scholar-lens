@@ -47,8 +47,8 @@ from .guide_authority import (
     used_source_urls,
 )
 from .logger import logger
-from .markdown_lint import close_open_fence
-from .markdown_math import without_fences
+from .markdown_lint import TABLE_DELIMITER, TABLE_ROW, close_open_fence
+from .markdown_math import IMAGE, without_fences
 from .metrics import TokenBudgetGuard
 from .prompt_safety import neutralize_prompt_tags
 from .prompts import (
@@ -63,6 +63,7 @@ from .prompts import (
 from .prompts.tech_guide import (
     DEPTH_CHARS,
     NON_KOREAN_CHAR_FACTOR,
+    PROSE_UNIT,
     REFERENCE_LABEL,
     TechGuideTaxonomyPrompt,
 )
@@ -94,6 +95,7 @@ from .web_research import (
     WebResearcher,
     page_key,
     product_names,
+    source_label,
 )
 
 DEFAULT_LANGUAGE: str = "Korean"
@@ -159,9 +161,34 @@ _GETTING_STARTED_SCOPE = (
 )
 
 
+_QUOTE_PREFIX = re.compile(r"^[ \t]*(?:>[ \t]?)+")
+_LINKED_IMAGE = re.compile(rf"\[{IMAGE.pattern}\]\([^)\s]*\)")
+
+
 def prose_chars(markdown: str) -> int:
-    """Characters of prose (whitespace collapsed, code blocks excluded)."""
-    return len(" ".join(without_fences(markdown).split()))
+    """Characters of prose (:data:`PROSE_UNIT`): whitespace collapsed to
+    single spaces; fenced code, table rows (in a quote too, and a table
+    written without outer pipes) and images (a linked one too) excluded, the
+    text beside an image kept."""
+    lines = [
+        _QUOTE_PREFIX.sub("", line) for line in without_fences(markdown).splitlines()
+    ]
+    table = [bool(TABLE_ROW.match(line)) for line in lines]
+    for i, line in enumerate(lines):
+        # A pipe-less table: its header, its "--- | ---" row and the "a | b"
+        # rows under it.
+        if "|" in line and TABLE_DELIMITER.match(line) and i and "|" in lines[i - 1]:
+            table[i - 1] = True
+            end = i
+            while end < len(lines) and "|" in lines[end]:
+                table[end] = True
+                end += 1
+    kept = [
+        IMAGE.sub("", _LINKED_IMAGE.sub("", line))
+        for line, is_table in zip(lines, table, strict=True)
+        if not is_table
+    ]
+    return len(" ".join(" ".join(kept).split()))
 
 
 def length_report(markdown: str, depth: str, language: str) -> str:
@@ -169,8 +196,8 @@ def length_report(markdown: str, depth: str, language: str) -> str:
     depth = depth if depth in DEPTH_CHARS else _DEFAULT_DEPTH
     bound, target = _depth_target(depth, language)
     return (
-        f"Measured: {prose_chars(markdown):,} characters of prose (code blocks "
-        f"excluded). Target for a {depth} section: {bound} {target:,}."
+        f"Measured: {prose_chars(markdown):,} {PROSE_UNIT}. Target for a "
+        f"{depth} section: {bound} {target:,}."
     )
 
 
@@ -222,8 +249,8 @@ class PlannedSection:
         depth = self.depth if self.depth in DEPTH_CHARS else _DEFAULT_DEPTH
         bound, target = _depth_target(depth, language)
         directive = (
-            f"{depth.upper()} section ({bound} {target:,} characters of prose, "
-            f"code excluded): {_DEPTH_GUIDANCE[depth]}"
+            f"{depth.upper()} section ({bound} {target:,} {PROSE_UNIT}): "
+            f"{_DEPTH_GUIDANCE[depth]}"
         )
         if guide_type == GETTING_STARTED:
             directive += f"\n{_GETTING_STARTED_SCOPE}"
@@ -240,11 +267,49 @@ class PlannedSection:
 def owned_elsewhere(sections: list[PlannedSection], index: int) -> str:
     """The concepts the other sections own (``index`` is 0-based), for the
     writer of section ``index``: used there, explained only by their owner."""
-    lines = [
-        f"- {'earlier' if i < index else 'later'}, '{s.title}': {'; '.join(s.owns)}"
-        for i, s in enumerate(sections)
-        if i != index and s.owns
-    ]
+    own = set(sections[index].owns) if 0 <= index < len(sections) else set()
+    lines = []
+    for i, s in enumerate(sections):
+        # A concept this section owns too is its own to explain.
+        owns = [concept for concept in s.owns if concept not in own]
+        if i != index and owns:
+            where = "earlier" if i < index else "later"
+            lines.append(f"- {where}, '{s.title}': {'; '.join(owns)}")
+    return "\n".join(lines) or "- none"
+
+
+_PARENTHETICAL = re.compile(r"\s*\([^)]*\)")
+
+
+def parse_glossary(raw: str) -> dict[str, str]:
+    """English term -> rendering from the synopsis's ``<glossary>`` lines
+    ("English term | rendering"); a parenthetical left in a rendering is
+    dropped, since the writer adds the English at first use."""
+    glossary: dict[str, str] = {}
+    for line in raw.splitlines():
+        english, sep, rendering = line.strip().lstrip("-* ").partition("|")
+        english = english.strip()
+        rendering = _PARENTHETICAL.sub("", rendering).strip()
+        if sep and english and rendering:
+            glossary.setdefault(english, rendering)
+    return glossary
+
+
+def glossary_view(glossary: dict[str, str], earlier: list[str]) -> str:
+    """The glossary for one section: each rendering with its English, marked
+    [introduced] when an ``earlier`` section already writes its first-use
+    form "rendering(English)" (case-insensitive, a space before the
+    parenthesis allowed), else [new]; a term written in English alone."""
+    folded = [section.casefold() for section in earlier]
+    lines = []
+    for english, rendering in glossary.items():
+        if rendering.casefold() == english.casefold():
+            lines.append(f"- {rendering}")
+        else:
+            forms = [f"{rendering}{gap}({english})".casefold() for gap in ("", " ")]
+            used = any(form in section for form in forms for section in folded)
+            status = "introduced" if used else "new"
+            lines.append(f"- {rendering} = {english} [{status}]")
     return "\n".join(lines) or "- none"
 
 
@@ -253,6 +318,8 @@ class TechGuide:
     topic: str
     body: str
     source_urls: list[str] = field(default_factory=list)
+    # Page title of each source URL, for the source list's link text.
+    source_titles: dict[str, str] = field(default_factory=dict)
     # Degraded-output notes for the PR checklist and the job result.
     notes: list[str] = field(default_factory=list)
     # Images the writer was offered; any other image in the body is dropped.
@@ -270,6 +337,8 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
     _products: tuple[str, ...] = ()
     # The synopsis's raw <section_plan> (per-section sources and concepts).
     _section_plan: str = ""
+    # The synopsis's glossary: English term -> rendering.
+    _glossary: dict[str, str] = {}
     # Official reference pages fetched this run, the identifiers they were
     # looked up for and the searches spent (capped per guide).
     _reference_pages: list[PageContent]
@@ -292,6 +361,7 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
         evaluator_enable_thinking: bool | None = None,
         thinking_effort: str = "medium",
         max_sections: int,
+        title_max_length: int,
         verify_grounding: bool = True,
         auto_research: bool = True,
         max_research_queries: int,
@@ -299,10 +369,15 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
         min_quality_score: int = _MIN_QUALITY_SCORE,
         max_revision_attempts: int = _MAX_REVISION_ATTEMPTS,
         max_total_tokens: int | None = None,
+        translation_guideline: list[dict[str, Any]] | None = None,
         callbacks: list[Any] | None = None,
     ) -> None:
         self.language = language
+        # Curated term renderings; the synopsis's glossary applies them.
+        self.translation_guideline = translation_guideline or []
         self.max_sections = max_sections
+        # The blog's title limit (the conventions' ``seo_title_max_length``).
+        self.title_max_length = title_max_length
         # When True, each drafted section is fact-checked against the sources to
         # strip ungrounded claims (the review pipeline's evaluate-and-revise idea
         # applied to guides). Cheap insurance against hallucinated APIs/flags.
@@ -477,12 +552,14 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
         if queries and can_search:
             # Fetch the top results into the corpus so the gathered material
             # actually reaches the writer, not just the outline planner.
+            before = len(corpus.pages)
             await asyncio.to_thread(
                 self.researcher.run_searches,
                 corpus,
                 queries,
                 fetch_top=self.fetch_top_results,
             )
+            self._log_added("search", corpus.pages[before:])
         elif queries:
             logger.info(
                 "Search backend has no results; skipping %d queries.", len(queries)
@@ -518,17 +595,20 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
                 + ", ".join(unverified)
             )
 
+        source_urls = used_source_urls(
+            body,
+            corpus,
+            [*urls, *references],
+            self._official,
+            self._reference_pages,
+            self._section_source_urls,
+        )
+        titles = {page.url: page.title for page in corpus.pages}
         return TechGuide(
             topic=topic,
             body=body,
-            source_urls=used_source_urls(
-                body,
-                corpus,
-                [*urls, *references],
-                self._official,
-                self._reference_pages,
-                self._section_source_urls,
-            ),
+            source_urls=source_urls,
+            source_titles={url: titles[url] for url in source_urls if titles.get(url)},
             notes=list(self.notes),
             image_urls=list(corpus.image_urls),
         )
@@ -558,6 +638,7 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
                 page.user_reference = True
                 corpus.pages.append(page)
                 held |= keys
+                self._log_added("reference-material", [page])
         if not corpus.pages:
             raise NotTechnicalContentError(
                 "None of the supplied URLs returned readable content."
@@ -591,6 +672,7 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
                 "outline": digest_sections([guide.body]),
                 "category_options": ", ".join(category_options),
                 "controlled_tags": ", ".join(controlled_tags),
+                "title_max_length": self.title_max_length,
             }
         )
         return result
@@ -660,7 +742,9 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
                 ),
                 "search_results": self._search_digest(corpus),
                 "input_outline": input_outline(corpus, self._source_urls),
+                "translation_guideline": str(self.translation_guideline or ""),
                 "max_sections": self.max_sections,
+                "title_max_length": self.title_max_length,
                 "language": self.language,
             }
         )
@@ -669,6 +753,7 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
             raise ValueError("Synopsis generation returned empty output.")
         self._guide_type = (result.get("guide_type") or "").strip().lower()
         self._section_plan = result.get("section_plan") or ""
+        self._glossary = parse_glossary(result.get("glossary") or "")
         title = " ".join((result.get("title") or "").split())
         # An unclosed tag would make the rest of the output the title.
         if not title or is_placeholder(title) or "<" in title or len(title) > 200:
@@ -700,6 +785,14 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
                 section.official_source = False  # no docs: nothing to look up
             elif not any(self._official.covers(u) for u in urls):
                 await self._find_official_source(corpus, section)
+        labels = {page.url: source_label(page, self._official) for page in corpus.pages}
+        for number, section in enumerate(sections, start=1):
+            logger.info(
+                "Section %d planned sources: %s",
+                number,
+                ", ".join(f"[{labels.get(u, '?')}] {u}" for u in section.sources)
+                or "(none)",
+            )
         available_images = "\n".join(corpus.image_urls) or "(none)"
 
         # Canonical numbered outline of ONLY the sections that will be written,
@@ -708,7 +801,8 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
         total = len(sections)
 
         written: list[str] = []
-        to_ground: list[tuple[int, str]] = []  # (index in written, its sources)
+        # (index in written, its sources, its glossary view)
+        to_ground: list[tuple[int, str, str]] = []
         for index, planned in enumerate(sections, start=1):
             # Hard ceiling: past _HARD_BUDGET_MULTIPLE × the budget, abort like
             # the review/summary pipelines rather than keep spending on the
@@ -729,6 +823,7 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
                 if part
             )
             section_label = planned.label(index)
+            glossary = glossary_view(self._glossary, written)
             sources = corpus.relevant_text(
                 f"{topic} {planned.title} {planned.description}",
                 max_chars=_SECTION_SOURCE_CHARS,
@@ -750,6 +845,7 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
                     self.language, self._guide_type
                 ),
                 owned_elsewhere=owned_elsewhere(sections, index - 1),
+                glossary=glossary,
             )
             if not markdown:
                 # A dropped section leaves a hole: `final_outline`/`total` (fixed
@@ -785,9 +881,10 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
                     available_images=available_images,
                     final_outline=final_outline,
                     owned_elsewhere=owned_elsewhere(sections, index - 1),
+                    glossary=glossary,
                 )
                 if self.verify_grounding:
-                    to_ground.append((len(written), sources))
+                    to_ground.append((len(written), sources, glossary))
             written.append(close_open_fence(markdown))
         if to_ground:
             await self._ground_sections(written, to_ground, corpus)
@@ -796,7 +893,7 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
     async def _ground_sections(
         self,
         written: list[str],
-        to_ground: list[tuple[int, str]],
+        to_ground: list[tuple[int, str, str]],
         corpus: ResearchCorpus,
     ) -> None:
         """Fact-check the drafted sections in place. Flags and metric names the
@@ -810,21 +907,27 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
         )
         await self._add_reference(corpus, unchecked)
         reference = ResearchCorpus(pages=list(self._reference_pages))
-        for index, sources in to_ground:
+        for index, sources, glossary in to_ground:
             self._enforce_hard_token_budget()
-            if unchecked and reference.pages:
+            # The section's own unchecked identifiers pick the reference parts.
+            own = [i for i in unchecked if i in written[index]]
+            if own and reference.pages:
                 excerpt = reference.relevant_text(
-                    " ".join(unchecked) + " " + written[index][:2_000],
+                    " ".join(own) + " " + written[index][:2_000],
                     max_chars=_REFERENCE_SOURCE_CHARS,
                     official=self._official,
                 )
                 sources = f"{excerpt}\n\n---\n\n{sources}"
             draft = written[index]
-            grounded = close_open_fence(await self._ground_section(draft, sources))
+            grounded = close_open_fence(
+                await self._ground_section(draft, sources, glossary)
+            )
             if added_slips(draft, grounded):
                 # Grounding is the last pass; one retry if it broke a rule
                 # (e.g. hedged a claim instead of removing it).
-                retried = close_open_fence(await self._ground_section(draft, sources))
+                retried = close_open_fence(
+                    await self._ground_section(draft, sources, glossary)
+                )
                 if len(added_slips(draft, retried)) < len(added_slips(draft, grounded)):
                     grounded = retried
                 if len(publish_blockers(grounded)) > len(publish_blockers(draft)):
@@ -918,7 +1021,19 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
             self._reference_searches += min(searches_left, len(identifiers))
         self._reference_ids += identifiers
         self._reference_pages += added
+        self._log_added("reference-lookup", added)
         return added
+
+    def _log_added(self, kind: str, pages: list[PageContent]) -> None:
+        """One INFO line per page added to the corpus: how it came in, the
+        label prompts give it, and its URL."""
+        for page in pages:
+            logger.info(
+                "Added %s page [%s] %s",
+                kind,
+                source_label(page, self._official),
+                page.final_url or page.url,
+            )
 
     def _enforce_hard_token_budget(self) -> None:
         """Raise ``TokenBudgetExceeded`` once spend passes the hard ceiling.
@@ -968,6 +1083,7 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
         available_images: str,
         final_outline: str,
         owned_elsewhere: str,
+        glossary: str,
     ) -> str:
         """Score a section and revise it while it stays below the threshold or
         has a blocking issue: one the evaluator names (a factual error, an
@@ -994,6 +1110,8 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
                 previous_sections=previous_sections,
                 sources=sources,
                 final_outline=final_outline,
+                owned_elsewhere=owned_elsewhere,
+                glossary=glossary,
             )
             feedback = self._feedback_or_generic(score, feedback)
             # The issues to fix, and how many the evaluator raised.
@@ -1018,14 +1136,21 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
             # only for 90+), so it still revises with a generic directive.
             if best_score >= self.min_quality_score and not best_issues:
                 break
+            # Blocking issues first (they alone decide acceptance), then the
+            # measured length, then the evaluator's other feedback.
             feedback = "\n\n".join(
                 part
                 for part in (
-                    best_feedback,
                     (
-                        "Fix every one of these blocking issues:\n"
+                        "First fix every one of these blocking issues:\n"
                         + "\n".join(f"- {i}" for i in best_issues)
                         if best_issues
+                        else ""
+                    ),
+                    f"Length: {length_report(best_markdown, planned.depth, self.language)}",
+                    (
+                        f"Then apply this feedback:\n{best_feedback}"
+                        if best_feedback
                         else ""
                     ),
                 )
@@ -1052,12 +1177,13 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
                 sources=sources,
                 available_images=available_images,
                 owned_elsewhere=owned_elsewhere,
+                glossary=glossary,
                 # The writer edits the draft the feedback refers to: a blind
                 # rewrite at temperature 0 tends to reproduce the rejected one.
                 depth_directive=(
                     f"{planned.depth_directive(self.language, self._guide_type)}\n\nYou are REVISING an existing "
-                    f"draft of this section that did not pass review. "
-                    f"Address this feedback: {feedback}\n\n"
+                    f"draft of this section that did not pass review.\n\n"
+                    f"{feedback}\n\n"
                     f"CURRENT DRAFT to improve (rewrite it, keeping what works):\n"
                     f"{best_markdown}"
                 ),
@@ -1117,6 +1243,8 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
         previous_sections: str,
         sources: str,
         final_outline: str,
+        owned_elsewhere: str,
+        glossary: str,
     ) -> tuple[int, str, list[str]]:
         """Return (quality_score 0-100, improvement_feedback, blocking_issues)
         for a section, judged against the sources it was written from and the
@@ -1133,6 +1261,8 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
                     self.language, self._guide_type
                 ),
                 "previous_sections": previous_sections,
+                "owned_elsewhere": owned_elsewhere,
+                "glossary": glossary,
                 "length_report": length_report(markdown, planned.depth, self.language),
                 "language": self.language,
             }
@@ -1142,7 +1272,9 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
         return score, feedback, parse_lines((result or {}).get("blocking_issues"))
 
     @RetryableBase._retry("tech_guide_grounding")
-    async def _ground_section(self, section_markdown: str, sources: str) -> str:
+    async def _ground_section(
+        self, section_markdown: str, sources: str, glossary: str
+    ) -> str:
         """Fact-check a drafted section, returning the cleaned version.
 
         Falls back to the original draft if the grounding pass returns nothing,
@@ -1152,6 +1284,7 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
             {
                 "section": section_markdown,
                 "sources": sources,
+                "glossary": glossary,
                 "language": self.language,
             }
         )
@@ -1173,6 +1306,7 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
         available_images: str,
         depth_directive: str,
         owned_elsewhere: str,
+        glossary: str,
     ) -> str:
         payload = {
             "topic": topic,
@@ -1186,6 +1320,7 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
             "available_images": available_images,
             "depth_directive": depth_directive,
             "owned_elsewhere": owned_elsewhere,
+            "glossary": glossary,
             "language": self.language,
         }
         result = await self.section_chain.ainvoke(payload)

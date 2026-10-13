@@ -169,7 +169,9 @@ class AppConstants:
 
     class External(str, Enum):
         ARXIV_HTML = "https://arxiv.org/html"
-        AR5IV_LABS_HTML = "https://ar5iv.labs.arxiv.org/html"
+        # A paper's LaTeX source (tar.gz, or one gzipped .tex), the fallback
+        # for a figure the HTML rendering lost.
+        ARXIV_E_PRINT = "https://arxiv.org/e-print"
         ARXIV_PDF = "https://arxiv.org/pdf"
         UPSTAGE_DOCUMENT_PARSE = "https://api.upstage.ai/v1/document-ai/document-parse"
 

@@ -41,6 +41,12 @@ from .logger import is_running_in_aws, logger
 from .markdown_lint import writing_issues
 from .metrics import TokenBudgetGuard
 from .parser import Content, Figure
+from .post_validator import (
+    description_markup,
+    description_problems,
+    paper_page_title,
+    unsourced_numbers,
+)
 from .prompt_safety import neutralize_prompt_tags
 from .prompts import (
     BasePrompt,
@@ -155,6 +161,9 @@ class ReviewText(NamedTuple):
     key_takeaways: str
     closing: str
     subtitle: str = ""
+    # The post's search snippet (front-matter ``description``); empty lets the
+    # blog derive one.
+    description: str = ""
     # Degraded-output notes (sections skipped or below the bar, unusable
     # finalization) for the PR checklist and the job result.
     notes: tuple[str, ...] = ()
@@ -686,6 +695,7 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
             "title": self.paper.title,
             "glossary": render_glossary(plan),
             "closing_points": self._closing_points(plan),
+            "abstract": self.paper.abstract or "(not available)",
             "repair_note": "",
             "language": self.language,
         }
@@ -693,12 +703,28 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
         # a repair never replaces a valid part with a worse one.
         final: dict[str, str] = {}
         problems: dict[str, str] = {}
+
+        def description_issues(description: str) -> str | None:
+            """The description's problems, its numbers checked against the
+            TL;DR that is kept (not the attempt's own) and the abstract."""
+            sources = f"{final['key_takeaways']}\n{self.paper.abstract or ''}"
+            return "; ".join(description_problems(description, sources)) or None
+
         for attempt in range(2):
             result = await self._call(self.finalizer, payload)
             answer = {k: (result.get(k) or "").strip() for k in _FINAL_PARTS}
             answer["key_takeaways"] = _strip_tldr_heading(answer["key_takeaways"])
-            found = _finalization_problems(answer, self.paper.title)
-            for part in _FINAL_PARTS:
+            found = _finalization_problems(
+                answer,
+                self.paper.title,
+                source=self.paper.content.text,
+                abstract=self.paper.abstract or "",
+            )
+            for part in _KEEP_ORDER:
+                if part == "description":
+                    found.pop(part, None)
+                    if issues := description_issues(answer[part]):
+                        found[part] = issues
                 # Replace a kept part only with a well-formed one, or an empty
                 # kept part with anything.
                 if part not in final or (
@@ -709,6 +735,12 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
                         problems[part] = found[part]
                     else:
                         problems.pop(part, None)
+            # A kept description is rechecked when this attempt's TL;DR replaced
+            # the one it was checked against.
+            if issues := description_issues(final["description"]):
+                problems["description"] = issues
+            else:
+                problems.pop("description", None)
             if not problems:
                 break
             logger.warning(
@@ -719,13 +751,29 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
             payload["repair_note"] = (
                 "Your previous answer could not be used: "
                 + "; ".join(problems.values())
-                + ". Return all three parts again in the exact format."
+                + ". Return all four parts again in the exact format."
             )
         else:
             self.notes.append(
                 "Review finalization still malformed after a repair attempt: "
                 + "; ".join(problems.values())
             )
+            if description_markup(final["description"]):
+                # The blog shows markup literally and fails the build; without
+                # a description it derives one from the TL;DR.
+                final["description"] = ""
+        page_title = paper_page_title(
+            self.paper.title, korean=self.language == "Korean"
+        )
+        description = " ".join(final["description"].split())
+        if description and len(description) <= len(page_title):
+            # The blog fails a description no longer than the page title.
+            self.notes.append(
+                f"Review description ({len(description)} characters) was not "
+                f"longer than the page title ({len(page_title)}); dropped so the "
+                "blog derives one."
+            )
+            final["description"] = ""
         return final
 
     @measure_execution_time
@@ -769,6 +817,7 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
             key_takeaways=final["key_takeaways"],
             closing=final["closing"],
             subtitle=final["subtitle"],
+            description=final["description"],
             notes=tuple(self.notes),
         )
 
@@ -821,11 +870,18 @@ def _strip_tldr_heading(text: str) -> str:
     return _TLDR_HEADING.sub("", text)
 
 
-_FINAL_PARTS = ("subtitle", "key_takeaways", "closing")
+_FINAL_PARTS = ("subtitle", "description", "key_takeaways", "closing")
+# The TL;DR is kept first: the description's numbers are checked against it.
+_KEEP_ORDER = ("key_takeaways", "subtitle", "description", "closing")
 
 
-def _finalization_problems(final: dict[str, str], title: str) -> dict[str, str]:
-    """Structural problems of the finalizer's answer, by part."""
+def _finalization_problems(
+    final: dict[str, str], title: str, *, source: str, abstract: str
+) -> dict[str, str]:
+    """Problems of the finalizer's answer, by part: its structure, errors the
+    validator would reject, and numbers the paper (``source``) never states
+    in the TL;DR, or that neither the TL;DR nor the ``abstract`` states in
+    the description."""
     problems: dict[str, str] = {}
     if not final["subtitle"]:
         problems["subtitle"] = "subtitle is empty"
@@ -838,6 +894,17 @@ def _finalization_problems(final: dict[str, str], title: str) -> dict[str, str]:
         problems["key_takeaways"] = (
             f"key_takeaways must have exactly four ### questions (found {len(questions)})"
         )
+    if found := description_problems(
+        final["description"], f"{final['key_takeaways']}\n{abstract}"
+    ):
+        problems["description"] = "; ".join(found)
+    if missing := unsourced_numbers(final["key_takeaways"], source):
+        note = (
+            "TL;DR numbers the paper never states (copy each as the paper gives "
+            "it; 1B is 10억, 1M is 100만): " + ", ".join(missing)
+        )
+        shape = problems.get("key_takeaways")
+        problems["key_takeaways"] = f"{shape}; {note}" if shape else note
     if not final["closing"]:
         problems["closing"] = "closing is empty"
     elif not re.match(r"##\s+\S", final["closing"].lstrip()):

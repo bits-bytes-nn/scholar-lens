@@ -151,7 +151,12 @@ def unverified_identifiers(
     for seg in segments(body):
         if seg.kind not in ("fence", "icode"):
             continue
-        code = re.sub(r"\\\n\s*", " ", body[seg.start : seg.end])  # join lines
+        code = body[seg.start : seg.end]
+        if seg.kind == "fence":
+            # The opening fence's info string names a language ("```python"),
+            # not a command run.
+            code = code.partition("\n")[2]
+        code = re.sub(r"\\\n\s*", " ", code)  # join lines
         names_product = any(pattern.search(code.lower()) for pattern in tokens)
         if (seg.kind == "fence" and names_product) or _KWARG.match(code.strip("` ")):
             for argument in _KWARG.findall(code):

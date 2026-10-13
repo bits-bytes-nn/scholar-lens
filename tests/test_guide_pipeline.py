@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from scholar_lens.src.guide_pipeline import guide_branch_id
+import pytest
+
+from scholar_lens.src.guide_pipeline import guide_branch_id, guide_title
 
 
 def test_branch_id_follows_the_source_urls_not_the_title() -> None:
@@ -43,3 +45,34 @@ def test_branch_id_counts_reference_material() -> None:
     )
     # A guide from reference material alone still gets its own branch.
     assert guide_branch_id(["https://blog.x.io/a"]) != guide_branch_id([])
+
+
+LONG = (
+    "vLLM: Installation, Offline and Online Serving, PagedAttention and "
+    "Continuous Batching Internals, Configuration and Deployment"
+)
+
+
+@pytest.mark.parametrize(
+    ("title", "seo_title", "expected"),
+    [
+        ("vLLM Serving Guide", "", "vLLM Serving Guide"),
+        (LONG, "vLLM: Serving and Internals", "vLLM: Serving and Internals"),
+        # An over-long seo_title: the title cut at a word boundary, never
+        # reduced to the tool's name before the colon.
+        (
+            LONG,
+            "x" * 71,
+            "vLLM: Installation, Offline and Online Serving, PagedAttention and",
+        ),
+        (
+            LONG,
+            "",
+            "vLLM: Installation, Offline and Online Serving, PagedAttention and",
+        ),
+    ],
+)
+def test_a_guide_title_over_the_seo_limit_is_replaced(
+    title: str, seo_title: str, expected: str
+) -> None:
+    assert guide_title(title, seo_title, 70) == expected

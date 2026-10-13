@@ -238,8 +238,9 @@ class TestGuideEndToEnd:
         post = Path(outcome.markdown_path).read_text(encoding="utf-8")
         violations = validate_post(post, context.conventions, "guide")
         assert [v for v in violations if v.level == "error"] == []
-        # External doc images stay links but are flagged for review.
-        assert any(v.rule == "image" for v in violations if v.level == "warning")
+        # A docs-site image is someone else's: linked as is, flagged for review.
+        assert "![arch](https://docs.vllm.ai/arch.png)" in post
+        assert [v.level for v in violations if v.rule == "image"] == ["warning"]
         front = post.split("\n---\n", 1)[0]
         assert 'categories: ["Tech Guides", "Language-Models"]' in front
         assert "paper_author" not in front and "\nauthor:" not in front
@@ -399,10 +400,11 @@ def _guideline_context(s3: _FakeS3):  # type: ignore[no-untyped-def]
 async def test_translation_guideline_is_optional(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    from scholar_lens.src import runtime
     from scholar_lens.src.aws_helpers import S3OperationError
 
-    monkeypatch.setattr(paper_pipeline, "ROOT_DIR", tmp_path)
-    load = paper_pipeline._load_translation_guideline
+    monkeypatch.setattr(runtime, "ROOT_DIR", tmp_path)
+    load = runtime.load_translation_guideline
     missing = _FakeS3(None)
     assert await load(_guideline_context(missing)) is None  # type: ignore[arg-type]
     assert missing.keys and missing.keys[0].startswith("sl/")
@@ -423,7 +425,7 @@ async def test_guideline_failure_stops_before_paid_stages(
     async def broken(_context):  # type: ignore[no-untyped-def]
         raise RuntimeError("s3 down")
 
-    monkeypatch.setattr(paper_pipeline, "_load_translation_guideline", broken)
+    monkeypatch.setattr(paper_pipeline, "load_translation_guideline", broken)
     monkeypatch.setattr(paper_pipeline, "_prepare_paper_data", prepare)
     with pytest.raises(RuntimeError, match="s3 down"):
         await paper_pipeline.run_paper_pipeline(

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import io
+import tarfile
 import time
 from pathlib import Path
 
@@ -13,7 +14,10 @@ from PIL import Image
 from scholar_lens.src.utils import images
 from scholar_lens.src.utils.images import (
     MAX_RENDER_SIDE,
+    is_ar5iv_placeholder,
+    raster_to_png,
     sanitize_svg,
+    source_figure,
     svg_canvas_size,
     svg_to_png,
 )
@@ -220,3 +224,132 @@ def test_renders_run_at_most_max_concurrent(monkeypatch) -> None:  # type: ignor
     with ThreadPoolExecutor(8) as pool:
         list(pool.map(lambda _: images._render_isolated("<svg/>", 1.0), range(8)))
     assert peak == images.MAX_CONCURRENT_RENDERS
+
+
+def test_raster_to_png_converts_and_bounds_size() -> None:
+    small = io.BytesIO()
+    Image.new("RGB", (5000, 10), "blue").save(small, format="WEBP")
+    with Image.open(io.BytesIO(raster_to_png(small.getvalue()))) as image:
+        assert image.format == "PNG" and max(image.size) == MAX_RENDER_SIDE
+    huge = io.BytesIO()
+    Image.new("1", (8000, 7000)).save(huge, format="BMP")
+    with pytest.raises(ValueError, match="too large"):
+        raster_to_png(huge.getvalue())
+    with pytest.raises(ValueError, match="not a decodable image"):
+        raster_to_png(b"<html>404</html>")
+
+
+@pytest.mark.parametrize("fmt", ["TIFF", "BMP", "AVIF"])
+def test_raster_to_png_reads_the_converted_formats(fmt: str) -> None:
+    Image.init()
+    if fmt not in Image.OPEN:
+        pytest.skip(f"Pillow has no {fmt} plugin here")
+    data = io.BytesIO()
+    Image.new("RGB", (4, 3), "red").save(data, format=fmt)
+    with Image.open(io.BytesIO(raster_to_png(data.getvalue()))) as image:
+        assert (image.format, image.size) == ("PNG", (4, 3))
+
+
+def test_raster_to_png_refuses_other_formats_with_a_clean_reason() -> None:
+    # Pillow reads ICO, but it is not a figure format the publisher converts.
+    ico = io.BytesIO()
+    Image.new("RGB", (16, 16), "red").save(ico, format="ICO")
+    with pytest.raises(ValueError, match="expected one of PNG, JPEG") as info:
+        raster_to_png(ico.getvalue())
+    assert "BytesIO" not in str(info.value)
+
+
+def test_raster_to_png_converts_cmyk() -> None:
+    cmyk = io.BytesIO()
+    Image.new("CMYK", (4, 4), (0, 255, 255, 0)).save(cmyk, format="JPEG")
+    with Image.open(io.BytesIO(raster_to_png(cmyk.getvalue()))) as image:
+        assert image.format == "PNG" and image.mode == "RGBA"
+
+
+PLACEHOLDER = Path(__file__).parent / "fixtures" / "ar5iv_placeholder.png"
+
+
+def test_ar5iv_placeholder_is_recognized_by_its_bytes() -> None:
+    data = PLACEHOLDER.read_bytes()
+    with Image.open(io.BytesIO(data)) as image:
+        assert image.size == (325, 400)
+    assert is_ar5iv_placeholder(data)
+    assert not is_ar5iv_placeholder(data + b"\0")
+
+
+def _png(color: str = "red") -> bytes:
+    out = io.BytesIO()
+    Image.new("RGB", (6, 4), color).save(out, format="PNG")
+    return out.getvalue()
+
+
+def _pdf() -> bytes:
+    import fitz
+
+    with fitz.open() as doc:
+        page = doc.new_page(width=100, height=50)
+        page.draw_rect(fitz.Rect(10, 10, 90, 40), color=(0, 0, 1), fill=(0, 0, 1))
+        return doc.tobytes()
+
+
+def _archive(files: dict[str, bytes], compress: bool = True) -> bytes:
+    out = io.BytesIO()
+    with tarfile.open(fileobj=out, mode="w:gz" if compress else "w") as tar:
+        for name, data in files.items():
+            info = tarfile.TarInfo(name)
+            info.size = len(data)
+            tar.addfile(info, io.BytesIO(data))
+    return out.getvalue()
+
+
+class TestSourceFigure:
+    """A figure ar5iv lost is taken from the paper's arXiv source archive."""
+
+    def test_same_path_wins_over_a_copy_elsewhere(self) -> None:
+        archive = _archive(
+            {
+                "main.tex": b"\\documentclass{article}",
+                "Media/overview.png": _png("red"),
+                "arxiv_v1/Media/overview.png": _png("blue"),
+            }
+        )
+        assert source_figure(archive, "Media/overview.png") == _png("red")
+
+    def test_unique_stem_in_another_directory(self) -> None:
+        archive = _archive({"./figs/overview.jpg": b"\xff\xd8\xffjpeg"}, False)
+        assert source_figure(archive, "overview.png") == b"\xff\xd8\xffjpeg"
+
+    def test_pdf_figure_is_rendered(self) -> None:
+        png = source_figure(_archive({"figs/arch.pdf": _pdf()}), "figs/arch.png")
+        with Image.open(io.BytesIO(png)) as image:
+            assert image.format == "PNG" and image.size == (200, 100)
+            assert image.convert("RGB").getpixel((100, 50)) == (0, 0, 255)
+
+    def test_png_is_preferred_over_pdf(self) -> None:
+        archive = _archive({"f/a.pdf": _pdf(), "f/a.png": _png()})
+        assert source_figure(archive, "f/a.png") == _png()
+
+    @pytest.mark.parametrize(
+        "files,path,reason",
+        [
+            ({"main.tex": b"x"}, "Media/x1.png", "no figure file"),
+            (
+                {"a/fig.png": _png("red"), "b/fig.png": _png("blue")},
+                "fig.png",
+                "several figure files",
+            ),
+            ({"figs/plot.eps": b"%!PS"}, "figs/plot.png", "EPS"),
+            ({"figs/plot.pdf": b"not a pdf"}, "figs/plot.png", "cannot be rendered"),
+        ],
+    )
+    def test_unusable_source_raises(
+        self, files: dict[str, bytes], path: str, reason: str
+    ) -> None:
+        with pytest.raises(ValueError, match=reason):
+            source_figure(_archive(files), path)
+
+    def test_single_gzipped_tex_is_not_an_archive(self) -> None:
+        import gzip
+
+        with pytest.raises(ValueError, match="not a source archive"):
+            source_figure(gzip.compress(b"\\documentclass{article}"), "x.png")

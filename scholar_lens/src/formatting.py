@@ -14,9 +14,11 @@ from __future__ import annotations
 
 import html
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
+from urllib.parse import quote
 
 from .markdown_math import has_math, normalize_math
 from .post_conventions import PostConventions
@@ -58,6 +60,7 @@ def render_front_matter(
     paper_author: str | None = None,
     paper_doi: str | None = None,
     seo_title: str | None = None,
+    description: str | None = None,
 ) -> str:
     """Render Jekyll front matter; every scalar is YAML-escaped and optional
     keys are omitted when empty."""
@@ -71,6 +74,8 @@ def render_front_matter(
         lines.append(f"paper_author: {_quoted(paper_author)}")
     if paper_doi:
         lines.append(f"paper_doi: {_quoted(paper_doi)}")
+    if description:
+        lines.append(f"description: {_quoted(description)}")
     lines += [
         f"categories: [{_quoted_list(categories)}]",
         f"tags: [{_quoted_list(tags)}]",
@@ -89,9 +94,30 @@ def split_leading_h1(body: str) -> tuple[str | None, str]:
     return m.group("title").strip(), body[m.end() :]
 
 
+# Characters of an untrusted title that kramdown or Liquid would read as
+# markup inside "[text](url)": brackets end the link, a | turns the list item
+# into a table, braces open Liquid. Each becomes an entity (shown as itself).
+_LINK_TEXT_ENTITIES = str.maketrans(
+    {"[": "&#91;", "]": "&#93;", "|": "&#124;", "{": "&#123;", "}": "&#125;"}
+)
+# What a link target keeps as is: RFC 3986 reserved characters and "%" (so an
+# encoded URL stays the same). Parentheses, spaces and | are encoded: an
+# unbalanced ")" ends the target, a space ends it, a | splits a table cell.
+_URL_SAFE = ":/?#@!$&'*+,;=%~"
+
+
 def md_link_text(text: str) -> str:
-    """Escape brackets so a title containing ``]`` keeps ``[text](url)`` valid."""
-    return text.replace("[", "&#91;").replace("]", "&#93;")
+    """``text`` (a page or paper title) as plain link text: HTML escaped
+    (entities in it decoded first, so ``&amp;`` stays one ampersand) and with
+    the characters Markdown or Liquid would read as markup as entities."""
+    return html.escape(html.unescape(text), quote=False).translate(_LINK_TEXT_ENTITIES)
+
+
+def md_link_url(url: str) -> str:
+    """``url`` as a Markdown link target: characters that would end the
+    target or split a table cell percent-encoded, anything already encoded
+    kept."""
+    return quote(url, safe=_URL_SAFE)
 
 
 def _paper_author(paper: Paper) -> str | None:
@@ -120,17 +146,26 @@ def resolve_topic(raw: str, spec: PostConventions) -> str | None:
     return None
 
 
+def cut_title(title: str, limit: int) -> str:
+    """``title`` (whitespace collapsed) cut to ``limit`` at a word boundary."""
+    title = " ".join(title.split())
+    if len(title) <= limit:
+        return title
+    cut = title[: limit + 1].rsplit(" ", 1)[0].rstrip(" :,-–—")
+    return cut or title[:limit]
+
+
 def shorten_title(title: str, limit: int) -> str | None:
-    """A ``seo_title`` for a title over ``limit``: the part before the colon
-    when it is a usable name, else the title cut at a word boundary."""
+    """A paper's ``seo_title`` for a title over ``limit``: the part before
+    the colon (the paper's name) when it is usable, else the title cut at a
+    word boundary (:func:`cut_title`)."""
     title = " ".join(title.split())
     if len(title) <= limit:
         return None
     head = title.split(":", 1)[0].strip()
     if ":" in title and 3 <= len(head) <= limit:
         return head
-    cut = title[: limit + 1].rsplit(" ", 1)[0].rstrip(" :,-–—")
-    return cut or title[:limit]
+    return cut_title(title, limit)
 
 
 def build_post_meta(
@@ -199,6 +234,7 @@ def paper_front_matter(
     *,
     body: str = "",
     subtitle: str | None = None,
+    description: str | None = None,
 ) -> str:
     """Front matter for a review or summary of ``paper``; ``body`` decides
     ``use_math``."""
@@ -211,6 +247,7 @@ def paper_front_matter(
         paper_author=_paper_author(paper),
         # The blog looks up the paper's live citation count by it.
         paper_doi=paper.doi,
+        description=description,
         categories=categories,
         tags=meta.tags,
         cover=meta.cover,
@@ -218,19 +255,33 @@ def paper_front_matter(
     )
 
 
-def _paper_references(paper: Paper, extra_links: list[tuple[str, str]]) -> str:
-    seen = {str(paper.pdf_url).rstrip("/")}
-    lines = [f"* [{md_link_text(paper.title)}]({paper.pdf_url})"]
-    links = [
-        ("/".join(str(r).rstrip("/").split("/")[-2:]) or str(r), str(r))
-        for r in paper.repo_urls
-    ] + extra_links
-    for text, url in links:
+def link_list(links: Iterable[tuple[str | None, str]]) -> str:
+    """``* [title](url)`` lines for ``(title, url)`` pairs, one per URL
+    (a trailing slash ignored); a missing or placeholder title, or one that
+    is just the URL, shows the URL itself."""
+    seen: set[str] = set()
+    lines: list[str] = []
+    for title, url in links:
         if url.rstrip("/") in seen:
             continue
         seen.add(url.rstrip("/"))
-        lines.append(f"* [{md_link_text(text)}]({url})")
-    return "\n\n- - -\n### References\n" + "\n".join(lines) + "\n"
+        text = " ".join((title or "").split())
+        if is_placeholder(text) or text == url:
+            text = url
+        lines.append(f"* [{md_link_text(text)}]({md_link_url(url)})")
+    return "\n".join(lines)
+
+
+def _paper_references(paper: Paper, extra_links: list[tuple[str, str]]) -> str:
+    links = [
+        (paper.title, str(paper.pdf_url)),
+        *(
+            ("/".join(str(r).rstrip("/").split("/")[-2:]) or str(r), str(r))
+            for r in paper.repo_urls
+        ),
+        *extra_links,
+    ]
+    return f"\n\n- - -\n### References\n{link_list(links)}\n"
 
 
 def same_as_title(candidate: str, title: str) -> bool:
@@ -326,6 +377,7 @@ def format_review(
         subtitle=_subtitle(
             review.subtitle, h1, paper.title, fallback=review.key_takeaways
         ),
+        description=review.description,
     )
     return f"{front_matter}{content}{_paper_references(paper, [])}"
 
@@ -334,17 +386,28 @@ _LEAD_BLOCKQUOTE = re.compile(r"\A((?:>[^\n]*\n?)+)")
 _SUMMARY_LABEL = re.compile(r"^\*\*[^*]{1,20}:?\*\*:?\s*")
 
 
+def _summary_lead(body: str) -> tuple[str, str]:
+    """``(lead, rest)``: the text of the summary's leading ``> **요약:** …``
+    blockquote (label dropped) and the body after it."""
+    match = _LEAD_BLOCKQUOTE.match(body)
+    if not match:
+        return "", body
+    lines = [line[1:].strip() for line in match.group(1).splitlines()]
+    text = _SUMMARY_LABEL.sub("", " ".join(line for line in lines if line))
+    return text, body[match.end() :].lstrip("\n")
+
+
+def summary_lead(body: str) -> str:
+    """The summary's TL;DR text (its leading blockquote)."""
+    return _summary_lead(body.lstrip())[0]
+
+
 def summary_with_tldr(body: str) -> str:
     """Paper posts open with ``## TL;DR``: turn the summary's leading
     ``> **요약:** …`` blockquote into that section (label dropped)."""
     if body.startswith("## TL;DR"):
         return body
-    match = _LEAD_BLOCKQUOTE.match(body)
-    if not match:
-        return body
-    lines = [line[1:].strip() for line in match.group(1).splitlines()]
-    text = _SUMMARY_LABEL.sub("", " ".join(line for line in lines if line))
-    rest = body[match.end() :].lstrip("\n")
+    text, rest = _summary_lead(body)
     return f"## TL;DR\n\n{text}\n\n{rest}" if text else rest
 
 
@@ -364,6 +427,7 @@ def format_summary(
         meta,
         body=content,
         subtitle=_subtitle(result.get("subtitle"), h1, paper.title, fallback=content),
+        description=result.get("description"),
     )
     links = _MD_LINK.findall(result.get("urls", ""))
     return f"{front_matter}{content}{_paper_references(paper, links)}"
@@ -375,7 +439,8 @@ def format_guide(
     *,
     meta: PostMeta,
 ) -> str:
-    """Front matter (``["Tech Guides", <topic>]``) → guide body → sources."""
+    """Front matter (``["Tech Guides", <topic>]``) → guide body → sources,
+    each linked by its page title (``guide.source_titles``)."""
     _, body = split_leading_h1(guide.body)
     content = normalize_math(body.strip())
     categories = [github_config.tech_guide_category] + (
@@ -390,5 +455,6 @@ def format_guide(
         cover=meta.cover,
         use_math=has_math(content),
     )
-    sources = "\n".join(f"* <{url}>" for url in guide.source_urls)
+    titles = guide.source_titles
+    sources = link_list((titles.get(url), url) for url in guide.source_urls)
     return f"{front_matter}{content}\n\n- - -\n### Sources\n{sources}\n"

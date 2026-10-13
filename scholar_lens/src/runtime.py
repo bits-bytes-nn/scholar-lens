@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import os
 import time
 from collections.abc import Coroutine
@@ -26,13 +27,19 @@ from pydantic import BaseModel, ConfigDict
 
 from ..configs import Config
 from .aws_helpers import S3Handler, get_ssm_param_value
-from .constants import RUN_SECRETS, EnvVars, SSMParams
+from .constants import RUN_SECRETS, EnvVars, LocalPaths, S3Paths, SSMParams
 from .jobs import JobRequest, JobResult, ssm_base, write_result_manifest
 from .logger import is_running_in_aws, logger
 from .metrics import MetricsEmitter, TokenUsageTracker
-from .post_conventions import PostConventions, fetch_blog_tags, load_conventions
+from .post_conventions import (
+    BlogPost,
+    PostConventions,
+    fetch_blog_posts,
+    load_conventions,
+    tag_counts,
+)
 from .post_validator import PostValidationError
-from .publisher import Publisher, PublishError, PublishRequest
+from .publisher import PostAssetError, Publisher, PublishError, PublishRequest
 from .tags import format_tag
 
 # Working directory for papers, figures and generated posts: the container's
@@ -54,14 +61,21 @@ class RunContext(BaseModel):
     # The blog's post conventions, loaded once per run (see load_run_conventions).
     conventions: PostConventions | None = None
 
-    # Tags the blog already uses (reuse candidates) with their post counts,
-    # most used first; loaded on first use.
+    # The blog's posts (tags, descriptions, translation ids), loaded on first
+    # use, and the tags they use that a new post may reuse, with their post
+    # counts, most used first.
+    blog_posts: list[BlogPost] | None = None
     blog_tags: dict[str, int] | None = None
 
     def require_conventions(self) -> PostConventions:
         if self.conventions is None:
             self.conventions = load_run_conventions(self.config)
         return self.conventions
+
+    def require_blog_posts(self) -> list[BlogPost]:
+        if self.blog_posts is None:
+            self.blog_posts = load_run_blog_posts(self.config)
+        return self.blog_posts
 
     def require_blog_tags(self) -> list[str]:
         if self.blog_tags is None:
@@ -71,7 +85,7 @@ class RunContext(BaseModel):
             words = spec.tags.lowercase_words
             self.blog_tags = {
                 t: n
-                for t, n in load_run_blog_tags(self.config).items()
+                for t, n in tag_counts(self.require_blog_posts()).items()
                 if t.lower() not in retired
                 and t not in controlled
                 and format_tag(t, words) == t  # only spellings a post may use
@@ -225,20 +239,20 @@ def load_run_conventions(config: Config) -> PostConventions:
     )
 
 
-def load_run_blog_tags(config: Config) -> dict[str, int]:
-    """The blog's existing tags with their post counts, or none when GitHub is
-    not configured or the listing fails (the model then proposes fresh short
-    tags)."""
+def load_run_blog_posts(config: Config) -> list[BlogPost]:
+    """The blog's posts, or none when GitHub is not configured or the listing
+    fails (the model then proposes fresh short tags, and the blog's own CI is
+    left to catch a description another post already uses)."""
     github = config.resources.github
     if not (github.enabled and github.repo_name):
-        return {}
+        return []
     try:
-        return fetch_blog_tags(
+        return fetch_blog_posts(
             github.repo_name, github.base_branch, os.getenv(EnvVars.GITHUB_TOKEN.value)
         )
-    except Exception as e:  # noqa: BLE001 - reuse hints only; never fail the run
-        logger.warning("Could not list the blog's tags: %s", e)
-        return {}
+    except Exception as e:  # noqa: BLE001 - hints and a CI-backed check only
+        logger.warning("Could not list the blog's posts: %s", e)
+        return []
 
 
 def build_publisher(context: RunContext) -> Publisher:
@@ -250,6 +264,7 @@ def build_publisher(context: RunContext) -> Publisher:
         s3_bucket_name=context.config.resources.s3_bucket_name,
         s3_prefix=context.config.resources.s3_prefix,
         conventions=context.require_conventions(),
+        site_posts=context.require_blog_posts(),
     )
 
 
@@ -298,6 +313,33 @@ async def publish_artifact(
             logger.warning("Blog PR failed: %s", e)
             outcome.warnings.append(f"Blog PR not created: {e}")
     return outcome
+
+
+async def load_translation_guideline(
+    context: RunContext,
+) -> list[dict[str, Any]] | None:
+    """The glossary-style translation guideline (curated term renderings that
+    reviews, summaries and guides follow): the local file when present, else
+    the S3 copy. It is optional, so a missing object yields ``None``; any
+    other S3 error still raises (before any paid stage runs)."""
+    guideline_path = (
+        ROOT_DIR
+        / LocalPaths.ASSETS_DIR.value
+        / LocalPaths.TRANSLATION_GUIDELINE_FILE.value
+    )
+    if guideline_path.exists():
+        return json.loads(await asyncio.to_thread(guideline_path.read_text, "utf-8"))
+    if not context.s3_handler:
+        return None
+    s3_key = (
+        f"{context.config.resources.s3_prefix}/"
+        f"{S3Paths.TRANSLATION_GUIDELINE.value}/{guideline_path.name}"
+    ).lstrip("/")
+    text = await asyncio.to_thread(context.s3_handler.get_text, s3_key)
+    if text is None:
+        logger.info("No translation guideline at '%s'; continuing without.", s3_key)
+        return None
+    return json.loads(text)
 
 
 def _is_fetch_outage(error: BaseException) -> bool:
@@ -376,6 +418,13 @@ def run_job(request: JobRequest, *, job_id: str | None = None) -> JobResult:
         result.s3_uri = e.rejected_s3_uri
         result.warnings = list(getattr(e, "run_notes", []))
         logger.error("Post failed validation: %s", e)
+    except PostAssetError as e:
+        # A paper figure could not be stored: nothing was published.
+        result.error = f"{type(e).__name__}: {e}"
+        result.markdown_path = e.rejected_path
+        result.s3_uri = e.rejected_s3_uri
+        result.warnings = list(getattr(e, "run_notes", []))
+        logger.error("Post blocked by its images: %s", e)
     except Exception as e:
         result.error = f"{type(e).__name__}: {e}"
         result.warnings = list(getattr(e, "run_notes", []))

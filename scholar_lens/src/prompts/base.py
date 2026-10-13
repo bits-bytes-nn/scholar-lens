@@ -44,6 +44,19 @@ Spend words where the difficulty is, not evenly.
 - Simplify the exposition, never the facts.
 """
 
+# Number slips found in published paper posts (blog PRs #88, #89); writers
+# avoid them, checkers list them as must-fix. The TL;DR and the description
+# are also matched against the paper in code (post_validator.unsourced_numbers).
+NUMBER_RULES: str = """
+- Copy numbers verbatim with the model, variant (base or chat, pre-trained or
+  fine-tuned, size), cell and setup (not an ablation's) they belong to.
+- 1B = 10억, 1M = 100만, 1T = 1조 (7B = 70억). A relative gain is not %p; an
+  exponent is not a share; a share of outputs is not a rate; a formula's
+  input is not its result.
+- "모든 벤치마크에서 앞섰다" only with no reported loss; expand an acronym only
+  as the paper does.
+"""
+
 SUPPLEMENTARY_CONTEXT_RULES: str = """
 Context beyond the paper makes the text useful, but must be honest:
 - Allowed: background from the provided citation summaries or code, and
@@ -54,16 +67,17 @@ Context beyond the paper makes the text useful, but must be honest:
   never present them as the paper's numbers.
 - Claim only as strongly as the paper does: keep its hedges ("we believe",
   "suggests"), and never turn a conjecture into a fact, one setting into a
-  general rule, or an unexplained difference into a stated cause.
-- Copy the paper's numbers verbatim. A derived number (a ratio, a reduction,
-  a difference) shows its inputs inline: "1,200ms에서 300ms로, 75% 감소".
-  Compare numbers only on the same benchmark, metric and evaluation setting;
-  if the compared models differ in size, say so.
+  general rule, an unexplained difference into a stated cause, or "inspired
+  by X" into "uses X".
+- A derived number (a ratio, a reduction, a difference) shows its inputs
+  inline: "1,200ms에서 300ms로, 75% 감소". Compare numbers only on the same
+  benchmark, metric and evaluation setting; if the compared models differ in
+  size, say so.
 - Code: quote or adapt code only from the provided code examples. Without them,
   write code only when it clarifies something an equation cannot, label it as
   pseudocode reconstructed from the paper, and never cite file paths or symbol
   names you have not seen. Do not invent unstated constants.
-"""
+""" + NUMBER_RULES
 
 HEADING_STRUCTURE_RULES: str = """
 - Never write an H1 (`#`) heading; the post title comes from the front matter.
@@ -153,6 +167,20 @@ MATH_RULES: str = r"""
   $$\text{{Model}}^{{L}}$$, never "Model^L" in prose.
 """
 
+# Term rendering; the planner's glossary and every writer, checker and editor
+# follow it. The English-stem lint in markdown_lint checks its last bullet.
+TERMINOLOGY_RULES: str = """
+- A term the translation guideline lists takes its rendering there (the
+  glossary already applies it). Any other technical term is written in the
+  target language when a natural translation exists. Keep English only for
+  proper nouns, product, API, model and code names (vLLM, Adam, `max_tokens`)
+  and terms with no natural translation.
+- A rendering carries no parenthetical: add the English once, at the term's
+  first use in the post ("연속 배칭(continuous batching)").
+- Never glue a Korean ending to an English word ("prefill합니다"): write
+  "prefill을 수행합니다".
+"""
+
 STYLE_RULES: str = """
 - Write natural, flowing prose in the target language, in a professional yet
   accessible register. No translationese, no hype ("revolutionary", "획기적인"),
@@ -164,15 +192,8 @@ STYLE_RULES: str = """
   parts by structure, by name or number ("이 절", "앞 절", "설치 절에서 다룬" /
   "this section"); a back-reference by content is fine ("앞서 설명한 `--host`
   설정" / "the `--host` setting described above").
-- Keep established English technical terms when the target language has no
-  clear equivalent (e.g. BERT, Transformer); otherwise use the target
-  language's standard terms.
-- WHEN THE OUTPUT LANGUAGE IS KOREAN: use the "입니다" register throughout and
-  standard translated terms ("손실 함수", "경사 하강법", "사전 학습"). Never
-  glue a Korean ending to an English stem ("fine-tune합니다", "freeze된");
-  write "미세 조정합니다", "동결된" or keep the English noun with a Korean
-  verb ("Adam을 사용합니다").
-"""
+- WHEN THE OUTPUT LANGUAGE IS KOREAN: use the "입니다" register throughout.
+""" + TERMINOLOGY_RULES
 
 
 @dataclass(frozen=True)

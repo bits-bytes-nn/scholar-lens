@@ -16,6 +16,13 @@ from scholar_lens.src.post_validator import Violation, errors, validate_post
 
 FIXTURES = Path(__file__).parent / "fixtures" / "blog_defects"
 SPEC = load_local_conventions()
+# A description as the blog's hand-written ones read (PR #88): plain text,
+# 120-160 characters, opening with the model's name.
+DESCRIPTION = (
+    "DeepSeek-V3는 총 671B, 토큰당 37B 파라미터가 활성화되는 MoE 모델로, MLA와 보조 "
+    "손실 없는 부하 분산, FP8 혼합 정밀도 학습을 결합해 2.788M H800 GPU 시간만으로 "
+    "학습을 마쳤습니다. 아키텍처를 정리합니다."
+)
 
 
 def make_post(
@@ -36,6 +43,7 @@ def make_post(
         "tags": '["Multi-Token-Prediction", "DeepSeek"]',
         "cover": "/assets/images/language-models.jpg",
         "use_math": use_math,
+        "description": f'"{DESCRIPTION}"',
     }
     if kind == "guide":
         fields.pop("subtitle")
@@ -230,9 +238,18 @@ class TestBody:
         )
         assert "image" in rules(make_post("![a](/assets/2412/x1.png)"))
         assert rules(make_post("![a](/assets/images/deepseek-v3-1.png)")) == set()
+        # A third-party image stays a link (copyright): a warning, not an error.
         assert "image" in rules(
             make_post("![a](https://docs.x.dev/a.png)"), level="warning"
         )
+        assert "image" not in rules(make_post("![a](https://docs.x.dev/a.png)"))
+
+    def test_data_url_image_is_an_error(self) -> None:
+        post = make_post("![a](data:image/png;base64,iVBORw0KGgo=)")
+        found = errors(validate_post(post, SPEC, "review"))
+        assert [v.message for v in found if v.rule == "image"] == [
+            "inline data: image; store it as a file in /assets/images/"
+        ]
 
     def test_envelope_tag_leak(self) -> None:
         assert "envelope" in rules(make_post("본문</explanation>"))
@@ -243,12 +260,80 @@ class TestBody:
 
 
 class TestDescription:
-    def test_math_in_first_paragraph_warns(self) -> None:
-        post = make_post().replace(
+    @staticmethod
+    def _found(post: str, **kwargs) -> list[Violation]:  # type: ignore[no-untyped-def]
+        return [
+            v
+            for v in validate_post(post, SPEC, "review", **kwargs)
+            if v.rule == "description"
+        ]
+
+    def test_the_blogs_kind_of_description_passes(self) -> None:
+        assert self._found(make_post()) == []
+
+    def test_no_longer_than_the_page_title_is_an_error(self) -> None:
+        # <title> is "DeepSeek-V3 Technical Report 논문 리뷰" (34 characters).
+        post = make_post(front={"description": '"DeepSeek-V3를 정리합니다."'})
+        assert [v.level for v in self._found(post)] == ["error"]
+
+    @pytest.mark.parametrize(
+        ("lang", "levels"),
+        [
+            # A Korean paper post's <title> is its seo_title plus the suffix.
+            ({}, ["warning"]),
+            # Any other post's <title> is its plain title (head.html).
+            ({"lang": "en", "translation_id": "deepseek-v3"}, ["error"]),
+        ],
+    )
+    def test_seo_title_names_only_a_korean_paper_posts_page(
+        self, lang: dict[str, str], levels: list[str]
+    ) -> None:
+        front = {
+            "title": '"DeepSeek-V3 Technical Report on Mixture of Experts at Scale"',
+            "seo_title": '"DeepSeek-V3"',
+            "description": f'"{"DeepSeek-V3는 MoE 모델입니다. " * 2}"',  # 46
+            **lang,
+        }
+        assert [v.level for v in self._found(make_post(front=front))] == levels
+
+    def test_outside_the_usual_length_warns(self) -> None:
+        text = "DeepSeek-V3는 MoE 모델입니다. " * 2  # 46 characters
+        found = self._found(make_post(front={"description": f'"{text}"'}))
+        assert [v.level for v in found] == ["warning"]
+
+    def test_missing_on_a_paper_post_warns(self) -> None:
+        found = self._found(make_post(drop=("description",)))
+        assert [v.level for v in found] == ["warning"]
+
+    def test_another_posts_description_is_an_error(self) -> None:
+        from scholar_lens.src.post_conventions import BlogPost
+
+        def site(path: str) -> list[BlogPost]:
+            return [BlogPost(path=path, description=f"  {DESCRIPTION}\n")]
+
+        name = "2026-10-13-deepseek-v3-technical-report.md"
+        other = self._found(
+            make_post(), file_name=name, site_posts=site("_posts/2025-01-01-other.md")
+        )
+        assert [v.level for v in other] == ["error"]
+        # The post this one replaces is not another post.
+        replaced = self._found(
+            make_post(),
+            file_name=name,
+            site_posts=site("_posts/2025-10-07-deepseek-v3-technical-report.md"),
+        )
+        assert replaced == []
+
+    def test_math_in_first_paragraph_warns_without_a_description(self) -> None:
+        post = make_post(drop=("description",)).replace(
             "짧은 답입니다.", "변화량 $$\\Delta W$$를 학습합니다."
         )
-        assert "description" in rules(post, level="warning")
-        assert "description" not in rules(make_post(), level="warning")
+        assert any("contains math" in v.message for v in self._found(post))
+        # With a description the blog never reads the first paragraph.
+        with_one = make_post().replace(
+            "짧은 답입니다.", "변화량 $$\\Delta W$$를 학습합니다."
+        )
+        assert self._found(with_one) == []
 
 
 def test_leaked_figure_marker_is_an_error() -> None:
@@ -256,9 +341,20 @@ def test_leaked_figure_marker_is_an_error() -> None:
     assert "envelope" in rules(post)
 
 
-def test_future_date_is_an_error() -> None:
-    assert "date" in rules(make_post(front={"date": "2999-01-01 00:00:00"}))
-    assert "date" not in rules(make_post())
+@pytest.mark.parametrize(
+    "date,ok",
+    [
+        ("2024-12-27 00:00:00", True),
+        ("2024-12-27", True),  # a date without a time is checked too
+        ("2024-12-28", False),
+        ("2024-12-28 08:00:00 +0900", True),  # 2024-12-27 in UTC
+    ],
+)
+def test_date_is_not_after_the_file_name(date: str, ok: bool) -> None:
+    found = validate_post(
+        make_post(front={"date": date}), SPEC, "review", file_name="2024-12-27-x.md"
+    )
+    assert ("date" not in {v.rule for v in errors(found)}) is ok
 
 
 class TestBodyErrors:
@@ -306,3 +402,82 @@ class TestValidatorDetails:
             for v in validate_post(self._post(body), load_local_conventions(), "guide")
             if v.rule == "math"
         ]
+
+
+class TestUnsourcedNumbers:
+    SOURCE = (
+        "Mistral 7B outperforms Llama 2 13B. Models from 0.6B parameters, an "
+        "Elo of 1,338 and 87.3% on MMLU; 2 trillion tokens with a 128K context. "
+        "M_opt ∝ C^0.5243 and 2.788M GPU hours; a 400M encoder; 1.4T tokens; "
+        "LongMemEval improves by 15.2% (55.4% to 63.8%)."
+    )
+
+    @pytest.mark.parametrize(
+        "text,missing",
+        [
+            # B -> 억 is x10: 7B is 70억, never 7억; 0.6B is 6억, not 0.6억.
+            ("70억 파라미터의 Mistral 7B", []),
+            ("7억 파라미터", ["7억"]),
+            ("6억에서 시작", []),
+            ("0.6억에서 시작", ["0.6억"]),
+            # M -> 만 / 백만, K -> 천, T -> 조; thousands separators.
+            ("278.8만 GPU 시간, 4억 인코더, 1.4조 토큰과 2조 토큰", []),
+            # Combined Korean units add up: 12만 8천 is 128,000 (128K).
+            ("128K 문맥, 12만 8천은 합성 수", []),
+            ("12만8천 토큰", []),
+            ("12만 9천 토큰", ["12만 9천"]),
+            ("278만 8천 GPU 시간", []),
+            # A larger unit after a smaller one starts a new number.
+            ("128K와 8천 2조", ["8천"]),
+            ("Elo 1338점, MMLU 87.3", []),
+            # An exponent read as a percentage of the budget.
+            ("예산의 52.43%를 모델에", ["52.43"]),
+            ("15.2% 개선(55.4%에서 63.8%)", []),
+            # Names are not numbers; a list keeps its items.
+            ("Qwen3와 H800, 7B,13B", []),
+        ],
+    )
+    def test_numbers_match_the_source(self, text: str, missing: list[str]) -> None:
+        from scholar_lens.src.post_validator import unsourced_numbers
+
+        assert unsourced_numbers(text, self.SOURCE) == missing
+
+    @pytest.mark.parametrize(
+        ("text", "read"),
+        [
+            # 만 as the particle "only" or in 만큼 is no unit.
+            ("상위 5만 사용", [("5", "5")]),
+            ("10만큼 늘었다", [("10", "10")]),
+            ("32만을 썼다", [("32", "32")]),
+            ("5만 개선", [("5", "5")]),
+            # 만 is 10^4 before a number, a counter, a non-Hangul word, a
+            # particle "only" never follows, punctuation or the end.
+            ("5만 명", [("5만", "50000")]),
+            ("10만 개의 문서", [("10만", "100000")]),
+            ("10만 tokens", [("10만", "100000")]),
+            ("100만에서 200만으로", [("100만", "1000000"), ("200만", "2000000")]),
+            ("12만 8천", [("12만 8천", "128000")]),
+            ("1억 2000만 사용", [("1억 2000만", "120000000")]),
+            ("약 5만.", [("5만", "50000")]),
+        ],
+    )
+    def test_man_is_a_unit_only_by_the_closed_rule(
+        self, text: str, read: list[tuple[str, str]]
+    ) -> None:
+        from decimal import Decimal
+
+        from scholar_lens.src.post_validator import _numbers
+
+        assert [(n.text, n.absolute) for n in _numbers(text)] == [
+            (t, Decimal(v)) for t, v in read
+        ]
+
+    def test_description_problems(self) -> None:
+        from scholar_lens.src.post_validator import description_problems
+
+        tldr = "DeepSeek-V3는 671B MoE 모델로 2.788M GPU 시간에 학습했습니다."
+        assert description_problems(DESCRIPTION, tldr + " 37B H800") == []
+        problems = description_problems("`DeepSeek-V3`는 99점입니다.", tldr)
+        assert len(problems) == 3  # markup, length, an unsourced number
+        assert "99" in problems[2]
+        assert description_problems("", tldr) == ["description is empty"]
