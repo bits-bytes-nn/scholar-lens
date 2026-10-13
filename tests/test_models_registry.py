@@ -76,21 +76,18 @@ class TestEmbeddingModelRegistry:
 
 class TestRequestShapeFlags:
     @pytest.mark.parametrize(
-        ("model", "always_on", "price"),
+        ("model", "price"),
         [
-            (LanguageModelId.CLAUDE_V5_5_OPUS, True, (4.0, 20.0)),
-            (LanguageModelId.CLAUDE_V5_5_SONNET, True, (2.0, 10.0)),
-            (LanguageModelId.CLAUDE_V5_5_HAIKU, True, (0.10, 0.50)),
-            (LanguageModelId.CLAUDE_V5_1_FABLE, True, (10.0, 50.0)),
-            (LanguageModelId.CLAUDE_V4_8_OPUS, False, (5.0, 25.0)),
-            (LanguageModelId.CLAUDE_V5_SONNET, False, (2.0, 10.0)),
+            (LanguageModelId.CLAUDE_V5_5_OPUS, (4.0, 20.0)),
+            (LanguageModelId.CLAUDE_V5_5_SONNET, (2.0, 10.0)),
+            (LanguageModelId.CLAUDE_V5_5_HAIKU, (0.10, 0.50)),
+            (LanguageModelId.CLAUDE_V5_1_FABLE, (10.0, 50.0)),
+            (LanguageModelId.CLAUDE_V4_8_OPUS, (5.0, 25.0)),
+            (LanguageModelId.CLAUDE_V5_SONNET, (2.0, 10.0)),
         ],
     )
-    def test_thinking_and_price(
-        self, model: LanguageModelId, always_on: bool, price: tuple[float, float]
-    ) -> None:
+    def test_price(self, model: LanguageModelId, price: tuple[float, float]) -> None:
         info = _LANGUAGE_MODEL_INFO[model]
-        assert info.thinking_always_on is always_on
         assert (info.input_price_per_mtok, info.output_price_per_mtok) == price
 
     def test_every_model_is_priced(self) -> None:

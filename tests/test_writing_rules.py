@@ -509,3 +509,109 @@ def test_section_with_open_fence_does_not_swallow_the_next_heading() -> None:
     section = ensure_section_heading("```python\nprint(1)\n", "예제")
     joined = section + "\n\n## 다음 절\n\n본문입니다."
     assert joined.count("```") == 2
+
+
+def test_edit_that_drops_a_closing_fence_is_skipped() -> None:
+    from scholar_lens.src.review_plan import Edit, apply_edits
+
+    text = "## A\n\n```python\nx = 1\n```\n\n본문입니다.\n\n## B\n\n끝입니다."
+    edit = Edit(find="x = 1\n```\n", replace="x = 1\n")
+    out, applied, skipped = apply_edits(text, [edit], max_edits=3)
+    assert applied == 0 and out == text and skipped
+
+
+@pytest.mark.parametrize(
+    "find,replace",
+    [("본문.", "본문.\n\n```"), ("ls\n```", "ls")],
+)
+def test_edit_that_unbalances_a_fence_is_skipped(find: str, replace: str) -> None:
+    from scholar_lens.src.review_plan import Edit, apply_edits
+
+    text = "## A\n\n본문.\n\n```bash\nls\n```\n\n## B\n\n끝."
+    out, applied, skipped = apply_edits(
+        text, [Edit(find=find, replace=replace)], max_edits=3
+    )
+    assert applied == 0 and out == text and "fence" in skipped[0]
+
+
+def test_edit_inside_a_whole_code_block_is_applied() -> None:
+    from scholar_lens.src.review_plan import Edit, apply_edits
+
+    text = "## A\n\n```bash\nls\n```\n"
+    out, applied, _ = apply_edits(
+        text,
+        [Edit(find="```bash\nls\n```", replace="```bash\nls -la\n```")],
+        max_edits=3,
+    )
+    assert applied == 1 and "ls -la" in out
+
+
+@pytest.mark.parametrize(
+    "text,find,replace,expected",
+    [
+        (  # change the info string
+            "## A\n\n```py\nx = 1\n```\n\n본문.",
+            "```py\n",
+            "```python\n",
+            "```python\nx = 1\n```",
+        ),
+        (  # a prose edit anchored on the closing fence
+            "## A\n\n```bash\nls\n```\n\n다음 문단입니다.",
+            "```\n\n다음 문단입니다.",
+            "```\n\n고친 문단입니다.",
+            "```\n\n고친 문단입니다.",
+        ),
+        (  # move a misplaced closing fence
+            "## A\n\n```bash\nls\n```\n설명이 코드 밖에 있어야 합니다.\npwd\n\n## B\n\n끝.",
+            "ls\n```\n설명이 코드 밖에 있어야 합니다.\npwd\n",
+            "ls\npwd\n```\n\n설명이 코드 밖에 있어야 합니다.\n",
+            "ls\npwd\n```\n\n설명이",
+        ),
+        (  # close the article's one unclosed fence
+            "## A\n\n```bash\nls\n\n본문이 코드에 갇혔습니다.",
+            "ls\n\n본문이",
+            "ls\n```\n\n본문이",
+            "ls\n```\n\n본문이",
+        ),
+    ],
+)
+def test_edits_that_repair_a_fence_are_applied(
+    text: str, find: str, replace: str, expected: str
+) -> None:
+    from scholar_lens.src.review_plan import Edit, apply_edits
+
+    out, applied, skipped = apply_edits(
+        text, [Edit(find=find, replace=replace)], max_edits=3
+    )
+    assert applied == 1, skipped
+    assert expected in out
+
+
+def test_closing_an_unclosed_fence_may_bring_back_a_swallowed_heading() -> None:
+    from scholar_lens.src.review_plan import Edit, apply_edits
+
+    text = "## A\n\n```python\nx = 1\n\n## B\n\n끝."
+    out, applied, skipped = apply_edits(
+        text, [Edit(find="x = 1\n\n## B", replace="x = 1\n```\n\n## B")], max_edits=3
+    )
+    assert applied == 1, skipped
+    assert "x = 1\n```\n\n## B" in out
+
+
+@pytest.mark.parametrize(
+    "replace",
+    [
+        "x = 1\n```\n\n## New\n\n## B",  # adds a heading
+        "x = 1\n```\n\n## B\n\n## A",  # duplicates one
+        "x = 1\n```\n\n## B 바꿈",  # renames the swallowed one
+        "```\n\n## B",  # drops the code with the closing
+    ],
+)
+def test_closing_an_unclosed_fence_changes_nothing_else(replace: str) -> None:
+    from scholar_lens.src.review_plan import Edit, apply_edits
+
+    text = "## A\n\n```python\nx = 1\n\n## B\n\n끝."
+    out, applied, _ = apply_edits(
+        text, [Edit(find="x = 1\n\n## B", replace=replace)], max_edits=3
+    )
+    assert applied == 0 and out == text

@@ -29,39 +29,42 @@ import requests
 from pydantic import HttpUrl
 
 from .arxiv_handler import ArxivHandler, ArxivMetadata
-from .constants import ARXIV_ID_BODY, normalize_arxiv_id
+from .constants import arxiv_id_from_url, normalize_arxiv_id
 from .logger import logger
+from .pdf_download import (
+    CHUNK_BYTES,
+    NotPdfContentError,
+    PdfTooLargeError,
+    save_pdf,
+)
 from .pinned_transport import PinnedRequestsAdapter
 from .url_guard import (
     UnsafeUrlError,
     assert_url_is_public,
     assert_url_scheme_and_literal,
+    is_temporary_dns_failure,
 )
 
-# arXiv and the mirrors that serve the same paper under its arXiv id
-# (ar5iv.labs.arxiv.org already matches arxiv.org).
-_ARXIV_HOST_PATTERN = re.compile(r"(^|\.)(arxiv|ar5iv|alphaxiv)\.org$", re.IGNORECASE)
-_ARXIV_URL_ID = re.compile(
-    rf"/(?:abs|pdf|html|overview)/({ARXIV_ID_BODY})(?:\.pdf)?/?$"
-)
 # "arxiv.org/abs/2106.09685" or "openreview.net/pdf?id=…" typed without a scheme.
 _SCHEMELESS_URL = re.compile(r"^[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}/", re.IGNORECASE)
 
 _PDF_DOWNLOAD_TIMEOUT_SECONDS = 30
-_PDF_PROBE_TIMEOUT_SECONDS = 15
-_PDF_MAGIC_BYTES = b"%PDF-"
 # Max redirect hops to follow manually (each re-validated against the SSRF guard).
 _MAX_REDIRECTS = 5
-# Cap PDF downloads so a hostile/oversized URL cannot exhaust disk or memory.
-_MAX_PDF_BYTES = 100 * 1024 * 1024  # 100 MB
 
 
 class PaperSourceError(Exception):
-    """Base error for paper-source resolution and download."""
+    """Base error for paper-source resolution and download: the request
+    itself is unusable (bad URL, not a paper)."""
 
 
 class NotAPdfError(PaperSourceError):
     """Raised when a supplied URL does not resolve to a PDF document."""
+
+
+class PaperFetchError(PaperSourceError):
+    """The paper could not be fetched for transport reasons (timeout, refused
+    connection, 429, 5xx): an outage worth retrying, not a bad request."""
 
 
 class PaperSource(ABC):
@@ -132,24 +135,28 @@ class ArxivSource(PaperSource):
         return self._handler.fetch_metadata(self._arxiv_id)
 
     def download_pdf(self, papers_dir: Path) -> Path:
-        return self._handler.download_paper(self._arxiv_id, papers_dir)
+        # Into this source's own folder (an unversioned id would otherwise land
+        # in "<id>vN/" while the rest of the paper lives in "<id>/").
+        return self._handler.download_paper(
+            self._arxiv_id, papers_dir, folder=self.source_id
+        )
 
 
 class PdfUrlSource(PaperSource):
     """Paper backed by an arbitrary URL that must serve a PDF.
 
-    The URL is validated to actually return a PDF (via a ``HEAD``/streamed
-    ``GET`` content-type and magic-byte check). Non-PDF URLs raise
-    :class:`NotAPdfError`, satisfying the "reject if the URL is not a paper PDF"
-    requirement.
+    The download is one streamed ``GET`` checked by content type and magic
+    bytes. A URL that answers with something other than a PDF raises
+    :class:`NotAPdfError`; a transport error or 429/5xx raises
+    :class:`PaperFetchError`.
     """
 
     def __init__(self, url: str, session: requests.Session | None = None) -> None:
         self._url = HttpUrl(url)
         self._raw_url = url
         # SSRF guard (cheap, offline): reject bad schemes and internal IP
-        # literals at construction. The full DNS-resolving check runs at fetch
-        # time in _assert_is_pdf so constructing a source does no network I/O.
+        # literals at construction. The full DNS-resolving check runs when the
+        # PDF is fetched, so constructing a source does no network I/O.
         try:
             assert_url_scheme_and_literal(url)
         except UnsafeUrlError as e:
@@ -234,10 +241,18 @@ class PdfUrlSource(PaperSource):
             try:
                 assert_url_is_public(current)
             except UnsafeUrlError as e:
+                if is_temporary_dns_failure(e):
+                    raise PaperFetchError(str(e)) from e
                 raise PaperSourceError(str(e)) from e
-            response = self._session.request(
-                method, current, allow_redirects=False, stream=True, **kwargs
-            )
+            try:
+                response = self._session.request(
+                    method, current, allow_redirects=False, stream=True, **kwargs
+                )
+            except UnsafeUrlError as e:
+                # The pinned adapter resolves again at connect time.
+                if is_temporary_dns_failure(e):
+                    raise PaperFetchError(str(e)) from e
+                raise PaperSourceError(str(e)) from e
             if response.is_redirect and response.next is not None:
                 location = response.headers.get("Location", "")
                 response.close()
@@ -251,7 +266,10 @@ class PdfUrlSource(PaperSource):
         )
 
     def download_pdf(self, papers_dir: Path) -> Path:
-        self._assert_is_pdf()
+        """Download the PDF in one streamed GET: an HTML content type or a body
+        without PDF magic bytes is :class:`NotAPdfError` (a ``.pdf`` suffix is
+        only a hint; servers return login pages from such URLs), a transport
+        failure or 429/5xx is :class:`PaperFetchError`."""
         paper_dir = papers_dir / self.source_id
         paper_dir.mkdir(parents=True, exist_ok=True)
         pdf_path = paper_dir / f"{self.source_id}.pdf"
@@ -259,43 +277,35 @@ class PdfUrlSource(PaperSource):
             with self._safe_request(
                 "GET", self._raw_url, timeout=_PDF_DOWNLOAD_TIMEOUT_SECONDS
             ) as response:
-                response.raise_for_status()
-                # Reject oversized downloads up front when the server declares a
-                # length, and enforce the cap while streaming regardless.
-                declared = response.headers.get("Content-Length")
-                if declared and declared.isdigit() and int(declared) > _MAX_PDF_BYTES:
-                    raise PaperSourceError(
-                        f"PDF at '{self._raw_url}' exceeds the {_MAX_PDF_BYTES}-byte "
-                        f"limit (Content-Length: {declared})."
+                status = response.status_code
+                if status == 429 or status >= 500:
+                    raise PaperFetchError(
+                        f"'{self._raw_url}' is unavailable right now (HTTP {status})."
                     )
-                written = 0
-                oversized = False
-                with pdf_path.open("wb") as fh:
-                    for chunk in response.iter_content(chunk_size=8192):
-                        if not chunk:
-                            continue
-                        written += len(chunk)
-                        if written > _MAX_PDF_BYTES:
-                            oversized = True
-                            break
-                        fh.write(chunk)
-                # Delete the partial file AFTER the handle is closed by the
-                # context manager (portable; no unlink-while-open).
-                if oversized:
-                    pdf_path.unlink(missing_ok=True)
+                if not response.ok:
                     raise PaperSourceError(
-                        f"PDF at '{self._raw_url}' exceeds the "
-                        f"{_MAX_PDF_BYTES}-byte limit."
+                        f"'{self._raw_url}' returned HTTP {status}, not a PDF."
                     )
+                content_type = response.headers.get("Content-Type", "").lower()
+                if "html" in content_type:
+                    raise NotAPdfError(
+                        f"URL '{self._raw_url}' returned HTML, not a PDF "
+                        f"(Content-Type: {content_type})."
+                    )
+                save_pdf(
+                    response.iter_content(chunk_size=CHUNK_BYTES),
+                    pdf_path,
+                    source=self._raw_url,
+                    declared_length=response.headers.get("Content-Length"),
+                )
+        except NotPdfContentError as e:
+            raise NotAPdfError(str(e)) from e
+        except PdfTooLargeError as e:
+            raise PaperSourceError(str(e)) from e
         except requests.RequestException as e:
-            raise PaperSourceError(
+            raise PaperFetchError(
                 f"Failed to download PDF from '{self._raw_url}': {e}"
             ) from e
-        if pdf_path.stat().st_size == 0 or not self._has_pdf_magic(pdf_path):
-            pdf_path.unlink(missing_ok=True)
-            raise NotAPdfError(
-                f"Downloaded content from '{self._raw_url}' is not a valid PDF."
-            )
         self._discovered_title = self._extract_pdf_title(pdf_path)
         logger.info("Successfully downloaded PDF to: '%s'", pdf_path)
         return pdf_path
@@ -316,81 +326,9 @@ class PdfUrlSource(PaperSource):
             logger.debug("Could not read PDF title from '%s': %s", pdf_path, e)
         return None
 
-    def _assert_is_pdf(self) -> None:
-        """Probe the URL and reject anything that is not a PDF.
-
-        A ``.pdf`` suffix is only a weak hint — servers routinely return HTML
-        login/landing pages from ``.pdf`` URLs — so we never trust it alone.
-        We accept an explicit ``application/pdf`` content-type or confirmed PDF
-        magic bytes; we reject an explicit HTML content-type; and when the
-        content-type is missing/ambiguous we fall back to a ranged magic-byte
-        probe. Only if every signal is inconclusive do we defer to the
-        post-download magic-byte check in :meth:`download_pdf`.
-        """
-        # The HEAD request re-validates the URL and every redirect hop against
-        # the SSRF guard (see _safe_request), so no separate pre-check is needed.
-        try:
-            head = self._safe_request(
-                "HEAD", self._raw_url, timeout=_PDF_PROBE_TIMEOUT_SECONDS
-            )
-            head.close()
-            # A failed HEAD (405/403 with an HTML error page) says nothing about
-            # the GET response, so only trust its content type when it is OK.
-            content_type = (
-                head.headers.get("Content-Type", "").lower() if head.ok else ""
-            )
-            if "application/pdf" in content_type:
-                return
-            if content_type and "html" in content_type:
-                raise NotAPdfError(
-                    f"URL '{self._raw_url}' returned HTML, not a PDF "
-                    f"(Content-Type: {content_type})."
-                )
-        except requests.RequestException as e:
-            logger.debug("HEAD probe for '%s' failed: %s", self._raw_url, e)
-        # Content-type was absent or ambiguous: confirm via magic bytes.
-        if not self._probe_magic_bytes():
-            raise NotAPdfError(f"URL '{self._raw_url}' does not appear to serve a PDF.")
-
-    def _probe_magic_bytes(self) -> bool:
-        try:
-            with self._safe_request(
-                "GET",
-                self._raw_url,
-                timeout=_PDF_PROBE_TIMEOUT_SECONDS,
-                headers={"Range": "bytes=0-7"},
-            ) as response:
-                response.raise_for_status()
-                prefix = next(response.iter_content(chunk_size=8), b"")
-                return prefix.startswith(_PDF_MAGIC_BYTES)
-        except requests.RequestException as e:
-            logger.debug("Magic-byte probe for '%s' failed: %s", self._raw_url, e)
-            return False
-
-    @staticmethod
-    def _has_pdf_magic(pdf_path: Path) -> bool:
-        with pdf_path.open("rb") as fh:
-            return fh.read(len(_PDF_MAGIC_BYTES)).startswith(_PDF_MAGIC_BYTES)
-
     def close(self) -> None:
         """Close the owned requests session (releases the connection pool)."""
         self._session.close()
-
-
-def is_arxiv_id(value: str) -> bool:
-    """True if ``value`` is an arXiv identifier (modern or legacy, optionally
-    prefixed with ``arXiv:``), not a URL."""
-    return normalize_arxiv_id(value) is not None
-
-
-def extract_arxiv_id_from_url(url: str) -> str | None:
-    """Return the arXiv ID embedded in an arxiv.org URL, else ``None``."""
-    parsed = urlparse(url)
-    if not _ARXIV_HOST_PATTERN.search(parsed.hostname or ""):
-        return None
-    # /abs/2401.06066, /pdf/2401.06066v2.pdf, /abs/hep-th/9901001
-    match = _ARXIV_URL_ID.search(parsed.path)
-    return match.group(1) if match else None
 
 
 def resolve_paper_source(
@@ -410,7 +348,7 @@ def resolve_paper_source(
         source = f"https://{source}"
     if source.lower().startswith(("http://", "https://")):
         try:
-            if arxiv_id := extract_arxiv_id_from_url(source):
+            if arxiv_id := arxiv_id_from_url(source):
                 logger.info("Detected arXiv ID '%s' from URL.", arxiv_id)
                 return ArxivSource(arxiv_id, handler=arxiv_handler)
             return PdfUrlSource(source)

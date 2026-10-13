@@ -100,7 +100,7 @@ class TestPythonFiles:
 
 
 class TestGitClone:
-    async def test_timeout_kills_git_and_args_disable_redirects(
+    async def test_timeout_kills_git(
         self, tmp_path, monkeypatch: pytest.MonkeyPatch
     ) -> None:  # type: ignore[no-untyped-def]
         import os
@@ -109,9 +109,8 @@ class TestGitClone:
 
         bin_dir = tmp_path / "bin"
         bin_dir.mkdir()
-        args_file = tmp_path / "args.txt"
         fake_git = bin_dir / "git"
-        fake_git.write_text(f'#!/bin/sh\necho "$@" > {args_file}\nexec sleep 30\n')
+        fake_git.write_text("#!/bin/sh\nexec sleep 30\n")
         fake_git.chmod(0o755)
         monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
         monkeypatch.setattr(cr, "_CLONE_TIMEOUT_SECONDS", 1)
@@ -120,19 +119,18 @@ class TestGitClone:
             await cr.CodeRetriever._git_clone(
                 "https://github.com/o/r", tmp_path / "out"
             )
-        args = args_file.read_text()
-        assert "http.followRedirects=false" in args and "core.symlinks=false" in args
-        assert "--depth=1" in args
 
-    async def test_nonzero_exit_raises(self, tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:  # type: ignore[no-untyped-def]
+    async def test_nonzero_exit_raises_and_args_disable_redirects(self, tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:  # type: ignore[no-untyped-def]
         import os
 
         import scholar_lens.src.code_retriever as cr
 
         bin_dir = tmp_path / "bin"
         bin_dir.mkdir()
+        args_file = tmp_path / "args.txt"
         (bin_dir / "git").write_text(
-            "#!/bin/sh\necho 'fatal: not found' >&2\nexit 128\n"
+            f'#!/bin/sh\necho "$@" > {args_file}\n'
+            "echo 'fatal: not found' >&2\nexit 128\n"
         )
         (bin_dir / "git").chmod(0o755)
         monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
@@ -140,3 +138,89 @@ class TestGitClone:
             await cr.CodeRetriever._git_clone(
                 "https://github.com/o/r", tmp_path / "out"
             )
+        # The clone runs with redirects and symlinks off, shallow.
+        args = args_file.read_text()
+        assert "http.followRedirects=false" in args and "core.symlinks=false" in args
+        assert "--depth=1" in args
+
+
+# --------------------------------------------------------------------------- #
+# code_retriever repo-name derivation (blocker fix)
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.parametrize(
+    "url,prefix",
+    [
+        ("https://github.com/microsoft/LoRA", "LoRA-"),
+        ("https://github.com/microsoft/LoRA/", "LoRA-"),  # trailing slash
+        ("https://github.com/org/repo.git", "repo-"),
+        ("https://github.com/org/repo.git/", "repo-"),
+    ],
+)
+def test_repo_dir_name(url: str, prefix: str) -> None:
+    # The dir name keeps the human-readable basename, then a short URL hash to
+    # avoid collisions (see test_repo_dir_name_disambiguates_same_basename).
+    name = CodeRetriever._repo_dir_name(url)
+    assert name.startswith(prefix)
+    assert len(name) > len(prefix)  # hash suffix present
+
+
+def test_repo_dir_name_disambiguates_same_basename() -> None:
+    # The collision fix: two repos with the same basename must map to distinct
+    # cache dirs, or concurrent rmtree+clone would race on one directory.
+    a = CodeRetriever._repo_dir_name("https://github.com/orgA/model")
+    b = CodeRetriever._repo_dir_name("https://github.com/orgB/model")
+    assert a != b
+    assert a.startswith("model-") and b.startswith("model-")
+
+
+def test_repo_dir_name_is_deterministic() -> None:
+    # Same URL → same dir (cache reuse across runs).
+    url = "https://github.com/microsoft/LoRA"
+    assert CodeRetriever._repo_dir_name(url) == CodeRetriever._repo_dir_name(url)
+
+
+@pytest.mark.parametrize(
+    "url",
+    ["https://github.com/", "https://github.com", "/", ""],
+)
+def test_repo_dir_name_never_empty(url: str) -> None:
+    # The blocker invariant: never collapse onto the cache root (which a later
+    # rmtree would wipe). Any non-empty name is acceptable.
+    assert CodeRetriever._repo_dir_name(url) != ""
+
+
+class TestOwnPackageIsIndexed:
+    """Regression: a repository whose package shares a known library's name
+    (a peft or Megatron-LM clone) indexed none of its own code."""
+
+    @staticmethod
+    def _write(path, text: str = "x = 1\n"):  # type: ignore[no-untyped-def]
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
+
+    def test_repo_named_after_the_library_keeps_its_package(self, tmp_path) -> None:
+        from scholar_lens.src.code_retriever import python_files
+
+        repo = tmp_path / "Megatron-LM-0123abcd"
+        self._write(repo / "megatron" / "core" / "transformer.py")
+        self._write(repo / "examples" / "transformers" / "patched.py")
+        names = {p.relative_to(repo).as_posix() for p in python_files(repo)}
+        assert "megatron/core/transformer.py" in names
+        assert "examples/transformers/patched.py" not in names  # still vendored
+
+    def test_declared_project_name_keeps_its_package(self, tmp_path) -> None:
+        from scholar_lens.src.code_retriever import python_files
+
+        repo = tmp_path / "checkout-0123abcd"
+        self._write(repo / "pyproject.toml", '[project]\nname = "peft"\n')
+        self._write(repo / "peft" / "tuners" / "lora.py")
+        assert any(p.name == "lora.py" for p in python_files(repo))
+
+    def test_src_layout_package_is_kept(self, tmp_path) -> None:
+        from scholar_lens.src.code_retriever import python_files
+
+        repo = tmp_path / "anything-0123abcd"
+        self._write(repo / "src" / "peft" / "tuners" / "lora.py")
+        assert any(p.name == "lora.py" for p in python_files(repo))

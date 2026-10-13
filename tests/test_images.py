@@ -201,13 +201,17 @@ def test_renders_run_at_most_max_concurrent(monkeypatch) -> None:  # type: ignor
     from scholar_lens.src.utils import images
 
     active, peak, lock = 0, 0, threading.Lock()
+    # Renders meet in pairs, so the cap is reached on any runner; a third
+    # concurrent render would only show up when the semaphore lets it in.
+    together = threading.Barrier(images.MAX_CONCURRENT_RENDERS, timeout=5)
 
     def fake_child(text: str, zoom: float) -> subprocess.CompletedProcess[bytes]:
         nonlocal active, peak
         with lock:
             active += 1
             peak = max(peak, active)
-        time.sleep(0.05)
+        together.wait()
+        time.sleep(0.01)
         with lock:
             active -= 1
         return subprocess.CompletedProcess([], 0, stdout=b"png", stderr=b"")

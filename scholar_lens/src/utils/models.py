@@ -12,10 +12,6 @@ class EmbeddingModelInfo(BaseModel):
         default=None,
         description="Maximum sequence length in characters that the model can process.",
     )
-    max_sequence_tokens: int | None = Field(
-        default=None,
-        description="Maximum number of tokens the model can process in a single sequence.",
-    )
 
 
 class LanguageModelInfo(BaseModel):
@@ -51,13 +47,6 @@ class LanguageModelInfo(BaseModel):
             "budget_tokens, and rejects sampling parameters (temperature/top_k)."
         ),
     )
-    thinking_always_on: bool = Field(
-        default=False,
-        description=(
-            "Thinking cannot be disabled (thinking.type='disabled' is rejected); "
-            "effort is the only cost/depth control."
-        ),
-    )
     supports_1m_context_window: bool = Field(
         default=False,
         description="Needs the context-1m beta flag to reach a 1M window.",
@@ -75,16 +64,16 @@ class LanguageModelInfo(BaseModel):
 
 _EMBEDDING_MODEL_INFO: dict[EmbeddingModelId, EmbeddingModelInfo] = {
     EmbeddingModelId.TITAN_EMBED_V1: EmbeddingModelInfo(
-        dimensions=1536, max_sequence_length=50000, max_sequence_tokens=8192
+        dimensions=1536, max_sequence_length=50000
     ),
     EmbeddingModelId.TITAN_EMBED_V2: EmbeddingModelInfo(
-        dimensions=[256, 512, 1024], max_sequence_length=50000, max_sequence_tokens=8192
+        dimensions=[256, 512, 1024], max_sequence_length=50000
     ),
     EmbeddingModelId.EMBED_ENGLISH_V3: EmbeddingModelInfo(
-        dimensions=1024, max_sequence_length=2048, max_sequence_tokens=512
+        dimensions=1024, max_sequence_length=2048
     ),
     EmbeddingModelId.EMBED_MULTILINGUAL_V3: EmbeddingModelInfo(
-        dimensions=1024, max_sequence_length=2048, max_sequence_tokens=512
+        dimensions=1024, max_sequence_length=2048
     ),
     # NOTE: add new models here
 }
@@ -113,9 +102,7 @@ def _legacy(
     )
 
 
-def _adaptive(
-    price: tuple[float, float], *, always_on: bool, out: int = 128_000
-) -> LanguageModelInfo:
+def _adaptive(price: tuple[float, float], *, out: int = 128_000) -> LanguageModelInfo:
     """Claude 4.7+ generation: 1M context (via the beta flag, as live-validated
     on Bedrock), adaptive thinking."""
     return LanguageModelInfo(
@@ -127,7 +114,6 @@ def _adaptive(
         supports_prompt_caching=True,
         supports_thinking=True,
         uses_adaptive_thinking=True,
-        thinking_always_on=always_on,
         count_tokens_proxy=_SONNET_4_6,
     )
 
@@ -136,6 +122,10 @@ _HAIKU_3 = (0.25, 1.25)
 _SONNET_3 = (3.0, 15.0)
 _OPUS_LEGACY = (15.0, 75.0)
 _OPUS = (5.0, 25.0)
+# (input, output) USD per million tokens assumed for an invoked id missing from
+# the registry: the Opus 4.x list price, so an unknown model is not
+# under-counted.
+FALLBACK_PRICE_PER_MTOK = _OPUS
 
 _LANGUAGE_MODEL_INFO: dict[LanguageModelId, LanguageModelInfo] = {
     LanguageModelId.CLAUDE_V3_HAIKU: _legacy(
@@ -154,9 +144,7 @@ _LANGUAGE_MODEL_INFO: dict[LanguageModelId, LanguageModelInfo] = {
         supports_thinking=True,
     ),
     # Tiered: prompts over 100K input tokens bill at $0.50/$2.50 per MTok.
-    LanguageModelId.CLAUDE_V5_5_HAIKU: _adaptive(
-        (0.10, 0.50), always_on=True
-    ).model_copy(
+    LanguageModelId.CLAUDE_V5_5_HAIKU: _adaptive((0.10, 0.50)).model_copy(
         update={
             "long_prompt_threshold": 100_000,
             "long_prompt_price_per_mtok": (0.50, 2.50),
@@ -195,8 +183,8 @@ _LANGUAGE_MODEL_INFO: dict[LanguageModelId, LanguageModelInfo] = {
         supports_thinking=True,
         supports_1m_context_window=True,
     ),
-    LanguageModelId.CLAUDE_V5_SONNET: _adaptive((2.0, 10.0), always_on=False),
-    LanguageModelId.CLAUDE_V5_5_SONNET: _adaptive((2.0, 10.0), always_on=True),
+    LanguageModelId.CLAUDE_V5_SONNET: _adaptive((2.0, 10.0)),
+    LanguageModelId.CLAUDE_V5_5_SONNET: _adaptive((2.0, 10.0)),
     LanguageModelId.CLAUDE_V4_OPUS: _legacy(
         200_000,
         32_000,
@@ -224,10 +212,10 @@ _LANGUAGE_MODEL_INFO: dict[LanguageModelId, LanguageModelInfo] = {
         supports_1m_context_window=True,
         count_tokens_proxy=_SONNET_4_6,
     ),
-    LanguageModelId.CLAUDE_V4_7_OPUS: _adaptive(_OPUS, always_on=False),
-    LanguageModelId.CLAUDE_V4_8_OPUS: _adaptive(_OPUS, always_on=False),
-    LanguageModelId.CLAUDE_V5_5_OPUS: _adaptive((4.0, 20.0), always_on=True),
-    LanguageModelId.CLAUDE_V5_1_FABLE: _adaptive((10.0, 50.0), always_on=True),
+    LanguageModelId.CLAUDE_V4_7_OPUS: _adaptive(_OPUS),
+    LanguageModelId.CLAUDE_V4_8_OPUS: _adaptive(_OPUS),
+    LanguageModelId.CLAUDE_V5_5_OPUS: _adaptive((4.0, 20.0)),
+    LanguageModelId.CLAUDE_V5_1_FABLE: _adaptive((10.0, 50.0)),
     # NOTE: add new models here
 }
 

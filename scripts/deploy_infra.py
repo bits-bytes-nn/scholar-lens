@@ -65,18 +65,26 @@ from scholar_lens.cli import APP_REPORTED_EXIT_CODES
 from scholar_lens.configs import Config
 from scholar_lens.configs.config import CONFIG_PATH
 from scholar_lens.src.aws_helpers import get_account_id
-from scholar_lens.src.constants import RUN_SECRETS, EnvVars, SSMParams
+from scholar_lens.src.constants import (
+    RUN_SECRETS,
+    EmbeddingModelId,
+    EnvVars,
+    LanguageModelId,
+    SSMParams,
+)
 from scholar_lens.src.jobs import ssm_base
 from scholar_lens.src.logger import logger
-from scholar_lens.src.metrics import METRICS_NAMESPACE
+from scholar_lens.src.metrics import COST_METRIC_NAME, METRICS_NAMESPACE
 
 # The single job definition runs every artifact kind; the CLI serialises a
 # JobRequest into the ``request`` parameter (scholar_lens/src/jobs.py).
 JOB_COMMAND = ["python3", "-m", "scholar_lens", "worker", "--request", "Ref::request"]
 
-# Provider secrets the job reads from SSM (SecureString, written out-of-band
-# by scripts/put_secrets.py; never part of the template).
-SECRET_SSM_PARAMS = tuple(RUN_SECRETS)
+# Bedrock model vendors the app can invoke ("anthropic", "amazon", "cohere"),
+# from the model registries: the job role may call only their models.
+BEDROCK_VENDORS = sorted(
+    {m.value.split(".")[0] for m in (*LanguageModelId, *EmbeddingModelId)}
+)
 
 
 class PaperReviewStack(Stack):
@@ -192,19 +200,27 @@ class PaperReviewStack(Stack):
     def _aws_partition_arn(self, service: str, resource: str) -> str:
         return f"arn:{self.partition}:{service}:{self.region}:{self.account}:{resource}"
 
-    def _source_account_condition(self) -> dict[str, dict[str, str]]:
-        return {"StringEquals": {"aws:SourceAccount": self.account}}
+    def _alarm_source_condition(self) -> dict[str, dict[str, str]]:
+        """Only this account's CloudWatch alarms (confused-deputy guard)."""
+        return {
+            "StringEquals": {"aws:SourceAccount": self.account},
+            "ArnLike": {
+                "aws:SourceArn": self._aws_partition_arn("cloudwatch", "alarm:*")
+            },
+        }
 
     def _bedrock_statements(self) -> list[iam.PolicyStatement]:
         bedrock_regions = {self.region}
         if self.bedrock_region_name:
             bedrock_regions.add(self.bedrock_region_name)
         # Cross-region inference profiles route a call to any member region,
-        # and newer model ids are region-less, so foundation models are allowed
-        # in every region. Inference profiles are account resources: pinned.
+        # and newer model ids are region-less, so the vendors' foundation
+        # models are allowed in every region. Inference profiles are account
+        # resources: pinned.
         bedrock_resources: list[str] = [
-            f"arn:{self.partition}:bedrock:::foundation-model/*",
-            f"arn:{self.partition}:bedrock:*::foundation-model/*",
+            f"arn:{self.partition}:bedrock:{region}::foundation-model/{vendor}.*"
+            for region in ("", "*")
+            for vendor in BEDROCK_VENDORS
         ]
         for region in sorted(bedrock_regions):
             bedrock_resources.append(
@@ -226,7 +242,6 @@ class PaperReviewStack(Stack):
                 actions=[
                     "bedrock:ListInferenceProfiles",
                     "bedrock:GetInferenceProfile",
-                    "bedrock:ListFoundationModels",
                 ],
                 resources=["*"],
                 conditions={
@@ -251,10 +266,12 @@ class PaperReviewStack(Stack):
             iam.PolicyStatement(
                 sid="S3ObjectAccess", actions=object_actions, resources=[object_arn]
             ),
+            # ListBucket lets a missing object (the optional translation
+            # guideline) read as 404, not 403. A GetObject carries no
+            # s3:prefix key, so a prefix condition would not apply to that
+            # check; the bucket is the project's own.
             iam.PolicyStatement(
-                sid="S3ListBucket",
-                actions=["s3:ListBucket", "s3:GetBucketLocation"],
-                resources=[bucket_arn],
+                sid="S3ListBucket", actions=["s3:ListBucket"], resources=[bucket_arn]
             ),
         ]
 
@@ -290,7 +307,7 @@ class PaperReviewStack(Stack):
                         "ssm",
                         f"parameter{ssm_base(self.project_name, self.stage)}/{param.value}",
                     )
-                    for param in SECRET_SSM_PARAMS
+                    for param in RUN_SECRETS
                 ],
             ),
         ]
@@ -309,18 +326,14 @@ class PaperReviewStack(Stack):
         return role
 
     def _create_execution_role(self) -> iam.Role:
-        # Pull the image and write logs only.
+        # Pull the image and write logs only: the image asset and the log
+        # driver grant exactly that on their own repository and log group.
         return iam.Role(
             self,
             "PaperReviewExecutionRole",
             assumed_by=iam.ServicePrincipal("ecs-tasks.amazonaws.com"),
             description="ECS execution role for Scholar Lens (image pull + logs)",
             role_name=self._get_resource_name("paper-review-exec"),
-            managed_policies=[
-                iam.ManagedPolicy.from_aws_managed_policy_name(
-                    "service-role/AmazonECSTaskExecutionRolePolicy"
-                )
-            ],
         )
 
     def _create_instance_role(self) -> iam.Role:
@@ -352,7 +365,7 @@ class PaperReviewStack(Stack):
         topic_key.grant_encrypt_decrypt(
             iam.ServicePrincipal(
                 "cloudwatch.amazonaws.com",
-                conditions=self._source_account_condition(),
+                conditions=self._alarm_source_condition(),
             )
         )
         topic = sns.Topic(
@@ -371,7 +384,7 @@ class PaperReviewStack(Stack):
                 principals=[iam.ServicePrincipal("cloudwatch.amazonaws.com")],
                 actions=["sns:Publish"],
                 resources=[topic.topic_arn],
-                conditions=self._source_account_condition(),
+                conditions=self._alarm_source_condition(),
             )
         )
         if email_address:
@@ -427,7 +440,7 @@ class PaperReviewStack(Stack):
             # (non-zero exit) is final, since a rerun repeats the Bedrock spend.
             retry_attempts=3,
             retry_strategies=[
-                # Covers spot reclaim and host termination ("Host EC2*").
+                # Matches "Host EC2*" status reasons: the instance terminated.
                 batch.RetryStrategy.of(
                     batch.Action.RETRY, batch.Reason.SPOT_INSTANCE_RECLAIMED
                 ),
@@ -471,22 +484,9 @@ class PaperReviewStack(Stack):
             security_groups=[self.security_group],
             vpc_subnets=self.vpc_subnets,
         )
+        # On-demand only: a spot reclaim re-runs the whole job and repeats its
+        # Bedrock spend, which costs far more than the EC2 it saves.
         job_queue.add_compute_environment(ondemand_env, 1)
-        spot_env = batch.ManagedEc2EcsComputeEnvironment(
-            self,
-            "PaperReviewSpotComputeEnv",
-            allocation_strategy=batch.AllocationStrategy.SPOT_CAPACITY_OPTIMIZED,
-            compute_environment_name=self._get_resource_name("paper-review-spot"),
-            spot=True,
-            maxv_cpus=8,
-            instance_role=self.instance_role,
-            instance_types=[ec2.InstanceType("optimal")],
-            launch_template=launch_template,
-            vpc=self.vpc,
-            security_groups=[self.security_group],
-            vpc_subnets=self.vpc_subnets,
-        )
-        job_queue.add_compute_environment(spot_env, 2)
         return job_queue
 
     def _store_ssm_parameters(self) -> None:
@@ -523,7 +523,7 @@ class PaperReviewStack(Stack):
         code), or a worker that could not send its own notification (4).
         """
         sns_action = cw_actions.SnsAction(self.topic)
-        events.Rule(
+        failed_rule = events.Rule(
             self,
             "BatchJobFailedRule",
             rule_name=self._get_resource_name("batch-failed"),
@@ -558,6 +558,18 @@ class PaperReviewStack(Stack):
                 )
             ],
         )
+        # The target's generated grant lets any EventBridge rule publish; only
+        # this rule may (confused-deputy guard).
+        self.topic.add_to_resource_policy(
+            iam.PolicyStatement(
+                sid="OnlyTheFailureRule",
+                effect=iam.Effect.DENY,
+                principals=[iam.ServicePrincipal("events.amazonaws.com")],
+                actions=["sns:Publish"],
+                resources=[self.topic.topic_arn],
+                conditions={"ArnNotEquals": {"aws:SourceArn": failed_rule.rule_arn}},
+            )
+        )
 
         # The app emits EstimatedCostUSD both per Mode and dimensionless; an
         # alarm can watch only one series, so it uses the dimensionless total.
@@ -567,7 +579,7 @@ class PaperReviewStack(Stack):
             alarm_name=self._get_resource_name("estimated-cost"),
             metric=cloudwatch.Metric(
                 namespace=METRICS_NAMESPACE,
-                metric_name="EstimatedCostUSD",
+                metric_name=COST_METRIC_NAME,
                 statistic="Sum",
                 period=Duration.hours(1),
             ),

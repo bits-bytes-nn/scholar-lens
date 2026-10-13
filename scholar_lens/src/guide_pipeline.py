@@ -11,9 +11,14 @@ from .constants import EnvVars, LanguageModelId, LocalPaths
 from .formatting import build_post_meta, format_guide
 from .jobs import JobRequest
 from .logger import logger
-from .markdown_lint import fill_image_alts
+from .markdown_lint import (
+    drop_unknown_images,
+    figure_markers_to_images,
+    fill_image_alts,
+)
 from .metrics import TokenUsageTracker
-from .publisher import PublishRequest, build_pr_body, slugify
+from .publish_types import slugify
+from .publisher import PublishRequest, build_pr_body
 from .runtime import ROOT_DIR, PipelineOutcome, RunContext, publish_artifact
 from .tech_guide import TechGuide, TechGuideGenerator
 from .web_research import (
@@ -53,22 +58,25 @@ async def run_guide_pipeline(
         max_total_tokens=cfg.max_total_tokens,
         callbacks=[tracker],
     )
+    spec = context.require_conventions()
+    github = context.config.resources.github
     try:
         guide = await generator.generate(
             request.urls,
             discover_subpages=request.discover_subpages,
             search_queries=request.search_queries or None,
         )
+        taxonomy = await generator.classify(
+            guide,
+            category_options=list(spec.topics),
+            controlled_tags=spec.tags.controlled,
+        )
+    except Exception as e:
+        # Keep the generator's notes (e.g. the budget note) on a failed run.
+        e.run_notes = list(generator.notes)  # type: ignore[attr-defined]
+        raise
     finally:
         researcher.close()
-
-    spec = context.require_conventions()
-    github = context.config.resources.github
-    taxonomy = await generator.classify(
-        guide,
-        category_options=list(spec.topics),
-        controlled_tags=spec.tags.controlled,
-    )
     meta = build_post_meta(
         title=guide.topic,
         category_type=github.tech_guide_category,
@@ -83,7 +91,7 @@ async def run_guide_pipeline(
     slug = slugify(guide.topic, max_length=80)
     work_dir = ROOT_DIR / LocalPaths.PAPERS_DIR.value / f"guide-{slug}"
     work_dir.mkdir(parents=True, exist_ok=True)
-    document = fill_image_alts(format_guide(github, guide, meta=meta), {}, guide.topic)
+    document = guide_document(format_guide(github, guide, meta=meta), guide)
     publish_request = _build_publish_request(
         guide, work_dir, document, branch_id=guide_branch_id(request.urls)
     )
@@ -92,6 +100,15 @@ async def run_guide_pipeline(
         context, publish_request, create_pr=request.create_pr
     )
     return outcome
+
+
+def guide_document(document: str, guide: TechGuide) -> str:
+    """Copied ``[Image: …]`` markers become images, images the writer was
+    never offered (a logo, a tracking pixel, an invented URL) are dropped, and
+    every image gets alt text: the paper pipeline's order."""
+    document = figure_markers_to_images(document)
+    document = drop_unknown_images(document, set(guide.image_urls))
+    return fill_image_alts(document, {}, guide.topic)
 
 
 def _split_list(value: str) -> list[str]:

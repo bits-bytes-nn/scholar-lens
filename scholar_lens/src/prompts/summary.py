@@ -10,6 +10,7 @@ from .base import (
     STYLE_RULES,
     SUMMARY_DEPTH_RULES,
     SUPPLEMENTARY_CONTEXT_RULES,
+    TABLE_RULES,
     VISUAL_RULES,
     BasePrompt,
 )
@@ -49,9 +50,9 @@ class PaperSummaryPrompt(BasePrompt):
 
     Structure (Markdown inside <summary>):
     1. Open with a blockquote of 2-3 lines in {language}: what the paper does,
-       the key idea, and the headline result with its setting
-       (Korean: start with "> **요약:** "). Plain prose only — no math in this
-       blockquote; the blog uses it as the post's search description.
+       the key idea, and the headline result with its setting. Plain prose
+       only — no math in this blockquote; the blog uses it as the post's
+       search description.
     2. Then exactly these five `##` sections (a Korean post uses the headings
        verbatim; any other language translates them, keeping emoji and order):
        ## 🔍 이 연구는 왜 필요합니까?
@@ -68,9 +69,8 @@ class PaperSummaryPrompt(BasePrompt):
       implementation concrete (modules, defaults); never contradict the paper
       with it. Once the key equation is defined, every later mention (a
       callout included) uses that same form.
-    - Results: the evidence for the main claim — one distilled Markdown table
-      of the headline numbers when the paper has comparative results, and the
-      1-2 settings needed to read the result. For benchmark or empirical
+    - Results: the evidence for the main claim, with the 1-2 settings needed
+      to read it. For benchmark or empirical
       papers this section carries the most weight.
     - Significance and limits: why it matters and at least one concrete
       limitation grounded in the paper (an assumption, an evaluation gap, a
@@ -82,6 +82,7 @@ class PaperSummaryPrompt(BasePrompt):
         + CITATION_KEY_RULES
         + HEADING_STRUCTURE_RULES
         + VISUAL_RULES
+        + TABLE_RULES
         + PAPER_TABLE_RULES
         + IMAGE_PATH_RULES
         + MATH_RULES

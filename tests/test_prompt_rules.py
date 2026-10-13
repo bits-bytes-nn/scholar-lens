@@ -34,16 +34,22 @@ def _render(prompt: type[BasePrompt]) -> str:
     return "\n".join(str(m.content) for m in messages)
 
 
-@pytest.mark.parametrize("prompt", WRITERS + [PaperSectionCheckPrompt, PaperEditPrompt])
+@pytest.mark.parametrize("prompt", WRITERS + [PaperEditPrompt])
 def test_math_rule_is_double_dollar_only(prompt: type[BasePrompt]) -> None:
     text = _render(prompt)
-    assert "Write ALL math, inline and display, between $$ and $$" in text
+    assert "Write all math, inline and display, between $$ and $$" in text
     # The blog does not render \( \); no prompt may tell the model to use it.
     assert "Inline math: \\(" not in text
     assert "\\\\(" not in text
 
 
-@pytest.mark.parametrize("prompt", WRITERS + [PaperSectionCheckPrompt])
+def test_checker_leaves_mechanical_rules_to_code() -> None:
+    text = _render(PaperSectionCheckPrompt)
+    assert "checked in code" in text
+    assert "Write all math" not in text
+
+
+@pytest.mark.parametrize("prompt", WRITERS)
 def test_no_h1_rule(prompt: type[BasePrompt]) -> None:
     text = _render(prompt)
     assert "# Paper Title" not in text
@@ -132,4 +138,3 @@ def test_summary_register_and_structure() -> None:
         "## 🔮 이 연구의 의의와 한계는 무엇입니까?",
     ):
         assert heading in text
-    assert "> **요약:**" in text

@@ -26,8 +26,7 @@ A summary is short: about 2,000-3,000 Hangul syllables of prose in Korean
   symbols defined, and at most one small worked example.
 - Results: one distilled table plus at most three findings, each with its
   setting.
-- Prose is the default; no `###` inside a section except in the results
-  section; lists only for genuinely parallel items.
+- No `###` inside a section except in the results section.
 """
 
 DEPTH_RULES: str = """
@@ -49,10 +48,9 @@ Context beyond the paper makes the text useful, but must be honest:
   textbook-level knowledge (what a standard technique is, why a known problem
   matters). Phrase it as explanation, not as a claim about this paper.
 - Never invent numbers, benchmark results, attributions, or links that are not
-  in the inputs. Mark your own derivations or estimates as such (e.g. "a rough
-  calculation gives …" / "대략 계산하면 …"). Toy values in a worked example
-  are fine when clearly illustrative ("예를 들어 입력이 3개라면 …"); never
-  present them as the paper's numbers.
+  in the inputs. Mark your own derivations or estimates as such ("대략
+  계산하면 …"). Clearly illustrative toy values in a worked example are fine;
+  never present them as the paper's numbers.
 - Copy the paper's numbers verbatim. A derived number (a ratio, a reduction,
   a difference) shows its inputs inline: "1,200ms에서 300ms로, 75% 감소".
   Compare numbers only on the same benchmark, metric and evaluation setting;
@@ -107,16 +105,25 @@ VISUAL_RULES: str = """
 - Every image has alt text in the post's language that says what the figure
   shows ("인코더-디코더 구조도"), never an English caption, a file name or
   "Figure 3".
-- Tables are real Markdown tables, never images. Use exactly one header row
-  (merge multi-level headers per column as "Parent Child", e.g. "AIME 2024
-  pass@1"), give every row the same number of cells, and leave no header cell
-  empty except the first. A comparison of many numbers goes in one table; the
-  prose interprets it, repeating only a derived number's inputs.
 - Prose is the default. Use a short list only for genuinely parallel items
   (algorithm steps, three or more options). Use a callout ("> **핵심:** …" /
   "> **Key idea:** …") only for a non-obvious insight, at most three in the
   whole post.
 - Never emit Mermaid, Graphviz or PlantUML blocks; they do not render.
+"""
+
+# Table shape (checked in code, so writers get it and checkers do not).
+TABLE_RULES: str = """
+- Tables are real Markdown tables, never images. Use exactly one header row
+  (merge multi-level headers per column as "Parent Child", e.g. "AIME 2024
+  pass@1"), give every row the same number of cells, and leave no header cell
+  empty except the first. A comparison of many numbers goes in one table; the
+  prose interprets it, repeating only a derived number's inputs.
+"""
+
+# Size cap of a table copied from the paper (not checked in code).
+TABLE_SIZE_RULE: str = """
+- A table from the paper has at most 8 rows and 7 columns.
 """
 
 PAPER_TABLE_RULES: str = """
@@ -128,15 +135,12 @@ PAPER_TABLE_RULES: str = """
 """
 
 MATH_RULES: str = r"""
-- Write ALL math, inline and display, between $$ and $$ — the blog renders
-  nothing else (no \( \), no \[ \], no single $). Inline: "the loss
-  $$\mathcal{{L}}$$ decreases". Display: $$ ... $$ on its own line with a blank line
-  before and after.
-- Do not escape underscores inside math ($$x_t$$, not $$x\_t$$); only inside
-  \text{{...}} or \texttt{{...}} write \_. Never put Korean (or other non-Latin)
-  text inside math; keep words outside or in English inside \text{{...}}.
-- Inside inline math never use a bare | (it breaks tables): use
-  \lvert x \rvert, \lVert x \rVert or \mid.
+- Write all math, inline and display, between $$ and $$ (never a single $):
+  inline "the loss $$\mathcal{{L}}$$ decreases"; display on its own line with
+  a blank line before and after it, in lists and quotes too.
+- Never put Korean (or other non-Latin) text inside math; keep words outside
+  or in English inside \text{{...}}. No bare | in inline math: \mid
+  (conditional), \lvert x \rvert (length), \lVert x \rVert (norm, KL).
 - Use \begin{{aligned}} inside $$...$$ for multi-line equations and
   \begin{{array}} or bmatrix for matrices; never standalone align/equation/
   gather environments. Use \boldsymbol, not \bm; \text{{...}}, not \rm.

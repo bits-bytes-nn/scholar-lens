@@ -16,8 +16,17 @@ from urllib.parse import urlparse
 
 import yaml
 
-from .markdown_lint import ENVELOPE_TAGS, mostly_hangul
-from .markdown_math import TEXT_COMMAND, has_math
+from .front_matter import split_front_matter_text
+from .markdown_lint import ENVELOPE_TAG, mostly_hangul
+from .markdown_math import (
+    ESCAPED_UNDERSCORE,
+    HANGUL,
+    TEXT_COMMAND,
+    fence_roles,
+    has_math,
+    image_sources,
+    indented_code_lines,
+)
 from .post_conventions import PostConventions
 from .tags import format_tag
 
@@ -26,24 +35,15 @@ Level = Literal["error", "warning"]
 
 ARXIV_IMAGE_HOSTS = ("arxiv.org", "ar5iv.org", "ar5iv.labs.arxiv.org")
 
-_FENCE = re.compile(r"^\s*(```|~~~)")
 _HEADING = re.compile(r"^(#{1,6})\s+(.*\S)\s*$")
-_HANGUL = re.compile(r"[\uac00-\ud7a3\u3131-\u318e]")
 _INLINE_MATH = re.compile(r"\$\$(.+?)\$\$")
 _INLINE_CODE = re.compile(r"`[^`]*`")
-_IMAGE = re.compile(
-    r"!\[[^\]]*\]\(([^()\s]*(?:\([^()]*\)[^()\s]*)*)(?:\s+\"[^\"]*\")?\)"
-)
-_ENVELOPE = re.compile(rf"</?(?:{'|'.join(ENVELOPE_TAGS)})>")
 _TABLE_SEPARATOR = re.compile(r"^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$")
 # A cell holding a value ("63.6", "1,820", "37.4%", "5.3±0.2"), not a label
 # that merely contains a digit ("pass@1").
 _NUMERIC_CELL = re.compile(
     r"[\s*~≈<>+\-−$]*\d[\d.,]*\s*(?:%|[KMBkmb×x])?(?:\s*(?:±|\+/-)\s*[\d.,]+%?)?[\s*]*"
 )
-_ESCAPED_UNDERSCORE = re.compile(r"\\_")
-_TEXT_COMMAND = TEXT_COMMAND
-_LEGACY_DELIMS = re.compile(r"\\\\?\(|\\\\?\)")
 _PERSON = re.compile(r"^[A-Z][a-zA-Z'.\-]+(?:\s+[A-Z][a-zA-Z'.\-]+){1,3}$")
 # Words that mark a name as an organisation rather than a person.
 _ORG_WORDS = re.compile(
@@ -90,34 +90,172 @@ def warnings(violations: list[Violation]) -> list[Violation]:
 def split_front_matter(markdown: str) -> tuple[dict[str, Any] | None, str, int]:
     """Return ``(front_matter, body, body_start_line)``; ``None`` if absent or
     unparsable."""
-    if not markdown.startswith("---\n"):
-        return None, markdown, 1
-    end = markdown.find("\n---\n", 4)
-    if end == -1:
+    front, body = split_front_matter_text(markdown)
+    if not front:
         return None, markdown, 1
     try:
-        data = yaml.safe_load(markdown[4:end])
+        data = yaml.safe_load(front[4:-5])
     except yaml.YAMLError:
         return None, markdown, 1
-    body = markdown[end + 5 :]
-    return (
-        (data if isinstance(data, dict) else None),
-        body,
-        markdown[: end + 5].count("\n") + 1,
-    )
+    return (data if isinstance(data, dict) else None), body, front.count("\n") + 1
 
 
 def _prose_lines(body: str) -> list[tuple[int, str]]:
-    """Body lines outside fenced code, as (offset, text)."""
+    """Body lines outside fenced and indented code, as (offset, text)."""
+    lines = body.split("\n")
+    code = indented_code_lines(lines)
+    return [
+        (i, line)
+        for i, (line, role) in enumerate(zip(lines, fence_roles(lines), strict=True))
+        if role == "prose" and i not in code
+    ]
+
+
+_LINT_FENCE = re.compile(r"^\s*(`{3,}|~{3,})")
+
+
+def _math_lines(body: str) -> list[tuple[int, str]]:
+    """Body lines the blog lint checks for math (script/lint-posts.rb): those
+    outside its code fences, which it finds with ``FENCE = /\\A\\s*(`{3,}|~{3,})/``
+    (a fence inside a blockquote is not one, and indented code is checked).
+    The math rules run on these lines so a post the blog's CI would reject is
+    never passed here."""
     out: list[tuple[int, str]] = []
-    in_fence = False
+    fence: str | None = None
     for i, line in enumerate(body.split("\n")):
-        if _FENCE.match(line):
-            in_fence = not in_fence
+        m = _LINT_FENCE.match(line)
+        if m:
+            if fence is None:
+                fence = m.group(1)
+            elif set(line.strip()) == {fence[0]} and len(line.strip()) >= len(fence):
+                fence = None
             continue
-        if not in_fence:
+        if fence is None:
             out.append((i, line))
     return out
+
+
+_LINT_TEXT_GROUP = re.compile(r"\\(?:text\w*|mathrm|operatorname)\{")
+_LINT_TABLE_PIPE = re.compile(r"\A\$\$(?:(?!\$\$).)+\$\$\Z")
+
+
+def _lint_without_text_groups(math: str) -> str:
+    out, rest = [], math
+    while m := _LINT_TEXT_GROUP.search(rest):
+        out.append(rest[: m.start()])
+        depth, k = 1, m.end()
+        while k < len(rest) and depth:
+            depth += {"{": 1, "}": -1}.get(rest[k], 0)
+            k += 1
+        rest = rest[k:]
+    out.append(rest)
+    return "".join(out)
+
+
+def _lint_span_findings(spans: list[str]) -> list[str]:
+    spans = [_lint_without_text_groups(m) for m in spans]
+    found = []
+    if any("\\_" in m for m in spans):
+        found.append(r"no \_ inside $$ (only within \text{})")
+    if any(HANGUL.search(m) for m in spans):
+        found.append("Korean text inside $$; a currency sign written $$ opens math")
+    return found
+
+
+def _lint_after_display(line: str | None) -> bool:
+    rest = _unquote(line or "").strip()
+    return not rest or rest.startswith("{:")
+
+
+def _blog_lint_math(body: str) -> list[tuple[int, str]]:
+    """The blog lint's math findings (``script/lint-posts.rb``, ``body`` and
+    ``math``) as ``(line index, message)``: ported as written, so the lines
+    it reads as prose but kramdown shows as code are judged its way."""
+    lines = body.split("\n")
+    found: list[tuple[int, str]] = []
+    fence: str | None = None
+    block: int | None = None
+    span: int | None = None
+    for i, line in enumerate(lines):
+        if m := _LINT_FENCE.match(line):
+            if fence is None:
+                fence = m.group(1)
+            elif re.fullmatch(f"{re.escape(fence[0])}{{{len(fence)},}}", line.strip()):
+                fence = None
+            continue
+        if fence:
+            continue
+        bare = _unquote(line)
+        odd = re.sub(r"`[^`]*`", "", bare).count("$$") % 2 == 1
+        if span is not None and not bare.strip():
+            found.append((span, "unbalanced $$ in the paragraph"))
+            span = None
+        if block is not None or (
+            odd and span is None and bare.lstrip().startswith("$$")
+        ):
+            found += [(i, f) for f in _lint_span_findings([line.replace("$", "")])]
+            if odd and block is not None:
+                if not _lint_after_display(
+                    lines[i + 1] if i + 1 < len(lines) else None
+                ):
+                    found.append((i, "display $$ needs a blank line after it"))
+            elif odd and i > 0 and _unquote(lines[i - 1]).strip():
+                found.append((i, "display $$ needs a blank line before it"))
+            if odd:
+                block = None if block is not None else i
+            continue
+        if odd:
+            span = None if span is not None else i
+        prose = re.sub(r"`[^`]*`", "", bare)
+        found += [
+            (i, f) for f in _lint_span_findings(re.findall(r"\$\$(.+?)\$\$", prose))
+        ]
+        outside = re.sub(r"\$\$.+?\$\$", "", prose)
+        if re.search(r"\\\\[(\[]", outside):
+            found.append((i, "math written \\\\( or \\\\[; write $$ … $$"))
+        if re.search(r"\}\$(?!\$)|(?<!\$)\$\\[a-zA-Z]", outside):
+            found.append((i, "TeX next to a single `$`; write the formula as $$ … $$"))
+        if _LINT_TABLE_PIPE.match(prose.strip()) and not prose.lstrip().startswith("|"):
+            before = i == 0 or not _unquote(lines[i - 1]).strip()
+            after = _lint_after_display(lines[i + 1] if i + 1 < len(lines) else None)
+            if not (before and after):
+                found.append((i, "display $$ needs a blank line before and after"))
+    if block is not None:
+        found.append((block, "$$ block never closed"))
+    if span is not None:
+        found.append((span, "unbalanced $$ in the paragraph"))
+    return found
+
+
+def _check_all_math(front, body, lines, offset, add) -> None:  # type: ignore[no-untyped-def]
+    """The math rules on the prose ``lines``, plus the blog lint's own math
+    findings on the lines it reads as prose although kramdown shows them as
+    code (a fence inside a blockquote, an indented code block): its CI would
+    reject those, so they must not pass here either."""
+    _check_math(front, body, lines, offset, add)
+    code_only = {i for i, _ in _math_lines(body)} - {i for i, _ in lines}
+    if not code_only:
+        return
+    for i, message in _blog_lint_math(body):
+        if i in code_only:
+            add(
+                "error",
+                "math",
+                offset + i,
+                f"{message} (the blog lint reads this code as prose)",
+            )
+
+
+def _unclosed_fence_line(body: str) -> int | None:
+    """0-based line of the opener of a fence that never closes, if any."""
+    lines = body.split("\n")
+    opened: int | None = None
+    for i, role in enumerate(fence_roles(lines)):
+        if role == "open":
+            opened = i
+        elif role == "close":
+            opened = None
+    return opened
 
 
 def validate_post(
@@ -135,13 +273,34 @@ def validate_post(
         return found
 
     lines = _prose_lines(body)
+    unclosed = _unclosed_fence_line(body)
+    if unclosed is not None:
+        add("error", "code", offset + unclosed, "a code fence is never closed")
     _check_front_matter(front, body, spec, kind, add)
     _check_headings(lines, offset, kind, add)
-    _check_math(front, body, lines, offset, add)
+    _check_all_math(front, body, lines, offset, add)
     _check_tables(lines, offset, add)
     _check_images(lines, offset, add)
     _check_text(lines, offset, add)
     _check_description(lines, offset, add)
+    return found
+
+
+def body_errors(markdown: str) -> list[str]:
+    """The publish-blocking body checks (tables, math, code fences) as short
+    issue strings, so a writing loop can fix them before the post is final."""
+    found: list[str] = []
+
+    def add(level: Level, rule: str, line: int, message: str) -> None:
+        if level == "error" and rule != "use-math":
+            found.append(f"{rule}: {message} (line {line})")
+
+    lines = _prose_lines(markdown)
+    unclosed = _unclosed_fence_line(markdown)
+    if unclosed is not None:
+        add("error", "code", 1 + unclosed, "a code fence is never closed")
+    _check_all_math({}, markdown, lines, 1, add)
+    _check_tables(lines, 1, add)
     return found
 
 
@@ -325,17 +484,47 @@ def _check_tldr(lines, offset, kind, add) -> None:  # type: ignore[no-untyped-de
         )
 
 
-def _is_display_line(line: str) -> bool:
-    stripped = line.strip()
-    return stripped == "$$" or (
-        stripped.startswith("$$")
-        and stripped.endswith("$$")
-        and len(stripped) > 4
-        and stripped.count("$$") == 2
-    )
+_QUOTE = re.compile(r"^\s*(?:>\s?)+")
+# Math the Markdown reads first: `\\(`/`\\[` reach MathJax only after `*` and
+# `_` inside them turned into <em>. (A single `\(` is a Markdown escape for a
+# literal parenthesis; normalize_math has already turned `\(x\)` math into $$.)
+_ESCAPED_DELIMS = re.compile(r"\\\\[(\[]")
+# TeX next to a single `$`: math that never opened (a price is neither
+# preceded by `}` nor followed by a command).
+_LONE_DOLLAR_TEX = re.compile(r"\}\$(?!\$)|(?<!\$)\$\\[a-zA-Z]")
+_INLINE_SPAN = re.compile(r"\$\$(?:(?!\$\$).)+\$\$")
+_WRAPPED_SPAN = re.compile(r"\$\$((?:(?!\$\$).)+)\$\$", re.DOTALL)
+# Lines that start a new block: a heading, or a list item (which ends a span
+# opened in a sibling item). An inline $$ span left open before it never
+# closes there.
+_STARTS_HEADING = re.compile(r"#{1,6}[ \t]")
+_STARTS_ITEM = re.compile(r"(?:[-*+]|\d+[.)])[ \t]")
+# A single-backslash \[ … \] around TeX in prose: display math the
+# normalizer could not convert (Markdown shows it as "[ … ]").
+# A TeX command or a spaced "=" marks math; "\[^1\]" (a footnote) and
+# "\[--max_len\]" (an option) do not.
+_BRACKET_TEX = re.compile(
+    r"(?<!\\)\\\[(?=[^\]]*(?:\\[A-Za-z]|\s=\s))"
+    r"|^[ \t]*\\{1,2}[\[\]][ \t]*$"  # a bracket display's own delimiter line
+)
+# The same over lines: a "\[" ending a line and its "\]" on a later line of
+# the paragraph, with math between them ("배열은 a\[\ni\]" is not math).
+_BRACKET_BLOCK = re.compile(
+    r"(?<!\\)\\\[[ \t]*\n(?P<body>(?:(?!\\\]).)*?(?:\\[A-Za-z]|\s=\s).*?)\\\]",
+    re.DOTALL,
+)
+
+
+def _unquote(line: str) -> str:
+    """The text of a line after any blockquote markers."""
+    return _QUOTE.sub("", line)
 
 
 def _check_math(front, body, lines, offset, add) -> None:  # type: ignore[no-untyped-def]
+    """The blog's math rules (script/lint-posts.rb), blockquotes included:
+    only ``$$`` delimiters; a display block opens on a line starting with
+    ``$$`` and closes on the next line with an odd number of them, with blank
+    lines around it; an inline span may wrap within its paragraph."""
     if bool(front.get("use_math")) != has_math(body):
         add(
             "error",
@@ -343,42 +532,131 @@ def _check_math(front, body, lines, offset, add) -> None:  # type: ignore[no-unt
             1,
             "use_math must be true exactly when the post contains $$ math",
         )
-    text_by_index = dict(lines)
-    in_block = False
-    for i, raw in lines:
-        line = _INLINE_CODE.sub("", raw)
-        stripped = line.strip()
-        if _LEGACY_DELIMS.search(line) and not in_block:
-            add("error", "math", offset + i, r"use $$ … $$, not \( … \)")
-        # A display block may span lines: "$$" alone, or "$$\begin{cases}" …
-        # "\end{cases}$$" — a line with an odd number of $$ opens or closes it.
+    bare_by_index = {i: _unquote(line) for i, line in lines}
+
+    raw_by_index = dict(lines)
+    body_lines = body.split("\n")
+
+    def blank(i: int) -> bool:
+        return not bare_by_index.get(i, "").strip()
+
+    def starts_block(i: int) -> bool:
+        """Whether a bare | on line ``i`` splits it into table cells: a table
+        row, or a paragraph's, list item's or quote's first line (not a
+        heading, a continuation line, or a line glued under a heading or a
+        closing fence, which kramdown keeps as a paragraph)."""
+        text = bare_by_index.get(i, "").lstrip()
+        if text.startswith("#"):
+            return False
+        if text.startswith("|"):  # a table row: kramdown splits it at the bar
+            return True
+        before_raw = body_lines[i - 1] if 0 < i <= len(body_lines) else ""
+        if i - 1 not in bare_by_index and before_raw.strip():
+            return False  # glued under a code line (a closing fence)
+        before = raw_by_index.get(i - 1, "").lstrip()
+        if before.startswith("#"):
+            return False
+        if i not in bare_by_index or blank(i - 1) or _STARTS_ITEM.match(text):
+            return True
+        quoted = raw_by_index.get(i, "").lstrip().startswith(">")
+        return quoted and not before.startswith(">")
+
+    def closes_mid_line(i: int) -> bool:
+        """Whether the ``$$`` opened on line ``i`` closes on a later line of
+        the paragraph with text after it: an inline span that starts a
+        paragraph line, not a display block."""
+        j = i + 1
+        while j in bare_by_index and not blank(j):
+            later = _INLINE_CODE.sub("", bare_by_index[j]).strip()
+            if later.count("$$") % 2:
+                return bool(later.split("$$", 1)[1].strip())
+            j += 1
+        return False
+
+    block: int | None = None  # line a multi-line display block opened on
+    span: int | None = None  # line an inline span wrapping onto the next opened on
+    for i, _ in lines:
+        bare = _INLINE_CODE.sub("", bare_by_index[i])
+        stripped = bare.strip()
         odd = stripped.count("$$") % 2 == 1
-        opens = not in_block and odd and stripped.startswith("$$")
-        closes = in_block and odd and stripped.endswith("$$")
-        if opens or closes:
-            if opens and text_by_index.get(i - 1, "").strip():
+        if span is not None and (
+            not stripped
+            or _STARTS_HEADING.match(stripped)
+            or (
+                _STARTS_ITEM.match(stripped)
+                and _STARTS_ITEM.match(bare_by_index[span].strip())
+            )
+            or bare_by_index[span].lstrip().startswith("|")  # rows never wrap
+        ):
+            # A blank line, a sibling list item or a heading ends the block:
+            # the open $$ never closes there.
+            add("error", "math", offset + span, "unbalanced $$ in the paragraph")
+            span = None
+        opens_block = (
+            odd
+            and span is None
+            and stripped.startswith("$$")
+            and (blank(i - 1) or not closes_mid_line(i))
+        )
+        if block is not None or opens_block:
+            _check_math_span(stripped.replace("$$", ""), offset + i, add, inline=False)
+            if odd and block is not None and not blank(i + 1):
+                if not bare_by_index.get(i + 1, "").strip().startswith("{:"):
+                    add(
+                        "error",
+                        "math",
+                        offset + i,
+                        "display $$ needs a blank line after it",
+                    )
+            elif odd and block is None and i > 0 and not blank(i - 1):
                 add(
                     "error",
                     "math",
                     offset + i,
                     "display $$ needs a blank line before it",
                 )
-            if closes and text_by_index.get(i + 1, "").strip():
-                add(
-                    "error",
-                    "math",
-                    offset + i,
-                    "display $$ needs a blank line after it",
+            if odd:
+                block = None if block is not None else i
+            continue
+        if odd:
+            if span is not None:
+                # A span wrapped over lines: the per-line checks never see it.
+                text = "\n".join(
+                    _INLINE_CODE.sub("", bare_by_index.get(j, ""))
+                    for j in range(span, i + 1)
                 )
-            _check_math_span(stripped.strip("$"), offset + i, add, inline=False)
-            in_block = not in_block
-            continue
-        if in_block:
-            _check_math_span(stripped, offset + i, add, inline=False)
-            continue
-        if _is_display_line(line) and not stripped.startswith("|"):
-            before, after = text_by_index.get(i - 1, ""), text_by_index.get(i + 1, "")
-            if before.strip() or after.strip():
+                for math in _WRAPPED_SPAN.findall(text):
+                    if "\n" in math:
+                        _check_math_span(
+                            math,
+                            offset + span,
+                            add,
+                            inline=True,
+                            row=starts_block(span),
+                        )
+                # The rest of this line, after the closing $$, is checked as
+                # its own line below.
+                bare = bare.split("$$", 1)[1]
+                span = None
+            else:
+                span = i
+                bare = bare.rsplit("$$", 1)[0]  # the wrapped span is checked whole
+        outside = _INLINE_SPAN.sub("", bare)
+        if _ESCAPED_DELIMS.search(outside) or _BRACKET_TEX.search(outside):
+            add("error", "math", offset + i, r"math written \( or \[; use $$ … $$")
+        if _LONE_DOLLAR_TEX.search(outside):
+            add(
+                "error",
+                "math",
+                offset + i,
+                "TeX next to a single `$`; write the formula as $$ … $$",
+            )
+        if _INLINE_SPAN.fullmatch(stripped) and not stripped.startswith("|"):
+            # kramdown attribute lists ("{: …}") may follow a display directly.
+            after_ok = blank(i + 1) or bare_by_index.get(i + 1, "").strip().startswith(
+                "{:"
+            )
+            if not (blank(i - 1) and after_ok):
                 add(
                     "error",
                     "math",
@@ -387,28 +665,106 @@ def _check_math(front, body, lines, offset, add) -> None:  # type: ignore[no-unt
                 )
             _check_math_span(stripped[2:-2], offset + i, add, inline=False)
             continue
-        if line.count("$$") % 2:
-            add("error", "math", offset + i, "unpaired $$ (currency written as math?)")
+        for math in _INLINE_MATH.findall(bare):
+            _check_math_span(math, offset + i, add, inline=True, row=starts_block(i))
+    if block is not None:
+        add("error", "math", offset + block, "$$ block never closed")
+    if span is not None:
+        add("error", "math", offset + span, "unbalanced $$ in the paragraph")
+    _check_bracket_blocks(lines, bare_by_index, offset, add)
+    _check_list_restarts(lines, bare_by_index, offset, add)
+
+
+_ORDERED_ITEM = re.compile(r"(\d+)[.)][ \t]")
+
+
+def _check_list_restarts(lines, bare_by_index, offset, add) -> None:  # type: ignore[no-untyped-def]
+    """An ordered item numbered above 1 after a display indented less than the
+    item's content (at the margin, or glued and under-indented), with or
+    without a paragraph between them: the display ended the list, so kramdown
+    starts a new one and shows "1."."""
+
+    def width(text: str) -> int:
+        return len(text.expandtabs(4)) - len(text.expandtabs(4).lstrip())
+
+    display_indent: int | None = None  # least indent of a display since an item
+    for i, raw in lines:
+        line = bare_by_index[i]
+        stripped = line.strip()
+        if not stripped:
             continue
-        spans = _INLINE_MATH.findall(line)
-        for span in spans:
-            _check_math_span(
-                span,
-                offset + i,
-                add,
-                inline=True,
-                crowded=len(spans) > 1 or stripped.startswith("|"),
+        # A quoted line: the indent before its ">" (a callout in a step) plus
+        # the indent inside the quote (a list in a quote).
+        indent = width(line) + (width(raw) if raw.lstrip().startswith(">") else 0)
+        item = _ORDERED_ITEM.match(stripped)
+        if item and _STARTS_ITEM.match(stripped):
+            column = indent + len(item.group(0))
+            if (
+                int(item.group(1)) > 1
+                and display_indent is not None
+                and display_indent < column
+            ):
+                add(
+                    "warning",
+                    "list",
+                    offset + i,
+                    f"ordered list restarts at {item.group(1)} after a display, so "
+                    "it renders as 1.; indent the display (and any paragraph after "
+                    "it) into the item above",
+                )
+            display_indent = None
+            continue
+        if _STARTS_ITEM.match(stripped):
+            display_indent = None
+        elif stripped.startswith("$$") and (
+            stripped.endswith("$$") or stripped.count("$$") % 2
+        ):  # a whole-line display or a block's opening line
+            display_indent = (
+                indent if display_indent is None else min(display_indent, indent)
             )
 
 
-def _check_math_span(math: str, line: int, add, *, inline: bool, crowded: bool = False) -> None:  # type: ignore[no-untyped-def]
-    outside_text = _TEXT_COMMAND.sub("", math)
-    if _ESCAPED_UNDERSCORE.search(outside_text):
+def _check_bracket_blocks(lines, bare_by_index, offset, add) -> None:  # type: ignore[no-untyped-def]
+    """A "\\[ … \\]" display written over lines (kramdown shows it as text)."""
+    paragraph: list[int] = []
+
+    def flush() -> None:
+        text = "\n".join(_INLINE_CODE.sub("", bare_by_index[j]) for j in paragraph)
+        prose = _INLINE_SPAN.sub("", text)
+        for m in _BRACKET_BLOCK.finditer(prose):
+            if not prose[prose.rfind("\n", 0, m.start()) + 1 : m.start()].strip():
+                continue  # a "\\[" on its own line is reported line by line
+            line = paragraph[0] + prose.count("\n", 0, m.start())
+            add("error", "math", offset + line, r"math written \( or \[; use $$ … $$")
+        paragraph.clear()
+
+    for i, _ in lines:
+        if not bare_by_index[i].strip() or (paragraph and i != paragraph[-1] + 1):
+            flush()
+        if bare_by_index[i].strip():
+            paragraph.append(i)
+    flush()
+
+
+def _check_math_span(math: str, line: int, add, *, inline: bool, row: bool = False) -> None:  # type: ignore[no-untyped-def]
+    outside_text = TEXT_COMMAND.sub("", math)
+    if ESCAPED_UNDERSCORE.search(outside_text):
         add("error", "math", line, r"no \_ inside $$ (only within \text{})")
-    if inline and _HANGUL.search(outside_text):
-        add("error", "math", line, "Korean text inside inline $$ (currency or prose?)")
-    if inline and crowded and re.search(r"(?<!\\)\|", math):
-        add("error", "math", line, r"bare | inside inline $$; use \lvert … \rvert")
+    if HANGUL.search(outside_text):  # the blog lint checks display math too
+        add("error", "math", line, "Korean text inside $$ (currency or prose?)")
+    # kramdown reads a bare | in inline math on the first line of a block (a
+    # paragraph, list item or quote; ``row``) as a table cell separator, so
+    # the block becomes a table. normalize_math rewrites it to \vert except
+    # inside \text{} or an array column spec, so what reaches here needs a
+    # hand fix.
+    if inline and row and re.search(r"(?<!\\)\|", math):
+        add(
+            "error",
+            "math",
+            line,
+            r"bare | inside inline $$ (in \text{} or an array spec); use \vert,"
+            r" \lvert … \rvert or \mid",
+        )
 
 
 def _split_cells(row: str) -> list[str]:
@@ -465,9 +821,15 @@ def _check_tables(lines, offset, add) -> None:  # type: ignore[no-untyped-def]
                         offset + i,
                         f"repeated header '{header[col]}'",
                     )
+            previous: list[str] | None = None
             for row_number, (j, row) in enumerate(block[1:]):
                 cells = _split_cells(row)
-                if len(cells) != width:
+                if cells == previous and any(cells):
+                    add("error", "table", offset + j, "row repeats the row above")
+                previous = cells
+                # Fewer cells are a group-label row kramdown pads (the blog's
+                # lint allows them); more cells shift the columns.
+                if len(cells) > width:
                     add(
                         "error",
                         "table",
@@ -490,6 +852,69 @@ def _check_tables(lines, offset, add) -> None:  # type: ignore[no-untyped-def]
         index += 1
 
 
+_NUMBER = re.compile(r"(?<![\w.])[-+−]?\d[\d,]*(?:\.\d+)?(?:[eE][-+]?\d+)?(?![\w.])")
+# Numbers too small or too common to tell a copied value from an invented one.
+_TRIVIAL_NUMBER = re.compile(r"\d{1,2}|\d{4}")
+MAX_UNSOURCED_NUMBERS = 8
+
+
+def _canonical_number(token: str) -> str:
+    """``1,234.50`` → ``1234.5``; ``-0.30`` → ``0.3`` (sign ignored)."""
+    digits = token.lstrip("-+−").replace(",", "").lower()
+    if "e" in digits:
+        try:
+            return repr(float(digits))
+        except ValueError:
+            return digits
+    if "." in digits:
+        digits = digits.rstrip("0").rstrip(".")
+    return digits.lstrip("0") or "0"
+
+
+def unsourced_table_numbers(markdown: str, source_text: str) -> list[str]:
+    """Table rows of the post whose numbers never appear together in one
+    line or one table of the source paper, plus lone values
+    the paper never states. Thousands separators, trailing zeros and signs
+    are normalised; small integers and years count only within a row.
+
+    A row that regroups or derives values can be legitimate, so these are
+    review notes, not errors.
+    """
+    _, body, _ = split_front_matter(markdown)
+    # A source unit is a line (a sentence or table row) or a whole table, so a
+    # transposed or regrouped table still finds its values together.
+    units: list[str] = []
+    table: list[str] = []
+    for line in [*source_text.splitlines(), ""]:
+        units.append(line)
+        if line.lstrip().startswith("|"):
+            table.append(line)
+        elif table:
+            units.append("\n".join(table))
+            table = []
+    source_rows = [{_canonical_number(t) for t in _NUMBER.findall(u)} for u in units]
+    known = set().union(*source_rows) if source_rows else set()
+    missing: list[str] = []
+    for _, line in _prose_lines(body):
+        if not line.lstrip().startswith("|") or _TABLE_SEPARATOR.match(line.strip()):
+            continue
+        cells = _split_cells(_INLINE_MATH.sub(" ", _INLINE_CODE.sub(" ", line)))
+        tokens = [
+            t for cell in cells[1:] for t in _NUMBER.findall(cell)
+        ]  # not the label
+        values = {_canonical_number(t) for t in tokens}
+        if len(values) >= 2:
+            if not any(values <= row for row in source_rows):
+                label = cells[0] or "row"
+                missing.append(f"{label}: {' / '.join(tokens)}")
+            continue
+        for token in tokens:
+            value = _canonical_number(token)
+            if not _TRIVIAL_NUMBER.fullmatch(value) and value not in known:
+                missing.append(token)
+    return missing[:MAX_UNSOURCED_NUMBERS]
+
+
 _IMAGE_ALT = re.compile(r"!\[([^\]]*)\]\(")
 
 
@@ -498,14 +923,14 @@ def _check_images(lines, offset, add) -> None:  # type: ignore[no-untyped-def]
     for i, line in lines:
         if korean:
             for alt in _IMAGE_ALT.findall(_INLINE_CODE.sub("", line)):
-                if not _HANGUL.search(alt):
+                if not HANGUL.search(alt):
                     add(
                         "warning",
                         "image-alt",
                         offset + i,
                         f"image alt text is not Korean: '{alt[:60]}'",
                     )
-        for src in _IMAGE.findall(line):
+        for src in image_sources(line):
             host = urlparse(src).hostname or ""
             if src.startswith(("http://", "https://")):
                 if host in ARXIV_IMAGE_HOSTS or host.endswith(
@@ -550,7 +975,7 @@ def _check_description(lines, offset, add) -> None:  # type: ignore[no-untyped-d
 def _check_text(lines, offset, add) -> None:  # type: ignore[no-untyped-def]
     for i, line in lines:
         prose = _INLINE_CODE.sub("", line)
-        if _ENVELOPE.search(prose):
+        if ENVELOPE_TAG.search(prose):
             add("error", "envelope", offset + i, "generator tag leaked into the post")
         if "[Image:" in prose:
             add(

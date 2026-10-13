@@ -2,6 +2,7 @@ import asyncio
 from pathlib import Path
 
 import boto3
+from boto3.exceptions import S3UploadFailedError
 from boto3.s3.transfer import TransferConfig
 from botocore.exceptions import BotoCoreError, ClientError
 
@@ -20,6 +21,11 @@ class BatchJobError(AWSHandlerError):
     pass
 
 
+# boto3's managed upload re-raises service errors as S3UploadFailedError, which
+# is not a ClientError; connection problems surface as BotoCoreError.
+_UPLOAD_ERRORS = (ClientError, S3UploadFailedError, BotoCoreError)
+
+
 class S3Handler:
     def __init__(self, boto_session: boto3.Session, bucket_name: str):
         if not bucket_name:
@@ -27,35 +33,6 @@ class S3Handler:
         self.boto_session = boto_session
         self.bucket_name = bucket_name
         self._s3_client = self.boto_session.client("s3")
-
-    def download_file(self, s3_key: str, local_path: Path):
-        try:
-            local_path.parent.mkdir(parents=True, exist_ok=True)
-            self._s3_client.download_file(self.bucket_name, s3_key, str(local_path))
-            logger.info(
-                "Successfully downloaded 's3://%s/%s' to '%s'",
-                self.bucket_name,
-                s3_key,
-                local_path,
-            )
-        except ClientError as e:
-            raise S3OperationError(f"Failed to download '{s3_key}'") from e
-
-    async def download_file_async(self, s3_key: str, local_path: Path):
-        try:
-            await asyncio.to_thread(self.download_file, s3_key, local_path)
-        except S3OperationError as e:
-            logger.error("Async download failed: %s", e)
-            raise
-
-    def exists(self, s3_key: str) -> bool:
-        try:
-            self._s3_client.head_object(Bucket=self.bucket_name, Key=s3_key)
-            return True
-        except ClientError as e:
-            if e.response["Error"]["Code"] == "404":
-                return False
-            raise S3OperationError(f"Failed to check existence of '{s3_key}'") from e
 
     def put_text(self, s3_key: str, text: str) -> None:
         try:
@@ -82,7 +59,6 @@ class S3Handler:
         self,
         local_dir: Path,
         s3_prefix: str,
-        file_extensions: list[str] | None = None,
         public_readable: bool = False,
     ) -> int:
         if not local_dir.is_dir():
@@ -92,11 +68,7 @@ class S3Handler:
         extra_args = {"ACL": "public-read"} if public_readable else {}
         upload_count = 0
 
-        files_to_upload = [
-            p
-            for p in local_dir.rglob("*")
-            if p.is_file() and (not file_extensions or p.suffix in file_extensions)
-        ]
+        files_to_upload = [p for p in local_dir.rglob("*") if p.is_file()]
 
         for local_path in files_to_upload:
             relative_path = local_path.relative_to(local_dir)
@@ -110,7 +82,7 @@ class S3Handler:
                     ExtraArgs=extra_args,
                 )
                 upload_count += 1
-            except ClientError as e:
+            except _UPLOAD_ERRORS as e:
                 logger.error(
                     "Failed to upload '%s' to 's3://%s/%s': %s",
                     local_path,
@@ -144,7 +116,7 @@ class S3Handler:
                 self.bucket_name,
                 s3_key,
             )
-        except ClientError as e:
+        except _UPLOAD_ERRORS as e:
             raise S3OperationError(f"Failed to upload '{local_path}'") from e
 
     @staticmethod

@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import hashlib
 import io
 import json
 import os
@@ -16,7 +17,7 @@ from bs4 import BeautifulSoup, Tag
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import Runnable
 from PIL import Image
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from .constants import AppConstants, EnvVars, LanguageModelId, LocalPaths
 from .logger import logger
@@ -267,6 +268,10 @@ class HTMLParseResult(BaseModel):
     figures: list[Figure] = Field(default_factory=list)
 
 
+# parsed.json records the PDF it was made from (sha256 of the file).
+_PDF_HASH_KEY = "pdf_sha256"
+
+
 class Region(BaseModel):
     model_config = ConfigDict(frozen=True)
     page: int = Field(gt=0)
@@ -277,8 +282,8 @@ class Region(BaseModel):
     def validate_coordinates(
         cls, v: Sequence[dict[str, float]]
     ) -> Sequence[dict[str, float]]:
-        if len(v) < 4:
-            raise ValueError("Coordinates must contain at least 4 points")
+        if len(v) < 4 or not all("x" in p and "y" in p for p in v):
+            raise ValueError("Coordinates must be at least 4 points with x and y")
         return v
 
 
@@ -331,9 +336,6 @@ class RichParser(BaseParser):
             FigureAnalysisPrompt.get_prompt() | figure_analyser_llm | StrOutputParser()
         )
 
-    async def parse(self, *args: Any, **kwargs: Any) -> Any:
-        raise NotImplementedError("RichParser is an abstract class")
-
 
 class HTMLParser(BaseParser):
     def __init__(self, timeout: int = DEFAULT_TIMEOUT):
@@ -343,8 +345,7 @@ class HTMLParser(BaseParser):
     async def parse(self, arxiv_id: str, extract_text: bool = True) -> HTMLParseResult:
         html_content, _ = await self._fetch_html_with_fallback(arxiv_id)
         soup = BeautifulSoup(preserve_listing_spaces(html_content), "html.parser")
-        content = self._extract_content(soup, extract_text)
-        return HTMLParseResult(content=content)
+        return HTMLParseResult(content=self._extract_content(soup, extract_text))
 
     @staticmethod
     def _extract_content(soup: BeautifulSoup, extract_text: bool) -> Content:
@@ -365,10 +366,15 @@ class HTMLParser(BaseParser):
         for url in urls_to_try:
             try:
                 html = await self._fetch_html_from_url(url)
-                return html, url
             except ContentParseError:
                 logger.warning("Failed to fetch from '%s', trying next URL", url)
                 continue
+            # A failed conversion still answers 200 with a stub ("See pages
+            # 1-last of main.pdf"): the next rendering may have the paper.
+            if _readable_chars(html) < MIN_PARSED_TEXT_CHARS:
+                logger.warning("'%s' has almost no text, trying next URL", url)
+                continue
+            return html, url
         raise ContentParseError(f"Failed to fetch HTML for arXiv ID: '{arxiv_id}'")
 
     async def _fetch_html_from_url(self, url: str) -> str:
@@ -422,43 +428,44 @@ class HTMLRichParser(RichParser, HTMLParser):
         # figures nested inside another figure.
         root = soup.select_one(".ltx_page_main") or soup
         figure_tasks: list[Coroutine[Any, Any, Figure]] = []
-        seen_srcs: set[str] = set()
+        seen_urls: set[str] = set()
         for media in root.select(_FIGURE_MEDIA):
             src = media.get("data" if media.name == "object" else "src")
-            if not isinstance(src, str) or not src or src.startswith("data:"):
+            if not isinstance(src, str) or not src or src.lower().startswith("data:"):
                 continue
-            if src in seen_srcs:
+            url = self._construct_figure_url(src)
+            if url in seen_urls:
                 continue
-            seen_srcs.add(src)
+            seen_urls.add(url)
             figure_tasks.append(
                 Figure.from_llm(
                     self.figure_analyser,
                     str(len(figure_tasks)),
-                    self._construct_figure_url(src),
+                    url,
                     _figure_caption(media),
                 )
             )
+        return _completed_figures(
+            await asyncio.gather(*figure_tasks, return_exceptions=True)
+        )
 
-        all_figures = await asyncio.gather(*figure_tasks, return_exceptions=True)
 
-        unique_figures: list[Figure] = []
-        seen_paths = set()
-        for figure in all_figures:
-            if isinstance(figure, Exception):
-                logger.warning("Figure extraction failed: %s", figure)
-                continue
-            if isinstance(figure, Figure) and figure.path not in seen_paths:
-                unique_figures.append(figure)
-                seen_paths.add(figure.path)
+def _completed_figures(results: Sequence[Figure | BaseException]) -> list[Figure]:
+    figures = []
+    for result in results:
+        if isinstance(result, BaseException):
+            if _is_budget_breach(result):
+                raise result
+            logger.warning("Figure extraction failed: %s", result)
+            continue
+        figures.append(result)
+    return figures
 
-        if len(all_figures) != len(unique_figures):
-            logger.info(
-                "Deduplicated %d figures down to %d unique figures based on path.",
-                len(all_figures),
-                len(unique_figures),
-            )
 
-        return unique_figures
+def _readable_chars(html: str) -> int:
+    soup = BeautifulSoup(html, "html.parser")
+    root = soup.select_one(".ltx_page_main") or soup.body or soup
+    return len(root.get_text(" ", strip=True))
 
 
 _FIGURE_MEDIA = 'img.ltx_graphics, .ltx_figure img, object[type="image/svg+xml"]'
@@ -546,7 +553,10 @@ class PDFParser(RichParser):
 
             figures = await self._extract_figures(elements, pdf_path, figures_dir)
             content_html = _bind_figure_sources(
-                response.get("content", {}).get("html", "").strip(), figures
+                escape_stray_angle_brackets(
+                    response.get("content", {}).get("html", "").strip()
+                ),
+                figures,
             )
             text = extract_text_from_html(content_html)
             if len(text) < MIN_PARSED_TEXT_CHARS:
@@ -565,16 +575,30 @@ class PDFParser(RichParser):
         self, pdf_path: Path, use_cache: bool
     ) -> dict[str, Any]:
         parsed_path = pdf_path.parent / LocalPaths.PARSED_FILE.value
+        try:
+            digest: str | None = hashlib.sha256(pdf_path.read_bytes()).hexdigest()
+        except OSError:
+            digest = None  # the parse request reports the unreadable file
         if use_cache and parsed_path.exists():
             cached = self._load_cached_response(parsed_path)
-            if _has_content(cached):
+            # A newer arXiv version lands in the same folder: a cache made from
+            # other bytes is stale. Caches written before the hash was stored
+            # cannot be checked and are kept.
+            stale = digest is not None and cached.get(_PDF_HASH_KEY, digest) != digest
+            if _has_content(cached) and not stale:
                 return cached
-            logger.warning("Ignoring empty cached parse at '%s'.", parsed_path)
+            logger.warning(
+                "Ignoring %s cached parse at '%s'.",
+                "stale" if stale else "empty",
+                parsed_path,
+            )
 
         response = await self._request_document_parse(pdf_path)
         # Never cache an empty response: it would pin the failure for re-runs.
         if _has_content(response):
-            self._cache_response(parsed_path, response)
+            self._cache_response(
+                parsed_path, {**response, _PDF_HASH_KEY: digest} if digest else response
+            )
         return response
 
     @staticmethod
@@ -621,30 +645,31 @@ class PDFParser(RichParser):
         self, elements: list[dict[str, Any]], pdf_path: Path, figures_dir: Path
     ) -> list[Figure]:
         figure_data = []
-        for element in elements:
+        for index, element in enumerate(elements):
             category = element.get("category", "").lower()
             if category in self.FIGURE_CATEGORIES and element.get("coordinates"):
-                soup = BeautifulSoup(
-                    element.get("content", {}).get("html", ""), "html.parser"
-                )
-                img = soup.find("img")
-                caption = ""
-                if isinstance(img, Tag) and (alt_text := img.get("alt")):
-                    caption = str(alt_text).strip()
-
                 figure_data.append(
                     {
                         "page": element["page"],
                         "coordinates": element["coordinates"],
-                        "caption": caption,
+                        "caption": _pdf_figure_caption(elements, index),
                         "figure_id": element.get("id", ""),
                     }
                 )
 
+        valid: list[dict[str, Any]] = []
+        regions: list[Region] = []
+        for fd in figure_data:
+            try:
+                regions.append(Region(**fd))
+            except ValidationError as e:  # one bad box must not fail the parse
+                logger.warning("Skipping figure with invalid coordinates: %s", e)
+                continue
+            valid.append(fd)
+        figure_data = valid
         if not figure_data:
             return []
 
-        regions = [Region(**fd) for fd in figure_data]
         paths = extract_figures_from_pdf(pdf_path, figures_dir, regions)
 
         # ``paths`` is aligned with ``regions`` (None where a crop failed), so a
@@ -660,28 +685,8 @@ class PDFParser(RichParser):
             if path is not None
         ]
 
-        all_figures = await asyncio.gather(*tasks, return_exceptions=True)
-
-        unique_figures = []
-        seen_paths = set()
-        for figure in all_figures:
-            if isinstance(figure, Exception):
-                logger.warning("Figure extraction failed: %s", figure)
-                continue
-            if not isinstance(figure, Figure):
-                continue
-            if figure.path not in seen_paths:
-                unique_figures.append(figure)
-                seen_paths.add(figure.path)
-
-        if len(all_figures) != len(unique_figures):
-            logger.info(
-                "Deduplicated %d figures down to %d unique figures based on path.",
-                len(all_figures),
-                len(unique_figures),
-            )
-
-        return unique_figures
+        # Crop files are "<idx>.png", one per region: no duplicates to drop.
+        return _completed_figures(await asyncio.gather(*tasks, return_exceptions=True))
 
     async def _parse_with_fallback(
         self,
@@ -767,16 +772,7 @@ def _process_region(
 
     try:
         page = doc[region.page - 1]
-        coords = region.coordinates
-
-        if not (
-            isinstance(coords, list)
-            and len(coords) >= 4
-            and all("x" in p and "y" in p for p in coords)
-        ):
-            logger.warning("Invalid coordinate format for region %d. Skipping.", idx)
-            return None
-
+        coords = region.coordinates  # shape checked by Region
         rect_coords = [
             coords[0]["x"] * page.rect.width,
             coords[0]["y"] * page.rect.height,
@@ -794,6 +790,55 @@ def _process_region(
     except Exception as e:
         logger.warning("Error processing region %d: %s", idx, e)
         return None
+
+
+# Tags the document-parse API emits; any other "<" is the paper's own text
+# (math such as y_{<t}, chat-template tokens like <start_of_turn>, "x <y").
+# A tag is the name plus attribute pairs up to ">": "$0<p<1$" or "n<th" in the
+# text are not tags even though "p" and "th" are tag names.
+_UPSTAGE_TAG = re.compile(
+    r"<(?!/?(?:p|br|h[1-6]|table|thead|tbody|tr|td|th|img|figure|figcaption|"
+    r"caption|header|footer|ul|ol|li)"
+    r"(?:\s+[\w-]+\s*=\s*(?:'[^']*'|\"[^\"]*\"|[^\s'\">]+))*\s*/?>)",
+    re.IGNORECASE,
+)
+
+
+def escape_stray_angle_brackets(html: str) -> str:
+    """Escape every ``<`` that does not open a document-parse tag, so the HTML
+    parser keeps it as text instead of swallowing what follows."""
+    return _UPSTAGE_TAG.sub("&lt;", html)
+
+
+# A real caption: "Figure 3: …", "Fig. 3 …", "그림 3".
+_CAPTION_START = re.compile(r"^\s*(?:fig(?:ure)?\.?|그림)\s*\d", re.IGNORECASE)
+_CAPTION_LOOKAHEAD = 3
+
+
+def _element_text(element: dict[str, Any]) -> str:
+    html = element.get("content", {}).get("html", "")
+    return " ".join(
+        BeautifulSoup(escape_stray_angle_brackets(html), "html.parser")
+        .get_text(" ")
+        .split()
+    )
+
+
+def _pdf_figure_caption(elements: list[dict[str, Any]], index: int) -> str:
+    """The "Figure N …" caption or paragraph right after a figure element (the
+    figure's own ``alt`` is OCR text from inside the image), else ""."""
+    for element in elements[index + 1 : index + 1 + _CAPTION_LOOKAHEAD]:
+        if element.get("category", "").lower() in PDFParser.FIGURE_CATEGORIES:
+            break
+        text = _element_text(element)
+        if _CAPTION_START.match(text):
+            return text
+    soup = BeautifulSoup(
+        elements[index].get("content", {}).get("html", ""), "html.parser"
+    )
+    img = soup.find("img")
+    alt = " ".join(str(img.get("alt") or "").split()) if isinstance(img, Tag) else ""
+    return alt if _CAPTION_START.match(alt) else ""
 
 
 def _has_content(response: dict[str, Any]) -> bool:
@@ -821,7 +866,13 @@ def _bind_figure_sources(html: str, figures: list[Figure]) -> str:
     return str(soup)
 
 
-_IMAGE_MARKER = re.compile(r"\[Image:\s*alt=(.*?),\s*src=(.*?)\]", re.DOTALL)
+# Quoted, as written by ``extract_text_from_html`` (whose alt never holds a
+# double quote); the unquoted form of older caches is still read.
+_IMAGE_MARKER = re.compile(
+    r'\[Image:\s*alt="(?P<q_alt>[^"]*)",\s*src="(?P<q_src>[^"]*)"\]'
+    r"|\[Image:\s*alt=(?P<alt>.*?),\s*src=(?P<src>.*?)\]",
+    re.DOTALL,
+)
 
 
 def _marker_text(value: str) -> str:
@@ -856,12 +907,31 @@ def attach_figure_context(
     first, then the vision analysis labeled as approximate (writers must not
     take its readings as the paper's numbers). Markers matching no extracted
     figure are removed; no marker is ever paired with a figure by position."""
-    figure_map = {Path(fig.path).name: fig for fig in figures}
+    by_name: dict[str, list[Figure]] = {}
+    for fig in figures:
+        by_name.setdefault(Path(fig.path).name, []).append(fig)
+
+    def find(src: str) -> Figure | None:
+        """The figure whose path is ``src`` or ends with it (HTML markers keep
+        the page-relative src); the file name alone only when it is unique,
+        so ``a/curve.png`` and ``b/curve.png`` never swap."""
+        candidates = by_name.get(Path(src).name, [])
+        relative = src.lstrip("./")
+        exact = [
+            f for f in candidates if f.path == src or f.path.endswith("/" + relative)
+        ]
+        if len(exact) == 1:
+            return exact[0]
+        return candidates[0] if len(candidates) == 1 else None
 
     def repl(match: re.Match) -> str:
-        alt_value = _real_text(" ".join(match.group(1).split()).strip("[]"))
-        src_value = match.group(2).strip()
-        matched = figure_map.get(Path(src_value).name) if src_value else None
+        if match.group("q_src") is not None:
+            alt_raw, src_value = match.group("q_alt"), match.group("q_src").strip()
+        else:  # unquoted legacy marker
+            alt_raw = match.group("alt").strip("[]")
+            src_value = match.group("src").strip()
+        alt_value = _real_text(" ".join(alt_raw.split()))
+        matched = find(src_value) if src_value else None
         if matched is None:
             if src_value:
                 logger.warning("No extracted figure for image src '%s'", src_value)

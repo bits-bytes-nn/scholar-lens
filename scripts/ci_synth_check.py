@@ -2,7 +2,9 @@
 
 Synthesizes ``PaperReviewStack`` against a fake account and asserts the parts
 of the template the application depends on: the single job definition's
-command (the CLI ``worker`` contract) and its exit-code-aware retry strategy.
+command (the CLI ``worker`` contract), its retry strategy, the failure rule's
+exit codes (those the worker reports itself) and the cost alarm's metric name
+(the one the app emits).
 """
 
 from __future__ import annotations
@@ -16,6 +18,8 @@ from aws_cdk import Environment
 
 sys.path.append(str(Path(__file__).parent.parent))
 
+from scholar_lens.cli import APP_REPORTED_EXIT_CODES  # noqa: E402
+from scholar_lens.src.metrics import COST_METRIC_NAME  # noqa: E402
 from scripts.deploy_infra import JOB_COMMAND, PaperReviewStack  # noqa: E402
 
 FAKE_ACCOUNT = "123456789012"
@@ -59,6 +63,24 @@ def check_template(template: dict[str, Any]) -> None:
         raise SystemExit("Job definition must retry only on infrastructure failures.")
     if resources_of_type(template, "AWS::Lambda::Function"):
         raise SystemExit("Unexpected Lambda functions in the stack.")
+    skipped = [
+        clause["container"]["exitCode"][0].get("anything-but")
+        for rule in resources_of_type(template, "AWS::Events::Rule")
+        for clause in rule["Properties"]["EventPattern"]["detail"].get("$or", [])
+    ]
+    if list(APP_REPORTED_EXIT_CODES) not in skipped:
+        raise SystemExit(
+            f"Failure rule must skip exactly the worker-reported exits "
+            f"{list(APP_REPORTED_EXIT_CODES)}; found {skipped}."
+        )
+    alarm_metrics = {
+        a["Properties"].get("MetricName")
+        for a in resources_of_type(template, "AWS::CloudWatch::Alarm")
+    }
+    if COST_METRIC_NAME not in alarm_metrics:
+        raise SystemExit(
+            f"No alarm watches the emitted cost metric {COST_METRIC_NAME!r}."
+        )
 
 
 def main() -> None:

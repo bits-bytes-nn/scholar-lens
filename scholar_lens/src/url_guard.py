@@ -83,33 +83,7 @@ def assert_url_is_public(url: str) -> None:
     otherwise. DNS resolution failures are also treated as unsafe (fail closed).
     Performs DNS resolution — call at fetch time, not in hot constructors.
     """
-    assert_url_scheme_and_literal(url)
-    parts = urlsplit(url)
-    host = parts.hostname
-    # If the host is an IP literal, the pre-check already validated it.
-    try:
-        ipaddress.ip_address(host or "")
-        return
-    except ValueError:
-        pass
-
-    # Hostname: resolve and check every returned address (fail closed on error).
-    try:
-        infos = socket.getaddrinfo(host, parts.port or None, proto=socket.IPPROTO_TCP)
-    except socket.gaierror as e:
-        raise UnsafeUrlError(f"Could not resolve host '{host}': {e}") from e
-    addresses = {info[4][0] for info in infos}
-    if not addresses:
-        raise UnsafeUrlError(f"Host '{host}' resolved to no addresses.")
-    for addr in addresses:
-        try:
-            ip = ipaddress.ip_address(addr)
-        except ValueError:
-            continue
-        if _is_blocked_ip(ip):
-            raise UnsafeUrlError(
-                f"URL '{url}' resolves to a non-public address ({addr})."
-            )
+    resolve_validated_ip(url)
 
 
 def is_url_public(url: str) -> bool:
@@ -120,6 +94,18 @@ def is_url_public(url: str) -> bool:
     except UnsafeUrlError as e:
         logger.debug("Blocked non-public URL '%s': %s", url, e)
         return False
+
+
+def is_temporary_dns_failure(error: BaseException) -> bool:
+    """A resolver hiccup (``EAI_AGAIN``) somewhere in the cause chain: the host
+    may well exist, so the failure is an outage, not a bad URL (a host that
+    does not exist, ``EAI_NONAME``, is not temporary)."""
+    seen: BaseException | None = error
+    while seen is not None:
+        if isinstance(seen, socket.gaierror) and seen.errno == socket.EAI_AGAIN:
+            return True
+        seen = seen.__cause__ or seen.__context__
+    return False
 
 
 def resolve_validated_ip(url: str) -> str | None:

@@ -121,11 +121,9 @@ class TestParseSynopsisSections:
             "2. [USAGE] [brief] Quick install — one-liner (visuals: code)"
         )
         out = gen._parse_synopsis_sections(synopsis)
-        assert out[0].area == "CONCEPT"
         assert out[0].depth == "deep"
         assert out[0].title == "How GitOps works"
         assert out[0].visuals == "none"
-        assert out[1].area == "USAGE"
         assert out[1].depth == "brief"
         assert out[1].title == "Quick install"
         assert out[1].visuals == "code"
@@ -145,7 +143,6 @@ class TestParseSynopsisSections:
         out = gen._parse_synopsis_sections("1. Plain Title — desc")
         assert out[0].title == "Plain Title"
         assert out[0].depth == "standard"
-        assert out[0].area == ""
 
     def test_depth_directive_maps_to_text(self) -> None:
         gen = _make_generator()
@@ -426,14 +423,39 @@ class TestResearchPlanning:
         gen.researcher.run_searches.assert_called_once()
         assert gen.researcher.run_searches.call_args.args[1] == ["explicit query"]
 
-    async def test_planner_topic_used_when_relevance_gate_has_none(self) -> None:
-        # Relevance returns no usable topic, but the planner guessed one earlier.
-        gen = _make_generator(auto_research=False)
-        gen.relevance_chain.ainvoke = AsyncMock(
-            return_value={"is_relevant": "yes", "topic": "N/A", "reason": "ok"}
+    async def test_gate_judges_the_seed_pages_before_any_search(self) -> None:
+        # Search results never rewrite the topic: the gate runs on the seed
+        # corpus first, and the planner's topic (from the same seed) wins.
+        gen = _make_generator(auto_research=True)
+        order: list[str] = []
+        gen.researcher.research = MagicMock(return_value=_corpus())
+        gen.researcher.run_searches = MagicMock(
+            side_effect=lambda *a, **k: order.append("search")
         )
-        topic = await gen._assert_relevant(_corpus(), fallback_topic="Planned Topic")
-        assert topic == "Planned Topic"
+
+        async def relevance(_inputs: dict) -> dict:
+            order.append("gate")
+            return {"is_relevant": "yes", "topic": "X Internals", "reason": "ok"}
+
+        gen.relevance_chain.ainvoke = AsyncMock(side_effect=relevance)
+        gen.research_plan_chain.ainvoke = AsyncMock(
+            return_value={"topic": "Getting Started with X", "queries": "q1"}
+        )
+        gen.synopsis_chain.ainvoke = AsyncMock(return_value={"synopsis": "1. Intro"})
+        gen.section_chain.ainvoke = AsyncMock(
+            return_value={"section_markdown": "## S\nbody"}
+        )
+        guide = await gen.generate(["https://docs.x.com"], discover_subpages=False)
+        assert order == ["gate", "search"]
+        assert guide.topic == "Getting Started with X"
+
+    def test_getting_started_scope_reaches_the_writer(self) -> None:
+        gen = _make_generator()
+        section = gen._parse_synopsis_sections("1. [deep] Internals — x")[0]
+        assert "getting-started guide" in section.depth_directive(
+            "English", "getting-started"
+        )
+        assert "getting-started guide" not in section.depth_directive("English")
 
 
 class TestEvaluateAndRevise:
@@ -724,6 +746,29 @@ class TestTokenBudget:
         gen._token_tracker = tracker
         gen._enforce_hard_token_budget()  # must NOT raise
 
+    async def test_classify_runs_past_the_soft_cap(self) -> None:
+        # A finished guide between 1x and 1.5x the cap is still classified.
+        from scholar_lens.src.metrics import TokenBudgetExceeded
+
+        gen = _make_generator()
+        gen.max_total_tokens = 1000
+        tracker = MagicMock()
+        tracker.total_tokens = 1200
+
+        def _check(ceiling: int | None) -> None:
+            if ceiling and tracker.total_tokens > ceiling:
+                raise TokenBudgetExceeded("over")
+
+        tracker.check_budget.side_effect = _check
+        gen._token_tracker = tracker
+        gen.taxonomy_chain = MagicMock()
+        gen.taxonomy_chain.ainvoke = AsyncMock(return_value={"topic": "x"})
+        guide = MagicMock(topic="t", synopsis="s", sections=[])
+        result = await gen.classify(
+            guide, category_options=["A"], controlled_tags=["B"]
+        )
+        assert result == {"topic": "x"}
+
     async def test_over_budget_skips_eval_and_grounding(self) -> None:
         # When the budget is spent, sections are still WRITTEN but the expensive
         # evaluate/revise + grounding passes are skipped.
@@ -862,3 +907,21 @@ class TestGuideLengthAndRules:
             final_outline="1. Intro",
         )
         assert any("'Intro' kept below the bar" in n for n in gen.notes)
+
+
+async def test_placeholder_planner_topic_falls_back_to_the_gate() -> None:
+    gen = _make_generator(auto_research=True)
+    gen.researcher.research = MagicMock(return_value=_corpus())
+    gen.researcher.run_searches = MagicMock()
+    gen.relevance_chain.ainvoke = AsyncMock(
+        return_value={"is_relevant": "yes", "topic": "Using X", "reason": "ok"}
+    )
+    gen.research_plan_chain.ainvoke = AsyncMock(
+        return_value={"topic": "N/A", "queries": "q1"}
+    )
+    gen.synopsis_chain.ainvoke = AsyncMock(return_value={"synopsis": "1. Intro"})
+    gen.section_chain.ainvoke = AsyncMock(
+        return_value={"section_markdown": "## S\nbody"}
+    )
+    guide = await gen.generate(["https://docs.x.com"], discover_subpages=False)
+    assert guide.topic == "Using X"

@@ -12,7 +12,7 @@ from scholar_lens.src.explainer import Paper, ReviewText
 from scholar_lens.src.formatting import format_review, paper_post_meta
 from scholar_lens.src.parser import Content, Figure, attach_figure_context
 from scholar_lens.src.post_conventions import load_local_conventions
-from scholar_lens.src.publisher import slugify as _slugify
+from scholar_lens.src.publish_types import slugify as _slugify
 
 
 class TestSlugify:

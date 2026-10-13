@@ -1,22 +1,14 @@
-"""Tests for the P1 security + quality fixes (no real network).
-
-Covers: the SSRF url_guard, HTMLTagOutputParser entity-unescape + trailing-tag
-strip, the code_retriever trailing-slash repo-name fix, and the git token
-redaction helper in the publisher.
-"""
+"""SSRF url_guard and the IP-pinned transports (no real network)."""
 
 from __future__ import annotations
 
 import pytest
 
-from scholar_lens.src.code_retriever import CodeRetriever
-from scholar_lens.src.publisher import Publisher
 from scholar_lens.src.url_guard import (
     UnsafeUrlError,
     assert_url_is_public,
     is_url_public,
 )
-from scholar_lens.src.utils.parsers import HTMLTagOutputParser
 
 # --------------------------------------------------------------------------- #
 # SSRF url_guard
@@ -138,149 +130,6 @@ def test_pinned_transport_rewrites_host_to_validated_ip(
     literal_req = httpx.Request("GET", "https://1.1.1.1/x")
     pt._pin(literal_req)
     assert literal_req.url.host == "1.1.1.1"
-
-
-# --------------------------------------------------------------------------- #
-# HTMLTagOutputParser
-# --------------------------------------------------------------------------- #
-
-
-def test_parser_unescapes_entities() -> None:
-    p = HTMLTagOutputParser(tag_names="summary")
-    assert p.parse("<summary>A &amp; B &gt; C &lt; D</summary>") == "A & B > C < D"
-
-
-def test_parser_strips_trailing_orphan_tags() -> None:
-    p = HTMLTagOutputParser(tag_names="summary")
-    assert p.parse("<summary>real body</path></name></summary>") == "real body"
-
-
-def test_parser_keeps_trailing_closing_tag_that_is_real_prose() -> None:
-    # Regression guard: a closing-tag-like token in legitimate prose, with NO
-    # matching opening tag, must be preserved (not silently stripped). Here the
-    # content ends with an escaped </response> the author meant to show.
-    p = HTMLTagOutputParser(tag_names="guide")
-    out = p.parse("<guide>The end marker is &lt;/response&gt;</guide>")
-    assert out == "The end marker is </response>"
-
-
-def test_parser_keeps_paired_trailing_close_tag() -> None:
-    # A closing tag that pairs with an earlier opening tag is intentional inline
-    # HTML and must be kept.
-    p = HTMLTagOutputParser(tag_names="guide")
-    out = p.parse("<guide>see &lt;kbd&gt;Enter&lt;/kbd&gt;</guide>")
-    assert out == "see <kbd>Enter</kbd>"
-
-
-def test_parser_keeps_inline_markup_but_unescapes() -> None:
-    p = HTMLTagOutputParser(tag_names="guide")
-    # A markdown table header with an escaped ampersand must come back literal.
-    out = p.parse("<guide>| Model &amp; Method | x |</guide>")
-    assert out == "| Model & Method | x |"
-
-
-def test_parser_dict_mode_multiple_tags() -> None:
-    p = HTMLTagOutputParser(tag_names=["summary", "tags"])
-    out = p.parse("<summary>body &amp; more</summary><tags>A, B</tags>")
-    assert out == {"summary": "body & more", "tags": "A, B"}
-
-
-def test_parser_preserves_generics_and_comparisons() -> None:
-    # Regression (quality-0): the body is Markdown/code and may contain raw
-    # angle-bracket tokens. It must NOT be HTML-parsed (which lowercased tag
-    # names, injected junk attributes, and appended synthetic close tags).
-    p = HTMLTagOutputParser(tag_names="summary")
-    out = p.parse(
-        "<summary>Returns a Vector<float> and a Map<str,int>; a < b holds.</summary>"
-    )
-    assert out == "Returns a Vector<float> and a Map<str,int>; a < b holds."
-    assert "</float>" not in out
-    assert "</str" not in out
-
-
-def test_parser_preserves_code_fence_with_generics() -> None:
-    p = HTMLTagOutputParser(tag_names="section_markdown")
-    body = (
-        "```rust\n"
-        "let m: HashMap<String, i32> = HashMap::new();\n"
-        "let v: Vec<u8> = vec![];\n"
-        "```"
-    )
-    out = p.parse(f"<section_markdown>{body}</section_markdown>")
-    assert out == body
-    assert "HashMap<String, i32>" in out  # not lowercased, no injected attrs
-    assert 'i32=""' not in out
-
-
-def test_parser_preserves_list_generic_takeaway() -> None:
-    p = HTMLTagOutputParser(tag_names="key_takeaways")
-    out = p.parse("<key_takeaways>- Handles List<T> generics</key_takeaways>")
-    assert out == "- Handles List<T> generics"
-    assert "</t>" not in out.lower()
-
-
-# --------------------------------------------------------------------------- #
-# code_retriever repo-name derivation (blocker fix)
-# --------------------------------------------------------------------------- #
-
-
-@pytest.mark.parametrize(
-    "url,prefix",
-    [
-        ("https://github.com/microsoft/LoRA", "LoRA-"),
-        ("https://github.com/microsoft/LoRA/", "LoRA-"),  # trailing slash
-        ("https://github.com/org/repo.git", "repo-"),
-        ("https://github.com/org/repo.git/", "repo-"),
-    ],
-)
-def test_repo_dir_name(url: str, prefix: str) -> None:
-    # The dir name keeps the human-readable basename, then a short URL hash to
-    # avoid collisions (see test_repo_dir_name_disambiguates_same_basename).
-    name = CodeRetriever._repo_dir_name(url)
-    assert name.startswith(prefix)
-    assert len(name) > len(prefix)  # hash suffix present
-
-
-def test_repo_dir_name_disambiguates_same_basename() -> None:
-    # The collision fix: two repos with the same basename must map to distinct
-    # cache dirs, or concurrent rmtree+clone would race on one directory.
-    a = CodeRetriever._repo_dir_name("https://github.com/orgA/model")
-    b = CodeRetriever._repo_dir_name("https://github.com/orgB/model")
-    assert a != b
-    assert a.startswith("model-") and b.startswith("model-")
-
-
-def test_repo_dir_name_is_deterministic() -> None:
-    # Same URL → same dir (cache reuse across runs).
-    url = "https://github.com/microsoft/LoRA"
-    assert CodeRetriever._repo_dir_name(url) == CodeRetriever._repo_dir_name(url)
-
-
-@pytest.mark.parametrize(
-    "url",
-    ["https://github.com/", "https://github.com", "/", ""],
-)
-def test_repo_dir_name_never_empty(url: str) -> None:
-    # The blocker invariant: never collapse onto the cache root (which a later
-    # rmtree would wipe). Any non-empty name is acceptable.
-    assert CodeRetriever._repo_dir_name(url) != ""
-
-
-# --------------------------------------------------------------------------- #
-# publisher git token redaction
-# --------------------------------------------------------------------------- #
-
-
-def test_redact_token_scrubs_secret() -> None:
-    err = RuntimeError("clone failed for https://oauth2:ghp_SECRET123@github.com/x")
-    scrubbed = Publisher._redact_token(err, "ghp_SECRET123")
-    assert "ghp_SECRET123" not in str(scrubbed)
-    assert "***" in str(scrubbed)
-
-
-def test_redact_token_noop_when_no_token() -> None:
-    err = RuntimeError("some error")
-    assert str(Publisher._redact_token(err, None)) == "some error"
 
 
 @pytest.mark.parametrize(

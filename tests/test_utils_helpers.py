@@ -7,29 +7,10 @@ import asyncio
 import pytest
 
 from scholar_lens.src.utils.helpers import (
-    arg_as_bool,
     extract_text_from_html,
     measure_execution_time,
 )
 from scholar_lens.src.utils.parsers import HTMLTagOutputParser
-
-
-class TestArgAsBool:
-    @pytest.mark.parametrize("value", ["yes", "true", "1", "y", "t", "TRUE", "Yes"])
-    def test_truthy(self, value: str) -> None:
-        assert arg_as_bool(value) is True
-
-    @pytest.mark.parametrize("value", ["no", "false", "0", "n", "f", "FALSE"])
-    def test_falsy(self, value: str) -> None:
-        assert arg_as_bool(value) is False
-
-    def test_passthrough_bool(self) -> None:
-        assert arg_as_bool(True) is True
-        assert arg_as_bool(False) is False
-
-    def test_invalid_raises(self) -> None:
-        with pytest.raises(Exception):
-            arg_as_bool("maybe")
 
 
 class TestExtractTextFromHtml:
@@ -94,7 +75,8 @@ class TestExtractTextFromHtml:
     def test_image_marker_alt_is_single_line(self) -> None:
         html = '<img alt="Mixture of\nExperts" src="3.png">'
         assert (
-            extract_text_from_html(html) == "[Image: alt=Mixture of Experts, src=3.png]"
+            extract_text_from_html(html)
+            == '[Image: alt="Mixture of Experts", src="3.png"]'
         )
 
 
@@ -163,6 +145,27 @@ class TestTableToMarkdown:
         assert lines[0] == "| Benchmark | Claude-3.5- Sonnet-1022 | GPT-4o 0513 |"
         assert lines[2:] == ["| MMLU | 88.3 | 87.2 |"]
 
+    def test_rowspan_does_not_pull_a_section_row_into_the_header(self) -> None:
+        # "Size" spans three rows, but the second is a section label.
+        html = (
+            "<table><tr><td>Model</td><td rowspan='3'>Size</td><td>GSM8K</td></tr>"
+            "<tr><td colspan='2'>Closed-Source Base Model</td></tr>"
+            "<tr><td>Minerva</td><td>58.8</td></tr></table>"
+        )
+        lines = _table_lines(html)
+        assert lines[0] == "| Model | Size | GSM8K |"
+        assert "Closed-Source Base Model" not in lines[0]
+
+    def test_spanning_sub_header_inside_thead_stays_in_the_header(self) -> None:
+        html = (
+            "<table><thead><tr><th rowspan='2'>Model</th><th colspan='2'>AIME</th>"
+            "</tr><tr><th colspan='2'>pass@1</th></tr></thead>"
+            "<tbody><tr><td>R1</td><td>79.8</td><td>80.1</td></tr></tbody></table>"
+        )
+        lines = _table_lines(html)
+        assert lines[0] == "| Model | AIME pass@1 | AIME pass@1 |"
+        assert lines[2:] == ["| R1 | 79.8 | 80.1 |"]
+
     def test_every_row_has_header_width_and_pipes_escaped(self) -> None:
         html = (
             "<table><tr><th>Metric</th><th>Value</th><th>Note</th></tr>"
@@ -182,26 +185,6 @@ class TestTableToMarkdown:
     def test_caption_kept_above_table(self) -> None:
         html = "<table><caption>Table 4: Results</caption><tr><th>A</th></tr><tr><td>1</td></tr></table>"
         assert extract_text_from_html(html).startswith("Table 4: Results\n\n| A |")
-
-    def test_mixtral_fixture_tables_are_rectangular(self) -> None:
-        import json
-        import re
-        from pathlib import Path
-
-        fixture = (
-            Path(__file__).resolve().parents[1] / "papers/2401_04088v1/parsed.json"
-        )
-        if not fixture.exists():
-            pytest.skip("local Mixtral parse fixture not present")
-        html = json.loads(fixture.read_text(encoding="utf-8"))["content"]["html"]
-        tables = re.findall(r"<table.*?</table>", html, re.S)
-        assert tables
-        for table in tables:
-            lines = _table_lines(table)
-            widths = {len(re.split(r"(?<!\\)\|", line)) for line in lines}
-            assert len(widths) == 1, table[:200]
-            header_cells = [c.strip() for c in re.split(r"(?<!\\)\|", lines[0])[2:-1]]
-            assert all(header_cells), lines[0]
 
 
 class TestHTMLTagOutputParser:
@@ -437,10 +420,10 @@ class TestLatexmlStructures:
             '<img src="img/arch.png" alt="arch"><img data-src="/lazy.png" alt="lazy">'
         )
         out = extract_text_from_html(html, base_url="https://docs.x.io/guide/page")
-        assert "src=https://docs.x.io/guide/img/arch.png]" in out
-        assert "src=https://docs.x.io/lazy.png]" in out
+        assert 'src="https://docs.x.io/guide/img/arch.png"]' in out
+        assert 'src="https://docs.x.io/lazy.png"]' in out
         # Paper parsing keeps the raw src (markers are matched by file name).
-        assert "src=img/arch.png]" in extract_text_from_html(html)
+        assert 'src="img/arch.png"]' in extract_text_from_html(html)
 
 
 class TestListItemCode:
@@ -513,3 +496,48 @@ class TestDocsPageStructure:
         out = extract_text_from_html(html)
         assert "- outer\n  - inner\n    inner b\n  outer b" in out
         assert out.endswith("\nstray indent")  # never an indented code block
+
+
+class TestDocsAndLatexmlStructure:
+    def test_latexml_span_table_becomes_a_gfm_table(self) -> None:
+        # Regression: DeepSeekMath's results tables are spans, not <table>s,
+        # and came out as one long line.
+        html = (
+            '<span class="ltx_tabular">'
+            '<span class="ltx_tr">'
+            '<span class="ltx_td ltx_rowspan ltx_rowspan_2">Corpus</span>'
+            '<span class="ltx_td ltx_colspan ltx_colspan_2">English</span></span>'
+            '<span class="ltx_tr"><span class="ltx_td">GSM8K</span>'
+            '<span class="ltx_td">MATH</span></span>'
+            '<span class="ltx_tr"><span class="ltx_td">MathPile</span>'
+            '<span class="ltx_td">2.7%</span><span class="ltx_td">3.3%</span></span>'
+            "</span>"
+        )
+        out = extract_text_from_html(html)
+        assert "| Corpus | English GSM8K | English MATH |" in out
+        assert "| MathPile | 2.7% | 3.3% |" in out
+
+    def test_katex_visual_copy_is_dropped(self) -> None:
+        html = (
+            '<p>Update <span class="katex"><span class="katex-mathml">'
+            '<math><semantics><annotation encoding="application/x-tex">'
+            "\\Delta W</annotation></semantics></math></span>"
+            '<span class="katex-html" aria-hidden="true">ΔW</span></span>.</p>'
+        )
+        assert extract_text_from_html(html) == "Update $$\\Delta W$$."
+
+    def test_katex_html_only_output_is_kept(self) -> None:
+        html = '<p>Loss <span class="katex"><span class="katex-html">x+1</span></span> here.</p>'
+        assert "x+1" in extract_text_from_html(html)
+
+    def test_relative_links_resolve_and_header_links_drop(self) -> None:
+        html = (
+            '<h2>Install<a class="headerlink" href="#install">#</a></h2>'
+            '<p>See <a href="/docs/x/setup">setup</a>.</p>'
+        )
+        out = extract_text_from_html(html, base_url="https://docs.x.dev/docs/x/a")
+        assert out == "## Install\n\nSee setup (https://docs.x.dev/docs/x/setup)."
+
+    def test_whitespace_only_lines_are_paragraph_breaks(self) -> None:
+        out = extract_text_from_html("<ul><li>a</li></ul>\n   \n<p>b</p>")
+        assert "\n \n" not in out and out.endswith("b")

@@ -1,5 +1,6 @@
 import re
 from enum import Enum, auto
+from urllib.parse import urlparse
 
 # arXiv identifiers: modern "2401.06066" and legacy "hep-th/9901001" /
 # "math.GT/0309136", each with an optional version suffix ("v2").
@@ -7,20 +8,32 @@ ARXIV_ID_BODY = r"(?:\d{4}\.\d{4,5}|[a-z][a-z\-]*(?:\.[A-Za-z]{2,})?/\d{7})(?:v\
 ARXIV_ID_PATTERN = re.compile(rf"^{ARXIV_ID_BODY}$")
 
 
-_ARXIV_URL = re.compile(
-    rf"^https?://(?:www\.|export\.)?arxiv\.org/(?:abs|pdf|html)/({ARXIV_ID_BODY})(?:\.pdf)?/?$",
-    re.IGNORECASE,
+# arXiv and the mirrors that serve a paper under its arXiv id
+# (ar5iv.labs.arxiv.org and export.arxiv.org match too).
+_ARXIV_HOST = re.compile(r"(^|\.)(arxiv|ar5iv|alphaxiv)\.org$", re.IGNORECASE)
+_ARXIV_URL_PATH = re.compile(
+    rf"/(?:abs|pdf|html|overview)/({ARXIV_ID_BODY})(?:\.pdf)?/?$", re.IGNORECASE
 )
 # New-style ids got a 5-digit sequence number from 2015-01 (YYMM 1501) on.
 _FIVE_DIGIT_SINCE_YYMM = 1501
 
 
+def arxiv_id_from_url(url: str | None) -> str | None:
+    """The arXiv id of an arXiv (or ar5iv/alphaXiv) abs/pdf/html URL, validated
+    like :func:`normalize_arxiv_id`; None for any other URL."""
+    if not url:
+        return None
+    parsed = urlparse(url.strip())
+    if not _ARXIV_HOST.search(parsed.hostname or ""):
+        return None
+    match = _ARXIV_URL_PATH.search(parsed.path)
+    return normalize_arxiv_id(match.group(1)) if match else None
+
+
 def arxiv_id_from_reference(value: str | None) -> str | None:
-    """Like :func:`normalize_arxiv_id`, but also accepts an arxiv.org
-    abs/pdf/html URL (how references often cite a paper)."""
-    if value and (url_match := _ARXIV_URL.match(value.strip())):
-        return normalize_arxiv_id(url_match.group(1))
-    return normalize_arxiv_id(value)
+    """Like :func:`normalize_arxiv_id`, but also accepts an arXiv URL (how
+    references often cite a paper)."""
+    return arxiv_id_from_url(value) or normalize_arxiv_id(value)
 
 
 def normalize_arxiv_id(value: str | None) -> str | None:
@@ -31,6 +44,7 @@ def normalize_arxiv_id(value: str | None) -> str | None:
     candidate = value.strip()
     if candidate.lower().startswith("arxiv:"):
         candidate = candidate[len("arxiv:") :].strip()
+    candidate = re.sub(r"V(\d+)$", r"v\1", candidate)
     if not ARXIV_ID_PATTERN.match(candidate):
         return None
     if modern := re.match(r"^(\d{4})\.(\d+)", candidate):
@@ -59,12 +73,16 @@ class EmbeddingModelId(str, Enum):
 class EnvVars(str, Enum):
     AWS_PROFILE_NAME = "AWS_PROFILE_NAME"
     BRAVE_API_KEY = "BRAVE_API_KEY"
+    # Optional: Crossref's "polite pool" (a contact address) and a Semantic
+    # Scholar key, both for higher rate limits on reference lookups.
+    CROSSREF_MAILTO = "CROSSREF_MAILTO"
     GITHUB_TOKEN = "GITHUB_TOKEN"
     LANGCHAIN_API_KEY = "LANGCHAIN_API_KEY"
     LANGCHAIN_TRACING_V2 = "LANGCHAIN_TRACING_V2"
     LANGCHAIN_ENDPOINT = "LANGCHAIN_ENDPOINT"
     LANGCHAIN_PROJECT = "LANGCHAIN_PROJECT"
     LOG_LEVEL = "LOG_LEVEL"
+    SEMANTIC_SCHOLAR_API_KEY = "SEMANTIC_SCHOLAR_API_KEY"
     TAVILY_API_KEY = "TAVILY_API_KEY"
     TOPIC_ARN = "TOPIC_ARN"
     UPSTAGE_API_KEY = "UPSTAGE_API_KEY"
@@ -98,7 +116,6 @@ class LanguageModelId(str, Enum):
 
 class LocalPaths(str, Enum):
     ASSETS_DIR = "assets"
-    FAISS_INDEX_DIR = "faiss_index"
     FIGURES_DIR = "figures"
     LOGS_DIR = "logs"
     PAPERS_DIR = "papers"
@@ -114,7 +131,6 @@ class LocalPaths(str, Enum):
 
 
 class S3Paths(AutoNamedEnum):
-    ASSETS = auto()
     POSTS = auto()
     RESULTS = auto()
     TRANSLATION_GUIDELINE = auto()
@@ -124,8 +140,10 @@ class SSMParams(AutoNamedEnum):
     BATCH_JOB_DEFINITION = "batch-job-definition"
     BATCH_JOB_QUEUE = "batch-job-queue"
     BRAVE_API_KEY = "brave-api-key"
+    CROSSREF_MAILTO = "crossref-mailto"
     GITHUB_TOKEN = "github-token"
     LANGCHAIN_API_KEY = "langchain-api-key"
+    SEMANTIC_SCHOLAR_API_KEY = "semantic-scholar-api-key"
     TAVILY_API_KEY = "tavily-api-key"
     UPSTAGE_API_KEY = "upstage-api-key"
 
@@ -149,4 +167,6 @@ RUN_SECRETS: dict[SSMParams, EnvVars] = {
     SSMParams.UPSTAGE_API_KEY: EnvVars.UPSTAGE_API_KEY,
     SSMParams.TAVILY_API_KEY: EnvVars.TAVILY_API_KEY,
     SSMParams.BRAVE_API_KEY: EnvVars.BRAVE_API_KEY,
+    SSMParams.CROSSREF_MAILTO: EnvVars.CROSSREF_MAILTO,
+    SSMParams.SEMANTIC_SCHOLAR_API_KEY: EnvVars.SEMANTIC_SCHOLAR_API_KEY,
 }

@@ -27,7 +27,6 @@ import asyncio
 import re
 from dataclasses import dataclass, field
 from typing import Any
-from urllib.parse import urlparse
 
 import boto3
 from langchain_core.output_parsers import StrOutputParser
@@ -35,8 +34,8 @@ from langchain_core.runnables import Runnable, RunnableLambda
 
 from .constants import LanguageModelId
 from .logger import logger
-from .markdown_lint import close_open_fence, writing_issues
-from .markdown_math import SEGMENT_PATTERN
+from .markdown_lint import close_open_fence
+from .markdown_math import segments, without_fences
 from .metrics import TokenBudgetGuard
 from .prompt_safety import neutralize_prompt_tags
 from .prompts import (
@@ -54,10 +53,13 @@ from .prompts.tech_guide import (
     TechGuideTaxonomyPrompt,
 )
 from .review_plan import (
+    added_slips,
     article_ledger,
     digest_sections,
     draft_rank,
+    publish_blockers,
     rejected_revision_note,
+    rule_issues,
 )
 from .utils import (
     BedrockLanguageModelFactory,
@@ -68,7 +70,13 @@ from .utils import (
     measure_execution_time,
     parse_quality_score,
 )
-from .web_research import OfficialDocs, ResearchCorpus, WebResearcher, normalize_url
+from .web_research import (
+    OfficialDocs,
+    ResearchCorpus,
+    WebResearcher,
+    normalize_url,
+    product_names,
+)
 
 DEFAULT_LANGUAGE: str = "Korean"
 # Upper bound on guide sections. The synopsis is told this budget so it plans a
@@ -122,13 +130,17 @@ def _depth_target(depth: str, language: str) -> tuple[str, int]:
 
 
 _DEFAULT_DEPTH: str = "standard"
-_VALID_AREAS: frozenset[str] = frozenset({"CONCEPT", "DETAIL", "USAGE", "APPLICATION"})
+GETTING_STARTED = "getting-started"
+_GETTING_STARTED_SCOPE = (
+    "This is a getting-started guide: explain internals only as far as the "
+    "reader needs them to use and tune the tool (no simulators, derivations or "
+    "from-scratch reimplementations)."
+)
 
 
 def prose_chars(markdown: str) -> int:
     """Characters of prose (whitespace collapsed, code blocks excluded)."""
-    prose = re.sub(r"```.*?```", " ", markdown, flags=re.DOTALL)
-    return len(" ".join(prose.split()))
+    return len(" ".join(without_fences(markdown).split()))
 
 
 def length_report(markdown: str, depth: str, language: str) -> str:
@@ -159,10 +171,9 @@ def parse_section_output(raw: str) -> dict[str, str]:
 
 @dataclass
 class PlannedSection:
-    """One outline entry: title, concern area, writing depth, and visual hint."""
+    """One outline entry: title, writing depth, and visual hint."""
 
     title: str
-    area: str = ""
     depth: str = _DEFAULT_DEPTH
     visuals: str = ""
     description: str = ""
@@ -172,13 +183,15 @@ class PlannedSection:
         line = f"{index}. {self.title}"
         return f"{line} — {self.description}" if self.description else line
 
-    def depth_directive(self, language: str) -> str:
+    def depth_directive(self, language: str, guide_type: str = "") -> str:
         depth = self.depth if self.depth in DEPTH_CHARS else _DEFAULT_DEPTH
         bound, target = _depth_target(depth, language)
         directive = (
             f"{depth.upper()} section ({bound} {target:,} characters of prose, "
             f"code excluded): {_DEPTH_GUIDANCE[depth]}"
         )
+        if guide_type == GETTING_STARTED:
+            directive += f"\n{_GETTING_STARTED_SCOPE}"
         if self.visuals and self.visuals != "none":
             directive += (
                 f"\nPlanned visual aid for this section: {self.visuals}. Include it "
@@ -192,18 +205,20 @@ class TechGuide:
     topic: str
     synopsis: str
     body: str
-    image_urls: list[str] = field(default_factory=list)
     source_urls: list[str] = field(default_factory=list)
     # Degraded-output notes for the PR checklist and the job result.
     notes: list[str] = field(default_factory=list)
     # Text of every fetched page (taxonomy checks read it).
     source_text: str = field(default="", repr=False)
+    # Images the writer was offered; any other image in the body is dropped.
+    image_urls: list[str] = field(default_factory=list)
 
 
 class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
     """Generates a self-study technical guide from a list of source URLs."""
 
     # The requested docs (hosts and versions): the authority for flags and defaults.
+    _guide_type: str = ""
     _official: OfficialDocs = OfficialDocs(frozenset(), frozenset())
     _source_urls: tuple[str, ...] = ()
 
@@ -366,6 +381,13 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
             raise NotTechnicalContentError(
                 "None of the supplied URLs returned readable content."
             )
+        # Where the requested pages actually landed (redirects, a pinned
+        # version behind "stable") is official too.
+        self._official = OfficialDocs.from_research(urls, corpus.pages)
+
+        # Judge the seed pages alone: search results never redefine what the
+        # user asked for, and a rejected input spends nothing on searches.
+        gate_topic = await self._assert_relevant(corpus)
 
         # Deep-research planning: when no explicit queries are supplied, derive
         # search queries (and an early topic guess) from the seed pages so the
@@ -391,7 +413,11 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
                 "Search backend has no results; skipping %d queries.", len(queries)
             )
 
-        topic = await self._assert_relevant(corpus, fallback_topic=planned_topic)
+        topic = (
+            planned_topic
+            if planned_topic and not is_placeholder(planned_topic)
+            else gate_topic
+        )
         synopsis = await self._draft_synopsis(topic, corpus)
         body = await self._write_sections(topic, synopsis, corpus)
         body = self._overview(synopsis) + body
@@ -407,10 +433,10 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
             topic=topic,
             synopsis=synopsis,
             body=body,
-            image_urls=corpus.image_urls,
             source_urls=[p.url for p in corpus.pages],
             notes=list(self.notes),
             source_text="\n\n".join(p.text for p in corpus.pages),
+            image_urls=list(corpus.image_urls),
         )
 
     @RetryableBase._retry("tech_guide_taxonomy")
@@ -422,8 +448,10 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
         controlled_tags: list[str],
     ) -> dict[str, str]:
         """Propose the blog topic, tags and SEO title for a finished guide (the
-        caller normalizes and validates them against the post conventions)."""
-        self._enforce_token_budget()
+        caller normalizes and validates them against the post conventions).
+        Past the soft cap the finished guide is still classified: only the
+        hard ceiling stops a guide whose sections are already paid for."""
+        self._enforce_hard_token_budget()
         result: dict[str, str] = await self.taxonomy_chain.ainvoke(
             {
                 "title": guide.topic,
@@ -471,9 +499,7 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
             logger.warning("Research planning failed; using seed URLs only: %s", e)
             return None, []
 
-    async def _assert_relevant(
-        self, corpus: ResearchCorpus, *, fallback_topic: str | None = None
-    ) -> str:
+    async def _assert_relevant(self, corpus: ResearchCorpus) -> str:
         sources = self._sources_digest(corpus)
         result = await self.relevance_chain.ainvoke({"sources": sources})
         is_relevant = is_affirmative(result.get("is_relevant"))
@@ -483,9 +509,6 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
                 f"Supplied URLs are not technical documentation: {reason}"
             )
         topic = result.get("topic", "").strip()
-        if is_placeholder(topic):
-            # Fall back to the research planner's topic guess before giving up.
-            topic = (fallback_topic or "").strip()
         if is_placeholder(topic):
             raise NotTechnicalContentError(
                 "Could not determine a technical topic from the sources."
@@ -511,7 +534,8 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
         synopsis = result.get("synopsis", "").strip()
         if not synopsis:
             raise ValueError("Synopsis generation returned empty output.")
-        logger.info("Guide type: %s", (result.get("guide_type") or "?").strip())
+        self._guide_type = (result.get("guide_type") or "").strip().lower()
+        logger.info("Guide type: %s", self._guide_type or "?")
         return synopsis
 
     async def _write_sections(
@@ -573,7 +597,9 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
                 already_in_guide=article_ledger(written),
                 sources=sources,
                 available_images=available_images,
-                depth_directive=planned.depth_directive(self.language),
+                depth_directive=planned.depth_directive(
+                    self.language, self._guide_type
+                ),
             )
             if not markdown:
                 # A dropped section leaves a hole: `final_outline`/`total` (fixed
@@ -626,8 +652,10 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
         official pages fetched so far never mention first pull the official
         reference pages that can settle them into each section's sources, so
         a stale flag is corrected instead of hedged."""
-        official_text, product = official_reference(list(self._source_urls), corpus)
-        unchecked = unverified_identifiers("\n\n".join(written), official_text, product)
+        official_text, products = official_reference(list(self._source_urls), corpus)
+        unchecked = unverified_identifiers(
+            "\n\n".join(written), official_text, products
+        )
         reference = ResearchCorpus()
         if unchecked:
             reference.pages = await asyncio.to_thread(
@@ -635,7 +663,7 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
                 corpus,
                 self._official,
                 unchecked,
-                product=product,
+                product=products[0] if products else "",
             )
         for index, sources in to_ground:
             self._enforce_hard_token_budget()
@@ -646,9 +674,19 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
                     official=self._official,
                 )
                 sources = f"{excerpt}\n\n---\n\n{sources}"
-            written[index] = close_open_fence(
-                await self._ground_section(written[index], sources)
-            )
+            draft = written[index]
+            grounded = close_open_fence(await self._ground_section(draft, sources))
+            if added_slips(draft, grounded):
+                # Grounding is the last pass; one retry if it broke a rule
+                # (e.g. hedged a claim instead of removing it).
+                retried = close_open_fence(await self._ground_section(draft, sources))
+                if len(added_slips(draft, retried)) < len(added_slips(draft, grounded)):
+                    grounded = retried
+                if len(publish_blockers(grounded)) > len(publish_blockers(draft)):
+                    # Both attempts broke something the validator rejects:
+                    # keep the ungrounded draft rather than fail the post.
+                    grounded = draft
+            written[index] = grounded
 
     def _enforce_hard_token_budget(self) -> None:
         """Raise ``TokenBudgetExceeded`` once spend passes the hard ceiling.
@@ -699,7 +737,7 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
         final_outline: str,
     ) -> str:
         """Score a section and revise it while it stays below the threshold or
-        breaks a deterministic writing rule (:func:`writing_issues`).
+        breaks a deterministic writing rule (:func:`review_plan.rule_issues`).
 
         Mirrors the review pipeline's evaluate loop, but keeps the BEST draft:
         every revision is re-scored, and a revision is only kept if it ranks
@@ -710,14 +748,17 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
             # No revision budget: skip evaluation entirely (no wasted LLM call).
             return markdown
 
-        def rank(score: int, issues: list[str]) -> tuple[bool, int, int]:
+        def rank(
+            score: int, text: str, issues: list[str]
+        ) -> tuple[bool, bool, int, int]:
             return draft_rank(
                 passes=score >= self.min_quality_score and not issues,
+                publishable=not publish_blockers(text),
                 blocking=len(issues),
                 score=score,
             )
 
-        best_markdown, best_issues = markdown, writing_issues(markdown)
+        best_markdown, best_issues = markdown, rule_issues(markdown)
         best_score, feedback = await self._evaluate_section(
             topic=topic,
             planned=planned,
@@ -776,7 +817,7 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
                 # tends to reproduce the same rejected draft and waste the
                 # (expensive) writer+evaluator calls.
                 depth_directive=(
-                    f"{planned.depth_directive(self.language)}\n\nYou are REVISING an existing "
+                    f"{planned.depth_directive(self.language, self._guide_type)}\n\nYou are REVISING an existing "
                     f"draft of this section that did not pass review. "
                     f"Address this feedback: {feedback}\n\n"
                     f"CURRENT DRAFT to improve (rewrite it, keeping what works):\n"
@@ -793,10 +834,12 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
                 previous_sections=previous_sections,
             )
             feedback = self._feedback_or_generic(score, feedback)
-            issues = writing_issues(revised)
+            issues = rule_issues(revised)
             # Keep the revision only if it ranks above the best so far;
             # otherwise discard it (a rewrite can regress).
-            if rank(score, issues) > rank(best_score, best_issues):
+            if rank(score, revised, issues) > rank(
+                best_score, best_markdown, best_issues
+            ):
                 best_markdown, best_score, best_issues = revised, score, issues
                 best_feedback = feedback
             else:
@@ -849,7 +892,9 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
                 "topic": topic,
                 "section": markdown,
                 "section_to_write": section_label,
-                "depth_directive": planned.depth_directive(self.language),
+                "depth_directive": planned.depth_directive(
+                    self.language, self._guide_type
+                ),
                 "previous_sections": previous_sections,
                 "length_report": length_report(markdown, planned.depth, self.language),
                 "language": self.language,
@@ -923,12 +968,11 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
             if not re.match(r"^(\d+[.)]|[-*•])\s+", stripped):
                 continue
             body = re.sub(r"^(\d+[.)]|[-*•])\s+", "", stripped)
-            area, depth, visuals, title = self._extract_area_depth(body)
+            depth, visuals, title = self._extract_depth(body)
             if title:
                 sections.append(
                     PlannedSection(
                         title=title,
-                        area=area,
                         depth=depth,
                         visuals=visuals,
                         description=self._extract_description(body),
@@ -944,15 +988,14 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
         return sections[: self.max_sections] if apply_cap else sections
 
     @staticmethod
-    def _extract_area_depth(body: str) -> tuple[str, str, str, str]:
+    def _extract_depth(body: str) -> tuple[str, str, str]:
         """Pull leading [AREA] [depth] tags and a trailing visuals hint off a line.
 
-        Returns (area, depth, visuals, title). Tags MUST be bracketed (the
+        Returns (depth, visuals, title); the area tag is consumed, not kept. Tags MUST be bracketed (the
         synopsis prompt always brackets them); this avoids mis-reading a title
         word that happens to match a keyword (e.g. "Usage — ..."). They may
         appear in either order; the remaining text (minus a trailing
         "(visuals: ...)" hint) is the title."""
-        area = ""
         depth = _DEFAULT_DEPTH
         # Consume up to two leading [..] bracketed tokens. An unrecognised token
         # (typo'd / hallucinated tag) is still consumed so it never leaks into
@@ -962,9 +1005,7 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
             if not match:
                 break
             token = match.group(1)
-            if token.upper() in _VALID_AREAS:
-                area = token.upper()
-            elif token.lower() in DEPTH_CHARS:
+            if token.lower() in DEPTH_CHARS:
                 depth = token.lower()
             body = body[match.end() :]
         # Capture the planned visual aid, e.g. "(visuals: table)".
@@ -975,7 +1016,7 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
         # Only an em/en dash separates title from description — a spaced ASCII
         # hyphen is left intact so titles like "Using gRPC - the basics" survive.
         title = re.split(r"\s+[—–]\s+|\(visuals?:", body, maxsplit=1)[0].strip()
-        return area, depth, visuals, title or body.strip()
+        return depth, visuals, title or body.strip()
 
     @staticmethod
     def _extract_description(body: str) -> str:
@@ -1027,12 +1068,11 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
 
 # Identifiers a reader copies verbatim: CLI flags and Prometheus-style metric
 # names ("vllm:time_to_first_token_seconds", "..._requests_total").
-_FLAG = re.compile(r"(?<![\w-])--[a-z][a-z0-9]*(?:-[a-z0-9]+)*")
+_FLAG = re.compile(r"(?<![\w-])--[a-z][a-z0-9]*(?:[-_][a-z0-9]+)*")
 _METRIC = re.compile(
     r"\b[a-z][a-z0-9]*(?::[a-z0-9]+(?:_[a-z0-9]+)+"
     r"|(?:_[a-z0-9]+)+_(?:total|seconds|bytes|count|bucket|sum))\b"
 )
-_HOST_NOISE = frozenset({"docs", "www", "doc", "api", "readthedocs", "github", "io"})
 MAX_UNVERIFIED = 10
 
 
@@ -1055,35 +1095,52 @@ def input_outline(corpus: ResearchCorpus, urls: tuple[str, ...] | list[str]) -> 
     return "\n".join(lines) or "(none)"
 
 
-def official_reference(urls: list[str], corpus: ResearchCorpus) -> tuple[str, str]:
-    """(text of the fetched pages of the requested docs — same hosts and a
-    compatible docs version — and the product name taken from the first host:
-    ``docs.vllm.ai`` → ``vllm``)."""
-    official = OfficialDocs.from_urls(urls)
+def official_reference(
+    urls: list[str], corpus: ResearchCorpus
+) -> tuple[str, list[str]]:
+    """(text of the fetched pages of the requested docs — where they landed,
+    in a compatible docs version — and the names their commands go by)."""
+    official = OfficialDocs.from_research(urls, corpus.pages)
     text = "\n".join(
         p.text for p in corpus.pages if official.covers(p.final_url or p.url)
     )
-    labels = (
-        [
-            label
-            for label in (urlparse(urls[0]).hostname or "").split(".")[:-1]
-            if label not in _HOST_NOISE
-        ]
-        if urls
-        else []
-    )
-    return text, labels[0] if labels else ""
+    return text, product_names(urls, corpus.pages)
 
 
-def unverified_identifiers(body: str, official_text: str, product: str) -> list[str]:
+def _flag_spellings(flag: str, both_styles: bool) -> list[str]:
+    """Ways the official text may spell ``flag``: as written, as a Python API
+    argument (``--max-model-len`` → ``max_model_len``, multi-word names only,
+    since a bare word like ``model`` appears in any prose), and in the other
+    dash style when the docs use both."""
+    name = flag[2:]
+    spellings = [flag]
+    if "-" in name:  # an underscore flag already is its own API form
+        spellings.append(name.replace("-", "_"))
+    if re.search(r"[-_]", name) and both_styles:
+        spellings += ["--" + name.replace("_", "-"), "--" + name.replace("-", "_")]
+    return spellings
+
+
+def unverified_identifiers(
+    body: str, official_text: str, products: str | list[str]
+) -> list[str]:
     """CLI flags of ``product`` commands and metric names the guide shows in
     code that the official pages never mention (a stale or invented flag is
     the costliest guide error: readers paste it). Flags count only after the
-    product's name on a command line, so ``docker``/``curl`` options are not
-    checked. Note-only: an empty ``official_text`` checks nothing."""
+    product's name on a command line (or alone in inline code), so
+    ``docker``/``curl`` options are not checked. Note-only: an empty ``official_text`` checks nothing.
+    """
     if not official_text.strip():
         return []
+    names = [products] if isinstance(products, str) else list(products)
+    names = [n.lower() for n in names if n]
+    tokens = [re.compile(rf"(?<![\w/.-]){re.escape(n)}(?![\w-])") for n in names]
     known = official_text.lower()
+    # CLIs that take both "--a-b" and "--a_b" (torchrun, accelerate) show both
+    # styles in their docs; one that shows only dashes (ruff) rejects "_".
+    both_styles = bool(re.search(r"--[a-z0-9]+-[a-z]", known)) and bool(
+        re.search(r"--[a-z0-9]+_[a-z]", known)
+    )
     found: list[str] = []
 
     def check(token: str, variants: list[str]) -> None:
@@ -1093,21 +1150,27 @@ def unverified_identifiers(body: str, official_text: str, product: str) -> list[
         if token not in found and not mentioned:
             found.append(token)
 
-    for match in SEGMENT_PATTERN.finditer(body):
-        if match.lastgroup not in ("fence", "icode"):
+    for seg in segments(body):
+        if seg.kind not in ("fence", "icode"):
             continue
-        code = re.sub(r"\\\n\s*", " ", match.group(0))  # join continued lines
+        code = re.sub(r"\\\n\s*", " ", body[seg.start : seg.end])  # join lines
         for line in code.splitlines():
             lowered = line.lower()
-            start = lowered.find(product) if product else 0
-            if match.lastgroup == "fence" and start < 0:
+            # The product as a command word, not inside HF_TOKEN or a path.
+            hits = [
+                m.start() for m in (pattern.search(lowered) for pattern in tokens) if m
+            ]
+            start = min(hits) if hits else (0 if not names else -1)
+            if seg.kind == "fence" and start < 0:
                 continue
-            for flag in _FLAG.findall(line[max(start, 0) :]):
-                # Python APIs spell the same option with underscores.
-                check(
-                    flag,
-                    [flag, flag[2:].replace("-", "_")] if "-" in flag[2:] else [flag],
-                )
+            # Inline code without the product counts a flag only when it is a
+            # bare flag (`--max-model-len`), not another tool's (`curl -s`).
+            bare_flag = line.strip("` ").startswith("--")
+            flags = (
+                _FLAG.findall(line[max(start, 0) :]) if start >= 0 or bare_flag else []
+            )
+            for flag in flags:
+                check(flag, _flag_spellings(flag, both_styles))
             for metric in _METRIC.findall(line):
                 check(metric, [metric, metric.replace(":", "_")])
     return found[:MAX_UNVERIFIED]

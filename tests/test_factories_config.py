@@ -204,12 +204,9 @@ class TestInferenceProfiles:
 class TestGetModelInfo:
     def test_known_model_returns_info(self) -> None:
         factory = _make_factory()
-        assert factory.get_model_info(LanguageModelId.CLAUDE_V3_HAIKU) is not None
-
-    def test_supported_models_listed(self) -> None:
-        assert (
-            LanguageModelId.CLAUDE_V5_5_OPUS in _make_factory().get_supported_models()
-        )
+        info = factory.get_model_info(LanguageModelId.CLAUDE_V5_5_OPUS)
+        assert info is not None and info.max_output_tokens == 128_000
+        assert info.uses_adaptive_thinking
 
 
 class TestBaseBedrockWrapperTruncation:
@@ -410,6 +407,6 @@ class TestTruncationGuard:
 
     def test_truncation_is_not_retried(self) -> None:
         from scholar_lens.src.utils.factories import OutputTruncatedError
-        from scholar_lens.src.utils.retry import _is_retryable
+        from scholar_lens.src.utils.retry import is_transient_error
 
-        assert _is_retryable(OutputTruncatedError("x")) is False
+        assert is_transient_error(OutputTruncatedError("x")) is False

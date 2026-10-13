@@ -17,3 +17,20 @@ def test_branch_id_tells_pages_apart_by_query() -> None:
     advanced = guide_branch_id(["https://docs.example.com/view?id=advanced"])
     assert intro != advanced
     assert intro == guide_branch_id(["https://docs.example.com/view?id=intro#top"])
+
+
+def test_guide_document_converts_markers_and_drops_unoffered_images() -> None:
+    from scholar_lens.src.guide_pipeline import guide_document
+    from scholar_lens.src.tech_guide import TechGuide
+
+    arch = "https://docs.x.dev/img/arch.png"
+    guide = TechGuide(topic="X 시작하기", synopsis="", body="", image_urls=[arch])
+    document = (
+        "## 구조\n\n아래 그림은 구조를 보여 줍니다.\n\n"
+        f'[Image: alt="아키텍처", src="{arch}"]\n\n'
+        "![로고](https://docs.x.dev/img/logo.svg)\n"
+    )
+    out = guide_document(document, guide)
+    assert "[Image:" not in out
+    assert f"]({arch})" in out
+    assert "logo.svg" not in out

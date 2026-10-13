@@ -1,6 +1,7 @@
 import asyncio
 import hashlib
 import os
+import re
 import shutil
 from collections.abc import Sequence
 from pathlib import Path
@@ -166,10 +167,7 @@ class CodeRetriever(RetryableBase):
 
     def _initialize_directories(self, paper_dir: Path) -> None:
         self.repo_cache_dir = paper_dir / LocalPaths.REPOS_DIR.value
-        self._index_root = paper_dir / LocalPaths.FAISS_INDEX_DIR.value
-        self.index_cache_dir = self._index_root
-        for directory in [self.repo_cache_dir, self.index_cache_dir]:
-            directory.mkdir(parents=True, exist_ok=True)
+        self.repo_cache_dir.mkdir(parents=True, exist_ok=True)
 
     def _initialize_text_splitter(self, chunk_size: int, chunk_overlap: int) -> None:
         self.text_splitter = RecursiveCharacterTextSplitter(
@@ -199,12 +197,6 @@ class CodeRetriever(RetryableBase):
         return f"{name}-{digest}"
 
     async def download_repositories(self, repo_urls: list[str]) -> list[Path]:
-        # Key the FAISS cache by the repository set so a rerun with different
-        # repositories never loads an index built from other code.
-        repo_set = "\n".join(sorted(repo_urls))
-        self.index_cache_dir = (
-            self._index_root / hashlib.sha1(repo_set.encode("utf-8")).hexdigest()[:12]
-        )
         candidate_paths = [
             self.repo_cache_dir / self._repo_dir_name(url) for url in repo_urls
         ]
@@ -246,7 +238,7 @@ class CodeRetriever(RetryableBase):
 
         ``git`` will act on ``file://`` (local exfiltration into the indexed
         corpus), ``ssh://``, and internal ``http://`` targets. Repo URLs come
-        from untrusted Slack input, so allow only ``https://`` to a public host
+        from the job request or CLI (untrusted input), so allow only ``https://`` to a public host
         (SSRF guard) — no scheme is trusted by default.
         """
         if not url.lower().startswith("https://"):
@@ -303,11 +295,11 @@ class CodeRetriever(RetryableBase):
             message = stderr.decode("utf-8", errors="replace").strip()[-500:]
             raise RuntimeError(f"git clone of '{url}' failed: {message}")
 
-    async def create_or_load_index(
+    async def build_index(
         self, repo_paths: list[Path] | None = None, augment: bool = True
     ) -> None:
-        if self._try_load_index_sync():
-            return
+        """Embed the repositories' code into an in-memory index for this run
+        (it is never persisted: a run's repositories and settings decide it)."""
         repo_paths = repo_paths or self.repo_paths
         if not repo_paths:
             raise ValueError("No repository paths provided")
@@ -317,27 +309,7 @@ class CodeRetriever(RetryableBase):
         logger.info("Created %d documents", len(documents))
         if augment:
             documents = await self._augment_documents(documents)
-        await self._create_and_save_index(documents)
-
-    def _try_load_index_sync(self) -> bool:
-        if self.vector_store:
-            logger.warning("Vector store already exists, re-creating.")
-            self.delete_index_sync()
-        try:
-            self.vector_store = FAISS.load_local(
-                str(self.index_cache_dir),
-                self.embeddings,
-                allow_dangerous_deserialization=True,
-            )
-            logger.info("Loaded index from '%s'", self.index_cache_dir)
-            return True
-        except Exception as e:
-            logger.warning(
-                "Failed to load index from '%s': %s. Creating new one.",
-                self.index_cache_dir,
-                str(e),
-            )
-            return False
+        await self._create_index(documents)
 
     async def _create_documents(self, repo_paths: list[Path]) -> list[Document]:
         """Chunks of the most relevant files, in relevance order, capped at
@@ -401,7 +373,7 @@ class CodeRetriever(RetryableBase):
             )
         return augmented_docs
 
-    async def _create_and_save_index(self, documents: list[Document]) -> None:
+    async def _create_index(self, documents: list[Document]) -> None:
         if not documents:
             logger.warning("No documents provided to create index.")
             return
@@ -428,15 +400,7 @@ class CodeRetriever(RetryableBase):
             await self._aadd_documents_with_retry(batch)
             if number % _PROGRESS_EVERY_BATCHES == 0 or number == total_batches:
                 logger.info("Embedded %d/%d document batches.", number, total_batches)
-
-        if self.vector_store and isinstance(self.vector_store, FAISS):
-            await asyncio.to_thread(
-                self.vector_store.save_local, str(self.index_cache_dir)
-            )
-        logger.info(
-            "Completed adding all batches. Index saved to '%s'",
-            self.index_cache_dir,
-        )
+        logger.info("Indexed %d code chunks.", len(documents))
 
     @RetryableBase._retry("documents_embedding")
     async def _afrom_documents_with_retry(self, documents: list[Document]) -> FAISS:
@@ -448,16 +412,8 @@ class CodeRetriever(RetryableBase):
             raise ValueError("Vector store is not initialized.")
         await self.vector_store.aadd_documents(documents)
 
-    def delete_index_sync(self) -> None:
-        if self.index_cache_dir.exists():
-            shutil.rmtree(self.index_cache_dir)
-            logger.info("Deleted index from '%s'", self.index_cache_dir)
-        self.vector_store = None
-
     async def delete_index(self) -> None:
-        if self.index_cache_dir.exists():
-            await asyncio.to_thread(shutil.rmtree, self.index_cache_dir)
-            logger.info("Deleted index from '%s'", self.index_cache_dir)
+        """Release the in-memory index."""
         self.vector_store = None
 
     async def generate_codebase_summary(
@@ -523,14 +479,45 @@ class CodeRetriever(RetryableBase):
         ]
 
 
-def _is_vendored_library(directory: Path, root: Path) -> bool:
+# A project's declared name: name = "peft" (pyproject/setup.cfg) or name="peft".
+_DECLARED_NAME = re.compile(r"""^\s*name\s*=\s*["']?([A-Za-z0-9_.-]+)""", re.M)
+_SETUP_PY_NAME = re.compile(r"""\bname\s*=\s*["']([A-Za-z0-9_.-]+)["']""")
+
+
+def _name_tokens(name: str) -> set[str]:
+    normalized = re.sub(r"[-_.]+", "_", name.lower()).strip("_")
+    return {normalized, *normalized.split("_")} - {""}
+
+
+def own_package_names(root: Path) -> set[str]:
+    """Names the repository's own package may go by: its directory name (the
+    clone folder ends in "-<hash>") and the name its project file declares, so
+    a repo of peft or Megatron-LM indexes its own ``peft/`` or ``megatron/``."""
+    names = _name_tokens(re.sub(r"-[0-9a-f]{8}$", "", root.name))
+    for project_file in _PROJECT_FILES:
+        path = root / project_file
+        if not path.is_file():
+            continue
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        pattern = _SETUP_PY_NAME if project_file == "setup.py" else _DECLARED_NAME
+        if match := pattern.search(text):
+            names |= _name_tokens(match.group(1))
+    return names
+
+
+def _is_vendored_library(directory: Path, root: Path, own: set[str]) -> bool:
     """A nested directory that is itself a packaged copy of another project
-    (its own setup.py/pyproject.toml), or a known library vendored inline."""
-    if directory == root:
-        return False
+    (its own setup.py/pyproject.toml), or a known library vendored inline;
+    never the repository's own package."""
+    if directory == root or directory.parent == root / "src":
+        return False  # the root, or a package in the src layout
     if any((directory / name).is_file() for name in _PROJECT_FILES):
         return True
-    return directory.name.lower() in _KNOWN_LIBRARIES
+    name = directory.name.lower()
+    return name in _KNOWN_LIBRARIES and name not in own
 
 
 def _readme_text(root: Path) -> str:
@@ -553,13 +540,14 @@ def python_files(repo_path: Path, *, max_files: int | None = None) -> list[Path]
     """
     root = repo_path.resolve()
     readme = _readme_text(repo_path)
+    own = own_package_names(repo_path)
     vendored: dict[Path, bool] = {}
 
     def in_vendored_dir(path: Path) -> bool:
         for parent in path.relative_to(repo_path).parents:
             directory = repo_path / parent
             if directory not in vendored:
-                vendored[directory] = _is_vendored_library(directory, repo_path)
+                vendored[directory] = _is_vendored_library(directory, repo_path, own)
             if vendored[directory]:
                 return True
         return False

@@ -65,8 +65,19 @@ def _seconds(value: str) -> float:
     return seconds
 
 
+class _JsonArgumentParser(argparse.ArgumentParser):
+    """Usage errors keep the one-JSON-object contract: usage goes to stderr,
+    ``{"status": "rejected"}`` to stdout, exit 2 (sub-commands inherit this
+    class)."""
+
+    def error(self, message: str) -> Any:  # argparse's NoReturn hook
+        self.print_usage(sys.stderr)
+        _emit({"status": "rejected", "error": f"{self.prog}: {message}"})
+        sys.exit(EXIT_REJECTED)
+
+
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
+    parser = _JsonArgumentParser(
         prog="scholar-lens",
         description="Generate AI/ML paper reviews, summaries and technical guides.",
     )
@@ -307,7 +318,7 @@ def _work_request(raw: str) -> int:
 
 
 def _raise_on_sigterm() -> None:
-    """Batch stops a job with SIGTERM (timeout, cancel, spot reclaim). Turn it
+    """Batch stops a job with SIGTERM (timeout, cancel, host termination). Turn it
     into SystemExit so cleanup, metrics and the result manifest still run
     (``runtime.run_coroutine`` does not wait for in-flight model calls)."""
 

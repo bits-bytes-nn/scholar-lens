@@ -70,6 +70,7 @@ from .review_plan import (
     parse_lines,
     parse_plan,
     previous_context,
+    publish_blockers,
     rejected_revision_note,
     render_brief,
     render_closing_points,
@@ -96,7 +97,9 @@ ROOT_DIR: Path = (
 
 nltk.data.path.append(str(ROOT_DIR))
 
-_NO_CODEBASE = "(no code repository provided)"
+# Language-neutral sentinel for "no code repository was provided"; the review
+# and summary prompts key off this exact string.
+NO_CODEBASE = "(no code repository provided)"
 _TAG_EXPLANATION = "explanation"
 
 
@@ -166,6 +169,9 @@ class SectionCheck:
     # unsupported claims, plus deterministic rule slips): a section never
     # passes with any.
     must_fix: list[str] = field(default_factory=list)
+    # The subset of must-fix the blog validator would still reject after the
+    # publisher's own fixes: a draft with any can never be published.
+    blockers: list[str] = field(default_factory=list)
 
     def passes(self, min_score: int) -> bool:
         return self.score >= min_score and not self.missing and not self.must_fix
@@ -175,9 +181,10 @@ class SectionCheck:
             return True
         return self._rank(min_score) > other._rank(min_score)
 
-    def _rank(self, min_score: int) -> tuple[bool, int, int]:
+    def _rank(self, min_score: int) -> tuple[bool, bool, int, int]:
         return draft_rank(
             passes=self.passes(min_score),
+            publishable=not self.blockers,
             blocking=len(self.missing) + len(self.must_fix),
             score=self.score,
         )
@@ -347,7 +354,7 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
             or "- none",
             "references": references,
             "codebase_summary": neutralize_prompt_tags(
-                self.paper.codebase_summary or _NO_CODEBASE
+                self.paper.codebase_summary or NO_CODEBASE
             ),
             "translation_guideline": self._guideline(),
             "repair_note": "",
@@ -507,6 +514,7 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
         }
         best_draft, best_check = "", None
         draft_to_revise, feedback = "", ""
+        previous_check: SectionCheck | None = None
         for attempt in range(1, self.max_synthesis_attempts + 1):
             draft, missing_source = await self._write(
                 base, section.title, draft_to_revise=draft_to_revise, feedback=feedback
@@ -526,7 +534,8 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
             )
             # Deterministic rule slips are the writer's to fix (one owner: this
             # loop); the checker itself weighs the writer's unsupported items.
-            check.must_fix += writing_issues(draft)
+            check.blockers = publish_blockers(draft)
+            check.must_fix += writing_issues(draft) + check.blockers
             logger.info(
                 "Section %d '%s' attempt %d: score %d, %d missing, %d must-fix.",
                 index + 1,
@@ -548,6 +557,12 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
             )
             if not worse:
                 best_draft, best_check = draft, check
+            if _stalled(check, previous_check, self.min_quality_score):
+                # Over the bar with full coverage, and another revision did not
+                # reduce the blocking items: more attempts only trade one
+                # subjective defect for another.
+                break
+            previous_check = check
             draft_to_revise = best_draft
             feedback = _revision_feedback(best_check)
             if worse:
@@ -561,10 +576,13 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
                     f"\n{rejected}" if rejected and rejected != feedback else ""
                 )
         if best_check is not None and not best_check.passes(self.min_quality_score):
+            open_items = "; ".join(
+                item[:120] for item in [*best_check.missing, *best_check.must_fix][:3]
+            )
             self.notes.append(
                 f"Review section '{section.title}' kept below the quality bar "
                 f"(score {best_check.score}, {len(best_check.missing)} missing, "
-                f"{len(best_check.must_fix)} must-fix): check it."
+                f"{len(best_check.must_fix)} must-fix): check it. Open: {open_items}"
             )
         return ensure_section_heading(best_draft, section.title) if best_draft else ""
 
@@ -801,7 +819,30 @@ def _finalization_problems(final: dict[str, str], title: str) -> dict[str, str]:
         problems["closing"] = "closing is empty"
     elif not re.match(r"##\s+\S", final["closing"].lstrip()):
         problems["closing"] = "closing must start with its own '## ' heading"
+    # Errors the validator would reject the whole post for.
+    for part in ("key_takeaways", "closing"):
+        if (
+            part not in problems
+            and final[part]
+            and (blockers := publish_blockers(final[part]))
+        ):
+            problems[part] = "; ".join(blockers[:3])
     return problems
+
+
+def _stalled(
+    check: SectionCheck, previous: SectionCheck | None, min_score: int
+) -> bool:
+    """A revision that cleared the score bar and covers everything but did not
+    reduce the must-fix items: stop revising. Never while the draft still has
+    an error the validator would reject (those are fixable, not subjective)."""
+    return (
+        previous is not None
+        and not check.blockers
+        and check.score >= min_score
+        and not check.missing
+        and len(check.must_fix) >= len(previous.must_fix)
+    )
 
 
 def _revision_feedback(check: SectionCheck | None) -> str:

@@ -3487,26 +3487,6 @@ docs = ["sphinx (<7)", "sphinx_rtd_theme"]
 tests = ["hypothesis (>=3.27.0)", "pytest (>=7.4.0)", "pytest-cov (>=2.10.1)", "pytest-xdist (>=3.5.0)"]
 
 [[package]]
-name = "pypdf"
-version = "6.6.0"
-description = "A pure-python PDF library capable of splitting, merging, cropping, and transforming PDF files"
-optional = false
-python-versions = ">=3.9"
-groups = ["main"]
-files = [
-    {file = "pypdf-6.6.0-py3-none-any.whl", hash = "sha256:bca9091ef6de36c7b1a81e09327c554b7ce51e88dad68f5890c2b4a4417f1fd7"},
-    {file = "pypdf-6.6.0.tar.gz", hash = "sha256:4c887ef2ea38d86faded61141995a3c7d068c9d6ae8477be7ae5de8a8e16592f"},
-]
-
-[package.extras]
-crypto = ["cryptography"]
-cryptodome = ["PyCryptodome"]
-dev = ["black", "flit", "pip-tools", "pre-commit", "pytest-cov", "pytest-socket", "pytest-timeout", "pytest-xdist", "wheel"]
-docs = ["myst_parser", "sphinx", "sphinx_rtd_theme"]
-full = ["Pillow (>=8.0.0)", "cryptography"]
-image = ["Pillow (>=8.0.0)"]
-
-[[package]]
 name = "pytest"
 version = "9.0.3"
 description = "pytest: simple powerful testing with Python"
@@ -4669,4 +4649,4 @@ cffi = ["cffi (>=1.17,<2.0) ; platform_python_implementation != \"PyPy\" and pyt
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.12"
-content-hash = "cc2540a226e8d5acc671bba85795b03323d035db6541071857b947f4f5197062"
+content-hash = "eacf5e9927cc8861fee79e19fe65ded55628c4e316aaac38cdfcad3ed7f43638"

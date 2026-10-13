@@ -13,7 +13,9 @@ from __future__ import annotations
 
 import os
 import re
+import socket
 from abc import ABC, abstractmethod
+from collections import Counter
 from collections.abc import Collection
 from dataclasses import dataclass, field
 from urllib.parse import urljoin, urlparse
@@ -23,10 +25,18 @@ from bs4 import BeautifulSoup, Tag, UnicodeDammit
 
 from .constants import EnvVars
 from .logger import logger
+from .markdown_lint import close_open_fence
+from .markdown_math import segments
 from .pinned_transport import PinnedHTTPTransport
 from .prompt_safety import neutralize_prompt_tags
-from .url_guard import UnsafeUrlError, is_url_public
+from .url_guard import (
+    UnsafeUrlError,
+    assert_url_is_public,
+    is_temporary_dns_failure,
+    is_url_public,
+)
 from .utils import extract_text_from_html
+from .utils.helpers import is_page_furniture
 
 DEFAULT_TIMEOUT: int = 30
 DEFAULT_MAX_SUBPAGES: int = 8
@@ -53,9 +63,77 @@ _REFERENCE_LINK = re.compile(
     re.I,
 )
 # A docs version in a URL path: a rolling alias or a pinned release such as
-# "v0.6.0", "0.6" or "v2" (a bare number like a year is not a version).
+# "v0.6.0", "0.6" or "v2" (a bare number like a year is not a version). Aliases
+# and dotted releases count at any depth (/deeplearning/nemo/user-guide/docs/en/
+# v1.23.0/); a bare "vN" only right after the root or a language, since deeper
+# it is an API version ("/reference/rest/v1/"), not a docs release.
 _ROLLING_DOCS_VERSIONS = frozenset({"latest", "stable", "main", "dev", "nightly"})
-_PINNED_DOCS_VERSION = re.compile(r"v\d+(?:\.\d+)*|\d+(?:\.\d+)+", re.I)
+_DOTTED_DOCS_VERSION = re.compile(r"v?\d+(?:\.\d+)+", re.I)
+_BARE_DOCS_VERSION = re.compile(r"v\d+", re.I)
+_BARE_VERSION_SEGMENTS = 2  # "v2" only right after the root or a language
+# A product named by a docs path: huggingface.co/docs/<product>/…
+_DOCS_PRODUCT_PATH = re.compile(r"^/docs/([a-z][a-z0-9_-]*)/", re.I)
+# The command of a shell line in fenced code that takes long options
+# ("vllm serve --x"). Lines are split at "&&", "||", ";" and "|"; "\\" line
+# continuations are joined; environment assignments, options, numbers and
+# generic tools or launchers (sudo, timeout, srun, bash …) are skipped, and
+# "kubectl exec pod -- vllm …" reads what follows the "--".
+_COMMAND_SEPARATOR = re.compile(r"&&|\|\||;|\|")
+_ENV_ASSIGNMENT = re.compile(
+    r"(?<![\w-])[A-Za-z_][A-Za-z0-9_]*=(?:\"[^\"\n]*\"|'[^'\n]*'|\S*)"
+)
+_PROMPT = re.compile(r"^\s*(?:\([\w.-]+\)\s*)?\$\s")
+_COMMAND_NAME = re.compile(r"[a-z][a-z0-9_-]{1,30}", re.I)
+_LONG_OPTION = re.compile(r"\s--[a-z]", re.I)
+_LINE_CONTINUATION = re.compile(r"\\\r?\n\s*")
+# Tools whose subcommands are not products ("pip install", "git clone").
+_GENERIC_COMMANDS = frozenset(
+    {
+        "apt", "apt-get", "brew", "cat", "conda", "curl", "docker", "echo",
+        "export", "git", "helm", "kubectl", "npm", "pip", "pip3", "printf",
+        "python", "python3", "uv", "wget",
+    }
+)  # fmt: skip
+# Launchers and shells: what they run is the command.
+_LAUNCHERS = frozenset(
+    {
+        "bash", "cd", "env", "exec", "nice", "nohup", "numactl", "sh", "source",
+        "srun", "stdbuf", "sudo", "taskset", "time", "timeout", "watch", "xargs",
+        "zsh",
+    }
+)  # fmt: skip
+
+
+def _command_of(part: str) -> str | None:
+    """The tool a shell command line runs, or None (a generic tool's own
+    subcommand is not one)."""
+    rest = _PROMPT.sub("", part)
+    if " -- " in rest:
+        rest = rest.rsplit(" -- ", 1)[1]
+    for token in _ENV_ASSIGNMENT.sub(" ", rest).split():
+        word = token.strip("'\"")
+        if word[:1] == "-" or word.isdigit() or word.lower() in _LAUNCHERS:
+            continue
+        if word.lower() in _GENERIC_COMMANDS or not _COMMAND_NAME.fullmatch(word):
+            return None
+        return word
+    return None
+
+
+def _commands_with_flags(code: str) -> list[str]:
+    """The tools the shell lines in ``code`` that take long options run."""
+    found: list[str] = []
+    for line in _LINE_CONTINUATION.sub(" ", code).splitlines():
+        for part in _COMMAND_SEPARATOR.split(line):
+            if _LONG_OPTION.search(part) and (command := _command_of(part)):
+                found.append(command.lower())
+    return found
+
+
+_FENCED_CODE = re.compile(r"^```[^\n]*\n(.*?)^```", re.S | re.M)
+# Host labels that do not name a product (docs.vllm.ai → vllm).
+HOST_NOISE = frozenset({"docs", "www", "doc", "api", "readthedocs", "github"})
+# Images that are page furniture, not content: tracking pixels and chrome.
 _BRAVE_WEB_SEARCH_URL = "https://api.search.brave.com/res/v1/web/search"
 _TAVILY_SEARCH_URL = "https://api.tavily.com/search"
 
@@ -63,11 +141,18 @@ _TAVILY_SEARCH_URL = "https://api.tavily.com/search"
 def docs_version(url: str) -> str | None:
     """The first path segment that names a docs version (``latest``,
     ``stable``, ``v0.6.0``, ``0.6`` …), lower-cased; ``None`` when there is none."""
-    for segment in urlparse(url).path.split("/"):
+    segments = [s for s in urlparse(url).path.split("/") if s]
+    for index, segment in enumerate(segments):
         lowered = segment.lower()
-        if lowered in _ROLLING_DOCS_VERSIONS or _PINNED_DOCS_VERSION.fullmatch(lowered):
+        if lowered in _ROLLING_DOCS_VERSIONS or _DOTTED_DOCS_VERSION.fullmatch(lowered):
+            return lowered
+        if index < _BARE_VERSION_SEGMENTS and _BARE_DOCS_VERSION.fullmatch(lowered):
             return lowered
     return None
+
+
+def _is_current(version: str | None) -> bool:
+    return version is None or version in _ROLLING_DOCS_VERSIONS
 
 
 @dataclass(frozen=True)
@@ -86,6 +171,27 @@ class OfficialDocs:
             versions=frozenset(docs_version(u) for u in urls),
         )
 
+    @classmethod
+    def from_research(
+        cls, urls: Collection[str], pages: Collection[PageContent]
+    ) -> OfficialDocs:
+        """Like :meth:`from_urls`, plus where the requested pages actually
+        landed: a docs site that redirects (``pytorch.org/docs/stable`` →
+        ``docs.pytorch.org/docs/2.14``) keeps its own pages official, and the
+        pinned release a rolling or unversioned link resolves to is current."""
+        base = cls.from_urls(urls)
+        requested = {normalize_url(u) for u in urls}
+        hosts, versions = set(base.hosts), set(base.versions)
+        for page in pages:
+            if not page.final_url or normalize_url(page.url) not in requested:
+                continue
+            if host := urlparse(page.final_url).hostname:
+                hosts.add(host)
+            landed = docs_version(page.final_url)
+            if _is_current(docs_version(page.url)) or landed in base.versions:
+                versions.add(landed)
+        return cls(hosts=frozenset(hosts), versions=frozenset(versions))
+
     def on_host(self, url: str) -> bool:
         return (urlparse(url).hostname or "") in self.hosts
 
@@ -98,10 +204,84 @@ class OfficialDocs:
         if version in _ROLLING_DOCS_VERSIONS:
             # Rolling aliases describe the current release, like an
             # unversioned input does.
-            return not self.versions or any(
-                v is None or v in _ROLLING_DOCS_VERSIONS for v in self.versions
-            )
+            return not self.versions or any(_is_current(v) for v in self.versions)
         return False  # a pinned release none of the inputs asked for
+
+
+def product_names(urls: Collection[str], pages: Collection[PageContent]) -> list[str]:
+    """Names the requested docs' commands go by, most specific first: the
+    product in a ``/docs/<product>/`` path (when the pages use that name), the command the requested pages'
+    fenced code runs most often with long options (at least twice, so one
+    stray example does not count), then the site's host label
+    (``docs.vllm.ai`` → ``vllm``). Generic tools are skipped, except as the
+    docs' own host (``helm.sh`` → ``helm``)."""
+    names: list[str] = []
+
+    def add(name: str, *, generic_ok: bool = False) -> bool:
+        name = name.lower()
+        if not name or name in names:
+            return False
+        if name in _GENERIC_COMMANDS and not generic_ok:
+            return False
+        names.append(name)
+        return True
+
+    requested = {normalize_url(u) for u in urls}
+    own_text = " ".join(  # code only: a title says "Quick Reference" too
+        " ".join(_FENCED_CODE.findall(page.text)).lower()
+        for page in pages
+        if normalize_url(page.url) in requested
+    )
+    for url in urls:
+        # A /docs/<x>/ segment names a product only when the pages' code uses it;
+        # on single-product sites it is a section ("reference", "setup").
+        if match := _DOCS_PRODUCT_PATH.match(urlparse(url).path):
+            section = match.group(1).lower()
+            if docs_version("/" + section) is None and re.search(
+                rf"(?<![\w-]){re.escape(section)}(?![\w])", own_text
+            ):
+                add(section)
+    counts = Counter(
+        command
+        for page in pages
+        if normalize_url(page.url) in requested
+        for block in _FENCED_CODE.findall(page.text)
+        for command in _commands_with_flags(block)
+    )
+    if counts:
+        command, count = counts.most_common(1)[0]
+        if count >= 2:
+            add(command)
+    for url in urls:
+        labels = (urlparse(url).hostname or "").split(".")[:-1]
+        for label in labels:
+            # The docs' own domain names its tool even when it is a generic one
+            # elsewhere (helm.sh → helm), but not a subdomain (python.langchain.com).
+            if label not in HOST_NOISE and add(label, generic_ok=label == labels[-1]):
+                break
+    return names
+
+
+class SourceFetchError(Exception):
+    """Every requested page failed for transport reasons (timeouts, refused
+    connections, 429/5xx): a retryable outage, not a bad request."""
+
+
+def _is_resolver_error(error: BaseException) -> bool:
+    """A DNS lookup failure (any ``socket.gaierror``) in the cause chain."""
+    seen: BaseException | None = error
+    while seen is not None:
+        if isinstance(seen, socket.gaierror):
+            return True
+        seen = seen.__cause__ or seen.__context__
+    return False
+
+
+def _is_transport_failure(error: BaseException) -> bool:
+    if isinstance(error, httpx.HTTPStatusError):
+        status = error.response.status_code
+        return status == 429 or status >= 500
+    return isinstance(error, httpx.TransportError) or is_temporary_dns_failure(error)
 
 
 @dataclass(frozen=True)
@@ -184,7 +364,7 @@ class ResearchCorpus:
             room = max_chars - used
             if room <= 2_000:
                 break
-            blocks.append(block[:room])
+            blocks.append(_cut(block, room))
             used += len(blocks[-1])
         return "\n\n---\n\n".join(blocks)
 
@@ -382,9 +562,10 @@ class WebResearcher:
     ) -> ResearchCorpus:
         corpus = ResearchCorpus()
         visited: set[str] = set()
+        failures: list[BaseException] = []
 
         for url in urls:
-            page = self._fetch_page(url)
+            page = self._fetch_page(url, failures=failures)
             if page is None:
                 continue
             corpus.pages.append(page)
@@ -399,6 +580,11 @@ class WebResearcher:
                         corpus.pages.append(sub_page)
                         visited.add(normalize_url(sub_url))
 
+        if urls and not corpus.pages and len(failures) == len(urls):
+            if all(_is_transport_failure(e) for e in failures):
+                raise SourceFetchError(
+                    f"Could not reach any of the requested pages: {failures[0]}"
+                ) from failures[0]
         self.run_searches(corpus, search_queries or [])
 
         logger.info(
@@ -418,23 +604,32 @@ class WebResearcher:
         the seed pages once, derive queries from them, then broaden the corpus
         without re-fetching the seed URLs.
 
-        ``fetch_top`` > 0 also brings that many of the highest-ranked, not-yet-
-        visited results into ``corpus.pages`` so the gathered material actually
+        ``fetch_top`` > 0 also brings that many not-yet-visited results, taken
+        round-robin across the queries, into ``corpus.pages`` so the gathered material actually
         reaches the writer (a result list alone is title+snippet only). A result
         that already carries cleaned ``content`` (Tavily) is used directly — no
         re-fetch, so no extra SSRF surface; otherwise the URL is fetched through
         the same SSRF guard as every other fetch (Brave). Deduped against pages
         already in the corpus.
         """
-        for query in queries:
-            corpus.search_results.extend(self.search_provider.search(query))
+        per_query = [self.search_provider.search(query) for query in queries]
+        for results in per_query:
+            corpus.search_results.extend(results)
 
         if fetch_top <= 0:
             return
 
+        # Take result i of every query before result i + 1 of any, so no single
+        # query (e.g. an internals one) fills the whole fetch budget.
+        interleaved = [
+            results[i]
+            for i in range(max((len(r) for r in per_query), default=0))
+            for results in per_query
+            if i < len(results)
+        ]
         visited = {normalize_url(p.url) for p in corpus.pages}
         added = 0
-        for result in corpus.search_results:
+        for result in interleaved:
             if added >= fetch_top:
                 break
             norm = normalize_url(result.url)
@@ -527,7 +722,9 @@ class WebResearcher:
         )
         return added
 
-    def _fetch_page(self, url: str) -> PageContent | None:
+    def _fetch_page(
+        self, url: str, *, failures: list[BaseException] | None = None
+    ) -> PageContent | None:
         # SSRF guard, two layers: a cheap pre-check here for a fast skip + clear
         # log without opening a connection, and the authoritative check in
         # PinnedHTTPTransport, which validates and pins EVERY request — including
@@ -535,17 +732,48 @@ class WebResearcher:
         # no unchecked redirect target). The transport raises UnsafeUrlError if a
         # hop targets a non-public address.
         if not is_url_public(url):
-            logger.warning("Skipping non-public URL '%s' (SSRF guard).", url)
-            return None
+            try:
+                # Again, for the reason. A lookup that now succeeds was a
+                # resolver hiccup: go on and fetch (the transport re-checks).
+                assert_url_is_public(url)
+            except UnsafeUrlError as e:
+                if is_temporary_dns_failure(e):  # an outage, not an unsafe URL
+                    logger.warning("Failed to resolve '%s': %s", url, e)
+                    if failures is not None:
+                        failures.append(e)
+                    return None
+                if _is_resolver_error(e):
+                    logger.warning(
+                        "Skipping '%s': the host could not be resolved.", url
+                    )
+                else:
+                    logger.warning(
+                        "Skipping non-public URL '%s' (SSRF guard): %s", url, e
+                    )
+                return None
         try:
             fetched = self._get_html(url)
         except UnsafeUrlError as e:
-            logger.warning(
-                "Skipping '%s' — redirected to non-public target: %s", url, e
-            )
+            if is_temporary_dns_failure(e):  # at connect time: an outage
+                logger.warning("Failed to resolve '%s' while fetching: %s", url, e)
+                if failures is not None:
+                    failures.append(e)
+            elif _is_resolver_error(e):
+                logger.warning(
+                    "Skipping '%s': a host could not be resolved: %s", url, e
+                )
+            else:
+                logger.warning(
+                    "Skipping '%s' — it or a redirect targets a non-public "
+                    "address: %s",
+                    url,
+                    e,
+                )
             return None
         except httpx.HTTPError as e:
             logger.warning("Failed to fetch '%s': %s", url, e)
+            if failures is not None:
+                failures.append(e)
             return None
         if fetched is None:
             return None
@@ -555,7 +783,9 @@ class WebResearcher:
         title = soup.title.get_text(strip=True) if soup.title else url
         # Relative links and image markers resolve against where the page
         # actually lives (after redirects), not the URL we asked for.
-        text = extract_text_from_html(html, base_url=final_url)
+        text = extract_text_from_html(
+            _main_content(soup) or html, base_url=final_url, skip_page_furniture=True
+        )
         image_urls = self._extract_images(soup, final_url)
         links = self._extract_links(soup, final_url)
         return PageContent(
@@ -619,14 +849,19 @@ class WebResearcher:
         return html, final_url
 
     def _extract_images(self, soup: BeautifulSoup, base_url: str) -> list[str]:
+        """Content images, deduped: tracking pixels and the logos in page
+        chrome (header, navigation, footer, ``<noscript>``) are skipped."""
         images: list[str] = []
         for img in soup.find_all("img"):
-            if not isinstance(img, Tag):
+            if not isinstance(img, Tag) or is_page_furniture(img):
                 continue
             src = img.get("src") or img.get("data-src")
             if isinstance(src, str) and src.strip():
                 absolute = urljoin(base_url, src.strip())
-                if absolute.lower().startswith(("http://", "https://")):
+                if (
+                    absolute.lower().startswith(("http://", "https://"))
+                    and absolute not in images
+                ):
                     images.append(absolute)
             if len(images) >= self.max_images_per_page:
                 break
@@ -650,9 +885,19 @@ class WebResearcher:
         return links
 
     def _select_subpages(self, page: PageContent, base_url: str) -> list[str]:
-        """In-scope sub-URLs: same host and under the seed's path, deduped."""
+        """In-scope sub-URLs: same host and under the seed's path, deduped. A
+        leaf page without an extension (``/docs/peft/guides/lora``) has no
+        children, so its siblings are in scope instead."""
         base = urlparse(base_url)
         scope = _scope_prefix(base.path)
+        selected = self._links_under(page, base_url, scope)
+        parent = scope.rstrip("/").rsplit("/", 1)[0] + "/"
+        if not selected and parent.count("/") > 2:
+            selected = self._links_under(page, base_url, parent)
+        return selected
+
+    def _links_under(self, page: PageContent, base_url: str, scope: str) -> list[str]:
+        base = urlparse(base_url)
         selected: list[str] = []
         seen: set[str] = set()
         for link in page.links:
@@ -669,6 +914,45 @@ class WebResearcher:
             if len(selected) >= self.max_subpages:
                 break
         return selected
+
+
+def _main_content(soup: BeautifulSoup) -> str:
+    """The page's single ``<article>`` (else its single ``<main>``) as HTML,
+    so the sidebars, version pickers and "rate this page" widgets around it
+    stay out of the text; "" when the page has no such landmark."""
+    for name in ("article", "main"):
+        found = soup.find_all(name)
+        if len(found) == 1 and found[0].get_text(strip=True):
+            return str(found[0])
+    return ""
+
+
+def _cut(text: str, limit: int) -> str:
+    """``text`` cut to ``limit`` at a paragraph break, never inside a code
+    fence (a fence left open would make the rest of the prompt read as code)."""
+    if len(text) <= limit:
+        return text
+    head = text[:limit]
+    if (paragraph := head.rfind("\n\n")) > limit // 2:
+        head = head[:paragraph]
+    # Cut inside a math span: drop the open one. Code is masked first, since a
+    # shell ``$$`` (the PID) is not math and would otherwise cut the page.
+    masked = list(head)
+    for seg in segments(head):
+        if seg.kind in ("fence", "icode"):
+            masked[seg.start : seg.end] = " " * (seg.end - seg.start)
+    prose = "".join(masked)
+    if prose.count("$$") % 2:
+        head = head[: prose.rfind("$$")].rstrip()
+        prose = prose[: len(head)]
+    # A cut inside inline code leaves an odd backtick, inside "$$" a lone "$".
+    if prose.count("`") % 2:
+        head = head[: prose.rfind("`")].rstrip()
+        prose = prose[: len(head)]
+    # Only a "$$" split by the cut leaves a lone "$"; "$x$" ends correctly.
+    if re.search(r"(?<!\$)\$$", prose) and text[len(head) : len(head) + 1] == "$":
+        head = head[:-1].rstrip()
+    return close_open_fence(head)
 
 
 def _meta_refresh_target(html: str, base_url: str) -> str | None:

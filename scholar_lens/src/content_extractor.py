@@ -221,7 +221,7 @@ class ContentExtractor(RetryableBase):
         still collapse the model's formatting variants of the SAME reference
         ("Smith et al." vs "Smith, J., et al.") across pagination calls, while
         keeping genuinely distinct same-title works (different authors/year)
-        apart, which a title-only key silently dropped.
+        apart.
         """
         if cit.arxiv_id:
             return f"arxiv:{cit.arxiv_id.lower()}"

@@ -1,4 +1,3 @@
-import argparse
 import asyncio
 import functools
 import re
@@ -43,20 +42,6 @@ def parse_quality_score(raw: Any) -> int:
         return clamp(int(fraction.group(1)))
     match = re.search(r"\d+", text)
     return clamp(int(match.group())) if match else 0
-
-
-def arg_as_bool(value: Any) -> bool:
-    if isinstance(value, bool):
-        return value
-
-    if isinstance(value, str):
-        value = value.lower().strip()
-        if value in ("yes", "true", "t", "y", "1"):
-            return True
-        if value in ("no", "false", "f", "n", "0"):
-            return False
-
-    raise argparse.ArgumentTypeError("Boolean value expected")
 
 
 _AFFIRMATIVE = frozenset({"y", "yes", "yeah", "yep", "true", "t", "1"})
@@ -164,6 +149,56 @@ _NUMERIC_CELL = re.compile(
 _MAX_HEADER_ROWS = 3
 
 
+# LaTeXML lays out some tables as nested <span>/<div> elements with classes,
+# spans encoded as ``ltx_colspan_N``/``ltx_rowspan_N``.
+_LATEXML_TABLE_PARTS = {
+    "ltx_tabular": "table",
+    "ltx_thead": "thead",
+    "ltx_tbody": "tbody",
+    "ltx_tr": "tr",
+    "ltx_td": "td",
+}
+_LATEXML_SPAN = re.compile(r"^ltx_(colspan|rowspan)_(\d+)$")
+# KaTeX renders each formula twice: MathML (kept) and visual HTML (dropped
+# only when the MathML copy is there; HTML-only output is the formula).
+_KATEX_VISUAL = ".katex-html, [aria-hidden=true]"
+# Images that are page furniture, not content: tracking pixels, site logos
+# and anything in the page chrome.
+_CHROME_TAGS = ("noscript", "header", "nav", "footer")
+_LOGO = re.compile(r"(?:^|[-_.])logo(?:$|[-_.])", re.I)
+
+
+def is_page_furniture(img: Tag) -> bool:
+    """A docs-page ``<img>`` that is chrome, a tracking pixel or a site logo."""
+    if img.find_parent(_CHROME_TAGS):
+        return True
+    if {str(img.get("width", "")).strip(), str(img.get("height", "")).strip()} & {
+        "0",
+        "1",
+    }:
+        return True
+    src = str(img.get("src") or img.get("data-src") or "")
+    return bool(_LOGO.search(src.rsplit("/", 1)[-1]))
+
+
+# Sphinx/MkDocs anchor glyphs after headings ("## torch.compile#").
+_HEADER_LINK = "a.headerlink, a.anchor, a.headeranchor-link"
+
+
+def _latexml_tables_to_html(soup: BeautifulSoup) -> None:
+    """Rename LaTeXML ``span``/``div`` tables to real table elements so they
+    go through :func:`table_to_markdown` instead of flattening into a line."""
+    for element in soup.select(
+        ", ".join(f"span.{c}, div.{c}" for c in _LATEXML_TABLE_PARTS)
+    ):
+        classes = _classes(element)
+        part = next(c for c in classes if c in _LATEXML_TABLE_PARTS)
+        element.name = _LATEXML_TABLE_PARTS[part]
+        for name in classes:
+            if match := _LATEXML_SPAN.match(name):
+                element[match.group(1)] = match.group(2)
+
+
 def _inline(text: str) -> str:
     return re.sub(r"\s+", " ", text)
 
@@ -260,16 +295,19 @@ def _equation_table_markdown(table: Tag) -> str:
 
 
 def _nested_table_text(table: Tag, render_cell: Callable[[Tag], str]) -> str:
-    """A table inside a table cell, flattened: cells ' / ', rows '; '."""
-    rows = []
+    """A table inside a table cell, flattened: cells ' / ', rows '; ' (a
+    one-column stack, LaTeX's way of breaking a cell's text, joins with spaces)."""
+    rows, widest = [], 0
     for tr in _own_rows(table):
         cells = [
             _inline(render_cell(c)).strip()
             for c in tr.find_all(["td", "th"], recursive=False)
         ]
         if any(cells):
-            rows.append(" / ".join(c for c in cells if c))
-    return "; ".join(rows)
+            filled = [c for c in cells if c]
+            widest = max(widest, len(filled))
+            rows.append(" / ".join(filled))
+    return (" " if widest == 1 else "; ").join(rows)
 
 
 def _body_cells(slot_row: list[tuple[str, bool] | None]) -> list[str]:
@@ -296,6 +334,9 @@ def table_to_markdown(table: Tag, render_cell: Callable[[Tag], str]) -> str:
     first_row_span = 1
     is_th_row: list[bool] = []
     in_thead: list[bool] = []
+    # A row whose only own cell spans columns: a section label such as
+    # "Closed-Source Base Model", never part of a stacked header.
+    section_row: list[bool] = []
     for r, tr in enumerate(_own_rows(table)):
         while len(grid) <= r:
             grid.append([])
@@ -303,6 +344,7 @@ def table_to_markdown(table: Tag, render_cell: Callable[[Tag], str]) -> str:
         cells = list(tr.find_all(["td", "th"], recursive=False))
         is_th_row.append(bool(cells) and all(c.name == "th" for c in cells))
         in_thead.append(tr.find_parent("thead") is not None)
+        section_row.append(len(cells) == 1 and _cell_span(cells[0], "colspan") > 1)
         col = 0
         for cell in cells:
             while col < len(row) and row[col] is not None:
@@ -327,6 +369,7 @@ def table_to_markdown(table: Tag, render_cell: Callable[[Tag], str]) -> str:
     slots = [grid[i] + [None] * (width - len(grid[i])) for i in keep]
     is_th_row = [is_th_row[i] if i < len(is_th_row) else False for i in keep]
     in_thead = [in_thead[i] if i < len(in_thead) else False for i in keep]
+    section_row = [section_row[i] if i < len(section_row) else False for i in keep]
     rows = [_body_cells(slot_row) for slot_row in slots]
 
     header_count = sum(1 for flag in in_thead[: len(rows)] if flag)
@@ -346,6 +389,12 @@ def table_to_markdown(table: Tag, render_cell: Callable[[Tag], str]) -> str:
         # header) marks those rows as header even when one looks numeric.
         header_count = max(header_count, min(first_row_span, _MAX_HEADER_ROWS))
     header_count = max(1, min(header_count, len(rows) - 1)) if len(rows) > 1 else 1
+    # A rowspan in the header must not pull a section label row into it (a
+    # spanning sub-header inside <thead> is still header).
+    header_count = next(
+        (i for i in range(1, header_count) if section_row[i] and not in_thead[i]),
+        header_count,
+    )
 
     header: list[str] = []
     for c in range(width):
@@ -514,15 +563,21 @@ def _list_start(element: Tag) -> int:
         return 1
 
 
-def extract_text_from_html(html_content: str, *, base_url: str | None = None) -> str:
+def extract_text_from_html(
+    html_content: str,
+    *,
+    base_url: str | None = None,
+    skip_page_furniture: bool = False,
+) -> str:
     """Convert paper/doc HTML into compact Markdown-like text for the models.
 
     Keeps the structure the writers need: headings (``##``), paragraphs, list
     items, fenced ``<pre>`` and LaTeXML listing code, ``$$``-delimited LaTeX
     from MathML, complete GFM tables, footnotes in place, and
-    ``[Image: alt=…, src=…]`` figure markers (``src`` resolved against
+    ``[Image: alt="…", src="…"]`` figure markers (``src`` resolved against
     ``base_url`` when given). Page chrome (nav/header/footer/aside, scripts) is
-    dropped.
+    dropped; with ``skip_page_furniture`` (docs pages) so are logo and
+    tracking-pixel images, matching the page's image list.
     """
     if not html_content:
         return ""
@@ -532,8 +587,13 @@ def extract_text_from_html(html_content: str, *, base_url: str | None = None) ->
     for tag_name in _DROPPED_TAGS:
         for tag in soup.find_all(tag_name):
             tag.decompose()
-    for tag in soup.select(", ".join(_DROPPED_LATEXML)):
+    for tag in soup.select(", ".join((*_DROPPED_LATEXML, _HEADER_LINK))):
         tag.decompose()
+    for katex in soup.select(".katex"):
+        if katex.select_one(".katex-mathml"):
+            for tag in katex.select(_KATEX_VISUAL):
+                tag.decompose()
+    _latexml_tables_to_html(soup)
     for tag_name in _PAGE_LEVEL_TAGS:
         for tag in soup.find_all(tag_name):
             if tag.find_parent(["article", "main"]) is None:
@@ -564,11 +624,14 @@ def extract_text_from_html(html_content: str, *, base_url: str | None = None) ->
             return ""
         name = element.name
         if name == "img":
+            if skip_page_furniture and is_page_furniture(element):
+                return ""
             src = str(element.get("src") or element.get("data-src") or "").strip()
             if src.lower().startswith("data:"):
                 return ""  # inline bitmap: nothing a writer could reference
             alt = _inline(str(element.get("alt", ""))).strip()
-            return f"[Image: alt={alt}, src={resolve(src)}]"
+            alt = alt.replace('"', "'")
+            return f'[Image: alt="{alt}", src="{resolve(src)}"]'
         if (
             name == "object"
             and element.get("data")
@@ -578,7 +641,7 @@ def extract_text_from_html(html_content: str, *, base_url: str | None = None) ->
             data = str(element.get("data")).strip()
             if data.lower().startswith("data:"):
                 return ""  # inline SVG payload, as for <img>
-            return f"[Image: alt=, src={resolve(data)}]"
+            return f'[Image: alt="", src="{resolve(data)}"]'
         if name == "math":
             return _math_markdown(element)
         if name == "table":
@@ -637,7 +700,7 @@ def extract_text_from_html(html_content: str, *, base_url: str | None = None) ->
                 or href == text.strip()
             ):
                 return text
-            return f"{text} ({href})"
+            return f"{text} ({resolve(href.strip())})"
         if name in _BLOCK_TAGS:
             return f"\n\n{children(element)}\n\n"
         return children(element)
@@ -654,9 +717,12 @@ def extract_text_from_html(html_content: str, *, base_url: str | None = None) ->
         fence = _fence_toggle(line, fence)
         if was_open or fence is not None:
             lines.append(line)  # code (and its fence lines)
-        else:
+        elif line.strip():
             kept, in_list = _list_line(line, in_list)
             lines.append(kept)
+        else:
+            lines.append("")  # a whitespace-only line is a paragraph break
+            in_list = False
     return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
 
 

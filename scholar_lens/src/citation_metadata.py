@@ -14,14 +14,18 @@ the caller can fall back. Network access goes through a shared rate limiter.
 
 from __future__ import annotations
 
+import os
 import re
+import threading
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from difflib import SequenceMatcher
+from typing import Any
 
 import httpx
 from bs4 import BeautifulSoup
 
+from .constants import EnvVars
 from .logger import logger
 from .rate_limiter import RateLimiter
 
@@ -29,10 +33,16 @@ _TIMEOUT = 15.0
 _CROSSREF_URL = "https://api.crossref.org/works"
 _SEMANTIC_SCHOLAR_URL = "https://api.semanticscholar.org/graph/v1/paper/search"
 
-# Generous shared limiters (these APIs tolerate more than arXiv, but politeness
-# still avoids 429s under the concurrent citation fan-out).
-_CROSSREF_LIMITER = RateLimiter(rate=5.0, per=1.0, name="crossref")
+# Shared limiters sized to each API's published limits: Crossref's public pool
+# allows 1 request per second, one at a time (x-rate-limit-limit: 1,
+# x-concurrency-limit: 1); Semantic Scholar's unauthenticated pool is shared
+# and throttles bursts.
+_CROSSREF_LIMITER = RateLimiter(rate=1.0, per=1.0, name="crossref")
+_CROSSREF_CONCURRENCY = threading.Lock()
 _SEMANTIC_SCHOLAR_LIMITER = RateLimiter(rate=1.0, per=1.0, name="semantic-scholar")
+# A 429 without Retry-After waits this long before the single retry.
+_DEFAULT_RETRY_AFTER = 5.0
+_MAX_RETRY_AFTER = 60.0
 
 # Crossref work types whose URL we trust as the primary publication of a cited
 # paper. Book chapters / encyclopedia entries / monographs are EXCLUDED: for an
@@ -100,12 +110,48 @@ class MetadataProvider(ABC):
     def lookup(self, title: str) -> ReferenceMetadata | None: ...
 
 
+def _retry_after(response: httpx.Response) -> float:
+    try:
+        seconds = float(response.headers.get("Retry-After", ""))
+    except ValueError:
+        seconds = _DEFAULT_RETRY_AFTER
+    return min(max(seconds, 0.0), _MAX_RETRY_AFTER)
+
+
+def _get_json(
+    url: str,
+    *,
+    params: dict[str, str],
+    limiter: RateLimiter,
+    timeout: float,
+    headers: dict[str, str] | None = None,
+    serial: threading.Lock | None = None,
+) -> Any:
+    """GET JSON at the API's pace. A 429 pauses every caller of the API for
+    its ``Retry-After`` and is retried once; any other failure raises."""
+    for attempt in range(2):
+        limiter.acquire()
+        if serial is not None:
+            with serial:
+                response = httpx.get(
+                    url, params=params, headers=headers, timeout=timeout
+                )
+        else:
+            response = httpx.get(url, params=params, headers=headers, timeout=timeout)
+        if response.status_code == 429 and attempt == 0:
+            limiter.penalize(_retry_after(response))
+            continue
+        response.raise_for_status()
+        return response.json()
+    raise AssertionError("unreachable")  # pragma: no cover
+
+
 class CrossrefProvider(MetadataProvider):
     """Crossref REST API — no key, broad coverage, abstracts when available."""
 
     def __init__(self, *, timeout: float = _TIMEOUT, mailto: str | None = None) -> None:
         self.timeout = timeout
-        self.mailto = mailto
+        self.mailto = mailto or os.environ.get(EnvVars.CROSSREF_MAILTO.value)
 
     def lookup(self, title: str) -> ReferenceMetadata | None:
         params = {
@@ -116,10 +162,14 @@ class CrossrefProvider(MetadataProvider):
         if self.mailto:
             params["mailto"] = self.mailto
         try:
-            _CROSSREF_LIMITER.acquire()
-            resp = httpx.get(_CROSSREF_URL, params=params, timeout=self.timeout)
-            resp.raise_for_status()
-            items = resp.json().get("message", {}).get("items", [])
+            data = _get_json(
+                _CROSSREF_URL,
+                params=params,
+                limiter=_CROSSREF_LIMITER,
+                timeout=self.timeout,
+                serial=_CROSSREF_CONCURRENCY,
+            )
+            items = data.get("message", {}).get("items", [])
         except (httpx.HTTPError, ValueError) as e:
             logger.warning("Crossref lookup failed for '%s': %s", title, e)
             return None
@@ -151,16 +201,22 @@ class CrossrefProvider(MetadataProvider):
 class SemanticScholarProvider(MetadataProvider):
     """Semantic Scholar graph search — good abstract coverage for CS/ML."""
 
-    def __init__(self, *, timeout: float = _TIMEOUT) -> None:
+    def __init__(
+        self, *, timeout: float = _TIMEOUT, api_key: str | None = None
+    ) -> None:
         self.timeout = timeout
+        self.api_key = api_key or os.environ.get(EnvVars.SEMANTIC_SCHOLAR_API_KEY.value)
 
     def lookup(self, title: str) -> ReferenceMetadata | None:
         params = {"query": title, "limit": "1", "fields": "title,abstract,authors,url"}
         try:
-            _SEMANTIC_SCHOLAR_LIMITER.acquire()
-            resp = httpx.get(_SEMANTIC_SCHOLAR_URL, params=params, timeout=self.timeout)
-            resp.raise_for_status()
-            data = resp.json().get("data", [])
+            data = _get_json(
+                _SEMANTIC_SCHOLAR_URL,
+                params=params,
+                limiter=_SEMANTIC_SCHOLAR_LIMITER,
+                timeout=self.timeout,
+                headers={"x-api-key": self.api_key} if self.api_key else None,
+            ).get("data", [])
         except (httpx.HTTPError, ValueError) as e:
             logger.warning("Semantic Scholar lookup failed for '%s': %s", title, e)
             return None

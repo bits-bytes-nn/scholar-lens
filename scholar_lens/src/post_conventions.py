@@ -21,6 +21,7 @@ import requests
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from .front_matter import split_front_matter_text
 from .logger import logger
 
 LOCAL_CONVENTIONS_PATH = (
@@ -64,14 +65,6 @@ class TagSpec(BaseModel):
         return value
 
 
-class MathSpec(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-    # Macros the blog's MathJax config defines on top of the standard set.
-    defined_macros: list[str] = Field(
-        default_factory=lambda: ["llbracket", "rrbracket", "textsc"]
-    )
-
-
 class PostConventions(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -79,7 +72,6 @@ class PostConventions(BaseModel):
     topics: dict[str, str | None]
     forbidden_keys: list[str] = Field(default_factory=list)
     tags: TagSpec
-    math: MathSpec = Field(default_factory=MathSpec)
     # Titles longer than this need a shorter ``seo_title``.
     seo_title_max_length: int = 70
 
@@ -158,11 +150,11 @@ def load_conventions(
 
 
 def _front_matter_tags(text: str) -> list[str]:
-    if not text.startswith("---\n"):
+    front, _ = split_front_matter_text(text)
+    if not front:
         return []
-    end = text.find("\n---\n", 4)
     try:
-        data = yaml.safe_load(text[4:end]) if end != -1 else None
+        data = yaml.safe_load(front[4:-5])
     except yaml.YAMLError:
         return []
     tags = data.get("tags") if isinstance(data, dict) else None

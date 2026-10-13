@@ -9,7 +9,6 @@ from .factories import (
     OutputTruncatedError,
 )
 from .helpers import (
-    arg_as_bool,
     escape_yaml_double_quoted,
     extract_text_from_html,
     is_affirmative,
@@ -34,7 +33,6 @@ __all__ = [
     "HTMLTagOutputParser",
     "RetryableBase",
     "BatchProcessor",
-    "arg_as_bool",
     "escape_yaml_double_quoted",
     "extract_text_from_html",
     "is_affirmative",

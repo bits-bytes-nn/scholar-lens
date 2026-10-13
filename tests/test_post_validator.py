@@ -181,13 +181,35 @@ class TestBody:
         assert "math" not in rules(make_post("문장입니다.\n\n$$ x^2 $$\n\n다음 문장"))
 
     def test_legacy_inline_delimiters(self) -> None:
-        assert "math" in rules(make_post(r"변수 \(x\)를 씁니다."))
+        # The Markdown-escaped form reaches MathJax; a single backslash is a
+        # literal parenthesis (normalize_math converts \(x\) math first).
+        assert "math" in rules(make_post(r"변수 \\(x\\)를 씁니다."))
+        assert "math" not in rules(make_post(r"**LongMemEval \(s\)** 데이터셋"))
 
-    def test_bare_pipe_in_crowded_inline_math(self) -> None:
+    def test_bare_pipe_in_inline_math(self) -> None:
         assert "math" in rules(make_post("값 $$|x|$$ 와 $$y$$ 입니다."))
+        # A single span on a one-line paragraph still becomes a GFM table.
+        assert "math" in rules(make_post("본문 $$p(y|x)$$ 입니다."))
+        assert "math" not in rules(make_post(r"본문 $$p(y \mid x)$$ 입니다."))
+        assert "math" not in rules(make_post("$$\n|x| = 1\n$$"))  # display
         assert "math" not in rules(
             make_post(r"값 $$\lvert x \rvert$$ 와 $$y$$ 입니다.")
         )
+
+    def test_bare_pipe_in_a_wrapped_inline_span(self) -> None:
+        # Regression: a span that wraps onto the next line was never checked.
+        assert "math" in rules(make_post("크기는 $$|S| +\n|T|$$ 입니다."))
+        assert "math" not in rules(
+            make_post("크기는 $$\\vert S\\vert +\n\\vert T\\vert$$ 입니다.")
+        )
+
+    def test_unconverted_bracket_display_in_prose(self) -> None:
+        # Markdown shows "\[ y = f(x) \]" as "[ y = f(x) ]" (here in a quote).
+        assert "math" in rules(make_post("> \\[ y = f(x) \\]"))
+        assert "math" not in rules(make_post("본문 \\[1\\] 인용."))
+        for prose in ("옵션 \\[--max_len\\] 참고.", "각주 \\[^1\\] 입니다."):
+            assert "math" not in rules(make_post(prose))
+        assert "math" in rules(make_post("> \\[ \\frac{a}{b} \\]"))
 
     def test_underscore_escape_allowed_inside_text(self) -> None:
         assert "math" not in rules(make_post(r"값 $$\text{batch\_size}$$ 입니다."))
@@ -227,3 +249,50 @@ def test_leaked_figure_marker_is_an_error() -> None:
 def test_future_date_is_an_error() -> None:
     assert "date" in rules(make_post(front={"date": "2999-01-01 00:00:00"}))
     assert "date" not in rules(make_post())
+
+
+class TestBodyErrors:
+    def test_table_and_inline_pipe_errors_are_exposed_for_writers(self) -> None:
+        from scholar_lens.src.post_validator import body_errors
+
+        body = (
+            "| A | B |\n| --- | --- |\n| 1 | 2 | 3 |\n\n"
+            "$$a|b$$ and $$c$$ in one line.\n"
+        )
+        issues = body_errors(body)
+        assert any(i.startswith("table:") and "3 cells" in i for i in issues)
+        assert any(i.startswith("math:") and "bare |" in i for i in issues)
+        assert body_errors("## 제목\n\n본문입니다.\n") == []
+
+    def test_unclosed_fence_is_an_error_not_silent_code(self) -> None:
+        from scholar_lens.src.post_validator import body_errors
+
+        assert any("never closed" in i for i in body_errors("```py\nx = 1\n"))
+
+
+class TestValidatorDetails:
+    def _post(self, body: str) -> str:
+        return (
+            '---\nlayout: post\ntitle: "T"\nsubtitle: "부제"\n'
+            "date: 2021-01-01 00:00:00\n"
+            'categories: ["Tech Guides", "Language-Models"]\n'
+            'tags: ["Efficient-Attention"]\n'
+            "cover: /assets/images/language-models.jpg\nuse_math: true\n---\n" + body
+        )
+
+    def test_unclosed_fence_reported_at_its_line(self) -> None:
+        md = self._post("## A\n\n본문 $$x$$입니다.\n\n```python\nx = 1\n")
+        codes = [
+            v
+            for v in validate_post(md, load_local_conventions(), "guide")
+            if v.rule == "code"
+        ]
+        assert codes and codes[0].line == 15  # the ``` line, not the front matter
+
+    def test_attribute_list_may_follow_a_display(self) -> None:
+        body = "## A\n\n본문입니다.\n\n$$x = 1$$\n{: .center}\n\n끝입니다.\n"
+        assert not [
+            v
+            for v in validate_post(self._post(body), load_local_conventions(), "guide")
+            if v.rule == "math"
+        ]

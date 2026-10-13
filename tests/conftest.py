@@ -105,3 +105,12 @@ def tmp_papers_dir(tmp_path: Path) -> Path:
     d = tmp_path / "papers"
     d.mkdir()
     return d
+
+
+@pytest.fixture(autouse=True)
+def _no_arxiv_rate_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The process-wide arXiv limiter (1 request per 3 s) would make every test
+    that touches the arXiv client wait in real time."""
+    from scholar_lens.src import arxiv_handler
+
+    monkeypatch.setattr(arxiv_handler._ARXIV_RATE_LIMITER, "acquire", lambda: None)

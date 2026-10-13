@@ -291,6 +291,14 @@ async def publish_artifact(
     return outcome
 
 
+def _is_fetch_outage(error: BaseException) -> bool:
+    """A transport failure or 429/5xx while fetching the source: the request
+    is fine, so the run failed rather than being rejected."""
+    from .paper_source import PaperFetchError
+
+    return isinstance(error, PaperFetchError)
+
+
 def _rejected_input_errors() -> tuple[type[BaseException], ...]:
     """Errors caused by the request itself (bad URL, not a paper, not docs).
 
@@ -344,9 +352,13 @@ def run_job(request: JobRequest, *, job_id: str | None = None) -> JobResult:
         result.pr_url = outcome.pr_url
         result.warnings = outcome.warnings
     except _rejected_input_errors() as e:
-        result.status = "rejected"
-        result.error = str(e)
-        logger.warning("Request rejected: %s", e)
+        if _is_fetch_outage(e):  # the source exists but could not be reached
+            result.error = f"{type(e).__name__}: {e}"
+            logger.error("Run failed: %s", e)
+        else:
+            result.status = "rejected"
+            result.error = str(e)
+            logger.warning("Request rejected: %s", e)
     except PostValidationError as e:
         # The post broke a blog convention: nothing was published.
         result.error = str(e)
@@ -361,7 +373,7 @@ def run_job(request: JobRequest, *, job_id: str | None = None) -> JobResult:
         logger.error("Run failed: %s", e, exc_info=True)
     finally:
         # Neither returned nor raised an Exception: SIGTERM (Batch timeout,
-        # cancel, spot reclaim) or Ctrl-C.
+        # cancel, host termination) or Ctrl-C.
         interrupted = result.status == "failed" and result.error is None
         if interrupted:
             result.error = INTERRUPTED_ERROR
@@ -373,7 +385,7 @@ def run_job(request: JobRequest, *, job_id: str | None = None) -> JobResult:
     return result
 
 
-# SIGTERM (Batch timeout, cancel, spot reclaim) or Ctrl-C. Batch may still
+# SIGTERM (Batch timeout, cancel, host termination) or Ctrl-C. Batch may still
 # retry an interrupted job, so the run does not announce a failure; Batch's
 # own FAILED event reports a terminal one.
 INTERRUPTED_ERROR = "Interrupted before completion."

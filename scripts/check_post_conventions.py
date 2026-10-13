@@ -7,7 +7,9 @@ copy in the job image. The check compares the parsed YAML of both::
 
 Repository and branch default to ``BLOG_REPO`` / ``BLOG_BRANCH`` (branch
 ``main``). ``GITHUB_TOKEN`` is used when set (private repositories). When no
-repository is configured the check prints a notice and passes. A missing
+repository is configured the check prints a notice and passes, unless
+``--require-repo`` is given (the scheduled run, which exists only for this
+check, must not pass vacuously). A missing
 canonical file (HTTP 404) fails with exit 2 when a token is set (GitHub answers
 404 both for a missing file and for a repository the token cannot read);
 without a token a private repository also answers 404, so the check only
@@ -93,8 +95,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--branch", default=os.getenv("BLOG_BRANCH") or "main")
     parser.add_argument("--path", default=CANONICAL_PATH)
     parser.add_argument("--local", type=Path, default=DEFAULT_LOCAL)
+    parser.add_argument(
+        "--require-repo",
+        action="store_true",
+        help="Fail (exit 2) instead of skipping when no repository is configured.",
+    )
     args = parser.parse_args(argv)
     if not args.repo:
+        if args.require_repo:
+            print("error: BLOG_REPO is not set; the drift check cannot run.")
+            return 2
         print("notice: BLOG_REPO not set; skipping post-conventions drift check.")
         return 0
     token = os.getenv("GITHUB_TOKEN") or None

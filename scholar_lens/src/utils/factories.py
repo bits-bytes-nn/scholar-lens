@@ -90,9 +90,6 @@ class BaseBedrockModelFactory(Generic[ModelIdT, ModelInfoT, WrapperT], ABC):
     def get_model_info(self, model_id: ModelIdT) -> ModelInfoT | None:
         return self._get_model_info_dict().get(model_id)
 
-    def get_supported_models(self) -> list[ModelIdT]:
-        return list(self._get_model_info_dict().keys())
-
 
 class BedrockCrossRegionModelHelper:
     """Resolves the inference profile (``global.`` or regional prefix) to call
@@ -164,7 +161,6 @@ def _resolve_inference_profile(
 
 class BedrockEmbeddingsWrapper(BaseBedrockWrapper, BedrockEmbeddings):
     max_sequence_length: int | None = Field(default=None)
-    max_sequence_tokens: int | None = Field(default=None)
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
         if not texts:
@@ -209,7 +205,6 @@ class BedrockEmbeddingModelFactory(
             client=self._client,
             model_id=model_id.value,
             max_sequence_length=model_info.max_sequence_length,
-            max_sequence_tokens=model_info.max_sequence_tokens,
             **kwargs,
         )
         logger.debug("Created embedding model: '%s'", model_id.value)

@@ -127,21 +127,18 @@ def _cause_chain(exc: BaseException) -> list[BaseException]:
     return chain
 
 
-def _is_retryable(exc: BaseException) -> bool:
-    """Retry only when the cause chain holds a known-transient error and no
+def is_transient_error(exc: BaseException) -> bool:
+    """Whether ``exc`` is a known-transient failure (throttling, 5xx, timeout,
+    dropped connection): the retry policy's predicate, also used by callers
+    that poll or degrade instead of retrying.
+
+    True only when the cause chain holds a known-transient error and no
     known-deterministic one (a wrapper such as ``RuntimeError(...) from
     ClientError`` is classified by what it wraps)."""
     verdicts = [_classify(link) for link in _cause_chain(exc)]
     if False in verdicts:
         return False
     return True in verdicts
-
-
-def is_transient_error(exc: BaseException) -> bool:
-    """Whether ``exc`` is a known-transient failure (throttling, 5xx, timeout,
-    dropped connection) under this policy — for callers that poll or degrade
-    instead of retrying."""
-    return _is_retryable(exc)
 
 
 def _should_stop(retry_state: tenacity.RetryCallState) -> bool:
@@ -166,7 +163,7 @@ class RetryableBase:
                 initial=RETRY_MULTIPLIER, max=RETRY_MAX_WAIT
             ),
             stop=_should_stop,
-            retry=tenacity.retry_if_exception(_is_retryable),
+            retry=tenacity.retry_if_exception(is_transient_error),
             before_sleep=lambda retry_state: logger.warning(
                 "Retrying '%s' (attempt %d failed: %s). Waiting %.1fs",
                 operation_name,

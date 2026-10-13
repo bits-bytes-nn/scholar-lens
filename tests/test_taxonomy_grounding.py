@@ -90,9 +90,9 @@ class TestUnverifiedIdentifiers:
                 ("https://blog.example.com/x", "--preemption-mode swap"),
             ]
         )
-        text, product = official_reference(["https://docs.vllm.ai/en/latest/"], corpus)
-        assert product == "vllm" and "--preemption-mode" not in text
-        assert "--preemption-mode" in unverified_identifiers(GUIDE, text, product)
+        text, products = official_reference(["https://docs.vllm.ai/en/latest/"], corpus)
+        assert products[0] == "vllm" and "--preemption-mode" not in text
+        assert "--preemption-mode" in unverified_identifiers(GUIDE, text, products)
 
     def test_no_official_text_checks_nothing(self) -> None:
         assert unverified_identifiers(GUIDE, "", "vllm") == []
@@ -160,3 +160,44 @@ def test_older_docs_version_is_labelled_and_not_official() -> None:
         ["https://docs.vllm.ai/en/latest/quickstart/"], corpus
     )
     assert reference.count("prefix caching") == 1
+
+
+def test_underscore_flags_are_read_whole_and_match_either_spelling() -> None:
+    body = (
+        "```bash\naccelerate launch --multi_gpu --num_processes 2 train.py\n"
+        "torchrun --nproc_per_node=8 --max-restarts=3 train.py\n```"
+    )
+    official = (
+        "Use --multi_gpu and --num_processes. torchrun --nproc-per-node, --max_restarts"
+    )
+    found = unverified_identifiers(body, official, ["accelerate", "torchrun"])
+    assert found == []
+    assert (
+        unverified_identifiers(body, "nothing here", ["accelerate"])[0] == "--multi_gpu"
+    )
+
+
+def test_inline_code_checks_bare_flags_not_other_tools() -> None:
+    found = unverified_identifiers(
+        "`--stale-flag` 와 `curl --silent`", "nothing", ["vllm"]
+    )
+    assert found == ["--stale-flag"]
+
+
+def test_single_word_flags_are_not_excused_by_prose() -> None:
+    body = "```bash\nvllm serve m --model x --gpu 1\n```"
+    official = "Pick the model and the gpu count. vllm serve --port 8000"
+    assert unverified_identifiers(body, official, ["vllm"]) == ["--model", "--gpu"]
+
+
+def test_other_dash_style_only_counts_when_the_docs_use_both() -> None:
+    body = "```bash\nruff check --unsafe_fixes\n```"
+    assert unverified_identifiers(
+        body, "ruff check --unsafe-fixes --fix", ["ruff"]
+    ) == ["--unsafe_fixes"]
+
+
+def test_underscore_flag_is_not_excused_by_a_python_argument() -> None:
+    body = "```bash\nhf download repo --local_dir out\n```"
+    official = "hf download repo --local-dir out\n\nhf_hub_download(local_dir=...)"
+    assert unverified_identifiers(body, official, ["hf"]) == ["--local_dir"]

@@ -25,13 +25,11 @@ import boto3
 from langchain_core.callbacks import BaseCallbackHandler
 
 from .logger import logger
-from .utils.models import model_info_for_invoked_id
+from .utils.models import FALLBACK_PRICE_PER_MTOK, model_info_for_invoked_id
 
 METRICS_NAMESPACE = "ScholarLens"
-
-# USD per million tokens (input, output) for a model id missing from the
-# registry: the Opus 4.x list price, so an unknown model is not under-counted.
-_FALLBACK_PRICE_PER_MTOK = (5.0, 25.0)
+# The per-run cost metric; the stack's cost alarm watches this exact name.
+COST_METRIC_NAME = "EstimatedCostUSD"
 
 
 class TokenBudgetExceeded(RuntimeError):
@@ -171,7 +169,7 @@ def price_per_mtok(model_id: str) -> tuple[float, float]:
     info = model_info_for_invoked_id(model_id)
     if info is None:
         logger.debug("No price for model '%s'; using the fallback rate.", model_id)
-        return _FALLBACK_PRICE_PER_MTOK
+        return FALLBACK_PRICE_PER_MTOK
     return info.input_price_per_mtok, info.output_price_per_mtok
 
 
@@ -209,7 +207,7 @@ class MetricsEmitter:
             "OutputTokens": tracker.output_tokens,
             "TotalTokens": tracker.total_tokens,
             "LLMCalls": tracker.call_count,
-            "EstimatedCostUSD": cost,
+            COST_METRIC_NAME: cost,
             "DurationSeconds": round(duration_seconds, 2),
             "Success": 1 if success else 0,
             "Failure": 0 if success else 1,

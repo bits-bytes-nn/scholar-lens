@@ -11,7 +11,23 @@ from datetime import datetime
 
 import pytest
 
+from scholar_lens.src import arxiv_handler
 from scholar_lens.src.arxiv_handler import ArxivHandler, ArxivMetadata
+
+
+class _NoWaitLimiter:
+    def acquire(self) -> None:
+        pass
+
+    def penalize(self, seconds: float) -> None:
+        pass
+
+
+@pytest.fixture(autouse=True)
+def _no_arxiv_pacing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The process-wide limiter allows one request per 3 s; tests never wait."""
+    monkeypatch.setattr(arxiv_handler, "_ARXIV_RATE_LIMITER", _NoWaitLimiter())
+
 
 PUBLISHED = datetime(2024, 1, 1, 12, 0, 0)
 UPDATED = datetime(2024, 1, 2, 12, 0, 0)
@@ -143,3 +159,25 @@ class TestSearchByTitleSimilarity:
             [_FakePaper("A completely unrelated paper title here", "0000.00000")]
         )
         assert handler.search_by_title("Attention Is All You Need") is None
+
+
+class TestDownloadFolder:
+    def test_unversioned_id_downloads_into_its_own_folder(
+        self, monkeypatch, tmp_path
+    ) -> None:
+        # Regression: "2106.09685" downloaded into "2106_09685v2/" while the
+        # rest of the paper lived in "2106_09685/".
+        from types import SimpleNamespace
+
+        from scholar_lens.src.paper_source import ArxivSource
+
+        handler = ArxivHandler()
+        paper = SimpleNamespace(
+            get_short_id=lambda: "2106.09685v2", pdf_url="https://arxiv.org/pdf/x"
+        )
+        monkeypatch.setattr(handler, "_fetch_single_paper", lambda _id: paper)
+        monkeypatch.setattr(
+            ArxivHandler, "_download", staticmethod(lambda url, path: path.touch())
+        )
+        path = ArxivSource("2106.09685", handler=handler).download_pdf(tmp_path)
+        assert path == tmp_path / "2106_09685" / "2106_09685.pdf"

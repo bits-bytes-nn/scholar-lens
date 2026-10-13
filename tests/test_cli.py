@@ -338,3 +338,14 @@ def test_status_timeout_must_be_finite_and_non_negative(value: str) -> None:
 def test_status_timeout_accepts_seconds() -> None:
     args = cli.build_parser().parse_args(["status", "job-1", "--timeout", "90"])
     assert args.timeout == 90.0
+
+
+@pytest.mark.parametrize("argv", [["review"], ["summarize", "2106.09685", "--typo"]])
+def test_usage_errors_print_one_json_object(
+    capsys: pytest.CaptureFixture, argv: list[str]
+) -> None:
+    with pytest.raises(SystemExit) as exit_info:
+        cli.main(argv)
+    assert exit_info.value.code == cli.EXIT_REJECTED
+    out = _output(capsys)
+    assert out["status"] == "rejected" and "scholar-lens" in out["error"]

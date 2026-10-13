@@ -6,16 +6,18 @@ from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel, Field
 
 from ..logger import logger
-from .retry import RetryableBase
+from .retry import RetryableBase, is_transient_error
 
 
 class BatchProcessor(BaseModel):
     """Runs a LangChain chain over many items in chunks.
 
     Each chunk goes through ``abatch(..., return_exceptions=True)``; only the
-    items that failed are retried one by one (with the shared retry policy), so
-    successful results are never re-billed. Results stay aligned with the
-    inputs: an item that still fails yields ``None``.
+    items that failed transiently (throttling, timeouts) are retried one by one
+    with the shared retry policy, so successful results are never re-billed and
+    a deterministic failure (truncated output, invalid input) is not paid for
+    twice. Results stay aligned with the inputs: an item that still fails
+    yields ``None``.
     """
 
     max_concurrency: int = Field(default=5, ge=1)
@@ -64,9 +66,14 @@ class BatchProcessor(BaseModel):
                     return_exceptions=True,
                 )
             )
-            failed = [
-                i for i, r in enumerate(chunk_results) if isinstance(r, Exception)
-            ]
+            errors = {
+                i: r for i, r in enumerate(chunk_results) if isinstance(r, Exception)
+            }
+            failed = [i for i, e in errors.items() if is_transient_error(e)]
+            for i, error in errors.items():
+                if i not in failed:
+                    logger.error("'%s' failed for one item: %s", task_name, error)
+                    chunk_results[i] = None
             if failed:
                 logger.warning(
                     "'%s': retrying %d of %d items individually.",

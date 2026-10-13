@@ -2,7 +2,7 @@ r"""Lint + auto-fix a published Markdown post for the blog's kramdown/MathJax qu
 
 A companion to :mod:`markdown_math`. Where that module normalizes math
 delimiters, this one catches the *other* recurring blog-rendering failures. It reuses the same
-validated code/math-span splitter (:data:`markdown_math.SEGMENT_PATTERN`) so it
+validated code/math-span splitter (:func:`markdown_math.segments`) so it
 never mistakes code for prose or math.
 
 Auto-fixes (deterministic, outside code):
@@ -43,7 +43,18 @@ from __future__ import annotations
 import re
 
 from .logger import logger
-from .markdown_math import SEGMENT_PATTERN
+from .markdown_math import (
+    HANGUL,
+    IMAGE,
+    _indent_width,
+    _list_column,
+    fence_roles,
+    indented_code_lines,
+    indented_code_test,
+    normalize_math,
+    open_fence,
+    segments,
+)
 
 # Non-standard-package macros that are commonly emitted but are NOT loaded on the
 # blog's MathJax, so they render as red raw text. We warn ONLY on this small,
@@ -88,7 +99,9 @@ ENVELOPE_TAGS: tuple[str, ...] = (
     "find",
     "replace",
 )
-_ENVELOPE_TAG = re.compile(rf"</?(?:{'|'.join(ENVELOPE_TAGS)})>")
+ENVELOPE_TAG = re.compile(rf"</?(?:{'|'.join(ENVELOPE_TAGS)})>")
+
+
 # The paper's numbering of figures/tables/equations/sections, in prose. A bare
 # "<n>장" is a counter ("GPU 2장", "그림 3장"), so only a dotted number counts
 # as a chapter; "지표 2" is not "표 2"; "3 절감" is not a section.
@@ -100,7 +113,6 @@ NUMBERED_REF = re.compile(
     r"|§\s*\d+"
 )
 _LATEX_LIKE = re.compile(r"[\\^_{]")
-_IMAGE_LINK = re.compile(r"!\[([^\]]*)\]\(([^()\s]*(?:\([^()]*\)[^()\s]*)*)\)")
 
 # Real inline HTML tags a post may legitimately use; these must NOT be escaped.
 # Everything else that looks like <word ...> in prose is treated as a
@@ -139,7 +151,8 @@ _REAL_HTML_TAGS = frozenset(
         "p",
         "pre",
         "q",
-        "s",
+        # No "s": in an ML post "<s>"/"</s>" are the BOS/EOS tokens, and as a
+        # tag they would strike through the rest of the sentence.
         "samp",
         "small",
         "span",
@@ -160,11 +173,11 @@ _REAL_HTML_TAGS = frozenset(
     }
 )
 # An angle-bracket token: an opening/closing/self-closing tag-like run with no
-# embedded '<'/'>' and no whitespace-only body. group(1) = optional '/', group(2)
+# embedded '<'/'>' or line break and no whitespace-only body. group(1) = optional '/', group(2)
 # = the leading name token (letters/digits/_-). We only escape when that name is
 # not a real HTML tag, so <br>, <sup>, </table> stay intact but <none>,
 # <your-namespace>, <server-host> get escaped.
-_ANGLE_TOKEN = re.compile(r"<(/?)([A-Za-z][A-Za-z0-9._-]*)[^<>]*?/?>")
+_ANGLE_TOKEN = re.compile(r"<(/?)([A-Za-z][A-Za-z0-9._-]*)[^<>\n]*?/?>")
 # GFM autolinks — ``<https://…>`` / ``<mailto:…>`` / ``<user@host>`` — are valid
 # Markdown that kramdown renders as links; escaping them produces dead literal
 # text. Recognise and leave them alone (distinct from ``<placeholder>`` tokens).
@@ -183,10 +196,57 @@ def _classify_regions(markdown: str) -> list[tuple[int, int, str]]:
     """Return (start, end, kind) for every code/math span, kind in
     {fence, icode, display, paren, bracket}. Used to know which offsets are 'protected'
     (code) or 'math' so prose-only checks skip them."""
-    return [
-        (m.start(), m.end(), m.lastgroup or "")
-        for m in SEGMENT_PATTERN.finditer(markdown)
-    ]
+    return [(seg.start, seg.end, seg.kind) for seg in segments(markdown)]
+
+
+_TABLE_ROW = re.compile(r"^[ \t]*\|")
+_TABLE_DELIMITER = re.compile(
+    r"^[ \t]*\|?[ \t]*:?-{3,}:?[ \t]*(?:\|[ \t]*:?-{3,}:?[ \t]*)*\|?[ \t]*$"
+)
+
+
+def _separate_tables(markdown: str) -> str:
+    """Blank lines around a pipe table glued to text above or below it:
+    kramdown reads a table run into a paragraph (or a paragraph run into
+    it) as plain text with literal pipes. A table glued under a list item is
+    indented to the item's content so the list does not end there. Code and
+    quotes are left alone."""
+    lines = markdown.split("\n")
+    roles = fence_roles(lines)
+    code = indented_code_lines(lines)
+
+    def row(k: int) -> bool:
+        return (
+            0 <= k < len(lines)
+            and roles[k] == "prose"
+            and k not in code
+            and bool(_TABLE_ROW.match(lines[k]))
+        )
+
+    out: list[str] = []
+    i = 0
+    while i < len(lines):
+        if not (row(i) and row(i + 1) and _TABLE_DELIMITER.match(lines[i + 1])):
+            out.append(lines[i])
+            i += 1
+            continue
+        end = i + 2
+        while row(end):
+            end += 1
+        before = out[-1] if out else ""
+        if before.strip() and not before.lstrip().startswith(">"):
+            out.append("")
+        rows = lines[i:end]
+        column = _list_column(lines, i) if before.strip() else None
+        if column is not None and _indent_width(lines[i]) < column:
+            rows = [" " * column + r.lstrip(" \t") for r in rows]  # stay in the item
+        out.extend(rows)
+        after = lines[end] if end < len(lines) else ""
+        # "{: .class}" belongs to the table it follows.
+        if after.strip() and not after.lstrip().startswith((">", "{:")):
+            out.append("")
+        i = end
+    return "\n".join(out)
 
 
 def _fix_headings(markdown: str) -> str:
@@ -218,6 +278,24 @@ def _fix_headings(markdown: str) -> str:
     return "\n".join(out)
 
 
+# A chat-template token ("<|im_start|>"): in prose its "|"s split the line
+# into a table, so it is set as inline code.
+_CHAT_TOKEN = re.compile(r"<\|[\w.-]+\|>")
+
+
+def _code_chat_tokens(markdown: str) -> str:
+    regions = _classify_regions(markdown)
+    protected = [(s, e) for s, e, k in regions if k in ("fence", "icode", *_MATH_KINDS)]
+    in_code = indented_code_test(markdown)
+
+    def repl(m: re.Match[str]) -> str:
+        if any(s <= m.start() < e for s, e in protected) or in_code(m.start()):
+            return m.group(0)
+        return f"`{m.group(0)}`"
+
+    return _CHAT_TOKEN.sub(repl, markdown)
+
+
 def _escape_placeholder_tags(markdown: str, regions: list[tuple[int, int, str]]) -> str:
     """Escape bare ``<placeholder>`` tokens in prose so kramdown doesn't treat
     them as HTML.
@@ -231,6 +309,7 @@ def _escape_placeholder_tags(markdown: str, regions: list[tuple[int, int, str]])
     ``\\langle`` stay untouched.
     """
     protected = [(s, e) for s, e, k in regions if k in ("fence", "icode", *_MATH_KINDS)]
+    in_code = indented_code_test(markdown)  # an indented code block
 
     def repl(m: re.Match[str]) -> str:
         if m.group(2).lower() in _REAL_HTML_TAGS:
@@ -240,7 +319,11 @@ def _escape_placeholder_tags(markdown: str, regions: list[tuple[int, int, str]])
     out: list[str] = []
     pos = 0
     for m in _ANGLE_TOKEN.finditer(markdown):
-        if any(s <= m.start() < e for s, e in protected):
+        # Skipped when any part of it is code or math: a "k<n" in prose must
+        # not pair with the ">" of a later callout or inline code.
+        if any(s < m.end() and m.start() < e for s, e in protected) or any(
+            in_code(i) for i in (m.start(), m.end() - 1)
+        ):
             continue
         # A valid GFM autolink (URL/email) must render as a link, not be escaped;
         # a Markdown-escaped "\\<name\\>" already renders as text.
@@ -256,13 +339,21 @@ def _escape_placeholder_tags(markdown: str, regions: list[tuple[int, int, str]])
     return "".join(out)
 
 
+def _fills_its_lines(markdown: str, start: int, end: int) -> bool:
+    line_start = markdown.rfind("\n", 0, start) + 1
+    line_end = markdown.find("\n", end)
+    line_end = len(markdown) if line_end == -1 else line_end
+    return not (markdown[line_start:start] + markdown[end:line_end]).strip()
+
+
 def _warn_pipes_in_math(markdown: str, regions: list[tuple[int, int, str]]) -> None:
-    """Warn about a bare ``|`` inside a math span (kramdown may read it as a
-    table-cell delimiter). NOT auto-rewritten: ``\\vert`` would be wrong after
-    ``\\left``/``\\right``/``\\middle`` and inside ``array{c|c}`` column specs, so
-    the safe fix is context-dependent and left to a human."""
+    """Warn about a bare ``|`` left inside an inline math span (kramdown may
+    read it as a table-cell delimiter). ``normalize_math`` already rewrote the
+    rest to ``\\vert`` (the same symbol, also after ``\\left``/``\\right``);
+    what remains sits in ``\\text{}`` or an ``array{c|c}`` column spec, where
+    the fix depends on intent. A display block on its own lines is safe."""
     for ms, me, kind in regions:
-        if kind not in _MATH_KINDS:
+        if kind not in _MATH_KINDS or _fills_its_lines(markdown, ms, me):
             continue
         if _BARE_PIPE.search(markdown[ms:me]):
             logger.warning(
@@ -349,7 +440,10 @@ def _outside(regions: list[tuple[int, int, str]], kinds: tuple[str, ...]):  # ty
 
 def _remove_envelope_tags(markdown: str) -> str:
     keep = _outside(_classify_regions(markdown), ("fence", "icode"))
-    return _ENVELOPE_TAG.sub(lambda m: "" if keep(m.start()) else m.group(0), markdown)
+    return ENVELOPE_TAG.sub(
+        lambda m: m.group(0) if not keep(m.start()) else "",
+        markdown,
+    )
 
 
 def _level_headings(markdown: str) -> str:
@@ -376,54 +470,77 @@ def _level_headings(markdown: str) -> str:
     return "\n".join(out)
 
 
-_FENCE_LINE = re.compile(r"^[ \t]{0,3}(`{3,}|~{3,})(.*)$")
-
-
 def close_open_fence(text: str) -> str:
     """Close a code fence a writer left open at the end of its section, so the
-    rest of the post is not read as code (CommonMark: a closing fence is the
-    same character, at least as long, with nothing after it)."""
-    opener = ""
-    for line in text.splitlines():
-        match = _FENCE_LINE.match(line)
-        if not match:
-            continue
-        run, rest = match.group(1), match.group(2).strip()
-        if not opener:
-            if not (run[0] == "`" and "`" in rest):
-                opener = run
-        elif run[0] == opener[0] and len(run) >= len(opener) and not rest:
-            opener = ""
+    rest of the post is not read as code."""
+    opener = open_fence(text)
     return f"{text.rstrip()}\n{opener}" if opener else text
+
+
+def _file_name(source: str) -> str:
+    return source.split("?", 1)[0].split("#", 1)[0].rsplit("/", 1)[-1]
+
+
+def _host(source: str) -> str:
+    """The host of a URL; "" for a local or relative path."""
+    match = re.match(r"^(?:[a-z][a-z0-9+.-]*:)?//([^/?#]+)", source, re.I)
+    return match.group(1).lower() if match else ""
+
+
+# arXiv figure names (x1.png) are generic: on arXiv the paper id, not just the
+# host, says whose figure it is (any version).
+_ARXIV_PAPER_ID = re.compile(r"/(\d{4}\.\d{4,5})(?:v\d+)?/")
+
+
+def _paper_id(source: str) -> str:
+    match = _ARXIV_PAPER_ID.search(source)
+    return match.group(1) if match else ""
 
 
 def drop_unknown_images(markdown: str, known_sources: set[str]) -> str:
     """Remove image links whose source is not a known figure.
 
     ``known_sources`` holds the artifact's real figure paths/URLs; a link is
-    kept when its source, or its file name, is in that set. Anything else is a
-    hallucinated image (e.g. a paper's HTML page used as an image) and would
-    render as a broken image.
+    kept when its source is in that set, or when its file name is and it is a
+    local/relative path; on the same host as that figure (for arXiv, the same
+    paper in any version) it is rewritten to the known source. A same-named
+    image on another host is not the figure.
+    Anything else is a hallucinated image (e.g. a paper's HTML page used as an
+    image) and would render as a broken image.
     """
-    known_names = {s.rsplit("/", 1)[-1] for s in known_sources}
+    known_names: dict[str, dict[tuple[str, str], str]] = {}
+    for source in sorted(known_sources):
+        name = _file_name(source)
+        known_names.setdefault(name, {}).setdefault(
+            (_host(source), _paper_id(source)), source
+        )
     keep = _outside(_classify_regions(markdown), ("fence", "icode"))
 
     def repl(m: re.Match[str]) -> str:
         src = m.group(2)
         if not keep(m.start()) or src in known_sources:
             return m.group(0)
-        if src.rsplit("/", 1)[-1] in known_names:
+        origins = known_names.get(_file_name(src))
+        if origins is not None and not _host(src):
             return m.group(0)
+        known = (origins or {}).get((_host(src), _paper_id(src)))
+        if known is not None:
+            # The same figure under another version or path: point at the
+            # source that was actually fetched (another one may 404).
+            head, sep, tail = m.group(0).partition("](")
+            return head + sep + tail.replace(src, known, 1)
         logger.warning("Dropping image with unknown source: %r", src[:100])
         return ""
 
-    return _IMAGE_LINK.sub(repl, markdown)
+    return IMAGE.sub(repl, markdown)
 
 
 _CAPTION_LABEL = re.compile(r"^\s*(?:Figure|Fig\.|Table|그림|표)\s*\d+\s*[:.]\s*", re.I)
 
 
-_FIGURE_MARKER = re.compile(
+# The figure marker writers see in their sources (quoted fields; the parser's
+# attach_figure_context writes it). One parser, shared with review_plan.
+FIGURE_MARKER = re.compile(
     r'\[Image:\s*alt="(?P<alt>[^"]*)",\s*src="(?P<src>[^"]+)"'
     r'(?:,\s*caption="(?P<caption>[^"]*)")?\]'
 )
@@ -451,7 +568,7 @@ def figure_markers_to_images(markdown: str) -> str:
             return image  # inside a table row: stay on the row
         return f"\n\n{image}\n\n"
 
-    return _FIGURE_MARKER.sub(repl, markdown)
+    return FIGURE_MARKER.sub(repl, markdown)
 
 
 def _alt_text(text: str, limit: int = 160) -> str:
@@ -491,20 +608,19 @@ def fill_image_alts(markdown: str, captions: dict[str, str], fallback: str) -> s
         alt, src = m.group(1).strip(), m.group(2)
         if not keep(m.start()):
             return m.group(0)
-        if korean and not _HANGUL.search(alt):
+        if korean and not HANGUL.search(alt):
             heading = _section_heading_before(markdown, m.start())
-            if _HANGUL.search(heading):
-                return f"![{_alt_text(heading, 80)}]({src})"
+            if HANGUL.search(heading):
+                return f"![{_alt_text(heading, 80)}]({src}{m.group(3)})"
         if alt:
             return m.group(0)
         caption = captions.get(src) or captions.get(src.rsplit("/", 1)[-1]) or ""
         text = _CAPTION_LABEL.sub("", caption).strip() or fallback
-        return f"![{_alt_text(text)}]({src})"
+        return f"![{_alt_text(text)}]({src}{m.group(3)})"
 
-    return _IMAGE_LINK.sub(repl, markdown)
+    return IMAGE.sub(repl, markdown)
 
 
-_HANGUL = re.compile(r"[가-힣]")
 _LATIN = re.compile(r"[A-Za-z]")
 _ENGLISH_STEM_ENDING = re.compile(
     r"(?<![A-Za-z0-9_./-])([A-Za-z][A-Za-z-]*)"
@@ -554,7 +670,7 @@ def mostly_hangul(markdown: str) -> bool:
     (one syllable ≈ two letters); code, math and link targets excluded."""
     prose = _masked(markdown, ("fence", "icode", *_MATH_KINDS))
     prose = re.sub(r"\]\([^)]*\)", "]", prose)
-    hangul = len(_HANGUL.findall(prose))
+    hangul = len(HANGUL.findall(prose))
     return hangul > 0 and hangul * 2 > len(_LATIN.findall(prose))
 
 
@@ -591,12 +707,12 @@ def writing_issues(markdown: str) -> list[str]:
     prose = _masked(markdown, ("fence", "icode", *_MATH_KINDS))
     issues: list[str] = []
     # A copied internal figure marker: its caption's numbering is not prose.
-    if marker := _FIGURE_MARKER.search(prose):
+    if marker := FIGURE_MARKER.search(prose):
         issues.append(
             "copied figure marker (write a Markdown image ![alt](src) instead): "
             f"{marker.group(0)[:80]}"
         )
-        prose = _FIGURE_MARKER.sub(_blank, prose)
+        prose = FIGURE_MARKER.sub(_blank, prose)
     prose = _LINK_TARGET.sub(_blank, prose)
     for m in NUMBERED_REF.finditer(prose):
         issues.append(
@@ -671,27 +787,33 @@ def limit_callouts(markdown: str) -> str:
     return markdown
 
 
-def lint_markdown(markdown: str) -> str:
+def lint_markdown(markdown: str, *, warn: bool = True) -> str:
     """Auto-fix the safe blog-rendering issues and warn about risky ones.
 
     Auto-fixed: leftover envelope tags removed; callouts beyond
     :data:`MAX_CALLOUTS` become paragraphs; a body H1 becomes H2 and level
-    jumps are raised; a blank line before a heading glued to the previous line;
+    jumps are raised; a blank line before a heading glued to the previous line, and around a
+    pipe table glued to text;
     bare ``<placeholder>`` angle-bracket tokens in prose escaped so kramdown
-    doesn't emit stray HTML closing tags. Warned (left untouched, since
+    doesn't emit stray HTML closing tags; chat-template tokens (``<|im_start|>``)
+    set as inline code. Warned (left untouched, since
     a rewrite could ship a new bug): bare ``|`` in math, fragile amsmath envs /
     ``\\bm``, single-$ inline math, known-undefined macros, and non-URL link
-    targets. Returns the fixed Markdown.
+    targets (``warn=False`` skips them). Returns the fixed Markdown.
     """
     fixed = _remove_envelope_tags(markdown)
     fixed = limit_callouts(fixed)
     fixed = _level_headings(fixed)
     fixed = _fix_headings(fixed)
+    fixed = _separate_tables(fixed)
+    fixed = _code_chat_tokens(fixed)
 
     # Escape bare <placeholder> tokens before warnings run so region offsets are
     # computed against the final text. Re-classify since escaping shifts offsets.
     fixed = _escape_placeholder_tags(fixed, _classify_regions(fixed))
 
+    if not warn:
+        return fixed
     regions = _classify_regions(fixed)
     _warn_pipes_in_math(fixed, regions)
     _warn_fragile_math(fixed, regions)
@@ -699,3 +821,13 @@ def lint_markdown(markdown: str) -> str:
     _warn_undefined_macros(fixed, regions)
     _warn_non_url_links(fixed, regions)
     return fixed
+
+
+def publish_body(markdown: str, *, warn: bool = True) -> str:
+    """The publisher's body pipeline, in one place: an open fence closed,
+    callouts over the cap unboxed (before the math pass, so a display left in
+    an unboxed callout is isolated too), the blog math rules applied, then the
+    other auto-fixes of :func:`lint_markdown`. Idempotent."""
+    return lint_markdown(
+        normalize_math(limit_callouts(close_open_fence(markdown))), warn=warn
+    )

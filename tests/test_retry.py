@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from scholar_lens.src.utils.retry import _is_retryable
+from scholar_lens.src.utils.retry import is_transient_error
 
 
 class _CustomValueError(ValueError):
@@ -13,12 +13,12 @@ class _CustomValueError(ValueError):
 
 class TestIsRetryable:
     def test_transient_errors_are_retried(self) -> None:
-        assert _is_retryable(ConnectionError("reset")) is True
-        assert _is_retryable(TimeoutError("slow")) is True
+        assert is_transient_error(ConnectionError("reset")) is True
+        assert is_transient_error(TimeoutError("slow")) is True
 
     def test_unknown_errors_are_not_retried(self) -> None:
         # Allow-list design: an unrecognised error would fail the same way again.
-        assert _is_retryable(RuntimeError("profile lookup failed")) is False
+        assert is_transient_error(RuntimeError("profile lookup failed")) is False
 
     def test_wrapped_errors_are_classified_by_their_cause(self) -> None:
         from botocore.exceptions import ClientError
@@ -32,8 +32,8 @@ class TestIsRetryable:
                 except RuntimeError as outer:
                     return outer
 
-        assert _is_retryable(wrapped("ThrottlingException")) is True
-        assert _is_retryable(wrapped("ValidationException")) is False
+        assert is_transient_error(wrapped("ThrottlingException")) is True
+        assert is_transient_error(wrapped("ValidationException")) is False
 
     def test_http_status_errors(self) -> None:
         import httpx
@@ -45,9 +45,9 @@ class TestIsRetryable:
                 "x", request=request, response=httpx.Response(code, request=request)
             )
 
-        assert _is_retryable(status_error(503)) is True
-        assert _is_retryable(status_error(429)) is True
-        assert _is_retryable(status_error(404)) is False
+        assert is_transient_error(status_error(503)) is True
+        assert is_transient_error(status_error(429)) is True
+        assert is_transient_error(status_error(404)) is False
 
     def test_arxiv_errors_are_not_retried_again(self) -> None:
         from scholar_lens.src.arxiv_handler import ArxivPaperError
@@ -58,28 +58,28 @@ class TestIsRetryable:
             try:
                 raise ArxivPaperError("arXiv fetch failed after retries") from e
             except ArxivPaperError as outer:
-                assert _is_retryable(outer) is False
+                assert is_transient_error(outer) is False
 
     def test_deterministic_errors_are_not_retried(self) -> None:
-        assert _is_retryable(ValueError("bad")) is False
-        assert _is_retryable(TypeError("bad")) is False
-        assert _is_retryable(KeyError("missing")) is False
+        assert is_transient_error(ValueError("bad")) is False
+        assert is_transient_error(TypeError("bad")) is False
+        assert is_transient_error(KeyError("missing")) is False
 
     def test_subclass_of_non_retryable_is_not_retried(self) -> None:
         # MRO-based match: a ValueError subclass is still terminal.
-        assert _is_retryable(_CustomValueError("bad")) is False
+        assert is_transient_error(_CustomValueError("bad")) is False
 
     def test_token_budget_is_terminal(self) -> None:
         from scholar_lens.src.metrics import TokenBudgetExceeded
 
-        assert _is_retryable(TokenBudgetExceeded("over")) is False
+        assert is_transient_error(TokenBudgetExceeded("over")) is False
 
     def test_domain_rejections_are_terminal(self) -> None:
         from scholar_lens.src.paper_source import NotAPdfError
         from scholar_lens.src.url_guard import UnsafeUrlError
 
-        assert _is_retryable(NotAPdfError("nope")) is False
-        assert _is_retryable(UnsafeUrlError("internal")) is False
+        assert is_transient_error(NotAPdfError("nope")) is False
+        assert is_transient_error(UnsafeUrlError("internal")) is False
 
 
 class TestRetryPredicate:
@@ -104,25 +104,25 @@ class TestRetryPredicate:
         ],
     )
     def test_transient_aws_errors_retried(self, code: str, status: int) -> None:
-        from scholar_lens.src.utils.retry import _is_retryable
+        from scholar_lens.src.utils.retry import is_transient_error
 
-        assert _is_retryable(self._client_error(code, status))
+        assert is_transient_error(self._client_error(code, status))
 
     @pytest.mark.parametrize(
         "code",
         ["AccessDeniedException", "ValidationException", "ResourceNotFoundException"],
     )
     def test_deterministic_aws_errors_not_retried(self, code: str) -> None:
-        from scholar_lens.src.utils.retry import _is_retryable
+        from scholar_lens.src.utils.retry import is_transient_error
 
-        assert not _is_retryable(self._client_error(code))
+        assert not is_transient_error(self._client_error(code))
 
     def test_read_timeout_retried(self) -> None:
         from botocore.exceptions import ReadTimeoutError
 
-        from scholar_lens.src.utils.retry import _is_retryable
+        from scholar_lens.src.utils.retry import is_transient_error
 
-        assert _is_retryable(ReadTimeoutError(endpoint_url="https://bedrock"))
+        assert is_transient_error(ReadTimeoutError(endpoint_url="https://bedrock"))
 
 
 class TestRetryBudget:

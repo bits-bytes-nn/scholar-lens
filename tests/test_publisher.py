@@ -17,8 +17,9 @@ from moto import mock_aws
 
 from scholar_lens.configs import Github
 from scholar_lens.src.aws_helpers import S3Handler
+from scholar_lens.src.blog_sync import BlogBranchSync
+from scholar_lens.src.publish_types import slugify
 from scholar_lens.src.publisher import (
-    BlogBranchSync,
     PostAssetError,
     Publisher,
     PublishError,
@@ -26,7 +27,6 @@ from scholar_lens.src.publisher import (
     build_pr_body,
     image_format,
     is_arxiv_host,
-    slugify,
 )
 
 
@@ -321,17 +321,6 @@ class TestImageLocalization:
         content, _ = await self._publish(tmp_path, f"# T\n\n![arch]({url})\n")
         assert f"![arch]({url})" in content
 
-    async def test_other_external_images_downloaded_when_enabled(
-        self, tmp_path: Path
-    ) -> None:
-        content, _ = await self._publish(
-            tmp_path,
-            "![d](https://docs.example.com/a.png)\n",
-            download_external_images=True,
-            fetch_image=lambda u: PNG,
-        )
-        assert "![d](/assets/images/my-guide-1.png)" in content
-
     async def test_already_hosted_images_untouched(self, tmp_path: Path) -> None:
         content, staged = await self._publish(
             tmp_path, "![a](/assets/images/other-1.png)\n"
@@ -368,40 +357,10 @@ class TestImageLocalization:
         assert not any(staged.iterdir())
 
 
-class TestValidationHook:
-    async def test_warnings_reach_the_pr_body_checklist(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        pub = Publisher(Github(), root_dir=tmp_path)
-        monkeypatch.setattr(
-            pub, "_validate", lambda markdown, request: ["Check tag 'LoRA'"]
-        )
-        request = _request(tmp_path)
-        await pub.publish(request)
-        assert request.validation_warnings == ["Check tag 'LoRA'"]
-        assert request.pr_body_with_checklist().endswith(
-            "### Review checklist\n- [ ] Check tag 'LoRA'"
-        )
-
-    async def test_blocking_violation_saves_nothing(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        pub = Publisher(Github(), root_dir=tmp_path)
-
-        def reject(markdown: str, request: PublishRequest) -> list[str]:
-            raise ValueError("forbidden key: author")
-
-        monkeypatch.setattr(pub, "_validate", reject)
-        with pytest.raises(ValueError, match="forbidden key"):
-            await pub.publish(_request(tmp_path))
-        assert not list(tmp_path.glob("*.md"))
-
-    def test_build_pr_body_without_warnings_has_no_checklist(self) -> None:
-        body = build_pr_body(kind="paper review", title="T", fields={})
-        assert "Review checklist" not in body
-        assert "- [ ] w" in build_pr_body(
-            kind="paper review", title="T", fields={}, warnings=["w"]
-        )
+def test_build_pr_body_has_no_checklist_until_publish() -> None:
+    assert "Review checklist" not in build_pr_body(
+        kind="paper review", title="T", fields={}
+    )
 
 
 @pytest.mark.usefixtures("skip_validation")
@@ -447,6 +406,10 @@ class FakeRef:
 
     def edit(self, sha: str, force: bool = False) -> None:
         self.repo.ref_edits.append((self.name, sha, force))
+        current = self.repo.refs[self.name]
+        if not force and current not in self.repo._ancestors(sha):
+            # GitHub refuses a non-fast-forward update without force.
+            raise GithubException(422, {"message": "Update is not a fast forward"})
         self.repo.refs[self.name] = sha
 
 
@@ -801,6 +764,178 @@ class TestBlogBranchSync:
         posts = [p for p in repo.files_at(_BRANCH) if p.startswith("_posts/")]
         assert posts == [old]
         assert f"Replaces the published post `{old}`" in repo.pulls[0].body
+
+    @pytest.mark.parametrize(
+        "published,title",
+        [
+            (
+                "2025-10-11-gemini-2.5--pushing-the-frontier-with-advanced-reasoning--"
+                "multimodality--long-context--and-next-generation-agentic-capabilities",
+                "Gemini 2.5: Pushing the Frontier with Advanced Reasoning, "
+                "Multimodality, Long Context, and Next Generation Agentic Capabilities",
+            ),
+            (
+                "2026-01-12-deepseek-v3.2--pushing-the-frontier-of-open-large-language-models",
+                "DeepSeek-V3.2: Pushing the Frontier of Open Large Language Models",
+            ),
+            (
+                "2025-02-14-deepseek-coder-when-the-large-language-model-meets-"
+                "programming-the-rise-of-code-intelligence",
+                "DeepSeek-Coder: When the Large Language Model Meets Programming - "
+                "The Rise of Code Intelligence",
+            ),
+            (
+                "2025-02-05-deepseekmoe-towards-ultimate-expert-specialization-in-"
+                "mixture-of-experts-language-models",
+                "DeepSeekMoE: Towards Ultimate Expert Specialization in "
+                "Mixture-of-Experts Language Models",
+            ),
+        ],
+    )
+    def test_posts_named_by_older_slug_rules_are_updated_in_place(
+        self, tmp_path: Path, published: str, title: str
+    ) -> None:
+        old = f"_posts/{published}.md"
+        repo = FakeRepo({old: b"older review"})
+        md = _post(tmp_path, f"2026-10-12-{slugify(title)}")
+        BlogBranchSync(repo, _CONFIG).sync(_request(tmp_path, title=title), md)
+        posts = [p for p in repo.files_at(_BRANCH) if p.startswith("_posts/")]
+        assert posts == [old]
+
+    def test_summary_never_replaces_the_review_of_the_same_paper(
+        self, tmp_path: Path
+    ) -> None:
+        title = (
+            "Gemini 2.5: Pushing the Frontier with Advanced Reasoning, "
+            "Multimodality, Long Context, and Next Generation Agentic Capabilities"
+        )
+        review = f"_posts/2025-10-11-{slugify(title)}.md"
+        repo = FakeRepo({review: b"review"})
+        summary = _request(tmp_path, title=title, kind="summarize")
+        md = _post(tmp_path, f"2026-10-12-{summary.slug}")
+        BlogBranchSync(repo, _CONFIG).sync(summary, md)
+        posts = sorted(p for p in repo.files_at(_BRANCH) if p.startswith("_posts/"))
+        assert posts == sorted([review, f"_posts/{md.name}"])
+
+    def test_retried_create_pull_that_already_succeeded_reuses_the_pr(
+        self, tmp_path: Path
+    ) -> None:
+        repo = FakeRepo({"README.md": b"blog"})
+        original = repo.create_pull
+
+        def create_then_fail(**kwargs: Any) -> FakePull:
+            original(**kwargs)  # the first attempt went through ...
+            raise GithubException(422, {"message": "A pull request already exists"})
+
+        repo.create_pull = create_then_fail  # type: ignore[method-assign]
+        url = BlogBranchSync(repo, _CONFIG).sync(
+            _request(tmp_path), _post(tmp_path, "2026-10-11-my-guide")
+        )
+        assert url == repo.pulls[0].html_url and len(repo.pulls) == 1
+
+    def test_retried_create_ref_that_already_succeeded_moves_the_ref(
+        self, tmp_path: Path
+    ) -> None:
+        repo = FakeRepo({"README.md": b"blog"})
+        original = repo.create_git_ref
+
+        def create_then_fail(ref: str, sha: str) -> FakeRef:
+            original(ref, repo.refs["heads/main"])  # created, at an older sha
+            raise GithubException(422, {"message": "Reference already exists"})
+
+        repo.create_git_ref = create_then_fail  # type: ignore[method-assign]
+        BlogBranchSync(repo, _CONFIG).sync(
+            _request(tmp_path), _post(tmp_path, "2026-10-11-my-guide")
+        )
+        assert "_posts/2026-10-11-my-guide.md" in repo.files_at(_BRANCH)
+        assert repo.ref_edits[-1][2] is False  # fast-forward only
+
+    def test_branch_moved_by_another_writer_is_a_clear_error(
+        self, tmp_path: Path
+    ) -> None:
+        repo = FakeRepo({"README.md": b"blog"})
+        original = repo.create_git_ref
+        sibling = repo._new_commit(
+            repo.commits[repo.refs["heads/main"]][0], [repo.refs["heads/main"]], {}
+        )
+
+        def taken(ref: str, sha: str) -> FakeRef:
+            original(ref, sibling)  # someone else's commit, not an ancestor
+            raise GithubException(422, {"message": "Reference already exists"})
+
+        repo.create_git_ref = taken  # type: ignore[method-assign]
+        with pytest.raises(PublishError, match="fast-forward"):
+            BlogBranchSync(repo, _CONFIG).sync(
+                _request(tmp_path), _post(tmp_path, "2026-10-11-my-guide")
+            )
+        assert repo.refs[_BRANCH] == sibling
+
+    def test_push_to_the_open_pull_request_meanwhile_is_a_clear_error(
+        self, tmp_path: Path
+    ) -> None:
+        repo = FakeRepo({"README.md": b"blog"})
+        sync = BlogBranchSync(repo, _CONFIG)
+        md = _post(tmp_path, "2026-10-11-my-guide")
+        sync.sync(_request(tmp_path), md)
+        md.write_text("# v2\n", encoding="utf-8")
+        original = repo.create_git_commit
+
+        def racing(message: str, tree: Any, parents: Any, **identity: Any) -> Any:
+            commit = original(message, tree, parents, **identity)
+            head = repo.refs[_BRANCH]  # someone pushes to the PR branch
+            repo.refs[_BRANCH] = repo._new_commit(repo.commits[head][0], [head], {})
+            return commit
+
+        repo.create_git_commit = racing  # type: ignore[method-assign]
+        with pytest.raises(PublishError, match="moved while this run updated it"):
+            sync.sync(_request(tmp_path), md)
+
+    def test_ref_lookup_failure_after_a_create_422_is_not_called_a_conflict(
+        self, tmp_path: Path
+    ) -> None:
+        repo = FakeRepo({"README.md": b"blog"})
+
+        def taken(ref: str, sha: str) -> FakeRef:
+            raise GithubException(422, {"message": "Reference already exists"})
+
+        repo.create_git_ref = taken  # type: ignore[method-assign]
+        # The ref "exists" but cannot be read (e.g. an invalid name): 404.
+        with pytest.raises(GithubException) as raised:
+            BlogBranchSync(repo, _CONFIG).sync(
+                _request(tmp_path), _post(tmp_path, "2026-10-11-my-guide")
+            )
+        assert raised.value.status == 404
+
+    def test_refused_reset_from_base_names_the_cause(self, tmp_path: Path) -> None:
+        repo = FakeRepo({"README.md": b"blog"})
+        sync = BlogBranchSync(repo, _CONFIG)
+        md = _post(tmp_path, "2026-10-11-my-guide")
+        sync.sync(_request(tmp_path), md)
+        repo.pulls.clear()  # no open PR: the next run restarts from base
+        md.write_text("# v2\n", encoding="utf-8")
+
+        def refuse(self: FakeRef, sha: str, force: bool = False) -> None:
+            raise GithubException(422, {"message": "protected branch"})
+
+        original = FakeRef.edit
+        FakeRef.edit = refuse  # type: ignore[method-assign]
+        try:
+            with pytest.raises(PublishError, match="refused to reset"):
+                sync.sync(_request(tmp_path), md)
+        finally:
+            FakeRef.edit = original  # type: ignore[method-assign]
+
+    def test_other_create_pull_errors_still_fail(self, tmp_path: Path) -> None:
+        repo = FakeRepo({"README.md": b"blog"})
+
+        def fail(**kwargs: Any) -> FakePull:
+            raise GithubException(422, {"message": "Validation Failed"})
+
+        repo.create_pull = fail  # type: ignore[method-assign]
+        with pytest.raises(GithubException):
+            BlogBranchSync(repo, _CONFIG).sync(
+                _request(tmp_path), _post(tmp_path, "2026-10-11-my-guide")
+            )
 
     def test_truncated_tree_is_an_error(self, tmp_path: Path) -> None:
         repo = FakeRepo({"README.md": b"blog"})

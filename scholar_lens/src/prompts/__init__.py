@@ -1,7 +1,6 @@
 from .base import BasePrompt
 from .extraction import (
     AttributesExtractionPrompt,
-    CitationAnalysisPrompt,
     CitationExtractionPrompt,
     CitationSummaryPrompt,
     CodeAnalysisPrompt,
@@ -28,7 +27,6 @@ from .tech_guide import (
 __all__ = [
     "AttributesExtractionPrompt",
     "BasePrompt",
-    "CitationAnalysisPrompt",
     "CitationExtractionPrompt",
     "CitationSummaryPrompt",
     "CodeAnalysisPrompt",

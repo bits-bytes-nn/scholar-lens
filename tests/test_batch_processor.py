@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from botocore.exceptions import ClientError
 
 from scholar_lens.src.utils import retry as retry_module
 from scholar_lens.src.utils.batch import BatchProcessor
@@ -23,9 +24,17 @@ def _prepare(items: list[Any]) -> list[dict[str, Any]]:
 class FakeChain:
     """abatch/ainvoke stand-in that fails chosen items and counts calls."""
 
-    def __init__(self, fail_in_batch: set[int], fail_always: set[int] | None = None):
+    def __init__(
+        self,
+        fail_in_batch: set[int],
+        fail_always: set[int] | None = None,
+        batch_error: Exception | None = None,
+    ):
         self.fail_in_batch = fail_in_batch
         self.fail_always = fail_always or set()
+        self.batch_error = batch_error or ClientError(
+            {"Error": {"Code": "ThrottlingException"}}, "InvokeModel"
+        )
         self.batch_calls = 0
         self.single_calls: list[int] = []
 
@@ -35,7 +44,7 @@ class FakeChain:
         assert kwargs.get("return_exceptions") is True
         self.batch_calls += 1
         return [
-            RuntimeError("throttled") if d["x"] in self.fail_in_batch else d["x"] * 10
+            self.batch_error if d["x"] in self.fail_in_batch else d["x"] * 10
             for d in inputs
         ]
 
@@ -81,6 +90,13 @@ class TestAExecuteWithFallback:
     ) -> None:
         chain = FakeChain(fail_in_batch={2}, fail_always={2})
         assert await _run(processor, [1, 2, 3], chain) == [10, None, 30]
+
+    async def test_deterministic_batch_failure_is_not_retried(
+        self, processor: BatchProcessor
+    ) -> None:
+        chain = FakeChain(fail_in_batch={2}, batch_error=ValueError("bad input"))
+        assert await _run(processor, [1, 2, 3], chain) == [10, None, 30]
+        assert chain.single_calls == []  # not paid for twice
 
 
 class TestBatchProcessorValidation:

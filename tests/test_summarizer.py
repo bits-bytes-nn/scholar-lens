@@ -257,6 +257,10 @@ class TestSummaryLength:
         [
             "가나다라마 " * 500,  # lost the ## heading
             "## 🔍 질문\n\n" + "가나다라마 " * 500 + "\n\n![a](/x.png)",  # new image
+            # a table the validator would reject (empty header cell)
+            "## 🔍 질문\n\n"
+            + "가나다라마 " * 500
+            + "\n\n| 방법 | |\n| --- | --- |\n| A | 1 |",
         ],
     )
     async def test_shortening_that_drops_structure_is_rejected(
@@ -346,3 +350,14 @@ async def test_derived_subtitle_is_noted(sample_paper: Paper) -> None:
     )
     await summarizer.summarize(sample_paper)
     assert any("Summary subtitle" in n for n in summarizer.notes)
+
+
+def test_shortening_may_not_trade_one_blocker_for_another() -> None:
+    from scholar_lens.src.summarizer import _blockers
+
+    ragged = "| a | b |\n| --- | --- |\n| 1 | 2 | 3 |\n"
+    repeated = "| a | b |\n| --- | --- |\n| 1 | 2 |\n| 1 | 2 |\n"
+    original = "앞 문단.\n\n" + ragged
+    # The same kind of blocker on another line is not new.
+    assert _blockers("짧게.\n\n" + ragged) <= _blockers(original)
+    assert not _blockers("짧게.\n\n" + repeated) <= _blockers(original)

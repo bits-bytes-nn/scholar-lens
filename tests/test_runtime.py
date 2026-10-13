@@ -49,10 +49,14 @@ class TestLoadSecretsFromSsm:
         ctx = MagicMock()
         ctx.config.resources.project_name = "p"
         ctx.config.resources.stage = "dev"
+        monkeypatch.delenv(EnvVars.BRAVE_API_KEY.value, raising=False)
         # Must not raise — an optional secret simply isn't set.
         runtime.load_secrets_from_ssm(
             ctx, {SSMParams.BRAVE_API_KEY: EnvVars.BRAVE_API_KEY}
         )
+        import os
+
+        assert EnvVars.BRAVE_API_KEY.value not in os.environ
 
     @pytest.mark.parametrize(
         "code,level",
@@ -184,6 +188,20 @@ class TestRunJob:
         result = runtime.run_job(JobRequest(kind="summarize", source="https://x.dev/a"))
         assert result.status == "rejected"
         assert "returned HTML" in (result.error or "")
+
+    def test_fetch_outage_is_a_failure_not_a_rejection(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from scholar_lens.src.jobs import JobRequest
+        from scholar_lens.src.paper_source import PaperFetchError
+
+        async def pipeline(context, request, tracker):  # type: ignore[no-untyped-def]
+            raise PaperFetchError("503 from the host")
+
+        self._patch(monkeypatch, pipeline)
+        result = runtime.run_job(JobRequest(kind="summarize", source="https://x.dev/a"))
+        assert result.status == "failed"
+        assert "503" in (result.error or "")
 
     def test_failure_is_reported_not_raised(
         self, monkeypatch: pytest.MonkeyPatch

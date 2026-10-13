@@ -19,7 +19,14 @@ from scholar_lens.src.content_extractor import Attributes, Citation
 from scholar_lens.src.explainer import Paper, PaperReviewer, ReviewText
 from scholar_lens.src.metrics import TokenBudgetExceeded, TokenUsageTracker
 from scholar_lens.src.parser import Content
-from scholar_lens.src.review_plan import PlanError, SourceText
+from scholar_lens.src.post_validator import body_errors
+from scholar_lens.src.review_plan import (
+    PlanError,
+    SourceText,
+    draft_rank,
+    publish_blockers,
+    rule_issues,
+)
 
 MARKER = '[Image: alt="arch", src="/p/figures/0.png", caption="The architecture."]'
 SENTENCES = [
@@ -696,3 +703,131 @@ def test_subtitle_that_repeats_the_title_is_a_problem() -> None:
         "closing": "## 한계\n\n끝.",
     }
     assert set(_finalization_problems(final, "Pixtral 12B")) == {"subtitle"}
+
+
+async def test_revisions_stop_when_must_fix_items_do_not_shrink() -> None:
+    # Logged DPO pattern: over the score bar, nothing missing, the same number
+    # of subjective must-fix items on every attempt (2 → 2 → 2).
+    def check(_: dict[str, Any]) -> dict[str, str]:
+        return {
+            "quality_score": "80",
+            "missing_items": "none",
+            "must_fix": "- 'A' 표현을 바꿉니다\n- 'B' 근거를 보강합니다",
+        }
+
+    reviewer = _reviewer(checker=FakeChain(check), max_synthesis_attempts=3)
+    review = await reviewer.run()
+    sections = len(json.loads(_plan()[6:-7])["sections"])
+    assert len(reviewer.checker.calls) == 2 * sections  # type: ignore[attr-defined]
+    note = next(n for n in review.notes if "below the quality bar" in n)
+    assert "Open: 'A' 표현을 바꿉니다" in note
+
+
+async def test_shrinking_must_fix_items_keep_revising() -> None:
+    counts = iter([3, 2, 1, 0] * 10)
+
+    def check(_: dict[str, Any]) -> dict[str, str]:
+        n = next(counts)
+        items = "\n".join(f"- 항목 {i}" for i in range(n)) or "none"
+        return {"quality_score": "80", "missing_items": "none", "must_fix": items}
+
+    reviewer = _reviewer(checker=FakeChain(check), max_synthesis_attempts=3)
+    await reviewer.run()
+    # 3 → 2 → 1: every revision made progress, so all three attempts run.
+    assert len(reviewer.checker.calls) >= 3  # type: ignore[attr-defined]
+
+
+BAD_TABLE = "\n\n| 방법 | | 정확도 |\n| --- | --- | --- |\n| LoRA | 1 | 90.1 |\n"
+GOOD_TABLE = "\n\n| 방법 | 랭크 | 정확도 |\n| --- | --- | --- |\n| LoRA | 1 | 90.1 |\n"
+TARGET = "LoRA의 핵심"
+
+
+def _with(payload: dict[str, Any], extra: str) -> str:
+    return _writer(payload).replace("</explanation>", extra + "</explanation>")
+
+
+class TestRuleIssuesAfterPublisherFixes:
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "손실은 다음과 같습니다.\n$$\nh = W_0 x\n$$\n이 식입니다.",
+            "갱신 \\\\(x\\_t\\\\)를 씁니다.",
+            "변환은 다음과 같습니다.\n\\\\[ y = f(x) \\\\]\n끝입니다.",
+        ],
+    )
+    def test_math_the_publisher_fixes_is_not_an_issue(self, text: str) -> None:
+        assert body_errors(text)  # the raw draft would fail ...
+        assert rule_issues(text) == []  # ... but not after normalization
+
+    def test_real_table_error_still_counts(self) -> None:
+        assert publish_blockers(BAD_TABLE.strip())
+
+    async def test_autofixable_math_spends_no_revision(self) -> None:
+        calls = {"n": 0}
+
+        def write(payload: dict[str, Any]) -> str:
+            if TARGET in payload["section_brief"]:
+                calls["n"] += 1
+                return _with(payload, "\n손실입니다.\n$$\nh = W_0 x\n$$\n핵심입니다.")
+            return _writer(payload)
+
+        review = await _reviewer(
+            writer=FakeChain(write), checker=FakeChain(_pass)
+        ).run()
+        assert calls["n"] == 1
+        assert not any("quality bar" in note for note in review.notes)
+
+
+class TestPublishableDraftWins:
+    def test_rank_puts_publishable_before_score(self) -> None:
+        broken = draft_rank(passes=False, publishable=False, blocking=1, score=88)
+        clean = draft_rank(passes=False, publishable=True, blocking=1, score=85)
+        assert clean > broken
+
+    async def test_lower_scoring_publishable_revision_is_kept(self) -> None:
+        calls = {"n": 0}
+
+        def write(payload: dict[str, Any]) -> str:
+            if TARGET in payload["section_brief"]:
+                calls["n"] += 1
+                return _with(payload, BAD_TABLE if calls["n"] == 1 else GOOD_TABLE)
+            return _writer(payload)
+
+        def check(payload: dict[str, Any]) -> dict[str, str]:
+            if "| 방법 |" not in payload["draft"]:
+                return _pass(payload)
+            score = "88" if "| 방법 | |" in payload["draft"] else "85"
+            return {
+                "quality_score": score,
+                "missing_items": "none",
+                "must_fix": "- '본문입니다' → 더 구체적으로",
+            }
+
+        review = await _reviewer(
+            writer=FakeChain(write), checker=FakeChain(check)
+        ).run()
+        assert "| 방법 | | 정확도 |" not in review.body
+        assert body_errors(review.body) == []
+
+    async def test_no_stall_while_a_publish_blocker_remains(self) -> None:
+        calls = {"n": 0}
+
+        def write(payload: dict[str, Any]) -> str:
+            if TARGET in payload["section_brief"]:
+                calls["n"] += 1
+                return _with(payload, GOOD_TABLE if calls["n"] >= 3 else BAD_TABLE)
+            return _writer(payload)
+
+        review = await _reviewer(
+            writer=FakeChain(write), checker=FakeChain(_pass)
+        ).run()
+        assert calls["n"] == 3
+        assert "| 방법 | | 정확도 |" not in review.body
+
+
+def test_finalization_part_that_the_validator_would_reject_is_a_problem() -> None:
+    from scholar_lens.src.explainer import _finalization_problems
+
+    closing = "## 한계와 시사점\n\n| 방법 | |\n| --- | --- |\n| A | 1 |\n"
+    final = {"subtitle": "s", "key_takeaways": TLDR, "closing": closing}
+    assert set(_finalization_problems(final, "Title")) == {"closing"}

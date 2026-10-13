@@ -68,7 +68,7 @@ class AttributesExtractionPrompt(BasePrompt):
        none is exact:
        {controlled_tags}
     7. KEYWORDS: at most 5 specific tags for the paper's own contributions
-       (1-4 words each, e.g. "Low-Rank Adaptation", "Paged Attention"). Reuse an
+       (1-4 words each, e.g. "Knowledge Distillation", "Vector Search"). Reuse an
        existing keyword whenever one fits; never restate the paper title, never
        use generic terms ("Deep Learning", "Transformer") or a technique the
        paper does not actually use.
@@ -255,61 +255,6 @@ class CitationExtractionPrompt(BasePrompt):
     Execute this extraction with the precision of a master bibliographer. Every academic reference matters, and every
     title must be complete and accurate. Remember: extract from bibliography sections only, never from LaTeX commands
     or in-text citations.
-    """
-
-
-class CitationAnalysisPrompt(BasePrompt):
-    input_variables: list[str] = ["reference_title", "original_content"]
-    output_variables: list[str] = ["analysis"]
-
-    system_prompt_template: str = """
-    You are an expert AI/ML research analyst specializing in citation analysis. Your task is to analyze cited papers and
-    explain their technical contributions and relevance to the citing work.
-
-    Focus on:
-    - Technical accuracy and precision
-    - Clear explanation of methodologies
-    - Relevance to the citing paper
-    - Concise but comprehensive analysis
-    """
-
-    human_prompt_template: str = """
-    Analyze the relationship between this cited paper and the citing work:
-
-    CITED PAPER TITLE:
-    {reference_title}
-
-    CITING WORK CONTEXT:
-    {original_content}
-
-    Provide analysis following this structure:
-
-    ## Core Contribution
-    - What is the main technical innovation of the cited paper?
-    - How does it advance the field?
-
-    ## Technical Details
-    - Key algorithms, methods, or architectures
-    - Important mathematical formulations (LaTeX between $$ and $$ for both inline and display math; never \\( \\) or single $)
-    - Critical experimental findings or theoretical results
-
-    ## Relevance to Citing Work
-    - How is this paper being used or referenced?
-    - What specific aspects are being built upon or compared against?
-    - Why is this citation important for the citing work?
-
-    ## Significance
-    - Impact on the field
-    - Key advantages or limitations
-    - Position relative to other approaches
-
-    Format your response as:
-    <analysis>
-    [Your structured analysis here using the format above]
-    </analysis>
-
-    If the title alone provides insufficient information, focus on what can be reasonably inferred and clearly state any
-    limitations in your analysis.
     """
 
 

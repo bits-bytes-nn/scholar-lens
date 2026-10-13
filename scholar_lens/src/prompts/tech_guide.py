@@ -6,6 +6,7 @@ from .base import (
     MATH_RULES,
     READER_PROFILE,
     STYLE_RULES,
+    TABLE_RULES,
     VISUAL_RULES,
     BasePrompt,
 )
@@ -162,13 +163,9 @@ class TechGuideSynopsisPrompt(BasePrompt):
     """
         + LENGTH_BUDGET
         + """
-    This is NOT a translation of one doc page — it is a curated learning path. Design an ordered outline that builds
-    understanding progressively and covers these CONCERN AREAS where the sources support them (label each section with
-    the area it belongs to):
-    - CONCEPT: core concepts, principles, mental model, and (where relevant) architecture / how it works internally
-    - DETAIL: deeper mechanics, configuration, key components, and how the pieces fit together
-    - USAGE: practical getting-started and how-to workflows with runnable code
-    - APPLICATION: real-world use cases, best practices, pitfalls, and comparisons/trade-offs
+    This is NOT a translation of one doc page — it is a curated learning path. Order the sections so understanding
+    builds progressively, and cover what the sources support: the core concepts, configuration and key components,
+    runnable usage, and practical pitfalls and trade-offs. In a getting-started guide usage leads and the rest serves it.
 
     DEPTH IS NOT UNIFORM. This is a guide a reader STUDIES, not a reference they skim — so since it is not a mere
     translation, the important, conceptually hard parts must be covered DEEPLY and in detail, while easy or peripheral
@@ -193,21 +190,17 @@ class TechGuideSynopsisPrompt(BasePrompt):
     less essential ones so the outline is complete within {max_sections} sections.
 
     Write section titles and descriptions in this language: {language} (keep established English technical terms
-    as-is). Keep the bracketed area/depth/visuals keywords in English exactly as shown.
+    as-is). Keep the bracketed depth and visuals keywords in English exactly as shown.
 
-    FORMAT — each line is: a number, then ONE area tag in brackets, then ONE depth tag in brackets, then the title,
-    then " — " and a one-line description, then a "(visuals: ...)" hint.
-    - Pick EXACTLY ONE area from: CONCEPT, DETAIL, USAGE, APPLICATION (do NOT write the pipe list literally).
-    - Pick EXACTLY ONE depth from: deep, standard, brief.
-    - visuals is one of: table, image, code, none.
+    FORMAT — each line is: a number, then ONE depth tag in brackets (deep, standard or brief), then the title, then
+    " — " and a one-line description, then a "(visuals: ...)" hint, where visuals is one of: table, image, code, none.
     Example:
-    1. [CONCEPT] [deep] How GitOps Reconciliation Works — the control loop and desired-state model (visuals: table)
+    1. [deep] How GitOps Reconciliation Works — the control loop and desired-state model (visuals: table)
 
     Respond in this format (one line per section):
     <guide_type>getting-started or explainer</guide_type>
     <synopsis>
-    1. [CONCEPT] [deep] Section Title — one-line description (visuals: table)
-    2. [USAGE] [brief] Section Title — one-line description (visuals: code)
+    1. [standard] Section Title — one-line description (visuals: code)
     ...
     </synopsis>
     """
@@ -297,34 +290,22 @@ class TechGuideSectionPrompt(BasePrompt):
     {available_images}
     </available_images>
 
-    DEDUPLICATION — do this BEFORE writing a single word:
-    - Read <previously_written_sections> completely. Note every concept, definition, code example, table, and image
-      already presented there. Those are OFF-LIMITS: do not re-explain, re-define, or re-show them.
-      <already_in_guide> lists (extracted in code) every heading, equation, table, figure, code block and callout the guide
-      already shows — never show any of them again (count its callouts against the cap).
-    - This section must add genuinely NEW material. If it naturally connects to earlier content, refer to it in one
-      short phrase ("as introduced earlier") and move on — never restate it.
-
-    NO MECHANICAL FRAMING — the guide reads as one continuous document, not a series of stitched-together essays:
-    - Do NOT open the section with a recap of the previous chapter ("앞 장에서는 …를 살펴봤습니다", "이전 장에서
-      다룬 …"). Start directly with this section's own material.
-    - Do NOT close with a preview of the next chapter or a restated summary ("이어지는 장에서는 …", "정리하면 …",
-      "In the next section we will …"). End when the section's content is complete.
-    - A brief, substantive transition is fine when it genuinely aids flow; a formulaic recap-then-preview wrapper on
-      every section is not. When in doubt, omit the framing and let the content stand.
+    <already_in_guide> lists (extracted in code) every heading, equation, table, figure, code block and callout the
+    guide already shows: never show any of them again (count its callouts against the cap), and never re-explain
+    what <previously_written_sections> already explained; refer to it in a short phrase instead. Start directly with
+    this section's own material and end when it is complete (no recap or preview of other sections).
 
     Requirements:
     - Start with exactly one `##` heading naming this section.
     - HONOUR THE <depth_directive>: go deep on conceptually hard parts and stay brief on routine ones. This is a
       guide to be studied, not a translation; stay within the scope described for this section in the outline.
-    - Ground all technical content in <sources>; do NOT invent APIs, flags, or behaviors not supported by them.
     - Include runnable code blocks (with language fences) where they aid understanding. For a section whose
       depth_directive plans a code/table visual, include it unless the sources genuinely do not support one.
-    - You MAY reference an image ONLY if its URL appears in <available_images>, using `![alt](url)`, copied
-      exactly. Every image you embed MUST be explained in the adjacent prose; if no image fits, use none.
+    - Images: only URLs listed in <available_images>.
     """
         + HEADING_STRUCTURE_RULES
         + VISUAL_RULES
+        + TABLE_RULES
         + IMAGE_PATH_RULES
         + MATH_RULES
         + """
@@ -385,7 +366,7 @@ class TechGuideGroundingPrompt(BasePrompt):
 class TechGuideEvaluationPrompt(BasePrompt):
     """Scores a drafted section 0-100 and returns actionable revision feedback.
 
-    The tech-guide analogue of PaperEvaluationPrompt: a separate evaluation
+    A separate evaluation
     agent that gates each section on depth, structure, style, non-duplication,
     and visual richness, driving a score-and-revise loop.
     """
@@ -500,8 +481,8 @@ class TechGuideTaxonomyPrompt(BasePrompt):
     Rules:
     - category: exactly one value copied from category_options — the closest fit.
     - controlled_tags: 1-3 values copied from controlled_tag_options naming what the guide teaches (not a neighbouring field).
-    - keywords: up to 5 short reusable topic tags in English (1-4 words each, e.g. "Paged Attention",
-      "Inference Serving"); name techniques and tools the guide teaches, never restate the title.
+    - keywords: up to 5 short reusable topic tags in English (1-4 words each, e.g. "Vector Search",
+      "Container Orchestration"); name techniques and tools the guide teaches, never restate the title.
     - seo_title: only when the title is longer than 70 characters, a version of at most 70 characters that keeps
       the product or technique name first; otherwise leave empty.
 

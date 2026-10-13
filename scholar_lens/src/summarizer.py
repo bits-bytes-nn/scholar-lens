@@ -15,12 +15,14 @@ import boto3
 from langchain_core.runnables import Runnable
 
 from .constants import LanguageModelId
-from .explainer import Paper
+from .explainer import NO_CODEBASE, Paper
 from .formatting import derived_subtitle, split_leading_h1
 from .logger import logger
+from .markdown_math import DISPLAY_MATH, HANGUL, image_sources
 from .metrics import TokenBudgetExceeded, TokenBudgetGuard
 from .prompt_safety import neutralize_prompt_tags
 from .prompts import BasePrompt, PaperSummaryPrompt, PaperSummaryShortenPrompt
+from .review_plan import publish_blockers
 from .utils import (
     BedrockLanguageModelFactory,
     HTMLTagOutputParser,
@@ -29,21 +31,22 @@ from .utils import (
 )
 
 DEFAULT_LANGUAGE: str = "Korean"
-# Language-neutral sentinel for "no code repository was provided"; the summary
-# prompt keys off this exact string to decide whether to use a codebase.
-_NO_CODEBASE: str = "(no code repository provided)"
+
+
+def _blockers(text: str) -> set[str]:
+    """Publish blockers without their line numbers (the shortened text moves
+    lines): a shorter summary may not add a kind the original did not have."""
+    return {re.sub(r" \(line \d+\)$", "", b) for b in publish_blockers(text)}
+
+
 # A summary over this many Hangul syllables gets one shortening pass down to
 # the top of the range SUMMARY_DEPTH_RULES asks for (2,000-3,000).
 MAX_SUMMARY_HANGUL: int = 3_500
 SHORTEN_TARGET_HANGUL: int = 3_000
-_HANGUL = re.compile(r"[가-힣]")
-_IMAGE_SRC = re.compile(r"!\[[^\]]*\]\(([^)\s]+)")
-# A display-equation line: a lone $$ or a whole-line $$ … $$.
-_DISPLAY_MATH = re.compile(r"^[ \t]*\$\$(?:[^\n]*\$\$)?[ \t]*$", re.MULTILINE)
 
 
 def hangul_length(text: str) -> int:
-    return len(_HANGUL.findall(text))
+    return len(HANGUL.findall(text))
 
 
 def _skeleton(summary: str) -> tuple[bool, list[str], list[str], int]:
@@ -53,8 +56,8 @@ def _skeleton(summary: str) -> tuple[bool, list[str], list[str], int]:
     return (
         summary.lstrip().startswith(">"),
         re.findall(r"^##\s.*$", summary, re.MULTILINE),
-        _IMAGE_SRC.findall(summary),
-        len(_DISPLAY_MATH.findall(summary)),
+        image_sources(summary),
+        len(DISPLAY_MATH.findall(summary)),
     )
 
 
@@ -149,9 +152,11 @@ class PaperSummarizer(RetryableBase, TokenBudgetGuard):
     async def _shorten_if_long(self, summary: str) -> str:
         """One bounded shortening call for an over-long summary (never a
         loop). The shorter text is kept only when it is shorter and keeps the
-        summary's structure; any failure keeps the original."""
+        summary's structure without adding a publish-blocking error; any failure
+        keeps the original. The cap is
+        measured in Hangul syllables, so it applies to Korean summaries only."""
         length = hangul_length(summary)
-        if length <= MAX_SUMMARY_HANGUL:
+        if self.language != "Korean" or length <= MAX_SUMMARY_HANGUL:
             return summary
         logger.info("Summary has %d Hangul syllables; shortening once.", length)
         try:
@@ -167,10 +172,14 @@ class PaperSummarizer(RetryableBase, TokenBudgetGuard):
             shorter
             and hangul_length(shorter) < length
             and _skeleton(shorter) == _skeleton(summary)
+            and _blockers(shorter) <= _blockers(summary)
         ):
             summary, length = shorter, hangul_length(shorter)
         elif shorter:
-            logger.warning("Shortened summary dropped structure; kept the original.")
+            logger.warning(
+                "Shortened summary changed its structure or added a publish "
+                "blocker; kept the original."
+            )
         if length > MAX_SUMMARY_HANGUL:
             self.notes.append(
                 f"Summary is still long ({length:,} Hangul syllables; target "
@@ -203,7 +212,7 @@ class PaperSummarizer(RetryableBase, TokenBudgetGuard):
             {
                 "content": neutralize_prompt_tags(content),
                 "codebase_summary": neutralize_prompt_tags(
-                    codebase_summary or _NO_CODEBASE
+                    codebase_summary or NO_CODEBASE
                 ),
                 "language": self.language,
                 "translation_guideline": str(self.translation_guideline),

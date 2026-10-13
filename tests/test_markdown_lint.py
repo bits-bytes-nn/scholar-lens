@@ -213,6 +213,16 @@ class TestDropUnknownImages:
         md = "`![x](nowhere.png)`"
         assert drop_unknown_images(md, set()) == md
 
+    def test_arxiv_figures_need_the_same_paper_in_any_version(self) -> None:
+        known = {"https://arxiv.org/html/2106.09685v2/x1.png"}
+        md = (
+            "![a](https://arxiv.org/html/2106.09685v1/x1.png) "
+            "![b](https://arxiv.org/html/2999.99999v1/x1.png)"
+        )
+        out = drop_unknown_images(md, known)
+        # The same figure in another version points at the fetched source.
+        assert out.strip() == "![a](https://arxiv.org/html/2106.09685v2/x1.png)"
+
 
 class TestFillImageAlts:
     def test_caption_without_label_becomes_alt(self) -> None:
@@ -265,3 +275,109 @@ def test_heading_level_jumps_are_closed() -> None:
     out = lint_markdown(src)
     assert "\n### Deep\n" in out and "\n#### Deeper\n" in out
     assert "#### code" in out and out.startswith("## TL;DR")
+
+
+def test_a_same_named_image_on_another_host_is_dropped() -> None:
+    known = {
+        "https://docs.x.io/img/arch.png",
+        "https://cdn.x.io/a.png?v=2",
+        "/tmp/p/figures/fig_1.png",
+        "https://arxiv.org/html/2106.09685v2/x1.png",
+    }
+    md = (
+        "![a](https://evil.example/arch.png) ![b](https://docs.x.io/img/arch.png) "
+        "![c](https://cdn.x.io/a.png) ![d](figures/fig_1.png) "
+        "![e](https://arxiv.org/html/2106.09685/x1.png)"
+    )
+    out = drop_unknown_images(md, known)
+    assert "evil.example" not in out
+    for kept in ("docs.x.io/img/arch.png", "cdn.x.io/a.png", "fig_1.png", "x1.png"):
+        assert kept in out
+
+
+@pytest.mark.parametrize(
+    "src",
+    [
+        "다음을 실행합니다.\n\n    vllm serve <model-name> --port 8000\n\n끝.",
+        "> ```bash\n> vllm serve <model>\n> ```",
+    ],
+)
+def test_placeholders_in_indented_or_quoted_code_are_not_escaped(src: str) -> None:
+    assert lint_markdown(src) == src
+
+
+@pytest.mark.parametrize(
+    "src,kept",
+    [  # an open "<" in prose never pairs with a ">" on a later line or in code
+        ("조건 k<n 일 때 성립합니다.\n\n> **참고:** 인용입니다.", "> **참고:**"),
+        ("조건 k<n 일 때 성립합니다.\n\n코드 `x > y` 를 보세요.", "`x > y`"),
+        ("타입은 List<T 처럼 씁니다.\n\n- 항목 `a -> b`", "`a -> b`"),
+    ],
+)
+def test_open_angle_bracket_does_not_escape_later_lines(src: str, kept: str) -> None:
+    assert kept in lint_markdown(src, warn=False)
+
+
+def test_publish_body_is_idempotent_with_an_unboxed_callout() -> None:
+    from scholar_lens.src.markdown_lint import MAX_CALLOUTS, publish_body
+
+    callouts = "\n\n".join(f"> **핵심:** 요점 {i}." for i in range(MAX_CALLOUTS))
+    src = callouts + "\n\n> **핵심:** 아래 식\n> $$\n> a = b\n> $$\n> 설명\n"
+    once = publish_body(src, warn=False)
+    assert publish_body(once, warn=False) == once
+
+
+def test_bos_eos_tokens_are_escaped_not_strikethrough() -> None:
+    from scholar_lens.src.markdown_lint import lint_markdown
+
+    out = lint_markdown("BOS 토큰 <s>를 문장 앞에, EOS 토큰 </s>를 끝에 붙입니다.")
+    assert "&lt;s&gt;" in out and "&lt;/s&gt;" in out
+
+
+def test_chat_template_tokens_become_inline_code() -> None:
+    out = lint_markdown("모델은 <|im_start|> 토큰을 씁니다.", warn=False)
+    assert out == "모델은 `<|im_start|>` 토큰을 씁니다."
+    assert lint_markdown(out, warn=False) == out
+    kept = "$$\\text{<|x|>}$$ 와 `<|eot_id|>`"
+    assert lint_markdown(kept, warn=False) == kept
+
+
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        (
+            "| a | b |\n|---|---|\n| 1 | 2 |\n표 아래입니다.",
+            "| 1 | 2 |\n\n표 아래입니다.",
+        ),
+        ("표 위입니다.\n| a | b |\n|---|---|\n| 1 | 2 |", "표 위입니다.\n\n| a | b |"),
+    ],
+)
+def test_tables_glued_to_text_get_blank_lines(text: str, expected: str) -> None:
+    out = lint_markdown(text, warn=False)
+    assert expected in out and lint_markdown(out, warn=False) == out
+
+
+def test_summary_tags_are_removed_even_inside_details() -> None:
+    # kramdown renders a bare <summary> inside <details> as a broken page, and
+    # no prompt asks for <details>: the tag is stripped like any leaked one.
+    out = lint_markdown(
+        "<details>\n<summary>펼치기</summary>\n\n내용\n</details>", warn=False
+    )
+    assert "<summary>" not in out and "</summary>" not in out
+    assert "</summary>" not in lint_markdown("본문 </summary>", warn=False)
+
+
+def test_table_glued_under_a_list_item_stays_in_the_item() -> None:
+    table = "| a | b |\n| --- | --- |\n| 1 | 2 |"
+    out = lint_markdown(
+        f"1. 첫 단계입니다.\n{table}\n2. 둘째 단계입니다.\n", warn=False
+    )
+    assert "\n   | a | b |\n   | --- | --- |\n   | 1 | 2 |\n" in out
+    assert "\n2. 둘째 단계입니다." in out and lint_markdown(out, warn=False) == out
+
+
+def test_table_attribute_line_stays_attached() -> None:
+    out = lint_markdown(
+        "앞 문장.\n| a | b |\n| --- | --- |\n| 1 | 2 |\n{: .wide}\n", warn=False
+    )
+    assert "| 1 | 2 |\n{: .wide}" in out

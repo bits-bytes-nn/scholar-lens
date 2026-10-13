@@ -22,7 +22,7 @@ DOCS_HTML = """
 <body>
   <h1>Getting Started</h1>
   <p>FastAPI is a modern web framework.</p>
-  <img src="/img/logo.png">
+  <img src="/img/architecture.png">
   <img src="https://cdn.example.com/diagram.svg">
   <a href="/docs/tutorial/">Tutorial</a>
   <a href="https://external.com/other">External</a>
@@ -100,10 +100,10 @@ class TestWebResearcherFetch:
         assert "modern web framework" in page.text
         assert "analytics" not in page.text  # script stripped
         # Relative image resolved to absolute; external kept.
-        assert "https://fastapi.tiangolo.com/img/logo.png" in page.image_urls
+        assert "https://fastapi.tiangolo.com/img/architecture.png" in page.image_urls
         assert "https://cdn.example.com/diagram.svg" in page.image_urls
         # The text markers name the same absolute URLs the writers may use.
-        assert "src=https://fastapi.tiangolo.com/img/logo.png]" in page.text
+        assert 'src="https://fastapi.tiangolo.com/img/architecture.png"]' in page.text
 
     def test_non_html_resource_skipped(self) -> None:
         url = "https://x.com/file.pdf"
@@ -209,6 +209,22 @@ class TestRunSearches:
         researcher.run_searches(corpus, ["q"], fetch_top=1)
         assert len(corpus.pages) == 1
         assert corpus.pages[0].url == result_url
+
+    def test_fetch_top_takes_results_round_robin_across_queries(self) -> None:
+        # One query's results must not fill the whole fetch budget.
+        class Provider(_StubProvider):
+            def search(self, query, *, count=5, domains=None):  # type: ignore[no-untyped-def,override]
+                return [
+                    SearchResult(
+                        title=f"{query}{i}", url=f"https://{query}.x/{i}", content="c"
+                    )
+                    for i in range(5)
+                ]
+
+        researcher = _researcher({}, search_provider=Provider(content="c"))
+        corpus = ResearchCorpus()
+        researcher.run_searches(corpus, ["a", "b"], fetch_top=4)
+        assert [p.title for p in corpus.pages] == ["a0", "b0", "a1", "b1"]
 
     def test_fetch_top_dedupes_against_existing_pages(self) -> None:
         # A result URL already present as a seed page is not added again.
@@ -473,7 +489,7 @@ class TestHardenedFetch:
         )
         corpus = researcher.research(["https://docs.x.dev/docs/stable/notes/cuda.html"])
         assert [p.text for p in corpus.pages] == [
-            "CUDA semantics.\n\nAMP (amp.html)",
+            "CUDA semantics.\n\nAMP (https://docs.x.dev/docs/2.14/notes/amp.html)",
             "AMP.",
         ]
         assert (
@@ -561,3 +577,348 @@ def test_relevant_text_picks_matching_pages_within_budget() -> None:
         text.find("Install") if "Install" in text else 10**9
     )
     assert len(text) <= 5_000 + 20
+
+
+class TestOfficialDocsAfterRedirects:
+    """Regression: the official host and version came only from the typed URL,
+    so a docs site that redirects left every page "third-party"."""
+
+    def test_redirected_seed_keeps_its_landing_host_and_release_official(
+        self,
+    ) -> None:
+        from scholar_lens.src.web_research import OfficialDocs
+
+        seed = PageContent(
+            url="https://pytorch.org/docs/stable/notes/cuda.html",
+            title="t",
+            text="x",
+            final_url="https://docs.pytorch.org/docs/2.14/notes/cuda.html",
+        )
+        official = OfficialDocs.from_research([seed.url], [seed])
+        assert official.covers("https://docs.pytorch.org/docs/2.14/notes/amp.html")
+        assert not official.covers("https://docs.pytorch.org/docs/2.0/notes/amp.html")
+        assert official.covers("https://pytorch.org/docs/stable/x.html")
+
+    def test_unversioned_link_to_a_pinned_release(self) -> None:
+        from scholar_lens.src.web_research import OfficialDocs
+
+        seed = PageContent(
+            url="https://huggingface.co/docs/peft/developer_guides/lora",
+            title="t",
+            text="x",
+            final_url="https://huggingface.co/docs/peft/v0.21.0/developer_guides/lora",
+        )
+        official = OfficialDocs.from_research([seed.url], [seed])
+        assert official.covers(seed.final_url)
+        assert not official.covers("https://huggingface.co/docs/peft/v0.6.0/x")
+
+    @pytest.mark.parametrize(
+        ("url", "version"),
+        [
+            ("https://cloud.x.dev/reference/rest/v1/projects", None),
+            ("https://docs.x.dev/en/v2/guide", "v2"),
+            ("https://docs.x.dev/docs/2.14/notes", "2.14"),
+            ("https://blog.x.dev/2024/05/post", None),
+            (
+                "https://docs.nvidia.com/deeplearning/nemo/user-guide/docs/en/v1.23.0/x",
+                "v1.23.0",
+            ),
+            (
+                "https://cloud.google.com/python/docs/reference/aiplatform/1.38.0/x",
+                "1.38.0",
+            ),
+            ("https://docs.pytorch.org/docs/stable/notes/cuda.html", "stable"),
+            (
+                "https://huggingface.co/docs/peft/v0.21.0/developer_guides/lora",
+                "v0.21.0",
+            ),
+            ("https://huggingface.co/docs/transformers/main/en/index", "main"),
+        ],
+    )
+    def test_api_path_segments_are_not_docs_versions(
+        self, url: str, version: str | None
+    ) -> None:
+        from scholar_lens.src.web_research import docs_version
+
+        assert docs_version(url) == version
+
+
+class TestProductNames:
+    def test_names_from_docs_path_commands_and_host(self) -> None:
+        from scholar_lens.src.web_research import product_names
+
+        url = "https://huggingface.co/docs/peft/quicktour"
+        seed = PageContent(
+            url=url,
+            title="t",
+            text="```bash\naccelerate launch --config_file c.yaml train.py\n"
+            "accelerate launch --num_processes 2 train.py\n"
+            "pip install --upgrade peft\n```",
+        )
+        assert product_names([url], [seed]) == ["peft", "accelerate", "huggingface"]
+
+    def test_host_label_for_a_product_site(self) -> None:
+        from scholar_lens.src.web_research import product_names
+
+        assert product_names(["https://docs.vllm.ai/en/latest/"], []) == ["vllm"]
+
+    def test_environment_assignments_are_not_the_command(self) -> None:
+        from scholar_lens.src.web_research import product_names
+
+        url = "https://docs.vllm.ai/en/latest/serving/"
+        seed = PageContent(
+            url=url,
+            title="t",
+            text="```bash\nCUDA_VISIBLE_DEVICES=0,1 vllm serve m "
+            "--tensor-parallel-size 2\n```",
+        )
+        assert product_names([url], [seed]) == ["vllm"]
+
+
+class TestFetchFailures:
+    def test_every_seed_unreachable_is_an_outage_not_bad_input(self) -> None:
+        # Regression: a Cloudflare 429 on the only URL ended as "not technical
+        # documentation" and the job was rejected.
+        from scholar_lens.src.web_research import SourceFetchError
+
+        url = "https://docs.x.dev/guide"
+        researcher = _researcher({url: (429, "text/html", "challenge")})
+        with pytest.raises(SourceFetchError):
+            researcher.research([url], discover_subpages=False)
+
+    def test_temporary_dns_failure_is_an_outage(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import socket
+
+        from scholar_lens.src.web_research import SourceFetchError
+
+        def no_dns(*_a, **_k):  # type: ignore[no-untyped-def]
+            raise socket.gaierror(socket.EAI_AGAIN, "temporary failure")
+
+        monkeypatch.setattr(socket, "getaddrinfo", no_dns)
+        url = "https://docs.x.dev/guide"
+        with pytest.raises(SourceFetchError):
+            _researcher({}).research([url], discover_subpages=False)
+
+    def test_temporary_dns_failure_at_connect_time_is_an_outage(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import socket
+
+        from scholar_lens.src import web_research
+        from scholar_lens.src.url_guard import UnsafeUrlError
+        from scholar_lens.src.web_research import SourceFetchError
+
+        def connect_fails(self, url):  # type: ignore[no-untyped-def]
+            try:
+                raise socket.gaierror(socket.EAI_AGAIN, "temporary failure")
+            except socket.gaierror as e:
+                raise UnsafeUrlError(f"cannot resolve {url}") from e
+
+        monkeypatch.setattr(web_research, "is_url_public", lambda _url: True)
+        monkeypatch.setattr(web_research.WebResearcher, "_get_html", connect_fails)
+        url = "https://docs.x.dev/guide"
+        with pytest.raises(SourceFetchError):
+            _researcher({}).research([url], discover_subpages=False)
+
+    def test_a_missing_page_still_yields_an_empty_corpus(self) -> None:
+        researcher = _researcher({})
+        corpus = researcher.research(["https://docs.x.dev/nope"])
+        assert corpus.pages == []
+
+
+class TestPageExtraction:
+    def test_chrome_images_are_skipped_and_duplicates_dropped(self) -> None:
+        url = "https://docs.x.dev/guide/intro.html"
+        html = (
+            "<html><body><header><img src='/logo.png'></header>"
+            "<noscript><img src='https://t.example/px.gif' width='1'></noscript>"
+            "<main><img src='/huggingface_logo-noborder.svg'><p>Text.</p>"
+            "<img src='/fig.png'><img src='/fig.png'><img src='/catalog.png'></main>"
+            "<footer><img src='/logo.png'></footer></body></html>"
+        )
+        corpus = _researcher({url: (200, "text/html", html)}).research(
+            [url], discover_subpages=False
+        )
+        assert corpus.pages[0].image_urls == [
+            "https://docs.x.dev/fig.png",
+            "https://docs.x.dev/catalog.png",
+        ]
+        # The text's figure markers agree with the image list.
+        text = corpus.pages[0].text
+        assert "logo" not in text and "px.gif" not in text
+        assert 'src="https://docs.x.dev/fig.png"' in text
+
+    def test_text_comes_from_the_single_article(self) -> None:
+        url = "https://docs.x.dev/guide/intro.html"
+        html = (
+            "<html><body><div class='sidebar'>v1.0 v1.1 v1.2 Rate this page</div>"
+            "<article><h1>Intro</h1><p>The guide.</p></article></body></html>"
+        )
+        corpus = _researcher({url: (200, "text/html", html)}).research(
+            [url], discover_subpages=False
+        )
+        assert corpus.pages[0].text == "## Intro\n\nThe guide."
+
+    def test_leaf_page_without_extension_discovers_its_siblings(self) -> None:
+        seed = "https://docs.x.dev/docs/peft/guides/lora"
+        html = "<p>LoRA.</p><a href='/docs/peft/guides/ia3'>IA3</a>"
+        researcher = _researcher(
+            {
+                seed: (200, "text/html", html),
+                "https://docs.x.dev/docs/peft/guides/ia3": (
+                    200,
+                    "text/html",
+                    "<p>IA3.</p>",
+                ),
+            }
+        )
+        corpus = researcher.research([seed])
+        assert [p.text for p in corpus.pages][1] == "IA3."
+
+    def test_relevant_text_never_cuts_inside_a_code_fence(self) -> None:
+        body = "Intro.\n\n```python\n" + "x = 1\n" * 2000 + "```\n\nAfter."
+        corpus = ResearchCorpus(pages=[PageContent("u", "t", body)])
+        text = corpus.relevant_text("x", max_chars=4_000)
+        assert text.count("```") % 2 == 0
+
+
+def test_a_flapping_dns_check_still_fetches_the_page(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Regression: the cheap pre-check failed on a resolver hiccup and the
+    # second check (for the reason) passed, yet the page was skipped as
+    # "non-public" and the guide ended up rejected.
+    from scholar_lens.src import web_research as wr
+
+    url = "https://docs.x.dev/guide"
+    monkeypatch.setattr(wr, "is_url_public", lambda u: False)
+    monkeypatch.setattr(wr, "assert_url_is_public", lambda u: None)
+    html = "<html><body><main><h2>Guide</h2><p>Install it.</p></main></body></html>"
+    corpus = _researcher({url: (200, "text/html", html)}).research(
+        [url], discover_subpages=False
+    )
+    assert corpus.pages and "Install it." in corpus.pages[0].text
+
+
+@pytest.mark.parametrize(
+    "block,product",
+    [
+        ('HF_TOKEN="a b" vllm serve m --port 1', "vllm"),
+        ("sudo vllm serve m --port 1", "vllm"),
+        ("accelerate launch \\\n  --config_file x.yaml train.py", "accelerate"),
+        ("CUDA_VISIBLE_DEVICES=0,1 vllm serve m --tp 2", "vllm"),
+        ("sudo -E vllm serve --port 1", "vllm"),
+        ("env HF=1 vllm serve --x", "vllm"),
+        ("cd repo && vllm serve --x", "vllm"),
+        ("nohup vllm serve --x &", "vllm"),
+        ("timeout 600 vllm serve --x", "vllm"),
+        ("srun -N2 torchrun --nproc_per_node 8 train.py", "torchrun"),
+        ("bash -c 'vllm serve --x'", "vllm"),
+        ("kubectl exec pod -- vllm serve --x", "vllm"),
+        ("(venv) $ vllm serve --x", "vllm"),
+        ("accelerate launch \\\r\n  --config_file x.yaml train.py", "accelerate"),
+    ],
+)
+def test_product_names_read_the_command_not_its_prefix(
+    block: str, product: str
+) -> None:
+    from scholar_lens.src.web_research import PageContent, product_names
+
+    # Twice: a command counts once it recurs (one stray example does not).
+    page = PageContent(
+        url="https://docs.x.dev/guide",
+        title="t",
+        text=f"```bash\n{block}\n{block}\n```\n",
+    )
+    assert product_names(["https://docs.x.dev/guide"], [page])[0] == product
+
+
+def test_cut_never_leaves_a_math_span_open() -> None:
+    from scholar_lens.src.web_research import _cut
+
+    text = "a " * 10 + "$$x = " + "y " * 50 + "$$ end"
+    assert _cut(text, 40).count("$$") % 2 == 0
+
+
+def test_cut_ignores_shell_dollars_in_code() -> None:
+    from scholar_lens.src.web_research import _cut
+
+    text = "Intro.\n\n```bash\necho $$ > pid\n```\n\n" + "Prose sentence. " * 3000
+    out = _cut(text, 20_000)
+    assert len(out) > 15_000 and "echo $$ > pid" in out
+
+
+def test_a_single_stray_command_is_not_a_product() -> None:
+    from scholar_lens.src.web_research import PageContent, product_names
+
+    page = PageContent(
+        url="https://docs.x.dev/guide",
+        title="t",
+        text="```bash\nnumactl --cpunodebind=0 vllm serve --x\nfoo --bar\n```\n",
+    )
+    assert product_names(["https://docs.x.dev/guide"], [page]) == ["x"]
+
+
+def test_short_product_names_match_as_command_words() -> None:
+    from scholar_lens.src.tech_guide import unverified_identifiers
+
+    body = "```bash\nhf download m --local-dir d\ndocker run -e HF_TOKEN=t --gpus all img\n```"
+    found = unverified_identifiers(body, "hf download --local-dir", ["hf"])
+    assert found == []  # --gpus follows HF_TOKEN, not the hf command
+
+
+@pytest.mark.parametrize("text", ["a " * 30 + "$$x$$", "a " * 30 + "`code` and `more`"])
+def test_cut_leaves_no_lone_dollar_or_backtick(text: str) -> None:
+    from scholar_lens.src.web_research import _cut
+
+    for limit in range(55, len(text)):
+        out = _cut(text, limit)
+        assert not out.endswith("$") or out.endswith("$$")
+        assert out.count("`") % 2 == 0
+
+
+def test_cut_keeps_the_closing_dollar_of_inline_math() -> None:
+    from scholar_lens.src.web_research import _cut
+
+    text = "The attention cost grows as $O(n^2)$\n\nNext paragraph " + "x " * 40
+    assert _cut(text, 40).endswith("$O(n^2)$")
+
+
+def test_docs_section_names_are_not_products() -> None:
+    from scholar_lens.src.web_research import product_names
+
+    names = product_names(["https://kubernetes.io/docs/reference/kubectl/"], [])
+    assert "reference" not in names and names[0] == "kubernetes"
+
+
+def test_path_product_needs_the_pages_to_use_it() -> None:
+    from scholar_lens.src.web_research import PageContent, product_names
+
+    url = "https://huggingface.co/docs/peft/quicktour"
+    page = PageContent(
+        url=url, title="PEFT quicktour", text="```bash\npip install peft\n```"
+    )
+    assert product_names([url], [page])[0] == "peft"
+    setup = "https://kubernetes.io/docs/setup/"
+    other = PageContent(url=setup, title="Getting started", text="")
+    assert "setup" not in product_names([setup], [other])
+    lang = "https://python.langchain.com/docs/integrations/"
+    assert "langchain" in product_names([lang], [])
+
+
+def test_title_words_do_not_make_a_path_product() -> None:
+    from scholar_lens.src.web_research import PageContent, product_names
+
+    url = "https://kubernetes.io/docs/reference/kubectl/quick-reference/"
+    page = PageContent(
+        url=url, title="kubectl Quick Reference", text="```bash\nkubectl get pods\n```"
+    )
+    assert "reference" not in product_names([url], [page])
+
+
+def test_a_generic_tool_names_its_own_docs_site() -> None:
+    from scholar_lens.src.web_research import product_names
+
+    assert product_names(["https://helm.sh/docs/intro/using_helm/"], [])[0] == "helm"

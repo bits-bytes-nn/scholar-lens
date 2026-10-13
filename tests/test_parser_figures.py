@@ -7,6 +7,7 @@ no AWS or network calls are made.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import fitz
@@ -241,6 +242,19 @@ class TestAttachFigureContext:
 
         return Figure(figure_id="1", path=path, caption=caption, analysis=analysis)
 
+    def test_quoted_alt_with_comma_or_brackets_is_kept_whole(self) -> None:
+        from scholar_lens.src.parser import attach_figure_context
+
+        fig = self._figure("/w/figures/3.png", caption="c")
+        out = attach_figure_context(
+            '[Image: alt="x, src=evil.png", src="3.png"] '
+            '[Image: alt="[brackets]", src="3.png"]',
+            [fig],
+            is_pdf_parsed=True,
+        )
+        assert 'alt="x, src=evil.png", src="3.png"' in out
+        assert 'alt="(brackets)", src="3.png"' in out
+
     def test_caption_used_when_analysis_missing(self) -> None:
         from scholar_lens.src.parser import attach_figure_context
 
@@ -330,8 +344,8 @@ class TestBindFigureSources:
         )
         figures = [Figure(figure_id="11", path="/w/figures/1.png")]
         text = extract_text_from_html(_bind_figure_sources(html, figures))
-        assert "[Image: alt=MoE layer, src=1.png]" in text
-        assert "[Image: alt=, src=]" in text  # unmatched figure stays unbound
+        assert '[Image: alt="MoE layer", src="1.png"]' in text
+        assert '[Image: alt="", src=""]' in text  # unmatched figure stays unbound
 
 
 class TestEmptyDocumentParse:
@@ -377,6 +391,46 @@ class TestEmptyDocumentParse:
         pdf = tmp_path / "p.pdf"
         await parser._get_or_parse_document(pdf, use_cache=True)
         assert not (tmp_path / LocalPaths.PARSED_FILE.value).exists()
+
+
+class TestParseCache:
+    GOOD = {"elements": [{"id": 1}], "content": {"html": "<p>" + "x " * 200 + "</p>"}}
+
+    @staticmethod
+    def _parser(calls: list[str]):  # type: ignore[no-untyped-def]
+        from scholar_lens.src.parser import PDFParser
+
+        parser = PDFParser.__new__(PDFParser)
+
+        async def request(_path):  # type: ignore[no-untyped-def]
+            calls.append("parse")
+            return TestParseCache.GOOD
+
+        parser._request_document_parse = request  # type: ignore[method-assign]
+        return parser
+
+    async def test_cache_from_another_pdf_is_reparsed(self, tmp_path: Path) -> None:
+        calls: list[str] = []
+        parser = self._parser(calls)
+        pdf = tmp_path / "p.pdf"
+        pdf.write_bytes(b"%PDF-1.7 v1")
+        await parser._get_or_parse_document(pdf, use_cache=True)
+        await parser._get_or_parse_document(pdf, use_cache=True)
+        assert calls == ["parse"]  # same bytes: cached
+        pdf.write_bytes(b"%PDF-1.7 v2")  # a newer arXiv version, same folder
+        await parser._get_or_parse_document(pdf, use_cache=True)
+        assert calls == ["parse", "parse"]
+
+    async def test_cache_without_a_hash_is_kept(self, tmp_path: Path) -> None:
+        from scholar_lens.src.constants import LocalPaths
+
+        calls: list[str] = []
+        parser = self._parser(calls)
+        pdf = tmp_path / "p.pdf"
+        pdf.write_bytes(b"%PDF-1.7")
+        (tmp_path / LocalPaths.PARSED_FILE.value).write_text(json.dumps(self.GOOD))
+        await parser._get_or_parse_document(pdf, use_cache=True)
+        assert calls == []
 
 
 class TestFigureAnalysisFailure:
@@ -473,3 +527,104 @@ class TestFigureAnalysisFailure:
                     self._analyser(TokenBudgetExceeded("over budget")), "1", "/p/1.png"
                 )
             )
+
+
+class TestUpstageHtmlEscaping:
+    """Regression: document-parse HTML is not escaped, so a literal "<"
+    swallowed the text after it (math, chat-template tokens, prose)."""
+
+    @pytest.mark.parametrize(
+        ("html", "kept"),
+        [
+            (
+                "<p>$$p(y_t \\mid y_{<t})\\right)$$ holds.</p>",
+                "y_{<t})\\right)$$ holds.",
+            ),
+            ("<p><start_of_turn>user hi<end_of_turn></p>", "<start_of_turn>user hi"),
+            ("<p>Score: <score> out of 5.</p>", "<score> out of 5."),
+            (
+                "<p>in the format of <problem, original response></p>",
+                "<problem, original response>",
+            ),
+            ("<p>We require x <y and the loss.</p>", "x <y and the loss."),
+            # "<" followed by a tag name that is not a tag ("p", "th").
+            (
+                "<p id='1'>We require $0<p<1$ and the loss stays bounded; q>0 holds.</p>",
+                "$0<p<1$ and the loss stays bounded; q>0 holds.",
+            ),
+            ("<p>if n<th then x</p><p>Next</p>", "n<th then x"),
+            ("<p>$|x|<p$ and $0<p\\leq 1$.</p>", "$|x|<p$ and $0<p\\leq 1$."),
+        ],
+    )
+    def test_stray_angle_brackets_survive(self, html: str, kept: str) -> None:
+        from scholar_lens.src.parser import escape_stray_angle_brackets
+        from scholar_lens.src.utils import extract_text_from_html
+
+        assert kept in extract_text_from_html(escape_stray_angle_brackets(html))
+
+    def test_document_parse_tags_are_kept(self) -> None:
+        from scholar_lens.src.parser import escape_stray_angle_brackets
+
+        html = "<table><tr><td colspan='2'>a</td></tr></table><br><figure id='3'>"
+        assert escape_stray_angle_brackets(html) == html
+
+
+class TestPdfFigureCaption:
+    @staticmethod
+    def _element(category: str, html: str) -> dict:
+        return {"category": category, "content": {"html": html}}
+
+    def test_caption_comes_from_the_following_caption_element(self) -> None:
+        from scholar_lens.src.parser import _pdf_figure_caption
+
+        elements = [
+            self._element(
+                "figure", "<figure><img alt='h B=0 Pretrained Weights'></figure>"
+            ),
+            self._element("caption", "<p>Figure 1: Our reparametrization.</p>"),
+        ]
+        assert _pdf_figure_caption(elements, 0) == "Figure 1: Our reparametrization."
+
+    def test_ocr_alt_text_is_not_a_caption(self) -> None:
+        from scholar_lens.src.parser import _pdf_figure_caption
+
+        elements = [
+            self._element("figure", "<figure><img alt='h B=0 Pretrained'></figure>"),
+            self._element("paragraph", "<p>We then train the model.</p>"),
+        ]
+        assert _pdf_figure_caption(elements, 0) == ""
+
+
+class TestFigureMarkerMatching:
+    def test_same_file_name_in_two_folders_never_swaps(self) -> None:
+        # Regression: markers matched figures by basename, so figs/a/curve.png
+        # and figs/b/curve.png both became the second figure.
+        from scholar_lens.src.parser import attach_figure_context
+
+        base = "https://arxiv.org/html/2401.00001v1/"
+        figures = [
+            Figure(figure_id="0", path=base + "figs/a/curve.png", caption="First."),
+            Figure(figure_id="1", path=base + "figs/b/curve.png", caption="Second."),
+        ]
+        text = "[Image: alt=, src=figs/a/curve.png] and [Image: alt=, src=figs/b/curve.png]"
+        out = attach_figure_context(text, figures, is_pdf_parsed=False)
+        assert out.index("First.") < out.index("Second.")
+        assert out.count("figs/a/curve.png") == 1
+
+
+class TestThinHtmlFallsBackToAr5iv:
+    async def test_conversion_stub_tries_the_next_rendering(self, monkeypatch) -> None:
+        # arXiv answers 200 with "See pages 1-last of main.pdf" when its
+        # conversion failed; the next rendering may have the paper.
+        from scholar_lens.src.parser import HTMLParser
+
+        stub = "<div class='ltx_page_main'>See pages 1-last of main.pdf</div>"
+        full = "<div class='ltx_page_main'>" + "<p>Real text.</p>" * 200 + "</div>"
+        pages = iter([stub, full])
+
+        async def fake_fetch(self, url: str) -> str:  # type: ignore[no-untyped-def]
+            return next(pages)
+
+        monkeypatch.setattr(HTMLParser, "_fetch_html_from_url", fake_fetch)
+        html, url = await HTMLParser()._fetch_html_with_fallback("1412.6980")
+        assert html == full and "ar5iv" in url

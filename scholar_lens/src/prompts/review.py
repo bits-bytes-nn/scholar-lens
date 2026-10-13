@@ -16,6 +16,8 @@ from .base import (
     READER_PROFILE,
     STYLE_RULES,
     SUPPLEMENTARY_CONTEXT_RULES,
+    TABLE_RULES,
+    TABLE_SIZE_RULE,
     VISUAL_RULES,
     BasePrompt,
 )
@@ -111,13 +113,12 @@ class PaperPlanningPrompt(BasePrompt):
        and boilerplate; a substantive appendix belongs to a section.
     8. glossary: the key terms with the exact rendering to use throughout in
        {language}, following the translation guideline; keep established English
-       names (Transformer, LoRA, BLEU) as they are. Include every compared
+       names (Transformer, Adam, BLEU) as they are. Include every compared
        baseline and method name.
     9. needs_code: true where code from the paper's repository would make the
        section concrete (implementation, algorithm, architecture).
-    10. Titles are in {language}, descriptive, without numbers; names stay as
-        they are, but no English connectives ("on", "vs", "with"). purpose is
-        one line saying what the reader gets from the section.
+    10. Titles are in {language}, descriptive, without numbers. purpose is one
+        line saying what the reader gets from the section.
 
     Output only the plan as JSON inside <plan> tags:
     <plan>
@@ -202,14 +203,11 @@ class PaperSectionPrompt(BasePrompt):
     - A caveat about how far a result can be trusted gets at most one sentence,
       right beside that result. Never write a caveat, summary or conclusion
       `###` subsection; the review has one closing section for that.
-    - What a figure shows must come from the paper's text. A detail you only
-      see in the figure analysis may be described as what the figure looks
-      like, never turned into a claim or a mechanism; give no value, colour
-      meaning or trend read off a figure that neither the paper text nor the
-      analysis states.
-    - If draft_to_revise is not empty, revise it according to
-      improvement_feedback (which may list missing must-cover items): keep what
-      works, fix what is named, and return the complete revised section.
+    - What a figure shows comes from the paper text. A detail only in the
+      figure analysis describes how the figure looks, never a claim,
+      mechanism, value, colour meaning or trend.
+    - If draft_to_revise is not empty, revise it per improvement_feedback:
+      keep what works, fix what is named, return the complete section.
     - If the source text truly lacks the material for a must-cover item, do not
       invent it: name the item in <missing_source>.
 
@@ -226,6 +224,7 @@ class PaperSectionPrompt(BasePrompt):
     """
         + HEADING_STRUCTURE_RULES
         + VISUAL_RULES
+        + TABLE_RULES
         + PAPER_TABLE_RULES
         + IMAGE_PATH_RULES
         + """
@@ -350,11 +349,13 @@ class PaperSectionCheckPrompt(BasePrompt):
        is padding or easy material; far under target on hard items is a
        defect. Never ask to cut a required item.
     3. Fidelity: nothing contradicts the source; no invented results, links or
-       code provenance. Clearly illustrative toy values in a worked example
-       ("예를 들어 입력이 3개라면 …") are allowed and are not results. Every
+       code provenance (illustrative toy values are not results). Every
        comparison or causal claim holds for the conditions compared (a gap
        "explained" by a factor both sides share is wrong); a figure description stays within the paper text
-       and the figure analysis; nothing contradicts already_in_article.
+       and the figure analysis; nothing contradicts already_in_article. A
+       formula from outside the paper is exactly right; derivation steps agree
+       in signs and variable definitions; "all"/"모든" about a setting holds in
+       every experiment.
     4. No repetition: nothing listed in already_in_article (headings,
        equations, tables, figures, code, callouts) is shown again; concepts owned
        elsewhere are not re-explained; nothing repeats inside the section.
@@ -365,12 +366,13 @@ class PaperSectionCheckPrompt(BasePrompt):
         + DEPTH_RULES
         + SUPPLEMENTARY_CONTEXT_RULES
         + VISUAL_RULES
-        + PAPER_TABLE_RULES
-        + HEADING_STRUCTURE_RULES
+        + TABLE_SIZE_RULE
         + CITATION_KEY_RULES
-        + MATH_RULES
         + STYLE_RULES
         + """
+    Headings, math syntax and table shape are checked in code; do not score
+    or list them.
+
     Score out of 100: coverage 30, depth calibration 25, fidelity 25,
     repetition, consistency and flow 20. Caps: any missing must-cover item caps
     the score at 69 — except items in unsupported_items that the source text
@@ -378,20 +380,22 @@ class PaperSectionCheckPrompt(BasePrompt):
     ask for them in the feedback (if the source does contain one, it is
     missing); an invented result presented as the paper's, a fabricated
     link or a modified image path caps it at 40. 90+ only when nothing
-    actionable remains; most first drafts have at least one fixable weakness.
+    actionable remains.
 
     In the feedback, put the most important fixes first, quote the passage each
     refers to, and say what to do instead; keep what already works.
 
     must_fix lists the defects that block the section regardless of score, one
     per line with the quoted passage and the fix:
-    - an explanation, equation, table, figure or code block already listed in
-      already_in_article, shown or explained again;
+    - an equation, table, figure or code block listed in already_in_article
+      shown again;
     - a derived number (ratio, reduction, difference) that is wrong when you
       recompute it from its stated inputs, or an own estimate presented as the
       paper's number;
     - a comparison or causal claim the compared conditions do not support, or
-      a figure detail the paper text and figure analysis do not state.
+      a figure detail the paper text and figure analysis do not state;
+    - a wrong formula, a sign or variable that contradicts another step, or a
+      setting claimed for all experiments that one of them does not use.
 
     Output exactly:
     <quality_score>an integer from 0 to 100</quality_score>
@@ -611,7 +615,9 @@ class PaperFinalizationPrompt(BasePrompt):
        - well-known follow-up work only if you are certain it exists, named in
          plain text without links or new numbers; otherwise omit it.
        Cover the paper's own stated limitations and future work listed above
-       once each; this is the article's only limitations section. Do not
+       once each; this is the article's only limitations section. Future work
+       comes only from that list; never call something the paper already does
+       (an appendix included) future work. Do not
        restate the review's conclusions. A limitation or caveat the review body
        already states is named in one clause at most, never explained again;
        spend the words on what the body has not said.
@@ -619,8 +625,6 @@ class PaperFinalizationPrompt(BasePrompt):
     Rules for all parts:
     - Use the glossary renderings for its terms, as the review does.
     - Every number must already appear in the review; never add links.
-    - <key_takeaways> starts directly with the first `###` question (no
-      `## TL;DR` heading; the post adds it).
     - Synthesize; do not copy the review's sentences.
     - Never mention the writing process or skipped sections.
     """

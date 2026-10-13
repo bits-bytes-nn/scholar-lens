@@ -47,7 +47,7 @@
 - Python 3.12 이상과 [Poetry](https://python-poetry.org/)
 - `bedrock_region_name` 리전에서 설정한 모델(기본값: Claude Opus 5.5, Sonnet 5.5, Haiku 5.5)에 접근할 수 있는 AWS 프로필
 - PDF 파싱용 `UPSTAGE_API_KEY`(arXiv가 아닌 소스와 HTML 대체 경로에 필요)
-- 선택: 가이드 웹 조사용 `TAVILY_API_KEY` 또는 `BRAVE_API_KEY`, 블로그 PR용 `GITHUB_TOKEN`
+- 선택: 가이드 웹 조사용 `TAVILY_API_KEY` 또는 `BRAVE_API_KEY`, 블로그 PR용 `GITHUB_TOKEN`, 인용 조회 한도를 높이는 `CROSSREF_MAILTO`(Crossref polite pool)와 `SEMANTIC_SCHOLAR_API_KEY`
 
 ```bash
 git clone https://github.com/bits-bytes-nn/scholar-lens.git && cd scholar-lens
@@ -59,12 +59,14 @@ poetry run python -m scholar_lens summarize 2106.09685 --no-pr
 
 ## 설정
 
-`scholar_lens/configs/config.yaml`(Git 제외)은 엄격하게 검증하며, 모르는 키가 있으면 오류입니다. 템플릿에 모든 키와 기본값이 있습니다. 주로 바꾸는 값은 다음과 같습니다.
+`scholar_lens/configs/config.yaml`(Git 제외)은 엄격하게 검증하며, 모르는 키가 있으면 오류입니다. 템플릿에 모든 키와 기본값이 있습니다. 파일이 없으면 로컬 실행은 이 기본값(S3 버킷 없음, GitHub 연동 꺼짐)과 기본 AWS 자격 증명으로 동작하므로, Bedrock을 호출하고 비용이 듭니다. 주로 바꾸는 값은 다음과 같습니다.
 
-- `resources`: `profile_name`, `bedrock_region_name`, `s3_bucket_name`(`cdk deploy`, Batch 실행, `status`에 필요), `email_address`(SNS 알림)
+- `resources`: `profile_name`, `bedrock_region_name`, `s3_bucket_name`(`cdk deploy`와 Batch 실행에 필요. 없으면 `status`는 저장된 결과 없이 Batch 상태만 보여 줌), `email_address`(SNS 알림)
 - `resources.github`: `enabled`, `repo_name`(예: `owner/owner.github.io`), `base_branch`, `branch_prefix`, 산출물 유형별 카테고리 이름
 - 단계별 `*_model_id`, `thinking_effort`, 품질 기준, `max_total_tokens` 비용 상한(기본값: 리뷰 800만, 요약 100만, 가이드 300만 토큰)
 - `output_language`(기본값 `Korean`)
+
+기존 `config.yaml`을 쓰고 있다면 `citations.citation_analysis_model_id`를 지워 주세요. 초록이 없는 참고문헌은 더 이상 요약하지 않으므로 이 설정을 없앴고, 남아 있으면 설정을 불러올 때 `extra_forbidden` 오류가 납니다.
 
 ## CLI
 
@@ -86,7 +88,7 @@ poetry run python -m scholar_lens status <job-id> --wait         # 원격 작업
 | `--remote` | review, summarize, guide | AWS Batch에 제출하고 작업 ID를 돌려줍니다 |
 | `--wait`, `--timeout S` | status | 작업이 끝나거나 `S`초가 지날 때까지 조회합니다 |
 
-모든 명령은 stdout에 JSON 객체 하나를 출력하고, 로그는 stderr로 보냅니다. 실행 결과는 `JobResult`(`status`, `title`, `markdown_path`, `s3_uri`, `pr_url`, `warnings`, `violations`, `error`, `estimated_cost_usd` 등)입니다. `--remote`는 `job_id`를, `status`는 Batch 상태와 완료 후 저장된 결과를 돌려줍니다. 종료 코드는 `0` 성공 또는 제출, `1` 실패(블로그 규칙 검사에서 거부된 경우 포함), `2` 입력 거부(PDF 아님, 안전하지 않은 URL, 없는 arXiv ID, 기술 문서가 아닌 페이지), `3` 진행 중(`status`, 또는 `status --wait` 시간 초과), `4` 명령 자체의 실패(`"status": "error"`: 자격 증명, 설정, AWS API 오류. 작업 상태는 알 수 없음)입니다. URL은 따옴표로 감쌉니다. zsh에서는 따옴표 없는 URL의 `?`가 glob으로 해석되어 명령이 실패합니다.
+모든 명령은 stdout에 JSON 객체 하나를 출력하고, 로그는 stderr로 보냅니다. 실행 결과는 `JobResult`(`status`, `title`, `markdown_path`, `s3_uri`, `pr_url`, `warnings`, `violations`, `error`, `estimated_cost_usd` 등)입니다. `--remote`는 `job_id`를, `status`는 Batch 상태와 완료 후 저장된 결과를 돌려줍니다. 종료 코드는 `0` 성공 또는 제출, `1` 실패(블로그 규칙 검사에서 거부된 경우, 설정·자격 증명 문제로 로컬 실행을 시작하지 못한 경우 포함), `2` 입력 거부(PDF 아님, 안전하지 않은 URL, 없는 arXiv ID, 기술 문서가 아닌 페이지, 인자 누락 같은 사용법 오류), `3` 진행 중(`status`, 또는 `status --wait` 시간 초과), `4` `--remote`나 `status` 자체의 실패(`"status": "error"`: 자격 증명, 설정, AWS API 오류. 작업 상태는 알 수 없음)입니다. Batch 워커의 종료 코드는 `scholar_lens/cli.py`에 있습니다. URL은 따옴표로 감쌉니다. zsh에서는 따옴표 없는 URL의 `?`가 glob으로 해석되어 명령이 실패합니다.
 
 ## 에이전트에서 쓰기(OpenClaw, Claude Code, Codex)
 
@@ -94,21 +96,22 @@ poetry run python -m scholar_lens status <job-id> --wait         # 원격 작업
 
 ## 블로그 규칙 검사
 
-블로그 규칙의 정본은 블로그의 `_data/post_conventions.yml`이고, `assets/post_conventions.yml`은 그 사본입니다. 둘이 다르면 CI가 실패하며, GitHub 연동이 켜져 있으면 실행 시 블로그 기준 브랜치의 정본을 읽습니다. 글을 저장하기 전에 `scholar_lens/src/post_validator.py`가 front matter(`paper_author`, `subtitle`, `seo_title`, 카테고리, 표지, 태그), 헤딩(`## TL;DR`, H1 금지), `$$` 수식, 표 모양, 이미지 위치, 생성용 태그 누출을 검사합니다. error가 있으면 게시를 멈추고, 글은 작업 폴더에 `*.rejected.md`로 남기며 `violations`에 기록합니다. warning은 PR 본문의 체크리스트가 됩니다.
+블로그 규칙의 정본은 블로그의 `_data/post_conventions.yml`이고, `assets/post_conventions.yml`은 그 사본입니다. 저장소 변수 `BLOG_REPO`를 설정하면 `Post conventions` 워크플로가 변경 때마다, 그리고 매주 둘을 비교해 다르면 실패합니다(이 변수가 없으면 매주 실행이 실패합니다). 또 GitHub 연동이 켜져 있으면 실행 시 블로그 기준 브랜치의 정본을 읽습니다. 글을 저장하기 전에 `scholar_lens/src/post_validator.py`가 front matter(`paper_author`, `subtitle`, `seo_title`, 카테고리, 표지, 태그), 헤딩(H1 금지, 논문 글은 `## TL;DR`로 시작), `$$` 수식, 표 모양, 이미지 위치, 생성용 태그 누출을 검사합니다. error가 있으면 게시를 멈추고, 글은 작업 폴더에 `*.rejected.md`로 남기며 `violations`에 기록합니다. warning은 PR 본문의 체크리스트가 됩니다.
 
 ## AWS 배포
 
-위 조건에 더해 Node.js, Docker, AWS CDK CLI와 `resources.s3_bucket_name`에 적은 기존 S3 버킷이 필요합니다(스택은 버킷을 만들지 않습니다). `resources.profile_name`과 같은 프로필을 넘깁니다.
+위 조건에 더해 Node.js, Docker, AWS CDK CLI와 `resources.s3_bucket_name`에 적은 기존 S3 버킷이 필요합니다(스택은 버킷을 만들지 않습니다. 작업 역할이 버킷 전체 목록을 볼 수 있으므로 Scholar Lens 전용 버킷을 씁니다). `resources.profile_name`과 같은 프로필을 넘깁니다.
 
 ```bash
 cdk bootstrap --profile <profile_name>           # 계정·리전당 한 번
 cdk deploy --profile <profile_name>              # cdk.json: poetry run python scripts/deploy_infra.py
 poetry run python scripts/put_secrets.py         # .env의 비밀값을 SSM SecureString에 기록
+poetry run python scripts/put_secrets.py github-token   # 비밀값 하나를 교체한 뒤
 ```
 
 이미지에는 체크아웃의 `scholar_lens/configs/config.yaml`이 들어가므로 Batch 작업은 마지막 배포 시점의 설정을 씁니다. 설정을 고치면 `cdk deploy`를 다시 실행합니다. 이 파일이나 `s3_bucket_name`이 없으면 배포가 멈춥니다.
 
-스택은 Batch 작업 정의 하나(`python3 -m scholar_lens worker --request Ref::request`)를 온디맨드와 스팟 컴퓨팅에서 실행합니다. 결과는 `s3://<bucket>/<prefix>/results/<job_id>.json`에 저장하고, 성공과 실패를 모두 SNS로 알립니다. 앱이 직접 알리지 못하고 끝난 작업(시간 초과, 비정상 종료, 호스트 유실)은 EventBridge 규칙이 알립니다. 중단된 시도는 Batch가 재시도할 수 있으므로 실패 알림을 보내지 않습니다. `cdk synth`와 `cdk diff`는 비밀값을 건드리지 않습니다.
+스택은 Batch 작업 정의 하나(`python3 -m scholar_lens worker --request Ref::request`)를 온디맨드 컴퓨팅에서 실행합니다(스팟 회수는 Bedrock 비용을 다시 쓰게 합니다). 결과는 `s3://<bucket>/<prefix>/results/<job_id>.json`에 저장하고, 성공과 실패를 모두 SNS로 알립니다. 앱이 직접 알리지 못하고 끝난 작업(시간 초과, 비정상 종료, 호스트 유실)은 EventBridge 규칙이 알립니다. 호스트가 사라진 작업은 Batch가 재시도하므로, 중단된 시도는 실패 알림을 보내지 않습니다. `cdk synth`와 `cdk diff`는 비밀값을 건드리지 않습니다.
 
 ## 개발
 

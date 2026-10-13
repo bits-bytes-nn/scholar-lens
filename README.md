@@ -47,7 +47,7 @@ Prerequisites:
 - Python 3.12+ and [Poetry](https://python-poetry.org/)
 - An AWS profile with Bedrock access to the configured models in `bedrock_region_name` (defaults: Claude Opus 5.5, Sonnet 5.5, Haiku 5.5)
 - `UPSTAGE_API_KEY` for PDF parsing (non-arXiv sources and the HTML fallback)
-- Optional: `TAVILY_API_KEY` or `BRAVE_API_KEY` for guide web research, `GITHUB_TOKEN` for blog PRs
+- Optional: `TAVILY_API_KEY` or `BRAVE_API_KEY` for guide web research, `GITHUB_TOKEN` for blog PRs, `CROSSREF_MAILTO` (Crossref polite pool) and `SEMANTIC_SCHOLAR_API_KEY` (higher citation-lookup limits)
 
 ```bash
 git clone https://github.com/bits-bytes-nn/scholar-lens.git && cd scholar-lens
@@ -59,12 +59,14 @@ poetry run python -m scholar_lens summarize 2106.09685 --no-pr
 
 ## Configuration
 
-`scholar_lens/configs/config.yaml` (gitignored) is validated strictly: unknown keys are errors. The template lists every key with its default. The ones you usually set:
+`scholar_lens/configs/config.yaml` (gitignored) is validated strictly: unknown keys are errors. The template lists every key with its default. Without the file a local run uses those defaults (no S3 bucket, GitHub off) and your default AWS credentials, so it still calls Bedrock and is billed. The ones you usually set:
 
-- `resources`: `profile_name`, `bedrock_region_name`, `s3_bucket_name` (needed for `cdk deploy`, Batch and `status`), `email_address` (SNS notifications)
+- `resources`: `profile_name`, `bedrock_region_name`, `s3_bucket_name` (needed for `cdk deploy` and Batch; without it `status` shows the Batch state but no stored result), `email_address` (SNS notifications)
 - `resources.github`: `enabled`, `repo_name` (e.g. `owner/owner.github.io`), `base_branch`, `branch_prefix`, and the category labels per artifact type
 - per-stage `*_model_id`, `thinking_effort`, quality thresholds and `max_total_tokens` cost caps (defaults: review 8M, summary 1M, guide 3M tokens)
 - `output_language` (default `Korean`)
+
+Upgrading an existing `config.yaml`: delete `citations.citation_analysis_model_id` (removed; references without an abstract are no longer summarised), or loading the config fails with `extra_forbidden`.
 
 ## CLI
 
@@ -86,7 +88,7 @@ poetry run python -m scholar_lens status <job-id> --wait         # poll a remote
 | `--remote` | review, summarize, guide | Submit to AWS Batch and return the job id |
 | `--wait`, `--timeout S` | status | Poll until the job finishes or `S` seconds pass |
 
-Every command prints one JSON object on stdout; logs go to stderr. A run returns a `JobResult` (`status`, `title`, `markdown_path`, `s3_uri`, `pr_url`, `warnings`, `violations`, `error`, `estimated_cost_usd`, …); `--remote` returns the `job_id`; `status` returns the Batch state and, once finished, the stored result. Exit codes: `0` succeeded or submitted, `1` failed (including a post rejected by the conventions gate), `2` rejected input (not a PDF, unsafe URL, unknown arXiv id, non-technical pages), `3` still running (`status`, or `status --wait` timed out), `4` the command itself failed (`"status": "error"`: credentials, config, AWS API errors; the job's state is unknown). Quote URLs: in zsh, `?` in an unquoted URL is a glob and the command fails.
+Every command prints one JSON object on stdout; logs go to stderr. A run returns a `JobResult` (`status`, `title`, `markdown_path`, `s3_uri`, `pr_url`, `warnings`, `violations`, `error`, `estimated_cost_usd`, …); `--remote` returns the `job_id`; `status` returns the Batch state and, once finished, the stored result. Exit codes: `0` succeeded or submitted, `1` failed (including a post rejected by the conventions gate, and a local run that could not start: config or credentials), `2` rejected input (not a PDF, unsafe URL, unknown arXiv id, non-technical pages, or a usage error such as a missing argument), `3` still running (`status`, or `status --wait` timed out), `4` `--remote` or `status` itself failed (`"status": "error"`: credentials, config, AWS API errors; the job's state is unknown). The Batch worker's own codes are listed in `scholar_lens/cli.py`. Quote URLs: in zsh, `?` in an unquoted URL is a glob and the command fails.
 
 ## Agents (OpenClaw, Claude Code, Codex)
 
@@ -94,21 +96,22 @@ The same CLI is the agent interface. The skill `~/.openclaw/workspace/skills/sch
 
 ## Blog conventions gate
 
-The blog owns its rules in `_data/post_conventions.yml`; `assets/post_conventions.yml` is a copy (CI fails when they drift, and runs read the blog's base-branch copy when GitHub is enabled). Before a post is saved, `scholar_lens/src/post_validator.py` checks it: front matter (`paper_author`, `subtitle`, `seo_title`, categories, cover, tags), headings (`## TL;DR`, no H1), `$$` math, table shape, image locations, leaked generator tags. Errors stop publishing (the post is kept as `*.rejected.md` next to the work files and listed in `violations`); warnings become a checklist in the PR body.
+The blog owns its rules in `_data/post_conventions.yml`; `assets/post_conventions.yml` is a copy (the `Post conventions` workflow fails when they drift, on every change and weekly, once the repository variable `BLOG_REPO` is set; the weekly run fails until it is; runs read the blog's base-branch copy when GitHub is enabled). Before a post is saved, `scholar_lens/src/post_validator.py` checks it: front matter (`paper_author`, `subtitle`, `seo_title`, categories, cover, tags), headings (no H1; paper posts start with `## TL;DR`), `$$` math, table shape, image locations, leaked generator tags. Errors stop publishing (the post is kept as `*.rejected.md` next to the work files and listed in `violations`); warnings become a checklist in the PR body.
 
 ## Deploy to AWS
 
-Needs Node.js, Docker and the AWS CDK CLI in addition to the above, and an existing S3 bucket named in `resources.s3_bucket_name` (the stack does not create it). Pass the same profile as `resources.profile_name`:
+Needs Node.js, Docker and the AWS CDK CLI in addition to the above, and an existing S3 bucket named in `resources.s3_bucket_name` (the stack does not create it; use one dedicated to Scholar Lens, since the job role may list the whole bucket). Pass the same profile as `resources.profile_name`:
 
 ```bash
 cdk bootstrap --profile <profile_name>           # once per account/region
 cdk deploy --profile <profile_name>              # cdk.json runs: poetry run python scripts/deploy_infra.py
 poetry run python scripts/put_secrets.py         # write .env secrets to SSM SecureString
+poetry run python scripts/put_secrets.py github-token   # after rotating one secret
 ```
 
 The image includes `scholar_lens/configs/config.yaml` from your checkout, so Batch jobs use the config as of the last deploy: re-run `cdk deploy` after editing it. The deploy stops when the file or `s3_bucket_name` is missing.
 
-The stack runs one Batch job definition (`python3 -m scholar_lens worker --request Ref::request`) on on-demand and spot compute, writes results to `s3://<bucket>/<prefix>/results/<job_id>.json`, and notifies SNS on success and failure; an EventBridge rule reports jobs that end without the app's own notice (timeout, crash, lost host). An interrupted attempt sends no failure notice, since Batch may retry it. `cdk synth`/`diff` never touch secrets.
+The stack runs one Batch job definition (`python3 -m scholar_lens worker --request Ref::request`) on on-demand compute (a spot reclaim would repeat the Bedrock spend), writes results to `s3://<bucket>/<prefix>/results/<job_id>.json`, and notifies SNS on success and failure; an EventBridge rule reports jobs that end without the app's own notice (timeout, crash, lost host). An interrupted attempt sends no failure notice, since Batch retries a job whose host went away. `cdk synth`/`diff` never touch secrets.
 
 ## Development
 

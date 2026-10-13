@@ -210,6 +210,7 @@ class TestGuideEndToEnd:
                 "블록 크기 \\(B\\)를 정합니다.\n\n![arch](https://docs.vllm.ai/arch.png)\n"
             ),
             source_urls=["https://docs.vllm.ai/en/latest/"],
+            image_urls=["https://docs.vllm.ai/arch.png"],  # offered to the writer
         )
 
         class FakeGenerator:
@@ -432,3 +433,28 @@ async def test_guideline_failure_stops_before_paid_stages(
             TokenUsageTracker(),
         )
     prepare.assert_not_called()
+
+
+async def test_guide_budget_abort_keeps_the_generator_notes(
+    pipeline_env, monkeypatch: pytest.MonkeyPatch  # type: ignore[no-untyped-def]
+) -> None:
+    from scholar_lens.src.metrics import TokenBudgetExceeded
+
+    context, _ = pipeline_env
+
+    class FakeGenerator:
+        def __init__(self, *args, **kwargs) -> None:  # type: ignore[no-untyped-def]
+            self.notes = ["Token budget reached: later sections were not refined."]
+
+        async def generate(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+            raise TokenBudgetExceeded("4600000 > 4500000")
+
+    monkeypatch.setattr(guide_pipeline, "TechGuideGenerator", FakeGenerator)
+    monkeypatch.setattr(guide_pipeline, "WebResearcher", MagicMock())
+    with pytest.raises(TokenBudgetExceeded) as caught:
+        await guide_pipeline.run_guide_pipeline(
+            context,
+            JobRequest(kind="guide", urls=["https://docs.vllm.ai/en/latest/"]),
+            TokenUsageTracker(),
+        )
+    assert caught.value.run_notes == FakeGenerator().notes  # type: ignore[attr-defined]

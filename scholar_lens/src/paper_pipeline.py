@@ -33,7 +33,7 @@ from .parser import (
     PDFParser,
     attach_figure_context,
 )
-from .post_validator import split_front_matter
+from .post_validator import split_front_matter, unsourced_table_numbers
 from .publisher import PublishRequest, build_pr_body
 from .runtime import ROOT_DIR, PipelineOutcome, RunContext, publish_artifact
 from .summarizer import PaperSummarizer
@@ -81,7 +81,11 @@ async def run_paper_pipeline(
                 translation_guideline,
                 tracker,
             )
-        degraded += _unanalysed_figure_notes(paper)
+        degraded += (
+            _unanalysed_figure_notes(paper)
+            + _code_notes(paper)
+            + _number_notes(paper, document)
+        )
         # Keep only images that are real figures of this paper.
         document = figure_markers_to_images(document)
         document = drop_unknown_images(document, _figure_sources(paper))
@@ -241,7 +245,6 @@ async def _prepare_paper_data(
     citation_summarizer = (
         CitationSummarizer(
             LanguageModelId(context.config.citations.citation_summarization_model_id),
-            LanguageModelId(context.config.citations.citation_analysis_model_id),
             context.bedrock_boto_session,
             paper_dir=paper_dir,
             callbacks=callbacks,
@@ -338,7 +341,7 @@ async def _process_code(
             callbacks=callbacks,
         )
         await code_retriever.download_repositories(repo_urls)
-        await code_retriever.create_or_load_index()
+        await code_retriever.build_index()
         summary = await code_retriever.generate_codebase_summary()
         return summary, code_retriever
     except NoPythonFilesError:
@@ -419,6 +422,29 @@ def _unanalysed_figure_notes(paper: Paper) -> list[str]:
     if not count:
         return []
     return [f"{count} figure(s) were not analysed (captions only): check them."]
+
+
+def _code_notes(paper: Paper) -> list[str]:
+    """A note when the user gave a repository but code analysis produced
+    nothing (it degrades to "no codebase" instead of failing the run)."""
+    if paper.repo_urls and not paper.codebase_summary:
+        return [
+            "Code analysis of the given repository failed or found no Python "
+            "files; the post was written without it."
+        ]
+    return []
+
+
+def _number_notes(paper: Paper, document: str) -> list[str]:
+    """Table numbers the paper never states (an invented or mistyped value
+    is the defect; a derived one is fine but worth a look)."""
+    missing = unsourced_table_numbers(document, paper.content.text)
+    if not missing:
+        return []
+    return [
+        "Table values not found in the paper (check each is copied or derived "
+        f"correctly): {', '.join(missing)}"
+    ]
 
 
 def _tag_notes(paper: Paper, document: str) -> list[str]:

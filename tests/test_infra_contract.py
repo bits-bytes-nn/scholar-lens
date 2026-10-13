@@ -72,6 +72,75 @@ class TestStackWiring:
         assert "s3:DeleteObject" not in actions
         assert "s3:PutObjectAcl" not in actions  # public_assets is off
 
+    @staticmethod
+    def _statements(template: dict[str, Any], sid: str) -> list[dict[str, Any]]:
+        return [
+            s
+            for p in resources_of_type(template, "AWS::IAM::Policy")
+            for s in p["Properties"]["PolicyDocument"]["Statement"]
+            if s.get("Sid") == sid
+        ]
+
+    def test_bedrock_invoke_is_limited_to_the_app_vendors(
+        self, template: dict[str, Any]
+    ) -> None:
+        (invoke,) = self._statements(template, "BedrockInvoke")
+        arns = [r["Fn::Join"][1][-1] for r in invoke["Resource"]]
+        models = [a for a in arns if "foundation-model/" in a]
+        assert models and all(not a.endswith("foundation-model/*") for a in models)
+        assert {a.rsplit("/", 1)[1] for a in models} == {
+            "amazon.*",
+            "anthropic.*",
+            "cohere.*",
+        }
+
+    def test_bedrock_discovery_is_only_what_the_app_calls(
+        self, template: dict[str, Any]
+    ) -> None:
+        # ListInferenceProfiles: utils/factories; GetInferenceProfile: langchain_aws.
+        (discovery,) = self._statements(template, "BedrockDiscovery")
+        assert sorted(discovery["Action"]) == [
+            "bedrock:GetInferenceProfile",
+            "bedrock:ListInferenceProfiles",
+        ]
+        assert "aws:RequestedRegion" in discovery["Condition"]["StringEquals"]
+
+    def test_list_bucket_has_no_prefix_condition(
+        self, template: dict[str, Any]
+    ) -> None:
+        # A GetObject on a missing key is 404 only with an unconditioned
+        # ListBucket: S3 does not evaluate s3:prefix for that check.
+        (listing,) = self._statements(template, "S3ListBucket")
+        assert listing["Action"] == "s3:ListBucket"
+        assert "Condition" not in listing
+
+    def test_execution_role_has_only_its_own_grants(
+        self, template: dict[str, Any]
+    ) -> None:
+        roles = resources_of_type(template, "AWS::IAM::Role")
+        execution = [
+            r
+            for r in roles
+            if r["Properties"]["RoleName"].endswith("paper-review-exec")
+        ]
+        assert execution and "ManagedPolicyArns" not in execution[0]["Properties"]
+
+    def test_only_the_failure_rule_may_publish(self, template: dict[str, Any]) -> None:
+        statements = [
+            s
+            for p in resources_of_type(template, "AWS::SNS::TopicPolicy")
+            for s in p["Properties"]["PolicyDocument"]["Statement"]
+        ]
+        (deny,) = [s for s in statements if s.get("Sid") == "OnlyTheFailureRule"]
+        assert deny["Effect"] == "Deny"
+        assert "aws:SourceArn" in deny["Condition"]["ArnNotEquals"]
+        alarm = next(s for s in statements if s.get("Sid") == "AllowCloudWatchAlarms")
+        assert "aws:SourceArn" in alarm["Condition"]["ArnLike"]
+
+    def test_on_demand_compute_only(self, template: dict[str, Any]) -> None:
+        (env,) = resources_of_type(template, "AWS::Batch::ComputeEnvironment")
+        assert env["Properties"]["ComputeResources"]["Type"] == "EC2"
+
     def test_only_the_cost_alarm(self, template: dict[str, Any]) -> None:
         # Run outcomes are reported by the app and the failed-job rule; a log
         # alarm would repeat them.
@@ -144,3 +213,7 @@ class TestPostConventionsCheck:
     def test_no_repo_configured_skips(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("BLOG_REPO", raising=False)
         assert conventions.main([]) == 0
+
+    def test_scheduled_run_needs_a_repo(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("BLOG_REPO", raising=False)
+        assert conventions.main(["--require-repo"]) == 2

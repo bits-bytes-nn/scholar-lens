@@ -23,7 +23,22 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from .logger import logger
-from .markdown_lint import callout_lines, close_open_fence, writing_issues
+from .markdown_lint import (
+    FIGURE_MARKER,
+    callout_lines,
+    close_open_fence,
+    publish_body,
+    writing_issues,
+)
+from .markdown_math import (
+    DISPLAY_MATH,
+    HANGUL,
+    fence_roles,
+    image_sources,
+    open_fence,
+    without_fences,
+)
+from .post_validator import body_errors
 
 Difficulty = Literal["easy", "medium", "hard"]
 Importance = Literal["core", "supporting", "context"]
@@ -67,9 +82,7 @@ _CLOSING_HEADING = re.compile(
     r"|^결론|^향후 연구",
     re.IGNORECASE,
 )
-_IMAGE_MARKER = re.compile(r'\[Image:[^\n]*?src="([^"]+)"[^\n]*?"\]')
 _JSON_FENCE = re.compile(r"^```(?:json)?\s*|\s*```$")
-_HANGUL = re.compile(r"[가-힣]")
 _LATIN_WORD = re.compile(r"[A-Za-z0-9]+(?:[-'][A-Za-z0-9]+)*")
 
 
@@ -252,13 +265,12 @@ def _fit_budget(plan: ReviewPlan) -> None:
 def approx_words(text: str) -> int:
     """Length in English-word equivalents: Latin words plus Hangul syllables
     / 2.5 (a Korean sentence carrying the same content), code fences excluded."""
-    prose = re.sub(r"```.*?```", " ", text, flags=re.DOTALL)
-    hangul = len(_HANGUL.findall(prose))
-    latin = len(_LATIN_WORD.findall(_HANGUL.sub(" ", prose)))
+    prose = without_fences(text)
+    hangul = len(HANGUL.findall(prose))
+    latin = len(_LATIN_WORD.findall(HANGUL.sub(" ", prose)))
     return latin + round(hangul / 2.5)
 
 
-_FENCE_LINE = re.compile(r"^\s*(```|~~~)")
 _HEADING_LINE = re.compile(r"^#{1,6}\s")
 
 
@@ -277,6 +289,7 @@ def split_units(
     line, table, fenced code block or display-math block (never split), and
     one per sentence of ordinary paragraphs (via ``sentence_spans``)."""
     lines = _line_spans(text)
+    roles = fence_roles([text[a:b] for a, b in lines])
     units: list[tuple[int, int]] = []
     paragraph: list[tuple[int, int]] = []
 
@@ -294,12 +307,9 @@ def split_units(
         line = text[start:end]
         stripped = line.strip()
         block_end: int | None = None
-        if _FENCE_LINE.match(line):
-            fence = _FENCE_LINE.match(line).group(1)  # type: ignore[union-attr]
+        if roles[i] == "open":
             j = i + 1
-            while j < len(lines) and not text[
-                lines[j][0] : lines[j][1]
-            ].strip().startswith(fence):
+            while j < len(lines) and roles[j] == "code":
                 j += 1
             block_end = min(j, len(lines) - 1)
         elif stripped == "$$":
@@ -413,14 +423,14 @@ def figure_catalog(text: str) -> list[tuple[str, str]]:
     """``(figure_id, marker)`` for each distinct figure marker, in order of
     appearance (``F1``, ``F2`` …)."""
     seen: dict[str, str] = {}
-    for match in _IMAGE_MARKER.finditer(text):
-        seen.setdefault(match.group(1), match.group(0))
+    for match in FIGURE_MARKER.finditer(text):
+        seen.setdefault(match.group("src"), match.group(0))
     return [(f"F{i}", marker) for i, marker in enumerate(seen.values(), start=1)]
 
 
 def marker_src(marker: str) -> str:
-    match = _IMAGE_MARKER.search(marker)
-    return match.group(1) if match else ""
+    match = FIGURE_MARKER.search(marker)
+    return match.group("src") if match else ""
 
 
 def parse_plan(raw: str) -> ReviewPlan:
@@ -684,7 +694,9 @@ def section_source(
     parts = [source.slice(a, b) for a, b in ranges if 0 <= a <= b < n]
     text = "\n\n[…]\n\n".join(parts)
     keep = set(section.figures)
-    text = _IMAGE_MARKER.sub(lambda m: m.group(0) if m.group(1) in keep else "", text)
+    text = FIGURE_MARKER.sub(
+        lambda m: m.group(0) if m.group("src") in keep else "", text
+    )
     for src in section.figures:
         if src not in text and src in figure_markers:
             text += "\n\n" + figure_markers[src]
@@ -793,12 +805,15 @@ def parse_edits(raw: str) -> list[Edit]:
     ]
 
 
-def draft_rank(*, passes: bool, blocking: int, score: int) -> tuple[bool, int, int]:
+def draft_rank(
+    *, passes: bool, publishable: bool, blocking: int, score: int
+) -> tuple[bool, bool, int, int]:
     """Order of two drafts of a section (higher is better), shared by the
-    review and guide loops: passing first, then the score, then fewer
-    blocking defects (missing items, must-fix, rule slips). A slip never
-    outweighs the score: a faithful draft with one slip beats an invented one."""
-    return passes, score, -blocking
+    review and guide loops: passing first, then publishable (no error the
+    validator would reject), then the score, then fewer blocking defects
+    (missing items, must-fix, rule slips). A writing slip never outweighs the
+    score: a faithful draft with one slip beats an invented one."""
+    return passes, publishable, score, -blocking
 
 
 def rejected_revision_note(score: int, blocking: int) -> str:
@@ -815,14 +830,35 @@ def tag_body(raw: str, tag: str) -> str | None:
     return matches[-1] if matches else None
 
 
-def _added_slips(before: str, after: str) -> list[str]:
-    """Writing-rule hits (rule and offending text) an edit would add, even
-    when it also fixes another."""
+def rule_issues(text: str) -> list[str]:
+    """Deterministic rule hits a writer can fix: writing slips plus the
+    publish-blocking body checks (tables, math, code fences) that are left
+    after the publisher's own fixes (math delimiters, blank lines, headings),
+    so a draft is never revised for what the publisher repairs."""
+    return writing_issues(text) + publish_blockers(text)
+
+
+def publish_blockers(text: str) -> list[str]:
+    """The body errors the validator would still report once the section is
+    closed (an open fence) and the publisher has normalized math and linted
+    the Markdown."""
+    fixed = publish_body(text, warn=False)
+    return body_errors(fixed)
+
+
+def added_slips(before: str, after: str) -> list[str]:
+    """Rule hits (rule and offending text) an edit would add, even when it
+    also fixes another."""
 
     def keys(text: str) -> Counter[str]:
-        return Counter(issue.split(":", 1)[0] for issue in writing_issues(text))
+        return Counter(issue.split(":", 1)[0] for issue in rule_issues(text))
 
     return list((keys(after) - keys(before)).elements())
+
+
+def _is_subsequence(items: list[str], within: list[str]) -> bool:
+    remaining = iter(within)
+    return all(item in remaining for item in items)
 
 
 def apply_edits(
@@ -848,13 +884,33 @@ def apply_edits(
             skipped.append(f"find occurs {count} times: {edit.find[:60]!r}")
             continue
         edited = text.replace(edit.find, edit.replace, 1)
-        if _TOP_HEADING.findall(edited) != _TOP_HEADING.findall(text):
+        # Closing the article's one unclosed fence: the edit only adds the
+        # closing fence line and changes nothing else.
+        closes_fence = (
+            bool(open_fence(text))
+            and not open_fence(edited)
+            and _without_bare_fences(edit.replace) == _without_bare_fences(edit.find)
+        )
+        if open_fence(edit.find) != open_fence(edit.replace) and not closes_fence:
+            # Adding or dropping a lone fence line opens or closes a code
+            # block elsewhere (prose would turn into code, or code into
+            # prose), unless it closes the article's one unclosed fence.
+            # Changing an info string or moving a fence keeps the balance.
+            skipped.append(f"would unbalance a code fence: {edit.find[:60]!r}")
+            continue
+        # On the text outside code, so an edit that drops a closing fence (and
+        # turns the following sections into code) is caught too.
+        before = _TOP_HEADING.findall(without_fences(text))
+        after = _TOP_HEADING.findall(without_fences(edited))
+        # Closing the article's unclosed fence may only bring back headings
+        # the open code block had swallowed; it may not lose or rename one.
+        if after != before and not (closes_fence and _is_subsequence(before, after)):
             skipped.append(f"would change a heading: {edit.find[:60]!r}")
             continue
         if lost := _lost_assets(edit.find, text, edited):
             skipped.append(f"would remove the only {lost}: {edit.find[:60]!r}")
             continue
-        if added := _added_slips(text, edited):
+        if added := added_slips(text, edited):
             skipped.append(
                 f"would add a writing-rule slip ({added[0]}): {edit.find[:60]!r}"
             )
@@ -866,17 +922,25 @@ def apply_edits(
     return text, applied, skipped
 
 
+_BARE_FENCE_LINE = re.compile(r"(?m)^[ \t]*(?:`{3,}|~{3,})[ \t]*\n?")
+
+
+def _without_bare_fences(text: str) -> str:
+    """``text`` without lines that are only a fence (a closing fence)."""
+    return _BARE_FENCE_LINE.sub("", text).strip()
+
+
 def _lost_assets(find: str, text: str, edited: str) -> str:
     """The kind of figure, display equation or table the edit removes without
     another copy left ("" when none): fixing one in place keeps the count and
     is fine; dropping a repeated copy leaves the other in ``edited``."""
-    for kind, pattern in (
-        ("figure", _IMAGE_SRC),
-        ("equation", _DISPLAY_MATH),
-        ("table", _TABLE_HEADER),
+    for kind, items in (
+        ("figure", image_sources),
+        ("equation", DISPLAY_MATH.findall),
+        ("table", _TABLE_HEADER.findall),
     ):
-        fewer = len(pattern.findall(edited)) < len(pattern.findall(text))
-        if fewer and any(item not in edited for item in pattern.findall(find)):
+        fewer = len(items(edited)) < len(items(text))
+        if fewer and any(item not in edited for item in items(find)):
             return kind
     return ""
 
@@ -913,28 +977,26 @@ def parse_lines(raw: str | None) -> list[str]:
     return lines
 
 
-# A display block: "$$" on its own line … "$$", or one whole-line "$$…$$".
-# A prose line that merely starts with inline math ("$$W_0$$는 …") is not one.
-_DISPLAY_MATH = re.compile(
-    r"^\$\$[ \t]*\n.*?\n[ \t]*\$\$[ \t]*$|^\$\$(?:(?!\$\$)[^\n])+\$\$[ \t]*$",
-    re.MULTILINE | re.DOTALL,
-)
 _TABLE_HEADER = re.compile(r"^(\|[^\n]*\|)[ \t]*\n\|[ \t]*:?-+", re.MULTILINE)
-_IMAGE_SRC = re.compile(r"!\[[^\]]*\]\(([^)\s]+)")
 _TOP_HEADING = re.compile(r"^## .*$", re.MULTILINE)
 _SECTION_HEADING = re.compile(r"^#{2,3} [^\n]+", re.MULTILINE)
 
 
 def _code_first_lines(text: str) -> list[str]:
     """The first non-empty line of every fenced code block."""
-    lines, firsts, in_fence, first = text.splitlines(), [], False, ""
-    for line in lines:
-        if _FENCE_LINE.match(line):
-            if in_fence and first:
-                firsts.append(first)
-            in_fence, first = not in_fence, ""
-        elif in_fence and not first and line.strip():
+    lines = text.splitlines()
+    firsts, first, inside = [], "", False
+    for line, role in zip(lines, fence_roles(lines), strict=True):
+        if role == "open":
+            first, inside = "", True
+        elif role == "code" and not first and line.strip():
             first = line.strip()
+        elif role == "close":
+            inside = False
+            if first:
+                firsts.append(first)
+    if inside and first:
+        firsts.append(first)
     return firsts
 
 
@@ -946,10 +1008,10 @@ def article_ledger(sections: Sequence[str]) -> str:
     lines = [f"- heading: {h}" for h in _SECTION_HEADING.findall(text)]
     lines += [
         f"- equation: {' '.join(m.group(0).split())[:160]}"
-        for m in _DISPLAY_MATH.finditer(text)
+        for m in DISPLAY_MATH.finditer(text)
     ]
     lines += [f"- table: {h[:160]}" for h in _TABLE_HEADER.findall(text)]
-    lines += [f"- figure: {src}" for src in _IMAGE_SRC.findall(text)]
+    lines += [f"- figure: {src}" for src in image_sources(text)]
     lines += [f"- code: {first[:160]}" for first in _code_first_lines(text)]
     lines += [f"- callout: {c[:160]}" for c in callout_lines(text)]
     return "\n".join(lines) or "- nothing yet"
