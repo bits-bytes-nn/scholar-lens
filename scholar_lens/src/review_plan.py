@@ -39,6 +39,7 @@ from .markdown_math import (
     without_fences,
 )
 from .post_validator import body_errors
+from .utils.helpers import first_sentence
 
 Difficulty = Literal["easy", "medium", "hard"]
 Importance = Literal["core", "supporting", "context"]
@@ -103,26 +104,6 @@ def _is_closing_heading(title: str) -> bool:
     return False
 
 
-def coerce_ranges(value: Any) -> list[tuple[int, int]]:
-    """Accept [3, 9], [[3, 9]], ["3-9"] or [{"start": 3, "end": 9}]."""
-    if not isinstance(value, list):
-        return []
-    if len(value) == 2 and all(isinstance(v, int) for v in value):
-        value = [value]
-    ranges = []
-    for item in value:
-        if isinstance(item, dict):
-            item = [item.get("start"), item.get("end")]
-        elif isinstance(item, str) and "-" in item:
-            item = item.split("-", 1)
-        try:
-            start, end = (int(str(v).strip()) for v in item)
-        except (TypeError, ValueError):
-            continue
-        ranges.append((start, end))
-    return ranges
-
-
 class PlanError(ValueError):
     """The planner output could not be parsed into a usable plan."""
 
@@ -167,11 +148,6 @@ class PlannedSection(BaseModel):
     length_scale: float = 1.0
     hard_scale: float = 1.0
 
-    @field_validator("sentence_ranges", mode="before")
-    @classmethod
-    def _coerce_ranges(cls, value: Any) -> Any:
-        return coerce_ranges(value)
-
     @field_validator("must_cover", mode="before")
     @classmethod
     def _coerce_items(cls, value: Any) -> Any:
@@ -201,11 +177,6 @@ class ReviewPlan(BaseModel):
     # The paper's own limitations and future work, for the closing assessment
     # (the body never gets a limitations/conclusion section of its own).
     closing_points: list[str] = Field(default_factory=list)
-
-    @field_validator("excluded_ranges", mode="before")
-    @classmethod
-    def _coerce_excluded(cls, value: Any) -> Any:
-        return coerce_ranges(value)
 
     @field_validator("glossary", mode="before")
     @classmethod
@@ -985,7 +956,7 @@ def _bare_answer(item: str) -> str:
     bare = re.sub(r"\s*(?:\([^)]*\)|[-—–]+)\s*$", "", bare)
     # "None — all items are covered", "없음: 모두 반영됨"
     bare = re.sub(r"^(none|n/a|없음|해당 없음)\s*[-—–:].*$", r"\1", bare)
-    return bare.strip("\"'`()[]{}.!。*_ ")
+    return bare.strip("\"'`()[]{}.!;。*_ ")
 
 
 def parse_lines(raw: str | None) -> list[str]:
@@ -1039,12 +1010,6 @@ def article_ledger(sections: Sequence[str]) -> str:
     return "\n".join(lines) or "- nothing yet"
 
 
-def _first_sentence(paragraph: str) -> str:
-    flat = " ".join(paragraph.split())
-    match = re.search(r"(.+?[.!?。])(\s|$)", flat)
-    return (match.group(1) if match else flat)[:200]
-
-
 def digest_sections(sections: Sequence[str]) -> str:
     """Compact view of earlier sections: headings plus the first sentence of
     each prose paragraph (tables, code and display math left out)."""
@@ -1055,7 +1020,9 @@ def digest_sections(sections: Sequence[str]) -> str:
             if not block or block.startswith(("|", "```", "$$", "!", ">")):
                 continue
             out.append(
-                block if block.startswith("#") else f"  {_first_sentence(block)}"
+                block
+                if block.startswith("#")
+                else f"  {first_sentence(' '.join(block.split()))[:200]}"
             )
     return "\n".join(out)
 

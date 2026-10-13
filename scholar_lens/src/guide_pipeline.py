@@ -86,7 +86,6 @@ async def run_guide_pipeline(
         proposed_seo_title=taxonomy.get("seo_title"),
         spec=spec,
         known_tags=context.require_blog_tags(),
-        source_text=guide.source_text,
     )
     slug = slugify(guide.topic, max_length=80)
     work_dir = ROOT_DIR / LocalPaths.PAPERS_DIR.value / f"guide-{slug}"
@@ -95,7 +94,7 @@ async def run_guide_pipeline(
     publish_request = _build_publish_request(
         guide, work_dir, document, branch_id=guide_branch_id(request.urls)
     )
-    publish_request.review_notes += [*meta.notes, *guide.notes]
+    publish_request.review_notes += guide.notes
     outcome = await publish_artifact(
         context, publish_request, create_pr=request.create_pr
     )

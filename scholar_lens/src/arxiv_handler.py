@@ -1,6 +1,5 @@
 import re
 from datetime import datetime
-from difflib import SequenceMatcher
 from pathlib import Path
 
 import arxiv
@@ -8,6 +7,7 @@ import requests
 import tenacity
 from pydantic import BaseModel, Field, HttpUrl, ValidationInfo, field_validator
 
+from .citation_metadata import title_similarity, titles_match
 from .constants import normalize_arxiv_id
 from .logger import logger
 from .pdf_download import CHUNK_BYTES, save_pdf
@@ -245,14 +245,7 @@ class ArxivHandler:
             pdf_url=HttpUrl(paper.pdf_url) if paper.pdf_url else None,
         )
 
-    # Minimum raw-title similarity (on top of an exact normalized match) before
-    # we trust an arXiv title-search hit. Guards against aggressive normalization
-    # collapsing two genuinely different titles onto the same key, which would
-    # silently summarise the WRONG paper.
-    TITLE_SIMILARITY_THRESHOLD: float = 0.85
-
     def search_by_title(self, title: str, max_results: int = 10) -> str | None:
-        normalized_query_title = self._normalize_title(title)
         queries_to_try = [f'ti:"{title}"']
         if "-" in title:
             queries_to_try.append(f'ti:"{title.replace("-", " ")}"')
@@ -261,22 +254,18 @@ class ArxivHandler:
             try:
                 _ARXIV_RATE_LIMITER.acquire()
                 search = arxiv.Search(query=query, max_results=max_results)
+                # The closest matching title, not the first: a survey or a
+                # "Revisited" follow-up may be listed before the paper itself.
+                best: tuple[float, str] | None = None
                 for paper in self.client.results(search):
-                    if self._normalize_title(paper.title) != normalized_query_title:
-                        continue
-                    similarity = SequenceMatcher(
-                        None, title.lower(), paper.title.lower()
-                    ).ratio()
-                    if similarity < self.TITLE_SIMILARITY_THRESHOLD:
-                        logger.warning(
-                            "Rejecting low-similarity title match (%.2f) for '%s' "
-                            "vs '%s'.",
-                            similarity,
-                            title,
-                            paper.title,
-                        )
-                        continue
-                    return paper.get_short_id()
+                    if titles_match(title, paper.title):
+                        similarity = title_similarity(title, paper.title)
+                        if similarity == 1.0:
+                            return paper.get_short_id()
+                        if best is None or similarity > best[0]:
+                            best = (similarity, paper.get_short_id())
+                if best is not None:
+                    return best[1]
             except Exception as e:
                 _ARXIV_RATE_LIMITER.penalize(_retry_after_seconds(e))
                 logger.warning("Search query '%s' failed: %s", query, e)
@@ -284,7 +273,3 @@ class ArxivHandler:
 
         logger.warning("No confident title match found for: '%s'", title)
         return None
-
-    @staticmethod
-    def _normalize_title(title: str) -> str:
-        return re.sub(r"[\s.-]+", "", title).lower()

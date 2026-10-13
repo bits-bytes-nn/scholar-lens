@@ -109,14 +109,17 @@ poetry run python scripts/put_secrets.py github-token   # after rotating one sec
 
 Batch jobs use the `config.yaml` baked into the image at the last deploy, so re-run `cdk deploy` after editing it ([stack details](./docs/design.md#10-인프라)).
 
+The stack's hourly cost alarm covers Batch runs only: local runs send no CloudWatch metrics, so check their `estimated_cost_usd` in the printed result ([alarms](./docs/design.md#11-관측성)).
+
 ## Development
 
 ```bash
-poetry run pytest                                # unit and pipeline tests, no AWS or network
+poetry run pytest tests/ -W ignore::DeprecationWarning --cov=scholar_lens --cov=scripts --cov-fail-under=85   # as in CI; no AWS or network
 poetry run ruff check scholar_lens scripts tests
 poetry run black --check scholar_lens scripts tests
 poetry run mypy scholar_lens scripts
 poetry run python scripts/ci_synth_check.py      # CDK synth with a fake account
+actionlint                                       # lint the GitHub workflows
 ```
 
 ## Changelog

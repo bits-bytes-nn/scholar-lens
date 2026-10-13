@@ -58,14 +58,6 @@ _INLINE_CODE = re.compile(r"`[^`]*`")
 _NUMERIC_CELL = re.compile(
     r"[\s*~≈<>+\-−$]*\d[\d.,]*\s*(?:%|[KMBkmb×x])?(?:\s*(?:±|\+/-)\s*[\d.,]+%?)?[\s*]*"
 )
-_PERSON = re.compile(r"^[A-Z][a-zA-Z'.\-]+(?:\s+[A-Z][a-zA-Z'.\-]+){1,3}$")
-# Words that mark a name as an organisation rather than a person.
-_ORG_WORDS = re.compile(
-    r"\b(AI|Lab|Labs|Laboratory|Research|University|Institute|College|School|"
-    r"Inc|Corp|Corporation|Ltd|LLC|Company|Group|Team|Foundation|Center|Centre|"
-    r"Academy|Technologies|Technology|DeepMind|Google|Meta|Microsoft|OpenAI|"
-    r"Anthropic|NVIDIA|Amazon|Apple|IBM|Alibaba|Tencent|Baidu|ByteDance|Mistral)\b"
-)
 
 
 @dataclass(frozen=True)
@@ -387,11 +379,6 @@ def _check_paper_author(value: Any, add: Add) -> None:
         return
     if re.search(r"\bet\s+al\b", author, re.IGNORECASE):
         add("error", "paper-author", 1, f"paper_author is a person list: '{author}'")
-        return
-    parts = [p.strip() for p in re.split(r",|\band\b|&", author) if p.strip()]
-    people = [p for p in parts if _PERSON.match(p) and not _ORG_WORDS.search(p)]
-    if len(parts) >= 2 and len(people) == len(parts):
-        add("error", "paper-author", 1, f"paper_author lists people: '{author}'")
 
 
 def _check_tags(tags: Any, body: str, spec: PostConventions, add: Add) -> None:

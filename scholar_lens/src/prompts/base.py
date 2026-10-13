@@ -161,7 +161,9 @@ STYLE_RULES: str = """
 - Do not announce what a section will do ("This section explains …" / "이 절에서는
   …를 살펴봅니다"), recap the previous one, or promise later content; start with
   the substance and stop when it is complete. Never refer to the post's own
-  parts ("이 절", "이 장", "앞 절", "첫 절에서" / "this section").
+  parts by structure, by name or number ("이 절", "앞 절", "설치 절에서 다룬" /
+  "this section"); a back-reference by content is fine ("앞서 설명한 `--host`
+  설정" / "the `--host` setting described above").
 - Keep established English technical terms when the target language has no
   clear equivalent (e.g. BERT, Transformer); otherwise use the target
   language's standard terms.

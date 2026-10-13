@@ -93,7 +93,6 @@ class TestFrontMatter:
         "author",
         [
             '"Preston Rasmussen et al."',
-            '"Edward Hu, Yelong Shen, Phillip Wallis"',
             '""',
         ],
     )
@@ -101,7 +100,14 @@ class TestFrontMatter:
         assert "paper-author" in rules(make_post(front={"paper_author": author}))
 
     @pytest.mark.parametrize(
-        "author", ['"Zep AI"', '"Google DeepMind"', '"Meta AI and New York University"']
+        "author",
+        [
+            '"Zep AI"',
+            '"Google DeepMind"',
+            '"Meta AI and New York University"',
+            '"Carnegie Mellon, Johns Hopkins"',
+            '"Hugging Face and Mila Quebec"',
+        ],
     )
     def test_organisations_pass(self, author: str) -> None:
         assert "paper-author" not in rules(make_post(front={"paper_author": author}))

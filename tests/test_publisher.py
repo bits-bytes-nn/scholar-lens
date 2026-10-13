@@ -1087,6 +1087,106 @@ class TestValidationGate:
         assert "- [ ]" in request.pr_body_with_checklist()
 
 
+class TestRejectedCopy:
+    """A rejected post is copied to S3 (Batch scratch is lost); a failed copy
+    must not hide the validation result."""
+
+    BROKEN = VALID_POST.replace('paper_author: "Microsoft"', 'author: "Edward Hu"')
+
+    async def test_rejected_post_is_copied_under_the_rejected_prefix(
+        self, tmp_path: Path
+    ) -> None:
+        from scholar_lens.src.post_validator import PostValidationError
+
+        with mock_aws():
+            client = boto3.client("s3", region_name="us-east-1")
+            client.create_bucket(Bucket=BUCKET)
+            pub = Publisher(
+                Github(),
+                root_dir=tmp_path,
+                s3_handler=S3Handler(boto3.Session(region_name="us-east-1"), BUCKET),
+                s3_bucket_name=BUCKET,
+                s3_prefix="scholar-lens",
+            )
+            request = _request(tmp_path, markdown=self.BROKEN)
+            with pytest.raises(PostValidationError) as info:
+                await pub.publish(request)
+            key = f"scholar-lens/rejected/{request.slug}.rejected.md"
+            keys = [
+                o["Key"]
+                for o in client.list_objects_v2(Bucket=BUCKET).get("Contents", [])
+            ]
+            assert keys == [key]
+        assert info.value.rejected_s3_uri == f"s3://{BUCKET}/{key}"
+
+    async def test_failed_copy_still_reports_the_rejection(
+        self, tmp_path: Path
+    ) -> None:
+        from scholar_lens.src.post_validator import PostValidationError
+
+        class FailingS3:
+            async def upload_file_async(self, *_args: Any) -> None:
+                raise OSError("S3 down")
+
+        pub = Publisher(
+            Github(),
+            root_dir=tmp_path,
+            s3_handler=FailingS3(),  # type: ignore[arg-type]
+            s3_bucket_name=BUCKET,
+            s3_prefix="scholar-lens",
+        )
+        with pytest.raises(PostValidationError) as info:
+            await pub.publish(_request(tmp_path, markdown=self.BROKEN))
+        assert info.value.rejected_s3_uri is None
+        assert info.value.rejected_path and Path(info.value.rejected_path).exists()
+
+
+class TestDownloadImage:
+    # An IP literal passes the SSRF check without DNS (sockets are blocked).
+    PUBLIC_URL = "https://93.184.216.34/figure.png"
+
+    @staticmethod
+    def _serve(monkeypatch: pytest.MonkeyPatch, chunks: list[bytes]) -> None:
+        from scholar_lens.src import publisher
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, stream=httpx.ByteStream(b"".join(chunks)))
+
+        monkeypatch.setattr(
+            publisher, "PinnedHTTPTransport", lambda: httpx.MockTransport(handler)
+        )
+
+    def test_small_image_is_returned(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from scholar_lens.src.publisher import download_image
+
+        self._serve(monkeypatch, [b"\x89PNG", b"data"])
+        assert download_image(self.PUBLIC_URL) == b"\x89PNGdata"
+
+    def test_oversized_stream_is_cut_off(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from scholar_lens.src import publisher
+
+        monkeypatch.setattr(publisher, "_MAX_IMAGE_BYTES", 8)
+        self._serve(monkeypatch, [b"\x89PNG", b"too much data"])
+        with pytest.raises(ValueError, match="exceeds 8 bytes"):
+            publisher.download_image(self.PUBLIC_URL)
+
+    @pytest.mark.parametrize(
+        "url", ["http://127.0.0.1/x.png", "http://169.254.169.254/latest/meta-data"]
+    )
+    def test_private_address_is_refused_before_any_request(
+        self, monkeypatch: pytest.MonkeyPatch, url: str
+    ) -> None:
+        from scholar_lens.src import publisher
+        from scholar_lens.src.url_guard import UnsafeUrlError
+
+        def no_transport() -> None:
+            raise AssertionError("no request may be made")
+
+        monkeypatch.setattr(publisher, "PinnedHTTPTransport", no_transport)
+        with pytest.raises(UnsafeUrlError):
+            publisher.download_image(url)
+
+
 class TestPostSlug:
     def test_summary_and_review_never_share_a_slug(self, tmp_path: Path) -> None:
         review = _request(tmp_path, title="LoRA: Low-Rank Adaptation", kind="review")

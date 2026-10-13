@@ -4,7 +4,7 @@ from typing import Any, ClassVar, Generic, TypeVar
 
 import boto3
 from botocore.config import Config as BotoConfig
-from botocore.exceptions import ClientError
+from botocore.exceptions import BotoCoreError, ClientError
 from langchain_aws import ChatBedrockConverse
 from langchain_community.embeddings import BedrockEmbeddings
 from langchain_core.callbacks import CallbackManagerForLLMRun
@@ -175,6 +175,20 @@ class BedrockEmbeddingsWrapper(BaseBedrockWrapper, BedrockEmbeddings):
     def embed_query(self, text: str) -> list[float]:
         truncated_text = self._truncate_text(text, self.max_sequence_length, "query")
         return super().embed_query(truncated_text)
+
+    def _embedding_func(self, text: str) -> list[float]:
+        # langchain_community wraps every endpoint error in a bare ValueError,
+        # which the retry policy treats as deterministic; surface the botocore
+        # error instead so throttling and timeouts are classified (and retried)
+        # like every other Bedrock call. It is re-raised outside the handler so
+        # the ValueError is not chained back onto it as its context.
+        try:
+            return super()._embedding_func(text)
+        except ValueError as e:
+            original = e.__cause__ or e.__context__
+            if not isinstance(original, (ClientError, BotoCoreError)):
+                raise
+        raise original
 
 
 class BedrockEmbeddingModelFactory(

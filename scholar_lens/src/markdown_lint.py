@@ -102,14 +102,20 @@ ENVELOPE_TAGS: tuple[str, ...] = (
 ENVELOPE_TAG = re.compile(rf"</?(?:{'|'.join(ENVELOPE_TAGS)})>")
 
 
+# What can follow a Korean numbered reference: the end, a space or punctuation,
+# or a particle. Anything else continues a word ("그림 3장", "3 절감", "1 절전").
+# 가/도/만 are left out on purpose: after a number they read as counters
+# ("2가지", "3도", "2만").
+_KO_REF_END = r"(?!\w)|(?=에서|에|의|은|는|을|를|이|과|와|로|으로|까지|부터|보다|처럼)"
+
 # The paper's numbering of figures/tables/equations/sections, in prose. A bare
 # "<n>장" is a counter ("GPU 2장", "그림 3장"), so only a dotted number counts
-# as a chapter; "지표 2" is not "표 2"; "3 절감" is not a section.
+# as a chapter; "지표 2" is not "표 2".
 NUMBERED_REF = re.compile(
     r"\b(?:Figure|Fig\.|Table|Section|Sec\.|Eq\.|Equation|Algorithm|Theorem|Lemma"
     r"|Proposition|Corollary)\s*\(?\d+"
-    r"|(?<![가-힣])(?:그림|표|수식|식|알고리즘)\s*(?:\(\d+\)|\d+(?![\d\s]*[개장가]))"
-    r"|\d+(?:\.\d+)*\s*절(?![감대단편충댓반차약])|\d+(?:\.\d+)+장"
+    rf"|(?<![가-힣])(?:그림|표|수식|식|알고리즘)\s*(?:\(\d+\)|\d+[a-z]?(?:{_KO_REF_END}))"
+    rf"|\d+(?:\.\d+)*\s*절(?:{_KO_REF_END})|\d+(?:\.\d+)+장(?:{_KO_REF_END})"
     r"|§\s*\d+"
 )
 _LATEX_LIKE = re.compile(r"[\\^_{]")

@@ -61,6 +61,17 @@ def test_code_note_only_when_a_given_repository_yielded_nothing() -> None:
     assert not _code_notes(SimpleNamespace(repo_urls=[], codebase_summary=None))  # type: ignore[arg-type]
 
 
+def test_text_only_note_when_pdf_layout_parsing_failed() -> None:
+    from scholar_lens.src.paper_pipeline import _text_only_notes
+    from scholar_lens.src.parser import Content
+
+    text_only = SimpleNamespace(content=Content(text="t", text_only=True))
+    assert _text_only_notes(text_only) == [  # type: ignore[arg-type]
+        "PDF parsed as text only; figures and tables unavailable."
+    ]
+    assert _text_only_notes(SimpleNamespace(content=Content(text="t"))) == []  # type: ignore[arg-type]
+
+
 def _context() -> SimpleNamespace:
     paper = SimpleNamespace(figure_analysis_model_id="anthropic.claude-haiku")
     code = SimpleNamespace(

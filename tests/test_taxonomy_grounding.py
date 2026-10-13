@@ -1,63 +1,17 @@
-"""Controlled tags must be the source's topic; guide flags must exist in the
-official docs (deterministic checks, no LLM calls)."""
+"""Guide flags must exist in the official docs (deterministic checks, no LLM
+calls)."""
 
 from __future__ import annotations
 
 import pytest
 
-from scholar_lens.src.formatting import build_post_meta
-from scholar_lens.src.post_conventions import load_local_conventions
-from scholar_lens.src.tags import off_topic_tags
-from scholar_lens.src.tech_guide import official_reference, unverified_identifiers
+from scholar_lens.src.guide_authority import official_reference, unverified_identifiers
 from scholar_lens.src.web_research import (
     OfficialDocs,
     PageContent,
     ResearchCorpus,
     docs_version,
 )
-
-PREFERENCE_PAPER = (
-    "We fine-tune language models from human preferences. Alignment of the "
-    "policy uses a Bradley-Terry model; reasoning about the reward is implicit."
-)
-
-
-class TestOffTopicTags:
-    def test_barely_mentioned_tag_is_off_topic(self) -> None:
-        assert off_topic_tags(["Alignment", "Reasoning-Models"], PREFERENCE_PAPER) == [
-            "Reasoning-Models"
-        ]
-
-    def test_broad_tag_whose_words_recur_is_kept(self) -> None:
-        text = "sliding window attention is efficient. " * 3
-        assert off_topic_tags(["Efficient-Attention"], text) == []
-
-    def test_acronym_counts_as_support(self) -> None:
-        assert off_topic_tags(["Retrieval-Augmented-Generation"], "We use RAG.") == []
-
-
-class TestControlledTagDrop:
-    def _meta(self, controlled: list[str], text: str):  # type: ignore[no-untyped-def]
-        return build_post_meta(
-            title="A Paper",
-            category_type="Paper Reviews",
-            proposed_topic="",
-            specific_tags=["Preference-Learning"],
-            controlled_tags=controlled,
-            proposed_seo_title=None,
-            spec=load_local_conventions(),
-            source_text=text,
-        )
-
-    def test_off_topic_controlled_tag_dropped_with_a_note(self) -> None:
-        meta = self._meta(["Alignment", "Reasoning-Models"], PREFERENCE_PAPER)
-        assert "Reasoning-Models" not in meta.tags and "Alignment" in meta.tags
-        assert any("Reasoning-Models" in note for note in meta.notes)
-
-    def test_last_controlled_tag_is_kept(self) -> None:
-        meta = self._meta(["Reasoning-Models"], PREFERENCE_PAPER)
-        assert "Reasoning-Models" in meta.tags and meta.notes == []
-
 
 GUIDE = """## 서빙
 
@@ -79,7 +33,7 @@ def _corpus(pages: list[tuple[str, str]]) -> ResearchCorpus:
 
 class TestUnverifiedIdentifiers:
     def test_flags_and_metrics_missing_from_official_pages(self) -> None:
-        missing = unverified_identifiers(GUIDE, OFFICIAL, "vllm")
+        missing = unverified_identifiers(GUIDE, OFFICIAL, ["vllm"])
         assert missing == ["--model", "--preemption-mode", "vllm_request_failure_total"]
         assert "--gpus" not in missing  # docker's own option, before "vllm"
 
@@ -90,12 +44,13 @@ class TestUnverifiedIdentifiers:
                 ("https://blog.example.com/x", "--preemption-mode swap"),
             ]
         )
-        text, products = official_reference(["https://docs.vllm.ai/en/latest/"], corpus)
-        assert products[0] == "vllm" and "--preemption-mode" not in text
-        assert "--preemption-mode" in unverified_identifiers(GUIDE, text, products)
+        official = OfficialDocs.from_urls(["https://docs.vllm.ai/en/latest/"])
+        text = official_reference(official, corpus)
+        assert "--preemption-mode" not in text
+        assert "--preemption-mode" in unverified_identifiers(GUIDE, text, ["vllm"])
 
     def test_no_official_text_checks_nothing(self) -> None:
-        assert unverified_identifiers(GUIDE, "", "vllm") == []
+        assert unverified_identifiers(GUIDE, "", ["vllm"]) == []
 
 
 def test_sources_are_labelled_by_authority() -> None:
@@ -156,9 +111,7 @@ def test_older_docs_version_is_labelled_and_not_official() -> None:
     text = corpus.relevant_text("prefix caching", max_chars=10_000, official=official)
     assert "(official documentation): https://docs.vllm.ai/en/latest/a" in text
     assert "(older docs version): https://docs.vllm.ai/en/v0.6.0/b" in text
-    reference, _ = official_reference(
-        ["https://docs.vllm.ai/en/latest/quickstart/"], corpus
-    )
+    reference = official_reference(official, corpus)
     assert reference.count("prefix caching") == 1
 
 

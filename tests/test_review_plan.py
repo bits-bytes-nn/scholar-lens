@@ -95,24 +95,13 @@ class TestParsePlan:
         with pytest.raises(PlanError):
             parse_plan(raw)
 
-    def test_range_shapes_are_coerced(self) -> None:
+    @pytest.mark.parametrize("ranges", [[3, 9], ["10-12"], [{"start": 1, "end": 2}]])
+    def test_off_schema_ranges_go_to_the_repair_round(self, ranges: list) -> None:
         raw = _plan_json(
-            sections=[
-                {"title": "a", "sentence_ranges": [3, 9], "must_cover": ["x"]},
-                {"title": "b", "sentence_ranges": ["10-12"], "must_cover": ["y"]},
-                {
-                    "title": "c",
-                    "sentence_ranges": [{"start": 13, "end": 14}],
-                    "must_cover": ["z"],
-                },
-            ]
+            sections=[{"title": "a", "sentence_ranges": ranges, "must_cover": ["x"]}]
         )
-        plan = parse_plan(raw)
-        assert [s.sentence_ranges for s in plan.sections] == [
-            [(3, 9)],
-            [(10, 12)],
-            [(13, 14)],
-        ]
+        with pytest.raises(PlanError):
+            parse_plan(raw)
 
     def test_glossary_list_form(self) -> None:
         raw = _plan_json(glossary=[{"term": "rank", "rendering": "랭크"}])

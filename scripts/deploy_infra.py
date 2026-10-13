@@ -573,6 +573,25 @@ class PaperReviewStack(Stack):
             )
         )
 
+        # A failure notification the rule could not deliver (e.g. a topic or
+        # key policy change) would otherwise be lost silently.
+        cloudwatch.Alarm(
+            self,
+            "FailureRuleDeliveryAlarm",
+            alarm_name=self._get_resource_name("batch-failed-delivery"),
+            metric=cloudwatch.Metric(
+                namespace="AWS/Events",
+                metric_name="FailedInvocations",
+                dimensions_map={"RuleName": failed_rule.rule_name},
+                statistic="Sum",
+                period=Duration.minutes(5),
+            ),
+            threshold=0,
+            evaluation_periods=1,
+            comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD,
+            treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
+        ).add_alarm_action(sns_action)
+
         # The app emits EstimatedCostUSD both per Mode and dimensionless; an
         # alarm can watch only one series, so it uses the dimensionless total.
         cost_alarm = cloudwatch.Alarm(

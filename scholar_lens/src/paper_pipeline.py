@@ -83,7 +83,8 @@ async def run_paper_pipeline(
                 tracker,
             )
         degraded += (
-            _unanalysed_figure_notes(paper)
+            _text_only_notes(paper)
+            + _unanalysed_figure_notes(paper)
             + _code_notes(paper)
             + _number_notes(paper, document)
         )
@@ -151,7 +152,6 @@ async def _generate_review(
         known_tags=context.require_blog_tags(),
     )
     return format_review(github, paper, review, meta=meta), [
-        *meta.notes,
         *review.notes,
         *_citation_notes(citation_summarizer),
     ]
@@ -183,10 +183,7 @@ async def _generate_summary(
         context.require_conventions(),
         known_tags=context.require_blog_tags(),
     )
-    return format_summary(github, paper, result, meta=meta), [
-        *meta.notes,
-        *summarizer.notes,
-    ]
+    return format_summary(github, paper, result, meta=meta), list(summarizer.notes)
 
 
 async def _prepare_paper_data(
@@ -409,6 +406,14 @@ def _figure_captions(paper: Paper) -> dict[str, str]:
         captions[str(fig.path)] = caption
         captions[Path(str(fig.path)).name] = caption
     return captions
+
+
+def _text_only_notes(paper: Paper) -> list[str]:
+    """A note when PDF layout parsing failed and the post was written from the
+    PDF's text layer alone."""
+    if paper.content.text_only:
+        return ["PDF parsed as text only; figures and tables unavailable."]
+    return []
 
 
 def _unanalysed_figure_notes(paper: Paper) -> list[str]:

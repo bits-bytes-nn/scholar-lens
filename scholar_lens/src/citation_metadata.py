@@ -68,16 +68,23 @@ _CROSSREF_PRIMARY_TYPES = frozenset(
 TITLE_MATCH_THRESHOLD: float = 0.9
 
 
+def _norm_title(value: str) -> str:
+    return " ".join(re.sub(r"[^\w ]+", " ", value.casefold()).split())
+
+
+def title_similarity(queried: str, resolved: str) -> float:
+    """Similarity of two titles (case/punctuation-insensitive); 1.0 when
+    they are the same title."""
+    return SequenceMatcher(None, _norm_title(queried), _norm_title(resolved)).ratio()
+
+
 def titles_match(queried: str | None, resolved: str | None) -> bool:
     """Whether two titles name the same paper (case/punctuation-insensitive)."""
     if not queried or not resolved:
         return False
 
-    def norm(value: str) -> str:
-        return " ".join(re.sub(r"[^\w ]+", " ", value.casefold()).split())
-
-    q, r = norm(queried), norm(resolved)
-    if not (q and r) or SequenceMatcher(None, q, r).ratio() < TITLE_MATCH_THRESHOLD:
+    q, r = _norm_title(queried), _norm_title(resolved)
+    if not (q and r) or title_similarity(queried, resolved) < TITLE_MATCH_THRESHOLD:
         return False
     # Version-like tokens tell sibling papers apart even when the rest of the
     # title is identical (GPT-4 vs GPT-4o, Qwen2 vs Qwen2.5, LoRA vs LoRA+).

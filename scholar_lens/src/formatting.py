@@ -20,8 +20,9 @@ from typing import TYPE_CHECKING
 
 from .markdown_math import has_math, normalize_math
 from .post_conventions import PostConventions
-from .tags import normalize_tags, off_topic_tags
+from .tags import normalize_tags
 from .utils import escape_yaml_double_quoted, is_placeholder
+from .utils.helpers import first_sentence
 
 if TYPE_CHECKING:
     from ..configs import Github as GithubConfig
@@ -108,8 +109,6 @@ class PostMeta:
     tags: list[str]
     seo_title: str | None = None
     new_tags: list[str] = field(default_factory=list)
-    # Reviewer notes on taxonomy decisions (e.g. a dropped off-topic tag).
-    notes: list[str] = field(default_factory=list)
 
 
 def resolve_topic(raw: str, spec: PostConventions) -> str | None:
@@ -144,31 +143,16 @@ def build_post_meta(
     proposed_seo_title: str | None,
     spec: PostConventions,
     known_tags: list[str] | None = None,
-    source_text: str | None = None,
 ) -> PostMeta:
     """Normalize tags, resolve the topic/cover and pick a ``seo_title``.
 
-    With ``source_text`` (the paper or the guide's sources), a controlled tag
-    the source barely mentions is dropped while another controlled tag
-    remains. Anything that still breaks a convention (no controlled tag,
-    unknown topic) is left for the post validator to reject, never silently
-    patched.
+    Anything that still breaks a convention (no controlled tag, unknown topic)
+    is left for the post validator to reject, never silently patched.
     """
     topic = resolve_topic(proposed_topic, spec)
     selection = normalize_tags(
         specific_tags, controlled_tags, title=title, spec=spec, known_tags=known_tags
     )
-    notes = []
-    if source_text:
-        off = off_topic_tags(selection.controlled, source_text)
-        kept = [t for t in selection.controlled if t not in off]
-        if off and kept:
-            selection.controlled = kept
-            selection.tags = [*selection.specific, *kept]
-            notes = [
-                f"Dropped the controlled tag '{t}': the source barely mentions it."
-                for t in off
-            ]
     limit = spec.seo_title_max_length
     seo = (proposed_seo_title or "").strip() or None
     if len(title) <= limit:
@@ -186,7 +170,6 @@ def build_post_meta(
         tags=selection.tags,
         seo_title=seo,
         new_tags=new_tags,
-        notes=notes,
     )
 
 
@@ -206,7 +189,6 @@ def paper_post_meta(
         proposed_seo_title=attributes.seo_title,
         spec=spec,
         known_tags=known_tags,
-        source_text=paper.content.text,
     )
 
 
@@ -261,7 +243,6 @@ def same_as_title(candidate: str, title: str) -> bool:
 # and end with "…".
 _SUBTITLE_MAX = 80
 _SUBTITLE_CUT = 60
-_ABBREVIATIONS = re.compile(r"\b(?:e\.g|i\.e|et al|vs|cf|etc)\.$", re.IGNORECASE)
 _QUESTION_LABEL = re.compile(r"^\*\*[^*\n]*\?\*\*\s*")
 _LABEL = re.compile(r"^\*\*[^*\n]{1,30}:\*\*\s*|^\*\*[^*\n]{1,30}\*\*:\s*")
 
@@ -274,13 +255,6 @@ def _plain(text: str) -> str:
     text = re.sub(r"\*\*(.+?)\*\*|__(.+?)__", lambda m: m.group(1) or m.group(2), text)
     text = re.sub(r"(?<![\w*])\*(?!\s)(.+?)(?<!\s)\*(?![\w*])", r"\1", text)
     return " ".join(text.split())
-
-
-def _first_sentence(text: str) -> str:
-    for match in re.finditer(r"[.!?。](?=\s)", text):
-        if not _ABBREVIATIONS.search(text[: match.end()]):
-            return text[: match.end()]
-    return text
 
 
 def _shorten_subtitle(text: str) -> str:
@@ -306,7 +280,7 @@ def _lead_sentence(markdown: str) -> str:
         text = re.sub(r"^(?:>\s*|[-*]\s+|\d+[.)]\s+)", "", text)
         text = _QUESTION_LABEL.sub("", text)
         text = _LABEL.sub("", text)
-        text = _first_sentence(_plain(text)).rstrip(".!?。 ")
+        text = first_sentence(_plain(text)).rstrip(".!?。 ")
         if text:
             return _shorten_subtitle(text)
     return ""

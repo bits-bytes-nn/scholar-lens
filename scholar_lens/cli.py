@@ -352,7 +352,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     except Exception as e:  # noqa: BLE001 - report AWS/config errors as JSON
         _emit({"status": "error", "error": f"{type(e).__name__}: {e}"})
         return EXIT_ERROR
-    return _EXIT_BY_STATUS[_run(request).status]
+    try:
+        return _EXIT_BY_STATUS[_run(request).status]
+    except KeyboardInterrupt as e:
+        # Ctrl-C: run_job has cleaned up and re-raised with its recorded result
+        # (cost, tokens, duration); still print one result.
+        from scholar_lens.src.runtime import INTERRUPTED_ERROR
+
+        _emit(
+            getattr(e, "job_result", None)
+            or JobResult(
+                kind=request.kind, input=request.describe(), error=INTERRUPTED_ERROR
+            )
+        )
+        return EXIT_FAILED
 
 
 if __name__ == "__main__":

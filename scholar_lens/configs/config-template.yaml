@@ -96,7 +96,7 @@ tech_guide:
   max_research_queries: 6
   fetch_top_results: 4
   min_quality_score: 75
-  max_revision_attempts: 2
+  max_revision_attempts: 1
   # Soft limit: past it, remaining sections skip evaluate/revise/grounding;
   # past 1.5x the run aborts.
   max_total_tokens: 3000000

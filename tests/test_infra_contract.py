@@ -141,12 +141,35 @@ class TestStackWiring:
         (env,) = resources_of_type(template, "AWS::Batch::ComputeEnvironment")
         assert env["Properties"]["ComputeResources"]["Type"] == "EC2"
 
-    def test_only_the_cost_alarm(self, template: dict[str, Any]) -> None:
+    def test_only_cost_and_failure_delivery_alarms(
+        self, template: dict[str, Any]
+    ) -> None:
         # Run outcomes are reported by the app and the failed-job rule; a log
         # alarm would repeat them.
         alarms = resources_of_type(template, "AWS::CloudWatch::Alarm")
         names = sorted(a["Properties"]["AlarmName"] for a in alarms)
-        assert names == ["scholar-lens-dev-estimated-cost"]
+        assert names == [
+            "scholar-lens-dev-batch-failed-delivery",
+            "scholar-lens-dev-estimated-cost",
+        ]
+
+    def test_failure_rule_delivery_alarm_watches_the_rule(
+        self, template: dict[str, Any]
+    ) -> None:
+        (rule_id,) = [
+            logical_id
+            for logical_id, r in template["Resources"].items()
+            if r["Type"] == "AWS::Events::Rule"
+        ]
+        (alarm,) = [
+            a
+            for a in resources_of_type(template, "AWS::CloudWatch::Alarm")
+            if a["Properties"]["MetricName"] == "FailedInvocations"
+        ]
+        props = alarm["Properties"]
+        assert props["Namespace"] == "AWS/Events"
+        assert props["Dimensions"] == [{"Name": "RuleName", "Value": {"Ref": rule_id}}]
+        assert props["AlarmActions"]
 
     def test_failed_job_rule_skips_only_app_reported_exits(
         self, template: dict[str, Any]

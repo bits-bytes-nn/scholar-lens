@@ -410,3 +410,60 @@ class TestTruncationGuard:
         from scholar_lens.src.utils.retry import is_transient_error
 
         assert is_transient_error(OutputTruncatedError("x")) is False
+
+
+class TestEmbeddingErrors:
+    """langchain_community wraps endpoint errors in ValueError; the wrapper must
+    surface the botocore error so the shared retry policy can classify it."""
+
+    @pytest.fixture(autouse=True)
+    def _no_backoff(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr("scholar_lens.src.utils.retry.RETRY_MAX_WAIT", 0)
+
+    @staticmethod
+    def _embeddings(
+        code: str, status: int
+    ) -> tuple[fac.BedrockEmbeddingsWrapper, MagicMock]:
+        client = MagicMock()
+        client.invoke_model.side_effect = ClientError(
+            {
+                "Error": {"Code": code, "Message": "x"},
+                "ResponseMetadata": {"HTTPStatusCode": status},
+            },
+            "InvokeModel",
+        )
+        embeddings = fac.BedrockEmbeddingsWrapper.model_construct(
+            client=client,
+            model_id="amazon.titan-embed-text-v2:0",
+            model_kwargs=None,
+            normalize=False,
+        )
+        return embeddings, client
+
+    @staticmethod
+    def _embed_with_retry(embeddings: fac.BedrockEmbeddingsWrapper) -> None:
+        from scholar_lens.src.utils.retry import RetryableBase
+
+        RetryableBase._retry("test")(embeddings.embed_documents)(["text"])
+
+    def test_throttling_is_transient_and_retried(self) -> None:
+        from scholar_lens.src.utils.retry import MAX_RETRIES, is_transient_error
+
+        embeddings, client = self._embeddings("ThrottlingException", 429)
+        with pytest.raises(ClientError) as excinfo:
+            self._embed_with_retry(embeddings)
+        assert is_transient_error(excinfo.value)
+        assert client.invoke_model.call_count == MAX_RETRIES
+
+    def test_validation_error_is_not_retried(self) -> None:
+        embeddings, client = self._embeddings("ValidationException", 400)
+        with pytest.raises(ClientError):
+            self._embed_with_retry(embeddings)
+        assert client.invoke_model.call_count == 1
+
+    def test_non_endpoint_value_error_is_kept(self) -> None:
+        embeddings, client = self._embeddings("ThrottlingException", 429)
+        client.invoke_model.side_effect = None
+        client.invoke_model.return_value = {"body": MagicMock(read=lambda: b"{")}
+        with pytest.raises(ValueError):
+            embeddings.embed_query("text")

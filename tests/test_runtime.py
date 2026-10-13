@@ -232,6 +232,23 @@ class TestRunJob:
         # Batch may retry the job: no FAILED notification from the app.
         assert self.notified == [False]
 
+    def test_ctrl_c_carries_the_recorded_result(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from scholar_lens.src.jobs import JobRequest
+
+        async def pipeline(context, request, tracker):  # type: ignore[no-untyped-def]
+            tracker.input_tokens = 1_200
+            raise KeyboardInterrupt
+
+        finished = self._patch(monkeypatch, pipeline)
+        with pytest.raises(KeyboardInterrupt) as raised:
+            runtime.run_job(JobRequest(kind="summarize", source="2106.09685"))
+        result = raised.value.job_result  # type: ignore[attr-defined]
+        assert result is finished[0]
+        assert result.error == runtime.INTERRUPTED_ERROR
+        assert result.input_tokens == 1_200
+
 
 class TestResultNotification:
     def test_success_lists_pr_and_cost(self) -> None:

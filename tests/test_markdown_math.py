@@ -660,6 +660,7 @@ def test_fold_stays_fast_on_long_items() -> None:
     import time
 
     # Linear, not quadratic: doubling the input must not quadruple the time.
+    # The fastest of three runs filters out scheduler noise.
     def took(n: int, quoted: bool) -> float:
         lead, gap = (
             ("> 1. 항목\n", ">    $$x_{k}$$\n>\n")
@@ -667,9 +668,12 @@ def test_fold_stays_fast_on_long_items() -> None:
             else ("1. 항목\n", "   $$x_{k}$$\n\n")
         )
         text = lead + "".join(gap.format(k=k) for k in range(n))
-        started = time.monotonic()
-        norm(text)
-        return time.monotonic() - started
+        runs = []
+        for _ in range(3):
+            started = time.monotonic()
+            norm(text)
+            runs.append(time.monotonic() - started)
+        return min(runs)
 
     for quoted in (False, True):
         small, large = took(500, quoted), took(2000, quoted)

@@ -13,65 +13,51 @@ from ..logger import logger
 
 
 def parse_quality_score(raw: Any) -> int:
-    """Parse a 0-100 evaluator quality score robustly.
+    """The evaluator's 0-100 score: the first integer of its
+    ``<quality_score>`` tag body, so "85", "85/100" or "Score: 85" read 85.
 
-    Shared by the review and tech-guide evaluate-and-revise loops. The prompt
-    asks for a bare integer, but a model may still pad it: "85", "85/100",
-    "Score: 85", "85 (excellent)", "9/10", or "N/A". Precedence:
-
-    1. a clean integer;
-    2. otherwise a leading ``<n>/<total>`` fraction -> the NUMERATOR ("85/100" ->
-       85, not 100);
-    3. otherwise the FIRST integer anywhere in the string (so "Score: 85" -> 85,
-       not 0 — an anchored match here would mis-score and force a wasted revision).
-
-    The result is clamped to 0-100; a non-numeric value falls back to 0, which
-    forces another attempt rather than crashing.
+    Shared by the review and tech-guide evaluate-and-revise loops. The result
+    is clamped to 0-100; a non-numeric value reads 0, which forces another
+    attempt rather than crashing.
     """
-    text = str(raw if raw is not None else "").strip()
-
-    def clamp(n: int) -> int:
-        return max(0, min(100, n))
-
-    try:
-        return clamp(int(text))
-    except ValueError:
-        pass
-    fraction = re.search(r"(\d+)\s*/\s*\d+", text)
-    if fraction:
-        return clamp(int(fraction.group(1)))
-    match = re.search(r"\d+", text)
-    return clamp(int(match.group())) if match else 0
+    match = re.search(r"\d+", str(raw if raw is not None else ""))
+    return max(0, min(100, int(match.group()))) if match else 0
 
 
-_AFFIRMATIVE = frozenset({"y", "yes", "yeah", "yep", "true", "t", "1"})
-_PLACEHOLDER = frozenset(
-    {
-        "n/a",
-        "na",
-        "none",
-        "null",
-        "unknown",
-        "unnamed",
-        "anonymous",
-        "not available",
-        "empty",
-    }
-)
+# The yes/no and missing-value answers the prompts ask for.
+_AFFIRMATIVE = frozenset({"y", "yes"})
+# "Unknown" is what ``paper_source`` sets for a source without authors.
+_PLACEHOLDER = frozenset({"n/a", "unknown", "none", "not specified"})
+
+
+def _bare(value: str) -> str:
+    return value.strip().rstrip(".").strip().lower()
 
 
 def is_affirmative(value: str | None) -> bool:
-    """Whether an LLM yes/no field means "yes".
-
-    Tolerant of the common ways a model says yes ("y", "yes", "true", …) instead
-    of brittle equality with a single character. Anything else (incl. None) is no.
-    """
-    return value is not None and value.strip().lower() in _AFFIRMATIVE
+    """Whether an LLM yes/no field ("y or n", "yes or no") means "yes"; case,
+    surrounding space and a trailing period are ignored. Anything else (incl.
+    None) is no."""
+    return value is not None and _bare(value) in _AFFIRMATIVE
 
 
 def is_placeholder(value: str | None) -> bool:
-    """Whether a value is a missing/placeholder marker (N/A, Unknown, None…)."""
-    return not value or value.strip().lower() in _PLACEHOLDER
+    """Whether a value is empty or a missing-value marker (N/A, Unknown, None,
+    Not specified), with or without a trailing period."""
+    return not value or _bare(value) in _PLACEHOLDER
+
+
+_ABBREVIATIONS = re.compile(r"\b(?:e\.g|i\.e|et al|vs|cf|etc)\.$", re.IGNORECASE)
+
+
+def first_sentence(text: str) -> str:
+    """``text`` up to its first sentence end (``.!?。`` before whitespace),
+    not counting abbreviations such as "e.g." or "et al."; all of ``text``
+    when it has none."""
+    for match in re.finditer(r"[.!?。](?=\s)", text):
+        if not _ABBREVIATIONS.search(text[: match.end()]):
+            return text[: match.end()]
+    return text
 
 
 def escape_yaml_double_quoted(value: str) -> str:

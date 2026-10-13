@@ -60,7 +60,7 @@ Batch worker ┘                                    │     (수집 → 생성 �
 | `src/metrics.py` | 토큰·비용 집계, 예산 가드, CloudWatch 지표 |
 | `src/url_guard.py`, `src/pinned_transport.py`, `src/rate_limiter.py`, `src/prompt_safety.py` | SSRF 방지, IP 고정 전송, 속도 제한, 프롬프트 펜스 태그 무력화 |
 | `src/aws_helpers.py`, `src/constants.py`, `src/logger.py` | S3·SSM·계정 헬퍼, 공용 상수·경로, 로거 |
-| `scripts/` | CDK 스택, CI synth 검사, 비밀값 기록, 블로그 규칙 drift 검사 |
+| `scripts/` | CDK 스택, CI synth 검사, 비밀값 기록, 블로그 규칙 불일치 검사 |
 
 ## 2. CLI와 작업 계약
 
@@ -77,7 +77,7 @@ Batch worker ┘                                    │     (수집 → 생성 �
 
 stdout에는 JSON 객체 하나만 출력하고 로그는 stderr로 보냅니다. 인자 누락 같은 사용법 오류도 사용법은 stderr로, `{"status": "rejected"}`는 stdout으로 내고 2로 끝납니다. 종료 코드의 정본은 `cli.py` 모듈 docstring이고, `JobResult.status`의 `succeeded`·`failed`·`rejected`가 각각 0·1·2입니다(`_EXIT_BY_STATUS`). 로컬 실행이 설정·자격 증명 문제로 시작하지 못해도 `failed`(1)입니다.
 
-`--remote`는 `SubmittedJob`을 출력하고 0으로 끝납니다. `status`는 결과 manifest가 있으면 그 상태의 종료 코드를 돌려줍니다. 없으면 Batch가 `FAILED`일 때 1, 아직 끝나지 않았거나 `--wait`가 시간 초과되면 3, `SUCCEEDED`인데 manifest가 없으면 0입니다. `--wait` 중 Batch 조회나 결과 manifest 읽기의 throttling·5xx·네트워크 오류는 건너뛰고 계속 조회합니다.
+`--remote`는 `SubmittedJob`을 출력하고 0으로 끝납니다. `status`는 결과 매니페스트가 있으면 그 상태의 종료 코드를 돌려줍니다. 없으면 Batch가 `FAILED`일 때 1, 아직 끝나지 않았거나 `--wait`가 시간 초과되면 3, `SUCCEEDED`인데 매니페스트가 없으면 0입니다. `--wait` 중 Batch 조회나 결과 매니페스트 읽기의 요청 제한·5xx·네트워크 오류는 건너뛰고 계속 조회합니다.
 
 `--remote`나 `status`가 실패하면(자격 증명, 설정, Batch·S3 API 오류) `{"status": "error"}`와 종료 코드 4를 냅니다. 작업 실패(1)와 구분하기 위해서이며, 이때 원격 작업의 상태는 알 수 없습니다.
 
@@ -103,7 +103,7 @@ stdout에는 JSON 객체 하나만 출력하고 로그는 stderr로 보냅니다
 
 1. `Config.load()`와 `build_context`로 boto 세션(기본 리전, Bedrock 리전)과 S3 핸들러를 만듭니다.
 2. AWS 안에서는 SSM SecureString에서 비밀값을 환경 변수로 읽습니다(`load_secrets_from_ssm`). 로컬은 `.env`를 씁니다.
-3. 파이프라인을 실행합니다. 입력 오류는 `rejected`, `PostValidationError`는 `failed`와 `violations`, 그 밖의 예외는 `failed`로 기록합니다. `SystemExit`·`KeyboardInterrupt`는 정리 후 다시 던집니다.
+3. 파이프라인을 실행합니다. 입력 오류는 `rejected`, `PostValidationError`는 `failed`와 `violations`, 그 밖의 예외는 `failed`로 기록합니다. `SystemExit`·`KeyboardInterrupt`는 정리 후 다시 던집니다. 로컬 실행의 Ctrl-C는 `cli.py::main`이 받아 `INTERRUPTED_ERROR`인 `failed` 결과를 JSON으로 출력하고 1로 끝냅니다.
 4. `finally`에서 지표를 보내고, AWS 안에서 `TOPIC_ARN`이 있으면 성공·실패 모두 SNS로 알리며(`format_result_notification`), Batch 실행이면 결과 매니페스트를 저장합니다.
 
 worker는 SIGTERM을 `SystemExit`로 바꿔(`cli.py::_raise_on_sigterm`) Batch 시간 초과나 취소, 호스트 종료 때도 4단계가 실행되게 합니다. 파이프라인은 `asyncio.run` 대신 `runtime.py::run_coroutine`으로 돌려, 중단 시 작업자 스레드에서 진행 중인 Bedrock 호출을 기다리지 않고 바로 정리 단계로 갑니다(Batch는 SIGTERM 약 30초 뒤 SIGKILL). 이때는 매니페스트만 저장하고(`INTERRUPTED_ERROR`) SNS 실패 알림은 보내지 않습니다. 정상 종료는 인터프리터가 남은 작업자 스레드를 기다리므로, worker는 정리 뒤 `os._exit(143)`으로 바로 끝납니다(`cli.py::_work`). 호스트가 사라졌으면 Batch가 재시도하고, 최종 실패면 EventBridge 규칙이 알립니다.
@@ -146,7 +146,7 @@ LLM 라우팅 호출 없이 계획을 따릅니다(`PaperReviewer._enrich`). 참
 
 쉬운 항목은 한두 문장으로, 어려운 항목은 직관 → `$$` 수식 → 작은 예제 → 그림 순으로 씁니다. 길이 때문에 끊을 때만 `has_more`로 이어 쓰며 최대 `MAX_CONTINUATIONS`(4)번입니다.
 
-검수(`_check`)는 지시서, 원문, 측정한 분량과 목표 분량을 보고 0–100점과 빠진 항목(`missing_items`), 반드시 고칠 결함(`must_fix`: 반복, 다시 계산하면 틀리는 수치, 근거 없는 주장·그림 설명), 개선 의견을 돌려줍니다. 배점은 누락 없음 30, 깊이 25, 원문 충실도 25, 흐름 20이며, 빠진 항목이 하나라도 있으면 점수 상한은 69입니다. 코드가 찾은 규칙 위반(`markdown_lint.py::writing_issues`: 원 논문 번호 참조, 영어 어간+한국어 어미, 글 자체 지칭, 단일 `$` 수식, 그대로 옮긴 그림 표식, "(미검증)" 같은 독자용 검증 유보 문구)도 `must_fix`에 더합니다. 절은 점수가 `min_quality_score` 이상이고 빠진 항목과 `must_fix`가 없을 때만 통과하며, 그렇지 않으면 지금까지 가장 좋은 초안과 지적을 함께 넘겨 고쳐 쓰게 합니다. 초안 순위는 통과 여부 → 게시 가능 여부(게시를 막는 오류 없음) → 점수 → 막는 결함 수 순이고(`review_plan.py::draft_rank`, 가이드 루프와 공유), 기각된 수정본의 문제도 다음 지적에 붙입니다. 초안 수는 `max_synthesis_attempts`가 상한이고, 절은 계획된 `##` 제목으로 시작하게 맞춥니다(`ensure_section_heading`).
+검수(`_check`)는 지시서, 원문, 측정한 분량과 목표 분량을 보고 0–100점과 빠진 항목(`missing_items`), 반드시 고칠 결함(`must_fix`: 반복, 다시 계산하면 틀리는 수치, 근거 없는 주장·그림 설명), 개선 의견을 돌려줍니다. 배점은 누락 없음 30, 깊이 25, 원문 충실도 25, 흐름 20이며, 빠진 항목이 하나라도 있으면 점수 상한은 69입니다. 코드가 찾은 규칙 위반(`markdown_lint.py::writing_issues`: 원 논문 번호 참조, 영어 어간+한국어 어미, 글 자체 지칭, 단일 `$` 수식, 그대로 옮긴 그림 표식, "(미검증)" 같은 독자용 검증 유보 문구)도 `must_fix`에 더합니다. 절은 점수가 `min_quality_score` 이상이고 빠진 항목과 `must_fix`가 없을 때만 통과하며, 그렇지 않으면 지금까지 가장 좋은 초안과 지적을 함께 넘겨 고쳐 쓰게 합니다. 초안 순위는 통과 여부 → 게시 가능 여부(게시를 막는 오류 없음) → 점수 → 막는 결함 수 순이고(`review_plan.py::draft_rank`, 가이드 루프와 공유하되 가이드는 평가자의 차단 문제 수를 점수보다 먼저 봅니다), 기각된 수정본의 문제도 다음 지적에 붙입니다. 초안 수는 `max_synthesis_attempts`가 상한이고, 절은 계획된 `##` 제목으로 시작하게 맞춥니다(`ensure_section_heading`).
 
 ### 3.4 전체 편집
 
@@ -184,13 +184,12 @@ LLM 라우팅 호출 없이 계획을 따릅니다(`PaperReviewer._enrich`). 참
 `tech_guide.py::TechGuideGenerator.generate` 순서입니다.
 
 1. 시드 URL과 범위 안 하위 페이지를 수집합니다(`web_research.py::WebResearcher.research`).
-2. 관련성 판정(`TechGuideRelevancePrompt`)을 시드 페이지와 그 하위 페이지만으로 먼저 합니다. 통과하지 못하면 `NotTechnicalContentError`로 거부하므로 검색 비용이 들지 않습니다.
+2. 관련성 판정(`TechGuideRelevancePrompt`)을 시드 페이지와 그 하위 페이지만으로 먼저 합니다. 통과하지 못하면 `NotTechnicalContentError`로 거부하므로 검색 비용이 들지 않습니다. 같은 호출이 문서가 다루는 명령·패키지 이름(`<commands>`)도 돌려주며, 시드 페이지에 단어로 나오는 이름만 씁니다. 하나도 없으면 사이트 호스트 이름(`docs.vllm.ai` → `vllm`)을 씁니다(`web_research.py::product_names`).
 3. 검색 제공자가 있고 검색어가 주어지지 않았으면 계획 단계가 검색어를 만들고(`auto_research`, `max_research_queries`), 검색어마다 번갈아 고른 상위 결과 페이지를 말뭉치에 넣습니다(`fetch_top_results`). 가이드 주제는 계획 단계의 주제를 씁니다.
-4. 개요를 만들고(최대 10개 절) 절마다 깊이(deep/standard/brief)를 정합니다.
-5. 절마다 작성 → 평가(0–100, 평가자도 절의 근거 자료와 전체 목차를 봅니다) → 기준 미달 시 수정(`max_revision_attempts`) 순서로 진행합니다. 수정본이 3점 미만으로 오르고 규칙 위반도 줄지 않으면 수정을 멈춥니다. 모든 절을 쓴 뒤 사실 확인(`verify_grounding`)을 합니다. 공식 페이지에 없는 CLI 플래그·Python 인자(`gpu_memory_utilization=`)·메트릭 이름은 같은 공식 문서(같은 호스트, 호환되는 버전)의 레퍼런스 페이지로 확인합니다. 집필 전에는 서드파티 페이지에만 나오는 식별자를, 사실 확인 전에는 초안에 새로 나온 식별자를 찾으며, 두 조회를 합쳐 검색 3번, 6쪽까지 씁니다(`WebResearcher.add_official_reference`, 식별자와 맞는 경로의 링크를 먼저 씁니다). 사실 확인용 몫을 남기도록 집필 전 조회는 검색 2번, 4쪽까지만 씁니다. 그래도 확인되지 않은 식별자는 PR 체크리스트에 올립니다. 출처 목록에는 요청한 페이지와 같은 공식 문서(호환되는 버전)의 페이지를 넣고, 그 밖의 페이지는 어느 절의 근거 자료에 실제로 들어갔거나 본문이 링크하거나 이미지를 가져온 경우에만 넣습니다. 레퍼런스 페이지는 본문에 남은 식별자를 담은 경우에만 넣고, 이전 버전 문서는 넣지 않습니다(`used_source_urls`). 각 절의 호출에는 말뭉치 전체가 아니라 절 제목·설명과 가장 관련 있는 페이지만 약 6만 자까지 넣고(`ResearchCorpus.relevant_text`), 앞선 절은 직전 두 절 전문과 그 이전 절의 요약만 넘깁니다.
-6. 절이 셋 이상이면 개요에서 "이 가이드에서 다루는 것"을 만듭니다(추가 호출 없음).
+4. 개요를 만들고(최대 10개 절) 절마다 깊이(deep/standard/brief)를 정합니다. 개요 호출은 절마다 그 절을 뒷받침하는 말뭉치 페이지 URL과 그 절이 맡는 개념도 돌려줍니다(`<section_plan>`). URL은 말뭉치에 있는 것만 남기고, 계획의 번호는 개요의 번호 매긴 줄과 맞춥니다(`guide_authority.py::parse_section_plan`). 계획 줄이 없거나 공식 문서 페이지가 하나도 없는 절은 집필 전에 절 제목으로 공식 사이트를 도메인 제한 검색합니다. 검색 결과로 찾은 페이지만 그 절의 공식 출처로 치며, 검색 백엔드가 없거나 찾지 못하면 집필자에게 출처가 보여 주는 내용만 쓰라고 알립니다. 계획이 그 절에 고른 페이지와 제목 조회로 찾은 페이지는 절의 근거 자료 맨 앞에 둡니다. 각 집필 호출에는 다른 절이 맡은 개념 목록(`owned_elsewhere`)을 넘겨 다시 정의하지 않게 합니다.
+5. 절마다 작성 → 평가 → 기준 미달 시 수정(`max_revision_attempts`, 기본 1회) 순서로 진행합니다. 평가자는 절의 근거 자료와 전체 목차를 보고 점수(0–100)와 차단 문제(`<blocking_issues>`: 사실 오류, 절 안의 모순, 출처에 없는 플래그·기본값, 다른 절을 이름이나 번호로 가리키는 표현)를 돌려줍니다. 점수가 기준 이상이고 차단 문제와 코드로 찾은 규칙 위반이 없어야 통과하며, 차단 문제는 수정 지시에 반드시 고칠 항목으로 들어갑니다. 수정본은 원래 초안보다 순위가 높을 때만 남기며, 순위는 통과 여부, 게시 가능 여부, 평가자의 차단 문제 수, 점수, 규칙 위반 수 순서로 비교합니다. 모든 절을 쓴 뒤 사실 확인(`verify_grounding`)을 합니다. 공식 페이지에 없는 CLI 플래그·Python 인자(`gpu_memory_utilization=`)·메트릭 이름은 같은 공식 문서(같은 호스트, 호환되는 버전)의 레퍼런스 페이지로 확인합니다. 집필 전에는 서드파티 페이지에만 나오는 식별자와 공식 출처가 없는 절의 제목을, 사실 확인 전에는 초안에 새로 나온 식별자를 찾으며, 모든 조회를 합쳐 검색 3번, 6쪽까지 씁니다(`WebResearcher.add_official_reference`, 식별자 조회는 검색 뒤에 식별자와 맞는 경로의 링크도 씁니다). 집필 전 조회(서드파티 식별자와 절 제목)는 합쳐서 검색 2번, 4쪽까지만 써서, 사실 확인에 검색 1번과 2쪽 이상이 남습니다. 그래도 확인되지 않은 식별자는 PR 체크리스트에 올립니다. 출처 목록에는 요청한 페이지와 같은 공식 문서(호환되는 버전)의 페이지를 넣고, 그 밖의 페이지는 어느 절의 근거 자료에 실제로 들어갔거나 본문이 링크하거나 이미지를 가져온 경우에만 넣습니다. 레퍼런스 페이지는 본문에 남은 식별자를 낱말 단위로 담은 경우에만 넣고, 이전 버전 문서는 넣지 않습니다(`guide_authority.py::used_source_urls`). 각 절의 호출에는 말뭉치 전체가 아니라 절 제목·설명과 가장 관련 있는 페이지만 약 6만 자까지 넣고(`ResearchCorpus.relevant_text`), 앞선 절은 직전 두 절 전문과 그 이전 절의 요약만 넘깁니다.
 
-가이드 파이프라인(`guide_pipeline.py`)은 완성된 가이드를 `TechGuideGenerator.classify`로 분류해 블로그 주제 하나, 통제 태그, 세부 태그, `seo_title` 후보를 받고, `formatting.py::build_post_meta`가 spec에 맞게 확정합니다. 문서 사이트의 이미지는 외부 링크로 남기고 검증에서 warning으로 표시합니다.
+가이드 파이프라인(`guide_pipeline.py`)은 완성된 가이드를 `TechGuideGenerator.classify`로 분류해 블로그 주제 하나, 통제 태그, 세부 태그, `seo_title` 후보를 받고, `formatting.py::build_post_meta`가 spec에 맞게 확정합니다. 분류는 개요가 아니라 완성된 본문의 헤딩과 문단 첫 문장으로 하므로 본문에 없는 내용을 태그로 달지 않습니다. 목차는 블로그 레이아웃이 만들므로 본문에 따로 넣지 않습니다. 문서 사이트의 이미지는 외부 링크로 남기고 검증에서 warning으로 표시합니다.
 
 ## 5. 데이터 수집과 파싱
 
@@ -204,7 +203,7 @@ LLM 라우팅 호출 없이 계획을 따릅니다(`PaperReviewer._enrich`). 참
 ### 5.2 파싱
 
 - arXiv 소스는 arXiv HTML(`arxiv.org/html`, 실패 시 ar5iv)을 먼저 씁니다(`parser.py::HTMLRichParser`). 실패하거나 내용이 비면 PDF로 넘어갑니다.
-- PDF는 Upstage Document Parse(`parser.py::PDFParser`)로 파싱하고, 실패하면 PyMuPDF로 텍스트만 추출합니다. 빈 응답은 캐시하지 않습니다.
+- PDF는 Upstage Document Parse(`parser.py::PDFParser`)로 파싱하고, 실패하면 PyMuPDF로 텍스트만 추출하고(`Content.text_only`), 그림과 표가 없다는 메모를 PR 체크리스트에 올립니다. Upstage 호출은 재시도하지 않습니다. 빈 응답은 캐시하지 않습니다.
 - 그림은 비전 모델(`figure_analysis_model_id`)로 분석하고, `parser.py::attach_figure_context`가 본문의 이미지 마커에 경로와 분석을 붙입니다. 짝짓기는 순서가 아니라 요소 ID와 파일명으로 합니다.
 
 ### 5.3 HTML을 텍스트로
@@ -219,7 +218,7 @@ LLM 라우팅 호출 없이 계획을 따릅니다(`PaperReviewer._enrich`). 참
 
 `content_extractor.py::ContentExtractor`가 두 가지를 추출합니다.
 
-- 속성(`extract_attributes`): 제목, 저자, 발행 조직(`affiliation`), spec 주제 중 하나(`category`), 통제 태그, 세부 키워드, `seo_title`. 키워드 재사용 후보로 블로그 글에 이미 쓰인 태그를 넘깁니다(`runtime.py::RunContext.require_blog_tags`).
+- 속성(`extract_attributes`): 제목, 저자, 발행 조직(`affiliation`), 규칙 파일의 주제 중 하나(`category`), 통제 태그, 세부 키워드, `seo_title`. 키워드 재사용 후보로 블로그 글에 이미 쓰인 태그를 넘깁니다(`runtime.py::RunContext.require_blog_tags`).
 - 인용(`extract_citations`, 리뷰만): 참고문헌을 페이지 단위로 추출하며 최대 `MAX_CITATION_PAGES`(20)회입니다.
 
 인용 요약(`citation_summarizer.py::CitationSummarizer`)은 초록을 우선합니다. Crossref, OpenAlex, Semantic Scholar(API 키가 있을 때만), arXiv 순서로 메타데이터를 찾고(`citation_metadata.py`, 속도 제한 포함, `Retry-After`가 60초를 넘으면 그 실행 동안 해당 제공자를 건너뜀), 제목 유사도 0.9 이상이고 버전 표기와 단어가 바뀌지 않은 경우(하이픈·영국식 철자 차이는 같은 단어)만 같은 논문으로 인정합니다(OpenAlex는 상위 5건 중 첫 일치 결과). 제목의 내용어를 하나도 담지 않은 초록은 다른 논문의 것으로 보고 버리며, OpenAlex의 arXiv 레코드 초록은 믿지 않고 DOI의 arXiv ID로 arXiv에서 받습니다. 맞지 않는 초록은 요약하지 않으며, 초록도 본문도 찾지 못한 인용은 리뷰 노트(PR 체크리스트)에 올립니다. `prefer_full_text: true`면 arXiv 전문을 받습니다.
@@ -254,13 +253,13 @@ LLM 라우팅 호출 없이 계획을 따릅니다(`PaperReviewer._enrich`). 참
 
 블로그 파일에 아직 없는 생성기 쪽 한도는 코드 기본값을 씁니다. 세부 태그 검증 상한은 10개(`TagSpec.max_specific`)이고 생성 목표는 5개(`GENERATED_SPECIFIC_TAGS`)입니다. 통제 태그는 생성 시 최대 3개(`max_controlled`)이며, `seo_title` 기준 길이는 70자입니다. 블로그 파일의 `math` 항목(정의 매크로 목록)은 읽지 않습니다. YAML 1.1 파서가 `on`을 불리언으로 읽는 문제는 `TagSpec._unbool`이 되돌립니다.
 
-실행 중에는 GitHub 연동이 켜져 있으면 블로그 `base_branch`의 정본을 읽고(`post_conventions.py::load_conventions`), 읽지 못하면 사본을 쓰며 사본과 다르면 경고합니다. CI의 drift 검사는 둘이 다르면 실패합니다(12절).
+실행 중에는 GitHub 연동이 켜져 있으면 블로그 `base_branch`의 정본을 읽고(`post_conventions.py::load_conventions`), 읽지 못하면 사본을 쓰며 사본과 다르면 경고합니다. CI의 불일치 검사는 둘이 다르면 실패합니다(12절).
 
 ### 6.2 결정적 후처리
 
 검증 전에 코드가 다음을 고칩니다.
 
-- **front matter 조립**(`formatting.py`): `author`는 쓰지 않습니다. 논문 글은 `paper_author`(발행 조직)와 `subtitle`(모델이 쓴 부제 → 본문 첫 H1 → TL;DR 첫 문장 순, 제목과 같으면 다음 후보)을 둡니다. `seo_title`은 제목이 70자를 넘을 때만 넣으며, 모델 후보가 없거나 길면 콜론 앞부분이나 단어 경계에서 자릅니다(`shorten_title`). 카테고리 주제와 표지는 spec에서 정하고(`resolve_topic`, `PostConventions.cover_for`), `use_math`는 `$$`가 있을 때만 켭니다. `date`는 논문 발행일입니다.
+- **front matter 조립**(`formatting.py`): `author`는 쓰지 않습니다. 논문 글은 `paper_author`(발행 조직)와 `subtitle`(모델이 쓴 부제 → 본문 첫 H1 → TL;DR 첫 문장 순, 제목과 같으면 다음 후보)을 두고, 논문에 DOI가 있으면 블로그가 인용 수를 조회하는 `paper_doi`를 둡니다. `seo_title`은 제목이 70자를 넘을 때만 넣으며, 모델 후보가 없거나 길면 콜론 앞부분이나 단어 경계에서 자릅니다(`shorten_title`). 카테고리 주제와 표지는 spec에서 정하고(`resolve_topic`, `PostConventions.cover_for`), `use_math`는 `$$`가 있을 때만 켭니다. `date`는 논문 발행일입니다.
 - **태그**(`tags.py::normalize_tags`): 공백·`_`는 하이픈, `&`는 `and`, `/`와 따옴표는 삭제, 연속 하이픈 축약, 첫 단어가 아닌 기능어는 소문자로 바꿉니다. 그다음 별칭을 대체 태그로 바꾸고, 대소문자를 무시해 중복을 없애며, 제목 전체·콜론 앞·콜론 뒤와 같은 태그를 지웁니다. 통제 태그는 닫힌 목록만 남기고, 세부 태그 중 통제 태그와 같은 것은 통제 쪽으로 옮깁니다. 발행 순서는 세부 태그 다음 통제 태그입니다.
 - **수식**(`markdown_math.py::normalize_math`): `\(…\)`·`\\(…\\)`는 `$$…$$`로, `\[…\]`는 앞뒤 빈 줄을 둔 디스플레이 `$$`로 바꿉니다. `$$` 안의 `\_`는 `\text{}`·`\texttt{}` 안을 빼고 `_`로 되돌리고, 한 줄 전체가 `$$`인 수식 앞뒤에 빈 줄을 넣습니다(표·목록 제외). 확률·정책 인자 안의 조건부 `\|`·`\Vert`는 `\mid`로, 합의 상한으로 쓰인 `\lVert x \rVert`(길이)는 `\lvert x \rvert`로 바꿉니다(노름과 KL 발산의 `\|`는 그대로). 코드와 단일 `$`는 건드리지 않습니다.
 - **Markdown**(`markdown_lint.py::lint_markdown`): 헤딩 앞 빈 줄, 생성용 envelope 태그 제거, H1을 H2로 올리고 한 단계 넘게 깊어진 헤딩을 앞 헤딩 바로 아래 단계로 올리기, 네 번째부터의 콜아웃(`> **라벨:** …`)을 일반 문단으로 풀기, 가짜 HTML 태그 이스케이프를 처리합니다. `drop_unknown_images`는 논문 그림이 아닌 이미지를 지우고, `fill_image_alts`는 빈 alt를 그림 캡션으로 채우며, 한국어 글의 영어 alt는 가장 가까운 헤딩으로 바꿉니다. 원 논문 번호 참조 같은 규칙 위반(`writing_issues`)은 게시 직전 본문에서 다시 찾아 PR 체크리스트에 올립니다.
@@ -277,7 +276,7 @@ LLM 라우팅 호출 없이 계획을 따릅니다(`PaperReviewer._enrich`). 참
 | `title` | error | 제목이 비어 있음 |
 | `categories` | error | `[<유형>, <주제>]`가 아님, 모르는 유형·주제, 산출물 종류와 유형의 `paper` 여부 불일치 |
 | `cover` | error | `cover_for(유형, 주제)`와 다름 |
-| `paper-author` | error | 논문 글에서 비었거나 `et al.` 또는 사람 이름 나열, 가이드에 있음 |
+| `paper-author` | error | 논문 글에서 비었거나 `et al.`이 있음, 가이드에 있음 |
 | `subtitle` | error | 논문 글에서 비었거나 제목과 같음 |
 | `seo-title` | error | 제목이 70자 초과인데 없음, 또는 `seo_title`이 70자 초과 |
 | `translation` | error | `lang`이 spec의 `languages`(`ko`/`en`)가 아님, 번역본에 `translation_id`가 없음, `translation_id`가 있는데 `lang`이 없음 |
@@ -341,7 +340,7 @@ PR 본문(`build_pr_body`)에는 논문 ID, PDF URL, 파싱 방식, 글자 수, 
 
 ### 8.2 재시도와 제한 시간
 
-재시도는 한 계층만 소유합니다. botocore는 standard 모드에서 1회만 시도하고(연결 30초, 읽기 3600초: 비스트리밍 호출이 출력 128k 토큰을 끝까지 생성하는 시간), `utils/retry.py::RetryableBase._retry`가 tenacity로 throttling, 5xx, 연결·읽기 시간 초과만 지수 백오프와 지터로 재시도합니다. 읽기 시간 초과는 긴 생성 전체를 다시 과금하므로 한 번만 재시도합니다. AccessDenied, ValidationException, ResourceNotFound, 예산 초과, 입력 검증 오류는 바로 실패합니다. `utils/batch.py::BatchProcessor`(코드 분석 일괄 처리)는 실패한 항목만 다시 처리합니다.
+재시도는 한 계층만 소유합니다. botocore는 standard 모드에서 1회만 시도하고(연결 30초, 읽기 3600초: 비스트리밍 호출이 출력 128k 토큰을 끝까지 생성하는 시간), `utils/retry.py::RetryableBase._retry`가 tenacity로 요청 제한, 5xx, 연결·읽기 시간 초과만 지수 백오프와 지터로 재시도합니다. 읽기 시간 초과는 긴 생성 전체를 다시 과금하므로 한 번만 재시도합니다. AccessDenied, ValidationException, ResourceNotFound, 예산 초과, 입력 검증 오류는 바로 실패합니다. `utils/batch.py::BatchProcessor`(코드 분석 일괄 처리)는 실패한 항목만 다시 처리합니다.
 
 ### 8.3 예산과 비용
 
@@ -381,8 +380,8 @@ PR 본문(`build_pr_body`)에는 논문 ID, PDF URL, 파싱 방식, 글자 수, 
 - **로그**: `logger.py`가 stderr로 쓰고, 로컬에서는 `logs/`에도 남깁니다. 모든 실행 끝에 `run_metrics` 한 줄(종류, 성공, 토큰, 호출 수, 비용, 시간)을 남깁니다.
 - **지표**: `metrics.py::MetricsEmitter.emit_run`이 `ScholarLens` 네임스페이스에 `InputTokens`, `OutputTokens`, `TotalTokens`, `LLMCalls`, `EstimatedCostUSD`, `DurationSeconds`, `Success`, `Failure`를 `Mode` 차원이 있는 것과 없는 것 두 벌로 보냅니다(AWS 안에서만).
 - **경보**:
-  - 1시간 추정 비용 합계 50달러 초과, 경보 1개. 지표는 실행이 끝날 때 보내므로 진행 중인 실행을 멈추지 못합니다(8.3절)
-  - EventBridge의 Batch `FAILED` 이벤트를 SNS로 전달. 앱이 직접 알리고 종료 코드 10·11로 끝난 작업은 제외하고, 그 밖의 종료 코드(시간 초과·중단 143, OOM·비정상 종료, worker 실행 전 Python·인자 오류 1·2, 알림 실패 4)와 종료 코드가 없는 경우(호스트 유실)는 알림
+  - 1시간 추정 비용 합계 50달러 초과, 경보 1개. 지표는 실행이 끝날 때 보내므로 진행 중인 실행을 멈추지 못합니다(8.3절). 지표는 AWS 안에서만 보내므로 이 경보는 Batch 실행만 다루고, 로컬 실행 비용은 `JobResult.estimated_cost_usd`와 `run_metrics` 로그로만 확인합니다
+  - EventBridge의 Batch `FAILED` 이벤트를 SNS로 전달. 앱이 직접 알리고 종료 코드 10·11로 끝난 작업은 제외하고, 그 밖의 종료 코드(시간 초과·중단 143, OOM·비정상 종료, worker 실행 전 Python·인자 오류 1·2, 알림 실패 4)와 종료 코드가 없는 경우(호스트 유실)는 알림. 이 규칙의 SNS 전달이 실패하면(`FailedInvocations`) 경보 하나가 같은 토픽으로 알림
   - 실행 결과는 앱 알림과 이 규칙이 다루므로 로그 `ERROR` 경보는 두지 않습니다. 실행을 멈추지 않는 문제는 warning 로그로 남깁니다. PR 생성 실패처럼 결과에 남는 경고는 알림에 모두 적고, 알림·매니페스트 저장 실패는 로그에만 남습니다(실패 실행의 알림 실패는 위의 종료 코드 4로 보고). 성공한 실행의 알림이 실패하면 작업은 0으로 끝나 아무도 알리지 않지만, 결과 매니페스트가 있어 `status`로 결과를 볼 수 있습니다.
 - **결과 매니페스트**: 원격 실행의 최종 상태는 S3 매니페스트와 `status` 명령으로 확인합니다.
 

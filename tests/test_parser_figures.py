@@ -165,6 +165,7 @@ class TestFitzTextFallback:
         parser = PDFParser.__new__(PDFParser)  # no Bedrock/Upstage init
         figures, content = await parser._parse_with_fallback(one_page_pdf)
         assert figures == []  # fallback is text-only
+        assert content.text_only
         assert "Hello figure" in content.text
 
     async def test_fallback_raises_on_empty_text(self, tmp_path: Path) -> None:

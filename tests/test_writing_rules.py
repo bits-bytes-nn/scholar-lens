@@ -53,6 +53,19 @@ from scholar_lens.src.review_plan import (
         ("CUDA 12.1 장치 드라이버", False),
         ("vLLM 0.6.3 장애 사례", False),
         ("1.5 장점이 있습니다", False),
+        ("유휴 GPU를 1 절전 모드로 전환합니다", False),
+        ("배치 크기를 16 절삭 없이 유지합니다", False),
+        ("그림 2번째 행을 보세요", False),
+        ("표 3줄을 추가합니다", False),
+        ("3절", True),
+        ("3절과 4절", True),
+        ("2.1절까지", True),
+        ("그림 2", True),
+        ("그림 2a에서", True),
+        ("표 1, 표 2", True),
+        ("수식 (3)을 풀면", True),
+        ("표 2를 보면", True),
+        ("그림 1보다 작습니다", True),
     ],
 )
 def test_numbered_ref_ignores_counters(text: str, flagged: bool) -> None:
@@ -439,7 +452,21 @@ def test_korean_equation_references(text: str, flagged: bool) -> None:
 
 
 @pytest.mark.parametrize(
-    "answer", ["1. None", "- None —", "none (all covered)", "2) 없음"]
+    "answer",
+    [
+        "1. None",
+        "- None —",
+        "none (all covered)",
+        "2) 없음",
+        "None — all items are covered",
+        "없음: 모두 반영됨",
+        "Nothing missing.",
+        "N/A",
+        "해당 없음",
+        "없습니다",
+        "- 없음 (모두 반영됨)",
+        "none;",
+    ],
 )
 def test_numbered_and_annotated_none_answers_are_empty(answer: str) -> None:
     from scholar_lens.src.review_plan import parse_lines
@@ -471,15 +498,6 @@ def test_edit_that_trades_one_slip_for_another_is_skipped() -> None:
     edit = Edit(find="Table 2에서 결과를", replace="이 절에서 결과를")
     out, applied, skipped = apply_edits(text, [edit], max_edits=3)
     assert applied == 0 and out == text and "self-reference" in skipped[0]
-
-
-@pytest.mark.parametrize(
-    "answer", ["None — all items are covered", "없음: 모두 반영됨", "Nothing missing."]
-)
-def test_explained_none_answers_are_empty(answer: str) -> None:
-    from scholar_lens.src.review_plan import parse_lines
-
-    assert parse_lines(answer) == []
 
 
 def test_config_section_is_not_a_self_reference() -> None:

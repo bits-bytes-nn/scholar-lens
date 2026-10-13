@@ -117,6 +117,43 @@ def test_invalid_request_is_rejected(capsys: pytest.CaptureFixture) -> None:
     assert _output(capsys)["status"] == "rejected"
 
 
+def test_ctrl_c_in_a_local_run_prints_an_interrupted_result(
+    capsys: pytest.CaptureFixture,
+) -> None:
+    from scholar_lens.src.runtime import INTERRUPTED_ERROR
+
+    with mock.patch("scholar_lens.src.runtime.run_job", side_effect=KeyboardInterrupt):
+        assert cli.main(["summarize", "2106.09685", "--no-pr"]) == cli.EXIT_FAILED
+    output = _output(capsys)
+    assert output["status"] == "failed"
+    assert output["error"] == INTERRUPTED_ERROR
+    assert output["kind"] == "summarize"
+
+
+def test_ctrl_c_prints_the_recorded_cost_and_tokens(
+    capsys: pytest.CaptureFixture,
+) -> None:
+    from scholar_lens.src.runtime import INTERRUPTED_ERROR
+
+    recorded = JobResult(
+        kind="summarize",
+        input="2106.09685",
+        error=INTERRUPTED_ERROR,
+        input_tokens=1_200,
+        estimated_cost_usd=0.42,
+        duration_seconds=12.5,
+    )
+    interrupt = KeyboardInterrupt()
+    interrupt.job_result = recorded  # type: ignore[attr-defined]
+    with mock.patch("scholar_lens.src.runtime.run_job", side_effect=interrupt):
+        assert cli.main(["summarize", "2106.09685", "--no-pr"]) == cli.EXIT_FAILED
+    output = _output(capsys)
+    assert output["error"] == INTERRUPTED_ERROR
+    assert output["input_tokens"] == 1_200
+    assert output["estimated_cost_usd"] == 0.42
+    assert output["duration_seconds"] == 12.5
+
+
 class TestWorker:
     @pytest.fixture(autouse=True)
     def _no_signal_handler(self) -> Any:

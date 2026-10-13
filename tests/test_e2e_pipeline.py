@@ -204,7 +204,6 @@ class TestGuideEndToEnd:
         context, _ = pipeline_env
         guide = TechGuide(
             topic="Serving LLMs with vLLM",
-            synopsis="PagedAttention, continuous batching, deployment.",
             body=(
                 "# vLLM 가이드\n\n## PagedAttention 이해하기\n\nKV 캐시를 페이지 단위로 관리합니다.\n"
                 "블록 크기 \\(B\\)를 정합니다.\n\n![arch](https://docs.vllm.ai/arch.png)\n"

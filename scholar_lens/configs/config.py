@@ -106,8 +106,9 @@ class Citations(_Section):
         default=LanguageModelId.CLAUDE_V5_5_HAIKU
     )
     # When True, download each cited paper's full text (slow, arXiv-heavy). When
-    # False (default), summarise from the abstract resolved via Crossref/Semantic
-    # Scholar/arXiv metadata — far fewer calls and no arXiv rate-limit storms.
+    # False (default), summarise from the abstract resolved via Crossref, then
+    # OpenAlex, then Semantic Scholar (only with an API key), then arXiv — far
+    # fewer calls and no arXiv rate-limit storms.
     prefer_full_text: bool = Field(default=False)
 
 
@@ -191,7 +192,7 @@ class TechGuide(_Section):
     # Per-section evaluate-and-revise loop (the review pipeline's evaluate gate):
     # sections scoring below the threshold are revised up to N times.
     min_quality_score: int = Field(default=75, ge=0, le=100)
-    max_revision_attempts: int = Field(default=2, ge=0, le=5)
+    max_revision_attempts: int = Field(default=1, ge=0, le=5)
     # Soft limit on one guide run (None = no limit); default keeps a run near
     # $15 on Opus 5.5. Past it the remaining sections skip evaluate/revise/
     # grounding; past 1.5x the run aborts.

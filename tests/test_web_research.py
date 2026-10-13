@@ -84,9 +84,19 @@ class TestResearchCorpus:
         )
         assert corpus.image_urls == ["a", "b", "c"]
 
-    def test_combined_text_truncates(self) -> None:
-        corpus = ResearchCorpus(pages=[PageContent("u", "t", "x" * 1000)])
-        assert len(corpus.combined_text(max_chars=100)) == 100
+    def test_combined_text_labels_sources_by_authority(self) -> None:
+        from scholar_lens.src.web_research import OfficialDocs
+
+        corpus = ResearchCorpus(
+            pages=[
+                PageContent("https://docs.x.dev/a", "A", "x"),
+                PageContent("https://blog.x.io/b", "B", "y"),
+            ]
+        )
+        text = corpus.combined_text(OfficialDocs.from_urls(["https://docs.x.dev/"]))
+        assert "## Source (official documentation): https://docs.x.dev/a" in text
+        assert "## Source (third-party): https://blog.x.io/b" in text
+        assert "## Source: https://docs.x.dev/a" in corpus.combined_text()
 
 
 class TestWebResearcherFetch:
@@ -165,18 +175,6 @@ class TestRunSearches:
         assert len(corpus.pages) == 1
         assert provider.seen == ["q1", "q2"]
         assert [r.title for r in corpus.search_results] == ["r:q1", "r:q2"]
-
-    def test_research_drives_searches_via_run_searches(self) -> None:
-        url = "https://fastapi.tiangolo.com/"
-        provider = _StubProvider()
-        researcher = _researcher(
-            {url: (200, "text/html", DOCS_HTML)}, search_provider=provider
-        )
-        corpus = researcher.research(
-            [url], discover_subpages=False, search_queries=["fastapi tutorial"]
-        )
-        assert provider.seen == ["fastapi tutorial"]
-        assert len(corpus.search_results) == 1
 
     def test_fetch_top_uses_content_without_fetching(self) -> None:
         # A result that carries cleaned content (Tavily) becomes a page directly,
@@ -593,6 +591,22 @@ def test_relevant_text_records_the_pages_it_includes() -> None:
     assert included == {"https://d.dev/a"}  # the second page found no room
 
 
+def test_relevant_text_puts_preferred_pages_first() -> None:
+    from scholar_lens.src.web_research import PageContent, ResearchCorpus
+
+    corpus = ResearchCorpus(
+        pages=[
+            PageContent(url="https://d.dev/a", title="A", text="kv cache " * 600),
+            PageContent(url="https://d.dev/b", title="B", text="unrelated " * 600),
+        ]
+    )
+    included: set[str] = set()
+    corpus.relevant_text(
+        "kv cache", max_chars=7_000, included=included, prefer=["https://d.dev/b"]
+    )
+    assert included == {"https://d.dev/b"}
+
+
 @pytest.mark.parametrize(
     ("path", "expected"),
     [
@@ -679,35 +693,25 @@ class TestOfficialDocsAfterRedirects:
 
 
 class TestProductNames:
-    def test_names_from_docs_path_commands_and_host(self) -> None:
+    def test_only_names_the_seed_pages_show_are_kept(self) -> None:
         from scholar_lens.src.web_research import product_names
 
-        url = "https://huggingface.co/docs/peft/quicktour"
-        seed = PageContent(
-            url=url,
-            title="t",
-            text="```bash\naccelerate launch --config_file c.yaml train.py\n"
-            "accelerate launch --num_processes 2 train.py\n"
-            "pip install --upgrade peft\n```",
-        )
-        assert product_names([url], [seed]) == ["peft", "accelerate", "huggingface"]
+        url = "https://docs.astral.sh/uv/"
+        seed = PageContent(url, "uv", "```console\n$ uv sync\n$ uvx ruff\n```")
+        names = product_names("uv, `uvx`\nastral-cli, UV", [url], [seed])
+        assert names == ["uv", "uvx"]
 
-    def test_host_label_for_a_product_site(self) -> None:
+    def test_host_label_only_when_no_name_is_shown(self) -> None:
         from scholar_lens.src.web_research import product_names
 
-        assert product_names(["https://docs.vllm.ai/en/latest/"], []) == ["vllm"]
-
-    def test_environment_assignments_are_not_the_command(self) -> None:
-        from scholar_lens.src.web_research import product_names
-
-        url = "https://docs.vllm.ai/en/latest/serving/"
-        seed = PageContent(
-            url=url,
-            title="t",
-            text="```bash\nCUDA_VISIBLE_DEVICES=0,1 vllm serve m "
-            "--tensor-parallel-size 2\n```",
-        )
-        assert product_names([url], [seed]) == ["vllm"]
+        url = "https://docs.astral.sh/uv/"
+        seed = PageContent(url, "uv", "see docs.astral.sh/uv for more")
+        assert product_names("none", [url], [seed]) == ["astral"]
+        # Any Python page shows "None": the answer still names nothing.
+        python = PageContent(url, "uv", "Set `seed=None` to disable.")
+        for none in ("none", "None.", "N/A"):
+            assert product_names(none, [url], [python]) == ["astral"], none
+        assert product_names("", ["https://vllm.readthedocs.io/en/"], []) == ["vllm"]
 
 
 class TestFetchFailures:
@@ -863,39 +867,6 @@ def test_a_flapping_dns_check_still_fetches_the_page(
     assert corpus.pages and "Install it." in corpus.pages[0].text
 
 
-@pytest.mark.parametrize(
-    "block,product",
-    [
-        ('HF_TOKEN="a b" vllm serve m --port 1', "vllm"),
-        ("sudo vllm serve m --port 1", "vllm"),
-        ("accelerate launch \\\n  --config_file x.yaml train.py", "accelerate"),
-        ("CUDA_VISIBLE_DEVICES=0,1 vllm serve m --tp 2", "vllm"),
-        ("sudo -E vllm serve --port 1", "vllm"),
-        ("env HF=1 vllm serve --x", "vllm"),
-        ("cd repo && vllm serve --x", "vllm"),
-        ("nohup vllm serve --x &", "vllm"),
-        ("timeout 600 vllm serve --x", "vllm"),
-        ("srun -N2 torchrun --nproc_per_node 8 train.py", "torchrun"),
-        ("bash -c 'vllm serve --x'", "vllm"),
-        ("kubectl exec pod -- vllm serve --x", "vllm"),
-        ("(venv) $ vllm serve --x", "vllm"),
-        ("accelerate launch \\\r\n  --config_file x.yaml train.py", "accelerate"),
-    ],
-)
-def test_product_names_read_the_command_not_its_prefix(
-    block: str, product: str
-) -> None:
-    from scholar_lens.src.web_research import PageContent, product_names
-
-    # Twice: a command counts once it recurs (one stray example does not).
-    page = PageContent(
-        url="https://docs.x.dev/guide",
-        title="t",
-        text=f"```bash\n{block}\n{block}\n```\n",
-    )
-    assert product_names(["https://docs.x.dev/guide"], [page])[0] == product
-
-
 def test_cut_never_leaves_a_math_span_open() -> None:
     from scholar_lens.src.web_research import _cut
 
@@ -911,19 +882,8 @@ def test_cut_ignores_shell_dollars_in_code() -> None:
     assert len(out) > 15_000 and "echo $$ > pid" in out
 
 
-def test_a_single_stray_command_is_not_a_product() -> None:
-    from scholar_lens.src.web_research import PageContent, product_names
-
-    page = PageContent(
-        url="https://docs.x.dev/guide",
-        title="t",
-        text="```bash\nnumactl --cpunodebind=0 vllm serve --x\nfoo --bar\n```\n",
-    )
-    assert product_names(["https://docs.x.dev/guide"], [page]) == ["x"]
-
-
 def test_short_product_names_match_as_command_words() -> None:
-    from scholar_lens.src.tech_guide import unverified_identifiers
+    from scholar_lens.src.guide_authority import unverified_identifiers
 
     body = "```bash\nhf download m --local-dir d\ndocker run -e HF_TOKEN=t --gpus all img\n```"
     found = unverified_identifiers(body, "hf download --local-dir", ["hf"])
@@ -945,41 +905,3 @@ def test_cut_keeps_the_closing_dollar_of_inline_math() -> None:
 
     text = "The attention cost grows as $O(n^2)$\n\nNext paragraph " + "x " * 40
     assert _cut(text, 40).endswith("$O(n^2)$")
-
-
-def test_docs_section_names_are_not_products() -> None:
-    from scholar_lens.src.web_research import product_names
-
-    names = product_names(["https://kubernetes.io/docs/reference/kubectl/"], [])
-    assert "reference" not in names and names[0] == "kubernetes"
-
-
-def test_path_product_needs_the_pages_to_use_it() -> None:
-    from scholar_lens.src.web_research import PageContent, product_names
-
-    url = "https://huggingface.co/docs/peft/quicktour"
-    page = PageContent(
-        url=url, title="PEFT quicktour", text="```bash\npip install peft\n```"
-    )
-    assert product_names([url], [page])[0] == "peft"
-    setup = "https://kubernetes.io/docs/setup/"
-    other = PageContent(url=setup, title="Getting started", text="")
-    assert "setup" not in product_names([setup], [other])
-    lang = "https://python.langchain.com/docs/integrations/"
-    assert "langchain" in product_names([lang], [])
-
-
-def test_title_words_do_not_make_a_path_product() -> None:
-    from scholar_lens.src.web_research import PageContent, product_names
-
-    url = "https://kubernetes.io/docs/reference/kubectl/quick-reference/"
-    page = PageContent(
-        url=url, title="kubectl Quick Reference", text="```bash\nkubectl get pods\n```"
-    )
-    assert "reference" not in product_names([url], [page])
-
-
-def test_a_generic_tool_names_its_own_docs_site() -> None:
-    from scholar_lens.src.web_research import product_names
-
-    assert product_names(["https://helm.sh/docs/intro/using_helm/"], [])[0] == "helm"

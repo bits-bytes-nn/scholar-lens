@@ -109,14 +109,17 @@ poetry run python scripts/put_secrets.py github-token   # 비밀값 하나를 �
 
 Batch 작업은 마지막 배포 때 이미지에 넣은 `config.yaml`을 쓰므로, 설정을 고치면 `cdk deploy`를 다시 실행합니다([스택 상세](./docs/design.md#10-인프라)).
 
+스택의 1시간 비용 경보는 Batch 실행만 다룹니다. 로컬 실행은 CloudWatch 지표를 보내지 않으므로 출력된 결과의 `estimated_cost_usd`로 비용을 확인합니다([경보](./docs/design.md#11-관측성)).
+
 ## 개발
 
 ```bash
-poetry run pytest                                # 단위·파이프라인 테스트(AWS·네트워크 없음)
+poetry run pytest tests/ -W ignore::DeprecationWarning --cov=scholar_lens --cov=scripts --cov-fail-under=85   # CI와 같은 명령, AWS·네트워크 없음
 poetry run ruff check scholar_lens scripts tests
 poetry run black --check scholar_lens scripts tests
 poetry run mypy scholar_lens scripts
 poetry run python scripts/ci_synth_check.py      # 가짜 계정으로 CDK synth
+actionlint                                       # GitHub 워크플로 검사
 ```
 
 ## 변경 이력

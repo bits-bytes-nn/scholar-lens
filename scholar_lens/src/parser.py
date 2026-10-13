@@ -63,6 +63,9 @@ class FigureParseError(ParserError):
 class Content(BaseModel):
     model_config = ConfigDict(frozen=False)
     text: str = Field(default="")
+    # The layout parser failed and only the PDF's text layer was read, so the
+    # paper's figures and tables are unavailable.
+    text_only: bool = Field(default=False)
 
     def __str__(self) -> str:
         return f"Content(text='{self.text[:50]}...')"
@@ -714,7 +717,7 @@ class PDFParser(RichParser):
             )
 
         logger.info("PyMuPDF fallback parser extracted %d characters", len(text))
-        return [], Content(text=text if extract_text else "")
+        return [], Content(text=text if extract_text else "", text_only=True)
 
     @staticmethod
     def _extract_text_with_fitz(pdf_path: Path) -> str:

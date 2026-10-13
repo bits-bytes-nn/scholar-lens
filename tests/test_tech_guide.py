@@ -68,6 +68,8 @@ def _make_generator(
     gen.notes = []
     gen._section_source_urls = set()
     gen.researcher = MagicMock()
+    gen.researcher.add_official_reference = MagicMock(return_value=[])
+    gen._reference_pages, gen._reference_ids = [], []
     gen.relevance_chain = MagicMock()
     gen.research_plan_chain = MagicMock()
     gen.synopsis_chain = MagicMock()
@@ -486,6 +488,7 @@ class TestEvaluateAndRevise:
             sources="src",
             available_images="(none)",
             final_outline="1. Intro",
+            owned_elsewhere="- none",
         )
         gen.section_chain.ainvoke.assert_awaited()  # a revision happened
         assert out == "## Revised\ndeeper body"
@@ -515,6 +518,7 @@ class TestEvaluateAndRevise:
             sources="src",
             available_images="(none)",
             final_outline="1. Intro",
+            owned_elsewhere="- none",
         )
         assert out == "## Draft\noriginal"  # original kept, not the worse rewrite
 
@@ -543,6 +547,7 @@ class TestEvaluateAndRevise:
             sources="src",
             available_images="(none)",
             final_outline="1. 설치",
+            owned_elsewhere="- none",
         )
         assert out == "## 설치\n\n이 절에서 설치합니다."
 
@@ -564,6 +569,7 @@ class TestEvaluateAndRevise:
             sources="src",
             available_images="(none)",
             final_outline="1. Intro",
+            owned_elsewhere="- none",
         )
         gen.section_chain.ainvoke.assert_not_awaited()  # no revision needed
         assert out == "## Good\nbody"
@@ -584,6 +590,7 @@ class TestEvaluateAndRevise:
             sources="src",
             available_images="(none)",
             final_outline="1. Intro",
+            owned_elsewhere="- none",
         )
         gen.evaluation_chain.ainvoke.assert_not_awaited()
         assert out == "## Draft\nbody"
@@ -611,6 +618,7 @@ class TestEvaluateAndRevise:
             sources="src",
             available_images="(none)",
             final_outline="1. Intro",
+            owned_elsewhere="- none",
         )
         gen.section_chain.ainvoke.assert_awaited()  # revision happened
 
@@ -628,17 +636,17 @@ class TestEvaluateAndRevise:
             sources="the sources",
             available_images="(none)",
             final_outline="1. Intro\n2. Serving",
+            owned_elsewhere="- none",
         )
 
     @pytest.mark.parametrize(
         ("scores", "revisions"),
         [
             (["50", "30"], 1),  # a worse revision ends the loop
-            (["50", "52"], 1),  # so does one gaining under 3 points
-            (["50", "60", "70"], 2),  # real gains keep revising
+            (["50", "52", "54"], 2),  # any gain keeps revising
         ],
     )
-    async def test_revisions_stop_once_they_stall(
+    async def test_revisions_stop_once_one_is_no_better(
         self, scores: list[str], revisions: int
     ) -> None:
         gen = _make_generator(min_quality_score=80, max_revision_attempts=2)
@@ -747,7 +755,7 @@ class TestTokenBudget:
         gen._token_tracker = tracker
         gen.taxonomy_chain = MagicMock()
         gen.taxonomy_chain.ainvoke = AsyncMock(return_value={"topic": "x"})
-        guide = MagicMock(topic="t", synopsis="s", sections=[])
+        guide = MagicMock(topic="t", body="## A\n\nb.")
         result = await gen.classify(
             guide, category_options=["A"], controlled_tags=["B"]
         )
@@ -808,7 +816,7 @@ class TestTokenBudget:
         assert gen.section_chain.ainvoke.await_count == 1
 
 
-class TestPlannedScopeAndOverview:
+class TestPlannedScope:
     def test_description_parsed_and_shown_in_label(self) -> None:
         gen = _make_generator()
         [section] = gen._parse_synopsis_sections(
@@ -825,14 +833,6 @@ class TestPlannedScopeAndOverview:
         gen = _make_generator()
         [section] = gen._parse_synopsis_sections("1. [USAGE] Install")
         assert section.label(2) == "2. Install"
-
-    def test_overview_lists_planned_sections(self) -> None:
-        gen = _make_generator()
-        overview = gen._overview("1. A — x\n2. B — y\n3. C — z")
-        assert overview.startswith("## In This Guide\n\n- A\n- B\n- C")
-
-    def test_overview_skipped_for_short_guides(self) -> None:
-        assert _make_generator()._overview("1. A\n2. B") == ""
 
 
 class TestGuideLengthAndRules:
@@ -865,6 +865,7 @@ class TestGuideLengthAndRules:
             sources="src",
             available_images="(none)",
             final_outline="1. 설치",
+            owned_elsewhere="- none",
         )
         assert out == "## 설치\n\n도구를 설치합니다."
         directive = gen.section_chain.ainvoke.await_args.args[0]["depth_directive"]
@@ -889,6 +890,7 @@ class TestGuideLengthAndRules:
             sources="src",
             available_images="(none)",
             final_outline="1. Intro",
+            owned_elsewhere="- none",
         )
         assert any("'Intro' kept below the bar" in n for n in gen.notes)
 
@@ -909,3 +911,175 @@ async def test_placeholder_planner_topic_falls_back_to_the_gate() -> None:
     )
     guide = await gen.generate(["https://docs.x.com"], discover_subpages=False)
     assert guide.topic == "Using X"
+
+
+class TestBlockingIssues:
+    async def test_blocking_issue_forces_a_revision_despite_a_high_score(
+        self,
+    ) -> None:
+        gen = _make_generator(min_quality_score=75, max_revision_attempts=1)
+        gen.evaluation_chain.ainvoke = AsyncMock(
+            side_effect=[
+                {
+                    "quality_score": "88",
+                    "blocking_issues": "- `--foo` is not in the sources: drop it",
+                    "improvement_feedback": "minor",
+                },
+                {"quality_score": "86", "blocking_issues": "none"},
+            ]
+        )
+        gen.section_chain.ainvoke = AsyncMock(
+            return_value={"section_markdown": "## Serve\n\nRun the server."}
+        )
+        out = await TestEvaluateAndRevise._revise(gen, "## Serve\n\nRun with --foo.")
+        assert out == "## Serve\n\nRun the server."
+        directive = gen.section_chain.ainvoke.await_args.args[0]["depth_directive"]
+        assert "blocking issues" in directive and "`--foo` is not in" in directive
+        assert gen.notes == []
+
+    async def test_a_revision_without_a_factual_error_beats_a_higher_score(
+        self,
+    ) -> None:
+        # Acceptance treats the evaluator's blocking issues as decisive, so the
+        # kept draft is the one without them even at a lower score.
+        gen = _make_generator(min_quality_score=75, max_revision_attempts=1)
+        gen.evaluation_chain.ainvoke = AsyncMock(
+            side_effect=[
+                {"quality_score": "80", "blocking_issues": "- wrong default"},
+                {"quality_score": "74", "blocking_issues": "none"},
+            ]
+        )
+        gen.section_chain.ainvoke = AsyncMock(
+            return_value={"section_markdown": "## Serve\n\nThe default is 0.9."}
+        )
+        out = await TestEvaluateAndRevise._revise(gen, "## Serve\n\nThe default is 1.")
+        assert out == "## Serve\n\nThe default is 0.9."
+
+    async def test_an_unresolved_blocking_issue_is_noted(self) -> None:
+        gen = _make_generator(min_quality_score=75, max_revision_attempts=1)
+        gen.evaluation_chain.ainvoke = AsyncMock(
+            return_value={"quality_score": "90", "blocking_issues": "- contradiction"}
+        )
+        gen.section_chain.ainvoke = AsyncMock(return_value={"section_markdown": ""})
+        await TestEvaluateAndRevise._revise(gen, "## Intro\n\nbody")
+        assert any("1 blocking issue(s)" in n for n in gen.notes)
+
+
+class TestSectionPlan:
+    async def test_sections_without_a_plan_line_are_looked_up_too(self) -> None:
+        from scholar_lens.src.web_research import OfficialDocs
+
+        gen = _make_generator()
+        gen._official = OfficialDocs.from_urls(["https://docs.x.com"])
+        gen._reference_searches = 0
+        gen._section_plan = "1 | sources: https://docs.x.com | owns: a"
+        gen.section_chain.ainvoke = AsyncMock(
+            return_value={"section_markdown": "## S\n\nbody"}
+        )
+        await gen._write_sections("X", "1. A — a\n2. B — b", _corpus())
+        lookup = gen.researcher.add_official_reference.call_args
+        assert lookup.args[2] == ["B"]
+        second = gen.section_chain.ainvoke.await_args_list[1].args[0]
+        assert "No official documentation page" in second["depth_directive"]
+
+    async def test_plan_sources_and_a_found_page_lead_the_section_sources(
+        self,
+    ) -> None:
+        from scholar_lens.src.web_research import OfficialDocs
+
+        gen = _make_generator()
+        gen._official = OfficialDocs.from_urls(["https://docs.x.com"])
+        gen._reference_searches = 0
+        found = PageContent("https://docs.x.com/deploy", "Deploy", "kubectl apply")
+        gen.researcher.add_official_reference = MagicMock(return_value=[found])
+        blog = PageContent("https://blog.x.io/b", "Blog", "Sync waves.")
+        filler = [
+            PageContent(f"https://docs.x.com/p{i}", f"B B {i}", "B B B " * 5_000)
+            for i in range(3)
+        ]
+        corpus = ResearchCorpus(pages=[*filler, blog, found])
+        gen._section_plan = "1 | sources: https://blog.x.io/b | owns: a"
+        gen.section_chain.ainvoke = AsyncMock(
+            return_value={"section_markdown": "## S\n\nbody"}
+        )
+        await gen._write_sections("X", "1. B — b", corpus)
+        sources = gen.section_chain.ainvoke.await_args.args[0]["sources"]
+        assert "Sync waves." in sources and "kubectl apply" in sources
+        assert sources.index("Sync waves.") < sources.index("B B B")
+
+    def test_a_stray_bullet_does_not_shift_the_numbering(self) -> None:
+        gen = _make_generator()
+        synopsis = "1. A — a\n   - a detail\n2. B — b"
+        assert [s.title for s in gen._parse_synopsis_sections(synopsis)] == [
+            "A",
+            "B",
+        ]
+
+    async def test_sources_concepts_and_official_support_reach_the_writer(
+        self,
+    ) -> None:
+        from scholar_lens.src.web_research import OfficialDocs
+
+        gen = _make_generator()
+        gen._official = OfficialDocs.from_urls(["https://docs.x.com"])
+        gen._reference_pages, gen._reference_ids = [], []
+        gen._reference_searches = 0
+        gen.researcher.add_official_reference = MagicMock(return_value=[])
+        gen._section_plan = (
+            "1 | sources: https://docs.x.com | owns: reconciliation\n"
+            "2 | sources: https://blog.x.io/b, https://unknown.example/z "
+            "| owns: sync waves; hooks"
+        )
+        corpus = ResearchCorpus(
+            pages=[
+                PageContent("https://docs.x.com", "X Docs", "How to use X."),
+                PageContent("https://blog.x.io/b", "Blog", "Sync waves."),
+            ]
+        )
+        gen.section_chain.ainvoke = AsyncMock(
+            return_value={"section_markdown": "## S\n\nbody"}
+        )
+        await gen._write_sections("X", "1. A — a\n2. B — b", corpus)
+        first, second = [c.args[0] for c in gen.section_chain.ainvoke.await_args_list]
+        assert first["owned_elsewhere"] == "- later, 'B': sync waves; hooks"
+        assert second["owned_elsewhere"] == "- earlier, 'A': reconciliation"
+        # Only section 2 lacks an official page: it is looked up by its title.
+        lookup = gen.researcher.add_official_reference.call_args
+        assert lookup.args[2] == ["B"]
+        assert "No official documentation page" in second["depth_directive"]
+        assert "No official documentation page" not in first["depth_directive"]
+
+    async def test_classify_reads_the_finished_body(self) -> None:
+        from scholar_lens.src.tech_guide import TechGuide
+
+        gen = _make_generator()
+        gen.taxonomy_chain = MagicMock()
+        gen.taxonomy_chain.ainvoke = AsyncMock(return_value={})
+        guide = TechGuide(
+            topic="X",
+            body="## Install\n\nInstall X with pip. More text.\n\n```bash\npip install x\n```",
+        )
+        await gen.classify(guide, category_options=["A"], controlled_tags=["B"])
+        outline = gen.taxonomy_chain.ainvoke.await_args.args[0]["outline"]
+        assert "## Install" in outline and "Install X with pip." in outline
+
+    async def test_relevance_gate_keeps_the_commands_the_docs_show(self) -> None:
+        gen = _make_generator()
+        gen._source_urls = ("https://docs.astral.sh/uv/",)
+        gen.relevance_chain.ainvoke = AsyncMock(
+            return_value={
+                "is_relevant": "yes",
+                "topic": "uv",
+                "commands": "uv, uvx, astral-cli",
+                "reason": "docs",
+            }
+        )
+        corpus = ResearchCorpus(
+            pages=[
+                PageContent(
+                    "https://docs.astral.sh/uv/", "uv", "```\nuv sync\nuvx ruff\n```"
+                )
+            ]
+        )
+        await gen._assert_relevant(corpus)
+        assert gen._products == ("uv", "uvx")

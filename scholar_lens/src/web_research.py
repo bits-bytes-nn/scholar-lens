@@ -15,7 +15,6 @@ import os
 import re
 import socket
 from abc import ABC, abstractmethod
-from collections import Counter
 from collections.abc import Collection
 from dataclasses import dataclass, field
 from urllib.parse import urljoin, urlparse
@@ -29,6 +28,7 @@ from .markdown_lint import close_open_fence
 from .markdown_math import segments
 from .pinned_transport import PinnedHTTPTransport
 from .prompt_safety import neutralize_prompt_tags
+from .review_plan import parse_lines
 from .url_guard import (
     UnsafeUrlError,
     assert_url_is_public,
@@ -82,7 +82,7 @@ def _reference_words(identifiers: list[str]) -> set[str]:
             ("_total", "_seconds", "_bytes", "_count", "_bucket", "_sum")
         )
         words |= _METRIC_WORDS if is_metric else _ARGUMENT_WORDS
-        words |= {w for w in re.split(r"[-_:=]+", identifier.lower()) if len(w) > 2}
+        words |= {w for w in re.split(r"[-_:=\s]+", identifier.lower()) if len(w) > 2}
     return words
 
 
@@ -98,69 +98,8 @@ _DOTTED_DOCS_VERSION = re.compile(
 )
 _BARE_DOCS_VERSION = re.compile(r"v\d+", re.I)
 _BARE_VERSION_SEGMENTS = 2  # "v2" only right after the root or a language
-# A product named by a docs path: huggingface.co/docs/<product>/…
-_DOCS_PRODUCT_PATH = re.compile(r"^/docs/([a-z][a-z0-9_-]*)/", re.I)
-# The command of a shell line in fenced code that takes long options
-# ("vllm serve --x"). Lines are split at "&&", "||", ";" and "|"; "\\" line
-# continuations are joined; environment assignments, options, numbers and
-# generic tools or launchers (sudo, timeout, srun, bash …) are skipped, and
-# "kubectl exec pod -- vllm …" reads what follows the "--".
-_COMMAND_SEPARATOR = re.compile(r"&&|\|\||;|\|")
-_ENV_ASSIGNMENT = re.compile(
-    r"(?<![\w-])[A-Za-z_][A-Za-z0-9_]*=(?:\"[^\"\n]*\"|'[^'\n]*'|\S*)"
-)
-_PROMPT = re.compile(r"^\s*(?:\([\w.-]+\)\s*)?\$\s")
-_COMMAND_NAME = re.compile(r"[a-z][a-z0-9_-]{1,30}", re.I)
-_LONG_OPTION = re.compile(r"\s--[a-z]", re.I)
-_LINE_CONTINUATION = re.compile(r"\\\r?\n\s*")
-# Tools whose subcommands are not products ("pip install", "git clone").
-_GENERIC_COMMANDS = frozenset(
-    {
-        "apt", "apt-get", "brew", "cat", "conda", "curl", "docker", "echo",
-        "export", "git", "helm", "kubectl", "npm", "pip", "pip3", "printf",
-        "python", "python3", "uv", "wget",
-    }
-)  # fmt: skip
-# Launchers and shells: what they run is the command.
-_LAUNCHERS = frozenset(
-    {
-        "bash", "cd", "env", "exec", "nice", "nohup", "numactl", "sh", "source",
-        "srun", "stdbuf", "sudo", "taskset", "time", "timeout", "watch", "xargs",
-        "zsh",
-    }
-)  # fmt: skip
-
-
-def _command_of(part: str) -> str | None:
-    """The tool a shell command line runs, or None (a generic tool's own
-    subcommand is not one)."""
-    rest = _PROMPT.sub("", part)
-    if " -- " in rest:
-        rest = rest.rsplit(" -- ", 1)[1]
-    for token in _ENV_ASSIGNMENT.sub(" ", rest).split():
-        word = token.strip("'\"")
-        if word[:1] == "-" or word.isdigit() or word.lower() in _LAUNCHERS:
-            continue
-        if word.lower() in _GENERIC_COMMANDS or not _COMMAND_NAME.fullmatch(word):
-            return None
-        return word
-    return None
-
-
-def _commands_with_flags(code: str) -> list[str]:
-    """The tools the shell lines in ``code`` that take long options run."""
-    found: list[str] = []
-    for line in _LINE_CONTINUATION.sub(" ", code).splitlines():
-        for part in _COMMAND_SEPARATOR.split(line):
-            if _LONG_OPTION.search(part) and (command := _command_of(part)):
-                found.append(command.lower())
-    return found
-
-
-_FENCED_CODE = re.compile(r"^```[^\n]*\n(.*?)^```", re.S | re.M)
 # Host labels that do not name a product (docs.vllm.ai → vllm).
 HOST_NOISE = frozenset({"docs", "www", "doc", "api", "readthedocs", "github"})
-# Images that are page furniture, not content: tracking pixels and chrome.
 _BRAVE_WEB_SEARCH_URL = "https://api.search.brave.com/res/v1/web/search"
 _TAVILY_SEARCH_URL = "https://api.tavily.com/search"
 
@@ -235,56 +174,31 @@ class OfficialDocs:
         return False  # a pinned release none of the inputs asked for
 
 
-def product_names(urls: Collection[str], pages: Collection[PageContent]) -> list[str]:
-    """Names the requested docs' commands go by, most specific first: the
-    product in a ``/docs/<product>/`` path (when the pages use that name), the command the requested pages'
-    fenced code runs most often with long options (at least twice, so one
-    stray example does not count), then the site's host label
-    (``docs.vllm.ai`` → ``vllm``). Generic tools are skipped, except as the
-    docs' own host (``helm.sh`` → ``helm``)."""
+def product_names(
+    proposed: str, urls: Collection[str], pages: Collection[PageContent]
+) -> list[str]:
+    """The command and package names the relevance gate read off the docs
+    (``proposed``, comma- or line-separated), kept only when the seed
+    ``pages`` show them as a word; the requested site's host label
+    (``docs.vllm.ai`` → ``vllm``) only when none of them does."""
+    text = " ".join(page.text.lower() for page in pages)
     names: list[str] = []
-
-    def add(name: str, *, generic_ok: bool = False) -> bool:
-        name = name.lower()
-        if not name or name in names:
-            return False
-        if name in _GENERIC_COMMANDS and not generic_ok:
-            return False
-        names.append(name)
-        return True
-
-    requested = {normalize_url(u) for u in urls}
-    own_text = " ".join(  # code only: a title says "Quick Reference" too
-        " ".join(_FENCED_CODE.findall(page.text)).lower()
-        for page in pages
-        if normalize_url(page.url) in requested
-    )
-    for url in urls:
-        # A /docs/<x>/ segment names a product only when the pages' code uses it;
-        # on single-product sites it is a section ("reference", "setup").
-        if match := _DOCS_PRODUCT_PATH.match(urlparse(url).path):
-            section = match.group(1).lower()
-            if docs_version("/" + section) is None and re.search(
-                rf"(?<![\w-]){re.escape(section)}(?![\w])", own_text
-            ):
-                add(section)
-    counts = Counter(
-        command
-        for page in pages
-        if normalize_url(page.url) in requested
-        for block in _FENCED_CODE.findall(page.text)
-        for command in _commands_with_flags(block)
-    )
-    if counts:
-        command, count = counts.most_common(1)[0]
-        if count >= 2:
-            add(command)
+    # A "none" answer names nothing (any Python page shows "None").
+    for raw in parse_lines("\n".join(re.split(r"[,\n]", proposed))):
+        name = raw.strip("`'\"").lower()
+        if (
+            name
+            and name not in names
+            and re.search(rf"(?<![\w/.-]){re.escape(name)}(?![\w-])", text)
+        ):
+            names.append(name)
+    if names:
+        return names
     for url in urls:
         labels = (urlparse(url).hostname or "").split(".")[:-1]
-        for label in labels:
-            # The docs' own domain names its tool even when it is a generic one
-            # elsewhere (helm.sh → helm), but not a subdomain (python.langchain.com).
-            if label not in HOST_NOISE and add(label, generic_ok=label == labels[-1]):
+        for label in reversed(labels):
+            if label not in HOST_NOISE and label not in names:
+                names.append(label)
                 break
     return names
 
@@ -358,10 +272,12 @@ class ResearchCorpus:
         max_chars: int,
         official: OfficialDocs | None = None,
         included: set[str] | None = None,
+        prefer: Collection[str] = (),
     ) -> str:
         """The pages most relevant to ``query`` (word overlap with title and
-        body), most relevant first, within ``max_chars``. Each section of a
-        guide reads only the material it needs instead of the whole corpus.
+        body), most relevant first, within ``max_chars``; the pages whose URL
+        is in ``prefer`` come before all others. Each section of a guide reads
+        only the material it needs instead of the whole corpus.
         With ``official``, each source is labelled official, older docs version
         or third-party so the writer knows which one decides a flag or default.
         The URL of each page that made the cut is added to ``included``."""
@@ -373,23 +289,13 @@ class ResearchCorpus:
             hits = sum(3 * (w in title) + min(body.count(w), 20) for w in words)
             return hits / (1 + len(body) / 20_000)  # don't favour sheer length
 
-        ranked = sorted(self.pages, key=score, reverse=True)
+        preferred = set(prefer)
+        ranked = sorted(
+            self.pages, key=lambda p: (p.url in preferred, score(p)), reverse=True
+        )
         blocks, used = [], 0
         for page in ranked:
-            label = ""
-            if official is not None:
-                url = page.final_url or page.url
-                if official.covers(url):
-                    label = " (official documentation)"
-                elif official.on_host(url):
-                    label = " (older docs version)"
-                else:
-                    label = " (third-party)"
-            block = (
-                f"## Source{label}: {neutralize_prompt_tags(page.url)}\n"
-                f"# {neutralize_prompt_tags(page.title)}\n\n"
-                f"{neutralize_prompt_tags(page.text)}"
-            )
+            block = _source_block(page, official)
             room = max_chars - used
             if room <= 2_000:
                 break
@@ -399,15 +305,29 @@ class ResearchCorpus:
                 included.add(page.url)
         return "\n\n---\n\n".join(blocks)
 
-    def combined_text(self, max_chars: int | None = None) -> str:
-        # URL and title are page-controlled too, so they are defanged as well.
-        blocks = [
-            f"## Source: {neutralize_prompt_tags(p.url)}\n"
-            f"# {neutralize_prompt_tags(p.title)}\n\n{neutralize_prompt_tags(p.text)}"
-            for p in self.pages
-        ]
-        text = "\n\n---\n\n".join(blocks)
-        return text[:max_chars] if max_chars else text
+    def combined_text(self, official: OfficialDocs | None = None) -> str:
+        """Every page, labelled by authority like :meth:`relevant_text`."""
+        return "\n\n---\n\n".join(_source_block(p, official) for p in self.pages)
+
+
+def _source_block(page: PageContent, official: OfficialDocs | None) -> str:
+    """One page for a prompt: URL, title and text, defanged (all three are
+    page-controlled), labelled official documentation, older docs version or
+    third-party when ``official`` is given."""
+    label = ""
+    if official is not None:
+        url = page.final_url or page.url
+        if official.covers(url):
+            label = " (official documentation)"
+        elif official.on_host(url):
+            label = " (older docs version)"
+        else:
+            label = " (third-party)"
+    return (
+        f"## Source{label}: {neutralize_prompt_tags(page.url)}\n"
+        f"# {neutralize_prompt_tags(page.title)}\n\n"
+        f"{neutralize_prompt_tags(page.text)}"
+    )
 
 
 class WebSearchProvider(ABC):
@@ -589,7 +509,6 @@ class WebResearcher:
         urls: list[str],
         *,
         discover_subpages: bool = True,
-        search_queries: list[str] | None = None,
     ) -> ResearchCorpus:
         corpus = ResearchCorpus()
         visited: set[str] = set()
@@ -616,12 +535,10 @@ class WebResearcher:
                 raise SourceFetchError(
                     f"Could not reach any of the requested pages: {failures[0]}"
                 ) from failures[0]
-        self.run_searches(corpus, search_queries or [])
 
         logger.info(
-            "Researched %d pages, %d search results, %d unique images.",
+            "Researched %d pages, %d unique images.",
             len(corpus.pages),
-            len(corpus.search_results),
             len(corpus.image_urls),
         )
         return corpus
@@ -631,7 +548,7 @@ class WebResearcher:
     ) -> None:
         """Append web-search results (and optionally their pages) to a corpus.
 
-        Split out from :meth:`research` so the deep-research planner can fetch
+        Separate from :meth:`research` so the deep-research planner can fetch
         the seed pages once, derive queries from them, then broaden the corpus
         without re-fetching the seed URLs.
 
@@ -695,15 +612,17 @@ class WebResearcher:
         product: str = "",
         max_searches: int = MAX_REFERENCE_SEARCHES,
         max_pages: int = MAX_REFERENCE_PAGES,
+        follow_links: bool = True,
     ) -> list[PageContent]:
         """Fetch reference pages of the ``official`` docs that can settle the
         given flags and metric names, add them to ``corpus`` and return them.
 
         Candidates are search results restricted to those hosts (one query per
-        batch of identifiers, at most ``max_searches``), then reference-like
-        links (CLI, arguments, configuration, metrics …) of the official pages
-        already fetched, those whose path fits the identifiers first. At most
-        ``max_pages`` are added, each through the same SSRF-guarded fetch.
+        batch of identifiers, at most ``max_searches``), then (with
+        ``follow_links``) reference-like links (CLI, arguments, configuration,
+        metrics …) of the official pages already fetched, those whose path
+        fits the identifiers first. At most ``max_pages`` are added, each
+        through the same SSRF-guarded fetch.
         """
         hosts = sorted(official.hosts)
         if not hosts or not identifiers or max_pages <= 0:
@@ -721,7 +640,7 @@ class WebResearcher:
         links = [
             link
             for seen in corpus.pages
-            if official.covers(seen.final_url or seen.url)
+            if follow_links and official.covers(seen.final_url or seen.url)
             for link in seen.links
             if official.covers(link) and _REFERENCE_LINK.search(urlparse(link).path)
         ]
