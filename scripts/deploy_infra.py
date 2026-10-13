@@ -188,7 +188,9 @@ class PaperReviewStack(Stack):
             vpc=self.vpc,
             allow_all_outbound=False,
             security_group_name=self._get_resource_name("paper-review"),
-            description="Security group for Scholar Lens jobs (HTTPS egress only)",
+            # Changing the description replaces the group, and the fixed name
+            # then collides with the old one: keep it as deployed.
+            description="Security group for Paper Review (HTTPS egress only)",
         )
         security_group.add_egress_rule(
             peer=ec2.Peer.any_ipv4(),
