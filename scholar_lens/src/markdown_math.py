@@ -348,6 +348,9 @@ def _on_table_row(markdown: str, start: int) -> bool:
     before = _QUOTE_PREFIX.sub("", markdown[line_start:start])
     if before.lstrip().startswith("|"):
         return True
+    line_end = markdown.find("\n", start)
+    if "|" not in markdown[line_start : len(markdown) if line_end == -1 else line_end]:
+        return False  # a pipe-less table row still has its cell separators
     block_start = markdown.rfind("\n\n", 0, line_start)
     block_start = 0 if block_start == -1 else block_start + 2
     block_end = markdown.find("\n\n", start)
@@ -382,7 +385,7 @@ def _list_indent(markdown: str, start: int, text: str) -> str:
     width = _columns(indent)
     line_start = markdown.rfind("\n", 0, start) + 1
     glued = True
-    for line in reversed(markdown[:line_start].splitlines()):
+    for line in _lines_before(markdown, line_start):
         if not line.strip():
             glued = False
             continue
@@ -393,6 +396,22 @@ def _list_indent(markdown: str, start: int, text: str) -> str:
         if _indent_width(line) == 0:
             return ""  # a paragraph at the margin: not in a list
     return ""
+
+
+def _lines_before(markdown: str, end: int) -> list[str]:
+    """Up to ``_MAX_SCAN`` lines ending at offset ``end``, nearest first (a
+    bounded walk back, so long documents stay linear)."""
+    out: list[str] = []
+    stop = end
+    while stop > 0 and len(out) < _MAX_SCAN:
+        begin = markdown.rfind("\n", 0, stop - 1) + 1
+        out.append(
+            markdown[begin : stop - 1]
+            if markdown[stop - 1] == "\n"
+            else markdown[begin:stop]
+        )
+        stop = begin
+    return out
 
 
 def _reindent(text: str, indent: str) -> str:
@@ -703,10 +722,11 @@ def _isolate_nested_displays(markdown: str) -> str:
         else:
             # Glued under a list item that goes on inside the quote: at the
             # item's column, so the list does not split around it.
-            inner = [_QUOTE_PREFIX.sub("", other) for other in lines]
-            column = _list_column(inner, i)
+            lo, hi = max(0, i - _MAX_SCAN), min(len(lines), last + 1 + _MAX_SCAN)
+            inner = [_QUOTE_PREFIX.sub("", other) for other in lines[lo:hi]]
+            column = _list_column(inner, i - lo)
             goes_on = _LIST_MARKER.match(
-                next((t for t in inner[last + 1 :] if t.strip()), "")
+                next((t for t in inner[last + 1 - lo :] if t.strip()), "")
             )
             if (
                 column
@@ -742,7 +762,7 @@ def _list_column(lines: list[str], i: int) -> int | None:
     over its glued lines, and over blank lines when everything after them is
     indented to the item's content (an indented heading or paragraph)."""
     crossed_blank, least = False, None
-    for line in reversed(lines[:i]):
+    for line in reversed(lines[max(0, i - _MAX_SCAN) : i]):
         if not line.strip():
             crossed_blank = True
             continue

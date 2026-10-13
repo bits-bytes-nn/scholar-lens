@@ -654,10 +654,21 @@ def test_fold_keeps_an_attribute_line_on_its_display() -> None:
 def test_fold_stays_fast_on_long_items() -> None:
     import time
 
-    text = "1. 항목\n" + "".join(f"   $$x_{k}$$\n\n" for k in range(2000))
-    started = time.monotonic()
-    norm(text)
-    assert time.monotonic() - started < 5
+    # Linear, not quadratic: doubling the input must not quadruple the time.
+    def took(n: int, quoted: bool) -> float:
+        lead, gap = (
+            ("> 1. 항목\n", ">    $$x_{k}$$\n>\n")
+            if quoted
+            else ("1. 항목\n", "   $$x_{k}$$\n\n")
+        )
+        text = lead + "".join(gap.format(k=k) for k in range(n))
+        started = time.monotonic()
+        norm(text)
+        return time.monotonic() - started
+
+    for quoted in (False, True):
+        small, large = took(500, quoted), took(2000, quoted)
+        assert large < 8 * max(small, 0.02)
 
 
 def test_hangul_matches_the_blog_lint() -> None:
