@@ -17,7 +17,7 @@ import re
 import socket
 from abc import ABC, abstractmethod
 from bisect import bisect_right
-from collections.abc import Collection
+from collections.abc import Callable, Collection
 from dataclasses import dataclass, field
 from itertools import pairwise
 from urllib.parse import urljoin, urlparse
@@ -767,6 +767,7 @@ class WebResearcher:
         max_searches: int = MAX_REFERENCE_SEARCHES,
         max_pages: int = MAX_REFERENCE_PAGES,
         follow_links: bool = True,
+        settles: Callable[[str], bool] | None = None,
     ) -> list[PageContent]:
         """Fetch reference pages of the ``official`` docs that can settle the
         given flags and metric names, add them to ``corpus`` and return them.
@@ -775,38 +776,53 @@ class WebResearcher:
         batch of identifiers, at most ``max_searches``), then (with
         ``follow_links``) reference-like links (CLI, arguments, configuration,
         metrics …) of the official pages already fetched, those whose path
-        fits the identifiers first. At most ``max_pages`` are added, each
-        through the same SSRF-guarded fetch.
+        fits the identifiers first. With ``settles``, a page counts only when
+        it settles an identifier (``settles(page.text)``); one that does not
+        (an index of the CLI pages) is left out, and with ``follow_links``
+        its reference-like links join the end of the candidates, ranked the
+        same way. At most ``max_pages`` are added and ``2 * max_pages``
+        fetched, each through the same SSRF-guarded fetch.
         """
         hosts = sorted(official.hosts)
         if not hosts or not identifiers or max_pages <= 0:
             return []
         visited = {normalize_url(p.final_url or p.url) for p in corpus.pages}
         visited |= {normalize_url(p.url) for p in corpus.pages}
-        candidates: list[SearchResult] = []
+        results: list[SearchResult] = []
         if self.search_provider.supports_search and max_searches > 0:
             searches = min(max_searches, len(identifiers))
             size = -(-len(identifiers) // searches)
             for i in range(searches):
                 batch = " ".join(identifiers[i * size : (i + 1) * size])
                 query = f"{product} {batch}".strip()
-                candidates += self.search_provider.search(query, domains=hosts)
-        links = [
-            link
-            for seen in corpus.pages
-            if follow_links and official.covers(seen.final_url or seen.url)
-            for link in seen.links
-            if official.covers(link) and _REFERENCE_LINK.search(urlparse(link).path)
-        ]
-        # Navigation order lists "metrics" before "engine_args"; a stable sort
-        # by fit keeps that order only among equally fitting pages.
+                results += self.search_provider.search(query, domains=hosts)
         wanted = _reference_words(identifiers)
-        links.sort(key=lambda link: -len(_path_words(link) & wanted))
-        candidates += [SearchResult(title="", url=link) for link in links]
+        links: list[str] = []
+
+        def queue_links(pages: list[PageContent]) -> None:
+            """Queue the pages' reference-like links after those already
+            queued, so a followed page's links never jump ahead of the links
+            of the pages before it."""
+            batch = [
+                link
+                for page in pages
+                if follow_links and official.covers(page.final_url or page.url)
+                for link in page.links
+                if official.covers(link)
+                and _REFERENCE_LINK.search(urlparse(link).path)
+                and normalize_url(link) not in visited
+            ]
+            # Navigation order lists "metrics" before "engine_args"; a stable
+            # sort by fit keeps that order only among equally fitting pages.
+            batch.sort(key=lambda link: -len(_path_words(link) & wanted))
+            links.extend(batch)
+
+        queue_links(corpus.pages)
         added: list[PageContent] = []
-        for result in candidates:
-            if len(added) >= max_pages:
-                break
+        fetches = 0
+        max_fetches = 2 * max_pages
+        while (results or links) and len(added) < max_pages:
+            result = results.pop(0) if results else SearchResult("", links.pop(0))
             norm = normalize_url(result.url)
             if not norm or norm in visited:
                 continue
@@ -820,15 +836,28 @@ class WebResearcher:
                     title=result.title or result.url,
                     text=result.content,
                 )
+            elif fetches >= max_fetches:
+                continue
             else:
+                fetches += 1
                 page = self._fetch_page(result.url)
-            if page is not None and official.covers(page.final_url or page.url):
+            if page is None or not official.covers(page.final_url or page.url):
+                continue
+            if settles is None or settles(page.text):
                 added.append(page)
+            else:
+                logger.info(
+                    "Reference candidate '%s' mentions none of the identifiers.",
+                    page.final_url or page.url,
+                )
+                queue_links([page])
         corpus.pages.extend(added)
         logger.info(
-            "Added %d official reference page(s) for %d identifier(s).",
+            "Added %d official reference page(s) for %d identifier(s) "
+            "(%d page(s) fetched).",
             len(added),
             len(identifiers),
+            fetches,
         )
         return added
 

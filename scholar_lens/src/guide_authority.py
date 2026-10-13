@@ -120,6 +120,41 @@ def _flag_spellings(flag: str, both_styles: bool) -> list[str]:
     return spellings
 
 
+def _both_styles(known: str) -> bool:
+    """Whether lowercased official text shows both "--a-b" and "--a_b" flags
+    (torchrun, accelerate take both; ruff, which shows only dashes, rejects
+    "_")."""
+    return bool(re.search(r"--[a-z0-9]+-[a-z]", known)) and bool(
+        re.search(r"--[a-z0-9]+_[a-z]", known)
+    )
+
+
+def _spellings(identifier: str, both_styles: bool) -> list[str]:
+    """Ways the official text may spell a flag, a Python API argument
+    (``a_b`` or its flag ``--a-b``) or a metric name (``a:b`` also as
+    ``a_b``)."""
+    if identifier.startswith("--"):
+        return _flag_spellings(identifier, both_styles)
+    if ":" in identifier:
+        return [identifier, identifier.replace(":", "_")]
+    return [identifier, "--" + identifier.replace("_", "-")]
+
+
+def mentions_any(
+    text: str, identifiers: Sequence[str], official_text: str = ""
+) -> bool:
+    """Whether ``text`` settles at least one of ``identifiers`` (flags, API
+    arguments, metric names) the way :func:`unverified_identifiers` checks
+    them, with the dash styles of ``official_text`` plus ``text``."""
+    known = text.lower()
+    both_styles = _both_styles(f"{official_text.lower()}\n{known}")
+    return any(
+        _mentions(known, spelling)
+        for identifier in identifiers
+        for spelling in _spellings(identifier.lower(), both_styles)
+    )
+
+
 def unverified_identifiers(
     body: str, official_text: str, products: Sequence[str]
 ) -> list[str]:
@@ -137,15 +172,13 @@ def unverified_identifiers(
     names = [n.lower() for n in products if n]
     tokens = [re.compile(rf"(?<![\w/.-]){re.escape(n)}(?![\w-])") for n in names]
     known = official_text.lower()
-    # CLIs that take both "--a-b" and "--a_b" (torchrun, accelerate) show both
-    # styles in their docs; one that shows only dashes (ruff) rejects "_".
-    both_styles = bool(re.search(r"--[a-z0-9]+-[a-z]", known)) and bool(
-        re.search(r"--[a-z0-9]+_[a-z]", known)
-    )
+    both_styles = _both_styles(known)
     found: list[str] = []
 
-    def check(token: str, variants: list[str]) -> None:
-        if token not in found and not any(_mentions(known, v) for v in variants):
+    def check(token: str) -> None:
+        if token not in found and not any(
+            _mentions(known, v) for v in _spellings(token, both_styles)
+        ):
             found.append(token)
 
     for seg in segments(body):
@@ -160,7 +193,7 @@ def unverified_identifiers(
         names_product = any(pattern.search(code.lower()) for pattern in tokens)
         if (seg.kind == "fence" and names_product) or _KWARG.match(code.strip("` ")):
             for argument in _KWARG.findall(code):
-                check(argument, [argument, "--" + argument.replace("_", "-")])
+                check(argument)
         for line in code.splitlines():
             lowered = line.lower()
             # The product as a command word, not inside HF_TOKEN or a path.
@@ -177,9 +210,9 @@ def unverified_identifiers(
                 _FLAG.findall(line[max(start, 0) :]) if start >= 0 or bare_flag else []
             )
             for flag in flags:
-                check(flag, _flag_spellings(flag, both_styles))
+                check(flag)
             for metric in _METRIC.findall(line):
-                check(metric, [metric, metric.replace(":", "_")])
+                check(metric)
     return found[:MAX_UNVERIFIED]
 
 

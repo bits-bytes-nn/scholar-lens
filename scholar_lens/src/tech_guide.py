@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import asyncio
 import difflib
+import functools
 import re
 from dataclasses import dataclass, field
 from typing import Any
@@ -40,6 +41,7 @@ from langchain_core.runnables import Runnable, RunnableLambda
 from .constants import LanguageModelId
 from .guide_authority import (
     input_outline,
+    mentions_any,
     official_reference,
     parse_section_plan,
     third_party_identifiers,
@@ -1007,6 +1009,16 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
         searches_left = (
             min(max_searches, MAX_REFERENCE_SEARCHES) - self._reference_searches
         )
+        # An identifier lookup keeps only pages that settle an identifier, as
+        # the unverified check reads them; a title lookup keeps its hits.
+        official_text = official_reference(self._official, corpus)
+        settles = (
+            functools.partial(
+                mentions_any, identifiers=identifiers, official_text=official_text
+            )
+            if follow_links
+            else None
+        )
         added = await asyncio.to_thread(
             self.researcher.add_official_reference,
             corpus,
@@ -1016,6 +1028,7 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
             max_searches=searches_left,
             max_pages=pages_left,
             follow_links=follow_links,
+            settles=settles,
         )
         if self.researcher.search_provider.supports_search:
             self._reference_searches += min(searches_left, len(identifiers))

@@ -299,6 +299,105 @@ def test_reference_links_that_fit_the_identifiers_come_first() -> None:
     assert [p.url for p in added] == [memory, ENGINE_ARGS]
 
 
+def _pages_researcher(pages: dict[str, PageContent]) -> WebResearcher:
+    """A researcher without search whose fetches return ``pages`` (by URL),
+    recording each fetched URL in ``researcher.fetched``."""
+    researcher = WebResearcher()
+    fetched: list[str] = []
+
+    def fetch(url: str) -> PageContent | None:
+        fetched.append(url)
+        return pages.get(url)
+
+    researcher._fetch_page = fetch  # type: ignore[method-assign]
+    researcher.fetched = fetched  # type: ignore[attr-defined]
+    return researcher
+
+
+def _settles(identifiers: list[str]):  # type: ignore[no-untyped-def]
+    from scholar_lens.src.guide_authority import mentions_any
+
+    return lambda text: mentions_any(text, identifiers)
+
+
+def test_reference_lookup_follows_an_index_page_to_the_flags() -> None:
+    serve_args = f"https://{HOST}/en/latest/configuration/serve_args.html"
+    cli_serve = f"https://{HOST}/en/latest/cli/serve.html"
+    old_cli = f"https://{HOST}/en/v0.6.0/cli/serve.html"
+    pages = {
+        serve_args: PageContent(
+            serve_args,
+            "Server Arguments",
+            "See the CLI reference.",
+            links=[old_cli, "https://blog.example.com/cli/x", cli_serve],
+        ),
+        cli_serve: PageContent(
+            cli_serve, "vllm serve", "--gpu-memory-utilization\n--kv-cache-dtype"
+        ),
+    }
+    researcher = _pages_researcher(pages)
+    corpus = ResearchCorpus(
+        pages=[PageContent(QUICKSTART, "Quickstart", "vllm serve", links=[serve_args])]
+    )
+    ids = ["--gpu-memory-utilization", "--quantization"]
+    added = researcher.add_official_reference(
+        corpus, OFFICIAL, ids, settles=_settles(ids)
+    )
+    # The index page is left out; its in-scope link that has a flag counts.
+    assert [p.url for p in added] == [cli_serve]
+    assert researcher.fetched == [serve_args, cli_serve]  # type: ignore[attr-defined]
+    assert [p.url for p in corpus.pages] == [QUICKSTART, cli_serve]
+
+
+def test_reference_lookup_bounds_a_chain_of_index_pages() -> None:
+    def url(i: int) -> str:
+        return f"https://{HOST}/en/latest/reference/r{i}.html"
+
+    # Each index page links the next; none mentions the flag.
+    pages = {
+        url(i): PageContent(url(i), f"r{i}", "An index.", links=[url(i + 1)])
+        for i in range(50)
+    }
+    researcher = _pages_researcher(pages)
+    corpus = ResearchCorpus(
+        pages=[PageContent(QUICKSTART, "Quickstart", "vllm serve", links=[url(0)])]
+    )
+    added = researcher.add_official_reference(
+        corpus, OFFICIAL, ["--x-y"], max_pages=3, settles=_settles(["--x-y"])
+    )
+    assert added == [] and len(corpus.pages) == 1
+    assert len(researcher.fetched) == 2 * 3  # type: ignore[attr-defined]
+
+
+def test_reference_lookup_without_links_drops_pages_that_settle_nothing() -> None:
+    hit = f"https://{HOST}/en/latest/cli/serve.html"
+    miss = f"https://{HOST}/en/latest/configuration/serve_args.html"
+    researcher, _ = _researcher(
+        [
+            SearchResult(title="index", url=miss, content="See the CLI pages."),
+            SearchResult(title="cli", url=hit, content="gpu_memory_utilization: 0.9"),
+        ]
+    )
+    corpus = ResearchCorpus(pages=[PageContent(QUICKSTART, "Q", "vllm serve")])
+    ids = ["--gpu-memory-utilization"]
+    added = researcher.add_official_reference(
+        corpus, OFFICIAL, ids, follow_links=False, settles=_settles(ids)
+    )
+    # The API-argument spelling settles the flag, as the unverified check reads it.
+    assert [p.url for p in added] == [hit]
+
+
+async def test_only_identifier_lookups_require_a_settling_page() -> None:
+    gen, corpus = _budget_generator([])
+    lookup = MagicMock(return_value=[])
+    gen.researcher.add_official_reference = lookup
+    await gen._add_reference(corpus, ["--max-model-len"])
+    settles = lookup.call_args.kwargs["settles"]
+    assert settles("max_model_len=4096") and not settles("--max-model-length")
+    await gen._add_reference(corpus, ["배포하기"], follow_links=False)
+    assert lookup.call_args.kwargs["settles"] is None
+
+
 async def test_reference_lookups_share_the_per_guide_caps() -> None:
     gen = _make_generator()
     gen._reference_pages, gen._reference_ids = [], []
@@ -409,11 +508,15 @@ def _budget_generator(search: list[SearchResult] | None):  # type: ignore[no-unt
         + ("cli/bench", "configuration/optimization")
     ]
     seed = PageContent(QUICKSTART, "Quickstart", "vllm serve m", links=links)
-    if search is None:
-        researcher = WebResearcher(NullSearchProvider())
-        researcher._fetch_page = lambda url: PageContent(url, url, "x")  # type: ignore[method-assign]
-    else:
-        researcher, _ = _researcher(search)
+    researcher = (
+        WebResearcher(NullSearchProvider())
+        if search is None
+        else _researcher(search)[0]
+    )
+    # Every fetched page settles the flags these tests look up.
+    researcher._fetch_page = lambda url: PageContent(  # type: ignore[method-assign]
+        url, url, "--gpu-memory-utilization --max-model-len --tensor-parallel-size"
+    )
     gen = _make_generator()
     gen.researcher = researcher
     gen._official = OFFICIAL
