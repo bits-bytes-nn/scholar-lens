@@ -862,6 +862,8 @@ class TestValidator:
     def test_survey_front_matter(self) -> None:
         found = rules(survey_post(GOOD_BODY, paper_author='"Stanford"'))
         assert "error:paper-author:a survey does not take paper_author" in found
+        found = rules(survey_post(GOOD_BODY, paper_doi='"10.48550/arXiv.2305.18290"'))
+        assert "error:paper-doi:a survey does not take paper_doi" in found
         wrong_type = rules(
             survey_post(GOOD_BODY, categories='["Paper Reviews", "Language-Models"]')
         )

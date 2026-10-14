@@ -55,6 +55,8 @@ class Add(Protocol):
     def __call__(self, level: Level, rule: str, line: int, message: str) -> None: ...
 
 
+# The blog lint's paper_doi form: a bare DOI, no URL, query or fragment.
+_BARE_DOI = re.compile(r"10\.\d{4,9}/[^\s?#]+")
 _HEADING = re.compile(r"^(#{1,6})\s+(.*\S)\s*$")
 _INLINE_MATH = re.compile(r"\$\$(.+?)\$\$")
 _INLINE_CODE = re.compile(r"`[^`]*`")
@@ -392,13 +394,23 @@ def _check_front_matter(
 
     if kind in PAPER_KINDS:
         _check_paper_author(front.get("paper_author"), add)
+        doi = front.get("paper_doi")
+        if doi is not None and not _BARE_DOI.fullmatch(str(doi)):
+            add(
+                "error",
+                "paper-doi",
+                1,
+                f"paper_doi is a bare DOI (10.<registrant>/<suffix>), got '{doi}'",
+            )
         subtitle = str(front.get("subtitle") or "").strip()
         if not subtitle:
             add("error", "subtitle", 1, "paper posts need a subtitle")
         elif subtitle == title:
             add("error", "subtitle", 1, "subtitle must differ from the title")
-    elif "paper_author" in front:
-        add("error", "paper-author", 1, f"a {kind} does not take paper_author")
+    else:
+        for key in ("paper_author", "paper_doi"):
+            if key in front:
+                add("error", key.replace("_", "-"), 1, f"a {kind} does not take {key}")
 
     seo_title = front.get("seo_title")
     limit = spec.seo_title_max_length

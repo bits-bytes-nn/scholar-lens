@@ -120,6 +120,19 @@ class TestFrontMatter:
     def test_organisations_pass(self, author: str) -> None:
         assert "paper-author" not in rules(make_post(front={"paper_author": author}))
 
+    @pytest.mark.parametrize(
+        ("doi", "ok"),
+        [
+            ('"10.48550/arXiv.2305.18290"', True),
+            ('"10.52202/075280-2338"', True),
+            ('"https://doi.org/10.48550/arXiv.2305.18290"', False),
+            ('"10.48550/arXiv.2305.18290?v=2"', False),
+            ('"10.1/x"', False),
+        ],
+    )
+    def test_paper_doi_is_a_bare_doi(self, doi: str, ok: bool) -> None:
+        assert ("paper-doi" not in rules(make_post(front={"paper_doi": doi}))) is ok
+
     def test_subtitle_required_and_distinct(self) -> None:
         assert "subtitle" in rules(make_post(drop=("subtitle",)))
         assert "subtitle" in rules(
