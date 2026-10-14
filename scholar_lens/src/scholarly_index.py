@@ -20,6 +20,7 @@ from typing import Any
 from . import citation_metadata
 from .arxiv_handler import ArxivMetadata
 from .constants import EnvVars
+from .logger import logger
 from .rate_limiter import RateLimiter
 from .survey_plan import (
     CitationData,
@@ -40,6 +41,8 @@ _OPENALEX_FIELDS = (
     "id,doi,title,authorships,publication_date,primary_location,locations,"
     "cited_by_count,abstract_inverted_index,referenced_works"
 )
+# DOIs looked up per OpenAlex request (an OR filter, one page).
+OPENALEX_MAX_DOIS = 50
 # Semantic Scholar's batch endpoint takes up to 500 ids per request.
 SEMANTIC_SCHOLAR_MAX_IDS = 500
 _SEMANTIC_SCHOLAR_FIELDS = "citationCount,venue,externalIds,references.externalIds"
@@ -245,6 +248,22 @@ class OpenAlexIndex:
 
     def by_doi(self, doi: str) -> list[dict[str, Any]]:
         return self._works({"filter": f"doi:{doi}"})
+
+    def by_dois(self, dois: list[str]) -> list[dict[str, Any]]:
+        """The works of several DOIs, ``OPENALEX_MAX_DOIS`` per request. A
+        DOI with a ``,`` or ``|`` (filter syntax in OpenAlex: it would split
+        the filter) is skipped and logged; it is then not found."""
+        unsafe = [d for d in dois if "," in d or "|" in d]
+        if unsafe:
+            logger.warning("Skipping DOIs OpenAlex cannot filter on: %s", unsafe)
+            dois = [d for d in dois if d not in unsafe]
+        works: list[dict[str, Any]] = []
+        for start in range(0, len(dois), OPENALEX_MAX_DOIS):
+            chunk = dois[start : start + OPENALEX_MAX_DOIS]
+            works += self._works(
+                {"filter": f"doi:{'|'.join(chunk)}", "per-page": str(len(chunk))}
+            )
+        return works
 
 
 def _search_text(value: str) -> str:

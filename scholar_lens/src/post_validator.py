@@ -1322,6 +1322,9 @@ _LINK_TARGET = re.compile(r"\]\((https?://[^)\s]+)\)")
 # A link to a paper itself (what a survey's citations and references point to).
 _PAPER_LINK = re.compile(r"^https?://(?:arxiv\.org/abs/|doi\.org/)")
 REFERENCES_HEADING = "### References"
+# The survey's list of the user's reference articles, after References, by
+# output language ("" for any other): links the body need not cite.
+FURTHER_READING_HEADINGS = {"Korean": "### 참고 자료", "": "### Further reading"}
 
 
 def _check_survey_citations(lines: Lines, offset: int, add: Add) -> None:
@@ -1329,11 +1332,16 @@ def _check_survey_citations(lines: Lines, offset: int, add: Add) -> None:
     is left unrendered, every listed reference is cited, and every paper the
     body links is listed. A reference only a table cites is a warning: the
     code-built timeline links every paper of the plan, so the prose skipped
-    it."""
+    it. The list ends at the next heading: the further-reading list of the
+    user's articles after it is no list of cited papers."""
     start = next((i for i, line in lines if line.strip() == REFERENCES_HEADING), None)
     if start is None:
         add("error", "references", offset, f"a survey ends with '{REFERENCES_HEADING}'")
         return
+    end = next(
+        (i for i, line in lines if i > start and _HEADING.match(line)),
+        lines[-1][0] + 1,
+    )
     cited: set[str] = set()
     in_prose: set[str] = set()
     for i, line in lines:
@@ -1348,7 +1356,7 @@ def _check_survey_citations(lines: Lines, offset: int, add: Add) -> None:
     listed = {
         url: i
         for i, line in lines
-        if i > start and line.lstrip().startswith("* ")
+        if start < i < end and line.lstrip().startswith("* ")
         for url in _LINK_TARGET.findall(line)
     }
     for url, i in listed.items():

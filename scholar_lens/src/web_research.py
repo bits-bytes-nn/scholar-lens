@@ -281,6 +281,9 @@ class PageContent:
     # for arXiv's "Refer to caption" placeholder).
     image_captions: dict[str, str] = field(default_factory=dict)
     links: list[str] = field(default_factory=list)
+    # The links inside the page's single <article>/<main> (all of ``links``
+    # when it has none): what its text cites, without its site navigation.
+    content_links: list[str] = field(default_factory=list)
     # Where the page actually lives after HTTP and <meta refresh> redirects
     # (sub-page scope is taken from it); empty when it is ``url`` itself.
     final_url: str = ""
@@ -937,12 +940,11 @@ class WebResearcher:
         # Images from the same scope as the text, so sidebar logos and badges
         # never become figures the writer may cite.
         # An arXiv abstract page has no figures, only site icons.
+        content = BeautifulSoup(main, "html.parser") if main else soup
         images = (
             {}
             if is_arxiv_host(final_url) and "/abs/" in urlparse(final_url).path
-            else self._extract_images(
-                BeautifulSoup(main, "html.parser") if main else soup, final_url
-            )
+            else self._extract_images(content, final_url)
         )
         image_urls = list(images)
         # The writer cites only listed images: drop the markers of the others
@@ -959,6 +961,9 @@ class WebResearcher:
             image_urls=image_urls,
             image_captions=images,
             links=links,
+            content_links=(
+                self._extract_links(content, final_url) if main else list(links)
+            ),
             final_url=final_url if final_url != url else "",
         )
 

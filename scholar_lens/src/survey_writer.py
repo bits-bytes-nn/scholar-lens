@@ -4,7 +4,9 @@ post.
 ``survey write --plan`` reads the plan (local or S3) the plan stage wrote and
 the user may have edited, resolves papers added by hand (DataCite for arXiv
 ids, OpenAlex for DOIs), turns each paper into a card (cached on disk and in
-S3), plans the outline, writes every section through the guide's
+S3), reads the plan's reference articles again (explanatory material for the
+sections that frame the field, listed as further reading), plans the
+outline, writes every section through the guide's
 write → evaluate → revise → ground loop (``tech_guide.revise_section``,
 ``checked_grounding``) and publishes the post like the other kinds. Every
 check on the models' answers is code (``survey_post``).
@@ -69,7 +71,13 @@ from .scholarly_index import (
     datacite_record,
     openalex_record,
 )
-from .survey_pipeline import HARD_BUDGET_MULTIPLE, SurveyCalls, survey_slug
+from .survey_pipeline import (
+    HARD_BUDGET_MULTIPLE,
+    SurveyCalls,
+    read_references,
+    reference_excerpts,
+    survey_slug,
+)
 from .survey_plan import (
     PlanPaper,
     SourceRecord,
@@ -98,6 +106,7 @@ from .survey_post import (
     figure_list,
     fill_metadata,
     foreign_paper_links,
+    further_reading,
     needs_metadata,
     normalize_plan_data,
     plan_data,
@@ -137,6 +146,11 @@ MAX_PAPER_IMAGES = 40
 # Sections that explain the papers they cover (full cards); the others place
 # or compare papers already explained (brief lines).
 COVERING_KINDS = ("lineage", "cross_cutting")
+# Sections that frame the field or tie lineages together (cross_cutting also
+# explains its papers) and so get the user's reference articles, within this
+# many characters in all.
+REFERENCE_KINDS = ("introduction", "cross_cutting", "comparison", "insights")
+REFERENCE_MATERIAL_CHARS = 8_000
 _REVISING = (
     "You are REVISING an existing draft of this section that did not pass "
     "review.\n\n{feedback}\n\nCURRENT DRAFT to improve (rewrite it, keeping "
@@ -359,6 +373,8 @@ class Survey:
     body: str
     plan: SurveyPlan
     cards: dict[str, PaperCard]
+    # The reference articles that were read: (title, url) for further reading.
+    reading: list[tuple[str, str]] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
 
 
@@ -574,11 +590,16 @@ class SurveyWriter(SurveyCalls):
     # ---- sections ------------------------------------------------------------------
 
     async def write(
-        self, plan: SurveyPlan, cards: Mapping[str, PaperCard], outline: SurveyOutline
+        self,
+        plan: SurveyPlan,
+        cards: Mapping[str, PaperCard],
+        outline: SurveyOutline,
+        material: Sequence[PageContent] = (),
     ) -> str:
         """Every section through write → evaluate → revise → ground; the
         code's tables appended (timeline to the introduction, comparison to
-        the comparison section)."""
+        the comparison section); ``material`` (the reference articles' pages)
+        offered to the sections of :data:`REFERENCE_KINDS`."""
         papers = {p.id: p for p in plan.papers}
         lineage_titles = {
             s.lineage: s.title
@@ -599,7 +620,7 @@ class SurveyWriter(SurveyCalls):
                 section.title,
             )
             table = tables.get(section.kind, "")
-            inputs = self._inputs(plan, cards, outline, index, written, table)
+            inputs = self._inputs(plan, cards, outline, index, written, table, material)
             directive = self._directive(section)
             text = await self._write_section({**inputs, "depth_directive": directive})
             if not text:
@@ -655,6 +676,7 @@ class SurveyWriter(SurveyCalls):
         index: int,
         written: Sequence[str],
         table: str,
+        material: Sequence[PageContent] = (),
     ) -> dict[str, Any]:
         """What the writer, evaluator and fact-checker of section ``index``
         see (all but the depth directive)."""
@@ -719,6 +741,15 @@ class SurveyWriter(SurveyCalls):
                     for p in plan.papers
                     if p.id in cards
                 )
+            ),
+            "reference_material": (
+                reference_excerpts(
+                    material,
+                    f"{plan.topic} {section.title} {section.description}",
+                    REFERENCE_MATERIAL_CHARS,
+                )
+                if section.kind in REFERENCE_KINDS
+                else "none"
             ),
             "figures": _figures_text(section, cards),
             "equations": _equations_text(section, cards),
@@ -811,6 +842,7 @@ class SurveyWriter(SurveyCalls):
                 "cards": inputs["cards"],
                 "other_papers": inputs["other_papers"],
                 "connections": inputs["connections"],
+                "reference_material": inputs["reference_material"],
                 "appended_table": inputs["appended_table"],
                 "language": self.language,
             }
@@ -830,6 +862,7 @@ class SurveyWriter(SurveyCalls):
                 "cards": inputs["cards"],
                 "other_papers": inputs["other_papers"],
                 "connections": inputs["connections"],
+                "reference_material": inputs["reference_material"],
                 "appended_table": inputs["appended_table"],
                 "glossary": inputs["glossary"],
                 "language": self.language,
@@ -1088,18 +1121,29 @@ async def write_survey(
     researcher: WebResearcher,
     translation_guideline: str,
 ) -> Survey:
-    """Cards → outline → sections."""
+    """Cards and reference articles → outline → sections."""
     cards, notes = await gather_cards(
         plan, writer, store=store, index=index, researcher=researcher
     )
+    articles = [r for r in plan.references if r.kind == "article"]
+    read = await asyncio.to_thread(
+        read_references, [r.url for r in articles], researcher
+    )
+    titles = {r.url: r.title for r in articles}
+    reading = [(titles.get(r.url) or r.page.title, r.url) for r in read if r.page]
+    if unread := [r.url for r in read if r.page is None]:
+        notes.append(
+            "Reference articles that could not be read (left out): " + ", ".join(unread)
+        )
     plan = without_papers(plan, [p.id for p in plan.papers if p.id not in cards])
     outline = await writer.outline(plan, cards, translation_guideline)
-    body = await writer.write(plan, cards, outline)
+    body = await writer.write(plan, cards, outline, [r.page for r in read if r.page])
     return Survey(
         title=outline.title,
         body=body,
         plan=plan,
         cards=cards,
+        reading=reading,
         notes=[*notes, *card_notes(plan, cards)],
     )
 
@@ -1229,7 +1273,10 @@ async def run_survey_write_pipeline(
         use_math=has_math(body),
         description=description or None,
     )
-    document = f"{front_matter}{body}\n\n{reference_list(survey.plan.papers)}"
+    document = (
+        f"{front_matter}{body}\n\n{reference_list(survey.plan.papers)}"
+        + further_reading(survey.reading, writer.language)
+    )
     slug = survey_slug(plan.topic)
     work_dir = papers_dir / slug
     work_dir.mkdir(parents=True, exist_ok=True)

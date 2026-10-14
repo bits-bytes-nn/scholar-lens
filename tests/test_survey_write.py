@@ -44,6 +44,7 @@ from scholar_lens.src.prompts.survey import (
     CONNECTION_RULES,
     DEPTH_GUIDANCE,
     NARRATION_RULE,
+    REFERENCE_MATERIAL_RULE,
     SECTION_ROLES,
 )
 from scholar_lens.src.publisher import Publisher
@@ -70,6 +71,7 @@ from scholar_lens.src.survey_post import (
     credit_figures,
     equation_in_source,
     figure_list,
+    further_reading,
     reference_list,
     render_citations,
     section_targets,
@@ -841,6 +843,30 @@ class TestValidator:
         no_refs = rules(survey_post("## 들어가며\n\n본문입니다.\n"))
         assert any(r.startswith("error:references:a survey ends with") for r in no_refs)
 
+    def test_further_reading_is_not_a_list_of_cited_papers(self) -> None:
+        body = GOOD_BODY + further_reading(
+            [("RLHF: Lil'Log", ARTICLE), ("A post", "https://blog.x.io/a")], "Korean"
+        )
+        assert body.endswith(
+            "arXiv.\n\n### 참고 자료\n* [RLHF: Lil'Log]"
+            f"({ARTICLE})\n* [A post](https://blog.x.io/a)\n"
+        )
+        assert [r for r in rules(survey_post(body)) if r.startswith("error")] == []
+        # An uncited paper in References is still an error.
+        extra = body.replace(
+            "\n\n### 참고 자료",
+            "\n* Ouyang et al. (2022). [IG](https://arxiv.org/abs/2203.02155).\n"
+            "\n### 참고 자료",
+        )
+        assert (
+            "error:references:reference never cited: https://arxiv.org/abs/2203.02155"
+            in rules(survey_post(extra))
+        )
+        assert further_reading([], "Korean") == ""
+        assert further_reading([("T", ARTICLE)], "English").startswith(
+            "\n### Further reading\n"
+        )
+
     def test_a_paper_linked_only_by_the_timeline_is_flagged(self) -> None:
         # The code-built timeline links every plan paper; the prose skipping
         # one is flagged for the reviewer without blocking the post.
@@ -1004,12 +1030,25 @@ def fake_writer(**kwargs: Any) -> SurveyWriter:
     return writer
 
 
+ARTICLE = "https://lilianweng.github.io/posts/2024-07-07-rlhf/"
+ARTICLE_TEXT = (
+    "## Reward hacking\n\nReward hacking is the central open problem of RLHF: "
+    "the policy exploits flaws of the reward model."
+)
+
+
 class FakeResearcher:
     def __init__(self) -> None:
         self.asked: list[str] = []
 
     def research(self, urls: list[str], *, discover_subpages: bool) -> ResearchCorpus:
         self.asked += urls
+        if urls[0] == ARTICLE:
+            return ResearchCorpus(
+                pages=[PageContent(ARTICLE, "RLHF | Lil'Log", ARTICLE_TEXT)]
+            )
+        if "arxiv.org" not in urls[0]:
+            return ResearchCorpus()  # unreadable
         arxiv_id = urls[0].rsplit("/", 1)[1]
         html = f"https://arxiv.org/html/{arxiv_id}v1"
         figure = f"{html}/x1.png"
@@ -1175,6 +1214,51 @@ class TestStage:
         assert "13" in writer.card_chain.payloads[1]["repair_note"]
         assert [r.value for r in built.results] == ["61%"]
         assert built.figures == []  # F1 is not in an empty figure list
+
+
+class TestReferenceArticles:
+    def test_articles_are_read_again_used_and_listed(
+        self, stage: dict[str, Any]
+    ) -> None:
+        data = plan_dict()
+        data["schema_version"] = 3
+        data["references"] = [
+            {"url": ARTICLE, "title": "Lilian Weng: RLHF", "kind": "article"},
+            # A paper reference was a candidate of the plan: not read again.
+            {"url": "https://arxiv.org/abs/2009.01325", "kind": "paper"},
+            {"url": "https://blog.x.io/gone", "title": "Gone"},
+        ]
+        Path(stage["request"].plan).write_text(json.dumps(data))
+        outcome = run_stage(stage)
+        post = outcome.markdown_path.read_text()
+        assert post.endswith(
+            "arXiv.\n\n### 참고 자료\n* [Lilian Weng: RLHF]" f"({ARTICLE})\n"
+        )
+        errors = [
+            v
+            for v in validate_post(post, survey_spec(), "survey")
+            if v.level == "error"
+        ]
+        assert errors == []
+        asked = stage["researcher"].asked
+        assert ARTICLE in asked and "https://blog.x.io/gone" in asked
+        assert "https://arxiv.org/abs/2009.01325" not in asked
+        assert any(
+            "Reference articles that could not be read" in w
+            and "https://blog.x.io/gone" in w
+            for w in outcome.warnings
+        )
+        writer = stage["writer"]
+        by_kind = {
+            p["section"].split("] ")[0].split("[")[1]: p["reference_material"]
+            for p in writer.section_chain.payloads
+        }
+        assert "Reward hacking" in by_kind["introduction"]
+        assert by_kind["lineage"] == "none"
+        for chain in (writer.evaluation_chain, writer.grounding_chain):
+            assert any(
+                "Reward hacking" in p["reference_material"] for p in chain.payloads
+            )
 
 
 class TestStageEdges:
@@ -1373,6 +1457,26 @@ class TestSectionRoles:
         assert FIGURES[0][1] in lineage["figures"]
         assert intro["figures"] == "none"
 
+    def test_reference_articles_reach_the_sections_that_frame_the_field(
+        self,
+    ) -> None:
+        writer, outline, found = fake_writer(), written_outline(), outline_cards()
+        article = PageContent(ARTICLE, "RLHF | Lil'Log", ARTICLE_TEXT)
+        kinds = [s.kind for s in outline.sections]
+        for index, kind in enumerate(kinds):
+            inputs = writer._inputs(plan(), found, outline, index, [], "", [article])
+            material = inputs["reference_material"]
+            if kind in survey_writer.REFERENCE_KINDS:
+                assert f"## Source (reference material): {ARTICLE}" in material
+                assert "Reward hacking is the central open problem" in material
+            else:
+                assert material == "none"
+            # The papers' cards stay the only source of paper facts.
+            assert "Reward hacking" not in inputs["cards"]
+        assert {"introduction", "comparison", "insights", "lineage"} <= set(kinds)
+        no_material = writer._inputs(plan(), found, outline, 0, [], "")
+        assert no_material["reference_material"] == "none"
+
     def test_directives_carry_the_role_and_a_lineage_has_no_depth(self) -> None:
         writer, outline = fake_writer(), written_outline()
         intro = writer._directive(outline.sections[0])
@@ -1396,6 +1500,8 @@ class TestSectionRoles:
         ):
             template = prompt.human_prompt_template
             assert CONNECTION_RULES in template and NARRATION_RULE in template
+            assert REFERENCE_MATERIAL_RULE in template
+            assert "<reference_material>\n{reference_material}" in template
         assert "lineage or cross-cutting section" in (
             SurveyEvaluationPrompt.human_prompt_template
         )

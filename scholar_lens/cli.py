@@ -7,7 +7,7 @@ and scripts can parse the outcome directly::
     scholar-lens review "https://openreview.net/pdf?id=nZeVKeeFYf9" --remote
     scholar-lens guide "https://docs.vllm.ai/en/latest/" --search-query "vLLM paged attention"
     scholar-lens guide "https://docs.vllm.ai/en/latest/" --reference "https://arxiv.org/abs/2309.06180"
-    scholar-lens survey plan "LLM preference optimization" --paper 2305.18290
+    scholar-lens survey plan "LLM preference optimization" --paper 2305.18290 --reference "https://huggingface.co/blog/rlhf"
     scholar-lens survey write --plan papers/survey-llm-preference-optimization/plan.json
     scholar-lens status <job-id> --wait
 
@@ -198,6 +198,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="A paper the survey must include: arXiv id or URL, or DOI (repeatable).",
     )
     survey_plan.add_argument(
+        "--reference",
+        dest="reference_urls",
+        action="append",
+        default=[],
+        metavar="URL",
+        help=(
+            "Reference material to consult: a blog post, survey article or paper "
+            "page (repeatable). It shapes the scope, the papers it links become "
+            "candidates (not required), and the write stage reads its articles "
+            "again and lists them as further reading."
+        ),
+    )
+    survey_plan.add_argument(
         "--since",
         dest="since_year",
         type=int,
@@ -276,6 +289,7 @@ def _request_from_args(args: argparse.Namespace) -> JobRequest:
             kind="survey_plan",
             topic=args.topic,
             paper_ids=args.paper_ids,
+            reference_urls=args.reference_urls,
             since_year=args.since_year,
             until_year=args.until_year,
         )

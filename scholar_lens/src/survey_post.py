@@ -19,9 +19,13 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from .formatting import md_link_text, md_link_url
+from .formatting import link_list, md_link_text, md_link_url
 from .markdown_math import segments
-from .post_validator import REFERENCES_HEADING, unsourced_numbers
+from .post_validator import (
+    FURTHER_READING_HEADINGS,
+    REFERENCES_HEADING,
+    unsourced_numbers,
+)
 from .prompts.tech_guide import DEPTH_CHARS, NON_KOREAN_CHAR_FACTOR
 from .publish_types import slugify
 from .survey_plan import (
@@ -933,3 +937,14 @@ def reference_list(papers: Iterable[PlanPaper]) -> str:
             line += f" {_plain(p.venue).rstrip('.')}."
         lines.append(line)
     return f"- - -\n{REFERENCES_HEADING}\n" + "\n".join(lines) + "\n"
+
+
+def further_reading(links: Sequence[tuple[str, str]], language: str) -> str:
+    """The user's reference articles as ``* [title](url)`` lines under
+    "### 참고 자료" (Korean) or "### Further reading", for after the
+    reference list; "" without any. They are no papers of the survey: the
+    validator does not ask the body to cite them."""
+    if not links:
+        return ""
+    heading = FURTHER_READING_HEADINGS.get(language, FURTHER_READING_HEADINGS[""])
+    return f"\n{heading}\n{link_list(links)}\n"

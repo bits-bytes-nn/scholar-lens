@@ -13,6 +13,7 @@ from scholar_lens.src.survey_plan import (
     NO_CORE_PAPER,
     Candidate,
     CitationData,
+    PlanReference,
     SourceRecord,
     SurveyInputError,
     SurveyPlan,
@@ -25,13 +26,16 @@ from scholar_lens.src.survey_plan import (
     check_selection,
     chronological,
     citation_edges,
+    cited_paper_ids,
     in_degrees,
     in_time_range,
     merge_records,
     normalize_doi,
+    paper_id_of,
     parse_paper_id,
     parse_tagged_json,
     rank_candidates,
+    reference_kind,
     semantic_scholar_id,
     shortlist,
     shortlist_digest,
@@ -92,6 +96,48 @@ class TestIds:
     def test_other_values_are_rejected(self, value: str) -> None:
         with pytest.raises(SurveyInputError):
             parse_paper_id(value)
+
+    @pytest.mark.parametrize(
+        ("url", "kind"),
+        [
+            ("https://arxiv.org/abs/2305.18290v2", "paper"),
+            ("https://arxiv.org/pdf/2305.18290", "paper"),
+            ("https://doi.org/10.18653/v1/2024.emnlp-main.626", "paper"),
+            ("https://huggingface.co/blog/rlhf", "article"),
+            ("https://example.com/2305.18290", "article"),
+        ],
+    )
+    def test_reference_kind(self, url: str, kind: str) -> None:
+        assert reference_kind(url) == kind
+        assert (paper_id_of(url) is not None) == (kind == "paper")
+
+    def test_cited_papers_from_links_and_text(self) -> None:
+        links = [
+            "https://arxiv.org/abs/2203.02155",
+            "https://arxiv.org/pdf/2203.02155v3",  # the same paper
+            "http://arxiv.org/pdf/1707.06347.pdf",
+            "https://arxiv.org/html/2402.01306v2",
+            "https://ar5iv.labs.arxiv.org/html/1706.03741",
+            "https://doi.org/10.18653/v1/2024.emnlp-main.626",
+            "https://doi.org/10.48550%2FarXiv.2009.01325",  # an arXiv DOI
+            "https://doi.org/10.1234",  # not a DOI
+            "https://arxiv.org/list/cs.CL/recent",  # a listing, no paper
+            "https://huggingface.co/blog/dpo-trl",
+            "https://arxiv.org/abs/2305.18290",  # the page's own paper
+        ]
+        text = (
+            "See Ouyang et al. (arXiv:2203.02155) and arXiv: 2210.10760v1, (2401.0001)."
+        )
+        assert cited_paper_ids(links, text, own="2305.18290") == [
+            "2203.02155",
+            "1707.06347",
+            "2402.01306",
+            "1706.03741",
+            "10.18653/v1/2024.emnlp-main.626",
+            "2009.01325",
+            "2210.10760",
+        ]
+        assert cited_paper_ids([], "no ids here") == []
 
     def test_normalize_doi_needs_a_doi(self) -> None:
         assert normalize_doi(None) is None
@@ -238,6 +284,24 @@ class TestEdgesAndRanking:
         again = rank_candidates([tie, cited, hit, old, new], edges, today=TODAY)
         assert [c.id for c in again] == [c.id for c in ranked]
 
+    def test_references_break_ties_after_topic_evidence(self) -> None:
+        referenced = cand(
+            "ref", found_by={"reference:https://a.io/p", "reference:https://b.io/q"}
+        )
+        searched = cand("hit", found_by={"query:q"})
+        popular = cand("pop", openalex_citations=10_000)
+        ranked = rank_candidates([popular, searched, referenced], [], today=TODAY)
+        # A search hit outranks any number of references (a blog post links
+        # off-topic papers too); references outrank citations per year.
+        assert [c.id for c in ranked] == ["hit", "ref", "pop"]
+        assert referenced.referenced == 2 and referenced.search_hits == 0
+        # Among equal topic evidence, the more referenced paper goes first.
+        both = cand("both", found_by={"query:q", "reference:https://a.io/p"})
+        ranked = rank_candidates([searched, both], [], today=TODAY)
+        assert [c.id for c in ranked] == ["both", "hit"]
+        # Referenced papers are no surer than others: the rank decides.
+        assert [c.id for c in shortlist(ranked, 1)] == ["both"]
+
     def test_search_hits_count_topic_queries_only(self) -> None:
         c = cand("x", found_by={"query:a", "landmark:b", "cites:y", "required"})
         assert c.search_hits == 1 and c.landmark
@@ -284,6 +348,9 @@ class TestEdgesAndRanking:
             " | found by 1 topic queries"
         ) in text
         assert len(text) < 800
+        flagged = cand("x", found_by={"reference:https://a.io/p", "query:q"})
+        assert "- id: x [REFERENCED by 1]\n" in shortlist_digest([flagged], [], TODAY)
+        assert "REFERENCED" not in shortlist_digest([cand("y")], [], TODAY)
 
 
 SCOPE = {
@@ -453,15 +520,65 @@ class TestPlan:
     def test_json_round_trip_uses_from_and_to(self) -> None:
         plan = make_plan()
         data = json.loads(plan.to_json())
-        assert data["schema_version"] == 2 and "references" not in data
+        assert data["schema_version"] == 3 and data["references"] == []
         assert data["edges"] == [{"from": "2305.18290", "to": "1706.03741"}]
         assert SurveyPlan.model_validate_json(plan.to_json()) == plan
 
-    def test_a_version_1_plan_loads_without_its_references(self) -> None:
-        plan = make_plan()
-        data = json.loads(plan.to_json())
-        data.update(schema_version=1, references=["https://example.com/a"])
-        assert SurveyPlan.model_validate(data) == plan
+    def test_references_round_trip(self) -> None:
+        plan = make_plan().model_copy(
+            update={
+                "references": [
+                    PlanReference(
+                        url="https://x.io/post", title="A post", kind="article"
+                    )
+                ]
+            }
+        )
+        again = SurveyPlan.model_validate_json(plan.to_json())
+        assert again.references == plan.references
+
+    def test_a_version_2_plan_loads_without_references(self) -> None:
+        data = json.loads(make_plan().to_json())
+        del data["references"]
+        data["schema_version"] = 2
+        plan = SurveyPlan.model_validate(data)
+        assert plan.schema_version == 3 and plan.references == []
+
+    def test_a_version_1_plan_converts_its_reference_urls(self) -> None:
+        data = json.loads(make_plan().to_json())
+        del data["references"]
+        data.update(
+            schema_version=1,
+            references=["https://x.io/a", "https://arxiv.org/abs/2305.18290", "notes"],
+        )
+        plan = SurveyPlan.model_validate(data)
+        assert [(r.url, r.kind) for r in plan.references] == [
+            ("https://x.io/a", "article"),
+            ("https://arxiv.org/abs/2305.18290", "paper"),
+        ]
+
+    def test_a_hand_added_reference_gets_its_kind_from_the_url(self) -> None:
+        data = json.loads(make_plan().to_json())
+        data["references"] = [
+            {"url": "https://doi.org/10.18653/v1/2024.emnlp-main.626"},
+            {"url": "https://lilianweng.github.io/posts/2024-07-07-hallucination/"},
+        ]
+        kinds = [r.kind for r in SurveyPlan.model_validate(data).references]
+        assert kinds == ["paper", "article"]
+
+    @pytest.mark.parametrize(
+        ("url", "kind"),
+        [
+            ("https://lilianweng.github.io/posts/2024-07-07-hallucination/", "paper"),
+            ("https://arxiv.org/abs/2305.18290", "article"),
+            ("https://doi.org/10.48550/arXiv.2305.18290", "article"),
+        ],
+    )
+    def test_a_reference_kind_that_contradicts_the_url_is_rejected(
+        self, url: str, kind: str
+    ) -> None:
+        with pytest.raises(ValidationError, match="kind follows the URL"):
+            PlanReference.model_validate({"url": url, "kind": kind})
 
     @pytest.mark.parametrize(
         ("edit", "message"),
@@ -473,8 +590,9 @@ class TestPlan:
                 "no papers",
             ),
             (lambda d: d["edges"].append({"from": "a", "to": "b"}), "not in the plan"),
-            (lambda d: d.update(schema_version=3), "schema_version"),
-            (lambda d: d.update(references=[]), "references"),
+            (lambda d: d.update(schema_version=4), "schema_version"),
+            (lambda d: d.update(references=[{"url": "x.io/a"}]), "references"),
+            (lambda d: d.update(references=["https://x.io/a"]), "references"),
             (lambda d: d.update(papers=[]), "papers"),
             (
                 lambda d: [p.update(role="supporting") for p in d["papers"]],

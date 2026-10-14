@@ -12,20 +12,21 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime
-from typing import Literal
+from typing import Any, Literal
+from urllib.parse import unquote
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from .citation_metadata import titles_match
-from .constants import arxiv_id_from_reference
+from .constants import ARXIV_ID_BODY, arxiv_id_from_reference
 
-# Plan files carry schema_version 2 (``SurveyPlan``); bump it with the
-# generator when the fields or their meaning change. Version 1 plans also
-# had ``references`` (never read); they load with it ignored.
-GENERATOR = "scholar-lens survey-plan/2"
+# Plan files carry schema_version 3 (``SurveyPlan``); bump it with the
+# generator when the fields or their meaning change. Version 2 plans have no
+# ``references``; version 1 plans had them as plain URLs (never read).
+GENERATOR = "scholar-lens survey-plan/3"
 
 # Shown to the selection call per candidate.
 ABSTRACT_EXCERPT_CHARS = 400
@@ -38,7 +39,10 @@ _DOI = re.compile(r"^10\.\d{4,9}/\S+$")
 _DOI_PREFIX = re.compile(r"^(?:https?://(?:dx\.)?doi\.org/|doi:)", re.IGNORECASE)
 _ARXIV_DOI = re.compile(r"^10\.48550/arxiv\.(.+)$", re.IGNORECASE)
 _JSON_FENCE = re.compile(r"^```(?:json)?\s*|\s*```$")
+# An arXiv id written out in a page's text ("arXiv:2305.18290").
+_TEXT_ARXIV_ID = re.compile(rf"\barXiv:\s?({ARXIV_ID_BODY})\b", re.IGNORECASE)
 _SLUG = r"^[a-z0-9][a-z0-9-]*$"
+_HTTP_URL = r"^https?://[^\s/]+\S*$"
 
 
 class SurveyInputError(ValueError):
@@ -84,6 +88,41 @@ def parse_paper_id(value: str) -> str:
     )
 
 
+def paper_id_of(value: str) -> str | None:
+    """:func:`parse_paper_id` of ``value``, None when it names no paper (any
+    URL other than an arXiv or doi.org link)."""
+    try:
+        return parse_paper_id(unquote(value))
+    except SurveyInputError:
+        return None
+
+
+# ---- the user's reference material ---------------------------------------------
+
+ReferenceKind = Literal["paper", "article"]
+
+
+def reference_kind(url: str) -> ReferenceKind:
+    """A reference URL that is an arXiv or doi.org link is a paper; any
+    other page (a blog post, a survey article, a talk page) an article."""
+    return "paper" if paper_id_of(url) else "article"
+
+
+def cited_paper_ids(
+    links: Iterable[str], text: str, *, own: str | None = None
+) -> list[str]:
+    """The papers a reference page cites, as plan ids in order of first
+    mention: its arXiv (abs, pdf, html) and doi.org links and the
+    ``arXiv:<id>`` ids its text writes out; ``own`` (the page's own paper,
+    for an arXiv page) left out. ``links`` should be the page's content
+    links, without its site navigation."""
+    found = [i for link in links if (i := paper_id_of(link))]
+    found += [
+        i for m in _TEXT_ARXIV_ID.finditer(text) if (i := unversioned_arxiv_id(m[1]))
+    ]
+    return [i for i in dict.fromkeys(found) if i != own]
+
+
 # ---- source records and merged candidates ----------------------------------
 
 Provider = Literal["openalex", "arxiv"]
@@ -107,7 +146,7 @@ class SourceRecord:
     # OpenAlex ids of the works this record cites.
     references: list[str] = field(default_factory=list)
     # How the pipeline found it: "query:<q>", "landmark:<title>", "required",
-    # "reference-of:<id>", "cites:<id>".
+    # "reference:<url>" (a reference the user passed is the paper or cites it).
     found_by: set[str] = field(default_factory=set)
 
     def keys(self) -> set[str]:
@@ -158,6 +197,11 @@ class Candidate:
     def search_hits(self) -> int:
         """Distinct topic queries that returned the paper."""
         return sum(1 for f in self.found_by if f.startswith("query:"))
+
+    @property
+    def referenced(self) -> int:
+        """Distinct user references that are the paper or link to it."""
+        return sum(1 for f in self.found_by if f.startswith("reference:"))
 
     @property
     def landmark(self) -> bool:
@@ -314,14 +358,18 @@ def citations_per_year(candidate: Candidate, current_year: int) -> float:
 def rank_candidates(
     candidates: Sequence[Candidate], edges: Sequence[tuple[str, str]], *, today: date
 ) -> list[Candidate]:
-    """Most supported first: topic evidence (in-pool citations received plus
-    distinct topic queries that found the paper), then citations per year
-    since publication, then id (a stable tie-break)."""
+    """Most supported first: topic evidence (in-pool citations received and
+    distinct topic queries that found the paper), then distinct user
+    references that are or cite it, then citations per year since
+    publication, then id (a stable tie-break). A reference is not topic
+    evidence: a blog post links papers off the topic too (a LoRA, a Gopher),
+    so it only breaks ties."""
     degrees = in_degrees(edges)
     return sorted(
         candidates,
         key=lambda c: (
             -(degrees.get(c.id, 0) + c.search_hits),
+            -c.referenced,
             -citations_per_year(c, today.year),
             c.id,
         ),
@@ -498,12 +546,58 @@ class PlanExclusion(_Strict):
     reason: str = ""
 
 
+class PlanReference(_Strict):
+    """Material the user passed (``--reference``): a paper (an arXiv or
+    doi.org link) was a candidate of the plan; an article is read again by
+    the write stage as explanatory material and listed as further reading.
+    ``kind`` follows the URL (:func:`reference_kind`): a hand-added
+    reference may leave it out, and one that contradicts the URL is
+    rejected."""
+
+    url: str = Field(pattern=_HTTP_URL)
+    title: str = ""
+    kind: ReferenceKind
+
+    @model_validator(mode="before")
+    @classmethod
+    def _kind_from_url(cls, data: object) -> object:
+        if isinstance(data, dict) and "kind" not in data:
+            data = {**data, "kind": reference_kind(str(data.get("url", "")))}
+        return data
+
+    @model_validator(mode="after")
+    def _kind_matches_url(self) -> PlanReference:
+        if self.kind != (derived := reference_kind(self.url)):
+            raise ValueError(
+                f"reference {self.url!r} is a {derived}, not a {self.kind} "
+                "(kind follows the URL; leave it out)"
+            )
+        return self
+
+
+def upgrade_plan_data(data: Mapping[str, Any]) -> dict[str, Any]:
+    """Plan data of an older schema as version 3: a version 2 plan had no
+    references; a version 1 plan's references were plain URLs (its other
+    entries are dropped)."""
+    data = dict(data)
+    version = data.get("schema_version")
+    if version == 1:
+        data["references"] = [
+            {"url": u}
+            for u in data.get("references") or []
+            if isinstance(u, str) and re.match(_HTTP_URL, u)
+        ]
+    if version in (1, 2):
+        data["schema_version"] = 3
+    return data
+
+
 class SurveyPlan(_Strict):
     """The plan file (``plan.json``): what the write stage reads. Users may
     edit it (drop, add or move papers, rename lineages); the write stage
     validates it again."""
 
-    schema_version: Literal[2] = 2
+    schema_version: Literal[3] = 3
     generator: str = GENERATOR
     created_at: datetime
     topic: str = Field(min_length=1)
@@ -515,17 +609,14 @@ class SurveyPlan(_Strict):
     papers: list[PlanPaper] = Field(min_length=1)
     edges: list[PlanEdge] = Field(default_factory=list)
     excluded: list[PlanExclusion] = Field(default_factory=list)
+    references: list[PlanReference] = Field(default_factory=list)
     sources: list[str] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
 
     @model_validator(mode="before")
     @classmethod
     def _upgrade(cls, data: object) -> object:
-        """A version 1 plan is a version 2 plan plus ``references``."""
-        if isinstance(data, dict) and data.get("schema_version") == 1:
-            data = {k: v for k, v in data.items() if k != "references"}
-            data["schema_version"] = 2
-        return data
+        return upgrade_plan_data(data) if isinstance(data, dict) else data
 
     @model_validator(mode="after")
     def _consistent(self) -> SurveyPlan:
@@ -576,6 +667,7 @@ def build_plan(
     pool: Sequence[Candidate],
     edges: Sequence[tuple[str, str]],
     time_range: TimeRange,
+    references: Sequence[PlanReference] = (),
     sources: Sequence[str],
     notes: Sequence[str],
     created_at: datetime,
@@ -639,6 +731,7 @@ def build_plan(
             )
             for e in excluded[:MAX_EXCLUDED]
         ],
+        references=list(references),
         sources=list(sources),
         notes=list(notes),
     )
@@ -649,13 +742,15 @@ def shortlist_digest(
 ) -> str:
     """One block per candidate for the selection call: id, year, title,
     venue, citations, in-pool citations received, topic queries that found
-    it, required and landmark flags and an abstract excerpt."""
+    it, required, landmark and referenced flags and an abstract excerpt."""
     degrees = in_degrees(edges)
     blocks = []
     for c in shortlist_:
         cites = "unknown" if c.citation_count is None else str(c.citation_count)
-        flags = (" [REQUIRED]" if c.required else "") + (
-            " [LANDMARK]" if c.landmark else ""
+        flags = (
+            (" [REQUIRED]" if c.required else "")
+            + (" [LANDMARK]" if c.landmark else "")
+            + (f" [REFERENCED by {c.referenced}]" if c.referenced else "")
         )
         abstract = " ".join((c.abstract or "").split())[:ABSTRACT_EXCERPT_CHARS]
         blocks.append(

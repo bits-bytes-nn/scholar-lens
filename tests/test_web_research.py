@@ -453,6 +453,24 @@ class TestHardenedFetch:
         )
         assert researcher._fetch_page("https://docs.x.dev/big") is None
 
+    def test_content_links_leave_out_the_site_navigation(self) -> None:
+        html = (
+            "<html><body><nav><a href='https://arxiv.org/abs/1111.11111'>x</a>"
+            "<a href='/posts/'>Posts</a></nav><article><p>Text.</p>"
+            "<a href='https://arxiv.org/abs/2305.18290'>DPO</a></article>"
+            "<footer><a href='/about'>About</a></footer></body></html>"
+        )
+        researcher = _researcher({"https://blog.x.io/p": (200, "text/html", html)})
+        page = researcher._fetch_page("https://blog.x.io/p")
+        assert page is not None
+        assert page.content_links == ["https://arxiv.org/abs/2305.18290"]
+        assert "https://blog.x.io/posts/" in page.links
+        # A page without an <article>/<main> has only its links.
+        flat = _researcher(
+            {"https://blog.x.io/q": (200, "text/html", "<a href='/a'>a</a>")}
+        )._fetch_page("https://blog.x.io/q")
+        assert flat is not None and flat.content_links == flat.links
+
     def test_relative_links_resolve_against_final_url(self) -> None:
         def handler(request: httpx.Request) -> httpx.Response:
             if request.url.path == "/old":

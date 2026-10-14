@@ -1,10 +1,14 @@
-"""Paper-survey plan stage: scope → candidates → selection → plan file.
+"""Paper-survey plan stage: references → scope → candidates → selection →
+plan file.
 
 ``survey plan`` writes an editable plan (``papers/survey-<slug>/plan.json``
 and its S3 copy); the write stage (``survey write --plan``,
-``survey_writer``) reads it. The scope and selection calls are the only model
-calls; the candidate step is deterministic API work (``scholarly_index``) and
-every check on the models' answers is code (``survey_plan``).
+``survey_writer``) reads it. The user's reference material (``--reference``)
+is read once: excerpts go to the scope call and the papers each reference is
+or links to join the candidates. The scope and selection calls are the only
+model calls; the candidate step is deterministic API work
+(``scholarly_index``) and every check on the models' answers is code
+(``survey_plan``).
 """
 
 from __future__ import annotations
@@ -37,6 +41,7 @@ from .publish_types import slugify
 from .runtime import ROOT_DIR, PipelineOutcome, RunContext
 from .scholarly_index import (
     DATACITE_MAX_IDS,
+    OPENALEX_MAX_DOIS,
     DataCiteIndex,
     OpenAlexIndex,
     SemanticScholarIndex,
@@ -46,6 +51,8 @@ from .scholarly_index import (
 )
 from .survey_plan import (
     Candidate,
+    PlanReference,
+    ReferenceKind,
     SourceRecord,
     SurveyInputError,
     SurveyPlan,
@@ -57,23 +64,36 @@ from .survey_plan import (
     build_plan,
     check_selection,
     citation_edges,
+    cited_paper_ids,
     in_time_range,
     merge_records,
+    paper_id_of,
     parse_paper_id,
     parse_tagged_json,
     rank_candidates,
+    reference_kind,
     semantic_scholar_id,
     shortlist,
     shortlist_digest,
     unversioned_arxiv_id,
 )
 from .utils import BedrockLanguageModelFactory, RetryableBase
+from .web_research import (
+    OfficialDocs,
+    PageContent,
+    ResearchCorpus,
+    SourceFetchError,
+    WebResearcher,
+    page_key,
+)
 
 M = TypeVar("M")
 
 # Results kept per search query and provider, and per landmark title.
 SEARCH_RESULTS = 25
 LANDMARK_RESULTS = 5
+# Reference material shown to the scope call, over all references.
+SCOPE_REFERENCE_CHARS = 8_000
 # Past max_total_tokens the repair round is skipped; past this multiple the
 # run aborts before the next call (the guide pipeline's two tiers).
 HARD_BUDGET_MULTIPLE = 1.5
@@ -87,6 +107,84 @@ _UNDERCOUNT_NOTE = (
 class CandidateSearchError(RuntimeError):
     """Every topic search, or every arXiv metadata lookup, failed (outage or
     spent quota): nothing reliable to plan from. The run fails; try again."""
+
+
+# ---- the user's reference material ---------------------------------------------
+
+
+@dataclass
+class ReadReference:
+    """A reference the user passed and its page (None when it could not be
+    read)."""
+
+    url: str
+    kind: ReferenceKind
+    page: PageContent | None
+
+    def cited_ids(self) -> list[str]:
+        """Plan ids of the paper the reference is (a paper link) and of the
+        papers its content links to or names by arXiv id."""
+        own = paper_id_of(self.url)
+        cited = (
+            cited_paper_ids(self.page.content_links, self.page.text, own=own)
+            if self.page
+            else []
+        )
+        return [own, *cited] if own else cited
+
+    def plan_reference(self) -> PlanReference:
+        return PlanReference(
+            url=self.url, title=self.page.title if self.page else "", kind=self.kind
+        )
+
+
+def read_references(
+    urls: Sequence[str], researcher: WebResearcher
+) -> list[ReadReference]:
+    """Each reference read once, without sub-pages (an arXiv link as the
+    paper's HTML full text); one spelling per page. A reference that cannot
+    be read is kept without its page: the material is optional. Blocking."""
+    read: list[ReadReference] = []
+    seen: set[str] = set()
+    for url in urls:
+        # One per paper (an arXiv link and its arXiv DOI) or page.
+        if (key := paper_id_of(url) or page_key(url)) in seen:
+            continue
+        seen.add(key)
+        try:
+            corpus = researcher.research([url], discover_subpages=False)
+        except SourceFetchError as e:
+            logger.warning("Could not read the reference %s: %s", url, e)
+            corpus = ResearchCorpus()
+        page = corpus.pages[0] if corpus.pages else None
+        read.append(ReadReference(url, reference_kind(url), page))
+    return read
+
+
+def reference_excerpts(pages: Sequence[PageContent], query: str, max_chars: int) -> str:
+    """Each reference page's parts most relevant to ``query``, an equal share
+    of ``max_chars`` each, labelled "(reference material)" and defanged
+    (:meth:`ResearchCorpus.relevant_text`); "none" without pages."""
+    if not pages:
+        return "none"
+    pages = [replace(p, user_reference=True) for p in pages]
+    return ResearchCorpus(pages=pages).relevant_text(
+        query,
+        max_chars=max_chars,
+        official=OfficialDocs.from_urls([]),
+        prefer=[p.url for p in pages],
+    )
+
+
+def unread_note(references: Sequence[ReadReference]) -> list[str]:
+    """The plan note on references that could not be read, if any."""
+    unread = [r.url for r in references if r.page is None]
+    if not unread:
+        return []
+    return [
+        "Reference material that could not be read (a paper link among it is "
+        "still a candidate): " + ", ".join(unread)
+    ]
 
 
 # ---- candidate step (deterministic, network) -------------------------------
@@ -167,12 +265,18 @@ class CandidateFinder:
         arxiv: ArxivHandler,
         datacite: DataCiteIndex,
         semantic_scholar: SemanticScholarIndex,
+        researcher: WebResearcher | None = None,
     ) -> None:
         self.openalex = openalex
         self.arxiv = arxiv
         self.datacite = datacite
         self.semantic_scholar = semantic_scholar
+        self.researcher = researcher or WebResearcher()
         self.calls = _Calls()
+        # Papers the user's references are or cite, and how many of them an
+        # index knew.
+        self.referenced_ids = 0
+        self.referenced_found = 0
         # arXiv ids OpenAlex gave that have no arXiv record (DataCite): the
         # id is wrong or its lookup failed. Their records are left out.
         self.unverified: set[str] = set()
@@ -218,15 +322,57 @@ class CandidateFinder:
             records += found
         return records
 
+    def read_references(self, urls: Sequence[str]) -> list[ReadReference]:
+        return read_references(urls, self.researcher)
+
+    def referenced_records(
+        self, references: Sequence[ReadReference]
+    ) -> list[SourceRecord]:
+        """Records of the papers the references are or cite: arXiv's metadata
+        (DataCite) for arXiv ids, OpenAlex's for other DOIs, each labelled
+        ``reference:<url>`` for every reference that names it. They are
+        candidates, not required. A paper no index knows, or whose lookup
+        failed, is left out."""
+        labels: dict[str, set[str]] = {}
+        for reference in references:
+            for paper_id in reference.cited_ids():
+                labels.setdefault(paper_id, set()).add(f"reference:{reference.url}")
+        arxiv_ids = [i for i in labels if unversioned_arxiv_id(i)]
+        dois = [i for i in labels if not unversioned_arxiv_id(i)]
+        records: list[SourceRecord] = []
+        for start in range(0, len(arxiv_ids), DATACITE_MAX_IDS):
+            chunk = arxiv_ids[start : start + DATACITE_MAX_IDS]
+            items = self.calls.run(
+                "DataCite", lambda c=chunk: self.datacite.arxiv_papers(c)
+            )
+            records += [r for item in items if (r := datacite_record(item, None))]
+        for start in range(0, len(dois), OPENALEX_MAX_DOIS):
+            chunk = dois[start : start + OPENALEX_MAX_DOIS]
+            records += self._openalex_records(
+                lambda c=chunk: self.openalex.by_dois(c), "reference"
+            )
+        found: list[SourceRecord] = []
+        for record in records:
+            key = next((k for k in (record.arxiv_id, record.doi) if k in labels), None)
+            if key is not None:
+                found.append(replace(record, found_by=set(labels[key])))
+        self.referenced_ids = len(labels)
+        self.referenced_found = len(
+            {k for r in found for k in (r.arxiv_id, r.doi) if k in labels}
+        )
+        return found
+
     def gather(
         self,
         scope: SurveyScope,
-        required: list[SourceRecord],
+        known: list[SourceRecord],
         *,
         time_range: TimeRange,
         today: date,
     ) -> CandidatePool:
-        records = list(required)
+        """The ranked pool: ``known`` records (the required and referenced
+        papers) plus the topic searches' and landmark titles' results."""
+        records = list(known)
         answered = self.calls.answered
         for query in scope.queries:
             label = f"query:{query}"
@@ -372,6 +518,11 @@ class CandidateFinder:
         ]
         if enriched:
             sources.append(f"Semantic Scholar citation data for {enriched} candidates")
+        if self.referenced_ids:
+            sources.append(
+                f"References: {self.referenced_ids} papers linked, "
+                f"{self.referenced_found} found in the indexes"
+            )
         return sources
 
     def _notes(self, enriched: int) -> list[str]:
@@ -509,7 +660,11 @@ class SurveyPlanner(SurveyCalls):
         )
 
     async def scope(
-        self, topic: str, time_range: TimeRange, required: list[Candidate]
+        self,
+        topic: str,
+        time_range: TimeRange,
+        required: list[Candidate],
+        references: Sequence[ReadReference] = (),
     ) -> SurveyScope:
         payload = {
             "topic": neutralize_prompt_tags(topic),
@@ -517,6 +672,11 @@ class SurveyPlanner(SurveyCalls):
             "required_papers": neutralize_prompt_tags(
                 "\n".join(f"- {c.title} ({c.year or 'year unknown'})" for c in required)
                 or "- none"
+            ),
+            "references": reference_excerpts(
+                [r.page for r in references if r.page],
+                topic,
+                SCOPE_REFERENCE_CHARS,
             ),
         }
 
@@ -579,17 +739,23 @@ async def plan_survey(
     candidate_pool: int,
     now: datetime,
 ) -> SurveyPlan:
-    """Scope the topic, gather and rank candidates, select the papers and
-    build the plan."""
+    """Read the references, scope the topic, gather and rank candidates,
+    select the papers and build the plan."""
     topic = (request.topic or "").strip()
     user_range = TimeRange(since=request.since_year, until=request.until_year)
     required_records = await asyncio.to_thread(
         finder.resolve_required, request.paper_ids
     )
     required = merge_records(required_records)
-    scope = await planner.scope(topic, user_range, required)
+    references = await asyncio.to_thread(finder.read_references, request.reference_urls)
+    referenced = await asyncio.to_thread(finder.referenced_records, references)
+    scope = await planner.scope(topic, user_range, required, references)
     pool = await asyncio.to_thread(
-        finder.gather, scope, required_records, time_range=user_range, today=now.date()
+        finder.gather,
+        scope,
+        [*required_records, *referenced],
+        time_range=user_range,
+        today=now.date(),
     )
     picks = shortlist(pool.candidates, candidate_pool)
     logger.info(
@@ -614,8 +780,9 @@ async def plan_survey(
         pool=picks,
         edges=pool.edges,
         time_range=user_range,
+        references=[r.plan_reference() for r in references],
         sources=pool.sources,
-        notes=pool.notes,
+        notes=[*pool.notes, *unread_note(references)],
         created_at=now,
     )
 
@@ -671,21 +838,26 @@ async def run_survey_plan_pipeline(
         max_total_tokens=cfg.max_total_tokens,
         callbacks=[tracker],
     )
+    researcher = WebResearcher()
     finder = CandidateFinder(
         openalex=OpenAlexIndex(),
         arxiv=ArxivHandler(),
         datacite=DataCiteIndex(),
         semantic_scholar=SemanticScholarIndex(),
+        researcher=researcher,
     )
-    plan = await plan_survey(
-        request,
-        planner=planner,
-        finder=finder,
-        min_papers=cfg.min_papers,
-        max_papers=cfg.max_papers,
-        candidate_pool=cfg.candidate_pool,
-        now=datetime.now(UTC),
-    )
+    try:
+        plan = await plan_survey(
+            request,
+            planner=planner,
+            finder=finder,
+            min_papers=cfg.min_papers,
+            max_papers=cfg.max_papers,
+            candidate_pool=cfg.candidate_pool,
+            now=datetime.now(UTC),
+        )
+    finally:
+        researcher.close()
     slug = survey_slug(plan.topic)
     path = ROOT_DIR / LocalPaths.PAPERS_DIR.value / slug / "plan.json"
     await asyncio.to_thread(save_plan, plan, path)

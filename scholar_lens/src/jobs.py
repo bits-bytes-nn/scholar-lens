@@ -14,6 +14,7 @@ import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any, Literal
+from urllib.parse import urlparse
 
 import boto3
 from botocore.exceptions import ClientError, HTTPClientError
@@ -51,12 +52,14 @@ class JobRequest(BaseModel):
     # guide: documentation URLs (the authority for commands, flags and
     # defaults), reference material to build on (papers, design docs, deep-dive
     # posts; never official) and optional extra web-search queries.
+    # survey_plan: reference material too (blog posts, survey articles, paper
+    # pages): read for the scope, the papers they link become candidates.
     urls: list[str] = Field(default_factory=list)
     reference_urls: list[str] = Field(default_factory=list)
     search_queries: list[str] = Field(default_factory=list)
     discover_subpages: bool = True
     # survey_plan: the topic, papers the survey must include (arXiv ids or
-    # URLs, DOIs) and an optional year range.
+    # URLs, DOIs), an optional year range and ``reference_urls``.
     topic: str | None = None
     paper_ids: list[str] = Field(default_factory=list)
     since_year: int | None = Field(default=None, ge=1900, le=2100)
@@ -107,16 +110,19 @@ class JobRequest(BaseModel):
                 self.source
                 or self.repo_urls
                 or self.urls
-                or self.reference_urls
                 or self.search_queries
                 or self.plan
             ):
                 raise ValueError(
                     "A survey_plan request takes 'topic', 'paper_ids', "
-                    "'since_year' and 'until_year'."
+                    "'reference_urls', 'since_year' and 'until_year'."
                 )
             for paper_id in self.paper_ids:
                 parse_paper_id(paper_id)  # SurveyInputError (a ValueError)
+            for url in self.reference_urls:
+                parsed = urlparse(url)
+                if parsed.scheme not in ("http", "https") or not parsed.hostname:
+                    raise ValueError(f"A reference must be an http(s) URL: {url!r}")
             if (
                 self.since_year
                 and self.until_year
