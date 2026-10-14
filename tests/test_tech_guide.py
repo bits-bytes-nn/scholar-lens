@@ -364,6 +364,33 @@ class TestGrounding:
         gen.grounding_chain.ainvoke.assert_not_awaited()
 
 
+class TestGroundingLeftoverIssues:
+    async def _ground_after_review(self, blocking: str) -> dict[str, str]:
+        gen = _make_generator(verify_grounding=True, max_revision_attempts=1)
+        corpus = ResearchCorpus(pages=[PageContent("https://d.dev", "D", "x")])
+        gen.section_chain.ainvoke = AsyncMock(
+            return_value={"section_markdown": "## S\n\nbody"}
+        )
+        gen.evaluation_chain.ainvoke = AsyncMock(
+            return_value={"quality_score": "90", "blocking_issues": blocking}
+        )
+        gen.grounding_chain.ainvoke = AsyncMock(return_value={})
+        await gen._write_sections("X", "1. A — a", corpus)
+        payload: dict[str, str] = gen.grounding_chain.ainvoke.await_args.args[0]
+        return payload
+
+    async def test_issues_left_after_revision_reach_grounding(self) -> None:
+        payload = await self._ground_after_review("- The default port is invented")
+        assert "- The default port is invented" in payload["blocking_issues"]
+        assert "exactly these claims" in payload["blocking_issues"]
+
+    async def test_no_leftover_issue_keeps_the_prompt_input(self) -> None:
+        payload = await self._ground_after_review("none")
+        assert payload["blocking_issues"] == ""
+        prompt = TechGuideGroundingPrompt.get_prompt().format(**payload)
+        assert "</glossary>\n\n    Editing rules:" in prompt
+
+
 class TestResearchPlanning:
     async def test_plan_research_parses_topic_and_queries(self) -> None:
         gen = _make_generator(auto_research=True)

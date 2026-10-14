@@ -15,6 +15,16 @@ from .review import (
     PaperSectionPrompt,
 )
 from .summary import PaperSummaryPrompt, PaperSummaryShortenPrompt
+from .survey import (
+    SurveyCardPrompt,
+    SurveyEvaluationPrompt,
+    SurveyFinalizationPrompt,
+    SurveyGroundingPrompt,
+    SurveyOutlinePrompt,
+    SurveyScopePrompt,
+    SurveySectionPrompt,
+    SurveySelectionPrompt,
+)
 from .tech_guide import (
     TechGuideEvaluationPrompt,
     TechGuideGroundingPrompt,
@@ -39,6 +49,14 @@ __all__ = [
     "PaperSectionPrompt",
     "PaperSummaryPrompt",
     "PaperSummaryShortenPrompt",
+    "SurveyCardPrompt",
+    "SurveyEvaluationPrompt",
+    "SurveyFinalizationPrompt",
+    "SurveyGroundingPrompt",
+    "SurveyOutlinePrompt",
+    "SurveyScopePrompt",
+    "SurveySectionPrompt",
+    "SurveySelectionPrompt",
     "TechGuideEvaluationPrompt",
     "TechGuideGroundingPrompt",
     "TechGuideRelevancePrompt",

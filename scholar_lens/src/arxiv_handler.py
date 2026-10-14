@@ -253,3 +253,22 @@ class ArxivHandler:
 
         logger.warning("No confident title match found for: '%s'", title)
         return None
+
+    def search(self, query: str, max_results: int) -> list[ArxivMetadata]:
+        """Papers matching an arXiv API query (``all:``/``ti:`` syntax or
+        free text), most relevant first. One attempt at the shared pace: a
+        failure raises ``ArxivPaperError`` for the caller to record."""
+        search = arxiv.Search(
+            query=query,
+            max_results=max_results,
+            sort_by=arxiv.SortCriterion.Relevance,
+        )
+        return self._collect(search, label=f"search '{query}'")
+
+    def _collect(self, search: arxiv.Search, *, label: str) -> list[ArxivMetadata]:
+        _ARXIV_RATE_LIMITER.acquire()
+        try:
+            return [self._paper_to_metadata(p) for p in self.client.results(search)]
+        except Exception as e:
+            _ARXIV_RATE_LIMITER.penalize(arxiv_retry_after_seconds(e))
+            raise ArxivPaperError(f"arXiv {label} failed: {e}") from e

@@ -107,7 +107,7 @@ jobs:
       - name: Import every pipeline in the image (catches a missing runtime dependency)
         run: >-
           docker run --rm scholar-lens-batch:ci python3 -c
-          "import scholar_lens.src.paper_pipeline, scholar_lens.src.guide_pipeline, scholar_lens.src.code_retriever"
+          "import scholar_lens.src.paper_pipeline, scholar_lens.src.guide_pipeline, scholar_lens.src.survey_pipeline, scholar_lens.src.survey_writer, scholar_lens.src.code_retriever"
       - name: Worker reports a malformed request (JSON, exit 11)
         run: |
           set +e

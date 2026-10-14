@@ -84,7 +84,7 @@ def titles_match(queried: str | None, resolved: str | None) -> bool:
         return False
 
     q, r = _norm_title(queried), _norm_title(resolved)
-    if not (q and r) or title_similarity(queried, resolved) < TITLE_MATCH_THRESHOLD:
+    if not (q and r) or not _similar(q, r):
         return False
     # Version-like tokens tell sibling papers apart even when the rest of the
     # title is identical (GPT-4 vs GPT-4o, Qwen2 vs Qwen2.5, LoRA vs LoRA+).
@@ -103,6 +103,17 @@ def titles_match(queried: str | None, resolved: str | None) -> bool:
         not any(_spelling_variant(a, b) for b in r_only) for a in q_only
     )
     return not swapped
+
+
+def _similar(q: str, r: str) -> bool:
+    """``title_similarity`` reaches the threshold; the cheap upper bounds of
+    the ratio rule most pairs out first (pools compare hundreds of titles)."""
+    matcher = SequenceMatcher(None, q, r)
+    return (
+        matcher.real_quick_ratio() >= TITLE_MATCH_THRESHOLD
+        and matcher.quick_ratio() >= TITLE_MATCH_THRESHOLD
+        and matcher.ratio() >= TITLE_MATCH_THRESHOLD
+    )
 
 
 # Two differing title words this similar, with the same start, are one word
@@ -213,19 +224,27 @@ def _get_json(
     timeout: float,
     headers: dict[str, str] | None = None,
     serial: threading.Lock | None = None,
+    json_body: Any = None,
 ) -> Any:
-    """GET JSON at the API's pace. A 429 pauses every caller of the API for
-    its ``Retry-After`` and is retried once; a wait beyond ``_MAX_RETRY_AFTER``
-    raises ``QuotaExhaustedError``, any other failure ``httpx.HTTPError``."""
+    """GET JSON at the API's pace (POST ``json_body`` when given). A 429
+    pauses every caller of the API for its ``Retry-After`` and is retried
+    once; a wait beyond ``_MAX_RETRY_AFTER`` raises ``QuotaExhaustedError``,
+    any other failure ``httpx.HTTPError``."""
+
+    def send() -> httpx.Response:
+        if json_body is not None:
+            return httpx.post(
+                url, params=params, json=json_body, headers=headers, timeout=timeout
+            )
+        return httpx.get(url, params=params, headers=headers, timeout=timeout)
+
     for attempt in range(2):
         limiter.acquire()
         if serial is not None:
             with serial:
-                response = httpx.get(
-                    url, params=params, headers=headers, timeout=timeout
-                )
+                response = send()
         else:
-            response = httpx.get(url, params=params, headers=headers, timeout=timeout)
+            response = send()
         if response.status_code == 429 and attempt == 0:
             limiter.penalize(_retry_after(response))
             continue

@@ -42,7 +42,9 @@ from .post_conventions import BlogPost, PostConventions
 from .publish_types import post_slug, same_post
 from .tags import format_tag
 
-ArtifactKind = Literal["review", "summarize", "guide"]
+ArtifactKind = Literal["review", "summarize", "guide", "survey"]
+# The kinds that review or summarize one paper (a paper type in the spec).
+PAPER_KINDS: tuple[ArtifactKind, ...] = ("review", "summarize")
 Level = Literal["error", "warning"]
 Lines = list[tuple[int, str]]
 
@@ -327,6 +329,8 @@ def validate_post(
     if front.get("description") is None:
         _check_description(lines, offset, add)
     _check_blog_markup(front, body, offset, add)
+    if kind == "survey":
+        _check_survey_citations(lines, offset, add)
     return found
 
 
@@ -372,7 +376,7 @@ def _check_front_matter(
         category_type, topic = str(categories[0]), str(categories[1])
         if category_type not in spec.types:
             add("error", "categories", 1, f"unknown type '{category_type}'")
-        elif spec.is_paper_type(category_type) != (kind != "guide"):
+        elif spec.is_paper_type(category_type) != (kind in PAPER_KINDS):
             add(
                 "error",
                 "categories",
@@ -386,7 +390,7 @@ def _check_front_matter(
             if front.get("cover") != expected:
                 add("error", "cover", 1, f"cover must be '{expected}'")
 
-    if kind != "guide":
+    if kind in PAPER_KINDS:
         _check_paper_author(front.get("paper_author"), add)
         subtitle = str(front.get("subtitle") or "").strip()
         if not subtitle:
@@ -394,7 +398,7 @@ def _check_front_matter(
         elif subtitle == title:
             add("error", "subtitle", 1, "subtitle must differ from the title")
     elif "paper_author" in front:
-        add("error", "paper-author", 1, "guides do not take paper_author")
+        add("error", "paper-author", 1, f"a {kind} does not take paper_author")
 
     seo_title = front.get("seo_title")
     limit = spec.seo_title_max_length
@@ -637,13 +641,13 @@ def _check_headings(lines: Lines, offset: int, kind: ArtifactKind, add: Add) -> 
                 offset + i,
                 f"heading jumps from H{previous} to H{level}",
             )
-        if first and kind != "guide" and not (level == 2 and text == "TL;DR"):
+        if first and kind in PAPER_KINDS and not (level == 2 and text == "TL;DR"):
             add("error", "headings", offset + i, "a paper post starts with '## TL;DR'")
         first = False
         previous = level
-    if first and kind != "guide":
+    if first and kind in PAPER_KINDS:
         add("error", "headings", offset, "a paper post starts with '## TL;DR'")
-    if kind != "guide":
+    if kind in PAPER_KINDS:
         _check_tldr(lines, offset, kind, add)
 
 
@@ -1298,3 +1302,53 @@ def _check_text(lines: Lines, offset: int, add: Add) -> None:
                 offset + i,
                 "internal figure marker leaked into the post",
             )
+
+
+# A writer's citation key ("[@2305.18290]") that was never rendered.
+_CITATION_KEY = re.compile(r"\[@[^\]\n]*\]")
+_LINK_TARGET = re.compile(r"\]\((https?://[^)\s]+)\)")
+# A link to a paper itself (what a survey's citations and references point to).
+_PAPER_LINK = re.compile(r"^https?://(?:arxiv\.org/abs/|doi\.org/)")
+REFERENCES_HEADING = "### References"
+
+
+def _check_survey_citations(lines: Lines, offset: int, add: Add) -> None:
+    """A survey's citations and its reference list agree: no citation key
+    is left unrendered, every listed reference is cited, and every paper the
+    body links is listed. A reference only a table cites is a warning: the
+    code-built timeline links every paper of the plan, so the prose skipped
+    it."""
+    start = next((i for i, line in lines if line.strip() == REFERENCES_HEADING), None)
+    if start is None:
+        add("error", "references", offset, f"a survey ends with '{REFERENCES_HEADING}'")
+        return
+    cited: set[str] = set()
+    in_prose: set[str] = set()
+    for i, line in lines:
+        prose = _INLINE_CODE.sub("", line)
+        if i < start:
+            for key in _CITATION_KEY.findall(prose):
+                add("error", "citations", offset + i, f"unresolved citation {key}")
+            targets = _LINK_TARGET.findall(prose)
+            cited.update(targets)
+            if not line.lstrip().startswith("|"):
+                in_prose.update(targets)
+    listed = {
+        url: i
+        for i, line in lines
+        if i > start and line.lstrip().startswith("* ")
+        for url in _LINK_TARGET.findall(line)
+    }
+    for url, i in listed.items():
+        if url not in cited:
+            add("error", "references", offset + i, f"reference never cited: {url}")
+        elif url not in in_prose:
+            # Only the code-built timeline links it: the prose skips the paper.
+            add("warning", "references", offset + i, f"cited only in a table: {url}")
+    for url in sorted(u for u in cited if _PAPER_LINK.match(u) and u not in listed):
+        add(
+            "error",
+            "citations",
+            offset + start,
+            f"cited paper not in References: {url}",
+        )

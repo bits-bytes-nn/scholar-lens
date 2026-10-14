@@ -38,7 +38,8 @@ class PublishRequest:
     pr_title: str
     pr_body: str
     commit_message: str
-    # Artifact kind the post is validated as ("review" | "summarize" | "guide").
+    # Artifact kind the post is validated as ("review", "summarize", "guide",
+    # "survey").
     kind: ArtifactKind = "review"
     # Pipeline-side findings for the reviewer (e.g. a tag the paper never
     # mentions); shown in the PR checklist with the validator's warnings.

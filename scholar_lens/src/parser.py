@@ -437,7 +437,7 @@ class HTMLRichParser(RichParser, HTMLParser):
                     self.figure_analyser,
                     str(len(figure_tasks)),
                     url,
-                    _figure_caption(media),
+                    figure_caption(media),
                 )
             )
         return _completed_figures(
@@ -478,7 +478,7 @@ def _own_caption(figure: Tag, media: Tag) -> Tag | None:
     return following if following in captions else captions[-1]
 
 
-def _figure_caption(media: Tag) -> str:
+def figure_caption(media: Tag) -> str:
     """Caption text for an image: its nearest captioned figure, with the
     enclosing figure's caption first when that one is only a sub-caption
     ("(a) ..."); else the image's alt text."""

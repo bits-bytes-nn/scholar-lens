@@ -2,7 +2,7 @@
 
 # Scholar-Lens
 
-**AI/ML 논문과 기술 문서를 블로그에 바로 올릴 수 있는 글로 바꿉니다. 심층 리뷰, 간결한 요약, 실습형 기술 가이드를 만듭니다.**
+**AI/ML 논문과 기술 문서를 블로그에 바로 올릴 수 있는 글로 바꿉니다. 심층 리뷰, 간결한 요약, 실습형 기술 가이드, 연구 주제의 논문 서베이를 만듭니다.**
 
 로컬이나 AWS Batch에서 실행하며, 사람과 에이전트(OpenClaw, Claude Code, Codex)가 같은 CLI를 씁니다. Amazon Bedrock의 Claude로 동작합니다.
 
@@ -24,6 +24,7 @@
 | **리뷰** | arXiv ID 또는 논문 PDF URL(코드 저장소 선택) | 일반 DS/MLE 독자를 위한 절별 리뷰입니다. 쉬운 내용은 짧게, 어려운 내용은 직관 → 수식 → 작은 예제 순으로 쌓아 올리며 그림, 표, TL;DR, 한계와 시사점을 포함합니다 |
 | **요약** | arXiv ID 또는 논문 PDF URL | TL;DR과 다섯 개의 짧은 절(동기, 아이디어, 구현, 결과, 의의와 한계) |
 | **기술 가이드** | 문서 URL, 참고 자료(논문, 설계 문서, 심층 분석 글) 또는 둘 다 | 설치와 사용법, 내부 동작 방식과 설계 이유, 주요 기능의 의미, 더 큰 시스템에 통합하는 방법을 다루는 출처 기반 가이드. 하위 페이지와 웹 검색으로 조사합니다 |
+| **논문 서베이** | 연구 주제(필수 논문, 연도 범위 선택), 이어서 계획 파일 | `survey plan`: 고칠 수 있는 JSON 계획 파일. OpenAlex와 arXiv에서 찾은 주제의 주요 논문을 시간순 계보로 묶고 역할, 선정 이유, 인용 관계를 적습니다. `survey write`: Lilian Weng의 블로그 같은 긴 글. 계보별 논문을 설명하고 서로 잇고, 논문의 그림과 핵심 수식, 연표와 비교표, 통찰, 저자-연도 인용을 담습니다 |
 
 모든 글은 대상 블로그의 규칙을 따르는 Jekyll Markdown이며, 저장하기 전에 검사합니다. 규칙을 어긴 글은 게시하지 않고 거부합니다. 글은 로컬 파일로 저장되고, 설정에 따라 S3에 올라가며 블로그 저장소에 PR로 제안됩니다.
 
@@ -34,6 +35,8 @@
 - **리뷰**: 계획 단계가 논문 전체를 읽고 집필 계획을 만듭니다. 계획에는 절 구성, 반드시 다룰 항목, 난이도, 선수 개념, 개념별 담당 절, 그림 배정, 용어집이 들어갑니다. 각 절은 지시서대로 쓴 뒤 지시서에 비추어 검수하고, 빠진 항목이 없을 때까지 고칩니다. 마지막으로 글 전체를 한 번 편집해 용어, 중복, 누락을 바로잡습니다.
 - **요약**: 파싱한 논문 전체를 입력으로 한 번 호출합니다.
 - **가이드**: 조사(문서, 참고 자료, 그리고 사용법·내부 구조와 설계·운영 통합을 찾는 웹 검색) → 관련성 판정 → 개요 → 절별 작성·평가·사실 확인 순서입니다. 명령, 플래그, 기본값은 공식 문서가 정하고, 개념·내부 구조·아키텍처는 논문, 설계 문서, 신뢰할 수 있는 기술 글도 근거로 씁니다.
+- **서베이 계획**: 범위 호출이 계보, 검색어, 주요 논문 제목을 제안하면 OpenAlex와 arXiv 검색(arXiv 메타데이터는 DataCite로 확인, 키가 있으면 Semantic Scholar 인용 수)으로 후보를 모으고, 코드가 병합·연결·순위를 정합니다. 선정 호출이 설정 범위 안에서 논문을 고르면 코드가 검증한 뒤 계획을 저장합니다.
+- **서베이 쓰기**: 고친 계획을 다시 검증하고 손으로 더한 논문은 DataCite·OpenAlex로 채웁니다. 논문마다 카드를 만들어 캐시합니다(핵심 논문은 arXiv HTML 전문, 보조 논문은 초록으로 한 번 호출). 카드의 숫자·수식·그림은 코드가 논문과 대조합니다. 개요 호출이 절(도입, 계보별 절, 필요하면 계보를 가로지르는 절, 비교, 통찰)을 정하면 코드가 논문 수로 절 길이를 정하고, 각 절은 가이드처럼 쓰기·평가·한 번 수정·카드 기준 사실 확인을 거칩니다. 코드가 `[@id]` 인용 키를 저자-연도 링크로 바꾸고 연표, 비교표, 참고 문헌을 만듭니다.
 - **발행**: 수식과 Markdown 정규화, 논문 자신의 그림을 블로그로 복사(그 밖의 이미지는 원본 링크로 둠), 블로그 규칙 검사를 거친 뒤 S3에 올리고, 글마다 고정된 브랜치로 GitHub PR을 엽니다.
 
 ![AWS 아키텍처](./docs/diagrams/aws-architecture.png)
@@ -63,7 +66,9 @@ poetry run python -m scholar_lens summarize 2106.09685 --no-pr
 
 - `resources`: `profile_name`, `bedrock_region_name`, `s3_bucket_name`(`cdk deploy`와 Batch 실행에 필요. 없으면 `status`는 저장된 결과 없이 Batch 상태만 보여 줌), `email_address`(SNS 알림)
 - `resources.github`: `enabled`, `repo_name`(예: `owner/owner.github.io`), `base_branch`, `branch_prefix`, 산출물 유형별 카테고리 이름
-- 단계별 `*_model_id`, `thinking_effort`, 품질 기준, `max_total_tokens` 비용 상한(기본값: 리뷰 800만, 요약 100만, 가이드 300만 토큰)
+- 단계별 `*_model_id`, `thinking_effort`, 품질 기준, `max_total_tokens` 비용 상한(기본값: 리뷰 800만, 요약 100만, 가이드 300만, 서베이 계획 30만, 서베이 쓰기 300만 토큰(`survey.write_max_total_tokens`))
+- `survey`: `min_papers`·`max_papers`(6·25), `candidate_pool`(60), 쓰기 단계의 `chars_per_core_paper`·`chars_per_supporting_paper`(3,000·800), `min_total_chars`·`max_total_chars`(20,000·70,000), `card_source_chars`
+- `resources.github.survey_category`(`Paper Surveys`): 블로그 글 규칙에 있는 유형이어야 하며, 없으면 `survey write`가 모델을 부르기 전에 멈춥니다
 - `output_language`(기본값 `Korean`)
 
 ## CLI
@@ -75,6 +80,10 @@ poetry run python -m scholar_lens guide "https://docs.vllm.ai/en/latest/getting_
   "https://docs.vllm.ai/en/latest/serving/openai_compatible_server.html" \
   --reference "https://arxiv.org/abs/2309.06180" \
   --reference "https://blog.vllm.ai/2025/01/27/v1-alpha-release.html"
+poetry run python -m scholar_lens survey plan "preference optimization for LLM alignment" \
+  --paper 2305.18290 --since 2017                                # papers/survey-<slug>/plan.json 저장
+poetry run python -m scholar_lens survey write \
+  --plan papers/survey-preference-optimization-for-llm-alignment/plan.json --no-pr
 poetry run python -m scholar_lens review 2106.09685 --remote     # AWS Batch에 제출
 poetry run python -m scholar_lens status <job-id> --wait         # 원격 작업 조회
 ```
@@ -86,9 +95,14 @@ poetry run python -m scholar_lens status <job-id> --wait         # 원격 작업
 | `--reference URL` | guide | 바탕으로 삼을 참고 자료(논문, 설계 문서, 심층 분석 글, 발표 페이지)입니다. HTML 페이지나 arXiv 링크여야 하며 그 밖의 PDF는 읽지 않습니다. 반복 가능하고, 위치 인자인 문서 URL(0개 이상)의 앞뒤 어디에나 둘 수 있습니다. 두 쪽에 모두 준 URL은 문서로 다루며 한 번만 나열합니다. 항상 쓰고 출처 목록에 넣지만 공식 문서로 다루지 않습니다 |
 | `--search-query Q` | guide | 웹 검색어를 지정합니다(반복 가능, 자동으로 계획한 검색어를 대신함) |
 | `--no-subpages` | guide | 하위 페이지를 따라가지 않습니다 |
-| `--no-pr` | review, summarize, guide | 글은 저장(·업로드)하되 PR은 열지 않습니다 |
-| `--remote` | review, summarize, guide | AWS Batch에 제출하고 작업 ID를 돌려줍니다 |
+| `--paper ID_OR_URL` | survey plan | 서베이에 꼭 넣을 논문입니다. arXiv ID나 URL, 또는 DOI(반복 가능) |
+| `--since YEAR`, `--until YEAR` | survey plan | 이 연도의 논문만 다룹니다(필수 논문은 예외) |
+| `--plan PATH_OR_S3_URI` | survey write | 계획 파일입니다. 로컬 경로 또는 설정한 버킷의 `s3://<bucket>/<key>`이며, `--remote`이면 로컬 계획을 먼저 `<s3_prefix>/surveys/<slug>/plan-<sha256>.json`에 올립니다 |
+| `--no-pr` | review, summarize, guide, survey write | 글은 저장(·업로드)하되 PR은 열지 않습니다 |
+| `--remote` | review, summarize, guide, survey plan, survey write | AWS Batch에 제출하고 작업 ID를 돌려줍니다 |
 | `--wait`, `--timeout S` | status | 작업이 끝나거나 `S`초가 지날 때까지 조회합니다 |
+
+`survey plan`은 글을 쓰지 않습니다. `JobResult`의 `plan_path`(로컬 `papers/survey-<slug>/plan.json`. `--remote` 실행은 컨테이너가 사라지므로 비어 있음)와 `s3_uri`(S3 사본. 원격 실행 뒤에는 이 값을 `survey write --plan`에 넘김)가 계획 파일입니다. 계획을 고친 뒤(논문 빼기·더하기·옮기기, 역할 바꾸기, 계보 이름 바꾸기) `survey write --plan`에 넘깁니다. 계획 단계를 다시 실행하면 내용이 다른 기존 계획은 `plan.<UTC 시각>.json`으로 남습니다. 손으로 더하는 논문은 `id`(arXiv ID나 URL, 또는 DOI), `lineage`, `role`만 있으면 되고, 제목·저자·연도·URL은 쓰기 단계가 채웁니다. 계획에는 `core` 논문이 하나 이상 있어야 합니다. 논문 카드는 논문, 카드 스키마, 모델, 언어와 카드 프롬프트·`card_source_chars`의 `-<variant>` 요약값별로 캐시하므로(둘 중 하나가 바뀌면 카드를 다시 만듦)(로컬 `papers/survey-cards/`, S3 `<s3_prefix>/surveys/cards/`) 다시 실행하거나 같은 논문을 다루는 다른 서베이가 재사용합니다. 계획 필드와 쓰기 단계는 [설계 문서](./docs/design.md#43-논문-서베이)에 있습니다.
 
 모든 명령은 stdout에 JSON 객체 하나(실행은 `JobResult`, `--remote`는 `job_id`, `status`는 Batch 상태와 저장된 결과)를 출력하고, 로그는 stderr로 보냅니다. 종료 코드는 `0` 성공 또는 제출, `1` 실패, `2` 입력 거부, `3` 진행 중, `4` 명령 자체의 실패입니다([상세](./docs/design.md#21-명령)). URL은 따옴표로 감쌉니다. zsh에서는 따옴표 없는 URL의 `?`가 glob으로 해석되어 명령이 실패합니다.
 
@@ -128,6 +142,8 @@ actionlint                                       # GitHub 워크플로 검사
 
 ## 변경 이력
 
+- `survey write --plan <파일>`(kind `survey_write`)을 추가했습니다. 고친 계획으로 `Paper Surveys` 글을 씁니다. 캐시하는 논문 카드, 개요, 가이드식 절별 집필과 검사, 코드가 만드는 연표와 비교표, 논문 그림, 저자-연도 인용이 들어갑니다. 블로그 글 규칙에 `Paper Surveys` 유형(`resources.github.survey_category`)이 있어야 합니다. 블로그가 이 유형을 `main`에 반영하기 전에는 함께 배포하는 `assets/post_conventions.yml`을 바꾸지 않으며(사본 차이 검사가 실패함), 테스트는 그 유형을 더한 규칙을 씁니다. 가이드의 평가·수정 반복과 사실 확인 재시도를 공용 함수(`tech_guide.revise_section`, `checked_grounding`)로 옮겼고 동작은 같습니다. `--remote`로 쓰려면 다시 배포합니다.
+- `survey plan "<주제>"`(kind `survey_plan`)를 추가했습니다. 주제의 주요 논문을 찾아 고칠 수 있는 계획 파일로 저장합니다(`plan_path`, `s3_uri`). `SEMANTIC_SCHOLAR_API_KEY`가 없으면 인용 수는 OpenAlex 값이라 arXiv 시대 ML 논문을 적게 세고, 알려진 인용 관계도 적습니다. `--remote`로 쓰려면 다시 배포합니다.
 - 업그레이드한 뒤 `--remote`를 쓰기 전에 `cdk deploy`로 다시 배포합니다. Batch 이미지는 마지막 배포의 코드를 실행하며, 이전 worker는 모르는 필드(예: `--reference`)가 든 요청을 거부합니다.
 - 가이드가 더 깊고 넓어졌습니다. 사용법, 내부 동작 원리와 이유, 더 큰 시스템에 통합하는 방법까지 다룹니다. 개요 단계의 절 계획이 개념마다 담당 절을 하나씩 정하고, 평가자가 지적한 차단 문제(사실 오류, 모순, 근거 없는 플래그·기본값)가 있으면 반드시 고쳐 쓰며, `tech_guide.max_revision_attempts` 기본값은 1회입니다. 실행 비용은 이전보다 늘었습니다.
 - `guide --reference URL`(반복 가능)로 문서 URL 옆에 참고 자료(논문, 설계 문서, 심층 분석 글)를 더할 수 있고, 참고 자료만으로도 가이드를 만들 수 있습니다. 문서 URL은 옵션 앞뒤 어디에나 둘 수 있습니다.

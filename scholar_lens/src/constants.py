@@ -148,6 +148,7 @@ class LocalPaths(str, Enum):
 class S3Paths(AutoNamedEnum):
     POSTS = auto()
     RESULTS = auto()
+    SURVEYS = auto()
     TRANSLATION_GUIDELINE = auto()
 
 

@@ -43,6 +43,7 @@ class Github(_Section):
     review_category: str = Field(default="Paper Reviews")
     summary_category: str = Field(default="Paper Summaries")
     tech_guide_category: str = Field(default="Tech Guides")
+    survey_category: str = Field(default="Paper Surveys")
     # Whether figures uploaded to S3 are world-readable. Default False (private):
     # blog images are served from the GitHub Pages repo, so public S3 ACLs are
     # an unnecessary exposure (and are rejected by buckets with Block Public
@@ -203,6 +204,70 @@ class TechGuide(_Section):
     max_total_tokens: int | None = Field(default=3_000_000, gt=0)
 
 
+class Survey(_Section):
+    # Plan stage: the scope call (lineages, search queries, landmark titles)
+    # and the selection call (which papers, lineages and roles).
+    scope_model_id: LanguageModelId = Field(default=LanguageModelId.CLAUDE_V5_5_SONNET)
+    selection_model_id: LanguageModelId = Field(
+        default=LanguageModelId.CLAUDE_V5_5_OPUS
+    )
+    thinking_effort: ThinkingEffort = Field(default="medium")
+    # Papers a survey covers; the selection call picks the count in between
+    # from the topic's breadth and the pool.
+    min_papers: int = Field(default=6, ge=2, le=50)
+    max_papers: int = Field(default=25, ge=2, le=60)
+    # Best-ranked candidates the selection call sees.
+    candidate_pool: int = Field(default=60, ge=10, le=200)
+    # Soft limit on one plan run (None = no limit): past it the repair round
+    # is skipped; past 1.5x the run aborts. A plan uses ~50k tokens.
+    max_total_tokens: int | None = Field(default=300_000, gt=0)
+
+    # Write stage (`survey write`). One card call per paper (cached), one
+    # outline call, then per section: writer, evaluator, at most
+    # max_revision_attempts revisions, grounding; one finalization call.
+    card_model_id: LanguageModelId = Field(default=LanguageModelId.CLAUDE_V5_5_SONNET)
+    outline_model_id: LanguageModelId = Field(default=LanguageModelId.CLAUDE_V5_5_OPUS)
+    writing_model_id: LanguageModelId = Field(default=LanguageModelId.CLAUDE_V5_5_OPUS)
+    evaluation_model_id: LanguageModelId = Field(
+        default=LanguageModelId.CLAUDE_V5_5_OPUS
+    )
+    # Characters of a core paper's arXiv HTML text its card call reads.
+    card_source_chars: int = Field(default=150_000, ge=10_000, le=600_000)
+    min_quality_score: int = Field(default=75, ge=0, le=100)
+    max_revision_attempts: int = Field(default=1, ge=0, le=3)
+    verify_grounding: bool = Field(default=True)
+    # Post length in characters of prose (Korean; other languages x2.5):
+    # each core and supporting paper adds its share to its lineage section,
+    # the other sections their depth's size; the total is then scaled into
+    # [min_total_chars, max_total_chars].
+    chars_per_core_paper: int = Field(default=3_000, ge=500, le=20_000)
+    chars_per_supporting_paper: int = Field(default=800, ge=100, le=5_000)
+    min_total_chars: int = Field(default=20_000, ge=5_000, le=200_000)
+    max_total_chars: int = Field(default=70_000, ge=5_000, le=200_000)
+    # Soft limit on one write run: past it sections are written without
+    # evaluation, revision or grounding; past 1.5x the run aborts.
+    write_max_total_tokens: int | None = Field(default=3_000_000, gt=0)
+
+    @model_validator(mode="after")
+    def _check_bounds(self) -> "Survey":
+        if self.min_total_chars > self.max_total_chars:
+            raise ValueError(
+                f"min_total_chars ({self.min_total_chars}) must not exceed "
+                f"max_total_chars ({self.max_total_chars})."
+            )
+        if self.min_papers > self.max_papers:
+            raise ValueError(
+                f"min_papers ({self.min_papers}) must not exceed max_papers "
+                f"({self.max_papers})."
+            )
+        if self.max_papers > self.candidate_pool:
+            raise ValueError(
+                f"max_papers ({self.max_papers}) must not exceed candidate_pool "
+                f"({self.candidate_pool})."
+            )
+        return self
+
+
 class Config(_Section):
     resources: Resources = Field(
         default_factory=lambda: Resources(project_name="scholar-lens")
@@ -213,6 +278,7 @@ class Config(_Section):
     explanation: Explanation = Field(default_factory=Explanation)
     summary: Summary = Field(default_factory=Summary)
     tech_guide: TechGuide = Field(default_factory=TechGuide)
+    survey: Survey = Field(default_factory=Survey)
     output_language: str = Field(default="Korean")
 
     @classmethod

@@ -31,8 +31,9 @@ import asyncio
 import difflib
 import functools
 import re
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Protocol
 
 import boto3
 from langchain_core.output_parsers import StrOutputParser
@@ -68,6 +69,7 @@ from .prompts.tech_guide import (
     PROSE_UNIT,
     REFERENCE_LABEL,
     TechGuideTaxonomyPrompt,
+    blocking_issues_block,
 )
 from .review_plan import (
     added_slips,
@@ -193,13 +195,21 @@ def prose_chars(markdown: str) -> int:
     return len(" ".join(" ".join(kept).split()))
 
 
+def measured_length(markdown: str, *, label: str, bound: str, target: int) -> str:
+    """Measured prose length against a target, for an evaluator or a
+    revision ("Target for <label>: <bound> <target>")."""
+    return (
+        f"Measured: {prose_chars(markdown):,} {PROSE_UNIT}. Target for "
+        f"{label}: {bound} {target:,}."
+    )
+
+
 def length_report(markdown: str, depth: str, language: str) -> str:
     """Measured length against the depth's target, for the evaluator."""
     depth = depth if depth in DEPTH_CHARS else _DEFAULT_DEPTH
     bound, target = _depth_target(depth, language)
-    return (
-        f"Measured: {prose_chars(markdown):,} {PROSE_UNIT}. Target for a "
-        f"{depth} section: {bound} {target:,}."
+    return measured_length(
+        markdown, label=f"a {depth} section", bound=bound, target=target
     )
 
 
@@ -266,7 +276,17 @@ class PlannedSection:
         return directive
 
 
-def owned_elsewhere(sections: list[PlannedSection], index: int) -> str:
+class OwningSection(Protocol):
+    """A planned section as :func:`owned_elsewhere` reads it."""
+
+    @property
+    def title(self) -> str: ...
+
+    @property
+    def owns(self) -> list[str]: ...
+
+
+def owned_elsewhere(sections: Sequence[OwningSection], index: int) -> str:
     """The concepts the other sections own (``index`` is 0-based), for the
     writer of section ``index``: used there, explained only by their owner."""
     own = set(sections[index].owns) if 0 <= index < len(sections) else set()
@@ -313,6 +333,148 @@ def glossary_view(glossary: dict[str, str], earlier: list[str]) -> str:
             status = "introduced" if used else "new"
             lines.append(f"- {rendering} = {english} [{status}]")
     return "\n".join(lines) or "- none"
+
+
+@dataclass
+class ReviewedDraft:
+    """The best draft of a section after :func:`revise_section`."""
+
+    text: str
+    score: int
+    feedback: str
+    # The evaluator's blocking issues plus the rule issues found in code.
+    issues: list[str]
+    # How many of ``issues`` the evaluator raised (listed first).
+    factual: int = 0
+
+    @property
+    def blocking(self) -> list[str]:
+        """The evaluator's blocking issues alone."""
+        return self.issues[: self.factual]
+
+
+async def revise_section(
+    markdown: str,
+    *,
+    evaluate: Callable[[str], Awaitable[tuple[int, str, list[str]]]],
+    revise: Callable[[str, str], Awaitable[str]],
+    length: Callable[[str], str],
+    min_score: int,
+    max_attempts: int,
+    label: str,
+    rules: Callable[[str], list[str]] = rule_issues,
+) -> ReviewedDraft:
+    """Score a section and revise it while it stays below ``min_score`` or
+    has a blocking issue: one ``evaluate`` names (it returns the score, the
+    feedback and those issues) or a rule ``rules`` finds in code.
+
+    Keeps the BEST draft: a revision (``revise(feedback, draft)``) is
+    re-scored and kept only if it ranks above the draft it revises
+    (:func:`review_plan.draft_rank`, with the evaluator's blocking issues
+    ahead of the score since they alone decide acceptance), so a
+    feedback-driven rewrite can never make the section worse. The feedback
+    lists the blocking issues first, then the measured ``length``, then the
+    evaluator's other feedback. ``label`` names the section in the log.
+    """
+
+    async def assess(text: str) -> tuple[int, str, list[str], int]:
+        score, feedback, blocking = await evaluate(text)
+        # The issues to fix, and how many the evaluator raised.
+        return score, feedback, blocking + rules(text), len(blocking)
+
+    def rank(
+        score: int, text: str, issues: list[str], factual: int
+    ) -> tuple[bool, bool, int, int, int]:
+        passes, publishable, score, slips = draft_rank(
+            passes=score >= min_score and not issues,
+            publishable=not publish_blockers(text),
+            blocking=len(issues),
+            score=score,
+        )
+        return passes, publishable, -factual, score, slips
+
+    best_markdown = markdown
+    best_score, best_feedback, best_issues, best_factual = await assess(markdown)
+    for attempt in range(1, max_attempts + 1):
+        # Accept only a score at the bar with no blocking issue. Empty
+        # feedback with a low score is a model slip (the prompt omits it
+        # only for 90+), so it still revises with a generic directive.
+        if best_score >= min_score and not best_issues:
+            break
+        # Blocking issues first (they alone decide acceptance), then the
+        # measured length, then the evaluator's other feedback.
+        feedback = "\n\n".join(
+            part
+            for part in (
+                (
+                    "First fix every one of these blocking issues:\n"
+                    + "\n".join(f"- {i}" for i in best_issues)
+                    if best_issues
+                    else ""
+                ),
+                f"Length: {length(best_markdown)}",
+                (
+                    f"Then apply this feedback:\n{best_feedback}"
+                    if best_feedback
+                    else ""
+                ),
+            )
+            if part
+        )
+        logger.info(
+            "Section %s scored %d (min %d), %d blocking issue(s) - revising "
+            "(attempt %d/%d).",
+            label,
+            best_score,
+            min_score,
+            len(best_issues),
+            attempt,
+            max_attempts,
+        )
+        revised = await revise(feedback, best_markdown)
+        if not revised:
+            break
+        score, revised_feedback, issues, factual = await assess(revised)
+        if rank(score, revised, issues, factual) <= rank(
+            best_score, best_markdown, best_issues, best_factual
+        ):
+            # A rewrite of the same draft would mostly repeat this one.
+            logger.info(
+                "Section %s revision scored %d (discarded, best %d) - "
+                "stopping revisions.",
+                label,
+                score,
+                best_score,
+            )
+            break
+        best_markdown, best_score = revised, score
+        best_feedback, best_issues = revised_feedback, issues
+        best_factual = factual
+    logger.info(
+        "Section %s final: score %d, %d blocking issue(s). Evaluator: %s",
+        label,
+        best_score,
+        len(best_issues),
+        " ".join(best_feedback.split())[:_LOGGED_FEEDBACK_CHARS] or "(none)",
+    )
+    return ReviewedDraft(
+        best_markdown, best_score, best_feedback, best_issues, best_factual
+    )
+
+
+async def checked_grounding(draft: str, ground: Callable[[], Awaitable[str]]) -> str:
+    """The grounded section (``ground()`` fact-checks ``draft``): grounding
+    is the last pass, so one retry when it broke a rule (e.g. hedged a claim
+    instead of removing it), and the ungrounded draft when both attempts
+    broke something the validator rejects."""
+    grounded = close_open_fence(await ground())
+    if added_slips(draft, grounded):
+        retried = close_open_fence(await ground())
+        if len(added_slips(draft, retried)) < len(added_slips(draft, grounded)):
+            grounded = retried
+        if len(publish_blockers(grounded)) > len(publish_blockers(draft)):
+            grounded = draft
+    return grounded
 
 
 @dataclass
@@ -398,6 +560,8 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
         self.callbacks = callbacks or []
         self._init_token_budget(self.callbacks, max_total_tokens)
         self.notes: list[str] = []
+        # The evaluator's blocking issues the last reviewed section kept.
+        self._leftover_blocking: list[str] = []
         self.researcher = researcher or WebResearcher()
         self.llm_factory = BedrockLanguageModelFactory(boto_session=boto_session)
         self.synopsis_model_id = synopsis_model_id
@@ -804,7 +968,7 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
 
         written: list[str] = []
         # (index in written, its sources, its glossary view)
-        to_ground: list[tuple[int, str, str]] = []
+        to_ground: list[tuple[int, str, str, list[str]]] = []
         for index, planned in enumerate(sections, start=1):
             # Hard ceiling: past _HARD_BUDGET_MULTIPLE × the budget, abort like
             # the review/summary pipelines rather than keep spending on the
@@ -886,7 +1050,9 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
                     glossary=glossary,
                 )
                 if self.verify_grounding:
-                    to_ground.append((len(written), sources, glossary))
+                    to_ground.append(
+                        (len(written), sources, glossary, self._leftover_blocking)
+                    )
             written.append(close_open_fence(markdown))
         if to_ground:
             await self._ground_sections(written, to_ground, corpus)
@@ -895,13 +1061,14 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
     async def _ground_sections(
         self,
         written: list[str],
-        to_ground: list[tuple[int, str, str]],
+        to_ground: list[tuple[int, str, str, list[str]]],
         corpus: ResearchCorpus,
     ) -> None:
         """Fact-check the drafted sections in place. Flags and metric names the
         official pages fetched so far never mention first pull the official
         reference pages that can settle them into each section's sources, so
-        a stale flag is corrected instead of hedged."""
+        a stale flag is corrected instead of hedged. The evaluator's blocking
+        issues a section's revisions left go to its fact-checker to fix."""
         unchecked = unverified_identifiers(
             "\n\n".join(written),
             official_reference(self._official, corpus),
@@ -909,7 +1076,7 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
         )
         await self._add_reference(corpus, unchecked)
         reference = ResearchCorpus(pages=list(self._reference_pages))
-        for index, sources, glossary in to_ground:
+        for index, sources, glossary, blocking in to_ground:
             self._enforce_hard_token_budget()
             # The section's own unchecked identifiers pick the reference parts.
             own = [i for i in unchecked if i in written[index]]
@@ -921,21 +1088,18 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
                 )
                 sources = f"{excerpt}\n\n---\n\n{sources}"
             draft = written[index]
-            grounded = close_open_fence(
-                await self._ground_section(draft, sources, glossary)
-            )
-            if added_slips(draft, grounded):
-                # Grounding is the last pass; one retry if it broke a rule
-                # (e.g. hedged a claim instead of removing it).
-                retried = close_open_fence(
-                    await self._ground_section(draft, sources, glossary)
+            if blocking:
+                logger.info(
+                    "Grounding section %d with %d leftover blocking issue(s).",
+                    index + 1,
+                    len(blocking),
                 )
-                if len(added_slips(draft, retried)) < len(added_slips(draft, grounded)):
-                    grounded = retried
-                if len(publish_blockers(grounded)) > len(publish_blockers(draft)):
-                    # Both attempts broke something the validator rejects:
-                    # keep the ungrounded draft rather than fail the post.
-                    grounded = draft
+            grounded = await checked_grounding(
+                draft,
+                functools.partial(
+                    self._ground_section, draft, sources, glossary, blocking
+                ),
+            )
             changed = sum(
                 1
                 for line in difflib.unified_diff(
@@ -1098,23 +1262,18 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
         owned_elsewhere: str,
         glossary: str,
     ) -> str:
-        """Score a section and revise it while it stays below the threshold or
-        has a blocking issue: one the evaluator names (a factual error, an
-        internal contradiction, an unsupported flag or default, a structural
-        self-reference) or a writing rule it breaks in code
-        (:func:`review_plan.rule_issues`).
-
-        Keeps the BEST draft: a revision is re-scored and kept only if it ranks
-        above the draft it revises (:func:`review_plan.draft_rank`, with the
-        evaluator's blocking issues ahead of the score since they alone decide
-        acceptance), so a feedback-driven rewrite can never make the section
-        worse.
-        """
+        """Score a section and revise it (:func:`revise_section`) while it
+        stays below the threshold or has a blocking issue: one the evaluator
+        names (a factual error, an internal contradiction, an unsupported
+        flag or default, a structural self-reference) or a writing rule it
+        breaks in code (:func:`review_plan.rule_issues`)."""
+        # The evaluator's blocking issues the revisions leave, for grounding.
+        self._leftover_blocking = []
         if self.max_revision_attempts <= 0:
             # No revision budget: skip evaluation entirely (no wasted LLM call).
             return markdown
 
-        async def evaluate(text: str) -> tuple[int, str, list[str], int]:
+        async def evaluate(text: str) -> tuple[int, str, list[str]]:
             score, feedback, blocking = await self._evaluate_section(
                 topic=topic,
                 planned=planned,
@@ -1126,60 +1285,10 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
                 owned_elsewhere=owned_elsewhere,
                 glossary=glossary,
             )
-            feedback = self._feedback_or_generic(score, feedback)
-            # The issues to fix, and how many the evaluator raised.
-            return score, feedback, blocking + rule_issues(text), len(blocking)
+            return score, self._feedback_or_generic(score, feedback), blocking
 
-        def rank(
-            score: int, text: str, issues: list[str], factual: int
-        ) -> tuple[bool, bool, int, int, int]:
-            passes, publishable, score, slips = draft_rank(
-                passes=score >= self.min_quality_score and not issues,
-                publishable=not publish_blockers(text),
-                blocking=len(issues),
-                score=score,
-            )
-            return passes, publishable, -factual, score, slips
-
-        best_markdown = markdown
-        best_score, best_feedback, best_issues, best_factual = await evaluate(markdown)
-        for attempt in range(1, self.max_revision_attempts + 1):
-            # Accept only a score at the bar with no blocking issue. Empty
-            # feedback with a low score is a model slip (the prompt omits it
-            # only for 90+), so it still revises with a generic directive.
-            if best_score >= self.min_quality_score and not best_issues:
-                break
-            # Blocking issues first (they alone decide acceptance), then the
-            # measured length, then the evaluator's other feedback.
-            feedback = "\n\n".join(
-                part
-                for part in (
-                    (
-                        "First fix every one of these blocking issues:\n"
-                        + "\n".join(f"- {i}" for i in best_issues)
-                        if best_issues
-                        else ""
-                    ),
-                    f"Length: {length_report(best_markdown, planned.depth, self.language)}",
-                    (
-                        f"Then apply this feedback:\n{best_feedback}"
-                        if best_feedback
-                        else ""
-                    ),
-                )
-                if part
-            )
-            logger.info(
-                "Section %d scored %d (min %d), %d blocking issue(s) - revising "
-                "(attempt %d/%d).",
-                section_number,
-                best_score,
-                self.min_quality_score,
-                len(best_issues),
-                attempt,
-                self.max_revision_attempts,
-            )
-            revised = await self._write_one_section(
+        async def revise(feedback: str, draft: str) -> str:
+            return await self._write_one_section(
                 topic=topic,
                 synopsis=final_outline,
                 section=section_label,
@@ -1198,40 +1307,26 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
                     f"draft of this section that did not pass review.\n\n"
                     f"{feedback}\n\n"
                     f"CURRENT DRAFT to improve (rewrite it, keeping what works):\n"
-                    f"{best_markdown}"
+                    f"{draft}"
                 ),
             )
-            if not revised:
-                break
-            score, revised_feedback, issues, factual = await evaluate(revised)
-            if rank(score, revised, issues, factual) <= rank(
-                best_score, best_markdown, best_issues, best_factual
-            ):
-                # A rewrite of the same draft would mostly repeat this one.
-                logger.info(
-                    "Section %d revision scored %d (discarded, best %d) - "
-                    "stopping revisions.",
-                    section_number,
-                    score,
-                    best_score,
-                )
-                break
-            best_markdown, best_score = revised, score
-            best_feedback, best_issues = revised_feedback, issues
-            best_factual = factual
-        logger.info(
-            "Section %d final: score %d, %d blocking issue(s). Evaluator: %s",
-            section_number,
-            best_score,
-            len(best_issues),
-            " ".join(best_feedback.split())[:_LOGGED_FEEDBACK_CHARS] or "(none)",
+
+        best = await revise_section(
+            markdown,
+            evaluate=evaluate,
+            revise=revise,
+            length=lambda text: length_report(text, planned.depth, self.language),
+            min_score=self.min_quality_score,
+            max_attempts=self.max_revision_attempts,
+            label=str(section_number),
         )
-        if best_score < self.min_quality_score or best_issues:
+        if best.score < self.min_quality_score or best.issues:
             self.notes.append(
                 f"Guide section '{planned.title}' kept below the bar (score "
-                f"{best_score}, {len(best_issues)} blocking issue(s)): check it."
+                f"{best.score}, {len(best.issues)} blocking issue(s)): check it."
             )
-        return best_markdown
+        self._leftover_blocking = best.blocking
+        return best.text
 
     def _feedback_or_generic(self, score: int, feedback: str) -> str:
         """Evaluator feedback, or a generic directive when a below-bar score
@@ -1286,9 +1381,14 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
 
     @RetryableBase._retry("tech_guide_grounding")
     async def _ground_section(
-        self, section_markdown: str, sources: str, glossary: str
+        self,
+        section_markdown: str,
+        sources: str,
+        glossary: str,
+        blocking: list[str] | None = None,
     ) -> str:
-        """Fact-check a drafted section, returning the cleaned version.
+        """Fact-check a drafted section, returning the cleaned version; the
+        evaluator's leftover ``blocking`` issues are corrected or removed.
 
         Falls back to the original draft if the grounding pass returns nothing,
         so verification can only improve—never drop—a section.
@@ -1299,6 +1399,7 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
                 "sources": sources,
                 "glossary": glossary,
                 "language": self.language,
+                "blocking_issues": blocking_issues_block(blocking or [], "<sources>"),
             }
         )
         grounded = (result or {}).get("grounded_markdown", "").strip()

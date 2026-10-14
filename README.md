@@ -2,7 +2,7 @@
 
 # Scholar-Lens
 
-**Turn AI/ML papers and documentation into blog-ready posts: in-depth reviews, concise summaries, and hands-on technical guides.**
+**Turn AI/ML papers and documentation into blog-ready posts: in-depth reviews, concise summaries, hands-on technical guides, and surveys of a research topic's papers.**
 
 Runs locally or on AWS Batch, driven by a CLI that people and agents (OpenClaw, Claude Code, Codex) share. Powered by Claude on Amazon Bedrock.
 
@@ -24,6 +24,7 @@ Runs locally or on AWS Batch, driven by a CLI that people and agents (OpenClaw, 
 | **Review** | arXiv id or paper PDF URL (+ optional code repos) | Section-by-section review for a general DS/MLE reader: easy parts short, hard parts built up from intuition to math to a worked example, with figures, tables, a TL;DR and a limitations section |
 | **Summary** | arXiv id or paper PDF URL | A TL;DR plus five short sections (motivation, idea, implementation, results, significance and limits) |
 | **Tech guide** | Documentation URLs and/or reference material (papers, design docs, deep-dive posts) | A source-grounded guide covering installation and usage, how the internals work and why, what each major feature means, and how to fit the tool into a larger system; researched across sub-pages and web search |
+| **Paper survey** | A research topic (+ optional required papers and years), then the plan file | `survey plan`: an editable JSON plan of the topic's major papers (OpenAlex, arXiv) in chronological lineages with roles, reasons and citation links. `survey write`: a long-form post in the style of Lilian Weng's blog: each lineage's papers explained and connected, with the papers' figures and key equations, a timeline and a comparison table, insights and author-year citations |
 
 Every post is Jekyll Markdown that follows the target blog's conventions, and is checked before it is saved: a post that breaks a rule is rejected instead of published. Posts go to a local file, optionally S3, and optionally a pull request on the blog repository.
 
@@ -34,6 +35,8 @@ Every post is Jekyll Markdown that follows the target blog's conventions, and is
 - **Review:** a planner reads the whole paper and writes a coverage plan (sections, must-cover items, difficulty, prerequisites, concept ownership, figures, glossary). Each section is written from its brief, checked against it, and revised until nothing is missing; one editing pass then fixes terminology, repetition and gaps across the article.
 - **Summary:** one long-context call over the parsed paper.
 - **Guide:** research (the docs, the reference material, and web searches for usage, internals and design, and production integration) → relevance gate → outline → per-section write, evaluate and fact-check. Official docs decide commands, flags and defaults; papers, design docs and reputable write-ups may ground concepts, internals and architecture.
+- **Survey plan:** a scope call proposes lineages, search queries and landmark titles; OpenAlex and arXiv searches (arXiv's metadata checked via DataCite, Semantic Scholar counts with a key) build a candidate pool that code merges, links and ranks; a selection call picks the papers within the configured bounds, and code validates the choice before the plan is saved.
+- **Survey write:** the (edited) plan is validated again and hand-added papers are completed from DataCite/OpenAlex; each paper becomes a cached card (one call over a core paper's arXiv HTML full text or a supporting paper's abstract) whose numbers, equation and figures code checks against the paper; an outline call plans the sections (introduction, one per lineage, optional cross-cutting ones, comparison, insights) whose lengths code derives from the paper counts; each section is written, evaluated, revised once and fact-checked against its cards like a guide section; code renders `[@id]` citation keys as author-year links and builds the timeline, comparison table and reference list.
 - **Publishing:** math and Markdown normalization, copying the paper's own figures into the blog (any other image stays a link to its source), the blog-conventions gate, then S3 and a GitHub PR on a fixed branch per post.
 
 ![AWS architecture](./docs/diagrams/aws-architecture.png)
@@ -63,7 +66,9 @@ poetry run python -m scholar_lens summarize 2106.09685 --no-pr
 
 - `resources`: `profile_name`, `bedrock_region_name`, `s3_bucket_name` (needed for `cdk deploy` and Batch; without it `status` shows the Batch state but no stored result), `email_address` (SNS notifications)
 - `resources.github`: `enabled`, `repo_name` (e.g. `owner/owner.github.io`), `base_branch`, `branch_prefix`, and the category labels per artifact type
-- per-stage `*_model_id`, `thinking_effort`, quality thresholds and `max_total_tokens` cost caps (defaults: review 8M, summary 1M, guide 3M tokens)
+- per-stage `*_model_id`, `thinking_effort`, quality thresholds and `max_total_tokens` cost caps (defaults: review 8M, summary 1M, guide 3M, survey plan 0.3M, survey write 3M tokens via `survey.write_max_total_tokens`)
+- `survey`: `min_papers`/`max_papers` (6/25), `candidate_pool` (60); for the write stage `chars_per_core_paper`/`chars_per_supporting_paper` (3,000/800) within `min_total_chars`/`max_total_chars` (20,000/70,000) and `card_source_chars`
+- `resources.github.survey_category` (`Paper Surveys`): must be a type in the blog's post conventions, or `survey write` stops before any model call
 - `output_language` (default `Korean`)
 
 ## CLI
@@ -75,6 +80,10 @@ poetry run python -m scholar_lens guide "https://docs.vllm.ai/en/latest/getting_
   "https://docs.vllm.ai/en/latest/serving/openai_compatible_server.html" \
   --reference "https://arxiv.org/abs/2309.06180" \
   --reference "https://blog.vllm.ai/2025/01/27/v1-alpha-release.html"
+poetry run python -m scholar_lens survey plan "preference optimization for LLM alignment" \
+  --paper 2305.18290 --since 2017                                # writes papers/survey-<slug>/plan.json
+poetry run python -m scholar_lens survey write \
+  --plan papers/survey-preference-optimization-for-llm-alignment/plan.json --no-pr
 poetry run python -m scholar_lens review 2106.09685 --remote     # submit to AWS Batch
 poetry run python -m scholar_lens status <job-id> --wait         # poll a remote job
 ```
@@ -86,9 +95,14 @@ poetry run python -m scholar_lens status <job-id> --wait         # poll a remote
 | `--reference URL` | guide | Reference material to build on (repeatable, next to zero or more positional docs URLs, before or after them; a URL given as both counts as docs, listed once): a paper, design doc, deep-dive post or talk page as an HTML page or an arXiv link (other PDFs are not read); always used and listed, never treated as official docs |
 | `--search-query Q` | guide | Web-search query (repeatable); replaces the queries the guide would plan itself |
 | `--no-subpages` | guide | Do not follow in-scope sub-pages |
-| `--no-pr` | review, summarize, guide | Save (and upload) the post but open no PR |
-| `--remote` | review, summarize, guide | Submit to AWS Batch and return the job id |
+| `--paper ID_OR_URL` | survey plan | A paper the survey must include: arXiv id or URL, or DOI (repeatable) |
+| `--since YEAR`, `--until YEAR` | survey plan | Only papers from these years (required papers excepted) |
+| `--plan PATH_OR_S3_URI` | survey write | The plan file: a local path or `s3://<bucket>/<key>` in the configured bucket; with `--remote` a local plan is uploaded to `<s3_prefix>/surveys/<slug>/plan-<sha256>.json` first |
+| `--no-pr` | review, summarize, guide, survey write | Save (and upload) the post but open no PR |
+| `--remote` | review, summarize, guide, survey plan, survey write | Submit to AWS Batch and return the job id |
 | `--wait`, `--timeout S` | status | Poll until the job finishes or `S` seconds pass |
+
+`survey plan` writes no post: its `JobResult` carries `plan_path` (local `papers/survey-<slug>/plan.json`; empty for a `--remote` run, whose container is gone) and `s3_uri` (its S3 copy, the one to pass to `survey write --plan` after a remote run). Edit the plan (drop, add or move papers, change roles, rename lineages) and pass it to `survey write --plan`; a rerun of the plan stage keeps a plan that differs as `plan.<UTC time>.json`. A paper added by hand needs only `id` (arXiv id or URL, or DOI), `lineage` and `role`; the write stage fills in its title, authors, year and URL. A plan needs at least one `core` paper. Paper cards are cached (local `papers/survey-cards/`, S3 `<s3_prefix>/surveys/cards/`) by paper, card schema, model, language and a `-<variant>` digest of the card prompt and `card_source_chars` (changing either writes the cards again), so a rerun or another survey of the same papers reuses them. The plan's fields and the write stage are described in the [design reference](./docs/design.md#43-논문-서베이).
 
 Every command prints one JSON object on stdout (a run's `JobResult`, the `job_id` for `--remote`, the Batch state and stored result for `status`); logs go to stderr. Exit codes: `0` succeeded or submitted, `1` failed, `2` rejected input, `3` still running, `4` the command itself failed ([details](./docs/design.md#21-명령)). Quote URLs: in zsh, `?` in an unquoted URL is a glob and the command fails.
 
@@ -128,6 +142,8 @@ actionlint                                       # lint the GitHub workflows
 
 ## Changelog
 
+- New `survey write --plan <file>` (kind `survey_write`): turns a (possibly edited) plan into a `Paper Surveys` post with cached paper cards, an outline, guide-style section writing and checks, deterministic timeline and comparison tables, the papers' figures and author-year citations. It needs the blog's post conventions to list the `Paper Surveys` type (`resources.github.survey_category`); until the blog has that type on `main`, the bundled `assets/post_conventions.yml` stays as it is (the copy check would fail) and the tests use conventions with the type added. The guide's evaluate-and-revise loop and grounding retry are now shared functions (`tech_guide.revise_section`, `checked_grounding`), with unchanged behaviour. Redeploy before using it with `--remote`.
+- New `survey plan "<topic>"` (kind `survey_plan`): finds a topic's major papers and saves an editable plan (`plan_path`, `s3_uri`). Without `SEMANTIC_SCHOLAR_API_KEY` citation counts are OpenAlex's, which undercount arXiv-era ML papers, and few citation links are known. Redeploy before using it with `--remote`.
 - After upgrading, redeploy (`cdk deploy`) before using `--remote`: the Batch image runs the code of the last deploy, and an older worker rejects a request with a field it does not know (such as `--reference`).
 - Guides go deeper and broader: usage, how the internals work and why, and how to fit the tool into a larger system. An outline-level section plan assigns each concept to one owning section, the evaluator's blocking issues (factual errors, contradictions, unsupported flags or defaults) force a revision, and `tech_guide.max_revision_attempts` now defaults to one revision. A run costs more than before.
 - `guide --reference URL` (repeatable) adds reference material (papers, design docs, deep-dive posts) next to the docs URLs, and a guide can be built from references alone. Docs URLs may now come before or after the options.

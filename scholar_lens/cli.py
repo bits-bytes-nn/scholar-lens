@@ -7,6 +7,8 @@ and scripts can parse the outcome directly::
     scholar-lens review "https://openreview.net/pdf?id=nZeVKeeFYf9" --remote
     scholar-lens guide "https://docs.vllm.ai/en/latest/" --search-query "vLLM paged attention"
     scholar-lens guide "https://docs.vllm.ai/en/latest/" --reference "https://arxiv.org/abs/2309.06180"
+    scholar-lens survey plan "LLM preference optimization" --paper 2305.18290
+    scholar-lens survey write --plan papers/survey-llm-preference-optimization/plan.json
     scholar-lens status <job-id> --wait
 
 Exit codes: 0 succeeded (or submitted), 1 failed, 2 rejected input,
@@ -31,6 +33,7 @@ from typing import Any
 from pydantic import BaseModel, ValidationError
 
 from scholar_lens.src.jobs import JobRequest, JobResult
+from scholar_lens.src.survey_plan import SurveyInputError
 
 EXIT_OK, EXIT_FAILED, EXIT_REJECTED, EXIT_PENDING, EXIT_ERROR = 0, 1, 2, 3, 4
 _EXIT_BY_STATUS = {
@@ -80,7 +83,10 @@ class _JsonArgumentParser(argparse.ArgumentParser):
 def build_parser() -> argparse.ArgumentParser:
     parser = _JsonArgumentParser(
         prog="scholar-lens",
-        description="Generate AI/ML paper reviews, summaries and technical guides.",
+        description=(
+            "Generate AI/ML paper reviews, summaries, technical guides and "
+            "paper surveys."
+        ),
     )
     commands = parser.add_subparsers(dest="command", required=True)
 
@@ -162,6 +168,74 @@ def build_parser() -> argparse.ArgumentParser:
     )
     add_run_options(guide)
 
+    survey = commands.add_parser(
+        "survey",
+        help="Survey of a research topic's major papers (plan, then write).",
+        description=(
+            "Survey of a research topic's major papers. 'plan' finds and "
+            "selects the papers and saves an editable plan file; 'write' "
+            "turns a (possibly edited) plan into the post."
+        ),
+    )
+    survey_stages = survey.add_subparsers(dest="survey_stage", required=True)
+    survey_plan = survey_stages.add_parser(
+        "plan",
+        help="Find the topic's major papers and save an editable plan (JSON).",
+        description=(
+            "Find the topic's major papers (OpenAlex, arXiv), select and group "
+            "them into lineages, and save an editable plan file."
+        ),
+    )
+    survey_plan.add_argument(
+        "topic", help="Research topic, e.g. 'LLM preference optimization'."
+    )
+    survey_plan.add_argument(
+        "--paper",
+        dest="paper_ids",
+        action="append",
+        default=[],
+        metavar="ID_OR_URL",
+        help="A paper the survey must include: arXiv id or URL, or DOI (repeatable).",
+    )
+    survey_plan.add_argument(
+        "--since",
+        dest="since_year",
+        type=int,
+        metavar="YEAR",
+        help="First year covered.",
+    )
+    survey_plan.add_argument(
+        "--until",
+        dest="until_year",
+        type=int,
+        metavar="YEAR",
+        help="Last year covered.",
+    )
+    survey_plan.add_argument(
+        "--remote",
+        action="store_true",
+        help="Submit to AWS Batch and return the job id instead of running here.",
+    )
+
+    survey_write = survey_stages.add_parser(
+        "write",
+        help="Write the survey post from a plan file.",
+        description=(
+            "Write the survey post from a plan file (as 'survey plan' saved it, "
+            "or edited): paper cards, outline, sections, blog checks, PR."
+        ),
+    )
+    survey_write.add_argument(
+        "--plan",
+        required=True,
+        metavar="PATH_OR_S3_URI",
+        help=(
+            "The plan file: a local path or s3://<bucket>/<key> in the configured "
+            "bucket (with --remote a local plan is uploaded there first)."
+        ),
+    )
+    add_run_options(survey_write)
+
     status = commands.add_parser("status", help="Show a remote job's state and result.")
     status.add_argument("job_id")
     status.add_argument(
@@ -195,6 +269,16 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 
 def _request_from_args(args: argparse.Namespace) -> JobRequest:
+    if args.command == "survey" and args.survey_stage == "write":
+        return JobRequest(kind="survey_write", plan=args.plan, create_pr=args.create_pr)
+    if args.command == "survey":
+        return JobRequest(
+            kind="survey_plan",
+            topic=args.topic,
+            paper_ids=args.paper_ids,
+            since_year=args.since_year,
+            until_year=args.until_year,
+        )
     if args.command == "guide":
         return JobRequest(
             kind="guide",
@@ -233,6 +317,10 @@ def _submit(request: JobRequest) -> int:
 
     context = _aws_context()
     resources = context.config.resources
+    if request.kind == "survey_write":
+        from scholar_lens.src.survey_writer import stage_plan_for_batch
+
+        request = stage_plan_for_batch(request, context.s3_handler, resources.s3_prefix)
     submitted = submit_job(
         context.default_boto_session,
         request,
@@ -289,7 +377,8 @@ def _raw_kind(raw: str) -> Any:
         kind = json.loads(raw).get("kind")
     except (ValueError, AttributeError):
         return None
-    return kind if kind in {"review", "summarize", "guide"} else None
+    kinds = {"review", "summarize", "guide", "survey_plan", "survey_write"}
+    return kind if kind in kinds else None
 
 
 def _report_worker_failure(result: JobResult) -> int:
@@ -386,6 +475,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _status(args.job_id, wait=args.wait, timeout=args.timeout)
         if args.remote:
             return _submit(request)
+    except SurveyInputError as e:  # e.g. a survey plan that cannot be staged
+        _emit({"status": "rejected", "error": str(e)})
+        return EXIT_REJECTED
     except Exception as e:  # noqa: BLE001 - report AWS/config errors as JSON
         _emit({"status": "error", "error": f"{type(e).__name__}: {e}"})
         return EXIT_ERROR

@@ -20,13 +20,14 @@ resources:
     enabled: false
     repo_name:                     # owner/owner.github.io
     base_branch: main
-    branch_prefix: paper-reviews   # PR branches: <prefix>/review-<id>, summary-<id>, guide-<url-hash>
+    branch_prefix: paper-reviews   # PR branches: <prefix>/review-<id>, summary-<id>, guide-<url-hash>, survey-<topic>
     author_name: Scholar Lens Bot
     author_email:
     # Lead category written to each post's front matter, per artifact type.
     review_category: Paper Reviews
     summary_category: Paper Summaries
     tech_guide_category: Tech Guides
+    survey_category: Paper Surveys   # a type the blog's post conventions must list
     # Upload figures to S3 with a public-read ACL (blog images normally come
     # from the blog repository, so keep this off).
     public_assets: false
@@ -106,6 +107,42 @@ tech_guide:
   # Soft limit: past it, remaining sections skip evaluate/revise/grounding;
   # past 1.5x the run aborts.
   max_total_tokens: 3000000
+
+survey:
+  # Plan stage (`survey plan`): scope call, then the selection call.
+  scope_model_id: anthropic.claude-sonnet-5-5
+  selection_model_id: anthropic.claude-opus-5-5
+  thinking_effort: medium
+  # The selection call picks a count in [min_papers, max_papers] from the
+  # topic's breadth and the pool, out of the candidate_pool best-ranked
+  # candidates (max_papers <= candidate_pool).
+  min_papers: 6
+  max_papers: 25
+  candidate_pool: 60
+  # Soft limit: past it the repair round is skipped; past 1.5x the run aborts.
+  max_total_tokens: 300000
+  # Write stage (`survey write --plan`): one card call per paper (cached by
+  # paper, card schema, model and language), one outline call, per section a
+  # writer, an evaluator, up to max_revision_attempts revisions and a
+  # grounding pass, then one finalization call (description, taxonomy).
+  card_model_id: anthropic.claude-sonnet-5-5
+  outline_model_id: anthropic.claude-opus-5-5
+  writing_model_id: anthropic.claude-opus-5-5
+  evaluation_model_id: anthropic.claude-opus-5-5
+  card_source_chars: 150000        # of a core paper's arXiv HTML text
+  min_quality_score: 75
+  max_revision_attempts: 1
+  verify_grounding: true
+  # Length in characters of prose (Korean; other languages x2.5): each paper
+  # adds its share to its lineage section, other sections their depth's size,
+  # and the total is scaled into [min_total_chars, max_total_chars].
+  chars_per_core_paper: 3000
+  chars_per_supporting_paper: 800
+  min_total_chars: 20000
+  max_total_chars: 70000
+  # Soft limit on one write run: past it sections skip evaluation, revision
+  # and grounding; past 1.5x the run aborts.
+  write_max_total_tokens: 3000000
 
 # Language of every generated artifact (e.g. Korean, English).
 output_language: Korean

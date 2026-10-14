@@ -7,7 +7,7 @@
 1. [개요와 데이터 흐름](#1-개요와-데이터-흐름)
 2. [CLI와 작업 계약](#2-cli와-작업-계약)
 3. [리뷰 워크플로](#3-리뷰-워크플로)
-4. [요약과 기술 가이드 파이프라인](#4-요약과-기술-가이드-파이프라인)
+4. [요약, 기술 가이드, 논문 서베이 파이프라인](#4-요약-기술-가이드-논문-서베이-파이프라인)
 5. [데이터 수집과 파싱](#5-데이터-수집과-파싱)
 6. [블로그 규칙과 검증](#6-블로그-규칙과-검증)
 7. [발행](#7-발행)
@@ -20,13 +20,15 @@
 
 ## 1. 개요와 데이터 흐름
 
-Scholar-Lens는 세 종류의 글을 만듭니다.
+Scholar-Lens는 네 종류의 글(리뷰, 요약, 기술 가이드, 논문 서베이)을 만듭니다. 서베이는 계획과 쓰기 두 단계입니다(4.3절).
 
 | 종류 | `kind` | 입력 | 파이프라인 |
 | --- | --- | --- | --- |
 | 논문 리뷰 | `review` | arXiv ID 또는 PDF URL, 선택적 코드 저장소 | `paper_pipeline.py::run_paper_pipeline` → `explainer.py::PaperReviewer` |
 | 논문 요약 | `summarize` | arXiv ID 또는 PDF URL | `paper_pipeline.py::run_paper_pipeline` → `summarizer.py::PaperSummarizer` |
 | 기술 가이드 | `guide` | 문서 URL 목록, 참고 자료 URL(`--reference`), 선택적 검색어 | `guide_pipeline.py::run_guide_pipeline` → `tech_guide.py::TechGuideGenerator` |
+| 논문 서베이 계획 | `survey_plan` | 주제, 필수 논문(`--paper`), 연도 범위 | `survey_pipeline.py::run_survey_plan_pipeline` → 계획 파일(JSON, 글 아님) |
+| 논문 서베이 | `survey_write` | 계획 파일(로컬 경로 또는 `s3://`) | `survey_writer.py::run_survey_write_pipeline` → `SurveyWriter` |
 
 모든 실행은 같은 경로를 탑니다.
 
@@ -51,6 +53,8 @@ Batch worker ┘                                    │     (수집 → 생성 �
 | `src/paper_pipeline.py`, `src/guide_pipeline.py` | 산출물별 파이프라인 |
 | `src/explainer.py`, `src/review_plan.py` | 리뷰 워크플로와 계획 처리 |
 | `src/summarizer.py`, `src/tech_guide.py`, `src/web_research.py` | 요약, 가이드, 웹 조사 |
+| `src/survey_pipeline.py`, `src/survey_plan.py`, `src/scholarly_index.py` | 서베이 계획 단계(후보 수집·모델 호출), 결정적 병합·순위·검증·계획 스키마, OpenAlex·DataCite·Semantic Scholar 어댑터 |
+| `src/survey_writer.py`, `src/survey_post.py` | 서베이 쓰기 단계(계획 재검증, 카드 캐시, 모델 호출, 발행), 결정적 카드·개요 검증, 길이 목표, 인용 키, 표, 그림 출처, 참고 문헌 |
 | `src/paper_source.py`, `src/pdf_download.py`, `src/arxiv_handler.py`, `src/parser.py`, `src/content_extractor.py` | 논문 소스, PDF 내려받기, 파싱, 속성·인용 추출 |
 | `src/citation_metadata.py`, `src/citation_summarizer.py`, `src/code_retriever.py` | 인용 해석·요약, 코드 검색 |
 | `src/formatting.py`, `src/tags.py`, `src/markdown_math.py`, `src/markdown_lint.py` | 글 조립, 태그 정규화, 수식·Markdown 후처리 |
@@ -66,12 +70,14 @@ Batch worker ┘                                    │     (수집 → 생성 �
 
 ### 2.1 명령
 
-`cli.py::build_parser`가 하위 명령 다섯 개를 정의합니다.
+`cli.py::build_parser`가 하위 명령 여섯 개를 정의합니다(`survey`는 `plan`·`write` 두 단계).
 
 | 명령 | 동작 |
 | --- | --- |
 | `review SOURCE`, `summarize SOURCE` | 논문 산출물을 로컬에서 실행하거나 `--remote`로 제출 |
 | `guide [URL...] [--reference URL]...` | 기술 가이드를 로컬에서 실행하거나 `--remote`로 제출(문서 URL과 참고 자료 URL 중 하나 이상) |
+| `survey plan TOPIC [--paper ID]... [--since Y] [--until Y]` | 서베이 계획 파일을 만들거나 `--remote`로 제출(4.3절). 글을 쓰지 않으므로 `--no-pr`가 없습니다 |
+| `survey write --plan PATH_OR_S3_URI [--no-pr]` | 계획 파일로 서베이 글을 쓰거나 `--remote`로 제출(4.3절). `--remote`이면 로컬 계획을 먼저 `<s3_prefix>/surveys/<slug>/plan-<sha256 앞 16자>.json`에 올리고(내용별 키라 덮어쓰지 않음, `survey_writer.py::stage_plan_for_batch`) 그 URI로 제출합니다 |
 | `status JOB_ID [--wait] [--timeout S]` | Batch 상태와 결과 매니페스트 조회(`jobs.py::describe_job`, `wait_for_job`) |
 | `worker --request JSON` | Batch 진입점. `AWS_BATCH_JOB_ID`를 작업 ID로 사용 |
 
@@ -81,7 +87,7 @@ stdout에는 JSON 객체 하나만 출력하고 로그는 stderr로 보냅니다
 
 `--remote`는 `SubmittedJob`을 출력하고 0으로 끝납니다. `status`는 결과 매니페스트가 있으면 그 상태의 종료 코드를 돌려줍니다. 없으면 Batch가 `FAILED`일 때 1, 아직 끝나지 않았거나 `--wait`가 시간 초과되면 3, `SUCCEEDED`인데 매니페스트가 없으면 0입니다. `--wait` 중 Batch 조회나 결과 매니페스트 읽기의 요청 제한·5xx·네트워크 오류는 건너뛰고 계속 조회합니다.
 
-`--remote`나 `status`가 실패하면(자격 증명, 설정, Batch·S3 API 오류) `{"status": "error"}`와 종료 코드 4를 냅니다. 작업 실패(1)와 구분하기 위해서이며, 이때 원격 작업의 상태는 알 수 없습니다.
+`--remote`나 `status`가 실패하면(자격 증명, 설정, Batch·S3 API 오류) `{"status": "error"}`와 종료 코드 4를 냅니다. 다만 `survey write --remote`가 올릴 계획을 읽을 수 없으면(파일 없음, JSON 아님, 버킷 없음) 입력 문제이므로 `{"status": "rejected"}`와 종료 코드 2입니다. 작업 실패(1)와 구분하기 위해서이며, 이때 원격 작업의 상태는 알 수 없습니다.
 
 ### 2.2 JobRequest와 JobResult
 
@@ -89,15 +95,19 @@ stdout에는 JSON 객체 하나만 출력하고 로그는 stderr로 보냅니다
 
 | 필드 | 대상 | 기본값 |
 | --- | --- | --- |
-| `kind` | 전체 | 필수(`review`, `summarize`, `guide`) |
+| `kind` | 전체 | 필수(`review`, `summarize`, `guide`, `survey_plan`, `survey_write`) |
 | `source` | review, summarize | 필수 |
 | `repo_urls`, `parse_pdf` | review, summarize | `[]`, `false` |
 | `urls`, `reference_urls`, `search_queries`, `discover_subpages` | guide | `[]`, `[]`(둘 중 하나 이상 필수), `[]`, `true` |
-| `create_pr` | 전체 | `true`(GitHub 연동이 켜져 있을 때만 의미) |
+| `topic`, `paper_ids`, `since_year`, `until_year` | survey_plan | `topic` 필수, `[]`, 없음, 없음. 다른 종류에 `topic` 등을 주면 거부하고, `since_year`가 `until_year`보다 늦거나 `paper_ids`에 arXiv ID·URL·DOI가 아닌 값이 있어도 거부합니다(`survey_plan.py::parse_paper_id`, Batch 제출 전) |
+| `plan` | survey_write | 필수. 로컬 경로 또는 설정한 버킷의 `s3://<bucket>/<key>`. `plan`과 `create_pr` 밖의 필드를 주면 거부하고, 다른 종류에 `plan`을 주면 거부합니다 |
+| `create_pr` | 전체 | `true`(GitHub 연동이 켜져 있을 때만 의미, survey_plan은 쓰지 않음) |
+
+서베이 두 종류는 자기 행의 필드와 `create_pr`만 받습니다. 다른 행의 필드에 기본값이 아닌 값(`parse_pdf: true`, `discover_subpages: false` 포함)을 주면 거부합니다.
 
 로컬 CLI와 Batch worker는 같은 객체를 씁니다. `--remote`는 `JobRequest.model_dump_json(exclude_defaults=True)`를 Batch 파라미터 `request` 하나로 넘기고, 작업 정의의 명령은 `["python3", "-m", "scholar_lens", "worker", "--request", "Ref::request"]`입니다(`scripts/deploy_infra.py::JOB_COMMAND`). 두 경로가 같은 파서를 쓰므로 인자 계약이 어긋나지 않습니다. 기본값인 필드는 보내지 않으므로, 새 필드를 쓰지 않는 요청은 그 필드가 생기기 전에 배포한 worker 이미지(`extra="forbid"`)도 받습니다. 새 필드(예: `reference_urls`)를 쓰는 요청은 `cdk deploy`로 이미지를 갱신한 뒤에만 원격 실행됩니다(`tests/test_jobs.py`가 `reference_urls` 이전 worker의 필드 집합 사본으로 검증).
 
-`jobs.py::JobResult`에는 `status`, `title`, `markdown_path`, `s3_uri`, `pr_url`, `warnings`, `violations`, `error`, `job_id`, `duration_seconds`, 토큰 수, `estimated_cost_usd`가 들어갑니다. Batch 실행은 이 결과를 `s3://<bucket>/<s3_prefix>/results/<job_id>.json`에 저장하고(`jobs.py::write_result_manifest`), `status`가 이를 읽어 붙입니다.
+`jobs.py::JobResult`에는 `status`, `title`, `markdown_path`, `plan_path`(로컬 survey_plan 실행의 계획 파일, 이때 `s3_uri`는 그 S3 사본. Batch 실행은 컨테이너와 함께 사라지는 경로라 비우고 `s3_uri`만 남김), `s3_uri`, `pr_url`, `warnings`, `violations`, `error`, `job_id`, `duration_seconds`, 토큰 수, `estimated_cost_usd`가 들어갑니다. Batch 실행은 이 결과를 `s3://<bucket>/<s3_prefix>/results/<job_id>.json`에 저장하고(`jobs.py::write_result_manifest`), `status`가 이를 읽어 붙입니다.
 
 ### 2.3 실행 수명주기
 
@@ -178,7 +188,7 @@ LLM 라우팅 호출 없이 계획을 따릅니다(`PaperReviewer._enrich`). 참
 
 8개 절 논문에서 계획 1회, 절마다 집필·검수 약 2–3회, 편집 1–2회, 마무리 1회입니다. 계획과 편집은 논문 전체를 입력으로 받고, 컨텍스트를 넘으면 `fit_text`가 뒷부분을 잘라냅니다. 이때도 미배정 구간 보정이 남은 문장을 절에 붙입니다. 모든 단계는 `max_total_tokens` 예산 가드를 거칩니다.
 
-## 4. 요약과 기술 가이드 파이프라인
+## 4. 요약, 기술 가이드, 논문 서베이 파이프라인
 
 ### 4.1 요약
 
@@ -192,11 +202,58 @@ LLM 라우팅 호출 없이 계획을 따릅니다(`PaperReviewer._enrich`). 참
 2. 관련성 판정(`TechGuideRelevancePrompt`)을 문서 페이지와 그 하위 페이지만으로(문서 URL이 없으면 참고 자료로) 먼저 합니다. 통과하지 못하면 `NotTechnicalContentError`로 거부하므로 검색 비용이 들지 않습니다. 같은 호출이 문서가 다루는 명령·패키지 이름(`<commands>`)도 돌려주며, 시드 페이지에 단어로 나오는 이름만 씁니다. 하나도 없으면 사이트 호스트 이름(`docs.vllm.ai` → `vllm`)을 씁니다(`web_research.py::product_names`).
 3. 검색 제공자가 있고 검색어가 주어지지 않았으면 계획 단계가 문서와 참고 자료를 보고 검색어를 만들고(`auto_research`, `max_research_queries`, 기본 6개), 상위 결과 페이지를 말뭉치에 넣습니다(`fetch_top_results`, 기본 12). 결과는 모든 검색어의 i번째 결과를 i+1번째보다 먼저 고르므로, 기본값에서는 검색어마다 상위 두 결과(이미 가진 페이지는 건너뜀)가 들어옵니다. 계획 프롬프트는 검색어를 사용법(공식 문서), 내부 구조와 설계(논문, 설계 문서, 아키텍처 개요, 메인테이너의 심층 분석 글, 소스 해설), 운영 아키텍처와 연동(배포 패턴, 확장, 관측성, 장애 양상, 주변 시스템과의 인터페이스) 세 의도에 약 3분의 1씩 나누라고 지시하지만, 실제 배분은 모델이 정합니다. 참고 자료가 이미 설명한 내용은 다시 찾지 않습니다. 계획 단계와 관련성 판정이 보는 출처 요약(6,000자)은 참고 자료와 나머지 페이지가 각각 절반 이상을 쓸 수 있게 나눕니다. 계획 단계의 주제는 검색과 개요 입력에 쓰고, 가이드 제목은 개요 호출이 돌려주는 `<title>`을 씁니다(없으면 계획 주제). 개요·분류 프롬프트는 제목 길이 기준으로 규칙 파일의 `seo_title_max_length`를 받아(`TechGuideGenerator(title_max_length=…)`), 제목을 그 길이 안에서 도구와 가이드의 관점을 담고 절 목록을 나열하지 않게 지시합니다. 게시 단계에서 제목이 그 길이를 넘으면 분류 단계의 `seo_title`(기준 안일 때) 또는 낱말 경계에서 자른 제목(`formatting.py::cut_title`)으로 바꿉니다(`guide_pipeline.py::guide_title`). 콜론 앞부분(`vLLM`)은 도구 이름일 뿐이므로 가이드 제목으로 쓰지 않습니다. 논문 글의 `seo_title`은 콜론 앞의 논문 이름을 그대로 씁니다(`formatting.py::shorten_title`).
 4. 개요를 만들고(최대 `max_sections`개 절, 기본 14, 3–30) 절마다 깊이(deep/standard/brief)를 정합니다. 분량 기준은 가이드 전체 약 35,000–55,000자(한국어 기준, 코드 제외), deep 절 약 5,000자, standard 약 2,500자, brief 1,000자 이하입니다(`prompts/tech_guide.py::LENGTH_BUDGET`). 분량은 공백을 하나로 줄인 산문 글자 수이며 코드 블록, 표 행(인용 블록 안의 표와 바깥 `|` 없이 `--- | ---` 구분 행을 둔 표 포함, 표 판별은 `markdown_lint.py`의 `TABLE_ROW`·`TABLE_DELIMITER`를 씀)과 이미지(링크로 감싼 이미지 포함)는 세지 않고, 이미지와 같은 줄의 글은 셉니다(`tech_guide.py::prose_chars`). 집필자 지시, 평가자의 측정 보고와 수정 지시가 같은 함수와 같은 단위(`PROSE_UNIT`)를 씁니다. 개요의 뼈대는 요청한 문서입니다. 절 구성은 문서의 구조와 독자의 진행 순서(`<input_outline>` 순서)를 따르고, 참고 자료와 검색 결과의 내부 구조·설계 이유·연동 내용은 별도 장을 만들지 않고 독자가 관련 기능이나 설정을 만나는 절에 넣습니다(메모리·캐시 설정을 다루는 절에서 메모리 메커니즘을 설명). 메커니즘에 따로 절을 주는 것은 핵심이고 나누면 흩어질 만큼 클 때뿐이며, 참고 자료 하나를 요약하는 절은 만들지 않습니다. 그 뼈대 안에서 출처가 뒷받침하는 범위의 폭과 깊이를 다룹니다. 도구가 푸는 문제와 핵심 개념, 핵심 메커니즘의 동작 방식과 설계 이유, 주요 기능별 의미(푸는 문제, 동작, 장단점, 쓸 때), 설치와 사용법, 더 큰 시스템에의 통합(인터페이스, 확장, 관측성, 장애 양상, 권고 형태의 설계 조언)입니다. 쉬운 내용은 짧게, 어려운 메커니즘을 설명하는 절은 배경부터 깊게 쓰며, 설치는 한 절 이하로 두고 플랫폼별 차이는 표나 공식 페이지 링크로 줄입니다. getting-started 유형은 사용법을 앞에 둡니다. 절은 사용·설정 내용에 공식 문서를, 그 절에 녹인 메커니즘·연동 내용에 참고 자료나 서드파티 설명 자료를 근거로 하며, `<section_plan>`에 그 자료를 적습니다. 집필자는 참고 자료를 따로 떼어 배경 설명으로 두지 않고 그 절의 기능 설명 안에서 가이드의 목소리로(푸는 문제 → 동작 → 설계 이유 → 여기서 쓰는 법) 풀고, 평가자는 참고 자료 하나를 요약한 듯한 절이나 해당 기능과 떨어진 메커니즘 설명을 구조(Structure & flow) 감점으로 봅니다. 개요 호출은 절마다 그 절을 뒷받침하는 말뭉치 페이지 URL과 그 절이 맡는 개념도 돌려줍니다(`<section_plan>`). URL은 말뭉치에 있는 것만 남기고, 계획의 번호는 개요의 번호 매긴 줄과 맞춥니다(`guide_authority.py::parse_section_plan`). 계획 줄이 없거나 공식 문서 페이지가 하나도 없는 절은 집필 전에 절 제목으로 공식 사이트를 도메인 제한 검색합니다. 검색 결과로 찾은 페이지만 그 절의 공식 출처로 치며, 검색 백엔드가 없거나 찾지 못하면 집필자에게 출처가 보여 주는 내용만 쓰라고 알립니다. 계획이 그 절에 고른 페이지와 제목 조회로 찾은 페이지는 계획 순서대로 절의 근거 자료 맨 앞에 두고, 각각 근거 자료 상한의 같은 몫을 먼저 받아 긴 논문이 공식 페이지를 밀어내지 않습니다. 남은 자리는 관련도 순으로, 잘린 우선 페이지부터 나눕니다(`ResearchCorpus.relevant_text`). 자기 몫보다 긴 페이지는 앞부분만 남기지 않고 헤딩 줄에서(그래도 긴 조각은 문단 경계에서, 코드 펜스와 `$$` 수식 안은 자르지 않음) 조각으로 나눕니다. 문단 경계에서 나뉜 절의 뒤쪽 조각을 남기면 그 절의 헤딩이 있는 첫 조각도 함께 남겨 "Deprecated options (removed in v0.10)" 같은 맥락을 잃지 않습니다. 머리말과 본문 사이에 빈 줄이 없거나 조각을 넣을 자리가 없으면 블록을 문단 경계에서 자릅니다. 조각마다 질의 단어를 담았는지 보되, 많은 조각에 나오는 단어(제품 이름, "and")일수록 가중치를 낮추고(역문서 빈도), 점수가 높은 조각을 몫 안에서 골라 페이지 순서대로 두며 빠진 부분은 `…` 줄로 표시합니다(`web_research.py::_excerpt`). 15만 자짜리 CLI 레퍼런스의 뒤쪽에 있는 병렬화·설정 플래그도 해당 절에 들어가게 하기 위해서입니다. 각 집필·평가 호출에는 다른 절이 맡은 개념 목록(`owned_elsewhere`, 그 절도 맡은 개념은 뺌)을 넘겨 다시 정의하지 않게 하고, 평가자는 그 개념을 설명한 것을 중복(Non-duplication)으로 보며 길게 설명하면 차단 문제로 둡니다. 개요 호출은 핵심 용어집(`<glossary>`, 최대 15개, 줄마다 `English term | rendering`)도 돌려줍니다. 표기는 용어 규칙(`prompts/base.py::TERMINOLOGY_RULES`)을 따른 한국어 용어나 고유명사·API의 영어이며 괄호 속 영어는 넣지 않고, 코드가 괄호를 떼어 파싱합니다(`tech_guide.py::parse_glossary`). 집필·평가·사실 확인 호출은 절마다 용어집을 받는데, 앞선 절 본문에 첫 사용 형태인 `표기(English)`(대소문자 무시, 괄호 앞 공백 허용)가 이미 나온 용어는 `[introduced]`, 아니면 `[new]`로 코드가 표시합니다. 표기만 나온 것은 소개로 보지 않습니다(`tech_guide.py::glossary_view`). `[new]` 용어만 그 절의 첫 사용에서 영어를 괄호로 한 번 붙입니다(`prompts/tech_guide.py::GLOSSARY_RULE`). 검색 결과, 사용자 참고 자료와 공식 레퍼런스 조회로 말뭉치에 들어온 페이지는 한 쪽마다 출처 라벨(official documentation, reference material, third-party, older docs version)과 URL을 INFO 로그로 남기고(`Added search page [third-party] https://…`), 집필 전에 절마다 계획된 출처를 한 줄로 남깁니다.
-5. 절마다 작성 → 평가 → 기준 미달 시 수정(`max_revision_attempts`, 기본 1회) 순서로 진행합니다. 평가자는 절의 근거 자료와 전체 목차를 보고 점수(0–100)와 차단 문제(`<blocking_issues>`: 사실 오류, 절 안의 모순, 출처 권한이 요구하는 근거가 없는 플래그·기본값, 어느 출처도 뒷받침하지 않는 내부 구조·아키텍처 주장, 다른 절을 이름이나 번호로 가리키는 표현)를 돌려줍니다. 점수가 기준 이상이고 차단 문제와 코드로 찾은 규칙 위반이 없어야 통과하며, 수정 지시는 차단 문제(반드시 고칠 항목), 측정한 분량과 목표, 평가자의 나머지 의견 순서로 씁니다. 수정본은 원래 초안보다 순위가 높을 때만 남기며, 순위는 통과 여부, 게시 가능 여부, 평가자의 차단 문제 수, 점수, 규칙 위반 수 순서로 비교합니다. 모든 절을 쓴 뒤 사실 확인(`verify_grounding`)을 합니다. 사실 확인 프롬프트는 용어 규칙 전체 대신, 절의 용어와 용어집 표기를 그대로 두고 영어 어간에 한국어 어미를 붙이지 말라는 한 줄만 둡니다. 공식 페이지에 없는 CLI 플래그·Python 인자(`gpu_memory_utilization=`)·메트릭 이름은 같은 공식 문서(같은 호스트, 호환되는 버전)의 레퍼런스 페이지로 확인합니다. 집필 전에는 서드파티 페이지에만 나오는 식별자와 공식 출처가 없는 절의 제목을, 사실 확인 전에는 초안에 새로 나온 식별자를 찾으며, 모든 조회를 합쳐 검색 3번, 6쪽까지 씁니다(`WebResearcher.add_official_reference`, 식별자 조회는 검색 뒤에 식별자와 맞는 경로의 링크도 씁니다). 식별자 조회에서는 찾는 식별자 중 하나 이상을 미확인 검사와 같은 표기 규칙(`guide_authority.py::mentions_any`)으로 담은 페이지만 말뭉치에 넣고 쪽수에 셉니다. 담지 않은 페이지(CLI 페이지 목록뿐인 색인 페이지 등)는 넣지 않고, 그 페이지의 레퍼런스 링크(같은 호스트, 호환되는 버전)를 같은 경로 순위로 후보 끝에 붙입니다. 가져오기는 조회마다 쪽수 한도의 2배까지입니다. 절 제목 조회는 검색 결과를 그대로 씁니다. 집필 전 조회(서드파티 식별자와 절 제목)는 합쳐서 검색 2번, 4쪽까지만 써서, 사실 확인에 검색 1번과 2쪽 이상이 남습니다. 그중 서드파티 식별자 조회는 절반(검색 1번, 2쪽)까지만 써서 절 제목 조회의 몫을 남깁니다. 가져온 레퍼런스 페이지는 그 절 본문에 나오는 미확인 식별자가 있는 절에만, 그 식별자와 절 앞부분으로 고른 발췌(2만 자, 긴 페이지는 위와 같이 조각 선택)로 사실 확인 근거 자료 앞에 붙입니다. 그래도 확인되지 않은 식별자는 PR 체크리스트에 올립니다. 출처 목록에는 요청한 페이지(문서와 참고 자료)와 같은 공식 문서(호환되는 버전)의 페이지를 넣고, 그 밖의 페이지는 어느 절의 근거 자료에 실제로 들어갔거나 본문이 링크하거나 이미지를 가져온 경우에만 넣습니다. 레퍼런스 페이지는 본문에 남은 식별자를 낱말 단위로 담은 경우에만 넣고, 이전 버전 문서는 넣지 않습니다(`guide_authority.py::used_source_urls`). 각 절의 호출에는 말뭉치 전체가 아니라 절 제목·설명과 가장 관련 있는 페이지만 약 6만 자까지 넣고(`ResearchCorpus.relevant_text`), 앞선 절은 직전 두 절 전문과 그 이전 절의 요약만 넘깁니다.
+5. 절마다 작성 → 평가 → 기준 미달 시 수정(`max_revision_attempts`, 기본 1회) 순서로 진행합니다. 평가자는 절의 근거 자료와 전체 목차를 보고 점수(0–100)와 차단 문제(`<blocking_issues>`: 사실 오류, 절 안의 모순, 출처 권한이 요구하는 근거가 없는 플래그·기본값, 어느 출처도 뒷받침하지 않는 내부 구조·아키텍처 주장, 다른 절을 이름이나 번호로 가리키는 표현)를 돌려줍니다. 점수가 기준 이상이고 차단 문제와 코드로 찾은 규칙 위반이 없어야 통과하며, 수정 지시는 차단 문제(반드시 고칠 항목), 측정한 분량과 목표, 평가자의 나머지 의견 순서로 씁니다. 수정본은 원래 초안보다 순위가 높을 때만 남기며, 순위는 통과 여부, 게시 가능 여부, 평가자의 차단 문제 수, 점수, 규칙 위반 수 순서로 비교합니다. 모든 절을 쓴 뒤 사실 확인(`verify_grounding`)을 합니다. 수정 뒤에도 남은 평가자의 차단 문제는 그 절의 사실 확인에 넘겨, 근거 자료만으로 바로 그 주장만 고치거나 지우게 합니다(`blocking_issues`, 없으면 프롬프트는 그대로). 사실 확인 프롬프트는 용어 규칙 전체 대신, 절의 용어와 용어집 표기를 그대로 두고 영어 어간에 한국어 어미를 붙이지 말라는 한 줄만 둡니다. 공식 페이지에 없는 CLI 플래그·Python 인자(`gpu_memory_utilization=`)·메트릭 이름은 같은 공식 문서(같은 호스트, 호환되는 버전)의 레퍼런스 페이지로 확인합니다. 집필 전에는 서드파티 페이지에만 나오는 식별자와 공식 출처가 없는 절의 제목을, 사실 확인 전에는 초안에 새로 나온 식별자를 찾으며, 모든 조회를 합쳐 검색 3번, 6쪽까지 씁니다(`WebResearcher.add_official_reference`, 식별자 조회는 검색 뒤에 식별자와 맞는 경로의 링크도 씁니다). 식별자 조회에서는 찾는 식별자 중 하나 이상을 미확인 검사와 같은 표기 규칙(`guide_authority.py::mentions_any`)으로 담은 페이지만 말뭉치에 넣고 쪽수에 셉니다. 담지 않은 페이지(CLI 페이지 목록뿐인 색인 페이지 등)는 넣지 않고, 그 페이지의 레퍼런스 링크(같은 호스트, 호환되는 버전)를 같은 경로 순위로 후보 끝에 붙입니다. 가져오기는 조회마다 쪽수 한도의 2배까지입니다. 절 제목 조회는 검색 결과를 그대로 씁니다. 집필 전 조회(서드파티 식별자와 절 제목)는 합쳐서 검색 2번, 4쪽까지만 써서, 사실 확인에 검색 1번과 2쪽 이상이 남습니다. 그중 서드파티 식별자 조회는 절반(검색 1번, 2쪽)까지만 써서 절 제목 조회의 몫을 남깁니다. 가져온 레퍼런스 페이지는 그 절 본문에 나오는 미확인 식별자가 있는 절에만, 그 식별자와 절 앞부분으로 고른 발췌(2만 자, 긴 페이지는 위와 같이 조각 선택)로 사실 확인 근거 자료 앞에 붙입니다. 그래도 확인되지 않은 식별자는 PR 체크리스트에 올립니다. 출처 목록에는 요청한 페이지(문서와 참고 자료)와 같은 공식 문서(호환되는 버전)의 페이지를 넣고, 그 밖의 페이지는 어느 절의 근거 자료에 실제로 들어갔거나 본문이 링크하거나 이미지를 가져온 경우에만 넣습니다. 레퍼런스 페이지는 본문에 남은 식별자를 낱말 단위로 담은 경우에만 넣고, 이전 버전 문서는 넣지 않습니다(`guide_authority.py::used_source_urls`). 각 절의 호출에는 말뭉치 전체가 아니라 절 제목·설명과 가장 관련 있는 페이지만 약 6만 자까지 넣고(`ResearchCorpus.relevant_text`), 앞선 절은 직전 두 절 전문과 그 이전 절의 요약만 넘깁니다.
 
 출처 권한은 집필·평가·사실 확인 프롬프트가 공유합니다(`prompts/tech_guide.py::SOURCE_AUTHORITY`). 프롬프트의 각 출처는 공식 문서(official documentation), 이전 버전 문서(older docs version), 참고 자료(reference material), 서드파티(third-party)로 표시됩니다(`web_research.py::source_label`). 명령, 플래그, API 이름, 기본값, 설정 키, 환경 변수, 메트릭 이름, 버전·플랫폼 지원은 공식 문서가 정합니다. 참고 자료와 서드파티 페이지(논문, 설계 문서, 메인테이너 글, 엔지니어링 글, 소스 코드)는 개념, 내부 구조, 설계 이유, 장단점, 아키텍처·연동 패턴의 근거가 될 수 있고, 1차 자료가 일반 튜토리얼보다 우선하며 마케팅 글은 근거가 되지 않습니다. 업체의 제품 페이지나 튜토리얼은 그 제품 자체의 사실에만 근거가 되고 다른 제품과의 비교 근거가 되지 않습니다. 논문이나 이전 설계 문서에만 나오는 메커니즘은 현재 공식 페이지가 확인하지 않는 한 현재 선택지가 아니라 그 문서가 설명하는 버전의 설계로(논문 이름이나 그 문서가 밝힌 버전을 적어) 씁니다. 현재 동작을 두고 공식 문서와 어긋나면 공식 문서가 이기고, 이전 버전 문서는 현재 동작을 정하지 않습니다. 근거 자료에 공식 페이지가 있으면 비공식 페이지에만 나오는 명령·플래그·기본값·설정 키는 쓰지 않고, 공식 페이지가 없으면 그 값을 보여 주는 페이지가 있어야 합니다. 평가자는 플래그·기본값에 이 근거를, 개념·내부 구조·아키텍처 주장에는 어느 출처든 근거나 교과서 수준 배경을 요구하며, 근거 없는 내부 구조·아키텍처 주장은 차단 문제입니다. 사실 확인은 출처가 뒷받침하는 개념 설명을 공식 페이지에 없다는 이유로 지우지 않고, 식별자는 계속 공식 문서로 확인합니다. 본문은 사실의 출처를 서술하지 않고, 의견, 벤치마크, 메커니즘이 나온 논문·설계 문서만 한 번 출처를 밝힙니다. 사실 확인이 절을 4분의 1 넘게 줄이면 로그(INFO)에 남깁니다. 참고 자료는 출처 목록에 항상 들어갑니다.
 
 가이드 파이프라인(`guide_pipeline.py`)은 완성된 가이드를 `TechGuideGenerator.classify`로 분류해 블로그 주제 하나, 통제 태그, 세부 태그, `seo_title` 후보를 받고, `formatting.py::build_post_meta`가 spec에 맞게 확정합니다. 분류는 개요가 아니라 완성된 본문의 헤딩과 문단 첫 문장으로 하므로 본문에 없는 내용을 태그로 달지 않습니다. 목차는 블로그 레이아웃이 만들므로 본문에 따로 넣지 않습니다. 문서 사이트 같은 남의 이미지는 블로그로 복사하지 않고 원본 링크로 두며, 검증 warning으로 PR 체크리스트에 올라갑니다(7장).
+
+### 4.3 논문 서베이
+
+서베이는 Lilian Weng의 블로그처럼 한 연구 주제의 주요 논문을 계보(lineage, 같은 접근을 공유하는 논문 묶음)별 시간순으로 엮고, 논문끼리의 관계와 통찰을 정리하는 글입니다. 두 단계로 나눕니다. `survey plan`이 사용자가 고칠 수 있는 계획 파일을 만들고, 사용자가 논문·계보를 고친 뒤 `survey write --plan <file>`이 그 파일로 글을 씁니다. 계획 단계의 모델 호출은 범위와 선정 두 번(각각 최대 한 번의 수정 호출)이고, 사실(서지 정보, 인용 관계, 순위)은 API와 코드가, 의미 판단(계보, 선정, 역할)은 모델이 맡습니다. 쓰기 단계는 4.3.1절입니다.
+
+`survey_pipeline.py::plan_survey` 순서입니다.
+
+1. **필수 논문**(`CandidateFinder.resolve_required`): `--paper`의 arXiv ID·URL은 DataCite에 등록된 arXiv DOI 레코드(`10.48550/arXiv.<id>`)에서, DOI는 OpenAlex에서 찾고, 같은 논문의 OpenAlex 레코드(arXiv DOI, 제목 검색)를 덧붙입니다. ID 형식이 틀리거나 색인이 모르는 논문은 `SurveyInputError`(rejected)이고, 색인 장애는 failed입니다.
+2. **범위**(`SurveyScopePrompt`, `survey.scope_model_id`): 주제, 사용자 연도 범위, 필수 논문 제목(프롬프트 태그는 무력화, `prompt_safety.py::neutralize_prompt_tags`)을 받아 `<scope>` 안의 JSON 하나로 다듬은 주제 서술, 계보 2–6개(`id`, 이름, 한 줄 설명), 검색어 4–8개, 모델이 기억하는 주요 논문 제목 최대 10개(landmarks)를 돌려줍니다. `survey_plan.py::SurveyScope`가 검증하고, 형식이 틀리면 문제 목록과 함께 한 번 다시 묻습니다. 랜드마크 제목은 검색어로만 쓰며, 색인에서 제목이 일치하는(`citation_metadata.py::titles_match`) 레코드만 후보가 됩니다.
+3. **후보 수집**(`CandidateFinder.gather`): 검색어마다 OpenAlex `search`(사용자 연도 범위로 필터)와 arXiv API(검색어의 모든 단어를 `all:`로 AND)에서 25건씩 받습니다. 랜드마크는 OpenAlex 제목 검색으로 찾고, arXiv ID가 있는 일치 레코드가 없을 때만 arXiv `ti:` 검색을 합니다. OpenAlex만 돌려준 arXiv ID는 DataCite에서 arXiv 메타데이터(제목, 저자, 초록, v1 제출일)를 50개씩 받아 확인합니다. OpenAlex는 일부 arXiv ID를 다른 논문 제목에 붙여 두기 때문입니다(실측: PPO `1707.06347`, InstructGPT `2203.02155`, Llama 2). 그래서 arXiv 레코드를 얻지 못한 arXiv ID(틀린 ID이거나 그 묶음의 조회 실패)의 레코드는 OpenAlex 메타데이터로 남기지 않고 빼며(필수 논문의 레코드는 arXiv ID만 뗌), 그 ID들을 계획의 `notes`에 적습니다. 조회가 모두 실패하면 `CandidateSearchError`(failed, 다시 실행)입니다. `SEMANTIC_SCHOLAR_API_KEY`가 있으면 마지막에 모든 후보를 배치 요청(500개씩)으로 보내 인용 수, 학회명, 참고문헌을 더합니다.
+4. **병합**(`survey_plan.py::merge_records`): arXiv ID, DOI, OpenAlex ID 중 하나가 같거나 제목이 일치하는 레코드는 한 논문이며, 한 레코드가 여러 논문과 맞으면 그 논문들을 합칩니다. 서로 다른 arXiv ID 두 개가 한 논문에 들어가는 병합은 하지 않습니다. 후보 ID는 arXiv ID(버전 없음), 없으면 DOI(소문자)입니다. 둘 다 없는 후보(OpenAlex 저작뿐)는 쓰기 단계가 서지 정보를 찾을 수 없으므로 풀에서 빼고 그 수를 `notes`에 적습니다. 제목·저자·초록·날짜는 arXiv 레코드(arXiv 검색, DataCite)가 우선이고(학회 레코드의 날짜는 `YYYY-01-01`인 경우가 많음), 학회명은 Semantic Scholar, OpenAlex의 arXiv 아닌 위치, `arXiv` 순서입니다. 인용 수는 OpenAlex 레코드 중 최댓값과 Semantic Scholar 값 중 큰 값입니다. OpenAlex의 arXiv 레코드 초록은 쓰지 않습니다(5.4절과 같은 이유).
+5. **간선과 순위**(`citation_edges`, `rank_candidates`): 후보 A의 참고문헌(OpenAlex ID, Semantic Scholar의 arXiv ID·DOI)이 후보 B의 키와 같으면 A→B 간선입니다. 여러 후보가 가진 키(병합하지 않은 두 arXiv 논문이 공유한 DOI)는 어느 쪽도 가리키지 않습니다. 사용자 연도 범위 밖이거나 연도를 모르는 후보는 빼고(필수 논문은 남김), (풀 안의 피인용 수 + 그 논문을 찾은 서로 다른 검색어 수) 내림차순, 발표 후 연간 인용 수 내림차순, ID 순으로 정렬합니다. 선정 호출의 후보 목록은 필수 논문과 랜드마크 제목과 일치한 후보를 먼저 넣고 나머지를 순위대로 채운 `candidate_pool`개(기본 60)입니다. 연도 범위는 사용자 범위만 씁니다.
+6. **선정**(`SurveySelectionPrompt`, `survey.selection_model_id`, adaptive thinking): 후보마다 ID, 제목, 연도, 학회, 인용 수와 연간 인용 수, 풀 안의 피인용 수, 그 후보를 찾은 검색어 수, 필수(`[REQUIRED]`)·랜드마크(`[LANDMARK]`) 표시, 초록 앞 400자를 보고 `[min_papers, max_papers]`(기본 6–25) 안에서 논문 수를 주제의 폭과 풀에 맞게 정해 이유를 적고, 논문마다 계보·역할(`core`·`supporting`)·한 줄 이유를, 제외한 주요 후보 최대 10개와 이유를 돌려줍니다. 계보는 합치거나 이름을 바꾸거나 새로 만들 수 있습니다. `check_selection`이 후보 목록에 없는 논문 ID, 중복, 빠진 필수 논문, 범위를 벗어난 논문 수, 핵심(`core`) 논문이 하나도 없는 선정, 모르는 계보, 중복 계보 ID를 모두 찾아 한 번 다시 묻고, 그래도 쓸 수 없으면 `SurveyPlanError`(failed)입니다. 후보 목록이 `min_papers`보다 작으면 하한은 목록 크기입니다. 제외 목록의 후보 목록 밖 ID는 다시 물을 문제가 아니므로 `build_plan`이 빼고 `notes`에 적습니다.
+7. **계획 파일**(`build_plan`, `save_plan`): 논문은 날짜순(날짜 없는 논문은 끝)이고, 간선은 선정한 논문 사이의 것만, 계보는 논문이 하나 이상 있는 것만 남깁니다. `papers/survey-<slug>/plan.json`(slug는 사용자 주제로 만들어 같은 요청은 같은 위치. slug가 버리는 한글 같은 비ASCII 글자가 주제에 있으면 주제의 SHA-1 앞 8자를 붙여 `LLM 선호 최적화`와 `LLM 추론 최적화`가 같은 위치를 쓰지 않음)에 저장하며, 내용이 다른 파일이 이미 있으면(손으로 고친 계획일 수 있음) `plan.<UTC 시각>.json`으로 옮겨 둡니다. 버킷이 있으면 `s3://<bucket>/<s3_prefix>/surveys/<slug>/plan.json`에도 올리며(`upload_plan`), 내용이 다른 S3 계획이 이미 있으면 `plan-<sha256 앞 16자>.json`(`survey write --remote`가 올리는 계획과 같은 이름 규칙)으로 남겨 둡니다. 결과의 `title`은 다듬은 주제, `plan_path`(로컬 실행만)·`s3_uri`는 계획 파일, `warnings`는 계획의 `notes`입니다.
+
+API 호출 정책입니다. OpenAlex·DataCite·Semantic Scholar는 `citation_metadata.py::_get_json`(공급자별 속도 제한, 429에 `Retry-After`만큼 기다린 뒤 한 번 재시도, 60초를 넘는 대기는 할당량 소진)을, arXiv는 `ArxivHandler.search`(프로세스 전역 3초 간격, 한 번 시도)를 씁니다. 재시도는 이 한 계층만 합니다. 후보 수집에서 실패한 호출(전송·HTTP 오류, JSON이 아닌 200 응답)은 건너뛰고 계획의 `notes`에 남기며, 할당량이 소진됐거나 연속 두 번 실패한 공급자(arXiv의 429는 몇 분씩 이어짐)는 그 실행 동안 부르지 않습니다. 주제 검색(검색어·랜드마크)이 하나도 답하지 않으면 필수 논문이 있어도 `CandidateSearchError`(failed), 범위 안 후보가 하나도 없으면 `SurveyInputError`(rejected)입니다. 그 밖의 예외(프로그램 오류)는 그대로 올라갑니다. 필수 논문 조회 실패는 건너뛰지 않습니다.
+
+OpenAlex는 arXiv 시대 ML 논문의 인용 수를 크게 적게 세고(실측: DPO의 arXiv 레코드 293회, 학회 레코드 460회) 프리프린트와 NeurIPS·ACL 레코드의 참고문헌이 대부분 비어 있어, Semantic Scholar 키가 없으면 간선이 적고 순위가 검색어 수와 OpenAlex 인용 수에 기댑니다. 이때는 계획의 `notes`에 그 사실을 남깁니다. 후보의 참고문헌과 인용 저작을 한 단계 더 넣는 인용 확장은 하지 않습니다(간선은 검색으로 모은 후보 사이에서만 셉니다). DPO 주제로 실측하면(고정 범위 호출, 검색어 6개, 랜드마크 8개, 필수 논문 DPO) 확장으로 후보는 197개에서 370개, 간선은 22개에서 664개로 늘었지만, 상위 60개 후보 목록의 43자리를 확장으로만 찾은 저작이 차지하고 검색으로 찾은 후보 45개를 밀어냈습니다. 그 43개는 대부분 범용 고피인용 저작(Attention Is All You Need, Adam, GPT-4, LLaMA)이나 다른 분야(염소 이버멕틴 약동학)였고, 주제에 맞는 것은 Constitutional AI, Bradley–Terry 쌍대 비교, TAMER 등 몇 개뿐이었습니다.
+
+토큰 예산은 `survey.max_total_tokens`(기본 30만)의 소프트 상한입니다. 넘으면 수정 호출을 하지 않고, 1.5배를 넘으면 다음 호출 전에 중단합니다.
+
+계획 파일(`survey_plan.py::SurveyPlan`, `extra="forbid"`)의 형식입니다. 내용은 영어이며(사용자가 고치는 작업 문서이고, 글은 쓰기 단계가 출력 언어로 씀), 사용자가 논문을 빼거나 더하거나 계보를 옮기고 이름을 바꿔도 되고, 쓰기 단계가 다시 검증합니다. 파일을 읽을 때의 검증(`SurveyPlan`)은 논문 ID·계보 ID 중복, 모르는 계보, 논문 없는 계보, 계획에 없는 논문을 가리키는 간선, 핵심(`core`) 논문이 없는 계획을 거부합니다.
+
+| 필드 | 내용 |
+| --- | --- |
+| `schema_version`, `generator`, `created_at` | `2`, `scholar-lens survey-plan/2`, UTC 생성 시각. 버전 1 계획(쓰이지 않던 `references` 필드가 있음)은 그 필드를 무시하고 읽습니다 |
+| `topic`, `scope`, `time_range` | 사용자 주제, 다듬은 주제 서술, `{since, until}`(사용자 범위, 열린 쪽은 `null`) |
+| `paper_count_reason` | 논문 수를 그렇게 정한 이유 |
+| `lineages[]` | `id`(소문자·숫자·하이픈), `name`, `description` |
+| `papers[]` | `id`(arXiv ID 또는 DOI), `title`, `authors`(앞 3명 + `et al.`), `year`, `date`(ISO), `venue`, `citation_count`, `url`(arXiv 초록 또는 doi.org), `lineage`, `role`(`core`·`supporting`), `reason`. 날짜순 |
+| `edges[]` | `{"from": 인용한 논문, "to": 인용된 논문}`, 선정한 논문 사이만 |
+| `excluded[]` | 제외한 주요 후보 최대 10개: `id`, `title`, `year`, `reason` |
+| `sources`, `notes` | 공급자별 요청·실패 수, 품질 메모(인용 수 과소 집계, 실패한 호출, 확인하지 못한 arXiv ID, 뺀 후보 수) |
+
+#### 4.3.1 쓰기 단계
+
+`survey_writer.py::run_survey_write_pipeline` 순서입니다. 블로그 글 규칙(`RunContext.require_conventions`, 6.1)에 `resources.github.survey_category`(기본 `Paper Surveys`) 유형이 없으면 모델을 부르기 전에 실패합니다. 블로그 규칙에서 이 유형은 `paper`가 아니므로 `paper_author`·`paper_doi`·`subtitle`이 없습니다.
+
+1. **계획 재검증**(`load_plan`, `survey_post.py::normalize_plan_data`): 계획 파일(로컬 또는 같은 버킷의 S3)을 JSON으로 읽고, 논문 ID를 계획 ID로 정규화하고(arXiv URL·doi.org 링크 → 버전 없는 arXiv ID·DOI), 빠진 논문을 가리키는 간선과 논문이 없어진 계보는 버리고 메모로 남깁니다. 제목이나 URL이 없는 논문(손으로 더한 논문)은 `id`, `lineage`, `role`만 있으면 되고, arXiv ID는 DataCite, DOI는 OpenAlex(그 논문에 arXiv ID가 있으면 초록은 DataCite의 arXiv 초록)에서 채웁니다(`PaperIndex`, `fill_metadata`). 그다음 `SurveyPlan`으로 검증하고 논문을 날짜순(날짜 없는 논문은 끝)으로 다시 정렬합니다. 색인이 모르는 논문, JSON이 아닌 파일, 스키마 위반(모르는 계보, 잘못된 역할 등)은 `SurveyInputError`(rejected)입니다.
+2. **논문 카드**(`gather_cards`, `SurveyCardPrompt`, `survey.card_model_id`): 카드는 `papers/survey-cards/<paper>/v<스키마>-<모델>-<언어>-<variant>.json`과 버킷이 있으면 `<s3_prefix>/surveys/cards/` 아래에 캐시하며(`card_cache_key`, `CardStore`), 같은 논문·카드 스키마·모델·출력 언어·`variant`면 다시 실행하거나 다른 서베이가 재사용합니다(카드 글이 출력 언어로 쓰이므로 언어도 키에 넣음). `variant`는 카드 프롬프트와 `card_source_chars`의 SHA-256 앞 8자(`card_variant`)라 둘 중 하나가 바뀌면 카드를 다시 만듭니다. 캐시가 없는 논문만 원문을 읽습니다. 핵심 논문이 arXiv에 있으면 `web_research.py::WebResearcher`로 arXiv HTML 전문과 그림 목록(이미지 URL과 캡션, `PageContent.image_captions`)을 읽고(arXiv 공용 속도 제한, HTML이 없거나 변환 실패 스텁이면 초록 페이지), 그 밖에는 색인의 초록을 씁니다. 원문이 없는 논문은 빠지고 PR 메모로 남습니다. 카드 호출은 논문당 한 번(동시 4개, 원문 앞 `card_source_chars`자)이며 `<card>` 안의 JSON(이름, 문제, 핵심 아이디어, 방법, 원문에서 그대로 옮긴 핵심 수식과 뜻, 결과(수치와 설정), 한계, 대비하는 선행 연구 이름, 그림 후보 최대 2개)을 `CardAnswer`로 검증합니다. `card_problems`가 원문에 없는 수치(`unsourced_numbers`), 원문 LaTeX에 없는 수식(공백·`$$` 무시), 그림 목록에 없는 ID를 찾으면 한 번 다시 묻고, 그래도 남은 것은 `build_card`가 지웁니다(수치가 틀린 문장·결과·한계, 수식, 그림). 지운 내역은 PR 체크리스트에 남습니다. 초록에서 쓴 핵심 arXiv 논문의 카드는 일시적인 접근 실패일 수 있어 캐시하지 않고, 다른 서베이에서 보조 논문으로 초록 카드가 캐시된 논문이 핵심 논문이면 캐시를 쓰지 않습니다. 읽을 수 없는 캐시도 없는 것으로 봅니다. 프롬프트의 뜻이 바뀌면 `CARD_SCHEMA_VERSION`을 올립니다. 현재 2(선행 연구와의 관계, `<paper id>#E<n>` ID의 핵심 수식 최대 3개, 여러 패널 그림 처리)이며, 이전 버전 카드는 읽지 않습니다.
+3. **개요**(`SurveyOutlinePrompt`, `survey.outline_model_id`, adaptive thinking): 계보와 논문, 카드 요약(그림·수식 유무), 인용 간선과 카드의 선행 연구를 보고 `<outline>` 안의 JSON으로 영어 제목(블로그 `seo_title_max_length` 이하, 넘으면 단어 경계에서 자름), 절 목록, 용어집(가이드와 같은 `English | rendering` 형식, `parse_glossary`)을 돌려줍니다. 절 종류는 `introduction`(처음), 계보마다 하나의 `lineage`(그 계보의 논문을 계획의 날짜순으로 코드가 배정, 핵심 논문은 `###` 소절), 계보가 서로 얽힐 때만 `cross_cutting`, `comparison`, `insights`, 선택적 `conclusion`(끝)이고, 절마다 깊이, 보여 줄 그림 ID(`<paper id>#F<n>`), 핵심 수식을 보여 줄 논문, 카드로 만들 추가 표, 담당 개념을 정합니다. `check_outline`이 제목 길이, 구조(`structure_problems`: 순서, 계보별 절 하나), 쓸 수 없는 참조(`clean_outline`: 모르는 논문·그림, 그 논문을 다루지 않는 절의 그림·수식, 두 번 쓰는 그림)를 찾아 한 번 다시 묻습니다. 그 뒤에도 구조 문제가 남으면 `SurveyPlanError`(failed)이고, 남은 참조는 코드가 지우고 PR 메모로 남깁니다.
+4. **길이**(`section_targets`): `lineage` 절은 논문 몫의 합(`chars_per_core_paper` 3,000, `chars_per_supporting_paper` 800), 다른 절은 깊이별 크기(`DEPTH_CHARS`: deep 5,000, standard 2,500, brief 1,000)이고, 합계가 `[min_total_chars, max_total_chars]`(20,000–70,000) 밖이면 모든 절을 같은 비율로 맞춥니다. 단위는 가이드와 같은 한국어 산문 글자 수(`prose_chars`)이며 다른 언어는 2.5배입니다.
+5. **절 집필**(`SurveyWriter.write`): 절마다 그 절 논문의 카드(자기 논문이 없는 도입·비교·통찰·결론 절은 핵심 논문. 카드 전체는 `lineage`·`cross_cutting` 절만 받고, `comparison` 절은 결과와 한계만, 도입·통찰·결론 절은 한 줄 카드만 받음), 다른 논문의 한 줄 카드, 관계 근거(계획의 인용 간선과 카드의 선행 연구), 인용 키 목록, 배정된 그림(URL과 캡션)과 수식, 앞 절 요약과 직전 두 절, 이미 나온 헤딩·수식·표·그림 목록(`article_ledger`), 다른 절의 담당 개념(`owned_elsewhere`), 용어집 상태(`glossary_view`)를 줍니다. 가이드의 반복(`tech_guide.py::revise_section`)으로 평가(0–100점, 차단 문제: 카드와 맞지 않는 서술·수치, `connections`와 카드가 뒷받침하지 않는 논문 사이 관계, 구조 참조, 남의 담당 개념 설명) → 차단 문제 우선 피드백으로 한 번 수정 → 더 나은 초안만 채택하고, 카드에 비추어 사실 확인(`checked_grounding`, 규칙을 어기면 한 번 재시도, 둘 다 게시 오류를 늘리면 초안 유지)합니다. 수정 뒤에도 남은 평가자의 차단 문제는 사실 확인에 넘겨, 카드만으로 바로 그 주장만 고치거나 지우게 합니다(`blocking_issues`). 코드 규칙(`rule_issues`)에 인용 규칙을 더합니다. 계획에 없는 인용 키, 손으로 쓴 서베이 밖 논문 링크(arXiv 초록·doi.org; 검증이 거부함), `lineage` 절이 다루면서 인용하지 않은 논문이 차단 문제입니다(`citation_issues`). 평가자와 사실 확인도 다른 논문의 한 줄 카드와 뒤에 붙을 표를 봅니다. 작가가 빈 절을 돌려주면 그 절은 빠지되, 코드의 표는 절 제목과 함께 남습니다. 연표(연도·논문·계보·핵심 아이디어, 모든 논문)는 `introduction` 뒤에, 비교표(논문·계보·설정과 함께 적은 주요 결과(검증된 수치만, 최대 2개)·한계, 핵심 논문. 핵심 아이디어는 연표에 있음)는 `comparison` 뒤에 코드가 붙이며(`timeline_table`, `comparison_table`, 셀 내용은 카드에서. 카드는 용어집보다 먼저 만들어 캐시하므로 셀은 용어집 표기가 아니라 카드의 한국어 용어를 씀), 작가는 표를 소개하고 해석만 합니다. 표 머리글은 출력 언어(한국어, 그 밖에는 영어)입니다.
+6. **조립**(`survey_body`): `[@<paper id>]` 키를 `([Rafailov et al., 2023](논문 URL))` 링크로 바꾸고(코드 안은 그대로, 모르는 키는 지우고 메모), 서베이 밖 논문 링크는 링크 글자만 남기고(메모), 작가에게 주지 않은 이미지를 지우고, 그림마다 바로 아래에 출처 줄(`*출처: [저자 et al., 연도](URL)*`)을 넣습니다. 마무리 호출(`SurveyFinalizationPrompt`)이 블로그 주제, 통제 태그, 세부 태그, 검색 설명을 정하고, 설명은 `description_problems`(평문, 120–160자, 본문에 있는 수치만)로 확인해 한 번 다시 묻고, 그래도 검증이 거부할 설명(마크업, 제목보다 짧음)이면 넣지 않아 블로그가 첫 문단에서 만듭니다. front matter는 `categories: ["Paper Surveys", <주제>]`, 표지는 `cover_for`, 태그는 `build_post_meta`가 정하고, 끝에 `- - -`와 `### References`(`Authors (year). Title` 링크, 날짜순)를 붙입니다. 논문 그림은 arXiv 그림이므로 발행 단계가 블로그로 복사합니다(7장).
+7. **발행**: 검증 종류는 `survey`이고(6.3), 브랜치는 `<branch_prefix>/survey-<주제 slug>`(계획의 주제로 정하므로 같은 계획을 다시 쓰면 같은 브랜치와 PR), 글 파일은 제목 slug입니다. front matter의 날짜는 계획의 `created_at`이라 다시 실행해도 같으므로, 같은 계획을 다시 쓰면 같은 글을 바꿉니다. 개요 호출이 다른 제목을 고르면 글 파일 이름이 달라지지만, 열린 PR에서는 front matter `date`가 같은 이전 파일을 예전 사본으로 지우고(7장), 이미 병합된 글은 슬러그로만 찾으므로 새 글로 올라갑니다(이전 글은 손으로 정리). PR 체크리스트에는 계획 재검증 메모, 지운 카드 내용, 초록만 읽은 핵심 논문, 빠진 논문, 기준에 못 미친 절, 예산 메모가 들어갑니다.
+
+토큰 예산은 `survey.write_max_total_tokens`(기본 300만)의 소프트 상한입니다. 넘으면 남은 절을 평가·수정·사실 확인 없이 쓰고, 1.5배를 넘으면 다음 호출 전에 중단합니다.
 
 ## 5. 데이터 수집과 파싱
 
@@ -285,7 +342,7 @@ LLM 라우팅 호출 없이 계획을 따릅니다(`PaperReviewer._enrich`). 참
 | `title` | error | 제목이 비어 있음 |
 | `categories` | error | `[<유형>, <주제>]`가 아님, 모르는 유형·주제, 산출물 종류와 유형의 `paper` 여부 불일치 |
 | `cover` | error | `cover_for(유형, 주제)`와 다름 |
-| `paper-author` | error | 논문 글에서 비었거나 `et al.`이 있음, 가이드에 있음 |
+| `paper-author` | error | 논문 글에서 비었거나 `et al.`이 있음, 가이드·서베이에 있음 |
 | `subtitle` | error | 논문 글에서 비었거나 제목과 같음 |
 | `seo-title` | error | 제목이 70자 초과인데 없음, 또는 `seo_title`이 70자 초과 |
 | `translation` | error | `lang`이 spec의 `languages`(`ko`/`en`)가 아님, 번역본에 `translation_id`가 없음, `translation_id`가 있는데 `lang`이 없음, 파일명(날짜 뒤)이 `<translation_id>`(한국어)·`<translation_id>-en`(영어)이 아님, `-en` 글에 `translation_id`가 없음, 블로그의 다른 글이 이 글을 `translation_id`로 가리키는데 이 글에 `translation_id`가 없음, 같은 `translation_id`의 같은 `lang` 글이 이미 있음 |
@@ -303,6 +360,8 @@ LLM 라우팅 호출 없이 계획을 따릅니다(`PaperReviewer._enrich`). 참
 | `description` | error | front matter `description`에 `$$`·강조·백틱·링크·태그·`{{`, 페이지 `<title>`(`head.html`처럼 `paper_author`가 있는 한국어 논문 글은 `seo_title`(없으면 제목)에 " 논문 리뷰"를 붙인 길이, 그 밖의 글은 제목)보다 길지 않음, 블로그의 다른 글과 같음(공백 정규화) |
 | `description` | warning | 논문 글에 `description`이 없음(블로그가 첫 문단에서 만듦), 길이가 120–160자 밖(블로그 메타 설명은 160자), `description`이 없는데 첫 문단에 수식 |
 | `envelope` | error | 생성용 태그(`</explanation>` 등) 누출 |
+| `citations` | error | 서베이 본문에 렌더링되지 않은 인용 키(`[@…]`), 본문이 링크한 논문(arXiv 초록·doi.org)이 `### References`에 없음 |
+| `references` | error | 서베이에 `### References`가 없음, 목록의 참고 문헌이 본문 산문에서 한 번도 인용되지 않음(코드가 붙인 연표는 모든 논문을 링크하므로 표 줄의 링크는 세지 않음) |
 | `image-alt` | warning | 한국어 글의 이미지 alt에 한글이 없음 |
 | `list` | warning | 디스플레이 수식 뒤에서 번호 목록이 2 이상으로 다시 시작함(목록이 끊김) |
 | `liquid` | error | `{% raw %}` 밖의 `{{ }}`·`{% %}`(코드 블록 포함; 게시 단계가 자동으로 감쌈) |
@@ -356,7 +415,7 @@ PR 본문(`build_pr_body`)에는 논문 ID, PDF URL, 파싱 방식, 글자 수, 
 
 ### 8.3 예산과 비용
 
-`metrics.py::TokenUsageTracker`가 콜백으로 모든 호출의 토큰을 모델별로 모으고, 레지스트리의 1M 토큰당 단가로 비용을 추정합니다(`estimated_cost_usd`). 단가는 Anthropic 목록가이며 Bedrock 청구액과 다를 수 있습니다. `TokenBudgetGuard`는 단계마다 `max_total_tokens`를 검사해 넘으면 `TokenBudgetExceeded`로 멈춥니다. 가이드의 `max_total_tokens`는 다른 종류와 달리 소프트 상한입니다. 상한에 이르면 남은 절을 쓰되 평가·수정·사실 확인을 건너뛰고, 1.5배를 넘으면 중단합니다. 비용 지표는 실행이 끝날 때 한 번 보내므로, 비용 경보(11절)는 이미 쓴 비용을 알릴 뿐 실행을 멈추지 못합니다. 실행 중 상한은 위 토큰 예산이 맡습니다.
+`metrics.py::TokenUsageTracker`가 콜백으로 모든 호출의 토큰을 모델별로 모으고, 레지스트리의 1M 토큰당 단가로 비용을 추정합니다(`estimated_cost_usd`). 단가는 Anthropic 목록가이며 Bedrock 청구액과 다를 수 있습니다. `TokenBudgetGuard`는 단계마다 `max_total_tokens`를 검사해 넘으면 `TokenBudgetExceeded`로 멈춥니다. 가이드의 `max_total_tokens`는 다른 종류와 달리 소프트 상한입니다. 상한에 이르면 남은 절을 쓰되 평가·수정·사실 확인을 건너뛰고, 1.5배를 넘으면 중단합니다. 서베이 계획의 `survey.max_total_tokens`와 쓰기의 `survey.write_max_total_tokens`도 소프트 상한입니다(4.3절). 비용 지표는 실행이 끝날 때 한 번 보내므로, 비용 경보(11절)는 이미 쓴 비용을 알릴 뿐 실행을 멈추지 못합니다. 실행 중 상한은 위 토큰 예산이 맡습니다.
 
 ## 9. 설정 참조
 
@@ -365,6 +424,8 @@ PR 본문(`build_pr_body`)에는 논문 ID, PDF URL, 파싱 방식, 글자 수, 
 - `resources.s3_bucket_name`: 글·이미지·결과 매니페스트 버킷. 미리 만들어 둔 버킷이어야 하며 배포에 필수입니다. 없으면 `status`는 저장된 결과 없이 Batch 상태만 보여 줍니다.
 - `resources.github.*_category`: `categories[0]`이 되므로 블로그 spec의 `types`에 있어야 합니다.
 - `explanation.max_synthesis_attempts`·`max_edit_rounds`, `tech_guide.max_revision_attempts`: 호출 수와 비용을 정하는 반복 상한입니다.
+- `survey.min_papers`·`max_papers`(기본 6·25, `max_papers` ≤ `candidate_pool`), `candidate_pool`(60): 서베이 논문 수 범위와 후보 수집 범위입니다(4.3절).
+- `survey.chars_per_core_paper`·`chars_per_supporting_paper`(3,000·800), `min_total_chars`·`max_total_chars`(20,000·70,000, 하한 ≤ 상한), `max_revision_attempts`(1), `verify_grounding`(켬): 서베이 글 길이와 절별 호출 수입니다(4.3.1절). `resources.github.survey_category`는 블로그 규칙의 유형이어야 합니다.
 
 ### 환경 변수
 
@@ -407,7 +468,7 @@ Docker 이미지(`Dockerfile`)는 `python:3.12-slim` 기반 2단계 빌드입니
 
 ## 13. 확장 지점
 
-- **새 산출물 종류**: `jobs.py::ArtifactKind`, `post_validator.py::ArtifactKind`, `cli.py::_raw_kind`에 값을 더하고, 파이프라인 모듈을 만들어 `runtime.py::_run_pipeline`에서 분기하며, `post_validator.py`에 그 종류의 규칙을 정합니다.
+- **새 산출물 종류**: `jobs.py::ArtifactKind`, `post_validator.py::ArtifactKind`(글을 발행하는 종류만), `cli.py::_raw_kind`, `runtime.py::_KIND_LABELS`에 값을 더하고, 파이프라인 모듈을 만들어 `runtime.py::_run_pipeline`에서 분기하며, `post_validator.py`에 그 종류의 규칙을 정합니다.
 - **새 모델**: `constants.py::LanguageModelId`와 `utils/models.py`의 레지스트리(컨텍스트, 출력 상한, thinking 방식, 단가)에 추가합니다.
 - **새 검색 제공자**: `web_research.py::WebSearchProvider`를 구현하고 `guide_pipeline.py::build_search_provider`에 연결합니다.
 - **블로그 규칙 변경**: 블로그의 `_data/post_conventions.yml`을 고치고 `assets/post_conventions.yml`에 같은 내용을 복사합니다. 새 규칙 종류가 필요하면 `post_conventions.py`의 모델과 `post_validator.py`에 함께 추가합니다.

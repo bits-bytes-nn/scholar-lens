@@ -273,7 +273,9 @@ class PipelineOutcome:
     """What a pipeline produced; folded into the run's :class:`JobResult`."""
 
     title: str
-    markdown_path: Path
+    # A post; a survey plan run produces the plan file instead.
+    markdown_path: Path | None = None
+    plan_path: Path | None = None
     s3_uri: str | None = None
     pr_url: str | None = None
     warnings: list[str] = field(default_factory=list)
@@ -357,6 +359,7 @@ def _rejected_input_errors() -> tuple[type[BaseException], ...]:
     """
     from .arxiv_handler import ArxivNotFoundError
     from .paper_source import PaperSourceError
+    from .survey_plan import SurveyInputError
     from .tech_guide import NotTechnicalContentError
     from .url_guard import UnsafeUrlError
 
@@ -364,6 +367,7 @@ def _rejected_input_errors() -> tuple[type[BaseException], ...]:
         ArxivNotFoundError,
         PaperSourceError,
         NotTechnicalContentError,
+        SurveyInputError,
         UnsafeUrlError,
     )
 
@@ -375,6 +379,14 @@ async def _run_pipeline(
         from .guide_pipeline import run_guide_pipeline
 
         return await run_guide_pipeline(context, request, tracker)
+    if request.kind == "survey_plan":
+        from .survey_pipeline import run_survey_plan_pipeline
+
+        return await run_survey_plan_pipeline(context, request, tracker)
+    if request.kind == "survey_write":
+        from .survey_writer import run_survey_write_pipeline
+
+        return await run_survey_write_pipeline(context, request, tracker)
     from .paper_pipeline import run_paper_pipeline
 
     return await run_paper_pipeline(context, request, tracker)
@@ -398,7 +410,13 @@ def run_job(request: JobRequest, *, job_id: str | None = None) -> JobResult:
         outcome = run_coroutine(_run_pipeline(context, request, tracker))
         result.status = "succeeded"
         result.title = outcome.title
-        result.markdown_path = str(outcome.markdown_path)
+        result.markdown_path = (
+            str(outcome.markdown_path) if outcome.markdown_path else None
+        )
+        # A Batch run's plan file is gone with its container: s3_uri only.
+        result.plan_path = (
+            str(outcome.plan_path) if outcome.plan_path and job_id is None else None
+        )
         result.s3_uri = outcome.s3_uri
         result.pr_url = outcome.pr_url
         result.warnings = outcome.warnings
@@ -547,6 +565,8 @@ _KIND_LABELS = {
     "review": "Paper Review",
     "summarize": "Paper Summary",
     "guide": "Tech Guide",
+    "survey_plan": "Survey Plan",
+    "survey_write": "Paper Survey",
 }
 
 

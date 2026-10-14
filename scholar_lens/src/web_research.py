@@ -29,7 +29,12 @@ from .constants import EnvVars, arxiv_id_from_url, arxiv_paper_key, is_arxiv_hos
 from .logger import logger
 from .markdown_lint import FIGURE_MARKER, close_open_fence
 from .markdown_math import segments
-from .parser import MIN_PARSED_TEXT_CHARS, _readable_chars
+from .parser import (
+    MIN_PARSED_TEXT_CHARS,
+    _readable_chars,
+    _real_text,
+    figure_caption,
+)
 from .pinned_transport import PinnedHTTPTransport
 from .prompt_safety import neutralize_prompt_tags
 from .prompts.tech_guide import (
@@ -272,6 +277,9 @@ class PageContent:
     title: str
     text: str
     image_urls: list[str] = field(default_factory=list)
+    # Each image's caption (its figure's caption, else its alt text; ""
+    # for arXiv's "Refer to caption" placeholder).
+    image_captions: dict[str, str] = field(default_factory=dict)
     links: list[str] = field(default_factory=list)
     # Where the page actually lives after HTTP and <meta refresh> redirects
     # (sub-page scope is taken from it); empty when it is ``url`` itself.
@@ -929,13 +937,14 @@ class WebResearcher:
         # Images from the same scope as the text, so sidebar logos and badges
         # never become figures the writer may cite.
         # An arXiv abstract page has no figures, only site icons.
-        image_urls = (
-            []
+        images = (
+            {}
             if is_arxiv_host(final_url) and "/abs/" in urlparse(final_url).path
             else self._extract_images(
                 BeautifulSoup(main, "html.parser") if main else soup, final_url
             )
         )
+        image_urls = list(images)
         # The writer cites only listed images: drop the markers of the others
         # (over the per-page cap, or furniture).
         kept = set(image_urls)
@@ -948,6 +957,7 @@ class WebResearcher:
             title=title,
             text=text,
             image_urls=image_urls,
+            image_captions=images,
             links=links,
             final_url=final_url if final_url != url else "",
         )
@@ -1035,12 +1045,12 @@ class WebResearcher:
             html = UnicodeDammit(raw, is_html=True).unicode_markup or ""
         return html, final_url
 
-    def _extract_images(self, soup: BeautifulSoup, base_url: str) -> list[str]:
-        """Content images, deduped: ``<img>`` and the SVG ``<object>``
-        figures arXiv renders (the elements the text's figure markers come
-        from); tracking pixels and the logos in page chrome (header,
-        navigation, footer, ``<noscript>``) are skipped."""
-        images: list[str] = []
+    def _extract_images(self, soup: BeautifulSoup, base_url: str) -> dict[str, str]:
+        """Content images, deduped, each with its caption: ``<img>`` and the
+        SVG ``<object>`` figures arXiv renders (the elements the text's
+        figure markers come from); tracking pixels and the logos in page
+        chrome (header, navigation, footer, ``<noscript>``) are skipped."""
+        images: dict[str, str] = {}
         for img in soup.find_all(("img", "object")):
             if not isinstance(img, Tag) or is_page_furniture(img):
                 continue
@@ -1056,7 +1066,7 @@ class WebResearcher:
                     absolute.lower().startswith(("http://", "https://"))
                     and absolute not in images
                 ):
-                    images.append(absolute)
+                    images[absolute] = _real_text(figure_caption(img))
             if len(images) >= self.max_images_per_page:
                 break
         return images

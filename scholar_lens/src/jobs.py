@@ -28,9 +28,10 @@ from .aws_helpers import (
 )
 from .constants import S3Paths, SSMParams
 from .logger import logger
+from .survey_plan import parse_paper_id
 from .utils.retry import is_transient_error
 
-ArtifactKind = Literal["review", "summarize", "guide"]
+ArtifactKind = Literal["review", "summarize", "guide", "survey_plan", "survey_write"]
 JobStatus = Literal["succeeded", "failed", "rejected"]
 
 # Batch job states that will not change any more.
@@ -54,11 +55,77 @@ class JobRequest(BaseModel):
     reference_urls: list[str] = Field(default_factory=list)
     search_queries: list[str] = Field(default_factory=list)
     discover_subpages: bool = True
+    # survey_plan: the topic, papers the survey must include (arXiv ids or
+    # URLs, DOIs) and an optional year range.
+    topic: str | None = None
+    paper_ids: list[str] = Field(default_factory=list)
+    since_year: int | None = Field(default=None, ge=1900, le=2100)
+    until_year: int | None = Field(default=None, ge=1900, le=2100)
+    # survey_write: the plan file, a local path or s3://<bucket>/<key> (a
+    # Batch run reads it from S3; the CLI uploads a local plan first).
+    plan: str | None = None
     # Opens a blog PR when the GitHub integration is enabled in config.
     create_pr: bool = True
 
     @model_validator(mode="after")
     def _check_inputs(self) -> JobRequest:
+        survey_fields = bool(
+            self.topic
+            or self.paper_ids
+            or self.since_year
+            or self.until_year
+            or self.plan
+        )
+        if self.kind in ("survey_plan", "survey_write") and (
+            self.parse_pdf or not self.discover_subpages
+        ):
+            raise ValueError(
+                f"A {self.kind} request takes no 'parse_pdf' or 'discover_subpages'."
+            )
+        if self.kind == "survey_write":
+            if not (self.plan and self.plan.strip()):
+                raise ValueError("A survey_write request needs a 'plan'.")
+            if (
+                self.source
+                or self.repo_urls
+                or self.urls
+                or self.reference_urls
+                or self.search_queries
+                or self.topic
+                or self.paper_ids
+                or self.since_year
+                or self.until_year
+            ):
+                raise ValueError(
+                    "A survey_write request takes 'plan' and 'create_pr' only."
+                )
+            return self
+        if self.kind == "survey_plan":
+            if not (self.topic and self.topic.strip()):
+                raise ValueError("A survey_plan request needs a 'topic'.")
+            if (
+                self.source
+                or self.repo_urls
+                or self.urls
+                or self.reference_urls
+                or self.search_queries
+                or self.plan
+            ):
+                raise ValueError(
+                    "A survey_plan request takes 'topic', 'paper_ids', "
+                    "'since_year' and 'until_year'."
+                )
+            for paper_id in self.paper_ids:
+                parse_paper_id(paper_id)  # SurveyInputError (a ValueError)
+            if (
+                self.since_year
+                and self.until_year
+                and self.since_year > self.until_year
+            ):
+                raise ValueError("'since_year' must not be after 'until_year'.")
+            return self
+        if survey_fields:
+            raise ValueError(f"A {self.kind} request takes no survey fields.")
         if self.kind == "guide":
             if not self.urls and not self.reference_urls:
                 raise ValueError(
@@ -76,7 +143,12 @@ class JobRequest(BaseModel):
 
     def describe(self) -> str:
         """Short human label of the input, for logs and notifications."""
-        return self.source or ", ".join([*self.urls, *self.reference_urls])
+        return (
+            self.topic
+            or self.plan
+            or self.source
+            or ", ".join([*self.urls, *self.reference_urls])
+        )
 
 
 class JobResult(BaseModel):
@@ -89,6 +161,9 @@ class JobResult(BaseModel):
     input: str
     title: str | None = None
     markdown_path: str | None = None
+    # survey_plan: the plan file of a local run (``s3_uri`` is its S3 copy,
+    # the only one a Batch run leaves).
+    plan_path: str | None = None
     s3_uri: str | None = None
     pr_url: str | None = None
     warnings: list[str] = Field(default_factory=list)
