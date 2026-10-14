@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -28,6 +29,7 @@ from scholar_lens.src.tech_guide import (
     NotTechnicalContentError,
     PlannedSection,
     TechGuideGenerator,
+    revise_section,
 )
 from scholar_lens.src.web_research import PageContent, ResearchCorpus
 
@@ -670,8 +672,9 @@ class TestEvaluateAndRevise:
                 {"quality_score": "garbage"},
             ]
         )
+        # The revision, then a targeted fix that returns nothing (rejected).
         gen.section_chain.ainvoke = AsyncMock(
-            return_value={"section_markdown": "## 설치\n\n설치합니다."}
+            side_effect=[{"section_markdown": "## 설치\n\n설치합니다."}, {}]
         )
         out = await gen._evaluate_and_revise(
             topic="X",
@@ -1056,7 +1059,9 @@ class TestGuideLengthAndRules:
             owned_elsewhere="- none",
             glossary="- none",
         )
-        directive = gen.section_chain.ainvoke.await_args.args[0]["depth_directive"]
+        # The revision (the last call is the targeted fix of what it left).
+        first = gen.section_chain.ainvoke.await_args_list[0]
+        directive = first.args[0]["depth_directive"]
         blocking = directive.index("wrong default")
         length = directive.index("Measured: 1,506 ")
         assert blocking < length < directive.index("cut the intro")
@@ -1630,3 +1635,85 @@ class TestGlossaryAndOwnership:
             == "- earlier, 'A': paging\n- later, 'C': paging; eviction"
         )
         assert owned_elsewhere(sections, 0) == "- later, 'C': eviction"
+
+
+class TestTargetedFix:
+    """The one targeted fix of the issues the revisions leave."""
+
+    @staticmethod
+    async def _run(
+        blocking: list[str], fixed: str, *, rules: Any = None
+    ) -> tuple[Any, list[str]]:
+        asked: list[str] = []
+
+        async def evaluate(_: str) -> tuple[int, str, list[str]]:
+            return 90, "", blocking
+
+        async def revise(feedback: str, draft: str) -> str:
+            asked.append(feedback)
+            # The revision is no better (discarded); the fix answers ``fixed``.
+            return fixed if feedback.startswith("TARGETED FIX") else draft
+
+        best = await revise_section(
+            "## S\n\nThe server listens on 8080.",
+            evaluate=evaluate,
+            revise=revise,
+            length=lambda _: "ok",
+            min_score=75,
+            max_attempts=1,
+            label="1",
+            **({"rules": rules} if rules else {}),
+        )
+        return best, asked
+
+    async def test_no_issue_left_means_no_fix_call(self) -> None:
+        best, asked = await self._run([], "unused")
+        assert asked == [] and best.fix == ""
+        assert best.below_bar_note("Guide", "S", 75) is None
+
+    async def test_a_clean_fix_is_applied_without_re_scoring(self) -> None:
+        issue = "The port 8080 is not in the sources: remove it"
+        best, asked = await self._run([issue], "## S\n\nThe server listens.")
+        assert len(asked) == 2  # one revision, one fix
+        fix = asked[1]
+        assert issue in fix and "smallest edit" in fix and "Length" not in fix
+        assert best.text == "## S\n\nThe server listens." and best.fix == "applied"
+        # Not re-scored, so the issue stays for the reviewer to check.
+        note = best.below_bar_note("Guide", "S", 75)
+        assert note is not None
+        assert "targeted fix applied" in note and issue in note
+
+    async def test_a_fix_that_adds_a_rule_issue_is_rejected(self) -> None:
+        best, _ = await self._run(
+            ["The port is wrong"], "## S\n\n이 절에서 server를 설명합니다."
+        )
+        assert best.text == "## S\n\nThe server listens on 8080."
+        assert best.fix == "rejected"
+
+    async def test_a_fix_that_adds_a_caller_rule_issue_is_rejected(self) -> None:
+        def rules(text: str) -> list[str]:
+            return [] if "[@a]" in text else ["citation: never cites [@a]"]
+
+        best, _ = await self._run(
+            ["The port is wrong"], "## S\n\nThe server listens.", rules=rules
+        )
+        # The draft had the citation issue too: the fix adds none, so applied.
+        assert best.fix == "applied"
+
+        async def evaluate(_: str) -> tuple[int, str, list[str]]:
+            return 90, "", ["The port is wrong"]
+
+        async def revise(feedback: str, draft: str) -> str:
+            return "## S\n\nNo citation." if "TARGETED" in feedback else draft
+
+        best = await revise_section(
+            "## S\n\nCited [@a].",
+            evaluate=evaluate,
+            revise=revise,
+            length=lambda _: "ok",
+            min_score=75,
+            max_attempts=1,
+            label="1",
+            rules=rules,
+        )
+        assert best.fix == "rejected" and best.text == "## S\n\nCited [@a]."

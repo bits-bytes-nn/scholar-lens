@@ -657,6 +657,11 @@ class SurveyWriter(SurveyCalls):
                 # only citation of a covered paper removed) keeps the draft.
                 before = citation_issues(text, papers, required)
                 if set(citation_issues(grounded, papers, required)) - set(before):
+                    logger.info(
+                        "Grounding broke survey section '%s''s citations: kept "
+                        "the draft before grounding.",
+                        section.title,
+                    )
                     self.notes.append(
                         f"Survey section '{section.title}': grounding broke its "
                         "citations, so the draft before grounding was kept."
@@ -806,11 +811,8 @@ class SurveyWriter(SurveyCalls):
             label=f"'{section.title}'",
             rules=rules,
         )
-        if best.score < self.min_quality_score or best.issues:
-            self.notes.append(
-                f"Survey section '{section.title}' kept below the bar (score "
-                f"{best.score}, {len(best.issues)} blocking issue(s)): check it."
-            )
+        if note := best.below_bar_note("Survey", section.title, self.min_quality_score):
+            self.notes.append(note)
         return best.text, best.blocking
 
     @SurveyCalls._retry("survey_section")

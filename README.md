@@ -66,7 +66,7 @@ poetry run python -m scholar_lens summarize 2106.09685 --no-pr
 
 - `resources`: `profile_name`, `bedrock_region_name`, `s3_bucket_name` (needed for `cdk deploy` and Batch; without it `status` shows the Batch state but no stored result), `email_address` (SNS notifications)
 - `resources.github`: `enabled`, `repo_name` (e.g. `owner/owner.github.io`), `base_branch`, `branch_prefix`, and the category labels per artifact type
-- per-stage `*_model_id`, `thinking_effort`, quality thresholds and `max_total_tokens` cost caps (defaults: review 8M, summary 1M, guide 3M, survey plan 0.3M, survey write 3M tokens via `survey.write_max_total_tokens`)
+- per-stage `*_model_id`, `thinking_effort`, quality thresholds and `max_total_tokens` cost caps (defaults: review 8M, summary 1M, guide 3M, survey plan 0.3M, survey write 4.5M tokens via `survey.write_max_total_tokens`)
 - `survey`: `min_papers`/`max_papers` (6/25), `candidate_pool` (60); for the write stage `chars_per_core_paper`/`chars_per_supporting_paper` (3,000/800) within `min_total_chars`/`max_total_chars` (20,000/70,000) and `card_source_chars`
 - `resources.github.survey_category` (`Paper Surveys`): must be a type in the blog's post conventions, or `survey write` stops before any model call
 - `output_language` (default `Korean`)

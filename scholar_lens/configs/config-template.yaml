@@ -142,7 +142,7 @@ survey:
   max_total_chars: 70000
   # Soft limit on one write run: past it sections skip evaluation, revision
   # and grounding; past 1.5x the run aborts.
-  write_max_total_tokens: 3000000
+  write_max_total_tokens: 4500000
 
 # Language of every generated artifact (e.g. Korean, English).
 output_language: Korean

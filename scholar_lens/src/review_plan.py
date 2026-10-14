@@ -839,12 +839,15 @@ def publish_blockers(text: str) -> list[str]:
     return body_errors(fixed)
 
 
-def added_slips(before: str, after: str) -> list[str]:
+def added_slips(
+    before: str, after: str, rules: Callable[[str], list[str]] = rule_issues
+) -> list[str]:
     """Rule hits (rule and offending text) an edit would add, even when it
-    also fixes another."""
+    also fixes another; ``rules`` finds them (:func:`rule_issues` by
+    default)."""
 
     def keys(text: str) -> Counter[str]:
-        return Counter(issue.split(":", 1)[0] for issue in rule_issues(text))
+        return Counter(issue.split(":", 1)[0] for issue in rules(text))
 
     return list((keys(after) - keys(before)).elements())
 

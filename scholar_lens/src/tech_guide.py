@@ -346,11 +346,42 @@ class ReviewedDraft:
     issues: list[str]
     # How many of ``issues`` the evaluator raised (listed first).
     factual: int = 0
+    # The targeted fix of the issues left: "applied", "rejected" or "" (none
+    # ran). An applied fix is not re-scored, so ``issues`` stay to check.
+    fix: str = ""
 
     @property
     def blocking(self) -> list[str]:
         """The evaluator's blocking issues alone."""
         return self.issues[: self.factual]
+
+    def below_bar_note(self, kind: str, title: str, min_score: int) -> str | None:
+        """The PR note for a draft left below ``min_score`` or with issues,
+        naming each issue (truncated) for the reviewer; ``None`` when it
+        passed."""
+        if self.score >= min_score and not self.issues:
+            return None
+        fix = f"; targeted fix {self.fix}" if self.fix else ""
+        listed = "; ".join(
+            f'"{" ".join(i.split())[:_NOTED_ISSUE_CHARS]}"' for i in self.issues
+        )
+        return (
+            f"{kind} section '{title}' kept below the bar (score {self.score}, "
+            f"{len(self.issues)} blocking issue(s){fix}): check it"
+            + (f": {listed}" if listed else ".")
+        )
+
+
+# Each issue in a below-the-bar PR note is cut to this many characters.
+_NOTED_ISSUE_CHARS = 200
+
+_TARGETED_FIX = (
+    "TARGETED FIX: this draft is final except for these blocking issues. "
+    "Make the smallest edit that resolves each one: rewrite or remove exactly "
+    "the sentence(s) it names, and copy every other sentence, heading, "
+    "citation, equation, figure and table unchanged. Do not rewrite, reorder, "
+    "shorten or extend anything else.\n"
+)
 
 
 async def revise_section(
@@ -375,6 +406,11 @@ async def revise_section(
     feedback-driven rewrite can never make the section worse. The feedback
     lists the blocking issues first, then the measured ``length``, then the
     evaluator's other feedback. ``label`` names the section in the log.
+
+    Issues left after the revisions get ONE targeted fix (``revise`` with
+    only those issues and an order to edit minimally). It is not re-scored
+    (cost): the fixed draft is kept only when ``rules`` find nothing new in
+    it, the same code checks a revision answers to.
     """
 
     async def assess(text: str) -> tuple[int, str, list[str], int]:
@@ -457,8 +493,29 @@ async def revise_section(
         len(best_issues),
         " ".join(best_feedback.split())[:_LOGGED_FEEDBACK_CHARS] or "(none)",
     )
+    fix = ""
+    if best_issues and max_attempts > 0:
+        fixed = await revise(
+            _TARGETED_FIX + "\n".join(f"- {i}" for i in best_issues), best_markdown
+        )
+        added = added_slips(best_markdown, fixed, rules) if fixed else []
+        if fixed and fixed != best_markdown and not added:
+            fix = "applied"
+            logger.info(
+                "Section %s targeted fix of %d issue(s) applied (not re-scored).",
+                label,
+                len(best_issues),
+            )
+            best_markdown = fixed
+        else:
+            fix = "rejected"
+            logger.info(
+                "Section %s targeted fix rejected (%s).",
+                label,
+                f"adds {added}" if added else "no change",
+            )
     return ReviewedDraft(
-        best_markdown, best_score, best_feedback, best_issues, best_factual
+        best_markdown, best_score, best_feedback, best_issues, best_factual, fix
     )
 
 
@@ -473,6 +530,10 @@ async def checked_grounding(draft: str, ground: Callable[[], Awaitable[str]]) ->
         if len(added_slips(draft, retried)) < len(added_slips(draft, grounded)):
             grounded = retried
         if len(publish_blockers(grounded)) > len(publish_blockers(draft)):
+            logger.info(
+                "Grounding added publish blockers on both attempts: kept the draft "
+                "before grounding."
+            )
             grounded = draft
     return grounded
 
@@ -1320,11 +1381,8 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
             max_attempts=self.max_revision_attempts,
             label=str(section_number),
         )
-        if best.score < self.min_quality_score or best.issues:
-            self.notes.append(
-                f"Guide section '{planned.title}' kept below the bar (score "
-                f"{best.score}, {len(best.issues)} blocking issue(s)): check it."
-            )
+        if note := best.below_bar_note("Guide", planned.title, self.min_quality_score):
+            self.notes.append(note)
         self._leftover_blocking = best.blocking
         return best.text
 

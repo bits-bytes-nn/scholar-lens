@@ -246,7 +246,7 @@ class Survey(_Section):
     max_total_chars: int = Field(default=70_000, ge=5_000, le=200_000)
     # Soft limit on one write run: past it sections are written without
     # evaluation, revision or grounding; past 1.5x the run aborts.
-    write_max_total_tokens: int | None = Field(default=3_000_000, gt=0)
+    write_max_total_tokens: int | None = Field(default=4_500_000, gt=0)
 
     @model_validator(mode="after")
     def _check_bounds(self) -> "Survey":

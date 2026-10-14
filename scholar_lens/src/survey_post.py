@@ -20,6 +20,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from .formatting import link_list, md_link_text, md_link_url
+from .markdown_lint import writing_issues
 from .markdown_math import segments
 from .post_validator import (
     FURTHER_READING_HEADINGS,
@@ -297,8 +298,22 @@ def card_problems(
 ) -> list[str]:
     """What the card call must fix (empty when the card is fine): numbers
     the paper never states, an equation it does not show, unknown or too
-    many figures."""
+    many figures, a reference to the paper's numbering ("표 1") the post's
+    tables would carry."""
     problems = []
+    texts = [
+        *_prose_fields(answer).values(),
+        *(f"{r.claim} {r.value} {r.setting}" for r in answer.results),
+        *answer.limitations,
+        *(e.meaning for e in answer.key_equations),
+    ]
+    for text in texts:
+        problems += [
+            f"{issue.split(' (', 1)[0]}: refer to the paper's tables, figures, "
+            "equations and sections by what they show, never by number"
+            for issue in writing_issues(text)
+            if issue.startswith("numbered reference")
+        ]
     for name, text in _prose_fields(answer).items():
         if missing := unsourced_numbers(text, source):
             problems.append(f"{name} has numbers the paper never states: {missing}")

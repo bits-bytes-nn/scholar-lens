@@ -296,6 +296,9 @@ Rules:
 - The card's texts carry no English parentheticals at all ("선호 최적화",
   not "선호 최적화(preference optimization)"): they fill table cells as
   written, and the post adds the English in its prose.
+- Never refer to the paper's tables, figures, equations or sections by
+  number ("표 1에서", "Figure 3"): the post has no such numbering; say what
+  they show instead.
 - results: up to 4 headline results, each number copied verbatim with the
   model, benchmark and setting it belongs to (not an ablation's)."""
         + NUMBER_RULES
@@ -676,7 +679,8 @@ Evaluate the drafted section of the survey "{title}".
 
 The code places <appended_table> (when not "none") right after the
 section: judge the section's lead-in and interpretation of it, never ask for
-the table itself. A statement about a paper may rest on its card in <cards>
+the table itself and never raise an issue about its cells (the code builds
+them from the cards; the writer cannot edit them). A statement about a paper may rest on its card in <cards>
 or its line in <other_papers>.
 
 Score the section 0-100:

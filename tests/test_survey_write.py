@@ -453,6 +453,23 @@ class TestCards:
             for p in card_problems(bad, source=SOURCE, figure_ids=[])
         )
 
+    def test_a_numbered_reference_in_card_text_is_a_problem(self) -> None:
+        bad = answer(
+            key_idea="DPO는 선호를 직접 학습합니다.",
+            results=[{"claim": "표 1에서 승률", "value": "61%", "setting": "TL;DR"}],
+            figures=[],
+        )
+        problems = card_problems(bad, source=SOURCE, figure_ids=[])
+        assert any(
+            p.startswith("numbered reference '표 1'") and "never by number" in p
+            for p in problems
+        )
+        clean = answer(key_idea="DPO는 선호를 직접 학습합니다.", figures=[])
+        assert not any(
+            "numbered reference" in p
+            for p in card_problems(clean, source=SOURCE, figure_ids=[])
+        )
+
     def test_build_drops_what_the_paper_does_not_back(self) -> None:
         built = build_card(
             answer(key_idea="정책이 보상 모델입니다. 13배 빠릅니다."),
@@ -1215,6 +1232,23 @@ class TestStage:
         assert [r.value for r in built.results] == ["61%"]
         assert built.figures == []  # F1 is not in an empty figure list
 
+    def test_a_numbered_reference_in_a_card_gets_a_repair_round(
+        self, stage: dict[str, Any]
+    ) -> None:
+        writer = stage["writer"]
+        bad = json.loads(card_answer({"title": "Direct x"})[6:-7])
+        bad["key_idea"] = "DPO는 표 1에서 보듯 선호를 직접 학습합니다."
+        good = card_answer({"title": "Direct x"})
+        answers = iter([f"<card>{json.dumps(bad, ensure_ascii=False)}</card>", good])
+        writer.card_chain = FakeChain(lambda _: next(answers))
+        dpo = plan().papers[2]
+        built = asyncio.run(writer.card(dpo, PaperText(SOURCE, "full_text", {})))
+        assert len(writer.card_chain.payloads) == 2
+        assert (
+            "numbered reference '표 1'" in writer.card_chain.payloads[1]["repair_note"]
+        )
+        assert "표 1" not in built.key_idea
+
 
 class TestReferenceArticles:
     def test_articles_are_read_again_used_and_listed(
@@ -1656,6 +1690,28 @@ class TestGroundingLeftoverIssues:
             and "exactly these claims" in s
             for s in sent
         )
+
+    def test_leftover_issues_get_one_targeted_fix_and_are_noted(self) -> None:
+        writer = fake_writer()
+        issue = "Invents the figure's red and orange circles " + "x" * 300
+        writer.evaluation_chain = FakeChain(
+            {
+                "quality_score": "90",
+                "blocking_issues": f"- {issue}",
+                "improvement_feedback": "",
+            }
+        )
+        asyncio.run(writer.write(plan(), outline_cards(), written_outline()))
+        directives = [p["depth_directive"] for p in writer.section_chain.payloads]
+        fixes = [d for d in directives if "TARGETED FIX" in d]
+        # Per section: the draft, one revision, one targeted fix.
+        assert len(fixes) == len(directives) // 3
+        assert all(issue in d and "Length:" not in d for d in fixes)
+        notes = [n for n in writer.notes if "kept below the bar" in n]
+        assert notes
+        # The fake writer answers the same text: the fix changes nothing.
+        assert all("targeted fix rejected" in n for n in notes)
+        assert all(issue[:200] in n and issue[:201] not in n for n in notes)
 
     def test_no_leftover_issue_keeps_the_prompt_input(self) -> None:
         writer = fake_writer()
