@@ -14,7 +14,9 @@ from .helpers import (
     is_affirmative,
     is_placeholder,
     measure_execution_time,
+    parse_lines,
     parse_quality_score,
+    tag_body,
 )
 from .models import EmbeddingModelInfo, LanguageModelInfo
 from .parsers import HTMLTagOutputParser
@@ -38,5 +40,7 @@ __all__ = [
     "is_affirmative",
     "is_placeholder",
     "measure_execution_time",
+    "parse_lines",
     "parse_quality_score",
+    "tag_body",
 ]

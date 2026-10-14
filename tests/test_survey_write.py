@@ -98,10 +98,13 @@ LOSS = r"\mathcal{L}_\text{DPO} = -\log \sigma(\beta \Delta)"
 
 
 def survey_spec() -> PostConventions:
-    """The bundled conventions plus the blog's new survey type (not in the
-    bundled copy until the blog's main branch has it)."""
-    spec = load_local_conventions()
-    return spec.model_copy(update={"types": {**spec.types, SURVEY_TYPE: TypeSpec()}})
+    """The bundled conventions; they list the blog's survey type."""
+    return load_local_conventions()
+
+
+def test_bundled_spec_has_the_survey_type() -> None:
+    survey_category = Config().resources.github.survey_category
+    assert survey_category in load_local_conventions().types
 
 
 def plan_dict() -> dict[str, Any]:
@@ -361,6 +364,32 @@ class TestPlanRevalidation:
         with pytest.raises(SurveyInputError, match="JSON"):
             load_plan("{not json", FakeIndex({}))
 
+    def test_a_plan_that_is_not_utf8_is_an_input_error(self, tmp_path: Path) -> None:
+        path = tmp_path / "plan.json"
+        path.write_bytes('{"topic": "선호"}'.encode("cp949"))
+        with pytest.raises(SurveyInputError, match="not UTF-8"):
+            read_plan_text(str(path), None)
+        s3 = MagicMock(bucket_name="bucket")
+        s3.get_text.side_effect = UnicodeDecodeError("utf-8", b"\xbc", 0, 1, "bad")
+        with pytest.raises(SurveyInputError, match="not UTF-8"):
+            read_plan_text("s3://bucket/a/plan.json", s3)
+
+    @pytest.mark.parametrize(
+        "edit, key",
+        [
+            (lambda d: d["papers"][0].update(lineage=["rlhf"]), "papers"),
+            (lambda d: d["lineages"][0].update(id=1), "lineages"),
+            (lambda d: d["edges"].append({"from": 1, "to": "x"}), "edges"),
+        ],
+    )
+    def test_wrong_typed_plan_fields_are_input_errors(
+        self, edit: Any, key: str
+    ) -> None:
+        data = plan_dict()
+        edit(data)
+        with pytest.raises(SurveyInputError, match=f"'{key}' entries need text"):
+            load_plan(json.dumps(data), FakeIndex({}))
+
     def test_plan_locations(self, tmp_path: Path) -> None:
         path = tmp_path / "plan.json"
         path.write_text("{}")
@@ -494,6 +523,30 @@ class TestCards:
         assert built.figures[0].url == FIGURES[0][1]
         assert len(built.dropped) == 4
 
+    def test_a_result_value_is_its_number(self) -> None:
+        # A verdict in place of a number is no table cell: asked again, then
+        # dropped.
+        verdict = {
+            "claim": "TL;DR 승률",
+            "value": "PPO보다 낫다",
+            "setting": "PPO 대비",
+        }
+        bad = answer(results=[verdict], figures=[])
+        assert "result 1's value has no number" in " ".join(
+            card_problems(bad, source=SOURCE, figure_ids=[])
+        )
+        built = build_card(
+            bad,
+            paper_id="2305.18290",
+            source=SOURCE,
+            source_kind="full_text",
+            figures=FIGURES,
+            model_id="m",
+            language="Korean",
+        )
+        assert built.results == []
+        assert "result without a number: TL;DR 승률" in built.dropped
+
     def test_equation_match_ignores_spacing_and_delimiters(self) -> None:
         assert equation_in_source(f"$$ {LOSS.replace(' ', '')} $$", SOURCE)
         assert not equation_in_source("", SOURCE)
@@ -513,7 +566,7 @@ class TestCards:
         )
         assert key == (
             "10.18653_v1_2024.emnlp-main.626/"
-            "v2-anthropic-claude-sonnet-5-5-korean-abcd1234.json"
+            "v3-anthropic-claude-sonnet-5-5-korean-abcd1234.json"
         )
         assert card_cache_key("2305.18290", "a", "Korean", "v") != card_cache_key(
             "2305.18290", "b", "Korean", "v"
@@ -913,12 +966,6 @@ class TestValidator:
         assert (
             "error:categories:type 'Paper Reviews' does not fit a survey" in wrong_type
         )
-        # The bundled spec has no survey type yet: the validator says so.
-        bundled = validate_post(
-            survey_post(GOOD_BODY), load_local_conventions(), "survey"
-        )
-        if SURVEY_TYPE not in load_local_conventions().types:
-            assert any(f"unknown type '{SURVEY_TYPE}'" in v.message for v in bundled)
 
     def test_a_guide_keeps_its_rules(self) -> None:
         found = [
@@ -1097,6 +1144,12 @@ def png() -> bytes:
     return buffer.getvalue()
 
 
+# The stage's translation guideline (the cards and the outline get it).
+GUIDELINE = [{"original": "helpfulness", "translated": "유용성"}]
+# The card cache variant of the stage's cards.
+STAGE_VARIANT = survey_writer.card_variant(150_000, str(GUIDELINE))
+
+
 @pytest.fixture
 def stage(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     """The write stage wired to fakes: chains, researcher, index, S3-less
@@ -1112,6 +1165,11 @@ def stage(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     monkeypatch.setattr(survey_writer, "PaperIndex", lambda *_: index)
     monkeypatch.setattr(survey_writer, "DataCiteIndex", MagicMock())
     monkeypatch.setattr(survey_writer, "OpenAlexIndex", MagicMock())
+
+    async def guideline(_: RunContext) -> list[dict[str, str]]:
+        return GUIDELINE
+
+    monkeypatch.setattr(survey_writer, "load_translation_guideline", guideline)
     spec = survey_spec()
 
     def publisher(context: RunContext) -> Publisher:
@@ -1189,8 +1247,6 @@ class TestStage:
         spec = BLOG / "_data" / "post_conventions.yml"
         if not (shutil.which("ruby") and lint.is_file() and spec.is_file()):
             pytest.skip("the blog checkout or ruby is not available")
-        if f"{SURVEY_TYPE}:" not in spec.read_text():
-            pytest.skip("the blog's spec has no survey type yet")
         outcome = run_stage(stage)
         copy = stage["tmp"] / "lint" / outcome.markdown_path.name
         copy.parent.mkdir()
@@ -1413,7 +1469,7 @@ class TestReviewFixes:
             "2305.18290",
             "anthropic.claude-sonnet-5-5",
             "Korean",
-            survey_writer.card_variant(150_000),
+            STAGE_VARIANT,
         )
         # An abstract card (the paper was supporting elsewhere) is rewritten
         # for a core paper; an unreadable one too.
@@ -1547,6 +1603,7 @@ class TestSectionRoles:
             source_kind="abstract",
             source="s",
             figures="(none)",
+            translation_guideline="- none",
             language="Korean",
             repair_note="",
         )
@@ -1713,6 +1770,70 @@ class TestGroundingLeftoverIssues:
         assert all("targeted fix rejected" in n for n in notes)
         assert all(issue[:200] in n and issue[:201] not in n for n in notes)
 
+    def test_the_targeted_fix_is_not_framed_as_a_rewrite(self) -> None:
+        writer = fake_writer()
+        writer.evaluation_chain = FakeChain(
+            {
+                "quality_score": "90",
+                "blocking_issues": "- x",
+                "improvement_feedback": "",
+            }
+        )
+        asyncio.run(writer.write(plan(), outline_cards(), written_outline()))
+        directives = [p["depth_directive"] for p in writer.section_chain.payloads]
+        fixes = [d for d in directives if "TARGETED FIX" in d]
+        assert fixes and all("keeping what works" not in d for d in fixes)
+        assert all("THE DRAFT to edit" in d for d in fixes)
+
+    def test_wording_issues_are_revised_but_not_grounded(self) -> None:
+        writer = fake_writer()
+        wording = "'측정되었습니다' -> '저자들이 측정했습니다'"
+        writer.evaluation_chain = FakeChain(
+            {
+                "quality_score": "90",
+                "blocking_issues": "none",
+                "wording_issues": f"- {wording}",
+                "improvement_feedback": "",
+            }
+        )
+        asyncio.run(writer.write(plan(), outline_cards(), written_outline()))
+        directives = [p["depth_directive"] for p in writer.section_chain.payloads]
+        assert any(wording in d and "You are REVISING" in d for d in directives)
+        assert any(wording in d and "TARGETED FIX" in d for d in directives)
+        # Grounding fact-checks; the wording is the writer's to fix.
+        assert all(p["blocking_issues"] == "" for p in writer.grounding_chain.payloads)
+
+    def test_empty_below_bar_feedback_gets_a_generic_directive(self) -> None:
+        writer = fake_writer()
+        writer.evaluation_chain = FakeChain(
+            {
+                "quality_score": "50",
+                "blocking_issues": "none",
+                "improvement_feedback": "",
+            }
+        )
+        asyncio.run(writer.write(plan(), outline_cards(), written_outline()))
+        revisions = [
+            p["depth_directive"]
+            for p in writer.section_chain.payloads
+            if "You are REVISING" in p["depth_directive"]
+        ]
+        assert revisions
+        assert all("scored below the quality bar" in d for d in revisions)
+
+    def test_an_empty_draft_is_written_once_more(self) -> None:
+        writer = fake_writer()
+        calls: list[str] = []
+
+        def answer(payload: dict[str, Any]) -> dict[str, str]:
+            calls.append(payload["depth_directive"])
+            return {} if len(calls) == 1 else section_answer(payload)
+
+        writer.section_chain = FakeChain(answer)
+        asyncio.run(writer.write(plan(), outline_cards(), written_outline()))
+        assert "The previous draft was empty" in calls[1]
+        assert not any("came back empty" in n for n in writer.notes)
+
     def test_no_leftover_issue_keeps_the_prompt_input(self) -> None:
         writer = fake_writer()
         asyncio.run(writer.write(plan(), outline_cards(), written_outline()))
@@ -1728,7 +1849,15 @@ class TestCardCache:
 
     def test_the_variant_follows_the_source_limit(self) -> None:
         assert survey_writer.card_variant(1) != survey_writer.card_variant(2)
+        # A changed translation guideline writes the cards again too.
+        assert survey_writer.card_variant(1) != survey_writer.card_variant(1, "x")
         assert re.fullmatch(r"[0-9a-f]{8}", survey_writer.card_variant(1))
+
+    def test_cards_get_the_translation_guideline(self, stage: dict[str, Any]) -> None:
+        run_stage(stage)
+        payloads = stage["writer"].card_chain.payloads
+        assert payloads
+        assert all("유용성" in p["translation_guideline"] for p in payloads)
 
     def test_a_card_of_another_paper_is_not_reused(self, stage: dict[str, Any]) -> None:
         run_stage(stage)
@@ -1737,7 +1866,7 @@ class TestCardCache:
             "2305.18290",
             "anthropic.claude-sonnet-5-5",
             "Korean",
-            survey_writer.card_variant(150_000),
+            STAGE_VARIANT,
         )
         store.put(key, card("1707.06347"))
         calls = len(stage["writer"].card_chain.payloads)

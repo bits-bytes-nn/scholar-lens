@@ -151,6 +151,24 @@ class TestTokenBudgetGuard:
         guard = self._guard([tracker], None)
         guard._enforce_token_budget()  # ceiling None → no-op
 
+    def test_two_tier_budget(self) -> None:
+        from scholar_lens.src.constants import HARD_BUDGET_MULTIPLE
+
+        tracker = TokenUsageTracker(input_tokens=1000)
+        guard = self._guard([tracker], 1000)
+        # At the budget: soft limit reached, hard ceiling not.
+        assert guard._over_soft_token_budget()
+        guard._enforce_hard_token_budget()
+        tracker.input_tokens = int(1000 * HARD_BUDGET_MULTIPLE) + 1
+        with pytest.raises(TokenBudgetExceeded):
+            guard._enforce_hard_token_budget()
+
+    def test_two_tier_budget_without_ceiling(self) -> None:
+        tracker = TokenUsageTracker(input_tokens=10_000)
+        guard = self._guard([tracker], None)
+        assert not guard._over_soft_token_budget()
+        guard._enforce_hard_token_budget()  # ceiling None → no-op
+
 
 class TestMetricsEmitter:
     def test_no_session_does_not_raise_and_no_client(self) -> None:

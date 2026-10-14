@@ -662,14 +662,53 @@ _VERIFICATION_HEDGE = re.compile(
 )
 
 
+# Translationese with no natural reading (prompts/base.py KOREAN_STYLE): a
+# double passive ("되어진", "보여지는") and the calque "에 있어" where a particle
+# or a nominalized verb shows it ("에 있어서는", "에 있어서의", "학습함에 있어").
+# A bare "에 있어서" (also "in" in Korean) and patterns that are normal Korean
+# in moderation ("에 대한", "~라는 점") are left to the LLM checkers.
+_TRANSLATIONESE = re.compile(
+    r"되어[지진져집]|보여[지진져]|에 있어(?:서[는도의](?! 안)|[는의])|[음함]에 있어(?![야요])"
+)
+# A sentence ending glued to a colon ("다음과 같습니다:", "거친다:"): the
+# pattern of the blog's own pre-publish count (`(다|니다):`, which must be 0)
+# in the writer's own prose lines: not in a heading (the plan's title), a
+# quotation (a blockquote or a quoted span), a table row or the reference
+# list.
+_SENTENCE_COLON = re.compile(r"다:")
+_QUOTED_SPAN = re.compile(r'"[^"\n]*"|“[^”\n]*”|‘[^’\n]*’|「[^」\n]*」')
+_REFERENCES_HEADING = re.compile(
+    r"^#{1,6}[ \t]+(?:references|bibliography|참고 ?자료|참고 ?문헌)\b",
+    re.IGNORECASE,
+)
+
+
+def _colon_endings(prose: str) -> list[tuple[int, int]]:
+    """Spans of "다:" in ``prose``'s own sentences (see :data:`_SENTENCE_COLON`)."""
+    spans, in_references, pos = [], False, 0
+    for line in prose.splitlines(keepends=True):
+        start, pos = pos, pos + len(line)
+        if line.startswith("#"):
+            in_references = bool(_REFERENCES_HEADING.match(line))
+            continue
+        if in_references or TABLE_ROW.match(line) or line.lstrip().startswith(">"):
+            continue
+        text = _QUOTED_SPAN.sub(_blank, line)
+        spans += [
+            (start + m.start(), start + m.end()) for m in _SENTENCE_COLON.finditer(text)
+        ]
+    return spans
+
+
 def writing_issues(markdown: str) -> list[str]:
     """Deterministic writing-rule violations in a generated post, one line
     each with the offending text, for an editor or reviser to fix.
 
     Covers references to the paper's numbering, an English stem with a Korean
     verb ending ("fine-tune합니다"), the post referring to its own parts
-    ("이 절에서"), reader-facing verification hedges ("(미검증)") and single-``$``
-    math. Code and math are ignored; image alt text
+    ("이 절에서"), reader-facing verification hedges ("(미검증)"), unambiguous
+    translationese (a double passive, "에 있어서는"), a sentence ending glued to
+    a colon ("같습니다:") and single-``$`` math. Code and math are ignored; image alt text
     and callouts are fixed in post-processing instead.
     """
     # Link and image targets are copied verbatim (a file named "Figure1.png"
@@ -700,6 +739,21 @@ def writing_issues(markdown: str) -> list[str]:
         issues.append(
             f"self-reference '{m.group(0).strip()}': "
             f"{_snippet(markdown, m.start(), m.end())}"
+        )
+    for m in _TRANSLATIONESE.finditer(prose):
+        kind, fix = (
+            ("calque", "write 에서 or 에는")
+            if "있어" in m.group(0)
+            else ("double passive", "one passive or an active verb")
+        )
+        issues.append(
+            f"{kind} '{m.group(0)}' ({fix}): "
+            f"{_snippet(markdown, m.start(), m.end())}"
+        )
+    for start, end in _colon_endings(prose):
+        issues.append(
+            "sentence ending with a colon '다:' (end it with a period or write "
+            f"a label): {_snippet(markdown, start, end)}"
         )
     for m in _VERIFICATION_HEDGE.finditer(prose):
         issues.append(

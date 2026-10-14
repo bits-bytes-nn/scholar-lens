@@ -21,6 +21,7 @@ from scholar_lens.src.prompts.tech_guide import (
     TechGuideGroundingPrompt,
     TechGuideTaxonomyPrompt,
 )
+from scholar_lens.src.section_loop import lost_structure, revise_section
 from scholar_lens.src.tech_guide import (
     _DEPTH_GUIDANCE,
     _GETTING_STARTED_SCOPE,
@@ -29,7 +30,6 @@ from scholar_lens.src.tech_guide import (
     NotTechnicalContentError,
     PlannedSection,
     TechGuideGenerator,
-    revise_section,
 )
 from scholar_lens.src.web_research import PageContent, ResearchCorpus
 
@@ -315,7 +315,7 @@ class TestGenerateFlow:
         ],
     )
     def test_section_output_parsed_leniently(self, raw: str, expected: str) -> None:
-        from scholar_lens.src.tech_guide import parse_section_output
+        from scholar_lens.src.section_loop import parse_section_output
 
         assert parse_section_output(raw) == {"section_markdown": expected}
 
@@ -693,6 +693,44 @@ class TestEvaluateAndRevise:
         )
         assert out == "## 설치\n\n이 절에서 설치합니다."
 
+    async def test_wording_issues_are_revised_then_fixed_minimally(self) -> None:
+        gen = _make_generator(min_quality_score=80, max_revision_attempts=1)
+        wording = "'측정되었습니다' -> '저자들이 측정했습니다'"
+        gen.evaluation_chain.ainvoke = AsyncMock(
+            return_value={
+                "quality_score": "90",
+                "blocking_issues": "none",
+                "wording_issues": f"- {wording}",
+            }
+        )
+        gen.section_chain.ainvoke = AsyncMock(
+            return_value={"section_markdown": "## Draft\nsame"}
+        )
+        await gen._evaluate_and_revise(
+            topic="X",
+            planned=PlannedSection(title="Intro", depth="deep"),
+            section_label="1. Intro",
+            markdown="## Draft\nsame",
+            section_number=1,
+            total_sections=1,
+            previous_sections="",
+            already_in_guide="- nothing yet",
+            sources="src",
+            available_images="(none)",
+            final_outline="1. Intro",
+            owned_elsewhere="- none",
+            glossary="- none",
+        )
+        revision, fix = (
+            c.args[0]["depth_directive"]
+            for c in gen.section_chain.ainvoke.await_args_list
+        )
+        assert wording in revision and "keeping what works" in revision
+        assert wording in fix and "TARGETED FIX" in fix
+        assert "keeping what works" not in fix and "THE DRAFT to edit" in fix
+        # Wording is not a factual issue for grounding.
+        assert gen._leftover_blocking == []
+
     async def test_high_score_accepts_without_revision(self) -> None:
         gen = _make_generator(min_quality_score=70, max_revision_attempts=2)
         gen.evaluation_chain.ainvoke = AsyncMock(
@@ -849,15 +887,15 @@ class TestTokenBudget:
 
     def test_hard_budget_aborts_past_multiple(self) -> None:
         # Soft tier trips at 1x (skip refinement); the hard tier RAISES past
-        # _HARD_BUDGET_MULTIPLE x so a runaway can't keep writing sections.
+        # HARD_BUDGET_MULTIPLE x so a runaway can't keep writing sections.
+        from scholar_lens.src.constants import HARD_BUDGET_MULTIPLE
         from scholar_lens.src.metrics import TokenBudgetExceeded
-        from scholar_lens.src.tech_guide import _HARD_BUDGET_MULTIPLE
 
         gen = _make_generator()
         gen.max_total_tokens = 1000
         tracker = MagicMock()
         # Real check_budget semantics: raise only when over the passed ceiling.
-        tracker.total_tokens = int(1000 * _HARD_BUDGET_MULTIPLE) + 1
+        tracker.total_tokens = int(1000 * HARD_BUDGET_MULTIPLE) + 1
 
         def _check(ceiling: int | None) -> None:
             if ceiling and tracker.total_tokens > ceiling:
@@ -991,7 +1029,7 @@ class TestGuideLengthAndRules:
         assert "about 12,500" in length_report(md, "deep", "English")
 
     def test_tables_and_images_are_not_prose(self) -> None:
-        from scholar_lens.src.tech_guide import prose_chars
+        from scholar_lens.src.section_loop import prose_chars
 
         md = (
             "## 제목\n\n"
@@ -1018,12 +1056,12 @@ class TestGuideLengthAndRules:
     def test_quoted_tables_linked_images_and_text_beside_images(
         self, markdown: str, prose: str
     ) -> None:
-        from scholar_lens.src.tech_guide import prose_chars
+        from scholar_lens.src.section_loop import prose_chars
 
         assert prose_chars("본문 " + "\n" + markdown) == len(f"본문 {prose}".strip())
 
     def test_writer_and_evaluator_state_the_same_unit(self) -> None:
-        from scholar_lens.src.prompts.tech_guide import PROSE_UNIT
+        from scholar_lens.src.prompts.base import PROSE_UNIT
         from scholar_lens.src.tech_guide import length_report
 
         assert PROSE_UNIT in PlannedSection(title="t").depth_directive("Korean")
@@ -1291,7 +1329,7 @@ class TestSectionPlan:
         assert _NO_OFFICIAL_SOURCE not in first["depth_directive"]
 
     def test_the_glossary_is_parsed_without_parentheticals(self) -> None:
-        from scholar_lens.src.tech_guide import parse_glossary
+        from scholar_lens.src.section_loop import parse_glossary
 
         raw = (
             "- continuous batching | 연속 배칭(continuous batching)\n"
@@ -1607,7 +1645,7 @@ class TestSeveralDocsAndReferences:
 
 class TestGlossaryAndOwnership:
     def test_a_term_is_introduced_only_by_its_first_use_form(self) -> None:
-        from scholar_lens.src.tech_guide import glossary_view
+        from scholar_lens.src.section_loop import glossary_view
 
         glossary = {"continuous batching": "연속 배칭", "Prefill": "프리필"}
         # A bare rendering (or the rendering inside a longer word) is no
@@ -1623,7 +1661,7 @@ class TestGlossaryAndOwnership:
     def test_a_section_is_not_told_its_own_concepts_are_owned_elsewhere(
         self,
     ) -> None:
-        from scholar_lens.src.tech_guide import owned_elsewhere
+        from scholar_lens.src.section_loop import owned_elsewhere
 
         sections = [
             PlannedSection("A", owns=["paging", "batching"]),
@@ -1637,17 +1675,24 @@ class TestGlossaryAndOwnership:
         assert owned_elsewhere(sections, 0) == "- later, 'C': eviction"
 
 
+# A section long enough that a one-sentence fix keeps most of its prose.
+_SECTION = (
+    "## S\n\nThe server listens on 8080. "
+    + "It accepts requests from clients and answers them in order. " * 3
+)
+
+
 class TestTargetedFix:
     """The one targeted fix of the issues the revisions leave."""
 
     @staticmethod
     async def _run(
-        blocking: list[str], fixed: str, *, rules: Any = None
+        blocking: list[str], fixed: str, *, rules: Any = None, draft: str = _SECTION
     ) -> tuple[Any, list[str]]:
         asked: list[str] = []
 
-        async def evaluate(_: str) -> tuple[int, str, list[str]]:
-            return 90, "", blocking
+        async def evaluate(_: str) -> tuple[int, str, list[str], list[str]]:
+            return 90, "", blocking, []
 
         async def revise(feedback: str, draft: str) -> str:
             asked.append(feedback)
@@ -1655,7 +1700,7 @@ class TestTargetedFix:
             return fixed if feedback.startswith("TARGETED FIX") else draft
 
         best = await revise_section(
-            "## S\n\nThe server listens on 8080.",
+            draft,
             evaluate=evaluate,
             revise=revise,
             length=lambda _: "ok",
@@ -1673,11 +1718,12 @@ class TestTargetedFix:
 
     async def test_a_clean_fix_is_applied_without_re_scoring(self) -> None:
         issue = "The port 8080 is not in the sources: remove it"
-        best, asked = await self._run([issue], "## S\n\nThe server listens.")
+        fixed = _SECTION.replace(" on 8080", "")
+        best, asked = await self._run([issue], fixed)
         assert len(asked) == 2  # one revision, one fix
         fix = asked[1]
         assert issue in fix and "smallest edit" in fix and "Length" not in fix
-        assert best.text == "## S\n\nThe server listens." and best.fix == "applied"
+        assert best.text == fixed and best.fix == "applied"
         # Not re-scored, so the issue stays for the reviewer to check.
         note = best.below_bar_note("Guide", "S", 75)
         assert note is not None
@@ -1685,35 +1731,181 @@ class TestTargetedFix:
 
     async def test_a_fix_that_adds_a_rule_issue_is_rejected(self) -> None:
         best, _ = await self._run(
-            ["The port is wrong"], "## S\n\n이 절에서 server를 설명합니다."
+            ["The port is wrong"], _SECTION.replace("The server", "이 절에서 server")
         )
-        assert best.text == "## S\n\nThe server listens on 8080."
-        assert best.fix == "rejected"
+        assert best.text == _SECTION and best.fix == "rejected"
 
     async def test_a_fix_that_adds_a_caller_rule_issue_is_rejected(self) -> None:
         def rules(text: str) -> list[str]:
             return [] if "[@a]" in text else ["citation: never cites [@a]"]
 
         best, _ = await self._run(
-            ["The port is wrong"], "## S\n\nThe server listens.", rules=rules
+            ["The port is wrong"], _SECTION.replace(" on 8080", ""), rules=rules
         )
         # The draft had the citation issue too: the fix adds none, so applied.
         assert best.fix == "applied"
+        cited = _SECTION + "Cited [@a]."
+        best, _ = await self._run(
+            ["The port is wrong"], _SECTION, rules=rules, draft=cited
+        )
+        assert best.fix == "rejected" and best.text == cited
 
-        async def evaluate(_: str) -> tuple[int, str, list[str]]:
-            return 90, "", ["The port is wrong"]
+    async def test_the_fix_goes_through_its_own_callback(self) -> None:
+        # No "rewrite it, keeping what works" frame around a minimal edit.
+        revisions: list[str] = []
+        fixes: list[tuple[str, str]] = []
+
+        async def evaluate(_: str) -> tuple[int, str, list[str], list[str]]:
+            return 90, "", ["The port is wrong"], []
 
         async def revise(feedback: str, draft: str) -> str:
-            return "## S\n\nNo citation." if "TARGETED" in feedback else draft
+            revisions.append(feedback)
+            return draft
+
+        async def fix(request: str, draft: str) -> str:
+            fixes.append((request, draft))
+            return draft.replace(" on 8080", "")
 
         best = await revise_section(
-            "## S\n\nCited [@a].",
+            _SECTION,
             evaluate=evaluate,
             revise=revise,
             length=lambda _: "ok",
             min_score=75,
             max_attempts=1,
             label="1",
-            rules=rules,
+            fix=fix,
         )
-        assert best.fix == "rejected" and best.text == "## S\n\nCited [@a]."
+        assert len(revisions) == 1 and not revisions[0].startswith("TARGETED")
+        assert fixes == [(fixes[0][0], _SECTION)]
+        assert fixes[0][0].startswith("TARGETED FIX") and best.fix == "applied"
+
+
+_STRUCTURED = (
+    "## S\n\n### Part\n\nThe server listens [@a; @b]. It answers requests in "
+    "order and keeps a queue of them.\n\n![Queue](q.png)\n\n$$\nx = 1\n$$\n\n"
+    "| a | b |\n| --- | --- |\n| 1 | 2 |\n"
+)
+
+
+@pytest.mark.parametrize(
+    "edited,reason",
+    [
+        (_STRUCTURED.replace("### Part\n\n", ""), "loses heading '### Part'"),
+        (_STRUCTURED.replace("![Queue](q.png)\n\n", ""), "loses image 'q.png'"),
+        (_STRUCTURED.replace("; @b", ""), "loses citation [@b]"),
+        (_STRUCTURED.replace("$$\nx = 1\n$$\n\n", ""), "loses a display equation"),
+        (_STRUCTURED.split("| a |")[0], "loses a table"),
+        (
+            _STRUCTURED.replace(
+                " It answers requests in order and keeps a queue of them.", ""
+            ),
+            "shrinks the prose",
+        ),
+    ],
+)
+def test_a_fix_that_loses_structure_is_named(edited: str, reason: str) -> None:
+    assert lost_structure(_STRUCTURED, edited).startswith(reason)
+
+
+def test_a_fix_may_correct_structure_in_place() -> None:
+    # A wrong formula or cell fixed in place, one sentence reworded.
+    edited = (
+        _STRUCTURED.replace("x = 1", "x = 2")
+        .replace("| 1 |", "| 3 |")
+        .replace("keeps a queue", "keeps one queue")
+    )
+    assert lost_structure(_STRUCTURED, edited) == ""
+
+
+async def test_a_fix_that_loses_structure_is_rejected() -> None:
+    async def evaluate(_: str) -> tuple[int, str, list[str], list[str]]:
+        return 90, "", ["The equation is wrong"], []
+
+    async def revise(feedback: str, draft: str) -> str:
+        return (
+            draft.replace("$$\nx = 1\n$$\n\n", "") if "TARGETED" in feedback else draft
+        )
+
+    best = await revise_section(
+        _STRUCTURED,
+        evaluate=evaluate,
+        revise=revise,
+        length=lambda _: "ok",
+        min_score=75,
+        max_attempts=1,
+        label="1",
+    )
+    assert best.fix == "rejected" and best.text == _STRUCTURED
+
+
+class TestWordingRanksAfterScore:
+    """A wording issue blocks acceptance like a rule slip, but never outranks
+    the score as a factual issue does."""
+
+    DEEP = "## 개요\n\n" + "깊이 있는 설명입니다. " * 80
+    SHALLOW = "## 개요\n\n짧은 설명입니다."
+
+    async def _run(self, wording: list[str], blocking: list[str]) -> Any:
+        async def evaluate(text: str) -> tuple[int, str, list[str], list[str]]:
+            if text == self.DEEP:
+                return 88, "좋습니다.", blocking, wording
+            return 70, "깊이가 부족합니다.", [], []
+
+        async def revise(_: str, __: str) -> str:
+            return self.SHALLOW
+
+        return await revise_section(
+            self.DEEP,
+            evaluate=evaluate,
+            revise=revise,
+            length=lambda text: str(len(text)),
+            min_score=85,
+            max_attempts=1,
+            label="x",
+        )
+
+    async def test_an_88_draft_with_a_wording_issue_beats_a_clean_70(self) -> None:
+        issue = "'계산할 수 없다는 점이 문제입니다' -> '이 합은 계산할 수 없습니다'"
+        best = await self._run([issue], [])
+        # Kept, still listed (not passing), but not a factual issue; the
+        # shallow targeted "fix" lost most of the prose and was rejected.
+        assert best.text == self.DEEP and best.score == 88
+        assert best.issues == [issue] and best.blocking == []
+        assert best.fix == "rejected"
+
+    async def test_a_factual_issue_still_outranks_the_score(self) -> None:
+        best = await self._run([], ["The default port is invented"])
+        assert best.text == self.SHALLOW and best.score == 70
+
+
+async def test_an_empty_revision_is_asked_for_once_more() -> None:
+    asked: list[str] = []
+
+    async def evaluate(text: str) -> tuple[int, str, list[str], list[str]]:
+        return (90, "", [], []) if text == "## S\n\nbetter" else (50, "deeper", [], [])
+
+    async def revise(feedback: str, _: str) -> str:
+        asked.append(feedback)
+        return "" if len(asked) == 1 else "## S\n\nbetter"
+
+    best = await revise_section(
+        "## S\n\nshallow",
+        evaluate=evaluate,
+        revise=revise,
+        length=lambda _: "ok",
+        min_score=75,
+        max_attempts=1,
+        label="1",
+    )
+    assert best.text == "## S\n\nbetter" and len(asked) == 2
+    assert "The previous draft was empty" in asked[1]
+
+
+def test_a_targeted_fix_may_not_drop_a_code_block() -> None:
+    from scholar_lens.src.section_loop import lost_structure
+
+    draft = "## S\n\nText.\n\n```bash\nvllm serve m --bad-flag\n```\n\nMore text."
+    assert lost_structure(draft, "## S\n\nText.\n\nMore text.") == "loses a code block"
+    edited = draft.replace(" --bad-flag", "")
+    assert lost_structure(draft, edited) == ""

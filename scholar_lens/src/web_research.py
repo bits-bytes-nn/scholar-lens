@@ -44,14 +44,13 @@ from .prompts.tech_guide import (
     THIRD_PARTY_LABEL,
 )
 from .rate_limiter import ARXIV_RATE_LIMITER, arxiv_retry_after_seconds
-from .review_plan import parse_lines
 from .url_guard import (
     UnsafeUrlError,
     assert_url_is_public,
     is_temporary_dns_failure,
     is_url_public,
 )
-from .utils import extract_text_from_html
+from .utils import extract_text_from_html, parse_lines
 from .utils.helpers import is_page_furniture
 
 DEFAULT_TIMEOUT: int = 30

@@ -112,6 +112,21 @@ class TestUnsupportedTags:
             text,
         ) == ["Paged-Optimizers"]
 
+    @pytest.mark.parametrize(
+        ("tag", "text", "supported"),
+        [
+            ("RAG", "Data storage layouts.", False),  # not inside a word
+            ("Transformer", "Vision transformers scale.", True),  # plural
+            ("Large-Language-Model", "We study large language models.", True),
+            ("Agent", "An agentic workflow.", False),
+            ("Mixture-of-Experts", "A sparse mixture of experts layer.", True),
+        ],
+    )
+    def test_phrases_match_whole_words(
+        self, tag: str, text: str, supported: bool
+    ) -> None:
+        assert (unsupported_tags([tag], text) == []) is supported
+
 
 class TestSpellingAndStylizedNames:
     def test_reuses_blog_spelling_and_keeps_stylized_case(self) -> None:

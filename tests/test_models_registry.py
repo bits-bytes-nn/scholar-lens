@@ -20,7 +20,6 @@ class TestLanguageModelRegistry:
         info = _LANGUAGE_MODEL_INFO[LanguageModelId.CLAUDE_V4_8_OPUS]
         assert info.supports_1m_context_window is True
         assert info.supports_thinking is True
-        assert info.supports_prompt_caching is True
 
     @pytest.mark.parametrize(
         "model",
@@ -36,7 +35,6 @@ class TestLanguageModelRegistry:
         # (1M context_window_size but supports_1m_context_window=False).
         info = _LANGUAGE_MODEL_INFO[model]
         assert info.supports_1m_context_window is True
-        assert info.supports_prompt_caching is True
         assert info.supports_thinking is True
 
     @pytest.mark.parametrize(

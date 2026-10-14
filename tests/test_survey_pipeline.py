@@ -37,7 +37,6 @@ from scholar_lens.src.survey_pipeline import (
     plan_survey,
     read_references,
     save_plan,
-    survey_slug,
 )
 from scholar_lens.src.survey_plan import (
     Candidate,
@@ -48,6 +47,7 @@ from scholar_lens.src.survey_plan import (
     SurveyPlanError,
     SurveyScope,
     TimeRange,
+    survey_slug,
 )
 from scholar_lens.src.web_research import PageContent, ResearchCorpus, SourceFetchError
 
@@ -454,6 +454,18 @@ class TestAdapters:
             "ids": ["ARXIV:2305.18290", "DOI:10.1/x", "DOI:10.1/y"]
         }
         assert http[0].method == "POST"
+
+    def test_semantic_scholar_batch_that_is_not_a_list_is_logged(
+        self, http: list[httpx.Request], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setitem(
+            ROUTES, "api.semanticscholar.org", lambda r: {"error": "odd"}
+        )
+        log = MagicMock()
+        monkeypatch.setattr(scholarly_index, "logger", log)
+        found = SemanticScholarIndex(api_key="k").papers(["ARXIV:2305.18290"])
+        assert found == [None]
+        log.warning.assert_called_once()
 
 
 class TestArxivSearch:

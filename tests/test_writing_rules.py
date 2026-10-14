@@ -115,6 +115,49 @@ class TestWritingIssues:
     def test_stem_check_leaves_proper_usage_alone(self, text: str) -> None:
         assert writing_issues(f"## 방법\n\n{text}") == []
 
+    @pytest.mark.parametrize(
+        "text,needle",
+        [
+            ("값이 저장되어진 뒤 읽습니다.", "double passive '되어진'"),
+            ("그림에서 보여지는 곡선입니다.", "double passive '보여지'"),
+            ("학습에 있어서는 중요합니다.", "calque '에 있어서는'"),
+            ("평가에 있어서의 기준입니다.", "calque '에 있어서의'"),
+            ("모델을 학습함에 있어 중요합니다.", "calque '함에 있어'"),
+            ("구조는 다음과 같습니다: 첫째, 인코더입니다.", "colon '다:'"),
+            ("모델은 두 단계를 거친다: 사전학습과 미세조정.", "colon '다:'"),
+            # Checked again after the reference list ends.
+            ("## 참고 자료\n\n* Kim (2020).\n\n## 정리\n\n크다: 첫째.", "colon '다:'"),
+        ],
+    )
+    def test_translationese_markers_are_caught(self, text: str, needle: str) -> None:
+        assert needle in "\n".join(writing_issues(f"## 방법\n\n{text}"))
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "주어진 입력에서 여겨지는 값을 씁니다.",
+            "설정되어 진행됩니다.",
+            "메모리에 있어 빠릅니다.",
+            # A bare "에 있어서" also means "in": the LLM checkers judge it.
+            "학습에 있어서 중요합니다.",
+            "캐시에 있어도 다시 읽습니다.",
+            "키가 코드에 있어서는 안 됩니다.",
+            "이 줄은 그 다음에 있어야 합니다.",
+            # Not the writer's sentence: a quotation, a table cell, the
+            # reference list.
+            '원문은 "두 단계를 거친다: 사전학습"이라고 씁니다.',
+            "> 두 단계를 거친다: 사전학습과 미세조정.",
+            "| 결과 | 덜 해롭다: 수치 없음 |\n| --- | --- |",
+            "## 참고 자료\n\n* Kim (2020). 모델은 크다: 부제.",
+            "- **장점:** 빠릅니다.",
+            "`되어진` 문자열과 $$x$$를 봅니다.",
+            "```text\n다음과 같습니다:\n```",
+            "### 보상을 정책으로 다시 쓰다: DPO\n\n본문입니다.",
+        ],
+    )
+    def test_translationese_markers_leave_normal_korean_alone(self, text: str) -> None:
+        assert writing_issues(f"## 방법\n\n{text}") == []
+
     def test_an_acronym_used_as_a_verb_is_fine(self) -> None:
         assert writing_issues("행렬을 SVD하고 비교합니다.") == []
 
@@ -373,14 +416,14 @@ class TestEditGuards:
 
 @pytest.mark.parametrize("raw", ["none.", "None", "없음.", "- none"])
 def test_parse_lines_none_with_punctuation(raw: str) -> None:
-    from scholar_lens.src.review_plan import parse_lines
+    from scholar_lens.src.utils import parse_lines
 
     assert parse_lines(raw) == []
 
 
 @pytest.mark.parametrize("answer", ["**없음**", "*None*", "_none_"])
 def test_emphasised_none_answers_are_empty(answer: str) -> None:
-    from scholar_lens.src.review_plan import parse_lines
+    from scholar_lens.src.utils import parse_lines
 
     assert parse_lines(answer) == []
 
@@ -488,13 +531,13 @@ def test_korean_equation_references(text: str, flagged: bool) -> None:
     ],
 )
 def test_numbered_and_annotated_none_answers_are_empty(answer: str) -> None:
-    from scholar_lens.src.review_plan import parse_lines
+    from scholar_lens.src.utils import parse_lines
 
     assert parse_lines(answer) == []
 
 
 def test_real_items_with_parentheticals_are_kept() -> None:
-    from scholar_lens.src.review_plan import parse_lines
+    from scholar_lens.src.utils import parse_lines
 
     assert parse_lines("- ablation (Table 3)") == ["ablation (Table 3)"]
 

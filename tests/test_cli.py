@@ -95,6 +95,30 @@ def test_remote_submits_and_prints_the_job(capsys: pytest.CaptureFixture) -> Non
 
 
 @pytest.mark.parametrize(
+    ("plan", "submitted"),
+    [("s3://other-bucket/p.json", False), ("s3://blog-bucket/p.json", True)],
+)
+def test_remote_survey_write_checks_the_plan_bucket(
+    plan: str, submitted: bool, capsys: pytest.CaptureFixture
+) -> None:
+    context = mock.MagicMock()
+    context.s3_handler.bucket_name = "blog-bucket"
+    job = SubmittedJob(job_id="j-1", job_name="n", kind="survey_write", input=plan)
+    with (
+        mock.patch.object(cli, "_aws_context", return_value=context),
+        mock.patch("scholar_lens.src.jobs.submit_job", return_value=job) as sub,
+    ):
+        code = cli.main(["survey", "write", "--plan", plan, "--remote"])
+    assert code == (cli.EXIT_OK if submitted else cli.EXIT_REJECTED)
+    assert sub.called is submitted
+    out = _output(capsys)
+    if submitted:
+        assert out["job_id"] == "j-1"
+    else:
+        assert out["status"] == "rejected" and "other-bucket" in out["error"]
+
+
+@pytest.mark.parametrize(
     "argv", [["status", "j"], ["guide", "https://docs.example.com", "--remote"]]
 )
 def test_config_validation_error_is_an_error_not_a_rejection(
@@ -185,6 +209,28 @@ class TestWorker:
         ):
             cli.main(["worker", "--request", request])
         exit_.assert_called_once_with(143)
+
+    def test_sigterm_prints_the_recorded_result(
+        self, capsys: pytest.CaptureFixture
+    ) -> None:
+        recorded = JobResult(kind="summarize", input="2106.09685", error="stopped")
+        recorded.input_tokens = 900
+
+        def interrupted(*_args: Any, **_kwargs: Any) -> Any:
+            stop = SystemExit(143)
+            stop.job_result = recorded  # type: ignore[attr-defined]
+            raise stop
+
+        request = '{"kind": "summarize", "source": "2106.09685"}'
+        with (
+            mock.patch("scholar_lens.src.runtime.run_job", side_effect=interrupted),
+            mock.patch.object(cli.os, "_exit", side_effect=RuntimeError) as exit_,
+            pytest.raises(RuntimeError),
+        ):
+            cli.main(["worker", "--request", request])
+        exit_.assert_called_once_with(143)
+        out = _output(capsys)
+        assert out["error"] == "stopped" and out["input_tokens"] == 900
 
     def test_other_system_exits_propagate(self) -> None:
         def stopped(*_args: Any, **_kwargs: Any) -> Any:

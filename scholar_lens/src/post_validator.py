@@ -419,7 +419,7 @@ def _check_front_matter(
     if seo_title and len(str(seo_title)) > limit:
         add("error", "seo-title", 1, f"seo_title is over {limit} characters")
 
-    _check_tags(front.get("tags"), body, spec, add)
+    _check_tags(front.get("tags"), spec, add)
 
     _check_description_field(front, spec, kind, add)
 
@@ -599,7 +599,7 @@ def _check_paper_author(value: Any, add: Add) -> None:
         add("error", "paper-author", 1, f"paper_author is a person list: '{author}'")
 
 
-def _check_tags(tags: Any, body: str, spec: PostConventions, add: Add) -> None:
+def _check_tags(tags: Any, spec: PostConventions, add: Add) -> None:
     if not isinstance(tags, list) or not tags:
         add("error", "tags", 1, "tags must be a non-empty list")
         return

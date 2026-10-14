@@ -7,7 +7,7 @@ ids, OpenAlex for DOIs), turns each paper into a card (cached on disk and in
 S3), reads the plan's reference articles again (explanatory material for the
 sections that frame the field, listed as further reading), plans the
 outline, writes every section through the guide's
-write → evaluate → revise → ground loop (``tech_guide.revise_section``,
+write → evaluate → revise → ground loop (``section_loop.revise_section``,
 ``checked_grounding``) and publishes the post like the other kinds. Every
 check on the models' answers is code (``survey_post``).
 """
@@ -48,14 +48,13 @@ from .prompts import (
     SurveyOutlinePrompt,
     SurveySectionPrompt,
 )
+from .prompts.base import PROSE_UNIT, blocking_issues_block
 from .prompts.survey import DEPTH_GUIDANCE, SECTION_ROLES
-from .prompts.tech_guide import PROSE_UNIT, blocking_issues_block
 from .publisher import PublishRequest, build_pr_body
 from .review_plan import (
     article_ledger,
     digest_sections,
     ensure_section_heading,
-    parse_lines,
     rule_issues,
 )
 from .runtime import (
@@ -71,12 +70,22 @@ from .scholarly_index import (
     datacite_record,
     openalex_record,
 )
+from .section_loop import (
+    EMPTY_DRAFT,
+    FIXING,
+    REVISING,
+    checked_grounding,
+    feedback_or_generic,
+    glossary_view,
+    measured_length,
+    owned_elsewhere,
+    parse_section_output,
+    revise_section,
+)
 from .survey_pipeline import (
-    HARD_BUDGET_MULTIPLE,
     SurveyCalls,
     read_references,
     reference_excerpts,
-    survey_slug,
 )
 from .survey_plan import (
     PlanPaper,
@@ -85,6 +94,7 @@ from .survey_plan import (
     SurveyPlan,
     SurveyPlanError,
     parse_tagged_json,
+    survey_slug,
     unversioned_arxiv_id,
 )
 from .survey_post import (
@@ -123,15 +133,12 @@ from .survey_post import (
     validate_plan,
     without_papers,
 )
-from .tech_guide import (
-    checked_grounding,
-    glossary_view,
-    measured_length,
-    owned_elsewhere,
-    parse_section_output,
-    revise_section,
+from .utils import (
+    BedrockLanguageModelFactory,
+    HTMLTagOutputParser,
+    parse_lines,
+    parse_quality_score,
 )
-from .utils import BedrockLanguageModelFactory, HTMLTagOutputParser, parse_quality_score
 from .web_research import (
     PageContent,
     ResearchCorpus,
@@ -151,11 +158,6 @@ COVERING_KINDS = ("lineage", "cross_cutting")
 # many characters in all.
 REFERENCE_KINDS = ("introduction", "cross_cutting", "comparison", "insights")
 REFERENCE_MATERIAL_CHARS = 8_000
-_REVISING = (
-    "You are REVISING an existing draft of this section that did not pass "
-    "review.\n\n{feedback}\n\nCURRENT DRAFT to improve (rewrite it, keeping "
-    "what works):\n{draft}"
-)
 
 
 # ---- reading the plan ---------------------------------------------------------------
@@ -170,14 +172,20 @@ def read_plan_text(location: str, s3_handler: S3Handler | None) -> str:
             raise SurveyInputError(
                 f"The plan {location!r} is not in this run's S3 bucket."
             )
-        text = s3_handler.get_text(key)
+        try:
+            text = s3_handler.get_text(key)
+        except UnicodeDecodeError as e:
+            raise SurveyInputError(f"The plan {location!r} is not UTF-8: {e}") from e
         if text is None:
             raise SurveyInputError(f"No plan at {location!r}.")
         return text
     path = Path(location).expanduser()
     if not path.is_file():
         raise SurveyInputError(f"No plan file at {location!r}.")
-    return path.read_text(encoding="utf-8")
+    try:
+        return path.read_text(encoding="utf-8")
+    except UnicodeDecodeError as e:
+        raise SurveyInputError(f"The plan {location!r} is not UTF-8: {e}") from e
 
 
 class PaperIndex:
@@ -318,13 +326,15 @@ class CardStore:
             self.s3_handler.put_text(f"{self.s3_prefix}/{key}", text)
 
 
-def card_variant(card_source_chars: int) -> str:
-    """A short digest of what a card is written by: the card prompt and the
-    source limit (a change to either writes the cards again)."""
+def card_variant(card_source_chars: int, translation_guideline: str = "") -> str:
+    """A short digest of what a card is written by: the card prompt, the
+    source limit and the translation guideline (a change to any writes the
+    cards again)."""
     template = (
         SurveyCardPrompt.system_prompt_template
         + SurveyCardPrompt.human_prompt_template
         + str(card_source_chars)
+        + translation_guideline
     )
     return hashlib.sha256(template.encode()).hexdigest()[:8]
 
@@ -452,16 +462,10 @@ class SurveyWriter(SurveyCalls):
 
     # ---- budget ------------------------------------------------------------------
 
-    def _enforce_hard_budget(self) -> None:
-        if self._token_tracker is not None and self.max_total_tokens:
-            self._token_tracker.check_budget(
-                int(self.max_total_tokens * HARD_BUDGET_MULTIPLE)
-            )
-
     def _refine(self) -> bool:
         """Whether a section still gets evaluation, revision and grounding
         (False once the soft token limit is reached)."""
-        if not self._over_soft_budget():
+        if not self._over_soft_token_budget():
             return True
         note = (
             "Token budget reached: later survey sections were written without "
@@ -474,9 +478,13 @@ class SurveyWriter(SurveyCalls):
 
     # ---- cards ---------------------------------------------------------------------
 
-    async def card(self, paper: PlanPaper, text: PaperText) -> PaperCard:
+    async def card(
+        self, paper: PlanPaper, text: PaperText, translation_guideline: str = ""
+    ) -> PaperCard:
         """One card call (one repair round); the answer is checked against
-        the paper's text in code (:func:`survey_post.build_card`)."""
+        the paper's text in code (:func:`survey_post.build_card`). The
+        card's texts render terms by ``translation_guideline`` (they fill the
+        post's tables as written)."""
         figures = figure_list(text.figures) if text.kind == "full_text" else []
         payload = {
             "title": neutralize_prompt_tags(paper.title),
@@ -489,6 +497,7 @@ class SurveyWriter(SurveyCalls):
                 "\n".join(f"- {fid}: {caption}" for fid, _, caption in figures)
             )
             or "(none)",
+            "translation_guideline": translation_guideline or "- none",
             "language": self.language,
         }
 
@@ -612,7 +621,7 @@ class SurveyWriter(SurveyCalls):
         }
         written: list[str] = []
         for index, section in enumerate(outline.sections):
-            self._enforce_hard_budget()
+            self._enforce_hard_token_budget()
             logger.info(
                 "Writing survey section %d/%d: %s",
                 index + 1,
@@ -623,6 +632,15 @@ class SurveyWriter(SurveyCalls):
             inputs = self._inputs(plan, cards, outline, index, written, table, material)
             directive = self._directive(section)
             text = await self._write_section({**inputs, "depth_directive": directive})
+            if not text:
+                # Once more, like the review loop, before leaving a hole.
+                logger.warning(
+                    "Survey section '%s' came back empty - retrying once.",
+                    section.title,
+                )
+                text = await self._write_section(
+                    {**inputs, "depth_directive": f"{directive}\n\n{EMPTY_DRAFT}"}
+                )
             if not text:
                 self.notes.append(f"Survey section '{section.title}' came back empty.")
                 if table:  # the code's table still belongs in the post
@@ -788,18 +806,24 @@ class SurveyWriter(SurveyCalls):
     ) -> tuple[str, list[str]]:
         """The best draft and the evaluator's blocking issues it still has."""
 
-        async def evaluate(markdown: str) -> tuple[int, str, list[str]]:
-            return await self._evaluate(markdown, inputs, directive, section)
+        async def evaluate(markdown: str) -> tuple[int, str, list[str], list[str]]:
+            score, feedback, blocking, wording = await self._evaluate(
+                markdown, inputs, directive, section
+            )
+            feedback = feedback_or_generic(score, feedback, self.min_quality_score)
+            return score, feedback, blocking, wording
 
-        async def revise(feedback: str, draft: str) -> str:
+        async def write(request: str) -> str:
             revised = await self._write_section(
-                {
-                    **inputs,
-                    "depth_directive": f"{directive}\n\n"
-                    + _REVISING.format(feedback=feedback, draft=draft),
-                }
+                {**inputs, "depth_directive": f"{directive}\n\n{request}"}
             )
             return ensure_section_heading(revised, section.title) if revised else ""
+
+        async def revise(feedback: str, draft: str) -> str:
+            return await write(REVISING.format(feedback=feedback, draft=draft))
+
+        async def fix(request: str, draft: str) -> str:
+            return await write(FIXING.format(request=request, draft=draft))
 
         best = await revise_section(
             text,
@@ -810,6 +834,7 @@ class SurveyWriter(SurveyCalls):
             max_attempts=self.max_revision_attempts,
             label=f"'{section.title}'",
             rules=rules,
+            fix=fix,
         )
         if note := best.below_bar_note("Survey", section.title, self.min_quality_score):
             self.notes.append(note)
@@ -817,7 +842,7 @@ class SurveyWriter(SurveyCalls):
 
     @SurveyCalls._retry("survey_section")
     async def _write_section(self, payload: dict[str, Any]) -> str:
-        self._enforce_hard_budget()
+        self._enforce_hard_token_budget()
         result = await self.section_chain.ainvoke(payload)
         return str((result or {}).get("section_markdown", "")).strip()
 
@@ -828,8 +853,8 @@ class SurveyWriter(SurveyCalls):
         inputs: dict[str, Any],
         directive: str,
         section: OutlineSection,
-    ) -> tuple[int, str, list[str]]:
-        self._enforce_hard_budget()
+    ) -> tuple[int, str, list[str], list[str]]:
+        self._enforce_hard_token_budget()
         result = await self.evaluation_chain.ainvoke(
             {
                 "title": inputs["title"],
@@ -851,13 +876,18 @@ class SurveyWriter(SurveyCalls):
         )
         score = parse_quality_score((result or {}).get("quality_score"))
         feedback = ((result or {}).get("improvement_feedback") or "").strip()
-        return score, feedback, parse_lines((result or {}).get("blocking_issues"))
+        return (
+            score,
+            feedback,
+            parse_lines((result or {}).get("blocking_issues")),
+            parse_lines((result or {}).get("wording_issues")),
+        )
 
     @SurveyCalls._retry("survey_grounding")
     async def _ground(
         self, draft: str, inputs: dict[str, Any], blocking: list[str] | None = None
     ) -> str:
-        self._enforce_hard_budget()
+        self._enforce_hard_token_budget()
         result = await self.grounding_chain.ainvoke(
             {
                 "section": draft,
@@ -923,7 +953,7 @@ class SurveyWriter(SurveyCalls):
 
     @SurveyCalls._retry("survey_finalization")
     async def _finalize(self, payload: dict[str, Any]) -> dict[str, str]:
-        self._enforce_hard_budget()
+        self._enforce_hard_token_budget()
         result: dict[str, str] = await self.finalization_chain.ainvoke(payload)
         return result
 
@@ -1021,11 +1051,12 @@ async def gather_cards(
     store: CardStore,
     index: PaperIndex,
     researcher: WebResearcher,
+    translation_guideline: str = "",
 ) -> tuple[dict[str, PaperCard], list[str]]:
     """A card per plan paper (cached ones reused), in plan order, and the
     notes on papers left out (no text, or no usable card)."""
     model_id = writer.card_model_id.value
-    variant = card_variant(writer.card_source_chars)
+    variant = card_variant(writer.card_source_chars, translation_guideline)
     keys = {
         p.id: card_cache_key(p.id, model_id, writer.language, variant)
         for p in plan.papers
@@ -1066,7 +1097,7 @@ async def gather_cards(
                 notes.append(f"No text found for {paper.id} ({paper.title}): left out.")
                 return
             try:
-                card = await writer.card(paper, text)
+                card = await writer.card(paper, text, translation_guideline)
             except SurveyPlanError as e:
                 notes.append(
                     f"No usable card for {paper.id} ({paper.title}): left out ({e})."
@@ -1125,7 +1156,12 @@ async def write_survey(
 ) -> Survey:
     """Cards and reference articles → outline → sections."""
     cards, notes = await gather_cards(
-        plan, writer, store=store, index=index, researcher=researcher
+        plan,
+        writer,
+        store=store,
+        index=index,
+        researcher=researcher,
+        translation_guideline=translation_guideline,
     )
     articles = [r for r in plan.references if r.kind == "article"]
     read = await asyncio.to_thread(

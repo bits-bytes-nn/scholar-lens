@@ -30,14 +30,13 @@ from langchain_core.runnables import Runnable
 
 from .arxiv_handler import ArxivHandler, ArxivPaperError
 from .aws_helpers import S3Handler
-from .citation_metadata import QuotaExhaustedError, titles_match
+from .citation_metadata import ProviderUnavailableError, titles_match
 from .constants import LanguageModelId, LocalPaths, S3Paths
 from .jobs import JobRequest
 from .logger import logger
 from .metrics import TokenBudgetGuard, TokenUsageTracker
 from .prompt_safety import neutralize_prompt_tags
 from .prompts import BasePrompt, SurveyScopePrompt, SurveySelectionPrompt
-from .publish_types import slugify
 from .runtime import ROOT_DIR, PipelineOutcome, RunContext
 from .scholarly_index import (
     DATACITE_MAX_IDS,
@@ -75,6 +74,7 @@ from .survey_plan import (
     semantic_scholar_id,
     shortlist,
     shortlist_digest,
+    survey_slug,
     unversioned_arxiv_id,
 )
 from .utils import BedrockLanguageModelFactory, RetryableBase
@@ -94,9 +94,6 @@ SEARCH_RESULTS = 25
 LANDMARK_RESULTS = 5
 # Reference material shown to the scope call, over all references.
 SCOPE_REFERENCE_CHARS = 8_000
-# Past max_total_tokens the repair round is skipped; past this multiple the
-# run aborts before the next call (the guide pipeline's two tiers).
-HARD_BUDGET_MULTIPLE = 1.5
 _UNDERCOUNT_NOTE = (
     "Citation counts are OpenAlex's, which undercount arXiv-era ML papers and "
     "list few of their references (so few citation edges); set "
@@ -194,7 +191,8 @@ def unread_note(references: Sequence[ReadReference]) -> list[str]:
 class _Calls:
     """Runs index calls, counting requests and failures per provider. A
     transport or HTTP error, or a response that is not JSON, is a failed
-    call the step can do without; a provider whose quota is spent, or that
+    call the step can do without; a provider whose quota is spent or key is
+    rejected, or that
     failed twice in a row (arXiv's 429s last minutes), is skipped for the
     rest of the run; any other error propagates."""
 
@@ -215,7 +213,7 @@ class _Calls:
         self.made[provider] += 1
         try:
             result = call()
-        except QuotaExhaustedError as e:
+        except ProviderUnavailableError as e:
             self._fail(provider, e, skip=True)
         except (httpx.HTTPError, json.JSONDecodeError, ArxivPaperError) as e:
             self._fail(provider, e, skip=self.failing[provider] + 1 >= _MAX_FAILURES)
@@ -588,13 +586,13 @@ class SurveyCalls(RetryableBase, TokenBudgetGuard):
             except SurveyPlanError as e:
                 problems = [str(e)[:1000]]
             else:
-                last = attempt == 1 or self._over_soft_budget()
+                last = attempt == 1 or self._over_soft_token_budget()
                 if not problems or (accept_last and last):
                     return result
             logger.warning(
                 "Survey %s unusable (attempt %d): %s", tag, attempt + 1, problems
             )
-            if self._over_soft_budget():
+            if self._over_soft_token_budget():
                 break
             payload["repair_note"] = (
                 "\nYour previous answer could not be used:\n"
@@ -608,19 +606,9 @@ class SurveyCalls(RetryableBase, TokenBudgetGuard):
 
     @RetryableBase._retry("survey_call")
     async def _invoke(self, chain: Runnable, payload: dict[str, Any]) -> str:
-        if self._token_tracker is not None and self.max_total_tokens:
-            self._token_tracker.check_budget(
-                int(self.max_total_tokens * HARD_BUDGET_MULTIPLE)
-            )
+        self._enforce_hard_token_budget()
         raw: str = await chain.ainvoke(payload)
         return raw
-
-    def _over_soft_budget(self) -> bool:
-        return bool(
-            self._token_tracker is not None
-            and self.max_total_tokens
-            and self._token_tracker.total_tokens >= self.max_total_tokens
-        )
 
 
 class SurveyPlanner(SurveyCalls):
@@ -811,19 +799,6 @@ def upload_plan(plan: SurveyPlan, s3_handler: S3Handler, key: str) -> None:
         digest = hashlib.sha256(old.encode()).hexdigest()[:16]
         s3_handler.put_text(key.rsplit("/", 1)[0] + f"/plan-{digest}.json", old)
     s3_handler.put_text(key, text)
-
-
-def survey_slug(topic: str) -> str:
-    """The plan's folder name; the user's topic, so a rerun of the same
-    request lands in the same place. A topic with non-ASCII letters (Korean)
-    gets a hash suffix: the slug drops those letters, so "LLM 선호 최적화" and
-    "LLM 추론 최적화" would otherwise share one folder, branch and post."""
-    slug = f"survey-{slugify(topic, max_length=80)}"
-    if any(not ch.isascii() and ch.isalpha() for ch in topic):
-        digest = hashlib.sha1(topic.strip().encode("utf-8")).hexdigest()[:8]
-        if not slug.endswith(digest):  # slugify's own suffix (all non-ASCII)
-            slug = f"{slug}-{digest}"
-    return slug
 
 
 async def run_survey_plan_pipeline(

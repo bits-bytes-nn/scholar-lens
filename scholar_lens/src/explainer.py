@@ -73,7 +73,6 @@ from .review_plan import (
     normalize_plan,
     number_sentences,
     parse_edits,
-    parse_lines,
     parse_plan,
     previous_context,
     publish_blockers,
@@ -84,7 +83,6 @@ from .review_plan import (
     render_glossary,
     render_outline,
     section_source,
-    tag_body,
 )
 from .utils import (
     BedrockLanguageModelFactory,
@@ -92,7 +90,9 @@ from .utils import (
     RetryableBase,
     is_affirmative,
     measure_execution_time,
+    parse_lines,
     parse_quality_score,
+    tag_body,
 )
 
 ROOT_DIR: Path = (
@@ -515,7 +515,9 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
             "plan_outline": render_outline(plan),
             "section_brief": render_brief(plan, index, figure_markers),
             "source_text": source or "(no direct source text; see the brief)",
-            "citation_summaries": "\n\n".join(enrichment.citation_summaries)
+            "citation_summaries": neutralize_prompt_tags(
+                "\n\n".join(enrichment.citation_summaries)
+            )
             or "- none",
             "code": render_code(enrichment.code),
             "glossary": render_glossary(plan),

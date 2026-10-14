@@ -24,6 +24,7 @@ from typing import Any
 import boto3
 from langchain_core.callbacks import BaseCallbackHandler
 
+from .constants import HARD_BUDGET_MULTIPLE
 from .logger import logger
 from .utils.models import FALLBACK_PRICE_PER_MTOK, model_info_for_invoked_id
 
@@ -85,9 +86,11 @@ class TokenBudgetGuard:
     ``TechGuideGenerator``) locate the run's :class:`TokenUsageTracker` in their
     callback list and abort once cumulative spend passes ``max_total_tokens``.
     Subclasses call :meth:`_init_token_budget` from
-    ``__init__`` and :meth:`_enforce_token_budget` at each expensive step. The
-    tech-guide's soft-degrade / hard-abort tiers build on ``_token_tracker`` and
-    ``max_total_tokens`` set here.
+    ``__init__`` and :meth:`_enforce_token_budget` at each expensive step.
+    The guide and survey pipelines use the two-tier budget instead: past the
+    soft limit (:meth:`_over_soft_token_budget`) they skip the optional
+    checks, past the hard ceiling (:meth:`_enforce_hard_token_budget`) they
+    abort.
     """
 
     _token_tracker: TokenUsageTracker | None
@@ -108,6 +111,24 @@ class TokenBudgetGuard:
         """Abort the run if the configured total-token budget is exceeded."""
         if self._token_tracker is not None and self.max_total_tokens:
             self._token_tracker.check_budget(self.max_total_tokens)
+
+    def _enforce_hard_token_budget(self) -> None:
+        """Abort the run (``TokenBudgetExceeded``) once spend passes
+        :data:`~scholar_lens.src.constants.HARD_BUDGET_MULTIPLE` times the
+        budget: the soft limit only skips the optional checks, this is the
+        true cap so a runaway can't keep issuing writer calls."""
+        if self._token_tracker is not None and self.max_total_tokens:
+            self._token_tracker.check_budget(
+                int(self.max_total_tokens * HARD_BUDGET_MULTIPLE)
+            )
+
+    def _over_soft_token_budget(self) -> bool:
+        """Whether spend has reached the budget (the soft limit)."""
+        return bool(
+            self._token_tracker is not None
+            and self.max_total_tokens
+            and self._token_tracker.total_tokens >= self.max_total_tokens
+        )
 
 
 def _extract_usage(response: Any) -> tuple[int, int, str]:  # noqa: ANN401

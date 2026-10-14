@@ -3,7 +3,10 @@
 from .base import (
     HEADING_STRUCTURE_RULES,
     IMAGE_PATH_RULES,
+    KOREAN_STYLE,
     MATH_RULES,
+    NATURALNESS_CHECK,
+    PROSE_UNIT,
     READER_PROFILE,
     STYLE_RULES,
     TABLE_RULES,
@@ -20,15 +23,11 @@ OLDER_DOCS_LABEL = "older docs version"
 REFERENCE_LABEL = "reference material"
 THIRD_PARTY_LABEL = "third-party"
 # Prose-length target per section depth, in Korean characters of prose as
-# ``tech_guide.prose_chars`` measures it (PROSE_UNIT). Single source for the
+# ``section_loop.prose_chars`` measures it (PROSE_UNIT). Single source for the
 # synopsis budget, the section directives and the evaluator's length report.
 DEPTH_CHARS: dict[str, int] = {"deep": 5_000, "standard": 2_500, "brief": 1_000}
 # Other languages need about this many times the characters for the same content.
 NON_KOREAN_CHAR_FACTOR: float = 2.5
-# What the length targets count: the writer is told the unit the evaluator measures.
-PROSE_UNIT = (
-    "characters of prose (spaces included; code blocks, tables and images excluded)"
-)
 LENGTH_BUDGET = (
     f"LENGTH BUDGET ({PROSE_UNIT}; in a language other than Korean, about "
     f"{NON_KOREAN_CHAR_FACTOR:g}x these numbers):\n"
@@ -43,22 +42,8 @@ SOURCE_NARRATION = (
 )
 
 
-def blocking_issues_block(issues: list[str], sources: str) -> str:
-    """The grounding prompt's ``blocking_issues`` input: the evaluator's
-    blocking issues the revisions left in the section, with the order to fix
-    exactly those claims from ``sources`` (the tag naming the evidence); empty
-    when none are left, so the prompt is unchanged."""
-    if not issues:
-        return ""
-    listed = "\n".join(f"- {issue}" for issue in issues)
-    return (
-        f"\n\nThe reviewer left these blocking issues in the section. Correct or remove exactly these claims using only "
-        f"{sources}; change nothing else for them:\n{listed}"
-    )
-
-
 # How the writer and the evaluator treat the synopsis's glossary (rendered by
-# ``tech_guide.glossary_view``).
+# ``section_loop.glossary_view``).
 GLOSSARY_RULE = (
     "Write each <glossary> term as its rendering, table cells included. A term marked [new] gets its English in "
     'parentheses once, at its first use in the section ("연속 배칭(continuous batching)"); a term marked '
@@ -493,7 +478,10 @@ class TechGuideGroundingPrompt(BasePrompt):
       introduced it too: no lead-in to a missing block, no count ("three options") that no longer matches.
     - Preserve correct, well-grounded content, code blocks, tables, and the heading. Do NOT add new claims.
     - Keep the original language: {language}. Keep the section's terminology and the <glossary> renderings as
-      written; never introduce an English stem with a Korean ending ("prefill합니다").
+      written; never introduce an English stem with a Korean ending ("prefill합니다"). Write any sentence you
+      rewrite by these rules:"""
+        + KOREAN_STYLE
+        + """
 
     Return ONLY the cleaned section:
     <grounded_markdown>
@@ -528,6 +516,7 @@ class TechGuideEvaluationPrompt(BasePrompt):
     output_variables: list[str] = [
         "quality_score",
         "blocking_issues",
+        "wording_issues",
         "improvement_feedback",
     ]
 
@@ -596,6 +585,7 @@ class TechGuideEvaluationPrompt(BasePrompt):
       section.
     - Style & tone (5): Follows the shared STYLE rules and the target language register; clean Markdown. """
         + GLOSSARY_RULE
+        + NATURALNESS_CHECK
         + """
     - Non-duplication (20): Does NOT restate concepts/examples/tables/images already in <previously_written_sections>,
       nor explain a concept in <concepts_owned_elsewhere> (its owner explains it; using it is fine).
@@ -619,17 +609,19 @@ class TechGuideEvaluationPrompt(BasePrompt):
     BLOCKING ISSUES block the section whatever its score; list each with the quoted passage and the fix: a factual
     error, a statement that contradicts another one in the section, a claim without the support SOURCES requires,
     a structural reference to another part of the guide (its section name or number), and a substantial explanation
-    of a concept in <concepts_owned_elsewhere>. A preference or
-    a weakness a score already reflects goes in the feedback instead.
+    of a concept in <concepts_owned_elsewhere>. The naturalness check's blocking wording issues go in
+    <wording_issues> instead, each with the quoted sentence and its rewrite. A preference or a weakness a score
+    already reflects goes in the feedback.
 
     Then give specific, actionable feedback the writer can apply to improve THIS section, tied to the lowest-scoring
     dimension(s). If the section is genuinely excellent (90+), return empty feedback rather than inventing problems.
 
-    Write the blocking issues and the feedback in this language: {language}.
+    Write the issues and the feedback in this language: {language}.
 
     Respond in exactly this format:
     <quality_score>An integer from 0 to 100</quality_score>
     <blocking_issues>one blocking issue per line, or exactly "none" when there is none</blocking_issues>
+    <wording_issues>one blocking wording issue per line, or exactly "none"</wording_issues>
     <improvement_feedback>Concrete, actionable feedback for revising this section</improvement_feedback>
     """
     )

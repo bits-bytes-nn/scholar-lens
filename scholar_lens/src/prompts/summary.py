@@ -134,7 +134,7 @@ class PaperSummaryShortenPrompt(BasePrompt):
     sentences. Keep unchanged: the opening blockquote, every `##` heading,
     every image line, every $$ math expression, the results table and all
     numbers. Do not add anything new. Keep the {language} language, register
-    and Markdown.
+    and Markdown; a sentence you rewrite stays natural, never translationese.
 
     <summary>
     {summary}

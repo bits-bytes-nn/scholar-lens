@@ -29,6 +29,7 @@ from .post_validator import (
 )
 from .prompts.tech_guide import DEPTH_CHARS, NON_KOREAN_CHAR_FACTOR
 from .publish_types import slugify
+from .section_loop import parse_glossary
 from .survey_plan import (
     PlanPaper,
     SourceRecord,
@@ -37,13 +38,12 @@ from .survey_plan import (
     merge_records,
     parse_paper_id,
 )
-from .tech_guide import parse_glossary
 from .utils.helpers import _escape_cell_pipes
 
 # Cards are cached by (paper, CARD_SCHEMA_VERSION, model, language, card
 # prompt and source limit): bump the version when the card fields or their
 # meaning change.
-CARD_SCHEMA_VERSION = 2
+CARD_SCHEMA_VERSION = 3
 # Figures a core paper's card may offer the post.
 MAX_CARD_FIGURES = 2
 # Equations a card may offer the post.
@@ -52,6 +52,8 @@ MAX_CARD_EQUATIONS = 3
 TABLE_RESULTS = 2
 _SENTENCE_END = re.compile(r"(?<=[.!?。])\s+")
 _MATH_DELIMS = re.compile(r"^\$\$|\$\$$")
+# A card result's value is its number(s).
+_DIGIT = re.compile(r"\d")
 
 
 class _Strict(BaseModel):
@@ -76,6 +78,18 @@ def plan_data(text: str) -> dict[str, Any]:
             raise SurveyInputError(f"The plan's '{key}' must be a list of objects.")
     if not all(isinstance(p.get("id"), str) for p in data["papers"]):
         raise SurveyInputError("Every paper of the plan needs an 'id'.")
+    # normalize_plan_data compares and hashes these before the schema check.
+    for key, items, fields in (
+        ("papers", data["papers"], ("lineage",)),
+        ("lineages", data.get("lineages") or [], ("id",)),
+        ("edges", data.get("edges") or [], ("from", "to", "citing", "cited")),
+    ):
+        for item in items:
+            wrong = [f for f in fields if not isinstance(item.get(f, ""), str)]
+            if wrong:
+                raise SurveyInputError(
+                    f"The plan's '{key}' entries need text in {', '.join(wrong)}."
+                )
     return data
 
 
@@ -224,7 +238,7 @@ class PaperCard(_Strict):
     """A paper as the writers see it: the card call's answer with every
     number, equation and figure checked against the paper in code."""
 
-    schema_version: Literal[2] = 2  # CARD_SCHEMA_VERSION
+    schema_version: Literal[3] = 3  # CARD_SCHEMA_VERSION
     paper_id: str
     model_id: str
     language: str
@@ -321,6 +335,11 @@ def card_problems(
         text = f"{result.claim} {result.value} {result.setting}"
         if missing := unsourced_numbers(text, source):
             problems.append(f"result {n} has numbers the paper never states: {missing}")
+        if not _DIGIT.search(result.value):
+            problems.append(
+                f"result {n}'s value has no number: give only its number(s), "
+                "or leave the result out"
+            )
     for n, item in enumerate(answer.limitations, 1):
         if missing := unsourced_numbers(item, source):
             problems.append(
@@ -386,6 +405,8 @@ def build_card(
             dropped.append(
                 f"result with unverified number(s) {missing}: {result.claim}"
             )
+        elif not _DIGIT.search(result.value):
+            dropped.append(f"result without a number: {result.claim}")
         else:
             results.append(result)
     limitations = []

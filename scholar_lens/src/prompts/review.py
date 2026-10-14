@@ -12,6 +12,7 @@ from .base import (
     HEADING_STRUCTURE_RULES,
     IMAGE_PATH_RULES,
     MATH_RULES,
+    NATURALNESS_CHECK,
     NUMBER_RULES,
     PAPER_TABLE_RULES,
     READER_PROFILE,
@@ -184,30 +185,26 @@ class PaperSectionPrompt(BasePrompt):
       understanding, at the depth its difficulty tag asks for. The source text
       is the authority on the paper: never contradict its methods, claims or
       numbers. Figure markers look like [Image: alt="…", src="…", caption="…"];
-      the caption is an analysis of the figure for you, not text to copy. To
-      show a figure, write a Markdown image `![alt](<src copied exactly>)` —
-      never output the marker.
+      the caption is an analysis of the figure for you: never copy or mention
+      it, nor quote a value read off the figure. To show a figure, write a
+      Markdown image `![alt](<src copied exactly>)`, never the marker.
     - The target length is for the whole section, spent mostly on the hard
       items; never drop a required item to stay short.
-    - Explain each prerequisite in the brief briefly, as background, where it
-      is first needed.
+    - Explain each prerequisite in the brief briefly where it is first
+      needed.
     - Concepts owned by earlier sections: refer back in a short phrase, never
       re-explain. Concepts owned by later sections: use them plainly if you
-      must, unexplained and without promising they come later.
+      must, unexplained.
     - Never show again anything already_in_article lists (count its callouts
-      against the cap); refer back descriptively. Continue the flow of
-      previous_sections without recap.
+      against the cap).
     - Use the glossary rendering for every glossary term, table cells
-      included. Place only the figures listed in the brief, where
-      their content is discussed.
+      included. Place only the figures listed in the brief.
     - Setup is given only as far as the reader needs it to read the results
       (tables hold results, never hyper-parameter lists); explain a metric in
       one sentence where it is first used.
     - A caveat about how far a result can be trusted gets at most one sentence,
       right beside that result. Never write a caveat, summary or conclusion
       `###` subsection; the review has one closing section for that.
-    - Never quote a value read off a figure, nor mention the figure analysis,
-      a caption or their mismatch.
     - If draft_to_revise is not empty, revise it per improvement_feedback:
       keep what works, fix what is named, return the complete section.
     - If the source text truly lacks the material for a must-cover item, do not
@@ -253,60 +250,60 @@ class PaperSectionPrompt(BasePrompt):
     )
 
     human_prompt_template: str = """
-    Write the section described in the brief, in {language}.
+Write the section described in the brief, in {language}.
 
-    <plan_outline>
-    {plan_outline}
-    </plan_outline>
+<plan_outline>
+{plan_outline}
+</plan_outline>
 
-    <glossary>
-    {glossary}
-    </glossary>
+<glossary>
+{glossary}
+</glossary>
 
-    <translation_guideline>
-    {translation_guideline}
-    </translation_guideline>
+<translation_guideline>
+{translation_guideline}
+</translation_guideline>
 
-    <section_brief>
-    {section_brief}
-    </section_brief>
+<section_brief>
+{section_brief}
+</section_brief>
 
-    <concepts_owned_elsewhere>
-    {owned_elsewhere}
-    </concepts_owned_elsewhere>
+<concepts_owned_elsewhere>
+{owned_elsewhere}
+</concepts_owned_elsewhere>
 
-    <already_in_article>
-    {already_in_article}
-    </already_in_article>
+<already_in_article>
+{already_in_article}
+</already_in_article>
 
-    <source_text>
-    {source_text}
-    </source_text>
+<source_text>
+{source_text}
+</source_text>
 
-    <citation_summaries>
-    {citation_summaries}
-    </citation_summaries>
+<citation_summaries>
+{citation_summaries}
+</citation_summaries>
 
-    <code_examples>
-    {code}
-    </code_examples>
+<code_examples>
+{code}
+</code_examples>
 
-    <previous_sections>
-    {previous_sections}
-    </previous_sections>
+<previous_sections>
+{previous_sections}
+</previous_sections>
 
-    <current_explanation>
-    {current_explanation}
-    </current_explanation>
+<current_explanation>
+{current_explanation}
+</current_explanation>
 
-    <draft_to_revise>
-    {draft_to_revise}
-    </draft_to_revise>
+<draft_to_revise>
+{draft_to_revise}
+</draft_to_revise>
 
-    <improvement_feedback>
-    {improvement_feedback}
-    </improvement_feedback>
-    """
+<improvement_feedback>
+{improvement_feedback}
+</improvement_feedback>
+"""
 
 
 class PaperSectionCheckPrompt(BasePrompt):
@@ -364,8 +361,8 @@ class PaperSectionCheckPrompt(BasePrompt):
     4. No repetition: nothing listed in already_in_article (headings,
        equations, tables, figures, code, callouts) is shown again; concepts owned
        elsewhere are not re-explained; nothing repeats inside the section.
-    5. Consistency and flow: glossary terms used as given; natural prose;
-       figures placed where discussed and introduced.
+    5. Consistency and flow: glossary terms used as given; figures placed
+       where discussed and introduced; naturalness as below.
     6. The writing rules below.
     """
         + DEPTH_RULES
@@ -374,6 +371,7 @@ class PaperSectionCheckPrompt(BasePrompt):
         + TABLE_SIZE_RULE
         + CITATION_KEY_RULES
         + STYLE_RULES
+        + NATURALNESS_CHECK
         + """
     Headings, math syntax, table shape and the callout cap are
     checked in code; do not score or list them.
@@ -408,7 +406,8 @@ class PaperSectionCheckPrompt(BasePrompt):
     - a quantity whose meaning changed (a share of outputs written as a
       rate) or a formula's input reported as its result;
     - a wrong formula, a sign or variable that contradicts another step, or a
-      setting claimed for all experiments that one of them does not use.
+      setting claimed for all experiments that one of them does not use;
+    - a blocking wording issue of the naturalness check.
 
     Output exactly:
     <quality_score>an integer from 0 to 100</quality_score>

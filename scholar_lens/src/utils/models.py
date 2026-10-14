@@ -38,7 +38,6 @@ class LanguageModelInfo(BaseModel):
         default=None,
         description="(input, output) USD per million tokens for long prompts.",
     )
-    supports_prompt_caching: bool = Field(default=False)
     supports_thinking: bool = Field(default=False)
     uses_adaptive_thinking: bool = Field(
         default=False,
@@ -86,7 +85,6 @@ def _legacy(
     out: int,
     price: tuple[float, float],
     *,
-    supports_prompt_caching: bool = False,
     supports_thinking: bool = False,
     supports_1m_context_window: bool = False,
 ) -> LanguageModelInfo:
@@ -96,7 +94,6 @@ def _legacy(
         max_output_tokens=out,
         input_price_per_mtok=price[0],
         output_price_per_mtok=price[1],
-        supports_prompt_caching=supports_prompt_caching,
         supports_thinking=supports_thinking,
         supports_1m_context_window=supports_1m_context_window,
     )
@@ -111,7 +108,6 @@ def _adaptive(price: tuple[float, float], *, out: int = 128_000) -> LanguageMode
         max_output_tokens=out,
         input_price_per_mtok=price[0],
         output_price_per_mtok=price[1],
-        supports_prompt_caching=True,
         supports_thinking=True,
         uses_adaptive_thinking=True,
         count_tokens_proxy=_SONNET_4_6,
@@ -128,19 +124,14 @@ _OPUS = (5.0, 25.0)
 FALLBACK_PRICE_PER_MTOK = _OPUS
 
 _LANGUAGE_MODEL_INFO: dict[LanguageModelId, LanguageModelInfo] = {
-    LanguageModelId.CLAUDE_V3_HAIKU: _legacy(
-        200_000, 4096, _HAIKU_3, supports_prompt_caching=True
-    ),
+    LanguageModelId.CLAUDE_V3_HAIKU: _legacy(200_000, 4096, _HAIKU_3),
     LanguageModelId.CLAUDE_V3_SONNET: _legacy(200_000, 4096, _SONNET_3),
     LanguageModelId.CLAUDE_V3_OPUS: _legacy(200_000, 4096, _OPUS_LEGACY),
-    LanguageModelId.CLAUDE_V3_5_HAIKU: _legacy(
-        200_000, 8192, (0.8, 4.0), supports_prompt_caching=True
-    ),
+    LanguageModelId.CLAUDE_V3_5_HAIKU: _legacy(200_000, 8192, (0.8, 4.0)),
     LanguageModelId.CLAUDE_V4_5_HAIKU: _legacy(
         200_000,
         64_000,
         (1.0, 5.0),
-        supports_prompt_caching=True,
         supports_thinking=True,
     ),
     # Tiered: prompts over 100K input tokens bill at $0.50/$2.50 per MTok.
@@ -151,17 +142,14 @@ _LANGUAGE_MODEL_INFO: dict[LanguageModelId, LanguageModelInfo] = {
         }
     ),
     LanguageModelId.CLAUDE_V3_5_SONNET: _legacy(200_000, 8192, _SONNET_3),
-    LanguageModelId.CLAUDE_V3_5_SONNET_V2: _legacy(
-        200_000, 8192, _SONNET_3, supports_prompt_caching=True
-    ),
+    LanguageModelId.CLAUDE_V3_5_SONNET_V2: _legacy(200_000, 8192, _SONNET_3),
     LanguageModelId.CLAUDE_V3_7_SONNET: _legacy(
-        200_000, 64_000, _SONNET_3, supports_prompt_caching=True, supports_thinking=True
+        200_000, 64_000, _SONNET_3, supports_thinking=True
     ),
     LanguageModelId.CLAUDE_V4_SONNET: _legacy(
         200_000,
         64_000,
         _SONNET_3,
-        supports_prompt_caching=True,
         supports_thinking=True,
         supports_1m_context_window=True,
     ),
@@ -169,7 +157,6 @@ _LANGUAGE_MODEL_INFO: dict[LanguageModelId, LanguageModelInfo] = {
         200_000,
         64_000,
         _SONNET_3,
-        supports_prompt_caching=True,
         supports_thinking=True,
         supports_1m_context_window=True,
     ),
@@ -179,7 +166,6 @@ _LANGUAGE_MODEL_INFO: dict[LanguageModelId, LanguageModelInfo] = {
         200_000,
         64_000,
         _SONNET_3,
-        supports_prompt_caching=True,
         supports_thinking=True,
         supports_1m_context_window=True,
     ),
@@ -189,25 +175,22 @@ _LANGUAGE_MODEL_INFO: dict[LanguageModelId, LanguageModelInfo] = {
         200_000,
         32_000,
         _OPUS_LEGACY,
-        supports_prompt_caching=True,
         supports_thinking=True,
     ),
     LanguageModelId.CLAUDE_V4_1_OPUS: _legacy(
         200_000,
         32_000,
         _OPUS_LEGACY,
-        supports_prompt_caching=True,
         supports_thinking=True,
     ),
     LanguageModelId.CLAUDE_V4_5_OPUS: _legacy(
-        200_000, 64_000, _OPUS, supports_prompt_caching=True, supports_thinking=True
+        200_000, 64_000, _OPUS, supports_thinking=True
     ),
     LanguageModelId.CLAUDE_V4_6_OPUS: LanguageModelInfo(
         context_window_size=200_000,
         max_output_tokens=64_000,
         input_price_per_mtok=_OPUS[0],
         output_price_per_mtok=_OPUS[1],
-        supports_prompt_caching=True,
         supports_thinking=True,
         supports_1m_context_window=True,
         count_tokens_proxy=_SONNET_4_6,

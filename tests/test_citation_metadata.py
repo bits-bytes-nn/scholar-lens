@@ -42,6 +42,7 @@ def _no_pacing(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         citation_metadata, "_SEMANTIC_SCHOLAR_LIMITER", _NoWaitLimiter()
     )
+    monkeypatch.setattr(citation_metadata, "_sleep", lambda _s: None)
 
 
 def test_429_waits_for_retry_after_then_retries_once(
@@ -100,6 +101,80 @@ def test_second_429_loses_only_that_reference(monkeypatch: pytest.MonkeyPatch) -
     assert resolver.resolve("A Title") is None
     assert resolver.resolve("Another Title") is None
     assert len(calls) == 4  # a throttle burst is not a spent quota
+
+
+@pytest.mark.parametrize(("first", "calls"), [(503, 2), (500, 2), (404, 1)])
+def test_a_server_error_is_retried_once_after_a_backoff(
+    monkeypatch: pytest.MonkeyPatch, first: int, calls: int
+) -> None:
+    statuses = [first, 200]
+    waits: list[float] = []
+    monkeypatch.setattr(citation_metadata, "_sleep", waits.append)
+
+    def fake_get(url: str, **_: Any) -> httpx.Response:
+        body = {"message": {"items": [{"title": ["T"], "abstract": "<p>A.</p>"}]}}
+        return httpx.Response(
+            statuses.pop(0), json=body, request=httpx.Request("GET", url)
+        )
+
+    monkeypatch.setattr("scholar_lens.src.citation_metadata.httpx.get", fake_get)
+    record = CrossrefProvider().lookup("T")
+    assert (record is not None) is (calls == 2)  # a 404 is not retried
+    assert len(statuses) == 2 - calls
+    assert len(waits) == calls - 1
+    assert all(
+        citation_metadata._SERVER_ERROR_BACKOFF
+        <= w
+        <= 2 * citation_metadata._SERVER_ERROR_BACKOFF
+        for w in waits
+    )
+
+
+def test_a_second_server_error_fails_the_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+
+    def fake_get(url: str, **_: Any) -> httpx.Response:
+        calls.append(url)
+        return httpx.Response(502, request=httpx.Request("GET", url))
+
+    monkeypatch.setattr("scholar_lens.src.citation_metadata.httpx.get", fake_get)
+    assert CrossrefProvider().lookup("T") is None
+    assert len(calls) == 2
+
+
+@pytest.mark.parametrize("status", [401, 403])
+def test_a_rejected_key_skips_the_provider_for_the_run(
+    monkeypatch: pytest.MonkeyPatch, status: int
+) -> None:
+    calls: list[str] = []
+
+    def fake_get(url: str, **_: Any) -> httpx.Response:
+        calls.append(url)
+        return httpx.Response(status, request=httpx.Request("GET", url))
+
+    monkeypatch.setattr("scholar_lens.src.citation_metadata.httpx.get", fake_get)
+    resolver = ChainedMetadataResolver([SemanticScholarProvider(api_key="bad")])
+    assert resolver.resolve("A Title") is None
+    assert resolver.resolve("Another Title") is None
+    assert len(calls) == 1
+
+
+def test_a_keyless_403_loses_only_that_reference(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+
+    def fake_get(url: str, **_: Any) -> httpx.Response:
+        calls.append(url)
+        return httpx.Response(403, request=httpx.Request("GET", url))
+
+    monkeypatch.setattr("scholar_lens.src.citation_metadata.httpx.get", fake_get)
+    resolver = ChainedMetadataResolver([CrossrefProvider()])
+    assert resolver.resolve("A Title") is None
+    assert resolver.resolve("Another Title") is None
+    assert len(calls) == 2
 
 
 def test_semantic_scholar_sends_its_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -485,6 +560,33 @@ def test_semantic_scholar_provider_parses(monkeypatch: pytest.MonkeyPatch) -> No
     assert md is not None
     assert md.authors == ["Jacob Devlin"]
     assert md.abstract == "We introduce BERT."
+    assert md.url == "https://s2.org/bert"  # no external id: its own page
+
+
+@pytest.mark.parametrize(
+    ("external_ids", "url"),
+    [
+        (
+            {"ArXiv": "1706.03762", "DOI": "10.1/x"},
+            "https://doi.org/10.48550/arXiv.1706.03762",
+        ),
+        ({"DOI": "10.18653/v1/N19-1423"}, "https://doi.org/10.18653/v1/N19-1423"),
+    ],
+)
+def test_semantic_scholar_links_the_paper_not_its_page(
+    monkeypatch: pytest.MonkeyPatch, external_ids: dict[str, str], url: str
+) -> None:
+    item = {
+        "title": "BERT",
+        "abstract": "We introduce BERT.",
+        "authors": [],
+        "url": "https://www.semanticscholar.org/paper/abc",
+        "externalIds": external_ids,
+    }
+    _patch_httpx(monkeypatch, {"data": [item]})
+    md = SemanticScholarProvider().lookup("bert")
+    assert md is not None and md.url == url
+    assert arxiv_id_from_doi(md.url) == external_ids.get("ArXiv")
 
 
 class _StubProvider(MetadataProvider):

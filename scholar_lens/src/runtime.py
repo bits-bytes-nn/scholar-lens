@@ -447,9 +447,10 @@ def run_job(request: JobRequest, *, job_id: str | None = None) -> JobResult:
         result.error = f"{type(e).__name__}: {e}"
         result.warnings = list(getattr(e, "run_notes", []))
         logger.error("Run failed: %s", e, exc_info=True)
-    except KeyboardInterrupt as e:
-        # The caller still prints this run's result (filled in below).
-        e.job_result = result  # type: ignore[attr-defined]
+    except (KeyboardInterrupt, SystemExit) as e:
+        # Ctrl-C or SIGTERM: the caller still prints this run's result
+        # (filled in below).
+        e.job_result = result  # type: ignore[union-attr]
         raise
     finally:
         # Neither returned nor raised an Exception: SIGTERM (Batch timeout,

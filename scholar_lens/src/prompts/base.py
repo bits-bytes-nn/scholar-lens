@@ -1,7 +1,6 @@
 from abc import ABC
 from dataclasses import dataclass
 
-from langchain_core.messages import SystemMessage
 from langchain_core.prompts import (
     ChatPromptTemplate,
     HumanMessagePromptTemplate,
@@ -112,11 +111,11 @@ IMAGE_PATH_RULES: str = """
 """
 
 VISUAL_RULES: str = """
-- Place a figure right where its content is discussed, introduce it in the
-  adjacent sentence ("The figure below shows …" / "아래 그림은 …를 보여줍니다"),
-  and explain what to look at. Show each figure, table, code block and equation
-  only once in the whole post; afterwards refer to it descriptively ("the loss
-  defined above" / "앞서 정의한 손실 함수").
+- Place a figure where its content is discussed; the sentence beside it
+  says what to notice in it, worded for the paragraph (never open two figure
+  introductions the same way; never describe a panel it lacks). Show each
+  figure, table, code block and equation once in the whole post; afterwards
+  refer to it descriptively ("앞서 정의한 손실 함수").
 - Refer to figures, tables, equations, theorems and sections descriptively,
   never by the source's numbers ("Figure 3", "Table 2", "Eq. (4)", "Theorem 1",
   "Section 3.2", "그림 3", "3.2절"): those numbers do not exist in this post.
@@ -177,23 +176,68 @@ TERMINOLOGY_RULES: str = """
   and terms with no natural translation.
 - A rendering carries no parenthetical: add the English once, at the term's
   first use in the post ("연속 배칭(continuous batching)").
-- Never glue a Korean ending to an English word ("prefill합니다"): write
-  "prefill을 수행합니다".
+- Never glue a Korean ending to an English word ("cache합니다"): write
+  "캐시에 저장합니다".
+"""
+
+# Korean naturalness: the patterns that set generated posts apart from the
+# blog's hand-edited ones (per 1,000 Hangul syllables against the Insights
+# posts). Writers, editors and grounding follow it; checkers flag breaks of it
+# (NATURALNESS_CHECK); markdown_lint flags the unambiguous ones.
+KOREAN_STYLE: str = """
+- IN KOREAN: write as a Korean engineer writes for colleagues, not as a
+  translation, in the "입니다" register; a table cell is a noun phrase or an
+  "입니다" sentence, one form per table. Rewrite:
+  - a noun frame ("~다는 점/사실"): "캐시가 작다는 점이 문제입니다" → "캐시가
+    작아서 문제입니다";
+  - a particle calque: "A와의 비교에서" → "A와 비교하면"; "모델에 대한 평가" →
+    "모델 평가"; "~에 있어서" → "~에서"; 에게 for a thing ("서버에게") → 에;
+  - a passive hiding who acts: "측정되었습니다" → "저자들이 측정했습니다"; a
+    double passive: "되어진다" → "된다";
+  - an English default verb (가지다, 수행하다, 역할을 하다): "세 단계를
+    가집니다" → "단계가 셋입니다";
+  - a formula: "직관은 다음과 같습니다.", a closing "결국 …라는 것입니다" or
+    "…하는 셈입니다", "할 수 있습니다" for what simply happens.
 """
 
 STYLE_RULES: str = """
-- Write natural, flowing prose in the target language, in a professional yet
-  accessible register. No translationese, no hype ("revolutionary", "획기적인"),
-  no filler intensifiers.
-- Prefer impersonal phrasing; avoid "we"/"I" ("우리"/"저").
-- Do not announce what a section will do ("This section explains …" / "이 절에서는
-  …를 살펴봅니다"), recap the previous one, or promise later content; start with
-  the substance and stop when it is complete. Never refer to the post's own
-  parts by structure, by name or number ("이 절", "앞 절", "설치 절에서 다룬" /
-  "this section"); a back-reference by content is fine ("앞서 설명한 `--host`
-  설정" / "the `--host` setting described above").
-- WHEN THE OUTPUT LANGUAGE IS KOREAN: use the "입니다" register throughout.
-""" + TERMINOLOGY_RULES
+- Plain, natural prose, professional yet accessible: no hype ("획기적인"),
+  filler intensifiers or "we"/"I" ("우리"/"저").
+- Do not announce what a section will do ("이 절에서는 …를 살펴봅니다"), recap
+  the previous one, or promise later content; start with the substance and
+  stop when it is complete. Never refer to the post's own parts by structure,
+  name or number ("이 절", "this section"); a back-reference by content is
+  fine ("앞서 설명한 `--host` 설정").
+""" + KOREAN_STYLE + TERMINOLOGY_RULES
+
+# How a checker or evaluator reads naturalness (with STYLE_RULES in its prompt).
+NATURALNESS_CHECK: str = """
+- Naturalness (Korean): quote each sentence that reads as translated or
+  machine-written, with its natural rewrite. Only two kinds are blocking
+  wording issues (listed where the output format says): (a) a sentence whose grammar or agent changes or obscures
+  its meaning; (b) a plain 다-form prose sentence outside quotations and code
+  (table cells included). Everything else is feedback.
+"""
+
+
+# What the length targets count: the writer is told the unit the evaluator measures.
+PROSE_UNIT = (
+    "characters of prose (spaces included; code blocks, tables and images excluded)"
+)
+
+
+def blocking_issues_block(issues: list[str], sources: str) -> str:
+    """The grounding prompt's ``blocking_issues`` input: the evaluator's
+    blocking issues the revisions left in the section, with the order to fix
+    exactly those claims from ``sources`` (the tag naming the evidence); empty
+    when none are left, so the prompt is unchanged."""
+    if not issues:
+        return ""
+    listed = "\n".join(f"- {issue}" for issue in issues)
+    return (
+        f"\n\nThe reviewer left these blocking issues in the section. Correct or remove exactly these claims using only "
+        f"{sources}; change nothing else for them:\n{listed}"
+    )
 
 
 @dataclass(frozen=True)
@@ -222,31 +266,13 @@ class BasePrompt(ABC):
                 )
 
     @classmethod
-    def get_prompt(cls, enable_prompt_cache: bool = False) -> ChatPromptTemplate:
-        system_template = cls.system_prompt_template
-        human_template = cls.human_prompt_template
+    def get_prompt(cls) -> ChatPromptTemplate:
         instance = cls(
             input_variables=cls.input_variables,
             output_variables=cls.output_variables,
-            system_prompt_template=system_template,
-            human_prompt_template=human_template,
+            system_prompt_template=cls.system_prompt_template,
+            human_prompt_template=cls.human_prompt_template,
         )
-
-        if enable_prompt_cache:
-            system_msg = SystemMessage(
-                content=[
-                    {
-                        "type": "text",
-                        "text": instance.system_prompt_template,
-                        "cache_control": {"type": "ephemeral"},
-                    }
-                ]
-            )
-            human_msg = HumanMessagePromptTemplate.from_template(
-                instance.human_prompt_template
-            )
-            return ChatPromptTemplate.from_messages([system_msg, human_msg])
-
         return ChatPromptTemplate.from_messages(
             [
                 SystemMessagePromptTemplate.from_template(

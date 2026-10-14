@@ -801,11 +801,13 @@ def parse_edits(raw: str) -> list[Edit]:
 def draft_rank(
     *, passes: bool, publishable: bool, blocking: int, score: int
 ) -> tuple[bool, bool, int, int]:
-    """Order of two drafts of a section (higher is better), shared by the
-    review and guide loops: passing first, then publishable (no error the
-    validator would reject), then the score, then fewer blocking defects
-    (missing items, must-fix, rule slips). A writing slip never outweighs the
-    score: a faithful draft with one slip beats an invented one."""
+    """Order of two drafts of a review section (higher is better): passing
+    first, then publishable (no error the validator would reject), then the
+    score, then fewer blocking defects (missing items, must-fix, rule slips).
+    A writing slip never outweighs the score: a faithful draft with one slip
+    beats an invented one. The guide and survey loop
+    (:func:`section_loop.revise_section`) puts fewer factual issues ahead of
+    the score and passes only wording issues and rule slips as ``blocking``."""
     return passes, publishable, score, -blocking
 
 
@@ -815,12 +817,6 @@ def rejected_revision_note(score: int, blocking: int) -> str:
         f"A previous revision of this draft was rejected (score {score}, "
         f"{blocking} blocking problem(s)); avoid its problems:"
     )
-
-
-def tag_body(raw: str, tag: str) -> str | None:
-    """Raw body of the last ``<tag>…</tag>`` in ``raw`` (no unescaping)."""
-    matches = re.findall(rf"<{tag}>(.*?)</{tag}>", raw or "", re.DOTALL)
-    return matches[-1] if matches else None
 
 
 def rule_issues(text: str) -> list[str]:
@@ -939,38 +935,6 @@ def _lost_assets(find: str, text: str, edited: str) -> str:
         if fewer and any(item not in edited for item in items(find)):
             return kind
     return ""
-
-
-_NONE_ANSWERS = {
-    "none",
-    "n/a",
-    "nothing missing",
-    "없음",
-    "해당 없음",
-    "없습니다",
-    "",
-}
-
-
-def _bare_answer(item: str) -> str:
-    """``item`` without list numbering, emphasis, punctuation, a trailing
-    dash or parenthetical ("1. None —", "none (all covered)" → "none")."""
-    bare = re.sub(r"^\d+[.)]\s*", "", item.lower())
-    bare = re.sub(r"\s*(?:\([^)]*\)|[-—–]+)\s*$", "", bare)
-    # "None — all items are covered", "없음: 모두 반영됨"
-    bare = re.sub(r"^(none|n/a|없음|해당 없음)\s*[-—–:].*$", r"\1", bare)
-    return bare.strip("\"'`()[]{}.!;。*_ ")
-
-
-def parse_lines(raw: str | None) -> list[str]:
-    """Non-empty bullet/plain lines of a tag body ("none" means empty, with or
-    without trailing punctuation)."""
-    lines = []
-    for line in (raw or "").splitlines():
-        item = line.strip().lstrip("-*•").strip()
-        if item and _bare_answer(item) not in _NONE_ANSWERS:
-            lines.append(item)
-    return lines
 
 
 _TABLE_HEADER = re.compile(r"^(\|[^\n]*\|)[ \t]*\n\|[ \t]*:?-+", re.MULTILINE)

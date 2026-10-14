@@ -271,6 +271,22 @@ class TestEdgesAndRanking:
         assert a.citation_count == 5000 and a.venue == "NeurIPS"
         assert citation_edges([a, b]) == [("A", "10.1/b")]
 
+    @pytest.mark.parametrize(
+        ("venue", "s2_venue", "expected"),
+        [
+            ("ICML", "arXiv.org", "ICML"),
+            ("arXiv", "arXiv.org", "arXiv"),
+            (None, "arXiv.org", "arXiv.org"),
+            ("arXiv", "NeurIPS", "NeurIPS"),
+        ],
+    )
+    def test_semantic_scholar_preprint_venue_keeps_an_existing_venue(
+        self, venue: str | None, s2_venue: str, expected: str
+    ) -> None:
+        a = cand("A", arxiv_id="2305.18290", venue=venue)
+        add_citation_data(a, CitationData(1, s2_venue))
+        assert a.venue == expected
+
     def test_ranking_is_evidence_then_citations_per_year_then_id(self) -> None:
         old = cand("old", published=date(2017, 6, 1), openalex_citations=900)
         new = cand("new", published=date(2025, 6, 1), openalex_citations=200)

@@ -15,7 +15,9 @@ Exit codes: 0 succeeded (or submitted), 1 failed, 2 rejected input,
 3 still running (``status``), 4 the command itself failed (``"status":
 "error"``: AWS credentials, config, Batch/S3 API errors), so the job's state
 is unknown. The Batch ``worker`` exits 10 (failed) or 11 (rejected) once it
-has sent its own notification, and 4 when that notification could not be sent.
+has sent its own notification, 4 when that notification could not be sent,
+and 143 (128 + SIGTERM) when Batch stopped it (timeout, cancel, host
+termination) after printing the interrupted run's result.
 """
 
 from __future__ import annotations
@@ -334,6 +336,7 @@ def _submit(request: JobRequest) -> int:
     if request.kind == "survey_write":
         from scholar_lens.src.survey_writer import stage_plan_for_batch
 
+        _check_plan_bucket(request.plan or "", context.s3_handler)
         request = stage_plan_for_batch(request, context.s3_handler, resources.s3_prefix)
     submitted = submit_job(
         context.default_boto_session,
@@ -343,6 +346,21 @@ def _submit(request: JobRequest) -> int:
     )
     _emit(submitted)
     return EXIT_OK
+
+
+def _check_plan_bucket(plan: str, s3_handler: Any) -> None:
+    """An ``s3://`` plan must be in the configured bucket, the only one the
+    job can read: ``SurveyInputError`` (rejected) before anything is
+    submitted, instead of a job that is rejected later."""
+    if not plan.startswith("s3://"):
+        return
+    bucket = plan.removeprefix("s3://").partition("/")[0]
+    configured = getattr(s3_handler, "bucket_name", None)
+    if bucket != configured:
+        raise SurveyInputError(
+            f"The plan {plan!r} is not in the configured S3 bucket "
+            f"({configured or 'none configured'})."
+        )
 
 
 def _status(job_id: str, *, wait: bool, timeout: float) -> int:
@@ -414,8 +432,10 @@ def _work(raw: str) -> int:
     """Batch entrypoint: run the JSON request; every failure is reported.
 
     After a SIGTERM (cleanup and manifest already done inside ``run_job``) the
-    process ends at once with 143: a normal interpreter exit would join the
-    worker thread of an in-flight model call, past Batch's ~30 s SIGKILL.
+    run's result is printed and the process ends at once with 143: a normal
+    interpreter exit would join the worker thread of an in-flight model call,
+    past Batch's ~30 s SIGKILL. A SIGTERM outside ``run_job`` (before the run
+    starts or after its result was printed) prints nothing more.
     """
     _raise_on_sigterm()
     try:
@@ -423,6 +443,8 @@ def _work(raw: str) -> int:
     except SystemExit as e:
         if e.code != _SIGTERM_EXIT:
             raise
+        if (recorded := getattr(e, "job_result", None)) is not None:
+            _emit(recorded)
         logging.shutdown()
         sys.stdout.flush()
         sys.stderr.flush()

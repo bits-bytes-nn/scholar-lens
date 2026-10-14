@@ -22,13 +22,13 @@ from scholar_lens.src.review_plan import (
     figure_catalog,
     normalize_plan,
     parse_edits,
-    parse_lines,
     parse_plan,
     previous_context,
     render_brief,
     section_source,
     target_words,
 )
+from scholar_lens.src.utils import parse_lines
 
 MARKER_A = '[Image: alt="arch", src="/p/figures/0.png", caption="Architecture."]'
 MARKER_B = (

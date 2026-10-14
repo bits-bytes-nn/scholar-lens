@@ -13,10 +13,22 @@ from scholar_lens.src.prompts import (
     PaperSectionCheckPrompt,
     PaperSectionPrompt,
     PaperSummaryPrompt,
+    PaperSummaryShortenPrompt,
+    SurveyCardPrompt,
+    SurveyEvaluationPrompt,
+    SurveyFinalizationPrompt,
+    SurveyGroundingPrompt,
+    SurveySectionPrompt,
     TechGuideEvaluationPrompt,
+    TechGuideGroundingPrompt,
     TechGuideSectionPrompt,
 )
-from scholar_lens.src.prompts.base import TERMINOLOGY_RULES, BasePrompt
+from scholar_lens.src.prompts.base import (
+    KOREAN_STYLE,
+    NATURALNESS_CHECK,
+    TERMINOLOGY_RULES,
+    BasePrompt,
+)
 from scholar_lens.src.prompts.extraction import (
     DEFAULT_CATEGORY_OPTIONS,
     DEFAULT_CONTROLLED_TAGS,
@@ -163,10 +175,112 @@ def test_one_terminology_rule_is_shared(prompt: type[BasePrompt]) -> None:
 
 def test_terminology_rule_examples_agree_with_the_stem_lint() -> None:
     # The rule's bad example is what the lint flags; its fixes are not.
-    assert writing_issues("한 번에 prefill합니다.")
-    assert not writing_issues("한 번에 prefill을 수행합니다.")
+    assert writing_issues("결과를 cache합니다.")
+    assert not writing_issues("결과를 캐시에 저장합니다.")
 
 
 def test_translation_guideline_wins_over_the_general_term_rule() -> None:
     # The guideline's curated renderings (some transliterated) take precedence.
     assert "translation guideline lists takes its rendering" in TERMINOLOGY_RULES
+
+
+# Every prompt that writes or rewrites Korean prose carries the one Korean
+# style block; the checkers also carry the naturalness check that makes its
+# worst breaks blocking.
+KOREAN_WRITERS = [
+    PaperSectionPrompt,
+    PaperEditPrompt,
+    PaperFinalizationPrompt,
+    PaperSummaryPrompt,
+    SurveyCardPrompt,
+    SurveySectionPrompt,
+    SurveyGroundingPrompt,
+    TechGuideSectionPrompt,
+    TechGuideGroundingPrompt,
+]
+CHECKERS = [PaperSectionCheckPrompt, SurveyEvaluationPrompt, TechGuideEvaluationPrompt]
+
+
+@pytest.mark.parametrize("prompt", KOREAN_WRITERS + CHECKERS)
+def test_one_korean_style_block_is_shared(prompt: type[BasePrompt]) -> None:
+    assert _render(prompt).count(KOREAN_STYLE.strip()) == 1
+
+
+@pytest.mark.parametrize("prompt", CHECKERS)
+def test_checkers_carry_the_naturalness_check(prompt: type[BasePrompt]) -> None:
+    assert _render(prompt).count(NATURALNESS_CHECK.strip()) == 1
+
+
+@pytest.mark.parametrize("prompt", [SurveyEvaluationPrompt, TechGuideEvaluationPrompt])
+def test_guide_and_survey_evaluators_list_wording_apart_from_facts(
+    prompt: type[BasePrompt],
+) -> None:
+    # Wording issues are ranked after the score, blocking issues before it.
+    text = _render(prompt)
+    assert prompt.output_variables == [
+        "quality_score",
+        "blocking_issues",
+        "wording_issues",
+        "improvement_feedback",
+    ]
+    assert "blocking wording issues go in <wording_issues>" in " ".join(text.split())
+    assert "<wording_issues>one blocking wording issue per line" in text
+
+
+def test_review_checker_lists_blocking_wording_in_must_fix() -> None:
+    # The review loop ranks every must-fix item after the score.
+    assert "- a blocking wording issue of the naturalness check." in _render(
+        PaperSectionCheckPrompt
+    )
+
+
+def test_naturalness_blocks_only_meaning_and_plain_da_form() -> None:
+    check = " ".join(NATURALNESS_CHECK.split())
+    assert "grammar or agent changes or obscures its meaning" in check
+    assert "plain 다-form prose sentence outside quotations and code" in check
+    assert "Everything else is feedback" in check and "at most" not in check
+    # A table cell is a noun phrase or an 입니다 sentence, one form per table.
+    assert "one form per table" in " ".join(KOREAN_STYLE.split())
+
+
+def test_figure_introductions_carry_no_template_sentence() -> None:
+    from scholar_lens.src.prompts.base import VISUAL_RULES
+
+    rules = " ".join(VISUAL_RULES.split())
+    assert "아래 그림" not in rules
+    assert "never open two figure introductions the same way" in rules
+    assert "never describe a panel it lacks" in rules
+
+
+def test_shared_style_examples_are_topic_neutral() -> None:
+    # Examples from one post's topic (a survey of RL, a vLLM guide) pull
+    # every post toward its wording.
+    from scholar_lens.src.prompts import SurveyOutlinePrompt
+
+    shared = KOREAN_STYLE + TERMINOLOGY_RULES
+    for topical in ("Gao", "정책", "가중치", "prefill"):
+        assert topical not in shared
+    assert "preference optimization" not in _render(SurveyOutlinePrompt)
+    for clause in ("~다는 점/사실", "에게", "셈입니다"):
+        assert clause in KOREAN_STYLE
+
+
+def test_cards_get_the_translation_guideline() -> None:
+    assert "<translation_guideline>" in _render(SurveyCardPrompt)
+
+
+@pytest.mark.parametrize(
+    "prompt", [SurveyFinalizationPrompt, PaperSummaryShortenPrompt]
+)
+def test_short_rewrites_ask_for_natural_prose(prompt: type[BasePrompt]) -> None:
+    assert "translation" in _render(prompt)
+
+
+def test_korean_style_examples_agree_with_the_lint() -> None:
+    # The block's double passive and calque are what the lint flags; their
+    # rewrites are not.
+    assert writing_issues("값이 되어진다.") and writing_issues(
+        "학습에 있어서는 씁니다."
+    )
+    assert not writing_issues("값이 된다. 학습에서 씁니다.")
+    assert "되어진다" in KOREAN_STYLE and "에 있어서" in KOREAN_STYLE

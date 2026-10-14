@@ -17,6 +17,11 @@ _ARXIV_URL_PATH = re.compile(
 # New-style ids got a 5-digit sequence number from 2015-01 (YYMM 1501) on.
 _FIVE_DIGIT_SINCE_YYMM = 1501
 
+# A soft token budget (guide, survey plan and write) is a hard ceiling at this
+# multiple of it: past the budget the optional checks are skipped, past the
+# ceiling the run aborts before the next call.
+HARD_BUDGET_MULTIPLE: float = 1.5
+
 
 def arxiv_id_from_url(url: str | None) -> str | None:
     """The arXiv id of an arXiv (or ar5iv/alphaXiv) abs/pdf/html URL, validated
@@ -166,8 +171,6 @@ class SSMParams(AutoNamedEnum):
 
 
 class AppConstants:
-    NULL_STRING: str = "null"
-
     class External(str, Enum):
         ARXIV_HTML = "https://arxiv.org/html"
         # A paper's LaTeX source (tar.gz, or one gzipped .tex), the fallback

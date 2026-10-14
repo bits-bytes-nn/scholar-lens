@@ -13,6 +13,7 @@ from .citation_metadata import ChainedMetadataResolver, arxiv_id_from_doi
 from .constants import AppConstants, LanguageModelId, LocalPaths, normalize_arxiv_id
 from .logger import logger
 from .parser import Content, ContentParseError, HTMLParser
+from .prompt_safety import neutralize_prompt_tags
 from .prompts import CitationSummaryPrompt
 from .utils import BedrockLanguageModelFactory, RetryableBase
 
@@ -82,7 +83,9 @@ class CitationSummarizer(RetryableBase):
         """Fit the (reference, original) pair to the summarizing model's window
         with Bedrock CountTokens. Both texts share one prompt, so first hold back
         room for the prompt template + the model's response, then split the
-        REMAINING budget between the two (each gets half)."""
+        REMAINING budget between the two (each gets half). Both are untrusted
+        (reference text from external APIs, the paper's own text), so their
+        prompt-fence tags are defanged first."""
         model_id = self.citation_summarizing_model_id
         window = self.llm_factory.effective_context_window(model_id)
         usable = max(window - self.llm_factory.DEFAULT_CONTEXT_RESERVE_TOKENS, 1000)
@@ -92,13 +95,13 @@ class CitationSummarizer(RetryableBase):
         return {
             "reference_content": self.llm_factory.fit_text(
                 model_id,
-                reference_content,
+                neutralize_prompt_tags(reference_content),
                 reserve_tokens=per_input_reserve,
                 label="citation reference",
             ),
             "original_content": self.llm_factory.fit_text(
                 model_id,
-                original_content,
+                neutralize_prompt_tags(original_content),
                 reserve_tokens=per_input_reserve,
                 label="citation original",
             ),
@@ -190,8 +193,10 @@ class CitationSummarizer(RetryableBase):
                 else metadata.title
             )
             authors = f"Authors: {metadata.author_str}\n" if metadata.authors else ""
+            # Title, URL and authors come from external APIs: defang them too.
             abstract = ReferenceSource(
-                header=f"Title: {link}\n{authors}", text=metadata.abstract or ""
+                header=neutralize_prompt_tags(f"Title: {link}\n{authors}"),
+                text=metadata.abstract or "",
             )
             if not self.prefer_full_text:
                 return abstract
@@ -241,7 +246,7 @@ class CitationSummarizer(RetryableBase):
             return None
         url = f"{AppConstants.External.ARXIV_PDF.value}/{arxiv_id}"
         return ReferenceSource(
-            header=(
+            header=neutralize_prompt_tags(
                 f"Title: [{metadata.title}]({url})\n"
                 f"Authors: {', '.join(metadata.authors)}\n"
             ),

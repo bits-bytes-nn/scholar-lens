@@ -15,7 +15,7 @@ from __future__ import annotations
 import html
 import re
 from collections.abc import Iterable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from urllib.parse import quote
@@ -145,7 +145,6 @@ class PostMeta:
     cover: str
     tags: list[str]
     seo_title: str | None = None
-    new_tags: list[str] = field(default_factory=list)
 
 
 def resolve_topic(raw: str, spec: PostConventions) -> str | None:
@@ -205,17 +204,11 @@ def build_post_meta(
         seo = None
     elif not seo or len(seo) > limit:
         seo = shorten_title(title, limit)
-    new_tags = (
-        [t for t in selection.specific if t not in set(known_tags)]
-        if known_tags is not None
-        else []
-    )
     return PostMeta(
         topic=topic,
         cover=spec.cover_for(category_type, topic or ""),
         tags=selection.tags,
         seo_title=seo,
-        new_tags=new_tags,
     )
 
 

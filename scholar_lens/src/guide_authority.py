@@ -12,7 +12,7 @@ from collections.abc import Collection, Sequence
 
 from .markdown_math import segments
 from .prompt_safety import neutralize_prompt_tags
-from .review_plan import parse_lines
+from .utils import parse_lines
 from .web_research import (
     OfficialDocs,
     PageContent,

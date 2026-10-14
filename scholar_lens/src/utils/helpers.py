@@ -47,6 +47,44 @@ def is_placeholder(value: str | None) -> bool:
     return not value or _bare(value) in _PLACEHOLDER
 
 
+_NONE_ANSWERS = {
+    "none",
+    "n/a",
+    "nothing missing",
+    "없음",
+    "해당 없음",
+    "없습니다",
+    "",
+}
+
+
+def _bare_answer(item: str) -> str:
+    """``item`` without list numbering, emphasis, punctuation, a trailing
+    dash or parenthetical ("1. None —", "none (all covered)" → "none")."""
+    bare = re.sub(r"^\d+[.)]\s*", "", item.lower())
+    bare = re.sub(r"\s*(?:\([^)]*\)|[-—–]+)\s*$", "", bare)
+    # "None — all items are covered", "없음: 모두 반영됨"
+    bare = re.sub(r"^(none|n/a|없음|해당 없음)\s*[-—–:].*$", r"\1", bare)
+    return bare.strip("\"'`()[]{}.!;。*_ ")
+
+
+def parse_lines(raw: str | None) -> list[str]:
+    """Non-empty bullet/plain lines of a tag body ("none" means empty, with or
+    without trailing punctuation)."""
+    lines = []
+    for line in (raw or "").splitlines():
+        item = line.strip().lstrip("-*•").strip()
+        if item and _bare_answer(item) not in _NONE_ANSWERS:
+            lines.append(item)
+    return lines
+
+
+def tag_body(raw: str, tag: str) -> str | None:
+    """Raw body of the last ``<tag>…</tag>`` in ``raw`` (no unescaping)."""
+    matches = re.findall(rf"<{tag}>(.*?)</{tag}>", raw or "", re.DOTALL)
+    return matches[-1] if matches else None
+
+
 _ABBREVIATIONS = re.compile(r"\b(?:e\.g|i\.e|et al|vs|cf|etc)\.$", re.IGNORECASE)
 
 

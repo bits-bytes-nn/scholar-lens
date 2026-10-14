@@ -10,6 +10,7 @@ choice against the pool before the plan is built. Nothing here does I/O.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from collections.abc import Iterable, Mapping, Sequence
@@ -22,6 +23,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 
 from .citation_metadata import titles_match
 from .constants import ARXIV_ID_BODY, arxiv_id_from_reference
+from .publish_types import slugify
 
 # Plan files carry schema_version 3 (``SurveyPlan``); bump it with the
 # generator when the fields or their meaning change. Version 2 plans have no
@@ -54,6 +56,19 @@ class SurveyPlanError(ValueError):
 
 
 # ---- identifiers -----------------------------------------------------------
+
+
+def survey_slug(topic: str) -> str:
+    """The plan's folder name; the user's topic, so a rerun of the same
+    request lands in the same place. A topic with non-ASCII letters (Korean)
+    gets a hash suffix: the slug drops those letters, so "LLM 선호 최적화" and
+    "LLM 추론 최적화" would otherwise share one folder, branch and post."""
+    slug = f"survey-{slugify(topic, max_length=80)}"
+    if any(not ch.isascii() and ch.isalpha() for ch in topic):
+        digest = hashlib.sha1(topic.strip().encode("utf-8")).hexdigest()[:8]
+        if not slug.endswith(digest):  # slugify's own suffix (all non-ASCII)
+            slug = f"{slug}-{digest}"
+    return slug
 
 
 def normalize_doi(value: str | None) -> str | None:
@@ -304,6 +319,10 @@ class CitationData:
     reference_keys: set[str] = field(default_factory=set)
 
 
+# The venue Semantic Scholar gives an arXiv-only paper.
+SEMANTIC_SCHOLAR_PREPRINT_VENUE = "arXiv.org"
+
+
 def semantic_scholar_id(candidate: Candidate) -> str | None:
     if candidate.arxiv_id:
         return f"ARXIV:{candidate.arxiv_id}"
@@ -312,11 +331,14 @@ def semantic_scholar_id(candidate: Candidate) -> str | None:
 
 def add_citation_data(candidate: Candidate, data: CitationData | None) -> None:
     """Fold Semantic Scholar's count, venue and references into a candidate
-    (its venue names the proceedings more cleanly than OpenAlex's)."""
+    (its venue names the proceedings more cleanly than OpenAlex's). Its
+    preprint venue name never replaces a venue the candidate already has."""
     if data is None:
         return
     candidate.semantic_scholar_citations = data.citation_count
-    if data.venue:
+    if data.venue and not (
+        candidate.venue and data.venue == SEMANTIC_SCHOLAR_PREPRINT_VENUE
+    ):
         candidate.venue = data.venue
     candidate.reference_keys |= data.reference_keys
 

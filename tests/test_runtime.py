@@ -225,8 +225,10 @@ class TestRunJob:
             raise SystemExit(143)
 
         finished = self._patch(monkeypatch, pipeline)
-        with pytest.raises(SystemExit):
+        with pytest.raises(SystemExit) as raised:
             runtime.run_job(JobRequest(kind="summarize", source="2106.09685"))
+        # The worker prints this result before it exits.
+        assert raised.value.job_result is finished[0]  # type: ignore[attr-defined]
         assert finished[0].status == "failed"
         assert finished[0].error == runtime.INTERRUPTED_ERROR
         # Batch may retry the job: no FAILED notification from the app.
@@ -248,6 +250,66 @@ class TestRunJob:
         assert result is finished[0]
         assert result.error == runtime.INTERRUPTED_ERROR
         assert result.input_tokens == 1_200
+
+
+@pytest.mark.parametrize(
+    ("kind", "module", "function", "fields"),
+    [
+        ("review", "paper_pipeline", "run_paper_pipeline", {"source": "2106.09685"}),
+        (
+            "summarize",
+            "paper_pipeline",
+            "run_paper_pipeline",
+            {"source": "2106.09685"},
+        ),
+        ("guide", "guide_pipeline", "run_guide_pipeline", {"urls": ["https://d.io"]}),
+        (
+            "survey_plan",
+            "survey_pipeline",
+            "run_survey_plan_pipeline",
+            {"topic": "LLM preference optimization"},
+        ),
+        (
+            "survey_write",
+            "survey_writer",
+            "run_survey_write_pipeline",
+            {"plan": "plan.json"},
+        ),
+    ],
+)
+def test_run_pipeline_dispatches_each_kind(
+    monkeypatch: pytest.MonkeyPatch,
+    kind: str,
+    module: str,
+    function: str,
+    fields: dict[str, object],
+) -> None:
+    import asyncio
+    import importlib
+
+    from scholar_lens.src.jobs import JobRequest
+
+    request = JobRequest(kind=kind, **fields)  # type: ignore[arg-type]
+    outcome = runtime.PipelineOutcome(title=kind)
+    calls: list[tuple[str, object]] = []
+    for name, attr in {
+        "paper_pipeline": "run_paper_pipeline",
+        "guide_pipeline": "run_guide_pipeline",
+        "survey_pipeline": "run_survey_plan_pipeline",
+        "survey_writer": "run_survey_write_pipeline",
+    }.items():
+
+        async def fake(context, req, tracker, _attr=attr):  # type: ignore[no-untyped-def]
+            calls.append((_attr, req))
+            return outcome
+
+        monkeypatch.setattr(
+            importlib.import_module(f"scholar_lens.src.{name}"), attr, fake
+        )
+
+    got = asyncio.run(runtime._run_pipeline(MagicMock(), request, MagicMock()))
+    assert got is outcome
+    assert calls == [(function, request)]
 
 
 class TestResultNotification:

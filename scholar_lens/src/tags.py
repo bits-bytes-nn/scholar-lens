@@ -135,14 +135,18 @@ def acronym(tag: str) -> str:
 
 
 def unsupported_tags(tags: list[str], text: str) -> list[str]:
-    """Tags whose phrase, or its acronym, never appears in ``text`` — a likely
-    mis-tag (e.g. a DPO tag on a paper that never uses DPO)."""
+    """Tags whose phrase, or its acronym, never appears in ``text`` as whole
+    words (the phrase may end in a plural ``s``/``es``) — a likely mis-tag
+    (e.g. a DPO tag on a paper that never uses DPO; a "RAG" tag is not
+    supported by "storage")."""
     haystack = re.sub(r"[\s\-_]+", " ", text.lower())
     missing = []
     for tag in tags:
         phrase = tag.replace("-", " ").lower()
         initials = acronym(tag)
-        if phrase in haystack:
+        if re.search(
+            rf"(?<![a-z0-9]){re.escape(phrase)}(?:e?s)?(?![a-z0-9])", haystack
+        ):
             continue
         if len(initials) >= 2 and re.search(
             rf"(?<![A-Za-z0-9]){re.escape(initials)}(?![A-Za-z0-9])", text

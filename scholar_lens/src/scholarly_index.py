@@ -2,11 +2,11 @@
 arXiv's DOI records at DataCite and Semantic Scholar citation data, turned
 into :class:`~scholar_lens.src.survey_plan.SourceRecord` values.
 
-HTTP pacing and the single 429 retry come from
+HTTP pacing and the single 429/5xx retry come from
 ``citation_metadata._get_json`` (the one retry layer for these APIs); arXiv
 calls go through :class:`~scholar_lens.src.arxiv_handler.ArxivHandler` and
 its process-wide limiter. Failures raise (``httpx.HTTPError``,
-``QuotaExhaustedError``, ``ArxivPaperError``): the candidate step decides
+``ProviderUnavailableError``, ``ArxivPaperError``): the candidate step decides
 which ones it can do without.
 """
 
@@ -306,6 +306,13 @@ class SemanticScholarIndex:
                 timeout=_TIMEOUT,
                 headers={"x-api-key": self.api_key} if self.api_key else None,
             )
+            if not isinstance(data, list):
+                logger.warning(
+                    "Semantic Scholar batch answered %s, not a list; no citation "
+                    "data for %d papers",
+                    type(data).__name__,
+                    len(chunk),
+                )
             rows = data if isinstance(data, list) else []
             rows += [None] * (len(chunk) - len(rows))
             found += [_semantic_scholar_paper(row) for row in rows[: len(chunk)]]

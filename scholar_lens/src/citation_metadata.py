@@ -16,8 +16,10 @@ the caller can fall back. Network access goes through a shared rate limiter.
 from __future__ import annotations
 
 import os
+import random
 import re
 import threading
+import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from difflib import SequenceMatcher
@@ -48,6 +50,11 @@ _SEMANTIC_SCHOLAR_LIMITER = RateLimiter(rate=1.0, per=1.0, name="semantic-schola
 # A 429 without Retry-After waits this long before the single retry.
 _DEFAULT_RETRY_AFTER = 5.0
 _MAX_RETRY_AFTER = 60.0
+# A 5xx waits this long (plus up to the same again, at random) before the
+# single retry.
+_SERVER_ERROR_BACKOFF = 2.0
+# Patched by tests so a retry does not really wait.
+_sleep = time.sleep
 
 # Crossref work types whose URL we trust as the primary publication of a cited
 # paper. Book chapters / encyclopedia entries / monographs are EXCLUDED: for an
@@ -198,9 +205,18 @@ class MetadataProvider(ABC):
     def lookup(self, title: str) -> ReferenceMetadata | None: ...
 
 
-class QuotaExhaustedError(RuntimeError):
+class ProviderUnavailableError(RuntimeError):
+    """The provider cannot answer for the rest of the run: callers skip it."""
+
+
+class QuotaExhaustedError(ProviderUnavailableError):
     """The API asked for a wait longer than ``_MAX_RETRY_AFTER`` (a spent daily
     quota): waiting is pointless, so the provider is skipped for the run."""
+
+
+class ProviderAuthError(ProviderUnavailableError):
+    """The API rejected its key (401/403): every later call would too, so the
+    provider is skipped for the run."""
 
 
 def _retry_after(response: httpx.Response) -> float:
@@ -226,10 +242,13 @@ def _get_json(
     serial: threading.Lock | None = None,
     json_body: Any = None,
 ) -> Any:
-    """GET JSON at the API's pace (POST ``json_body`` when given). A 429
-    pauses every caller of the API for its ``Retry-After`` and is retried
-    once; a wait beyond ``_MAX_RETRY_AFTER`` raises ``QuotaExhaustedError``,
-    any other failure ``httpx.HTTPError``."""
+    """GET JSON at the API's pace (POST ``json_body`` when given). This is
+    the one retry layer for these APIs: a 429 pauses every caller of the API
+    for its ``Retry-After`` and is retried once, a 5xx is retried once after
+    a short randomized backoff. A wait beyond ``_MAX_RETRY_AFTER`` raises
+    ``QuotaExhaustedError``; a 401/403 to a keyed request (``headers`` carry
+    the API key) raises ``ProviderAuthError``; any other failure
+    ``httpx.HTTPError``."""
 
     def send() -> httpx.Response:
         if json_body is not None:
@@ -248,6 +267,18 @@ def _get_json(
         if response.status_code == 429 and attempt == 0:
             limiter.penalize(_retry_after(response))
             continue
+        if response.status_code >= 500 and attempt == 0:
+            logger.info(
+                "%s answered %d; retrying once",
+                response.url.host,
+                response.status_code,
+            )
+            _sleep(_SERVER_ERROR_BACKOFF * (1 + random.random()))
+            continue
+        if response.status_code in (401, 403) and headers:
+            raise ProviderAuthError(
+                f"{response.url.host} rejected the API key ({response.status_code})"
+            )
         response.raise_for_status()
         return response.json()
     raise AssertionError("unreachable")  # pragma: no cover
@@ -406,7 +437,11 @@ class SemanticScholarProvider(MetadataProvider):
         self.api_key = api_key or os.environ.get(EnvVars.SEMANTIC_SCHOLAR_API_KEY.value)
 
     def lookup(self, title: str) -> ReferenceMetadata | None:
-        params = {"query": title, "limit": "1", "fields": "title,abstract,authors,url"}
+        params = {
+            "query": title,
+            "limit": "1",
+            "fields": "title,abstract,authors,url,externalIds",
+        }
         try:
             data = _get_json(
                 _SEMANTIC_SCHOLAR_URL,
@@ -429,8 +464,19 @@ class SemanticScholarProvider(MetadataProvider):
                 a.get("name", "") for a in item.get("authors", []) if a.get("name")
             ],
             abstract=item.get("abstract"),
-            url=item.get("url"),
+            url=_semantic_scholar_url(item),
         )
+
+
+def _semantic_scholar_url(item: dict[str, Any]) -> str | None:
+    """The paper's own link: its arXiv DOI (so the caller can fetch it by id)
+    or DOI, else the Semantic Scholar page."""
+    ids = item.get("externalIds") or {}
+    if arxiv_id := normalize_arxiv_id(str(ids.get("ArXiv") or "")):
+        return f"https://doi.org/10.48550/arXiv.{arxiv_id}"
+    if doi := str(ids.get("DOI") or "").strip():
+        return f"https://doi.org/{doi}"
+    return item.get("url")
 
 
 class ChainedMetadataResolver:
@@ -467,7 +513,7 @@ class ChainedMetadataResolver:
                 continue
             try:
                 result = provider.lookup(title)
-            except QuotaExhaustedError as e:
+            except ProviderUnavailableError as e:
                 self._exhausted.add(id(provider))
                 logger.warning("Skipping %s for the rest of the run: %s", provider, e)
                 continue

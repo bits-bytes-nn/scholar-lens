@@ -31,9 +31,8 @@ import asyncio
 import difflib
 import functools
 import re
-from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Protocol
+from typing import Any
 
 import boto3
 from langchain_core.output_parsers import StrOutputParser
@@ -50,8 +49,7 @@ from .guide_authority import (
     used_source_urls,
 )
 from .logger import logger
-from .markdown_lint import TABLE_DELIMITER, TABLE_ROW, close_open_fence
-from .markdown_math import IMAGE, without_fences
+from .markdown_lint import close_open_fence
 from .metrics import TokenBudgetGuard
 from .prompt_safety import neutralize_prompt_tags
 from .prompts import (
@@ -63,22 +61,29 @@ from .prompts import (
     TechGuideSectionPrompt,
     TechGuideSynopsisPrompt,
 )
+from .prompts.base import PROSE_UNIT, blocking_issues_block
 from .prompts.tech_guide import (
     DEPTH_CHARS,
     NON_KOREAN_CHAR_FACTOR,
-    PROSE_UNIT,
     REFERENCE_LABEL,
     TechGuideTaxonomyPrompt,
-    blocking_issues_block,
 )
 from .review_plan import (
-    added_slips,
     article_ledger,
     digest_sections,
-    draft_rank,
-    parse_lines,
-    publish_blockers,
-    rule_issues,
+)
+from .section_loop import (
+    EMPTY_DRAFT,
+    FIXING,
+    REVISING,
+    checked_grounding,
+    feedback_or_generic,
+    glossary_view,
+    measured_length,
+    owned_elsewhere,
+    parse_glossary,
+    parse_section_output,
+    revise_section,
 )
 from .utils import (
     BedrockLanguageModelFactory,
@@ -87,6 +92,7 @@ from .utils import (
     is_affirmative,
     is_placeholder,
     measure_execution_time,
+    parse_lines,
     parse_quality_score,
 )
 from .web_research import (
@@ -121,13 +127,6 @@ _GROUNDING_CUT_LOGGED: float = 0.25
 # Section quality gate (mirrors the review pipeline's evaluate loop).
 _MIN_QUALITY_SCORE: int = 75
 _MAX_REVISION_ATTEMPTS: int = 1
-# Evaluator feedback logged per section (the full text goes to the writer).
-_LOGGED_FEEDBACK_CHARS: int = 300
-# Hard-abort multiple of max_total_tokens. The budget is two-tier: at 1x the
-# guide soft-degrades (skips evaluate/revise/grounding but keeps writing so the
-# guide is complete); past this multiple it hard-aborts like the review/summary
-# pipelines, so a runaway can't keep spending on writer calls indefinitely.
-_HARD_BUDGET_MULTIPLE: float = 1.5
 
 # Section directives and the evaluator's length report use DEPTH_CHARS (one
 # source with the synopsis budget).
@@ -165,45 +164,6 @@ _GETTING_STARTED_SCOPE = (
 )
 
 
-_QUOTE_PREFIX = re.compile(r"^[ \t]*(?:>[ \t]?)+")
-_LINKED_IMAGE = re.compile(rf"\[{IMAGE.pattern}\]\([^)\s]*\)")
-
-
-def prose_chars(markdown: str) -> int:
-    """Characters of prose (:data:`PROSE_UNIT`): whitespace collapsed to
-    single spaces; fenced code, table rows (in a quote too, and a table
-    written without outer pipes) and images (a linked one too) excluded, the
-    text beside an image kept."""
-    lines = [
-        _QUOTE_PREFIX.sub("", line) for line in without_fences(markdown).splitlines()
-    ]
-    table = [bool(TABLE_ROW.match(line)) for line in lines]
-    for i, line in enumerate(lines):
-        # A pipe-less table: its header, its "--- | ---" row and the "a | b"
-        # rows under it.
-        if "|" in line and TABLE_DELIMITER.match(line) and i and "|" in lines[i - 1]:
-            table[i - 1] = True
-            end = i
-            while end < len(lines) and "|" in lines[end]:
-                table[end] = True
-                end += 1
-    kept = [
-        IMAGE.sub("", _LINKED_IMAGE.sub("", line))
-        for line, is_table in zip(lines, table, strict=True)
-        if not is_table
-    ]
-    return len(" ".join(" ".join(kept).split()))
-
-
-def measured_length(markdown: str, *, label: str, bound: str, target: int) -> str:
-    """Measured prose length against a target, for an evaluator or a
-    revision ("Target for <label>: <bound> <target>")."""
-    return (
-        f"Measured: {prose_chars(markdown):,} {PROSE_UNIT}. Target for "
-        f"{label}: {bound} {target:,}."
-    )
-
-
 def length_report(markdown: str, depth: str, language: str) -> str:
     """Measured length against the depth's target, for the evaluator."""
     depth = depth if depth in DEPTH_CHARS else _DEFAULT_DEPTH
@@ -215,14 +175,6 @@ def length_report(markdown: str, depth: str, language: str) -> str:
 
 class NotTechnicalContentError(Exception):
     """Raised when the supplied URLs are not technical documentation."""
-
-
-def parse_section_output(raw: str) -> dict[str, str]:
-    """Extract ``<section_markdown>`` from the writer output; if the wrapper is
-    missing or unbalanced, keep the text and drop stray tag fragments."""
-    match = re.search(r"<section_markdown>(.*?)</section_markdown>", raw, re.DOTALL)
-    text = match.group(1) if match else raw
-    return {"section_markdown": re.sub(r"</?section_markdown>", "", text).strip()}
 
 
 _NO_OFFICIAL_SOURCE = (
@@ -274,268 +226,6 @@ class PlannedSection:
         if not self.official_source:
             directive += f"\n{_NO_OFFICIAL_SOURCE}"
         return directive
-
-
-class OwningSection(Protocol):
-    """A planned section as :func:`owned_elsewhere` reads it."""
-
-    @property
-    def title(self) -> str: ...
-
-    @property
-    def owns(self) -> list[str]: ...
-
-
-def owned_elsewhere(sections: Sequence[OwningSection], index: int) -> str:
-    """The concepts the other sections own (``index`` is 0-based), for the
-    writer of section ``index``: used there, explained only by their owner."""
-    own = set(sections[index].owns) if 0 <= index < len(sections) else set()
-    lines = []
-    for i, s in enumerate(sections):
-        # A concept this section owns too is its own to explain.
-        owns = [concept for concept in s.owns if concept not in own]
-        if i != index and owns:
-            where = "earlier" if i < index else "later"
-            lines.append(f"- {where}, '{s.title}': {'; '.join(owns)}")
-    return "\n".join(lines) or "- none"
-
-
-_PARENTHETICAL = re.compile(r"\s*\([^)]*\)")
-
-
-def parse_glossary(raw: str) -> dict[str, str]:
-    """English term -> rendering from the synopsis's ``<glossary>`` lines
-    ("English term | rendering"); a parenthetical left in a rendering is
-    dropped, since the writer adds the English at first use."""
-    glossary: dict[str, str] = {}
-    for line in raw.splitlines():
-        english, sep, rendering = line.strip().lstrip("-* ").partition("|")
-        english = english.strip()
-        rendering = _PARENTHETICAL.sub("", rendering).strip()
-        if sep and english and rendering:
-            glossary.setdefault(english, rendering)
-    return glossary
-
-
-def glossary_view(glossary: dict[str, str], earlier: list[str]) -> str:
-    """The glossary for one section: each rendering with its English, marked
-    [introduced] when an ``earlier`` section already writes its first-use
-    form "rendering(English)" (case-insensitive, a space before the
-    parenthesis allowed), else [new]; a term written in English alone."""
-    folded = [section.casefold() for section in earlier]
-    lines = []
-    for english, rendering in glossary.items():
-        if rendering.casefold() == english.casefold():
-            lines.append(f"- {rendering}")
-        else:
-            forms = [f"{rendering}{gap}({english})".casefold() for gap in ("", " ")]
-            used = any(form in section for form in forms for section in folded)
-            status = "introduced" if used else "new"
-            lines.append(f"- {rendering} = {english} [{status}]")
-    return "\n".join(lines) or "- none"
-
-
-@dataclass
-class ReviewedDraft:
-    """The best draft of a section after :func:`revise_section`."""
-
-    text: str
-    score: int
-    feedback: str
-    # The evaluator's blocking issues plus the rule issues found in code.
-    issues: list[str]
-    # How many of ``issues`` the evaluator raised (listed first).
-    factual: int = 0
-    # The targeted fix of the issues left: "applied", "rejected" or "" (none
-    # ran). An applied fix is not re-scored, so ``issues`` stay to check.
-    fix: str = ""
-
-    @property
-    def blocking(self) -> list[str]:
-        """The evaluator's blocking issues alone."""
-        return self.issues[: self.factual]
-
-    def below_bar_note(self, kind: str, title: str, min_score: int) -> str | None:
-        """The PR note for a draft left below ``min_score`` or with issues,
-        naming each issue (truncated) for the reviewer; ``None`` when it
-        passed."""
-        if self.score >= min_score and not self.issues:
-            return None
-        fix = f"; targeted fix {self.fix}" if self.fix else ""
-        listed = "; ".join(
-            f'"{" ".join(i.split())[:_NOTED_ISSUE_CHARS]}"' for i in self.issues
-        )
-        return (
-            f"{kind} section '{title}' kept below the bar (score {self.score}, "
-            f"{len(self.issues)} blocking issue(s){fix}): check it"
-            + (f": {listed}" if listed else ".")
-        )
-
-
-# Each issue in a below-the-bar PR note is cut to this many characters.
-_NOTED_ISSUE_CHARS = 200
-
-_TARGETED_FIX = (
-    "TARGETED FIX: this draft is final except for these blocking issues. "
-    "Make the smallest edit that resolves each one: rewrite or remove exactly "
-    "the sentence(s) it names, and copy every other sentence, heading, "
-    "citation, equation, figure and table unchanged. Do not rewrite, reorder, "
-    "shorten or extend anything else.\n"
-)
-
-
-async def revise_section(
-    markdown: str,
-    *,
-    evaluate: Callable[[str], Awaitable[tuple[int, str, list[str]]]],
-    revise: Callable[[str, str], Awaitable[str]],
-    length: Callable[[str], str],
-    min_score: int,
-    max_attempts: int,
-    label: str,
-    rules: Callable[[str], list[str]] = rule_issues,
-) -> ReviewedDraft:
-    """Score a section and revise it while it stays below ``min_score`` or
-    has a blocking issue: one ``evaluate`` names (it returns the score, the
-    feedback and those issues) or a rule ``rules`` finds in code.
-
-    Keeps the BEST draft: a revision (``revise(feedback, draft)``) is
-    re-scored and kept only if it ranks above the draft it revises
-    (:func:`review_plan.draft_rank`, with the evaluator's blocking issues
-    ahead of the score since they alone decide acceptance), so a
-    feedback-driven rewrite can never make the section worse. The feedback
-    lists the blocking issues first, then the measured ``length``, then the
-    evaluator's other feedback. ``label`` names the section in the log.
-
-    Issues left after the revisions get ONE targeted fix (``revise`` with
-    only those issues and an order to edit minimally). It is not re-scored
-    (cost): the fixed draft is kept only when ``rules`` find nothing new in
-    it, the same code checks a revision answers to.
-    """
-
-    async def assess(text: str) -> tuple[int, str, list[str], int]:
-        score, feedback, blocking = await evaluate(text)
-        # The issues to fix, and how many the evaluator raised.
-        return score, feedback, blocking + rules(text), len(blocking)
-
-    def rank(
-        score: int, text: str, issues: list[str], factual: int
-    ) -> tuple[bool, bool, int, int, int]:
-        passes, publishable, score, slips = draft_rank(
-            passes=score >= min_score and not issues,
-            publishable=not publish_blockers(text),
-            blocking=len(issues),
-            score=score,
-        )
-        return passes, publishable, -factual, score, slips
-
-    best_markdown = markdown
-    best_score, best_feedback, best_issues, best_factual = await assess(markdown)
-    for attempt in range(1, max_attempts + 1):
-        # Accept only a score at the bar with no blocking issue. Empty
-        # feedback with a low score is a model slip (the prompt omits it
-        # only for 90+), so it still revises with a generic directive.
-        if best_score >= min_score and not best_issues:
-            break
-        # Blocking issues first (they alone decide acceptance), then the
-        # measured length, then the evaluator's other feedback.
-        feedback = "\n\n".join(
-            part
-            for part in (
-                (
-                    "First fix every one of these blocking issues:\n"
-                    + "\n".join(f"- {i}" for i in best_issues)
-                    if best_issues
-                    else ""
-                ),
-                f"Length: {length(best_markdown)}",
-                (
-                    f"Then apply this feedback:\n{best_feedback}"
-                    if best_feedback
-                    else ""
-                ),
-            )
-            if part
-        )
-        logger.info(
-            "Section %s scored %d (min %d), %d blocking issue(s) - revising "
-            "(attempt %d/%d).",
-            label,
-            best_score,
-            min_score,
-            len(best_issues),
-            attempt,
-            max_attempts,
-        )
-        revised = await revise(feedback, best_markdown)
-        if not revised:
-            break
-        score, revised_feedback, issues, factual = await assess(revised)
-        if rank(score, revised, issues, factual) <= rank(
-            best_score, best_markdown, best_issues, best_factual
-        ):
-            # A rewrite of the same draft would mostly repeat this one.
-            logger.info(
-                "Section %s revision scored %d (discarded, best %d) - "
-                "stopping revisions.",
-                label,
-                score,
-                best_score,
-            )
-            break
-        best_markdown, best_score = revised, score
-        best_feedback, best_issues = revised_feedback, issues
-        best_factual = factual
-    logger.info(
-        "Section %s final: score %d, %d blocking issue(s). Evaluator: %s",
-        label,
-        best_score,
-        len(best_issues),
-        " ".join(best_feedback.split())[:_LOGGED_FEEDBACK_CHARS] or "(none)",
-    )
-    fix = ""
-    if best_issues and max_attempts > 0:
-        fixed = await revise(
-            _TARGETED_FIX + "\n".join(f"- {i}" for i in best_issues), best_markdown
-        )
-        added = added_slips(best_markdown, fixed, rules) if fixed else []
-        if fixed and fixed != best_markdown and not added:
-            fix = "applied"
-            logger.info(
-                "Section %s targeted fix of %d issue(s) applied (not re-scored).",
-                label,
-                len(best_issues),
-            )
-            best_markdown = fixed
-        else:
-            fix = "rejected"
-            logger.info(
-                "Section %s targeted fix rejected (%s).",
-                label,
-                f"adds {added}" if added else "no change",
-            )
-    return ReviewedDraft(
-        best_markdown, best_score, best_feedback, best_issues, best_factual, fix
-    )
-
-
-async def checked_grounding(draft: str, ground: Callable[[], Awaitable[str]]) -> str:
-    """The grounded section (``ground()`` fact-checks ``draft``): grounding
-    is the last pass, so one retry when it broke a rule (e.g. hedged a claim
-    instead of removing it), and the ungrounded draft when both attempts
-    broke something the validator rejects."""
-    grounded = close_open_fence(await ground())
-    if added_slips(draft, grounded):
-        retried = close_open_fence(await ground())
-        if len(added_slips(draft, retried)) < len(added_slips(draft, grounded)):
-            grounded = retried
-        if len(publish_blockers(grounded)) > len(publish_blockers(draft)):
-            logger.info(
-                "Grounding added publish blockers on both attempts: kept the draft "
-                "before grounding."
-            )
-            grounded = draft
-    return grounded
 
 
 @dataclass
@@ -1031,7 +721,7 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
         # (index in written, its sources, its glossary view)
         to_ground: list[tuple[int, str, str, list[str]]] = []
         for index, planned in enumerate(sections, start=1):
-            # Hard ceiling: past _HARD_BUDGET_MULTIPLE × the budget, abort like
+            # Hard ceiling: past HARD_BUDGET_MULTIPLE × the budget, abort like
             # the review/summary pipelines rather than keep spending on the
             # (expensive) writer calls — the soft-degrade below is the earlier,
             # gentler tier.
@@ -1058,7 +748,8 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
                 included=self._section_source_urls,
                 prefer=planned.sources,
             )
-            markdown = await self._write_one_section(
+            write = functools.partial(
+                self._write_one_section,
                 topic=topic,
                 synopsis=final_outline,
                 section=section_label,
@@ -1068,12 +759,15 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
                 already_in_guide=article_ledger(written),
                 sources=sources,
                 available_images=available_images,
-                depth_directive=planned.depth_directive(
-                    self.language, self._guide_type
-                ),
                 owned_elsewhere=owned_elsewhere(sections, index - 1),
                 glossary=glossary,
             )
+            directive = planned.depth_directive(self.language, self._guide_type)
+            markdown = await write(depth_directive=directive)
+            if not markdown:
+                # Once more, like the review loop, before leaving a hole.
+                logger.warning("Section %d came back empty - retrying once.", index)
+                markdown = await write(depth_directive=f"{directive}\n\n{EMPTY_DRAFT}")
             if not markdown:
                 # A dropped section leaves a hole: `final_outline`/`total` (fixed
                 # before writing) still list it, so later sections may reference a
@@ -1273,24 +967,11 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
                 page.final_url or page.url,
             )
 
-    def _enforce_hard_token_budget(self) -> None:
-        """Raise ``TokenBudgetExceeded`` once spend passes the hard ceiling.
-
-        The soft tier (:meth:`_budget_exhausted`) only skips refinement; this is
-        the true cap so a runaway can't keep issuing writer calls forever —
-        parity with the review/summary hard budget guards.
-        """
-        if self._token_tracker is None or not self.max_total_tokens:
-            return
-        self._token_tracker.check_budget(
-            int(self.max_total_tokens * _HARD_BUDGET_MULTIPLE)
-        )
-
     def _budget_exhausted(self) -> bool:
         """Whether the run has hit its total-token ceiling (if one is set)."""
         if self._token_tracker is None or not self.max_total_tokens:
             return False
-        if self._token_tracker.total_tokens >= self.max_total_tokens:
+        if self._over_soft_token_budget():
             note = (
                 "Token budget reached: later guide sections were written without "
                 "evaluation, revision or grounding."
@@ -1334,8 +1015,8 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
             # No revision budget: skip evaluation entirely (no wasted LLM call).
             return markdown
 
-        async def evaluate(text: str) -> tuple[int, str, list[str]]:
-            score, feedback, blocking = await self._evaluate_section(
+        async def evaluate(text: str) -> tuple[int, str, list[str], list[str]]:
+            score, feedback, blocking, wording = await self._evaluate_section(
                 topic=topic,
                 planned=planned,
                 section_label=section_label,
@@ -1346,9 +1027,10 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
                 owned_elsewhere=owned_elsewhere,
                 glossary=glossary,
             )
-            return score, self._feedback_or_generic(score, feedback), blocking
+            feedback = feedback_or_generic(score, feedback, self.min_quality_score)
+            return score, feedback, blocking, wording
 
-        async def revise(feedback: str, draft: str) -> str:
+        async def write(directive: str) -> str:
             return await self._write_one_section(
                 topic=topic,
                 synopsis=final_outline,
@@ -1361,16 +1043,18 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
                 available_images=available_images,
                 owned_elsewhere=owned_elsewhere,
                 glossary=glossary,
-                # The writer edits the draft the feedback refers to: a blind
-                # rewrite at temperature 0 tends to reproduce the rejected one.
                 depth_directive=(
-                    f"{planned.depth_directive(self.language, self._guide_type)}\n\nYou are REVISING an existing "
-                    f"draft of this section that did not pass review.\n\n"
-                    f"{feedback}\n\n"
-                    f"CURRENT DRAFT to improve (rewrite it, keeping what works):\n"
-                    f"{draft}"
+                    f"{planned.depth_directive(self.language, self._guide_type)}\n\n{directive}"
                 ),
             )
+
+        async def revise(feedback: str, draft: str) -> str:
+            # The writer edits the draft the feedback refers to: a blind
+            # rewrite at temperature 0 tends to reproduce the rejected one.
+            return await write(REVISING.format(feedback=feedback, draft=draft))
+
+        async def fix(request: str, draft: str) -> str:
+            return await write(FIXING.format(request=request, draft=draft))
 
         best = await revise_section(
             markdown,
@@ -1380,23 +1064,12 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
             min_score=self.min_quality_score,
             max_attempts=self.max_revision_attempts,
             label=str(section_number),
+            fix=fix,
         )
         if note := best.below_bar_note("Guide", planned.title, self.min_quality_score):
             self.notes.append(note)
         self._leftover_blocking = best.blocking
         return best.text
-
-    def _feedback_or_generic(self, score: int, feedback: str) -> str:
-        """Evaluator feedback, or a generic directive when a below-bar score
-        came without any (the prompt only omits feedback for 90+ sections, so
-        empty feedback with a low score is a model slip)."""
-        if feedback or score >= self.min_quality_score:
-            return feedback
-        return (
-            "The section scored below the quality bar. Increase technical "
-            "depth and concrete detail, tighten structure, and remove any "
-            "redundancy with earlier sections."
-        )
 
     @RetryableBase._retry("tech_guide_evaluation")
     async def _evaluate_section(
@@ -1411,9 +1084,9 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
         final_outline: str,
         owned_elsewhere: str,
         glossary: str,
-    ) -> tuple[int, str, list[str]]:
-        """Return (quality_score 0-100, improvement_feedback, blocking_issues)
-        for a section, judged against the sources it was written from and the
+    ) -> tuple[int, str, list[str], list[str]]:
+        """Return (quality_score 0-100, improvement_feedback, blocking_issues,
+        wording_issues) for a section, judged against the sources it was written from and the
         full outline (so it can tell an unsupported claim or another section's
         material)."""
         result = await self.evaluation_chain.ainvoke(
@@ -1435,7 +1108,12 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
         )
         score = parse_quality_score((result or {}).get("quality_score"))
         feedback = ((result or {}).get("improvement_feedback") or "").strip()
-        return score, feedback, parse_lines((result or {}).get("blocking_issues"))
+        return (
+            score,
+            feedback,
+            parse_lines((result or {}).get("blocking_issues")),
+            parse_lines((result or {}).get("wording_issues")),
+        )
 
     @RetryableBase._retry("tech_guide_grounding")
     async def _ground_section(
