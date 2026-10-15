@@ -8,7 +8,12 @@ from scholar_lens.src.post_conventions import (
     GENERATED_SPECIFIC_TAGS,
     load_local_conventions,
 )
-from scholar_lens.src.tags import format_tag, normalize_tags, unsupported_tags
+from scholar_lens.src.tags import (
+    format_tag,
+    normalize_tags,
+    tag_problem,
+    unsupported_tags,
+)
 
 SPEC = load_local_conventions()
 WORDS = SPEC.tags.lowercase_words
@@ -29,10 +34,19 @@ class TestFormatTag:
             ("Graph/RAG", "GraphRAG"),
             ("multi_token  prediction", "Multi-token-prediction"),
             ("On-Policy Distillation", "On-Policy-Distillation"),
+            # The blog lint lowercases inner words only (lint-posts.rb line
+            # 167): a last "In" or "On" is a particle.
+            ("Opt In", "Opt-In"),
+            ("Add-On", "Add-On"),
+            ("Attention On Demand", "Attention-on-Demand"),
+            # A leading "." or "+" fails its form (line 164).
+            (".NET Runtime", "NET-Runtime"),
+            ("+Plus", "Plus"),
         ],
     )
     def test_spelling(self, raw: str, expected: str) -> None:
         assert format_tag(raw, WORDS) == expected
+        assert tag_problem(expected, WORDS) is None
 
     def test_yaml_on_is_a_word(self) -> None:
         assert "on" in WORDS

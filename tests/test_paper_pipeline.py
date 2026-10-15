@@ -142,3 +142,36 @@ def test_number_notes_name_table_rows_the_paper_never_states() -> None:
     notes = _number_notes(paper, doc)  # type: ignore[arg-type]
     assert len(notes) == 1 and "27 / 21 / 22" in notes[0]
     assert _number_notes(paper, doc.replace("27 | 21 | 22", "272 | 122 | 199")) == []  # type: ignore[arg-type]
+
+
+def test_a_retitled_arxiv_version_replaces_the_published_post() -> None:
+    # v2 renamed the paper: the post keeps the slug (file name, image names)
+    # of the post the version-free branch published.
+    from pathlib import Path
+
+    from scholar_lens.src.paper_pipeline import _build_publish_request, paper_branch_id
+    from scholar_lens.src.post_conventions import BlogPost
+
+    paper = SimpleNamespace(
+        arxiv_id="2106.09685v2",
+        title="LoRA v2: A New Title",
+        pdf_url="https://arxiv.org/pdf/2106.09685v2",
+        is_pdf_parsed=False,
+        repo_urls=[],
+        content=SimpleNamespace(text=""),
+    )
+    branch = paper_branch_id(paper, "review")  # type: ignore[arg-type]
+    assert branch == "review-2106.09685"
+    assert paper_branch_id(paper, "summarize") == "summary-2106.09685"  # type: ignore[arg-type]
+    request = _build_publish_request(
+        paper,  # type: ignore[arg-type]
+        Path("/tmp/p"),
+        "---\ntitle: x\n---\n",
+        "review",
+        branch_id=branch,
+        known_tags=set(),
+        published=BlogPost(path="_posts/2025-10-19-lora-low-rank-adaptation.md"),
+    )
+    assert request.branch_id == branch
+    assert request.slug == "lora-low-rank-adaptation"
+    assert request.staged_images_dir.name == "lora-low-rank-adaptation"

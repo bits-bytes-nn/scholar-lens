@@ -203,11 +203,11 @@ def test_inline_math_starting_a_continuation_line_is_no_display() -> None:
     ]
 
 
-def test_code_that_kramdown_renders_as_code_is_not_math() -> None:
-    # The blog lint also reads these as prose; its own CI on the blog PR
-    # judges them, so the validator only checks what kramdown shows as text.
+def test_code_the_blog_lint_reads_as_prose_is_checked_like_it() -> None:
+    # lint-posts.rb's fence (line 189) is no fence inside a quote and it has
+    # no indented code: a lone $$ there is unbalanced to its CI, so here too.
     for body in ("> ```bash\n> echo $$\n> ```", "앞 문단.\n\n    echo $$ > pid"):
-        assert math_errors(body) == []
+        assert math_errors(body) == ["unbalanced $$ in the paragraph"]
 
 
 def test_fenced_code_and_our_own_rules_are_not_applied_to_code() -> None:

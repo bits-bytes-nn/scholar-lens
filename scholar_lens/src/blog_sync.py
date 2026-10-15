@@ -1,8 +1,8 @@
 """Mirror one published post (+ its images) onto a blog branch and PR.
 
 The GitHub side of :class:`~.publisher.Publisher`: Git Data API commits on a
-deterministic branch, reuse of an already-published post's path, and cleanup of
-files an earlier run of the same artifact left on the branch.
+deterministic branch, the posts that branch published, and cleanup of files an
+earlier run of the same artifact left on the branch.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ from .publish_types import (
     BLOG_IMAGES_DIR,
     PublishError,
     PublishRequest,
-    post_key,
+    is_post_file,
     post_slug,
     same_post,
 )
@@ -44,13 +44,6 @@ def _git_blob_sha(data: bytes) -> str:
     return hashlib.sha1(b"blob %d\0" % len(data) + data).hexdigest()
 
 
-def _front_matter_date(markdown: str) -> str | None:
-    """The post's front-matter ``date`` (the paper's publication time)."""
-    front, _, _ = split_front_matter(markdown)
-    date = (front or {}).get("date")
-    return None if date is None else str(date)
-
-
 class BlogBranchSync:
     """Mirror one post (+ its images) onto a dedicated branch and PR.
 
@@ -65,8 +58,46 @@ class BlogBranchSync:
         self.repo = repo
         self.config = config
 
+    def _branch(self, branch_id: str) -> str:
+        return f"{self.config.branch_prefix}/{branch_id}"
+
+    def merged_posts(self, branch_id: str) -> list[str]:
+        """The posts this tool wrote on the artifact's branch in its merged
+        pull requests, latest first: the post a rerun replaces after a new
+        title gave it another slug. A person's commits on the branch (a
+        translation, say) are not the artifact's; without a configured
+        identity no commit is the tool's (:meth:`_is_generator_commit`)."""
+        if not self.config.author_email:
+            return []  # without an identity no commit counts as the tool's
+        owner = self.repo.full_name.split("/")[0]
+        merged = sorted(
+            (
+                pull
+                for pull in self.repo.get_pulls(
+                    state="closed",
+                    head=f"{owner}:{self._branch(branch_id)}",
+                    base=self.config.base_branch,
+                )
+                if pull.merged_at is not None
+            ),
+            # One pull request per branch is open at a time: the newest
+            # number is the latest merged.
+            key=lambda pull: pull.number,
+            reverse=True,
+        )
+        posts: list[str] = []
+        for pull in merged:
+            for commit in reversed(list(pull.get_commits())):
+                if self._is_generator_commit(commit):
+                    posts += [
+                        f.filename
+                        for f in commit.files
+                        if f.status != "removed" and is_post_file(f.filename)
+                    ]
+        return list(dict.fromkeys(posts))
+
     def sync(self, request: PublishRequest, markdown_path: Path) -> str:
-        branch = f"{self.config.branch_prefix}/{request.branch_id}"
+        branch = self._branch(request.branch_id)
         base_sha = self.repo.get_git_ref(f"heads/{self.config.base_branch}").object.sha
         head_ref = self._find_ref(branch)
         open_pull = self._open_pull(branch) if head_ref is not None else None
@@ -84,7 +115,7 @@ class BlogBranchSync:
         on_base = {e.path: e.sha for e in base_tree.tree if e.type == "blob"}
         existing = {e.path: e.sha for e in parent_tree.tree if e.type == "blob"}
         files = self._artifact_files(request, markdown_path)
-        files, notes = self._keep_published_path(files, markdown_path, on_base)
+        notes = self._published_notes(request, markdown_path, on_base)
         changes = [
             path
             for path, data in files.items()
@@ -187,39 +218,43 @@ class BlogBranchSync:
             raise PublishError("The blog repository tree is too large to list.")
         return tree
 
-    def _keep_published_path(
-        self, files: dict[str, bytes], markdown_path: Path, on_base: dict[str, str]
-    ) -> tuple[dict[str, bytes], list[str]]:
-        """A post already on the base branch keeps its file name (and so its
-        date prefix and URL): a rerun updates it instead of adding a copy.
+    def _published_notes(
+        self, request: PublishRequest, markdown_path: Path, on_base: dict[str, str]
+    ) -> list[str]:
+        """PR notes naming the published post this one replaces and the hand
+        edits to it (or its images) since it was generated.
 
-        Returns the files and PR notes naming the post that is replaced and
-        the hand edits to it (or its images) since it was generated.
+        The publisher named (and validated) the post after the post it
+        replaces (:meth:`~.publisher.Publisher.find_published`). A post of
+        the same slug under another name, or the replaced post gone, means
+        the blog changed since: :class:`PublishError`, as a renamed post
+        would not be the one that was validated.
         """
-        posts = LocalPaths.POSTS_DIR.value
-        new_path = f"{posts}/{markdown_path.name}"
+        new_path = f"{LocalPaths.POSTS_DIR.value}/{markdown_path.name}"
         slug = post_slug(markdown_path.stem)
-        published = sorted(
+        others = sorted(
             path
             for path in on_base
-            if path.startswith(f"{posts}/")
-            and path.count("/") == 1
-            and path.endswith(".md")
+            if is_post_file(path)
+            and path != new_path
             and same_post(post_slug(Path(path).stem), slug)
         )
-        if not published:
-            return files, []
-        old = published[0]
-        notes = [
-            f"Replaces the published post `{old}`.",
-            *self._hand_edits(old, on_base),
+        if others:
+            raise PublishError(
+                f"The blog already has this post as `{others[0]}`, which it was "
+                "not named after (the blog's post listing missed it); rerun."
+            )
+        if request.published_path and request.published_path not in on_base:
+            raise PublishError(
+                f"The replaced post `{request.published_path}` is no longer on "
+                f"'{self.config.base_branch}'; rerun."
+            )
+        if new_path not in on_base:
+            return []
+        return [
+            f"Replaces the published post `{new_path}`.",
+            *self._hand_edits(new_path, on_base),
         ]
-        if new_path in published:
-            return files, notes
-        renamed = dict(files)
-        renamed[old] = renamed.pop(new_path)
-        logger.info("Updating the published post '%s' in place.", old)
-        return renamed, notes
 
     def _is_generator_commit(self, commit: Any) -> bool:
         """Whether this tool made ``commit``: its author and committer are the
@@ -317,39 +352,18 @@ class BlogBranchSync:
         new_files: dict[str, bytes],
     ) -> list[str]:
         """Files of earlier runs that exist only on this artifact's branch:
-        older copies of the post and numbered images this run no longer
-        produces.
-
-        An older copy has the post's slug or, after a retitled arXiv version,
-        the same front-matter ``date`` (the paper's publication time) and the
-        same kind (a summary slug ends in ``-summary``, so a review and a
-        summary of one paper never replace each other). Any other post on the
-        branch was added by hand and is kept; a hand-added post of the same
-        kind with that exact timestamp would be taken for an older copy.
+        older copies of the post (any post on it that is not on the base:
+        the branch holds this one artifact, under whatever title an earlier
+        run gave it) and numbered images this run no longer produces. A post
+        or image a person added is kept (:meth:`_only_generated`).
         """
-        posts = LocalPaths.POSTS_DIR.value
         slug = post_slug(markdown_path.stem)
-        date = _front_matter_date(markdown_path.read_text(encoding="utf-8"))
         branch_only = [
             path
             for path in branch_files
             if path not in on_base and path not in new_files
         ]
-        old_posts = [
-            path
-            for path in branch_only
-            if path.startswith(f"{posts}/")
-            and path.count("/") == 1
-            and path.endswith(".md")
-            and (
-                same_post(post_slug(Path(path).stem), slug)
-                or (
-                    date is not None
-                    and post_key(post_slug(Path(path).stem))[0] == post_key(slug)[0]
-                    and _front_matter_date(self._blob_text(branch_files[path])) == date
-                )
-            )
-        ]
+        old_posts = [path for path in branch_only if is_post_file(path)]
         slugs = {slug} | {post_slug(Path(path).stem) for path in old_posts}
         own_image = re.compile(
             rf"^{re.escape(BLOG_IMAGES_DIR)}/"

@@ -43,6 +43,28 @@ def arxiv_paper_key(url: str | None) -> str | None:
     return re.sub(r"v\d+$", "", arxiv_id) if arxiv_id else None
 
 
+# The blog lint's paper_doi rule (tech-blog script/lint-posts.rb lines
+# 133-138): a bare DOI, no URL, query or fragment (js/citations.js puts it in a
+# request path as is), and an arXiv DOI without the paper's version ("v2"):
+# arXiv registers one DOI per paper. Ruby's \s is ASCII whitespace.
+BARE_DOI = re.compile(r"10\.\d{4,9}/[^ \t\r\n\f\v?#]+")
+ARXIV_DOI_VERSION = re.compile(r"10\.48550/.*v\d+", re.IGNORECASE)
+_DOI_PREFIX = re.compile(r"^(?:https?://(?:dx\.)?doi\.org/|doi:\s*)", re.IGNORECASE)
+
+
+def bare_doi(value: str | None) -> str | None:
+    """``value`` as the blog's ``paper_doi``: a ``doi.org`` URL or ``doi:``
+    prefix dropped and an arXiv DOI's version cut; None when what is left is
+    no bare DOI (:data:`BARE_DOI`). Other DOIs are kept as registered: a
+    "/v1/" in one (``10.18653/v1/…``) is part of its name."""
+    if not value:
+        return None
+    doi = _DOI_PREFIX.sub("", value.strip())
+    if ARXIV_DOI_VERSION.fullmatch(doi):
+        doi = re.sub(r"v\d+$", "", doi, flags=re.IGNORECASE)
+    return doi if BARE_DOI.fullmatch(doi) else None
+
+
 def is_arxiv_host(url: str) -> bool:
     """Whether ``url`` is served by arXiv itself (arxiv.org or a subdomain
     such as export.arxiv.org and ar5iv.labs.arxiv.org), whose rate limit

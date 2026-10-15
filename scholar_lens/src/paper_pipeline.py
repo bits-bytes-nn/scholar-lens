@@ -34,12 +34,15 @@ from .parser import (
     PDFParser,
     attach_figure_context,
 )
+from .post_conventions import BlogPost
 from .post_validator import unsourced_table_numbers
+from .publish_types import title_slug
 from .publisher import PublishRequest, build_pr_body
 from .runtime import (
     ROOT_DIR,
     PipelineOutcome,
     RunContext,
+    find_published_post,
     load_translation_guideline,
     publish_artifact,
 )
@@ -74,9 +77,13 @@ async def run_paper_pipeline(
             tracker,
             needs_citations=request.kind == "review",
         )
+        branch_id = paper_branch_id(paper, request.kind)
+        published, lookup_notes = await find_published_post(
+            context, slug=title_slug(paper.title, request.kind), branch_id=branch_id
+        )
         if request.kind == "summarize":
             document, degraded = await _generate_summary(
-                context, paper, translation_guideline, tracker
+                context, paper, translation_guideline, tracker, published
             )
         else:
             assert citation_summarizer is not None
@@ -87,9 +94,11 @@ async def run_paper_pipeline(
                 code_retriever,
                 translation_guideline,
                 tracker,
+                published,
             )
         degraded += (
-            _text_only_notes(paper)
+            lookup_notes
+            + _text_only_notes(paper)
             + _unanalysed_figure_notes(paper)
             + _code_notes(paper)
             + _number_notes(paper, document)
@@ -103,8 +112,10 @@ async def run_paper_pipeline(
             paper_dir,
             document,
             request.kind,
+            branch_id=branch_id,
             known_tags=set(context.require_blog_tags())
             | set(context.require_conventions().tags.controlled),
+            published=published,
         )
         publish_request.review_notes += degraded
         outcome = await publish_artifact(
@@ -124,6 +135,7 @@ async def _generate_review(
     code_retriever: CodeRetriever | None,
     translation_guideline: list[dict[str, Any]] | None,
     tracker: TokenUsageTracker,
+    published: BlogPost | None,
 ) -> tuple[str, list[str]]:
     cfg = context.config.explanation
     reviewer = PaperReviewer(
@@ -156,6 +168,7 @@ async def _generate_review(
         github.review_category,
         context.require_conventions(),
         known_tags=context.require_blog_tags(),
+        published=published,
     )
     return format_review(github, paper, review, meta=meta), [
         *review.notes,
@@ -168,6 +181,7 @@ async def _generate_summary(
     paper: Paper,
     translation_guideline: list[dict[str, Any]] | None,
     tracker: TokenUsageTracker,
+    published: BlogPost | None,
 ) -> tuple[str, list[str]]:
     cfg = context.config.summary
     summarizer = PaperSummarizer(
@@ -188,6 +202,7 @@ async def _generate_summary(
         github.summary_category,
         context.require_conventions(),
         known_tags=context.require_blog_tags(),
+        published=published,
     )
     return format_summary(github, paper, result, meta=meta), list(summarizer.notes)
 
@@ -466,7 +481,9 @@ def _build_publish_request(
     document: str,
     kind: str,
     *,
+    branch_id: str,
     known_tags: set[str],
+    published: BlogPost | None,
 ) -> PublishRequest:
     label = "summary" if kind == "summarize" else "review"
     pr_body = build_pr_body(
@@ -486,11 +503,18 @@ def _build_publish_request(
         title=paper.title,
         markdown=document,
         work_dir=paper_dir,
-        # Version-free id: a new arXiv version updates the same branch and PR.
-        branch_id=f"{label}-{re.sub(r'v\d+$', '', paper.arxiv_id)}",
+        branch_id=branch_id,
         pr_title=f"Paper {label.capitalize()}: {paper.title}",
         pr_body=pr_body,
         commit_message=f"feat: add paper {label} for '{paper.title}'",
         kind="summarize" if kind == "summarize" else "review",
         review_notes=_tag_notes(paper, document),
+        published_path=published.path if published else None,
     )
+
+
+def paper_branch_id(paper: Paper, kind: str) -> str:
+    """Version-free id: a new arXiv version (or title) updates the same
+    branch, pull request and post."""
+    label = "summary" if kind == "summarize" else "review"
+    return f"{label}-{re.sub(r'v\d+$', '', paper.arxiv_id)}"

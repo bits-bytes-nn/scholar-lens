@@ -268,6 +268,25 @@ def build_publisher(context: RunContext) -> Publisher:
     )
 
 
+async def find_published_post(
+    context: RunContext, *, slug: str, branch_id: str
+) -> tuple[BlogPost | None, list[str]]:
+    """The blog's post a new post replaces (:meth:`Publisher.find_published`)
+    and review notes: when the blog's pull requests cannot be read, the post
+    is published as new, and the note asks to check it duplicates none."""
+    publisher = build_publisher(context)
+    try:
+        return await asyncio.to_thread(publisher.find_published, slug, branch_id), []
+    except PublishError as e:
+        logger.warning(
+            "Could not look up the posts branch '%s' published: %s", branch_id, e
+        )
+        return None, [
+            f"Could not read which post an earlier run of this artifact published "
+            f"({e}); check the blog has no older copy of this post."
+        ]
+
+
 @dataclass
 class PipelineOutcome:
     """What a pipeline produced; folded into the run's :class:`JobResult`."""

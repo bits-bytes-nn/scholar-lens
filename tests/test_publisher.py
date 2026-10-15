@@ -21,6 +21,8 @@ from PIL import Image
 from scholar_lens.configs import Github
 from scholar_lens.src.aws_helpers import S3Handler
 from scholar_lens.src.blog_sync import BlogBranchSync
+from scholar_lens.src.post_conventions import BlogPost
+from scholar_lens.src.post_validator import PostValidationError
 from scholar_lens.src.publish_types import slugify
 from scholar_lens.src.publisher import (
     PostAssetError,
@@ -309,7 +311,9 @@ class TestImageLocalization:
             "![docs](http://docs.example.com/a.png)\n"
         )
         content, staged = await self._publish(tmp_path, body, fetch_image=fetch)
-        assert body in content and not any(staged.iterdir())
+        # The http:// link is upgraded (the blog's htmlproofer fails http).
+        upgraded = body.replace("http://", "https://")
+        assert upgraded in content and not any(staged.iterdir())
 
     async def test_http_url_is_fetched_over_https(self, tmp_path: Path) -> None:
         fetched: list[str] = []
@@ -513,6 +517,8 @@ class FakeRepo:
         # (merged ones too): what GET /commits/{sha}/pulls reports.
         self.all_pulls: list[tuple[FakePull, str]] = []
         self.messages: dict[str, str] = {}
+        # Closed pull requests (see merge()): what GET /pulls?state=closed lists.
+        self.closed: list[SimpleNamespace] = []
         self.truncated = False
         for data in base_files.values():
             self.blobs[_blob_sha(data)] = data
@@ -654,9 +660,34 @@ class FakeRepo:
         changed.sort(key=lambda c: int(c.removeprefix("commit")), reverse=True)
         return [self._view(c) for c in changed]
 
-    def get_pulls(self, state: str, head: str, base: str) -> list[FakePull]:
+    def get_pulls(self, state: str, head: str, base: str) -> list[Any]:
         branch = head.split(":", 1)[1]
-        return [p for p in self.pulls if p.head == branch]
+        pulls = self.closed if state == "closed" else self.pulls
+        return [p for p in pulls if p.head == branch]
+
+    def merge(
+        self, branch: str, posts: list[str], *, by_tool: bool = True, merged=True
+    ) -> None:
+        """A closed pull request from ``branch`` with one commit that wrote
+        ``posts`` (by the tool's identity or a person's)."""
+        person = (
+            {"name": "Bot", "email": "bot@example.com"}
+            if by_tool
+            else {"name": "Someone", "email": "someone@example.com"}
+        )
+        actor = SimpleNamespace(**person, date=datetime(2026, 1, 1, tzinfo=UTC))
+        commit = SimpleNamespace(
+            commit=SimpleNamespace(author=actor, committer=actor),
+            files=[SimpleNamespace(filename=p, status="added") for p in posts],
+        )
+        self.closed.append(
+            SimpleNamespace(
+                number=len(self.closed) + 1,
+                head=branch,
+                merged_at=datetime(2026, 1, 2, tzinfo=UTC) if merged else None,
+                get_commits=lambda: [commit],
+            )
+        )
 
     def create_pull(self, title: str, body: str, head: str, base: str) -> FakePull:
         pull = FakePull(len(self.pulls) + 1, head, title, body)
@@ -848,26 +879,30 @@ class TestBlogBranchSync:
         assert "_posts/2026-10-12-new-title.md" in files
         assert files["README.md"] == b"blog"
 
-    def test_summary_on_the_same_branch_keeps_the_review(self, tmp_path: Path) -> None:
-        # Same paper, same front-matter date, different kind: not an old copy.
+    def test_retitled_guide_replaces_its_older_copy_on_an_open_pr(
+        self, tmp_path: Path
+    ) -> None:
+        # A guide is dated by its run: the older copy shares neither the slug
+        # nor the date, only the branch.
         repo = FakeRepo({"README.md": b"blog"})
         sync = BlogBranchSync(repo, _CONFIG)
-        front = "---\ntitle: x\ndate: 2021-06-17 17:37:18\n---\n# Post\n"
-        for name, slug in (("review", "lora"), ("summary", "lora-summary")):
+        for day, slug in (("1", "vllm-guide"), ("2", "serving-with-vllm")):
+            work = tmp_path / day
             sync.sync(
-                _request(tmp_path / name, title="LoRA"),
+                _request(work, title=slug),
                 _post(
-                    tmp_path / name,
-                    f"2026-10-11-{slug}",
-                    body=front,
+                    work,
+                    f"2026-10-1{day}-{slug}",
+                    body=f"---\ndate: 2026-10-1{day} 0{day}:00:00\n---\n",
                     images={f"{slug}-1.png": PNG},
                     slug=slug,
                 ),
             )
-        files = repo.files_at(_BRANCH)
-        assert "_posts/2026-10-11-lora.md" in files
-        assert "assets/images/lora-1.png" in files
-        assert "_posts/2026-10-11-lora-summary.md" in files
+        posts = [p for p in repo.files_at(_BRANCH) if not p.endswith("README.md")]
+        assert sorted(posts) == [
+            "_posts/2026-10-12-serving-with-vllm.md",
+            "assets/images/serving-with-vllm-1.png",
+        ]
 
     def test_hand_added_post_on_the_branch_survives_a_rerun(
         self, tmp_path: Path
@@ -888,12 +923,34 @@ class TestBlogBranchSync:
         assert "_posts/2026-10-11-related-notes.md" in repo.files_at(_BRANCH)
 
     def test_replacing_a_published_post_is_flagged(self, tmp_path: Path) -> None:
-        repo = FakeRepo({"_posts/2025-01-01-my-guide.md": b"hand written"})
+        old = "_posts/2025-01-01-my-guide.md"
+        repo = FakeRepo({old: b"hand written"})
+        md = _post(tmp_path, "2025-01-01-my-guide")
+        BlogBranchSync(repo, _CONFIG).sync(_request(tmp_path, published_path=old), md)
+        assert f"Replaces the published post `{old}`" in repo.pulls[0].body
+        assert repo.files_at(_BRANCH)[old] == b"# Post\n"
+
+    def test_a_published_post_it_was_not_named_after_is_an_error(
+        self, tmp_path: Path
+    ) -> None:
+        # The blog listing missed the post: renaming the file now would ship a
+        # name the post was never validated with (its date, its URL).
+        repo = FakeRepo({"_posts/2026-10-10-my-guide.md": b"# Post v1\n"})
         md = _post(tmp_path, "2026-10-11-my-guide")
-        BlogBranchSync(repo, _CONFIG).sync(_request(tmp_path), md)
-        assert "Replaces the published post `_posts/2025-01-01-my-guide.md`" in (
-            repo.pulls[0].body
-        )
+        with pytest.raises(PublishError, match="2026-10-10-my-guide.md"):
+            BlogBranchSync(repo, _CONFIG).sync(_request(tmp_path), md)
+        assert repo.pulls == [] and _BRANCH not in repo.refs
+
+    def test_a_replaced_post_gone_from_the_base_is_an_error(
+        self, tmp_path: Path
+    ) -> None:
+        old = "_posts/2025-01-01-old-title.md"
+        repo = FakeRepo({"README.md": b"blog"})
+        md = _post(tmp_path, "2025-01-01-old-title")
+        with pytest.raises(PublishError, match="no longer on"):
+            BlogBranchSync(repo, _CONFIG).sync(
+                _request(tmp_path, published_path=old), md
+            )
 
     def test_hand_edits_since_generation_are_listed(self, tmp_path: Path) -> None:
         repo = FakeRepo({"README.md": b"blog"})
@@ -911,7 +968,8 @@ class TestBlogBranchSync:
         repo.refs["heads/main"] = repo.commit_files(figure, {"x.md": b"x"}, "Other")
 
         sync.sync(
-            _request(tmp_path / "d2"), _post(tmp_path / "d2", "2026-10-12-my-guide")
+            _request(tmp_path / "d2", published_path=post),
+            _post(tmp_path / "d2", post[7:-3]),
         )
         notes = [
             line
@@ -925,9 +983,10 @@ class TestBlogBranchSync:
         assert image in repo.files_at(_BRANCH)  # a published image is kept
 
     def test_a_post_never_generated_lists_all_its_commits(self, tmp_path: Path) -> None:
-        repo = FakeRepo({"_posts/2025-01-01-my-guide.md": b"v1"})
-        md = _post(tmp_path, "2026-10-11-my-guide")
-        BlogBranchSync(repo, _CONFIG).sync(_request(tmp_path), md)
+        old = "_posts/2025-01-01-my-guide.md"
+        repo = FakeRepo({old: b"v1"})
+        md = _post(tmp_path, old[7:-3])
+        BlogBranchSync(repo, _CONFIG).sync(_request(tmp_path, published_path=old), md)
         assert "Hand edit since generation" in repo.pulls[0].body
 
     def test_no_hand_edits_is_said(self, tmp_path: Path) -> None:
@@ -938,8 +997,11 @@ class TestBlogBranchSync:
         )
         repo.refs["heads/main"] = repo.refs[_BRANCH]
         repo.pulls.clear()
-        md = _post(tmp_path / "b", "2026-10-12-my-guide", body="# Post v2\n")
-        sync.sync(_request(tmp_path / "b"), md)
+        md = _post(tmp_path / "b", "2026-10-10-my-guide", body="# Post v2\n")
+        sync.sync(
+            _request(tmp_path / "b", published_path="_posts/2026-10-10-my-guide.md"),
+            md,
+        )
         assert "No hand edits to `_posts/2026-10-10-my-guide.md`" in (
             repo.pulls[0].body
         )
@@ -988,67 +1050,6 @@ class TestBlogBranchSync:
         files = repo.files_at(f"heads/{config.branch_prefix}/my-guide")
         assert "_posts/2026-10-10-my-guide.md" in files
         assert "assets/images/my-guide-1.png" in files
-
-    def test_older_double_hyphen_slug_is_the_same_post(self, tmp_path: Path) -> None:
-        old = "_posts/2025-10-19-direct-preference-optimization--your-model.md"
-        repo = FakeRepo({old: b"older review"})
-        md = _post(tmp_path, "2026-10-11-direct-preference-optimization-your-model")
-        BlogBranchSync(repo, _CONFIG).sync(_request(tmp_path), md)
-        posts = [p for p in repo.files_at(_BRANCH) if p.startswith("_posts/")]
-        assert posts == [old]
-        assert f"Replaces the published post `{old}`" in repo.pulls[0].body
-
-    @pytest.mark.parametrize(
-        "published,title",
-        [
-            (
-                "2025-10-11-gemini-2.5--pushing-the-frontier-with-advanced-reasoning--"
-                "multimodality--long-context--and-next-generation-agentic-capabilities",
-                "Gemini 2.5: Pushing the Frontier with Advanced Reasoning, "
-                "Multimodality, Long Context, and Next Generation Agentic Capabilities",
-            ),
-            (
-                "2026-01-12-deepseek-v3.2--pushing-the-frontier-of-open-large-language-models",
-                "DeepSeek-V3.2: Pushing the Frontier of Open Large Language Models",
-            ),
-            (
-                "2025-02-14-deepseek-coder-when-the-large-language-model-meets-"
-                "programming-the-rise-of-code-intelligence",
-                "DeepSeek-Coder: When the Large Language Model Meets Programming - "
-                "The Rise of Code Intelligence",
-            ),
-            (
-                "2025-02-05-deepseekmoe-towards-ultimate-expert-specialization-in-"
-                "mixture-of-experts-language-models",
-                "DeepSeekMoE: Towards Ultimate Expert Specialization in "
-                "Mixture-of-Experts Language Models",
-            ),
-        ],
-    )
-    def test_posts_named_by_older_slug_rules_are_updated_in_place(
-        self, tmp_path: Path, published: str, title: str
-    ) -> None:
-        old = f"_posts/{published}.md"
-        repo = FakeRepo({old: b"older review"})
-        md = _post(tmp_path, f"2026-10-12-{slugify(title)}")
-        BlogBranchSync(repo, _CONFIG).sync(_request(tmp_path, title=title), md)
-        posts = [p for p in repo.files_at(_BRANCH) if p.startswith("_posts/")]
-        assert posts == [old]
-
-    def test_summary_never_replaces_the_review_of_the_same_paper(
-        self, tmp_path: Path
-    ) -> None:
-        title = (
-            "Gemini 2.5: Pushing the Frontier with Advanced Reasoning, "
-            "Multimodality, Long Context, and Next Generation Agentic Capabilities"
-        )
-        review = f"_posts/2025-10-11-{slugify(title)}.md"
-        repo = FakeRepo({review: b"review"})
-        summary = _request(tmp_path, title=title, kind="summarize")
-        md = _post(tmp_path, f"2026-10-12-{summary.slug}")
-        BlogBranchSync(repo, _CONFIG).sync(summary, md)
-        posts = sorted(p for p in repo.files_at(_BRANCH) if p.startswith("_posts/"))
-        assert posts == sorted([review, f"_posts/{md.name}"])
 
     def test_retried_create_pull_that_already_succeeded_reuses_the_pr(
         self, tmp_path: Path
@@ -1178,16 +1179,6 @@ class TestBlogBranchSync:
                 _request(tmp_path), _post(tmp_path, "2026-10-11-my-guide")
             )
 
-    def test_rerun_after_merge_updates_the_published_file(self, tmp_path: Path) -> None:
-        # Merged yesterday as 2026-10-10-…; a rerun today must edit that file,
-        # not add a second post with the same URL.
-        repo = FakeRepo({"_posts/2026-10-10-my-guide.md": b"# Post v1\n"})
-        md = _post(tmp_path, "2026-10-11-my-guide")
-        BlogBranchSync(repo, _CONFIG).sync(_request(tmp_path), md)
-        files = repo.files_at(_BRANCH)
-        assert files["_posts/2026-10-10-my-guide.md"] == b"# Post\n"
-        assert "_posts/2026-10-11-my-guide.md" not in files
-
     def test_already_published_unchanged_raises(self, tmp_path: Path) -> None:
         md = _post(tmp_path, "2026-10-11-my-guide")
         repo = FakeRepo({"_posts/2026-10-11-my-guide.md": b"# Post\n"})
@@ -1285,6 +1276,219 @@ Low-Rank Adaptation은 Quantization과 함께 쓰입니다.
 
 설명입니다.
 """
+
+
+class FakeGithub:
+    """``github.Github`` serving one fake repository."""
+
+    repo: Any = None
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        pass
+
+    def get_repo(self, name: str) -> Any:
+        return FakeGithub.repo
+
+    def close(self) -> None:
+        pass
+
+
+def _site(*paths: str, **fields: Any) -> list[BlogPost]:
+    return [BlogPost(path=path, **fields) for path in paths]
+
+
+class TestFindPublished:
+    """The post a regenerated one replaces: same slug, else what an earlier
+    run of the artifact's branch published."""
+
+    @pytest.fixture
+    def repo(self, monkeypatch: pytest.MonkeyPatch) -> FakeRepo:
+        monkeypatch.setenv("GITHUB_TOKEN", "ghp_x")
+        repo = FakeRepo({"README.md": b"blog"})
+        monkeypatch.setattr(FakeGithub, "repo", repo)
+        monkeypatch.setattr("scholar_lens.src.publisher.Github", FakeGithub)
+        return repo
+
+    def _find(self, tmp_path: Path, site: list[BlogPost], slug: str) -> Any:
+        publisher = Publisher(_CONFIG, root_dir=tmp_path, site_posts=site)
+        return publisher.find_published(slug, "guide-abc")
+
+    def test_a_translation_on_the_branch_is_not_the_post(
+        self, tmp_path: Path, repo: FakeRepo, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        site = _site(
+            "_posts/2026-01-01-old-title.md", "_posts/2026-01-01-old-title-en.md"
+        )
+        monkeypatch.setattr(
+            "scholar_lens.src.publisher.BlogBranchSync.merged_posts",
+            lambda self, branch_id: [
+                "_posts/2026-01-01-old-title-en.md",
+                "_posts/2026-01-01-old-title.md",
+            ],
+        )
+        found = self._find(tmp_path, site, "new-title")
+        assert found.path == "_posts/2026-01-01-old-title.md"
+
+    def test_older_double_hyphen_slug_is_the_same_post(
+        self, tmp_path: Path, repo: FakeRepo
+    ) -> None:
+        old = "_posts/2025-10-19-direct-preference-optimization--your-model.md"
+        found = self._find(
+            tmp_path,
+            _site(old, "_posts/2025-01-01-other.md"),
+            "direct-preference-optimization-your-model",
+        )
+        assert found.path == old
+
+    @pytest.mark.parametrize(
+        "published,title",
+        [
+            (
+                "2025-10-11-gemini-2.5--pushing-the-frontier-with-advanced-reasoning--"
+                "multimodality--long-context--and-next-generation-agentic-capabilities",
+                "Gemini 2.5: Pushing the Frontier with Advanced Reasoning, "
+                "Multimodality, Long Context, and Next Generation Agentic Capabilities",
+            ),
+            (
+                "2026-01-12-deepseek-v3.2--pushing-the-frontier-of-open-large-language-models",
+                "DeepSeek-V3.2: Pushing the Frontier of Open Large Language Models",
+            ),
+            (
+                "2025-02-14-deepseek-coder-when-the-large-language-model-meets-"
+                "programming-the-rise-of-code-intelligence",
+                "DeepSeek-Coder: When the Large Language Model Meets Programming - "
+                "The Rise of Code Intelligence",
+            ),
+            (
+                "2025-02-05-deepseekmoe-towards-ultimate-expert-specialization-in-"
+                "mixture-of-experts-language-models",
+                "DeepSeekMoE: Towards Ultimate Expert Specialization in "
+                "Mixture-of-Experts Language Models",
+            ),
+        ],
+    )
+    def test_posts_named_by_older_slug_rules_are_found(
+        self, tmp_path: Path, repo: FakeRepo, published: str, title: str
+    ) -> None:
+        old = f"_posts/{published}.md"
+        assert self._find(tmp_path, _site(old), slugify(title)).path == old
+
+    def test_a_summary_never_replaces_the_review_of_the_same_paper(
+        self, tmp_path: Path, repo: FakeRepo
+    ) -> None:
+        site = _site("_posts/2025-10-11-lora.md")
+        assert self._find(tmp_path, site, "lora-summary") is None
+
+    def test_a_retitled_rerun_finds_what_its_branch_published(
+        self, tmp_path: Path, repo: FakeRepo
+    ) -> None:
+        old = "_posts/2026-01-05-vllm-serving-guide.md"
+        repo.merge("paper-reviews/guide-abc", [old])
+        repo.merge("paper-reviews/guide-other", ["_posts/2026-01-06-x.md"])
+        site = _site(old, "_posts/2026-01-06-x.md")
+        assert self._find(tmp_path, site, "serving-llms-with-vllm").path == old
+
+    def test_the_latest_merged_post_of_the_branch_wins(
+        self, tmp_path: Path, repo: FakeRepo
+    ) -> None:
+        first, second = "_posts/2026-01-05-a.md", "_posts/2026-02-05-b.md"
+        repo.merge("paper-reviews/guide-abc", [first])
+        repo.merge("paper-reviews/guide-abc", [second])
+        assert self._find(tmp_path, _site(first, second), "c").path == second
+
+    @pytest.mark.parametrize(
+        "merge",
+        [
+            {"by_tool": False},  # a person's post (a translation) on the branch
+            {"merged": False},  # closed without merging
+        ],
+    )
+    def test_posts_the_branch_did_not_publish_are_not_its(
+        self, tmp_path: Path, repo: FakeRepo, merge: dict[str, bool]
+    ) -> None:
+        old = "_posts/2026-01-05-vllm-serving-guide.md"
+        repo.merge("paper-reviews/guide-abc", [old], **merge)
+        assert self._find(tmp_path, _site(old), "serving-llms-with-vllm") is None
+
+    def test_a_published_post_since_removed_is_not_replaced(
+        self, tmp_path: Path, repo: FakeRepo
+    ) -> None:
+        repo.merge("paper-reviews/guide-abc", ["_posts/2026-01-05-gone.md"])
+        site = _site("_posts/2026-01-06-x.md")
+        assert self._find(tmp_path, site, "serving-llms-with-vllm") is None
+
+    def test_without_a_blog_listing_github_is_not_asked(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def no_github(*args: Any, **kwargs: Any) -> None:
+            raise AssertionError("GitHub was called")
+
+        monkeypatch.setattr("scholar_lens.src.publisher.Github", no_github)
+        assert self._find(tmp_path, [], "x") is None
+
+    def test_unreadable_pull_requests_are_an_error_without_the_token(
+        self, tmp_path: Path, repo: FakeRepo, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("GITHUB_TOKEN", "ghp_SECRET")
+
+        def fail(**kwargs: Any) -> list[Any]:
+            raise GithubException(502, {"message": "bad gateway ghp_SECRET"})
+
+        repo.get_pulls = fail  # type: ignore[method-assign]
+        with pytest.raises(PublishError, match="bad gateway") as info:
+            self._find(tmp_path, _site("_posts/2026-01-06-x.md"), "y")
+        assert "ghp_SECRET" not in str(info.value)
+
+
+class TestPublishReplacing:
+    """A post that replaces a published one keeps its file name and image
+    names, and is validated under that name."""
+
+    async def test_file_images_and_validation_use_the_published_name(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        validated: list[str] = []
+
+        def validate(self: Any, markdown: str, request: Any, file_name: str) -> list:
+            validated.append(file_name)
+            return []
+
+        monkeypatch.setattr(Publisher, "_validate", validate)
+        _figures(tmp_path, **{"0.png": PNG})
+        old = "_posts/2026-01-05-vllm-serving-guide.md"
+        request = _request(
+            tmp_path,
+            title="Serving LLMs with vLLM",
+            markdown="## T\n\n![a](0.png)\n",
+            published_path=old,
+        )
+        _, md_path = await Publisher(Github(), root_dir=tmp_path).publish(request)
+        assert md_path.name == "2026-01-05-vllm-serving-guide.md"
+        assert validated == ["2026-01-05-vllm-serving-guide.md"]
+        assert "![a](/assets/images/vllm-serving-guide-1.png)" in md_path.read_text()
+        staged = tmp_path / "blog-images" / "vllm-serving-guide"
+        assert [p.name for p in staged.iterdir()] == ["vllm-serving-guide-1.png"]
+
+    async def test_the_published_name_passes_the_date_check(
+        self, tmp_path: Path
+    ) -> None:
+        # A guide regenerated today keeps the published post's date: under its
+        # dated file name the date check passes (today's would not).
+        post = VALID_POST.replace("2021-06-17 00:00:00", "2026-01-05 03:00:00")
+        request = _request(
+            tmp_path,
+            markdown=post,
+            published_path="_posts/2026-01-05-lora.md",
+        )
+        _, md_path = await Publisher(Github(), root_dir=tmp_path).publish(request)
+        assert md_path.name == "2026-01-05-lora.md"
+        later = _request(
+            tmp_path / "later",
+            markdown=post,
+            published_path="_posts/2026-01-04-lora.md",
+        )
+        with pytest.raises(PostValidationError, match="after the file name"):
+            await Publisher(Github(), root_dir=tmp_path).publish(later)
 
 
 class TestValidationGate:

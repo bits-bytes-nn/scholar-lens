@@ -1964,3 +1964,63 @@ class TestStagingValidation:
         path.write_text(json.dumps(data))
         stage_plan_for_batch(JobRequest(kind="survey_write", plan=str(path)), s3, "x")
         s3.put_text.assert_called_once()
+
+
+def test_a_rerun_replaces_the_post_its_plan_published(
+    stage: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A rerun of the plan under a new model title updates the post the
+    plan's branch published: its file name (URL), date, topic and image
+    names stay, and the post passes the validator under that name."""
+    from datetime import UTC, datetime
+
+    from scholar_lens.configs import Github
+    from scholar_lens.src.post_conventions import BlogPost
+    from tests.test_publisher import FakeGithub, FakeRepo
+
+    old = "_posts/2026-10-02-preference-learning-for-llms.md"
+    repo = FakeRepo({})
+    repo.merge("paper-reviews/survey-preference-optimization", [old])
+    monkeypatch.setenv("GITHUB_TOKEN", "ghp_x")
+    monkeypatch.setattr(FakeGithub, "repo", repo)
+    monkeypatch.setattr("scholar_lens.src.publisher.Github", FakeGithub)
+    context = stage["context"]
+    context.blog_posts = [
+        BlogPost(
+            path=old,
+            date=datetime(2026, 10, 2, 5, tzinfo=UTC),
+            categories=[SURVEY_TYPE, "Finetuning"],
+        )
+    ]
+    github = Github(
+        enabled=True,
+        repo_name="owner/blog",
+        author_name="Bot",
+        author_email="bot@example.com",
+    )
+    monkeypatch.setattr(
+        runtime,
+        "build_publisher",
+        lambda ctx: Publisher(
+            github,
+            root_dir=stage["tmp"],
+            conventions=survey_spec(),
+            site_posts=ctx.blog_posts,
+            fetch_image=lambda url: png(),
+        ),
+    )
+    outcome = run_stage(stage)
+    post = outcome.markdown_path.read_text()
+    assert outcome.markdown_path.name == "2026-10-02-preference-learning-for-llms.md"
+    assert "\ndate: 2026-10-02 05:00:00\n" in post
+    assert f'categories: ["{SURVEY_TYPE}", "Finetuning"]' in post
+    assert "cover: /assets/images/finetuning.jpg" in post
+    assert "](/assets/images/preference-learning-for-llms-1.png)" in post
+    errors = [
+        v
+        for v in validate_post(
+            post, survey_spec(), "survey", file_name=outcome.markdown_path.name
+        )
+        if v.level == "error"
+    ]
+    assert errors == []

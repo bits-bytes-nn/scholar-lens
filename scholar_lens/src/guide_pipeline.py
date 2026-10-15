@@ -17,12 +17,13 @@ from .markdown_lint import (
     fill_image_alts,
 )
 from .metrics import TokenUsageTracker
-from .publish_types import slugify
+from .publish_types import slugify, title_slug
 from .publisher import PublishRequest, build_pr_body
 from .runtime import (
     ROOT_DIR,
     PipelineOutcome,
     RunContext,
+    find_published_post,
     load_translation_guideline,
     publish_artifact,
 )
@@ -92,6 +93,12 @@ async def run_guide_pipeline(
     guide.topic = guide_title(
         guide.topic, taxonomy.get("seo_title") or "", spec.seo_title_max_length
     )
+    # Keyed by the sources, not the model's title: a rerun replaces the post
+    # an earlier run published, whatever title it gets now.
+    branch_id = guide_branch_id(sources)
+    published, lookup_notes = await find_published_post(
+        context, slug=title_slug(guide.topic, "guide"), branch_id=branch_id
+    )
     meta = build_post_meta(
         title=guide.topic,
         category_type=github.tech_guide_category,
@@ -101,15 +108,17 @@ async def run_guide_pipeline(
         proposed_seo_title=taxonomy.get("seo_title"),
         spec=spec,
         known_tags=context.require_blog_tags(),
+        published=published,
     )
     slug = slugify(guide.topic, max_length=80)
     work_dir = ROOT_DIR / LocalPaths.PAPERS_DIR.value / f"guide-{slug}"
     work_dir.mkdir(parents=True, exist_ok=True)
     document = guide_document(format_guide(github, guide, meta=meta), guide)
     publish_request = _build_publish_request(
-        guide, work_dir, document, branch_id=guide_branch_id(sources)
+        guide, work_dir, document, branch_id=branch_id
     )
-    publish_request.review_notes += guide.notes
+    publish_request.published_path = published.path if published else None
+    publish_request.review_notes += [*lookup_notes, *guide.notes]
     outcome = await publish_artifact(
         context, publish_request, create_pr=request.create_pr
     )

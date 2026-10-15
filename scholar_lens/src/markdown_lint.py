@@ -41,11 +41,17 @@ whose source is not a known figure of the artifact.
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
+from functools import cache
+from typing import Literal
 
 from .logger import logger
 from .markdown_math import (
+    BLOG_CODE_SPAN,
     HANGUL,
     IMAGE,
+    blog_bare,
+    blog_line_roles,
     fence_roles,
     indent_width,
     indented_code_lines,
@@ -55,20 +61,33 @@ from .markdown_math import (
     open_fence,
     segments,
 )
+from .post_conventions import load_local_conventions
 
-# Non-standard-package macros that are commonly emitted but are NOT loaded on the
-# blog's MathJax, so they render as red raw text. We warn ONLY on this small,
-# explicit "known-bad-unless-defined" set rather than trying to allowlist the
-# hundreds of base-MathJax macros (which would mis-warn on valid ones). Drop a
-# macro from here once the blog adds a \newcommand/package for it.
-# (\llbracket, \rrbracket and \textsc are defined by the blog's head.html.)
-_UNDEFINED_MACROS = frozenset(
+# Macros of non-standard packages that writers commonly emit; base MathJax
+# does not load them, so they render as red raw text unless the blog defines
+# them. We warn only on this small explicit set rather than allowlisting the
+# hundreds of base-MathJax macros (which would mis-warn on valid ones); the
+# ones the blog defines (post_conventions.yml math.defined_macros, the list
+# _includes/head.html sets) are left out at run time.
+_EXTENSION_MACROS = frozenset(
     {
         "coloneqq",  # mathtools
         "eqqcolon",  # mathtools
         "vcentcolon",  # mathtools
+        "llbracket",  # stmaryrd
+        "rrbracket",  # stmaryrd
+        "textsc",  # text mode
     }
 )
+
+
+@cache
+def undefined_macros() -> frozenset[str]:
+    """The macros of :data:`_EXTENSION_MACROS` the blog's MathJax does not
+    define, by the conventions file's ``math.defined_macros``."""
+    defined = load_local_conventions().math.defined_macros
+    return _EXTENSION_MACROS - set(defined)
+
 
 # A bare "|" not already escaped or part of \vert/\mid/\| etc.
 _BARE_PIPE = re.compile(r"(?<!\\)\|")
@@ -372,7 +391,7 @@ def _warn_undefined_macros(markdown: str, regions: list[tuple[int, int, str]]) -
         if kind not in _MATH_KINDS:
             continue
         for mm in _MACRO.finditer(markdown[ms:me]):
-            if mm.group(1) in _UNDEFINED_MACROS:
+            if mm.group(1) in undefined_macros():
                 seen.add(mm.group(1))
     if seen:
         logger.warning(
@@ -398,6 +417,98 @@ def _warn_non_url_links(markdown: str, regions: list[tuple[int, int, str]]) -> N
                 "internal cross-references.",
                 target[:80],
             )
+
+
+# The URLs the blog's htmlproofer fails (.github/workflows/jekyll.yml runs it
+# with enforce_https, its default): an <a>/<link> href or an <img> src or
+# srcset with the http scheme, or protocol-relative ("//host"). In Markdown
+# those are inline link and image targets, reference definitions (not
+# footnotes), autolinks and the attributes of raw HTML; text in code is no
+# link, and a bare URL in prose is not one either (kramdown does not autolink).
+_INSECURE_URL = re.compile(
+    r"(?P<lead>\]\([ \t]*<?|^[ \t]{0,3}\[(?!\^)[^\]\n]+\]:[ \t]*<?"
+    r"|(?<![\w-])(?:href|src)[ \t]*=[ \t]*[\"']?[ \t]*|<(?=http:))"
+    r"(?P<url>(?:http:)?//[^\s\"'<>)]*)",
+    re.IGNORECASE,
+)
+_SRCSET = re.compile(
+    r"(?<![\w-])srcset[ \t]*=[ \t]*([\"'])(?P<value>.*?)\1", re.IGNORECASE
+)
+_SRCSET_URL = re.compile(r"(?P<lead>(?:^|,)[ \t]*)(?P<url>(?:http:)?//\S*)", re.I)
+
+
+def _https(url: str) -> str:
+    return "https://" + re.sub(r"^(?:http:)?//", "", url, flags=re.IGNORECASE)
+
+
+def _upgrade_in_text(text: str) -> str:
+    def srcset(m: re.Match[str]) -> str:
+        value = _SRCSET_URL.sub(
+            lambda u: u.group("lead") + _https(u.group("url")), m.group("value")
+        )
+        return m.group(0).replace(m.group("value"), value, 1)
+
+    text = _INSECURE_URL.sub(lambda m: m.group("lead") + _https(m.group("url")), text)
+    # A link that shows its own URL ("[http://x](https://x)") shows the new one.
+    text = _SELF_LABEL.sub(
+        lambda m: (
+            f"[{m.group('target')}]"
+            if m.group("label")[len("http://") :]
+            == m.group("target")[len("https://") :]
+            else m.group(0)
+        ),
+        text,
+    )
+    return _SRCSET.sub(srcset, text)
+
+
+_SELF_LABEL = re.compile(
+    r"\[(?P<label>http://[^\]\s]+)\](?=\((?P<target>https://[^)\s]+)\))"
+)
+
+
+def _code_split(line: str) -> list[tuple[str, bool]]:
+    """``line`` as (text, is_code) pieces around its code spans."""
+    pieces, pos = [], 0
+    for m in BLOG_CODE_SPAN.finditer(line):
+        pieces += [(line[pos : m.start()], False), (m.group(0), True)]
+        pos = m.end()
+    return [*pieces, (line[pos:], False)]
+
+
+def _link_lines(markdown: str) -> list[int]:
+    """Indices of the lines kramdown renders (not fenced or indented code)."""
+    lines = markdown.split("\n")
+    code = indented_code_lines(lines)
+    roles = fence_roles(lines)
+    return [i for i in range(len(lines)) if roles[i] == "prose" and i not in code]
+
+
+def insecure_links(line: str) -> list[str]:
+    """The http:// and protocol-relative link targets of one rendered line
+    (code spans excluded) that the blog's htmlproofer fails."""
+    found: list[str] = []
+    for text, is_code in _code_split(line):
+        if is_code:
+            continue
+        found += [m.group("url") for m in _INSECURE_URL.finditer(text)]
+        for m in _SRCSET.finditer(text):
+            found += [u.group("url") for u in _SRCSET_URL.finditer(m.group("value"))]
+    return found
+
+
+def upgrade_http_links(markdown: str) -> str:
+    """Rewrite every link target htmlproofer fails (:func:`insecure_links`)
+    to ``https://`` on the same host and path, outside code. Text in code
+    (``curl http://localhost:8000``) is left as written."""
+    lines = markdown.split("\n")
+    for i in _link_lines(markdown):
+        if "//" in lines[i]:
+            lines[i] = "".join(
+                text if is_code else _upgrade_in_text(text)
+                for text, is_code in _code_split(lines[i])
+            )
+    return "\n".join(lines)
 
 
 def _outside(regions: list[tuple[int, int, str]], kinds: tuple[str, ...]):  # type: ignore[no-untyped-def]
@@ -662,42 +773,69 @@ _VERIFICATION_HEDGE = re.compile(
 )
 
 
-# Translationese with no natural reading (prompts/base.py KOREAN_STYLE): a
-# double passive ("되어진", "보여지는") and the calque "에 있어" where a particle
-# or a nominalized verb shows it ("에 있어서는", "에 있어서의", "학습함에 있어").
-# A bare "에 있어서" (also "in" in Korean) and patterns that are normal Korean
-# in moderation ("에 대한", "~라는 점") are left to the LLM checkers.
-_TRANSLATIONESE = re.compile(
+# The blog lint's prose rules (script/lint-posts.rb lines 212-230), with its
+# patterns and exemptions as they are, so a post passes here exactly when it
+# passes there. Translationese with no natural reading (prompts/base.py
+# KOREAN_STYLE): a double passive ("되어진", "보여지는") and the calque "에 있어"
+# where a particle or a nominalized verb shows it ("에 있어서는", "학습함에
+# 있어"). A bare "에 있어서" (also "in" in Korean) and patterns that are normal
+# Korean in moderation ("에 대한", "~라는 점") are left to the LLM checkers.
+TRANSLATIONESE = re.compile(  # lint-posts.rb line 216
     r"되어[지진져집]|보여[지진져]|에 있어(?:서[는도의](?! 안)|[는의])|[음함]에 있어(?![야요])"
 )
-# A sentence ending glued to a colon ("다음과 같습니다:", "거친다:"): the
-# pattern of the blog's own pre-publish count (`(다|니다):`, which must be 0)
-# in the writer's own prose lines: not in a heading (the plan's title), a
-# quotation (a blockquote or a quoted span), a table row or the reference
-# list.
-_SENTENCE_COLON = re.compile(r"다:")
-_QUOTED_SPAN = re.compile(r'"[^"\n]*"|“[^”\n]*”|‘[^’\n]*’|「[^」\n]*」')
-_REFERENCES_HEADING = re.compile(
-    r"^#{1,6}[ \t]+(?:references|bibliography|참고 ?자료|참고 ?문헌)\b",
+# A sentence ending glued to a colon ("다음과 같습니다:"): end the sentence.
+SENTENCE_COLON = re.compile(r"다:")  # line 218
+_QUOTED_SPAN = re.compile(r'"[^"\n]*"|“[^”\n]*”|‘[^’\n]*’|「[^」\n]*」')  # line 219
+_REFERENCES_HEADING = re.compile(  # line 220
+    r"\A#{1,6}\s+(?:references|bibliography|참고 ?자료|참고 ?문헌)\b",
     re.IGNORECASE,
 )
+_ALT_IMAGE = re.compile(r"!\[[^\]\n]*\]\([^)\n]*\)")  # line 227
+_DOLLAR_SPAN = re.compile(r"\$\$.*?\$\$")  # line 287
 
 
-def _colon_endings(prose: str) -> list[tuple[int, int]]:
-    """Spans of "다:" in ``prose``'s own sentences (see :data:`_SENTENCE_COLON`)."""
-    spans, in_references, pos = [], False, 0
-    for line in prose.splitlines(keepends=True):
-        start, pos = pos, pos + len(line)
-        if line.startswith("#"):
+@dataclass(frozen=True)
+class StyleHit:
+    """One prose-rule hit: the body line (0-based), the rule and the match."""
+
+    line: int
+    rule: Literal["translationese", "colon"]
+    match: str
+    text: str  # the line's checked text, for a snippet
+
+
+def style_hits(body: str) -> list[StyleHit]:
+    """Translationese and colon-ended sentences where the blog lint looks for
+    them (lint-posts.rb ``prose``, lines 222-230, called from line 292): prose
+    lines outside its fences and display blocks, not a heading, a
+    blockquote, a table row (indented under a list too) or a line of the
+    reference list; quoted spans, image syntax (alt text), code spans and
+    ``$$`` spans removed."""
+    hits: list[StyleHit] = []
+    lines = body.split("\n")
+    in_references = False
+    for i, (line, role) in enumerate(zip(lines, blog_line_roles(lines), strict=True)):
+        if role != "prose":
+            continue
+        if line.startswith("#"):  # line 282
             in_references = bool(_REFERENCES_HEADING.match(line))
+        if (
+            in_references
+            or line.startswith("#")
+            or line.lstrip().startswith((">", "|"))
+        ):
             continue
-        if in_references or TABLE_ROW.match(line) or line.lstrip().startswith(">"):
-            continue
-        text = _QUOTED_SPAN.sub(_blank, line)
-        spans += [
-            (start + m.start(), start + m.end()) for m in _SENTENCE_COLON.finditer(text)
-        ]
-    return spans
+        text = _DOLLAR_SPAN.sub("", blog_bare(line))
+        text = _ALT_IMAGE.sub("", _QUOTED_SPAN.sub("", text))
+        for rule, pattern in (
+            ("translationese", TRANSLATIONESE),
+            ("colon", SENTENCE_COLON),
+        ):
+            hits += [
+                StyleHit(i, rule, m.group(0), text)  # type: ignore[arg-type]
+                for m in pattern.finditer(text)
+            ]
+    return hits
 
 
 def writing_issues(markdown: str) -> list[str]:
@@ -740,21 +878,21 @@ def writing_issues(markdown: str) -> list[str]:
             f"self-reference '{m.group(0).strip()}': "
             f"{_snippet(markdown, m.start(), m.end())}"
         )
-    for m in _TRANSLATIONESE.finditer(prose):
+    for hit in style_hits(markdown):
+        start = hit.text.find(hit.match)
+        snippet = _snippet(hit.text, start, start + len(hit.match))
+        if hit.rule == "colon":
+            issues.append(
+                "sentence ending with a colon '다:' (end it with a period or "
+                f"write a label): {snippet}"
+            )
+            continue
         kind, fix = (
             ("calque", "write 에서 or 에는")
-            if "있어" in m.group(0)
+            if "있어" in hit.match
             else ("double passive", "one passive or an active verb")
         )
-        issues.append(
-            f"{kind} '{m.group(0)}' ({fix}): "
-            f"{_snippet(markdown, m.start(), m.end())}"
-        )
-    for start, end in _colon_endings(prose):
-        issues.append(
-            "sentence ending with a colon '다:' (end it with a period or write "
-            f"a label): {_snippet(markdown, start, end)}"
-        )
+        issues.append(f"{kind} '{hit.match}' ({fix}): {snippet}")
     for m in _VERIFICATION_HEDGE.finditer(prose):
         issues.append(
             "verification hedge (fix the claim from an official source or drop it): "
@@ -820,7 +958,8 @@ def lint_markdown(markdown: str, *, warn: bool = True) -> str:
     pipe table glued to text;
     bare ``<placeholder>`` angle-bracket tokens in prose escaped so kramdown
     doesn't emit stray HTML closing tags; chat-template tokens (``<|im_start|>``)
-    set as inline code. Warned (left untouched, since
+    set as inline code; http:// and protocol-relative link targets upgraded
+    to https:// (:func:`upgrade_http_links`). Warned (left untouched, since
     a rewrite could ship a new bug): bare ``|`` in math, fragile amsmath envs /
     ``\\bm``, single-$ inline math, known-undefined macros, and non-URL link
     targets (``warn=False`` skips them). Returns the fixed Markdown.
@@ -831,6 +970,7 @@ def lint_markdown(markdown: str, *, warn: bool = True) -> str:
     fixed = _fix_headings(fixed)
     fixed = _separate_tables(fixed)
     fixed = _code_chat_tokens(fixed)
+    fixed = upgrade_http_links(fixed)
 
     # Escape bare <placeholder> tokens before warnings run so region offsets are
     # computed against the final text. Re-classify since escaping shifts offsets.

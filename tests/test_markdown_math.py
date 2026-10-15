@@ -101,6 +101,15 @@ def test_has_math_ignores_code() -> None:
     assert not has_math("`$$x$$` in code")
 
 
+def test_has_math_reads_code_as_the_blog_lint_does() -> None:
+    # use_math follows lint-posts.rb (lines 262, 300): its fences only, so
+    # $$ in a fence inside a quote or in an indented code block counts.
+    assert not has_math("```bash\necho $$\n```")
+    assert has_math("> ```bash\n> echo $$\n> ```")
+    assert has_math("앞 문단.\n\n    echo $$ > pid")
+    assert not has_math("Write ``$$`` to open math.")
+
+
 class TestFenceSpans:
     def test_four_backtick_fence_holds_a_three_backtick_line(self) -> None:
         from scholar_lens.src.markdown_math import fence_spans

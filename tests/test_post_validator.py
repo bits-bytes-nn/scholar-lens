@@ -382,6 +382,11 @@ class TestBodyErrors:
         assert any(i.startswith("table:") and "3 cells" in i for i in issues)
         assert any(i.startswith("math:") and "bare |" in i for i in issues)
         assert body_errors("## 제목\n\n본문입니다.\n") == []
+        # The blog lint's style rules block publishing, so the loops see them.
+        assert any(
+            i.startswith("style:")
+            for i in body_errors("## 제목\n\n구성은 다음과 같습니다: 첫째.\n")
+        )
 
     def test_unclosed_fence_is_an_error_not_silent_code(self) -> None:
         from scholar_lens.src.post_validator import body_errors
@@ -494,3 +499,136 @@ class TestUnsourcedNumbers:
         assert len(problems) == 3  # markup, length, an unsourced number
         assert "99" in problems[2]
         assert description_problems("", tldr) == ["description is empty"]
+
+
+def errors_of(markdown: str, rule: str, kind: str = "review") -> list[str]:
+    found = errors(validate_post(markdown, SPEC, kind))  # type: ignore[arg-type]
+    return [v.message for v in found if v.rule == rule]
+
+
+class TestBlogLintParity:
+    """The blog lint's own cases (tech-blog test/test_lint_posts.rb): a post
+    fails here exactly when it fails there."""
+
+    @pytest.mark.parametrize(
+        ("author", "ok"),
+        [  # test_lint_posts.rb lines 34-40 and 271-274
+            ('"Rasmussen et al."', False),
+            ('"Rasmussen ET AL"', False),  # /et al/i, case-blind
+            ('"Wet Algorithms Lab"', False),  # anywhere, as the blog reads it
+            ('["A", "B"]', False),  # one string, not a list
+            ('"Google DeepMind, Google Research, Stanford"', True),
+        ],
+    )
+    def test_paper_author(self, author: str, ok: bool) -> None:
+        found = errors_of(make_post(front={"paper_author": author}), "paper-author")
+        assert (found == []) is ok
+
+    @pytest.mark.parametrize(
+        ("doi", "message"),
+        [  # test_lint_posts.rb lines 290-297
+            ('"10.48550/arXiv.2310.06825"', None),
+            ('"10.18653/v1/2024.acl-long.1"', None),
+            ('"10.1145/3292500.3330701v2"', None),  # only arXiv's version is cut
+            ('"https://doi.org/10.48550/arXiv.2310.06825"', "bare DOI"),
+            ('"arXiv:2310.06825"', "bare DOI"),
+            ('""', "bare DOI"),
+            ("", "bare DOI"),  # set but empty
+            ("10.48550", "bare DOI"),
+            ('"10.1000/a?b"', "bare DOI"),
+            ('"10.1000/a#b"', "bare DOI"),
+            ('"10.48550/arXiv.2310.06825v2"', "arXiv version"),
+        ],
+    )
+    def test_paper_doi(self, doi: str, message: str | None) -> None:
+        found = errors_of(make_post(front={"paper_doi": doi}), "paper-doi")
+        assert found == [] if message is None else message in " ".join(found)
+
+    @pytest.mark.parametrize(
+        ("tag", "message"),
+        [  # test_lint_posts.rb lines 60-66, 180-191
+            ("Opt-In", None),  # a last "In"/"On" is a particle
+            ("Leiden-Algorithm-for-Text", None),
+            ("2024", None),
+            ("pytorch", None),
+            ("Attention-On-Demand", "should have on"),
+            ("Community-Detection-For-RAG", "should have for"),
+            ("Public-Dataset-Only Training", "joined by hyphens"),
+            (".NET", "joined by hyphens"),
+            ("+Plus", "joined by hyphens"),
+            ("Sparse-Mixture-of-Experts", "retired"),
+        ],
+    )
+    def test_tag_form(self, tag: str, message: str | None) -> None:
+        post = make_post(front={"tags": f'["{tag}", "DeepSeek"]'})
+        found = errors_of(post, "tags")
+        assert found == [] if message is None else message in " ".join(found)
+
+    @pytest.mark.parametrize(
+        ("table", "message"),
+        [  # test_lint_posts.rb lines 84-101
+            ("| | A | B |\n|---|---|---|\n| x | 1 | 2 |", "first cell is empty"),
+            ("| 모델 | A | |\n|---|---|---|\n| x | 1 | 2 |", "empty header cell"),
+            # A cell holding only \| is not empty (tech-blog 71c4c51).
+            ("| \\| | A |\n|---|---|\n| x | 1 |", None),
+            ("| 모델 | A |\n|---|---|\n| | 85.2 |", None),
+            ("| 모델 | A |\n|---|---|\n| | 85.2±0.3 |", "sub-header"),
+        ],
+    )
+    def test_table_headers(self, table: str, message: str | None) -> None:
+        found = errors_of(make_post(table), "table")
+        assert found == [] if message is None else message in " ".join(found)
+
+    @pytest.mark.parametrize(
+        "body",
+        [  # test_lint_posts.rb lines 277-281
+            "그림에서 보여지는 곡선입니다.",
+            "추론에 있어서는 그렇습니다.",
+            "학습함에 있어 중요합니다.",
+            "다음과 같이 작동합니다:\n\n1. 하나",
+            # An indented code block is prose to the blog lint.
+            "앞 문단.\n\n    보여지는 것: x",
+            "### References\n\n* 논문\n\n### 정리\n\n좋다: 끝",
+        ],
+    )
+    def test_style_rules_reject(self, body: str) -> None:
+        assert errors_of(make_post(body), "style")
+
+    @pytest.mark.parametrize(
+        "body",
+        [  # test_lint_posts.rb lines 282-287
+            "이 점에 있어서 중요합니다.",
+            '### 정리합니다: 요약\n\n> 그는 말했다: 아니다\n\n"이렇다: 저렇다"라고 '
+            "합니다.\n\n`a다:b`",
+            "| 바다: 깊이 | 1 |\n|---|---|\n| 2 | 3 |",
+            "- 항목\n\n  | 같습니다: | 2 |\n  |---|---|\n  | 3 | 4 |\n\n"
+            "![정리합니다: 그림](/assets/images/a.png)",
+            "### References\n\n* 보여지는 것들: 논문",
+            "```text\n다음과 같습니다:\n```",
+            "Intro.\n\n$$\n같습니다:\n$$\n\nTail.",
+        ],
+    )
+    def test_style_rules_exempt(self, body: str) -> None:
+        assert errors_of(make_post(body), "style") == []
+
+    @pytest.mark.parametrize(
+        ("body", "insecure"),
+        [  # htmlproofer's enforce_https: a/link href, img src/srcset
+            ("[링크](http://example.com)를 봅니다.", True),
+            ("![그림](http://example.com/a.png)", True),
+            ("<http://example.com>", True),
+            ('<a href="http://a.b">x</a>', True),
+            (
+                '<img src="https://a.b/x.png" srcset="http://a.b/y.png 2x" alt="x">',
+                True,
+            ),
+            ("[x](//a.b/c)", True),
+            ("[a]: http://a.b", True),
+            ("[링크](https://example.com)와 `http://localhost:8000`", False),
+            ("```bash\ncurl http://localhost:8000\n```", False),
+            ("앞 문단.\n\n    curl http://localhost:8000", False),
+            ("주소 http://localhost:8000 는 링크가 아닙니다.", False),
+        ],
+    )
+    def test_http_links(self, body: str, insecure: bool) -> None:
+        assert bool(errors_of(make_post(body), "link")) is insecure

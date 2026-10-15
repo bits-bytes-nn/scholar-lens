@@ -18,17 +18,45 @@ _SEPARATORS = re.compile(r"[\s_\u2010-\u2015]+")  # incl. en/em dashes
 _DROP_CHARS = re.compile(r"[/\"'`’“”]")  # deleted, not separators
 _INVALID_CHARS = re.compile(r"[^0-9A-Za-z.+\-]")
 _HYPHENS = re.compile(r"-{2,}")
+# The blog lint's tag form (tech-blog script/lint-posts.rb line 164): a letter
+# or digit first (no ".NET" or "+x"), then letters, digits and . + -.
+TAG_FORMAT = re.compile(r"[A-Za-z0-9][A-Za-z0-9.+-]*")
+
+
+def _inner_words(tag: str) -> list[str]:
+    """The words between the first and the last, split as Ruby's
+    ``split("-")`` does (trailing empty fields dropped; line 167): a last
+    "In" or "On" is a particle ("Opt-In", "Add-On"), not a function word."""
+    words = tag.split("-")
+    while words and not words[-1]:
+        words.pop()
+    return words[1:-1]
+
+
+def tag_problem(tag: str, lowercase_words: list[str]) -> str | None:
+    """What the blog lint rejects in a tag's form (lint-posts.rb lines
+    164-169), or None: anything but :data:`TAG_FORMAT`, or an inner function
+    word not in lowercase."""
+    if not TAG_FORMAT.fullmatch(tag):
+        return f"tag '{tag}' must be words joined by hyphens"
+    lower = {w.lower() for w in lowercase_words}
+    word = next(
+        (w for w in _inner_words(tag) if w.lower() in lower and w != w.lower()), None
+    )
+    return f"tag '{tag}' should have {word.lower()}, lowercase" if word else None
 
 
 def format_tag(raw: str, lowercase_words: list[str]) -> str:
     """Normalize spelling only: ``"Pan & Scan / Image processing"`` →
     ``"Pan-and-Scan-Image-processing"``. Word case is kept (acronyms, ``k-bit``)
-    except function words after the first, which are lowercased."""
+    except function words between the first and the last word, which are
+    lowercased (the blog lint's rule, :func:`tag_problem`); a leading "." or
+    "+" is dropped."""
     text = html.unescape(raw).strip().replace("&", " and ")
     text = _DROP_CHARS.sub("", text)
     text = _SEPARATORS.sub("-", text.strip())
     text = _INVALID_CHARS.sub("", text)
-    text = _HYPHENS.sub("-", text).strip("-")
+    text = _HYPHENS.sub("-", text).lstrip(".+-").strip("-")
     if not text:
         return ""
     lower = {w.lower() for w in lowercase_words}
@@ -37,8 +65,8 @@ def format_tag(raw: str, lowercase_words: list[str]) -> str:
     # Capitalize a lowercase first word, but keep stylized names ("vLLM").
     if first.islower():
         first = first[:1].upper() + first[1:]
-    words = [first] + [w.lower() if w.lower() in lower else w for w in words[1:]]
-    return "-".join(words)
+    inner = [w.lower() if w.lower() in lower else w for w in words[1:-1]]
+    return "-".join([first, *inner, *words[1:][-1:]])
 
 
 def _key(tag: str) -> str:

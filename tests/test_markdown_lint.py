@@ -6,7 +6,13 @@ import logging
 
 import pytest
 
-from scholar_lens.src.markdown_lint import drop_unknown_images, lint_markdown
+from scholar_lens.src.markdown_lint import (
+    drop_unknown_images,
+    lint_markdown,
+    undefined_macros,
+    upgrade_http_links,
+)
+from scholar_lens.src.post_conventions import load_local_conventions
 
 
 @pytest.fixture
@@ -159,6 +165,13 @@ class TestWarnings:
         with caplog.at_level(logging.WARNING, logger="app"):
             lint_markdown(r"math $$\llbracket x \rrbracket \textsc{a}$$")
         assert not any("does not define" in r.message for r in caplog.records)
+
+    def test_defined_macros_come_from_the_conventions(self) -> None:
+        # post_conventions.yml math.defined_macros (the blog's head.html list).
+        defined = load_local_conventions().math.defined_macros
+        assert {"llbracket", "rrbracket", "textsc"} <= set(defined)
+        assert not undefined_macros() & set(defined)
+        assert "coloneqq" in undefined_macros()
 
     def test_non_url_link_target_warns(self, caplog) -> None:
         with caplog.at_level(logging.WARNING, logger="app"):
@@ -390,3 +403,39 @@ def test_table_attribute_line_stays_attached() -> None:
         "앞 문장.\n| a | b |\n| --- | --- |\n| 1 | 2 |\n{: .wide}\n", warn=False
     )
     assert "| 1 | 2 |\n{: .wide}" in out
+
+
+@pytest.mark.parametrize(
+    ("src", "expected"),
+    [
+        (
+            "[a](http://a.b/x) and ![b](HTTP://a.b/y.png)",
+            "[a](https://a.b/x) and ![b](https://a.b/y.png)",
+        ),
+        ("<http://a.b> and [c](//a.b/c)", "<https://a.b> and [c](https://a.b/c)"),
+        (
+            '<a href="http://a.b">x</a> <img src="//a.b/i.png" srcset="http://a.b/1.png 1x, http://a.b/2.png 2x">',
+            '<a href="https://a.b">x</a> <img src="https://a.b/i.png" srcset="https://a.b/1.png 1x, https://a.b/2.png 2x">',
+        ),
+        ("[ref]: http://a.b/r", "[ref]: https://a.b/r"),
+        # Code, a footnote and a bare URL (no link to kramdown) are left alone.
+        (
+            "`curl http://localhost:8000` and [x](http://a.b)",
+            "`curl http://localhost:8000` and [x](https://a.b)",
+        ),
+        (
+            "```bash\ncurl http://localhost:8000\n```",
+            "```bash\ncurl http://localhost:8000\n```",
+        ),
+        (
+            "text.\n\n    curl http://localhost:8000",
+            "text.\n\n    curl http://localhost:8000",
+        ),
+        ("[^1]: http://a.b and http://c.d", "[^1]: http://a.b and http://c.d"),
+        # A link showing its own URL shows the upgraded one.
+        ("[http://a.b/x](http://a.b/x)", "[https://a.b/x](https://a.b/x)"),
+    ],
+)
+def test_http_links_are_upgraded(src: str, expected: str) -> None:
+    assert upgrade_http_links(src) == expected
+    assert upgrade_http_links(expected) == expected

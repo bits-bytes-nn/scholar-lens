@@ -9,6 +9,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from .constants import LocalPaths
+
 if TYPE_CHECKING:  # a type only: keeps this module a leaf
     from .post_validator import ArtifactKind
 
@@ -47,13 +49,17 @@ class PublishRequest:
     # Filled by Publisher.publish: non-blocking post-validation findings, shown
     # as a checklist in the PR body.
     validation_warnings: list[str] = field(default_factory=list)
+    # The blog's post this one replaces (``_posts/<date>-<slug>.md``, see
+    # Publisher.find_published): the post keeps that file name, URL and image
+    # names.
+    published_path: str | None = None
 
     @property
     def slug(self) -> str:
-        """Post slug: a summary and a review of one paper must not share a
-        file name, image names or URL."""
-        base = slugify(self.title)
-        return f"{base}{SUMMARY_SLUG_SUFFIX}" if self.kind == "summarize" else base
+        """Post slug: the replaced post's, else the title's."""
+        if self.published_path:
+            return post_slug(Path(self.published_path).stem)
+        return title_slug(self.title, self.kind)
 
     @property
     def staged_images_dir(self) -> Path:
@@ -64,6 +70,13 @@ class PublishRequest:
         return with_review_checklist(
             self.pr_body, [*self.validation_warnings, *extra_notes]
         )
+
+
+def title_slug(title: str, kind: str) -> str:
+    """A new post's slug: a summary and a review of one paper must not share
+    a file name, image names or URL."""
+    base = slugify(title)
+    return f"{base}{SUMMARY_SLUG_SUFFIX}" if kind == "summarize" else base
 
 
 def slugify(title: str, max_length: int = 80) -> str:
@@ -111,3 +124,12 @@ def post_key(slug: str) -> tuple[bool, str]:
 
 def same_post(slug: str, other: str) -> bool:
     return post_key(slug) == post_key(other)
+
+
+def is_post_file(path: str) -> bool:
+    """A post directly in the blog's ``_posts/`` folder (the only place this
+    tool writes posts)."""
+    posts = LocalPaths.POSTS_DIR.value
+    return (
+        path.startswith(f"{posts}/") and path.count("/") == 1 and path.endswith(".md")
+    )

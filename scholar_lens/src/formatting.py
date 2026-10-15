@@ -20,9 +20,9 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from urllib.parse import quote
 
-from .constants import normalize_arxiv_id
+from .constants import bare_doi, normalize_arxiv_id
 from .markdown_math import has_math, normalize_math
-from .post_conventions import PostConventions
+from .post_conventions import BlogPost, PostConventions
 from .tags import normalize_tags
 from .utils import escape_yaml_double_quoted, is_placeholder
 from .utils.helpers import first_sentence
@@ -130,21 +130,25 @@ def _paper_author(paper: Paper) -> str | None:
 def _paper_doi(paper: Paper) -> str | None:
     """The DOI the blog looks the citation count up by: the arXiv DOI for an
     arXiv paper (the blog backfills older posts the same way), else the
-    paper's own DOI."""
+    paper's own DOI as the blog lint takes it (:func:`constants.bare_doi`:
+    no URL or ``doi:`` prefix, an arXiv DOI without its version); None when
+    it is no bare DOI."""
     arxiv_id = normalize_arxiv_id(paper.arxiv_id)
     if arxiv_id:
         return f"10.48550/arXiv.{re.sub(r'v\d+$', '', arxiv_id)}"
-    return paper.doi
+    return bare_doi(paper.doi)
 
 
 @dataclass
 class PostMeta:
-    """Taxonomy decided in code from the model's proposals and the spec."""
+    """Taxonomy decided in code from the model's proposals and the spec;
+    ``date`` is set when the post replaces a published one (its date)."""
 
     topic: str | None
     cover: str
     tags: list[str]
     seo_title: str | None = None
+    date: datetime | None = None
 
 
 def resolve_topic(raw: str, spec: PostConventions) -> str | None:
@@ -188,13 +192,17 @@ def build_post_meta(
     proposed_seo_title: str | None,
     spec: PostConventions,
     known_tags: list[str] | None = None,
+    published: BlogPost | None = None,
 ) -> PostMeta:
     """Normalize tags, resolve the topic/cover and pick a ``seo_title``.
+
+    A post that replaces the ``published`` one keeps its topic and date (the
+    post's URL is built from both), whatever the model proposes now.
 
     Anything that still breaks a convention (no controlled tag, unknown topic)
     is left for the post validator to reject, never silently patched.
     """
-    topic = resolve_topic(proposed_topic, spec)
+    topic = published.topic if published else resolve_topic(proposed_topic, spec)
     selection = normalize_tags(
         specific_tags, controlled_tags, title=title, spec=spec, known_tags=known_tags
     )
@@ -209,6 +217,7 @@ def build_post_meta(
         cover=spec.cover_for(category_type, topic or ""),
         tags=selection.tags,
         seo_title=seo,
+        date=published.date if published else None,
     )
 
 
@@ -217,6 +226,7 @@ def paper_post_meta(
     category_type: str,
     spec: PostConventions,
     known_tags: list[str] | None = None,
+    published: BlogPost | None = None,
 ) -> PostMeta:
     attributes = paper.attributes
     return build_post_meta(
@@ -228,6 +238,7 @@ def paper_post_meta(
         proposed_seo_title=attributes.seo_title,
         spec=spec,
         known_tags=known_tags,
+        published=published,
     )
 
 
@@ -247,7 +258,7 @@ def paper_front_matter(
         title=paper.title,
         seo_title=meta.seo_title,
         subtitle=subtitle,
-        date=paper.published,
+        date=meta.date or paper.published,
         paper_author=_paper_author(paper),
         # The blog looks up the paper's live citation count by it.
         paper_doi=_paper_doi(paper),
@@ -453,7 +464,7 @@ def format_guide(
     front_matter = render_front_matter(
         title=guide.topic,
         seo_title=meta.seo_title,
-        date=datetime.now(UTC),
+        date=meta.date or datetime.now(UTC),
         categories=categories,
         tags=meta.tags,
         cover=meta.cover,

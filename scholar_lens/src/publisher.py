@@ -48,7 +48,13 @@ from .pinned_transport import PinnedHTTPTransport
 from .post_conventions import BlogPost, PostConventions, load_local_conventions
 from .post_validator import PostValidationError, validate_post
 from .prompt_safety import strip_defanging
-from .publish_types import BLOG_IMAGES_DIR, PublishRequest
+from .publish_types import (
+    BLOG_IMAGES_DIR,
+    PublishRequest,
+    is_post_file,
+    post_slug,
+    same_post,
+)
 from .publish_types import PublishError as PublishError  # re-exported
 from .rate_limiter import ARXIV_RATE_LIMITER, arxiv_retry_after_seconds
 from .url_guard import UnsafeUrlError, assert_url_is_public
@@ -61,6 +67,8 @@ from .utils.images import (
 )
 
 if TYPE_CHECKING:
+    from github.Repository import Repository
+
     from ..configs import Github as GithubConfig
 
 _IMAGE_DOWNLOAD_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
@@ -379,8 +387,14 @@ class Publisher:
         """
         slug = request.slug
         # The post filename is prefixed with the publish date (today); the paper's
-        # own date lives in the front-matter `date` field, set by the caller.
-        file_name = f"{datetime.now(UTC).strftime('%Y-%m-%d')}-{slug}"
+        # own date lives in the front-matter `date` field, set by the caller. A
+        # post that replaces a published one keeps its file name: the name it
+        # is validated with is the one the blog gets.
+        file_name = (
+            Path(request.published_path).stem
+            if request.published_path
+            else f"{datetime.now(UTC).strftime('%Y-%m-%d')}-{slug}"
+        )
         # Body-only passes: the front matter is already YAML-escaped and must
         # not be math-normalized or HTML-escaped.
         # Defanged prompt tags a model copied from its input get their plain
@@ -424,6 +438,40 @@ class Publisher:
 
         s3_url = await self._upload_to_s3(request, markdown_path)
         return s3_url, markdown_path
+
+    def find_published(self, slug: str, branch_id: str) -> BlogPost | None:
+        """The blog's post a new one with ``slug``, from the artifact
+        ``branch_id``, replaces: the post with that slug (older slug rules
+        included, see :func:`same_post`), else the one this tool wrote on the
+        artifact's branch and a merged pull request published (a rerun under
+        a new title). The new post then keeps its file name, URL, date and
+        topic.
+
+        Raises :class:`PublishError` when the blog's pull requests cannot be
+        read.
+        """
+        posts = {post.path: post for post in self.site_posts if is_post_file(post.path)}
+        by_slug = sorted(
+            path for path in posts if same_post(post_slug(Path(path).stem), slug)
+        )
+        if by_slug:
+            return posts[by_slug[0]]
+        if not posts:
+            return None  # no blog listing: nothing is known to be published
+        published = self._with_repo(
+            lambda repo: BlogBranchSync(repo, self.github_config).merged_posts(
+                branch_id
+            )
+        )
+        # A translation ("…-en.md") on the branch is not the post this run writes.
+        return next(
+            (
+                posts[path]
+                for path in published
+                if path in posts and not Path(path).stem.endswith("-en")
+            ),
+            None,
+        )
 
     def _validate(
         self, markdown: str, request: PublishRequest, file_name: str
@@ -510,34 +558,34 @@ class Publisher:
         Re-running the same artifact updates the same branch and PR. Raises
         :class:`PublishError` on any failure; the token never appears in it.
         """
+        # PyGithub is blocking HTTP; keep it off the event loop.
+        return await asyncio.to_thread(
+            self._with_repo,
+            lambda repo: BlogBranchSync(repo, self.github_config).sync(
+                request, markdown_path
+            ),
+        )
+
+    def _with_repo[T](self, action: Callable[[Repository], T]) -> T:
+        """``action`` on the blog repository; any failure is a
+        :class:`PublishError` without the token in it."""
         repo_name = self.github_config.repo_name
         if not repo_name:
             raise PublishError("resources.github.repo_name is not configured.")
         token = os.getenv(EnvVars.GITHUB_TOKEN.value)
         if not token:
             raise PublishError(f"{EnvVars.GITHUB_TOKEN.value} is not set.")
-        try:
-            # PyGithub is blocking HTTP; keep it off the event loop.
-            return await asyncio.to_thread(
-                self._sync_pull_request, token, repo_name, request, markdown_path
-            )
-        except PublishError:
-            raise
-        except Exception as e:
-            raise PublishError(str(self._redact_token(e, token))) from None
-
-    def _sync_pull_request(
-        self, token: str, repo_name: str, request: PublishRequest, markdown_path: Path
-    ) -> str:
         client = Github(
             auth=Auth.Token(token),
             timeout=_GITHUB_TIMEOUT_SECONDS,
             retry=GithubRetry(total=_GITHUB_MAX_RETRIES),
         )
         try:
-            return BlogBranchSync(client.get_repo(repo_name), self.github_config).sync(
-                request, markdown_path
-            )
+            return action(client.get_repo(repo_name))
+        except PublishError:
+            raise
+        except Exception as e:
+            raise PublishError(str(self._redact_token(e, token))) from None
         finally:
             client.close()
 

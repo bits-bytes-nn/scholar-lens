@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -68,6 +69,28 @@ class TestFetchBlogPosts:
             ("Knowledge-Graph", 1),
         ]
         assert not any(url.endswith("/r") for url in requested)
+
+
+@pytest.mark.parametrize(
+    ("date", "expected"),
+    [
+        ("2026-01-05 03:00:00", datetime(2026, 1, 5, 3, tzinfo=UTC)),  # UTC
+        ("2026-01-05 12:00:00 +0900", datetime(2026, 1, 5, 3, tzinfo=UTC)),
+        ('"2026-01-05T12:00:00+09:00"', datetime(2026, 1, 5, 3, tzinfo=UTC)),
+        ("2026-01-05", datetime(2026, 1, 5, tzinfo=UTC)),
+        ("someday", None),
+    ],
+)
+def test_a_post_date_and_categories_are_read(
+    date: str, expected: datetime | None
+) -> None:
+    # What a regenerated post keeps: the instant Jekyll dates the post at
+    # (the blog builds in UTC) and its categories.
+    text = f'---\ndate: {date}\ncategories: ["Tech Guides", "Language-Models"]\n---\n'
+    post = post_conventions._blog_post("_posts/2026-01-05-x.md", text)
+    assert post.date == expected
+    assert post.categories == ["Tech Guides", "Language-Models"]
+    assert post.topic == "Language-Models"
 
 
 class TestLoadConventions:

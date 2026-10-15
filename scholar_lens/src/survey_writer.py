@@ -50,6 +50,7 @@ from .prompts import (
 )
 from .prompts.base import PROSE_UNIT, blocking_issues_block
 from .prompts.survey import DEPTH_GUIDANCE, SECTION_ROLES
+from .publish_types import title_slug
 from .publisher import PublishRequest, build_pr_body
 from .review_plan import (
     article_ledger,
@@ -61,6 +62,7 @@ from .runtime import (
     ROOT_DIR,
     PipelineOutcome,
     RunContext,
+    find_published_post,
     load_translation_guideline,
     publish_artifact,
 )
@@ -1288,6 +1290,12 @@ async def run_survey_write_pipeline(
         raise
     finally:
         researcher.close()
+    # Keyed by the plan's topic, not the model's title: a rerun of the same
+    # plan updates the same branch, pull request and published post.
+    slug = survey_slug(plan.topic)
+    published, lookup_notes = await find_published_post(
+        context, slug=title_slug(survey.title, "survey"), branch_id=slug
+    )
     meta = build_post_meta(
         title=survey.title,
         category_type=github.survey_category,
@@ -1297,14 +1305,16 @@ async def run_survey_write_pipeline(
         proposed_seo_title=None,
         spec=spec,
         known_tags=context.require_blog_tags(),
+        published=published,
     )
     description = " ".join((taxonomy.get("description") or "").split())
     front_matter = render_front_matter(
         title=survey.title,
         seo_title=meta.seo_title,
-        # The plan's creation time, stable across reruns of the plan (the
-        # file name carries the publish day, which is never earlier).
-        date=plan.created_at.astimezone(UTC),
+        # The published post's date, else the plan's creation time, stable
+        # across reruns of the plan (the file name carries the publish day,
+        # which is never earlier).
+        date=meta.date or plan.created_at.astimezone(UTC),
         categories=[github.survey_category] + ([meta.topic] if meta.topic else []),
         tags=meta.tags,
         cover=meta.cover,
@@ -1315,7 +1325,6 @@ async def run_survey_write_pipeline(
         f"{front_matter}{body}\n\n{reference_list(survey.plan.papers)}"
         + further_reading(survey.reading, writer.language)
     )
-    slug = survey_slug(plan.topic)
     work_dir = papers_dir / slug
     work_dir.mkdir(parents=True, exist_ok=True)
     core = sum(p.role == "core" for p in survey.plan.papers)
@@ -1323,8 +1332,6 @@ async def run_survey_write_pipeline(
         title=survey.title,
         markdown=document,
         work_dir=work_dir,
-        # Keyed by the plan's topic, not the model's title: a rerun of the
-        # same plan updates the same branch and pull request.
         branch_id=slug,
         pr_title=f"Paper Survey: {survey.title}",
         pr_body=build_pr_body(
@@ -1339,8 +1346,10 @@ async def run_survey_write_pipeline(
         ),
         commit_message=f"feat: add paper survey '{survey.title}'",
         kind="survey",
+        published_path=published.path if published else None,
     )
     publish_request.review_notes += [
+        *lookup_notes,
         *plan_notes,
         *survey.notes,
         *body_notes,

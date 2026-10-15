@@ -522,6 +522,24 @@ class TestPublishArtifact:
         assert outcome.warnings == ["Blog PR not created: 403 from GitHub"]
 
 
+def test_an_unreadable_branch_history_becomes_a_review_note(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import asyncio
+
+    from scholar_lens.src.publisher import PublishError
+
+    publisher = MagicMock()
+    publisher.find_published.side_effect = PublishError("502 from GitHub")
+    monkeypatch.setattr(runtime, "build_publisher", lambda context: publisher)
+    published, notes = asyncio.run(
+        runtime.find_published_post(MagicMock(), slug="x", branch_id="guide-abc")
+    )
+    assert published is None
+    assert len(notes) == 1 and "502 from GitHub" in notes[0]
+    publisher.find_published.assert_called_once_with("x", "guide-abc")
+
+
 def test_no_pr_run_reports_the_post_checklist(
     monkeypatch: pytest.MonkeyPatch, tmp_path
 ) -> None:  # type: ignore[no-untyped-def]

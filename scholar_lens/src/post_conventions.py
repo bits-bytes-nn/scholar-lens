@@ -13,6 +13,7 @@ and are read from the spec when the blog adds them.
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -65,6 +66,13 @@ class TagSpec(BaseModel):
         return value
 
 
+class MathSpec(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    # The macros _includes/head.html defines for MathJax on top of the
+    # standard set (the blog's test keeps the two lists equal).
+    defined_macros: list[str] = Field(default_factory=list)
+
+
 class PostConventions(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -72,6 +80,7 @@ class PostConventions(BaseModel):
     topics: dict[str, str | None]
     forbidden_keys: list[str] = Field(default_factory=list)
     tags: TagSpec
+    math: MathSpec = Field(default_factory=MathSpec)
     # Titles longer than this need a shorter ``seo_title``.
     seo_title_max_length: int = 70
     # A translation is one post in each of these ``lang`` values.
@@ -153,8 +162,9 @@ def load_conventions(
 
 class BlogPost(BaseModel):
     """What a new post must agree with in one of the blog's posts: its
-    tags (reused), its description (unique site-wide) and its translation
-    pairing."""
+    tags (reused), its description (unique site-wide), its translation
+    pairing, and the ``date`` and ``categories`` (its URL) a regenerated
+    version of it keeps."""
 
     model_config = ConfigDict(frozen=True)
     path: str
@@ -162,6 +172,29 @@ class BlogPost(BaseModel):
     description: str | None = None
     lang: str | None = None
     translation_id: str | None = None
+    # In UTC, the time zone the blog builds in (_config.yml).
+    date: datetime | None = None
+    categories: list[str] = Field(default_factory=list)
+
+    @property
+    def topic(self) -> str | None:
+        """``categories[1]``, the post's topic."""
+        return self.categories[1] if len(self.categories) > 1 else None
+
+
+def _utc_date(value: Any) -> datetime | None:
+    """A front-matter ``date`` as YAML reads it (a datetime, a date or a
+    string) in UTC; a time without an offset is UTC already."""
+    if isinstance(value, str):
+        try:
+            value = datetime.fromisoformat(value)
+        except ValueError:
+            return None
+    if isinstance(value, date) and not isinstance(value, datetime):
+        value = datetime(value.year, value.month, value.day)
+    if not isinstance(value, datetime):
+        return None
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
 
 
 def _blog_post(path: str, text: str) -> BlogPost:
@@ -173,6 +206,7 @@ def _blog_post(path: str, text: str) -> BlogPost:
     if not isinstance(data, dict):
         return BlogPost(path=path)
     tags = data.get("tags")
+    categories = data.get("categories")
 
     def text_value(key: str) -> str | None:
         value = data.get(key)
@@ -184,6 +218,10 @@ def _blog_post(path: str, text: str) -> BlogPost:
         description=text_value("description"),
         lang=text_value("lang"),
         translation_id=text_value("translation_id"),
+        date=_utc_date(data.get("date")),
+        categories=(
+            [str(c) for c in categories] if isinstance(categories, list) else []
+        ),
     )
 
 

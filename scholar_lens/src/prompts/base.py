@@ -134,8 +134,9 @@ TABLE_RULES: str = """
 - Tables are real Markdown tables, never images. Use exactly one header row
   (merge multi-level headers per column as "Parent Child", e.g. "AIME 2024
   pass@1"), give every row the same number of cells, and leave no header cell
-  empty except the first. A comparison of many numbers goes in one table; the
-  prose interprets it, repeating only a derived number's inputs.
+  empty: the first names what the rows are ("구분", "모델", "지표", "벤치마크").
+  A comparison of many numbers goes in one table; the prose interprets it,
+  repeating only a derived number's inputs.
 """
 
 # Size cap of a table copied from the paper (not checked in code).

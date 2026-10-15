@@ -1032,6 +1032,74 @@ def normalize_math(markdown: str) -> str:
     return _collapse_blank_runs(text)
 
 
+# The blog lint's own reading of a body (script/lint-posts.rb), ported so the
+# checks that mirror it see the same lines. Its fence (line 189) opens on a
+# line starting with 3+ backticks or tildes after any whitespace: a fence
+# inside a blockquote ("> ```") is no fence there, and an indented code block
+# is prose, so math in either is checked like any other line.
+BLOG_FENCE = re.compile(r"\A\s*(`{3,}|~{3,})")
+# A code span, opened and closed by the same run of backticks (line 191).
+BLOG_CODE_SPAN = re.compile(r"(`+).*?\1")
+_BLOG_QUOTE = re.compile(r"\A\s*(?:>\s?)+")  # unquote (line 348)
+
+
+def blog_unquote(line: str) -> str:
+    """The text of a line after any blockquote markers (lint-posts.rb ``unquote``)."""
+    return _BLOG_QUOTE.sub("", line, count=1)
+
+
+def blog_bare(line: str) -> str:
+    """A line as the blog lint reads its math: unquoted, code spans removed
+    (lint-posts.rb line 261)."""
+    return BLOG_CODE_SPAN.sub("", blog_unquote(line))
+
+
+def blog_line_roles(lines: list[str]) -> list[str]:
+    """Each line's role as the blog lint's body loop assigns it
+    (lint-posts.rb lines 241-280): ``"fence"`` (a fence marker or a line
+    inside one), ``"display"`` (a line of a ``$$`` display block opened on a
+    line starting with ``$$``, delimiters included) or ``"prose"``.
+
+    A fence closes only on a line of its own character, at least as long,
+    with nothing else on it (line 250); an unclosed one runs to the end.
+    """
+    roles: list[str] = []
+    fence: str | None = None
+    block = False  # inside a multi-line display block
+    para = False  # a paragraph with an odd number of $$ is open
+    for line in lines:
+        if m := BLOG_FENCE.match(line):
+            if fence is None:
+                fence = m.group(1)
+            elif re.fullmatch(f"{re.escape(fence[0])}{{{len(fence)},}}", line.strip()):
+                fence = None
+            roles.append("fence")
+            continue
+        if fence is not None:
+            roles.append("fence")
+            continue
+        bare = blog_bare(line)
+        odd = bare.count("$$") % 2 == 1
+        if para and not bare.strip():
+            para = False
+        if block or (odd and not para and bare.lstrip().startswith("$$")):
+            if odd:
+                block = not block
+            roles.append("display")
+            continue
+        if odd:
+            para = not para
+        roles.append("prose")
+    return roles
+
+
 def has_math(markdown: str) -> bool:
-    """Whether the (normalized) Markdown contains a ``$$`` math span outside code."""
-    return any(seg.kind == "display" for seg in segments(markdown))
+    """Whether the Markdown has ``$$`` outside code, as the blog lint decides
+    a post needs ``use_math: true`` (lint-posts.rb lines 262 and 300): on any
+    line outside its fences, code spans removed. Math in an indented code
+    block or a fence inside a blockquote counts, as it does there."""
+    lines = markdown.split("\n")
+    return any(
+        role != "fence" and "$$" in blog_bare(line)
+        for line, role in zip(lines, blog_line_roles(lines), strict=True)
+    )
