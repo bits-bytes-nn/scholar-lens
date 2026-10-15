@@ -156,3 +156,12 @@ class TestSpellingAndStylizedNames:
             "vLLM",
             "Key-Value-Cache",
         ]
+
+
+def test_a_taxonomy_answer_needs_a_controlled_tag() -> None:
+    from scholar_lens.src.tags import NO_CONTROLLED_TAG, controlled_tag_problems
+
+    options = ["Quantization", "Agentic-AI"]
+    assert controlled_tag_problems("quantization, Other", options) == []
+    assert controlled_tag_problems("", options) == [NO_CONTROLLED_TAG]
+    assert controlled_tag_problems("Model-Serving", options) == [NO_CONTROLLED_TAG]

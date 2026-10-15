@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import html
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 from .post_conventions import GENERATED_SPECIFIC_TAGS, PostConventions
@@ -182,3 +183,19 @@ def unsupported_tags(tags: list[str], text: str) -> list[str]:
             continue
         missing.append(tag)
     return missing
+
+
+NO_CONTROLLED_TAG = (
+    "controlled_tags has no value from controlled_tag_options; the blog "
+    "requires at least one, so copy the closest fit"
+)
+
+
+def controlled_tag_problems(answer: str | None, options: Sequence[str]) -> list[str]:
+    """The taxonomy answer's controlled-tag problem: none of its
+    comma-separated values is one of ``options`` (the blog lint requires at
+    least one controlled tag)."""
+    picked = {value.strip().lower() for value in (answer or "").split(",")}
+    return (
+        [] if picked & {option.lower() for option in options} else [NO_CONTROLLED_TAG]
+    )

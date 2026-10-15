@@ -875,8 +875,9 @@ search description. Choose only from the lists you are given.
 
 - category: exactly one value copied from category_options, the closest fit.
 - controlled_tags: values copied from controlled_tag_options: one by
-  default, naming what the survey covers; a second only when whole lineages
-  are about it.
+  default, naming what the survey covers (the closest fit when none matches
+  exactly: the blog requires one); a second only when whole lineages are
+  about it.
 - keywords: up to 5 short reusable topic tags in English (1-4 words each)
   naming methods and ideas the survey covers; never restate the title.
 - description: the post's search snippet, one plain text paragraph of

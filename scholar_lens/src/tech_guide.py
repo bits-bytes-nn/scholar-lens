@@ -86,6 +86,7 @@ from .section_loop import (
     parse_section_output,
     revise_section,
 )
+from .tags import controlled_tag_problems
 from .utils import (
     BedrockLanguageModelFactory,
     HTMLTagOutputParser,
@@ -603,13 +604,18 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
         for attempt in range(2):
             result = await self._classify(payload)
             description = " ".join((result.get("description") or "").split())
-            if not (problems := description_problems(description, guide.body)):
+            if not (
+                problems := description_problems(description, guide.body)
+                + controlled_tag_problems(
+                    result.get("controlled_tags"), controlled_tags
+                )
+            ):
                 break
             logger.warning(
-                "Guide description unusable (attempt %d): %s", attempt + 1, problems
+                "Guide taxonomy answer unusable (attempt %d): %s", attempt + 1, problems
             )
             payload["repair_note"] = (
-                "Your previous description could not be used: "
+                "Your previous answer could not be used: "
                 + "; ".join(problems)
                 + ". Answer all five parts again."
             )

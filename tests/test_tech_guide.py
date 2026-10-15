@@ -1383,7 +1383,10 @@ class TestSectionPlan:
         gen = _make_generator()
         gen.taxonomy_chain = MagicMock()
         gen.taxonomy_chain.ainvoke = AsyncMock(
-            side_effect=[{"description": "`vLLM` is fast."}, {"description": good}]
+            side_effect=[
+                {"description": "`vLLM` is fast.", "controlled_tags": "B"},
+                {"description": good, "controlled_tags": "B"},
+            ]
         )
         guide = TechGuide(topic="vLLM", body="## Engine\n\nThe engine.")
         result = await gen.classify(
@@ -1394,6 +1397,30 @@ class TestSectionPlan:
         assert "description is plain text" in second["repair_note"]
         assert second["language"] == "English"
         assert guide.notes == []
+
+    async def test_classify_asks_again_without_a_controlled_tag(self) -> None:
+        from scholar_lens.src.tags import NO_CONTROLLED_TAG
+        from scholar_lens.src.tech_guide import TechGuide
+
+        good = (
+            "Ray Serve deploys models as scalable online APIs; this guide covers "
+            "deployments, composition, autoscaling and running it on Kubernetes."
+        )
+        gen = _make_generator()
+        gen.taxonomy_chain = MagicMock()
+        gen.taxonomy_chain.ainvoke = AsyncMock(
+            side_effect=[
+                {"description": good, "controlled_tags": ""},
+                {"description": good, "controlled_tags": "B"},
+            ]
+        )
+        guide = TechGuide(topic="Ray Serve", body="## Serve\n\nServing.")
+        result = await gen.classify(
+            guide, category_options=["A"], controlled_tags=["B", "C"]
+        )
+        assert result["controlled_tags"] == "B"
+        second = gen.taxonomy_chain.ainvoke.await_args_list[1].args[0]
+        assert NO_CONTROLLED_TAG in second["repair_note"]
 
     async def test_a_description_still_marked_up_after_the_repair_is_dropped(
         self,

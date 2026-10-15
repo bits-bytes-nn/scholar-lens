@@ -668,8 +668,8 @@ class TechGuideTaxonomyPrompt(BasePrompt):
 
     Rules:
     - category: exactly one value copied from category_options — the closest fit.
-    - controlled_tags: values copied from controlled_tag_options: one by default, naming what the guide teaches; a
-      second only when whole sections teach it, never a neighbouring field.
+    - controlled_tags: values copied from controlled_tag_options: one by default, naming what the guide teaches (the
+      closest fit when none matches exactly: the blog requires one); a second only when whole sections teach it.
     - keywords: up to 5 short reusable topic tags in English (1-4 words each, e.g. "Vector Search",
       "Container Orchestration"); name techniques and tools the guide teaches, never restate the title.
     - seo_title: only when the title is longer than {title_max_length} characters, a version of at most {title_max_length} characters that keeps

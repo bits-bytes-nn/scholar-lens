@@ -135,6 +135,7 @@ from .survey_post import (
     validate_plan,
     without_papers,
 )
+from .tags import controlled_tag_problems
 from .utils import (
     BedrockLanguageModelFactory,
     HTMLTagOutputParser,
@@ -935,13 +936,20 @@ class SurveyWriter(SurveyCalls):
         for attempt in range(2):
             result = await self._finalize(payload)
             description = " ".join((result.get("description") or "").split())
-            if not (problems := description_problems(description, body)):
+            if not (
+                problems := description_problems(description, body)
+                + controlled_tag_problems(
+                    result.get("controlled_tags"), controlled_tags
+                )
+            ):
                 return result
             logger.warning(
-                "Survey description unusable (attempt %d): %s", attempt + 1, problems
+                "Survey finalization answer unusable (attempt %d): %s",
+                attempt + 1,
+                problems,
             )
             payload["repair_note"] = (
-                "Your previous description could not be used: "
+                "Your previous answer could not be used: "
                 + "; ".join(problems)
                 + ". Answer all four parts again."
             )
