@@ -270,6 +270,17 @@ class TestImageLocalization:
         assert url not in content
         assert (staged / "my-guide-1.png").read_bytes() == PNG
 
+    async def test_html_arxiv_images_and_their_lightbox_are_stored(
+        self, tmp_path: Path
+    ) -> None:
+        url = "https://arxiv.org/html/2502.17416v1/Media/looping.png"
+        body = f'<a class="glightbox" href="{url}"><img src="{url}" alt="loop"></a>\n'
+        content, staged = await self._publish(tmp_path, body, fetch_image=lambda u: PNG)
+        assert url not in content
+        assert 'href="/assets/images/my-guide-1.png"' in content
+        assert 'src="/assets/images/my-guide-1.png"' in content
+        assert (staged / "my-guide-1.png").read_bytes() == PNG
+
     async def test_download_failure_blocks_publishing(self, tmp_path: Path) -> None:
         def fetch(url: str) -> bytes:
             raise httpx.ConnectError("boom")

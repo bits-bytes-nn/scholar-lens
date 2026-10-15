@@ -197,6 +197,14 @@ def _is_paper_figure(src: str) -> bool:
     return not src.startswith(("http://", "https://")) or is_arxiv_host(src)
 
 
+_HTML_IMG_SRC = re.compile(
+    r"""(?P<lead><img\b[^>]*?\bsrc=["'])(?P<url>https?://[^"'\s]+)""", re.IGNORECASE
+)
+_HTML_HREF = re.compile(
+    r"""(?P<lead><a\b[^>]*?\bhref=["'])(?P<url>https?://[^"'\s]+)""", re.IGNORECASE
+)
+
+
 class ImageLocalizer:
     """Rewrite the paper's figures in a post to the blog's flat
     ``/assets/images`` layout, writing the image files into ``staging_dir``.
@@ -253,26 +261,51 @@ class ImageLocalizer:
             if seg.kind in ("fence", "icode")
         ]
 
-        def repl(match: re.Match) -> str:
-            if any(start <= match.start() < end for start, end in code):
-                return match.group(0)  # an image example inside code
-            alt_text, src = match.group(1), match.group(2).strip()
-            title = match.group(3) or ""
+        def in_code(pos: int) -> bool:
+            return any(start <= pos < end for start, end in code)
+
+        def store(src: str) -> str | None:
+            """The blog path of ``src`` once stored, or None when left as-is."""
             if src in hosted:
-                return f"![{alt_text}]({hosted[src]}{title})"
+                return hosted[src]
             if src.startswith(("/assets/", "data:")) or not _is_paper_figure(src):
-                return match.group(0)  # left as-is by policy
+                return None  # left as-is by policy
             try:
                 data, extension = self._image(src, sources)
             except PostAssetError as e:
                 failures.append(str(e))
-                return match.group(0)
+                return None
             name = f"{self.slug}-{len(hosted) + 1}.{extension}"
             (self.staging_dir / name).write_bytes(data)
             hosted[src] = f"/{BLOG_IMAGES_DIR}/{name}"
-            return f"![{alt_text}]({hosted[src]}{title})"
+            return hosted[src]
+
+        def repl(match: re.Match) -> str:
+            if in_code(match.start()):
+                return match.group(0)  # an image example inside code
+            alt_text, src = match.group(1), match.group(2).strip()
+            title = match.group(3) or ""
+            path = store(src)
+            return match.group(0) if path is None else f"![{alt_text}]({path}{title})"
+
+        def html_src(match: re.Match) -> str:
+            if in_code(match.start()):
+                return match.group(0)
+            path = store(match.group("url"))
+            return match.group(0) if path is None else match.group("lead") + path
 
         markdown = IMAGE.sub(repl, markdown)
+        # An HTML <img> (a hand-written figure or lightbox) stores the same way,
+        # and a lightbox link pointing at that image follows it.
+        markdown = _HTML_IMG_SRC.sub(html_src, markdown)
+        markdown = _HTML_HREF.sub(
+            lambda m: (
+                m.group("lead") + hosted[m.group("url")]
+                if m.group("url") in hosted and not in_code(m.start())
+                else m.group(0)
+            ),
+            markdown,
+        )
         if failures:
             raise PostAssetError("; ".join(failures))
         return markdown
