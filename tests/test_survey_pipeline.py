@@ -12,6 +12,7 @@ from typing import Any
 from unittest import mock
 from unittest.mock import AsyncMock, MagicMock
 
+import arxiv
 import httpx
 import pytest
 from pydantic import ValidationError
@@ -531,7 +532,7 @@ class TestArxivSearch:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         handler, limiter = self._handler(
-            monkeypatch, RuntimeError("Page request resulted in HTTP 429")
+            monkeypatch, arxiv.HTTPError("https://export.arxiv.org/api/query", 0, 429)
         )
         with pytest.raises(ArxivPaperError, match="429"):
             handler.search("all:dpo", 5)
