@@ -179,3 +179,16 @@ def test_arxiv_pdf_download_is_paced_and_penalty_capped(
     # The second download waited out the capped penalty, then set a new one.
     assert clock.now - start == pytest.approx(60.0)
     assert limiter._blocked_until - clock.now == pytest.approx(60.0)
+
+
+def test_a_429_in_the_message_alone_is_not_a_rate_limit() -> None:
+    from types import SimpleNamespace
+
+    from scholar_lens.src.rate_limiter import arxiv_retry_after_seconds
+
+    not_found = Exception("404 for https://arxiv.org/abs/2405.04291")
+    not_found.response = SimpleNamespace(headers={}, status_code=404)  # type: ignore[attr-defined]
+    assert arxiv_retry_after_seconds(not_found) == 0.0
+    limited = Exception("rate limited")
+    limited.response = SimpleNamespace(headers={}, status_code=429)  # type: ignore[attr-defined]
+    assert arxiv_retry_after_seconds(limited) == 30.0

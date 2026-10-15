@@ -111,6 +111,9 @@ def arxiv_retry_after_seconds(error: Exception) -> float:
             return 0.0
         return min(seconds, MAX_RETRY_AFTER_SECONDS)
     # arXiv 429s rarely include Retry-After; apply a conservative default.
-    if "429" in str(error):
+    # The status comes from the HTTP response (httpx, requests) or the arxiv
+    # client's own HTTPError, never from the message: "2405.04291" holds 429.
+    status = getattr(response, "status_code", None) or getattr(error, "status", None)
+    if status == 429:
         return _ARXIV_429_FALLBACK_RETRY_SECONDS
     return 0.0

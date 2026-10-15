@@ -150,10 +150,11 @@ _LATEX_LIKE = re.compile(r"[\\^_{]")
 # vanish. The last row is an inline <svg>'s children.
 BLOG_HTML_ELEMENTS = frozenset(
     """a abbr audio b blockquote br caption center cite code col colgroup dd del
-    details div dl dt em figcaption figure h1 h2 h3 h4 h5 h6 hr i iframe img ins
-    kbd li mark ol p picture pre script section small source span strong sub
-    summary sup svg table tbody td tfoot th thead tr ul video wbr
-    circle defs g line path polygon polyline rect text tspan use""".split()
+    details dfn div dl dt em figcaption figure h1 h2 h3 h4 h5 h6 hr i iframe img
+    ins kbd li mark ol p picture pre q samp script section small source span
+    strong sub summary sup svg table tbody td tfoot th thead time tr track u ul
+    var video wbr
+    circle defs ellipse g line marker path polygon polyline rect text tspan use""".split()
 )
 # Elements that mean nothing bare: <img> or <a> alone is a token, not markup.
 BLOG_NEEDS_ATTRIBUTES = frozenset("a audio iframe img script source video".split())
