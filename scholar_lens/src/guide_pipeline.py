@@ -86,7 +86,10 @@ async def run_guide_pipeline(
         )
     except Exception as e:
         # Keep the generator's notes (e.g. the budget note) on a failed run.
-        e.run_notes = list(generator.notes)  # type: ignore[attr-defined]
+        e.run_notes = [  # type: ignore[attr-defined]
+            *generator.notes,
+            *researcher.search_notes(),
+        ]
         raise
     finally:
         researcher.close()
@@ -97,7 +100,10 @@ async def run_guide_pipeline(
     # an earlier run published, whatever title it gets now.
     branch_id = guide_branch_id(sources)
     published, lookup_notes = await find_published_post(
-        context, slug=title_slug(guide.topic, "guide"), branch_id=branch_id
+        context,
+        slug=title_slug(guide.topic, "guide"),
+        branch_id=branch_id,
+        category=github.tech_guide_category,
     )
     meta = build_post_meta(
         title=guide.topic,
@@ -113,12 +119,20 @@ async def run_guide_pipeline(
     slug = slugify(guide.topic, max_length=80)
     work_dir = ROOT_DIR / LocalPaths.PAPERS_DIR.value / f"guide-{slug}"
     work_dir.mkdir(parents=True, exist_ok=True)
-    document = guide_document(format_guide(github, guide, meta=meta), guide)
+    document = guide_document(
+        format_guide(github, guide, meta=meta),
+        guide,
+        korean=context.config.output_language == "Korean",
+    )
     publish_request = _build_publish_request(
         guide, work_dir, document, branch_id=branch_id
     )
     publish_request.published_path = published.path if published else None
-    publish_request.review_notes += [*lookup_notes, *guide.notes]
+    publish_request.review_notes += [
+        *lookup_notes,
+        *guide.notes,
+        *researcher.search_notes(),
+    ]
     outcome = await publish_artifact(
         context, publish_request, create_pr=request.create_pr
     )
@@ -138,13 +152,14 @@ def guide_title(title: str, seo_title: str, limit: int) -> str:
     return cut_title(title, limit)
 
 
-def guide_document(document: str, guide: TechGuide) -> str:
+def guide_document(document: str, guide: TechGuide, *, korean: bool) -> str:
     """Copied ``[Image: …]`` markers become images, images the writer was
     never offered (a logo, a tracking pixel, an invented URL) are dropped, and
-    every image gets alt text: the paper pipeline's order."""
+    every image gets alt text (Korean in a ``korean`` post): the paper
+    pipeline's order."""
     document = figure_markers_to_images(document)
     document = drop_unknown_images(document, set(guide.image_urls))
-    return fill_image_alts(document, {}, guide.topic)
+    return fill_image_alts(document, {}, guide.topic, korean=korean)
 
 
 def _split_list(value: str) -> list[str]:

@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import json
 import re
-from collections import Counter
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
@@ -23,13 +22,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from .logger import logger
-from .markdown_lint import (
-    FIGURE_MARKER,
-    callout_lines,
-    close_open_fence,
-    publish_body,
-    writing_issues,
-)
+from .markdown_lint import FIGURE_MARKER, callout_lines, close_open_fence
 from .markdown_math import (
     DISPLAY_MATH,
     HANGUL,
@@ -38,7 +31,7 @@ from .markdown_math import (
     open_fence,
     without_fences,
 )
-from .post_validator import body_errors
+from .quality_gate import added_slips
 from .utils.helpers import first_sentence
 
 Difficulty = Literal["easy", "medium", "hard"]
@@ -817,35 +810,6 @@ def rejected_revision_note(score: int, blocking: int) -> str:
         f"A previous revision of this draft was rejected (score {score}, "
         f"{blocking} blocking problem(s)); avoid its problems:"
     )
-
-
-def rule_issues(text: str) -> list[str]:
-    """Deterministic rule hits a writer can fix: writing slips plus the
-    publish-blocking body checks (tables, math, code fences) that are left
-    after the publisher's own fixes (math delimiters, blank lines, headings),
-    so a draft is never revised for what the publisher repairs."""
-    return writing_issues(text) + publish_blockers(text)
-
-
-def publish_blockers(text: str) -> list[str]:
-    """The body errors the validator would still report once the section is
-    closed (an open fence) and the publisher has normalized math and linted
-    the Markdown."""
-    fixed = publish_body(text, warn=False)
-    return body_errors(fixed)
-
-
-def added_slips(
-    before: str, after: str, rules: Callable[[str], list[str]] = rule_issues
-) -> list[str]:
-    """Rule hits (rule and offending text) an edit would add, even when it
-    also fixes another; ``rules`` finds them (:func:`rule_issues` by
-    default)."""
-
-    def keys(text: str) -> Counter[str]:
-        return Counter(issue.split(":", 1)[0] for issue in rules(text))
-
-    return list((keys(after) - keys(before)).elements())
 
 
 def _is_subsequence(items: list[str], within: list[str]) -> bool:

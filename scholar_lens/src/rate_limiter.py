@@ -12,6 +12,7 @@ primitive is the right tool and composes with concurrent callers.
 
 from __future__ import annotations
 
+import math
 import threading
 import time
 
@@ -90,18 +91,25 @@ ARXIV_RATE_LIMITER = RateLimiter(rate=1.0, per=3.0, name="arxiv")
 # Penalty when an arXiv 429 carries no Retry-After header (arXiv usually omits
 # it).
 _ARXIV_429_FALLBACK_RETRY_SECONDS: float = 30.0
+# The longest server-requested wait honoured: a larger Retry-After is capped
+# here so one response cannot stall every later request for hours.
+MAX_RETRY_AFTER_SECONDS: float = 60.0
 
 
 def arxiv_retry_after_seconds(error: Exception) -> float:
-    """Best-effort extraction of a Retry-After hint from an arXiv/HTTP error."""
+    """Best-effort extraction of a Retry-After hint from an arXiv/HTTP error,
+    capped at :data:`MAX_RETRY_AFTER_SECONDS`."""
     response = getattr(error, "response", None)
     headers = getattr(response, "headers", None) or {}
     raw = headers.get("Retry-After") or headers.get("retry-after")
     if raw:
         try:
-            return float(raw)
+            seconds = float(raw)
         except (TypeError, ValueError):
             return 0.0
+        if not math.isfinite(seconds):
+            return 0.0
+        return min(seconds, MAX_RETRY_AFTER_SECONDS)
     # arXiv 429s rarely include Retry-After; apply a conservative default.
     if "429" in str(error):
         return _ARXIV_429_FALLBACK_RETRY_SECONDS

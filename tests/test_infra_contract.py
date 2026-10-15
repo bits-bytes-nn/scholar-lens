@@ -141,6 +141,14 @@ class TestStackWiring:
         (env,) = resources_of_type(template, "AWS::Batch::ComputeEnvironment")
         assert env["Properties"]["ComputeResources"]["Type"] == "EC2"
 
+    def test_compute_follows_the_latest_ami(self, template: dict[str, Any]) -> None:
+        (env,) = resources_of_type(template, "AWS::Batch::ComputeEnvironment")
+        # An in-place infrastructure update (no replacement) moves to the AMI.
+        assert env["Properties"]["ReplaceComputeEnvironment"] is False
+        assert (
+            env["Properties"]["ComputeResources"]["UpdateToLatestImageVersion"] is True
+        )
+
     def test_only_cost_and_failure_delivery_alarms(
         self, template: dict[str, Any]
     ) -> None:

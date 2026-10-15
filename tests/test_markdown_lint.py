@@ -245,6 +245,7 @@ class TestFillImageAlts:
             "![](https://arxiv.org/html/x/x1.png)\n![kept](/a.png)\n![](/u.png)",
             {"x1.png": "Figure 6: Subspace similarity between A_r=8 and A_r=64."},
             "LoRA",
+            korean=False,
         )
         assert (
             "![Subspace similarity between A_r=8 and A_r=64.](https://arxiv.org/html/x/x1.png)"

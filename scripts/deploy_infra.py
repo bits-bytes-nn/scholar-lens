@@ -485,6 +485,9 @@ class PaperReviewStack(Stack):
             vpc=self.vpc,
             security_groups=[self.security_group],
             vpc_subnets=self.vpc_subnets,
+            # Pick up the latest ECS-optimized AMI on each infrastructure
+            # update instead of pinning the one current at creation.
+            update_to_latest_image_version=True,
         )
         # On-demand only: a spot reclaim re-runs the whole job and repeats its
         # Bedrock spend, which costs far more than the EC2 it saves.

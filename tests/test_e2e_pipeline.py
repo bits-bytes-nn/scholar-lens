@@ -238,8 +238,9 @@ class TestGuideEndToEnd:
         post = Path(outcome.markdown_path).read_text(encoding="utf-8")
         violations = validate_post(post, context.conventions, "guide")
         assert [v for v in violations if v.level == "error"] == []
-        # A docs-site image is someone else's: linked as is, flagged for review.
-        assert "![arch](https://docs.vllm.ai/arch.png)" in post
+        # A docs-site image is someone else's: linked as is, flagged for review;
+        # a Korean post's English alt becomes its section heading.
+        assert "![PagedAttention 이해하기](https://docs.vllm.ai/arch.png)" in post
         assert [v.level for v in violations if v.rule == "image"] == ["warning"]
         front = post.split("\n---\n", 1)[0]
         assert 'categories: ["Tech Guides", "Language-Models"]' in front

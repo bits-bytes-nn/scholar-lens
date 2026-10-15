@@ -20,13 +20,8 @@ from scholar_lens.src.explainer import Paper, PaperReviewer, ReviewText
 from scholar_lens.src.metrics import TokenBudgetExceeded, TokenUsageTracker
 from scholar_lens.src.parser import Content
 from scholar_lens.src.post_validator import body_errors
-from scholar_lens.src.review_plan import (
-    PlanError,
-    SourceText,
-    draft_rank,
-    publish_blockers,
-    rule_issues,
-)
+from scholar_lens.src.quality_gate import publish_blockers, rule_issues
+from scholar_lens.src.review_plan import PlanError, SourceText, draft_rank
 
 MARKER = '[Image: alt="arch", src="/p/figures/0.png", caption="The architecture."]'
 SENTENCES = [
@@ -111,7 +106,7 @@ def _pass(_: dict[str, Any]) -> dict[str, str]:
 
 TLDR = "\n\n".join(f"### 질문 {i}\n답입니다." for i in ("하나", "둘", "셋", "넷"))
 # A description the finalizer checks pass: plain text, 120-160 characters,
-# no number the TL;DR or the abstract lacks.
+# no number the TL;DR lacks.
 DESCRIPTION = (
     "LoRA는 사전 학습된 가중치를 고정하고 저랭크 행렬 B와 A만 학습해, 전체 미세 조정과 "
     "같은 GLUE 성능을 내면서 학습할 파라미터와 메모리를 크게 줄입니다. 추론 지연도 "
@@ -736,11 +731,9 @@ def test_finalization_problems_are_structural_only() -> None:
         "key_takeaways": TLDR,
         "closing": long_closing,
     }
-    assert _finalization_problems(final, "Title", source=SOURCE, abstract="") == {}
+    assert _finalization_problems(final, "Title", source=SOURCE) == {}
     final["closing"] = "한계입니다."
-    assert set(_finalization_problems(final, "Title", source=SOURCE, abstract="")) == {
-        "closing"
-    }
+    assert set(_finalization_problems(final, "Title", source=SOURCE)) == {"closing"}
 
 
 def test_subtitle_that_repeats_the_title_is_a_problem() -> None:
@@ -754,9 +747,9 @@ def test_subtitle_that_repeats_the_title_is_a_problem() -> None:
         "key_takeaways": TLDR,
         "closing": "## 한계\n\n끝.",
     }
-    assert set(
-        _finalization_problems(final, "Pixtral 12B", source=SOURCE, abstract="")
-    ) == {"subtitle"}
+    assert set(_finalization_problems(final, "Pixtral 12B", source=SOURCE)) == {
+        "subtitle"
+    }
 
 
 async def test_revisions_stop_when_must_fix_items_do_not_shrink() -> None:
@@ -889,9 +882,22 @@ def test_finalization_part_that_the_validator_would_reject_is_a_problem() -> Non
         "key_takeaways": TLDR,
         "closing": closing,
     }
-    assert set(_finalization_problems(final, "Title", source=SOURCE, abstract="")) == {
-        "closing"
+    assert set(_finalization_problems(final, "Title", source=SOURCE)) == {"closing"}
+
+
+def test_description_numbers_come_from_the_tldr_only() -> None:
+    # As the finalizer prompt asks: a number only the abstract states is
+    # still unsourced in the post's description.
+    from scholar_lens.src.explainer import _finalization_problems
+
+    final = {
+        "subtitle": "s",
+        "description": DESCRIPTION.replace("B와 A만", "랭크 8의 B와 A만"),
+        "key_takeaways": TLDR,
+        "closing": "## 한계와 시사점\n\n한계입니다.",
     }
+    found = _finalization_problems(final, "Title", source="rank 8 " + SOURCE)
+    assert found["description"].endswith("TL;DR or sources: 8")
 
 
 async def test_open_must_fix_items_reach_the_editor() -> None:

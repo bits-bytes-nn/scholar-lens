@@ -11,13 +11,19 @@ the server fetch it on their behalf.
 rejecting any address that is loopback, private, link-local, or otherwise not a
 normal public unicast address. It raises :class:`UnsafeUrlError` on rejection so
 callers can convert it into a domain-specific error.
+
+:func:`upgrade_to_https` rewrites an ``http://`` URL to ``https://`` (same host,
+path and query). The pinned transports apply it to every request and redirect
+hop: the AWS Batch security group allows only HTTPS (443) egress, so a plain
+HTTP fetch would hang until its timeout there; upgrading keeps local and Batch
+runs identical and never sends a request in clear text.
 """
 
 from __future__ import annotations
 
 import ipaddress
 import socket
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 
 from .logger import logger
 
@@ -29,6 +35,28 @@ _METADATA_ADDRESSES = {"169.254.169.254", "fd00:ec2::254"}
 
 class UnsafeUrlError(ValueError):
     """Raised when a URL is rejected by the SSRF guard."""
+
+
+def upgrade_to_https(url: str) -> str:
+    """Return ``url`` with an ``http`` scheme rewritten to ``https``.
+
+    The host, path, query and fragment are kept; an explicit ``:80`` (the HTTP
+    default port) is dropped so the upgraded URL uses 443. Any other scheme is
+    returned unchanged (the guard rejects it separately).
+
+    Args:
+        url: The URL to upgrade.
+
+    Returns:
+        The ``https`` form of an ``http`` URL, otherwise ``url`` itself.
+    """
+    parts = urlsplit(url)
+    if parts.scheme.lower() != "http":
+        return url
+    netloc = parts.netloc
+    if parts.port == 80:
+        netloc = netloc.rsplit(":", 1)[0]
+    return urlunsplit(("https", netloc, parts.path, parts.query, parts.fragment))
 
 
 def _is_blocked_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:

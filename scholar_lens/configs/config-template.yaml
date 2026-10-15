@@ -22,6 +22,9 @@ resources:
     base_branch: main
     branch_prefix: paper-reviews   # PR branches: <prefix>/review-<id>, summary-<id>, guide-<url-hash>, survey-<topic>
     author_name: Scholar Lens Bot
+    # The tool's commit identity. Required for regeneration: without it a rerun
+    # cannot find the post its branch published (only a post with the same
+    # slug is replaced) and leaves its older branch copies in place.
     author_email:
     # Lead category written to each post's front matter, per artifact type.
     review_category: Paper Reviews

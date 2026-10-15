@@ -139,18 +139,20 @@ TABLE_RULES: str = """
   repeating only a derived number's inputs.
 """
 
-# Size cap of a table copied from the paper (not checked in code).
+# Size cap of a table copied from the paper (not checked in code); checkers
+# get it alone, writers with how to copy and shorten such a table.
 TABLE_SIZE_RULE: str = """
 - A table from the paper has at most 8 rows and 7 columns.
 """
 
-PAPER_TABLE_RULES: str = """
-- A table from the paper has at most 8 rows and 7 columns. Copy cells and
-  numbers verbatim from the source table; label method/model rows with the
-  names used in the prose. To shorten a long table, omit whole rows or columns
-  (keep the main method and the strongest baselines) and add one line saying
-  that some were omitted; never drop or merge individual cells.
+PAPER_TABLE_RULES: str = (
+    TABLE_SIZE_RULE
+    + """- Copy a paper table's cells and numbers verbatim; label method/model rows
+  with the names used in the prose. To shorten a long table, omit whole rows
+  or columns (keep the main method and the strongest baselines) and add one
+  line saying that some were omitted; never drop or merge individual cells.
 """
+)
 
 MATH_RULES: str = r"""
 - Write all math, inline and display, between $$ and $$ (never a single $):
@@ -198,7 +200,8 @@ KOREAN_STYLE: str = """
   - an English default verb (가지다, 수행하다, 역할을 하다): "세 단계를
     가집니다" → "단계가 셋입니다";
   - a formula: "직관은 다음과 같습니다.", a closing "결국 …라는 것입니다" or
-    "…하는 셈입니다", "할 수 있습니다" for what simply happens.
+    "…하는 셈입니다", "할 수 있습니다" for what simply happens;
+  - 다 before a colon ("셋입니다:") → a period ("셋입니다."), then the list.
 """
 
 STYLE_RULES: str = """

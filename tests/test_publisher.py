@@ -281,6 +281,34 @@ class TestImageLocalization:
         assert 'src="/assets/images/my-guide-1.png"' in content
         assert (staged / "my-guide-1.png").read_bytes() == PNG
 
+    async def test_html_images_after_a_shortened_url_are_found(
+        self, tmp_path: Path
+    ) -> None:
+        # Storing the long Markdown image shortens the text before the fence:
+        # code spans found before that pass would cover the wrong text.
+        long = "https://arxiv.org/html/2502.17416v1/x" + "a" * 80 + ".png"
+        html = "https://arxiv.org/html/2502.17416v1/y.png"
+        body = (
+            f"![a]({long})\n\n```python\n" + "print(1)\n" * 30 + "```\n\n"
+            f'<img src="{html}" alt="b">\n'
+        )
+        content, staged = await self._publish(tmp_path, body, fetch_image=lambda u: PNG)
+        assert html not in content
+        assert '<img src="/assets/images/my-guide-2.png" alt="b">' in content
+
+    async def test_an_img_example_in_a_fence_is_left_alone(
+        self, tmp_path: Path
+    ) -> None:
+        long = "https://arxiv.org/html/2502.17416v1/x" + "a" * 80 + ".png"
+        example = "https://arxiv.org/html/2502.17416v1/code.png"
+        body = (
+            f"![a]({long})\n\nText.\n\n```html\n"
+            f'<a href="{example}"><img src="{example}"></a>\n```\n'
+        )
+        content, staged = await self._publish(tmp_path, body, fetch_image=lambda u: PNG)
+        assert f'<a href="{example}"><img src="{example}"></a>' in content
+        assert [p.name for p in staged.iterdir()] == ["my-guide-1.png"]
+
     async def test_download_failure_blocks_publishing(self, tmp_path: Path) -> None:
         def fetch(url: str) -> bytes:
             raise httpx.ConnectError("boom")
@@ -1304,7 +1332,11 @@ class FakeGithub:
         pass
 
 
+_GUIDE = ["Tech Guides", "Language-Models"]
+
+
 def _site(*paths: str, **fields: Any) -> list[BlogPost]:
+    fields.setdefault("categories", _GUIDE)
     return [BlogPost(path=path, **fields) for path in paths]
 
 
@@ -1320,9 +1352,15 @@ class TestFindPublished:
         monkeypatch.setattr("scholar_lens.src.publisher.Github", FakeGithub)
         return repo
 
-    def _find(self, tmp_path: Path, site: list[BlogPost], slug: str) -> Any:
+    def _find(
+        self,
+        tmp_path: Path,
+        site: list[BlogPost],
+        slug: str,
+        category: str = "Tech Guides",
+    ) -> Any:
         publisher = Publisher(_CONFIG, root_dir=tmp_path, site_posts=site)
-        return publisher.find_published(slug, "guide-abc")
+        return publisher.find_published(slug, "guide-abc", category)
 
     def test_a_translation_on_the_branch_is_not_the_post(
         self, tmp_path: Path, repo: FakeRepo, monkeypatch: pytest.MonkeyPatch
@@ -1389,6 +1427,26 @@ class TestFindPublished:
     ) -> None:
         site = _site("_posts/2025-10-11-lora.md")
         assert self._find(tmp_path, site, "lora-summary") is None
+
+    def test_a_post_of_another_type_is_not_replaced(
+        self, tmp_path: Path, repo: FakeRepo
+    ) -> None:
+        # A guide titled "vLLM" must not take over the review of the same name.
+        review = _site("_posts/2025-10-11-vllm.md", categories=["Paper Reviews", "x"])
+        assert self._find(tmp_path, review, "vllm") is None
+        assert self._find(tmp_path, review, "vllm", "Paper Reviews") == review[0]
+
+    def test_without_a_token_pull_requests_are_not_read(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def no_github(*args: Any, **kwargs: Any) -> None:
+            raise AssertionError("GitHub was called")
+
+        monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+        monkeypatch.setattr("scholar_lens.src.publisher.Github", no_github)
+        site = _site("_posts/2026-01-06-x.md")
+        assert self._find(tmp_path, site, "y") is None
+        assert self._find(tmp_path, site, "x").path == "_posts/2026-01-06-x.md"
 
     def test_a_retitled_rerun_finds_what_its_branch_published(
         self, tmp_path: Path, repo: FakeRepo

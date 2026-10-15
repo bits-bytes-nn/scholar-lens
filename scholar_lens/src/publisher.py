@@ -255,14 +255,22 @@ class ImageLocalizer:
         # arXiv id -> its source archive, or why it could not be fetched.
         sources: dict[str, bytes | PostAssetError] = {}
 
-        code = [
-            (seg.start, seg.end)
-            for seg in segments(markdown)
-            if seg.kind in ("fence", "icode")
-        ]
+        code: list[tuple[int, int]] = []
 
         def in_code(pos: int) -> bool:
             return any(start <= pos < end for start, end in code)
+
+        def substitute(
+            pattern: re.Pattern[str], repl: Callable[[re.Match[str]], str], text: str
+        ) -> str:
+            # Each pass shortens the text before later matches (a long URL
+            # becomes a short path): find the code spans afresh every time.
+            code[:] = [
+                (seg.start, seg.end)
+                for seg in segments(text)
+                if seg.kind in ("fence", "icode")
+            ]
+            return pattern.sub(repl, text)
 
         def store(src: str) -> str | None:
             """The blog path of ``src`` once stored, or None when left as-is."""
@@ -294,11 +302,12 @@ class ImageLocalizer:
             path = store(match.group("url"))
             return match.group(0) if path is None else match.group("lead") + path
 
-        markdown = IMAGE.sub(repl, markdown)
+        markdown = substitute(IMAGE, repl, markdown)
         # An HTML <img> (a hand-written figure or lightbox) stores the same way,
         # and a lightbox link pointing at that image follows it.
-        markdown = _HTML_IMG_SRC.sub(html_src, markdown)
-        markdown = _HTML_HREF.sub(
+        markdown = substitute(_HTML_IMG_SRC, html_src, markdown)
+        markdown = substitute(
+            _HTML_HREF,
             lambda m: (
                 m.group("lead") + hosted[m.group("url")]
                 if m.group("url") in hosted and not in_code(m.start())
@@ -472,25 +481,34 @@ class Publisher:
         s3_url = await self._upload_to_s3(request, markdown_path)
         return s3_url, markdown_path
 
-    def find_published(self, slug: str, branch_id: str) -> BlogPost | None:
+    def find_published(
+        self, slug: str, branch_id: str, category: str
+    ) -> BlogPost | None:
         """The blog's post a new one with ``slug``, from the artifact
         ``branch_id``, replaces: the post with that slug (older slug rules
-        included, see :func:`same_post`), else the one this tool wrote on the
-        artifact's branch and a merged pull request published (a rerun under
-        a new title). The new post then keeps its file name, URL, date and
-        topic.
+        included, see :func:`same_post`) whose ``categories[0]`` is
+        ``category`` (a guide titled like a review does not take it over),
+        else the one this tool wrote on the artifact's branch and a merged
+        pull request published (a rerun under a new title). The new post then
+        keeps its file name, URL, date, topic and translation pairing.
+
+        Without a blog listing nothing is known to be published, and without
+        a GitHub token there are no pull requests to read: None.
 
         Raises :class:`PublishError` when the blog's pull requests cannot be
         read.
         """
         posts = {post.path: post for post in self.site_posts if is_post_file(post.path)}
         by_slug = sorted(
-            path for path in posts if same_post(post_slug(Path(path).stem), slug)
+            path
+            for path, post in posts.items()
+            if same_post(post_slug(Path(path).stem), slug)
+            and post.categories[:1] == [category]
         )
         if by_slug:
             return posts[by_slug[0]]
-        if not posts:
-            return None  # no blog listing: nothing is known to be published
+        if not posts or not os.getenv(EnvVars.GITHUB_TOKEN.value):
+            return None
         published = self._with_repo(
             lambda repo: BlogBranchSync(repo, self.github_config).merged_posts(
                 branch_id

@@ -533,11 +533,63 @@ def test_an_unreadable_branch_history_becomes_a_review_note(
     publisher.find_published.side_effect = PublishError("502 from GitHub")
     monkeypatch.setattr(runtime, "build_publisher", lambda context: publisher)
     published, notes = asyncio.run(
-        runtime.find_published_post(MagicMock(), slug="x", branch_id="guide-abc")
+        runtime.find_published_post(
+            MagicMock(blog_listing_error=None),
+            slug="x",
+            branch_id="guide-abc",
+            category="Tech Guides",
+        )
     )
     assert published is None
     assert len(notes) == 1 and "502 from GitHub" in notes[0]
-    publisher.find_published.assert_called_once_with("x", "guide-abc")
+    publisher.find_published.assert_called_once_with("x", "guide-abc", "Tech Guides")
+
+
+def test_a_failed_blog_listing_becomes_a_review_note(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import asyncio
+
+    def fail(*args: object) -> list[object]:
+        raise RuntimeError("403 rate limit")
+
+    monkeypatch.setattr(runtime, "fetch_blog_posts", fail)
+    config = MagicMock()
+    config.resources.github.enabled = True
+    context = runtime.RunContext.model_construct(
+        config=config, blog_posts=None, blog_listing_error=None
+    )
+    monkeypatch.setattr(
+        runtime, "build_publisher", lambda ctx: _publisher(ctx.require_blog_posts())
+    )
+    published, notes = asyncio.run(
+        runtime.find_published_post(
+            context, slug="x", branch_id="b", category="Tech Guides"
+        )
+    )
+    assert published is None and context.blog_posts == []
+    assert len(notes) == 1 and "403 rate limit" in notes[0]
+
+
+def _publisher(site_posts: list[object]) -> MagicMock:
+    publisher = MagicMock()
+    publisher.find_published.return_value = None
+    return publisher
+
+
+def test_a_listed_blog_adds_no_lookup_note(monkeypatch: pytest.MonkeyPatch) -> None:
+    import asyncio
+
+    monkeypatch.setattr(runtime, "build_publisher", lambda ctx: _publisher([]))
+    _, notes = asyncio.run(
+        runtime.find_published_post(
+            MagicMock(blog_listing_error=None),
+            slug="x",
+            branch_id="b",
+            category="Tech Guides",
+        )
+    )
+    assert notes == []
 
 
 def test_no_pr_run_reports_the_post_checklist(

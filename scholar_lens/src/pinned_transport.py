@@ -7,7 +7,9 @@ close that window: each request (including every redirect hop, since each
 re-enters ``handle_request``) is validated via :func:`resolve_validated_ip`, and
 the connection is pinned to the exact IP that was validated. The original
 hostname is preserved as the TLS SNI / ``Host`` header so certificate
-verification and virtual-hosting still work.
+verification and virtual-hosting still work. Every hop is also upgraded from
+``http`` to ``https`` (:func:`upgrade_to_https`): the Batch security group only
+allows 443 egress.
 
 A request to a non-public target raises :class:`UnsafeUrlError`, which the
 fetchers already treat as "skip this URL".
@@ -23,18 +25,20 @@ import httpx
 import requests
 from requests.adapters import HTTPAdapter
 
-from .url_guard import resolve_validated_ip
+from .url_guard import resolve_validated_ip, upgrade_to_https
 
 
 def _pin(request: httpx.Request) -> httpx.URL:
-    """Validate the request URL and rewrite its host to the validated IP.
+    """Upgrade the request URL to https, validate it and pin its host to the
+    validated IP.
 
-    Returns the original URL so the caller can restore it after sending (the
-    response, redirects and link resolution must see the hostname, never the
-    pinned IP). No rewrite for an IP literal. Raises :class:`UnsafeUrlError`
-    for a non-public target.
+    Returns the (upgraded) hostname URL so the caller can restore it after
+    sending (the response, redirects and link resolution must see the
+    hostname, never the pinned IP). No IP rewrite for an IP literal. Raises
+    :class:`UnsafeUrlError` for a non-public target.
     """
-    original = request.url
+    original = httpx.URL(upgrade_to_https(str(request.url)))
+    request.url = original
     pinned_ip = resolve_validated_ip(str(original))
     if pinned_ip is None:
         return original  # IP literal — connect as-is
@@ -89,7 +93,8 @@ class PinnedRequestsAdapter(HTTPAdapter):
     def send(
         self, request: requests.PreparedRequest, **kwargs: Any
     ) -> requests.Response:
-        url = request.url or ""
+        url = upgrade_to_https(request.url or "")
+        request.url = url
         parts = urlsplit(url)
         host = parts.hostname or ""
         pinned_ip = resolve_validated_ip(url)  # raises UnsafeUrlError if not public

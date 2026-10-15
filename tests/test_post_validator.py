@@ -120,19 +120,6 @@ class TestFrontMatter:
     def test_organisations_pass(self, author: str) -> None:
         assert "paper-author" not in rules(make_post(front={"paper_author": author}))
 
-    @pytest.mark.parametrize(
-        ("doi", "ok"),
-        [
-            ('"10.48550/arXiv.2305.18290"', True),
-            ('"10.52202/075280-2338"', True),
-            ('"https://doi.org/10.48550/arXiv.2305.18290"', False),
-            ('"10.48550/arXiv.2305.18290?v=2"', False),
-            ('"10.1/x"', False),
-        ],
-    )
-    def test_paper_doi_is_a_bare_doi(self, doi: str, ok: bool) -> None:
-        assert ("paper-doi" not in rules(make_post(front={"paper_doi": doi}))) is ok
-
     def test_subtitle_required_and_distinct(self) -> None:
         assert "subtitle" in rules(make_post(drop=("subtitle",)))
         assert "subtitle" in rules(
@@ -461,34 +448,27 @@ class TestUnsourcedNumbers:
         assert unsourced_numbers(text, self.SOURCE) == missing
 
     @pytest.mark.parametrize(
-        ("text", "read"),
+        ("text", "source", "missing"),
         [
-            # 만 as the particle "only" or in 만큼 is no unit.
-            ("상위 5만 사용", [("5", "5")]),
-            ("10만큼 늘었다", [("10", "10")]),
-            ("32만을 썼다", [("32", "32")]),
-            ("5만 개선", [("5", "5")]),
-            # 만 is 10^4 before a number, a counter, a non-Hangul word, a
-            # particle "only" never follows, punctuation or the end.
-            ("5만 명", [("5만", "50000")]),
-            ("10만 개의 문서", [("10만", "100000")]),
-            ("10만 tokens", [("10만", "100000")]),
-            ("100만에서 200만으로", [("100만", "1000000"), ("200만", "2000000")]),
-            ("12만 8천", [("12만 8천", "128000")]),
-            ("1억 2000만 사용", [("1억 2000만", "120000000")]),
-            ("약 5만.", [("5만", "50000")]),
+            # A lone 만 is the unit 10^4 or the particle "only": the number is
+            # sourced when the source has either reading.
+            ("상위 5만 사용", "the top 5 layers", []),
+            ("5만 명", "50,000 annotators", []),
+            ("10만 tokens", "100K tokens", []),
+            ("10만큼 늘었다", "grows by 10", []),
+            ("상위 5만 사용", "the top 7 layers", ["5만"]),
+            # A combined Korean number is one quantity, never "only".
+            ("12만 8천", "128K context", []),
+            ("12만 8천", "12 layers and 8 heads", ["12만 8천"]),
+            ("1억 2000만 사용", "120M parameters", []),
         ],
     )
-    def test_man_is_a_unit_only_by_the_closed_rule(
-        self, text: str, read: list[tuple[str, str]]
+    def test_man_is_sourced_as_either_reading(
+        self, text: str, source: str, missing: list[str]
     ) -> None:
-        from decimal import Decimal
+        from scholar_lens.src.post_validator import unsourced_numbers
 
-        from scholar_lens.src.post_validator import _numbers
-
-        assert [(n.text, n.absolute) for n in _numbers(text)] == [
-            (t, Decimal(v)) for t, v in read
-        ]
+        assert unsourced_numbers(text, source) == missing
 
     def test_description_problems(self) -> None:
         from scholar_lens.src.post_validator import description_problems

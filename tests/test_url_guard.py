@@ -213,3 +213,69 @@ def test_pinned_requests_adapter_sni_and_url(monkeypatch: pytest.MonkeyPatch) ->
     assert response.url == "https://papers.example.com/a.pdf"
     assert prepared.url == "https://papers.example.com/a.pdf"
     assert adapter._local.server_hostname is None
+
+
+@pytest.mark.parametrize(
+    ("url", "upgraded"),
+    [
+        ("http://example.com/a/b?x=1#f", "https://example.com/a/b?x=1#f"),
+        ("HTTP://Example.com/", "https://Example.com/"),
+        ("http://example.com:80/p", "https://example.com/p"),
+        ("http://example.com:8080/p", "https://example.com:8080/p"),
+        ("http://[2001:db8::1]:80/p", "https://[2001:db8::1]/p"),
+        ("https://example.com/p", "https://example.com/p"),
+        ("ftp://example.com/p", "ftp://example.com/p"),
+    ],
+)
+def test_upgrade_to_https_keeps_host_and_path(url: str, upgraded: str) -> None:
+    from scholar_lens.src.url_guard import upgrade_to_https
+
+    assert upgrade_to_https(url) == upgraded
+
+
+def test_pinned_transport_upgrades_http_to_https(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Batch allows only 443 egress: an http:// page (or redirect hop) is
+    # fetched over https on the same host and path.
+    import httpx
+
+    import scholar_lens.src.pinned_transport as pt
+
+    monkeypatch.setattr(pt, "resolve_validated_ip", lambda url: "93.184.216.34")
+    seen: list[str] = []
+
+    def fake_send(self, request):  # type: ignore[no-untyped-def]
+        seen.append(f"{request.url.scheme}://{request.url.host}{request.url.path}")
+        return httpx.Response(200, request=request, text="ok")
+
+    monkeypatch.setattr(httpx.HTTPTransport, "handle_request", fake_send)
+    with httpx.Client(transport=pt.PinnedHTTPTransport()) as client:
+        response = client.get("http://docs.example.com/guide/")
+    assert seen == ["https://93.184.216.34/guide/"]
+    assert str(response.url) == "https://docs.example.com/guide/"
+
+
+def test_pinned_requests_adapter_upgrades_http_to_https(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import requests
+    from requests.adapters import HTTPAdapter
+
+    import scholar_lens.src.pinned_transport as pt
+
+    monkeypatch.setattr(pt, "resolve_validated_ip", lambda url: "93.184.216.34")
+    captured: dict = {}
+
+    def fake_send(self, request, **kwargs):  # type: ignore[no-untyped-def]
+        captured["url"] = request.url
+        response = requests.Response()
+        response.status_code = 200
+        response.url = request.url
+        return response
+
+    monkeypatch.setattr(HTTPAdapter, "send", fake_send)
+    prepared = requests.Request("GET", "http://papers.example.com/a.pdf").prepare()
+    response = pt.PinnedRequestsAdapter().send(prepared)
+    assert captured["url"] == "https://93.184.216.34/a.pdf"
+    assert response.url == "https://papers.example.com/a.pdf"

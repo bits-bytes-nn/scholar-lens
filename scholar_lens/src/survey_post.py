@@ -43,7 +43,7 @@ from .utils.helpers import _escape_cell_pipes
 # Cards are cached by (paper, CARD_SCHEMA_VERSION, model, language, card
 # prompt and source limit): bump the version when the card fields or their
 # meaning change.
-CARD_SCHEMA_VERSION = 3
+CARD_SCHEMA_VERSION = 4
 # Figures a core paper's card may offer the post.
 MAX_CARD_FIGURES = 2
 # Equations a card may offer the post.
@@ -54,6 +54,8 @@ _SENTENCE_END = re.compile(r"(?<=[.!?。])\s+")
 _MATH_DELIMS = re.compile(r"^\$\$|\$\$$")
 # A card result's value is its number(s).
 _DIGIT = re.compile(r"\d")
+# A card result's setting is a noun phrase (a table cell), not a sentence.
+_SENTENCE_SETTING = re.compile(r"다\.\s*$")
 
 
 class _Strict(BaseModel):
@@ -238,7 +240,7 @@ class PaperCard(_Strict):
     """A paper as the writers see it: the card call's answer with every
     number, equation and figure checked against the paper in code."""
 
-    schema_version: Literal[3] = 3  # CARD_SCHEMA_VERSION
+    schema_version: Literal[4] = 4  # CARD_SCHEMA_VERSION
     paper_id: str
     model_id: str
     language: str
@@ -313,7 +315,8 @@ def card_problems(
     """What the card call must fix (empty when the card is fine): numbers
     the paper never states, an equation it does not show, unknown or too
     many figures, a reference to the paper's numbering ("표 1") the post's
-    tables would carry."""
+    tables would carry, a result setting written as a sentence ("…입니다.")
+    where the table needs a noun phrase."""
     problems = []
     texts = [
         *_prose_fields(answer).values(),
@@ -339,6 +342,11 @@ def card_problems(
             problems.append(
                 f"result {n}'s value has no number: give only its number(s), "
                 "or leave the result out"
+            )
+        if _SENTENCE_SETTING.search(result.setting):
+            problems.append(
+                f"result {n}'s setting is a sentence: write it as a noun phrase "
+                "(model, benchmark, what it is compared with)"
             )
     for n, item in enumerate(answer.limitations, 1):
         if missing := unsourced_numbers(item, source):

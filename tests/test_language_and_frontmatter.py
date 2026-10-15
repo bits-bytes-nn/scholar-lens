@@ -9,9 +9,16 @@ import pytest
 from scholar_lens.configs import Github
 from scholar_lens.src.content_extractor import Attributes
 from scholar_lens.src.explainer import Paper
-from scholar_lens.src.formatting import paper_front_matter, paper_post_meta
+from scholar_lens.src.formatting import (
+    PostMeta,
+    format_guide,
+    format_summary,
+    paper_front_matter,
+    paper_post_meta,
+)
 from scholar_lens.src.parser import Content
 from scholar_lens.src.post_conventions import BlogPost, load_local_conventions
+from scholar_lens.src.post_validator import validate_post
 from scholar_lens.src.prompts import (
     PaperEditPrompt,
     PaperFinalizationPrompt,
@@ -19,6 +26,7 @@ from scholar_lens.src.prompts import (
     PaperSectionCheckPrompt,
     PaperSectionPrompt,
 )
+from scholar_lens.src.tech_guide import TechGuide
 
 
 def _build_front_matter(_github: Github, paper: Paper, category_type: str, **kwargs):  # type: ignore[no-untyped-def]
@@ -58,6 +66,68 @@ class TestBuildFrontMatter:
         assert "\ndate: 2021-05-03 23:00:00\n" in out
         assert 'categories: ["Paper Reviews", "Finetuning"]' in out
         assert "cover: /assets/images/finetuning.jpg" in out
+
+    def test_a_regenerated_summary_keeps_date_topic_and_translation(self) -> None:
+        # The Korean post of a translated pair: its rerun stays half of the
+        # pair (the blog fails a translation_id on one language only).
+        published = BlogPost(
+            path="_posts/2021-05-04-a-study-summary.md",
+            date=datetime(2021, 5, 4, 8, 0, tzinfo=UTC),
+            categories=["Paper Summaries", "Finetuning"],
+            lang="ko",
+            translation_id="a-study-summary",
+        )
+        twin = BlogPost(
+            path="_posts/2021-05-04-a-study-summary-en.md",
+            lang="en",
+            translation_id="a-study-summary",
+        )
+        spec = load_local_conventions()
+        meta = paper_post_meta(
+            self._paper(), "Paper Summaries", spec, published=published
+        )
+        github = Github()
+        result = {
+            "summary": "> **요약:** 결과를 정리합니다.\n\n## 방법\n\n본문입니다.\n"
+        }
+        post = format_summary(github, self._paper(), result, meta=meta)
+        front = post.split("\n---\n", 1)[0]
+        assert "\ndate: 2021-05-04 08:00:00\n" in front
+        assert 'categories: ["Paper Summaries", "Finetuning"]' in front
+        assert '\nlang: "ko"\ntranslation_id: "a-study-summary"' in front
+        found = validate_post(
+            post,
+            spec,
+            "summarize",
+            file_name="2021-05-04-a-study-summary.md",
+            site_posts=[published, twin],
+        )
+        assert [v for v in found if v.rule == "translation"] == []
+
+    def test_a_regenerated_guide_keeps_its_translation(self) -> None:
+        meta = PostMeta(
+            topic="Language-Models",
+            cover="/assets/images/tech-guides.jpg",
+            tags=["vLLM"],
+            lang="en",
+            translation_id="vllm-guide",
+        )
+        guide = TechGuide(topic="vLLM", body="## Intro\n\nText.\n")
+        out = format_guide(Github(), guide, meta=meta)
+        assert '\nlang: "en"\ntranslation_id: "vllm-guide"\n---\n' in out
+
+    def test_a_guide_carries_its_description(self) -> None:
+        meta = PostMeta(topic="Language-Models", cover="/c.jpg", tags=["vLLM"])
+        guide = TechGuide(topic="vLLM", body="Text.\n", description="vLLM 안내")
+        assert '\ndescription: "vLLM 안내"\n' in format_guide(
+            Github(), guide, meta=meta
+        )
+        guide.description = ""
+        assert "description:" not in format_guide(Github(), guide, meta=meta)
+
+    def test_a_new_post_has_no_translation_keys(self) -> None:
+        out = _build_front_matter(Github(), self._paper(), "Paper Reviews")
+        assert "lang:" not in out and "translation_id" not in out
 
     def test_ampersand_entity_not_leaked(self) -> None:
         out = _build_front_matter(Github(), self._paper(), "Paper Reviews")

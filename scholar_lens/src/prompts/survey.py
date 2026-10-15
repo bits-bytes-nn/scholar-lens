@@ -169,7 +169,7 @@ Shortlist:
 # How the writers cite: keys the code renders as "(Author et al., year)" links.
 CITATION_RULES = """
 - Cite a paper of this survey only with its key, copied exactly from
-  <citation_keys>: "[@2305.18290]", several as "[@2305.18290; @2402.01306]".
+  <citation_keys>: "[@key]", several as "[@key1; @key2]".
   The code turns each key into an author-year link; never write a paper's
   link, arXiv id or author list yourself, and never cite a work that has no
   key (name it in plain text instead).
@@ -289,8 +289,8 @@ Return, inside <card> tags, one JSON object with exactly these keys:
   "key_idea": "1-2 sentences: the paper's central idea, for a table cell",
   "method": "3-6 sentences: how the method works, the steps a reader must know",
   "key_equations": [{{"latex": "an equation in LaTeX, copied character for character from the paper text (without $$)", "meaning": "one sentence: what it says, its symbols defined"}}],
-  "results": [{{"claim": "a neutral label of what was measured (e.g. GSM8K 정확도), no winner or verdict", "value": "only the number(s) with their units as the paper states them", "setting": "model, benchmark, what it is compared with"}}],
-  "limitations": ["a limitation the paper states or its results show"],
+  "results": [{{"claim": "a neutral label of what was measured (e.g. GSM8K 정확도), no winner or verdict", "value": "only the number(s) as the paper states them, unit words in {language}", "setting": "a noun phrase: model, benchmark, what it is compared with"}}],
+  "limitations": ["a limitation of the paper, never of the text you were given"],
   "prior_work": [{{"name": "a method or paper, by name", "relation": "builds_on"}}],
   "figures": [{{"id": "F1", "reason": "what it shows"}}]
 }}
@@ -327,7 +327,8 @@ Rules:
 - figures: up to 2 ids from <figures> whose captions show the method's
   structure or its headline result best; none when <figures> is empty or no
   figure helps.
-- limitations: up to 3; prior_work: up to 8.
+- limitations: up to 3, each one the paper states or its results show; if
+  the text gives none, leave limitations empty. prior_work: up to 8.
 - Output nothing outside the <card> tags.
 {repair_note}
 """
@@ -708,7 +709,9 @@ Score the section 0-100:
   inherits, changes and leaves open), with relations supported as the rules
   below say.
 - Accuracy (20): every statement about a paper matches its card; numbers
-  with their setting.
+  with their setting, following these rules:"""
+        + NUMBER_RULES
+        + """
 - Visuals (10): the planned figures, equations and tables present and
   explained.
 - Non-duplication (15): nothing <previously_written_sections> explained
@@ -733,8 +736,9 @@ quoted passage and the fix: a statement about a paper its card contradicts
 or does not support (also when only <reference_material> says it), a number
 not in the cards, a relation between papers
 <connections> and the cards do not support, a structural reference to
-another part of the post, a mention of cards or inputs, and a substantial
-explanation of a concept in <concepts_owned_elsewhere>. The naturalness
+another part of the post, a mention of cards or inputs, a passage
+re-explaining what <previously_written_sections> already explained, and a
+substantial explanation of a concept in <concepts_owned_elsewhere>. The naturalness
 check's blocking wording issues go in <wording_issues> instead, each with
 the quoted sentence and its rewrite. A weakness the score reflects goes in
 the feedback.
@@ -870,8 +874,9 @@ search description. Choose only from the lists you are given.
 <controlled_tag_options>{controlled_tags}</controlled_tag_options>
 
 - category: exactly one value copied from category_options, the closest fit.
-- controlled_tags: 1-3 values copied from controlled_tag_options naming what
-  the survey covers.
+- controlled_tags: values copied from controlled_tag_options: one by
+  default, naming what the survey covers; a second only when whole lineages
+  are about it.
 - keywords: up to 5 short reusable topic tags in English (1-4 words each)
   naming methods and ideas the survey covers; never restate the title.
 - description: the post's search snippet, one plain text paragraph of
@@ -884,7 +889,7 @@ search description. Choose only from the lists you are given.
 
 Respond in exactly this format:
 <category>...</category>
-<controlled_tags>Tag-One, Tag-Two</controlled_tags>
+<controlled_tags>Tag-One</controlled_tags>
 <keywords>Keyword One, Keyword Two</keywords>
 <description>...</description>
 """

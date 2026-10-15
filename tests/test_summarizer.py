@@ -53,6 +53,8 @@ def _make_summarizer_with_stub_chain(chain_result: dict[str, str]) -> PaperSumma
     chain = MagicMock()
     chain.ainvoke = AsyncMock(return_value=chain_result)
     summarizer.summary_chain = chain
+    summarizer.fix_chain = MagicMock()
+    summarizer.fix_chain.ainvoke = AsyncMock(return_value={})
     return summarizer
 
 
@@ -417,3 +419,67 @@ def test_shortening_may_not_trade_one_blocker_for_another() -> None:
     # The same kind of blocker on another line is not new.
     assert _blockers("짧게.\n\n" + ragged) <= _blockers(original)
     assert not _blockers("짧게.\n\n" + repeated) <= _blockers(original)
+
+
+class TestSummaryTargetedFix:
+    BROKEN = "> 리드입니다.\n\n## 🔍 질문\n\n결과는 다음과 같습니다:\n\n- 가\n- 나\n"
+    FIXED = "> 리드입니다.\n\n## 🔍 질문\n\n결과는 다음과 같습니다.\n\n- 가\n- 나\n"
+
+    def _summarizer(self, summary: str, fixed: str) -> PaperSummarizer:
+        summarizer = _make_summarizer_with_stub_chain(
+            {
+                "summary": summary,
+                "subtitle": "s",
+                "description": DESCRIPTION,
+                "urls": "",
+            }
+        )
+        summarizer.fix_chain.ainvoke = AsyncMock(return_value={"summary": fixed})
+        return summarizer
+
+    async def test_blockers_get_one_targeted_fix(self, sample_paper: Paper) -> None:
+        summarizer = self._summarizer(self.BROKEN, self.FIXED)
+        result = await summarizer.summarize(sample_paper)
+        assert result["summary"] == self.FIXED.strip()
+        summarizer.fix_chain.ainvoke.assert_awaited_once()
+        sent = summarizer.fix_chain.ainvoke.await_args.args[0]
+        assert sent["request"].startswith("TARGETED FIX")
+        assert "colon (다:)" in sent["request"]
+        assert sent["summary"] == self.BROKEN.strip()
+
+    @pytest.mark.parametrize(
+        "fixed",
+        [
+            # lost the ## heading
+            "> 리드입니다.\n\n결과는 다음과 같습니다.\n\n- 가\n- 나\n",
+            # the blocker is still there
+            BROKEN,
+            # trades the blocker for another kind
+            "> 리드입니다.\n\n## 🔍 질문\n\n값이 되어진다.\n\n- 가\n- 나\n",
+            "",
+        ],
+    )
+    async def test_a_fix_that_does_not_reduce_blockers_or_drops_structure_is_rejected(
+        self, sample_paper: Paper, fixed: str
+    ) -> None:
+        summarizer = self._summarizer(self.BROKEN, fixed)
+        result = await summarizer.summarize(sample_paper)
+        assert result["summary"] == self.BROKEN.strip()
+
+    async def test_a_clean_summary_makes_no_fix_call(self, sample_paper: Paper) -> None:
+        summarizer = self._summarizer(self.FIXED, self.BROKEN)
+        result = await summarizer.summarize(sample_paper)
+        assert result["summary"] == self.FIXED.strip()
+        summarizer.fix_chain.ainvoke.assert_not_awaited()
+
+    async def test_a_failed_fix_keeps_the_original(
+        self, sample_paper: Paper, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        summarizer = self._summarizer(self.BROKEN, self.FIXED)
+
+        async def boom(*_: str) -> dict[str, str]:
+            raise RuntimeError("throttled")
+
+        monkeypatch.setattr(summarizer, "_fix", boom)
+        result = await summarizer.summarize(sample_paper)
+        assert result["summary"] == self.BROKEN.strip()

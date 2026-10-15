@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from scholar_lens.src.markdown_lint import writing_issues
+from scholar_lens.src.markdown_lint import style_hits, writing_issues
 from scholar_lens.src.prompts import (
     AttributesExtractionPrompt,
     PaperEditPrompt,
@@ -26,6 +26,9 @@ from scholar_lens.src.prompts import (
 from scholar_lens.src.prompts.base import (
     KOREAN_STYLE,
     NATURALNESS_CHECK,
+    NUMBER_RULES,
+    PAPER_TABLE_RULES,
+    TABLE_SIZE_RULE,
     TERMINOLOGY_RULES,
     BasePrompt,
 )
@@ -33,6 +36,7 @@ from scholar_lens.src.prompts.extraction import (
     DEFAULT_CATEGORY_OPTIONS,
     DEFAULT_CONTROLLED_TAGS,
 )
+from scholar_lens.src.prompts.tech_guide import TechGuideTaxonomyPrompt
 
 WRITERS = [
     PaperSectionPrompt,
@@ -277,10 +281,47 @@ def test_short_rewrites_ask_for_natural_prose(prompt: type[BasePrompt]) -> None:
 
 
 def test_korean_style_examples_agree_with_the_lint() -> None:
-    # The block's double passive and calque are what the lint flags; their
-    # rewrites are not.
-    assert writing_issues("값이 되어진다.") and writing_issues(
-        "학습에 있어서는 씁니다."
-    )
-    assert not writing_issues("값이 된다. 학습에서 씁니다.")
-    assert "되어진다" in KOREAN_STYLE and "에 있어서" in KOREAN_STYLE
+    # The block's double passive, calque and 다-colon are what the blog's
+    # prose lint flags; their rewrites are not.
+    assert [
+        h.rule for h in style_hits("값이 되어진다.\n\n학습에 있어서는 씁니다.")
+    ] == [
+        "translationese",
+        "translationese",
+    ]
+    assert [h.rule for h in style_hits("단계는 셋입니다:\n")] == ["colon"]
+    assert not style_hits("값이 된다. 학습에서 씁니다. 단계는 셋입니다.\n")
+    for example in ("되어진다", "에 있어서", '"셋입니다:"', '"셋입니다."'):
+        assert example in KOREAN_STYLE
+
+
+@pytest.mark.parametrize("prompt", [SurveyEvaluationPrompt, TechGuideEvaluationPrompt])
+def test_survey_and_guide_evaluators_check_the_number_rules(
+    prompt: type[BasePrompt],
+) -> None:
+    assert NUMBER_RULES in _render(prompt)
+
+
+def test_the_table_size_cap_has_one_source() -> None:
+    assert PAPER_TABLE_RULES.startswith(TABLE_SIZE_RULE)
+    assert _render(PaperSectionPrompt).count("8 rows and 7 columns") == 1
+
+
+def test_survey_evaluator_blocks_re_explaining_earlier_sections() -> None:
+    blocking = _render(SurveyEvaluationPrompt).split("BLOCKING ISSUES", 1)[1]
+    assert "re-explaining what <previously_written_sections>" in blocking
+
+
+def test_card_limitations_are_the_papers_not_the_inputs() -> None:
+    text = _render(SurveyCardPrompt)
+    assert "never of the text you were given" in text
+    assert "leave limitations empty" in text
+
+
+def test_guide_taxonomy_returns_a_description() -> None:
+    assert "description" in TechGuideTaxonomyPrompt.output_variables
+    assert "120-160 characters" in _render(TechGuideTaxonomyPrompt)
+
+
+def test_survey_citation_example_uses_no_real_paper_key() -> None:
+    assert '"[@key]"' in _render(SurveySectionPrompt)

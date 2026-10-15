@@ -30,7 +30,7 @@ from bs4 import BeautifulSoup
 
 from .constants import EnvVars, normalize_arxiv_id
 from .logger import logger
-from .rate_limiter import RateLimiter
+from .rate_limiter import MAX_RETRY_AFTER_SECONDS, RateLimiter
 
 _TIMEOUT = 15.0
 _CROSSREF_URL = "https://api.crossref.org/works"
@@ -49,7 +49,7 @@ _SEARCH_CANDIDATES = 5
 _SEMANTIC_SCHOLAR_LIMITER = RateLimiter(rate=1.0, per=1.0, name="semantic-scholar")
 # A 429 without Retry-After waits this long before the single retry.
 _DEFAULT_RETRY_AFTER = 5.0
-_MAX_RETRY_AFTER = 60.0
+_MAX_RETRY_AFTER = MAX_RETRY_AFTER_SECONDS
 # A 5xx waits this long (plus up to the same again, at random) before the
 # single retry.
 _SERVER_ERROR_BACKOFF = 2.0

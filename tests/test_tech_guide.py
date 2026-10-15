@@ -943,7 +943,7 @@ class TestTokenBudget:
         result = await gen.classify(
             guide, category_options=["A"], controlled_tags=["B"]
         )
-        assert result == {"topic": "x"}
+        assert result["topic"] == "x"
 
     async def test_over_budget_skips_eval_and_grounding(self) -> None:
         # When the budget is spent, sections are still WRITTEN but the expensive
@@ -1370,6 +1370,46 @@ class TestSectionPlan:
         assert evaluated["owned_elsewhere"] == "- earlier, 'A': a"
         grounded = gen.grounding_chain.ainvoke.await_args_list[1].args[0]
         assert grounded["glossary"] == second["glossary"]
+
+    async def test_classify_sets_a_checked_description_with_one_repair(
+        self,
+    ) -> None:
+        from scholar_lens.src.tech_guide import TechGuide
+
+        good = (
+            "vLLM serves large language models with paged attention and continuous "
+            "batching; this guide covers its engine, scheduler and deployment."
+        )
+        gen = _make_generator()
+        gen.taxonomy_chain = MagicMock()
+        gen.taxonomy_chain.ainvoke = AsyncMock(
+            side_effect=[{"description": "`vLLM` is fast."}, {"description": good}]
+        )
+        guide = TechGuide(topic="vLLM", body="## Engine\n\nThe engine.")
+        result = await gen.classify(
+            guide, category_options=["A"], controlled_tags=["B"]
+        )
+        assert guide.description == result["description"] == good
+        second = gen.taxonomy_chain.ainvoke.await_args_list[1].args[0]
+        assert "description is plain text" in second["repair_note"]
+        assert second["language"] == "English"
+        assert guide.notes == []
+
+    async def test_a_description_still_marked_up_after_the_repair_is_dropped(
+        self,
+    ) -> None:
+        from scholar_lens.src.tech_guide import TechGuide
+
+        gen = _make_generator()
+        gen.taxonomy_chain = MagicMock()
+        gen.taxonomy_chain.ainvoke = AsyncMock(
+            return_value={"description": "`vLLM` is fast."}
+        )
+        guide = TechGuide(topic="vLLM", body="## Engine\n\nThe engine.")
+        await gen.classify(guide, category_options=["A"], controlled_tags=["B"])
+        assert gen.taxonomy_chain.ainvoke.await_count == 2
+        assert guide.description == ""
+        assert any("Guide description" in n for n in guide.notes)
 
     async def test_classify_reads_the_finished_body(self) -> None:
         from scholar_lens.src.tech_guide import TechGuide

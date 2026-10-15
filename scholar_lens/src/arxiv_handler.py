@@ -145,9 +145,15 @@ class ArxivHandler:
     @staticmethod
     def _download(url: str, pdf_path: Path) -> None:
         """Stream the PDF with timeouts and a size cap (``urlretrieve``, used
-        by the arxiv library, has neither)."""
+        by the arxiv library, has neither), paced by the arXiv rate limiter;
+        an error's Retry-After (capped) holds later arXiv requests."""
+        _ARXIV_RATE_LIMITER.acquire()
         with requests.get(url, stream=True, timeout=_ARXIV_TIMEOUT) as response:
-            response.raise_for_status()
+            try:
+                response.raise_for_status()
+            except requests.HTTPError as e:
+                _ARXIV_RATE_LIMITER.penalize(arxiv_retry_after_seconds(e))
+                raise
             save_pdf(
                 response.iter_content(chunk_size=CHUNK_BYTES),
                 pdf_path,

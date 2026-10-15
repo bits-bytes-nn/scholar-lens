@@ -66,6 +66,8 @@ class RunContext(BaseModel):
     # counts, most used first.
     blog_posts: list[BlogPost] | None = None
     blog_tags: dict[str, int] | None = None
+    # Why the blog's posts could not be listed (they are then none).
+    blog_listing_error: str | None = None
 
     def require_conventions(self) -> PostConventions:
         if self.conventions is None:
@@ -74,7 +76,11 @@ class RunContext(BaseModel):
 
     def require_blog_posts(self) -> list[BlogPost]:
         if self.blog_posts is None:
-            self.blog_posts = load_run_blog_posts(self.config)
+            try:
+                self.blog_posts = load_run_blog_posts(self.config)
+            except Exception as e:  # noqa: BLE001 - hints and a CI-backed check only
+                logger.warning("Could not list the blog's posts: %s", e)
+                self.blog_posts, self.blog_listing_error = [], str(e)
         return self.blog_posts
 
     def require_blog_tags(self) -> list[str]:
@@ -240,19 +246,16 @@ def load_run_conventions(config: Config) -> PostConventions:
 
 
 def load_run_blog_posts(config: Config) -> list[BlogPost]:
-    """The blog's posts, or none when GitHub is not configured or the listing
-    fails (the model then proposes fresh short tags, and the blog's own CI is
-    left to catch a description another post already uses)."""
+    """The blog's posts, or none when GitHub is not configured. A failed
+    listing raises; :meth:`RunContext.require_blog_posts` then goes on with
+    none (the model proposes fresh short tags, and the blog's own CI is left
+    to catch a description another post already uses)."""
     github = config.resources.github
     if not (github.enabled and github.repo_name):
         return []
-    try:
-        return fetch_blog_posts(
-            github.repo_name, github.base_branch, os.getenv(EnvVars.GITHUB_TOKEN.value)
-        )
-    except Exception as e:  # noqa: BLE001 - hints and a CI-backed check only
-        logger.warning("Could not list the blog's posts: %s", e)
-        return []
+    return fetch_blog_posts(
+        github.repo_name, github.base_branch, os.getenv(EnvVars.GITHUB_TOKEN.value)
+    )
 
 
 def build_publisher(context: RunContext) -> Publisher:
@@ -269,21 +272,33 @@ def build_publisher(context: RunContext) -> Publisher:
 
 
 async def find_published_post(
-    context: RunContext, *, slug: str, branch_id: str
+    context: RunContext, *, slug: str, branch_id: str, category: str
 ) -> tuple[BlogPost | None, list[str]]:
-    """The blog's post a new post replaces (:meth:`Publisher.find_published`)
-    and review notes: when the blog's pull requests cannot be read, the post
-    is published as new, and the note asks to check it duplicates none."""
+    """The blog's post of ``category`` a new post replaces
+    (:meth:`Publisher.find_published`) and review notes: when the blog's
+    posts or pull requests cannot be read, the post is published as new, and
+    the note asks to check it duplicates none."""
     publisher = build_publisher(context)
+    notes: list[str] = []
+    if context.blog_listing_error:
+        notes.append(
+            f"Could not list the blog's posts ({context.blog_listing_error}); "
+            "this post was written as a new one: check the blog has no older "
+            "copy of it, and that its tags and description fit the blog."
+        )
     try:
-        return await asyncio.to_thread(publisher.find_published, slug, branch_id), []
+        found = await asyncio.to_thread(
+            publisher.find_published, slug, branch_id, category
+        )
+        return found, notes
     except PublishError as e:
         logger.warning(
             "Could not look up the posts branch '%s' published: %s", branch_id, e
         )
         return None, [
+            *notes,
             f"Could not read which post an earlier run of this artifact published "
-            f"({e}); check the blog has no older copy of this post."
+            f"({e}); check the blog has no older copy of this post.",
         ]
 
 

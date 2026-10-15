@@ -62,16 +62,17 @@ class AttributesExtractionPrompt(BasePrompt):
        lists. Use the lab most authors belong to; or "N/A".
     5. CATEGORY: exactly one of these values, copied verbatim:
        {category_options}
-    6. CONTROLLED_TAGS: 1-3 values from this closed list, copied verbatim,
-       comma-separated, each naming the paper's own topic (not a neighbouring
-       field it only mentions). Always give at least one — the closest fit when
-       none is exact:
+    6. CONTROLLED_TAGS: values from this closed list, copied verbatim,
+       comma-separated: one by default, the paper's own topic (the closest fit
+       when none is exact); a second only when the method or the experiments
+       are about it, never a field the paper only mentions:
        {controlled_tags}
     7. KEYWORDS: at most 5 specific tags for the paper's own contributions
-       (1-4 words each, e.g. "Knowledge Distillation", "Vector Search"). Reuse an
-       existing keyword whenever one fits; never restate the paper title, never
-       use generic terms ("Deep Learning", "Transformer") or a technique the
-       paper does not actually use.
+       (1-4 words each, e.g. "Knowledge Distillation", "Vector Search"). Use an
+       existing keyword's spelling only when it names this paper's own
+       contribution; otherwise use the paper's own term. Never restate the
+       paper title, never use generic terms ("Deep Learning", "Transformer")
+       or a technique the paper does not actually use.
 
     Output the block below exactly once — no notes, no corrections, nothing
     after it:

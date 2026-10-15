@@ -14,7 +14,11 @@ from .review import (
     PaperSectionCheckPrompt,
     PaperSectionPrompt,
 )
-from .summary import PaperSummaryPrompt, PaperSummaryShortenPrompt
+from .summary import (
+    PaperSummaryFixPrompt,
+    PaperSummaryPrompt,
+    PaperSummaryShortenPrompt,
+)
 from .survey import (
     SurveyCardPrompt,
     SurveyEvaluationPrompt,
@@ -47,6 +51,7 @@ __all__ = [
     "PaperPlanningPrompt",
     "PaperSectionCheckPrompt",
     "PaperSectionPrompt",
+    "PaperSummaryFixPrompt",
     "PaperSummaryPrompt",
     "PaperSummaryShortenPrompt",
     "SurveyCardPrompt",

@@ -455,6 +455,30 @@ class TestAdapters:
         }
         assert http[0].method == "POST"
 
+    def test_semantic_scholar_batch_is_chunked(
+        self, http: list[httpx.Request], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # One request per SEMANTIC_SCHOLAR_MAX_IDS ids keeps each answer
+        # well under the request timeout; the results stay aligned with ids.
+        assert scholarly_index.SEMANTIC_SCHOLAR_MAX_IDS == 100
+        monkeypatch.setattr(scholarly_index, "SEMANTIC_SCHOLAR_MAX_IDS", 2)
+        monkeypatch.setitem(
+            ROUTES,
+            "api.semanticscholar.org",
+            lambda r: [
+                {"citationCount": len(i), "externalIds": {}}
+                for i in json.loads(r.content)["ids"]
+            ],
+        )
+        ids = ["DOI:10.1/a", "DOI:10.1/bb", "DOI:10.1/ccc", "DOI:10.1/dddd", "DOI:1"]
+        found = SemanticScholarIndex(api_key="k").papers(ids)
+        assert [json.loads(r.content)["ids"] for r in http] == [
+            ids[0:2],
+            ids[2:4],
+            ids[4:],
+        ]
+        assert [f.citation_count if f else None for f in found] == [len(i) for i in ids]
+
     def test_semantic_scholar_batch_that_is_not_a_list_is_logged(
         self, http: list[httpx.Request], monkeypatch: pytest.MonkeyPatch
     ) -> None:

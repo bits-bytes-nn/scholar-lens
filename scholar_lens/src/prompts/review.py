@@ -83,7 +83,9 @@ class PaperPlanningPrompt(BasePrompt):
        that matter — never a hyper-parameter list); the headline results with
        the settings that produced them; ablations and analyses that support the
        claims. Be specific ("how the loss down-weights easy negatives"),
-       never generic ("method details"). Give
+       never generic ("method details"). Every must_cover item and closing
+       point is a claim the paper's text makes, never a value read off a
+       figure or a critique of a figure caption. Give
        every must_cover item its own difficulty (see 3): the writer's length
        budget is computed from these.
     2. Order sections the way that best teaches the paper — usually problem,
@@ -190,18 +192,17 @@ class PaperSectionPrompt(BasePrompt):
       Markdown image `![alt](<src copied exactly>)`, never the marker.
     - The target length is for the whole section, spent mostly on the hard
       items; never drop a required item to stay short.
-    - Explain each prerequisite in the brief briefly where it is first
-      needed.
+    - Explain each prerequisite of the brief where it is first needed.
     - Concepts owned by earlier sections: refer back in a short phrase, never
-      re-explain. Concepts owned by later sections: use them plainly if you
-      must, unexplained.
+      re-explain. Concepts owned by later sections: use them plainly,
+      unexplained.
     - Never show again anything already_in_article lists (count its callouts
       against the cap).
     - Use the glossary rendering for every glossary term, table cells
       included. Place only the figures listed in the brief.
-    - Setup is given only as far as the reader needs it to read the results
-      (tables hold results, never hyper-parameter lists); explain a metric in
-      one sentence where it is first used.
+    - Give setup only as far as the results need it (tables hold results,
+      never hyper-parameter lists); explain a metric in one sentence at its
+      first use.
     - A caveat about how far a result can be trusted gets at most one sentence,
       right beside that result. Never write a caveat, summary or conclusion
       `###` subsection; the review has one closing section for that.
@@ -236,9 +237,9 @@ class PaperSectionPrompt(BasePrompt):
         + STYLE_RULES
         + EXCLUDED_CONTENT_RULES
         + """
-    Length: if the section runs very long, stop at a paragraph boundary and set
-    has_more to y (the next turn continues); y ONLY when must-cover items
-    remain unwritten, otherwise n.
+    Length: if the section runs very long, stop at a paragraph boundary;
+    has_more is y (the next turn continues) ONLY while must-cover items
+    remain unwritten.
 
     Output exactly:
     <explanation>
@@ -628,8 +629,7 @@ class PaperFinalizationPrompt(BasePrompt):
        writes it ("Mistral 7B는 …", "DPO는 …"), never with a generic opener
        ("대규모 언어 모델의 발전으로 …"), says what the paper does and its
        headline result, and may end with what the review covers ("… 구조와
-       학습 과정을 정리합니다."). Numbers only from the TL;DR above or the
-       paper's <abstract>.
+       학습 과정을 정리합니다."). Its numbers appear in your TL;DR.
 
     4. Closing assessment (inside <closing>): a `##` heading in {language}
        meaning "Limitations and Takeaways" (Korean: "## 한계와 시사점"), then
@@ -641,11 +641,11 @@ class PaperFinalizationPrompt(BasePrompt):
        - limitations: unstated assumptions, evaluation gaps, cost or
          engineering trade-offs, settings where the method may not hold —
          specific and evidence-based, not generic;
-       - practical implications: when to use it and when not;
-       - well-known follow-up work only if you are certain it exists, named in
-         plain text without links or new numbers; otherwise omit it.
+       - practical implications: when to use it and when not.
        Cover the paper's own stated limitations and future work listed above
-       once each; this is the article's only limitations section. Future work
+       once each (skip an item that is a value read off a figure or a
+       critique of a figure caption: the paper's text does not claim it);
+       this is the article's only limitations section. Future work
        comes only from that list; never call something the paper already does
        (an appendix included) future work. Do not
        restate the review's conclusions. A limitation or caveat the review body
@@ -654,7 +654,8 @@ class PaperFinalizationPrompt(BasePrompt):
 
     Rules for all parts:
     - Use the glossary renderings for its terms, as the review does.
-    - Every number must already appear in the review; never add links.
+    - Every number must already appear in the review; never add links or
+      claims the review does not make.
     - Synthesize; do not copy the review's sentences.
     - Never mention the writing process or skipped sections.
     """

@@ -26,21 +26,22 @@ from .markdown_lint import (
     ENVELOPE_TAG,
     TABLE_DELIMITER,
     insecure_links,
-    mostly_hangul,
     style_hits,
 )
 from .markdown_math import (
     BLOG_CODE_SPAN,
     ESCAPED_UNDERSCORE,
     HANGUL,
-    QUOTE_PREFIX,
     TEXT_COMMAND,
+    blog_bare,
+    blog_fence_roles,
     blog_line_roles,
+    blog_open_fence_line,
+    blog_unquote,
     fence_roles,
     has_math,
     image_sources,
     indented_code_lines,
-    open_fence_line,
 )
 from .post_conventions import BlogPost, PostConventions
 from .publish_types import post_slug, same_post
@@ -61,7 +62,6 @@ class Add(Protocol):
 
 _HEADING = re.compile(r"^(#{1,6})\s+(.*\S)\s*$")
 _INLINE_MATH = re.compile(r"\$\$(.+?)\$\$")
-_INLINE_CODE = re.compile(r"`[^`]*`")
 # A cell holding a number ("63.6", "1,820", "37.4%"), not a label that
 # merely contains a digit ("pass@1"): the blog lint's test (lint-posts.rb
 # line 398) for a data row under the header with a blank first cell.
@@ -122,14 +122,10 @@ def _blog_lines(body: str) -> Lines:
     ]
 
 
-_LINT_FENCE = re.compile(r"^\s*(`{3,}|~{3,})")
-
-
 _LINT_TAG = re.compile(r"(?<!\\)<(/?)([a-zA-Z][\w-]*)(\s[^<>]*)?/?>")
 _LINT_RAW = re.compile(r"(\{%-?\s*(?:end)?raw\s*-?%\})")
 _LINT_FENCE_INFO = re.compile(r"\A(`{3,}|~{3,})\s*\S+\s+\S")
 _LINT_TABLE_RULE = re.compile(r"\A\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\Z")
-_LINT_CODE_SPAN = re.compile(r"(`+).*?\1")
 _DESCRIPTION_MARKUP = re.compile(r"\$\$|\*\S[^*]*\*|`|\]\(|<[a-zA-Z/]|\{[{%]")
 # A description's length: the blog's <meta name="description"> keeps 160
 # characters (post_description.rb META_LIMIT); the hand-written ones on the
@@ -154,8 +150,8 @@ def description_markup(description: str) -> bool:
 
 def description_problems(description: str, sources: str) -> list[str]:
     """What a writer must fix in a generated ``description``: plain text of
-    the right length whose every number is in ``sources`` (the post's TL;DR
-    and the paper's abstract)."""
+    the right length whose every number is in ``sources`` (what the post's
+    description may draw on: its TL;DR, or its body and sources)."""
     if not description:
         return ["description is empty"]
     problems = []
@@ -171,7 +167,7 @@ def description_problems(description: str, sources: str) -> list[str]:
         )
     if missing := unsourced_numbers(description, sources):
         problems.append(
-            "description numbers not in the TL;DR or the abstract: "
+            "description numbers not in the post's TL;DR or sources: "
             + ", ".join(missing)
         )
     return problems
@@ -180,7 +176,7 @@ def description_problems(description: str, sources: str) -> list[str]:
 def unknown_html_tag(text: str) -> str | None:
     """The first ``<name>`` in prose ``text`` the browser would drop, as the
     blog lint finds it (code spans and ``$$`` spans removed), or None."""
-    text = re.sub(r"\$\$.*?\$\$", "", BLOG_CODE_SPAN.sub("", _unquote(text)))
+    text = re.sub(r"\$\$.*?\$\$", "", BLOG_CODE_SPAN.sub("", blog_unquote(text)))
     for close, name, attrs in _LINT_TAG.findall(text):
         lowered = name.lower()
         if lowered not in BLOG_HTML_ELEMENTS or (
@@ -192,15 +188,25 @@ def unknown_html_tag(text: str) -> str | None:
 
 def _check_blog_markup(front: dict[str, Any], body: str, offset: int, add: Add) -> None:
     """The blog lint's markup rules (script/lint-posts.rb) as it applies them:
-    Liquid outside raw tags, tags the browser drops, fence info strings
-    kramdown does not read, a | inside $$ on a table row, ar5iv links and
-    lightbox links that do not open their image."""
+    Liquid outside raw tags, a fence never closed, tags the browser drops,
+    fence info strings kramdown does not read, a | inside $$ on a table row,
+    ar5iv links and lightbox links that do not open their image. Lines are
+    read by the lint's own roles (:func:`blog_fence_roles`): a fence or a
+    ``$$`` display block is no prose."""
     _check_lightbox(body, offset, add)
     lines = body.split("\n")
-    fence: str | None = None
+    roles = blog_fence_roles(lines)
+    if (unclosed := blog_open_fence_line(lines)) is not None:
+        add(
+            "error",
+            "code",
+            offset + unclosed,
+            "a code fence is never closed (a fence after > or one nested in "
+            "another closes nothing)",
+        )
     raw = False
     liquid = front.get("render_with_liquid") is not False
-    for i, line in enumerate(lines):
+    for i, (line, role) in enumerate(zip(lines, roles, strict=True)):
         if liquid:
             hit = False
             for part in _LINT_RAW.split(line):
@@ -216,24 +222,18 @@ def _check_blog_markup(front: dict[str, Any], body: str, offset: int, add: Add) 
                     offset + i,
                     "Liquid tag in the body; wrap it in {% raw %} ... {% endraw %}",
                 )
-        if m := _LINT_FENCE.match(line):
-            if fence is None:
-                fence = m.group(1)
-                if _LINT_FENCE_INFO.match(line.strip()):
-                    add(
-                        "error",
-                        "code",
-                        offset + i,
-                        "code fence info has a space; write just the language",
-                    )
-            elif re.fullmatch(f"{re.escape(fence[0])}{{{len(fence)},}}", line.strip()):
-                fence = None
-            continue
-        if fence:
+        if role == "open" and _LINT_FENCE_INFO.match(line.strip()):
+            add(
+                "error",
+                "code",
+                offset + i,
+                "code fence info has a space; write just the language",
+            )
+        if role != "prose":
             continue
         # ar5iv answers a figure it lost with a "NO IMAGE AVAILABLE" PNG and
         # HTTP 200, so no link check notices.
-        if "ar5iv." in _LINT_CODE_SPAN.sub("", _unquote(line)):
+        if "ar5iv." in blog_bare(line):
             add(
                 "error",
                 "link",
@@ -278,7 +278,7 @@ def _check_blog_markup(front: dict[str, Any], body: str, offset: int, add: Add) 
 _LINT_ATTRS = r"""(?:[^>"']|"[^"]*"|'[^']*')*"""
 _LIGHTBOX = re.compile(
     rf"""<a\b{_LINT_ATTRS}\bclass=["'][^"']*\bglightbox\b[^"']*["']{_LINT_ATTRS}>"""
-    rf"""\s*<img\b{_LINT_ATTRS}>""",
+    rf"""\s*(?P<img><img\b{_LINT_ATTRS}>)""",
     re.IGNORECASE | re.DOTALL,
 )
 _LINT_FENCED_BLOCK = re.compile(
@@ -293,9 +293,7 @@ def _check_lightbox(body: str, offset: int, add: Add) -> None:
     text = _LINT_FENCED_BLOCK.sub(lambda m: "\n" * m.group(0).count("\n"), body)
     for match in _LIGHTBOX.finditer(text):
         href = re.search(r"""\shref=["']([^"']+)""", match.group(0), re.IGNORECASE)
-        src = re.search(
-            r"""<img\b[^>]*\ssrc=["']([^"']+)""", match.group(0), re.IGNORECASE
-        )
+        src = re.search(r"""\ssrc=["']([^"']+)""", match.group("img"), re.IGNORECASE)
         if href and src and href.group(1) != src.group(1):
             add(
                 "error",
@@ -330,9 +328,6 @@ def validate_post(
         return found
 
     lines = _prose_lines(body)
-    unclosed = open_fence_line(body.split("\n"))
-    if unclosed is not None:
-        add("error", "code", offset + unclosed, "a code fence is never closed")
     _check_front_matter(front, body, spec, kind, add)
     if file_name is not None:
         _check_file_date(file_name, front.get("date"), add)
@@ -341,7 +336,8 @@ def validate_post(
     _check_headings(lines, offset, kind, add)
     _check_math(front, body, offset, add)
     _check_tables(lines, offset, add)
-    _check_images(lines, offset, add)
+    # The blog's language is Korean; a translation says otherwise in lang.
+    _check_images(lines, offset, add, korean=front.get("lang", "ko") == "ko")
     _check_text(lines, offset, add)
     _check_links(lines, offset, add)
     _check_style(body, offset, add)
@@ -364,9 +360,6 @@ def body_errors(markdown: str) -> list[str]:
             found.append(f"{rule}: {message} (line {line})")
 
     lines = _prose_lines(markdown)
-    unclosed = open_fence_line(markdown.split("\n"))
-    if unclosed is not None:
-        add("error", "code", 1 + unclosed, "a code fence is never closed")
     _check_math({}, markdown, 1, add)
     _check_tables(lines, 1, add)
     _check_links(lines, 1, add)
@@ -747,11 +740,6 @@ _BRACKET_BLOCK = re.compile(
 )
 
 
-def _unquote(line: str) -> str:
-    """The text of a line after any blockquote markers."""
-    return QUOTE_PREFIX.sub("", line)
-
-
 def _check_math(front: dict[str, Any], body: str, offset: int, add: Add) -> None:
     """The blog's math rules (script/lint-posts.rb), blockquotes included:
     only ``$$`` delimiters; a display block opens on a line starting with
@@ -771,7 +759,7 @@ def _check_math(front: dict[str, Any], body: str, offset: int, add: Add) -> None
             1,
             "use_math must be true exactly when the post contains $$ math",
         )
-    bare_by_index = {i: _unquote(line) for i, line in lines}
+    bare_by_index = {i: blog_unquote(line) for i, line in lines}
 
     raw_by_index = dict(lines)
     body_lines = body.split("\n")
@@ -1170,7 +1158,7 @@ def unsourced_table_numbers(markdown: str, source_text: str) -> list[str]:
     for _, line in _prose_lines(body):
         if not line.lstrip().startswith("|") or TABLE_DELIMITER.match(line.strip()):
             continue
-        cells = _split_cells(_INLINE_MATH.sub(" ", _INLINE_CODE.sub(" ", line)))
+        cells = _split_cells(_INLINE_MATH.sub(" ", BLOG_CODE_SPAN.sub(" ", line)))
         tokens = [
             t for cell in cells[1:] for t in _NUMBER.findall(cell)
         ]  # not the label
@@ -1211,28 +1199,13 @@ class _Number:
     value: Decimal  # as written ("7" in "7B")
     absolute: Decimal  # with its unit applied (7E+9)
     scaled: bool
+    # A lone 만 after the number is the unit 10^4 or the particle "only"
+    # ("5만 사용"): the number is sourced as either.
+    either: bool = False
 
 
 # The next part of a combined Korean number ("12만 8천", "1억 2000만").
 _KOREAN_PART = re.compile(r"\s?(\d+(?:\.\d+)?)(천만|백만|천|만|억|조)")
-# A bare 만 after a number is also the particle "only" ("5만 사용") and starts
-# 만큼 ("10만큼"). It is the unit 10^4 only when what follows is, by this
-# closed rule: the end of the text; a character that is neither Hangul nor
-# a space (punctuation, a digit, a letter); a particle "only" never comes
-# before (의, 에, 에서, 으로, 로, 까지, 부터: "only" follows them, "5에서만");
-# or, after at most one space,
-# a digit, a non-Hangul word ("10만 tokens"), a larger unit (억, 조) or a
-# counter from the list below that ends there or takes a particle
-# ("5만 명", "10만 개의"; not "5만 개선").
-_COUNTERS = (
-    "명|개|건|원|달러|장|회|번|권|쌍|편|배|줄|행|쪽|자|단어|토큰|문장|문서|"
-    "샘플|스텝|단계|시간|페이지|이미지|파라미터|억|조"
-)
-_PARTICLES = "의|이|가|을|를|은|는|에|으로|로|과|와|씩|당|도|만"
-_MAN_UNIT = re.compile(
-    r"\Z|[^\s가-힣]|의|에|으로|로|까지|부터"
-    rf"|\s?(?:[^\s가-힣]|(?:{_COUNTERS})(?:(?:{_PARTICLES})(?![가-힣])|(?![가-힣])))"
-)
 
 
 def _numbers(text: str) -> list[_Number]:
@@ -1242,8 +1215,6 @@ def _numbers(text: str) -> list[_Number]:
         value = Decimal(m.group("value").replace(",", ""))
         unit = m.group("letter") or m.group("word") or m.group("korean")
         end = m.end()
-        if unit == "만" and not _MAN_UNIT.match(text, end):
-            unit, end = None, m.start("korean")  # "only", not 10^4
         absolute = value.scaleb(_SCALES[unit]) if unit else value
         if unit and m.group("korean"):
             # Smaller Korean units right after add up: 12만 8천 is 128,000.
@@ -1262,6 +1233,7 @@ def _numbers(text: str) -> list[_Number]:
                 value.normalize(),
                 absolute.normalize(),
                 bool(unit),
+                either=unit == "만" and end == m.end(),
             )
         )
         pos = max(end, m.start() + 1)
@@ -1276,7 +1248,8 @@ def unsourced_numbers(text: str, source: str) -> list[str]:
     ignored. A number with a unit matches only the same quantity in the
     source, so 70억 matches 7B or 7 billion and 7억 does not (a combined
     Korean number is one quantity: 12만 8천 matches 128K); a bare number
-    matches the same digits anywhere in the source ("87.3" in "87.3%").
+    matches the same digits anywhere in the source ("87.3" in "87.3%"). A
+    lone 만 is also the particle "only", so 5만 matches 5 or 50,000.
     """
     known = _numbers(source)
     values = {n.value for n in known}
@@ -1285,7 +1258,7 @@ def unsourced_numbers(text: str, source: str) -> list[str]:
     for number in _numbers(text):
         found = (
             number.absolute in quantities if number.scaled else number.value in values
-        )
+        ) or (number.either and number.value in values)
         if not found and number.text not in missing:
             missing.append(number.text)
     return missing
@@ -1294,11 +1267,10 @@ def unsourced_numbers(text: str, source: str) -> list[str]:
 _IMAGE_ALT = re.compile(r"!\[([^\]]*)\]\(")
 
 
-def _check_images(lines: Lines, offset: int, add: Add) -> None:
-    korean = mostly_hangul("\n".join(line for _, line in lines))
+def _check_images(lines: Lines, offset: int, add: Add, *, korean: bool) -> None:
     for i, line in lines:
         if korean:
-            for alt in _IMAGE_ALT.findall(_INLINE_CODE.sub("", line)):
+            for alt in _IMAGE_ALT.findall(BLOG_CODE_SPAN.sub("", line)):
                 if not HANGUL.search(alt):
                     add(
                         "warning",
@@ -1362,7 +1334,7 @@ def _check_description(lines: Lines, offset: int, add: Add) -> None:
 
 def _check_text(lines: Lines, offset: int, add: Add) -> None:
     for i, line in lines:
-        prose = _INLINE_CODE.sub("", line)
+        prose = BLOG_CODE_SPAN.sub("", line)
         if ENVELOPE_TAG.search(prose):
             add("error", "envelope", offset + i, "generator tag leaked into the post")
         if "[Image:" in prose:
@@ -1393,11 +1365,18 @@ def _check_style(body: str, offset: int, add: Add) -> None:
     translationese and no sentence ending glued to a colon, where it looks
     (:func:`markdown_lint.style_hits`)."""
     for hit in style_hits(body):
-        message = (
-            f'translationese "{hit.match}"; reword it'
-            if hit.rule == "translationese"
-            else f"a sentence ends in a colon ({hit.match}); end it with a period"
-        )
+        if hit.rule == "colon":
+            message = (
+                f"a sentence ends in a colon ({hit.match}); end it with a period "
+                "or write a label"
+            )
+        elif "있어" in hit.match:
+            message = f'translationese "{hit.match}" (a calque); write 에서 or 에는'
+        else:
+            message = (
+                f'translationese "{hit.match}" (a double passive); write one '
+                "passive or an active verb"
+            )
         add("error", "style", offset + hit.line, message)
 
 
@@ -1430,7 +1409,7 @@ def _check_survey_citations(lines: Lines, offset: int, add: Add) -> None:
     cited: set[str] = set()
     in_prose: set[str] = set()
     for i, line in lines:
-        prose = _INLINE_CODE.sub("", line)
+        prose = BLOG_CODE_SPAN.sub("", line)
         if i < start:
             for key in _CITATION_KEY.findall(prose):
                 add("error", "citations", offset + i, f"unresolved citation {key}")

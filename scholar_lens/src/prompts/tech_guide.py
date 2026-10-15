@@ -6,6 +6,7 @@ from .base import (
     KOREAN_STYLE,
     MATH_RULES,
     NATURALNESS_CHECK,
+    NUMBER_RULES,
     PROSE_UNIT,
     READER_PROFILE,
     STYLE_RULES,
@@ -59,7 +60,8 @@ SOURCE_AUTHORITY = (
     "generic tutorials, marketing grounds nothing, and a vendor's product page or tutorial grounds facts about its "
     "own product only, never a comparison with other products. Where such a page conflicts with an official page "
     f'about current behaviour, the official page wins; an "({OLDER_DOCS_LABEL})" page never decides current '
-    "behaviour. A mechanism that only a paper or an older design doc describes is presented as the design of the "
+    "behaviour: a command, flag or default that only such a page gives is left out; it may ground how a mechanism "
+    "used to work, named as that version's. A mechanism that only a paper or an older design doc describes is presented as the design of the "
     "version it describes (name the paper or the version it states), not as a current option, unless an official current page confirms it. "
     "When <sources> include an official page, a command, flag, default or configuration key that only a "
     "non-official page gives is left out; when they include none, such a detail needs a page that shows it."
@@ -582,7 +584,9 @@ class TechGuideEvaluationPrompt(BasePrompt):
       sections. A section that reads as a standalone summary of one reference, or explains a mechanism apart from
       the feature it serves, loses here.
     - Accuracy (15): Every claim has the support SOURCES below requires; no statement contradicts another one in the
-      section.
+      section; numbers follow these rules:"""
+        + NUMBER_RULES
+        + """
     - Style & tone (5): Follows the shared STYLE rules and the target language register; clean Markdown. """
         + GLOSSARY_RULE
         + NATURALNESS_CHECK
@@ -607,7 +611,7 @@ class TechGuideEvaluationPrompt(BasePrompt):
     - Material another section of <full_outline> covers counts as duplication (Non-duplication), not as depth.
 
     BLOCKING ISSUES block the section whatever its score; list each with the quoted passage and the fix: a factual
-    error, a statement that contradicts another one in the section, a claim without the support SOURCES requires,
+    error (a number that breaks the number rules included), a statement that contradicts another one in the section, a claim without the support SOURCES requires,
     a structural reference to another part of the guide (its section name or number), and a substantial explanation
     of a concept in <concepts_owned_elsewhere>. The naturalness check's blocking wording issues go in
     <wording_issues> instead, each with the quoted sentence and its rewrite. A preference or a weakness a score
@@ -636,12 +640,15 @@ class TechGuideTaxonomyPrompt(BasePrompt):
         "category_options",
         "controlled_tags",
         "title_max_length",
+        "language",
+        "repair_note",
     ]
     output_variables: list[str] = [
         "category",
         "controlled_tags",
         "keywords",
         "seo_title",
+        "description",
     ]
 
     system_prompt_template: str = """
@@ -661,15 +668,22 @@ class TechGuideTaxonomyPrompt(BasePrompt):
 
     Rules:
     - category: exactly one value copied from category_options — the closest fit.
-    - controlled_tags: 1-3 values copied from controlled_tag_options naming what the guide teaches (not a neighbouring field).
+    - controlled_tags: values copied from controlled_tag_options: one by default, naming what the guide teaches; a
+      second only when whole sections teach it, never a neighbouring field.
     - keywords: up to 5 short reusable topic tags in English (1-4 words each, e.g. "Vector Search",
       "Container Orchestration"); name techniques and tools the guide teaches, never restate the title.
     - seo_title: only when the title is longer than {title_max_length} characters, a version of at most {title_max_length} characters that keeps
       the product or technique name first; otherwise leave empty.
+    - description: the post's search snippet, one plain text paragraph of 120-160 characters in {language}: no math,
+      Markdown, links or tags. It opens with the product or technique name, says what the guide teaches, and may end
+      with what it covers ("… 구조와 설정을 정리합니다."). Numbers only from <guide_outline>. In Korean, natural prose
+      in the "입니다" register, not a translation.
+    {repair_note}
 
     Respond in exactly this format:
     <category>...</category>
-    <controlled_tags>Tag-One, Tag-Two</controlled_tags>
+    <controlled_tags>Tag-One</controlled_tags>
     <keywords>Keyword One, Keyword Two</keywords>
     <seo_title></seo_title>
+    <description>...</description>
     """

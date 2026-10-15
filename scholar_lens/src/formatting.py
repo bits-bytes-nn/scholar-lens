@@ -62,6 +62,8 @@ def render_front_matter(
     paper_doi: str | None = None,
     seo_title: str | None = None,
     description: str | None = None,
+    lang: str | None = None,
+    translation_id: str | None = None,
 ) -> str:
     """Render Jekyll front matter; every scalar is YAML-escaped and optional
     keys are omitted when empty."""
@@ -84,6 +86,10 @@ def render_front_matter(
     ]
     if use_math:
         lines.append("use_math: true")
+    if lang:
+        lines.append(f"lang: {_quoted(lang)}")
+    if translation_id:
+        lines.append(f"translation_id: {_quoted(translation_id)}")
     return "\n".join([*lines, "---", ""])
 
 
@@ -135,20 +141,23 @@ def _paper_doi(paper: Paper) -> str | None:
     it is no bare DOI."""
     arxiv_id = normalize_arxiv_id(paper.arxiv_id)
     if arxiv_id:
-        return f"10.48550/arXiv.{re.sub(r'v\d+$', '', arxiv_id)}"
+        return bare_doi(f"10.48550/arXiv.{arxiv_id}")
     return bare_doi(paper.doi)
 
 
 @dataclass
 class PostMeta:
     """Taxonomy decided in code from the model's proposals and the spec;
-    ``date`` is set when the post replaces a published one (its date)."""
+    ``date``, ``lang`` and ``translation_id`` are set when the post replaces
+    a published one (its values: a translated post keeps its pair)."""
 
     topic: str | None
     cover: str
     tags: list[str]
     seo_title: str | None = None
     date: datetime | None = None
+    lang: str | None = None
+    translation_id: str | None = None
 
 
 def resolve_topic(raw: str, spec: PostConventions) -> str | None:
@@ -197,7 +206,8 @@ def build_post_meta(
     """Normalize tags, resolve the topic/cover and pick a ``seo_title``.
 
     A post that replaces the ``published`` one keeps its topic and date (the
-    post's URL is built from both), whatever the model proposes now.
+    post's URL is built from both) and its ``lang``/``translation_id`` (the
+    blog pairs translations by them), whatever the model proposes now.
 
     Anything that still breaks a convention (no controlled tag, unknown topic)
     is left for the post validator to reject, never silently patched.
@@ -218,6 +228,8 @@ def build_post_meta(
         tags=selection.tags,
         seo_title=seo,
         date=published.date if published else None,
+        lang=published.lang if published else None,
+        translation_id=published.translation_id if published else None,
     )
 
 
@@ -267,6 +279,8 @@ def paper_front_matter(
         tags=meta.tags,
         cover=meta.cover,
         use_math=has_math(body),
+        lang=meta.lang,
+        translation_id=meta.translation_id,
     )
 
 
@@ -465,10 +479,13 @@ def format_guide(
         title=guide.topic,
         seo_title=meta.seo_title,
         date=meta.date or datetime.now(UTC),
+        description=guide.description or None,
         categories=categories,
         tags=meta.tags,
         cover=meta.cover,
         use_math=has_math(content),
+        lang=meta.lang,
+        translation_id=meta.translation_id,
     )
     titles = guide.source_titles
     sources = link_list((titles.get(url), url) for url in guide.source_urls)

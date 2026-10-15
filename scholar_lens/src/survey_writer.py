@@ -52,11 +52,11 @@ from .prompts.base import PROSE_UNIT, blocking_issues_block
 from .prompts.survey import DEPTH_GUIDANCE, SECTION_ROLES
 from .publish_types import title_slug
 from .publisher import PublishRequest, build_pr_body
+from .quality_gate import rule_issues
 from .review_plan import (
     article_ledger,
     digest_sections,
     ensure_section_heading,
-    rule_issues,
 )
 from .runtime import (
     ROOT_DIR,
@@ -1206,7 +1206,7 @@ def survey_body(survey: Survey, language: str) -> tuple[str, list[str]]:
         f.url: f.caption for card in survey.cards.values() for f in card.figures
     }
     body = drop_unknown_images(body, set(owners))
-    body = fill_image_alts(body, captions, survey.title)
+    body = fill_image_alts(body, captions, survey.title, korean=language == "Korean")
     body = credit_figures(body, owners, language)
     notes = []
     if unknown:
@@ -1294,7 +1294,10 @@ async def run_survey_write_pipeline(
     # plan updates the same branch, pull request and published post.
     slug = survey_slug(plan.topic)
     published, lookup_notes = await find_published_post(
-        context, slug=title_slug(survey.title, "survey"), branch_id=slug
+        context,
+        slug=title_slug(survey.title, "survey"),
+        branch_id=slug,
+        category=github.survey_category,
     )
     meta = build_post_meta(
         title=survey.title,
@@ -1320,6 +1323,8 @@ async def run_survey_write_pipeline(
         cover=meta.cover,
         use_math=has_math(body),
         description=description or None,
+        lang=meta.lang,
+        translation_id=meta.translation_id,
     )
     document = (
         f"{front_matter}{body}\n\n{reference_list(survey.plan.papers)}"

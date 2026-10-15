@@ -14,6 +14,7 @@ from .markdown_math import segments
 from .prompt_safety import neutralize_prompt_tags
 from .utils import parse_lines
 from .web_research import (
+    METRIC_SUFFIXES,
     OfficialDocs,
     PageContent,
     ResearchCorpus,
@@ -26,7 +27,7 @@ from .web_research import (
 _FLAG = re.compile(r"(?<![\w-])--[a-z][a-z0-9]*(?:[-_][a-z0-9]+)*")
 _METRIC = re.compile(
     r"\b[a-z][a-z0-9]*(?::[a-z0-9]+(?:_[a-z0-9]+)+"
-    r"|(?:_[a-z0-9]+)+_(?:total|seconds|bytes|count|bucket|sum))\b"
+    rf"|(?:_[a-z0-9]+)+_(?:{'|'.join(METRIC_SUFFIXES)}))\b"
 )
 # Python API arguments of more than one word (``gpu_memory_utilization=``):
 # the same settings as the flags, as a reader passes them to the product's API.

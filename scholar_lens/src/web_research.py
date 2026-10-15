@@ -83,6 +83,9 @@ _ARGUMENT_WORDS = frozenset(
     {"cli", "arg", "args", "arguments", "options", "parameters"}
 )
 _METRIC_WORDS = frozenset({"metric", "metrics"})
+# Prometheus naming-convention suffixes that mark a metric name
+# ("..._requests_total"); guide_authority's metric pattern uses the same list.
+METRIC_SUFFIXES = ("total", "seconds", "bytes", "count", "bucket", "sum")
 
 
 def _path_words(url: str) -> set[str]:
@@ -96,7 +99,7 @@ def _reference_words(identifiers: list[str]) -> set[str]:
     words: set[str] = set()
     for identifier in identifiers:
         is_metric = ":" in identifier or identifier.endswith(
-            ("_total", "_seconds", "_bytes", "_count", "_bucket", "_sum")
+            tuple(f"_{suffix}" for suffix in METRIC_SUFFIXES)
         )
         words |= _METRIC_WORDS if is_metric else _ARGUMENT_WORDS
         words |= {w for w in re.split(r"[-_:=\s]+", identifier.lower()) if len(w) > 2}
@@ -115,8 +118,6 @@ _DOTTED_DOCS_VERSION = re.compile(
 )
 _BARE_DOCS_VERSION = re.compile(r"v\d+", re.I)
 _BARE_VERSION_SEGMENTS = 2  # "v2" only right after the root or a language
-# Host labels that do not name a product (docs.vllm.ai → vllm).
-HOST_NOISE = frozenset({"docs", "www", "doc", "api", "readthedocs", "github"})
 _BRAVE_WEB_SEARCH_URL = "https://api.search.brave.com/res/v1/web/search"
 _TAVILY_SEARCH_URL = "https://api.tavily.com/search"
 
@@ -209,13 +210,11 @@ class OfficialDocs:
         return False  # a pinned release none of the inputs asked for
 
 
-def product_names(
-    proposed: str, urls: Collection[str], pages: Collection[PageContent]
-) -> list[str]:
+def product_names(proposed: str, pages: Collection[PageContent]) -> list[str]:
     """The command and package names the relevance gate read off the docs
     (``proposed``, comma- or line-separated), kept only when the seed
-    ``pages`` show them as a word; the requested site's host label
-    (``docs.vllm.ai`` → ``vllm``) only when none of them does."""
+    ``pages`` show them as a word. No name shown means none: a product name
+    is never guessed from the site's host."""
     text = " ".join(page.text.lower() for page in pages)
     names: list[str] = []
     # A "none" answer names nothing (any Python page shows "None").
@@ -227,14 +226,6 @@ def product_names(
             and re.search(rf"(?<![\w/.-]){re.escape(name)}(?![\w-])", text)
         ):
             names.append(name)
-    if names:
-        return names
-    for url in urls:
-        labels = (urlparse(url).hostname or "").split(".")[:-1]
-        for label in reversed(labels):
-            if label not in HOST_NOISE and label not in names:
-                names.append(label)
-                break
     return names
 
 
@@ -492,6 +483,9 @@ class WebSearchProvider(ABC):
     # Whether this backend can actually return results. Callers gate expensive
     # research planning on this so they don't generate queries for a no-op.
     supports_search: bool = True
+    # Searches that failed (429, 5xx, timeout, malformed answer) and so
+    # returned nothing; not retried, reported as a run note instead.
+    failed_searches: int = 0
 
     @abstractmethod
     def search(
@@ -545,6 +539,7 @@ class BraveSearchProvider(WebSearchProvider):
         except (httpx.HTTPError, ValueError) as e:
             # ValueError covers JSONDecodeError on a malformed/truncated response.
             logger.warning("Brave search failed for '%s': %s", query, e)
+            self.failed_searches += 1
             return []
         results = data.get("web", {}).get("results") or []
         if not isinstance(results, list):
@@ -600,6 +595,7 @@ class TavilySearchProvider(WebSearchProvider):
         except (httpx.HTTPError, ValueError) as e:
             # ValueError covers JSONDecodeError on a malformed/truncated response.
             logger.warning("Tavily search failed for '%s': %s", query, e)
+            self.failed_searches += 1
             return []
         results = data.get("results") or []
         if not isinstance(results, list):
@@ -647,6 +643,17 @@ class WebResearcher:
                 transport=PinnedHTTPTransport(),
             )
         return self._client
+
+    def search_notes(self) -> list[str]:
+        """A run note when web searches failed (their results are missing
+        from the research), else nothing."""
+        failed = self.search_provider.failed_searches
+        if not failed:
+            return []
+        return [
+            f"{failed} web search(es) failed (rate limit, server error or "
+            "timeout) and were not retried: the research is missing their results."
+        ]
 
     def close(self) -> None:
         """Close the lazily-created HTTP client (releases its connection pool)."""

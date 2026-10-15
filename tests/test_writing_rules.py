@@ -11,11 +11,10 @@ from scholar_lens.src.markdown_lint import (
     fill_image_alts,
     limit_callouts,
     lint_markdown,
-    mostly_hangul,
     writing_issues,
 )
 from scholar_lens.src.post_conventions import load_local_conventions
-from scholar_lens.src.post_validator import validate_post
+from scholar_lens.src.post_validator import body_errors, validate_post
 from scholar_lens.src.review_plan import (
     HARD_OVERRUN,
     MIN_HARD_SCALE,
@@ -118,19 +117,23 @@ class TestWritingIssues:
     @pytest.mark.parametrize(
         "text,needle",
         [
-            ("값이 저장되어진 뒤 읽습니다.", "double passive '되어진'"),
-            ("그림에서 보여지는 곡선입니다.", "double passive '보여지'"),
-            ("학습에 있어서는 중요합니다.", "calque '에 있어서는'"),
-            ("평가에 있어서의 기준입니다.", "calque '에 있어서의'"),
-            ("모델을 학습함에 있어 중요합니다.", "calque '함에 있어'"),
-            ("구조는 다음과 같습니다: 첫째, 인코더입니다.", "colon '다:'"),
-            ("모델은 두 단계를 거친다: 사전학습과 미세조정.", "colon '다:'"),
+            ("값이 저장되어진 뒤 읽습니다.", '"되어진" (a double passive)'),
+            ("그림에서 보여지는 곡선입니다.", '"보여지" (a double passive)'),
+            ("학습에 있어서는 중요합니다.", '"에 있어서는" (a calque)'),
+            ("평가에 있어서의 기준입니다.", '"에 있어서의" (a calque)'),
+            ("모델을 학습함에 있어 중요합니다.", '"함에 있어" (a calque)'),
+            ("구조는 다음과 같습니다: 첫째, 인코더입니다.", "colon (다:)"),
+            ("모델은 두 단계를 거친다: 사전학습과 미세조정.", "colon (다:)"),
             # Checked again after the reference list ends.
-            ("## 참고 자료\n\n* Kim (2020).\n\n## 정리\n\n크다: 첫째.", "colon '다:'"),
+            ("## 참고 자료\n\n* Kim (2020).\n\n## 정리\n\n크다: 첫째.", "colon (다:)"),
         ],
     )
     def test_translationese_markers_are_caught(self, text: str, needle: str) -> None:
-        assert needle in "\n".join(writing_issues(f"## 방법\n\n{text}"))
+        # A blog prose rule: a publish-blocking body error, not a writing slip
+        # too (a writer would get it twice).
+        md = f"## 방법\n\n{text}"
+        assert needle in "\n".join(body_errors(md))
+        assert needle not in "\n".join(writing_issues(md))
 
     @pytest.mark.parametrize(
         "text",
@@ -156,7 +159,7 @@ class TestWritingIssues:
         ],
     )
     def test_translationese_markers_leave_normal_korean_alone(self, text: str) -> None:
-        assert writing_issues(f"## 방법\n\n{text}") == []
+        assert body_errors(f"## 방법\n\n{text}") == []
 
     def test_an_acronym_used_as_a_verb_is_fine(self) -> None:
         assert writing_issues("행렬을 SVD하고 비교합니다.") == []
@@ -207,7 +210,6 @@ class TestWritingIssues:
         assert writing_issues("Theorem 2와 Lemma 1에 따르면") != []
 
     def test_english_post_alt_is_not_flagged(self) -> None:
-        assert mostly_hangul("LoRA는 Transformer weight를 freeze") is False
         assert writing_issues("Body text.\n\n![Low-rank update](/a.png)") == []
 
 
@@ -219,26 +221,36 @@ class TestKoreanAlts:
             "## 💡 어떤 해결책을 제시합니까?\n\n본문은 한국어로 씁니다.\n\n"
             "![](/assets/images/a-1.png)\n"
         )
-        out = fill_image_alts(md, self.CAPTIONS, "LoRA")
+        out = fill_image_alts(md, self.CAPTIONS, "LoRA", korean=True)
         assert "![어떤 해결책을 제시합니까](/assets/images/a-1.png)" in out
 
     def test_heading_alt_drops_emoji(self) -> None:
         md = "## 📊 저랭크 분해\n\n본문은 한국어로 씁니다.\n\n![Refer](/a.png)\n"
-        assert "![저랭크 분해](/a.png)" in fill_image_alts(md, {}, "LoRA")
+        assert "![저랭크 분해](/a.png)" in fill_image_alts(md, {}, "LoRA", korean=True)
 
     def test_english_alt_falls_back_to_the_heading(self) -> None:
         md = (
             "## 저랭크 분해\n\n본문은 한국어로 씁니다.\n\n![Refer to caption](/a.png)\n"
         )
-        assert "![저랭크 분해](/a.png)" in fill_image_alts(md, {}, "LoRA")
+        assert "![저랭크 분해](/a.png)" in fill_image_alts(md, {}, "LoRA", korean=True)
 
     def test_korean_alt_and_english_posts_keep_their_alt(self) -> None:
         md = "## 방법\n\n본문입니다.\n\n![저랭크 구조](/a.png)"
-        assert fill_image_alts(md, {}, "x") == md
+        assert fill_image_alts(md, {}, "x", korean=True) == md
         english = "## Method\n\nBody.\n\n![](/assets/images/a-1.png)"
         assert "![Our reparametrization.]" in fill_image_alts(
-            english, self.CAPTIONS, "x"
+            english, self.CAPTIONS, "x", korean=False
         )
+
+    def test_the_post_language_decides_not_the_share_of_hangul(self) -> None:
+        # A Korean post heavy with English terms is still Korean; an English
+        # post quoting Korean is still English.
+        md = (
+            "## 저랭크 분해\n\nLoRA freezes the Transformer weights W.\n\n"
+            "![Refer](/a.png)\n"
+        )
+        assert "![저랭크 분해](/a.png)" in fill_image_alts(md, {}, "x", korean=True)
+        assert fill_image_alts(md, {}, "x", korean=False) == md
 
     def test_validator_warns_on_english_alt_in_a_korean_post(self) -> None:
         post = (
@@ -247,6 +259,24 @@ class TestKoreanAlts:
         )
         found = validate_post(post, load_local_conventions(), "review")
         assert any(v.rule == "image-alt" and v.level == "warning" for v in found)
+
+    def test_validator_reads_the_language_from_lang(self) -> None:
+        # Mostly English prose, yet a Korean post (no lang): its alt is
+        # checked; an English translation's is not.
+        body = (
+            "## TL;DR\n\nLoRA freezes the pretrained Transformer weights and "
+            "trains rank decompositions.\n\n![Low-rank update](/assets/images/x-1.png)\n"
+        )
+        spec = load_local_conventions()
+
+        def alt_warned(front: str) -> bool:
+            post = f'---\nlayout: post\ntitle: "T"\n{front}---\n{body}'
+            return any(
+                v.rule == "image-alt" for v in validate_post(post, spec, "review")
+            )
+
+        assert alt_warned("")
+        assert not alt_warned("lang: en\ntranslation_id: t\n")
 
 
 def _plan(sections: list[dict[str, object]]) -> str:

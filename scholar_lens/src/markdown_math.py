@@ -79,7 +79,13 @@ def indented_code_lines(lines: list[str]) -> set[int]:
     blank line. A whole-line ``$$`` display that opens such a block is left
     out: an over-indented equation is meant as math, and the normalizer
     re-indents it."""
-    code: set[int] = set()
+    return set(indented_code_bases(lines))
+
+
+def indented_code_bases(lines: list[str]) -> dict[int, int]:
+    """:func:`indented_code_lines` with each line's base column: the content
+    column of its list item (0 at the margin); the code starts 4 past it."""
+    code: dict[int, int] = {}
     base = 0
     for i, line in enumerate(lines):
         if not line.strip():
@@ -100,7 +106,7 @@ def indented_code_lines(lines: list[str]) -> set[int]:
             # inside a code block is part of the sample
             and not (previous_blank and _WHOLE_LINE_DISPLAY.match(line))
         ):
-            code.add(i)
+            code[i] = base
     return code
 
 
@@ -1054,14 +1060,16 @@ def blog_bare(line: str) -> str:
     return BLOG_CODE_SPAN.sub("", blog_unquote(line))
 
 
-def blog_line_roles(lines: list[str]) -> list[str]:
+def blog_fence_roles(lines: list[str]) -> list[str]:
     """Each line's role as the blog lint's body loop assigns it
-    (lint-posts.rb lines 241-280): ``"fence"`` (a fence marker or a line
-    inside one), ``"display"`` (a line of a ``$$`` display block opened on a
-    line starting with ``$$``, delimiters included) or ``"prose"``.
+    (lint-posts.rb lines 241-280): ``"open"``, ``"code"`` or ``"close"`` (a
+    fence's opener, a line inside it, its closer), ``"display"`` (a line of a
+    ``$$`` display block opened on a line starting with ``$$``, delimiters
+    included) or ``"prose"``.
 
-    A fence closes only on a line of its own character, at least as long,
-    with nothing else on it (line 250); an unclosed one runs to the end.
+    A fence marker starts its line (indentation only: one after ``>`` is
+    text there) and closes only on a line of its own character, at least as
+    long, with nothing else on it (line 250); an unclosed one runs to the end.
     """
     roles: list[str] = []
     fence: str | None = None
@@ -1071,12 +1079,15 @@ def blog_line_roles(lines: list[str]) -> list[str]:
         if m := BLOG_FENCE.match(line):
             if fence is None:
                 fence = m.group(1)
+                roles.append("open")
             elif re.fullmatch(f"{re.escape(fence[0])}{{{len(fence)},}}", line.strip()):
                 fence = None
-            roles.append("fence")
+                roles.append("close")
+            else:
+                roles.append("code")
             continue
         if fence is not None:
-            roles.append("fence")
+            roles.append("code")
             continue
         bare = blog_bare(line)
         odd = bare.count("$$") % 2 == 1
@@ -1091,6 +1102,26 @@ def blog_line_roles(lines: list[str]) -> list[str]:
             para = not para
         roles.append("prose")
     return roles
+
+
+def blog_line_roles(lines: list[str]) -> list[str]:
+    """:func:`blog_fence_roles` with a fence's lines all ``"fence"``."""
+    return [
+        "fence" if role in ("open", "code", "close") else role
+        for role in blog_fence_roles(lines)
+    ]
+
+
+def blog_open_fence_line(lines: list[str]) -> int | None:
+    """Index of the opener of a fence the blog lint finds never closed
+    (:func:`blog_fence_roles`), if any."""
+    opened: int | None = None
+    for i, role in enumerate(blog_fence_roles(lines)):
+        if role == "open":
+            opened = i
+        elif role == "close":
+            opened = None
+    return opened
 
 
 def has_math(markdown: str) -> bool:

@@ -48,7 +48,7 @@ def test_guide_document_converts_markers_and_drops_unoffered_images() -> None:
         f'[Image: alt="아키텍처", src="{arch}"]\n\n'
         "![로고](https://docs.x.dev/img/logo.svg)\n"
     )
-    out = guide_document(document, guide)
+    out = guide_document(document, guide, korean=True)
     assert "[Image:" not in out
     assert f"]({arch})" in out
     assert "logo.svg" not in out
@@ -131,7 +131,9 @@ async def _run_guide(
     monkeypatch.setattr(guide_pipeline, "ROOT_DIR", tmp_path)
     monkeypatch.setattr(guide_pipeline, "TechGuideGenerator", lambda **_: generator)
     monkeypatch.setattr(
-        guide_pipeline, "WebResearcher", lambda **_: SimpleNamespace(close=lambda: None)
+        guide_pipeline,
+        "WebResearcher",
+        lambda **_: SimpleNamespace(close=lambda: None, search_notes=lambda: []),
     )
     monkeypatch.setattr(guide_pipeline, "load_translation_guideline", no_guideline)
     request = JobRequest(kind="guide", urls=[DOCS], create_pr=False)

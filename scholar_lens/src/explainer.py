@@ -56,6 +56,7 @@ from .prompts import (
     PaperSectionCheckPrompt,
     PaperSectionPrompt,
 )
+from .quality_gate import publish_blockers
 from .review_plan import (
     RANGE_PADDING,
     PlanError,
@@ -75,7 +76,6 @@ from .review_plan import (
     parse_edits,
     parse_plan,
     previous_context,
-    publish_blockers,
     rejected_revision_note,
     render_brief,
     render_closing_points,
@@ -708,9 +708,9 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
 
         def description_issues(description: str) -> str | None:
             """The description's problems, its numbers checked against the
-            TL;DR that is kept (not the attempt's own) and the abstract."""
-            sources = f"{final['key_takeaways']}\n{self.paper.abstract or ''}"
-            return "; ".join(description_problems(description, sources)) or None
+            TL;DR that is kept (not the attempt's own)."""
+            found = description_problems(description, final["key_takeaways"])
+            return "; ".join(found) or None
 
         for attempt in range(2):
             result = await self._call(self.finalizer, payload)
@@ -720,7 +720,6 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
                 answer,
                 self.paper.title,
                 source=self.paper.content.text,
-                abstract=self.paper.abstract or "",
             )
             for part in _KEEP_ORDER:
                 if part == "description":
@@ -878,12 +877,11 @@ _KEEP_ORDER = ("key_takeaways", "subtitle", "description", "closing")
 
 
 def _finalization_problems(
-    final: dict[str, str], title: str, *, source: str, abstract: str
+    final: dict[str, str], title: str, *, source: str
 ) -> dict[str, str]:
     """Problems of the finalizer's answer, by part: its structure, errors the
     validator would reject, and numbers the paper (``source``) never states
-    in the TL;DR, or that neither the TL;DR nor the ``abstract`` states in
-    the description."""
+    in the TL;DR, or that the TL;DR does not state in the description."""
     problems: dict[str, str] = {}
     if not final["subtitle"]:
         problems["subtitle"] = "subtitle is empty"
@@ -896,9 +894,7 @@ def _finalization_problems(
         problems["key_takeaways"] = (
             f"key_takeaways must have exactly four ### questions (found {len(questions)})"
         )
-    if found := description_problems(
-        final["description"], f"{final['key_takeaways']}\n{abstract}"
-    ):
+    if found := description_problems(final["description"], final["key_takeaways"]):
         problems["description"] = "; ".join(found)
     if missing := unsourced_numbers(final["key_takeaways"], source):
         note = (

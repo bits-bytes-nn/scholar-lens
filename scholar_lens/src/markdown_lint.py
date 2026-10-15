@@ -54,6 +54,7 @@ from .markdown_math import (
     blog_line_roles,
     fence_roles,
     indent_width,
+    indented_code_bases,
     indented_code_lines,
     indented_code_test,
     list_column,
@@ -671,16 +672,17 @@ def _section_heading_before(markdown: str, start: int) -> str:
     return " ".join(words.split()).strip(" :,")
 
 
-def fill_image_alts(markdown: str, captions: dict[str, str], fallback: str) -> str:
+def fill_image_alts(
+    markdown: str, captions: dict[str, str], fallback: str, *, korean: bool
+) -> str:
     """Give every image usable alt text.
 
-    In a mostly-Hangul post an alt without Hangul (the parser's captions are
-    English) becomes the nearest section heading. Otherwise an empty alt gets the figure's
-    caption (without its "Figure 3:" label) when the source is known, else
-    ``fallback``.
+    In a Korean post (``korean``: the post's language) an alt without Hangul
+    (the parser's captions are English) becomes the nearest section heading.
+    Otherwise an empty alt gets the figure's caption (without its "Figure 3:"
+    label) when the source is known, else ``fallback``.
     """
     keep = _outside(_classify_regions(markdown), ("fence", "icode"))
-    korean = mostly_hangul(markdown)
 
     def repl(m: re.Match[str]) -> str:
         alt, src = m.group(1).strip(), m.group(2)
@@ -699,7 +701,6 @@ def fill_image_alts(markdown: str, captions: dict[str, str], fallback: str) -> s
     return IMAGE.sub(repl, markdown)
 
 
-_LATIN = re.compile(r"[A-Za-z]")
 # An English word used as a Korean verb or adjective: its stem followed by a
 # 하다/되다 form ("prefill하면서", "swap-in되어", "attention하도록"); the
 # particle 한테 ("Claude Code한테") is not one.
@@ -744,15 +745,6 @@ def _masked(markdown: str, kinds: tuple[str, ...]) -> str:
         if kind in kinds:
             out = out[:s] + re.sub(r"[^\n]", " ", out[s:e]) + out[e:]
     return out
-
-
-def mostly_hangul(markdown: str) -> bool:
-    """True when the prose is Korean: Hangul syllables outweigh Latin letters
-    (one syllable ≈ two letters); code, math and link targets excluded."""
-    prose = _masked(markdown, ("fence", "icode", *_MATH_KINDS))
-    prose = re.sub(r"\]\([^)]*\)", "]", prose)
-    hangul = len(HANGUL.findall(prose))
-    return hangul > 0 and hangul * 2 > len(_LATIN.findall(prose))
 
 
 def _snippet(text: str, start: int, end: int) -> str:
@@ -801,7 +793,6 @@ class StyleHit:
     line: int
     rule: Literal["translationese", "colon"]
     match: str
-    text: str  # the line's checked text, for a snippet
 
 
 def style_hits(body: str) -> list[StyleHit]:
@@ -832,7 +823,7 @@ def style_hits(body: str) -> list[StyleHit]:
             ("colon", SENTENCE_COLON),
         ):
             hits += [
-                StyleHit(i, rule, m.group(0), text)  # type: ignore[arg-type]
+                StyleHit(i, rule, m.group(0))  # type: ignore[arg-type]
                 for m in pattern.finditer(text)
             ]
     return hits
@@ -844,10 +835,11 @@ def writing_issues(markdown: str) -> list[str]:
 
     Covers references to the paper's numbering, an English stem with a Korean
     verb ending ("fine-tune합니다"), the post referring to its own parts
-    ("이 절에서"), reader-facing verification hedges ("(미검증)"), unambiguous
-    translationese (a double passive, "에 있어서는"), a sentence ending glued to
-    a colon ("같습니다:") and single-``$`` math. Code and math are ignored; image alt text
-    and callouts are fixed in post-processing instead.
+    ("이 절에서"), reader-facing verification hedges ("(미검증)") and
+    single-``$`` math. Code and math are ignored; image alt text and callouts
+    are fixed in post-processing instead. The blog's prose rules
+    (:func:`style_hits`) are publish-blocking body errors
+    (:func:`post_validator.body_errors`), so they are not repeated here.
     """
     # Link and image targets are copied verbatim (a file named "Figure1.png"
     # is not a reference the writer can reword).
@@ -878,21 +870,6 @@ def writing_issues(markdown: str) -> list[str]:
             f"self-reference '{m.group(0).strip()}': "
             f"{_snippet(markdown, m.start(), m.end())}"
         )
-    for hit in style_hits(markdown):
-        start = hit.text.find(hit.match)
-        snippet = _snippet(hit.text, start, start + len(hit.match))
-        if hit.rule == "colon":
-            issues.append(
-                "sentence ending with a colon '다:' (end it with a period or "
-                f"write a label): {snippet}"
-            )
-            continue
-        kind, fix = (
-            ("calque", "write 에서 or 에는")
-            if "있어" in hit.match
-            else ("double passive", "one passive or an active verb")
-        )
-        issues.append(f"{kind} '{hit.match}' ({fix}): {snippet}")
     for m in _VERIFICATION_HEDGE.finditer(prose):
         issues.append(
             "verification hedge (fix the claim from an official source or drop it): "
@@ -1048,14 +1025,56 @@ def _wrap_liquid(markdown: str) -> str:
     return "\n".join(wrapped)
 
 
+def _fence_indented_code(markdown: str) -> str:
+    """Indented code blocks as fenced ones, which kramdown renders the same:
+    the blog lint reads an indented block as prose, so a ``<tag>`` or ``$$``
+    in a sample there would fail it. The fence sits at the block's base
+    column (its list item's content) and the code keeps its own indent."""
+    lines = markdown.split("\n")
+    bases = indented_code_bases(lines)
+    roles = fence_roles(lines)
+    code = {i: base for i, base in bases.items() if roles[i] == "prose"}
+    if not code:
+        return markdown
+    out: list[str] = []
+    i = 0
+    while i < len(lines):
+        if i not in code:
+            out.append(lines[i])
+            i += 1
+            continue
+        base, end = code[i], i
+        j = i + 1
+        while j < len(lines) and (j in code or not lines[j].strip()):
+            if j in code:
+                end = j
+            j += 1
+        block = [
+            line.expandtabs(4)[base + 4 :] if line.strip() else ""
+            for line in lines[i : end + 1]
+        ]
+        runs = [len(m.group(0)) for m in re.finditer(r"`{3,}", "\n".join(block))]
+        fence = "`" * max([3, *(n + 1 for n in runs)])
+        indent = " " * base
+        out += [
+            f"{indent}{fence}",
+            *(f"{indent}{line}" if line else "" for line in block),
+            f"{indent}{fence}",
+        ]
+        i = end + 1
+    return "\n".join(out)
+
+
 def publish_body(markdown: str, *, warn: bool = True) -> str:
     """The publisher's body pipeline, in one place: an open fence closed,
     callouts over the cap unboxed (before the math pass, so a display left in
     an unboxed callout is isolated too), the blog math rules applied, then the
-    other auto-fixes of :func:`lint_markdown`, fence info strings cut to the
-    language and Liquid-looking text wrapped in ``{% raw %}``. Idempotent."""
+    other auto-fixes of :func:`lint_markdown`, indented code blocks fenced,
+    fence info strings cut to the language and Liquid-looking text wrapped
+    in ``{% raw %}``. Idempotent."""
+    fenced = _fence_indented_code(close_open_fence(markdown))
     linted = lint_markdown(
-        normalize_math(limit_callouts(_bare_fence_info(close_open_fence(markdown)))),
+        normalize_math(limit_callouts(_bare_fence_info(fenced))),
         warn=warn,
     )
     return _wrap_liquid(linted)

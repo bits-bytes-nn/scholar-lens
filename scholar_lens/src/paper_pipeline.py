@@ -78,8 +78,16 @@ async def run_paper_pipeline(
             needs_citations=request.kind == "review",
         )
         branch_id = paper_branch_id(paper, request.kind)
+        github = context.config.resources.github
         published, lookup_notes = await find_published_post(
-            context, slug=title_slug(paper.title, request.kind), branch_id=branch_id
+            context,
+            slug=title_slug(paper.title, request.kind),
+            branch_id=branch_id,
+            category=(
+                github.summary_category
+                if request.kind == "summarize"
+                else github.review_category
+            ),
         )
         if request.kind == "summarize":
             document, degraded = await _generate_summary(
@@ -106,7 +114,12 @@ async def run_paper_pipeline(
         # Keep only images that are real figures of this paper.
         document = figure_markers_to_images(document)
         document = drop_unknown_images(document, _figure_sources(paper))
-        document = fill_image_alts(document, _figure_captions(paper), paper.title)
+        document = fill_image_alts(
+            document,
+            _figure_captions(paper),
+            paper.title,
+            korean=context.config.output_language == "Korean",
+        )
         publish_request = _build_publish_request(
             paper,
             paper_dir,

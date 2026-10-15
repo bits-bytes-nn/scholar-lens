@@ -1,6 +1,7 @@
 """Import contracts between the pipeline modules, read from the source (AST):
 the survey stages and the shared section loop stay independent of the guide
-and review generators, and the web research layer of the review plan."""
+and review generators, the web research layer of the review plan, and the
+post checks of the run context, the pipelines and the publisher."""
 
 from __future__ import annotations
 
@@ -58,6 +59,20 @@ CONTRACTS = [
     ("survey_*.py", ("tech_guide", "explainer")),
     ("web_research.py", ("review_plan",)),
     ("section_loop.py", ("tech_guide", "explainer", "survey_*")),
+    # The post checks and fixes are pure: no run context, pipeline or
+    # publisher behind them.
+    *(
+        (f"{name}.py", ("runtime", "*_pipeline", "survey_writer", "publisher"))
+        for name in (
+            "markdown_lint",
+            "markdown_math",
+            "post_validator",
+            "post_conventions",
+            "tags",
+            "publish_types",
+            "quality_gate",
+        )
+    ),
 ]
 
 

@@ -24,6 +24,7 @@ from .logger import logger
 from .metrics import TokenBudgetExceeded
 from .pinned_transport import PinnedAsyncHTTPTransport
 from .prompts import FigureAnalysisPrompt
+from .rate_limiter import ARXIV_RATE_LIMITER, arxiv_retry_after_seconds
 from .url_guard import UnsafeUrlError, assert_url_is_public
 from .utils import (
     BedrockLanguageModelFactory,
@@ -374,11 +375,16 @@ class HTMLParser(BaseParser):
         return html, url
 
     async def _fetch_html_from_url(self, url: str) -> str:
+        """Fetch an arXiv HTML page, paced by the process-wide arXiv rate
+        limiter; an error's Retry-After (capped) holds later arXiv requests."""
+        await asyncio.to_thread(ARXIV_RATE_LIMITER.acquire)
         try:
             response = await self.async_client.get(url)
             response.raise_for_status()
             return response.text
         except httpx.HTTPError as e:
+            if isinstance(e, httpx.HTTPStatusError):
+                ARXIV_RATE_LIMITER.penalize(arxiv_retry_after_seconds(e))
             raise ContentParseError(f"Failed to fetch HTML from '{url}': {e}") from e
 
 

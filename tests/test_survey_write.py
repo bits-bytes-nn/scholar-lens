@@ -27,6 +27,7 @@ from scholar_lens.src import runtime, survey_writer
 from scholar_lens.src.jobs import JobRequest
 from scholar_lens.src.metrics import TokenUsageTracker
 from scholar_lens.src.post_conventions import (
+    BlogPost,
     PostConventions,
     TypeSpec,
     load_local_conventions,
@@ -499,6 +500,20 @@ class TestCards:
             for p in card_problems(clean, source=SOURCE, figure_ids=[])
         )
 
+    def test_a_result_setting_written_as_a_sentence_is_a_problem(self) -> None:
+        # The setting fills a comparison-table cell: a noun phrase.
+        def setting_problems(setting: str) -> list[str]:
+            result = {"claim": "TL;DR 승률", "value": "61%", "setting": setting}
+            bad = answer(results=[result], figures=[])
+            return [
+                p
+                for p in card_problems(bad, source=SOURCE, figure_ids=[])
+                if "setting is a sentence" in p
+            ]
+
+        assert setting_problems("PPO와 비교한 TL;DR 요약입니다.")
+        assert not setting_problems("TL;DR 요약, PPO 대비")
+
     def test_build_drops_what_the_paper_does_not_back(self) -> None:
         built = build_card(
             answer(key_idea="정책이 보상 모델입니다. 13배 빠릅니다."),
@@ -566,7 +581,7 @@ class TestCards:
         )
         assert key == (
             "10.18653_v1_2024.emnlp-main.626/"
-            "v3-anthropic-claude-sonnet-5-5-korean-abcd1234.json"
+            "v4-anthropic-claude-sonnet-5-5-korean-abcd1234.json"
         )
         assert card_cache_key("2305.18290", "a", "Korean", "v") != card_cache_key(
             "2305.18290", "b", "Korean", "v"
@@ -1255,6 +1270,24 @@ class TestStage:
             ["ruby", str(lint), str(copy)], capture_output=True, text=True, check=False
         )
         assert done.returncode == 0, done.stdout + done.stderr
+
+    def test_a_rerun_keeps_the_published_translation_pair(
+        self, stage: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        published = BlogPost(
+            path="_posts/2026-10-01-preference-optimization.md",
+            categories=[SURVEY_TYPE, "Language-Models"],
+            lang="ko",
+            translation_id="preference-optimization",
+        )
+
+        async def find(*args: Any, **kwargs: Any) -> tuple[BlogPost, list[str]]:
+            assert kwargs["category"] == SURVEY_TYPE
+            return published, []
+
+        monkeypatch.setattr(survey_writer, "find_published_post", find)
+        post = run_stage(stage).markdown_path.read_text()
+        assert '\nlang: "ko"\ntranslation_id: "preference-optimization"\n' in post
 
     def test_cards_are_cached_for_the_next_run(self, stage: dict[str, Any]) -> None:
         run_stage(stage)

@@ -25,7 +25,8 @@ from .markdown_math import (
     without_fences,
 )
 from .prompts.base import PROSE_UNIT
-from .review_plan import added_slips, draft_rank, publish_blockers, rule_issues
+from .quality_gate import added_slips, publish_blockers, rule_issues
+from .review_plan import draft_rank
 
 # Evaluator feedback logged per section (the full text goes to the writer).
 _LOGGED_FEEDBACK_CHARS: int = 300
@@ -186,7 +187,7 @@ REVISING = (
 )
 FIXING = "{request}\n\nTHE DRAFT to edit:\n{draft}"
 
-_TARGETED_FIX = (
+TARGETED_FIX = (
     "TARGETED FIX: this draft is final except for these blocking issues. "
     "Make the smallest edit that resolves each one: rewrite or remove exactly "
     "the sentence(s) it names, and copy every other sentence, heading, "
@@ -383,7 +384,7 @@ async def revise_section(
     outcome = ""
     if best_issues and max_attempts > 0:
         fixed = await (fix or revise)(
-            _TARGETED_FIX + "\n".join(f"- {i}" for i in best_issues), best_markdown
+            TARGETED_FIX + "\n".join(f"- {i}" for i in best_issues), best_markdown
         )
         if not fixed or fixed == best_markdown:
             reason = "no change"

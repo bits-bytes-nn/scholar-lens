@@ -180,6 +180,15 @@ class TestLightbox:
             found[0].line == make_post(body).split("\n").index(body.split("\n")[2]) + 1
         )
 
+    def test_src_is_read_inside_the_img_tag(self) -> None:
+        # An alt holding ">" ("A -> B") before src must not hide the mismatch
+        # (lint-posts.rb line 57 reads src in the matched <img>).
+        body = (
+            '<a href="/assets/images/g-1.png" class="glightbox">'
+            '<img alt="구조 -> 흐름" src="/assets/images/g-2.png"></a>'
+        )
+        assert any("set href to /assets/images/g-2.png" in m for m in messages(body))
+
     @pytest.mark.parametrize(
         "body",
         [
@@ -193,3 +202,39 @@ class TestLightbox:
     )
     def test_matching_href_and_code_pass(self, body: str) -> None:
         assert not [m for m in messages(body) if "glightbox" in m]
+
+
+class TestBlogLineRoles:
+    """The blog lint's fences and display blocks, as its body loop reads them."""
+
+    def test_an_unclosed_fence_after_a_quote_is_an_error(self) -> None:
+        # "> ```" is text to the lint; the bare ``` then opens a fence that
+        # never closes (CommonMark would pair the two).
+        from scholar_lens.src.post_validator import body_errors
+
+        body = "> ```python\n> x = 1\n```\n"
+        assert any("fence is never closed" in m for m in messages(body))
+        assert any("fence is never closed" in e for e in body_errors(body))
+
+    def test_a_tag_inside_a_display_block_is_math(self) -> None:
+        body = "식입니다.\n\n$$\na <t> b\n$$\n\n끝입니다."
+        assert not [m for m in messages(body) if "read as HTML" in m]
+
+    def test_a_tag_in_an_indented_code_block_is_fenced_at_publish(self) -> None:
+        from scholar_lens.src.quality_gate import publish_blockers
+
+        body = "예시입니다.\n\n    <think>\n    x = 1\n\n끝입니다.\n"
+        assert any("<think> is read as HTML" in m for m in messages(body))
+        fixed = publish_body(body, warn=False)
+        assert "```\n<think>\nx = 1\n```" in fixed
+        assert publish_body(fixed, warn=False) == fixed
+        assert not [m for m in messages(fixed) if "read as HTML" in m]
+        assert publish_blockers(body) == []
+
+    def test_indented_code_in_a_list_item_is_fenced_at_its_column(self) -> None:
+        from scholar_lens.src.markdown_lint import _fence_indented_code
+
+        body = "- 항목\n\n      code <b>\n        more\n\n- 다음\n"
+        assert _fence_indented_code(body) == (
+            "- 항목\n\n  ```\n  code <b>\n    more\n  ```\n\n- 다음\n"
+        )

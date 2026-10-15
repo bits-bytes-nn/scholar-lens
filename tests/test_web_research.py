@@ -385,6 +385,39 @@ class TestBraveSearchProvider:
         assert provider.search("q") == []
 
 
+class TestFailedSearchesAreCounted:
+    @pytest.mark.parametrize("status", [429, 500, 503])
+    def test_failed_searches_become_a_run_note(
+        self, monkeypatch: pytest.MonkeyPatch, status: int
+    ) -> None:
+        from scholar_lens.src.web_research import WebResearcher
+
+        calls: list[str] = []
+
+        def answer(url, **kwargs):  # type: ignore[no-untyped-def]
+            calls.append(url)
+            return httpx.Response(status, request=httpx.Request("GET", url))
+
+        monkeypatch.setattr(httpx, "get", answer)
+        monkeypatch.setattr(httpx, "post", answer)
+        for provider in (
+            BraveSearchProvider(api_key="k"),
+            TavilySearchProvider(api_key="k"),
+        ):
+            researcher = WebResearcher(search_provider=provider)
+            assert researcher.search_notes() == []
+            assert provider.search("a") == [] and provider.search("b") == []
+            assert provider.failed_searches == 2
+            (note,) = researcher.search_notes()
+            assert note.startswith("2 web search(es) failed")
+        assert len(calls) == 4  # one request per search: no retry
+
+    def test_no_search_provider_has_no_note(self) -> None:
+        from scholar_lens.src.web_research import WebResearcher
+
+        assert WebResearcher().search_notes() == []
+
+
 class TestHardenedFetch:
     @pytest.fixture(autouse=True)
     def _public(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -843,20 +876,20 @@ class TestProductNames:
 
         url = "https://docs.astral.sh/uv/"
         seed = PageContent(url, "uv", "```console\n$ uv sync\n$ uvx ruff\n```")
-        names = product_names("uv, `uvx`\nastral-cli, UV", [url], [seed])
+        names = product_names("uv, `uvx`\nastral-cli, UV", [seed])
         assert names == ["uv", "uvx"]
 
-    def test_host_label_only_when_no_name_is_shown(self) -> None:
+    def test_no_name_shown_is_no_name_never_a_host_guess(self) -> None:
         from scholar_lens.src.web_research import product_names
 
         url = "https://docs.astral.sh/uv/"
         seed = PageContent(url, "uv", "see docs.astral.sh/uv for more")
-        assert product_names("none", [url], [seed]) == ["astral"]
+        assert product_names("none", [seed]) == []
         # Any Python page shows "None": the answer still names nothing.
         python = PageContent(url, "uv", "Set `seed=None` to disable.")
         for none in ("none", "None.", "N/A"):
-            assert product_names(none, [url], [python]) == ["astral"], none
-        assert product_names("", ["https://vllm.readthedocs.io/en/"], []) == ["vllm"]
+            assert product_names(none, [python]) == [], none
+        assert product_names("", []) == []
 
 
 class TestFetchFailures:

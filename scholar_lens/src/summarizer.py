@@ -27,8 +27,14 @@ from .post_validator import (
     unsourced_numbers,
 )
 from .prompt_safety import neutralize_prompt_tags
-from .prompts import BasePrompt, PaperSummaryPrompt, PaperSummaryShortenPrompt
-from .review_plan import publish_blockers
+from .prompts import (
+    BasePrompt,
+    PaperSummaryFixPrompt,
+    PaperSummaryPrompt,
+    PaperSummaryShortenPrompt,
+)
+from .quality_gate import publish_blockers
+from .section_loop import TARGETED_FIX, lost_structure
 from .utils import (
     BedrockLanguageModelFactory,
     HTMLTagOutputParser,
@@ -104,6 +110,13 @@ class PaperSummarizer(RetryableBase, TokenBudgetGuard):
             callbacks=callbacks,
             prompt_cls=PaperSummaryShortenPrompt,
         )
+        self.fix_chain: Runnable = self._build_chain(
+            summary_model_id,
+            enable_thinking=False,
+            thinking_effort=thinking_effort,
+            callbacks=callbacks,
+            prompt_cls=PaperSummaryFixPrompt,
+        )
 
     def _build_chain(
         self,
@@ -137,8 +150,9 @@ class PaperSummarizer(RetryableBase, TokenBudgetGuard):
         ``##`` sections); ``subtitle`` is the title in the output language;
         ``description`` the search snippet (empty lets the blog derive one);
         ``urls`` is a comma-separated Markdown link list taken from the paper.
-        There is no repair round: numbers in the TL;DR the paper never states,
-        and a description that breaks its rules, become review notes.
+        The body gets at most one shortening and one targeted fix of its
+        publish blockers; numbers in the TL;DR the paper never states, and a
+        description that breaks its rules, become review notes.
         """
         self._enforce_token_budget()
         result = await self._summarize(paper.content.text, paper.codebase_summary)
@@ -147,6 +161,7 @@ class PaperSummarizer(RetryableBase, TokenBudgetGuard):
             raise ValueError("Summarizer returned an empty summary.")
         logger.info("Generated summary (%d chars).", len(summary))
         summary = await self._shorten_if_long(summary)
+        summary = await self._fix_blockers(summary)
         subtitle = result.get("subtitle", "").strip()
         if derived_subtitle(subtitle, split_leading_h1(summary)[0], paper.title):
             self.notes.append(
@@ -218,6 +233,46 @@ class PaperSummarizer(RetryableBase, TokenBudgetGuard):
                 f"{SHORTEN_TARGET_HANGUL:,}): trim it."
             )
         return summary
+
+    async def _fix_blockers(self, summary: str) -> str:
+        """ONE targeted fix call (section_loop's targeted-fix order) when the
+        summary has publish blockers. The fixed text is kept only when it has
+        fewer blockers, adds no new kind and keeps the summary's structure
+        (:func:`section_loop.lost_structure`); any failure keeps the
+        original, whose blockers the publisher then reports."""
+        blockers = publish_blockers(summary)
+        if not blockers:
+            return summary
+        logger.info("Summary has %d publish blocker(s); fixing once.", len(blockers))
+        request = TARGETED_FIX + "\n".join(f"- {b}" for b in blockers)
+        try:
+            self._enforce_token_budget()
+            result = await self._fix(request, summary)
+            fixed = (result.get("summary") or "").strip()
+        except TokenBudgetExceeded:
+            raise  # an exhausted budget fails fast
+        except Exception as e:  # noqa: BLE001 - the summary is still usable
+            logger.warning("Summary targeted fix failed: %s", e)
+            return summary
+        if not fixed or fixed == summary:
+            reason = "no change"
+        elif len(publish_blockers(fixed)) >= len(blockers):
+            reason = "blockers did not decrease"
+        elif not _blockers(fixed) <= _blockers(summary):
+            reason = "adds a new publish blocker"
+        else:
+            reason = lost_structure(summary, fixed)
+        if reason:
+            logger.warning("Summary targeted fix rejected (%s).", reason)
+            return summary
+        logger.info("Summary targeted fix applied.")
+        return fixed
+
+    @RetryableBase._retry("paper_summary_fix")
+    async def _fix(self, request: str, summary: str) -> dict[str, str]:
+        return await self.fix_chain.ainvoke(
+            {"request": request, "summary": summary, "language": self.language}
+        )
 
     @RetryableBase._retry("paper_summary_shortening")
     async def _shorten(self, summary: str) -> dict[str, str]:

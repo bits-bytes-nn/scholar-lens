@@ -149,26 +149,30 @@ async def test_stale_flag_pulls_the_official_reference_into_grounding() -> None:
     def add_reference(corpus, hosts, identifiers, *, product="", follow_links=True, **_):  # type: ignore[no-untyped-def]
         if not follow_links:
             return []  # the section's title lookup finds no page
-        assert "--preemption-mode" in identifiers and product == "example"
+        # The product is the command the seed page shows ("vllm serve").
+        assert "--preemption-mode" in identifiers and product == "vllm"
         corpus.pages.append(engine_args)
         return [engine_args]
 
     gen.researcher.add_official_reference = MagicMock(side_effect=add_reference)
     gen.relevance_chain.ainvoke = AsyncMock(
-        return_value={"is_relevant": "yes", "topic": "Using X", "reason": "docs"}
+        return_value={
+            "is_relevant": "yes",
+            "topic": "Using X",
+            "reason": "docs",
+            "commands": "vllm",
+        }
     )
     gen.synopsis_chain.ainvoke = AsyncMock(
         return_value={"synopsis": "1. Serving - run the server"}
     )
     gen.section_chain.ainvoke = AsyncMock(
         return_value={
-            "section_markdown": "## Serving\n\n```bash\nexample serve m --preemption-mode swap\n```"
+            "section_markdown": "## Serving\n\n```bash\nvllm serve m --preemption-mode swap\n```"
         }
     )
     gen.grounding_chain.ainvoke = AsyncMock(
-        return_value={
-            "grounded_markdown": "## Serving\n\n```bash\nexample serve m\n```"
-        }
+        return_value={"grounded_markdown": "## Serving\n\n```bash\nvllm serve m\n```"}
     )
     guide = await gen.generate([QUICKSTART], discover_subpages=False)
     sources = gen.grounding_chain.ainvoke.await_args.args[0]["sources"]

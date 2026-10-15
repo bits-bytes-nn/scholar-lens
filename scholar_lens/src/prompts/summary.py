@@ -1,10 +1,12 @@
-"""Prompt for the five-question paper summary (PaperSummarizer)."""
+"""Prompts for the five-question paper summary (PaperSummarizer): the
+summary, its one shortening pass and its one targeted fix."""
 
 from .base import (
     CITATION_KEY_RULES,
     EXCLUDED_CONTENT_RULES,
     HEADING_STRUCTURE_RULES,
     IMAGE_PATH_RULES,
+    KOREAN_STYLE,
     MATH_RULES,
     PAPER_TABLE_RULES,
     STYLE_RULES,
@@ -145,3 +147,37 @@ class PaperSummaryShortenPrompt(BasePrompt):
     the shortened summary
     </summary>
     """
+
+
+class PaperSummaryFixPrompt(BasePrompt):
+    """One targeted fix of the publish blockers a generated summary has
+    (``request`` is section_loop's targeted-fix order with the blockers)."""
+
+    input_variables: list[str] = ["request", "summary", "language"]
+    output_variables: list[str] = ["summary"]
+
+    system_prompt_template: str = """
+    You are a technical editor who fixes the named errors in a blog summary
+    with the smallest possible edits.
+    """
+
+    human_prompt_template: str = (
+        """
+    {request}
+
+    <summary>
+    {summary}
+    </summary>
+
+    Keep the {language} language, register and Markdown. New or rewritten
+    text follows these rules:
+    """
+        + MATH_RULES
+        + KOREAN_STYLE
+        + """
+    Output exactly:
+    <summary>
+    the complete fixed summary
+    </summary>
+    """
+    )

@@ -51,6 +51,7 @@ from .guide_authority import (
 from .logger import logger
 from .markdown_lint import close_open_fence
 from .metrics import TokenBudgetGuard
+from .post_validator import description_markup, description_problems
 from .prompt_safety import neutralize_prompt_tags
 from .prompts import (
     BasePrompt,
@@ -239,6 +240,8 @@ class TechGuide:
     notes: list[str] = field(default_factory=list)
     # Images the writer was offered; any other image in the body is dropped.
     image_urls: list[str] = field(default_factory=list)
+    # The search description (``classify``); empty lets the blog derive one.
+    description: str = ""
 
 
 class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
@@ -568,7 +571,6 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
                 + ", ".join(missing)
             )
 
-    @RetryableBase._retry("tech_guide_taxonomy")
     async def classify(
         self,
         guide: TechGuide,
@@ -576,22 +578,57 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
         category_options: list[str],
         controlled_tags: list[str],
     ) -> dict[str, str]:
-        """Propose the blog topic, tags and SEO title for a finished guide from
-        its body's headings and first sentences, so no tag names something the
-        guide does not teach (the caller normalizes and validates them against
-        the post conventions). Past the soft cap the finished guide is still
+        """Propose the blog topic, tags, SEO title and search description for
+        a finished guide from its body's headings and first sentences, so no
+        tag names something the guide does not teach (the caller normalizes
+        and validates them against the post conventions). The description is
+        checked by the post validator's description rules with one repair
+        round and set on ``guide.description``; one the validator would
+        reject (markup, not longer than the title) is dropped so the blog
+        derives one. Past the soft cap the finished guide is still
         classified: only the hard ceiling stops a guide whose sections are
         already paid for."""
+        payload: dict[str, Any] = {
+            "title": guide.topic,
+            "outline": digest_sections([guide.body]),
+            "category_options": ", ".join(category_options),
+            "controlled_tags": ", ".join(controlled_tags),
+            "title_max_length": self.title_max_length,
+            "language": self.language,
+            "repair_note": "",
+        }
+        result: dict[str, str] = {}
+        problems: list[str] = []
+        description = ""
+        for attempt in range(2):
+            result = await self._classify(payload)
+            description = " ".join((result.get("description") or "").split())
+            if not (problems := description_problems(description, guide.body)):
+                break
+            logger.warning(
+                "Guide description unusable (attempt %d): %s", attempt + 1, problems
+            )
+            payload["repair_note"] = (
+                "Your previous description could not be used: "
+                + "; ".join(problems)
+                + ". Answer all five parts again."
+            )
+        else:
+            # The guide's notes reach the PR (generate() copied them already).
+            guide.notes.append(
+                "Guide description still breaks the rules after a repair: "
+                + "; ".join(problems)
+            )
+            if description_markup(description) or len(description) <= len(guide.topic):
+                description = ""
+        guide.description = description
+        result["description"] = description
+        return result
+
+    @RetryableBase._retry("tech_guide_taxonomy")
+    async def _classify(self, payload: dict[str, Any]) -> dict[str, str]:
         self._enforce_hard_token_budget()
-        result: dict[str, str] = await self.taxonomy_chain.ainvoke(
-            {
-                "title": guide.topic,
-                "outline": digest_sections([guide.body]),
-                "category_options": ", ".join(category_options),
-                "controlled_tags": ", ".join(controlled_tags),
-                "title_max_length": self.title_max_length,
-            }
-        )
+        result: dict[str, str] = await self.taxonomy_chain.ainvoke(payload)
         return result
 
     async def _plan_research(
@@ -636,9 +673,7 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
             raise NotTechnicalContentError(
                 "Could not determine a technical topic from the sources."
             )
-        self._products = tuple(
-            product_names(result.get("commands", ""), self._source_urls, corpus.pages)
-        )
+        self._products = tuple(product_names(result.get("commands", ""), corpus.pages))
         logger.info(
             "Relevance gate passed. Topic: '%s'; commands: %s", topic, self._products
         )
@@ -1008,7 +1043,7 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
         stays below the threshold or has a blocking issue: one the evaluator
         names (a factual error, an internal contradiction, an unsupported
         flag or default, a structural self-reference) or a writing rule it
-        breaks in code (:func:`review_plan.rule_issues`)."""
+        breaks in code (:func:`quality_gate.rule_issues`)."""
         # The evaluator's blocking issues the revisions leave, for grounding.
         self._leftover_blocking = []
         if self.max_revision_attempts <= 0:

@@ -43,8 +43,10 @@ _OPENALEX_FIELDS = (
 )
 # DOIs looked up per OpenAlex request (an OR filter, one page).
 OPENALEX_MAX_DOIS = 50
-# Semantic Scholar's batch endpoint takes up to 500 ids per request.
-SEMANTIC_SCHOLAR_MAX_IDS = 500
+# Semantic Scholar's batch endpoint accepts up to 500 ids, but a 500-id answer
+# with every paper's references can outrun the 30 s timeout; 100 ids keep one
+# request well under it.
+SEMANTIC_SCHOLAR_MAX_IDS = 100
 _SEMANTIC_SCHOLAR_FIELDS = "citationCount,venue,externalIds,references.externalIds"
 
 
