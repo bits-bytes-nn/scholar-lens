@@ -455,12 +455,26 @@ class PaperReviewStack(Stack):
     def _launch_template(self) -> ec2.LaunchTemplate:
         # IMDSv2 with hop limit 1: containers (bridge network) cannot reach the
         # instance role; they use the job role via the ECS credentials endpoint.
+        # The root volume (where images, containers and job scratch live) is
+        # encrypted with the AWS-managed EBS key, at the ECS-optimized AMI's own
+        # device name and 30 GiB default size.
         return ec2.LaunchTemplate(
             self,
             "ComputeLaunchTemplate",
             launch_template_name=self._get_resource_name("compute"),
             require_imdsv2=True,
             http_put_response_hop_limit=1,
+            block_devices=[
+                ec2.BlockDevice(
+                    device_name="/dev/xvda",
+                    volume=ec2.BlockDeviceVolume.ebs(
+                        30,
+                        encrypted=True,
+                        volume_type=ec2.EbsDeviceVolumeType.GP3,
+                        delete_on_termination=True,
+                    ),
+                )
+            ],
         )
 
     def _create_job_queue(self) -> batch.JobQueue:
@@ -488,6 +502,17 @@ class PaperReviewStack(Stack):
             # Pick up the latest ECS-optimized AMI on each infrastructure
             # update instead of pinning the one current at creation.
             update_to_latest_image_version=True,
+        )
+        # Pin the template version: with the implicit $Default, Batch re-reads
+        # the template only on an infrastructure update, which a template-only
+        # change never triggers. A new version now updates the environment in
+        # place (ReplaceComputeEnvironment is false), not the queue.
+        cfn_env = ondemand_env.node.default_child
+        if not isinstance(cfn_env, batch.CfnComputeEnvironment):
+            raise TypeError("Expected the L1 compute environment under the L2.")
+        cfn_env.add_property_override(
+            "ComputeResources.LaunchTemplate.Version",
+            launch_template.latest_version_number,
         )
         # On-demand only: a spot reclaim re-runs the whole job and repeats its
         # Bedrock spend, which costs far more than the EC2 it saves.

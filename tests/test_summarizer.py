@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock
 
@@ -90,8 +91,15 @@ class TestPaperSummaryPrompt:
 
     def test_five_section_headers_present(self) -> None:
         template = PaperSummaryPrompt.human_prompt_template
-        for emoji in ["🔍", "💡", "⚙️", "📊", "🔮"]:
-            assert emoji in template
+        for heading in [
+            "연구 배경",
+            "제안 방법",
+            "구현 방식",
+            "실험 결과",
+            "의의와 한계",
+        ]:
+            assert f"## {heading}\n" in template
+        assert not re.search(r"^\s*##\s*[^\w\s]", template, re.MULTILINE)
 
 
 class TestPaperSummarizer:
@@ -102,7 +110,7 @@ class TestPaperSummarizer:
             {
                 "subtitle": "부제",
                 "description": DESCRIPTION,
-                "summary": "> **요약:** x\n\n## 🔍 ...\n\nbody",
+                "summary": "> **요약:** x\n\n## 연구 배경\n\nbody",
                 "urls": "[Repo](https://github.com/x/y)",
             }
         )
@@ -120,7 +128,7 @@ class TestPaperSummarizer:
             {
                 "subtitle": "부제",
                 "description": f"`LoRA`는 {DESCRIPTION}",
-                "summary": "> **요약:** 파라미터를 31337배 줄입니다.\n\n## 🔍 ...",
+                "summary": "> **요약:** 파라미터를 31337배 줄입니다.\n\n## 연구 배경",
                 "urls": "",
             }
         )
@@ -137,7 +145,7 @@ class TestPaperSummarizer:
             {
                 "subtitle": "부제",
                 "description": "LoRA는 저랭크 행렬만 학습합니다.",
-                "summary": "> **요약:** x\n\n## 🔍 ...",
+                "summary": "> **요약:** x\n\n## 연구 배경",
                 "urls": "",
             }
         )
@@ -156,7 +164,7 @@ class TestPaperSummarizer:
             update={"codebase_summary": "LoRA layer in lora/layers.py"}
         )
         summarizer = _make_summarizer_with_stub_chain(
-            {"summary": "## 🔍 x", "tags": "", "urls": ""}
+            {"summary": "## 연구 배경", "tags": "", "urls": ""}
         )
         await summarizer.summarize(paper)
         payload = summarizer.summary_chain.ainvoke.await_args.args[0]
@@ -166,7 +174,7 @@ class TestPaperSummarizer:
         self, sample_paper: Paper
     ) -> None:
         summarizer = _make_summarizer_with_stub_chain(
-            {"summary": "## 🔍 x", "tags": "", "urls": ""}
+            {"summary": "## 연구 배경", "tags": "", "urls": ""}
         )
         await summarizer.summarize(sample_paper)  # codebase_summary is None
         payload = summarizer.summary_chain.ainvoke.await_args.args[0]
@@ -190,7 +198,7 @@ class TestPaperSummarizer:
         from scholar_lens.src.metrics import TokenBudgetExceeded, TokenUsageTracker
 
         summarizer = _make_summarizer_with_stub_chain(
-            {"summary": "## 🔍 x", "tags": "", "urls": ""}
+            {"summary": "## 연구 배경", "tags": "", "urls": ""}
         )
         summarizer._token_tracker = TokenUsageTracker(
             input_tokens=5000, output_tokens=5000
@@ -213,7 +221,7 @@ class TestPaperSummarizer:
             attributes=Attributes(affiliation="x", category="x", keywords=["x"]),
         )
         summarizer = _make_summarizer_with_stub_chain(
-            {"summary": "## 🔍 x", "tags": "", "urls": ""}
+            {"summary": "## 연구 배경", "tags": "", "urls": ""}
         )
         await summarizer.summarize(paper)
         payload = summarizer.summary_chain.ainvoke.await_args.args[0]
@@ -226,7 +234,7 @@ class TestFormatSummary:
     def test_summary_front_matter_and_body(self, sample_paper: Paper) -> None:
         gh = Github()
         result = {
-            "summary": "## 🔍 motivation",
+            "summary": "## 연구 배경",
             "tags": "Scaling Laws",
             "urls": "[Repo](https://github.com/x/y)",
         }
@@ -236,7 +244,7 @@ class TestFormatSummary:
         assert '"Paper Summaries"' in out
         # The cover comes from the blog conventions' topic list.
         assert "cover: /assets/images/language-models.jpg" in out
-        assert "## 🔍 motivation" in out
+        assert "## 연구 배경" in out
         assert "### References" in out
         assert "* [Repo](https://github.com/x/y)" in out
 
@@ -266,7 +274,7 @@ class TestFormatSummary:
         self, sample_paper: Paper
     ) -> None:
         result = {
-            "summary": "> **요약:** 이 모델은 적은 연산으로 큰 모델과 대등합니다. 다음.\n\n## 🔍 동기",
+            "summary": "> **요약:** 이 모델은 적은 연산으로 큰 모델과 대등합니다. 다음.\n\n## 동기",
             "subtitle": sample_paper.title,
             "urls": "",
         }
@@ -275,8 +283,8 @@ class TestFormatSummary:
 
 
 class TestSummaryLength:
-    LONG = "## 🔍 질문\n\n" + "가나다라마 " * 800  # 4,000 Hangul syllables
-    SHORT = "## 🔍 질문\n\n" + "가나다라마 " * 500
+    LONG = "## 질문\n\n" + "가나다라마 " * 800  # 4,000 Hangul syllables
+    SHORT = "## 질문\n\n" + "가나다라마 " * 500
 
     def _summarizer(self, shortened: str) -> PaperSummarizer:
         summarizer = _make_summarizer_with_stub_chain(
@@ -314,9 +322,9 @@ class TestSummaryLength:
         "shortened",
         [
             "가나다라마 " * 500,  # lost the ## heading
-            "## 🔍 질문\n\n" + "가나다라마 " * 500 + "\n\n![a](/x.png)",  # new image
+            "## 질문\n\n" + "가나다라마 " * 500 + "\n\n![a](/x.png)",  # new image
             # a table the validator would reject (empty header cell)
-            "## 🔍 질문\n\n"
+            "## 질문\n\n"
             + "가나다라마 " * 500
             + "\n\n| 방법 | |\n| --- | --- |\n| A | 1 |",
         ],
@@ -422,8 +430,8 @@ def test_shortening_may_not_trade_one_blocker_for_another() -> None:
 
 
 class TestSummaryTargetedFix:
-    BROKEN = "> 리드입니다.\n\n## 🔍 질문\n\n결과는 다음과 같습니다:\n\n- 가\n- 나\n"
-    FIXED = "> 리드입니다.\n\n## 🔍 질문\n\n결과는 다음과 같습니다.\n\n- 가\n- 나\n"
+    BROKEN = "> 리드입니다.\n\n## 질문\n\n결과는 다음과 같습니다:\n\n- 가\n- 나\n"
+    FIXED = "> 리드입니다.\n\n## 질문\n\n결과는 다음과 같습니다.\n\n- 가\n- 나\n"
 
     def _summarizer(self, summary: str, fixed: str) -> PaperSummarizer:
         summarizer = _make_summarizer_with_stub_chain(
@@ -455,7 +463,7 @@ class TestSummaryTargetedFix:
             # the blocker is still there
             BROKEN,
             # trades the blocker for another kind
-            "> 리드입니다.\n\n## 🔍 질문\n\n값이 되어진다.\n\n- 가\n- 나\n",
+            "> 리드입니다.\n\n## 질문\n\n값이 되어진다.\n\n- 가\n- 나\n",
             "",
         ],
     )

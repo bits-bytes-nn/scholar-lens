@@ -150,11 +150,11 @@ def test_attributes_prompt_vocabularies_overridable() -> None:
 def test_summary_register_and_structure() -> None:
     text = _render(PaperSummaryPrompt)
     for heading in (
-        "## 🔍 이 연구는 왜 필요합니까?",
-        "## 💡 어떤 해결책을 제시합니까?",
-        "## ⚙️ 제안한 방법은 어떻게 구현되었습니까?",
-        "## 📊 핵심 실험 결과는 무엇입니까?",
-        "## 🔮 이 연구의 의의와 한계는 무엇입니까?",
+        "## 연구 배경",
+        "## 제안 방법",
+        "## 구현 방식",
+        "## 실험 결과",
+        "## 의의와 한계",
     ):
         assert heading in text
 

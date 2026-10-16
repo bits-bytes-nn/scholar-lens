@@ -56,12 +56,12 @@ class PaperSummaryPrompt(BasePrompt):
        as the post's `## TL;DR` paragraph: plain prose only, no math, no
        label, and every number one the paper states, as the paper states it.
     2. Then exactly these five `##` sections (a Korean post uses the headings
-       verbatim; any other language translates them, keeping emoji and order):
-       ## 🔍 이 연구는 왜 필요합니까?
-       ## 💡 어떤 해결책을 제시합니까?
-       ## ⚙️ 제안한 방법은 어떻게 구현되었습니까?
-       ## 📊 핵심 실험 결과는 무엇입니까?
-       ## 🔮 이 연구의 의의와 한계는 무엇입니까?
+       verbatim; any other language translates them, keeping the order):
+       ## 연구 배경
+       ## 제안 방법
+       ## 구현 방식
+       ## 실험 결과
+       ## 의의와 한계
 
     Depth per section follows the paper, not a fixed ratio:
     - Motivation: brief — the gap in prior approaches, in a few sentences.
@@ -111,7 +111,7 @@ class PaperSummaryPrompt(BasePrompt):
     <summary>
     > ...
 
-    ## 🔍 ...
+    ## 연구 배경
     ...
     </summary>
     <urls>...</urls>

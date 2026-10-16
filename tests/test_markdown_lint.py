@@ -440,3 +440,27 @@ def test_table_attribute_line_stays_attached() -> None:
 def test_http_links_are_upgraded(src: str, expected: str) -> None:
     assert upgrade_http_links(src) == expected
     assert upgrade_http_links(expected) == expected
+
+
+@pytest.mark.parametrize(
+    "src,expected",
+    [
+        (
+            "본문입니다.\n\n> ```python\n> x = 1\n\n다음 문단입니다.\n",
+            "본문입니다.\n\n> ```python\n> x = 1\n> ```\n\n다음 문단입니다.\n",
+        ),
+        ("> ```python\n> x = 1", "> ```python\n> x = 1\n> ```"),
+        # A closed quoted fence and a bare fence are left alone.
+        ("> ```\n> a\n> ```\n", "> ```\n> a\n> ```\n"),
+        ("```\n> a\n```\n", "```\n> a\n```\n"),
+    ],
+)
+def test_quoted_fences_close_where_their_blockquote_ends(
+    src: str, expected: str
+) -> None:
+    from scholar_lens.src.markdown_lint import close_quoted_fences
+    from scholar_lens.src.markdown_math import blog_unclosed_fence_lines
+
+    fixed = close_quoted_fences(src)
+    assert fixed == expected
+    assert blog_unclosed_fence_lines(fixed.split("\n")) == []

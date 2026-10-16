@@ -204,10 +204,17 @@ def test_inline_math_starting_a_continuation_line_is_no_display() -> None:
 
 
 def test_code_the_blog_lint_reads_as_prose_is_checked_like_it() -> None:
-    # lint-posts.rb's fence (line 189) is no fence inside a quote and it has
-    # no indented code: a lone $$ there is unbalanced to its CI, so here too.
-    for body in ("> ```bash\n> echo $$\n> ```", "앞 문단.\n\n    echo $$ > pid"):
-        assert math_errors(body) == ["unbalanced $$ in the paragraph"]
+    # lint-posts.rb has no indented code: a lone $$ there is unbalanced to
+    # its CI, so here too. A fence inside a quote is code there (``fences``,
+    # lines 192-218), and here.
+    assert math_errors("앞 문단.\n\n    echo $$ > pid") == [
+        "unbalanced $$ in the paragraph"
+    ]
+    assert math_errors("> ```bash\n> echo $$\n> ```") == []
+    # The blockquote's end ends a quoted fence left open; $$ after it is prose.
+    assert math_errors("> ```bash\n> echo\n\n값은 $$x 입니다.") == [
+        "unbalanced $$ in the paragraph"
+    ]
 
 
 def test_fenced_code_and_our_own_rules_are_not_applied_to_code() -> None:

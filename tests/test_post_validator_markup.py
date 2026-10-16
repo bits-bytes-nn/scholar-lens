@@ -29,6 +29,8 @@ def messages(body: str, **kwargs) -> list[str]:  # type: ignore[no-untyped-def]
         ("| a | b |\n|---|---|\n| $$p(y|x)$$ | 2 |", "inside $$ in a table"),
         ("| a | b |\n|---|---|\n| $$\\|\\theta\\|$$ | 2 |", "inside $$ in a table"),
         ("```text\nQuestion: {{ question }}\n```", "Liquid tag"),
+        # One dash a separator cell starts a table (lint-posts.rb line 405).
+        ("| 언어 | A |  |\n|--|--|--|\n| 영어 | 1 | 2 |", "empty header cell"),
         ("`{% raw %}{{ q }}{% endraw %}`와 `{{ context }}`", "Liquid tag"),
     ],
 )
@@ -207,14 +209,38 @@ class TestLightbox:
 class TestBlogLineRoles:
     """The blog lint's fences and display blocks, as its body loop reads them."""
 
-    def test_an_unclosed_fence_after_a_quote_is_an_error(self) -> None:
-        # "> ```" is text to the lint; the bare ``` then opens a fence that
-        # never closes (CommonMark would pair the two).
+    def test_a_quoted_fence_left_open_is_an_error(self) -> None:
+        # A fence inside a blockquote is code and ends with it: at the first
+        # blank line, or at the end of the post.
         from scholar_lens.src.post_validator import body_errors
 
-        body = "> ```python\n> x = 1\n```\n"
-        assert any("fence is never closed" in m for m in messages(body))
-        assert any("fence is never closed" in e for e in body_errors(body))
+        for body in (
+            "> ```python\n> x = 1\n\n뒤 문단입니다.\n",
+            "앞 문단입니다.\n\n> ```python\n> x = 1",
+        ):
+            assert any("fence is never closed" in m for m in messages(body))
+            assert any("fence is never closed" in e for e in body_errors(body))
+
+    def test_fence_roles_read_quoted_fences_as_the_lint_does(self) -> None:
+        from scholar_lens.src.markdown_math import (
+            blog_fence_roles,
+            blog_unclosed_fence_lines,
+        )
+
+        lines = ["> ```python", "> x", "> ```", "a"]
+        assert blog_fence_roles(lines) == ["open", "code", "close", "prose"]
+        # A bare marker after a quoted opener closes it too (unquote leaves it).
+        assert blog_fence_roles(["> ```", "> x", "```"]) == ["open", "code", "close"]
+        # A quoted marker inside a bare fence is part of its example.
+        lines = ["```markdown", "> ```python", "> ```", "```"]
+        assert blog_fence_roles(lines) == ["open", "code", "code", "close"]
+        # Two quoted fences left open, each ended by its blockquote's end.
+        lines = ["> ```", "> x", "", "> ~~~", "> y", "", "z"]
+        assert blog_fence_roles(lines) == [
+            "open", "code", "unclosed", "open", "code", "unclosed", "prose",
+        ]  # fmt: skip
+        assert blog_unclosed_fence_lines(lines) == [0, 3]
+        assert blog_unclosed_fence_lines(["```", "x", "", "y"]) == [0]
 
     def test_a_tag_inside_a_display_block_is_math(self) -> None:
         body = "식입니다.\n\n$$\na <t> b\n$$\n\n끝입니다."
@@ -238,3 +264,45 @@ class TestBlogLineRoles:
         assert _fence_indented_code(body) == (
             "- 항목\n\n  ```\n  code <b>\n    more\n  ```\n\n- 다음\n"
         )
+
+
+class TestQuotedFences:
+    """The blog lint's own cases (test/test_lint_posts.rb
+    ``test_a_fence_inside_a_blockquote_is_code``, PR #99): a fence inside a
+    blockquote is code, closed by a quoted marker or ended with the
+    blockquote at a blank line."""
+
+    RULES = ("read as HTML", "glightbox", "never closed", "colon")
+
+    def _markup(self, body: str) -> list[str]:
+        return [m for m in messages(body) if any(r in m for r in self.RULES)]
+
+    @pytest.mark.parametrize(
+        "body",
+        [
+            "> ```text\n> 답을 <think> 안에 쓰세요: 그다음 답합니다\n> ```\n",
+            '> ```html\n> <a class="glightbox" href="/p"><img src="/a.png"></a>\n'
+            "> ```\n",
+            # A quoted fence in a Markdown example is part of the example.
+            "```markdown\n> ```python\n> <think>\n> ```\n<think>\n```\n",
+        ],
+    )
+    def test_code_inside_a_quote_passes(self, body: str) -> None:
+        assert self._markup(body) == []
+
+    def test_a_tag_in_quoted_prose_is_found(self) -> None:
+        assert any(
+            "<think> is read as HTML" in m
+            for m in messages("> 답을 <think> 안에 씁니다.\n")
+        )
+
+    def test_a_quoted_fence_never_closed(self) -> None:
+        found = messages("앞 문단입니다.\n\n> ```text\n> <think>\n")
+        assert any("never closed" in m for m in found)
+
+    def test_the_blockquote_ends_at_the_blank_line_and_the_fence_with_it(self) -> None:
+        found = messages(
+            "> ```text\n> 인용입니다.\n\n<think> 뒤 문단입니다.\n\n```python\nx\n```\n"
+        )
+        assert any("never closed" in m for m in found)
+        assert any("<think> is read as HTML" in m for m in found)

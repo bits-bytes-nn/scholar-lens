@@ -19,14 +19,14 @@ _SEPARATORS = re.compile(r"[\s_\u2010-\u2015]+")  # incl. en/em dashes
 _DROP_CHARS = re.compile(r"[/\"'`’“”]")  # deleted, not separators
 _INVALID_CHARS = re.compile(r"[^0-9A-Za-z.+\-]")
 _HYPHENS = re.compile(r"-{2,}")
-# The blog lint's tag form (tech-blog script/lint-posts.rb line 164): a letter
+# The blog lint's tag form (tech-blog script/lint-posts.rb line 165): a letter
 # or digit first (no ".NET" or "+x"), then letters, digits and . + -.
 TAG_FORMAT = re.compile(r"[A-Za-z0-9][A-Za-z0-9.+-]*")
 
 
 def _inner_words(tag: str) -> list[str]:
     """The words between the first and the last, split as Ruby's
-    ``split("-")`` does (trailing empty fields dropped; line 167): a last
+    ``split("-")`` does (trailing empty fields dropped; line 168): a last
     "In" or "On" is a particle ("Opt-In", "Add-On"), not a function word."""
     words = tag.split("-")
     while words and not words[-1]:
@@ -36,7 +36,7 @@ def _inner_words(tag: str) -> list[str]:
 
 def tag_problem(tag: str, lowercase_words: list[str]) -> str | None:
     """What the blog lint rejects in a tag's form (lint-posts.rb lines
-    164-169), or None: anything but :data:`TAG_FORMAT`, or an inner function
+    165-170), or None: anything but :data:`TAG_FORMAT`, or an inner function
     word not in lowercase."""
     if not TAG_FORMAT.fullmatch(tag):
         return f"tag '{tag}' must be words joined by hyphens"

@@ -149,6 +149,24 @@ class TestStackWiring:
             env["Properties"]["ComputeResources"]["UpdateToLatestImageVersion"] is True
         )
 
+    def test_root_volume_is_encrypted(self, template: dict[str, Any]) -> None:
+        (lt,) = resources_of_type(template, "AWS::EC2::LaunchTemplate")
+        (device,) = lt["Properties"]["LaunchTemplateData"]["BlockDeviceMappings"]
+        assert device["DeviceName"] == "/dev/xvda"
+        ebs = device["Ebs"]
+        assert ebs["Encrypted"] is True
+        assert ebs["VolumeType"] == "gp3"
+        assert ebs["VolumeSize"] >= 30
+        assert "KmsKeyId" not in ebs  # the AWS-managed EBS key
+
+    def test_compute_tracks_the_launch_template_version(
+        self, template: dict[str, Any]
+    ) -> None:
+        (env,) = resources_of_type(template, "AWS::Batch::ComputeEnvironment")
+        spec = env["Properties"]["ComputeResources"]["LaunchTemplate"]
+        lt_id = spec["LaunchTemplateId"]["Ref"]
+        assert spec["Version"] == {"Fn::GetAtt": [lt_id, "LatestVersionNumber"]}
+
     def test_only_cost_and_failure_delivery_alarms(
         self, template: dict[str, Any]
     ) -> None:

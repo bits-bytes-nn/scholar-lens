@@ -44,7 +44,7 @@ def arxiv_paper_key(url: str | None) -> str | None:
 
 
 # The blog lint's paper_doi rule (tech-blog script/lint-posts.rb lines
-# 133-138): a bare DOI, no URL, query or fragment (js/citations.js puts it in a
+# 134-139): a bare DOI, no URL, query or fragment (js/citations.js puts it in a
 # request path as is), and an arXiv DOI without the paper's version ("v2"):
 # arXiv registers one DOI per paper. Ruby's \s is ASCII whitespace.
 BARE_DOI = re.compile(r"10\.\d{4,9}/[^ \t\r\n\f\v?#]+")

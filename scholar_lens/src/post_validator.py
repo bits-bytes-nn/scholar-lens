@@ -30,13 +30,14 @@ from .markdown_lint import (
 )
 from .markdown_math import (
     BLOG_CODE_SPAN,
+    BLOG_FENCE_ROLES,
     ESCAPED_UNDERSCORE,
     HANGUL,
     TEXT_COMMAND,
     blog_bare,
     blog_fence_roles,
     blog_line_roles,
-    blog_open_fence_line,
+    blog_unclosed_fence_lines,
     blog_unquote,
     fence_roles,
     has_math,
@@ -64,7 +65,7 @@ _HEADING = re.compile(r"^(#{1,6})\s+(.*\S)\s*$")
 _INLINE_MATH = re.compile(r"\$\$(.+?)\$\$")
 # A cell holding a number ("63.6", "1,820", "37.4%"), not a label that
 # merely contains a digit ("pass@1"): the blog lint's test (lint-posts.rb
-# line 398) for a data row under the header with a blank first cell.
+# line 428) for a data row under the header with a blank first cell.
 _NUMERIC_CELL = re.compile(r"[-+]?[\d.,]+%?")
 
 
@@ -109,9 +110,10 @@ def _prose_lines(body: str) -> Lines:
 
 
 def _blog_lines(body: str) -> Lines:
-    """Body lines outside the blog lint's fences (lint-posts.rb lines
-    243-255), as (offset, text): what its math checks read, an indented
-    code block and a fence inside a blockquote included."""
+    """Body lines outside the blog lint's fences (lint-posts.rb ``fences``,
+    lines 192-218, skipped at line 285), as (offset, text): what its math
+    checks read, an indented code block included (a fence inside a
+    blockquote is code there too)."""
     lines = body.split("\n")
     return [
         (i, line)
@@ -139,7 +141,8 @@ _PAPER_TITLE_SUFFIX = " 논문 리뷰"
 
 def paper_page_title(title: str, *, korean: bool) -> str:
     """The longest ``<title>`` head.html gives a paper post: the title plus
-    the Korean suffix on a Korean post (a ``seo_title`` only shortens it)."""
+    the Korean suffix on a Korean post (a ``seo_title``, which head.html uses
+    on every post, only shortens it)."""
     return f"{title}{_PAPER_TITLE_SUFFIX}" if korean else title
 
 
@@ -191,18 +194,19 @@ def _check_blog_markup(front: dict[str, Any], body: str, offset: int, add: Add) 
     Liquid outside raw tags, a fence never closed, tags the browser drops,
     fence info strings kramdown does not read, a | inside $$ on a table row,
     ar5iv links and lightbox links that do not open their image. Lines are
-    read by the lint's own roles (:func:`blog_fence_roles`): a fence or a
-    ``$$`` display block is no prose."""
-    _check_lightbox(body, offset, add)
+    read by the lint's own roles (:func:`blog_fence_roles`): a fence (one
+    inside a blockquote too) or a ``$$`` display block is no prose."""
     lines = body.split("\n")
     roles = blog_fence_roles(lines)
-    if (unclosed := blog_open_fence_line(lines)) is not None:
+    _check_lightbox(lines, roles, offset, add)
+    for unclosed in blog_unclosed_fence_lines(lines):
         add(
             "error",
             "code",
             offset + unclosed,
-            "a code fence is never closed (a fence after > or one nested in "
-            "another closes nothing)",
+            "a code fence is never closed (a fence nested in another closes "
+            "the outer one; a fence inside a blockquote ends with it, at the "
+            "first blank line)",
         )
     raw = False
     liquid = front.get("render_with_liquid") is not False
@@ -222,7 +226,7 @@ def _check_blog_markup(front: dict[str, Any], body: str, offset: int, add: Add) 
                     offset + i,
                     "Liquid tag in the body; wrap it in {% raw %} ... {% endraw %}",
                 )
-        if role == "open" and _LINT_FENCE_INFO.match(line.strip()):
+        if role == "open" and _LINT_FENCE_INFO.match(blog_unquote(line).strip()):
             add(
                 "error",
                 "code",
@@ -281,16 +285,18 @@ _LIGHTBOX = re.compile(
     rf"""\s*(?P<img><img\b{_LINT_ATTRS}>)""",
     re.IGNORECASE | re.DOTALL,
 )
-_LINT_FENCED_BLOCK = re.compile(
-    r"^\s*(`{3,}|~{3,}).*?^\s*\1[^\n]*", re.MULTILINE | re.DOTALL
-)
 
 
-def _check_lightbox(body: str, offset: int, add: Add) -> None:
+def _check_lightbox(lines: list[str], roles: list[str], offset: int, add: Add) -> None:
     """A lightbox opens its href: a page there (the figure's source) loads
     in an iframe the site refuses, an empty box. The href must be the image."""
-    # Fenced code keeps its line count, so line numbers after it hold.
-    text = _LINT_FENCED_BLOCK.sub(lambda m: "\n" * m.group(0).count("\n"), body)
+    # A fence's lines (one inside a blockquote too) go blank, so an example
+    # there is not read and line numbers after it hold (lint-posts.rb
+    # lines 53-54).
+    text = "\n".join(
+        "" if role in BLOG_FENCE_ROLES else line
+        for line, role in zip(lines, roles, strict=True)
+    )
     for match in _LIGHTBOX.finditer(text):
         href = re.search(r"""\shref=["']([^"']+)""", match.group(0), re.IGNORECASE)
         src = re.search(r"""\ssrc=["']([^"']+)""", match.group("img"), re.IGNORECASE)
@@ -468,16 +474,17 @@ def _check_description_field(
             1,
             "description is plain text; no $$, *emphasis*, backticks, links or tags",
         )
-    title = str(front.get("title") or "")
+    # head.html (lines 47 and 56-62) gives every post its seo_title, when set, for
+    # the plain title, and a paper post in the site's language (Korean) the
+    # suffix after it.
+    title = str(front.get("seo_title") or front.get("title") or "")
     categories = front.get("categories") or [""]
-    # head.html gives a paper post in the site's language (Korean) its
-    # seo_title and the suffix; any other page keeps its plain title.
     if (
         front.get("paper_author")
         and front.get("lang", "ko") == "ko"
         and spec.is_paper_type(str(categories[0]))
     ):
-        title = paper_page_title(str(front.get("seo_title") or title), korean=True)
+        title = paper_page_title(title, korean=True)
     if len(text) <= len(title):
         add(
             "error",
@@ -592,7 +599,7 @@ def _check_file_date(file_name: str, date: Any, add: Add) -> None:
 
 
 def _check_paper_author(value: Any, add: Add) -> None:
-    """The blog lint's rule (lint-posts.rb line 127): one non-blank string
+    """The blog lint's rule (lint-posts.rb line 128): one non-blank string
     without "et al" (any case, anywhere)."""
     if not isinstance(value, str) or not value.strip():
         add(
@@ -607,7 +614,7 @@ def _check_paper_author(value: Any, add: Add) -> None:
 
 
 def _check_paper_doi(front: dict[str, Any], add: Add) -> None:
-    """lint-posts.rb lines 133-138: a set ``paper_doi`` (even empty) is a bare
+    """lint-posts.rb lines 134-139: a set ``paper_doi`` (even empty) is a bare
     DOI, and an arXiv one carries no version."""
     if "paper_doi" not in front:
         return
@@ -635,7 +642,7 @@ def _check_tags(tags: Any, spec: PostConventions, add: Add) -> None:
         return
     controlled = set(spec.tags.controlled)
     for tag in map(str, tags):
-        # lint-posts.rb lines 161-170: a retired name, else the format.
+        # lint-posts.rb lines 162-171: a retired name, else the format.
         if (replacement := spec.tags.aliases.get(tag)) is not None:
             add("error", "tags", 1, f"tag '{tag}' is retired; use '{replacement}'")
         elif problem := tag_problem(tag, spec.tags.lowercase_words):
@@ -747,7 +754,7 @@ def _check_math(front: dict[str, Any], body: str, offset: int, add: Add) -> None
     lines around it; an inline span may wrap within its paragraph.
 
     They read the lines the blog lint reads (:func:`_blog_lines`: an
-    indented code block and a fence inside a quote too); the rules of our
+    indented code block too, a fence inside a quote not); the rules of our
     own (a bare | in inline math, a single-backslash bracket display, list
     restarts) only the lines kramdown renders as text."""
     lines = _blog_lines(body)
@@ -820,7 +827,7 @@ def _check_math(front: dict[str, Any], body: str, offset: int, add: Add) -> None
                 )
             )
         ):
-            # A blank line ends the paragraph (lint-posts.rb line 266); in
+            # A blank line ends the paragraph (lint-posts.rb line 296); in
             # rendered text a sibling list item, a heading or a table row
             # ends the block too: the open $$ never closes there.
             add("error", "math", offset + span, "unbalanced $$ in the paragraph")
@@ -1038,7 +1045,9 @@ def _check_tables(lines: Lines, offset: int, add: Add) -> None:
     while index < len(lines):
         i, line = lines[index]
         nxt = lines[index + 1][1] if index + 1 < len(lines) else ""
-        if line.lstrip().startswith("|") and TABLE_DELIMITER.match(nxt.strip()):
+        # The blog lint's separator row (lint-posts.rb line 405): one dash a
+        # cell is enough, as kramdown reads it ("|--|" under a header).
+        if line.lstrip().startswith("|") and _LINT_TABLE_RULE.match(nxt.strip()):
             header = _split_cells(line)
             width = len(header)
             block = [(i, line)]
@@ -1053,9 +1062,9 @@ def _check_tables(lines: Lines, offset: int, add: Add) -> None:
                     offset + i + 1,
                     "separator cell count differs from header",
                 )
-            # lint-posts.rb lines 391-396: no empty header cell, the first
+            # lint-posts.rb lines 421-426: no empty header cell, the first
             # included (it names the row labels: "구분", "모델"). A cell
-            # holding only "\|" is not empty (line 381).
+            # holding only "\|" is not empty (line 411).
             for col, label in enumerate(header):
                 if col and not label:
                     add(
@@ -1361,7 +1370,7 @@ def _check_links(lines: Lines, offset: int, add: Add) -> None:
 
 
 def _check_style(body: str, offset: int, add: Add) -> None:
-    """The blog lint's prose rules (lint-posts.rb lines 212-230): no
+    """The blog lint's prose rules (lint-posts.rb lines 241-259): no
     translationese and no sentence ending glued to a colon, where it looks
     (:func:`markdown_lint.style_hits`)."""
     for hit in style_hits(body):

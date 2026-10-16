@@ -48,10 +48,14 @@ from typing import Literal
 from .logger import logger
 from .markdown_math import (
     BLOG_CODE_SPAN,
+    BLOG_FENCE,
     HANGUL,
     IMAGE,
+    QUOTE_PREFIX,
     blog_bare,
+    blog_fence_roles,
     blog_line_roles,
+    blog_unquote,
     fence_roles,
     indent_width,
     indented_code_bases,
@@ -145,7 +149,7 @@ _LATEX_LIKE = re.compile(r"[\\^_{]")
 # placeholder token (e.g. <none>, <server-host>, <your-namespace>) that kramdown
 # would otherwise parse as an HTML open tag, emitting a stray closing tag later.
 # The HTML a post writes, as the blog lint knows it (script/lint-posts.rb
-# ``HTML_ELEMENTS``): any other ``<name>`` is passed through by kramdown and
+# ``HTML_ELEMENTS``, lines 231-237): any other ``<name>`` is passed through by kramdown and
 # dropped by the browser, so a prompt token (<think>, <input>, <s>) would
 # vanish. The last row is an inline <svg>'s children.
 BLOG_HTML_ELEMENTS = frozenset(
@@ -154,7 +158,7 @@ BLOG_HTML_ELEMENTS = frozenset(
     ins kbd li mark ol p picture pre q samp script section small source span
     strong sub summary sup svg table tbody td tfoot th thead time tr track u ul
     var video wbr
-    circle defs ellipse g line marker path polygon polyline rect text tspan use""".split()
+    circle defs g line path polygon polyline rect text tspan use""".split()
 )
 # Elements that mean nothing bare: <img> or <a> alone is a token, not markup.
 BLOG_NEEDS_ATTRIBUTES = frozenset("a audio iframe img script source video".split())
@@ -766,25 +770,25 @@ _VERIFICATION_HEDGE = re.compile(
 )
 
 
-# The blog lint's prose rules (script/lint-posts.rb lines 212-230), with its
+# The blog lint's prose rules (script/lint-posts.rb lines 241-259), with its
 # patterns and exemptions as they are, so a post passes here exactly when it
 # passes there. Translationese with no natural reading (prompts/base.py
 # KOREAN_STYLE): a double passive ("되어진", "보여지는") and the calque "에 있어"
 # where a particle or a nominalized verb shows it ("에 있어서는", "학습함에
 # 있어"). A bare "에 있어서" (also "in" in Korean) and patterns that are normal
 # Korean in moderation ("에 대한", "~라는 점") are left to the LLM checkers.
-TRANSLATIONESE = re.compile(  # lint-posts.rb line 216
+TRANSLATIONESE = re.compile(  # lint-posts.rb line 245
     r"되어[지진져집]|보여[지진져]|에 있어(?:서[는도의](?! 안)|[는의])|[음함]에 있어(?![야요])"
 )
 # A sentence ending glued to a colon ("다음과 같습니다:"): end the sentence.
-SENTENCE_COLON = re.compile(r"다:")  # line 218
-_QUOTED_SPAN = re.compile(r'"[^"\n]*"|“[^”\n]*”|‘[^’\n]*’|「[^」\n]*」')  # line 219
-_REFERENCES_HEADING = re.compile(  # line 220
+SENTENCE_COLON = re.compile(r"다:")  # line 247
+_QUOTED_SPAN = re.compile(r'"[^"\n]*"|“[^”\n]*”|‘[^’\n]*’|「[^」\n]*」')  # line 248
+_REFERENCES_HEADING = re.compile(  # line 249
     r"\A#{1,6}\s+(?:references|bibliography|참고 ?자료|참고 ?문헌)\b",
     re.IGNORECASE,
 )
-_ALT_IMAGE = re.compile(r"!\[[^\]\n]*\]\([^)\n]*\)")  # line 227
-_DOLLAR_SPAN = re.compile(r"\$\$.*?\$\$")  # line 287
+_ALT_IMAGE = re.compile(r"!\[[^\]\n]*\]\([^)\n]*\)")  # line 256
+_DOLLAR_SPAN = re.compile(r"\$\$.*?\$\$")  # line 317
 
 
 @dataclass(frozen=True)
@@ -798,7 +802,7 @@ class StyleHit:
 
 def style_hits(body: str) -> list[StyleHit]:
     """Translationese and colon-ended sentences where the blog lint looks for
-    them (lint-posts.rb ``prose``, lines 222-230, called from line 292): prose
+    them (lint-posts.rb ``prose``, lines 251-259, called from line 322): prose
     lines outside its fences and display blocks, not a heading, a
     blockquote, a table row (indented under a list too) or a line of the
     reference list; quoted spans, image syntax (alt text), code spans and
@@ -809,7 +813,7 @@ def style_hits(body: str) -> list[StyleHit]:
     for i, (line, role) in enumerate(zip(lines, blog_line_roles(lines), strict=True)):
         if role != "prose":
             continue
-        if line.startswith("#"):  # line 282
+        if line.startswith("#"):  # line 312
             in_references = bool(_REFERENCES_HEADING.match(line))
         if (
             in_references
@@ -1066,14 +1070,45 @@ def _fence_indented_code(markdown: str) -> str:
     return "\n".join(out)
 
 
+def close_quoted_fences(markdown: str) -> str:
+    """Close each fence a blockquote opened and left open, at the end of its
+    blockquote (before the blank line that ends it, or at the end of the
+    text), with the opener's own quote markers and fence: both lints read a
+    bare closer there as prose, so ``close_open_fence`` cannot fix it."""
+    lines = markdown.split("\n")
+    roles = blog_fence_roles(lines)
+    closers: dict[int, str] = {}
+    opener: str | None = None
+    for i, role in enumerate(roles):
+        if role == "open":
+            prefix = QUOTE_PREFIX.match(lines[i])
+            fence = BLOG_FENCE.match(blog_unquote(lines[i]))
+            opener = (
+                f"{prefix.group(0).rstrip()} {fence.group(1)}"
+                if prefix and fence
+                else None
+            )
+        elif role == "close":
+            opener = None
+        elif role == "unclosed" and opener:
+            closers[i] = opener
+            opener = None
+    if opener and roles and roles[-1] == "code":
+        closers[len(lines)] = opener
+    for i in sorted(closers, reverse=True):
+        lines.insert(i, closers[i])
+    return "\n".join(lines)
+
+
 def publish_body(markdown: str, *, warn: bool = True) -> str:
-    """The publisher's body pipeline, in one place: an open fence closed,
+    """The publisher's body pipeline, in one place: an open fence closed
+    (a quoted one where its blockquote ends),
     callouts over the cap unboxed (before the math pass, so a display left in
     an unboxed callout is isolated too), the blog math rules applied, then the
     other auto-fixes of :func:`lint_markdown`, indented code blocks fenced,
     fence info strings cut to the language and Liquid-looking text wrapped
     in ``{% raw %}``. Idempotent."""
-    fenced = _fence_indented_code(close_open_fence(markdown))
+    fenced = _fence_indented_code(close_open_fence(close_quoted_fences(markdown)))
     linted = lint_markdown(
         normalize_math(limit_callouts(_bare_fence_info(fenced))),
         warn=warn,

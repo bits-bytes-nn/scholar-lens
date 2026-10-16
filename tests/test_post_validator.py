@@ -281,11 +281,11 @@ class TestDescription:
         [
             # A Korean paper post's <title> is its seo_title plus the suffix.
             ({}, ["warning"]),
-            # Any other post's <title> is its plain title (head.html).
-            ({"lang": "en", "translation_id": "deepseek-v3"}, ["error"]),
+            # Any other post's <title> is its seo_title too (head.html line 47).
+            ({"lang": "en", "translation_id": "deepseek-v3"}, ["warning"]),
         ],
     )
-    def test_seo_title_names_only_a_korean_paper_posts_page(
+    def test_seo_title_names_every_posts_page(
         self, lang: dict[str, str], levels: list[str]
     ) -> None:
         front = {

@@ -146,7 +146,7 @@ class PaperSummarizer(RetryableBase, TokenBudgetGuard):
         """Return ``{"subtitle", "description", "summary", "urls"}`` for the
         paper.
 
-        ``summary`` is a Markdown fragment (a lead blockquote plus the five emoji
+        ``summary`` is a Markdown fragment (a lead blockquote plus the five fixed
         ``##`` sections); ``subtitle`` is the title in the output language;
         ``description`` the search snippet (empty lets the blog derive one);
         ``urls`` is a comma-separated Markdown link list taken from the paper.
