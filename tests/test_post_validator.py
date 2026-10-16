@@ -49,7 +49,7 @@ def make_post(
         fields.pop("subtitle")
         fields.pop("paper_author")
         fields["categories"] = '["Tech Guides", "Agentic-AI"]'
-        fields["cover"] = "/assets/images/default.jpg"
+        fields["cover"] = "/assets/images/agentic-ai.jpg"
         fields["tags"] = '["Agentic-AI"]'
     fields.update(front or {})
     for key in drop:
