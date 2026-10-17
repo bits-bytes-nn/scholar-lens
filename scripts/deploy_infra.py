@@ -494,7 +494,7 @@ class PaperReviewStack(Stack):
             compute_environment_name=self._get_resource_name("paper-review-ondemand"),
             maxv_cpus=4,
             instance_role=self.instance_role,
-            instance_types=[ec2.InstanceType("optimal")],
+            # Instance types default to Batch's "optimal" bundle.
             launch_template=launch_template,
             vpc=self.vpc,
             security_groups=[self.security_group],
