@@ -167,6 +167,14 @@ class TestStackWiring:
         lt_id = spec["LaunchTemplateId"]["Ref"]
         assert spec["Version"] == {"Fn::GetAtt": [lt_id, "LatestVersionNumber"]}
 
+    def test_compute_uses_the_optimal_bundle_once(
+        self, template: dict[str, Any]
+    ) -> None:
+        # CDK adds "optimal" itself; newer releases reject it as an explicit
+        # ec2.InstanceType.
+        (env,) = resources_of_type(template, "AWS::Batch::ComputeEnvironment")
+        assert env["Properties"]["ComputeResources"]["InstanceTypes"] == ["optimal"]
+
     def test_only_cost_and_failure_delivery_alarms(
         self, template: dict[str, Any]
     ) -> None:
