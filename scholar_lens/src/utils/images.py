@@ -15,7 +15,7 @@ import threading
 import xml.etree.ElementTree as ET
 from pathlib import PurePosixPath
 
-import fitz
+import pymupdf
 from PIL import Image, UnidentifiedImageError
 
 # Render scale for vector figures: 3x the SVG's CSS size gives a sharp PNG on
@@ -373,13 +373,13 @@ def _pdf_to_png(data: bytes) -> bytes:
     """The first page of a PDF figure as PNG, its longer side at most
     :data:`MAX_RENDER_SIDE`."""
     try:
-        with fitz.open(stream=data, filetype="pdf") as doc:
+        with pymupdf.open(stream=data, filetype="pdf") as doc:
             page = doc[0]
             zoom = min(
                 PDF_FIGURE_ZOOM,
                 MAX_RENDER_SIDE / max(page.rect.width, page.rect.height),
             )
-            return page.get_pixmap(matrix=fitz.Matrix(zoom, zoom)).tobytes("png")
+            return page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom)).tobytes("png")
     except (RuntimeError, ValueError, IndexError, ZeroDivisionError) as e:
         raise ValueError(f"the PDF figure cannot be rendered: {e}") from e
 

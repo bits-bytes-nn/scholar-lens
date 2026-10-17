@@ -91,8 +91,21 @@ class PinnedRequestsAdapter(HTTPAdapter):
         self._local = threading.local()
 
     def send(
-        self, request: requests.PreparedRequest, **kwargs: Any
+        self,
+        request: requests.PreparedRequest,
+        stream: bool = False,
+        timeout: Any = None,
+        verify: Any = True,
+        cert: Any = None,
+        proxies: dict[str, str] | None = None,
     ) -> requests.Response:
+        kwargs: dict[str, Any] = {
+            "stream": stream,
+            "timeout": timeout,
+            "verify": verify,
+            "cert": cert,
+            "proxies": proxies,
+        }
         url = upgrade_to_https(request.url or "")
         request.url = url
         parts = urlsplit(url)
@@ -122,7 +135,7 @@ class PinnedRequestsAdapter(HTTPAdapter):
     def get_connection_with_tls_context(
         self,
         request: requests.PreparedRequest,
-        verify: bool | str | None,
+        verify: Any,
         proxies: Any = None,
         cert: Any = None,
     ) -> Any:

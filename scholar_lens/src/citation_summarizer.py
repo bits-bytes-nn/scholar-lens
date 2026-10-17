@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 import boto3
-import fitz
+import pymupdf
 from langchain_core.output_parsers import StrOutputParser
 
 from .arxiv_handler import ArxivHandler, ArxivPaperError
@@ -297,7 +297,7 @@ class CitationSummarizer(RetryableBase):
             )
 
             def read_pdf() -> str:
-                with fitz.open(str(paper_path)) as doc:
+                with pymupdf.open(str(paper_path)) as doc:
                     return " ".join(page.get_text().strip() for page in doc)
 
             text = await asyncio.to_thread(read_pdf)
