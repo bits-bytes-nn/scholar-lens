@@ -284,11 +284,11 @@ def _png(color: str = "red") -> bytes:
 
 
 def _pdf() -> bytes:
-    import fitz
+    import pymupdf
 
-    with fitz.open() as doc:
+    with pymupdf.open() as doc:
         page = doc.new_page(width=100, height=50)
-        page.draw_rect(fitz.Rect(10, 10, 90, 40), color=(0, 0, 1), fill=(0, 0, 1))
+        page.draw_rect(pymupdf.Rect(10, 10, 90, 40), color=(0, 0, 1), fill=(0, 0, 1))
         return doc.tobytes()
 
 

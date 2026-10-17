@@ -11,8 +11,8 @@ from typing import Any, Self
 from urllib.parse import urljoin
 
 import boto3
-import fitz
 import httpx
+import pymupdf
 from bs4 import BeautifulSoup, Tag
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import Runnable
@@ -695,7 +695,7 @@ class PDFParser(RichParser):
         extract_text: bool = True,
     ) -> tuple[list[Figure], Content]:
         # Fallback when the primary (Upstage) parser fails, e.g. a 413 on a large
-        # PDF. Use PyMuPDF (fitz): it reads the PDF's text layer directly, is
+        # PDF. Use PyMuPDF: it reads the PDF's text layer directly, is
         # lightweight (no layout/OCR vision models, so it never OOMs the way
         # Unstructured "hi_res" did), and is already a dependency. For a
         # review/summary the text is what matters; figures are best-effort and
@@ -718,7 +718,7 @@ class PDFParser(RichParser):
 
     @staticmethod
     def _extract_text_with_fitz(pdf_path: Path) -> str:
-        with fitz.open(str(pdf_path)) as doc:
+        with pymupdf.open(str(pdf_path)) as doc:
             return "\n\n".join(page.get_text() for page in doc)
 
 
@@ -737,7 +737,7 @@ def extract_figures_from_pdf(
     figures_dir.mkdir(parents=True, exist_ok=True)
 
     try:
-        doc = fitz.open(pdf_path)
+        doc = pymupdf.open(pdf_path)
     except Exception as e:
         raise RuntimeError(f"Failed to open PDF '{pdf_path}': {e}") from e
 
@@ -750,13 +750,13 @@ def extract_figures_from_pdf(
         ]
 
 
-def _is_valid_region(region: Region, doc: fitz.Document) -> bool:
+def _is_valid_region(region: Region, doc: pymupdf.Document) -> bool:
     page_index = region.page - 1
     return 0 <= page_index < len(doc)
 
 
 def _process_region(
-    doc: fitz.Document,
+    doc: pymupdf.Document,
     region: Region,
     idx: int,
     figures_dir: Path,
@@ -780,8 +780,8 @@ def _process_region(
             coords[2]["y"] * page.rect.height,
         ]
 
-        clip_rect = fitz.Rect(*rect_coords)
-        mat = fitz.Matrix(zoom, zoom)
+        clip_rect = pymupdf.Rect(*rect_coords)
+        mat = pymupdf.Matrix(zoom, zoom)
         pix = page.get_pixmap(matrix=mat, clip=clip_rect, dpi=dpi)
 
         figure_path = figures_dir / name_template.format(idx=idx)

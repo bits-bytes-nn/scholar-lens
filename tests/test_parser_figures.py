@@ -1,7 +1,7 @@
 """Tests for the pure / offline pieces of the PDF figure parser.
 
 These tests deliberately avoid the Bedrock and Upstage code paths. Only the
-pydantic models and the local ``fitz``-based figure extraction are exercised;
+pydantic models and the local PyMuPDF-based figure extraction are exercised;
 no AWS or network calls are made.
 """
 
@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import fitz
+import pymupdf
 import pytest
 import tenacity
 
@@ -36,7 +36,7 @@ SQUARE_COORDS: list[dict[str, float]] = [
 def one_page_pdf(tmp_path: Path) -> Path:
     """Build a real single-page PDF so ``get_pixmap`` always succeeds."""
     pdf_path = tmp_path / "doc.pdf"
-    doc = fitz.open()
+    doc = pymupdf.open()
     page = doc.new_page(width=612, height=792)
     page.insert_text((72, 72), "Hello figure")
     doc.save(str(pdf_path))
@@ -104,13 +104,13 @@ class TestRegionModel:
 
 class TestIsValidRegion:
     def test_in_range_page_is_valid(self, one_page_pdf: Path) -> None:
-        doc = fitz.open(str(one_page_pdf))
+        doc = pymupdf.open(str(one_page_pdf))
         with doc:
             region = Region(page=1, coordinates=SQUARE_COORDS)
             assert _is_valid_region(region, doc) is True
 
     def test_page_beyond_document_is_invalid(self, one_page_pdf: Path) -> None:
-        doc = fitz.open(str(one_page_pdf))
+        doc = pymupdf.open(str(one_page_pdf))
         with doc:
             region = Region(page=2, coordinates=SQUARE_COORDS)
             assert _is_valid_region(region, doc) is False
@@ -151,7 +151,7 @@ class TestExtractFiguresFromPdf:
 
 
 class TestFitzTextFallback:
-    """The PyMuPDF (fitz) fallback used when the primary PDF parser fails."""
+    """The PyMuPDF fallback used when the primary PDF parser fails."""
 
     def test_extracts_text_layer(self, one_page_pdf: Path) -> None:
         from scholar_lens.src.parser import PDFParser
@@ -174,7 +174,7 @@ class TestFitzTextFallback:
         from scholar_lens.src.parser import ParserError, PDFParser
 
         blank = tmp_path / "blank.pdf"
-        doc = fitz.open()
+        doc = pymupdf.open()
         doc.new_page(width=612, height=792)
         doc.save(str(blank))
         doc.close()

@@ -23,6 +23,7 @@ import re
 from abc import ABC, abstractmethod
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 from urllib.parse import parse_qs, unquote, urljoin, urlparse
 
 import requests
@@ -224,9 +225,7 @@ class PdfUrlSource(PaperSource):
             pdf_url=self._url,
         )
 
-    def _safe_request(
-        self, method: str, url: str, **kwargs: object
-    ) -> requests.Response:
+    def _safe_request(self, method: str, url: str, **kwargs: Any) -> requests.Response:
         """Issue a request that re-validates every URL against the SSRF guard.
 
         Auto-redirects are disabled and followed manually so each hop's target is
@@ -314,9 +313,9 @@ class PdfUrlSource(PaperSource):
     def _extract_pdf_title(pdf_path: Path) -> str | None:
         """Best-effort title from the PDF's embedded document metadata."""
         try:
-            import fitz  # PyMuPDF, already a project dependency
+            import pymupdf
 
-            with fitz.open(pdf_path) as doc:
+            with pymupdf.open(pdf_path) as doc:
                 title = (doc.metadata or {}).get("title", "")
             title = " ".join(title.split())
             # Reject empty or junk titles (e.g. "untitled", a bare filename).
