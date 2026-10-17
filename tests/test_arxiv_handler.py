@@ -11,7 +11,23 @@ from datetime import datetime
 
 import pytest
 
+from scholar_lens.src import arxiv_handler
 from scholar_lens.src.arxiv_handler import ArxivHandler, ArxivMetadata
+
+
+class _NoWaitLimiter:
+    def acquire(self) -> None:
+        pass
+
+    def penalize(self, seconds: float) -> None:
+        pass
+
+
+@pytest.fixture(autouse=True)
+def _no_arxiv_pacing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The process-wide limiter allows one request per 3 s; tests never wait."""
+    monkeypatch.setattr(arxiv_handler, "_ARXIV_RATE_LIMITER", _NoWaitLimiter())
+
 
 PUBLISHED = datetime(2024, 1, 1, 12, 0, 0)
 UPDATED = datetime(2024, 1, 2, 12, 0, 0)
@@ -89,22 +105,6 @@ class TestGenerateAndValidateDoi:
         assert meta.doi == "10.1000/explicit"
 
 
-class TestNormalizeTitle:
-    @pytest.mark.parametrize(
-        "raw,expected",
-        [
-            ("Attention Is All You Need", "attentionisallyouneed"),
-            ("Self-Attention", "selfattention"),
-            ("A.B.C", "abc"),
-            ("  Mixed  -  Title.", "mixedtitle"),
-        ],
-    )
-    def test_normalization_removes_whitespace_dots_dashes(
-        self, raw: str, expected: str
-    ) -> None:
-        assert ArxivHandler._normalize_title(raw) == expected
-
-
 class _FakePaper:
     def __init__(self, title: str, short_id: str) -> None:
         self.title = title
@@ -127,19 +127,73 @@ class TestSearchByTitleSimilarity:
         handler = self._handler([_FakePaper("Attention Is All You Need", "1706.03762")])
         assert handler.search_by_title("Attention Is All You Need") == "1706.03762"
 
+    def test_exact_title_beats_a_survey_listed_first(self) -> None:
+        title = "Training Compute-Optimal Large Language Models"
+        handler = self._handler(
+            [
+                _FakePaper(f"{title}: A Survey", "2501.00001"),
+                _FakePaper(title, "2203.15556"),
+            ]
+        )
+        assert handler.search_by_title(title) == "2203.15556"
+
+    def test_closest_passing_title_without_an_exact_one(self) -> None:
+        title = "Mamba: Linear-Time Sequence Modeling with Selective State Spaces"
+        handler = self._handler(
+            [
+                _FakePaper(f"{title} Revisited", "2501.00002"),
+                # British spelling: not the same string, the closest match.
+                _FakePaper(title.replace("Modeling", "Modelling"), "2312.00752"),
+            ]
+        )
+        assert handler.search_by_title(title) == "2312.00752"
+
     def test_no_match_returns_none(self) -> None:
         handler = self._handler(
             [_FakePaper("Something Entirely Different", "9999.99999")]
         )
         assert handler.search_by_title("Attention Is All You Need") is None
 
-    def test_low_similarity_match_rejected(self, monkeypatch) -> None:
-        # Force the normalized titles to collide while the raw titles differ a
-        # lot, so the similarity gate (not the exact gate) does the rejecting.
+    def test_sibling_version_rejected(self) -> None:
+        handler = self._handler([_FakePaper("Qwen2.5 Technical Report", "2412.15115")])
+        assert handler.search_by_title("Qwen2 Technical Report") is None
+
+    def test_hyphen_retry_accepts_the_spaced_title(self) -> None:
+        from unittest.mock import MagicMock
+
+        handler = ArxivHandler.__new__(ArxivHandler)
+        handler.client = MagicMock()
+        handler.client.results = MagicMock(
+            side_effect=[
+                iter([]),
+                iter([_FakePaper("Few Shot Learners in Vision", "2001.00001")]),
+            ]
+        )
+        assert handler.search_by_title("Few-Shot Learners in Vision") == "2001.00001"
+        queries = [c.args[0].query for c in handler.client.results.call_args_list]
+        assert queries == [
+            'ti:"Few-Shot Learners in Vision"',
+            'ti:"Few Shot Learners in Vision"',
+        ]
+
+
+class TestDownloadFolder:
+    def test_unversioned_id_downloads_into_its_own_folder(
+        self, monkeypatch, tmp_path
+    ) -> None:
+        # Regression: "2106.09685" downloaded into "2106_09685v2/" while the
+        # rest of the paper lived in "2106_09685/".
+        from types import SimpleNamespace
+
+        from scholar_lens.src.paper_source import ArxivSource
+
+        handler = ArxivHandler()
+        paper = SimpleNamespace(
+            get_short_id=lambda: "2106.09685v2", pdf_url="https://arxiv.org/pdf/x"
+        )
+        monkeypatch.setattr(handler, "_fetch_single_paper", lambda _id: paper)
         monkeypatch.setattr(
-            ArxivHandler, "_normalize_title", staticmethod(lambda t: "x")
+            ArxivHandler, "_download", staticmethod(lambda url, path: path.touch())
         )
-        handler = self._handler(
-            [_FakePaper("A completely unrelated paper title here", "0000.00000")]
-        )
-        assert handler.search_by_title("Attention Is All You Need") is None
+        path = ArxivSource("2106.09685", handler=handler).download_pdf(tmp_path)
+        assert path == tmp_path / "2106_09685" / "2106_09685.pdf"

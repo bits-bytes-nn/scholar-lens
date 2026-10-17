@@ -12,6 +12,7 @@ primitive is the right tool and composes with concurrent callers.
 
 from __future__ import annotations
 
+import math
 import threading
 import time
 
@@ -82,3 +83,37 @@ class RateLimiter:
             return 0.0
         # Time for one more token to accrue.
         return (1 - self._tokens) * (self.per / self.rate)
+
+
+# arXiv asks for about one request every 3 seconds: one limiter for the whole
+# process (the arXiv API client, citation fetches and the guide's arXiv pages).
+ARXIV_RATE_LIMITER = RateLimiter(rate=1.0, per=3.0, name="arxiv")
+# Penalty when an arXiv 429 carries no Retry-After header (arXiv usually omits
+# it).
+_ARXIV_429_FALLBACK_RETRY_SECONDS: float = 30.0
+# The longest server-requested wait honoured: a larger Retry-After is capped
+# here so one response cannot stall every later request for hours.
+MAX_RETRY_AFTER_SECONDS: float = 60.0
+
+
+def arxiv_retry_after_seconds(error: Exception) -> float:
+    """Best-effort extraction of a Retry-After hint from an arXiv/HTTP error,
+    capped at :data:`MAX_RETRY_AFTER_SECONDS`."""
+    response = getattr(error, "response", None)
+    headers = getattr(response, "headers", None) or {}
+    raw = headers.get("Retry-After") or headers.get("retry-after")
+    if raw:
+        try:
+            seconds = float(raw)
+        except (TypeError, ValueError):
+            return 0.0
+        if not math.isfinite(seconds):
+            return 0.0
+        return min(seconds, MAX_RETRY_AFTER_SECONDS)
+    # arXiv 429s rarely include Retry-After; apply a conservative default.
+    # The status comes from the HTTP response (httpx, requests) or the arxiv
+    # client's own HTTPError, never from the message: "2405.04291" holds 429.
+    status = getattr(response, "status_code", None) or getattr(error, "status", None)
+    if status == 429:
+        return _ARXIV_429_FALLBACK_RETRY_SECONDS
+    return 0.0

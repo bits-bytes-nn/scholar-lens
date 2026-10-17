@@ -1,45 +1,40 @@
 import re
 from datetime import datetime
-from difflib import SequenceMatcher
 from pathlib import Path
 
 import arxiv
+import requests
 import tenacity
 from pydantic import BaseModel, Field, HttpUrl, ValidationInfo, field_validator
 
+from .citation_metadata import title_similarity, titles_match
+from .constants import normalize_arxiv_id
 from .logger import logger
-from .rate_limiter import RateLimiter
+from .pdf_download import CHUNK_BYTES, save_pdf
+from .rate_limiter import ARXIV_RATE_LIMITER, arxiv_retry_after_seconds
 
-# App-level retry for transient arXiv API failures (e.g. HTTP 429). This sits on
-# top of the arxiv client's own num_retries and adds jittered backoff so a busy
-# pipeline does not abort a whole job on a momentary rate limit.
+# The only retry layer for arXiv API calls (the arxiv client itself makes one
+# attempt): jittered backoff so a momentary 429 does not abort a whole job.
 _ARXIV_FETCH_MAX_ATTEMPTS: int = 4
 _ARXIV_FETCH_INITIAL_WAIT: int = 5
 _ARXIV_FETCH_MAX_WAIT: int = 60
-# Fallback penalty when a 429 carries no Retry-After header (arXiv usually omits
-# it). Named so the assumption is visible alongside the other retry constants.
-_ARXIV_429_FALLBACK_RETRY_SECONDS: float = 30.0
-
-# A single process-wide limiter shared by ALL ArxivHandler instances, so the
-# concurrent citation stage cannot fan out into an arXiv 429 storm. arXiv asks
-# for ~1 request / 3s; we honour that globally.
-_ARXIV_RATE_LIMITER = RateLimiter(rate=1.0, per=3.0, name="arxiv")
+# (connect, read) timeouts for arXiv API and PDF requests; without them a stalled
+# connection would hang a Batch job until its 3-hour limit.
+_ARXIV_TIMEOUT: tuple[float, float] = (10.0, 60.0)
 
 
-def _retry_after_seconds(error: Exception) -> float:
-    """Best-effort extraction of a Retry-After hint from an arXiv/HTTP error."""
-    response = getattr(error, "response", None)
-    headers = getattr(response, "headers", None) or {}
-    raw = headers.get("Retry-After") or headers.get("retry-after")
-    if raw:
-        try:
-            return float(raw)
-        except (TypeError, ValueError):
-            return 0.0
-    # arXiv 429s rarely include Retry-After; apply a conservative default.
-    if "429" in str(error):
-        return _ARXIV_429_FALLBACK_RETRY_SECONDS
-    return 0.0
+class _TimeoutAdapter(requests.adapters.HTTPAdapter):
+    """Applies a default timeout to requests made by the arxiv client."""
+
+    def send(self, request, **kwargs):  # type: ignore[no-untyped-def,override]
+        if kwargs.get("timeout") is None:
+            kwargs["timeout"] = _ARXIV_TIMEOUT
+        return super().send(request, **kwargs)
+
+
+# The process-wide arXiv limiter (shared with the guide's arXiv page fetches),
+# so the concurrent citation stage cannot fan out into an arXiv 429 storm.
+_ARXIV_RATE_LIMITER = ARXIV_RATE_LIMITER
 
 
 class ArxivPaperError(Exception):
@@ -92,8 +87,8 @@ class ArxivMetadata(BaseModel):
         # it directly. A previous version made a doi.org round-trip "to validate"
         # on every metadata construction — wasteful and a 429/hang risk inside a
         # pydantic validator. The format is stable; no network call is needed.
-        if arxiv_id and re.match(r"^\d{4}\.\d{4,5}(v\d+)?$", arxiv_id):
-            clean_arxiv_id = arxiv_id.split("v")[0]
+        if normalize_arxiv_id(arxiv_id):
+            clean_arxiv_id = re.sub(r"v\d+$", "", str(arxiv_id))
             return f"10.48550/arXiv.{clean_arxiv_id}"
 
         return None
@@ -112,27 +107,32 @@ class ArxivMetadata(BaseModel):
 
 
 class ArxivHandler:
-    DEFAULT_DELAY_SECONDS: int = 3
-    DEFAULT_MAX_RETRIES: int = 3
     DEFAULT_PAGE_SIZE: int = 100
 
-    def __init__(self, max_retries: int = DEFAULT_MAX_RETRIES):
+    def __init__(self) -> None:
+        # Pacing is the process-wide _ARXIV_RATE_LIMITER's job; the client's
+        # own per-instance delay would only add to it.
         self.client = arxiv.Client(
-            page_size=self.DEFAULT_PAGE_SIZE,
-            delay_seconds=self.DEFAULT_DELAY_SECONDS,
-            num_retries=max_retries,
+            page_size=self.DEFAULT_PAGE_SIZE, delay_seconds=0, num_retries=0
         )
+        session = getattr(self.client, "_session", None)
+        if isinstance(session, requests.Session):
+            adapter = _TimeoutAdapter()
+            session.mount("https://", adapter)
+            session.mount("http://", adapter)
 
-    def download_paper(self, arxiv_id: str, papers_dir: Path) -> Path:
+    def download_paper(
+        self, arxiv_id: str, papers_dir: Path, *, folder: str | None = None
+    ) -> Path:
+        """Download the PDF into ``papers_dir/<folder>`` (default: the resolved,
+        versioned id)."""
         try:
             paper = self._fetch_single_paper(arxiv_id)
-            safe_id = paper.get_short_id().replace(".", "_")
+            safe_id = folder or re.sub(r"[./]", "_", paper.get_short_id())
             paper_dir = papers_dir / safe_id
             paper_dir.mkdir(parents=True, exist_ok=True)
-            filename = f"{safe_id}.pdf"
-            pdf_path = Path(
-                paper.download_pdf(dirpath=str(paper_dir), filename=filename)
-            )
+            pdf_path = paper_dir / f"{safe_id}.pdf"
+            self._download(str(paper.pdf_url), pdf_path)
             logger.info("Successfully downloaded PDF to: '%s'", pdf_path)
             return pdf_path
         except ArxivNotFoundError:
@@ -141,6 +141,25 @@ class ArxivHandler:
             raise ArxivDownloadError(
                 f"Failed to download paper '{arxiv_id}': {str(e)}"
             ) from e
+
+    @staticmethod
+    def _download(url: str, pdf_path: Path) -> None:
+        """Stream the PDF with timeouts and a size cap (``urlretrieve``, used
+        by the arxiv library, has neither), paced by the arXiv rate limiter;
+        an error's Retry-After (capped) holds later arXiv requests."""
+        _ARXIV_RATE_LIMITER.acquire()
+        with requests.get(url, stream=True, timeout=_ARXIV_TIMEOUT) as response:
+            try:
+                response.raise_for_status()
+            except requests.HTTPError as e:
+                _ARXIV_RATE_LIMITER.penalize(arxiv_retry_after_seconds(e))
+                raise
+            save_pdf(
+                response.iter_content(chunk_size=CHUNK_BYTES),
+                pdf_path,
+                source=url,
+                declared_length=response.headers.get("Content-Length"),
+            )
 
     def fetch_metadata(self, arxiv_id: str) -> ArxivMetadata:
         try:
@@ -189,7 +208,7 @@ class ArxivHandler:
                 f"Paper not found for arXiv ID: '{arxiv_id}'"
             ) from e
         except Exception as e:
-            _ARXIV_RATE_LIMITER.penalize(_retry_after_seconds(e))
+            _ARXIV_RATE_LIMITER.penalize(arxiv_retry_after_seconds(e))
             raise ArxivPaperError(
                 f"An unexpected error occurred while fetching '{arxiv_id}': {e}"
             ) from e
@@ -212,14 +231,7 @@ class ArxivHandler:
             pdf_url=HttpUrl(paper.pdf_url) if paper.pdf_url else None,
         )
 
-    # Minimum raw-title similarity (on top of an exact normalized match) before
-    # we trust an arXiv title-search hit. Guards against aggressive normalization
-    # collapsing two genuinely different titles onto the same key, which would
-    # silently summarise the WRONG paper.
-    TITLE_SIMILARITY_THRESHOLD: float = 0.85
-
     def search_by_title(self, title: str, max_results: int = 10) -> str | None:
-        normalized_query_title = self._normalize_title(title)
         queries_to_try = [f'ti:"{title}"']
         if "-" in title:
             queries_to_try.append(f'ti:"{title.replace("-", " ")}"')
@@ -228,30 +240,41 @@ class ArxivHandler:
             try:
                 _ARXIV_RATE_LIMITER.acquire()
                 search = arxiv.Search(query=query, max_results=max_results)
+                # The closest matching title, not the first: a survey or a
+                # "Revisited" follow-up may be listed before the paper itself.
+                best: tuple[float, str] | None = None
                 for paper in self.client.results(search):
-                    if self._normalize_title(paper.title) != normalized_query_title:
-                        continue
-                    similarity = SequenceMatcher(
-                        None, title.lower(), paper.title.lower()
-                    ).ratio()
-                    if similarity < self.TITLE_SIMILARITY_THRESHOLD:
-                        logger.warning(
-                            "Rejecting low-similarity title match (%.2f) for '%s' "
-                            "vs '%s'.",
-                            similarity,
-                            title,
-                            paper.title,
-                        )
-                        continue
-                    return paper.get_short_id()
+                    if titles_match(title, paper.title):
+                        similarity = title_similarity(title, paper.title)
+                        if similarity == 1.0:
+                            return paper.get_short_id()
+                        if best is None or similarity > best[0]:
+                            best = (similarity, paper.get_short_id())
+                if best is not None:
+                    return best[1]
             except Exception as e:
-                _ARXIV_RATE_LIMITER.penalize(_retry_after_seconds(e))
+                _ARXIV_RATE_LIMITER.penalize(arxiv_retry_after_seconds(e))
                 logger.warning("Search query '%s' failed: %s", query, e)
                 continue
 
         logger.warning("No confident title match found for: '%s'", title)
         return None
 
-    @staticmethod
-    def _normalize_title(title: str) -> str:
-        return re.sub(r"[\s.-]+", "", title).lower()
+    def search(self, query: str, max_results: int) -> list[ArxivMetadata]:
+        """Papers matching an arXiv API query (``all:``/``ti:`` syntax or
+        free text), most relevant first. One attempt at the shared pace: a
+        failure raises ``ArxivPaperError`` for the caller to record."""
+        search = arxiv.Search(
+            query=query,
+            max_results=max_results,
+            sort_by=arxiv.SortCriterion.Relevance,
+        )
+        return self._collect(search, label=f"search '{query}'")
+
+    def _collect(self, search: arxiv.Search, *, label: str) -> list[ArxivMetadata]:
+        _ARXIV_RATE_LIMITER.acquire()
+        try:
+            return [self._paper_to_metadata(p) for p in self.client.results(search)]
+        except Exception as e:
+            _ARXIV_RATE_LIMITER.penalize(arxiv_retry_after_seconds(e))
+            raise ArxivPaperError(f"arXiv {label} failed: {e}") from e

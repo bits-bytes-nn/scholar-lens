@@ -11,13 +11,19 @@ the server fetch it on their behalf.
 rejecting any address that is loopback, private, link-local, or otherwise not a
 normal public unicast address. It raises :class:`UnsafeUrlError` on rejection so
 callers can convert it into a domain-specific error.
+
+:func:`upgrade_to_https` rewrites an ``http://`` URL to ``https://`` (same host,
+path and query). The pinned transports apply it to every request and redirect
+hop: the AWS Batch security group allows only HTTPS (443) egress, so a plain
+HTTP fetch would hang until its timeout there; upgrading keeps local and Batch
+runs identical and never sends a request in clear text.
 """
 
 from __future__ import annotations
 
 import ipaddress
 import socket
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 
 from .logger import logger
 
@@ -31,9 +37,34 @@ class UnsafeUrlError(ValueError):
     """Raised when a URL is rejected by the SSRF guard."""
 
 
+def upgrade_to_https(url: str) -> str:
+    """Return ``url`` with an ``http`` scheme rewritten to ``https``.
+
+    The host, path, query and fragment are kept; an explicit ``:80`` (the HTTP
+    default port) is dropped so the upgraded URL uses 443. Any other scheme is
+    returned unchanged (the guard rejects it separately).
+
+    Args:
+        url: The URL to upgrade.
+
+    Returns:
+        The ``https`` form of an ``http`` URL, otherwise ``url`` itself.
+    """
+    parts = urlsplit(url)
+    if parts.scheme.lower() != "http":
+        return url
+    netloc = parts.netloc
+    if parts.port == 80:
+        netloc = netloc.rsplit(":", 1)[0]
+    return urlunsplit(("https", netloc, parts.path, parts.query, parts.fragment))
+
+
 def _is_blocked_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
     return (
-        ip.is_private
+        # not is_global also covers shared/CGNAT space (100.64.0.0/10, used by
+        # some cloud metadata endpoints) and other special-purpose ranges.
+        not ip.is_global
+        or ip.is_private
         or ip.is_loopback
         or ip.is_link_local
         or ip.is_multicast
@@ -80,33 +111,7 @@ def assert_url_is_public(url: str) -> None:
     otherwise. DNS resolution failures are also treated as unsafe (fail closed).
     Performs DNS resolution — call at fetch time, not in hot constructors.
     """
-    assert_url_scheme_and_literal(url)
-    parts = urlsplit(url)
-    host = parts.hostname
-    # If the host is an IP literal, the pre-check already validated it.
-    try:
-        ipaddress.ip_address(host or "")
-        return
-    except ValueError:
-        pass
-
-    # Hostname: resolve and check every returned address (fail closed on error).
-    try:
-        infos = socket.getaddrinfo(host, parts.port or None, proto=socket.IPPROTO_TCP)
-    except socket.gaierror as e:
-        raise UnsafeUrlError(f"Could not resolve host '{host}': {e}") from e
-    addresses = {info[4][0] for info in infos}
-    if not addresses:
-        raise UnsafeUrlError(f"Host '{host}' resolved to no addresses.")
-    for addr in addresses:
-        try:
-            ip = ipaddress.ip_address(addr)
-        except ValueError:
-            continue
-        if _is_blocked_ip(ip):
-            raise UnsafeUrlError(
-                f"URL '{url}' resolves to a non-public address ({addr})."
-            )
+    resolve_validated_ip(url)
 
 
 def is_url_public(url: str) -> bool:
@@ -117,6 +122,18 @@ def is_url_public(url: str) -> bool:
     except UnsafeUrlError as e:
         logger.debug("Blocked non-public URL '%s': %s", url, e)
         return False
+
+
+def is_temporary_dns_failure(error: BaseException) -> bool:
+    """A resolver hiccup (``EAI_AGAIN``) somewhere in the cause chain: the host
+    may well exist, so the failure is an outage, not a bad URL (a host that
+    does not exist, ``EAI_NONAME``, is not temporary)."""
+    seen: BaseException | None = error
+    while seen is not None:
+        if isinstance(seen, socket.gaierror) and seen.errno == socket.EAI_AGAIN:
+            return True
+        seen = seen.__cause__ or seen.__context__
+    return False
 
 
 def resolve_validated_ip(url: str) -> str | None:

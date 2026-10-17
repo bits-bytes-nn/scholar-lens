@@ -53,7 +53,7 @@ def _add_file_handler(logger_obj: logging.Logger, formatter: logging.Formatter) 
         for h in logger_obj.handlers
     ):
         return
-    file_handler = logging.FileHandler(log_file_path, encoding="utf-8")
+    file_handler = logging.FileHandler(log_file_path, encoding="utf-8", delay=True)
     file_handler.setFormatter(formatter)
     logger_obj.addHandler(file_handler)
 

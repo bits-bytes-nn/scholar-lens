@@ -9,6 +9,7 @@ import pytest
 from pydantic import ValidationError
 
 from scholar_lens.configs import Code, Config, Explanation, Github
+from scholar_lens.configs import TechGuide as TechGuideConfig
 from scholar_lens.src.constants import LanguageModelId
 
 
@@ -39,6 +40,25 @@ class TestConfigValidation:
         )
         assert e.max_total_tokens is None
 
+    def test_every_artifact_has_a_default_token_cap(self) -> None:
+        config = Config()
+        for section in (config.explanation, config.summary, config.tech_guide):
+            assert section.max_total_tokens
+
+    def test_guide_research_defaults_read_the_top_results_of_each_query(
+        self,
+    ) -> None:
+        # Pages are taken round-robin across the queries, so this many reads
+        # each planned query's (each research intent's) top results.
+        guide = Config().tech_guide
+        assert guide.fetch_top_results >= 2 * guide.max_research_queries
+
+    @pytest.mark.parametrize("value", [2, 31])
+    def test_guide_max_sections_is_bounded(self, value: int) -> None:
+        with pytest.raises(ValidationError):
+            TechGuideConfig(max_sections=value)
+        assert TechGuideConfig(max_sections=20).max_sections == 20
+
     def test_category_labels_default_and_override(self) -> None:
         assert Github().review_category == "Paper Reviews"
         assert Github().summary_category == "Paper Summaries"
@@ -49,27 +69,11 @@ class TestConfigValidation:
         assert gh.tech_guide_category == "Guides"
 
 
-class TestGithubCoverImages:
-    def test_known_category_maps_to_configured_image(self) -> None:
-        gh = Github(
-            cover_images={"language-models": "language-models.jpg"},
-            default_cover_image="default.jpg",
-        )
-        assert gh.cover_image_for("Language Models") == "language-models.jpg"
-
-    def test_slug_normalisation_is_case_and_space_insensitive(self) -> None:
-        gh = Github(cover_images={"multimodal-learning": "mm.jpg"})
-        assert gh.cover_image_for("  Multimodal   Learning ") == "mm.jpg"
-
-    def test_unknown_category_falls_back_to_default(self) -> None:
-        gh = Github(default_cover_image="fallback.jpg")
-        assert gh.cover_image_for("Quantum Widgets") == "fallback.jpg"
-
-    def test_none_cover_images_coerced_to_empty_dict(self) -> None:
-        # Mirrors a YAML key written as `cover_images:` with no value.
-        gh = Github(cover_images=None)  # type: ignore[arg-type]
-        assert gh.cover_images == {}
-        assert gh.cover_image_for("anything") == "default.jpg"
+class TestGithubConfig:
+    def test_cover_keys_are_gone(self) -> None:
+        # Covers come from the blog's post conventions now; stale keys fail.
+        with pytest.raises(ValueError):
+            Github(cover_images={"x": "y.jpg"})  # type: ignore[call-arg]
 
 
 class TestConfigLoading:
@@ -100,11 +104,37 @@ class TestConfigLoading:
         config = Config.from_yaml(str(cfg_file))
         assert config.resources.project_name == "scholar-lens"
 
+    @pytest.mark.parametrize(
+        "model_id",
+        [
+            "anthropic.claude-opus-5-5",
+            "anthropic.claude-sonnet-5-5",
+            "anthropic.claude-haiku-5-5",
+            "anthropic.claude-fable-5-1",
+        ],
+    )
+    @pytest.mark.parametrize("effort", ["low", "medium", "high", "xhigh", "max"])
+    def test_latest_models_and_efforts_selectable(
+        self, tmp_path: Path, model_id: str, effort: str
+    ) -> None:
+        cfg_file = tmp_path / "config.yaml"
+        cfg_file.write_text(
+            f"summary:\n  summary_model_id: {model_id}\n  thinking_effort: {effort}\n",
+            encoding="utf-8",
+        )
+        config = Config.from_yaml(str(cfg_file))
+        assert config.summary.summary_model_id.value == model_id
+        assert config.summary.thinking_effort == effort
+
+    def test_unknown_effort_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            Explanation(thinking_effort="extreme")  # type: ignore[arg-type]
+
     def test_invalid_model_id_rejected(self, tmp_path: Path) -> None:
         cfg_file = tmp_path / "config.yaml"
         cfg_file.write_text(
             "explanation:\n" "  paper_finalization_model_id: not-a-real-model\n",
             encoding="utf-8",
         )
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError, match="paper_finalization_model_id"):
             Config.from_yaml(str(cfg_file))

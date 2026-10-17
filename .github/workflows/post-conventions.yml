@@ -1,0 +1,47 @@
+name: Post conventions
+
+# The blog owns _data/post_conventions.yml; assets/post_conventions.yml is the
+# copy baked into the job image. Runs on changes here and weekly, so a change
+# on the blog side is caught too. The scheduled run fails when BLOG_REPO is
+# unset instead of passing without checking anything.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "0 0 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: post-conventions-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  drift:
+    name: Post conventions match the blog
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - name: Install checker dependencies
+        run: python -m pip install --quiet requests==2.32.5 pyyaml==6.0.3  # as in poetry.lock
+      - name: Compare with the blog's _data/post_conventions.yml
+        env:
+          BLOG_REPO: ${{ vars.BLOG_REPO }}
+          BLOG_BRANCH: ${{ vars.BLOG_BRANCH }}
+          GITHUB_TOKEN: ${{ secrets.BLOG_READ_TOKEN || github.token }}
+          SCHEDULED: ${{ github.event_name == 'schedule' }}
+        run: |
+          if [ "$SCHEDULED" = "true" ]; then
+            python scripts/check_post_conventions.py --require-repo
+          else
+            python scripts/check_post_conventions.py
+          fi

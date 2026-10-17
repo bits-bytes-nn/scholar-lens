@@ -1,174 +1,182 @@
 <div align="center">
 
-# 👩‍🏫 Scholar-Lens
+# Scholar-Lens
 
-**AI/ML 논문과 기술 문서를 발행 가능한 콘텐츠로 — 논문 리뷰, 요약, 기술 가이드.**
+**AI/ML 논문과 기술 문서를 블로그에 바로 올릴 수 있는 글로 바꿉니다. 심층 리뷰, 간결한 요약, 실습형 기술 가이드, 연구 주제의 논문 서베이를 만듭니다.**
 
-CLI · AWS Batch · Slack 봇으로 구동 · Amazon Bedrock (Claude) 기반.
+로컬이나 AWS Batch에서 실행하며, 사람과 에이전트(OpenClaw, Claude Code, Codex)가 같은 CLI를 씁니다. Amazon Bedrock의 Claude로 동작합니다.
 
 [![CI](https://github.com/bits-bytes-nn/scholar-lens/actions/workflows/ci.yml/badge.svg)](https://github.com/bits-bytes-nn/scholar-lens/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.12%2B-blue)
 ![AWS CDK](https://img.shields.io/badge/IaC-AWS%20CDK-orange)
 ![Bedrock](https://img.shields.io/badge/LLM-Amazon%20Bedrock%20(Claude)-green)
 
-🇺🇸 [English README](./README.md)
+[English README](./README.md) · [설계 문서](./docs/design.md)
 
 ![Sample](./assets/sample.png)
 
 </div>
 
----
-
-## 무엇을 하나요
-
-Scholar-Lens는 논문 또는 문서 URL 묶음으로부터 세 가지 산출물을 생성합니다.
+## 하는 일
 
 | 산출물 | 입력 | 출력 |
 | --- | --- | --- |
-| 📝 **리뷰** | 논문 1개 (arXiv ID 또는 PDF URL) | 멀티 스테이지 LangGraph 워크플로우로 섹션별 심층 해설 (직관 → 형식화 → 코드) |
-| 📄 **요약** | 논문 1개 (arXiv ID 또는 PDF URL) | 다섯 섹션 간결 요약 (동기 · 해법 · 구현 · 결과 · 의의) |
-| 📚 **기술 가이드** | 문서 URL 1개 이상 | 출처에 근거한 실습형 기술 가이드 / 튜토리얼 |
+| **리뷰** | arXiv ID 또는 논문 PDF URL(코드 저장소 선택) | 일반 DS/MLE 독자를 위한 절별 리뷰입니다. 쉬운 내용은 짧게, 어려운 내용은 직관 → 수식 → 작은 예제 순으로 쌓아 올리며 그림, 표, TL;DR, 한계와 시사점을 포함합니다 |
+| **요약** | arXiv ID 또는 논문 PDF URL | TL;DR과 다섯 개의 짧은 절(연구 배경, 제안 방법, 구현 방식, 실험 결과, 의의와 한계) |
+| **기술 가이드** | 문서 URL, 참고 자료(논문, 설계 문서, 심층 분석 글) 또는 둘 다 | 설치와 사용법, 내부 동작 방식과 설계 이유, 주요 기능의 의미, 더 큰 시스템에 통합하는 방법을 다루는 출처 기반 가이드. 하위 페이지와 웹 검색으로 조사합니다 |
+| **논문 서베이** | 연구 주제(필수 논문, 참고 자료, 연도 범위 선택), 이어서 계획 파일 | `survey plan`: 고칠 수 있는 JSON 계획 파일. OpenAlex와 arXiv에서 찾은 주제의 주요 논문을 시간순 계보로 묶고 역할, 선정 이유, 인용 관계를 적습니다. `survey write`: Lilian Weng의 블로그 같은 긴 글. 계보별 논문을 설명하고 서로 잇고, 논문의 그림과 핵심 수식, 연표와 비교표, 통찰, 저자-연도 인용을 담습니다 |
 
-모든 산출물은 블로그에 바로 올릴 수 있는 깔끔한 Markdown이며, S3에 업로드하고 Jekyll 블로그에 PR로 발행할 수 있습니다.
+모든 글은 대상 블로그의 규칙을 따르는 Jekyll Markdown이며, 저장하기 전에 검사합니다. 규칙을 어긴 글은 게시하지 않고 거부합니다. 글은 로컬 파일로 저장되고, 설정에 따라 S3에 올라가며 블로그 저장소에 PR로 제안됩니다.
 
-## 핵심 특징
-
-- **모든 AI/ML 논문** — arXiv ID *또는* 임의의 논문 **PDF URL**을 받습니다(PDF가 아닌 URL은 거부). arXiv 전용이 아닙니다.
-- **환각 없이 근거 기반** — 인용은 Crossref / Semantic Scholar로 해석하고 제목 유사도 게이트를 거칩니다. 작성기는 소스에 등장한 URL만 링크할 수 있고, 기술 가이드는 섹션별 사실 검증 패스를 돕니다.
-- **최신 Claude** — Amazon Bedrock의 Claude Opus 4.8 / Sonnet 5 / Haiku 4.5 + adaptive thinking, 단계별 설정 가능.
-- **코드 인식 리뷰** — GitHub 저장소 분석 + FAISS 시맨틱 검색(선택).
-- **온디맨드 Slack 봇** — 논문이나 문서 URL과 함께 멘션하면, LLM이 *명시적* 요청을 파싱하고 Batch 작업을 실행한 뒤 스레드에 결과 링크를 회신합니다. AWS에 서버리스(Slack Events API → Lambda)로 호스팅되어 로컬에서 상주 프로세스를 띄울 필요 없이 항상 동작합니다.
-- **확장성과 관찰성** — AWS Batch(온디맨드 + 스팟), CloudWatch 알람, EventBridge→SNS 실패 알림, 암호화 SecureString 시크릿.
-
-## 아키텍처
-
-### 생성 파이프라인
-
-세 산출물은 공통 프런트엔드(해석 → 파싱 → 추출)를 공유한 뒤 분기합니다.
+## 동작 방식
 
 ![생성 파이프라인](./docs/diagrams/pipeline.png)
 
-### AWS 인프라
-
-모든 작업은 AWS Batch에서 컨테이너 잡으로 실행되며, 동일한 잡을 CLI · Slack 봇 · `run_batch.py`가 제출합니다.
+- **리뷰**: 계획 단계가 논문 전체를 읽고 집필 계획을 만듭니다. 계획에는 절 구성, 반드시 다룰 항목, 난이도, 선수 개념, 개념별 담당 절, 그림 배정, 용어집이 들어갑니다. 각 절은 지시서대로 쓴 뒤 지시서에 비추어 검수하고, 빠진 항목이 없을 때까지 고칩니다. 마지막으로 글 전체를 한 번 편집해 용어, 중복, 누락을 바로잡습니다.
+- **요약**: 파싱한 논문 전체를 입력으로 한 번 호출합니다.
+- **가이드**: 조사(문서, 참고 자료, 그리고 사용법·내부 구조와 설계·운영 통합을 찾는 웹 검색) → 관련성 판정 → 개요 → 절별 작성·평가·사실 확인 순서입니다. 명령, 플래그, 기본값은 공식 문서가 정하고, 개념·내부 구조·아키텍처는 논문, 설계 문서, 신뢰할 수 있는 기술 글도 근거로 씁니다.
+- **서베이 계획**: 사용자가 준 참고 자료(블로그 글, 서베이 글, 논문 페이지)를 한 번 읽습니다. 범위 호출이 주제와 그 발췌를 보고 계보, 검색어, 주요 논문 제목을 제안하면 OpenAlex와 arXiv 검색(arXiv 메타데이터는 DataCite로 확인, 키가 있으면 Semantic Scholar 인용 수)으로 후보를 모으고, 참고 자료 자신이나 거기서 링크한 논문(arXiv·doi.org 링크, `arXiv:` ID)도 후보에 더한 뒤 코드가 병합·연결·순위를 정합니다. 선정 호출이 설정 범위 안에서 논문을 고르면 코드가 검증한 뒤 계획을 저장합니다.
+- **서베이 쓰기**: 고친 계획을 다시 검증하고 손으로 더한 논문은 DataCite·OpenAlex로 채웁니다. 논문마다 카드를 만들어 캐시합니다(핵심 논문은 arXiv HTML 전문, 보조 논문은 초록으로 한 번 호출). 카드의 숫자·수식·그림은 코드가 논문과 대조합니다. 개요 호출이 절(도입, 계보별 절, 필요하면 계보를 가로지르는 절, 비교, 통찰)을 정하면 코드가 논문 수로 절 길이를 정하고, 각 절은 가이드처럼 쓰기·평가·한 번 수정·카드 기준 사실 확인을 거칩니다. 분야를 짜는 절(도입, 계보를 가로지르는 절, 비교, 통찰)은 계획의 참고 자료 글 발췌도 설명 자료로 받습니다(논문 사실의 근거로는 쓰지 않고, 견해는 그 글의 이름으로 밝힘). 코드가 `[@id]` 인용 키를 저자-연도 링크로 바꾸고 연표, 비교표, 참고 문헌, 참고 자료 글 목록을 만듭니다.
+- **발행**: 수식과 Markdown 정규화, 논문 자신의 그림을 블로그로 복사(그 밖의 이미지는 원본 링크로 둠), 블로그 규칙 검사를 거친 뒤 S3에 올리고, 글마다 고정된 브랜치로 GitHub PR을 엽니다.
 
 ![AWS 아키텍처](./docs/diagrams/aws-architecture.png)
 
-### 핵심 컴포넌트
+단계별 동작, 규칙, 설정 키는 [docs/design.md](./docs/design.md)에 있습니다.
 
-| 모듈 | 역할 |
-| --- | --- |
-| `paper_source.py` | arXiv ID 또는 논문 PDF URL을 `PaperSource`로 해석; URL 소스가 PDF를 제공하는지 검증(SSRF 가드 포함). |
-| `parser.py` · `content_extractor.py` | HTML/PDF 파싱 + 그림 추출; 인용 / 속성 / 목차 구조화 추출. |
-| `citation_metadata.py` · `citation_summarizer.py` | 추상 우선 참고문헌 해석(Crossref / Semantic Scholar), 속도 제한 + 제목 게이트. |
-| `explainer.py` | `ExplainerGraph` — 멀티 스테이지 LangGraph 리뷰 워크플로우. |
-| `summarizer.py` | `PaperSummarizer` — 다섯 섹션 요약. |
-| `tech_guide.py` · `web_research.py` | 문서 URL 조사(+ 하위 페이지 + 웹 검색) 후 근거 기반 가이드 작성. |
-| `code_retriever.py` | 저장소 클론 + 시맨틱 코드 검색(FAISS). |
-| `publisher.py` | 산출물 무관 S3 업로드 + Jekyll 블로그 PR. |
-| `slack/` | 온디맨드 Paper Bot(의도 파싱 → Batch 디스패치). |
+## 빠른 시작
 
-> 📖 데이터 흐름, 모듈 레퍼런스, 프롬프트, 인용 파이프라인, 인프라, Slack Lambda 아키텍처 등 내부 구조 심층 설명은 **[설계 문서](./docs/design.md)**를 참고하세요.
+사전 조건:
 
-## 기술 스택
+- Python 3.12 이상과 [Poetry](https://python-poetry.org/)
+- `bedrock_region_name` 리전에서 설정한 모델(기본값: Claude Opus 5.5, Sonnet 5.5, Haiku 5.5)에 접근할 수 있는 AWS 프로필
+- PDF 파싱용 `UPSTAGE_API_KEY`(arXiv가 아닌 소스와 HTML 대체 경로에 필요)
+- 선택: 가이드 웹 조사용 `TAVILY_API_KEY` 또는 `BRAVE_API_KEY`, 블로그 PR용 `GITHUB_TOKEN`, 인용 조회 한도를 높이는 `CROSSREF_MAILTO`(Crossref·OpenAlex polite pool), `OPENALEX_API_KEY`(키 없이 IP당 하루 약 100회인 OpenAlex 검색 한도를 높임)와 `SEMANTIC_SCHOLAR_API_KEY`(키가 있을 때만 Semantic Scholar 조회)
 
-Python 3.12+ · AWS CDK · Docker · Amazon Bedrock · LangChain / LangGraph · PyMuPDF · BeautifulSoup4 · FAISS · Pydantic.
+```bash
+git clone https://github.com/bits-bytes-nn/scholar-lens.git && cd scholar-lens
+poetry install --with dev
+cp scholar_lens/configs/config-template.yaml scholar_lens/configs/config.yaml   # 편집
+cp .env.template .env                                                           # 키 입력
+poetry run python -m scholar_lens summarize 2106.09685 --no-pr
+```
 
 ## 설정
 
-템플릿을 복사해 편집합니다.
+`scholar_lens/configs/config.yaml`(Git 제외)은 엄격하게 검증하며, 모르는 키가 있으면 오류입니다. 템플릿에 모든 키와 기본값이 있습니다. 파일이 없으면 로컬 실행은 이 기본값(S3 버킷 없음, GitHub 연동 꺼짐)과 기본 AWS 자격 증명으로 동작하므로, Bedrock을 호출하고 비용이 듭니다. 주로 바꾸는 값은 다음과 같습니다.
+
+- `resources`: `profile_name`, `bedrock_region_name`, `s3_bucket_name`(`cdk deploy`와 Batch 실행에 필요. 없으면 `status`는 저장된 결과 없이 Batch 상태만 보여 줌), `email_address`(SNS 알림)
+- `resources.github`: `enabled`, `repo_name`(예: `owner/owner.github.io`), `base_branch`, `branch_prefix`, `author_email`(이 도구의 커밋 정체성. 글을 다시 생성하려면 필요하며, 없으면 재실행이 슬러그가 같은 글만 바꾸고 브랜치에 남은 예전 사본을 지우지 않음), 산출물 유형별 카테고리 이름
+- 단계별 `*_model_id`, `thinking_effort`, 품질 기준, `max_total_tokens` 비용 상한(기본값: 리뷰 800만, 요약 100만, 가이드 300만, 서베이 계획 30만, 서베이 쓰기 450만 토큰(`survey.write_max_total_tokens`))
+- `survey`: `min_papers`·`max_papers`(6·25), `candidate_pool`(60), 쓰기 단계의 `chars_per_core_paper`·`chars_per_supporting_paper`(3,000·800), `min_total_chars`·`max_total_chars`(20,000·70,000), `card_source_chars`
+- `resources.github.survey_category`(`Paper Surveys`): 블로그 글 규칙에 있는 유형이어야 하며, 없으면 `survey write`가 모델을 부르기 전에 멈춥니다
+- `output_language`(기본값 `Korean`)
+
+## CLI
 
 ```bash
-cp scholar_lens/configs/config-template.yaml scholar_lens/configs/config.yaml
+poetry run python -m scholar_lens review 2106.09685 --repo-url "https://github.com/microsoft/LoRA"
+poetry run python -m scholar_lens summarize "https://openreview.net/pdf?id=nZeVKeeFYf9" --no-pr
+poetry run python -m scholar_lens guide "https://docs.vllm.ai/en/latest/getting_started/quickstart.html" \
+  "https://docs.vllm.ai/en/latest/serving/openai_compatible_server.html" \
+  --reference "https://arxiv.org/abs/2309.06180" \
+  --reference "https://blog.vllm.ai/2025/01/27/v1-alpha-release.html"
+poetry run python -m scholar_lens survey plan "preference optimization for LLM alignment" \
+  --paper 2305.18290 --since 2017 \
+  --reference "https://huggingface.co/blog/rlhf" \
+  --reference "https://arxiv.org/abs/2312.14925"                # papers/survey-<slug>/plan.json 저장
+poetry run python -m scholar_lens survey write \
+  --plan papers/survey-preference-optimization-for-llm-alignment/plan.json --no-pr
+poetry run python -m scholar_lens review 2106.09685 --remote     # AWS Batch에 제출
+poetry run python -m scholar_lens status <job-id> --wait         # 원격 작업 조회
 ```
 
-```yaml
-resources:
-  project_name: scholar-lens
-  stage: dev
-  profile_name: your-profile
-  default_region_name: ap-northeast-2
-  bedrock_region_name: us-west-2
-  s3_bucket_name: your-bucket
-  github:
-    enabled: true
-    repo_name: owner/owner.github.io
-    review_category: Paper Reviews     # 블로그 카테고리 탭 라벨(설정 가능)
-    summary_category: Paper Summaries
-    tech_guide_category: Tech Guides
+| 옵션 | 명령 | 효과 |
+| --- | --- | --- |
+| `--repo-url URL` | review, summarize | 논문 코드에 근거해 서술합니다(반복 가능) |
+| `--parse-pdf` | review, summarize | arXiv HTML이 있어도 PDF를 파싱합니다 |
+| `--reference URL` | guide | 바탕으로 삼을 참고 자료(논문, 설계 문서, 심층 분석 글, 발표 페이지)입니다. HTML 페이지나 arXiv 링크여야 하며 그 밖의 PDF는 읽지 않습니다. 반복 가능하고, 위치 인자인 문서 URL(0개 이상)의 앞뒤 어디에나 둘 수 있습니다. 두 쪽에 모두 준 URL은 문서로 다루며 한 번만 나열합니다. 항상 쓰고 출처 목록에 넣지만 공식 문서로 다루지 않습니다 |
+| `--search-query Q` | guide | 웹 검색어를 지정합니다(반복 가능, 자동으로 계획한 검색어를 대신함) |
+| `--no-subpages` | guide | 하위 페이지를 따라가지 않습니다 |
+| `--paper ID_OR_URL` | survey plan | 서베이에 꼭 넣을 논문입니다. arXiv ID나 URL, 또는 DOI(반복 가능) |
+| `--reference URL` | survey plan | 참고할 자료입니다(반복 가능). 블로그 글, 서베이·리뷰 글, 논문 페이지를 HTML 페이지나 arXiv 링크로 줍니다. 한 번 읽어 발췌로 범위를 잡고, 자료 자신이거나 자료가 링크한 논문(arXiv abs·pdf·html, doi.org 링크, 본문의 `arXiv:<id>`)을 후보에 더합니다. 이 후보는 `[REFERENCED by N]`으로 표시하고, 그 논문을 가리킨 자료 수는 주제 근거(풀 안의 피인용 수와 검색어 적중)가 같은 후보 사이의 순서를 정하며, 필수 논문은 아닙니다. 읽지 못한 자료는 실패가 아니라 계획 메모로 남습니다. 계획은 자료를 `references[]`로 저장하고, `survey write`가 그중 글(article)을 다시 읽어 도입·가로지르는 절·비교·통찰 절에 주고 `### 참고 자료`(영어 출력은 `### Further reading`)로 나열합니다 |
+| `--since YEAR`, `--until YEAR` | survey plan | 이 연도의 논문만 다룹니다(필수 논문은 예외) |
+| `--plan PATH_OR_S3_URI` | survey write | 계획 파일입니다. 로컬 경로 또는 설정한 버킷의 `s3://<bucket>/<key>`이며, `--remote`이면 로컬 계획을 먼저 `<s3_prefix>/surveys/<slug>/plan-<sha256>.json`에 올립니다 |
+| `--no-pr` | review, summarize, guide, survey write | 글은 저장(·업로드)하되 PR은 열지 않습니다 |
+| `--remote` | review, summarize, guide, survey plan, survey write | AWS Batch에 제출하고 작업 ID를 돌려줍니다 |
+| `--wait`, `--timeout S` | status | 작업이 끝나거나 `S`초가 지날 때까지 조회합니다 |
 
-explanation:
-  paper_synthesis_model_id: anthropic.claude-opus-4-8   # 최신 Claude Opus
-summary:
-  summary_model_id: anthropic.claude-opus-4-8
-tech_guide:
-  writing_model_id: anthropic.claude-opus-4-8
-  verify_grounding: true               # 섹션별 사실 검증 패스
+`survey plan`은 글을 쓰지 않습니다. `JobResult`의 `plan_path`(로컬 `papers/survey-<slug>/plan.json`. `--remote` 실행은 컨테이너가 사라지므로 비어 있음)와 `s3_uri`(S3 사본. 원격 실행 뒤에는 이 값을 `survey write --plan`에 넘김)가 계획 파일입니다. 계획을 고친 뒤(논문 빼기·더하기·옮기기, 역할 바꾸기, 계보 이름 바꾸기) `survey write --plan`에 넘깁니다. 계획 단계를 다시 실행하면 내용이 다른 기존 계획은 `plan.<UTC 시각>.json`으로 남습니다. 손으로 더하는 논문은 `id`(arXiv ID나 URL, 또는 DOI), `lineage`, `role`만 있으면 되고, 제목·저자·연도·URL은 쓰기 단계가 채웁니다. 손으로 더하는 참고 자료는 `url`만 있으면 되고 `kind`는 URL로 정합니다(arXiv·doi.org 링크는 `paper`, 나머지는 `article`). 쓰기 단계는 `article`만 읽습니다. 계획에는 `core` 논문이 하나 이상 있어야 합니다. 논문 카드는 논문, 카드 스키마, 모델, 언어와 카드 프롬프트·`card_source_chars`·번역 지침의 `-<variant>` 요약값별로 캐시하므로(셋 중 하나가 바뀌면 카드를 다시 만듦)(로컬 `papers/survey-cards/`, S3 `<s3_prefix>/surveys/cards/`) 다시 실행하거나 같은 논문을 다루는 다른 서베이가 재사용합니다. 계획 필드와 쓰기 단계는 [설계 문서](./docs/design.md#43-논문-서베이)에 있습니다.
 
-output_language: Korean
-```
+모든 명령은 stdout에 JSON 객체 하나(실행은 `JobResult`, `--remote`는 `job_id`, `status`는 Batch 상태와 저장된 결과)를 출력하고, 로그는 stderr로 보냅니다. 종료 코드는 `0` 성공 또는 제출, `1` 실패, `2` 입력 거부, `3` 진행 중, `4` 명령 자체의 실패입니다. Batch `worker`는 자체 알림을 보낸 뒤 `10`(실패)이나 `11`(거부)로, Batch가 작업을 멈추면 `143`으로 끝납니다([상세](./docs/design.md#21-명령)). URL은 따옴표로 감쌉니다. zsh에서는 따옴표 없는 URL의 `?`가 glob으로 해석되어 명령이 실패합니다.
 
-전체 스키마는 [`scholar_lens/configs/config-template.yaml`](./scholar_lens/configs/config-template.yaml)를 참고하세요.
+## 에이전트에서 쓰기(OpenClaw, Claude Code, Codex)
 
-## 사용법
+에이전트도 같은 CLI를 씁니다. `~/.openclaw/workspace/skills/scholar-lens/SKILL.md` 스킬이 호출 방법, `--remote`를 쓸 때, 사용자가 게시를 요청하지 않으면 `--no-pr`이 기본이라는 점을 안내합니다. MCP 서버 대신 CLI와 스킬을 택한 이유는 실행이 수 분에서 한 시간까지 걸리기 때문입니다. `--remote`와 `status`로 이미 비동기 계약이 있고, 스킬 디렉터리는 Claude Code와 Codex에도 공유됩니다.
 
-### 준비
+## 블로그 규칙 검사
+
+글을 저장하기 전에 블로그의 `_data/post_conventions.yml`(사본 `assets/post_conventions.yml`) 규칙으로 검사합니다. error가 있으면 게시를 멈추고 글을 `*.rejected.md`로 남기며, warning은 PR 체크리스트가 됩니다([규칙](./docs/design.md#6-블로그-규칙과-검증)).
+
+## AWS 배포
+
+위 조건에 더해 Node.js, Docker, AWS CDK CLI와 `resources.s3_bucket_name`에 적은 기존 S3 버킷이 필요합니다(스택은 버킷을 만들지 않습니다. 작업 역할이 버킷 전체 목록을 볼 수 있으므로 Scholar Lens 전용 버킷을 씁니다). `resources.profile_name`과 같은 프로필을 넘깁니다.
 
 ```bash
-poetry install --with dev          # 의존성 + 개발/테스트 도구
-cp .env.template .env               # 토큰 채우기(.env.template 참고)
-python scripts/deploy_infra.py      # AWS 인프라 배포(CDK)
+cdk bootstrap --profile <profile_name>           # 계정·리전당 한 번
+cdk deploy --profile <profile_name>              # cdk.json: poetry run python scripts/deploy_infra.py
+poetry run python scripts/put_secrets.py         # .env의 비밀값을 SSM SecureString에 기록
+poetry run python scripts/put_secrets.py github-token   # 비밀값 하나를 교체한 뒤
 ```
 
-### 산출물 생성 (CLI)
+Batch 작업은 마지막 배포 때 이미지에 넣은 `config.yaml`을 쓰므로, 설정을 고치면 `cdk deploy`를 다시 실행합니다([스택 상세](./docs/design.md#10-인프라)).
+
+스택의 1시간 비용 경보는 Batch 실행만 다룹니다. 로컬 실행은 CloudWatch 지표를 보내지 않으므로 출력된 결과의 `estimated_cost_usd`로 비용을 확인합니다([경보](./docs/design.md#11-관측성)).
+
+## 개발
 
 ```bash
-# 리뷰 — --source 는 arXiv ID 또는 논문 PDF URL
-python scholar_lens/main.py --source 2312.11805 --parse-pdf True
-python scholar_lens/main.py --source https://openreview.net/pdf?id=XXXX
-
-# 요약(다섯 섹션 간결 형식)
-python scholar_lens/main.py --source 2312.11805 --mode summarize
-
-# 문서 URL로부터 기술 가이드
-python scholar_lens/tech_guide_main.py \
-  --urls https://docs.framework.io/start https://docs.framework.io/api \
-  --search-queries "framework.io best practices"
-
-# AWS Batch 잡으로 제출
-python scripts/run_batch.py --source 2505.09388 --mode review \
-  --repo-urls https://github.com/org/repo
-```
-
-### Slack 봇
-
-봇은 **AWS에 서버리스로** 실행됩니다 — `python scripts/deploy_infra.py` + `cdk deploy`가
-API Gateway HTTP API 뒤의 리시버 Lambda와 워커 Lambda를 프로비저닝합니다. Slack 앱의
-**Event Subscriptions** Request URL을 리시버 주소(CDK 출력 `SlackEventsRequestUrl`)로 지정하고,
-`app_mention` + `message.im`을 구독한 뒤 `SLACK_BOT_TOKEN` / `SLACK_SIGNING_SECRET`을 설정하면 됩니다.
-로컬에 상주 프로세스를 띄울 필요가 없습니다.
-
-원하는 작업과 함께 봇을 멘션하세요 — 예: `review 2401.06066`,
-`summarize https://arxiv.org/pdf/2401.06066`, `guide https://docs.framework.io/start`.
-결과는 S3에 저장되고 블로그에 발행되며, 봇은 스레드에 상태와 링크를 회신합니다.
-
-```bash
-# 로컬 개발용 폴백: Events API 대신 Socket Mode로 봇 실행
-# (SLACK_BOT_TOKEN / SLACK_APP_TOKEN 필요, 앱에서 Socket Mode 활성화)
-python -m scholar_lens.slack.bot
-```
-
-> 💡 봇은 전용 Slack 앱에서 실행하여 같은 워크스페이스의 다른 봇과 토큰을 공유하지 않도록 하세요.
-
-## 테스트 & 품질
-
-```bash
-poetry run pytest tests/ --cov=scholar_lens --cov-report=term-missing  # 모든 AWS/네트워크 모킹
+poetry run pytest tests/ -W ignore::DeprecationWarning --cov=scholar_lens --cov=scripts --cov-fail-under=85   # CI와 같은 명령, AWS·네트워크 없음
 poetry run ruff check scholar_lens scripts tests
 poetry run black --check scholar_lens scripts tests
-poetry run mypy scholar_lens
-poetry run python scripts/ci_synth_check.py   # AWS 계정 없이 CDK synth 검증
+poetry run mypy scholar_lens scripts
+poetry run python scripts/ci_synth_check.py      # 가짜 계정으로 CDK synth
+actionlint                                       # GitHub 워크플로 검사
 ```
 
-CI(`.github/workflows/ci.yml`)는 푸시·PR마다 lint/format, pytest 매트릭스(Python 3.12 & 3.13),
-CDK synth 체크를 실행합니다.
+## 변경 이력
+
+- 가이드·서베이 절은 표적 수정 뒤 같은 평가 호출로 한 번 다시 평가합니다(표적 수정이 필요한 절마다 평가 호출 1회 추가). 고친 초안은 순위(통과, 게시 가능, 사실 문제 수, 점수, 문체 문제와 규칙 위반 순)가 고치기 전 초안보다 낮지 않을 때만 남기고, 낮으면 고치기 전 초안을 씁니다. 기준 미달 PR 메모는 다시 평가한 점수와 남은 문제, 표적 수정의 적용·되돌림·거부 여부를 적습니다. 소프트 토큰 예산에 이르면 다시 평가를 건너뛰고 메모에 고치기 전 문제를 남깁니다. 발행 직전에는 블로그 글 규칙을 다시 읽어, 실행 중에 블로그가 규칙을 바꿨으면(주제 커버 등) 현재 규칙으로 검증하고 `cover`를 분류에서 다시 정하며 PR에 "Blog conventions changed during the run" 메모를 남깁니다. 다시 읽지 못하면 시작 때 규칙을 씁니다.
+- 요약은 이모지 없는 `##` 헤딩을 씁니다: 연구 배경, 제안 방법, 구현 방식, 실험 결과, 의의와 한계. Batch 실행 템플릿은 루트 볼륨(`/dev/xvda`, 30 GiB gp3)을 AWS 관리형 EBS 키로 암호화하고, 컴퓨팅 환경은 실행 템플릿의 최신 버전 번호를 지정하므로 템플릿이 바뀌면 `cdk deploy`가 컴퓨팅 환경을 교체 없이 인프라 갱신합니다. 반영하려면 다시 배포하세요.
+- 게시 검사가 블로그 PR #99의 lint를 따릅니다. 인용문 안 펜스(`` > ``` ``)는 코드이므로 그 안의 `<태그>` 줄, `$$`, lightbox 예시를 더는 잡지 않고 그 안의 `$$`로 `use_math`를 켜지도 않습니다. 이 펜스는 같은 인용문의 닫는 표시에서 닫히고(맨 ```` ```markdown ```` 블록 안의 `` > ``` `` 줄은 그 예시의 일부), 열린 채 두면 인용문이 끝나는 빈 줄에서 닫히지 않은 펜스 오류가 됩니다. 표 구분선은 블로그처럼 칸마다 `-` 하나면 되고, `<ellipse>`·`<marker>`는 허용 HTML에서 빠졌습니다. `description`은 페이지 제목보다 길어야 하며, 이제 페이지 제목은 한국어 논문 글뿐 아니라 `seo_title`을 둔 모든 글에서 `seo_title`입니다(블로그 `<title>`과 같음).
+- 태그: 글마다 통제 태그는 기본 하나(논문·가이드·서베이 자신의 주제)이고, 방법이나 절 전체, 계보 전체가 다루는 주제일 때만 둘째를 답니다. 기존 태그의 표기는 그 태그가 논문 자신의 기여를 가리킬 때만 다시 씁니다. 가이드도 분류 호출이 `description`을 만들고, 발행 검증의 설명 규칙으로 확인해 한 번 다시 묻습니다(그래도 어기면 PR 메모, 마크업이 있으면 비워 블로그가 만듦). 게시를 막는 문제가 남은 요약은 표적 수정 호출을 한 번 받고, 문제가 줄고 새 문제나 구조 손실이 없을 때만 고친 글을 씁니다. 한국어 문체 규칙은 목록 앞 콜론이 붙은 "다"(`셋입니다:`)를 마침표로 바꾸게 합니다. 서베이 평가는 앞 절이 이미 설명한 내용을 다시 설명하는 대목을 막습니다. 가이드는 이전 버전 문서에만 나오는 명령·플래그·기본값을 넣지 않습니다. 논문 카드는 카드 스키마 4로 캐시합니다. 카드의 한계는 논문 자신의 한계만 적고(원문에 없으면 비움), 문장으로 쓴 결과 설정은 카드 문제이므로, 다음 `survey write`는 카드를 한 번 다시 만듭니다.
+- 논문 그림을 HTML(`<img src>`, 손으로 쓴 그림이나 lightbox)로 써도 Markdown 이미지처럼 블로그로 복사하고, 복사한 이미지를 여는 `<a href>` lightbox 링크도 복사본을 가리키게 바꿔 `href`와 `src`가 같게 둡니다.
+- 페이지, 이미지, PDF를 모두 HTTPS로 가져옵니다. Batch 보안 그룹은 443 포트 아웃바운드만 열므로 `http://` 요청과 리디렉션은 같은 호스트·경로의 `https://`로 바꿉니다(HTTPS가 없는 사이트는 가져오지 못함). arXiv HTML 페이지와 PDF 내려받기도 공용 arXiv 속도 제한기를 거치고, 서버의 `Retry-After`는 arXiv 요청을 최대 60초까지만 미룹니다. 가이드의 웹 검색이 실패하면(429, 5xx, 시간 초과) 다시 시도하지 않고 실패 횟수를 실행 메모로 남깁니다. Semantic Scholar 배치 요청은 100개씩(이전 500개) 보내 30초 제한 시간 안에 넉넉히 끝냅니다. 가이드의 제품 이름은 문서에 나오는 명령 이름에서만 정하고 사이트 호스트 이름으로 짐작하지 않습니다. Batch 컴퓨팅 환경은 `cdk deploy`마다 최신 ECS 최적화 AMI로 바뀝니다.
+- 블로그에 이미 있는 글을 다시 생성하면 이번 실행에서 모델이 어떤 제목이나 주제를 고르든 그 글의 파일 이름, URL, 이미지 이름, `date`와 주제(`categories`)를 그대로 씁니다. 바꿀 글은 슬러그로 찾고, 없으면 같은 브랜치(리뷰·요약은 arXiv ID, 가이드는 입력 URL, 서베이는 계획의 주제)의 이전 실행이 병합된 PR로 게시한 글로 찾으며, 그 최종 파일 이름으로 검증합니다. 블로그 동기화는 더 이상 글 이름을 바꾸지 않습니다. 실행이 보지 못한 게시본이 있으면 오류로 PR을 만들지 않고, 열린 PR에 다른 제목으로 남은 예전 사본은 지웁니다. 두 동작 모두 `resources.github.author_email`이 있어야 합니다.
+- 서베이 쓰기 예산 `survey.write_max_total_tokens`의 기본값이 450만 토큰입니다(이전 300만. 논문 22편 실행이 270만을 썼고 300만에서는 마지막 절들의 검사를 건너뛰었음). 이전에 복사한 `config.yaml`은 300만을 그대로 유지하므로, 새 기본값을 쓰려면 직접 고칩니다. 가이드·서베이 절의 수정 뒤에도 남은 차단 문제는 그 문제가 가리키는 문장만 고쳐 쓰는 호출을 한 번 더 합니다. 고친 결과가 규칙 위반을 더하거나 초안의 구조(헤딩·이미지·인용 키, 수식·표, 산문의 4분의 1 넘는 분량)를 잃으면 버리며, PR 메모에 그 문제들을 적습니다.
+- 생성한 글이 블로그 lint의 최신 규칙을 블로그와 같은 방식으로 따릅니다. 표의 첫 머리글 칸이 비면 오류이고("구분"이나 "모델"처럼 행 종류를 적음), 첫 칸이 빈 첫 행은 칸 하나가 맨 숫자(`85.2`. `85.2±0.3`은 아님)가 아니면 두 번째 머리글 행으로 봅니다. 번역투와 콜론이 붙은 문장 끝은 블로그의 예외(헤딩, 인용, 표 행, 이미지 대체 텍스트, 코드, 참고 문헌 목록)를 둔 게시 차단 오류입니다. `paper_author`에는 대소문자와 관계없이 "et al"을 쓸 수 없고, arXiv `paper_doi`에는 버전을 붙이지 않으며 DOI URL이나 `doi:` 접두어는 뗍니다. 태그는 끝의 "In"·"On"을 대문자로 두고(`Opt-In`) "."이나 "+"로 시작할 수 없습니다. 수식과 `use_math`는 들여쓴 코드 블록과 인용 블록 안의 펜스를 포함해 블로그 lint가 읽는 줄로 검사합니다. `http://`와 프로토콜 상대 링크·이미지 대상은 게시할 때 `https://`로 바꾸고, 남은 것은 블로그의 htmlproofer처럼 검증에서 실패합니다. MathJax 매크로 경고는 블로그의 `math.defined_macros`를 읽습니다.
+- `paper_doi`를 블로그 lint와 같은 규칙으로 검사합니다. 논문 글의 `paper_doi`는 맨 DOI(`10.<등록자>/<접미사>`, 공백·`?`·`#` 없음)여야 하고, 서베이·가이드에 `paper_author`나 `paper_doi`가 있으면 오류입니다.
+- `SEMANTIC_SCHOLAR_API_KEY`가 있으면 인용 요약이 Semantic Scholar의 초록도 쓰고(조회 순서의 마지막) Semantic Scholar 페이지 대신 논문의 arXiv DOI나 DOI를 링크하며, 서베이 계획은 Semantic Scholar의 인용 수, 학회명, 참고문헌을 더합니다(`arXiv.org` 학회명은 이미 아는 학회명을 덮어쓰지 않음). 공급자가 키를 거부하면(401/403) 그 실행 동안 그 공급자를 건너뛰고, 5xx는 한 번 다시 시도합니다.
+- 한국어 문장이 번역문처럼 읽히지 않게 했습니다. 모든 집필·편집·사실 확인 호출과 서베이 카드가 공용 한국어 문체 규칙(`prompts/base.py::KOREAN_STYLE`: 명사 틀, 조사 직역, 행위자를 숨기는 피동과 이중 피동, 영어식 기본 동사, 상투 문장, "입니다"체, 표 칸은 명사구나 "입니다" 문장 중 표마다 한 형태)을 받고, 리뷰 검수와 가이드·서베이 평가는 어색한 문장을 고친 문장과 함께 짚되 문법이나 행위자가 뜻을 바꾸는 문장과 "다"체 산문 문장만 막는 결함으로 올리며(가이드·서베이 평가는 `<wording_issues>`), 글쓰기 규칙 검사가 이중 피동(`되어진`), 닫힌 목록의 "에 있어" 직역(`에 있어서는`, `에 있어서의`, `학습함에 있어`. 맨 "에 있어서"는 모델 검사에 맡김), 콜론이 붙은 문장 끝(`같습니다:`)을 찾습니다. 논문 카드는 카드 스키마 3으로, 번역 지침을 캐시 변형값에 넣어 캐시하므로 다음 `survey write`는 캐시한 논문 카드를 한 번 다시 만듭니다(논문당 호출 1회).
+- `survey plan --reference URL`(반복 가능, survey_plan 요청의 `reference_urls`)을 다시 넣었고 이제 실제로 씁니다. 계획 단계가 자료마다 한 번 읽어 범위 호출에 발췌를 주고, 자료 자신이거나 자료가 링크한 논문을 후보에 더합니다(순위에서는 주제 근거 다음의 동점 처리 기준이 되고 후보 목록에 `[REFERENCED by N]` 표시). 계획은 자료를 `references[]`로 저장하고(`schema_version` 3, 버전 1·2 계획도 읽음), 쓰기 단계는 참고 자료 글을 분야를 짜는 절의 설명 자료로 쓰고 `### References` 뒤에 참고 자료 목록으로 붙입니다. `--remote`로 쓰려면 다시 배포합니다.
+- `survey write --plan <파일>`(kind `survey_write`)을 추가했습니다. 고친 계획으로 `Paper Surveys` 글을 씁니다. 캐시하는 논문 카드, 개요, 가이드식 절별 집필과 검사, 코드가 만드는 연표와 비교표, 논문 그림, 저자-연도 인용이 들어갑니다. 블로그 글 규칙에 `Paper Surveys` 유형(`resources.github.survey_category`)이 있어야 합니다. 가이드의 평가·수정 반복과 사실 확인 재시도를 공용 함수(`section_loop.revise_section`, `checked_grounding`)로 옮겼고 동작은 같습니다. `--remote`로 쓰려면 다시 배포합니다.
+- `survey plan "<주제>"`(kind `survey_plan`)를 추가했습니다. 주제의 주요 논문을 찾아 고칠 수 있는 계획 파일로 저장합니다(`plan_path`, `s3_uri`). `SEMANTIC_SCHOLAR_API_KEY`가 없으면 인용 수는 OpenAlex 값이라 arXiv 시대 ML 논문을 적게 세고, 알려진 인용 관계도 적습니다. `--remote`로 쓰려면 다시 배포합니다.
+- 업그레이드한 뒤 `--remote`를 쓰기 전에 `cdk deploy`로 다시 배포합니다. Batch 이미지는 마지막 배포의 코드를 실행하며, 이전 worker는 모르는 필드(예: `--reference`)가 든 요청을 거부합니다.
+- 가이드가 더 깊고 넓어졌습니다. 사용법, 내부 동작 원리와 이유, 더 큰 시스템에 통합하는 방법까지 다룹니다. 개요 단계의 절 계획이 개념마다 담당 절을 하나씩 정하고, 평가자가 지적한 차단 문제(사실 오류, 모순, 근거 없는 플래그·기본값)가 있으면 반드시 고쳐 쓰며, `tech_guide.max_revision_attempts` 기본값은 1회입니다. 실행 비용은 이전보다 늘었습니다.
+- `guide --reference URL`(반복 가능)로 문서 URL 옆에 참고 자료(논문, 설계 문서, 심층 분석 글)를 더할 수 있고, 참고 자료만으로도 가이드를 만들 수 있습니다. 문서 URL은 옵션 앞뒤 어디에나 둘 수 있습니다.
+- 가이드 기본값이 바뀌었습니다. `tech_guide.fetch_top_results`는 12(이전 4)이고, `tech_guide.max_sections`가 개요의 절 수 상한입니다. 이전 템플릿에서 복사한 `config.yaml`은 예전 값을 그대로 유지하므로, 새 기본값을 쓰려면 직접 고칩니다.
+- 논문 글은 front matter에 `paper_doi`를 넣습니다(arXiv 논문은 arXiv DOI, 그 밖에는 논문 DOI를 알 때). 블로그는 이 값으로 Semantic Scholar에서 인용 수를 조회합니다.
+- 인용 조회: Crossref 다음에 OpenAlex를 조회합니다(키 없이 IP당 하루 약 100회 검색, 선택 키 `OPENALEX_API_KEY`로 한도를 높임). Crossref는 상위 5건 중 제목이 일치하는 레코드를 고르며, Semantic Scholar는 `SEMANTIC_SCHOLAR_API_KEY`가 있을 때만 조회합니다.
+- 설정 키 `resources.github.default_cover_image`, `resources.github.cover_images`, `paper.table_of_contents_model_id`, `paper.output_fixing_model_id`, `citations.citation_analysis_model_id`, `explanation.paper_analysis_model_id`, `explanation.paper_enrichment_model_id`를 없앴습니다. `config.yaml`을 고쳐 이 키들을 지우지 않으면 설정을 불러올 때 `extra_forbidden` 오류가 납니다.
+- 진입점과 스택을 없앴습니다. Slack 봇과 그 Lambda(`Dockerfile.lambda`, `SLACK_*` 비밀값), `scholar_lens/main.py`, `scholar_lens/tech_guide_main.py`, `scripts/run_batch.py`, 스팟 컴퓨팅 환경입니다. `scholar-lens` CLI(로컬 또는 `--remote`)를 쓰며, Batch는 온디맨드 컴퓨팅 환경 하나에서 실행합니다.
+- 블로그로 복사하는 이미지는 논문 자신의 그림(arXiv HTML 그림, arXiv 원본에서 되살린 그림, PDF에서 잘라낸 그림)뿐입니다. 문서 사이트, 블로그, 참고 자료 같은 그 밖의 이미지는 원본 링크로 두고 PR 체크리스트에 `remote image not localized`로 올립니다. 논문 그림을 저장하지 못하면 글을 게시하지 않으며, 실행 결과의 `markdown_path`와 `s3_uri`가 거부된 초안을 가리킵니다.
+- ar5iv는 쓰지 않습니다. ar5iv 링크는 검증 오류이고, arXiv 그림이 ar5iv의 "NO IMAGE AVAILABLE" 자리표시 이미지로 오면 논문의 arXiv 원본(`/e-print`)에서 그림을 가져옵니다.
+- `glightbox` 링크는 자기 이미지를 열어야 합니다(`href`가 안쪽 `src`와 같음). 다르면 글을 거부합니다.
+- 논문 글에 생성한 `description`을 넣습니다. 모델·방법 이름으로 시작하는 120–160자 평문이며 블로그 안에서 겹치지 않아야 합니다. 설명의 수치는 TL;DR·초록과, TL;DR의 수치는 논문과 대조합니다. 맞지 않으면 리뷰의 보정 재시도에 반영하거나 PR 메모로 남기며, 글을 막는 것은 블로그 안에서 겹치는 설명뿐입니다. 단위가 붙은 수와 한국어 복합 수는 양으로 비교하고(`12만 8천`은 `128K`와 같음), 홀로 쓴 `N만`은 `만`이 조사 "~만"일 수도 있으므로 원문에 N이나 N×10⁴ 중 하나가 있으면 출처가 있는 것으로 봅니다.
+- 이미 게시된 글을 다시 생성하면, 생성 이후 그 글이나 이미지에 사람이 고친 커밋을 PR에 나열해 옮겨 적용할 수 있게 합니다. 이 도구의 PR은 merge commit으로 병합합니다. squash·rebase로 병합하면 생성 커밋이 기준 브랜치에 없어 그 글의 모든 커밋을 올립니다.
+- 참고 목록과 출처 목록은 URL마다 한 줄인 `[제목](URL)` 형식이며, 가이드 출처는 수집한 페이지 제목을 씁니다.
+- 가이드 절 분량은 산문만 셉니다. 코드, 표 행과 이미지는 빼고 셉니다.
+- 모든 프롬프트가 하나의 용어 규칙을 씁니다. 번역 지침에 있는 용어는 지침의 표기를 따르고(이제 가이드도 번역 지침을 받음), 그 밖의 용어는 자연스러운 번역이 있으면 번역해 처음 쓸 때 영어를 괄호로 덧붙입니다. 영어 단어에 붙인 하다·되다 활용형(`prefill하면서`, `swap-in되어`)은 lint가 찾습니다.
+
+## 라이선스
+
+[LICENSE](./LICENSE)를 참고하세요.

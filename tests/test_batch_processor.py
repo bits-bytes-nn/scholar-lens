@@ -1,222 +1,110 @@
-"""Tests for utils.batch.BatchProcessor (pure logic, no AWS).
-
-Uses simple in-memory callables. ``max_retries=1`` is used throughout so the
-tenacity retry decorator makes a single attempt and never sleeps on backoff,
-keeping every test fast (<2s). Progress bars are disabled via
-``show_progress=False``.
-"""
+"""Tests for utils.batch.BatchProcessor (pure logic, no AWS)."""
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 import pytest
+from botocore.exceptions import ClientError
 
+from scholar_lens.src.utils import retry as retry_module
 from scholar_lens.src.utils.batch import BatchProcessor
 
 
 @pytest.fixture(autouse=True)
-def _silence_logging() -> None:
-    logging.disable(logging.CRITICAL)
-    yield
-    logging.disable(logging.NOTSET)
+def _no_backoff(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(retry_module, "RETRY_MULTIPLIER", 0)
+    monkeypatch.setattr(retry_module, "RETRY_MAX_WAIT", 0)
 
 
 def _prepare(items: list[Any]) -> list[dict[str, Any]]:
     return [{"x": item} for item in items]
 
 
-def _batch_ok(inputs: list[dict[str, Any]], config: Any = None) -> list[Any]:
-    return [d["x"] * 10 for d in inputs]
+class FakeChain:
+    """abatch/ainvoke stand-in that fails chosen items and counts calls."""
 
+    def __init__(
+        self,
+        fail_in_batch: set[int],
+        fail_always: set[int] | None = None,
+        batch_error: Exception | None = None,
+    ):
+        self.fail_in_batch = fail_in_batch
+        self.fail_always = fail_always or set()
+        self.batch_error = batch_error or ClientError(
+            {"Error": {"Code": "ThrottlingException"}}, "InvokeModel"
+        )
+        self.batch_calls = 0
+        self.single_calls: list[int] = []
 
-def _batch_fail(inputs: list[dict[str, Any]], config: Any = None) -> list[Any]:
-    raise RuntimeError("batch boom")
+    async def abatch(
+        self, inputs: list[dict[str, Any]], config: Any = None, **kwargs: Any
+    ) -> list[Any]:
+        assert kwargs.get("return_exceptions") is True
+        self.batch_calls += 1
+        return [
+            self.batch_error if d["x"] in self.fail_in_batch else d["x"] * 10
+            for d in inputs
+        ]
 
-
-def _seq_ok(single_input: dict[str, Any]) -> Any:
-    return single_input["x"] * 10
-
-
-def _seq_fail(single_input: dict[str, Any]) -> Any:
-    raise RuntimeError("seq boom")
-
-
-async def _abatch_ok(inputs: list[dict[str, Any]], config: Any = None) -> list[Any]:
-    return [d["x"] * 10 for d in inputs]
-
-
-async def _abatch_fail(inputs: list[dict[str, Any]], config: Any = None) -> list[Any]:
-    raise RuntimeError("async batch boom")
-
-
-async def _aseq_ok(single_input: dict[str, Any]) -> Any:
-    return single_input["x"] * 10
-
-
-async def _aseq_fail(single_input: dict[str, Any]) -> Any:
-    raise RuntimeError("async seq boom")
+    async def ainvoke(self, payload: dict[str, Any]) -> Any:
+        self.single_calls.append(payload["x"])
+        if payload["x"] in self.fail_always:
+            raise ValueError("bad input")  # non-retryable: no backoff loop
+        return payload["x"] * 10
 
 
 @pytest.fixture
 def processor() -> BatchProcessor:
-    # max_retries=1 -> single attempt, no exponential backoff sleep.
-    return BatchProcessor(batch_size=3, max_concurrency=2, max_retries=1)
+    return BatchProcessor(batch_size=3, max_concurrency=2)
 
 
-class TestExecuteWithFallbackSync:
-    def test_all_items_succeed_in_order(self, processor: BatchProcessor) -> None:
-        result = processor.execute_with_fallback(
-            [1, 2, 3], _prepare, _batch_ok, _seq_ok, "task", show_progress=False
-        )
-        assert result == [10, 20, 30]
+async def _run(processor: BatchProcessor, items: list[int], chain: FakeChain) -> list:
+    return await processor.aexecute_with_fallback(
+        items, _prepare, chain.abatch, chain.ainvoke, "task"
+    )
 
-    def test_chunking_processes_all_items(self, processor: BatchProcessor) -> None:
-        # 7 items / batch_size 3 -> 3 chunks; all processed in order.
-        result = processor.execute_with_fallback(
-            list(range(1, 8)),
-            _prepare,
-            _batch_ok,
-            _seq_ok,
-            "task",
-            show_progress=False,
-        )
-        assert result == [10, 20, 30, 40, 50, 60, 70]
 
-    def test_empty_items_returns_empty(self, processor: BatchProcessor) -> None:
-        result = processor.execute_with_fallback(
-            [], _prepare, _batch_ok, _seq_ok, "task", show_progress=False
-        )
-        assert result == []
-
-    def test_empty_prepared_inputs_skips_chunk(self, processor: BatchProcessor) -> None:
-        result = processor.execute_with_fallback(
-            [1, 2, 3],
-            lambda items: [],
-            _batch_ok,
-            _seq_ok,
-            "task",
-            show_progress=False,
-        )
-        assert result == []
-
-    def test_batch_failure_falls_back_to_sequential(
+class TestAExecuteWithFallback:
+    async def test_all_succeed_in_order_across_chunks(
         self, processor: BatchProcessor
     ) -> None:
-        # Batch raises -> per-item sequential retry func succeeds for all.
-        result = processor.execute_with_fallback(
-            [1, 2, 3], _prepare, _batch_fail, _seq_ok, "task", show_progress=False
-        )
-        assert result == [10, 20, 30]
-
-    def test_sequential_failure_keeps_none_placeholder(
-        self, processor: BatchProcessor
-    ) -> None:
-        # Batch raises, then each sequential item also raises. The fallback logs
-        # and substitutes a None placeholder (NOT drops), preserving 1:1 length
-        # so callers that zip results back to inputs stay aligned.
-        result = processor.execute_with_fallback(
-            [1, 2, 3], _prepare, _batch_fail, _seq_fail, "task", show_progress=False
-        )
-        assert result == [None, None, None]
-
-    def test_run_config_overrides_batch_size(self, processor: BatchProcessor) -> None:
-        # run_config batch_size of 2 still processes every item.
-        result = processor.execute_with_fallback(
-            [1, 2, 3, 4, 5],
-            _prepare,
-            _batch_ok,
-            _seq_ok,
-            "task",
-            run_config={"batch_size": 2, "max_concurrency": 1},
-            show_progress=False,
-        )
-        assert result == [10, 20, 30, 40, 50]
-
-
-class TestAExecuteWithFallbackAsync:
-    async def test_all_items_succeed_in_order(self, processor: BatchProcessor) -> None:
-        result = await processor.aexecute_with_fallback(
-            [1, 2, 3, 4, 5],
-            _prepare,
-            _abatch_ok,
-            _aseq_ok,
-            "task",
-            show_progress=False,
-        )
-        assert result == [10, 20, 30, 40, 50]
+        chain = FakeChain(fail_in_batch=set())
+        assert await _run(processor, [1, 2, 3, 4, 5], chain) == [10, 20, 30, 40, 50]
+        assert chain.batch_calls == 2 and chain.single_calls == []
 
     async def test_empty_items_returns_empty(self, processor: BatchProcessor) -> None:
-        result = await processor.aexecute_with_fallback(
-            [], _prepare, _abatch_ok, _aseq_ok, "task", show_progress=False
-        )
-        assert result == []
+        assert await _run(processor, [], FakeChain(set())) == []
 
-    async def test_batch_failure_falls_back_to_concurrent_sequential(
+    async def test_only_failed_items_are_retried(
         self, processor: BatchProcessor
     ) -> None:
-        result = await processor.aexecute_with_fallback(
-            [1, 2, 3],
-            _prepare,
-            _abatch_fail,
-            _aseq_ok,
-            "task",
-            show_progress=False,
-        )
-        # Concurrent fallback gathers results; order is preserved by gather.
-        assert result == [10, 20, 30]
+        chain = FakeChain(fail_in_batch={2})
+        assert await _run(processor, [1, 2, 3], chain) == [10, 20, 30]
+        # Items 1 and 3 succeeded in the batch and must not be billed again.
+        assert chain.single_calls == [2]
 
-    async def test_sequential_failure_keeps_none_placeholder(
+    async def test_persistent_failure_keeps_alignment(
         self, processor: BatchProcessor
     ) -> None:
-        # Failed items resolve to None placeholders and are KEPT (not filtered),
-        # so len(results) == len(inputs) and positional alignment holds.
-        result = await processor.aexecute_with_fallback(
-            [1, 2, 3],
-            _prepare,
-            _abatch_fail,
-            _aseq_fail,
-            "task",
-            show_progress=False,
-        )
-        assert result == [None, None, None]
+        chain = FakeChain(fail_in_batch={2}, fail_always={2})
+        assert await _run(processor, [1, 2, 3], chain) == [10, None, 30]
 
-    async def test_partial_sequential_failure_preserves_alignment(
+    async def test_deterministic_batch_failure_is_not_retried(
         self, processor: BatchProcessor
     ) -> None:
-        # Regression (code-2): the middle item fails in the fallback. The result
-        # must be [10, None, 30] — same length/positions as the input — so a
-        # consumer zipping results to inputs pairs each with the RIGHT item
-        # instead of shifting every later item onto the wrong input.
-        async def _aseq_middle_fail(payload: dict[str, Any]) -> int:
-            n = payload["x"]
-            if n == 2:
-                raise RuntimeError("item 2 fails")
-            return n * 10
-
-        result = await processor.aexecute_with_fallback(
-            [1, 2, 3],
-            _prepare,
-            _abatch_fail,
-            _aseq_middle_fail,
-            "task",
-            show_progress=False,
-        )
-        assert result == [10, None, 30]
+        chain = FakeChain(fail_in_batch={2}, batch_error=ValueError("bad input"))
+        assert await _run(processor, [1, 2, 3], chain) == [10, None, 30]
+        assert chain.single_calls == []  # not paid for twice
 
 
 class TestBatchProcessorValidation:
-    def test_default_field_values(self) -> None:
+    def test_defaults(self) -> None:
         bp = BatchProcessor()
-        assert bp.max_concurrency == 5
-        assert bp.batch_size == 10
-        assert bp.max_retries == 5
+        assert bp.max_concurrency == 5 and bp.batch_size == 10
 
-    def test_invalid_batch_size_rejected(self) -> None:
-        with pytest.raises(Exception):
-            BatchProcessor(batch_size=0)
-
-    def test_invalid_max_concurrency_rejected(self) -> None:
-        with pytest.raises(Exception):
-            BatchProcessor(max_concurrency=0)
+    @pytest.mark.parametrize("field", ["batch_size", "max_concurrency"])
+    def test_non_positive_rejected(self, field: str) -> None:
+        with pytest.raises(ValueError):
+            BatchProcessor(**{field: 0})

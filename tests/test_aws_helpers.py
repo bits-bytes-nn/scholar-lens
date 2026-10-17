@@ -1,10 +1,4 @@
-"""Tests for the AWS helper layer (S3, STS, SSM, Batch).
-
-All AWS access is faked with ``moto``; the Batch helpers are exercised with
-``unittest.mock`` because a full moto Batch setup (VPC + compute environment)
-is disproportionately heavy for these unit tests. No real AWS or network
-calls are made.
-"""
+"""Tests for the AWS helper layer (S3, STS, SSM), faked with ``moto``."""
 
 from __future__ import annotations
 
@@ -13,18 +7,22 @@ from unittest import mock
 
 import boto3
 import pytest
+from boto3.exceptions import S3UploadFailedError
 from moto import mock_aws
 
 from scholar_lens.src.aws_helpers import (
-    BatchJobError,
     S3Handler,
+    S3OperationError,
     get_account_id,
     get_ssm_param_value,
-    submit_batch_job,
-    wait_for_batch_job_completion,
 )
 
 BUCKET_NAME = "scholar-lens-test-bucket"
+
+
+def _keys(session: boto3.Session, bucket: str = BUCKET_NAME) -> set[str]:
+    listed = session.client("s3").list_objects_v2(Bucket=bucket)
+    return {o["Key"] for o in listed.get("Contents", [])}
 
 
 @pytest.fixture
@@ -46,51 +44,24 @@ class TestS3HandlerConstruction:
 
 
 class TestS3HandlerSync:
-    def test_upload_then_exists_returns_true(
+    def test_upload_file_lands_under_the_prefix(
         self, boto_session: boto3.Session, s3_bucket: str, tmp_path: Path
     ) -> None:
         local = tmp_path / "doc.txt"
         local.write_text("hello", encoding="utf-8")
-        handler = S3Handler(boto_session, s3_bucket)
+        S3Handler(boto_session, s3_bucket).upload_file(local, s3_prefix="docs")
+        assert _keys(boto_session) == {"docs/doc.txt"}
 
-        handler.upload_file(local, s3_prefix="docs")
-
-        assert handler.exists("docs/doc.txt") is True
-
-    def test_exists_false_for_missing_key(
-        self, boto_session: boto3.Session, s3_bucket: str
-    ) -> None:
-        handler = S3Handler(boto_session, s3_bucket)
-        assert handler.exists("nope/missing.txt") is False
-
-    def test_download_file_round_trips_bytes(
-        self, boto_session: boto3.Session, s3_bucket: str, tmp_path: Path
-    ) -> None:
-        payload = b"\x00\x01round-trip\x02\x03"
-        boto_session.client("s3").put_object(
-            Bucket=s3_bucket, Key="blob.bin", Body=payload
-        )
-        handler = S3Handler(boto_session, s3_bucket)
-
-        dest = tmp_path / "nested" / "blob.bin"
-        handler.download_file("blob.bin", dest)
-
-        assert dest.read_bytes() == payload
-
-    def test_upload_directory_filters_by_extension(
+    def test_upload_directory_uploads_every_file(
         self, boto_session: boto3.Session, s3_bucket: str, tmp_path: Path
     ) -> None:
         src = tmp_path / "assets"
-        src.mkdir()
+        (src / "sub").mkdir(parents=True)
         (src / "image.png").write_bytes(b"\x89PNG\r\n")
-        (src / "notes.txt").write_text("ignore me", encoding="utf-8")
-        handler = S3Handler(boto_session, s3_bucket)
-
-        count = handler.upload_directory(src, s3_prefix="out", file_extensions=[".png"])
-
-        assert count == 1
-        assert handler.exists("out/image.png") is True
-        assert handler.exists("out/notes.txt") is False
+        (src / "sub" / "b.jpg").write_bytes(b"\xff\xd8")
+        count = S3Handler(boto_session, s3_bucket).upload_directory(src, "out")
+        assert count == 2
+        assert _keys(boto_session) == {"out/image.png", "out/sub/b.jpg"}
 
     def test_upload_directory_public_readable_does_not_error(
         self, boto_session: boto3.Session, s3_bucket: str, tmp_path: Path
@@ -103,7 +74,7 @@ class TestS3HandlerSync:
         count = handler.upload_directory(src, s3_prefix="public", public_readable=True)
 
         assert count == 1
-        assert handler.exists("public/page.png") is True
+        assert _keys(boto_session) == {"public/page.png"}
 
     def test_upload_directory_rejects_non_directory(
         self, boto_session: boto3.Session, s3_bucket: str, tmp_path: Path
@@ -138,21 +109,7 @@ class TestS3HandlerAsync:
 
             await handler.upload_file_async(local, s3_prefix="async")
 
-            assert handler.exists("async/async.txt") is True
-
-    async def test_download_file_async_round_trips(
-        self, boto_session: boto3.Session, tmp_path: Path
-    ) -> None:
-        with mock_aws():
-            client = boto_session.client("s3")
-            client.create_bucket(Bucket=BUCKET_NAME)
-            client.put_object(Bucket=BUCKET_NAME, Key="a.bin", Body=b"async-bytes")
-            handler = S3Handler(boto_session, BUCKET_NAME)
-
-            dest = tmp_path / "a.bin"
-            await handler.download_file_async("a.bin", dest)
-
-            assert dest.read_bytes() == b"async-bytes"
+            assert _keys(boto_session) == {"async/async.txt"}
 
 
 @mock_aws
@@ -187,127 +144,64 @@ class TestAccountAndSsm:
         assert get_ssm_param_value(boto_session, "/scholar-lens/plain") == "plain-value"
 
 
-class TestSubmitBatchJob:
-    def test_returns_job_id_from_response(self, boto_session: boto3.Session) -> None:
-        fake_client = mock.Mock()
-        fake_client.submit_job.return_value = {"jobId": "job-123"}
-
-        with mock.patch.object(boto_session, "client", return_value=fake_client):
-            job_id = submit_batch_job(
-                boto_session,
-                job_name="my-job",
-                job_queue="my-queue",
-                job_definition="my-def",
-                parameters={"k": "v"},
-            )
-
-        assert job_id == "job-123"
-        fake_client.submit_job.assert_called_once_with(
-            jobName="my-job",
-            jobQueue="my-queue",
-            jobDefinition="my-def",
-            parameters={"k": "v"},
-        )
-
-    def test_defaults_parameters_to_empty_dict(
-        self, boto_session: boto3.Session
+class TestS3Text:
+    def test_put_then_get_round_trips_unicode(
+        self, boto_session: boto3.Session, s3_bucket: str
     ) -> None:
-        fake_client = mock.Mock()
-        fake_client.submit_job.return_value = {"jobId": "job-456"}
+        handler = S3Handler(boto_session, s3_bucket)
+        handler.put_text("results/job.json", '{"title": "리뷰"}')
+        assert handler.get_text("results/job.json") == '{"title": "리뷰"}'
 
-        with mock.patch.object(boto_session, "client", return_value=fake_client):
-            submit_batch_job(
-                boto_session,
-                job_name="j",
-                job_queue="q",
-                job_definition="d",
-            )
-
-        _, kwargs = fake_client.submit_job.call_args
-        assert kwargs["parameters"] == {}
-
-    def test_client_error_wrapped_in_batch_job_error(
-        self, boto_session: boto3.Session
+    def test_get_missing_returns_none(
+        self, boto_session: boto3.Session, s3_bucket: str
     ) -> None:
-        from botocore.exceptions import ClientError
-
-        fake_client = mock.Mock()
-        fake_client.submit_job.side_effect = ClientError(
-            {"Error": {"Code": "X", "Message": "boom"}}, "SubmitJob"
-        )
-
-        with mock.patch.object(boto_session, "client", return_value=fake_client):
-            with pytest.raises(BatchJobError):
-                submit_batch_job(
-                    boto_session,
-                    job_name="j",
-                    job_queue="q",
-                    job_definition="d",
-                )
+        assert S3Handler(boto_session, s3_bucket).get_text("nope.json") is None
 
 
-class TestWaitForBatchJobCompletion:
-    def test_returns_on_succeeded(self, boto_session: boto3.Session) -> None:
-        fake_client = mock.Mock()
-        fake_client.describe_jobs.return_value = {"jobs": [{"status": "SUCCEEDED"}]}
-
-        with mock.patch.object(boto_session, "client", return_value=fake_client):
-            # Should return None without raising.
-            assert wait_for_batch_job_completion(boto_session, "job-1") is None
-
-    def test_polls_until_succeeded(
-        self, boto_session: boto3.Session, monkeypatch: pytest.MonkeyPatch
+class TestUploadDirectoryPartialFailure:
+    def test_raises_when_a_file_fails(
+        self, boto_session: boto3.Session, s3_bucket: str, tmp_path: Path
     ) -> None:
-        fake_client = mock.Mock()
-        fake_client.describe_jobs.side_effect = [
-            {"jobs": [{"status": "RUNNING"}]},
-            {"jobs": [{"status": "RUNNABLE"}]},
-            {"jobs": [{"status": "SUCCEEDED"}]},
-        ]
-        # Avoid real sleeping during polling.
-        monkeypatch.setattr("scholar_lens.src.aws_helpers.time.sleep", lambda _s: None)
+        (tmp_path / "a.png").write_bytes(b"x")
+        (tmp_path / "b.png").write_bytes(b"y")
+        handler = S3Handler(boto_session, s3_bucket)
+        real_upload = handler._s3_client.upload_file
 
-        with mock.patch.object(boto_session, "client", return_value=fake_client):
-            wait_for_batch_job_completion(
-                boto_session, "job-1", poll_interval_seconds=0
-            )
+        def flaky(path, *args, **kwargs):  # type: ignore[no-untyped-def]
+            if path.endswith("b.png"):
+                # What boto3's managed transfer raises for a denied PutObject.
+                raise S3UploadFailedError("An error occurred (AccessDenied)")
+            return real_upload(path, *args, **kwargs)
 
-        assert fake_client.describe_jobs.call_count == 3
+        with mock.patch.object(handler._s3_client, "upload_file", side_effect=flaky):
+            with pytest.raises(S3OperationError, match="1 of 2"):
+                handler.upload_directory(tmp_path, "assets")
 
-    @pytest.mark.parametrize("status", ["FAILED", "CANCELLED"])
-    def test_raises_on_terminal_failure(
-        self, boto_session: boto3.Session, status: str
+    def test_upload_file_wraps_the_managed_transfer_error(
+        self, boto_session: boto3.Session, s3_bucket: str, tmp_path: Path
     ) -> None:
-        fake_client = mock.Mock()
-        fake_client.describe_jobs.return_value = {
-            "jobs": [{"status": status, "statusReason": "nope"}]
-        }
+        local = tmp_path / "a.md"
+        local.write_text("x", encoding="utf-8")
+        handler = S3Handler(boto_session, s3_bucket)
+        failing = mock.MagicMock(side_effect=S3UploadFailedError("denied"))
+        with mock.patch.object(handler._s3_client, "upload_file", failing):
+            with pytest.raises(S3OperationError, match="Failed to upload"):
+                handler.upload_file(local, "posts")
 
-        with mock.patch.object(boto_session, "client", return_value=fake_client):
-            with pytest.raises(BatchJobError):
-                wait_for_batch_job_completion(boto_session, "job-1")
 
-    def test_raises_when_job_not_found(self, boto_session: boto3.Session) -> None:
-        fake_client = mock.Mock()
-        fake_client.describe_jobs.return_value = {"jobs": []}
+def test_s3_network_errors_become_s3_operation_errors() -> None:
+    from botocore.exceptions import EndpointConnectionError
 
-        with mock.patch.object(boto_session, "client", return_value=fake_client):
-            with pytest.raises(BatchJobError):
-                wait_for_batch_job_completion(boto_session, "job-1")
-
-    def test_times_out(
-        self, boto_session: boto3.Session, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        fake_client = mock.Mock()
-        fake_client.describe_jobs.return_value = {"jobs": [{"status": "RUNNING"}]}
-        # Drive the monotonic clock forward so the timeout window elapses.
-        clock = iter([0.0, 1.0, 100.0, 200.0])
-        monkeypatch.setattr(
-            "scholar_lens.src.aws_helpers.time.monotonic",
-            lambda: next(clock),
-        )
-        monkeypatch.setattr("scholar_lens.src.aws_helpers.time.sleep", lambda _s: None)
-
-        with mock.patch.object(boto_session, "client", return_value=fake_client):
-            with pytest.raises(TimeoutError):
-                wait_for_batch_job_completion(boto_session, "job-1", timeout_seconds=10)
+    handler = S3Handler.__new__(S3Handler)
+    handler.bucket_name = "b"
+    handler._s3_client = mock.MagicMock()
+    handler._s3_client.get_object.side_effect = EndpointConnectionError(
+        endpoint_url="https://s3"
+    )
+    handler._s3_client.put_object.side_effect = EndpointConnectionError(
+        endpoint_url="https://s3"
+    )
+    with pytest.raises(S3OperationError):
+        handler.get_text("k")
+    with pytest.raises(S3OperationError):
+        handler.put_text("k", "v")

@@ -1,23 +1,34 @@
 from .base import BasePrompt
 from .extraction import (
     AttributesExtractionPrompt,
-    CitationAnalysisPrompt,
     CitationExtractionPrompt,
     CitationSummaryPrompt,
     CodeAnalysisPrompt,
     CodebaseSummaryPrompt,
     FigureAnalysisPrompt,
-    TableOfContentsPrompt,
 )
 from .review import (
-    PaperAnalysisPrompt,
-    PaperEnrichmentPrompt,
-    PaperEvaluationPrompt,
+    PaperEditPrompt,
     PaperFinalizationPrompt,
-    PaperSynthesisPrompt,
+    PaperPlanningPrompt,
+    PaperSectionCheckPrompt,
+    PaperSectionPrompt,
 )
-from .slack import SlackIntentPrompt
-from .summary import PaperSummaryPrompt
+from .summary import (
+    PaperSummaryFixPrompt,
+    PaperSummaryPrompt,
+    PaperSummaryShortenPrompt,
+)
+from .survey import (
+    SurveyCardPrompt,
+    SurveyEvaluationPrompt,
+    SurveyFinalizationPrompt,
+    SurveyGroundingPrompt,
+    SurveyOutlinePrompt,
+    SurveyScopePrompt,
+    SurveySectionPrompt,
+    SurveySelectionPrompt,
+)
 from .tech_guide import (
     TechGuideEvaluationPrompt,
     TechGuideGroundingPrompt,
@@ -30,20 +41,27 @@ from .tech_guide import (
 __all__ = [
     "AttributesExtractionPrompt",
     "BasePrompt",
-    "CitationAnalysisPrompt",
     "CitationExtractionPrompt",
     "CitationSummaryPrompt",
     "CodeAnalysisPrompt",
     "CodebaseSummaryPrompt",
     "FigureAnalysisPrompt",
-    "PaperAnalysisPrompt",
-    "PaperEnrichmentPrompt",
+    "PaperEditPrompt",
     "PaperFinalizationPrompt",
-    "PaperEvaluationPrompt",
+    "PaperPlanningPrompt",
+    "PaperSectionCheckPrompt",
+    "PaperSectionPrompt",
+    "PaperSummaryFixPrompt",
     "PaperSummaryPrompt",
-    "PaperSynthesisPrompt",
-    "SlackIntentPrompt",
-    "TableOfContentsPrompt",
+    "PaperSummaryShortenPrompt",
+    "SurveyCardPrompt",
+    "SurveyEvaluationPrompt",
+    "SurveyFinalizationPrompt",
+    "SurveyGroundingPrompt",
+    "SurveyOutlinePrompt",
+    "SurveyScopePrompt",
+    "SurveySectionPrompt",
+    "SurveySelectionPrompt",
     "TechGuideEvaluationPrompt",
     "TechGuideGroundingPrompt",
     "TechGuideRelevancePrompt",

@@ -1,8 +1,7 @@
 """Token-usage accounting, cost estimation, and CloudWatch metric emission.
 
-The pipeline makes many Bedrock calls (especially the per-paragraph synthesis
-loop with Opus 4.8 + thinking). Without instrumentation this is the most
-expensive — and previously invisible — part of the system. This module adds:
+The pipelines make many Bedrock calls (especially the per-section writing
+loops), the most expensive part of the system. This module provides:
 
 * :class:`TokenUsageTracker` — a LangChain callback that accumulates input/output
   token counts across every model call in a run.
@@ -25,18 +24,13 @@ from typing import Any
 import boto3
 from langchain_core.callbacks import BaseCallbackHandler
 
+from .constants import HARD_BUDGET_MULTIPLE
 from .logger import logger
+from .utils.models import FALLBACK_PRICE_PER_MTOK, model_info_for_invoked_id
 
 METRICS_NAMESPACE = "ScholarLens"
-
-# Rough USD per 1K tokens by model family (input, output). Used only for an
-# *estimate* metric/log line — billing is authoritative. Tune as pricing changes.
-_DEFAULT_RATE = (0.003, 0.015)
-_COST_PER_1K: dict[str, tuple[float, float]] = {
-    "opus": (0.015, 0.075),
-    "sonnet": (0.003, 0.015),
-    "haiku": (0.0008, 0.004),
-}
+# The per-run cost metric; the stack's cost alarm watches this exact name.
+COST_METRIC_NAME = "EstimatedCostUSD"
 
 
 class TokenBudgetExceeded(RuntimeError):
@@ -51,6 +45,8 @@ class TokenUsageTracker(BaseCallbackHandler):
     output_tokens: int = 0
     call_count: int = 0
     per_model: dict[str, dict[str, int]] = field(default_factory=dict)
+    # Priced per call, so tiered (long-prompt) rates apply to the right calls.
+    cost_usd: float = 0.0
 
     @property
     def total_tokens(self) -> int:
@@ -67,14 +63,12 @@ class TokenUsageTracker(BaseCallbackHandler):
         bucket["input_tokens"] += in_tok
         bucket["output_tokens"] += out_tok
         bucket["calls"] += 1
+        self.cost_usd += call_cost_usd(model, in_tok, out_tok)
 
     def estimated_cost_usd(self) -> float:
-        total = 0.0
-        for model, usage in self.per_model.items():
-            rate_in, rate_out = _rate_for(model)
-            total += usage["input_tokens"] / 1000 * rate_in
-            total += usage["output_tokens"] / 1000 * rate_out
-        return round(total, 4)
+        """Estimated spend from list prices of the models actually called.
+        Bedrock bills at its own rates, so treat this as an estimate."""
+        return round(self.cost_usd, 4)
 
     def check_budget(self, max_total_tokens: int | None) -> None:
         """Raise :class:`TokenBudgetExceeded` if over the configured budget."""
@@ -88,14 +82,15 @@ class TokenUsageTracker(BaseCallbackHandler):
 class TokenBudgetGuard:
     """Shared total-token budget wiring for the generation pipelines.
 
-    All three generators (``ExplainerGraph``, ``PaperSummarizer``,
+    All three generators (``PaperReviewer``, ``PaperSummarizer``,
     ``TechGuideGenerator``) locate the run's :class:`TokenUsageTracker` in their
     callback list and abort once cumulative spend passes ``max_total_tokens``.
-    That lookup and guard were previously copy-pasted verbatim in each; this
-    mixin holds the single copy. Subclasses call :meth:`_init_token_budget` from
-    ``__init__`` and :meth:`_enforce_token_budget` at each expensive step. The
-    tech-guide's soft-degrade / hard-abort tiers build on ``_token_tracker`` and
-    ``max_total_tokens`` set here.
+    Subclasses call :meth:`_init_token_budget` from
+    ``__init__`` and :meth:`_enforce_token_budget` at each expensive step.
+    The guide and survey pipelines use the two-tier budget instead: past the
+    soft limit (:meth:`_over_soft_token_budget`) they skip the optional
+    checks, past the hard ceiling (:meth:`_enforce_hard_token_budget`) they
+    abort.
     """
 
     _token_tracker: TokenUsageTracker | None
@@ -116,6 +111,24 @@ class TokenBudgetGuard:
         """Abort the run if the configured total-token budget is exceeded."""
         if self._token_tracker is not None and self.max_total_tokens:
             self._token_tracker.check_budget(self.max_total_tokens)
+
+    def _enforce_hard_token_budget(self) -> None:
+        """Abort the run (``TokenBudgetExceeded``) once spend passes
+        :data:`~scholar_lens.src.constants.HARD_BUDGET_MULTIPLE` times the
+        budget: the soft limit only skips the optional checks, this is the
+        true cap so a runaway can't keep issuing writer calls."""
+        if self._token_tracker is not None and self.max_total_tokens:
+            self._token_tracker.check_budget(
+                int(self.max_total_tokens * HARD_BUDGET_MULTIPLE)
+            )
+
+    def _over_soft_token_budget(self) -> bool:
+        """Whether spend has reached the budget (the soft limit)."""
+        return bool(
+            self._token_tracker is not None
+            and self.max_total_tokens
+            and self._token_tracker.total_tokens >= self.max_total_tokens
+        )
 
 
 def _extract_usage(response: Any) -> tuple[int, int, str]:  # noqa: ANN401
@@ -158,12 +171,27 @@ def _extract_usage(response: Any) -> tuple[int, int, str]:  # noqa: ANN401
     return in_tok, out_tok, model
 
 
-def _rate_for(model_id: str) -> tuple[float, float]:
-    lowered = model_id.lower()
-    for family, rate in _COST_PER_1K.items():
-        if family in lowered:
-            return rate
-    return _DEFAULT_RATE
+def call_cost_usd(model_id: str, input_tokens: int, output_tokens: int) -> float:
+    """List-price cost of one call, honouring tiered long-prompt pricing."""
+    info = model_info_for_invoked_id(model_id)
+    price_in, price_out = price_per_mtok(model_id)
+    if (
+        info is not None
+        and info.long_prompt_threshold is not None
+        and info.long_prompt_price_per_mtok is not None
+        and input_tokens > info.long_prompt_threshold
+    ):
+        price_in, price_out = info.long_prompt_price_per_mtok
+    return input_tokens / 1e6 * price_in + output_tokens / 1e6 * price_out
+
+
+def price_per_mtok(model_id: str) -> tuple[float, float]:
+    """(input, output) USD per million tokens for an invoked model id."""
+    info = model_info_for_invoked_id(model_id)
+    if info is None:
+        logger.debug("No price for model '%s'; using the fallback rate.", model_id)
+        return FALLBACK_PRICE_PER_MTOK
+    return info.input_price_per_mtok, info.output_price_per_mtok
 
 
 class MetricsEmitter:
@@ -200,7 +228,7 @@ class MetricsEmitter:
             "OutputTokens": tracker.output_tokens,
             "TotalTokens": tracker.total_tokens,
             "LLMCalls": tracker.call_count,
-            "EstimatedCostUSD": cost,
+            COST_METRIC_NAME: cost,
             "DurationSeconds": round(duration_seconds, 2),
             "Success": 1 if success else 0,
             "Failure": 0 if success else 1,

@@ -1,11 +1,15 @@
 from abc import ABC, abstractmethod
+from functools import lru_cache
 from typing import Any, ClassVar, Generic, TypeVar
 
 import boto3
 from botocore.config import Config as BotoConfig
-from botocore.exceptions import ClientError
-from langchain_aws import ChatBedrock, ChatBedrockConverse
+from botocore.exceptions import BotoCoreError, ClientError
+from langchain_aws import ChatBedrockConverse
 from langchain_community.embeddings import BedrockEmbeddings
+from langchain_core.callbacks import CallbackManagerForLLMRun
+from langchain_core.messages import BaseMessage
+from langchain_core.outputs import ChatResult
 from pydantic import Field
 
 from ..constants import EmbeddingModelId, LanguageModelId
@@ -23,17 +27,12 @@ WrapperT = TypeVar("WrapperT")
 
 
 class BaseBedrockWrapper:
-    def _truncate_text(
-        self, text: str, max_chars: int | None, max_tokens: int | None, text_type: str
-    ) -> str:
+    def _truncate_text(self, text: str, max_chars: int | None, text_type: str) -> str:
         """Cap ``text`` to ``max_chars`` for an embedding model.
 
-        Embedding models (Titan/Cohere) are NOT supported by Bedrock CountTokens,
-        and the project policy is to use CountTokens for token counting rather
-        than a foreign tokenizer estimate. So embedding inputs are bounded only
-        by the model's character limit; ``max_tokens`` is accepted for interface
-        compatibility but intentionally not enforced here (embedding chunks are
-        ~1k chars, far below any model's token limit, so the char cap suffices)."""
+        Embedding models are not supported by Bedrock CountTokens, so inputs are
+        bounded by the model's character limit (chunks are ~1k chars, far below
+        any token limit)."""
         if max_chars and len(text) > max_chars:
             logger.warning(
                 "%s character count (%d) exceeds maximum (%d). Truncating.",
@@ -46,9 +45,14 @@ class BaseBedrockWrapper:
 
 
 class BaseBedrockModelFactory(Generic[ModelIdT, ModelInfoT, WrapperT], ABC):
-    BOTO_READ_TIMEOUT: ClassVar[int] = 300
-    BOTO_CONNECT_TIMEOUT: ClassVar[int] = 60
-    BOTO_MAX_ATTEMPTS: ClassVar[int] = 3
+    # A non-streaming call returns nothing until generation ends, so the read
+    # timeout must cover the longest response asked for (128k output tokens,
+    # thinking included, at a few dozen tokens per second), not a socket gap.
+    BOTO_READ_TIMEOUT: ClassVar[int] = 3600
+    BOTO_CONNECT_TIMEOUT: ClassVar[int] = 30
+    # One attempt: RetryableBase (utils.retry) is the single retry layer, so
+    # botocore must not multiply it.
+    BOTO_MAX_ATTEMPTS: ClassVar[int] = 1
     MAX_POOL_CONNECTIONS: ClassVar[int] = 50
 
     def __init__(
@@ -62,7 +66,7 @@ class BaseBedrockModelFactory(Generic[ModelIdT, ModelInfoT, WrapperT], ABC):
         boto_config = BotoConfig(
             read_timeout=self.BOTO_READ_TIMEOUT,
             connect_timeout=self.BOTO_CONNECT_TIMEOUT,
-            retries={"max_attempts": self.BOTO_MAX_ATTEMPTS, "mode": "adaptive"},
+            retries={"total_max_attempts": self.BOTO_MAX_ATTEMPTS, "mode": "standard"},
             max_pool_connections=self.MAX_POOL_CONNECTIONS,
         )
         self._client = self.boto_session.client(
@@ -86,53 +90,18 @@ class BaseBedrockModelFactory(Generic[ModelIdT, ModelInfoT, WrapperT], ABC):
     def get_model_info(self, model_id: ModelIdT) -> ModelInfoT | None:
         return self._get_model_info_dict().get(model_id)
 
-    def get_supported_models(self) -> list[ModelIdT]:
-        return list(self._get_model_info_dict().keys())
-
 
 class BedrockCrossRegionModelHelper:
+    """Resolves the inference profile (``global.`` or regional prefix) to call
+    a model through; the result is cached per (session, region, model)."""
+
     @staticmethod
     def get_cross_region_model_id(
         boto_session: boto3.Session,
         model_id: LanguageModelId,
         region_name: str,
     ) -> str:
-        try:
-            bedrock_client = boto_session.client("bedrock", region_name=region_name)
-            global_model_id = (
-                BedrockCrossRegionModelHelper._build_cross_region_model_id(
-                    model_id, region_name, is_global=True
-                )
-            )
-            if BedrockCrossRegionModelHelper._is_cross_region_model_available(
-                bedrock_client, global_model_id
-            ):
-                logger.debug("Using global cross-region model: '%s'", global_model_id)
-                return global_model_id
-            regional_model_id = (
-                BedrockCrossRegionModelHelper._build_cross_region_model_id(
-                    model_id, region_name, is_global=False
-                )
-            )
-            if BedrockCrossRegionModelHelper._is_cross_region_model_available(
-                bedrock_client, regional_model_id
-            ):
-                logger.debug(
-                    "Using regional cross-region model: '%s'", regional_model_id
-                )
-                return regional_model_id
-            logger.debug(
-                "Cross-region models not available, using standard model: '%s'",
-                model_id.value,
-            )
-            return model_id.value
-        except Exception as e:
-            logger.warning(
-                "Failed to resolve cross-region model for '%s': %s. Falling back to standard model.",
-                model_id.value,
-                e,
-            )
-            return model_id.value
+        return _resolve_inference_profile(boto_session, model_id, region_name)
 
     @staticmethod
     def _build_cross_region_model_id(
@@ -144,51 +113,82 @@ class BedrockCrossRegionModelHelper:
         return f"{prefix}.{model_id.value}"
 
     @staticmethod
-    def _is_cross_region_model_available(
-        bedrock_client: Any, cross_region_id: str
-    ) -> bool:
-        try:
-            # Paginate: a single maxResults page can silently truncate the
-            # catalog (and miss the profile we're checking) as AWS adds models.
-            next_token: str | None = None
-            while True:
-                kwargs: dict[str, Any] = {"typeEquals": "SYSTEM_DEFINED"}
-                if next_token:
-                    kwargs["nextToken"] = next_token
-                response = bedrock_client.list_inference_profiles(**kwargs)
-                for profile in response.get("inferenceProfileSummaries", []):
-                    if profile["inferenceProfileId"] == cross_region_id:
-                        return True
-                next_token = response.get("nextToken")
-                if not next_token:
-                    return False
-        except Exception as e:
-            raise RuntimeError(
-                f"Failed to check cross-region model availability: {e}"
-            ) from e
+    def _list_system_profiles(bedrock_client: Any) -> set[str]:
+        profiles: set[str] = set()
+        next_token: str | None = None
+        while True:
+            kwargs: dict[str, Any] = {"typeEquals": "SYSTEM_DEFINED"}
+            if next_token:
+                kwargs["nextToken"] = next_token
+            response = bedrock_client.list_inference_profiles(**kwargs)
+            profiles.update(
+                p["inferenceProfileId"]
+                for p in response.get("inferenceProfileSummaries", [])
+            )
+            next_token = response.get("nextToken")
+            if not next_token:
+                return profiles
+
+
+@lru_cache(maxsize=64)
+def _resolve_inference_profile(
+    boto_session: boto3.Session, model_id: LanguageModelId, region_name: str
+) -> str:
+    """Prefer the global profile, then the regional one, then the base id.
+
+    A failed lookup raises: silently falling back to the base id would surface
+    later as an opaque ValidationException on every call.
+    """
+    helper = BedrockCrossRegionModelHelper
+    try:
+        profiles = helper._list_system_profiles(
+            boto_session.client("bedrock", region_name=region_name)
+        )
+    except ClientError as e:
+        raise RuntimeError(
+            f"Could not list Bedrock inference profiles in '{region_name}': {e}"
+        ) from e
+    for is_global in (True, False):
+        candidate = helper._build_cross_region_model_id(
+            model_id, region_name, is_global
+        )
+        if candidate in profiles:
+            logger.debug("Using inference profile '%s'", candidate)
+            return candidate
+    logger.debug("No inference profile for '%s'; using the base id.", model_id.value)
+    return model_id.value
 
 
 class BedrockEmbeddingsWrapper(BaseBedrockWrapper, BedrockEmbeddings):
     max_sequence_length: int | None = Field(default=None)
-    max_sequence_tokens: int | None = Field(default=None)
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
         if not texts:
             logger.warning("No texts provided for embedding")
             return []
         truncated_texts = [
-            self._truncate_text(
-                text, self.max_sequence_length, self.max_sequence_tokens, "document"
-            )
+            self._truncate_text(text, self.max_sequence_length, "document")
             for text in texts
         ]
         return super().embed_documents(truncated_texts)
 
     def embed_query(self, text: str) -> list[float]:
-        truncated_text = self._truncate_text(
-            text, self.max_sequence_length, self.max_sequence_tokens, "query"
-        )
+        truncated_text = self._truncate_text(text, self.max_sequence_length, "query")
         return super().embed_query(truncated_text)
+
+    def _embedding_func(self, text: str) -> list[float]:
+        # langchain_community wraps every endpoint error in a bare ValueError,
+        # which the retry policy treats as deterministic; surface the botocore
+        # error instead so throttling and timeouts are classified (and retried)
+        # like every other Bedrock call. It is re-raised outside the handler so
+        # the ValueError is not chained back onto it as its context.
+        try:
+            return super()._embedding_func(text)
+        except ValueError as e:
+            original = e.__cause__ or e.__context__
+            if not isinstance(original, (ClientError, BotoCoreError)):
+                raise
+        raise original
 
 
 class BedrockEmbeddingModelFactory(
@@ -215,52 +215,79 @@ class BedrockEmbeddingModelFactory(
         if not model_info:
             raise ValueError(f"Unsupported embedding model ID: '{model_id.value}'")
 
-        model_kwargs = {}
-        dimensions = kwargs.pop("dimensions", None)
-
-        if dimensions:
-            supported_dims = model_info.dimensions
-            is_supported = False
-            if isinstance(supported_dims, list):
-                is_supported = dimensions in supported_dims
-            elif isinstance(supported_dims, int):
-                is_supported = dimensions == supported_dims
-
-            if not is_supported:
-                raise ValueError(
-                    f"Dimension {dimensions} is not supported by model '{model_id.value}'. "
-                    f"Supported dimensions: {supported_dims}"
-                )
-            if isinstance(supported_dims, list):
-                model_kwargs["dimensions"] = dimensions
-
         model = BedrockEmbeddingsWrapper(
             client=self._client,
             model_id=model_id.value,
-            model_kwargs=model_kwargs,
             max_sequence_length=model_info.max_sequence_length,
-            max_sequence_tokens=model_info.max_sequence_tokens,
             **kwargs,
         )
-        logger.debug(f"Created embedding model: '{model_id.value}'")
+        logger.debug("Created embedding model: '%s'", model_id.value)
         return model
+
+
+class OutputTruncatedError(RuntimeError):
+    """The model stopped at ``max_tokens``: its output is incomplete, so it must
+    never be parsed as if it were whole. Not retried (the same request would
+    stop at the same place); raise the call's ``max_tokens`` instead."""
+
+
+def _raise_if_truncated(
+    result: ChatResult, model_id: str, max_tokens: int | None
+) -> None:
+    for generation in result.generations:
+        metadata = getattr(generation.message, "response_metadata", {}) or {}
+        reason = metadata.get("stopReason") or metadata.get("stop_reason")
+        if reason == "max_tokens":
+            raise OutputTruncatedError(
+                f"'{model_id}' hit max_tokens={max_tokens}; the output is incomplete."
+            )
+
+
+class CheckedChatBedrockConverse(ChatBedrockConverse):
+    """``ChatBedrockConverse`` that fails loudly on a truncated response instead
+    of handing partial text to the output parsers. (The async path runs
+    ``_generate`` in an executor, so both are covered.)"""
+
+    def _generate(
+        self,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: CallbackManagerForLLMRun | None = None,
+        **kwargs: Any,
+    ) -> ChatResult:
+        result = super()._generate(
+            messages, stop=stop, run_manager=run_manager, **kwargs
+        )
+        _raise_if_truncated(result, self.model_id, self.max_tokens)
+        return result
 
 
 class BedrockLanguageModelFactory(
     BaseBedrockModelFactory[
-        LanguageModelId, LanguageModelInfo, ChatBedrock | ChatBedrockConverse
+        LanguageModelId, LanguageModelInfo, CheckedChatBedrockConverse
     ]
 ):
+    """Builds Converse chat models with the request shape each model accepts.
+
+    ``get_model`` options: ``enable_thinking``, ``thinking_effort``,
+    ``max_tokens`` (default :attr:`DEFAULT_MAX_TOKENS`), ``temperature``
+    (legacy models only), ``supports_1m_context_window``, ``callbacks``.
+    """
+
     DEFAULT_TEMPERATURE: ClassVar[float] = 0.0
-    DEFAULT_TOP_K: ClassVar[int] = 50
     DEFAULT_THINKING_BUDGET_TOKENS: ClassVar[int] = 2048
     DEFAULT_THINKING_EFFORT: ClassVar[str] = "medium"
-    DEFAULT_LATENCY_MODE: ClassVar[str] = "normal"
+    # Per-call output ceiling (capped at the model's own maximum). Thinking
+    # counts against it on the always-thinking 5.x models, so it is generous;
+    # asking for the full 128k would reserve that much tokens-per-minute quota
+    # up front. A response that still hits it raises OutputTruncatedError.
+    DEFAULT_MAX_TOKENS: ClassVar[int] = 64_000
     ANTHROPIC_1M_BETA: ClassVar[str] = "context-1m-2025-08-07"
     LARGE_CONTEXT_WINDOW: ClassVar[int] = 1_000_000
     # Tokens held back from the context window for the prompt template wrapping
     # the fitted text plus the model's own response.
     DEFAULT_CONTEXT_RESERVE_TOKENS: ClassVar[int] = 16_000
+    PROXY_COUNT_SAFETY_FACTOR: ClassVar[float] = 1.35
 
     def _get_boto_service_name(self) -> str:
         return "bedrock-runtime"
@@ -270,44 +297,20 @@ class BedrockLanguageModelFactory(
 
     def get_model(
         self, model_id: LanguageModelId, **kwargs: Any
-    ) -> ChatBedrock | ChatBedrockConverse:
+    ) -> CheckedChatBedrockConverse:
         model_info = self.get_model_info(model_id)
         if not model_info:
             raise ValueError(f"Unsupported language model ID: '{model_id.value}'")
         resolved_model_id = BedrockCrossRegionModelHelper.get_cross_region_model_id(
             self.boto_session, model_id, self.region_name or ""
         )
-        is_cross_region = resolved_model_id != model_id.value
-        enable_thinking = kwargs.get("enable_thinking", False)
-        want_1m = kwargs.get("supports_1m_context_window", False)
-        # The 1M-context beta is passed via additionalModelRequestFields, which is
-        # a Converse-only field — on the legacy ChatBedrock (InvokeModel) path it
-        # is silently dropped, so the window would NOT actually be enabled and
-        # fit_text (trusting a 1M budget) would overflow the real 200k limit.
-        # Force Converse whenever the 1M window is requested and supported.
-        use_converse = (
-            is_cross_region
-            or (enable_thinking and model_info.supports_thinking)
-            or (want_1m and model_info.supports_1m_context_window)
-        )
-        model_config = self._build_model_config(
-            model_info, resolved_model_id, use_converse, **kwargs
-        )
-        model_class = ChatBedrockConverse if use_converse else ChatBedrock
-        model = model_class(**model_config)
-        logger.debug(
-            "Created language model: '%s' with class %s",
-            resolved_model_id,
-            model_class.__name__,
-        )
-        return model
+        config = self._build_model_config(model_info, resolved_model_id, **kwargs)
+        logger.debug("Created language model '%s'", resolved_model_id)
+        return CheckedChatBedrockConverse(**config)
 
     def effective_context_window(self, model_id: LanguageModelId) -> int:
-        """The usable context window for ``model_id`` in tokens.
-
-        Models flagged for the 1M window are always invoked with it enabled, so
-        their effective window is the large one; otherwise it is the registered
-        window. Unknown models fall back to a conservative 200k."""
+        """Usable context window in tokens (1M-beta models are always invoked
+        with the beta; unknown models fall back to a conservative 200k)."""
         info = self.get_model_info(model_id)
         if not info:
             return 200_000
@@ -392,6 +395,12 @@ class BedrockLanguageModelFactory(
             else self.DEFAULT_CONTEXT_RESERVE_TOKENS
         )
         budget = max(self.effective_context_window(model_id) - reserve, 1_000)
+        info = self.get_model_info(model_id)
+        if info and info.count_tokens_proxy:
+            # Counted with another model's tokenizer; newer tokenizers (Opus 4.7+
+            # and the 5.x family) emit up to ~1.35x as many tokens for the same
+            # text, so shrink the budget instead of risking an overflow.
+            budget = int(budget / self.PROXY_COUNT_SAFETY_FACTOR)
         try:
             if self._within_budget(model_id, text, budget):
                 return text
@@ -424,145 +433,50 @@ class BedrockLanguageModelFactory(
         return text[:best]
 
     def _build_model_config(
-        self,
-        model_info: LanguageModelInfo,
-        resolved_model_id: str,
-        is_cross_region: bool,
-        **kwargs: Any,
+        self, model_info: LanguageModelInfo, resolved_model_id: str, **kwargs: Any
     ) -> dict[str, Any]:
-        enable_thinking = kwargs.get("enable_thinking", False)
-        supports_1m_context_window = kwargs.get("supports_1m_context_window", False)
-        temperature = kwargs.get("temperature", self.DEFAULT_TEMPERATURE)
-        final_temperature = (
-            1.0
-            if self._should_enable_thinking(enable_thinking, model_info)
-            else temperature
-        )
-        if final_temperature != temperature:
-            logger.debug("Adjusting temperature to 1.0 for thinking mode")
-        final_max_tokens = self._validate_max_tokens(
-            kwargs.get("max_tokens"), model_info
-        )
-        # Newer models (Opus 4.8+) deprecate the temperature parameter entirely;
-        # only send max_tokens for them.
-        token_config: dict[str, Any] = {"max_tokens": final_max_tokens}
-        if not model_info.uses_adaptive_thinking:
-            token_config["temperature"] = final_temperature
-        config = self._build_base_config(resolved_model_id, is_cross_region, **kwargs)
-        if is_cross_region:
-            config.update(token_config)
-        else:
-            config["model_kwargs"].update(token_config)
-        if supports_1m_context_window and model_info.supports_1m_context_window:
-            # get_model forces the Converse path when the 1M window is requested,
-            # so is_cross_region is True here and the beta goes through Converse's
-            # additional_model_request_fields (the InvokeModel branch below can't
-            # actually deliver it).
-            if is_cross_region:
-                config.setdefault("additional_model_request_fields", {}).update(
-                    {"anthropic_beta": [self.ANTHROPIC_1M_BETA]}
-                )
-            else:
-                config["model_kwargs"].setdefault(
-                    "additionalModelRequestFields", {}
-                ).update({"anthropic_beta": [self.ANTHROPIC_1M_BETA]})
-            logger.debug("Applied 1M context window support")
-        self._apply_model_features(config, model_info, is_cross_region, **kwargs)
-        return config
-
-    def _build_base_config(
-        self, resolved_model_id: str, is_cross_region: bool, **kwargs: Any
-    ) -> dict[str, Any]:
-        config = {
+        config: dict[str, Any] = {
             "model_id": resolved_model_id,
             "region_name": self.region_name,
             "client": self._client,
             "callbacks": kwargs.get("callbacks"),
+            "max_tokens": min(
+                kwargs.get("max_tokens") or self.DEFAULT_MAX_TOKENS,
+                model_info.max_output_tokens,
+            ),
         }
         if (
             self.boto_session.profile_name
             and self.boto_session.profile_name != "default"
         ):
             config["credentials_profile_name"] = self.boto_session.profile_name
-        common_params = {
-            "stop_sequences": ["\n\nHuman:"],
-        }
-        if is_cross_region:
-            config.update(common_params)
+        request_fields: dict[str, Any] = {}
+        thinking = bool(kwargs.get("enable_thinking")) and model_info.supports_thinking
+        if model_info.uses_adaptive_thinking:
+            # Effort is always sent: it is the cost/depth control whether or not
+            # thinking is requested, and models whose thinking is always on
+            # would otherwise run at their own (higher) default. Sampling
+            # parameters and thinking.type='disabled' are rejected, so neither
+            # is ever sent.
+            effort = kwargs.get("thinking_effort") or self.DEFAULT_THINKING_EFFORT
+            request_fields["output_config"] = {"effort": effort}
+            if thinking:
+                request_fields["thinking"] = {"type": "adaptive"}
         else:
-            config["model_kwargs"] = {
-                "top_k": kwargs.get("top_k", self.DEFAULT_TOP_K),
-                **common_params,
-            }
-        return config
-
-    def _apply_model_features(
-        self,
-        config: dict[str, Any],
-        model_info: LanguageModelInfo,
-        is_cross_region: bool,
-        **kwargs: Any,
-    ) -> None:
-        enable_perf = kwargs.get("enable_performance_optimization", False)
-        enable_think = kwargs.get("enable_thinking", False)
-        if self._should_enable_performance_optimization(
-            enable_perf, model_info, is_cross_region
+            # Legacy models: thinking needs temperature 1.0 and a token budget.
+            config["temperature"] = (
+                1.0 if thinking else kwargs.get("temperature", self.DEFAULT_TEMPERATURE)
+            )
+            if thinking:
+                request_fields["thinking"] = {
+                    "type": "enabled",
+                    "budget_tokens": self.DEFAULT_THINKING_BUDGET_TOKENS,
+                }
+        if (
+            kwargs.get("supports_1m_context_window")
+            and model_info.supports_1m_context_window
         ):
-            latency = kwargs.get("latency_mode", self.DEFAULT_LATENCY_MODE)
-            config.setdefault("performanceConfig", {}).update({"latency": latency})
-            logger.debug(
-                "Applied performance optimization (latency_mode='%s')", latency
-            )
-        if self._should_enable_thinking(enable_think, model_info):
-            if model_info.uses_adaptive_thinking:
-                # Opus 4.8+ API: thinking.type='adaptive' + output_config.effort.
-                effort = kwargs.get("thinking_effort", self.DEFAULT_THINKING_EFFORT)
-                think_config = {
-                    "thinking": {"type": "adaptive"},
-                    "output_config": {"effort": effort},
-                }
-                detail = f"effort='{effort}'"
-            else:
-                # Legacy API: thinking.type='enabled' + budget_tokens.
-                budget = kwargs.get(
-                    "thinking_budget_tokens", self.DEFAULT_THINKING_BUDGET_TOKENS
-                )
-                think_config = {
-                    "thinking": {"type": "enabled", "budget_tokens": budget}
-                }
-                detail = f"budget_tokens={budget}"
-            if is_cross_region:
-                config.setdefault("additional_model_request_fields", {}).update(
-                    think_config
-                )
-            else:
-                config.setdefault("model_kwargs", {}).update(think_config)
-            logger.debug("Applied thinking mode (%s)", detail)
-
-    @staticmethod
-    def _validate_max_tokens(
-        max_tokens: int | None, model_info: LanguageModelInfo
-    ) -> int:
-        final_max_tokens = max_tokens or model_info.max_output_tokens
-        if final_max_tokens > model_info.max_output_tokens:
-            logger.warning(
-                "Requested max_tokens (%d) exceeds model's maximum (%d). Adjusting.",
-                final_max_tokens,
-                model_info.max_output_tokens,
-            )
-            return model_info.max_output_tokens
-        return final_max_tokens
-
-    @staticmethod
-    def _should_enable_performance_optimization(
-        enable: bool, model_info: LanguageModelInfo, is_cross_region: bool
-    ) -> bool:
-        return (
-            enable
-            and model_info.supports_performance_optimization
-            and not is_cross_region
-        )
-
-    @staticmethod
-    def _should_enable_thinking(enable: bool, model_info: LanguageModelInfo) -> bool:
-        return enable and model_info.supports_thinking
+            request_fields["anthropic_beta"] = [self.ANTHROPIC_1M_BETA]
+        if request_fields:
+            config["additional_model_request_fields"] = request_fields
+        return config

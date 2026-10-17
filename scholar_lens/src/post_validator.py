@@ -1,0 +1,1447 @@
+"""Final gate for a generated post: does it follow the blog's conventions?
+
+:func:`validate_post` checks the finished Markdown (front matter + body) that is
+about to be published. An ``error`` means the blog would render it wrongly or a
+person would have to fix it, so publishing stops; a ``warning`` is attached to
+the pull request as a review checklist item. All checks are deterministic.
+"""
+
+from __future__ import annotations
+
+import itertools
+import re
+from collections.abc import Sequence
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from datetime import date as date_type
+from decimal import Decimal
+from pathlib import Path
+from typing import Any, Literal, Protocol
+
+from .constants import ARXIV_DOI_VERSION, BARE_DOI, is_arxiv_host
+from .front_matter import split_front_matter
+from .markdown_lint import (
+    BLOG_HTML_ELEMENTS,
+    BLOG_NEEDS_ATTRIBUTES,
+    ENVELOPE_TAG,
+    TABLE_DELIMITER,
+    insecure_links,
+    style_hits,
+)
+from .markdown_math import (
+    BLOG_CODE_SPAN,
+    BLOG_FENCE_ROLES,
+    ESCAPED_UNDERSCORE,
+    HANGUL,
+    TEXT_COMMAND,
+    blog_bare,
+    blog_fence_roles,
+    blog_line_roles,
+    blog_unclosed_fence_lines,
+    blog_unquote,
+    fence_roles,
+    has_math,
+    image_sources,
+    indented_code_lines,
+)
+from .post_conventions import BlogPost, PostConventions
+from .publish_types import post_slug, same_post
+from .tags import tag_problem
+
+ArtifactKind = Literal["review", "summarize", "guide", "survey"]
+# The kinds that review or summarize one paper (a paper type in the spec).
+PAPER_KINDS: tuple[ArtifactKind, ...] = ("review", "summarize")
+Level = Literal["error", "warning"]
+Lines = list[tuple[int, str]]
+
+
+class Add(Protocol):
+    """Records one finding; each ``_check_*`` reports through it."""
+
+    def __call__(self, level: Level, rule: str, line: int, message: str) -> None: ...
+
+
+_HEADING = re.compile(r"^(#{1,6})\s+(.*\S)\s*$")
+_INLINE_MATH = re.compile(r"\$\$(.+?)\$\$")
+# A cell holding a number ("63.6", "1,820", "37.4%"), not a label that
+# merely contains a digit ("pass@1"): the blog lint's test (lint-posts.rb
+# line 428) for a data row under the header with a blank first cell.
+_NUMERIC_CELL = re.compile(r"[-+]?[\d.,]+%?")
+
+
+@dataclass(frozen=True)
+class Violation:
+    level: Level
+    rule: str
+    line: int
+    message: str
+
+    def __str__(self) -> str:
+        return f"[{self.rule}] line {self.line}: {self.message}"
+
+
+class PostValidationError(Exception):
+    """A post broke at least one convention; nothing was published."""
+
+    def __init__(self, violations: list[Violation]) -> None:
+        self.violations = violations
+        # Where the rejected post was kept for inspection (set by the publisher).
+        self.rejected_path: str | None = None
+        self.rejected_s3_uri: str | None = None
+        blocking = errors(violations)
+        summary = "; ".join(str(v) for v in blocking[:10])
+        more = f" (+{len(blocking) - 10} more)" if len(blocking) > 10 else ""
+        super().__init__(f"{len(blocking)} convention error(s): {summary}{more}")
+
+
+def errors(violations: list[Violation]) -> list[Violation]:
+    return [v for v in violations if v.level == "error"]
+
+
+def _prose_lines(body: str) -> Lines:
+    """Body lines outside fenced and indented code, as (offset, text)."""
+    lines = body.split("\n")
+    code = indented_code_lines(lines)
+    return [
+        (i, line)
+        for i, (line, role) in enumerate(zip(lines, fence_roles(lines), strict=True))
+        if role == "prose" and i not in code
+    ]
+
+
+def _blog_lines(body: str) -> Lines:
+    """Body lines outside the blog lint's fences (lint-posts.rb ``fences``,
+    lines 192-218, skipped at line 285), as (offset, text): what its math
+    checks read, an indented code block included (a fence inside a
+    blockquote is code there too)."""
+    lines = body.split("\n")
+    return [
+        (i, line)
+        for i, (line, role) in enumerate(
+            zip(lines, blog_line_roles(lines), strict=True)
+        )
+        if role != "fence"
+    ]
+
+
+_LINT_TAG = re.compile(r"(?<!\\)<(/?)([a-zA-Z][\w-]*)(\s[^<>]*)?/?>")
+_LINT_RAW = re.compile(r"(\{%-?\s*(?:end)?raw\s*-?%\})")
+_LINT_FENCE_INFO = re.compile(r"\A(`{3,}|~{3,})\s*\S+\s+\S")
+_LINT_TABLE_RULE = re.compile(r"\A\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\Z")
+_DESCRIPTION_MARKUP = re.compile(r"\$\$|\*\S[^*]*\*|`|\]\(|<[a-zA-Z/]|\{[{%]")
+# A description's length: the blog's <meta name="description"> keeps 160
+# characters (post_description.rb META_LIMIT); the hand-written ones on the
+# blog run 120-160.
+DESCRIPTION_LENGTH = range(120, 161)
+# What head.html appends to a Korean paper post's <title> ("… 논문 리뷰" or
+# "… 논문 요약", the same length); the blog fails a description no longer
+# than the page title.
+_PAPER_TITLE_SUFFIX = " 논문 리뷰"
+
+
+def paper_page_title(title: str, *, korean: bool) -> str:
+    """The longest ``<title>`` head.html gives a paper post: the title plus
+    the Korean suffix on a Korean post (a ``seo_title``, which head.html uses
+    on every post, only shortens it)."""
+    return f"{title}{_PAPER_TITLE_SUFFIX}" if korean else title
+
+
+def description_markup(description: str) -> bool:
+    """Whether ``description`` has markup the blog would show literally."""
+    return bool(_DESCRIPTION_MARKUP.search(description))
+
+
+def description_problems(description: str, sources: str) -> list[str]:
+    """What a writer must fix in a generated ``description``: plain text of
+    the right length whose every number is in ``sources`` (what the post's
+    description may draw on: its TL;DR, or its body and sources)."""
+    if not description:
+        return ["description is empty"]
+    problems = []
+    if description_markup(description):
+        problems.append(
+            "description is plain text: no $$, *emphasis*, backticks, links, "
+            "tags or {{"
+        )
+    if len(description) not in DESCRIPTION_LENGTH:
+        problems.append(
+            f"description has {len(description)} characters; write "
+            f"{DESCRIPTION_LENGTH.start}-{DESCRIPTION_LENGTH.stop - 1}"
+        )
+    if missing := unsourced_numbers(description, sources):
+        problems.append(
+            "description numbers not in the post's TL;DR or sources: "
+            + ", ".join(missing)
+        )
+    return problems
+
+
+def unknown_html_tag(text: str) -> str | None:
+    """The first ``<name>`` in prose ``text`` the browser would drop, as the
+    blog lint finds it (code spans and ``$$`` spans removed), or None."""
+    text = re.sub(r"\$\$.*?\$\$", "", BLOG_CODE_SPAN.sub("", blog_unquote(text)))
+    for close, name, attrs in _LINT_TAG.findall(text):
+        lowered = name.lower()
+        if lowered not in BLOG_HTML_ELEMENTS or (
+            not close and not attrs.strip() and lowered in BLOG_NEEDS_ATTRIBUTES
+        ):
+            return name
+    return None
+
+
+def _check_blog_markup(front: dict[str, Any], body: str, offset: int, add: Add) -> None:
+    """The blog lint's markup rules (script/lint-posts.rb) as it applies them:
+    Liquid outside raw tags, a fence never closed, tags the browser drops,
+    fence info strings kramdown does not read, a | inside $$ on a table row,
+    ar5iv links and lightbox links that do not open their image. Lines are
+    read by the lint's own roles (:func:`blog_fence_roles`): a fence (one
+    inside a blockquote too) or a ``$$`` display block is no prose."""
+    lines = body.split("\n")
+    roles = blog_fence_roles(lines)
+    _check_lightbox(lines, roles, offset, add)
+    for unclosed in blog_unclosed_fence_lines(lines):
+        add(
+            "error",
+            "code",
+            offset + unclosed,
+            "a code fence is never closed (a fence nested in another closes "
+            "the outer one; a fence inside a blockquote ends with it, at the "
+            "first blank line)",
+        )
+    raw = False
+    liquid = front.get("render_with_liquid") is not False
+    for i, (line, role) in enumerate(zip(lines, roles, strict=True)):
+        if liquid:
+            hit = False
+            for part in _LINT_RAW.split(line):
+                tag = re.fullmatch(r"\{%-?\s*((?:end)?raw)\s*-?%\}", part)
+                if tag:
+                    raw = tag.group(1) == "raw"
+                elif not raw and re.search(r"\{\{|\{%", part):
+                    hit = True
+            if hit:
+                add(
+                    "error",
+                    "liquid",
+                    offset + i,
+                    "Liquid tag in the body; wrap it in {% raw %} ... {% endraw %}",
+                )
+        if role == "open" and _LINT_FENCE_INFO.match(blog_unquote(line).strip()):
+            add(
+                "error",
+                "code",
+                offset + i,
+                "code fence info has a space; write just the language",
+            )
+        if role != "prose":
+            continue
+        # ar5iv answers a figure it lost with a "NO IMAGE AVAILABLE" PNG and
+        # HTTP 200, so no link check notices.
+        if "ar5iv." in blog_bare(line):
+            add(
+                "error",
+                "link",
+                offset + i,
+                "ar5iv link; use arxiv.org/html or a copy in /assets/images/",
+            )
+        if html_tag := unknown_html_tag(line):
+            add(
+                "error",
+                "html",
+                offset + i,
+                f"<{html_tag}> is read as HTML and does not show; write it in `code`",
+            )
+        starts_table = (
+            line.lstrip().startswith("|")
+            and i + 1 < len(lines)
+            and _LINT_TABLE_RULE.match(lines[i + 1].strip())
+            and (i == 0 or not lines[i - 1].lstrip().startswith("|"))
+        )
+        if starts_table:
+            rows = [i] + [
+                k
+                for k in itertools.takewhile(
+                    lambda k: lines[k].lstrip().startswith("|"),
+                    range(i + 2, len(lines)),
+                )
+            ]
+            for k in rows:
+                spans = re.findall(r"\$\$(.*?)\$\$", BLOG_CODE_SPAN.sub("", lines[k]))
+                if any("|" in m for m in spans):
+                    add(
+                        "error",
+                        "table",
+                        offset + k,
+                        "a | inside $$ in a table breaks it; write \\mid, "
+                        "\\lvert...\\rvert or \\lVert...\\rVert",
+                    )
+
+
+# A hand-written zoomable figure: <a class="glightbox" ...><img ...>. Attribute
+# values may hold ">" (a caption "A -> B"), so runs skip quoted text.
+_LINT_ATTRS = r"""(?:[^>"']|"[^"]*"|'[^']*')*"""
+_LIGHTBOX = re.compile(
+    rf"""<a\b{_LINT_ATTRS}\bclass=["'][^"']*\bglightbox\b[^"']*["']{_LINT_ATTRS}>"""
+    rf"""\s*(?P<img><img\b{_LINT_ATTRS}>)""",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def _check_lightbox(lines: list[str], roles: list[str], offset: int, add: Add) -> None:
+    """A lightbox opens its href: a page there (the figure's source) loads
+    in an iframe the site refuses, an empty box. The href must be the image."""
+    # A fence's lines (one inside a blockquote too) go blank, so an example
+    # there is not read and line numbers after it hold (lint-posts.rb
+    # lines 53-54).
+    text = "\n".join(
+        "" if role in BLOG_FENCE_ROLES else line
+        for line, role in zip(lines, roles, strict=True)
+    )
+    for match in _LIGHTBOX.finditer(text):
+        href = re.search(r"""\shref=["']([^"']+)""", match.group(0), re.IGNORECASE)
+        src = re.search(r"""\ssrc=["']([^"']+)""", match.group("img"), re.IGNORECASE)
+        if href and src and href.group(1) != src.group(1):
+            add(
+                "error",
+                "lightbox",
+                offset + text.count("\n", 0, match.start()),
+                f"a glightbox link opens {href.group(1)}, not its image; "
+                f"set href to {src.group(1)} and name the source in the caption",
+            )
+
+
+def validate_post(
+    markdown: str,
+    spec: PostConventions,
+    kind: ArtifactKind,
+    *,
+    file_name: str | None = None,
+    site_posts: Sequence[BlogPost] = (),
+) -> list[Violation]:
+    """Check ``markdown`` against ``spec`` for an artifact of ``kind``; with
+    ``file_name`` (the post's file name) also its date prefix and its
+    translation name, and against ``site_posts`` (the blog's posts; the one
+    this post replaces is left out) that its description is unique and a
+    translation of it stays paired."""
+    found: list[Violation] = []
+
+    def add(level: Level, rule: str, line: int, message: str) -> None:
+        found.append(Violation(level, rule, line, message))
+
+    front, body, offset = split_front_matter(markdown)
+    if front is None:
+        add("error", "front-matter", 1, "missing or invalid YAML front matter")
+        return found
+
+    lines = _prose_lines(body)
+    _check_front_matter(front, body, spec, kind, add)
+    if file_name is not None:
+        _check_file_date(file_name, front.get("date"), add)
+        _check_translation_name(file_name, front, add)
+        _check_site(file_name, front, site_posts, add)
+    _check_headings(lines, offset, kind, add)
+    _check_math(front, body, offset, add)
+    _check_tables(lines, offset, add)
+    # The blog's language is Korean; a translation says otherwise in lang.
+    _check_images(lines, offset, add, korean=front.get("lang", "ko") == "ko")
+    _check_text(lines, offset, add)
+    _check_links(lines, offset, add)
+    _check_style(body, offset, add)
+    if front.get("description") is None:
+        _check_description(lines, offset, add)
+    _check_blog_markup(front, body, offset, add)
+    if kind == "survey":
+        _check_survey_citations(lines, offset, add)
+    return found
+
+
+def body_errors(markdown: str) -> list[str]:
+    """The publish-blocking body checks (tables, math, code fences, links,
+    markup and the blog's style rules) as short
+    issue strings, so a writing loop can fix them before the post is final."""
+    found: list[str] = []
+
+    def add(level: Level, rule: str, line: int, message: str) -> None:
+        if level == "error" and rule != "use-math":
+            found.append(f"{rule}: {message} (line {line})")
+
+    lines = _prose_lines(markdown)
+    _check_math({}, markdown, 1, add)
+    _check_tables(lines, 1, add)
+    _check_links(lines, 1, add)
+    _check_blog_markup({}, markdown, 1, add)
+    _check_style(markdown, 1, add)
+    return found
+
+
+def _check_front_matter(
+    front: dict[str, Any],
+    body: str,
+    spec: PostConventions,
+    kind: ArtifactKind,
+    add: Add,
+) -> None:
+    for key in spec.forbidden_keys:
+        if key in front:
+            add("error", "forbidden-key", 1, f"front matter must not contain '{key}'")
+
+    title = str(front.get("title") or "").strip()
+    if not title:
+        add("error", "title", 1, "title is empty")
+
+    categories = front.get("categories")
+    if not (isinstance(categories, list) and len(categories) == 2):
+        add("error", "categories", 1, "categories must be [<type>, <topic>]")
+        category_type, topic = "", ""
+    else:
+        category_type, topic = str(categories[0]), str(categories[1])
+        if category_type not in spec.types:
+            add("error", "categories", 1, f"unknown type '{category_type}'")
+        elif spec.is_paper_type(category_type) != (kind in PAPER_KINDS):
+            add(
+                "error",
+                "categories",
+                1,
+                f"type '{category_type}' does not fit a {kind}",
+            )
+        if topic not in spec.topics:
+            add("error", "categories", 1, f"unknown topic '{topic}'")
+        elif category_type in spec.types:
+            expected = spec.cover_for(category_type, topic)
+            if front.get("cover") != expected:
+                add("error", "cover", 1, f"cover must be '{expected}'")
+
+    if kind in PAPER_KINDS:
+        _check_paper_author(front.get("paper_author"), add)
+        _check_paper_doi(front, add)
+        subtitle = str(front.get("subtitle") or "").strip()
+        if not subtitle:
+            add("error", "subtitle", 1, "paper posts need a subtitle")
+        elif subtitle == title:
+            add("error", "subtitle", 1, "subtitle must differ from the title")
+    else:
+        for key in ("paper_author", "paper_doi"):
+            if key in front:
+                add("error", key.replace("_", "-"), 1, f"a {kind} does not take {key}")
+
+    seo_title = front.get("seo_title")
+    limit = spec.seo_title_max_length
+    if len(title) > limit and not seo_title:
+        add("error", "seo-title", 1, f"title is over {limit} characters; add seo_title")
+    if seo_title and len(str(seo_title)) > limit:
+        add("error", "seo-title", 1, f"seo_title is over {limit} characters")
+
+    _check_tags(front.get("tags"), spec, add)
+
+    _check_description_field(front, spec, kind, add)
+
+    lang = front.get("lang")
+    languages = " or ".join(spec.languages)
+    if lang is not None:
+        if lang not in spec.languages:
+            add("error", "translation", 1, f"lang must be {languages}")
+        if not front.get("translation_id"):
+            add("error", "translation", 1, "a translated post needs translation_id")
+    elif front.get("translation_id"):
+        add(
+            "error",
+            "translation",
+            1,
+            f"a post with translation_id must set lang ({languages})",
+        )
+
+
+def _check_description_field(
+    front: dict[str, Any], spec: PostConventions, kind: ArtifactKind, add: Add
+) -> None:
+    """The search snippet (README "description:"): plain text, longer than
+    the page's <title>; the blog derives one when it is missing."""
+    description = front.get("description")
+    if description is None:
+        if kind != "guide":
+            add(
+                "warning",
+                "description",
+                1,
+                "no description; the blog derives one from the first paragraph",
+            )
+        return
+    text = " ".join(str(description).split())
+    if description_markup(text):
+        add(
+            "error",
+            "description",
+            1,
+            "description is plain text; no $$, *emphasis*, backticks, links or tags",
+        )
+    # head.html (lines 47 and 56-62) gives every post its seo_title, when set, for
+    # the plain title, and a paper post in the site's language (Korean) the
+    # suffix after it.
+    title = str(front.get("seo_title") or front.get("title") or "")
+    categories = front.get("categories") or [""]
+    if (
+        front.get("paper_author")
+        and front.get("lang", "ko") == "ko"
+        and spec.is_paper_type(str(categories[0]))
+    ):
+        title = paper_page_title(title, korean=True)
+    if len(text) <= len(title):
+        add(
+            "error",
+            "description",
+            1,
+            f"description ({len(text)} characters) must be longer than the page "
+            f"title '{title}' ({len(title)})",
+        )
+    elif len(text) not in DESCRIPTION_LENGTH:
+        add(
+            "warning",
+            "description",
+            1,
+            f"description has {len(text)} characters; the blog's descriptions run "
+            f"{DESCRIPTION_LENGTH.start}-{DESCRIPTION_LENGTH.stop - 1}",
+        )
+
+
+def _check_translation_name(file_name: str, front: dict[str, Any], add: Add) -> None:
+    """A translation lives at ``<id>.md`` (Korean) and ``<id>-en.md``
+    (English) after the date; an ``-en`` post always has a translation_id."""
+    slug = post_slug(Path(file_name).stem)
+    translation_id = front.get("translation_id")
+    if not translation_id:
+        if slug.endswith("-en"):
+            add("error", "translation", 1, "an -en post must set translation_id")
+        return
+    expected = (
+        f"{translation_id}-en" if front.get("lang") == "en" else str(translation_id)
+    )
+    if slug != expected:
+        add(
+            "error",
+            "translation",
+            1,
+            f"a post with translation_id {translation_id} is named {expected}.md "
+            f"(after the date), not {slug}.md",
+        )
+
+
+def _check_site(
+    file_name: str, front: dict[str, Any], site_posts: Sequence[BlogPost], add: Add
+) -> None:
+    """Against the blog's other posts: no other post has the description
+    (the blog fails duplicates), and a published translation of this post
+    keeps its pair (one post per language with its translation_id)."""
+    slug = post_slug(Path(file_name).stem)
+    others = [
+        post
+        for post in site_posts
+        if not same_post(post_slug(Path(post.path).stem), slug)
+    ]
+    description = " ".join(str(front.get("description") or "").split())
+    for post in others:
+        if description and " ".join((post.description or "").split()) == description:
+            add(
+                "error",
+                "description",
+                1,
+                f"description is the same as {post.path}'s; the blog fails duplicates",
+            )
+    translation_id = str(front.get("translation_id") or slug)
+    twins = [
+        post
+        for post in others
+        if post.translation_id and same_post(post.translation_id, translation_id)
+    ]
+    if twins and not front.get("translation_id"):
+        add(
+            "error",
+            "translation",
+            1,
+            f"{twins[0].path} is this post's translation; set translation_id: "
+            f"{twins[0].translation_id} and lang",
+        )
+    for twin in twins:
+        if twin.lang == front.get("lang"):
+            add(
+                "error",
+                "translation",
+                1,
+                f"{twin.path} already has lang {twin.lang} for translation_id "
+                f"{translation_id}",
+            )
+
+
+def _check_file_date(file_name: str, date: Any, add: Add) -> None:
+    """Jekyll skips a post without the date prefix and builds a ``date:``
+    after the file's day (UTC) into a permanent URL. The file name carries
+    the posting day; ``date:`` is the paper's own date, never later."""
+    m = re.match(r"(\d{4}-\d{2}-\d{2})-", file_name)
+    if not m:
+        add("error", "date", 1, "the file name starts with YYYY-MM-DD-")
+        return
+    if isinstance(date, str):
+        try:
+            date = datetime.fromisoformat(date)
+        except ValueError:
+            return
+    if isinstance(date, datetime):
+        date = (date if date.tzinfo else date.replace(tzinfo=UTC)).astimezone(UTC)
+    if isinstance(date, date_type):  # a datetime is one too
+        day = date.date() if isinstance(date, datetime) else date
+        posted = datetime.strptime(m.group(1), "%Y-%m-%d").date()
+        if day > posted:
+            add(
+                "error",
+                "date",
+                1,
+                f"date {day} (UTC) is after the file name's {m.group(1)}",
+            )
+
+
+def _check_paper_author(value: Any, add: Add) -> None:
+    """The blog lint's rule (lint-posts.rb line 128): one non-blank string
+    without "et al" (any case, anywhere)."""
+    if not isinstance(value, str) or not value.strip():
+        add(
+            "error",
+            "paper-author",
+            1,
+            f"paper_author (publishing organisation) must be one string, got {value!r}",
+        )
+        return
+    if re.search(r"et al", value, re.IGNORECASE):
+        add("error", "paper-author", 1, f"paper_author is a person list: '{value}'")
+
+
+def _check_paper_doi(front: dict[str, Any], add: Add) -> None:
+    """lint-posts.rb lines 134-139: a set ``paper_doi`` (even empty) is a bare
+    DOI, and an arXiv one carries no version."""
+    if "paper_doi" not in front:
+        return
+    doi = front["paper_doi"]
+    text = "" if doi is None else str(doi)
+    if not BARE_DOI.fullmatch(text):
+        add(
+            "error",
+            "paper-doi",
+            1,
+            f"paper_doi is a bare DOI (10.<registrant>/<suffix>), got {doi!r}",
+        )
+    elif ARXIV_DOI_VERSION.fullmatch(text):
+        add(
+            "error",
+            "paper-doi",
+            1,
+            f"paper_doi '{text}' carries an arXiv version; drop the vN",
+        )
+
+
+def _check_tags(tags: Any, spec: PostConventions, add: Add) -> None:
+    if not isinstance(tags, list) or not tags:
+        add("error", "tags", 1, "tags must be a non-empty list")
+        return
+    controlled = set(spec.tags.controlled)
+    for tag in map(str, tags):
+        # lint-posts.rb lines 162-171: a retired name, else the format.
+        if (replacement := spec.tags.aliases.get(tag)) is not None:
+            add("error", "tags", 1, f"tag '{tag}' is retired; use '{replacement}'")
+        elif problem := tag_problem(tag, spec.tags.lowercase_words):
+            add("error", "tags", 1, problem)
+    used = [t for t in map(str, tags) if t in controlled]
+    if not used:
+        add("error", "tags", 1, "at least one controlled tag is required")
+    if len(used) > spec.tags.max_controlled:
+        add(
+            "warning",
+            "tags",
+            1,
+            f"more than {spec.tags.max_controlled} controlled tags",
+        )
+    specific = [t for t in map(str, tags) if t not in controlled]
+    if len(specific) > spec.tags.max_specific:
+        add("error", "tags", 1, f"at most {spec.tags.max_specific} specific tags")
+
+
+def _check_headings(lines: Lines, offset: int, kind: ArtifactKind, add: Add) -> None:
+    previous = 1
+    first = True
+    for i, line in lines:
+        match = _HEADING.match(line)
+        if not match:
+            continue
+        level, text = len(match.group(1)), match.group(2)
+        if level == 1:
+            add("error", "headings", offset + i, f"H1 in the body: '{text}'")
+        elif level > previous + 1:
+            add(
+                "error",
+                "headings",
+                offset + i,
+                f"heading jumps from H{previous} to H{level}",
+            )
+        if first and kind in PAPER_KINDS and not (level == 2 and text == "TL;DR"):
+            add("error", "headings", offset + i, "a paper post starts with '## TL;DR'")
+        first = False
+        previous = level
+    if first and kind in PAPER_KINDS:
+        add("error", "headings", offset, "a paper post starts with '## TL;DR'")
+    if kind in PAPER_KINDS:
+        _check_tldr(lines, offset, kind, add)
+
+
+def _check_tldr(lines: Lines, offset: int, kind: ArtifactKind, add: Add) -> None:
+    """The ``## TL;DR`` section has prose (and, in a review, its ``###``
+    questions): an empty one means the finalizer failed."""
+    start = next((i for i, line in lines if line.strip() == "## TL;DR"), None)
+    if start is None:
+        return  # reported above
+    prose = questions = 0
+    for i, line in lines:
+        if i <= start:
+            continue
+        stripped = line.strip()
+        if stripped.startswith("## ") or stripped == "- - -":
+            break
+        if stripped.startswith("### "):
+            questions += 1
+        elif stripped:
+            prose += 1
+    if not prose:
+        add("error", "headings", offset + start, "the '## TL;DR' section is empty")
+    elif kind == "review" and not questions:
+        add(
+            "error",
+            "headings",
+            offset + start,
+            "the review's '## TL;DR' has no '###' questions",
+        )
+
+
+# Math the Markdown reads first: `\\(`/`\\[` reach MathJax only after `*` and
+# `_` inside them turned into <em>. (A single `\(` is a Markdown escape for a
+# literal parenthesis; normalize_math has already turned `\(x\)` math into $$.)
+_ESCAPED_DELIMS = re.compile(r"\\\\[(\[]")
+# TeX next to a single `$`: math that never opened (a price is neither
+# preceded by `}` nor followed by a command).
+_LONE_DOLLAR_TEX = re.compile(r"\}\$(?!\$)|(?<!\$)\$\\[a-zA-Z]")
+_INLINE_SPAN = re.compile(r"\$\$(?:(?!\$\$).)+\$\$")
+_WRAPPED_SPAN = re.compile(r"\$\$((?:(?!\$\$).)+)\$\$", re.DOTALL)
+# Lines that start a new block: a heading, or a list item (which ends a span
+# opened in a sibling item). An inline $$ span left open before it never
+# closes there.
+_STARTS_HEADING = re.compile(r"#{1,6}[ \t]")
+_STARTS_ITEM = re.compile(r"(?:[-*+]|\d+[.)])[ \t]")
+# A single-backslash \[ … \] around TeX in prose: display math the
+# normalizer could not convert (Markdown shows it as "[ … ]").
+# A TeX command or a spaced "=" marks math; "\[^1\]" (a footnote) and
+# "\[--max_len\]" (an option) do not.
+_BRACKET_TEX = re.compile(
+    r"(?<!\\)\\\[(?=[^\]]*(?:\\[A-Za-z]|\s=\s))"
+    r"|^[ \t]*\\{1,2}[\[\]][ \t]*$"  # a bracket display's own delimiter line
+)
+# The same over lines: a "\[" ending a line and its "\]" on a later line of
+# the paragraph, with math between them ("배열은 a\[\ni\]" is not math).
+_BRACKET_BLOCK = re.compile(
+    r"(?<!\\)\\\[[ \t]*\n(?P<body>(?:(?!\\\]).)*?(?:\\[A-Za-z]|\s=\s).*?)\\\]",
+    re.DOTALL,
+)
+
+
+def _check_math(front: dict[str, Any], body: str, offset: int, add: Add) -> None:
+    """The blog's math rules (script/lint-posts.rb), blockquotes included:
+    only ``$$`` delimiters; a display block opens on a line starting with
+    ``$$`` and closes on the next line with an odd number of them, with blank
+    lines around it; an inline span may wrap within its paragraph.
+
+    They read the lines the blog lint reads (:func:`_blog_lines`: an
+    indented code block too, a fence inside a quote not); the rules of our
+    own (a bare | in inline math, a single-backslash bracket display, list
+    restarts) only the lines kramdown renders as text."""
+    lines = _blog_lines(body)
+    rendered = {i for i, _ in _prose_lines(body)}
+    if bool(front.get("use_math")) != has_math(body):
+        add(
+            "error",
+            "use-math",
+            1,
+            "use_math must be true exactly when the post contains $$ math",
+        )
+    bare_by_index = {i: blog_unquote(line) for i, line in lines}
+
+    raw_by_index = dict(lines)
+    body_lines = body.split("\n")
+
+    def blank(i: int) -> bool:
+        return not bare_by_index.get(i, "").strip()
+
+    def starts_block(i: int) -> bool:
+        """Whether a bare | on line ``i`` splits it into table cells: a table
+        row, or a paragraph's, list item's or quote's first line (not a
+        heading, a continuation line, or a line glued under a heading or a
+        closing fence, which kramdown keeps as a paragraph)."""
+        text = bare_by_index.get(i, "").lstrip()
+        if text.startswith("#"):
+            return False
+        if text.startswith("|"):  # a table row: kramdown splits it at the bar
+            return True
+        before_raw = body_lines[i - 1] if 0 < i <= len(body_lines) else ""
+        if i - 1 not in bare_by_index and before_raw.strip():
+            return False  # glued under a code line (a closing fence)
+        before = raw_by_index.get(i - 1, "").lstrip()
+        if before.startswith("#"):
+            return False
+        if i not in bare_by_index or blank(i - 1) or _STARTS_ITEM.match(text):
+            return True
+        quoted = raw_by_index.get(i, "").lstrip().startswith(">")
+        return quoted and not before.startswith(">")
+
+    def closes_mid_line(i: int) -> bool:
+        """Whether the ``$$`` opened on line ``i`` closes on a later line of
+        the paragraph with text after it: an inline span that starts a
+        paragraph line, not a display block."""
+        j = i + 1
+        while j in bare_by_index and not blank(j):
+            later = BLOG_CODE_SPAN.sub("", bare_by_index[j]).strip()
+            if later.count("$$") % 2:
+                return bool(later.split("$$", 1)[1].strip())
+            j += 1
+        return False
+
+    block: int | None = None  # line a multi-line display block opened on
+    span: int | None = None  # line an inline span wrapping onto the next opened on
+    for i, _ in lines:
+        bare = BLOG_CODE_SPAN.sub("", bare_by_index[i])
+        stripped = bare.strip()
+        odd = stripped.count("$$") % 2 == 1
+        if span is not None and (
+            not stripped
+            or (
+                i in rendered
+                and (
+                    _STARTS_HEADING.match(stripped)
+                    or (
+                        _STARTS_ITEM.match(stripped)
+                        and _STARTS_ITEM.match(bare_by_index[span].strip())
+                    )
+                    or bare_by_index[span].lstrip().startswith("|")  # rows never wrap
+                )
+            )
+        ):
+            # A blank line ends the paragraph (lint-posts.rb line 296); in
+            # rendered text a sibling list item, a heading or a table row
+            # ends the block too: the open $$ never closes there.
+            add("error", "math", offset + span, "unbalanced $$ in the paragraph")
+            span = None
+        opens_block = (
+            odd
+            and span is None
+            and stripped.startswith("$$")
+            and (blank(i - 1) or not closes_mid_line(i))
+        )
+        if block is not None or opens_block:
+            _check_math_span(stripped.replace("$$", ""), offset + i, add, inline=False)
+            if odd and block is not None and not blank(i + 1):
+                if not bare_by_index.get(i + 1, "").strip().startswith("{:"):
+                    add(
+                        "error",
+                        "math",
+                        offset + i,
+                        "display $$ needs a blank line after it",
+                    )
+            elif odd and block is None and i > 0 and not blank(i - 1):
+                add(
+                    "error",
+                    "math",
+                    offset + i,
+                    "display $$ needs a blank line before it",
+                )
+            if odd:
+                block = None if block is not None else i
+            continue
+        if odd:
+            if span is not None:
+                # A span wrapped over lines: the per-line checks never see it.
+                text = "\n".join(
+                    BLOG_CODE_SPAN.sub("", bare_by_index.get(j, ""))
+                    for j in range(span, i + 1)
+                )
+                for math in _WRAPPED_SPAN.findall(text):
+                    if "\n" in math:
+                        _check_math_span(
+                            math,
+                            offset + span,
+                            add,
+                            inline=True,
+                            row=span in rendered and starts_block(span),
+                        )
+                # The rest of this line, after the closing $$, is checked as
+                # its own line below.
+                bare = bare.split("$$", 1)[1]
+                span = None
+            else:
+                span = i
+                bare = bare.rsplit("$$", 1)[0]  # the wrapped span is checked whole
+        outside = _INLINE_SPAN.sub("", bare)
+        if _ESCAPED_DELIMS.search(outside) or (
+            i in rendered and _BRACKET_TEX.search(outside)
+        ):
+            add("error", "math", offset + i, r"math written \( or \[; use $$ … $$")
+        if _LONE_DOLLAR_TEX.search(outside):
+            add(
+                "error",
+                "math",
+                offset + i,
+                "TeX next to a single `$`; write the formula as $$ … $$",
+            )
+        if _INLINE_SPAN.fullmatch(stripped) and not stripped.startswith("|"):
+            # kramdown attribute lists ("{: …}") may follow a display directly.
+            after_ok = blank(i + 1) or bare_by_index.get(i + 1, "").strip().startswith(
+                "{:"
+            )
+            if not (blank(i - 1) and after_ok):
+                add(
+                    "error",
+                    "math",
+                    offset + i,
+                    "display $$ needs blank lines around it",
+                )
+            _check_math_span(stripped[2:-2], offset + i, add, inline=False)
+            continue
+        for math in _INLINE_MATH.findall(bare):
+            _check_math_span(
+                math,
+                offset + i,
+                add,
+                inline=True,
+                row=i in rendered and starts_block(i),
+            )
+    if block is not None:
+        add("error", "math", offset + block, "$$ block never closed")
+    if span is not None:
+        add("error", "math", offset + span, "unbalanced $$ in the paragraph")
+    text_lines = [(i, line) for i, line in lines if i in rendered]
+    _check_bracket_blocks(text_lines, bare_by_index, offset, add)
+    _check_list_restarts(text_lines, bare_by_index, offset, add)
+
+
+_ORDERED_ITEM = re.compile(r"(\d+)[.)][ \t]")
+
+
+def _check_list_restarts(
+    lines: Lines, bare_by_index: dict[int, str], offset: int, add: Add
+) -> None:
+    """An ordered item numbered above 1 after a display indented less than the
+    item's content (at the margin, or glued and under-indented), with or
+    without a paragraph between them: the display ended the list, so kramdown
+    starts a new one and shows "1."."""
+
+    def width(text: str) -> int:
+        return len(text.expandtabs(4)) - len(text.expandtabs(4).lstrip())
+
+    display_indent: int | None = None  # least indent of a display since an item
+    for i, raw in lines:
+        line = bare_by_index[i]
+        stripped = line.strip()
+        if not stripped:
+            continue
+        # A quoted line: the indent before its ">" (a callout in a step) plus
+        # the indent inside the quote (a list in a quote).
+        indent = width(line) + (width(raw) if raw.lstrip().startswith(">") else 0)
+        item = _ORDERED_ITEM.match(stripped)
+        if item and _STARTS_ITEM.match(stripped):
+            column = indent + len(item.group(0))
+            if (
+                int(item.group(1)) > 1
+                and display_indent is not None
+                and display_indent < column
+            ):
+                add(
+                    "warning",
+                    "list",
+                    offset + i,
+                    f"ordered list restarts at {item.group(1)} after a display, so "
+                    "it renders as 1.; indent the display (and any paragraph after "
+                    "it) into the item above",
+                )
+            display_indent = None
+            continue
+        if _STARTS_ITEM.match(stripped):
+            display_indent = None
+        elif stripped.startswith("$$") and (
+            stripped.endswith("$$") or stripped.count("$$") % 2
+        ):  # a whole-line display or a block's opening line
+            display_indent = (
+                indent if display_indent is None else min(display_indent, indent)
+            )
+
+
+def _check_bracket_blocks(
+    lines: Lines, bare_by_index: dict[int, str], offset: int, add: Add
+) -> None:
+    """A "\\[ … \\]" display written over lines (kramdown shows it as text)."""
+    paragraph: list[int] = []
+
+    def flush() -> None:
+        text = "\n".join(BLOG_CODE_SPAN.sub("", bare_by_index[j]) for j in paragraph)
+        prose = _INLINE_SPAN.sub("", text)
+        for m in _BRACKET_BLOCK.finditer(prose):
+            if not prose[prose.rfind("\n", 0, m.start()) + 1 : m.start()].strip():
+                continue  # a "\\[" on its own line is reported line by line
+            line = paragraph[0] + prose.count("\n", 0, m.start())
+            add("error", "math", offset + line, r"math written \( or \[; use $$ … $$")
+        paragraph.clear()
+
+    for i, _ in lines:
+        if not bare_by_index[i].strip() or (paragraph and i != paragraph[-1] + 1):
+            flush()
+        if bare_by_index[i].strip():
+            paragraph.append(i)
+    flush()
+
+
+def _check_math_span(
+    math: str, line: int, add: Add, *, inline: bool, row: bool = False
+) -> None:
+    outside_text = TEXT_COMMAND.sub("", math)
+    if ESCAPED_UNDERSCORE.search(outside_text):
+        add("error", "math", line, r"no \_ inside $$ (only within \text{})")
+    if HANGUL.search(outside_text):  # the blog lint checks display math too
+        add("error", "math", line, "Korean text inside $$ (currency or prose?)")
+    # kramdown reads a bare | in inline math on the first line of a block (a
+    # paragraph, list item or quote; ``row``) as a table cell separator, so
+    # the block becomes a table. normalize_math rewrites it to \vert except
+    # inside \text{} or an array column spec, so what reaches here needs a
+    # hand fix.
+    if inline and row and re.search(r"(?<!\\)\|", math):
+        add(
+            "error",
+            "math",
+            line,
+            r"bare | inside inline $$ (in \text{} or an array spec); use \vert,"
+            r" \lvert … \rvert or \mid",
+        )
+
+
+def _split_cells(row: str) -> list[str]:
+    masked = BLOG_CODE_SPAN.sub(lambda m: "x" * len(m.group(0)), row)
+    masked = _INLINE_MATH.sub(lambda m: "x" * len(m.group(0)), masked)
+    masked = masked.replace("\\|", "xx")
+    cells, start = [], 0
+    for pos, char in enumerate(masked):
+        if char == "|":
+            cells.append(row[start:pos])
+            start = pos + 1
+    cells.append(row[start:])
+    stripped = row.strip()
+    if stripped.startswith("|"):
+        cells = cells[1:]
+    if stripped.endswith("|") and not stripped.endswith("\\|"):
+        cells = cells[:-1]
+    return [c.strip() for c in cells]
+
+
+def _check_tables(lines: Lines, offset: int, add: Add) -> None:
+    index = 0
+    while index < len(lines):
+        i, line = lines[index]
+        nxt = lines[index + 1][1] if index + 1 < len(lines) else ""
+        # The blog lint's separator row (lint-posts.rb line 405): one dash a
+        # cell is enough, as kramdown reads it ("|--|" under a header).
+        if line.lstrip().startswith("|") and _LINT_TABLE_RULE.match(nxt.strip()):
+            header = _split_cells(line)
+            width = len(header)
+            block = [(i, line)]
+            index += 2
+            while index < len(lines) and lines[index][1].lstrip().startswith("|"):
+                block.append(lines[index])
+                index += 1
+            if len(_split_cells(nxt)) != width:
+                add(
+                    "error",
+                    "table",
+                    offset + i + 1,
+                    "separator cell count differs from header",
+                )
+            # lint-posts.rb lines 421-426: no empty header cell, the first
+            # included (it names the row labels: "구분", "모델"). A cell
+            # holding only "\|" is not empty (line 411).
+            for col, label in enumerate(header):
+                if col and not label:
+                    add(
+                        "error",
+                        "table",
+                        offset + i,
+                        f"empty header cell in column {col + 1}; merge a two-row "
+                        'header into one ("AIME 2024 pass@1")',
+                    )
+            if header and not header[0] and all(header[1:]):
+                add(
+                    "error",
+                    "table",
+                    offset + i,
+                    "table header's first cell is empty; name the column "
+                    '("구분", "모델")',
+                )
+            for col in range(1, width):
+                if header[col] and header[col] == header[col - 1]:
+                    add(
+                        "warning",
+                        "table",
+                        offset + i,
+                        f"repeated header '{header[col]}'",
+                    )
+            previous: list[str] | None = None
+            for row_number, (j, row) in enumerate(block[1:]):
+                cells = _split_cells(row)
+                if cells == previous and any(cells):
+                    add("error", "table", offset + j, "row repeats the row above")
+                previous = cells
+                # Fewer cells are a group-label row kramdown pads (the blog's
+                # lint allows them); more cells shift the columns.
+                if len(cells) > width:
+                    add(
+                        "error",
+                        "table",
+                        offset + j,
+                        f"{len(cells)} cells, header has {width}",
+                    )
+                if (
+                    row_number == 0
+                    and cells
+                    and not cells[0]
+                    and not any(_NUMERIC_CELL.fullmatch(c) for c in cells)
+                ):
+                    add(
+                        "error",
+                        "table",
+                        offset + j,
+                        "sub-header row; merge it into the header",
+                    )
+            continue
+        index += 1
+
+
+_NUMBER = re.compile(r"(?<![\w.])[-+−]?\d[\d,]*(?:\.\d+)?(?:[eE][-+]?\d+)?(?![\w.])")
+# Numbers too small or too common to tell a copied value from an invented one.
+_TRIVIAL_NUMBER = re.compile(r"\d{1,2}|\d{4}")
+MAX_UNSOURCED_NUMBERS = 8
+
+
+def _canonical_number(token: str) -> str:
+    """``1,234.50`` → ``1234.5``; ``-0.30`` → ``0.3`` (sign ignored)."""
+    digits = token.lstrip("-+−").replace(",", "").lower()
+    if "e" in digits:
+        try:
+            return repr(float(digits))
+        except ValueError:
+            return digits
+    if "." in digits:
+        digits = digits.rstrip("0").rstrip(".")
+    return digits.lstrip("0") or "0"
+
+
+def unsourced_table_numbers(markdown: str, source_text: str) -> list[str]:
+    """Table rows of the post whose numbers never appear together in one
+    line or one table of the source paper, plus lone values
+    the paper never states. Thousands separators, trailing zeros and signs
+    are normalised; small integers and years count only within a row.
+
+    A row that regroups or derives values can be legitimate, so these are
+    review notes, not errors.
+    """
+    _, body, _ = split_front_matter(markdown)
+    # A source unit is a line (a sentence or table row) or a whole table, so a
+    # transposed or regrouped table still finds its values together.
+    units: list[str] = []
+    table: list[str] = []
+    for line in [*source_text.splitlines(), ""]:
+        units.append(line)
+        if line.lstrip().startswith("|"):
+            table.append(line)
+        elif table:
+            units.append("\n".join(table))
+            table = []
+    source_rows = [{_canonical_number(t) for t in _NUMBER.findall(u)} for u in units]
+    known = set().union(*source_rows) if source_rows else set()
+    missing: list[str] = []
+    for _, line in _prose_lines(body):
+        if not line.lstrip().startswith("|") or TABLE_DELIMITER.match(line.strip()):
+            continue
+        cells = _split_cells(_INLINE_MATH.sub(" ", BLOG_CODE_SPAN.sub(" ", line)))
+        tokens = [
+            t for cell in cells[1:] for t in _NUMBER.findall(cell)
+        ]  # not the label
+        values = {_canonical_number(t) for t in tokens}
+        if len(values) >= 2:
+            if not any(values <= row for row in source_rows):
+                label = cells[0] or "row"
+                missing.append(f"{label}: {' / '.join(tokens)}")
+            continue
+        for token in tokens:
+            value = _canonical_number(token)
+            if not _TRIVIAL_NUMBER.fullmatch(value) and value not in known:
+                missing.append(token)
+    return missing[:MAX_UNSOURCED_NUMBERS]
+
+
+# A number with the scale word or letter right after it. Korean units are a
+# closed set (천 10^3, 만 10^4, 백만 10^6, 천만 10^7, 억 10^8, 조 10^12), and so
+# are the English ones a paper writes (K, M, B, T and the words). A letter
+# right before the number makes it part of a name ("H800", "Qwen3"); a
+# letter right after a unit letter makes it a word ("4MB").
+_SCALED_NUMBER = re.compile(
+    r"(?<![A-Za-z0-9.])(?P<value>\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)"
+    r"(?:(?P<letter>[KkMBT])(?![A-Za-z])"
+    r"|\s?(?P<word>thousand|million|billion|trillion)\b"
+    r"|(?P<korean>천만|백만|천|만|억|조))?"
+)
+_SCALES = {
+    "k": 3, "K": 3, "M": 6, "B": 9, "T": 12,
+    "thousand": 3, "million": 6, "billion": 9, "trillion": 12,
+    "천": 3, "만": 4, "백만": 6, "천만": 7, "억": 8, "조": 12,
+}  # fmt: skip
+
+
+@dataclass(frozen=True)
+class _Number:
+    text: str
+    value: Decimal  # as written ("7" in "7B")
+    absolute: Decimal  # with its unit applied (7E+9)
+    scaled: bool
+    # A lone 만 after the number is the unit 10^4 or the particle "only"
+    # ("5만 사용"): the number is sourced as either.
+    either: bool = False
+
+
+# The next part of a combined Korean number ("12만 8천", "1억 2000만").
+_KOREAN_PART = re.compile(r"\s?(\d+(?:\.\d+)?)(천만|백만|천|만|억|조)")
+
+
+def _numbers(text: str) -> list[_Number]:
+    found = []
+    pos = 0
+    while m := _SCALED_NUMBER.search(text, pos):
+        value = Decimal(m.group("value").replace(",", ""))
+        unit = m.group("letter") or m.group("word") or m.group("korean")
+        end = m.end()
+        absolute = value.scaleb(_SCALES[unit]) if unit else value
+        if unit and m.group("korean"):
+            # Smaller Korean units right after add up: 12만 8천 is 128,000.
+            scale = _SCALES[unit]
+            while (part := _KOREAN_PART.match(text, end)) and (
+                _SCALES[part.group(2)] < scale
+            ):
+                scale = _SCALES[part.group(2)]
+                absolute += Decimal(part.group(1)).scaleb(scale)
+                end = part.end()
+            if end != m.end():
+                value = absolute  # as written, the parts are one quantity
+        found.append(
+            _Number(
+                text[m.start() : end],
+                value.normalize(),
+                absolute.normalize(),
+                bool(unit),
+                either=unit == "만" and end == m.end(),
+            )
+        )
+        pos = max(end, m.start() + 1)
+    return found
+
+
+def unsourced_numbers(text: str, source: str) -> list[str]:
+    """The numbers of ``text`` (a TL;DR, a description) that ``source`` (the
+    paper) never states, in order, each once.
+
+    Thousands separators, trailing zeros, signs and a trailing % are
+    ignored. A number with a unit matches only the same quantity in the
+    source, so 70억 matches 7B or 7 billion and 7억 does not (a combined
+    Korean number is one quantity: 12만 8천 matches 128K); a bare number
+    matches the same digits anywhere in the source ("87.3" in "87.3%"). A
+    lone 만 is also the particle "only", so 5만 matches 5 or 50,000.
+    """
+    known = _numbers(source)
+    values = {n.value for n in known}
+    quantities = {n.absolute for n in known}
+    missing: list[str] = []
+    for number in _numbers(text):
+        found = (
+            number.absolute in quantities if number.scaled else number.value in values
+        ) or (number.either and number.value in values)
+        if not found and number.text not in missing:
+            missing.append(number.text)
+    return missing
+
+
+_IMAGE_ALT = re.compile(r"!\[([^\]]*)\]\(")
+
+
+def _check_images(lines: Lines, offset: int, add: Add, *, korean: bool) -> None:
+    for i, line in lines:
+        if korean:
+            for alt in _IMAGE_ALT.findall(BLOG_CODE_SPAN.sub("", line)):
+                if not HANGUL.search(alt):
+                    add(
+                        "warning",
+                        "image-alt",
+                        offset + i,
+                        f"image alt text is not Korean: '{alt[:60]}'",
+                    )
+        for src in image_sources(line):
+            if src.startswith(("http://", "https://")):
+                if is_arxiv_host(src):
+                    add(
+                        "error",
+                        "image",
+                        offset + i,
+                        f"arXiv image not localized: {src}",
+                    )
+                else:
+                    # Someone else's image is linked, not copied: check it
+                    # still loads and its source is credited.
+                    add(
+                        "warning",
+                        "image",
+                        offset + i,
+                        f"remote image not localized (linked to its source): {src}",
+                    )
+            elif src.startswith("data:"):
+                add(
+                    "error",
+                    "image",
+                    offset + i,
+                    "inline data: image; store it as a file in /assets/images/",
+                )
+            elif not re.fullmatch(r"/assets/images/[^/]+", src):
+                add(
+                    "error",
+                    "image",
+                    offset + i,
+                    f"image must live in /assets/images/: {src}",
+                )
+
+
+def _check_description(lines: Lines, offset: int, add: Add) -> None:
+    """Without a ``description:`` the blog derives one from the first prose
+    paragraph and strips math from it, so math there leaves a broken
+    sentence."""
+    for i, line in lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith(("#", ">", "|", "-", "*", "!", "$$")):
+            continue
+        if re.match(r"\d+\.\s", stripped):
+            continue
+        if "$$" in stripped:
+            add(
+                "warning",
+                "description",
+                offset + i,
+                "first paragraph (the search description) contains math",
+            )
+        return
+
+
+def _check_text(lines: Lines, offset: int, add: Add) -> None:
+    for i, line in lines:
+        prose = BLOG_CODE_SPAN.sub("", line)
+        if ENVELOPE_TAG.search(prose):
+            add("error", "envelope", offset + i, "generator tag leaked into the post")
+        if "[Image:" in prose:
+            add(
+                "error",
+                "envelope",
+                offset + i,
+                "internal figure marker leaked into the post",
+            )
+
+
+def _check_links(lines: Lines, offset: int, add: Add) -> None:
+    """No link or image the blog's htmlproofer fails for its scheme
+    (http://, or protocol-relative //): the publisher upgrades them to
+    https://, so one left here was written past it."""
+    for i, line in lines:
+        for url in insecure_links(line):
+            add(
+                "error",
+                "link",
+                offset + i,
+                f"{url} is not an HTTPS link; the blog's htmlproofer fails it",
+            )
+
+
+def _check_style(body: str, offset: int, add: Add) -> None:
+    """The blog lint's prose rules (lint-posts.rb lines 241-259): no
+    translationese and no sentence ending glued to a colon, where it looks
+    (:func:`markdown_lint.style_hits`)."""
+    for hit in style_hits(body):
+        if hit.rule == "colon":
+            message = (
+                f"a sentence ends in a colon ({hit.match}); end it with a period "
+                "or write a label"
+            )
+        elif "있어" in hit.match:
+            message = f'translationese "{hit.match}" (a calque); write 에서 or 에는'
+        else:
+            message = (
+                f'translationese "{hit.match}" (a double passive); write one '
+                "passive or an active verb"
+            )
+        add("error", "style", offset + hit.line, message)
+
+
+# A writer's citation key ("[@2305.18290]") that was never rendered.
+_CITATION_KEY = re.compile(r"\[@[^\]\n]*\]")
+_LINK_TARGET = re.compile(r"\]\((https?://[^)\s]+)\)")
+# A link to a paper itself (what a survey's citations and references point to).
+_PAPER_LINK = re.compile(r"^https?://(?:arxiv\.org/abs/|doi\.org/)")
+REFERENCES_HEADING = "### References"
+# The survey's list of the user's reference articles, after References, by
+# output language ("" for any other): links the body need not cite.
+FURTHER_READING_HEADINGS = {"Korean": "### 참고 자료", "": "### Further reading"}
+
+
+def _check_survey_citations(lines: Lines, offset: int, add: Add) -> None:
+    """A survey's citations and its reference list agree: no citation key
+    is left unrendered, every listed reference is cited, and every paper the
+    body links is listed. A reference only a table cites is a warning: the
+    code-built timeline links every paper of the plan, so the prose skipped
+    it. The list ends at the next heading: the further-reading list of the
+    user's articles after it is no list of cited papers."""
+    start = next((i for i, line in lines if line.strip() == REFERENCES_HEADING), None)
+    if start is None:
+        add("error", "references", offset, f"a survey ends with '{REFERENCES_HEADING}'")
+        return
+    end = next(
+        (i for i, line in lines if i > start and _HEADING.match(line)),
+        lines[-1][0] + 1,
+    )
+    cited: set[str] = set()
+    in_prose: set[str] = set()
+    for i, line in lines:
+        prose = BLOG_CODE_SPAN.sub("", line)
+        if i < start:
+            for key in _CITATION_KEY.findall(prose):
+                add("error", "citations", offset + i, f"unresolved citation {key}")
+            targets = _LINK_TARGET.findall(prose)
+            cited.update(targets)
+            if not line.lstrip().startswith("|"):
+                in_prose.update(targets)
+    listed = {
+        url: i
+        for i, line in lines
+        if start < i < end and line.lstrip().startswith("* ")
+        for url in _LINK_TARGET.findall(line)
+    }
+    for url, i in listed.items():
+        if url not in cited:
+            add("error", "references", offset + i, f"reference never cited: {url}")
+        elif url not in in_prose:
+            # Only the code-built timeline links it: the prose skips the paper.
+            add("warning", "references", offset + i, f"cited only in a table: {url}")
+    for url in sorted(u for u in cited if _PAPER_LINK.match(u) and u not in listed):
+        add(
+            "error",
+            "citations",
+            offset + start,
+            f"cited paper not in References: {url}",
+        )

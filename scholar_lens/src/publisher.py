@@ -4,10 +4,14 @@ Reviews, summaries and technical guides all produce a Markdown document plus an
 optional directory of figures. This module centralises the "ship it" steps so
 every artifact type publishes identically:
 
-* write the Markdown to a local file (rewriting local image paths to the blog's
-  assets layout),
-* upload the post + figures to S3, and
-* open a pull request against the configured github.io blog repository.
+* localize the paper's figures: arXiv and PDF-extracted figures are stored
+  flat as ``assets/images/<slug>-<n>.<ext>`` and referenced by absolute path,
+  the blog's convention (arXiv links rot when versions change and get no
+  layout dimensions); any other image is someone else's and stays a link to
+  its source,
+* write the Markdown to a local file and upload the post + images to S3, and
+* commit the post + images to a deterministic branch of the configured
+  github.io repository and open (or update) its PR (:mod:`.blog_sync`).
 """
 
 from __future__ import annotations
@@ -16,69 +20,375 @@ import asyncio
 import os
 import re
 import shutil
-from dataclasses import dataclass, field
-from datetime import datetime
+import time
+from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
+from urllib.parse import unquote, urlsplit
 
-from git import Repo
-from github import Auth, Github, GithubException
+import httpx
+from github import Auth, Github, GithubRetry
 
 from .aws_helpers import S3Handler
-from .constants import EnvVars, LocalPaths, S3Paths
+from .blog_sync import BlogBranchSync
+from .constants import (
+    ARXIV_ID_BODY,
+    AppConstants,
+    EnvVars,
+    LocalPaths,
+    S3Paths,
+    is_arxiv_host,
+)
+from .front_matter import split_front_matter_text
 from .logger import logger
-from .markdown_lint import lint_markdown
-from .markdown_math import normalize_math_underscores
+from .markdown_lint import publish_body, writing_notes
+from .markdown_math import IMAGE, segments
+from .pinned_transport import PinnedHTTPTransport
+from .post_conventions import BlogPost, PostConventions, load_local_conventions
+from .post_validator import PostValidationError, validate_post
+from .prompt_safety import strip_defanging
+from .publish_types import (
+    BLOG_IMAGES_DIR,
+    PublishRequest,
+    is_post_file,
+    post_slug,
+    same_post,
+)
+from .publish_types import PublishError as PublishError  # re-exported
+from .rate_limiter import ARXIV_RATE_LIMITER, arxiv_retry_after_seconds
+from .url_guard import UnsafeUrlError, assert_url_is_public
+from .utils.images import (
+    is_ar5iv_placeholder,
+    is_svg,
+    raster_to_png,
+    source_figure,
+    svg_to_png,
+)
 
 if TYPE_CHECKING:
+    from github.Repository import Repository
+
     from ..configs import Github as GithubConfig
 
-_IMAGE_EXTENSIONS = [".gif", ".jpg", ".jpeg", ".png", ".svg", ".webp"]
-# Image target tolerates one level of parens in the URL/path (e.g. Wikipedia's
-# ``File_(diagram).png`` or a scratch path ``fig_(a).png``). A naive ``(.*?)``
-# stops at the first ``)``, truncating the URL — the tail leaks as prose and the
-# rewritten local path 404s. The balanced group ``[^()]*(\([^()]*\)[^()]*)*``
-# still stops at the real closing paren, so multiple images per line split fine.
-_MARKDOWN_IMAGE_PATTERN = r"!\[(.*?)\]\(([^()]*(?:\([^()]*\)[^()]*)*)\)"
+_IMAGE_DOWNLOAD_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
+# Whole-download bound: the timeout above is per read, so a server dripping
+# bytes could otherwise stall the publish for as long as it likes.
+_IMAGE_DOWNLOAD_DEADLINE_SECONDS = 60.0
+_MAX_IMAGE_BYTES = 20 * 1024 * 1024
+# A paper's arXiv source (LaTeX + figures), read when a figure is ar5iv's
+# placeholder; arXiv caps submissions at 50 MB.
+_SOURCE_DOWNLOAD_DEADLINE_SECONDS = 180.0
+_MAX_SOURCE_BYTES = 100 * 1024 * 1024
+# Largest file stored as it is: every image is committed to the public blog
+# repository (and again on each rerun that changes it). A larger PNG or JPEG
+# is scaled to _SHRUNK_SIDE; a GIF (its animation would be lost) is not.
+_MAX_STORED_BYTES = 5 * 1024 * 1024
+_SHRUNK_SIDE = 2048
+# Sent on every download: names the tool to the sites it fetches from.
+_USER_AGENT = "scholar-lens (+https://github.com/bits-bytes-nn/scholar-lens)"
+# Formats stored as they are, by magic bytes -> stored extension (a GIF keeps
+# its animation).
+_IMAGE_SIGNATURES: tuple[tuple[bytes, str], ...] = (
+    (b"\x89PNG\r\n\x1a\n", "png"),
+    (b"\xff\xd8\xff", "jpg"),
+    (b"GIF87a", "gif"),
+    (b"GIF89a", "gif"),
+)
+# The figure path inside an arXiv HTML figure URL: /html/<id>v<N>/<path>.
+_ARXIV_HTML_FIGURE = re.compile(rf"^/html/({ARXIV_ID_BODY})/(.+)$")
+
+# GitHub API client limits: per-request timeout (seconds) and a small retry
+# budget (GithubRetry also waits out secondary rate limits).
+_GITHUB_TIMEOUT_SECONDS = 30
+_GITHUB_MAX_RETRIES = 3
 
 
-@dataclass
-class PublishRequest:
-    """Everything needed to publish one artifact."""
+class PostAssetError(Exception):
+    """An image the post references could not be localized; nothing is
+    uploaded or proposed. The post is kept as a rejected draft."""
 
-    title: str
-    markdown: str
-    work_dir: Path
-    branch_id: str
-    pr_title: str
-    pr_body: str
-    commit_message: str
-    rewrite_local_images: bool = True
-    figures_dirname: str = LocalPaths.FIGURES_DIR.value
-    extra_metadata: dict[str, str] = field(default_factory=dict)
-
-
-def slugify(title: str, max_length: int = 120) -> str:
-    """Filesystem- and S3-safe slug for a document title."""
-    slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")[:max_length].strip("-")
-    return slug or "untitled"
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+        # Where the rejected post was kept (set by the publisher).
+        self.rejected_path: str | None = None
+        self.rejected_s3_uri: str | None = None
 
 
 # Footer shared by every auto-generated blog PR body.
 _PR_FOOTER = "This pull request was automatically generated by the Scholar-Lens system."
 
 
-def build_pr_body(*, kind: str, title: str, fields: dict[str, str]) -> str:
+def build_pr_body(
+    *,
+    kind: str,
+    title: str,
+    fields: dict[str, str],
+) -> str:
     """Build a consistent blog-PR description across all artifact types.
 
     ``kind`` is the human label ("paper review" / "paper summary" / "technical
     guide"); ``fields`` are the artifact-specific metadata rows (rendered as
     ``- **Key**: value``), in insertion order. Empty-valued fields are skipped so
     each artifact only shows what's relevant, while the header/footer stay
-    identical."""
+    identical; the review checklist is added at publish time."""
     header = f"This PR adds an AI-generated {kind}: **{title}**"
     rows = "\n".join(f"- **{k}**: {v}" for k, v in fields.items() if v)
     return f"{header}\n\n{rows}\n\n{_PR_FOOTER}"
+
+
+def image_format(data: bytes) -> str | None:
+    """Stored extension for a PNG/JPEG/GIF payload; None for anything else."""
+    for signature, extension in _IMAGE_SIGNATURES:
+        if data.startswith(signature):
+            return extension
+    return None
+
+
+def download_image(url: str) -> bytes:
+    """Fetch an image over the SSRF-pinned transport, with timeouts, a total
+    deadline and a size cap. Every redirect hop is re-validated by the
+    transport."""
+    return _download(url, _MAX_IMAGE_BYTES, _IMAGE_DOWNLOAD_DEADLINE_SECONDS)
+
+
+def download_source(url: str) -> bytes:
+    """Fetch an arXiv source archive (``/e-print/<id>``), paced by the
+    process-wide arXiv rate limiter."""
+    ARXIV_RATE_LIMITER.acquire()
+    try:
+        return _download(url, _MAX_SOURCE_BYTES, _SOURCE_DOWNLOAD_DEADLINE_SECONDS)
+    except httpx.HTTPStatusError as e:
+        ARXIV_RATE_LIMITER.penalize(arxiv_retry_after_seconds(e))
+        raise
+
+
+def _download(url: str, max_bytes: int, deadline_seconds: float) -> bytes:
+    assert_url_is_public(url)
+    deadline = _clock() + deadline_seconds
+    with httpx.Client(
+        transport=PinnedHTTPTransport(),
+        timeout=_IMAGE_DOWNLOAD_TIMEOUT,
+        follow_redirects=True,
+        max_redirects=5,
+        headers={"User-Agent": _USER_AGENT},
+    ) as client:
+        with client.stream("GET", url) as response:
+            response.raise_for_status()
+            chunks: list[bytes] = []
+            size = 0
+            for chunk in response.iter_bytes():
+                size += len(chunk)
+                if size > max_bytes:
+                    raise ValueError(f"download exceeds {max_bytes} bytes")
+                if _clock() > deadline:
+                    raise ValueError(f"download took over {deadline_seconds:g} s")
+                chunks.append(chunk)
+    return b"".join(chunks)
+
+
+_clock = time.monotonic  # replaced in tests
+
+
+def _is_paper_figure(src: str) -> bool:
+    """A figure of the paper itself (cropped from its PDF, or on arXiv): the
+    only images the blog stores. Any other image (docs sites, blogs) is
+    copyrighted by its owner and stays a link to it."""
+    return not src.startswith(("http://", "https://")) or is_arxiv_host(src)
+
+
+_HTML_IMG_SRC = re.compile(
+    r"""(?P<lead><img\b[^>]*?\bsrc=["'])(?P<url>https?://[^"'\s]+)""", re.IGNORECASE
+)
+_HTML_HREF = re.compile(
+    r"""(?P<lead><a\b[^>]*?\bhref=["'])(?P<url>https?://[^"'\s]+)""", re.IGNORECASE
+)
+
+
+class ImageLocalizer:
+    """Rewrite the paper's figures in a post to the blog's flat
+    ``/assets/images`` layout, writing the image files into ``staging_dir``.
+
+    * arXiv URLs are downloaded over HTTPS (an ``http://`` URL is upgraded:
+      the Batch job reaches port 443 only; public hosts only, every redirect
+      hop checked),
+    * local figures (bare names or scratch paths) are read from
+      ``figures_dir``,
+    * any other remote image, paths already under ``/assets/`` and ``data:``
+      URLs are left alone (the validator flags the remote ones).
+
+    PNG, JPEG and GIF are stored as they are; an SVG is rasterized and any
+    other raster format converted to PNG. A file over
+    :data:`_MAX_STORED_BYTES` is scaled down (a GIF cannot be).
+
+    An arXiv figure that is ar5iv's "NO IMAGE AVAILABLE" placeholder is taken
+    from the paper's arXiv source instead.
+
+    Images are named ``<slug>-<n>.<ext>`` in order of first appearance; the
+    same source reused in the post maps to the same file. A figure that
+    cannot be stored raises :class:`PostAssetError`.
+    """
+
+    def __init__(
+        self,
+        *,
+        slug: str,
+        figures_dir: Path,
+        staging_dir: Path,
+        fetch: Callable[[str], bytes] = download_image,
+        fetch_source: Callable[[str], bytes] = download_source,
+    ) -> None:
+        self.slug = slug
+        self.figures_dir = figures_dir
+        self.staging_dir = staging_dir
+        self.fetch = fetch
+        self.fetch_source = fetch_source
+
+    def localize(self, markdown: str) -> str:
+        """The post with the paper's figures stored."""
+        if self.staging_dir.exists():
+            # This post's own scratch folder: drop a previous run's images.
+            shutil.rmtree(self.staging_dir)
+        self.staging_dir.mkdir(parents=True)
+        hosted: dict[str, str] = {}
+        failures: list[str] = []
+        # arXiv id -> its source archive, or why it could not be fetched.
+        sources: dict[str, bytes | PostAssetError] = {}
+
+        code: list[tuple[int, int]] = []
+
+        def in_code(pos: int) -> bool:
+            return any(start <= pos < end for start, end in code)
+
+        def substitute(
+            pattern: re.Pattern[str], repl: Callable[[re.Match[str]], str], text: str
+        ) -> str:
+            # Each pass shortens the text before later matches (a long URL
+            # becomes a short path): find the code spans afresh every time.
+            code[:] = [
+                (seg.start, seg.end)
+                for seg in segments(text)
+                if seg.kind in ("fence", "icode")
+            ]
+            return pattern.sub(repl, text)
+
+        def store(src: str) -> str | None:
+            """The blog path of ``src`` once stored, or None when left as-is."""
+            if src in hosted:
+                return hosted[src]
+            if src.startswith(("/assets/", "data:")) or not _is_paper_figure(src):
+                return None  # left as-is by policy
+            try:
+                data, extension = self._image(src, sources)
+            except PostAssetError as e:
+                failures.append(str(e))
+                return None
+            name = f"{self.slug}-{len(hosted) + 1}.{extension}"
+            (self.staging_dir / name).write_bytes(data)
+            hosted[src] = f"/{BLOG_IMAGES_DIR}/{name}"
+            return hosted[src]
+
+        def repl(match: re.Match) -> str:
+            if in_code(match.start()):
+                return match.group(0)  # an image example inside code
+            alt_text, src = match.group(1), match.group(2).strip()
+            title = match.group(3) or ""
+            path = store(src)
+            return match.group(0) if path is None else f"![{alt_text}]({path}{title})"
+
+        def html_src(match: re.Match) -> str:
+            if in_code(match.start()):
+                return match.group(0)
+            path = store(match.group("url"))
+            return match.group(0) if path is None else match.group("lead") + path
+
+        markdown = substitute(IMAGE, repl, markdown)
+        # An HTML <img> (a hand-written figure or lightbox) stores the same way,
+        # and a lightbox link pointing at that image follows it.
+        markdown = substitute(_HTML_IMG_SRC, html_src, markdown)
+        markdown = substitute(
+            _HTML_HREF,
+            lambda m: (
+                m.group("lead") + hosted[m.group("url")]
+                if m.group("url") in hosted and not in_code(m.start())
+                else m.group(0)
+            ),
+            markdown,
+        )
+        if failures:
+            raise PostAssetError("; ".join(failures))
+        return markdown
+
+    def _image(
+        self, src: str, sources: dict[str, bytes | PostAssetError]
+    ) -> tuple[bytes, str]:
+        """The stored bytes and extension for ``src``; raises
+        :class:`PostAssetError` saying why it cannot be stored."""
+        data = self._load(src)
+        if is_ar5iv_placeholder(data):
+            data = self._source_figure(src, sources)
+        if is_svg(data):
+            try:
+                data = svg_to_png(data)  # stored as a raster, never as markup
+            except (ValueError, UnicodeDecodeError) as e:
+                raise PostAssetError(
+                    f"'{src}' is an SVG that could not be rendered: {e}"
+                ) from e
+        extension = image_format(data)
+        try:
+            if extension is None:
+                data, extension = raster_to_png(data), "png"
+            if len(data) > _MAX_STORED_BYTES and extension != "gif":
+                data, extension = raster_to_png(data, _SHRUNK_SIDE), "png"
+        except ValueError as e:
+            raise PostAssetError(f"'{src}' is not an image: {e}") from e
+        if len(data) > _MAX_STORED_BYTES:
+            raise PostAssetError(
+                f"'{src}' is over {_MAX_STORED_BYTES} bytes "
+                f"{'(an animated GIF)' if extension == 'gif' else 'even when scaled down'}"
+            )
+        return data, extension
+
+    def _load(self, src: str) -> bytes:
+        if src.startswith(("http://", "https://")):
+            url = "https://" + src.split("://", 1)[1]
+            try:
+                return self.fetch(url)
+            except (httpx.HTTPError, UnsafeUrlError, ValueError) as e:
+                raise PostAssetError(f"could not download '{url}': {e}") from e
+        local = self.figures_dir / Path(src).name
+        if not local.is_file():
+            raise PostAssetError(f"figure '{src}' not found in {self.figures_dir}")
+        return local.read_bytes()
+
+    def _source_figure(
+        self, src: str, sources: dict[str, bytes | PostAssetError]
+    ) -> bytes:
+        """The figure ``src`` (ar5iv's placeholder) from the paper's arXiv
+        source."""
+        match = _ARXIV_HTML_FIGURE.match(urlsplit(src).path)
+        if not is_arxiv_host(src) or match is None:
+            raise PostAssetError(f"'{src}' is ar5iv's 'NO IMAGE AVAILABLE' image")
+        arxiv_id, figure_path = match.group(1), unquote(match.group(2))
+        if arxiv_id not in sources:
+            url = f"{AppConstants.External.ARXIV_E_PRINT.value}/{arxiv_id}"
+            try:
+                sources[arxiv_id] = self.fetch_source(url)
+            except (httpx.HTTPError, UnsafeUrlError, ValueError) as e:
+                sources[arxiv_id] = PostAssetError(
+                    f"'{src}' is a placeholder image and the arXiv source "
+                    f"could not be downloaded: {e}"
+                )
+        archive = sources[arxiv_id]
+        if isinstance(archive, PostAssetError):
+            raise archive
+        try:
+            return source_figure(archive, figure_path)
+        except ValueError as e:
+            raise PostAssetError(
+                f"'{src}' is a placeholder image and the arXiv source has no "
+                f"usable figure for it: {e}"
+            ) from e
 
 
 class Publisher:
@@ -92,227 +402,253 @@ class Publisher:
         s3_handler: S3Handler | None = None,
         s3_bucket_name: str | None = None,
         s3_prefix: str = "",
+        conventions: PostConventions | None = None,
+        site_posts: list[BlogPost] | None = None,
+        fetch_image: Callable[[str], bytes] = download_image,
+        fetch_source: Callable[[str], bytes] = download_source,
     ) -> None:
         self.github_config = github_config
+        self.conventions = conventions or load_local_conventions()
+        # The blog's posts a new one must not clash with (descriptions,
+        # translation ids); none when the blog could not be listed.
+        self.site_posts = site_posts or []
         self.root_dir = root_dir
         self.s3_handler = s3_handler
         self.s3_bucket_name = s3_bucket_name
         self.s3_prefix = s3_prefix
+        self.fetch_image = fetch_image
+        self.fetch_source = fetch_source
 
     async def publish(self, request: PublishRequest) -> tuple[str | None, Path]:
-        """Save + upload the artifact; return (s3_url, local_markdown_path)."""
+        """Normalize, localize images, validate, save and upload the post.
+
+        Returns ``(s3_url, local_markdown_path)``. Raises
+        :class:`PostAssetError` (or the validator's error) when the post
+        cannot be published as-is; it is then kept only as a rejected draft
+        (work dir, and S3 when configured).
+        """
+        slug = request.slug
         # The post filename is prefixed with the publish date (today); the paper's
-        # own date lives in the front-matter `date` field, set by the caller.
-        file_name = f"{datetime.now().strftime('%Y-%m-%d')}-{slugify(request.title)}"
-        markdown = request.markdown
-        # Escape underscores inside math so kramdown(GFM) doesn't eat subscripts
-        # before MathJax renders (a recurring blog-rendering issue).
-        markdown = normalize_math_underscores(markdown)
-        # Auto-fix other kramdown/MathJax pitfalls (blank line before headings,
-        # bare | in math) and warn about risky ones (single-$ math, undefined
-        # macros, non-URL links).
-        markdown = lint_markdown(markdown)
-        if request.rewrite_local_images:
-            markdown = self._rewrite_local_images(markdown, file_name)
+        # own date lives in the front-matter `date` field, set by the caller. A
+        # post that replaces a published one keeps its file name: the name it
+        # is validated with is the one the blog gets.
+        file_name = (
+            Path(request.published_path).stem
+            if request.published_path
+            else f"{datetime.now(UTC).strftime('%Y-%m-%d')}-{slug}"
+        )
+        # Body-only passes: the front matter is already YAML-escaped and must
+        # not be math-normalized or HTML-escaped.
+        # Defanged prompt tags a model copied from its input get their plain
+        # "<" back everywhere (titles too; harmless inside YAML strings).
+        front_matter, body = split_front_matter_text(strip_defanging(request.markdown))
+        # A fence left open at the end is closed (sections are closed one by
+        # one already); then the blog math rules ($$ only, no \_ in math,
+        # blank lines around display blocks) and the other kramdown/MathJax
+        # auto-fixes.
+        body = publish_body(body)
+        markdown = front_matter + body
+        localizer = ImageLocalizer(
+            slug=slug,
+            figures_dir=request.work_dir / LocalPaths.FIGURES_DIR.value,
+            staging_dir=request.staged_images_dir,
+            fetch=self.fetch_image,
+            fetch_source=self.fetch_source,
+        )
+        try:
+            markdown = await asyncio.to_thread(localizer.localize, markdown)
+        except PostAssetError as e:
+            # The finished text must not be lost with its figures.
+            rejected = self._save_rejected(markdown, request, [f"- image: {e}"])
+            logger.error("Post blocked by its images; kept at '%s'", rejected)
+            e.rejected_path = str(rejected)
+            await self._keep_rejected_copy(e)
+            raise
+        try:
+            request.validation_warnings = [
+                *request.review_notes,
+                # Rule slips the generators could not fix, on the final text.
+                *writing_notes(body),
+                *self._validate(markdown, request, f"{file_name}.md"),
+            ]
+        except PostValidationError as e:
+            await self._keep_rejected_copy(e)
+            raise
 
         markdown_path = request.work_dir / f"{file_name}.md"
         await asyncio.to_thread(markdown_path.write_text, markdown, encoding="utf-8")
 
-        s3_url = await self._upload_to_s3(request, file_name, markdown_path)
+        s3_url = await self._upload_to_s3(request, markdown_path)
         return s3_url, markdown_path
 
-    def _rewrite_local_images(self, markdown: str, file_name: str) -> str:
-        assets_path = f"/{S3Paths.ASSETS.value}/{file_name}"
+    def find_published(
+        self, slug: str, branch_id: str, category: str
+    ) -> BlogPost | None:
+        """The blog's post a new one with ``slug``, from the artifact
+        ``branch_id``, replaces: the post with that slug (older slug rules
+        included, see :func:`same_post`) whose ``categories[0]`` is
+        ``category`` (a guide titled like a review does not take it over),
+        else the one this tool wrote on the artifact's branch and a merged
+        pull request published (a rerun under a new title). The new post then
+        keeps its file name, URL, date, topic and translation pairing.
 
-        def repl(match: re.Match) -> str:
-            alt_text, img = match.group(1), match.group(2)
-            # Remote images stay as-is.
-            if img.startswith(("http://", "https://")):
-                return match.group(0)
-            # Already pointing at this post's asset dir — leave it.
-            if img.startswith(f"{assets_path}/"):
-                return match.group(0)
-            # Everything else — a relative name, or an ABSOLUTE local scratch path
-            # like "/Users/.../figures/0.png" injected by figure enrichment — is a
-            # figure this post owns. All figures upload flat into `assets_path`, so
-            # rewrite to the hosted basename. (Previously any "/"-prefixed path was
-            # skipped, so absolute local paths shipped verbatim and 404'd.)
-            return f"![{alt_text}]({assets_path}/{Path(img).name})"
+        Without a blog listing nothing is known to be published, and without
+        a GitHub token there are no pull requests to read: None.
 
-        return re.sub(_MARKDOWN_IMAGE_PATTERN, repl, markdown)
+        Raises :class:`PublishError` when the blog's pull requests cannot be
+        read.
+        """
+        posts = {post.path: post for post in self.site_posts if is_post_file(post.path)}
+        by_slug = sorted(
+            path
+            for path, post in posts.items()
+            if same_post(post_slug(Path(path).stem), slug)
+            and post.categories[:1] == [category]
+        )
+        if by_slug:
+            return posts[by_slug[0]]
+        if not posts or not os.getenv(EnvVars.GITHUB_TOKEN.value):
+            return None
+        published = self._with_repo(
+            lambda repo: BlogBranchSync(repo, self.github_config).merged_posts(
+                branch_id
+            )
+        )
+        # A translation ("…-en.md") on the branch is not the post this run writes.
+        return next(
+            (
+                posts[path]
+                for path in published
+                if path in posts and not Path(path).stem.endswith("-en")
+            ),
+            None,
+        )
+
+    def _validate(
+        self, markdown: str, request: PublishRequest, file_name: str
+    ) -> list[str]:
+        """Check the finished post against the blog conventions.
+
+        Errors stop publishing (nothing saved, uploaded or proposed); the post
+        is kept in the work dir as ``*.rejected.md`` with the violations so
+        it can be inspected. Warnings are returned for the PR checklist.
+        """
+        violations = validate_post(
+            markdown,
+            self.conventions,
+            request.kind,
+            file_name=file_name,
+            site_posts=self.site_posts,
+        )
+        if blocking := [v for v in violations if v.level == "error"]:
+            rejected = self._save_rejected(
+                markdown, request, [f"- {v}" for v in violations]
+            )
+            logger.error(
+                "Post rejected with %d error(s); kept at '%s'", len(blocking), rejected
+            )
+            error = PostValidationError(violations)
+            error.rejected_path = str(rejected)
+            raise error
+        return [str(v) for v in violations]
+
+    @staticmethod
+    def _save_rejected(
+        markdown: str, request: PublishRequest, findings: list[str]
+    ) -> Path:
+        """Keep a post that is not published as ``<slug>.rejected.md`` in the
+        work dir, with why and the generators' notes at its end."""
+        rejected = request.work_dir / f"{request.slug}.rejected.md"
+        report = "\n".join([*findings, *(f"- note: {n}" for n in request.review_notes)])
+        rejected.write_text(
+            f"{markdown}\n\n<!-- violations\n{report}\n-->\n", encoding="utf-8"
+        )
+        return rejected
+
+    async def _keep_rejected_copy(
+        self, error: PostValidationError | PostAssetError
+    ) -> None:
+        """In Batch the work dir is container scratch: copy the rejected post
+        to S3. A failed copy must not hide why the post was rejected."""
+        if not (error.rejected_path and self.s3_handler):
+            return
+        key = f"{self.s3_prefix}/rejected".lstrip("/")
+        path = Path(error.rejected_path)
+        try:
+            await self.s3_handler.upload_file_async(path, key)
+            error.rejected_s3_uri = f"s3://{self.s3_bucket_name}/{key}/{path.name}"
+        except Exception as upload_error:  # noqa: BLE001
+            logger.warning("Could not copy the rejected post: %s", upload_error)
 
     async def _upload_to_s3(
-        self, request: PublishRequest, file_name: str, markdown_path: Path
+        self, request: PublishRequest, markdown_path: Path
     ) -> str | None:
         if not self.s3_handler:
             return None
         prefix = self.s3_prefix or ""
         posts_key = f"{prefix}/{S3Paths.POSTS.value}".lstrip("/")
-        assets_key = f"{prefix}/{S3Paths.ASSETS.value}/{file_name}".lstrip("/")
+        images_key = f"{prefix}/{BLOG_IMAGES_DIR}".lstrip("/")
         await self.s3_handler.upload_file_async(markdown_path, posts_key)
 
-        figures_dir = request.work_dir / request.figures_dirname
-        if figures_dir.exists():
+        staged = request.staged_images_dir
+        if staged.is_dir() and any(staged.iterdir()):
             await asyncio.to_thread(
                 self.s3_handler.upload_directory,
-                figures_dir,
-                assets_key,
-                file_extensions=_IMAGE_EXTENSIONS,
+                staged,
+                images_key,
                 public_readable=self.github_config.public_assets,
             )
-        return f"s3://{self.s3_bucket_name}/{posts_key}/{file_name}.md"
+        return f"s3://{self.s3_bucket_name}/{posts_key}/{markdown_path.name}"
 
     async def create_pull_request(
         self, request: PublishRequest, markdown_path: Path
-    ) -> str | None:
-        """Open a blog PR and return its URL (None if skipped or on failure —
-        never raises, so a publish hiccup can't fail the pipeline)."""
-        repo_config = self.github_config
-        if not repo_config.repo_name:
-            logger.error("GitHub repository not configured.")
-            return None
-        repo_name = repo_config.repo_name  # narrowed to str for the closures below
+    ) -> str:
+        """Commit the post (+ images) to ``<branch_prefix>/<branch_id>`` and
+        return the URL of its open PR, creating or updating the PR as needed.
+
+        Re-running the same artifact updates the same branch and PR. Raises
+        :class:`PublishError` on any failure; the token never appears in it.
+        """
+        # PyGithub is blocking HTTP; keep it off the event loop.
+        return await asyncio.to_thread(
+            self._with_repo,
+            lambda repo: BlogBranchSync(repo, self.github_config).sync(
+                request, markdown_path
+            ),
+        )
+
+    def _with_repo[T](self, action: Callable[[Repository], T]) -> T:
+        """``action`` on the blog repository; any failure is a
+        :class:`PublishError` without the token in it."""
+        repo_name = self.github_config.repo_name
+        if not repo_name:
+            raise PublishError("resources.github.repo_name is not configured.")
         token = os.getenv(EnvVars.GITHUB_TOKEN.value)
         if not token:
-            logger.error(
-                "GitHub token not found in environment variable '%s'.",
-                EnvVars.GITHUB_TOKEN.value,
-            )
-            return None
-
-        clone_dir = self.root_dir / LocalPaths.GITHUB_CLONE_DIR.value
+            raise PublishError(f"{EnvVars.GITHUB_TOKEN.value} is not set.")
+        client = Github(
+            auth=Auth.Token(token),
+            timeout=_GITHUB_TIMEOUT_SECONDS,
+            retry=GithubRetry(total=_GITHUB_MAX_RETRIES),
+        )
         try:
-            timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-            branch_name = f"{repo_config.branch_prefix}/{request.branch_id}-{timestamp}"
-            await asyncio.to_thread(
-                self._git_operations,
-                clone_dir,
-                branch_name,
-                request.commit_message,
-                markdown_path,
-            )
-            logger.info("Creating a pull request on GitHub...")
-            # PyGithub is synchronous (blocking HTTP); run off the event loop so
-            # it doesn't stall other coroutines — mirrors the git-ops call above.
-            gh_repo = await asyncio.to_thread(
-                lambda: Github(auth=Auth.Token(token)).get_repo(repo_name)
-            )
-            try:
-                pull = await asyncio.to_thread(
-                    lambda: gh_repo.create_pull(
-                        title=request.pr_title,
-                        body=request.pr_body,
-                        head=branch_name,
-                        base=repo_config.base_branch,
-                    )
-                )
-                logger.info("Successfully created a pull request: '%s'", pull.html_url)
-                return pull.html_url
-            except GithubException as e:
-                if e.status == 422 and "A pull request already exists" in str(e.data):
-                    logger.warning(
-                        "Pull request for branch '%s' already exists.", branch_name
-                    )
-                    return None
-                raise
+            return action(client.get_repo(repo_name))
+        except PublishError:
+            raise
         except Exception as e:
-            logger.error("Failed to create GitHub pull request: %s", e, exc_info=True)
-            return None
+            raise PublishError(str(self._redact_token(e, token))) from None
         finally:
-            if clone_dir.exists():
-                await asyncio.to_thread(shutil.rmtree, clone_dir, ignore_errors=True)
-                logger.info("Cleaned up local clone directory: '%s'", clone_dir)
-
-    def _git_operations(
-        self,
-        clone_dir: Path,
-        branch_name: str,
-        commit_message: str,
-        markdown_path: Path,
-    ) -> None:
-        repo_config = self.github_config
-        token = os.getenv(EnvVars.GITHUB_TOKEN.value)
-        repo_url = f"https://oauth2:{token}@github.com/{repo_config.repo_name}.git"
-        try:
-            self._git_operations_inner(
-                clone_dir, branch_name, commit_message, markdown_path, repo_url
-            )
-        except Exception as e:
-            # GitPython embeds the failing command (including the tokened clone
-            # URL) in its exception text; scrub the token before it propagates or
-            # gets logged so credentials never leak into logs/SNS/Slack.
-            raise self._redact_token(e, token) from None
+            client.close()
 
     @staticmethod
     def _redact_token(error: Exception, token: str | None) -> Exception:
+        """Return ``error`` with the token scrubbed from its text.
+
+        A plain RuntimeError is returned rather than re-constructing the
+        original class (structured exceptions such as GithubException take
+        constructor args); the original class name is kept in the message.
+        """
         if not token:
             return error
         scrubbed = str(error).replace(token, "***")
-        # Return a plain RuntimeError rather than reconstructing the original
-        # class. Exceptions like GitCommandError / GithubException take structured
-        # constructor args, so type(error)(scrubbed) would raise TypeError inside
-        # redaction and mask the failure. Keep the original class name in the text
-        # for debuggability; the token is what must never survive.
         return RuntimeError(f"{type(error).__name__}: {scrubbed}")
-
-    def _git_operations_inner(
-        self,
-        clone_dir: Path,
-        branch_name: str,
-        commit_message: str,
-        markdown_path: Path,
-        repo_url: str,
-    ) -> None:
-        repo_config = self.github_config
-        if clone_dir.exists():
-            shutil.rmtree(clone_dir)
-
-        logger.info("Cloning repository '%s' to '%s'", repo_config.repo_name, clone_dir)
-        repo = Repo.clone_from(repo_url, clone_dir)
-
-        if branch_name in repo.heads:
-            new_branch = repo.heads[branch_name]
-        else:
-            new_branch = repo.create_head(
-                branch_name, repo.remotes.origin.refs[repo_config.base_branch]
-            )
-        new_branch.checkout()
-
-        posts_dir = clone_dir / LocalPaths.POSTS_DIR.value
-        posts_dir.mkdir(exist_ok=True)
-        shutil.copy(markdown_path, posts_dir)
-        logger.info("Copied markdown file to '%s'", posts_dir)
-
-        figures_dir = markdown_path.parent / LocalPaths.FIGURES_DIR.value
-        if figures_dir.exists():
-            assets_target_dir = (
-                clone_dir / LocalPaths.ASSETS_DIR.value / markdown_path.stem
-            )
-            assets_target_dir.mkdir(parents=True, exist_ok=True)
-            shutil.copytree(figures_dir, assets_target_dir, dirs_exist_ok=True)
-            logger.info("Copied figures to '%s'", assets_target_dir)
-
-        if not repo.is_dirty(untracked_files=True):
-            logger.warning("No changes to commit. Skipping push and pull request.")
-            return
-
-        logger.info("Committing changes...")
-        repo.git.add(all=True)
-        # Set the committer identity on this repo. ``--author`` only sets the
-        # author; git still refuses to commit without a committer name/email,
-        # which the Batch container does not have globally ("empty ident name").
-        with repo.config_writer() as cfg:
-            cfg.set_value("user", "name", repo_config.author_name)
-            if repo_config.author_email:
-                cfg.set_value("user", "email", repo_config.author_email)
-        author_actor = (
-            f"{repo_config.author_name} <{repo_config.author_email}>"
-            if repo_config.author_email
-            else repo_config.author_name
-        )
-        repo.git.commit("-m", commit_message, f"--author={author_actor}")
-
-        logger.info("Pushing changes to branch '%s'...", branch_name)
-        repo.remote(name="origin").push(
-            refspec=f"{branch_name}:{branch_name}", force=True
-        )

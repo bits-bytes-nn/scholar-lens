@@ -1,53 +1,92 @@
-"""CI-only CDK synthesis check.
+"""CI-only CDK synthesis check (no AWS credentials needed).
 
-Synthesizes the ``PaperReviewStack`` against a fake account/region so the
-construct graph and IAM/security wiring are validated on every push **without**
-needing real AWS credentials (the production ``deploy_infra.py`` entrypoint
-resolves the account via STS, which CI cannot do). This is a smoke test: if the
-stack fails to synthesize, CI fails.
+Synthesizes ``PaperReviewStack`` against a fake account and asserts the parts
+of the template the application depends on: the single job definition's
+command (the CLI ``worker`` contract), its retry strategy, the failure rule's
+exit codes (those the worker reports itself) and the cost alarm's metric name
+(the one the app emits).
 """
 
 from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import Any
 
 import aws_cdk as core
 from aws_cdk import Environment
 
 sys.path.append(str(Path(__file__).parent.parent))
 
-from scripts.deploy_infra import PaperReviewStack  # noqa: E402
+from scholar_lens.cli import APP_REPORTED_EXIT_CODES  # noqa: E402
+from scholar_lens.src.metrics import COST_METRIC_NAME  # noqa: E402
+from scripts.deploy_infra import JOB_COMMAND, PaperReviewStack  # noqa: E402
 
 FAKE_ACCOUNT = "123456789012"
 FAKE_REGION = "ap-northeast-2"
+STACK_NAME = "PaperReviewCiSynthStack"
 
 
-def main() -> None:
+def synth_template() -> dict[str, Any]:
     app = core.App()
     PaperReviewStack(
         app,
-        "PaperReviewCiSynthStack",
+        STACK_NAME,
         project_name="scholar-lens",
         stage="dev",
-        vpc_id=None,
-        subnet_ids=None,
         email_address="ci@example.com",
-        github_token="dummy",
-        langchain_api_key="dummy",
-        upstage_api_key="dummy",
         s3_bucket_name="scholar-lens-ci-bucket",
         s3_prefix="scholar-lens",
         bedrock_region_name="us-west-2",
         environment_vars={},
         env=Environment(account=FAKE_ACCOUNT, region=FAKE_REGION),
     )
-    assembly = app.synth()
-    stack = assembly.get_stack_by_name("PaperReviewCiSynthStack")
-    resource_count = len(stack.template.get("Resources", {}))
-    print(f"CDK synth OK: {resource_count} resources synthesized.")
-    if resource_count == 0:
-        raise SystemExit("CDK synth produced no resources.")
+    return app.synth().get_stack_by_name(STACK_NAME).template
+
+
+def resources_of_type(template: dict[str, Any], type_name: str) -> list[dict[str, Any]]:
+    return [
+        r for r in template.get("Resources", {}).values() if r.get("Type") == type_name
+    ]
+
+
+def check_template(template: dict[str, Any]) -> None:
+    """Raise SystemExit when the template breaks an application contract."""
+    job_definitions = resources_of_type(template, "AWS::Batch::JobDefinition")
+    if len(job_definitions) != 1:
+        raise SystemExit(f"Expected 1 job definition, found {len(job_definitions)}.")
+    props = job_definitions[0]["Properties"]
+    command = props["ContainerProperties"]["Command"]
+    if command != JOB_COMMAND:
+        raise SystemExit(f"Job command {command} != contract {JOB_COMMAND}.")
+    if not props.get("RetryStrategy", {}).get("EvaluateOnExit"):
+        raise SystemExit("Job definition must retry only on infrastructure failures.")
+    if resources_of_type(template, "AWS::Lambda::Function"):
+        raise SystemExit("Unexpected Lambda functions in the stack.")
+    skipped = [
+        clause["container"]["exitCode"][0].get("anything-but")
+        for rule in resources_of_type(template, "AWS::Events::Rule")
+        for clause in rule["Properties"]["EventPattern"]["detail"].get("$or", [])
+    ]
+    if list(APP_REPORTED_EXIT_CODES) not in skipped:
+        raise SystemExit(
+            f"Failure rule must skip exactly the worker-reported exits "
+            f"{list(APP_REPORTED_EXIT_CODES)}; found {skipped}."
+        )
+    alarm_metrics = {
+        a["Properties"].get("MetricName")
+        for a in resources_of_type(template, "AWS::CloudWatch::Alarm")
+    }
+    if COST_METRIC_NAME not in alarm_metrics:
+        raise SystemExit(
+            f"No alarm watches the emitted cost metric {COST_METRIC_NAME!r}."
+        )
+
+
+def main() -> None:
+    template = synth_template()
+    check_template(template)
+    print(f"CDK synth OK: {len(template.get('Resources', {}))} resources synthesized.")
 
 
 if __name__ == "__main__":

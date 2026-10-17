@@ -4,7 +4,6 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
   workflow_dispatch:
 
 concurrency:
@@ -21,13 +20,24 @@ jobs:
   lint:
     name: Lint & format
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - id: setup-python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
       - name: Install Poetry
         run: pipx install "poetry==${{ env.POETRY_VERSION }}"
+      - name: Configure Poetry
+        run: poetry config virtualenvs.in-project true
+      - name: Cache virtualenv
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-py${{ steps.setup-python.outputs.python-version }}-poetry${{ env.POETRY_VERSION }}-${{ hashFiles('poetry.lock') }}
       - name: Install dependencies (locked dev tools)
         run: poetry install --no-interaction --with dev
       - name: Ruff (lint)
@@ -40,13 +50,17 @@ jobs:
   test:
     name: Test (py${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.12", "3.13"]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - id: setup-python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install Poetry
@@ -54,10 +68,10 @@ jobs:
       - name: Configure Poetry
         run: poetry config virtualenvs.in-project true
       - name: Cache virtualenv
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: .venv
-          key: venv-${{ matrix.python-version }}-${{ hashFiles('poetry.lock') }}
+          key: venv-${{ runner.os }}-py${{ steps.setup-python.outputs.python-version }}-poetry${{ env.POETRY_VERSION }}-${{ hashFiles('poetry.lock') }}
       - name: Install dependencies (with dev group)
         run: poetry install --no-interaction --with dev
       - name: Run pytest with coverage
@@ -66,50 +80,69 @@ jobs:
           -p no:cacheprovider
           -W ignore::DeprecationWarning
           --cov=scholar_lens
+          --cov=scripts
           --cov-report=term-missing
           --cov-report=xml
-          --cov-fail-under=65
+          --cov-fail-under=85
       - name: Upload coverage artifact
         if: matrix.python-version == '3.12'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: coverage-xml
           path: coverage.xml
           if-no-files-found: ignore
 
   docker-build:
-    name: Docker images build
+    name: Docker image build
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - name: Build Batch image
         run: docker build -f Dockerfile -t scholar-lens-batch:ci .
-      - name: Build Slack worker Lambda image
-        run: docker build -f Dockerfile.lambda -t scholar-lens-worker:ci .
-      - name: Smoke-import the worker handler in the slim Lambda image
-        # Proves the slim requirements-lambda.txt set actually covers the worker's
-        # transitive import chain — a package present in requirements.txt but
-        # omitted here would otherwise ship undetected (synth + deploy don't
-        # import the handler) and fail only at Lambda invocation.
+      - name: Smoke-run the CLI in the image
+        run: docker run --rm scholar-lens-batch:ci python3 -m scholar_lens --help
+      - name: Import PyMuPDF and every pipeline in the image (catches a missing runtime dependency)
         run: >-
-          docker run --rm --entrypoint python scholar-lens-worker:ci
-          -c "import scholar_lens.slack.lambda_worker as w; assert hasattr(w, 'handler')"
+          docker run --rm scholar-lens-batch:ci python3 -c
+          "import fitz, scholar_lens.src.paper_pipeline, scholar_lens.src.guide_pipeline, scholar_lens.src.survey_pipeline, scholar_lens.src.survey_writer, scholar_lens.src.code_retriever"
+      - name: Worker reports a malformed request (JSON, exit 11)
+        run: |
+          set +e
+          docker run --rm scholar-lens-batch:ci python3 -m scholar_lens worker --request '{bad' > out.json
+          code=$?
+          set -e
+          test "$code" -eq 11
+          python3 -c "import json; assert json.load(open('out.json'))['status'] == 'rejected'"
 
   cdk-synth:
+    # Required by branch protection on main; the same synth also runs in
+    # tests/test_infra_contract.py.
     name: CDK synth (infra validation)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - id: setup-python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: "20"
-      - name: Install AWS CDK CLI
-        run: npm install -g aws-cdk
+          node-version: "22"
       - name: Install Poetry
         run: pipx install "poetry==${{ env.POETRY_VERSION }}"
+      - name: Configure Poetry
+        run: poetry config virtualenvs.in-project true
+      - name: Cache virtualenv
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-py${{ steps.setup-python.outputs.python-version }}-poetry${{ env.POETRY_VERSION }}-${{ hashFiles('poetry.lock') }}
       - name: Install dependencies
         run: poetry install --no-interaction --with dev
       - name: Synthesize stack (fake account, no AWS calls)

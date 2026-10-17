@@ -1,25 +1,34 @@
 import asyncio
-import re
-from difflib import SequenceMatcher
+import hashlib
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import boto3
+import fitz
 from langchain_core.output_parsers import StrOutputParser
-from pypdf import PdfReader
 
-from .arxiv_handler import ArxivHandler, ArxivNotFoundError
-from .citation_metadata import ChainedMetadataResolver, ReferenceMetadata
-from .constants import AppConstants, LanguageModelId, LocalPaths
+from .arxiv_handler import ArxivHandler, ArxivPaperError
+from .citation_metadata import ChainedMetadataResolver, arxiv_id_from_doi
+from .constants import AppConstants, LanguageModelId, LocalPaths, normalize_arxiv_id
 from .logger import logger
 from .parser import Content, ContentParseError, HTMLParser
-from .prompts import CitationAnalysisPrompt, CitationSummaryPrompt
-from .utils import BedrockLanguageModelFactory, HTMLTagOutputParser, RetryableBase
+from .prompt_safety import neutralize_prompt_tags
+from .prompts import CitationSummaryPrompt
+from .utils import BedrockLanguageModelFactory, RetryableBase
 
 DEFAULT_MAX_CONCURRENCY: int = 5
-DEFAULT_MAX_RETRIES: int = 3
 DEFAULT_SEARCH_RESULTS_LIMIT: int = 10
 DEFAULT_TIMEOUT: int = 60
+
+
+@dataclass(frozen=True)
+class ReferenceSource:
+    """What a citation summary is written from: a header naming the work
+    (linked when its URL is trusted) and its abstract or full text."""
+
+    header: str
+    text: str
 
 
 class CitationSummarizer(RetryableBase):
@@ -28,17 +37,15 @@ class CitationSummarizer(RetryableBase):
     def __init__(
         self,
         citation_summarizing_model_id: LanguageModelId,
-        citation_analysis_model_id: LanguageModelId,
-        boto_session: boto3.Session,
+        boto_session: boto3.Session | None = None,
         paper_dir: Path | None = None,
-        max_retries: int = DEFAULT_MAX_RETRIES,
         timeout: int = DEFAULT_TIMEOUT,
         max_concurrency: int = DEFAULT_MAX_CONCURRENCY,
         metadata_resolver: ChainedMetadataResolver | None = None,
         callbacks: list[Any] | None = None,
         prefer_full_text: bool = False,
     ) -> None:
-        self.boto_session = boto_session
+        self.boto_session = boto_session or boto3.Session()
         self.llm_factory = BedrockLanguageModelFactory(boto_session=self.boto_session)
         self.references_dir = (
             paper_dir or Path.cwd()
@@ -49,41 +56,25 @@ class CitationSummarizer(RetryableBase):
         self.metadata_resolver = metadata_resolver or ChainedMetadataResolver()
         self.prefer_full_text = prefer_full_text
         self._callbacks = callbacks or None
-        # Cache summaries by identifier so the same reference cited from multiple
-        # paragraphs is summarised only once (the enrich loop calls per-paragraph).
-        # The in-flight map gives single-flight semantics: concurrent callers for
-        # the same identifier await one shared task instead of each doing the work.
-        self._summary_cache: dict[str, str | None] = {}
-        self._inflight: dict[str, asyncio.Future[str | None]] = {}
+        # A reference's source is fetched once per run (single-flight: concurrent
+        # callers await one task); its summary is written per citing section,
+        # since it says why the reference matters THERE.
+        self._source_cache: dict[str, ReferenceSource | None] = {}
+        self._inflight: dict[str, asyncio.Future[ReferenceSource | None]] = {}
+        self._summary_cache: dict[tuple[str, str], str | None] = {}
         self._cache_lock = asyncio.Lock()
 
         self.citation_summarizing_model_id = citation_summarizing_model_id
-        analysis_llm = self.llm_factory.get_model(
-            citation_analysis_model_id, temperature=0.0, callbacks=self._callbacks
-        )
-        summarizing_llm = (
-            analysis_llm
-            if citation_summarizing_model_id == citation_analysis_model_id
-            else self.llm_factory.get_model(
-                citation_summarizing_model_id,
-                temperature=0.0,
-                callbacks=self._callbacks,
-            )
-        )
-
-        self.citation_analyzer = (
-            CitationAnalysisPrompt.get_prompt()
-            | analysis_llm
-            | HTMLTagOutputParser(tag_names=CitationAnalysisPrompt.output_variables)
+        summarizing_llm = self.llm_factory.get_model(
+            citation_summarizing_model_id, temperature=0.0, callbacks=self._callbacks
         )
         self.citation_summarizer = (
             CitationSummaryPrompt.get_prompt() | summarizing_llm | StrOutputParser()
         )
-        self.arxiv_handler = ArxivHandler(max_retries=max_retries)
+        self.arxiv_handler = ArxivHandler()
         # Timeout for per-call HTMLParser instances. A parser is NOT shared across
-        # tasks: summarize() resolves up to `max_concurrency` identifiers at once,
-        # and the parser's __aexit__ closes its httpx client — a shared instance
-        # would close the client out from under a concurrent task's in-flight GET.
+        # tasks: its __aexit__ closes its httpx client, which would abort a
+        # concurrent task's in-flight GET.
         self._parser_timeout = timeout
 
     def _fit_summary_inputs(
@@ -92,10 +83,11 @@ class CitationSummarizer(RetryableBase):
         """Fit the (reference, original) pair to the summarizing model's window
         with Bedrock CountTokens. Both texts share one prompt, so first hold back
         room for the prompt template + the model's response, then split the
-        REMAINING budget between the two (each gets half)."""
+        REMAINING budget between the two (each gets half). Both are untrusted
+        (reference text from external APIs, the paper's own text), so their
+        prompt-fence tags are defanged first."""
         model_id = self.citation_summarizing_model_id
         window = self.llm_factory.effective_context_window(model_id)
-        # Headroom for prompt template + output, then halve what's left per input.
         usable = max(window - self.llm_factory.DEFAULT_CONTEXT_RESERVE_TOKENS, 1000)
         # fit_text computes budget = window - reserve_tokens, so to give each input
         # `usable // 2` tokens we reserve everything above that.
@@ -103,13 +95,13 @@ class CitationSummarizer(RetryableBase):
         return {
             "reference_content": self.llm_factory.fit_text(
                 model_id,
-                reference_content,
+                neutralize_prompt_tags(reference_content),
                 reserve_tokens=per_input_reserve,
                 label="citation reference",
             ),
             "original_content": self.llm_factory.fit_text(
                 model_id,
-                original_content,
+                neutralize_prompt_tags(original_content),
                 reserve_tokens=per_input_reserve,
                 label="citation original",
             ),
@@ -118,91 +110,100 @@ class CitationSummarizer(RetryableBase):
     async def summarize(
         self, reference_identifiers: list[str], original_content: str
     ) -> list[str]:
-        async def process_with_semaphore(identifier: str) -> str | None:
-            # Serve from cache first; otherwise register an in-flight task so that
-            # concurrent callers for the same identifier (the enrich loop fires one
-            # summarize() per paragraph) share a single resolution instead of each
-            # re-doing the expensive arXiv/metadata work.
-            async with self._cache_lock:
-                if identifier in self._summary_cache:
-                    return self._summary_cache[identifier]
-                existing = self._inflight.get(identifier)
-                if existing is None:
-                    existing = asyncio.ensure_future(
-                        self._resolve_once(identifier, original_content)
+        """Summaries of the references, each written for ``original_content``;
+        a reference with no abstract or text is left out (and counted)."""
+        section_key = hashlib.sha1(original_content.encode("utf-8")).hexdigest()[:12]
+
+        async def one(identifier: str) -> str | None:
+            source = await self._source(identifier)
+            if source is None:
+                return None
+            key = (identifier, section_key)
+            if key not in self._summary_cache:
+                async with self.semaphore:
+                    self._summary_cache[key] = await self._summary(
+                        source, original_content
                     )
-                    self._inflight[identifier] = existing
-                    owner = True
-                else:
-                    owner = False
-            try:
-                return await existing
-            finally:
-                if owner:
-                    async with self._cache_lock:
-                        self._inflight.pop(identifier, None)
+            return self._summary_cache[key]
 
-        # De-duplicate identifiers within this call too.
         unique_identifiers = list(dict.fromkeys(reference_identifiers))
-        tasks = [
-            process_with_semaphore(identifier) for identifier in unique_identifiers
-        ]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-
+        results = await asyncio.gather(
+            *(one(identifier) for identifier in unique_identifiers),
+            return_exceptions=True,
+        )
         summaries: list[str] = []
-        for result in results:
-            if isinstance(result, Exception):
-                logger.error(
-                    "Failed to process an identifier after retries: '%s'", result
-                )
-            elif result is not None and isinstance(result, str):
-                if self.FAILURE_STRING not in result:
-                    summaries.append(result)
-                else:
-                    logger.warning("Excluding failed summary: '%s'", result)
-
+        unsourced = 0
+        for identifier, result in zip(unique_identifiers, results, strict=True):
+            if isinstance(result, BaseException):
+                logger.error("Citation summary failed for '%s': %s", identifier, result)
+            elif result is None:
+                unsourced += self._source_cache.get(identifier) is None
+            else:
+                summaries.append(result)
         logger.info(
-            "Generated %d summaries from %d identifiers",
+            "Generated %d summaries from %d identifiers (%d without an abstract or "
+            "text).",
             len(summaries),
             len(unique_identifiers),
+            unsourced,
         )
         return summaries
 
-    async def _resolve_once(self, identifier: str, original_content: str) -> str | None:
-        """Do the bounded work for one identifier and memoise the result.
+    def unsourced_references(self) -> list[str]:
+        """References looked up this run that no source (metadata abstract or
+        arXiv text) was found for; their summaries were skipped."""
+        return [ident for ident, source in self._source_cache.items() if source is None]
 
-        Reached at most once per identifier across the whole run (callers funnel
-        through the in-flight map in ``summarize``).
-        """
-        async with self.semaphore:
-            result = await self._process_identifier(identifier, original_content)
+    async def _source(self, identifier: str) -> ReferenceSource | None:
         async with self._cache_lock:
-            self._summary_cache[identifier] = result
-        return result
+            if identifier in self._source_cache:
+                return self._source_cache[identifier]
+            task = self._inflight.get(identifier)
+            owner = task is None
+            if task is None:
+                task = asyncio.ensure_future(self._fetch_source(identifier))
+                self._inflight[identifier] = task
+        try:
+            source = await task
+        finally:
+            if owner:
+                async with self._cache_lock:
+                    self._inflight.pop(identifier, None)
+        async with self._cache_lock:
+            self._source_cache[identifier] = source
+        return source
 
-    async def _process_identifier(
-        self, identifier: str, original_content: str
-    ) -> str | None:
+    async def _fetch_source(self, identifier: str) -> ReferenceSource | None:
+        async with self.semaphore:
+            return await self._resolve_source(identifier)
+
+    async def _resolve_source(self, identifier: str) -> ReferenceSource | None:
         # Explicit arXiv id -> go straight to arXiv (we already have the id).
-        if self._looks_like_arxiv_id(identifier):
-            arxiv_id = identifier.replace("arXiv:", "").replace("arxiv:", "")
-            return await self._process_arxiv_item(arxiv_id, original_content)
-
-        # Otherwise resolve metadata/abstract from lenient providers FIRST; this
-        # avoids the arXiv API entirely for most references and works from the
-        # abstract instead of downloading full text.
+        if arxiv_id := normalize_arxiv_id(identifier):
+            return await self._arxiv_source(arxiv_id)
+        # Otherwise resolve the abstract from lenient providers first, which
+        # avoids the arXiv API for most references. The resolver only returns
+        # a record whose title matches the citation.
         metadata = await asyncio.to_thread(self.metadata_resolver.resolve, identifier)
-        if metadata is not None and (
-            metadata.has_abstract or not self.prefer_full_text
-        ):
-            summary = await self._summarize_from_metadata(
-                metadata, original_content, identifier
+        abstract: ReferenceSource | None = None
+        if metadata is not None and metadata.has_abstract:
+            link = (
+                f"[{metadata.title}]({metadata.url})"
+                if metadata.url
+                else metadata.title
             )
-            if summary is not None:
-                return summary
-
-        # Last resort: arXiv title search (rate-limited) + the legacy path.
-        found_arxiv_id = await asyncio.to_thread(
+            authors = f"Authors: {metadata.author_str}\n" if metadata.authors else ""
+            # Title, URL and authors come from external APIs: defang them too.
+            abstract = ReferenceSource(
+                header=neutralize_prompt_tags(f"Title: {link}\n{authors}"),
+                text=metadata.abstract or "",
+            )
+            if not self.prefer_full_text:
+                return abstract
+        # A resolved arXiv DOI names the paper; otherwise search arXiv by title.
+        found_arxiv_id = arxiv_id_from_doi(
+            metadata.url if metadata else None
+        ) or await asyncio.to_thread(
             self.arxiv_handler.search_by_title,
             identifier,
             DEFAULT_SEARCH_RESULTS_LIMIT,
@@ -211,125 +212,65 @@ class CitationSummarizer(RetryableBase):
             logger.info(
                 "Found 'arxiv_id' '%s' for title: '%s'", found_arxiv_id, identifier
             )
-            return await self._process_arxiv_item(
-                found_arxiv_id.replace("arXiv:", ""), original_content
-            )
-        logger.warning("No metadata or arXiv match for: '%s'", identifier)
-        return await self._process_title_item(identifier, original_content)
+            full = await self._arxiv_source(found_arxiv_id.replace("arXiv:", ""))
+            if full is not None:
+                return full
+        if abstract is None:  # full text preferred but unavailable: abstract
+            logger.warning("No abstract or text found for reference '%s'", identifier)
+        return abstract
 
-    @staticmethod
-    def _looks_like_arxiv_id(identifier: str) -> bool:
-        return bool(
-            identifier.lower().startswith("arxiv:")
-            or re.match(r"^\d{4}\.\d{4,5}(v\d+)?$", identifier)
-        )
-
-    # Minimum title similarity to trust a resolved metadata URL as the right
-    # paper. Below this we keep the title as plain text (no mis-attributed link).
-    TITLE_MATCH_THRESHOLD: float = 0.72
-    # Minimum normalised length of a contained title before substring containment
-    # is trusted, so a short generic title isn't matched inside a long citation.
-    MIN_CONTAINED_TITLE_CHARS: int = 16
-
-    @staticmethod
-    def _title_matches(queried: str | None, resolved: str | None) -> bool:
-        """Whether a resolved title is close enough to the queried one to trust.
-
-        The queried identifier is often a raw citation string ("Smith et al.,
-        Foo Bar, 2021"); we compare on a normalised, lowercased basis and accept
-        either a high overall ratio or full containment of one normalised title
-        in the other (handles extra author/year noise around the title).
-        """
-        if not queried or not resolved:
-            return False
-
-        def _norm(s: str) -> str:
-            return re.sub(r"[^a-z0-9 ]+", " ", s.lower()).strip()
-
-        q, r = _norm(queried), _norm(resolved)
-        if not q or not r:
-            return False
-        # Strong overall similarity (incl. an exact match) is always trusted,
-        # regardless of length.
-        if (
-            SequenceMatcher(None, q, r).ratio()
-            >= CitationSummarizer.TITLE_MATCH_THRESHOLD
-        ):
-            return True
-        # Otherwise, proper containment handles author/year noise around the real
-        # title (e.g. the resolved title sits inside "Hu et al., <title>, 2021"),
-        # but only when the contained string is itself a substantial title — a
-        # short generic resolved title ("attention") inside a long citation must
-        # NOT auto-match. Real paper titles are well over this length.
-        if r in q or q in r:
-            return min(len(q), len(r)) >= CitationSummarizer.MIN_CONTAINED_TITLE_CHARS
-        return False
-
-    @RetryableBase._retry("citation_metadata_summary")
-    async def _summarize_from_metadata(
-        self,
-        metadata: ReferenceMetadata,
-        original_content: str,
-        queried_identifier: str | None = None,
-    ) -> str | None:
-        """Summarise a reference from its abstract (no full-text download).
-
-        The resolver returns the top fuzzy match from Crossref/Semantic Scholar,
-        which is sometimes the WRONG paper — embedding its URL produces a
-        mis-attributed citation link. Only attach the link when the resolved
-        title closely matches the queried title; otherwise keep the (queried)
-        title as plain text so we never point at a wrong paper.
-        """
-        reference_text = metadata.abstract or metadata.title
-        if not reference_text.strip():
-            return None
-        summary = await self.citation_summarizer.ainvoke(
-            self._fit_summary_inputs(reference_text, original_content)
-        )
-        if not summary or self.FAILURE_STRING in summary:
-            return None
-        trustworthy = self._title_matches(queried_identifier, metadata.title)
-        if metadata.url and trustworthy:
-            link = f"[{metadata.title}]({metadata.url})"
-        else:
-            link = metadata.title
-        author_line = f"Authors: {metadata.author_str}\n" if metadata.authors else ""
-        return f"Title: {link}\n{author_line}\n{summary}"
-
-    @RetryableBase._retry("arxiv_item_processing")
-    async def _process_arxiv_item(
-        self, arxiv_id: str, original_content: str
-    ) -> str | None:
+    async def _arxiv_source(self, arxiv_id: str) -> ReferenceSource | None:
         try:
-            # One arXiv metadata fetch gives title, authors AND abstract — no
-            # separate get_title_and_authors call (was a 2nd-3rd API hit).
+            # One arXiv metadata fetch gives title, authors and abstract.
             metadata = await asyncio.to_thread(
                 self.arxiv_handler.fetch_metadata, arxiv_id
             )
-            title = metadata.title
-            authors = ", ".join(metadata.authors)
+        except ArxivPaperError as e:
+            # Not found, or arXiv failing after its retries. A title lookup
+            # falls back to the metadata abstract it already has; an explicit
+            # arXiv id has no other source (the metadata providers match by
+            # title), so that reference is skipped.
+            logger.error("No usable text for arxiv_id '%s': %s", arxiv_id, e)
+            return None
+        abstract = (metadata.abstract or "").strip()
+        text = "" if self.prefer_full_text else abstract
+        if not text:
+            try:
+                text = (await self._extract_paper_content(arxiv_id)).text
+            except ContentParseError as e:
+                # Full text failed: the abstract (if any) still grounds a summary.
+                logger.warning("No full text for arxiv_id '%s': %s", arxiv_id, e)
+                text = abstract
+        if not text.strip():
+            logger.error("No usable text for arxiv_id '%s'", arxiv_id)
+            return None
+        url = f"{AppConstants.External.ARXIV_PDF.value}/{arxiv_id}"
+        return ReferenceSource(
+            header=neutralize_prompt_tags(
+                f"Title: [{metadata.title}]({url})\n"
+                f"Authors: {', '.join(metadata.authors)}\n"
+            ),
+            text=text,
+        )
 
-            if self.prefer_full_text:
-                content = await self._extract_paper_content(arxiv_id)
-                reference_text = content.text
-            else:
-                # Abstract-first: skip the full-text HTML/PDF download entirely.
-                reference_text = metadata.abstract or ""
-                if not reference_text.strip():
-                    content = await self._extract_paper_content(arxiv_id)
-                    reference_text = content.text
+    async def _summary(
+        self, source: ReferenceSource, original_content: str
+    ) -> str | None:
+        if not source.text.strip():
+            return None
+        summary = await self._invoke_summary(
+            self._fit_summary_inputs(source.text, original_content)
+        )
+        if not summary or self.FAILURE_STRING in summary:
+            logger.warning("Excluding failed summary for '%s'", source.header.strip())
+            return None
+        return f"{source.header}\n{summary}"
 
-            summary = await self.citation_summarizer.ainvoke(
-                self._fit_summary_inputs(reference_text, original_content)
-            )
-            url = f"{AppConstants.External.ARXIV_PDF.value}/{arxiv_id}"
-            return f"Title: [{title}]({url})\nAuthors: {authors}\n\n{summary}"
-        except (ArxivNotFoundError, ContentParseError) as e:
-            logger.error("Non-retryable error for arxiv_id '%s': %s", arxiv_id, e)
-            return f"[{arxiv_id}]\nCould not generate summary."
-        except Exception as e:
-            logger.error("Error during processing arxiv_id '%s': %s", arxiv_id, e)
-            raise
+    @RetryableBase._retry("citation_summary")
+    async def _invoke_summary(self, inputs: dict[str, str]) -> str:
+        """The model call alone is retried, so a throttle never refetches the
+        reference from arXiv."""
+        return await self.citation_summarizer.ainvoke(inputs)
 
     async def _extract_paper_content(self, arxiv_id: str) -> Content:
         try:
@@ -339,12 +280,10 @@ class CitationSummarizer(RetryableBase):
             logger.info(
                 "HTML parsing failed for '%s', falling back to PDF: %s", arxiv_id, e
             )
-
         return await self._parse_pdf_content(arxiv_id)
 
     async def _parse_html_content(self, arxiv_id: str) -> Content | None:
-        # Fresh parser per call: concurrent tasks must not share one httpx client
-        # (its __aexit__ close would abort another task's in-flight request).
+        # Fresh parser per call: concurrent tasks must not share one httpx client.
         async with HTMLParser(timeout=self._parser_timeout) as parser:
             result = await parser.parse(arxiv_id, extract_text=True)
             if result.content and result.content.text:
@@ -357,13 +296,9 @@ class CitationSummarizer(RetryableBase):
                 self.arxiv_handler.download_paper, arxiv_id, self.references_dir
             )
 
-            def read_pdf():
-                reader = PdfReader(paper_path)
-                return " ".join(
-                    page.extract_text().strip()
-                    for page in reader.pages
-                    if page.extract_text()
-                )
+            def read_pdf() -> str:
+                with fitz.open(str(paper_path)) as doc:
+                    return " ".join(page.get_text().strip() for page in doc)
 
             text = await asyncio.to_thread(read_pdf)
             logger.info(
@@ -374,13 +309,3 @@ class CitationSummarizer(RetryableBase):
             return Content(text=text)
         except Exception as e:
             raise ContentParseError(f"PDF parsing failed for {arxiv_id}") from e
-
-    @RetryableBase._retry("title_item_processing")
-    async def _process_title_item(self, title: str, original_content: str) -> str:
-        analysis = await self.citation_analyzer.ainvoke(
-            {"reference_title": title, "original_content": original_content}
-        )
-        analysis = analysis.get("analysis", "")
-        if not analysis or not analysis.strip():
-            return f"Title: [{title}]\n{self.FAILURE_STRING}"
-        return f"Title: [{title}]\n{analysis}"

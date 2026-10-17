@@ -1,12 +1,12 @@
 import asyncio
 import hashlib
 import os
+import re
 import shutil
 from collections.abc import Sequence
 from pathlib import Path
 
 import boto3
-import git
 from langchain_community.vectorstores.faiss import FAISS
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.documents import Document
@@ -14,7 +14,6 @@ from langchain_core.language_models import BaseLanguageModel
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.vectorstores import VectorStore
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from tqdm import tqdm
 
 from .constants import EmbeddingModelId, LanguageModelId, LocalPaths
 from .logger import logger
@@ -32,6 +31,65 @@ DEFAULT_CHUNK_SIZE: int = 1024
 DEFAULT_MAX_CONCURRENCY: int = 10
 DEFAULT_BATCH_SIZE: int = 10
 EMBEDDING_BATCH_SIZE: int = 100
+# Directories never indexed: VCS metadata, virtualenvs and vendored packages
+# would drown the paper's own code.
+_SKIPPED_DIRS = frozenset(
+    {
+        ".git",
+        ".venv",
+        "venv",
+        "env",
+        "site-packages",
+        "node_modules",
+        "__pycache__",
+        ".tox",
+        "build",
+        "dist",
+        "third_party",
+        "third-party",
+        "vendor",
+        "vendored",
+        "external",
+        "test",
+        "tests",
+        "testing",
+        "docs",
+    }
+)
+# Libraries that papers' repos commonly vendor whole (e.g. a patched copy of
+# transformers under examples/): a directory named after one is skipped unless
+# it is the repository's own package.
+_KNOWN_LIBRARIES = frozenset(
+    {
+        "transformers",
+        "torch",
+        "tensorflow",
+        "jax",
+        "flax",
+        "numpy",
+        "diffusers",
+        "accelerate",
+        "peft",
+        "datasets",
+        "fairseq",
+        "megatron",
+        "apex",
+        "deepspeed",
+    }
+)
+_PROJECT_FILES = ("setup.py", "pyproject.toml", "setup.cfg")
+MAX_FILE_BYTES: int = 100_000
+DEFAULT_MAX_FILES: int = 150
+DEFAULT_MAX_CHUNKS: int = 400
+# Progress is logged every this many batches while analysing/embedding.
+_PROGRESS_EVERY_BATCHES: int = 5
+_CLONE_TIMEOUT_SECONDS: int = 300
+# Abort a clone that stays below 1 KB/s for 60 s, and never prompt for input.
+_GIT_CLONE_ENV = {
+    "GIT_HTTP_LOW_SPEED_LIMIT": "1000",
+    "GIT_HTTP_LOW_SPEED_TIME": "60",
+    "GIT_TERMINAL_PROMPT": "0",
+}
 
 
 class NoPythonFilesError(Exception):
@@ -51,6 +109,8 @@ class CodeRetriever(RetryableBase):
         chunk_overlap: int = DEFAULT_CHUNK_OVERLAP,
         max_concurrency: int = DEFAULT_MAX_CONCURRENCY,
         batch_size: int = DEFAULT_BATCH_SIZE,
+        max_files: int = DEFAULT_MAX_FILES,
+        max_chunks: int = DEFAULT_MAX_CHUNKS,
         region_name: str | None = None,
         profile_name: str | None = None,
         boto_session: boto3.Session | None = None,
@@ -69,6 +129,8 @@ class CodeRetriever(RetryableBase):
         self._initialize_directories(paper_dir or Path.cwd())
         self.repo_paths: list[Path] | None = None
         self.vector_store: VectorStore | None = None
+        self.max_files = max_files
+        self.max_chunks = max_chunks
 
         code_analysis_llm = self.llm_factory.get_model(
             code_analysis_model_id, temperature=0.0, callbacks=self._callbacks
@@ -105,9 +167,7 @@ class CodeRetriever(RetryableBase):
 
     def _initialize_directories(self, paper_dir: Path) -> None:
         self.repo_cache_dir = paper_dir / LocalPaths.REPOS_DIR.value
-        self.index_cache_dir = paper_dir / LocalPaths.FAISS_INDEX_DIR.value
-        for directory in [self.repo_cache_dir, self.index_cache_dir]:
-            directory.mkdir(parents=True, exist_ok=True)
+        self.repo_cache_dir.mkdir(parents=True, exist_ok=True)
 
     def _initialize_text_splitter(self, chunk_size: int, chunk_overlap: int) -> None:
         self.text_splitter = RecursiveCharacterTextSplitter(
@@ -178,7 +238,7 @@ class CodeRetriever(RetryableBase):
 
         ``git`` will act on ``file://`` (local exfiltration into the indexed
         corpus), ``ssh://``, and internal ``http://`` targets. Repo URLs come
-        from untrusted Slack input, so allow only ``https://`` to a public host
+        from the job request or CLI (untrusted input), so allow only ``https://`` to a public host
         (SSRF guard) — no scheme is trusted by default.
         """
         if not url.lower().startswith("https://"):
@@ -193,17 +253,53 @@ class CodeRetriever(RetryableBase):
             CodeRetriever._assert_clonable(url)
             if path.exists():
                 await asyncio.to_thread(shutil.rmtree, path)
-            await asyncio.to_thread(git.Repo.clone_from, url, str(path), depth=1)
+            await CodeRetriever._git_clone(url, path)
             logger.info("Downloaded '%s' to '%s'", url, path)
         except Exception as e:
             logger.error("Failed to download repository '%s': %s", url, str(e))
             raise
 
-    async def create_or_load_index(
+    @staticmethod
+    async def _git_clone(url: str, path: Path) -> None:
+        """Shallow, single-branch clone with no symlinks checked out (a symlink
+        could point the indexer at local files) and no HTTP redirects (the URL
+        was SSRF-checked, its redirect target was not). The git process is
+        killed when it exceeds :data:`_CLONE_TIMEOUT_SECONDS`."""
+        process = await asyncio.create_subprocess_exec(
+            "git",
+            "-c",
+            "core.symlinks=false",
+            "-c",
+            "http.followRedirects=false",
+            "clone",
+            "--depth=1",
+            "--single-branch",
+            "--",
+            url,
+            str(path),
+            env={**os.environ, **_GIT_CLONE_ENV},
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        try:
+            _, stderr = await asyncio.wait_for(
+                process.communicate(), timeout=_CLONE_TIMEOUT_SECONDS
+            )
+        except TimeoutError:
+            process.kill()
+            await process.wait()
+            raise TimeoutError(
+                f"git clone of '{url}' exceeded {_CLONE_TIMEOUT_SECONDS}s"
+            ) from None
+        if process.returncode != 0:
+            message = stderr.decode("utf-8", errors="replace").strip()[-500:]
+            raise RuntimeError(f"git clone of '{url}' failed: {message}")
+
+    async def build_index(
         self, repo_paths: list[Path] | None = None, augment: bool = True
     ) -> None:
-        if self._try_load_index_sync():
-            return
+        """Embed the repositories' code into an in-memory index for this run
+        (it is never persisted: a run's repositories and settings decide it)."""
         repo_paths = repo_paths or self.repo_paths
         if not repo_paths:
             raise ValueError("No repository paths provided")
@@ -213,37 +309,25 @@ class CodeRetriever(RetryableBase):
         logger.info("Created %d documents", len(documents))
         if augment:
             documents = await self._augment_documents(documents)
-        await self._create_and_save_index(documents)
-
-    def _try_load_index_sync(self) -> bool:
-        if self.vector_store:
-            logger.warning("Vector store already exists, re-creating.")
-            self.delete_index_sync()
-        try:
-            self.vector_store = FAISS.load_local(
-                str(self.index_cache_dir),
-                self.embeddings,
-                allow_dangerous_deserialization=True,
-            )
-            logger.info("Loaded index from '%s'", self.index_cache_dir)
-            return True
-        except Exception as e:
-            logger.warning(
-                "Failed to load index from '%s': %s. Creating new one.",
-                self.index_cache_dir,
-                str(e),
-            )
-            return False
+        await self._create_index(documents)
 
     async def _create_documents(self, repo_paths: list[Path]) -> list[Document]:
+        """Chunks of the most relevant files, in relevance order, capped at
+        ``max_chunks`` so analysis and embedding cost stay bounded."""
         tasks = [
             self._read_file_as_document(py_file, repo_path)
             for repo_path in repo_paths
-            for py_file in repo_path.rglob("*.py")
+            for py_file in python_files(repo_path, max_files=self.max_files)
         ]
         doc_results = await asyncio.gather(*tasks)
         documents = [doc for doc in doc_results if doc is not None]
-        return self.text_splitter.split_documents(documents)
+        chunks = self.text_splitter.split_documents(documents)
+        if len(chunks) > self.max_chunks:
+            logger.info(
+                "Keeping the first %d of %d code chunks.", self.max_chunks, len(chunks)
+            )
+            chunks = chunks[: self.max_chunks]
+        return chunks
 
     @staticmethod
     async def _read_file_as_document(
@@ -289,7 +373,7 @@ class CodeRetriever(RetryableBase):
             )
         return augmented_docs
 
-    async def _create_and_save_index(self, documents: list[Document]) -> None:
+    async def _create_index(self, documents: list[Document]) -> None:
         if not documents:
             logger.warning("No documents provided to create index.")
             return
@@ -306,24 +390,17 @@ class CodeRetriever(RetryableBase):
 
         remaining_docs = documents[EMBEDDING_BATCH_SIZE:]
 
-        for i in tqdm(
-            range(0, len(remaining_docs), EMBEDDING_BATCH_SIZE),
-            desc="Adding document batches to FAISS",
+        total_batches = -(-len(remaining_docs) // EMBEDDING_BATCH_SIZE)
+        for number, i in enumerate(
+            range(0, len(remaining_docs), EMBEDDING_BATCH_SIZE), start=1
         ):
             batch = remaining_docs[i : i + EMBEDDING_BATCH_SIZE]
             if not batch:
                 continue
-
             await self._aadd_documents_with_retry(batch)
-
-        if self.vector_store and isinstance(self.vector_store, FAISS):
-            await asyncio.to_thread(
-                self.vector_store.save_local, str(self.index_cache_dir)
-            )
-        logger.info(
-            "Completed adding all batches. Index saved to '%s'",
-            self.index_cache_dir,
-        )
+            if number % _PROGRESS_EVERY_BATCHES == 0 or number == total_batches:
+                logger.info("Embedded %d/%d document batches.", number, total_batches)
+        logger.info("Indexed %d code chunks.", len(documents))
 
     @RetryableBase._retry("documents_embedding")
     async def _afrom_documents_with_retry(self, documents: list[Document]) -> FAISS:
@@ -335,16 +412,8 @@ class CodeRetriever(RetryableBase):
             raise ValueError("Vector store is not initialized.")
         await self.vector_store.aadd_documents(documents)
 
-    def delete_index_sync(self) -> None:
-        if self.index_cache_dir.exists():
-            shutil.rmtree(self.index_cache_dir)
-            logger.info("Deleted index from '%s'", self.index_cache_dir)
-        self.vector_store = None
-
     async def delete_index(self) -> None:
-        if self.index_cache_dir.exists():
-            await asyncio.to_thread(shutil.rmtree, self.index_cache_dir)
-            logger.info("Deleted index from '%s'", self.index_cache_dir)
+        """Release the in-memory index."""
         self.vector_store = None
 
     async def generate_codebase_summary(
@@ -358,7 +427,7 @@ class CodeRetriever(RetryableBase):
         for repo_path in repo_paths:
             if limit_reached:
                 break
-            for py_file in repo_path.rglob("*.py"):
+            for py_file in python_files(repo_path, max_files=self.max_files):
                 try:
                     # errors="replace" (see _read_file_as_document): don't drop a
                     # non-UTF-8-clean source file from the codebase summary.
@@ -366,14 +435,18 @@ class CodeRetriever(RetryableBase):
                         py_file.read_text, encoding="utf-8", errors="replace"
                     )
                     if total_chars + len(content) > self.MAX_CHARS:
-                        logger.warning(
-                            "Reached character limit (%d). Skipping remaining files.",
-                            self.MAX_CHARS,
+                        if total_chars >= self.MAX_CHARS * 0.95:
+                            logger.warning(
+                                "Reached character limit (%d); skipping the rest.",
+                                self.MAX_CHARS,
+                            )
+                            limit_reached = True
+                            break
+                        # One oversized file must not end the summary early.
+                        logger.info(
+                            "Skipping large file '%s' for the summary.", py_file
                         )
-                        # Stop the OUTER repo loop too, not just this repo's files,
-                        # so the summary never exceeds MAX_CHARS across repos.
-                        limit_reached = True
-                        break
+                        continue
                     total_chars += len(content)
                     all_content.append(content)
                 except Exception as e:
@@ -404,3 +477,105 @@ class CodeRetriever(RetryableBase):
             }
             for doc, score in results
         ]
+
+
+# A project's declared name: name = "peft" (pyproject/setup.cfg) or name="peft".
+_DECLARED_NAME = re.compile(r"""^\s*name\s*=\s*["']?([A-Za-z0-9_.-]+)""", re.M)
+_SETUP_PY_NAME = re.compile(r"""\bname\s*=\s*["']([A-Za-z0-9_.-]+)["']""")
+
+
+def _name_tokens(name: str) -> set[str]:
+    normalized = re.sub(r"[-_.]+", "_", name.lower()).strip("_")
+    return {normalized, *normalized.split("_")} - {""}
+
+
+def own_package_names(root: Path) -> set[str]:
+    """Names the repository's own package may go by: its directory name (the
+    clone folder ends in "-<hash>") and the name its project file declares, so
+    a repo of peft or Megatron-LM indexes its own ``peft/`` or ``megatron/``."""
+    names = _name_tokens(re.sub(r"-[0-9a-f]{8}$", "", root.name))
+    for project_file in _PROJECT_FILES:
+        path = root / project_file
+        if not path.is_file():
+            continue
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        pattern = _SETUP_PY_NAME if project_file == "setup.py" else _DECLARED_NAME
+        if match := pattern.search(text):
+            names |= _name_tokens(match.group(1))
+    return names
+
+
+def _is_vendored_library(directory: Path, root: Path, own: set[str]) -> bool:
+    """A nested directory that is itself a packaged copy of another project
+    (its own setup.py/pyproject.toml), or a known library vendored inline;
+    never the repository's own package."""
+    if directory == root or directory.parent == root / "src":
+        return False  # the root, or a package in the src layout
+    if any((directory / name).is_file() for name in _PROJECT_FILES):
+        return True
+    name = directory.name.lower()
+    return name in _KNOWN_LIBRARIES and name not in own
+
+
+def _readme_text(root: Path) -> str:
+    for candidate in sorted(root.glob("README*")):
+        if candidate.is_file():
+            try:
+                return candidate.read_text(encoding="utf-8", errors="replace").lower()
+            except OSError:
+                return ""
+    return ""
+
+
+def python_files(repo_path: Path, *, max_files: int | None = None) -> list[Path]:
+    """The repository's own Python sources, most relevant first.
+
+    Skips symlinks, files resolving outside the repository, files over
+    :data:`MAX_FILE_BYTES`, VCS/virtualenv/test/doc directories and vendored
+    copies of other libraries. Files the README mentions (by module or package
+    name) come first, then shallower paths; ``max_files`` caps the result.
+    """
+    root = repo_path.resolve()
+    readme = _readme_text(repo_path)
+    own = own_package_names(repo_path)
+    vendored: dict[Path, bool] = {}
+
+    def in_vendored_dir(path: Path) -> bool:
+        for parent in path.relative_to(repo_path).parents:
+            directory = repo_path / parent
+            if directory not in vendored:
+                vendored[directory] = _is_vendored_library(directory, repo_path, own)
+            if vendored[directory]:
+                return True
+        return False
+
+    candidates = []
+    for path in sorted(repo_path.rglob("*.py")):
+        relative = path.relative_to(repo_path)
+        if any(part.lower() in _SKIPPED_DIRS for part in relative.parts[:-1]):
+            continue
+        if path.is_symlink() or not path.is_file():
+            continue
+        if not path.resolve().is_relative_to(root):
+            continue
+        if path.stat().st_size > MAX_FILE_BYTES:
+            continue
+        if in_vendored_dir(path):
+            continue
+        names = {relative.stem.lower(), *(p.lower() for p in relative.parts[:-1])}
+        mentioned = any(len(n) >= 3 and n in readme for n in names - {"__init__"})
+        candidates.append((not mentioned, len(relative.parts), str(relative), path))
+    candidates.sort(key=lambda c: c[:3])
+    files = [c[3] for c in candidates]
+    if max_files is not None and len(files) > max_files:
+        logger.info(
+            "Indexing the %d most relevant of %d Python files in '%s'.",
+            max_files,
+            len(files),
+            repo_path.name,
+        )
+        files = files[:max_files]
+    return files

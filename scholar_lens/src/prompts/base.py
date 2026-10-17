@@ -1,218 +1,247 @@
 from abc import ABC
 from dataclasses import dataclass
 
-from langchain_core.messages import SystemMessage
 from langchain_core.prompts import (
     ChatPromptTemplate,
     HumanMessagePromptTemplate,
     SystemMessagePromptTemplate,
 )
 
-GRANULARITY_RULES: str = """
-**STANDARD**: Concise summary of key ideas and main concepts
-- Focus on brevity and clarity with essential technical details
-- Include key equations, figures, and core methodologies
-- Suitable for Introduction, Related Work, Evaluation, and Conclusion sections
-- Avoid exhaustive step-by-step breakdowns while maintaining technical accuracy
+# Shared writing rules for the review, summary and guide prompts. Each block
+# states one concern once; prompts compose the blocks they need instead of
+# restating them, so the rules cannot drift between artifacts.
 
-**DETAILED**: Comprehensive explanation with no omissions
-- Include ALL technical content, equations, algorithms, methodological details
-- Step-by-step explanation of all concepts, equations, algorithms
-- Maximum depth and coverage of all technical content
-- Nothing from original paper should be omitted or oversimplified
+READER_PROFILE: str = """
+The reader is a general data scientist or ML engineer: fluent in standard deep
+learning (Transformers, attention, embeddings, Adam, cross-entropy, fine-tuning,
+common benchmarks and metrics) but not a specialist in this topic.
 """
 
-TECHNICAL_DEPTH_RULES: str = """
-**BASIC**: Direct explanation following the paper
-- Use original expressions/terms/examples/equations from paper
-- Explain core concepts clearly but concisely
-- Focus on fundamental understanding and accurate representation
 
-**INTERMEDIATE**: Enhanced explanation with supplementary materials
-- Detailed concept and methodology explanations
-- Include practical examples, use cases, background knowledge
-- Properly attribute and integrate explanations from referenced papers
-- Include expanded mathematical derivations with step-by-step walkthroughs
-- Provide code implementations illustrating key concepts
-- **REQUIRED: Moderate use of supplementary materials (citations OR code)**
-
-**ADVANCED**: Comprehensive expert-level explanation
-- Most detailed and thorough explanation possible
-- In-depth theoretical foundations and mathematical proofs
-- Extensive practical examples and implementations
-- Full mathematical derivations with insights into each step
-- Complete code implementations with detailed explanations
-- **REQUIRED: Extensive use of supplementary materials (citations AND code)**
+SUMMARY_DEPTH_RULES: str = """
+A summary is short: about 2,000-3,000 Hangul syllables of prose in Korean
+(the same reading time in other languages), readable in five minutes.
+- Spend the words on the core mechanism: its intuition, its key equation with
+  symbols defined, and at most one small worked example.
+- Results: one distilled table plus at most three findings, each with its
+  setting.
+- No `###` inside a section except in the results section.
 """
 
-GRANULARITY_DEPTH_CONFLICT_RULES: str = """
-**STANDARD + ADVANCED**: Select only core concepts (~60% coverage), explain selected concepts in depth (100% depth)
-**STANDARD + INTERMEDIATE**: Enhanced explanations while maintaining brevity (~70% coverage with 80% depth)
-**DETAILED + BASIC**: Cover all content comprehensively (100% coverage) at fundamental level (60% depth)
-**DETAILED + INTERMEDIATE/ADVANCED**: Maximum thoroughness (100% coverage with 80-100% depth)
+DEPTH_RULES: str = """
+Spend words where the difficulty is, not evenly.
+- Easy material (standard setups, well-known components, routine results): one
+  or two sentences, then move on. Never pad familiar ideas.
+- Hard material (the paper's novel mechanism, dense math, non-obvious
+  derivations, counter-intuitive results): build it up in this order —
+  (1) the intuition in plain words, (2) the formal statement with every symbol
+  defined, (3) a small worked example or numeric walk-through where it helps
+  (for a theorem, the idea of the proof), (4) the paper's figure or a table
+  where it helps. Say briefly why the point is subtle. Each step adds
+  something new; never restate the previous one, and a callout replaces the
+  sentence it highlights instead of repeating it.
+- Simplify the exposition, never the facts.
 """
 
-DIFFICULTY_ADAPTIVE_RULES: str = """
-Beyond the configured granularity/depth, calibrate effort to the INTRINSIC
-DIFFICULTY of each concept so the review reads as "easy where it can be, patient
-where it must be":
-
-**EASY concepts** (standard setups, well-known components, routine results):
-- State them concisely and move on. Do NOT pad familiar ideas with filler.
-- A single clear sentence + the relevant equation/figure reference is enough.
-
-**HARD concepts** (novel mechanisms, dense math, non-obvious derivations,
-counter-intuitive results, anything a capable student would stumble on):
-- Slow down and scaffold understanding before formalism:
-  1. Give the intuition first (a plain-language "what this really means").
-  2. Add a concrete analogy or worked micro-example.
-  3. Then present the formal statement / derivation step by step.
-  4. Reinforce with a visual aid where one exists — reference the most relevant
-     figure, table, or code snippet from the source materials (never invent one).
-  5. Pull in citation_summaries for background the paper assumes but doesn't teach.
-- Briefly flag WHY it is subtle ("the non-obvious part is ...") so the reader
-  knows where to focus.
-
-**Calibration discipline**:
-- Spend the explanation budget where difficulty is highest; do not distribute it
-  uniformly. Skimming the easy 80% buys depth for the hard 20%.
-- Visual/auxiliary materials (figures, tables, code, citations) are tools for
-  HARD parts first; do not decorate easy parts with them.
-- Never sacrifice accuracy for accessibility — simplify the exposition, not the
-  facts.
+# Number slips found in published paper posts (blog PRs #88, #89); writers
+# avoid them, checkers list them as must-fix. The TL;DR and the description
+# are also matched against the paper in code (post_validator.unsourced_numbers).
+NUMBER_RULES: str = """
+- Copy numbers verbatim with the model, variant (base or chat, pre-trained or
+  fine-tuned, size), cell and setup (not an ablation's) they belong to.
+- 1B = 10억, 1M = 100만, 1T = 1조 (7B = 70억). A relative gain is not %p; an
+  exponent is not a share; a share of outputs is not a rate; a formula's
+  input is not its result.
+- "모든 벤치마크에서 앞섰다" only with no reported loss; expand an acronym only
+  as the paper does.
 """
+
+SUPPLEMENTARY_CONTEXT_RULES: str = """
+Context beyond the paper makes the text useful, but must be honest:
+- Allowed: background from the provided citation summaries or code, and
+  textbook-level knowledge (what a standard technique is, why a known problem
+  matters). Phrase it as explanation, not as a claim about this paper.
+- Never invent numbers, benchmark results, attributions, or links that are not
+  in the inputs. Clearly illustrative toy values in a worked example are fine;
+  never present them as the paper's numbers.
+- Claim only as strongly as the paper does: keep its hedges ("we believe",
+  "suggests"), and never turn a conjecture into a fact, one setting into a
+  general rule, an unexplained difference into a stated cause, or "inspired
+  by X" into "uses X".
+- A derived number (a ratio, a reduction, a difference) shows its inputs
+  inline: "1,200ms에서 300ms로, 75% 감소". Compare numbers only on the same
+  benchmark, metric and evaluation setting; if the compared models differ in
+  size, say so.
+- Code: quote or adapt code only from the provided code examples. Without them,
+  write code only when it clarifies something an equation cannot, label it as
+  pseudocode reconstructed from the paper, and never cite file paths or symbol
+  names you have not seen. Do not invent unstated constants.
+""" + NUMBER_RULES
 
 HEADING_STRUCTURE_RULES: str = """
-- Main title: # Paper Title (single # only)
-- Section: ## Section Title (double ##)
-- Subsection: ### Subsection Title (triple ###)
-- Subsubsection: #### Subsubsection Title (quadruple ####)
-- Detailed points: ##### Detailed Title (five #####)
-
-CRITICAL REQUIREMENTS (headings are written in the target output language):
-- NEVER include section numbers in headings
-- CORRECT: "## Introduction" / "## 서론", "### Proposed Method" / "### 제안 방법"
-- INCORRECT: "## 1. Introduction", "### 2.1 제안 방법", "## Section 3"
-- Never skip heading levels (e.g., going from ## directly to ####)
+- Never write an H1 (`#`) heading; the post title comes from the front matter.
+  Top-level sections use `##`, then `###` and `####`; never skip a level.
+- Headings are descriptive, in the target language, and never numbered
+  ("## Proposed Method" / "## 제안 방법", not "## 3. Method").
 """
 
 CITATION_KEY_RULES: str = """
-**NEVER expose citation keys** (e.g., smith2023transformer, brown2024attention) in prose.
-
-**Hyperlink URLs may ONLY be copied verbatim from a URL that appears in
-citation_summaries.** NEVER write a URL (arxiv.org/abs, arxiv.org/pdf, doi.org,
-…) from your own memory — your recall of arXiv IDs is unreliable and produces
-links to the WRONG paper (e.g. labelling a GPT-2 link with T5's id). If the
-referenced paper has no URL in citation_summaries, mention it as plain text with
-NO hyperlink. A wrong link is far worse than no link.
-
-Reference prose is written in the target output language; the examples below show
-English and Korean forms — follow the same pattern in whatever language you write.
-
-When author information is clear in citation_summaries AND a URL is provided there:
-- Use proper format with the url copied verbatim, e.g.
-  "the Transformer architecture proposed by [Vaswani et al.](url)" /
-  "[Vaswani et al.](url)에서 제안된 Transformer 아키텍처"
-
-When author info is unclear, only a citation key is available, or NO url is provided:
-- Use specific identifiers as PLAIN TEXT (no hyperlink): paper title, model name,
-  algorithm name, or method name
-- CORRECT (no url available): "the Transformer architecture", "BERT 모델"
-- CORRECT (url in citation_summaries): "[the Transformer architecture](url)"
-- INCORRECT: "[vaswani2017attention](url)", "in prior work" / "이전 연구에서",
-  "according to related work" / "관련 연구에 따르면", or any [text](url) whose url
-  you recalled rather than copied from citation_summaries
+- Never expose citation keys (e.g. smith2023transformer) in prose.
+- Link a cited work only with a URL copied verbatim from citation_summaries:
+  "[Vaswani et al.](url)" / "[Vaswani et al.](url)이 제안한 Transformer". Your
+  memory of arXiv ids is unreliable; a wrong link is worse than none.
+- Without such a URL, name the work in plain text by its method or model name
+  ("the Transformer architecture" / "Adapter 계열 기법"), never with a vague
+  phrase like "prior work" / "관련 연구에 따르면".
 """
 
 EXCLUDED_CONTENT_RULES: str = """
-ABSOLUTELY EXCLUDE (non-technical administrative content):
-- Acknowledgments sections (감사의 말, Acknowledgments)
-- Author contributions (저자 기여도, Author Contributions, CRediT)
-- Funding information (연구비 지원, Funding, Grant information)
-- Gratitude expressions (감사 표현, Thanks to...)
-- Contributor lists (기여자 목록)
-- References/Bibliography sections (the list itself, not in-text citations)
-
-These sections have ZERO technical value and must be completely ignored.
-
-**Silently** omit them: do NOT announce, describe, or comment on the exclusion.
-If the current content to explain is one of these administrative sections (e.g.
-a References list), output NOTHING for it — never write meta-text such as "이
-부분은 참고문헌 목록이라 분석을 생략합니다" or "이 섹션은 행정적 정보입니다". The
-reader must never see that a section was skipped.
+Silently skip non-technical sections: acknowledgments, author contributions,
+funding, gratitude, contributor lists, and the bibliography itself (in-text
+citations stay). Never mention that something was skipped; if the whole input
+is such a section, output nothing for it.
 """
 
 IMAGE_PATH_RULES: str = """
-**Image paths MUST be copied EXACTLY character-by-character from the source - NO modifications whatsoever**
-
-Path preservation rules:
-- Source has local path → Use local path: ![설명](/exact/local/path.png)
-- Source has HTTPS URL → Use HTTPS URL: ![설명](https://exact.url.com/path.png)
-- Source has relative path → Use relative path: ![설명](./exact/relative/path.png)
-
-FORBIDDEN modifications:
-- Converting local to URL or URL to local
-- Adding/removing https:// or http://
-- Changing / to \\ or vice versa
-- Adding/removing file extensions
-- ANY character-level changes
-
-**NEVER invent or guess an image URL.** Only insert an image whose EXACT path
-appears in the provided figures/analysis. In particular, NEVER use a paper
-landing/HTML page (e.g. `https://arxiv.org/html/2106.09685`) or an `/abs/` URL
-as an image `src` — those are web pages, not images, and render as broken
-images. If no real figure asset exists for a point, describe it in prose instead
-of inserting a fabricated image link.
+- Insert an image only if its exact path appears in the provided figure markers
+  or sources, copied character for character (local paths stay local; URLs stay
+  URLs). Never invent, guess, or repair an image path, and never use a paper's
+  landing/HTML page (e.g. an arxiv.org/html/<id> or /abs/ URL) as an image.
+- If no real figure exists for a point, describe it in prose instead.
 """
 
-VISUAL_DUPLICATION_RULES: str = """
-**Each visual element (figure, table, code block, equation) MUST appear ONLY ONCE in the ENTIRE document**
-
-Before inserting ANY visual element:
-1. Search through ALL of previous_explanation for this image path
-2. Look for any figure/table/code with similar description
-3. If found → DO NOT insert again, use descriptive reference only
-
-After first insertion, use natural descriptive references:
-- CORRECT: "위 그림에서 보듯이", "앞서 보여준 표와 같이"
-- INCORRECT: "그림 3에서", "표 2처럼", "Figure 1에서"
-
-**Every inserted figure MUST be referenced in the surrounding prose.** Never drop
-an image as a caption-only orphan: the sentence immediately before or after the
-image must point to it, in the target output language (e.g. "The figure below
-shows …" / "아래 그림은 …를 보여줍니다", "As the next figure shows …" / "다음 그림에서 보듯…").
-If you cannot naturally tie a figure into the narrative, do not insert it.
+VISUAL_RULES: str = """
+- Place a figure where its content is discussed; the sentence beside it
+  says what to notice in it, worded for the paragraph (never open two figure
+  introductions the same way; never describe a panel it lacks). Show each
+  figure, table, code block and equation once in the whole post; afterwards
+  refer to it descriptively ("앞서 정의한 손실 함수").
+- Refer to figures, tables, equations, theorems and sections descriptively,
+  never by the source's numbers ("Figure 3", "Table 2", "Eq. (4)", "Theorem 1",
+  "Section 3.2", "그림 3", "3.2절"): those numbers do not exist in this post.
+- Every image has alt text in the post's language that says what the figure
+  shows ("인코더-디코더 구조도"), never an English caption, a file name or
+  "Figure 3".
+- Prose is the default. Use a short list only for genuinely parallel items
+  (algorithm steps, three or more options). Use a callout ("> **핵심:** …" /
+  "> **Key idea:** …") only for a non-obvious insight, at most three in the
+  whole post.
+- Never emit Mermaid, Graphviz or PlantUML blocks; they do not render.
 """
 
-TABLE_RENDERING_RULES: str = """
-**Tables MUST be rendered as actual markdown tables, NOT as image links**
-
-CORRECT:
-| Model | Accuracy | F1-Score |
-|-------|----------|----------|
-| GPT-4 | 95.2% | 0.94 |
-
-INCORRECT:
-![표 1: 성능 비교](https://arxiv.org/html/2401.12345v1#S1.T1)
+# Table shape (checked in code, so writers get it and checkers do not).
+TABLE_RULES: str = """
+- Tables are real Markdown tables, never images. Use exactly one header row
+  (merge multi-level headers per column as "Parent Child", e.g. "AIME 2024
+  pass@1"), give every row the same number of cells, and leave no header cell
+  empty: the first names what the rows are ("구분", "모델", "지표", "벤치마크").
+  A comparison of many numbers goes in one table; the prose interprets it,
+  repeating only a derived number's inputs.
 """
 
-# Output-style rules. Written language-agnostically so they hold for ANY target
-# output language; the Korean specifics are explicitly scoped to "when the output
-# language is Korean" so non-Korean runs are not given conflicting guidance.
+# Size cap of a table copied from the paper (not checked in code); checkers
+# get it alone, writers with how to copy and shorten such a table.
+TABLE_SIZE_RULE: str = """
+- A table from the paper has at most 8 rows and 7 columns.
+"""
+
+PAPER_TABLE_RULES: str = (
+    TABLE_SIZE_RULE
+    + """- Copy a paper table's cells and numbers verbatim; label method/model rows
+  with the names used in the prose. To shorten a long table, omit whole rows
+  or columns (keep the main method and the strongest baselines) and add one
+  line saying that some were omitted; never drop or merge individual cells.
+"""
+)
+
+MATH_RULES: str = r"""
+- Write all math, inline and display, between $$ and $$ (never a single $):
+  inline "the loss $$\mathcal{{L}}$$ decreases"; display on its own line with
+  a blank line before and after it, in lists and quotes too.
+- Never put Korean (or other non-Latin) text inside math; keep words outside
+  or in English inside \text{{...}}. No bare | in inline math: \mid
+  (conditional), \lvert x \rvert (length), \lVert x \rVert (norm, KL).
+- Use \begin{{aligned}} inside $$...$$ for multi-line equations and
+  \begin{{array}} or bmatrix for matrices; never standalone align/equation/
+  gather environments. Use \boldsymbol, not \bm; \text{{...}}, not \rm.
+- A dollar amount in prose stays plain text ("$5 per hour"), never math.
+- Superscripts and subscripts exist only inside math: write
+  $$\text{{Model}}^{{L}}$$, never "Model^L" in prose.
+"""
+
+# Term rendering; the planner's glossary and every writer, checker and editor
+# follow it. The English-stem lint in markdown_lint checks its last bullet.
+TERMINOLOGY_RULES: str = """
+- A term the translation guideline lists takes its rendering there (the
+  glossary already applies it). Any other technical term is written in the
+  target language when a natural translation exists. Keep English only for
+  proper nouns, product, API, model and code names (vLLM, Adam, `max_tokens`)
+  and terms with no natural translation.
+- A rendering carries no parenthetical: add the English once, at the term's
+  first use in the post ("연속 배칭(continuous batching)").
+- Never glue a Korean ending to an English word ("cache합니다"): write
+  "캐시에 저장합니다".
+"""
+
+# Korean naturalness: the patterns that set generated posts apart from the
+# blog's hand-edited ones (per 1,000 Hangul syllables against the Insights
+# posts). Writers, editors and grounding follow it; checkers flag breaks of it
+# (NATURALNESS_CHECK); markdown_lint flags the unambiguous ones.
+KOREAN_STYLE: str = """
+- IN KOREAN: write as a Korean engineer writes for colleagues, not as a
+  translation, in the "입니다" register; a table cell is a noun phrase or an
+  "입니다" sentence, one form per table. Rewrite:
+  - a noun frame ("~다는 점/사실"): "캐시가 작다는 점이 문제입니다" → "캐시가
+    작아서 문제입니다";
+  - a particle calque: "A와의 비교에서" → "A와 비교하면"; "모델에 대한 평가" →
+    "모델 평가"; "~에 있어서" → "~에서"; 에게 for a thing ("서버에게") → 에;
+  - a passive hiding who acts: "측정되었습니다" → "저자들이 측정했습니다"; a
+    double passive: "되어진다" → "된다";
+  - an English default verb (가지다, 수행하다, 역할을 하다): "세 단계를
+    가집니다" → "단계가 셋입니다";
+  - a formula: "직관은 다음과 같습니다.", a closing "결국 …라는 것입니다" or
+    "…하는 셈입니다", "할 수 있습니다" for what simply happens;
+  - 다 before a colon ("셋입니다:") → a period ("셋입니다."), then the list.
+"""
+
 STYLE_RULES: str = """
-- Write in natural, flowing prose in the target output language, in a
-  professional yet accessible academic tone.
-- Prefer impersonal phrasing; avoid first-person pronouns (e.g. "we"/"우리").
-  * "We applied this method" → "This method was applied"
-- Never use explicit section-number references in prose.
-  * INCORRECT: "in Section 3.2", "as described in Chapter 2"
-  * CORRECT: "as described earlier", "the method introduced above"
-- Use the target language's established technical vocabulary; keep English only
-  for proper nouns or terms with no clear translation (e.g. BERT, GPT).
-- WHEN THE OUTPUT LANGUAGE IS KOREAN: use the "입니다" style; avoid "우리"/"저";
-  prefer translated terms ("손실 함수", "경사 하강법", "사전 학습", "역전파") and
-  keep English only when a translation is unclear or for proper nouns.
+- Plain, natural prose, professional yet accessible: no hype ("획기적인"),
+  filler intensifiers or "we"/"I" ("우리"/"저").
+- Do not announce what a section will do ("이 절에서는 …를 살펴봅니다"), recap
+  the previous one, or promise later content; start with the substance and
+  stop when it is complete. Never refer to the post's own parts by structure,
+  name or number ("이 절", "this section"); a back-reference by content is
+  fine ("앞서 설명한 `--host` 설정").
+""" + KOREAN_STYLE + TERMINOLOGY_RULES
+
+# How a checker or evaluator reads naturalness (with STYLE_RULES in its prompt).
+NATURALNESS_CHECK: str = """
+- Naturalness (Korean): quote each sentence that reads as translated or
+  machine-written, with its natural rewrite. Only two kinds are blocking
+  wording issues (listed where the output format says): (a) a sentence whose grammar or agent changes or obscures
+  its meaning; (b) a plain 다-form prose sentence outside quotations and code
+  (table cells included). Everything else is feedback.
 """
+
+
+# What the length targets count: the writer is told the unit the evaluator measures.
+PROSE_UNIT = (
+    "characters of prose (spaces included; code blocks, tables and images excluded)"
+)
+
+
+def blocking_issues_block(issues: list[str], sources: str) -> str:
+    """The grounding prompt's ``blocking_issues`` input: the evaluator's
+    blocking issues the revisions left in the section, with the order to fix
+    exactly those claims from ``sources`` (the tag naming the evidence); empty
+    when none are left, so the prompt is unchanged."""
+    if not issues:
+        return ""
+    listed = "\n".join(f"- {issue}" for issue in issues)
+    return (
+        f"\n\nThe reviewer left these blocking issues in the section. Correct or remove exactly these claims using only "
+        f"{sources}; change nothing else for them:\n{listed}"
+    )
 
 
 @dataclass(frozen=True)
@@ -241,31 +270,13 @@ class BasePrompt(ABC):
                 )
 
     @classmethod
-    def get_prompt(cls, enable_prompt_cache: bool = False) -> ChatPromptTemplate:
-        system_template = cls.system_prompt_template
-        human_template = cls.human_prompt_template
+    def get_prompt(cls) -> ChatPromptTemplate:
         instance = cls(
             input_variables=cls.input_variables,
             output_variables=cls.output_variables,
-            system_prompt_template=system_template,
-            human_prompt_template=human_template,
+            system_prompt_template=cls.system_prompt_template,
+            human_prompt_template=cls.human_prompt_template,
         )
-
-        if enable_prompt_cache:
-            system_msg = SystemMessage(
-                content=[
-                    {
-                        "type": "text",
-                        "text": instance.system_prompt_template,
-                        "cache_control": {"type": "ephemeral"},
-                    }
-                ]
-            )
-            human_msg = HumanMessagePromptTemplate.from_template(
-                instance.human_prompt_template
-            )
-            return ChatPromptTemplate.from_messages([system_msg, human_msg])
-
         return ChatPromptTemplate.from_messages(
             [
                 SystemMessagePromptTemplate.from_template(
