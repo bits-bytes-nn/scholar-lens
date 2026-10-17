@@ -702,3 +702,128 @@ class TestRunCoroutine:
             assert time.monotonic() - started < 2
         finally:
             release.set()
+
+
+class TestConventionsChangedDuringTheRun:
+    """The blog's conventions are re-read before publishing."""
+
+    TOPIC = "Language-Models"
+    NEW_COVER = "/assets/images/language-models-v2.jpg"
+
+    @staticmethod
+    def _markdown(cover: str) -> str:
+        from scholar_lens.src.formatting import render_front_matter
+
+        return (
+            render_front_matter(
+                title="LoRA",
+                date=datetime(2026, 10, 1, tzinfo=UTC),
+                categories=["Tech Guides", "Language-Models"],
+                tags=["LoRA"],
+                cover=cover,
+                use_math=False,
+            )
+            + "Body.\n"
+        )
+
+    def _run(
+        self, monkeypatch: pytest.MonkeyPatch, fresh: object
+    ) -> tuple[object, object, object]:
+        import asyncio
+
+        from scholar_lens.src.post_conventions import load_local_conventions
+        from scholar_lens.src.publisher import PublishRequest
+
+        started = load_local_conventions()
+
+        def load(config: object, *, fallback: bool = True) -> object:
+            assert fallback is False
+            if isinstance(fresh, Exception):
+                raise fresh
+            return fresh if fresh is not None else started
+
+        monkeypatch.setattr(runtime, "load_run_conventions", load)
+        validated_with: list[object] = []
+        publisher = MagicMock()
+
+        async def publish(request):  # type: ignore[no-untyped-def]
+            request.validation_warnings = list(request.review_notes)
+            return None, MagicMock()
+
+        publisher.publish = publish
+
+        def build(context):  # type: ignore[no-untyped-def]
+            validated_with.append(context.require_conventions())
+            return publisher
+
+        monkeypatch.setattr(runtime, "build_publisher", build)
+        context = runtime.RunContext.model_construct(
+            config=MagicMock(), conventions=started
+        )
+        request = PublishRequest(
+            title="LoRA",
+            markdown=self._markdown(started.topics[self.TOPIC]),
+            work_dir=MagicMock(),
+            branch_id="guide-x",
+            pr_title="t",
+            pr_body="b",
+            commit_message="c",
+            kind="guide",
+        )
+        outcome = asyncio.run(
+            runtime.publish_artifact(context, request, create_pr=False)
+        )
+        return request, validated_with[0], outcome
+
+    def test_a_changed_cover_is_recomputed_and_noted(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from scholar_lens.src.post_conventions import load_local_conventions
+
+        fresh = load_local_conventions()
+        fresh.topics[self.TOPIC] = self.NEW_COVER
+        request, spec, outcome = self._run(monkeypatch, fresh)
+        assert spec == fresh
+        assert request.markdown == self._markdown(self.NEW_COVER)  # type: ignore[attr-defined]
+        assert any(
+            "conventions changed during the run" in w and self.NEW_COVER in w
+            for w in outcome.warnings  # type: ignore[attr-defined]
+        )
+
+    def test_a_change_elsewhere_is_noted_without_touching_the_post(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from scholar_lens.src.post_conventions import load_local_conventions
+
+        fresh = load_local_conventions()
+        fresh.tags.controlled = fresh.tags.controlled[:-1]
+        request, spec, outcome = self._run(monkeypatch, fresh)
+        assert spec == fresh
+        cover = fresh.topics[self.TOPIC]
+        assert request.markdown == self._markdown(cover)  # type: ignore[attr-defined]
+        notes = [w for w in outcome.warnings if "conventions changed" in w]  # type: ignore[attr-defined]
+        assert len(notes) == 1 and "cover" not in notes[0]
+
+    @pytest.mark.parametrize(
+        "fresh", [None, RuntimeError("502")], ids=["unchanged", "unreachable"]
+    )
+    def test_unchanged_or_unreadable_conventions_add_no_note(
+        self, monkeypatch: pytest.MonkeyPatch, fresh: object
+    ) -> None:
+        from scholar_lens.src.post_conventions import load_local_conventions
+
+        request, spec, outcome = self._run(monkeypatch, fresh)
+        assert spec == load_local_conventions()
+        assert outcome.warnings == []  # type: ignore[attr-defined]
+
+
+def test_with_spec_cover_leaves_an_unknown_type_to_the_validator() -> None:
+    from scholar_lens.src.formatting import with_spec_cover
+    from scholar_lens.src.post_conventions import load_local_conventions
+
+    spec = load_local_conventions()
+    markdown = TestConventionsChangedDuringTheRun._markdown("/x.jpg").replace(
+        "Tech Guides", "Unknown Type"
+    )
+    assert with_spec_cover(markdown, spec) == (markdown, None)
+    assert with_spec_cover("No front matter.", spec) == ("No front matter.", None)

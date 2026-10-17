@@ -28,6 +28,7 @@ from pydantic import BaseModel, ConfigDict
 from ..configs import Config
 from .aws_helpers import S3Handler, get_ssm_param_value
 from .constants import RUN_SECRETS, EnvVars, LocalPaths, S3Paths, SSMParams
+from .formatting import with_spec_cover
 from .jobs import JobRequest, JobResult, ssm_base, write_result_manifest
 from .logger import is_running_in_aws, logger
 from .metrics import MetricsEmitter, TokenUsageTracker
@@ -233,16 +234,52 @@ def publish_sns(
         return False
 
 
-def load_run_conventions(config: Config) -> PostConventions:
+def load_run_conventions(config: Config, *, fallback: bool = True) -> PostConventions:
     """The blog's base-branch conventions when GitHub is configured, else the
-    bundled copy."""
+    bundled copy (``fallback`` False: an unreachable blog raises)."""
     github = config.resources.github
     return load_conventions(
         repo_name=github.repo_name,
         branch=github.base_branch,
         token=os.getenv(EnvVars.GITHUB_TOKEN.value),
         use_blog=github.enabled,
+        fallback=fallback,
     )
+
+
+def refresh_conventions(context: RunContext, request: PublishRequest) -> None:
+    """Re-read the blog's conventions before publishing: a long run may
+    outlive a blog change (e.g. a topic's cover). When they differ from the
+    ones the run started with, the post is validated against the new ones,
+    its ``cover`` is recomputed from its categories (:func:`with_spec_cover`)
+    and a review note says so. Fields that need a model call (the topic,
+    tags, description) are left for the validator to check. An unreadable
+    blog keeps the conventions the run started with."""
+    started = context.conventions
+    if not isinstance(started, PostConventions):
+        # Never loaded: the publisher reads the current ones now.
+        return
+    try:
+        fresh = load_run_conventions(context.config, fallback=False)
+    except Exception as e:  # noqa: BLE001 - the run's conventions still apply
+        logger.warning(
+            "Could not re-read the blog's post conventions before publishing "
+            "(%s); validating with the ones the run started with.",
+            e,
+        )
+        return
+    if fresh == started:
+        return
+    context.conventions = fresh
+    request.markdown, cover = with_spec_cover(request.markdown, fresh)
+    note = (
+        "Blog conventions changed during the run: the post was validated "
+        "against the blog's current conventions"
+        + (f" and its cover recomputed ('{cover}')" if cover else "")
+        + "; check its topic, tags and description still fit them."
+    )
+    logger.warning(note)
+    request.review_notes.append(note)
 
 
 def load_run_blog_posts(config: Config) -> list[BlogPost]:
@@ -318,7 +355,8 @@ class PipelineOutcome:
 async def publish_artifact(
     context: RunContext, request: PublishRequest, *, create_pr: bool
 ) -> PipelineOutcome:
-    """Save + upload the document, then open the blog PR when enabled.
+    """Save + upload the document, then open the blog PR when enabled. The
+    blog's conventions are re-read first (:func:`refresh_conventions`).
 
     The outcome's warnings are the post's checklist (review notes, rule slips,
     validator warnings), so ``--no-pr`` runs report them too.
@@ -326,6 +364,7 @@ async def publish_artifact(
     A PR failure does not fail the run (the artifact already exists locally and
     in S3); it is reported as a warning on the result instead.
     """
+    await asyncio.to_thread(refresh_conventions, context, request)
     publisher = build_publisher(context)
     try:
         s3_uri, markdown_path = await publisher.publish(request)

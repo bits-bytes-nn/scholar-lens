@@ -1754,12 +1754,22 @@ class TestTargetedFix:
 
     @staticmethod
     async def _run(
-        blocking: list[str], fixed: str, *, rules: Any = None, draft: str = _SECTION
+        blocking: list[str],
+        fixed: str,
+        *,
+        rules: Any = None,
+        draft: str = _SECTION,
+        scored: dict[str, tuple[int, list[str]]] | None = None,
+        rescore: bool = True,
     ) -> tuple[Any, list[str]]:
         asked: list[str] = []
+        # ``scored``: the score and blocking issues of a given text.
+        evaluated: list[str] = []
 
-        async def evaluate(_: str) -> tuple[int, str, list[str], list[str]]:
-            return 90, "", blocking, []
+        async def evaluate(text: str) -> tuple[int, str, list[str], list[str]]:
+            evaluated.append(text)
+            score, issues = (scored or {}).get(text, (90, blocking))
+            return score, "", issues, []
 
         async def revise(feedback: str, draft: str) -> str:
             asked.append(feedback)
@@ -1774,27 +1784,63 @@ class TestTargetedFix:
             min_score=75,
             max_attempts=1,
             label="1",
+            rescore=lambda: rescore,
             **({"rules": rules} if rules else {}),
         )
+        asked.extend(f"EVALUATED {text}" for text in evaluated)
         return best, asked
 
     async def test_no_issue_left_means_no_fix_call(self) -> None:
         best, asked = await self._run([], "unused")
-        assert asked == [] and best.fix == ""
+        assert asked == [f"EVALUATED {_SECTION}"] and best.fix == ""
         assert best.below_bar_note("Guide", "S", 75) is None
 
-    async def test_a_clean_fix_is_applied_without_re_scoring(self) -> None:
+    async def test_a_clean_fix_is_re_scored_once_and_kept(self) -> None:
         issue = "The port 8080 is not in the sources: remove it"
         fixed = _SECTION.replace(" on 8080", "")
-        best, asked = await self._run([issue], fixed)
-        assert len(asked) == 2  # one revision, one fix
+        best, asked = await self._run(
+            [issue], fixed, scored={fixed: (92, ["The order claim is unsupported"])}
+        )
+        # One revision, one fix; the draft, the revision and the fix scored.
+        assert len(asked) == 5 and asked[-1] == f"EVALUATED {fixed}"
         fix = asked[1]
         assert issue in fix and "smallest edit" in fix and "Length" not in fix
-        assert best.text == fixed and best.fix == "applied"
-        # Not re-scored, so the issue stays for the reviewer to check.
+        assert best.text == fixed and best.fix == "applied and re-scored"
+        # The note reports the re-scored draft, not the pre-fix issues.
+        assert best.score == 92 and best.blocking == ["The order claim is unsupported"]
         note = best.below_bar_note("Guide", "S", 75)
         assert note is not None
-        assert "targeted fix applied" in note and issue in note
+        assert "score 92" in note and "targeted fix applied and re-scored" in note
+        assert "unsupported" in note and issue not in note
+
+    async def test_a_fix_that_resolves_the_issues_passes(self) -> None:
+        fixed = _SECTION.replace(" on 8080", "")
+        best, _ = await self._run(
+            ["The port is wrong"], fixed, scored={fixed: (90, [])}
+        )
+        assert best.text == fixed and best.issues == []
+        assert best.below_bar_note("Guide", "S", 75) is None
+
+    async def test_a_fix_that_ranks_lower_is_reverted(self) -> None:
+        issue = "The port is wrong"
+        fixed = _SECTION.replace(" on 8080", "")
+        best, _ = await self._run(
+            [issue], fixed, scored={fixed: (90, [issue, "A new factual error"])}
+        )
+        assert best.text == _SECTION and best.fix == "reverted after re-scoring"
+        assert best.score == 90 and best.blocking == [issue]
+        note = best.below_bar_note("Guide", "S", 75)
+        assert note is not None and "reverted after re-scoring" in note
+
+    async def test_past_the_soft_budget_the_fix_is_not_re_scored(self) -> None:
+        issue = "The port is wrong"
+        fixed = _SECTION.replace(" on 8080", "")
+        best, asked = await self._run([issue], fixed, rescore=False)
+        assert f"EVALUATED {fixed}" not in asked
+        assert best.text == fixed and best.fix == "applied, not re-scored"
+        # Unscored, so the issue stays for the reviewer to check.
+        note = best.below_bar_note("Guide", "S", 75)
+        assert note is not None and issue in note and "not re-scored" in note
 
     async def test_a_fix_that_adds_a_rule_issue_is_rejected(self) -> None:
         best, _ = await self._run(
@@ -1810,7 +1856,7 @@ class TestTargetedFix:
             ["The port is wrong"], _SECTION.replace(" on 8080", ""), rules=rules
         )
         # The draft had the citation issue too: the fix adds none, so applied.
-        assert best.fix == "applied"
+        assert best.fix == "applied and re-scored"
         cited = _SECTION + "Cited [@a]."
         best, _ = await self._run(
             ["The port is wrong"], _SECTION, rules=rules, draft=cited
@@ -1845,7 +1891,10 @@ class TestTargetedFix:
         )
         assert len(revisions) == 1 and not revisions[0].startswith("TARGETED")
         assert fixes == [(fixes[0][0], _SECTION)]
-        assert fixes[0][0].startswith("TARGETED FIX") and best.fix == "applied"
+        assert (
+            fixes[0][0].startswith("TARGETED FIX")
+            and best.fix == "applied and re-scored"
+        )
 
 
 _STRUCTURED = (

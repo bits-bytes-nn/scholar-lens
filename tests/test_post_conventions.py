@@ -124,6 +124,21 @@ class TestLoadConventions:
             == local
         )
 
+    def test_without_fallback_an_unreachable_blog_raises(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The re-read before publishing must not mistake the bundled copy
+        # for a blog change.
+        self._fetch(monkeypatch, requests.ConnectionError("down"))
+        with pytest.raises(requests.ConnectionError):
+            load_conventions(
+                repo_name="o/r",
+                branch="main",
+                token=None,
+                use_blog=True,
+                fallback=False,
+            )
+
     def test_blog_rules_win_when_they_differ(
         self, monkeypatch: pytest.MonkeyPatch, local: Any
     ) -> None:

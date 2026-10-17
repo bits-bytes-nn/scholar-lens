@@ -838,6 +838,8 @@ class SurveyWriter(SurveyCalls):
             label=f"'{section.title}'",
             rules=rules,
             fix=fix,
+            # The re-score of the fix is an optional check (soft budget).
+            rescore=lambda: not self._over_soft_token_budget(),
         )
         if note := best.below_bar_note("Survey", section.title, self.min_quality_score):
             self.notes.append(note)

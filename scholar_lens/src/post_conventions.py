@@ -129,12 +129,19 @@ def fetch_blog_conventions(
 
 
 def load_conventions(
-    *, repo_name: str | None, branch: str, token: str | None, use_blog: bool
+    *,
+    repo_name: str | None,
+    branch: str,
+    token: str | None,
+    use_blog: bool,
+    fallback: bool = True,
 ) -> PostConventions:
     """The blog's rules when reachable, else the bundled copy.
 
     The copy is kept identical to the blog file by CI, so falling back to it
     is safe; a run still logs which source it used and any drift it sees.
+    With ``fallback`` False an unreachable blog raises
+    (``requests.RequestException``) instead.
     """
     local = load_local_conventions()
     if not (use_blog and repo_name):
@@ -142,6 +149,8 @@ def load_conventions(
     try:
         text = fetch_blog_conventions(repo_name, branch, token)
     except requests.RequestException as e:
+        if not fallback:
+            raise
         logger.warning(
             "Could not read the blog's post conventions (%s); using the bundled copy.",
             e,

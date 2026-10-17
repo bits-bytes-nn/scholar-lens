@@ -1106,6 +1106,8 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
             max_attempts=self.max_revision_attempts,
             label=str(section_number),
             fix=fix,
+            # The re-score of the fix is an optional check (soft budget).
+            rescore=lambda: not self._over_soft_token_budget(),
         )
         if note := best.below_bar_note("Guide", planned.title, self.min_quality_score):
             self.notes.append(note)

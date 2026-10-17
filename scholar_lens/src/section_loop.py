@@ -1,5 +1,6 @@
 """The section loop shared by the guide and survey writers: draft →
-evaluate → revise (keeping the best draft) → one targeted fix → ground.
+evaluate → revise (keeping the best draft) → one re-scored targeted fix →
+ground.
 
 Each writer supplies its own calls (evaluate, revise, fix, ground) and length
 target; this module holds the loop, the draft checks it applies (rule slips,
@@ -149,8 +150,11 @@ class ReviewedDraft:
     issues: list[str]
     # How many of ``issues`` are the evaluator's blocking (factual) issues.
     factual: int = 0
-    # The targeted fix of the issues left: "applied", "rejected" or "" (none
-    # ran). An applied fix is not re-scored, so ``issues`` stay to check.
+    # The targeted fix of the issues left (see :func:`revise_section`):
+    # "applied and re-scored" (score and issues are the fixed draft's),
+    # "reverted after re-scoring" (it ranked lower; the pre-fix draft kept),
+    # "applied, not re-scored" (token budget reached; the issues stay to
+    # check), "rejected" or "" (none ran).
     fix: str = ""
 
     @property
@@ -273,6 +277,7 @@ async def revise_section(
     label: str,
     rules: Callable[[str], list[str]] = rule_issues,
     fix: Callable[[str, str], Awaitable[str]] | None = None,
+    rescore: Callable[[], bool] = lambda: True,
 ) -> ReviewedDraft:
     """Score a section and revise it while it stays below ``min_score`` or
     has an issue: a blocking or wording issue ``evaluate`` names (it returns
@@ -291,9 +296,13 @@ async def revise_section(
 
     Issues left after the revisions get ONE targeted fix (``fix(request,
     draft)``, ``revise`` when not given, with only those issues and an order
-    to edit minimally). It is not re-scored (cost): the fixed draft is kept
-    only when ``rules`` find nothing new in it and it keeps the draft's
-    structure (:func:`lost_structure`).
+    to edit minimally). The fixed draft is dropped when ``rules`` find
+    something new in it or it loses the draft's structure
+    (:func:`lost_structure`); otherwise it is re-scored with ONE ``evaluate``
+    call and kept only if it ranks no lower than the pre-fix draft, so the
+    result reports the fixed draft's score and issues. ``rescore()`` False
+    (the token budget reached) skips that call: the fix is applied unscored
+    and the pre-fix issues stay for the reviewer to check.
     """
 
     async def assess(text: str) -> tuple[int, str, list[str], int]:
@@ -395,14 +404,41 @@ async def revise_section(
         if reason:
             outcome = "rejected"
             logger.info("Section %s targeted fix rejected (%s).", label, reason)
-        else:
-            outcome = "applied"
+        elif not rescore():
+            outcome = "applied, not re-scored"
             logger.info(
-                "Section %s targeted fix of %d issue(s) applied (not re-scored).",
+                "Section %s targeted fix of %d issue(s) applied (not re-scored: "
+                "token budget reached).",
                 label,
                 len(best_issues),
             )
             best_markdown = fixed
+        else:
+            score, fixed_feedback, issues, factual = await assess(fixed)
+            if rank(score, fixed, issues, factual) < rank(
+                best_score, best_markdown, best_issues, best_factual
+            ):
+                outcome = "reverted after re-scoring"
+                logger.info(
+                    "Section %s targeted fix re-scored %d with %d issue(s) - "
+                    "ranks lower, kept the pre-fix draft.",
+                    label,
+                    score,
+                    len(issues),
+                )
+            else:
+                outcome = "applied and re-scored"
+                logger.info(
+                    "Section %s targeted fix applied: re-scored %d, %d issue(s) "
+                    "left (was %d).",
+                    label,
+                    score,
+                    len(issues),
+                    len(best_issues),
+                )
+                best_markdown, best_score = fixed, score
+                best_feedback, best_issues = fixed_feedback, issues
+                best_factual = factual
     return ReviewedDraft(
         best_markdown, best_score, best_feedback, best_issues, best_factual, outcome
     )

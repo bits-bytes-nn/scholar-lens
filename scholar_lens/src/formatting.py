@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING
 from urllib.parse import quote
 
 from .constants import bare_doi, normalize_arxiv_id
+from .front_matter import split_front_matter, split_front_matter_text
 from .markdown_math import has_math, normalize_math
 from .post_conventions import BlogPost, PostConventions
 from .tags import normalize_tags
@@ -158,6 +159,30 @@ class PostMeta:
     date: datetime | None = None
     lang: str | None = None
     translation_id: str | None = None
+
+
+_COVER_LINE = re.compile(r"^cover: .*$", re.MULTILINE)
+
+
+def with_spec_cover(markdown: str, spec: PostConventions) -> tuple[str, str | None]:
+    """``markdown`` with its front matter's ``cover`` recomputed from its
+    ``categories`` (``[<type>, <topic>]``) by ``spec``
+    (:meth:`PostConventions.cover_for`, as :func:`build_post_meta` sets it),
+    and the new cover when it changed (else ``None``). A post whose type
+    ``spec`` does not know is left for the validator to reject."""
+    front, _, _ = split_front_matter(markdown)
+    categories = (front or {}).get("categories")
+    if not (isinstance(categories, list) and len(categories) == 2):
+        return markdown, None
+    category_type, topic = str(categories[0]), str(categories[1])
+    if category_type not in spec.types:
+        return markdown, None
+    cover = spec.cover_for(category_type, topic)
+    if front is None or front.get("cover") == cover:
+        return markdown, None
+    text, body = split_front_matter_text(markdown)
+    text, replaced = _COVER_LINE.subn(f"cover: {cover}", text, count=1)
+    return (text + body, cover) if replaced else (markdown, None)
 
 
 def resolve_topic(raw: str, spec: PostConventions) -> str | None:
