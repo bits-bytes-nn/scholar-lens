@@ -99,8 +99,8 @@ _BARE_PIPE = re.compile(r"(?<!\\)\|")
 # Single-$ inline math: a $...$ that is not part of a $$ display block. Used only
 # to warn, never to rewrite (could be currency).
 _SINGLE_DOLLAR = re.compile(r"(?<![\\$])\$(?!\$)(?!\s)[^$\n]+?(?<!\\)\$(?!\$)")
-# Markdown links: capture the target. Skip image links (handled elsewhere).
-_MD_LINK = re.compile(r"(?<!\!)\[(?:[^\]]*)\]\(([^)]*)\)")
+# A Markdown link (not an image): text and target.
+_MD_LINK = re.compile(r"(?<!\!)\[([^\]]*)\]\(([^)]*)\)")
 # LaTeX control words (\foo); \\ and single-char controls (\,, \{) are ignored.
 _MACRO = re.compile(r"\\([a-zA-Z]+)")
 # A heading line that needs a blank line before it.
@@ -408,21 +408,39 @@ def _warn_undefined_macros(markdown: str, regions: list[tuple[int, int, str]]) -
         )
 
 
-def _warn_non_url_links(markdown: str, regions: list[tuple[int, int, str]]) -> None:
-    code = [(s, e) for s, e, k in regions if k in ("fence", "icode")]
-    for m in _MD_LINK.finditer(markdown):
-        if any(s <= m.start() < e for s, e in code):
-            continue
-        target = m.group(1).strip()
-        if not target:
-            continue
-        if not target.startswith(("http://", "https://", "/", "#")):
-            logger.warning(
-                "Markdown lint: link target %r is not an http(s) URL (nor a site-"
-                "relative path) — likely a broken link; use plain prose for "
-                "internal cross-references.",
-                target[:80],
-            )
+_LINKED_IMAGE = re.compile(r"\[(!\[[^\]]*\]\([^)]*\))\]\(([^)]*)\)")
+_FOLLOWABLE = ("http://", "https://", "/", "#", "mailto:")
+
+
+def unlink_dead_links(markdown: str) -> str:
+    """Keep only the text of a link the blog cannot follow, outside code.
+
+    A target that is not an http(s) URL, a site-relative path or an anchor
+    (``../_images/x.svg`` copied from a docs page, ``부록 참조``) fails the
+    blog's htmlproofer, and so does an empty-text link (``[](url)``, left when
+    the image it wrapped was dropped). The text (or the linked image) stays;
+    an empty link goes.
+    """
+    keep = _outside(_classify_regions(markdown), ("fence", "icode"))
+
+    def image_repl(m: re.Match[str]) -> str:
+        if not keep(m.start()) or m.group(2).strip().startswith(_FOLLOWABLE):
+            return m.group(0)
+        logger.warning("Markdown lint: unlinked image (%s)", m.group(2)[:80])
+        return m.group(1)
+
+    def repl(m: re.Match[str]) -> str:
+        text, target = m.group(1), m.group(2).strip()
+        if not keep(m.start()) or "![" in text:
+            return m.group(0)
+        if text.strip() and (not target or target.startswith(_FOLLOWABLE)):
+            return m.group(0)
+        logger.warning("Markdown lint: unlinked [%s](%s)", text[:40], target[:80])
+        return text
+
+    markdown = _LINKED_IMAGE.sub(image_repl, markdown)
+    keep = _outside(_classify_regions(markdown), ("fence", "icode"))
+    return _MD_LINK.sub(repl, markdown)
 
 
 # The URLs the blog's htmlproofer fails (.github/workflows/jekyll.yml runs it
@@ -941,10 +959,11 @@ def lint_markdown(markdown: str, *, warn: bool = True) -> str:
     bare ``<placeholder>`` angle-bracket tokens in prose escaped so kramdown
     doesn't emit stray HTML closing tags; chat-template tokens (``<|im_start|>``)
     set as inline code; http:// and protocol-relative link targets upgraded
-    to https:// (:func:`upgrade_http_links`). Warned (left untouched, since
-    a rewrite could ship a new bug): bare ``|`` in math, fragile amsmath envs /
-    ``\\bm``, single-$ inline math, known-undefined macros, and non-URL link
-    targets (``warn=False`` skips them). Returns the fixed Markdown.
+    to https:// (:func:`upgrade_http_links`); links the blog cannot follow
+    reduced to their text (:func:`unlink_dead_links`). Warned (left untouched,
+    since a rewrite could ship a new bug): bare ``|`` in math, fragile amsmath
+    envs / ``\\bm``, single-$ inline math and known-undefined macros
+    (``warn=False`` skips them). Returns the fixed Markdown.
     """
     fixed = _remove_envelope_tags(markdown)
     fixed = limit_callouts(fixed)
@@ -953,6 +972,7 @@ def lint_markdown(markdown: str, *, warn: bool = True) -> str:
     fixed = _separate_tables(fixed)
     fixed = _code_chat_tokens(fixed)
     fixed = upgrade_http_links(fixed)
+    fixed = unlink_dead_links(fixed)
 
     # Escape bare <placeholder> tokens before warnings run so region offsets are
     # computed against the final text. Re-classify since escaping shifts offsets.
@@ -965,7 +985,6 @@ def lint_markdown(markdown: str, *, warn: bool = True) -> str:
     _warn_fragile_math(fixed, regions)
     _warn_single_dollar(fixed, regions)
     _warn_undefined_macros(fixed, regions)
-    _warn_non_url_links(fixed, regions)
     return fixed
 
 

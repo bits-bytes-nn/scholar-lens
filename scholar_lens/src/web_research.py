@@ -606,11 +606,30 @@ class TavilySearchProvider(WebSearchProvider):
                 url=r.get("url", ""),
                 description=r.get("content", ""),
                 # raw_content is the cleaned full page; fall back to the snippet.
-                content=(r.get("raw_content") or r.get("content") or ""),
+                content=absolute_markdown_links(
+                    r.get("raw_content") or r.get("content") or "", r["url"]
+                ),
             )
             for r in results
             if r.get("url")
         ]
+
+
+_MARKDOWN_TARGET = re.compile(r"(\]\()([^)\s]+)")
+
+
+def absolute_markdown_links(markdown: str, base_url: str) -> str:
+    """Resolve the relative link and image targets of a fetched page's
+    Markdown against the page URL, so a writer never copies a path such as
+    ``../_images/x.svg`` that only works on the source site."""
+
+    def repl(m: re.Match[str]) -> str:
+        target = m.group(2)
+        if target.startswith("#") or urlparse(target).scheme:
+            return m.group(0)
+        return m.group(1) + urljoin(base_url, target)
+
+    return _MARKDOWN_TARGET.sub(repl, markdown)
 
 
 class WebResearcher:

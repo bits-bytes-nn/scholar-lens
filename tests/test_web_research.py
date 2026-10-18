@@ -13,6 +13,7 @@ from scholar_lens.src.web_research import (
     SearchResult,
     TavilySearchProvider,
     WebResearcher,
+    absolute_markdown_links,
     neutralize_prompt_tags,
     normalize_url,
 )
@@ -315,6 +316,36 @@ class TestTavilySearchProvider:
         assert results[0].content == "FULL"  # raw_content preferred
         assert results[1].content == "snip2"  # falls back to snippet
         assert results[0].description == "snip"
+
+    def test_raw_content_links_resolve_against_the_page(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        page = "https://docs.ray.io/en/latest/serve/architecture.html"
+        raw = "[![](../_images/a.svg)](../_images/a.svg) [b](#x) [c](https://c.dev)"
+        payload = {"results": [{"title": "A", "url": page, "raw_content": raw}]}
+        monkeypatch.setattr(
+            httpx,
+            "post",
+            lambda url, **kw: httpx.Response(
+                200, json=payload, request=httpx.Request("POST", url)
+            ),
+        )
+        (result,) = TavilySearchProvider(api_key="k").search("q")
+        img = "https://docs.ray.io/en/latest/_images/a.svg"
+        assert result.content == f"[![]({img})]({img}) [b](#x) [c](https://c.dev)"
+
+
+@pytest.mark.parametrize(
+    ("target", "resolved"),
+    [
+        ("/serve/x.html", "https://d.dev/serve/x.html"),
+        ("x.png", "https://d.dev/en/x.png"),
+        ("mailto:a@b.dev", "mailto:a@b.dev"),
+    ],
+)
+def test_absolute_markdown_links(target: str, resolved: str) -> None:
+    out = absolute_markdown_links(f"[t]({target})", "https://d.dev/en/page.html")
+    assert out == f"[t]({resolved})"
 
     def test_http_error_returns_empty(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
