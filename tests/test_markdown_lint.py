@@ -10,6 +10,7 @@ from scholar_lens.src.markdown_lint import (
     drop_unknown_images,
     lint_markdown,
     undefined_macros,
+    unlink_dead_links,
     upgrade_http_links,
 )
 from scholar_lens.src.post_conventions import load_local_conventions
@@ -173,15 +174,23 @@ class TestWarnings:
         assert not undefined_macros() & set(defined)
         assert "coloneqq" in undefined_macros()
 
-    def test_non_url_link_target_warns(self, caplog) -> None:
-        with caplog.at_level(logging.WARNING, logger="app"):
-            lint_markdown("see [appendix](부록 비교 참조) for details")
-        assert any("not an http(s) URL" in r.message for r in caplog.records)
+    def test_dead_links_keep_only_their_text(self) -> None:
+        src = (
+            "see [appendix](부록 비교 참조) and [](../_images/a.svg)\n\n"
+            "[](https://x.dev/a.svg) [p](https://arxiv.org/abs/1) [q](/posts/x) "
+            "[a](#s) [m](mailto:a@b.dev) `[c](../x)`"
+        )
+        assert lint_markdown(src) == (
+            "see appendix and \n\n"
+            " [p](https://arxiv.org/abs/1) [q](/posts/x) [a](#s) "
+            "[m](mailto:a@b.dev) `[c](../x)`"
+        )
 
-    def test_real_and_relative_links_do_not_warn(self, caplog) -> None:
-        with caplog.at_level(logging.WARNING, logger="app"):
-            lint_markdown("[p](https://arxiv.org/abs/1) and [q](/posts/x) and [a](#s)")
-        assert not any("not an http(s) URL" in r.message for r in caplog.records)
+    def test_a_linked_image_keeps_the_image(self) -> None:
+        img = "![arch](https://x.dev/a.svg)"
+        assert unlink_dead_links(f"[{img}](../_images/a.svg)") == img
+        linked = f"[{img}](https://x.dev/a.svg)"
+        assert unlink_dead_links(linked) == linked
 
 
 def test_lint_is_idempotent() -> None:
