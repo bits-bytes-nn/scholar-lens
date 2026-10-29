@@ -989,3 +989,35 @@ async def test_description_no_longer_than_the_page_title_is_dropped() -> None:
     review = await reviewer.run()
     assert review.description == ""  # the blog derives one instead
     assert any("not longer than the page title" in n for n in review.notes)
+
+
+async def test_only_verified_arxiv_links_survive() -> None:
+    # The writer links the paper, a reference the summary resolved by title,
+    # a verified citation id, and an id from memory (another paper).
+    def write(payload: dict[str, Any]) -> str:
+        text = _writer(payload)
+        return text.replace(
+            "본문입니다.",
+            "[LoRA](https://arxiv.org/abs/2106.09685v2), "
+            "[Eckart](https://arxiv.org/pdf/2001.00001), "
+            "[Adam](https://arxiv.org/abs/1412.6980), "
+            "[Bradbury et al., 2018](https://arxiv.org/abs/1912.03356)",
+        )
+
+    reviewer = _reviewer(
+        writer=FakeChain(write),
+        citations=[
+            Citation(authors="Kingma", title="Adam", arxiv_id="1412.6980"),
+            Citation(authors="Eckart", title="Matrix approximation", arxiv_id=None),
+        ],
+    )
+    reviewer.citation_summarizer.summarize.return_value = [  # type: ignore[attr-defined]
+        "Title: [Matrix approximation](https://arxiv.org/pdf/2001.00001)\nRank."
+    ]
+    review = await reviewer.run()
+    assert reviewer.linkable_arxiv == {"2106.09685", "1412.6980", "2001.00001"}
+    assert "](https://arxiv.org/abs/1912.03356)" not in review.body
+    assert "Bradbury et al., 2018" in review.body
+    for kept in ("abs/2106.09685v2", "pdf/2001.00001", "abs/1412.6980"):
+        assert f"https://arxiv.org/{kept})" in review.body
+    assert any("1912.03356" in note for note in review.notes)

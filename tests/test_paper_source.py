@@ -416,6 +416,10 @@ class TestArxivIdRules:
             ("2401.0606", None),  # 4 digits after 2015-01 is not an arXiv id
             ("1412.69801", None),  # 5 digits before 2015-01 neither
             ("arXiv:2106.09685v2", "2106.09685v2"),
+            ("2024.01234", None),  # month 24: a made-up id
+            ("2021.01000", None),
+            ("0612.1234", None),  # before the scheme began (2007-04)
+            ("0704.0001", "0704.0001"),
         ],
     )
     def test_sequence_length_follows_the_date(self, value, expected) -> None:  # type: ignore[no-untyped-def]

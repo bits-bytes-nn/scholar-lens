@@ -1,5 +1,7 @@
 import ast
+import asyncio
 import re
+import unicodedata
 from collections.abc import Sequence
 from typing import Any
 
@@ -7,6 +9,8 @@ import boto3
 from langchain_core.callbacks import BaseCallbackHandler
 from pydantic import BaseModel, Field, field_validator
 
+from .arxiv_handler import ArxivHandler, ArxivMetadata, ArxivPaperError
+from .citation_metadata import titles_match
 from .constants import LanguageModelId, arxiv_id_from_reference
 from .logger import logger
 from .prompt_safety import neutralize_prompt_tags
@@ -62,6 +66,69 @@ class Citation(BaseModel):
         return f"Citation(title='{self.title}', arxiv_id='{self.arxiv_id}')"
 
 
+def _name_tokens(value: str) -> set[str]:
+    """Accent-free, case-folded name words of two letters or more ("Müller,
+    J." -> {"muller"}); initials and "et al." carry no identity."""
+    folded = unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode()
+    words = re.findall(r"[a-z]{2,}", folded.casefold())
+    return {w for w in words if w not in ("et", "al")}
+
+
+def arxiv_record_matches(citation: Citation, record: ArxivMetadata | None) -> bool:
+    """Whether the arXiv ``record`` is the work ``citation`` names: the titles
+    match (:func:`~.citation_metadata.titles_match`), a name of the cited first
+    author appears among the record's authors, and the cited year does not
+    precede the first arXiv version by more than a year (a venue year may
+    follow it by any amount). An author or year the citation lacks is not
+    checked."""
+    if record is None or not titles_match(citation.title, record.title):
+        return False
+    first_author = re.split(r"[,;&]| and ", citation.authors, maxsplit=1)[0]
+    if (cited := _name_tokens(first_author)) and not cited & _name_tokens(
+        " ".join(record.authors)
+    ):
+        return False
+    return citation.year is None or citation.year >= record.published.year - 1
+
+
+def verify_arxiv_ids(
+    citations: list[Citation], arxiv_handler: ArxivHandler
+) -> list[Citation]:
+    """``citations`` with every arXiv id checked against arXiv's own record
+    of it (one batched metadata request per page of ids): an id whose record
+    is another work, or that arXiv does not know, is dropped and the citation
+    kept without it. The extraction model fills ids from memory, and a wrong
+    id resolves to a real but unrelated paper, so it is never trusted
+    unchecked. When arXiv cannot be reached the ids are dropped too: the
+    summarizer then resolves the reference by its title, which it matches."""
+    ids = [c.arxiv_id for c in citations if c.arxiv_id]
+    if not ids:
+        return citations
+    try:
+        records = arxiv_handler.fetch_metadata_batch(ids)
+    except ArxivPaperError as e:
+        logger.warning(
+            "Could not verify %d arXiv id(s); dropping them: %s", len(ids), e
+        )
+        records = {}
+    verified: list[Citation] = []
+    dropped: list[str] = []
+    for citation in citations:
+        if citation.arxiv_id and not arxiv_record_matches(
+            citation, records.get(re.sub(r"v\d+$", "", citation.arxiv_id))
+        ):
+            dropped.append(f"{citation.arxiv_id} ({citation.title[:60]})")
+            citation = citation.model_copy(update={"arxiv_id": None})
+        verified.append(citation)
+    if dropped:
+        logger.warning(
+            "Dropped %d arXiv id(s) that do not name the cited work: %s",
+            len(dropped),
+            "; ".join(dropped[:10]),
+        )
+    return verified
+
+
 class ContentExtractor(RetryableBase):
     # Hard cap on the paginated citation-extraction loop, so a model that keeps
     # emitting has_more=y (or novel near-duplicate citations) cannot loop forever.
@@ -78,7 +145,10 @@ class ContentExtractor(RetryableBase):
         category_options: list[str] | None = None,
         controlled_tags: list[str] | None = None,
         existing_keywords: list[str] | None = None,
+        arxiv_handler: ArxivHandler | None = None,
     ) -> None:
+        # Checks the arXiv ids the citation model writes (verify_arxiv_ids).
+        self.arxiv_handler = arxiv_handler or ArxivHandler()
         # Taxonomy overrides for the attributes prompt; None keeps its defaults.
         self._taxonomy: dict[str, str] = {}
         if category_options:
@@ -174,15 +244,20 @@ class ContentExtractor(RetryableBase):
             if not raw_citations_str.strip():
                 break
 
-            newly_parsed_citations = [
-                self._parse_citation(line)
+            parsed = [
+                cit
                 for line in raw_citations_str.split("\n")
-                if line.strip()
+                if line.strip() and (cit := self._parse_citation(line))
             ]
+            # Before dedup, which keys on the id: one wrong id written for
+            # several references must not merge them.
+            newly_parsed_citations = await asyncio.to_thread(
+                verify_arxiv_ids, parsed, self.arxiv_handler
+            )
 
             unique_new_citations = []
             for cit in newly_parsed_citations:
-                if cit and (key := self._dedup_key(cit)) not in seen_citations:
+                if (key := self._dedup_key(cit)) not in seen_citations:
                     unique_new_citations.append(cit)
                     seen_citations.add(key)
 

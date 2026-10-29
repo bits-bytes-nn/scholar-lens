@@ -5,7 +5,14 @@ from pathlib import Path
 import arxiv
 import requests
 import tenacity
-from pydantic import BaseModel, Field, HttpUrl, ValidationInfo, field_validator
+from pydantic import (
+    BaseModel,
+    Field,
+    HttpUrl,
+    ValidationError,
+    ValidationInfo,
+    field_validator,
+)
 
 from .citation_metadata import title_similarity, titles_match
 from .constants import normalize_arxiv_id
@@ -175,10 +182,42 @@ class ArxivHandler:
             )
             raise ArxivPaperError(f"Could not process metadata for '{arxiv_id}'") from e
 
+    def fetch_metadata_batch(self, arxiv_ids: list[str]) -> dict[str, ArxivMetadata]:
+        """Metadata of the papers in ``arxiv_ids``, keyed by the id without
+        its version, one API request per page of ids. An id arXiv does not
+        know is absent from the result; a request that still fails after the
+        retries raises ``ArxivPaperError``."""
+        unique = list(dict.fromkeys(re.sub(r"v\d+$", "", i) for i in arxiv_ids))
+        found: dict[str, ArxivMetadata] = {}
+        for start in range(0, len(unique), self.DEFAULT_PAGE_SIZE):
+            chunk = unique[start : start + self.DEFAULT_PAGE_SIZE]
+            search = arxiv.Search(id_list=chunk, max_results=len(chunk))
+            label = f"metadata of {len(chunk)} id(s)"
+            for paper in self._retrying(label)(self._results_once, search, label):
+                try:
+                    metadata = self._paper_to_metadata(paper)
+                except ValidationError as e:  # one bad record, not the page
+                    logger.warning("Unusable arXiv record '%s': %s", paper, e)
+                    continue
+                found[re.sub(r"v\d+$", "", metadata.arxiv_id)] = metadata
+        return found
+
+    def _results_once(self, search: arxiv.Search, label: str) -> list[arxiv.Result]:
+        _ARXIV_RATE_LIMITER.acquire()
+        try:
+            return list(self.client.results(search))
+        except Exception as e:
+            _ARXIV_RATE_LIMITER.penalize(arxiv_retry_after_seconds(e))
+            raise ArxivPaperError(f"arXiv {label} failed: {e}") from e
+
     def _fetch_single_paper(self, arxiv_id: str) -> arxiv.Result:
+        return self._retrying(f"'{arxiv_id}'")(self._fetch_single_paper_once, arxiv_id)
+
+    @staticmethod
+    def _retrying(label: str) -> tenacity.Retrying:
         # Retry transient API errors (HTTP 429 etc.) with jittered backoff, but
         # never retry a genuine "not found" — that is terminal.
-        retryer = tenacity.Retrying(
+        return tenacity.Retrying(
             wait=tenacity.wait_exponential_jitter(
                 initial=_ARXIV_FETCH_INITIAL_WAIT, max=_ARXIV_FETCH_MAX_WAIT
             ),
@@ -190,13 +229,12 @@ class ArxivHandler:
                 and not isinstance(e, ArxivNotFoundError)
             ),
             before_sleep=lambda s: logger.warning(
-                "arXiv fetch for '%s' failed (attempt %d); retrying...",
-                arxiv_id,
+                "arXiv fetch for %s failed (attempt %d); retrying...",
+                label,
                 s.attempt_number,
             ),
             reraise=True,
         )
-        return retryer(self._fetch_single_paper_once, arxiv_id)
 
     def _fetch_single_paper_once(self, arxiv_id: str) -> arxiv.Result:
         _ARXIV_RATE_LIMITER.acquire()

@@ -346,7 +346,7 @@ class TestPlanRevalidation:
         [
             (
                 lambda d: d["papers"].append(
-                    {"id": "2499.99999", "lineage": "dpo", "role": "core"}
+                    {"id": "2412.99999", "lineage": "dpo", "role": "core"}
                 ),
                 "No index knows",
             ),
