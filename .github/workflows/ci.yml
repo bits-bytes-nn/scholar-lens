@@ -101,7 +101,14 @@ jobs:
         with:
           persist-credentials: false
       - name: Build Batch image
-        run: docker build -f Dockerfile -t scholar-lens-batch:ci .
+        # The same official python image (identical index digest) from Google's
+        # Docker Hub mirror. Anonymous pulls from public.ecr.aws answer GitHub's
+        # shared runner IPs with 429 "Data limit exceeded"; the Batch build in
+        # AWS keeps the Dockerfile's ECR Public default.
+        run: >-
+          docker build -f Dockerfile
+          --build-arg PYTHON_IMAGE=mirror.gcr.io/library/python:3.12-slim-bookworm
+          -t scholar-lens-batch:ci .
       - name: Smoke-run the CLI in the image
         run: docker run --rm scholar-lens-batch:ci python3 -m scholar_lens --help
       - name: Import PyMuPDF and every pipeline in the image (catches a missing runtime dependency)
