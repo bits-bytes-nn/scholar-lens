@@ -197,3 +197,65 @@ class TestDownloadFolder:
         )
         path = ArxivSource("2106.09685", handler=handler).download_pdf(tmp_path)
         assert path == tmp_path / "2106_09685" / "2106_09685.pdf"
+
+
+class TestFetchMetadataBatch:
+    @staticmethod
+    def _paper(short_id: str, title: str, authors: list[str]) -> object:
+        from types import SimpleNamespace
+
+        return SimpleNamespace(
+            get_short_id=lambda: short_id,
+            title=title,
+            authors=[SimpleNamespace(name=a) for a in authors],
+            published=PUBLISHED,
+            updated=UPDATED,
+            summary="An abstract.",
+            journal_ref=None,
+            primary_category="cs.CL",
+            categories=["cs.CL"],
+            doi=None,
+            pdf_url=None,
+        )
+
+    def test_one_request_per_page_keyed_by_unversioned_id(self, monkeypatch) -> None:
+        from unittest.mock import MagicMock
+
+        handler = ArxivHandler.__new__(ArxivHandler)
+        handler.client = MagicMock()
+        handler.client.results = MagicMock(
+            side_effect=[
+                iter(
+                    [
+                        self._paper("1706.03762v7", "Attention", ["A. Vaswani"]),
+                        # A record without authors is skipped, not the page.
+                        self._paper("2106.09685v2", "LoRA", []),
+                    ]
+                ),
+                iter([self._paper("2305.18290v3", "DPO", ["R. Rafailov"])]),
+            ]
+        )
+        monkeypatch.setattr(ArxivHandler, "DEFAULT_PAGE_SIZE", 2)
+        found = handler.fetch_metadata_batch(
+            ["1706.03762v5", "2106.09685", "1706.03762", "2305.18290"]
+        )
+        assert sorted(found) == ["1706.03762", "2305.18290"]
+        assert found["1706.03762"].title == "Attention"
+        searches = [c.args[0] for c in handler.client.results.call_args_list]
+        assert [s.id_list for s in searches] == [
+            ["1706.03762", "2106.09685"],
+            ["2305.18290"],
+        ]
+
+    def test_a_failing_request_raises_after_the_retries(self, monkeypatch) -> None:
+        from unittest.mock import MagicMock
+
+        monkeypatch.setattr(arxiv_handler, "_ARXIV_FETCH_MAX_ATTEMPTS", 2)
+        monkeypatch.setattr(arxiv_handler, "_ARXIV_FETCH_INITIAL_WAIT", 0)
+        monkeypatch.setattr(arxiv_handler, "_ARXIV_FETCH_MAX_WAIT", 0)
+        handler = ArxivHandler.__new__(ArxivHandler)
+        handler.client = MagicMock()
+        handler.client.results = MagicMock(side_effect=OSError("connection reset"))
+        with pytest.raises(arxiv_handler.ArxivPaperError):
+            handler.fetch_metadata_batch(["1706.03762"])
+        assert handler.client.results.call_count == 2

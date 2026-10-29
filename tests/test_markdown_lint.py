@@ -11,6 +11,7 @@ from scholar_lens.src.markdown_lint import (
     lint_markdown,
     undefined_macros,
     unlink_dead_links,
+    unlink_unknown_arxiv,
     upgrade_http_links,
 )
 from scholar_lens.src.post_conventions import load_local_conventions
@@ -473,3 +474,34 @@ def test_quoted_fences_close_where_their_blockquote_ends(
     fixed = close_quoted_fences(src)
     assert fixed == expected
     assert blog_unclosed_fence_lines(fixed.split("\n")) == []
+
+
+class TestUnlinkUnknownArxiv:
+    KNOWN = {"1706.03762", "2106.09685"}
+
+    def test_links_to_known_papers_stay_in_any_form(self) -> None:
+        text = (
+            "[Vaswani et al.](https://arxiv.org/abs/1706.03762v5), "
+            "[LoRA](https://arxiv.org/pdf/2106.09685) and "
+            "[DOI](https://doi.org/10.48550/arXiv.1706.03762)"
+        )
+        assert unlink_unknown_arxiv(text, self.KNOWN) == (text, [])
+
+    def test_a_link_to_an_unverified_paper_keeps_only_its_text(self) -> None:
+        text = (
+            "[Bradbury et al., 2018](https://arxiv.org/abs/1912.03356)과 "
+            "[MMLU](https://doi.org/10.48550/arXiv.2403.05530)"
+        )
+        fixed, removed = unlink_unknown_arxiv(text, self.KNOWN)
+        assert fixed == "Bradbury et al., 2018과 MMLU"
+        assert removed == [
+            "https://arxiv.org/abs/1912.03356",
+            "https://doi.org/10.48550/arXiv.2403.05530",
+        ]
+
+    def test_other_links_and_code_are_untouched(self) -> None:
+        text = (
+            "[JAX](https://github.com/jax-ml/jax) "
+            "`[x](https://arxiv.org/abs/1912.03356)`"
+        )
+        assert unlink_unknown_arxiv(text, self.KNOWN) == (text, [])

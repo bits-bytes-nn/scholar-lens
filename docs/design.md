@@ -290,7 +290,7 @@ OpenAlex는 arXiv 시대 ML 논문의 인용 수를 크게 적게 세고(실측:
 `content_extractor.py::ContentExtractor`가 두 가지를 추출합니다.
 
 - 속성(`extract_attributes`): 제목, 저자, 발행 조직(`affiliation`), 규칙 파일의 주제 중 하나(`category`), 통제 태그(기본 하나로 논문 자신의 주제, 방법이나 실험이 다루는 주제일 때만 둘째), 세부 키워드, `seo_title`. 키워드 재사용 후보로 블로그 글에 이미 쓰인 태그를 넘기되, 기존 표기는 그 태그가 이 논문 자신의 기여를 가리킬 때만 쓰고 아니면 논문의 용어를 씁니다(`runtime.py::RunContext.require_blog_tags`).
-- 인용(`extract_citations`, 리뷰만): 참고문헌을 페이지 단위로 추출하며 최대 `MAX_CITATION_PAGES`(20)회입니다.
+- 인용(`extract_citations`, 리뷰만): 참고문헌을 페이지 단위로 추출하며 최대 `MAX_CITATION_PAGES`(20)회입니다. 모델이 적은 arXiv ID는 중복 제거 전에 페이지마다 arXiv 메타데이터 한 번의 일괄 조회로 확인합니다(`content_extractor.py::verify_arxiv_ids`). 제목이 일치하고(`titles_match`), 인용의 제1저자 이름이 레코드 저자에 있고, 인용 연도가 arXiv 첫 버전보다 1년 넘게 이르지 않을 때만 ID를 남깁니다. 다른 논문의 ID, arXiv에 없는 ID, 형식이 틀린 ID(`2024.01234`처럼 YYMM의 월이 없는 것)는 버리고 인용은 ID 없이 남으며, arXiv에 닿지 못하면 그 페이지의 ID를 모두 버립니다. 이런 인용은 요약 단계가 제목으로 찾습니다. 리뷰 본문·TL;DR·마무리에서는 논문 자신, 확인된 인용 ID, 인용 요약에 실린 링크의 arXiv 논문만 링크로 남기고, 나머지 arXiv 링크(arXiv URL과 arXiv DOI)는 텍스트로 바꾼 뒤 리뷰 노트에 올립니다(`markdown_lint.py::unlink_unknown_arxiv`).
 
 인용 요약(`citation_summarizer.py::CitationSummarizer`)은 초록을 우선합니다. Crossref, OpenAlex(선택 API 키 `OPENALEX_API_KEY`를 `Authorization: Bearer`로 보냄. 키가 없으면 IP당 하루 약 100회 검색), Semantic Scholar(API 키가 있을 때만), arXiv 순서로 메타데이터를 찾고(`citation_metadata.py`, 속도 제한 포함, `Retry-After`가 60초를 넘으면 그 실행 동안 해당 제공자를 건너뜀), 제목 유사도 0.9 이상이고 버전 표기와 단어가 바뀌지 않은 경우(하이픈·영국식 철자 차이는 같은 단어)만 같은 논문으로 인정합니다(Crossref는 상위 5건 중 제목이 일치하는 레코드 가운데 제목 유사도가 가장 높은 것, OpenAlex는 상위 5건 중 첫 일치 결과). 제목의 내용어를 하나도 담지 않은 초록은 다른 논문의 것으로 보고 버리며, OpenAlex의 arXiv 레코드 초록은 믿지 않고 DOI의 arXiv ID로 arXiv에서 받습니다. 맞지 않는 초록은 요약하지 않으며, 초록도 본문도 찾지 못한 인용은 리뷰 노트(PR 체크리스트)에 올립니다. `prefer_full_text: true`면 arXiv 전문을 받습니다.
 

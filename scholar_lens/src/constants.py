@@ -16,6 +16,8 @@ _ARXIV_URL_PATH = re.compile(
 )
 # New-style ids got a 5-digit sequence number from 2015-01 (YYMM 1501) on.
 _FIVE_DIGIT_SINCE_YYMM = 1501
+# New-style ids start at 2007-04 (YYMM 0704).
+_MODERN_SINCE_YYMM = 704
 
 # A soft token budget (guide, survey plan and write) is a hard ceiling at this
 # multiple of it: past the budget the optional checks are skipped, past the
@@ -91,8 +93,13 @@ def normalize_arxiv_id(value: str | None) -> str | None:
     if not ARXIV_ID_PATTERN.match(candidate):
         return None
     if modern := re.match(r"^(\d{4})\.(\d+)", candidate):
+        yymm = int(modern.group(1))
+        # The YYMM prefix is a real month from 0704, when the scheme began:
+        # "2024.01234" (month 24) is a made-up id, not a typo of one.
+        if yymm < _MODERN_SINCE_YYMM or not 1 <= yymm % 100 <= 12:
+            return None
         four_digit = len(modern.group(2)) == 4
-        if four_digit != (int(modern.group(1)) < _FIVE_DIGIT_SINCE_YYMM):
+        if four_digit != (yymm < _FIVE_DIGIT_SINCE_YYMM):
             return None
     return candidate
 

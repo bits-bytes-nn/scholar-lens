@@ -45,6 +45,8 @@ from dataclasses import dataclass
 from functools import cache
 from typing import Literal
 
+from .citation_metadata import arxiv_id_from_doi
+from .constants import arxiv_paper_key
 from .logger import logger
 from .markdown_math import (
     BLOG_CODE_SPAN,
@@ -406,6 +408,34 @@ def _warn_undefined_macros(markdown: str, regions: list[tuple[int, int, str]]) -
             "MathJax equivalent.",
             sorted(seen),
         )
+
+
+def arxiv_link_key(url: str) -> str | None:
+    """The unversioned arXiv id an arXiv URL or arXiv DOI link names, or
+    None for any other link."""
+    if key := arxiv_paper_key(url):
+        return key
+    arxiv_id = arxiv_id_from_doi(url)
+    return re.sub(r"v\d+$", "", arxiv_id) if arxiv_id else None
+
+
+def unlink_unknown_arxiv(markdown: str, known: set[str]) -> tuple[str, list[str]]:
+    """``markdown`` with every link (outside code) to an arXiv paper whose
+    unversioned id is not in ``known`` reduced to its text, and the targets
+    removed. A writer model links arXiv ids from memory, which resolve to
+    real but unrelated papers; only ids checked against arXiv are kept."""
+    keep = _outside(_classify_regions(markdown), ("fence", "icode"))
+    removed: list[str] = []
+
+    def repl(m: re.Match[str]) -> str:
+        target = m.group(2).strip()
+        key = arxiv_link_key(target) if keep(m.start()) else None
+        if key is None or key in known:
+            return m.group(0)
+        removed.append(target)
+        return m.group(1)
+
+    return _MD_LINK.sub(repl, markdown), removed
 
 
 _LINKED_IMAGE = re.compile(r"\[(!\[[^\]]*\]\([^)]*\))\]\(([^)]*)\)")
