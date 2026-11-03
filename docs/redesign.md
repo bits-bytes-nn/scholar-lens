@@ -227,8 +227,39 @@ scholar_lens/
 - HTTP: httpx 하나로 통일하고, SSRF 방지 고정 전송을 어댑터 공용으로 둡니다. `arxiv` 라이브러리와 requests는 제거합니다.
 - 실행 메모: `RunNotes`를 유스케이스의 명시적 반환값으로 다룹니다. 예외에 속성을 붙이지 않습니다.
 - 비용과 예산: `LanguageModel` 어댑터가 호출마다 토큰·비용을 `Budget`에 기록하고, 단계는 `Budget`을 확인합니다. 예산 초과는 `BudgetExhausted` 도메인 오류입니다.
-- 단계별 사용량: 모든 모델 호출에 단계 이름을 붙여 단계별 토큰·비용을 실행 결과(`JobResult`)와 지표에 남깁니다.
+- 운영 비용 추적: 4.4절.
 - 관측성: 단계마다 구조화 로그(실행 ID, 단계, 모델, 지연, 토큰, 비용, 재시도·대체 사유)를 남기고 체크포인트를 S3에 저장해, 실패한 실행을 단계부터 다시 돌리고 원인을 볼 수 있게 합니다.
+
+### 4.4 운영 비용 추적과 보고
+
+지금은 실행이 끝날 때 모델별 입력·출력 토큰 합계와 목록가로 계산한 추정 비용 한 줄만 남깁니다(`metrics.py::TokenUsageTracker`). 캐시 토큰, 단계, 실패한 호출, 컴퓨팅 비용은 남지 않고, 청구 금액과 맞춰 볼 방법이 없습니다. 새 구조는 운영 중인 모든 실행의 비용을 호출 단위로 기록하고, 글 종류·단계·모델별로 집계하며, 실제 청구 금액과 대조합니다.
+
+호출 기록(`UsageEvent`, 모델 호출마다 하나):
+
+| 필드 | 내용 |
+| --- | --- |
+| `job_id`, `kind`, `item` | 실행 ID, 글 종류, 입력(논문 ID, 가이드 URL, 서베이 주제) |
+| `stage`, `step` | 단계(Read, Outline, Draft, Verify, Review, Fix, Edit, Finalize)와 세부(절 ID, 논문 ID) |
+| `model_id`, `inference_profile` | 모델과 실제 호출한 추론 프로필 ID 또는 ARN |
+| `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens` | Bedrock 응답의 사용량 그대로 |
+| `cost_usd`, `price_version` | 모델 레지스트리 가격표(캐시 단가 포함, 적용일 있음)로 계산한 금액과 가격표 버전 |
+| `latency_ms`, `attempt`, `outcome` | 지연, 재시도 차수, 성공·재시도·실패 |
+
+기록이 가는 곳:
+
+- 구조화 로그: 호출마다 JSON 한 줄(`event: llm_usage`)을 남기고(CloudWatch Logs), 실행이 끝나면 요약 한 줄(`event: run_usage`)을 남깁니다. 프롬프트와 응답 본문은 넣지 않습니다.
+- 실행 결과: `JobResult.usage`에 단계별·모델별 합계와 실패·거부된 실행의 사용량도 담습니다. 결과 매니페스트(`<s3_prefix>/results/<job_id>.json`)가 장기 원장입니다. 로컬 실행도 같은 형식으로 `papers/` 아래에 남깁니다.
+- CloudWatch 지표: EMF 로그로 `Tokens`, `CostUSD`, `Calls`, `FailedCalls`를 `Kind`, `Stage`, `Model` 차원과 함께 냅니다. 지금의 추정 비용 경보는 이 지표로 옮깁니다.
+- 알림: SNS 실행 알림에 총비용과 비싼 단계 상위 3개를 넣습니다.
+
+실제 청구 금액과의 대조:
+
+- 글 종류마다 Bedrock 응용 추론 프로필(application inference profile)을 CDK로 만들고 비용 할당 태그(`Project=scholar-lens`, `Kind=review|summary|guide|survey`)를 붙여 모든 호출을 그 프로필로 보냅니다. Cost Explorer와 CUR에서 종류별 실제 Bedrock 비용을 볼 수 있습니다.
+- 태그는 결제 콘솔에서 비용 할당 태그로 한 번 활성화해야 하고, 활성화 이후 사용분부터 집계됩니다(관리 계정 작업, 사용자 확인 필요).
+- Batch 컴퓨팅 환경의 인스턴스와 볼륨에도 같은 `Project` 태그를 전파해 EC2·EBS 비용을 함께 봅니다.
+- 월별 보고는 추정치(매니페스트 합계)와 청구액(Cost Explorer, 태그 기준)을 나란히 보여 주고 차이가 크면(예: 10% 초과) 가격표를 점검합니다.
+
+보고 명령: `scholar-lens costs --since 2026-11-01 [--until …] [--by kind|stage|model|day] [--format table|json|csv]`이 S3 매니페스트를 모아 실행 수, 성공·실패·거부별 비용, 글 한 편당 평균·최대 비용, 단계별 비중, 실패·거부로 버린 비용을 보여 주고, `--billed`이면 Cost Explorer의 태그별 청구액을 함께 냅니다. 구현은 전환 2단계(뼈대)에 넣어 이후 모든 실행에 적용합니다.
 
 ## 5. 글쓰기 원칙과 4종 글
 
@@ -309,7 +340,7 @@ scholar_lens/
 한 브랜치에서 한 번에 재구성하되, 커밋은 아래 순서로 나누고 각 단계에서 테스트를 통과시킵니다.
 
 1. 평가 도구와 기준선: 현재 main으로 평가셋을 실행해 수치를 기록합니다(비용 발생, 승인 필요).
-2. 뼈대: `settings`, `bootstrap`, `ports`, 도메인 오류, `import-linter` 계약을 만듭니다.
+2. 뼈대: `settings`, `bootstrap`, `ports`, 도메인 오류, `import-linter` 계약, 호출 단위 사용량 기록과 `costs` 보고 명령(4.4), 응용 추론 프로필과 비용 할당 태그(CDK)를 만듭니다.
 3. 도메인 이전: markdown·math·검증·계획 스키마·병합·순위 같은 순수 코드를 동작 변경 없이 옮기고 기존 테스트를 따라 옮깁니다.
 4. 어댑터: Bedrock Converse와 도구 루프, 서지 색인, 문서 읽기, 웹, AWS, GitHub를 옮깁니다. 계약 테스트와 HTTP 녹화 테스트를 둡니다.
 5. 엔진과 서베이: 결함이 가장 많은 서베이를 새 엔진으로 먼저 구현하고 평가셋으로 비교합니다.
