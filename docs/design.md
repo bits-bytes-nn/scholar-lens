@@ -264,6 +264,19 @@ OpenAlex는 arXiv 시대 ML 논문의 인용 수를 크게 적게 세고(실측:
 
 토큰 예산은 `survey.write_max_total_tokens`(기본 450만)의 소프트 상한입니다. 넘으면 남은 절을 평가·수정·사실 확인 없이 쓰고, 하드 상한(8.3절)을 넘으면 다음 호출 전에 중단합니다.
 
+#### 4.3.2 근거 장부 엔진(`survey.engine: evidence`)
+
+`survey.engine`이 `evidence`이면 쓰기 단계의 카드·개요·절 반복을 근거 장부 엔진(`application/survey_engine.py::EvidenceSurveyEngine`)이 맡습니다. 기본값은 `cards`(4.3.1)입니다. 계획 재검증, 참고 글 읽기, 인용 렌더링(`survey_body`), 마무리 분류, 발행은 같습니다. 설계 배경은 `docs/redesign.md` 3장입니다.
+
+1. **원문**(`src/survey_documents.py::PaperDocuments`): 논문마다 arXiv HTML(절, LaTeX, 그림)을 읽고, 없으면 PDF(arXiv, DOI면 OpenAlex의 오픈 액세스 사본, 앞 40쪽 텍스트), 그것도 없으면 색인의 초록을 씁니다. 보조 논문도 같은 순서로 읽습니다. 핵심 논문을 초록으로만 읽으면 PR 메모가 남습니다.
+2. **읽기**(`read`, 모델 역할 `read` = `survey.card_model_id`): 논문마다 Strands 에이전트 하나가 절 목록을 보고 `read_section`·`search_paper`로 필요한 절을 읽으며 `record_evidence`로 근거를 기록합니다(동시 4개, 핵심 논문 30턴·보조 논문 12턴, 논문당 60만 토큰 한도). 기록은 도구 안에서 코드가 검사하고(`domain/evidence.py::evidence_problems`) 통과하지 못하면 이유와 함께 거부되어 에이전트가 고칩니다. 인용문이 그 절에 글자 그대로 있어야 하고(공백 정규화, 대소문자 무시), 주장·표 칸의 모든 수치가 인용문에 있어야 하며, 수치 근거는 범위(모델·벤치마크·설정·지표)가 있어야 하고, 수식은 원문 LaTeX여야 하고, 그림은 원문 그림 목록에 있어야 합니다. 근거는 논문·읽기 버전(`READER_VERSION`)·모델·언어·역할·원문 종류별로 `papers/survey-evidence/`와 S3 `<prefix>/surveys/evidence/`에 캐시합니다. 프롬프트 문구 변경은 캐시를 무효화하지 않습니다.
+3. **개요**(`outline`, 역할 `outline`, adaptive thinking): 근거 장부 전체를 보고 절마다 주장형 제목, 논지, 독자 질문, 깊이, 근거 ID를 정합니다. `domain/survey/evidence_post.py::outline_problems`가 절 순서(도입, 계보별 한 절, 교차, 비교 하나, 통찰 하나, 선택적 결론), 근거 하나는 한 절만, 계보 절은 그 계보의 논문만, 핵심 논문 근거 2개·보조 논문 1개 이상, 표·연표·짧은 이름 누락을 검사해 두 번까지 다시 묻습니다.
+4. **절 집필**(역할 `write`): 절은 자기 근거, 앞 절 근거 목록(다시 쓰지 않고 내용으로 가리킬 것), 용어집 상태, 직전 절 끝을 받고, 사실을 말하는 문장마다 `[[E12]]` 표시를 붙입니다.
+5. **검증과 수정**: 코드 검사(`draft_problems`: 제목, 모르는·다른 절 근거, 근거 없는 수치, 인용 근거에 없는 수치, 앞 절이 이미 말한 수치, 작성 과정을 드러내는 메타 문장, 배정된 그림 누락·배정 안 된 그림), 문장별 주장 대조(역할 `evaluate`, 근거 인용문 기준 supported·unsupported·wrong), 첫 회차의 루브릭 검토(위치가 붙은 깊이·흐름·친절함·문체 문제)를 모아, 지목된 문장만 고치는 수정 호출을 최대 두 번 합니다. 구조를 잃거나(`structure_lost`) 코드 문제가 늘면 수정본을 버립니다. 그 뒤에도 근거가 뒷받침하지 않는 문장은 지우고 PR 메모에 남깁니다.
+6. **조립**: 도입 뒤에 연표(연도, 짧은 이름, 계보 짧은 이름, 핵심 아이디어), 비교 절 뒤에 비교표(핵심 논문의 수치 근거 최대 2개와 범위, 한계 근거. 빈 칸은 "정량 수치 없음"·"논문이 밝힌 한계 없음")를 코드로 붙이고, `[[E…]]`를 그 근거 논문의 `[@id]`로 바꿉니다. 그림은 근거의 URL과 캡션으로 출처 줄을 붙입니다.
+
+모델 호출은 `adapters/bedrock/strands_models.py::StrandsLanguageModel`(Strands `BedrockModel`, 종류별 응용 추론 프로필, botocore 표준 재시도 6회, 시스템 프롬프트·도구·대화 캐시)이 하고, 호출마다 단계(`read`, `outline`, `draft`, `verify`, `review`, `fix`) 사용량을 `TokenUsageTracker.record`로 남깁니다. 평가 실행은 `SCHOLAR_LENS_CONFIG`로 다른 설정 파일을 지정합니다.
+
 ## 5. 데이터 수집과 파싱
 
 ### 5.1 논문 소스
