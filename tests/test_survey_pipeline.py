@@ -18,6 +18,8 @@ import pytest
 from pydantic import ValidationError
 
 from scholar_lens import cli
+from scholar_lens.adapters.scholarly import index as scholarly_index
+from scholar_lens.adapters.scholarly import metadata as citation_metadata
 from scholar_lens.adapters.scholarly.arxiv import ArxivMetadata, ArxivPaperError
 from scholar_lens.adapters.scholarly.index import (
     DataCiteIndex,
@@ -39,8 +41,6 @@ from scholar_lens.domain.survey.plan import (
     TimeRange,
     survey_slug,
 )
-from scholar_lens.adapters.scholarly import index as scholarly_index
-from scholar_lens.adapters.scholarly import metadata as citation_metadata
 from scholar_lens.src.jobs import JobRequest, JobResult
 from scholar_lens.src.metrics import TokenBudgetExceeded, TokenUsageTracker
 from scholar_lens.src.survey_pipeline import (
@@ -324,10 +324,17 @@ WORK = {
         {"author": {"display_name": ":"}},
     ],
     "publication_date": "2023-05-29",
-    "primary_location": {"source": {"display_name": "arXiv (Cornell University)"}},
+    "primary_location": {
+        "source": {"display_name": "arXiv (Cornell University)", "type": "repository"}
+    },
     "locations": [
         {"landing_page_url": "http://arxiv.org/abs/2305.18290"},
-        {"source": {"display_name": "Neural Information Processing Systems"}},
+        {
+            "source": {
+                "display_name": "Neural Information Processing Systems",
+                "type": "conference",
+            }
+        },
     ],
     "cited_by_count": 293,
     "abstract_inverted_index": {"We": [0], "propose": [1]},
@@ -386,7 +393,7 @@ class TestAdapters:
         assert record is not None
         assert record.arxiv_id == "2305.18290" and record.doi is None
         assert record.openalex_id == "W4378771755"
-        assert record.venue == "Neural Information Processing Systems"
+        assert record.venue == "NeurIPS"
         assert record.authors == ["Rafael Rafailov"]
         # arXiv supplies abstracts of arXiv papers (OpenAlex's are unreliable).
         assert record.abstract is None

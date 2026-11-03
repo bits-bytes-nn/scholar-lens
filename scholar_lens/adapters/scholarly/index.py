@@ -24,6 +24,7 @@ from ...domain.survey.plan import (
     normalize_doi,
     unversioned_arxiv_id,
 )
+from ...domain.venues import venue_name
 from ...settings import EnvVars
 from ..http.rate_limit import RateLimiter
 from . import metadata as citation_metadata
@@ -65,14 +66,25 @@ def _parse_date(value: str | None) -> date | None:
         return None
 
 
-def _source_name(location: dict[str, Any] | None) -> str | None:
-    return ((location or {}).get("source") or {}).get("display_name")
+# OpenAlex source types that name where a work was published; repositories
+# (Zenodo, arXiv) and book series ("Lecture notes in computer science") do not.
+_VENUE_SOURCE_TYPES = ("conference", "journal")
+
+
+def openalex_venue(locations: list[dict[str, Any]]) -> str | None:
+    """The first conference or journal location's venue (:func:`venue_name`)."""
+    for loc in locations:
+        source = loc.get("source") or {}
+        if source.get("type") in _VENUE_SOURCE_TYPES:
+            if name := venue_name(source.get("display_name")):
+                return name
+    return None
 
 
 def openalex_record(work: dict[str, Any], found_by: str) -> SourceRecord | None:
     """A work as a record; None without a title or id. The arXiv id comes
-    from an arXiv DOI or an arXiv location; the venue is the first location
-    that is not arXiv."""
+    from an arXiv DOI or an arXiv location; the venue is the first
+    conference or journal location (:func:`openalex_venue`)."""
     title = " ".join((work.get("title") or "").split())
     openalex_id = _openalex_short_id(work.get("id"))
     if not title or not openalex_id:
@@ -87,14 +99,7 @@ def openalex_record(work: dict[str, Any], found_by: str) -> SourceRecord | None:
         None,
     )
     doi = normalize_doi(work.get("doi"))
-    venue = next(
-        (
-            name
-            for loc in locations
-            if (name := _source_name(loc)) and "arxiv" not in name.lower()
-        ),
-        None,
-    )
+    venue = openalex_venue(locations)
     authors = [
         name
         for a in work.get("authorships") or []
@@ -307,6 +312,7 @@ class SemanticScholarIndex:
                 params={"fields": _SEMANTIC_SCHOLAR_FIELDS},
                 json_body={"ids": chunk},
                 limiter=citation_metadata._SEMANTIC_SCHOLAR_LIMITER,
+                rate_limit_retries=citation_metadata.SEMANTIC_SCHOLAR_RATE_LIMIT_RETRIES,
                 timeout=_TIMEOUT,
                 headers={"x-api-key": self.api_key} if self.api_key else None,
             )
@@ -329,7 +335,7 @@ def _semantic_scholar_paper(row: Any) -> CitationData | None:
     count = row.get("citationCount")
     return CitationData(
         citation_count=count if isinstance(count, int) else None,
-        venue=(row.get("venue") or "").strip() or None,
+        venue=venue_name(row.get("venue")),
         reference_keys=set().union(
             *(
                 _semantic_scholar_keys(ref.get("externalIds"))

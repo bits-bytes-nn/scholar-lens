@@ -58,6 +58,9 @@ _OPENALEX_LIMITER = RateLimiter(rate=2.0, per=1.0, name="openalex")
 # Search results scanned for a matching record (one request either way).
 _SEARCH_CANDIDATES = 5
 _SEMANTIC_SCHOLAR_LIMITER = RateLimiter(rate=1.0, per=1.0, name="semantic-scholar")
+# Semantic Scholar answers bursts with 429s and no Retry-After (more so
+# without a key, on the shared pool): retried with doubling waits.
+SEMANTIC_SCHOLAR_RATE_LIMIT_RETRIES = 4
 # A 429 without Retry-After waits this long before the single retry.
 _DEFAULT_RETRY_AFTER = 5.0
 _MAX_RETRY_AFTER = MAX_RETRY_AFTER_SECONDS
@@ -139,10 +142,13 @@ def _get_json(
     headers: dict[str, str] | None = None,
     serial: threading.Lock | None = None,
     json_body: Any = None,
+    rate_limit_retries: int = 1,
 ) -> Any:
     """GET JSON at the API's pace (POST ``json_body`` when given). This is
     the one retry layer for these APIs: a 429 pauses every caller of the API
-    for its ``Retry-After`` and is retried once, a 5xx is retried once after
+    for its ``Retry-After`` (doubling from the default when the API sends
+    none, as Semantic Scholar's shared pool does) and is retried up to
+    ``rate_limit_retries`` times, a 5xx is retried once after
     a short randomized backoff. A wait beyond ``_MAX_RETRY_AFTER`` raises
     ``QuotaExhaustedError``; a 401/403 to a keyed request (``headers`` carry
     the API key) raises ``ProviderAuthError``; any other failure
@@ -155,17 +161,23 @@ def _get_json(
             )
         return httpx.get(url, params=params, headers=headers, timeout=timeout)
 
-    for attempt in range(2):
+    throttled = server_errors = 0
+    while True:
         limiter.acquire()
         if serial is not None:
             with serial:
                 response = send()
         else:
             response = send()
-        if response.status_code == 429 and attempt == 0:
-            limiter.penalize(_retry_after(response))
+        if response.status_code == 429 and throttled < rate_limit_retries:
+            wait = _retry_after(response)
+            if "Retry-After" not in response.headers:
+                wait = min(wait * 2**throttled, _MAX_RETRY_AFTER)
+            throttled += 1
+            limiter.penalize(wait)
             continue
-        if response.status_code >= 500 and attempt == 0:
+        if response.status_code >= 500 and server_errors == 0:
+            server_errors += 1
             logger.info(
                 "%s answered %d; retrying once",
                 response.url.host,
@@ -179,7 +191,6 @@ def _get_json(
             )
         response.raise_for_status()
         return response.json()
-    raise AssertionError("unreachable")  # pragma: no cover
 
 
 class CrossrefProvider(MetadataProvider):
@@ -345,6 +356,7 @@ class SemanticScholarProvider(MetadataProvider):
                 _SEMANTIC_SCHOLAR_URL,
                 params=params,
                 limiter=_SEMANTIC_SCHOLAR_LIMITER,
+                rate_limit_retries=SEMANTIC_SCHOLAR_RATE_LIMIT_RETRIES,
                 timeout=self.timeout,
                 headers={"x-api-key": self.api_key} if self.api_key else None,
             ).get("data", [])

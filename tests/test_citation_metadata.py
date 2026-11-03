@@ -742,3 +742,44 @@ class TestTitleGateSiblings:
 
     def test_same_title_with_punctuation_matches(self) -> None:
         assert titles_match("Attention is All you Need", "Attention Is All You Need.")
+
+
+def test_semantic_scholar_429s_without_retry_after_back_off_doubling(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The shared (keyless) pool answers bursts with bare 429s; one retry lost
+    # most plan-stage lookups (2026-11-03 security survey).
+    statuses = [429, 429, 429, 200]
+
+    def fake_get(url: str, **_: Any) -> httpx.Response:
+        return httpx.Response(
+            statuses.pop(0), json={"data": []}, request=httpx.Request("GET", url)
+        )
+
+    monkeypatch.setattr("scholar_lens.adapters.scholarly.metadata.httpx.get", fake_get)
+    limiter = citation_metadata._SEMANTIC_SCHOLAR_LIMITER
+    result = citation_metadata._get_json(
+        "https://api.semanticscholar.org/graph/v1/paper/search",
+        params={},
+        limiter=limiter,  # type: ignore[arg-type]
+        timeout=1,
+        rate_limit_retries=citation_metadata.SEMANTIC_SCHOLAR_RATE_LIMIT_RETRIES,
+    )
+    assert result == {"data": []}
+    assert limiter.penalties == [5.0, 10.0, 20.0]  # type: ignore[attr-defined]
+
+
+def test_rate_limit_retries_are_bounded(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_get(url: str, **_: Any) -> httpx.Response:
+        return httpx.Response(429, request=httpx.Request("GET", url))
+
+    monkeypatch.setattr("scholar_lens.adapters.scholarly.metadata.httpx.get", fake_get)
+    with pytest.raises(httpx.HTTPStatusError):
+        citation_metadata._get_json(
+            "https://api.semanticscholar.org/x",
+            params={},
+            limiter=citation_metadata._SEMANTIC_SCHOLAR_LIMITER,  # type: ignore[arg-type]
+            timeout=1,
+            rate_limit_retries=2,
+        )
+    assert len(citation_metadata._SEMANTIC_SCHOLAR_LIMITER.penalties) == 2  # type: ignore[attr-defined]

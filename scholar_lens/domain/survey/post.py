@@ -31,6 +31,7 @@ from ..validation import (
     REFERENCES_HEADING,
     unsourced_numbers,
 )
+from ..venues import reference_venue
 from .plan import (
     PlanPaper,
     SourceRecord,
@@ -977,8 +978,8 @@ def reference_list(papers: Iterable[PlanPaper]) -> str:
             f"* {_plain(p.authors)} ({p.year or 'n.d.'}). "
             f"[{_plain(p.title)}]({md_link_url(p.url)})."
         )
-        if p.venue:
-            line += f" {_plain(p.venue).rstrip('.')}."
+        if venue := reference_venue(p.venue):
+            line += f" {_plain(venue).rstrip('.')}."
         lines.append(line)
     return f"- - -\n{REFERENCES_HEADING}\n" + "\n".join(lines) + "\n"
 
