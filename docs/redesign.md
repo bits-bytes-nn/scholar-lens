@@ -254,9 +254,9 @@ scholar_lens/
 
 실제 청구 금액과의 대조:
 
-- 글 종류마다 Bedrock 응용 추론 프로필(application inference profile)을 CDK로 만들고 비용 할당 태그(`Project=scholar-lens`, `Kind=review|summary|guide|survey`)를 붙여 모든 호출을 그 프로필로 보냅니다. Cost Explorer와 CUR에서 종류별 실제 Bedrock 비용을 볼 수 있습니다.
-- 태그는 결제 콘솔에서 비용 할당 태그로 한 번 활성화해야 하고, 활성화 이후 사용분부터 집계됩니다(관리 계정 작업, 사용자 확인 필요).
-- Batch 컴퓨팅 환경의 인스턴스와 볼륨에도 같은 `Project` 태그를 전파해 EC2·EBS 비용을 함께 봅니다.
+- 스택은 이미 모든 리소스에 `ProjectName`, `CostCenter`, `Stage`, `ManagedBy` 태그를 붙이고, Batch 인스턴스와 볼륨에도 시작 템플릿으로 전파합니다(2026-11-03 확인). 비용이 가장 큰 Bedrock 호출에는 태그가 없습니다. 글 종류마다 Bedrock 응용 추론 프로필(application inference profile)을 CDK로 만들어 같은 태그와 `Kind=review|summary|guide|survey`를 붙이고 모든 호출을 그 프로필로 보냅니다. Cost Explorer와 CUR에서 종류별 실제 Bedrock 비용을 볼 수 있습니다.
+- 비용 할당 태그 중 `Stage`만 활성이고 `ProjectName`, `CostCenter`는 비활성입니다(2026-11-03 확인). Cost Explorer에서 프로젝트별로 묶으려면 이 둘과 `Kind`를 활성화해야 하며, 활성화 이후 사용분부터 집계됩니다.
+- 산출물 버킷은 다른 용도와 함께 쓰는 SageMaker 기본 버킷이라 태그가 없습니다. S3 비용은 작으므로 접두사 단위 사용량(S3 Storage Lens)으로 보고, 분리가 필요해지면 전용 버킷을 둡니다.
 - 월별 보고는 추정치(매니페스트 합계)와 청구액(Cost Explorer, 태그 기준)을 나란히 보여 주고 차이가 크면(예: 10% 초과) 가격표를 점검합니다.
 
 보고 명령: `scholar-lens costs --since 2026-11-01 [--until …] [--by kind|stage|model|day] [--format table|json|csv]`이 S3 매니페스트를 모아 실행 수, 성공·실패·거부별 비용, 글 한 편당 평균·최대 비용, 단계별 비중, 실패·거부로 버린 비용을 보여 주고, `--billed`이면 Cost Explorer의 태그별 청구액을 함께 냅니다. 구현은 전환 2단계(뼈대)에 넣어 이후 모든 실행에 적용합니다.
