@@ -53,7 +53,7 @@ logger = logging.getLogger(__name__)
 
 # Bump when the reader's prompt or the evidence schema changes meaning; the
 # prompt's wording alone does not invalidate cached evidence.
-READER_VERSION = 1
+READER_VERSION = 2
 _SAFE_KEY = re.compile(r"[^A-Za-z0-9._-]+")
 
 
