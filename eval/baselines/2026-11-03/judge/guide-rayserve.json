@@ -1,0 +1,90 @@
+{
+  "item": "guide-rayserve",
+  "post": "/tmp/baseline/out/guide-rayserve.md",
+  "scores": {
+    "A": 6,
+    "B": 7.5,
+    "C": 7,
+    "D": 8,
+    "E": 7,
+    "F": 6,
+    "T1": 8.5,
+    "T2": 8,
+    "T3": 7,
+    "G": 8
+  },
+  "score_evidence": {
+    "A": "No TL;DR; first section is 'Ray Serve 소개와 설치' (L11) with install commands at L19-27. Empty subsection: L1157 '### 세 종류의 액터: 컨트롤러, 프록시, 레플리카' followed by two blank lines (L1159-1160) where the architecture figure was dropped. HTML entity leaks in Sources: L2210 'Develop a Ray Serve application &#124; Anyscale Docs', L2212 'Kubernetes, EKS &amp; KubeRay &#124; Shav Vimalendiran'. Headings are topic names, not claims. English title L3 'Ray Serve in Practice: ...'. Category L6 'Language-Models' is a poor fit for a general serving guide. Math is $$-only and well-formed (L185-187, L1763-1765).",
+    "B": "Consistent 입니다 register, established English terms kept. Formulaic lead-ins: '다음과 같습니다' x18 (e.g. L89, L234, L352, L492, L1268, L1506, L1623), '편이 좋습니다' x6, '할 수 있습니다' x11. Noun frame L2017 '수집되는 메트릭이 다르다는 점을 알아야 합니다' -> '요청 경로마다 수집되는 메트릭이 다릅니다.' L1161 '제어 평면과 데이터 경로가 여기서 갈라집니다.' refers to a figure that is absent. Translation-flavoured L1232 '오토스케일링은 더 복잡하므로, 수동 스케일링을 먼저 검토할 만합니다' -> '오토스케일링보다 단순한 수동 스케일링부터 검토합니다.' Korean comments inside code/YAML (L895, L1395, L1786-1799).",
+    "C": "Running example (t5 Translator -> Summarizer pipeline -> serve_config.yaml -> RayService) is threaded well. But L104 '세 추상화' vs L234 '네 개념을 코드와 연결해 정리하면'. Pipeline introduced twice (L222-228 and L881-931); controller-death behaviour twice (L1170 and L1729); handle shares data path/batching twice (L831 and L1210). Contradiction: L1216 '기본 구성에서는 HTTP 프록시가 헤드 노드에 하나뿐' vs L1500 '기본값 `EveryNode`'.",
+    "D": "Good help at hard points: labelled worked calculations for fractional CPU packing (L183-189), autoscaling replicas = users/2 (L1353-1357), histogram mean (L2068-2072); asyncio cancellation semantics explained at the moment needed (L621, L667). Over-explains the trivial: generate() arguments L71, JSON-string body L283. Power-of-two-choices gets one clause (L1182).",
+    "E": "Many apt tables (L174-179, L1163-1168, L1270-1275, L1720-1727, L1911-1923, L2019-2029) and fenced code. Architecture diagram missing where the section is about it (L1157-1161). Heavy verbatim code reproduction (three FastAPI variants L393-490, full Loki walkthrough L1956-2011) is more than the explanation needs.",
+    "F": "13/15 checked claims supported. Deductions: (1) L1216 and L1704 state the proxy runs only on the head node by default, which the Serve config reference contradicts ('EveryNode (default)', production-guide/config) and which the post itself contradicts at L1500. (2) L1704 '헤드 노드에는 컨트롤러의 상태를 체크포인트하는 GCS가 있고 기본 구성의 HTTP 프록시도 떠 있어서, 무거운 추론이 같은 노드의 자원을 놓고 다투면 클러스터 전체가 영향을 받습니다' - source (shav.dev) only says 'Avoid running GPU workloads on Ray head nodes to prevent resource contention'; the mechanism is the writer's, stated as fact. (3) Unmarked writer-authored code not in any source: HttpCaller relay (L1062-1080) and PREFIXES reconfigure (L1538-1551).",
+    "T1": "Runnable end-to-end code and CLI with real flags (serve run/build/deploy/status, -o, -d, -a, --metrics-export-port). Partial snippets elide bodies (L895, L1395, L1412, L1425), so the composed and text_ml files are not runnable as printed.",
+    "T2": "Covers the important doc topics in a sensible order (deployments, HTTP, composition, architecture, autoscaling, config, KubeRay, FT, monitoring). Batching and multiplexing only linked. Some padding from verbatim tutorials.",
+    "T3": "Internals are present (request lifecycle L1174-1212, autoscaler layering L1361-1370, metrics buffering L2086-2100) but appear late (L1153); no section on when to choose Ray Serve or how it fails; non-official sources are 4/25 and only shav.dev is visibly used (EKS L1700-1712).",
+    "G": "Not run through validator/blog lint (no lint in this read-only pass). Manual check: description 126 chars, opens with 'Ray Serve', no numbers; use_math true with $$ present; fence info strings single words; no Liquid. Entity leaks in Sources (L2210, L2212) would render literally."
+  },
+  "principles": {
+    "claim_headings": {"status": "not met", "evidence": "Topic headings throughout: L102 '핵심 개념: 디플로이먼트, 레플리카, 애플리케이션', L1153 '요청 처리 구조와 아키텍처', L1868 '모니터링과 관측성'."},
+    "running_example": {"status": "met", "evidence": "t5-small Translator (L37) -> Summarizer pipeline (L885) -> text_ml.py with reconfigure (L1378) -> serve_config.yaml (L1442) -> RayService (L1625-1633, L1698). FT and monitoring switch to doc toy examples (SleepyPid L1840, Counter L1988, sleeper L2049)."},
+    "mechanism_choice_code_example": {"status": "partly met", "evidence": "Done for fractional resources (L181-189) and autoscaling (L1248-1359); most sections go mechanism -> code without comparing alternatives (e.g. proxy-per-node L1214-1218, large objects L1220-1224 only briefly)."},
+    "facts_once": {"status": "not met", "evidence": "Controller death pauses autoscaling and loses metrics: L1170 and L1729. Handle requests share data path and batching: L831 and L1210. Summarizer(Translator) app: L222-228 and L881-931. Ingress handles HTTP: L230 and L364."},
+    "numbers_scoped": {"status": "met", "evidence": "Defaults carry units and scope (L1737-1739 seconds, L2088 '기본값 `100`ms', L2094 '`10000`ms'); illustrative arithmetic labelled '설명용 계산이며, 실제 측정값이 아닙니다' (L183, L1353)."},
+    "nothing_invented": {"status": "partly met", "evidence": "Illustrative calculations are labelled, but HttpCaller (L1062-1080) and PREFIXES reconfigure (L1538-1551) are writer code not marked as such; L1704 adds an unsupported causal mechanism."},
+    "writer_assessment_at_end": {"status": "not met", "evidence": "Ends with '## 다음 단계' (L2149): example link table, LLM snippet, reading list (L2184-2189); no judgement of what works, limits, or when to use."},
+    "length_fitted": {"status": "partly met", "evidence": "2218 lines, ~57k non-code characters; verbatim reproductions (Loki setup L1956-2011, FastAPI wrapper variants L444-490, sklearn/PyTorch tutorials L289-360) inflate length beyond the difficulty."},
+    "type_specific_shape": {"status": "not met", "evidence": "No TL;DR; opens with intro + installation (L11-27); architecture first appears at L1153 (~52% through) after HTTP, FastAPI, WebSocket, streaming and composition details; no 'when to choose / how it fails' close; non-official sources 4/25 (16%)."},
+    "korean_style": {"status": "partly met", "evidence": "Steady 입니다 register and Korean headings, but '다음과 같습니다' x18 as a repeated table/code lead-in; English title L3; Korean comments embedded in code (L895, L1395, L1786)."}
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 13,
+    "unsupported": 1,
+    "wrong": 1,
+    "unverifiable": 0,
+    "examples": [
+      {"line": 751, "claim": "Uvicorn keeps HTTP connections alive for 5 seconds; set keep_alive_timeout_s in http_options; global, not updatable at runtime", "verdict": "supported", "source": "serve/http-guide: 'By default, Uvicorn keeps HTTP connections alive for 5 seconds between requests ... global to your Ray cluster, and you can't update it during runtime.'"},
+      {"line": 1222, "claim": "Request objects of 100KiB+ go to the object store and are read zero-copy", "verdict": "supported", "source": "serve/architecture: 'Larger request objects (100KiB+) are written to the object store and the replica can read them via zero-copy read.'"},
+      {"line": 1259, "claim": "num_replicas=auto equals max_ongoing_requests 5, target_ongoing_requests 2, min_replicas 1, max_replicas 100", "verdict": "supported", "source": "serve/autoscaling-guide config block and 'Ray Serve applies the defaults shown above, including max_replicas: 100.'"},
+      {"line": 1266, "claim": "Without num_replicas=auto, max_replicas defaults to 1 so no autoscaling occurs", "verdict": "supported", "source": "serve/autoscaling-guide: 'the base default for max_replicas is 1, which means autoscaling won't occur unless you explicitly set a higher value.'"},
+      {"line": 1275, "claim": "Set max_replicas about 20% above peak need", "verdict": "supported", "source": "serve/autoscaling-guide: 'Set this to ~20% higher than what you think you need for peak traffic.'"},
+      {"line": 1737, "claim": "Watchdog env defaults: probe interval 60 s, probe timeout 300 s, max fail 3 (0 disables)", "verdict": "supported", "source": "serve/production-guide/fault-tolerance env-var table: 60 / 300 / 3, 'Set to 0 to disable the watchdog.'"},
+      {"line": 1761, "claim": "max_constructor_retry_count default 20; RAY_SERVE_MAX_PER_REPLICA_RETRY_COUNT default 3; total = min(num_replicas x per-replica, max_constructor_retry_count)", "verdict": "supported", "source": "serve/production-guide/fault-tolerance 'Replica constructor retries'."},
+      {"line": 1809, "claim": "LISTEN_FOR_CHANGE_REQUEST_TIMEOUT_S lower/upper bounds default 30/60 s", "verdict": "supported", "source": "serve/production-guide/fault-tolerance: 'Defaults: 30 / 60 seconds'."},
+      {"line": 2077, "claim": "Default latency buckets [1,2,5,...,600000] ms", "verdict": "supported", "source": "serve/monitoring: 'The default buckets are: [1, 2, 5, 10, 20, 50, 100, 200, 300, 400, 500, 1000, 2000, 5000, 10000, 60000, 120000, 300000, 600000] (in milliseconds).'"},
+      {"line": 2088, "claim": "RAY_SERVE_METRICS_EXPORT_INTERVAL_MS default 100 ms (0 disables batching); Ray Core metrics_report_interval_ms default 10000 ms", "verdict": "supported", "source": "serve/monitoring 'Metrics export interval': 'Default: 100 milliseconds. Set to 0 to disable batching' and 'metrics_report_interval_ms system config (default 10000 ms)'."},
+      {"line": 2031, "claim": "ray_serve_deployment_status encodes 0 (UNKNOWN) to 6 (HEALTHY)", "verdict": "supported", "source": "serve/monitoring: '0 = UNKNOWN, 1 = DEPLOY_FAILED, ... 6 = HEALTHY'."},
+      {"line": 2182, "claim": "vLLM engine metrics (TTFT, TPOT, KV cache) on by default from Ray 2.51", "verdict": "supported", "source": "serve/llm/user-guides/observability: 'Engine metric logging is on by default as of Ray 2.51.'"},
+      {"line": 831, "claim": "RayServeHandle and RayServeSyncHandle fully removed in Ray 2.10", "verdict": "supported", "source": "serve/model_composition: 'The deprecated RayServeHandle and RayServeSyncHandle APIs have been fully removed as of Ray 2.10.'"},
+      {"line": 1216, "claim": "기본 구성에서는 HTTP 프록시가 헤드 노드에 하나뿐 (repeated at L1704 '기본 구성의 HTTP 프록시')", "verdict": "wrong", "source": "serve/production-guide/config: 'EveryNode (default): Run a proxy on every node in the cluster that has at least one replica actor.' The architecture page still says 'By default there is one HTTP proxy actor on the head node', but the config reference sets the current default, and the post's own L1500 says '기본값 `EveryNode`'. The post states both without reconciling."},
+      {"line": 1704, "claim": "GPU work should avoid the head node because the GCS and default HTTP proxy live there, so contention affects the whole cluster", "verdict": "unsupported", "source": "shav.dev EKS post only: 'Avoid running GPU workloads on Ray head nodes to prevent resource contention.' No source gives the GCS/proxy whole-cluster mechanism."}
+    ]
+  },
+  "checklist": {
+    "repeated": 1,
+    "avoided": 0,
+    "na": 1,
+    "repeated_ids": ["arch-diagram-relative-link"],
+    "items": [
+      {"id": "arch-diagram-relative-link", "status": "repeated", "evidence": "Partial: there is no empty-text or ../_images link any more, but the diagram is gone too. L1157 '### 세 종류의 액터: 컨트롤러, 프록시, 레플리카' is followed by blank L1159-1160 and then L1161 '컨트롤러는 ... 제어 평면과 데이터 경로가 여기서 갈라집니다.' The post has no image at all, so the check's requirement ('the architecture diagram is an image with Korean alt text and an absolute or local URL') is not met."},
+      {"id": "proxy-env-ray-start-unsupported", "status": "n/a", "evidence": "The post has no proxy/KubeRay env-var section. The one 'before starting Ray' statement (L1804 '복구 속도에 관여하는 환경 변수도 있으며, Ray를 시작하기 전에 설정합니다') covers RAY_SERVE_KV_TIMEOUT_S and LISTEN_FOR_CHANGE_*, and the fault-tolerance docs support it: 'These environment variables control fault tolerance-related behavior. Set them before starting Ray.'"}
+    ]
+  },
+  "extras": {
+    "architecture_first_line": 1153,
+    "architecture_first_note": "The '## 요청 처리 구조와 아키텍처' heading is at L1153 of 2218 (~52%). Earlier mentions are glimpses only: replicas as separate processes at L87 and L164.",
+    "non_official_source_share": "4/25 (16%): ROCm blog L2206, Anyscale Docs L2210, shav.dev L2212, YouTube L2214. Only shav.dev is visibly used in the body (EKS section L1700-1712). Counting Anyscale as vendor-official gives 3/25 (12%).",
+    "opens_with_problem": "partly: L13 states the problem (tensor-in/tensor-out tools vs whole business-logic pipelines), but under a '소개와 설치' heading with install commands immediately after (L17-27), and there is no TL;DR.",
+    "closes_with_when_to_choose_and_failure_modes": false,
+    "close_note": "Ends with '## 다음 단계' (L2149-2189): example links, an LLM snippet and a reading list.",
+    "other_generic_guide_checks": "Cross-references OK (no numbered chapter refs). HTML entity leaks in Sources (L2210 '&#124;', L2212 '&amp;', '&#124;'). Fences all closed. No stale third-party flags found. apiVersion ray.io/v1alpha1 (L1781) matches the current FT doc."
+  },
+  "top_issues": [
+    "Guide shape violated: no TL;DR; opens with intro plus installation (L11-27); architecture first appears at L1153 of 2218; ends with a link list (L2149-2189) instead of the writer's view on when to choose Ray Serve and how it fails.",
+    "Architecture diagram silently dropped: L1157 heading followed by blank L1159-1160, then L1161 '제어 평면과 데이터 경로가 여기서 갈라집니다' points at nothing. The human-fix check (diagram as an image with Korean alt text) is still unmet.",
+    "Contradictory and stale proxy default: L1216 '기본 구성에서는 HTTP 프록시가 헤드 노드에 하나뿐' (and L1704) vs L1500 '기본값 `EveryNode`'. The Serve config reference says EveryNode is the default.",
+    "Unsupported or unmarked content: L1704 invents a GCS/proxy contention mechanism beyond the source's 'prevent resource contention'; writer-authored code (HttpCaller L1062-1080, PREFIXES reconfigure L1538-1551) is not marked as the writer's example.",
+    "Repetition and length: facts restated (L1170/L1729, L831/L1210, L222-228/L881-931); '세 추상화' (L104) vs '네 개념' (L234); '다음과 같습니다' x18; heavy verbatim doc code (L444-490, L1956-2011); HTML entity leaks in Sources (L2210, L2212)."
+  ]
+}

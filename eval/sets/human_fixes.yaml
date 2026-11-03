@@ -1,0 +1,595 @@
+# Defects humans fixed (or review checklists flagged) in generated blog posts.
+# Each entry is a check a regenerated artifact for the same input must pass.
+# Blog repo: bits-bytes-nn/bits-bytes-nn.github.io. `source` is a PR number
+# (#N) or a commit sha in that repo.
+# status: fixed   = a human changed the published text (evidence: diff)
+#         flagged = listed in the PR's review checklist; may be unresolved
+version: 1
+
+items:
+  review-dpo:
+    input: "arXiv 2305.18290"
+    kind: review
+    post: _posts/2025-10-19-direct-preference-optimization--your-language-model-is-secretly-a-reward-model.md
+    sources: ["#86 (7d4251a)", "#88 (40562dc)", "#89 (8298b7b)"]
+    notes: >-
+      Same-day commit 225347a (2025-10-19) only reformatted headings, tables and
+      math escaping and is not listed. Respondent counts and comparison columns
+      were wrong in two places (body table and appendix table); one entry each.
+    fixes:
+      - id: implementation-fragment
+        category: markup
+        status: fixed
+        wrong: 'paragraph reduced to a stray fragment "/\pi_{\text{ref}}$를 초기화합니다."'
+        right: "Implementation is two steps: set pi_ref (pi_ref = pi^SFT if preferences were sampled from it, else maximize likelihood of preferred completions (x, y_w)), then minimize the DPO BCE loss on (x, y_w, y_l); no reward model or policy sampling."
+        check: 'No line begins with a broken math fragment such as "/\pi"; the implementation section explains how pi_ref is chosen (pi^SFT or MLE on y_w) before the DPO loss step.'
+        source: 7d4251a
+      - id: beta-tldr
+        category: number_scope
+        status: fixed
+        wrong: '"모든 실험에서 기본 하이퍼파라미터는 β = 0.1"'
+        right: "beta = 0.1 by default, but beta = 0.5 for TL;DR summarization."
+        check: "If beta is given as a default, the post does not say it applies to all experiments; TL;DR summarization uses beta = 0.5."
+        source: 7d4251a
+      - id: future-work-ranking-invented
+        category: invented_content
+        status: fixed
+        wrong: '"다중 선택지에 대한 순위나 조건부 선호도 등을 다루는 확장도 가능합니다. 이러한 확장은 ... 정렬 품질을 향상시킬 수 있습니다." (as future work)'
+        right: "Paper's future work: OOD generalization, reward over-optimization, scaling past 6B, eliciting high-quality judgments from automated evaluators, applying DPO to generative models in other modalities."
+        check: "Future-work list mentions eliciting good judgments from automated evaluators and other modalities; it does not present 'conditional preferences' as a paper-stated direction."
+        source: 7d4251a
+      - id: plackett-luce-not-future
+        category: invented_content
+        status: fixed
+        wrong: '"DPO의 이론적 프레임워크는 다른 선호도 모델링 접근법으로 확장될 수 있습니다 ... 다중 선택지에 대한 순위나 조건부 선호도 등을 다루는 확장도 가능합니다."'
+        right: "The paper already derives the DPO objective under the Plackett-Luce ranking model (Appendix A.3), so ranked feedback is covered without a separate reward model."
+        check: "Ranking extensions are described as already derived (Plackett-Luce, Appendix A.3), not as a hypothetical extension."
+        source: 7d4251a
+      - id: ppo-clip-objective
+        category: math
+        status: fixed
+        wrong: '\min\left(\frac{\pi_\theta(a|s)}{\pi_{\theta_k}(a|s)}, 1 \pm \epsilon\right) A^{\pi_{\theta_k}}(s,a)'
+        right: '\min\left(r_\theta A, \operatorname{clip}(r_\theta, 1-\epsilon, 1+\epsilon) A\right) with r_\theta = \pi_\theta(a \mid s)/\pi_{\theta_k}(a \mid s)'
+        check: "The PPO objective has min over (ratio*A, clip(ratio, 1-eps, 1+eps)*A); no '1 \\pm \\epsilon' inside min."
+        source: 7d4251a
+      - id: partition-function-size
+        category: math
+        status: fixed
+        wrong: '"가능한 응답의 수가 어휘 크기의 시퀀스 길이 제곱에 비례하여"'
+        right: "The number of responses is |V|^L (vocabulary size to the power of sequence length), exponential in length."
+        check: "Partition-function cost is described as |V|^L / exponential in length, not quadratic."
+        source: 7d4251a
+      - id: cnn-dm-prompt-variant
+        category: other
+        status: fixed
+        wrong: '"Reddit TL;DR에 사용한 것과 동일한 GPT-4 프롬프트를 사용하되"'
+        right: "The CNN/DailyMail OOD evaluation uses the GPT-4 (C) prompt."
+        check: "CNN/DailyMail win-rate paragraph names the GPT-4 (C) prompt."
+        source: 7d4251a
+      - id: human-study-columns
+        category: wrong_row_or_variant
+        status: fixed
+        wrong: '"| DPO vs PPO-1 | SFT vs PPO-1 | PPO-1 vs PPO-N |" (body and appendix tables)'
+        right: "Columns are DPO vs PPO-0, SFT vs PPO-0, PPO-1 vs PPO-0."
+        check: "Human-study table columns compare against PPO-0; no 'PPO-N' column."
+        source: 7d4251a
+      - id: human-study-respondents
+        category: other
+        status: fixed
+        wrong: '"응답자 수 | 27 | 21 | 22" (body and appendix tables)'
+        right: "N respondents: 272, 122, 199."
+        check: "Respondent row reads 272 / 122 / 199."
+        source: 7d4251a
+      - id: multi-judgment-comparisons
+        category: misattribution
+        status: fixed
+        wrong: '"DPO와 PPO-1 비교에 대해서만 여러 인간 판단을 수집합니다"'
+        right: "Multiple human judgments were collected only for DPO vs PPO-0 and PPO-1 vs PPO-0."
+        check: "Multiple human judgments are attributed to DPO vs PPO-0 and PPO-1 vs PPO-0 (both places)."
+        source: 7d4251a
+      - id: overoptimization-figure-ref
+        category: other
+        status: fixed
+        wrong: '"앞서 제시한 실험 결과 그림의 오른쪽에서"'
+        right: "Paper Figure 3 right (training progress on the dialogue task)."
+        check: "The slight late-training drop is tied to the paper's Figure 3 right (dialogue), not a vague 'figure shown earlier'."
+        source: 7d4251a
+      - id: gradient-u-definition
+        category: math
+        status: fixed
+        wrong: 'u = \hat{r}_\theta(x, y_l) - \hat{r}_\theta(x, y_w)'
+        right: 'u = \hat{r}_\theta(x, y_w) - \hat{r}_\theta(x, y_l)'
+        check: "In the appendix gradient derivation, u is defined as r_hat(y_w) - r_hat(y_l)."
+        source: 7d4251a
+      - id: gradient-sigma-argument
+        category: math
+        status: fixed
+        wrong: '\sigma(\hat{r}_\theta(x, y_w) - \hat{r}_\theta(x, y_l)) as the gradient weight (equation and explanation)'
+        right: '\sigma(\hat{r}_\theta(x, y_l) - \hat{r}_\theta(x, y_w)), which is near 1 when the implicit reward misorders the pair'
+        check: "Every DPO gradient weight is sigma(r_hat(y_l) - r_hat(y_w)), consistent with the 'close to 1 when wrong' explanation."
+        source: 7d4251a
+      - id: best-of-n-invented
+        category: invented_content
+        status: fixed
+        wrong: '"두 작업 모두에서 Best of 64와 Best of 128의 성능 차이가 미미하여, 추가 샘플링으로 인한 개선이 제한적임을 보여줍니다."'
+        right: "Paper only states that performance plateaus after roughly 64-128 samples."
+        check: "No added claim about the Best-of-64 vs Best-of-128 gap beyond the plateau statement."
+        source: 7d4251a
+      - id: excluded-participant
+        category: other
+        status: fixed
+        wrong: '"참가자는 총 25명의 자원봉사 평가자로" (no exclusion noted)'
+        right: "One of the 25 participants submitted late and was excluded from the final analysis but is listed."
+        check: "If 25 participants are mentioned, the post notes one was excluded from analysis."
+        source: 7d4251a
+      - id: missing-description
+        category: metadata
+        status: fixed
+        wrong: "front matter had no description:"
+        right: "Plain-text description, 120-158 chars, starting with the method name, numbers only from the TL;DR/abstract (e.g. TL;DR GPT-4 win rate ~61% vs PPO 57%)."
+        check: "Front matter has a plain-text description that starts with 'DPO' and only uses numbers that appear in the TL;DR or abstract."
+        source: "#88 (40562dc)"
+      - id: arxiv-https
+        category: citation_link
+        status: fixed
+        wrong: "http://arxiv.org/pdf/2305.18290v3"
+        right: "https://arxiv.org/pdf/2305.18290v3"
+        check: "All arXiv links use https."
+        source: "#89 (8298b7b)"
+
+  review-kimi:
+    input: "arXiv 2507.20534"
+    kind: review
+    post: _posts/2025-10-03-kimi-k2--open-agentic-intelligence.md
+    sources: ["#88 (40562dc)", "#89 (8298b7b)", "#119 (92f57ad)"]
+    notes: >-
+      Most defects lived in a duplicated copy of the RL and RL-infrastructure
+      sections that #119 removed. Earlier commits ab5e414 (2025-10-03) and
+      534de14 (#83, tag renames) are not listed.
+    fixes:
+      - id: rl-section-duplicated
+        category: structure_duplication
+        status: fixed
+        wrong: 'the "### 강화학습" section and "### 강화학습 인프라" each appeared twice (one copy with invented content)'
+        right: "One RL section following paper sections 3.2-3.3, then one RL infrastructure section."
+        check: "Each of '강화학습', '강화학습 인프라', '코로케이션 아키텍처', '검증 가능한 보상' appears once as a heading."
+        source: "#119 (92f57ad)"
+      - id: rl-subheading-levels
+        category: structure_duplication
+        status: fixed
+        wrong: "RL subsections (검증 가능한 보상, 강화학습 알고리즘, ...) were siblings of '### 강화학습' (H3)"
+        right: "Nested under the RL section (H4, and H5 for their sub-parts)."
+        check: "Verifiable-reward, self-critique and RL-algorithm headings are nested below the single RL heading."
+        source: "#119 (92f57ad)"
+      - id: ppo-claim
+        category: misattribution
+        status: fixed
+        wrong: '"PPO(Proximal Policy Optimization) 알고리즘을 기반으로 한 정책 최적화가 이루어집니다"'
+        right: "K2 adopts the policy optimization algorithm introduced in K1.5 (paper 3.2.3)."
+        check: "The post does not say K2's RL uses PPO; it names the K1.5 policy optimization algorithm."
+        source: "#119 (92f57ad)"
+      - id: invented-budget-formula
+        category: invented_content
+        status: fixed
+        wrong: 'L_{budget} = \lambda_{budget} \cdot \max(0, |response| - target_{length})'
+        right: "Budget control is a per-sample maximum token budget set by task type; responses over budget are truncated and penalized. No formula in the paper."
+        check: "No L_budget / lambda_budget formula."
+        source: "#119 (92f57ad)"
+      - id: invented-ptx-formula
+        category: invented_content
+        status: fixed
+        wrong: 'L_{total} = L_{RL} + \alpha_{PTX} \cdot L_{PTX}; PTX described as replaying original pre-training data'
+        right: "PTX is an auxiliary loss on a curated set of hand-selected high-quality samples, integrated into the RL objective; no such formula given."
+        check: "No L_total / alpha_PTX formula; PTX data is described as curated high-quality samples, not the pre-training corpus."
+        source: "#119 (92f57ad)"
+      - id: invented-temperature-formula
+        category: invented_content
+        status: fixed
+        wrong: 'T(t) = T_{init} \cdot \exp(-\gamma \cdot t)'
+        right: "Paper describes a temperature decay schedule (explore early, exploit later) without a functional form."
+        check: "No exponential temperature formula T(t)."
+        source: "#119 (92f57ad)"
+      - id: invented-env-code
+        category: invented_content
+        status: fixed
+        wrong: "python code block 'class AgenticEnvironment' with reset/step/render/close"
+        right: "Paper describes a unified OpenAI-Gym-like interface; it gives no code."
+        check: "No AgenticEnvironment class or other code block presented as the paper's environment API."
+        source: "#119 (92f57ad)"
+      - id: invented-math-verifier
+        category: invented_content
+        status: fixed
+        wrong: '"하이브리드 규칙 검증 시스템 ... 기호적 동등성 ... 단계별 추론 과정도 평가"'
+        right: "For math/STEM/logic the paper describes RL data preparation: diverse coverage and moderate difficulty selected with SFT pass@k."
+        check: "Math/STEM verifiable rewards are described via coverage and pass@k-based difficulty, not step-by-step reasoning grading or symbolic-equivalence checkers."
+        source: "#119 (92f57ad)"
+      - id: invented-logic-verifier
+        category: invented_content
+        status: fixed
+        wrong: '"형식 논리학의 원칙을 바탕으로 추론 체인의 각 단계가 논리적으로 타당한지 확인"'
+        right: "No such formal-logic step verifier in the paper."
+        check: "No formal-logic chain verifier claim."
+        source: "#119 (92f57ad)"
+      - id: invented-code-quality-eval
+        category: invented_content
+        status: fixed
+        wrong: '"단순한 테스트 케이스 통과뿐만 아니라 코드 품질, 효율성, 보안성까지 종합적으로 평가"'
+        right: "Coding/SWE rewards come from (human-written or synthetic) unit tests run in a Kubernetes sandbox (10,000+ concurrent instances)."
+        check: "Coding rewards are unit-test based; no claim of grading code quality, efficiency or security."
+        source: "#119 (92f57ad)"
+      - id: invented-safety-monitoring
+        category: invented_content
+        status: fixed
+        wrong: '"다층적 안전성 검증 시스템 ... 실시간으로 모니터링"'
+        right: "Safety uses human-curated seed prompts and an attack/target/judge prompt-evolution pipeline with task-specific rubrics (binary success/failure)."
+        check: "Safety section describes the attack-target-judge pipeline; no real-time monitoring claim."
+        source: "#119 (92f57ad)"
+      - id: invented-self-refine-loop
+        category: invented_content
+        status: fixed
+        wrong: '"K2는 먼저 자신의 응답을 생성하고, 이를 ... 자체 평가합니다. 그 다음 ... 응답을 개선하고, 개선된 응답을 다시 평가하는 반복적 과정"'
+        right: "The K2 actor generates responses and the K2 critic ranks them by pairwise comparison against core, prescriptive and human-annotated rubrics; the critic is refined with verifiable on-policy signals."
+        check: "Self-critique is described as pairwise ranking by a critic, not an iterative generate-critique-revise loop."
+        source: "#119 (92f57ad)"
+      - id: invented-human-rubric-content
+        category: invented_content
+        status: fixed
+        wrong: '"인간 주석 루브릭은 ... 창의성, 공감능력, 문화적 민감성 등"'
+        right: "Human-annotated rubrics are crafted by the data team for specific instructional contexts."
+        check: "Human-annotated rubrics are not described as covering creativity/empathy/cultural sensitivity."
+        source: "#119 (92f57ad)"
+      - id: rubric-limitation-garbled
+        category: wording
+        status: fixed
+        wrong: '"모호한 상황에서 자기 자격 부여를 피하고 명확성을 선호하는 경향으로 인해 ... 과도한 확신을 보일 수 있는 잠재적 편향"'
+        right: "Prescriptive rules forbid self-qualification, disclaimers and hedging, so the model may overstate certainty where epistemic humility fits (Appendix F)."
+        check: "Limitation says prescriptive rules ban hedging/disclaimers, causing overconfidence in ambiguous cases."
+        source: "#119 (92f57ad)"
+      - id: invented-infra-mechanisms
+        category: invented_content
+        status: fixed
+        wrong: '"점진적 로딩", "계층적 브로드캐스트 알고리즘", "실시간 모니터링과 디버깅 기능" in the duplicated RL infra section'
+        right: "Paper: checkpoint engine with pipelined per-parameter transfer and cluster-wide broadcast (full update < 30 s); selective checkpoint reads; partial rollout; Gym-like interface."
+        check: "RL infra section has no progressive loading, hierarchical broadcast algorithm or real-time debugging claims."
+        source: "#119 (92f57ad)"
+      - id: missing-description
+        category: metadata
+        status: fixed
+        wrong: "front matter had no description:"
+        right: "Plain-text description: 32B active / 1T total MoE, MuonClip, 15.5T tokens without loss spikes, SWE-Bench Verified 65.8."
+        check: "Front matter has a plain-text description starting with 'Kimi K2' using only TL;DR/abstract numbers."
+        source: "#88 (40562dc)"
+      - id: arxiv-https
+        category: citation_link
+        status: fixed
+        wrong: "http://arxiv.org/pdf/2507.20534v1"
+        right: "https://arxiv.org/pdf/2507.20534v1"
+        check: "All arXiv links use https."
+        source: "#89 (8298b7b)"
+
+  review-zep:
+    input: "arXiv 2501.13956"
+    kind: review
+    post: _posts/2026-06-07-zep-a-temporal-knowledge-graph-architecture-for-agent-memory.md
+    sources: ["#86 (7d4251a)", "#88 (40562dc)", "#89 (8298b7b)"]
+    notes: >-
+      #86 converted about 40 inline formulas; one entry covers them. 534de14
+      (#83) also unescaped underscores in display math and renamed tags; not
+      listed.
+    fixes:
+      - id: inline-math-delimiters
+        category: markup
+        status: fixed
+        wrong: '\\(\mathcal{N}\\), \\(t_{\text{ref}}\\), \\(\varphi_{\text{bfs}}\\) ...'
+        right: '$$\mathcal{N}$$ (the blog uses $$...$$ for inline and display math)'
+        check: 'No \\( \\) or \\[ \\] math delimiters; all math uses $$...$$.'
+        source: "#86 (7d4251a)"
+      - id: longmemeval-tldr-relative
+        category: number_unit
+        status: fixed
+        wrong: '"정확도를 15.2%포인트, ... 18.5%포인트 향상" (TL;DR)'
+        right: "Relative gains: 15.2% (gpt-4o-mini) and 18.5% (gpt-4o) over the full-context baseline."
+        check: "TL;DR gives LongMemEval gains as relative % (15.2%, 18.5%), not percentage points."
+        source: "#88 (40562dc)"
+      - id: longmemeval-results-relative
+        category: number_unit
+        status: fixed
+        wrong: '"베이스라인 대비 정확도가 15.2%포인트 ... 18.5%포인트 향상" (results section 4.3.2)'
+        right: "15.2% (55.4% to 63.8%) with gpt-4o-mini; 18.5% (60.2% to 71.2%) with gpt-4o."
+        check: "Results section states the absolute accuracies 55.4->63.8 and 60.2->71.2 alongside relative gains; no '%포인트'."
+        source: "#88 (40562dc)"
+      - id: longmemeval-baseline-misattributed
+        category: misattribution
+        status: fixed
+        wrong: '"gpt-4o-mini 대비 정확도를 15.2%포인트, gpt-4o 대비 18.5%포인트"'
+        right: "Gains are measured with gpt-4o-mini / gpt-4o as the answering model, against the full-context baseline using the same model."
+        check: "gpt-4o-mini and gpt-4o are named as the models used, not as the baselines Zep beats."
+        source: "#88 (40562dc)"
+      - id: longmemeval-185-arithmetic
+        category: number_scope
+        status: fixed
+        wrong: '"gpt-4o에서는 18.5%(60.2%에서 71.2%) 향상"'
+        right: "60.2 -> 71.2 is about an 18% (18.3%) relative gain; 18.5% is the figure stated in the paper text."
+        check: "If 18.5% is paired with 60.2->71.2, it is marked as the paper's stated figure (computed ratio is ~18.3%)."
+        source: "#89 (8298b7b)"
+      - id: missing-description
+        category: metadata
+        status: fixed
+        wrong: "front matter had no description:"
+        right: "Plain-text description: Graphiti temporal KG; DMR 94.8% vs MemGPT 93.4%; LongMemEval latency about 90% lower."
+        check: "Front matter has a plain-text description starting with 'Zep' using only TL;DR/abstract numbers."
+        source: "#88 (40562dc)"
+
+  summary-toolorchestra:
+    input: "arXiv 2511.21689"
+    kind: summary
+    post: _posts/2026-10-16-toolorchestra-elevating-intelligence-via-efficient-model-and-tool-orchestration-summary.md
+    sources: ["#101 (b6a1a96)", "#102 (9fc5673)"]
+    notes: >-
+      No human content fix. The only later change is the site-wide cover swap
+      (9fc5673, default.jpg to agentic-ai.jpg). PR #101's checklist flagged three
+      tags absent from the paper; they were kept as published.
+    fixes:
+      - id: tags-not-in-paper
+        category: metadata
+        status: flagged
+        wrong: 'tags "Multi-Objective-Reward", "ToolScale-Dataset", "Cost-Aware-Reinforcement-Learning"'
+        right: "Tags should be terms (or acronyms) that appear in the paper; reviewer kept these three."
+        check: "Each generated tag (or its acronym) appears in the paper, or is flagged in the PR checklist."
+        source: "#101"
+
+  summary-lora:
+    input: "arXiv 2106.09685"
+    kind: summary
+    post: null
+    sources: []
+    notes: >-
+      No LoRA (2106.09685) post was published and no blog PR fixed one (the
+      QLoRA post cites LoRA but is a different paper). No item-specific human
+      fixes. A local run on 2026-06-05 (OpenReview PDF input) showed generic
+      defects: HTML entity leak in the body ("모델 &amp; 방법") and title "Pdf"
+      for a non-arXiv PDF source; the arXiv-id input avoids the title issue.
+    fixes: []
+
+  guide-strands:
+    input: "Strands Agents SDK guide"
+    kind: guide
+    post: _posts/2026-10-23-strands-agents-sdk-the-agent-loop-hooks-and-production-controls.md
+    sources: ["#112 checklist", "e89220e"]
+    notes: >-
+      e89220e resolved all three items in PR #112's checklist and added the
+      result-metrics lines.
+    fixes:
+      - id: loop-diagram-remote
+        category: image
+        status: fixed
+        wrong: "![...](https://strandsagents.com/_astro/agent-loop-flow.CgHBgQw3_nJnxY.webp)"
+        right: "Localized copy under /assets/2026-10-23-strands-agents-sdk-the-agent-loop-hooks-and-production-controls/agent-loop-flow.png (labels localized)."
+        check: "No image links to a remote docs host; the agent-loop diagram is a local /assets/ file."
+        source: e89220e
+      - id: shared-agent-throw-scope
+        category: other
+        status: fixed
+        wrong: '"모듈 수준에서 에이전트 하나를 공유하면 ... 공유 인스턴스에 호출이 겹치면 ... THROW 때문에 예외로 끝납니다."'
+        right: "THROW (ConcurrencyException) applies when overlapping calls go through invoke_async; sync agent(...) inside an async def handler raises nothing but blocks the event loop so requests run one at a time."
+        check: "The shared-agent warning ties THROW/ConcurrencyException to invoke_async and says sync calls in async handlers block (serialize) instead of raising."
+        source: e89220e
+      - id: shared-agent-history-leak
+        category: other
+        status: fixed
+        wrong: "shared-agent warning omitted conversation-history carry-over"
+        right: "A shared module-level agent carries the previous request's conversation into the next; create an agent per request and use invoke_async in async handlers."
+        check: "Deployment section states shared agents leak conversation history across requests and recommends per-request agents + invoke_async."
+        source: e89220e
+      - id: result-fields-incomplete
+        category: other
+        status: fixed
+        wrong: "result example printed only result.message"
+        right: "Also shows result.stop_reason and result.metrics.get_summary() (cycles, cumulative tokens, per-tool usage)."
+        check: "AgentResult example shows stop_reason and metrics.get_summary() besides message."
+        source: e89220e
+      - id: multi-agent-subject
+        category: wording
+        status: fixed
+        wrong: '"어느 방법이든 최소 실행 단위는 Strands `Agent` 하나이고, ... 정보를 주고받으며"'
+        right: '"어느 방법이든 가장 작은 실행 단위는 Strands `Agent` 하나이며, 에이전트들이 정보를 주고받으면서 최종 답에 다가갑니다."'
+        check: "The sentence names 에이전트들 as the subject that exchanges information (not the execution unit)."
+        source: "#112 checklist, e89220e"
+
+  guide-rayserve:
+    input: "Ray Serve guide (docs.ray.io/en/latest/serve)"
+    kind: guide
+    post: _posts/2026-10-18-ray-serve-building-and-operating-scalable-model-serving-apps.md
+    sources: ["#109 checklist", "942baa6"]
+    notes: >-
+      PR #109 is open. The checklist item's quoted text is absent from the PR
+      head (the generator's targeted fix removed it); no human edit beyond
+      942baa6.
+    fixes:
+      - id: arch-diagram-relative-link
+        category: image
+        status: fixed
+        wrong: "[](../_images/architecture-2.0.svg)  (empty link text, docs-relative path; failed htmlproofer)"
+        right: "![Serve 인스턴스의 컨트롤러, 프록시, 레플리카와 요청 경로를 보여 주는 Ray Serve 아키텍처 구조도](https://docs.ray.io/en/latest/_images/architecture-2.0.svg)"
+        check: "No links or images with empty text or a docs-relative path (../_images/...); the architecture diagram is an image with Korean alt text and an absolute or local URL."
+        source: 942baa6
+      - id: proxy-env-ray-start-unsupported
+        category: invented_content
+        status: flagged
+        wrong: '"환경 변수는 Serve가 이 값을 읽는 프로세스 환경에 지정합니다. 로컬 클러스터에서 값을 시험해 본다면 다음처럼 `ray start` 전에 지정합니다."'
+        right: "The docs give only the proxy env vars' names, meanings and defaults; they do not say which process to set them in or to export before ray start."
+        check: "The KubeRay/proxy env-var section does not claim the vars must be exported before `ray start` or set in a specific process."
+        source: "#109 checklist"
+
+  guide-vllm:
+    input: "vLLM guide (docs.vllm.ai)"
+    kind: guide
+    post: null
+    sources: []
+    notes: >-
+      Never published; no blog PR. Defects seen in local runs (not human blog
+      fixes): 2026-06-05 cross-references to non-existent chapters ("14장",
+      "17장" with 12 sections), a trailing "</path></name>" tag remnant and a
+      "&gt;" entity leak; 2026-10-12 an unclosed code fence and stale
+      third-party CLI flags; 2026-10-13 install/usage-centric coverage with
+      little on internals. Use them as generic guide checks, not item-specific
+      fixes.
+    fixes: []
+
+  survey-security:
+    input: "survey: security of LLM-based AI agents (prompt injection, jailbreak, RAG poisoning, tool abuse, MCP, multi-agent, defenses)"
+    kind: survey
+    post: _posts/2026-11-03-securing-llm-agents-from-prompt-injection-to-mcp-and-defenses.md
+    sources: ["#121: d6d6993 (generated) vs e6c85c6 (hand revision)"]
+    notes: >-
+      Compares the first generated commit with the hand-revised second commit.
+      PR #121 says the revision followed two adversarial rubric rounds against
+      arXiv full texts. The 24 figures referenced in d6d6993 were added in
+      7fb2d05; that looks like the publisher's split push, so it is not listed.
+    fixes:
+      - id: houyi-sentence-grammar
+        category: wording
+        status: fixed
+        wrong: '"상용 앱 10개를 탐색적으로 분석해, ''앞의 지시를 무시하라'' 같은 기존 문구가 ... 자주 실패했습니다."'
+        right: '"분석한 결과, ... 기존 문구는 ... 자주 실패했습니다."'
+        check: "The HouYi pilot-study sentence is grammatical (분석한 결과 ... 문구는 ... 실패했습니다)."
+        source: e6c85c6
+      - id: heading-english-tool
+        category: wording
+        status: fixed
+        wrong: '"## Tool 악용, MCP, 멀티 에이전트 보안"'
+        right: '"## 도구 악용, MCP, 멀티 에이전트 보안"'
+        check: "Section headings use Korean terms (도구), not bare English common nouns like 'Tool'."
+        source: e6c85c6
+      - id: etdi-translationese
+        category: wording
+        status: fixed
+        wrong: '"그래서 이해하기 쉽고 실무에 바로 대응됩니다."'
+        right: '"기존 실무 관행에 그대로 대입할 수 있습니다."'
+        check: "No translationese like '실무에 바로 대응됩니다'."
+        source: e6c85c6
+      - id: multiagent-integrity-overgeneralized
+        category: other
+        status: fixed
+        wrong: '"모델 바깥에서 무결성을 보장하는 방어는 아직 이 분야 논문에서 거의 평가되지 않았습니다."'
+        right: "Not evaluated in the papers this survey covers (scope limited to the reviewed set)."
+        check: "Gap statements are scoped to the reviewed papers, not the whole field."
+        source: e6c85c6
+      - id: secalign-taskshield-repeated-verb
+        category: wording
+        status: fixed
+        wrong: '"판단의 기준을 함께 옮겼습니다. "이 문장이 위험해 보이는가"에서 "이 출력이나 행동이 사용자의 원래 의도와 맞는가"로 옮겼습니다."'
+        right: "One sentence: 판단 기준을 (위험해 보이는가)에서 (사용자 의도와 맞는가)로 함께 옮겼습니다."
+        check: "The SecAlign/Task Shield sentence does not repeat '옮겼습니다' across two sentences."
+        source: e6c85c6
+      - id: lightweight-defense-practice-claim
+        category: invented_content
+        status: fixed
+        wrong: '"실무에서 가장 먼저 도입되는 층이기도 해서 따로 정리해 둡니다."'
+        right: '"모델을 고치지 않아 가장 먼저 붙여 볼 수 있는 층입니다." (no unsupported claim about industry adoption)'
+        check: "No unsourced claim about what practitioners deploy first."
+        source: e6c85c6
+      - id: injecagent-finetuned-variants
+        category: wrong_row_or_variant
+        status: fixed
+        wrong: '"미세 조정된 GPT-4는 기본 설정 3.8%, 미세 조정된 GPT-3.5는 6.6%"'
+        right: '"미세 조정된 GPT 에이전트 두 종은 기본 설정에서 3.8%와 6.6%" (no per-version assignment)'
+        check: "InjecAgent fine-tuned agents' 3.8% / 6.6% are not assigned to GPT-4 / GPT-3.5 unless matched to the paper's table rows."
+        source: e6c85c6
+      - id: agentdojo-utility-restated
+        category: wording
+        status: fixed
+        wrong: '"공격이 있으면 GPT-4o의 유틸리티가 69.00%에서 50.08%로 떨어집니다." (repeats the numbers just given)'
+        right: '"공격 하나만으로 GPT-4o의 유틸리티가 20%p 가까이 떨어진 셈입니다."'
+        check: "AgentDojo paragraph does not restate 69.00%/50.08% twice; the drop is given as about 20%p."
+        source: e6c85c6
+      - id: agentdojo-baseline-defenses
+        category: misattribution
+        status: fixed
+        wrong: '"AgentDojo는 Spotlighting, 샌드위치 방어, DeBERTa 기반 인젝션 탐지기, 이중 LLM 패턴 같은 기존 방어를"'
+        right: "AgentDojo baselines: Spotlighting-style delimiters, sandwich defense, DeBERTa injection detector, and a tool filter (a simplified isolation approach); no dual-LLM pattern."
+        check: "AgentDojo's baseline defenses include a tool filter and do not include the dual-LLM pattern."
+        source: e6c85c6
+      - id: benchmark-conclusion-flip
+        category: other
+        status: fixed
+        wrong: '"같은 모델이라도 공격 문구 하나로 결론이 뒤집히므로"'
+        right: '"같은 모델이라도 공격 문구에 따라 성공률이 열 배 넘게 달라지므로"'
+        check: "Benchmark-comparability caveat is stated as a quantified ASR spread, not as a 'conclusion flips' claim."
+        source: e6c85c6
+      - id: jailbroken-cell-duplicated
+        category: structure_duplication
+        status: fixed
+        wrong: '"두 실패 모드를 조합한 공격이 GPT-4와 Claude v1.3의 레드팀 유해 요청 전부에서 공격 성공 (GPT-4·Claude v1.3, 두 실패 모드 조합 공격)"'
+        right: '"레드팀 유해 요청 전부에서 공격 성공 (GPT-4·Claude v1.3, 두 실패 모드 조합 공격)"'
+        check: "Result-table cells do not repeat the model/condition both in the sentence and in the parenthetical."
+        source: e6c85c6
+      - id: toolhijacker-limitation-column
+        category: wrong_row_or_variant
+        status: fixed
+        wrong: 'limitation cell: "StruQ, SecAlign 같은 예방 기반 방어와 탐지 기반 방어가 모두 충분하지 않았습니다."'
+        right: 'limitation cell: "노박스 설정의 공격만 다루며, 기존 방어를 넘는 새 방어는 제안하지 않습니다." (the defense-failure finding is a result, not a limitation)'
+        check: "ToolHijacker's limitation cell states the no-box scope / no new defense, not a finding about existing defenses."
+        source: e6c85c6
+      - id: prompt-infection-venue
+        category: venue
+        status: fixed
+        wrong: '"Prompt Infection ... (2024). Lecture notes in computer science."'
+        right: "arXiv (2410.07283)."
+        check: "Reference list venue for Prompt Infection is arXiv, not 'Lecture notes in computer science'."
+        source: e6c85c6
+
+  survey-rlhf:
+    input: "survey: LLM preference optimization (RLHF, DPO and successors)"
+    kind: survey
+    post: _posts/2026-10-18-from-rlhf-to-dpo-and-grpo-a-lineage-map-of-llm-preference.md
+    sources: ["#110 checklist (ef86b82)"]
+    notes: >-
+      PR #110 is open with one generated commit; no human edits yet. Entries
+      come from its review checklist, whose text is truncated, and one section
+      reported 4 blocking issues of which 4 are listed below (2 headings + 2
+      claims). In the PR head the copy-cause, DAA-quantification and GRPO-row
+      items are already resolved; both headings are still in da-form.
+    fixes:
+      - id: grpo-card-unverified-figure
+        category: invented_content
+        status: flagged
+        wrong: "paper card 'GRPO 유효 손실 분석' (2503.06639) carried an unverified number, equation or figure (auto-removed)"
+        right: "Paper cards contain only numbers/equations verifiable in the source paper."
+        check: "The 2503.06639 card has no number or equation absent from the paper."
+        source: "#110 checklist"
+      - id: copy-explains-preference
+        category: misattribution
+        status: flagged
+        wrong: '"높은 선호율도 이 때문일 가능성이 있습니다." (96%/84% preference attributed to labelers checking only for copying)'
+        right: "Authors say the copying behavior may stem from labelers heuristically checking for copying; they do not say it explains the 96%/84% preference rates."
+        check: "The 1909.08593 paragraph does not claim the 96%/84% preference is explained by labeler heuristics."
+        source: "#110 checklist"
+      - id: daa-no-quantification
+        category: invented_content
+        status: flagged
+        wrong: '"다만 저하의 크기를 정량적으로 제시하지는 않았습니다." (about 2406.02900)'
+        right: "Only the abstract lacks numbers; no evidence the paper gives none. Drop the sentence."
+        check: "No claim that 2406.02900 gives no quantitative degradation figures."
+        source: "#110 checklist"
+      - id: grpo-row-reward
+        category: misattribution
+        status: flagged
+        wrong: 'GRPO row: "정답 기반 보상(분석은 이진 검증 보상 가정)"'
+        right: '"그룹으로 정규화한 출력별 보상(분석은 이진 검증 가능한 보상 가정)"; binary verifiable reward is the 2503.06639 analysis assumption, not GRPO (2402.03300).'
+        check: "The comparison table's GRPO reward cell says group-normalized per-output reward, not answer/correctness-based reward."
+        source: "#110 checklist"
+      - id: heading-da-form-offline
+        category: wording
+        status: flagged
+        wrong: '"### 오프라인으로 가도 과최적화는 남는다"'
+        right: '"### 오프라인에도 남는 과최적화"'
+        check: "Section headings are noun phrases, not declarative 다-form sentences."
+        source: "#110 checklist"
+      - id: heading-da-form-judge
+        category: wording
+        status: flagged
+        wrong: '"### 남는 차이는 판정자다"'
+        right: '"### 남는 차이: 판정자"'
+        check: "Section headings are noun phrases, not declarative 다-form sentences."
+        source: "#110 checklist"

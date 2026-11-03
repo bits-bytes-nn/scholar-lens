@@ -1,0 +1,882 @@
+{
+  "schema_version": 3,
+  "generator": "scholar-lens survey-plan/3",
+  "created_at": "2026-10-14T01:47:37.955484Z",
+  "topic": "LLM 정렬을 위한 선호 최적화: RLHF, DPO와 그 후속 방법",
+  "scope": "Preference optimization for aligning large language models: from RLHF (learning a reward model from human preferences and optimizing it with PPO-style RL) to DPO and its successors, including direct, offline, reference-free, and online/RL-with-verifiable-reward variants. It stops at methods for post-training LLM alignment and does not cover pretraining or general-purpose RL.",
+  "time_range": {
+    "since": null,
+    "until": null
+  },
+  "paper_count_reason": "The topic is broad, with six active lineages running from 2017 preference-based RL to 2025 GRPO and verifiable-reward work, so the survey covers 22 papers. That is enough to cover the founding works, the turning points (InstructGPT, DPO, GRPO) and the main successors in each lineage. Benchmarks, generic LLM reports, application papers and minor DPO variants are left out.",
+  "lineages": [
+    {
+      "id": "rlhf-foundations",
+      "name": "RLHF foundations and PPO-based pipelines",
+      "description": "Learning reward models from human comparisons and optimizing them with PPO under a KL penalty, from Atari preferences to InstructGPT and Llama 2, including reward overoptimization."
+    },
+    {
+      "id": "ai-feedback",
+      "name": "AI feedback and scalable oversight",
+      "description": "Replacing human preference labels with model-generated critiques and preferences (Constitutional AI, RLAIF)."
+    },
+    {
+      "id": "direct-preference-optimization",
+      "name": "Direct preference optimization (DPO and generalizations)",
+      "description": "Closed-form reparameterization of the KL-regularized RLHF objective that trains directly on preference data, plus its theoretical generalizations and failure modes."
+    },
+    {
+      "id": "reference-free-simplified",
+      "name": "Reference-free and simplified objectives",
+      "description": "Ranking and odds-ratio losses and length-normalized rewards that drop the reference model or the separate SFT stage."
+    },
+    {
+      "id": "online-iterative",
+      "name": "Online, iterative and game-theoretic preference optimization",
+      "description": "Fresh on-policy sampling, iterative DPO and Nash/self-play formulations that go beyond the Bradley-Terry reward model."
+    },
+    {
+      "id": "critic-free-rl-reasoning",
+      "name": "Critic-free RL and verifiable rewards",
+      "description": "Lighter PPO replacements such as GRPO, applied with verifiable rewards to train reasoning models."
+    }
+  ],
+  "papers": [
+    {
+      "id": "1706.03741",
+      "title": "Deep reinforcement learning from human preferences",
+      "authors": "Paul Christiano, Jan Leike, Tom B. Brown et al.",
+      "year": 2017,
+      "date": "2017-06-12",
+      "venue": "Neural Information Processing Systems",
+      "citation_count": 6159,
+      "url": "https://arxiv.org/abs/1706.03741",
+      "lineage": "rlhf-foundations",
+      "role": "core",
+      "reason": "Founding work that learns a Bradley-Terry reward model from pairwise trajectory preferences and optimizes it with deep RL."
+    },
+    {
+      "id": "1909.08593",
+      "title": "Fine-Tuning Language Models from Human Preferences",
+      "authors": "Daniel M. Ziegler, Nisan Stiennon, Jeffrey Wu et al.",
+      "year": 2019,
+      "date": "2019-09-18",
+      "venue": "arXiv.org",
+      "citation_count": 2773,
+      "url": "https://arxiv.org/abs/1909.08593",
+      "lineage": "rlhf-foundations",
+      "role": "core",
+      "reason": "First application of preference reward models plus PPO with a KL penalty to pretrained language models."
+    },
+    {
+      "id": "2009.01325",
+      "title": "Learning to summarize from human feedback",
+      "authors": "Nisan Stiennon, Long Ouyang, Jeff Wu et al.",
+      "year": 2020,
+      "date": "2020-09-02",
+      "venue": "Neural Information Processing Systems",
+      "citation_count": 3552,
+      "url": "https://arxiv.org/abs/2009.01325",
+      "lineage": "rlhf-foundations",
+      "role": "core",
+      "reason": "Shows that RLHF at scale beats supervised baselines on summarization and establishes the SFT, reward model, PPO recipe."
+    },
+    {
+      "id": "2203.02155",
+      "title": "Training language models to follow instructions with human feedback",
+      "authors": "Long Ouyang, Jeff Wu, Xu Jiang et al.",
+      "year": 2022,
+      "date": "2022-03-04",
+      "venue": "Neural Information Processing Systems",
+      "citation_count": 24899,
+      "url": "https://arxiv.org/abs/2203.02155",
+      "lineage": "rlhf-foundations",
+      "role": "core",
+      "reason": "InstructGPT: the canonical three-stage RLHF pipeline that made the method mainstream for assistants."
+    },
+    {
+      "id": "2204.05862",
+      "title": "Training a Helpful and Harmless Assistant with Reinforcement Learning from Human Feedback",
+      "authors": "Yuntao Bai, Andy Jones, Kamal Ndousse et al.",
+      "year": 2022,
+      "date": "2022-04-12",
+      "venue": "arXiv.org",
+      "citation_count": 4403,
+      "url": "https://arxiv.org/abs/2204.05862",
+      "lineage": "rlhf-foundations",
+      "role": "supporting",
+      "reason": "Anthropic HH-RLHF: helpful/harmless preference data, an iterated online mode and the HH dataset used by later direct methods."
+    },
+    {
+      "id": "2210.10760",
+      "title": "Scaling Laws for Reward Model Overoptimization",
+      "authors": "Leo Gao, John Schulman, Jacob Hilton",
+      "year": 2022,
+      "date": "2022-10-19",
+      "venue": "International Conference on Machine Learning",
+      "citation_count": 1372,
+      "url": "https://arxiv.org/abs/2210.10760",
+      "lineage": "rlhf-foundations",
+      "role": "core",
+      "reason": "Quantifies reward model overoptimization (Goodhart's law), which motivates the KL regularization and the alternatives that followed."
+    },
+    {
+      "id": "2212.08073",
+      "title": "Constitutional AI: Harmlessness from AI Feedback",
+      "authors": "Yuntao Bai, Saurav Kadavath, Sandipan Kundu et al.",
+      "year": 2022,
+      "date": "2022-12-15",
+      "venue": "arXiv.org",
+      "citation_count": 3827,
+      "url": "https://arxiv.org/abs/2212.08073",
+      "lineage": "ai-feedback",
+      "role": "core",
+      "reason": "Constitutional AI replaces human harmlessness labels with AI critiques and preferences guided by written principles."
+    },
+    {
+      "id": "2304.05302",
+      "title": "RRHF: Rank Responses to Align Language Models with Human Feedback without tears",
+      "authors": "Zheng Yuan, Hongyi Yuan, Chuanqi Tan et al.",
+      "year": 2023,
+      "date": "2023-04-11",
+      "venue": "Neural Information Processing Systems",
+      "citation_count": 566,
+      "url": "https://arxiv.org/abs/2304.05302",
+      "lineage": "reference-free-simplified",
+      "role": "supporting",
+      "reason": "RRHF: an early ranking-loss alternative to PPO that needs no RL, a precursor of the simplified objectives."
+    },
+    {
+      "id": "2305.18290",
+      "title": "Direct Preference Optimization: Your Language Model is Secretly a Reward Model",
+      "authors": "Rafael Rafailov, Archit Sharma, Eric Mitchell et al.",
+      "year": 2023,
+      "date": "2023-05-29",
+      "venue": "Neural Information Processing Systems",
+      "citation_count": 11027,
+      "url": "https://arxiv.org/abs/2305.18290",
+      "lineage": "direct-preference-optimization",
+      "role": "core",
+      "reason": "DPO: derives a closed-form policy loss from the KL-regularized objective, removing the explicit reward model and the RL loop."
+    },
+    {
+      "id": "2307.09288",
+      "title": "Llama 2: Open Foundation and Fine-Tuned Chat Models",
+      "authors": "Hugo Touvron, Louis Martin, Kevin Stone et al.",
+      "year": 2023,
+      "date": "2023-07-18",
+      "venue": "arXiv.org",
+      "citation_count": 18557,
+      "url": "https://arxiv.org/abs/2307.09288",
+      "lineage": "rlhf-foundations",
+      "role": "supporting",
+      "reason": "Llama 2-Chat documents an open, industrial RLHF recipe combining rejection sampling and PPO with separate safety and helpfulness reward models."
+    },
+    {
+      "id": "2309.00267",
+      "title": "RLAIF vs. RLHF: Scaling Reinforcement Learning from Human Feedback with AI Feedback",
+      "authors": "Harrison Lee, Samrat Phatale, Hassan Mansoor et al.",
+      "year": 2023,
+      "date": "2023-09-01",
+      "venue": "International Conference on Machine Learning",
+      "citation_count": 754,
+      "url": "https://arxiv.org/abs/2309.00267",
+      "lineage": "ai-feedback",
+      "role": "supporting",
+      "reason": "Systematically shows that RLAIF can match RLHF, supporting AI feedback as a scalable labeling source."
+    },
+    {
+      "id": "2310.12036",
+      "title": "A General Theoretical Paradigm to Understand Learning from Human Preferences",
+      "authors": "Mohammad Gheshlaghi Azar, Mark Rowland, Bilal Piot et al.",
+      "year": 2023,
+      "date": "2023-10-18",
+      "venue": "International Conference on Artificial Intelligence and Statistics",
+      "citation_count": 1161,
+      "url": "https://arxiv.org/abs/2310.12036",
+      "lineage": "direct-preference-optimization",
+      "role": "core",
+      "reason": "The PsiPO framework explains DPO's overfitting under deterministic preferences and proposes IPO."
+    },
+    {
+      "id": "2312.00886",
+      "title": "Nash Learning from Human Feedback",
+      "authors": "Rémi Munos, Michal Valko, Daniele Calandriello et al.",
+      "year": 2023,
+      "date": "2023-12-01",
+      "venue": "International Conference on Machine Learning",
+      "citation_count": 258,
+      "url": "https://arxiv.org/abs/2312.00886",
+      "lineage": "online-iterative",
+      "role": "core",
+      "reason": "Nash learning from human feedback replaces reward maximization with finding the Nash equilibrium of a preference model."
+    },
+    {
+      "id": "2402.01306",
+      "title": "KTO: Model Alignment as Prospect Theoretic Optimization",
+      "authors": "Kawin Ethayarajh, Winnie Xu, Niklas Muennighoff et al.",
+      "year": 2024,
+      "date": "2024-02-02",
+      "venue": "arXiv.org",
+      "citation_count": 195,
+      "url": "https://arxiv.org/abs/2402.01306",
+      "lineage": "direct-preference-optimization",
+      "role": "core",
+      "reason": "KTO learns from unpaired desirable/undesirable signals via a prospect-theoretic utility, generalizing beyond pairwise data."
+    },
+    {
+      "id": "2402.03300",
+      "title": "DeepSeekMath: Pushing the Limits of Mathematical Reasoning in Open Language Models",
+      "authors": "Zhihong Shao, Peiyi Wang, Qihao Zhu et al.",
+      "year": 2024,
+      "date": "2024-02-05",
+      "venue": "arXiv.org",
+      "citation_count": 9813,
+      "url": "https://arxiv.org/abs/2402.03300",
+      "lineage": "critic-free-rl-reasoning",
+      "role": "core",
+      "reason": "Introduces GRPO, a critic-free PPO variant using group-relative advantages that became the standard for reasoning RL."
+    },
+    {
+      "id": "2403.07691",
+      "title": "ORPO: Monolithic Preference Optimization without Reference Model",
+      "authors": "Jiwoo Hong, Noah Lee, James Thorne",
+      "year": 2024,
+      "date": "2024-03-12",
+      "venue": "Conference on Empirical Methods in Natural Language Processing",
+      "citation_count": 716,
+      "url": "https://arxiv.org/abs/2403.07691",
+      "lineage": "reference-free-simplified",
+      "role": "core",
+      "reason": "ORPO merges SFT and preference alignment through an odds-ratio penalty with no reference model."
+    },
+    {
+      "id": "2403.08635",
+      "title": "Human Alignment of Large Language Models through Online Preference Optimisation",
+      "authors": "Daniele Calandriello, Daniel Guo, Remi Munos et al.",
+      "year": 2024,
+      "date": "2024-03-13",
+      "venue": "International Conference on Machine Learning",
+      "citation_count": 103,
+      "url": "https://arxiv.org/abs/2403.08635",
+      "lineage": "online-iterative",
+      "role": "supporting",
+      "reason": "Online IPO/DPO: shows that sampling fresh on-policy data closes the gap between offline direct methods and RLHF."
+    },
+    {
+      "id": "2405.00675",
+      "title": "Self-Play Preference Optimization for Language Model Alignment",
+      "authors": "Yue Wu, Zhiqing Sun, Huizhuo Yuan et al.",
+      "year": 2024,
+      "date": "2024-05-01",
+      "venue": "International Conference on Learning Representations",
+      "citation_count": 285,
+      "url": "https://arxiv.org/abs/2405.00675",
+      "lineage": "online-iterative",
+      "role": "core",
+      "reason": "SPPO: a self-play algorithm that approximates the Nash policy and handles intransitive preferences, scaling to strong open models."
+    },
+    {
+      "id": "2405.07863",
+      "title": "RLHF Workflow: From Reward Modeling to Online RLHF",
+      "authors": "Hanze Dong, Wei Xiong, Bo Pang et al.",
+      "year": 2024,
+      "date": "2024-05-13",
+      "venue": "Trans. Mach. Learn. Res.",
+      "citation_count": 292,
+      "url": "https://arxiv.org/abs/2405.07863",
+      "lineage": "online-iterative",
+      "role": "supporting",
+      "reason": "An open recipe for online iterative RLHF with iterative DPO, documenting its gains over offline training."
+    },
+    {
+      "id": "2405.14734",
+      "title": "SimPO: Simple Preference Optimization with a Reference-Free Reward",
+      "authors": "Yu Meng, Mengzhou Xia, Danqi Chen",
+      "year": 2024,
+      "date": "2024-05-23",
+      "venue": "Neural Information Processing Systems",
+      "citation_count": 1214,
+      "url": "https://arxiv.org/abs/2405.14734",
+      "lineage": "reference-free-simplified",
+      "role": "core",
+      "reason": "SimPO uses a length-normalized average log-probability reward plus a margin and drops the reference model, giving strong results."
+    },
+    {
+      "id": "2406.02900",
+      "title": "Scaling Laws for Reward Model Overoptimization in Direct Alignment Algorithms",
+      "authors": "Rafael Rafailov, Yaswanth Chittepu, Ryan Park et al.",
+      "year": 2024,
+      "date": "2024-06-05",
+      "venue": "Neural Information Processing Systems",
+      "citation_count": 173,
+      "url": "https://arxiv.org/abs/2406.02900",
+      "lineage": "direct-preference-optimization",
+      "role": "supporting",
+      "reason": "Shows that direct alignment algorithms also overoptimize, connecting DPO back to the reward hacking problem."
+    },
+    {
+      "id": "2503.06639",
+      "title": "Reinforcement Learning with Verifiable Rewards: GRPO's Effective Loss, Dynamics, and Success Amplification",
+      "authors": "Youssef Mroueh",
+      "year": 2025,
+      "date": "2025-03-09",
+      "venue": "arXiv.org",
+      "citation_count": 135,
+      "url": "https://arxiv.org/abs/2503.06639",
+      "lineage": "critic-free-rl-reasoning",
+      "role": "supporting",
+      "reason": "Analyzes GRPO under verifiable binary rewards as a weighted contrastive loss, linking it back to preference objectives."
+    }
+  ],
+  "edges": [
+    {
+      "from": "1909.08593",
+      "to": "1706.03741"
+    },
+    {
+      "from": "2009.01325",
+      "to": "1706.03741"
+    },
+    {
+      "from": "2009.01325",
+      "to": "1909.08593"
+    },
+    {
+      "from": "2203.02155",
+      "to": "1706.03741"
+    },
+    {
+      "from": "2203.02155",
+      "to": "1909.08593"
+    },
+    {
+      "from": "2203.02155",
+      "to": "2009.01325"
+    },
+    {
+      "from": "2203.02155",
+      "to": "2204.05862"
+    },
+    {
+      "from": "2204.05862",
+      "to": "2203.02155"
+    },
+    {
+      "from": "2210.10760",
+      "to": "1706.03741"
+    },
+    {
+      "from": "2210.10760",
+      "to": "2009.01325"
+    },
+    {
+      "from": "2210.10760",
+      "to": "2203.02155"
+    },
+    {
+      "from": "2210.10760",
+      "to": "2204.05862"
+    },
+    {
+      "from": "2212.08073",
+      "to": "1706.03741"
+    },
+    {
+      "from": "2212.08073",
+      "to": "2009.01325"
+    },
+    {
+      "from": "2212.08073",
+      "to": "2203.02155"
+    },
+    {
+      "from": "2212.08073",
+      "to": "2204.05862"
+    },
+    {
+      "from": "2212.08073",
+      "to": "2210.10760"
+    },
+    {
+      "from": "2304.05302",
+      "to": "1706.03741"
+    },
+    {
+      "from": "2304.05302",
+      "to": "1909.08593"
+    },
+    {
+      "from": "2304.05302",
+      "to": "2009.01325"
+    },
+    {
+      "from": "2304.05302",
+      "to": "2203.02155"
+    },
+    {
+      "from": "2304.05302",
+      "to": "2204.05862"
+    },
+    {
+      "from": "2304.05302",
+      "to": "2210.10760"
+    },
+    {
+      "from": "2305.18290",
+      "to": "1706.03741"
+    },
+    {
+      "from": "2305.18290",
+      "to": "1909.08593"
+    },
+    {
+      "from": "2305.18290",
+      "to": "2009.01325"
+    },
+    {
+      "from": "2305.18290",
+      "to": "2203.02155"
+    },
+    {
+      "from": "2305.18290",
+      "to": "2204.05862"
+    },
+    {
+      "from": "2305.18290",
+      "to": "2212.08073"
+    },
+    {
+      "from": "2307.09288",
+      "to": "1706.03741"
+    },
+    {
+      "from": "2307.09288",
+      "to": "2009.01325"
+    },
+    {
+      "from": "2307.09288",
+      "to": "2203.02155"
+    },
+    {
+      "from": "2307.09288",
+      "to": "2204.05862"
+    },
+    {
+      "from": "2307.09288",
+      "to": "2212.08073"
+    },
+    {
+      "from": "2309.00267",
+      "to": "1706.03741"
+    },
+    {
+      "from": "2309.00267",
+      "to": "1909.08593"
+    },
+    {
+      "from": "2309.00267",
+      "to": "2009.01325"
+    },
+    {
+      "from": "2309.00267",
+      "to": "2203.02155"
+    },
+    {
+      "from": "2309.00267",
+      "to": "2204.05862"
+    },
+    {
+      "from": "2309.00267",
+      "to": "2212.08073"
+    },
+    {
+      "from": "2309.00267",
+      "to": "2305.18290"
+    },
+    {
+      "from": "2310.12036",
+      "to": "1706.03741"
+    },
+    {
+      "from": "2310.12036",
+      "to": "2009.01325"
+    },
+    {
+      "from": "2310.12036",
+      "to": "2203.02155"
+    },
+    {
+      "from": "2310.12036",
+      "to": "2305.18290"
+    },
+    {
+      "from": "2312.00886",
+      "to": "1706.03741"
+    },
+    {
+      "from": "2312.00886",
+      "to": "2009.01325"
+    },
+    {
+      "from": "2312.00886",
+      "to": "2203.02155"
+    },
+    {
+      "from": "2312.00886",
+      "to": "2204.05862"
+    },
+    {
+      "from": "2312.00886",
+      "to": "2305.18290"
+    },
+    {
+      "from": "2312.00886",
+      "to": "2309.00267"
+    },
+    {
+      "from": "2312.00886",
+      "to": "2310.12036"
+    },
+    {
+      "from": "2312.00886",
+      "to": "2403.08635"
+    },
+    {
+      "from": "2402.03300",
+      "to": "2203.02155"
+    },
+    {
+      "from": "2402.03300",
+      "to": "2304.05302"
+    },
+    {
+      "from": "2402.03300",
+      "to": "2305.18290"
+    },
+    {
+      "from": "2402.03300",
+      "to": "2307.09288"
+    },
+    {
+      "from": "2403.07691",
+      "to": "1909.08593"
+    },
+    {
+      "from": "2403.07691",
+      "to": "2009.01325"
+    },
+    {
+      "from": "2403.07691",
+      "to": "2203.02155"
+    },
+    {
+      "from": "2403.07691",
+      "to": "2204.05862"
+    },
+    {
+      "from": "2403.07691",
+      "to": "2210.10760"
+    },
+    {
+      "from": "2403.07691",
+      "to": "2305.18290"
+    },
+    {
+      "from": "2403.07691",
+      "to": "2310.12036"
+    },
+    {
+      "from": "2403.07691",
+      "to": "2405.14734"
+    },
+    {
+      "from": "2403.08635",
+      "to": "1706.03741"
+    },
+    {
+      "from": "2403.08635",
+      "to": "2009.01325"
+    },
+    {
+      "from": "2403.08635",
+      "to": "2203.02155"
+    },
+    {
+      "from": "2403.08635",
+      "to": "2204.05862"
+    },
+    {
+      "from": "2403.08635",
+      "to": "2210.10760"
+    },
+    {
+      "from": "2403.08635",
+      "to": "2212.08073"
+    },
+    {
+      "from": "2403.08635",
+      "to": "2304.05302"
+    },
+    {
+      "from": "2403.08635",
+      "to": "2305.18290"
+    },
+    {
+      "from": "2403.08635",
+      "to": "2307.09288"
+    },
+    {
+      "from": "2403.08635",
+      "to": "2310.12036"
+    },
+    {
+      "from": "2403.08635",
+      "to": "2312.00886"
+    },
+    {
+      "from": "2405.00675",
+      "to": "1706.03741"
+    },
+    {
+      "from": "2405.00675",
+      "to": "2203.02155"
+    },
+    {
+      "from": "2405.00675",
+      "to": "2210.10760"
+    },
+    {
+      "from": "2405.00675",
+      "to": "2305.18290"
+    },
+    {
+      "from": "2405.00675",
+      "to": "2310.12036"
+    },
+    {
+      "from": "2405.00675",
+      "to": "2312.00886"
+    },
+    {
+      "from": "2405.00675",
+      "to": "2403.08635"
+    },
+    {
+      "from": "2405.00675",
+      "to": "2405.14734"
+    },
+    {
+      "from": "2405.07863",
+      "to": "1706.03741"
+    },
+    {
+      "from": "2405.07863",
+      "to": "1909.08593"
+    },
+    {
+      "from": "2405.07863",
+      "to": "2009.01325"
+    },
+    {
+      "from": "2405.07863",
+      "to": "2203.02155"
+    },
+    {
+      "from": "2405.07863",
+      "to": "2204.05862"
+    },
+    {
+      "from": "2405.07863",
+      "to": "2210.10760"
+    },
+    {
+      "from": "2405.07863",
+      "to": "2212.08073"
+    },
+    {
+      "from": "2405.07863",
+      "to": "2304.05302"
+    },
+    {
+      "from": "2405.07863",
+      "to": "2305.18290"
+    },
+    {
+      "from": "2405.07863",
+      "to": "2307.09288"
+    },
+    {
+      "from": "2405.07863",
+      "to": "2310.12036"
+    },
+    {
+      "from": "2405.07863",
+      "to": "2403.08635"
+    },
+    {
+      "from": "2405.07863",
+      "to": "2405.00675"
+    },
+    {
+      "from": "2405.14734",
+      "to": "1706.03741"
+    },
+    {
+      "from": "2405.14734",
+      "to": "1909.08593"
+    },
+    {
+      "from": "2405.14734",
+      "to": "2009.01325"
+    },
+    {
+      "from": "2405.14734",
+      "to": "2203.02155"
+    },
+    {
+      "from": "2405.14734",
+      "to": "2204.05862"
+    },
+    {
+      "from": "2405.14734",
+      "to": "2210.10760"
+    },
+    {
+      "from": "2405.14734",
+      "to": "2304.05302"
+    },
+    {
+      "from": "2405.14734",
+      "to": "2305.18290"
+    },
+    {
+      "from": "2405.14734",
+      "to": "2310.12036"
+    },
+    {
+      "from": "2405.14734",
+      "to": "2403.07691"
+    },
+    {
+      "from": "2405.14734",
+      "to": "2405.07863"
+    },
+    {
+      "from": "2406.02900",
+      "to": "1706.03741"
+    },
+    {
+      "from": "2406.02900",
+      "to": "1909.08593"
+    },
+    {
+      "from": "2406.02900",
+      "to": "2203.02155"
+    },
+    {
+      "from": "2406.02900",
+      "to": "2204.05862"
+    },
+    {
+      "from": "2406.02900",
+      "to": "2210.10760"
+    },
+    {
+      "from": "2406.02900",
+      "to": "2305.18290"
+    },
+    {
+      "from": "2406.02900",
+      "to": "2310.12036"
+    },
+    {
+      "from": "2503.06639",
+      "to": "2210.10760"
+    },
+    {
+      "from": "2503.06639",
+      "to": "2402.03300"
+    }
+  ],
+  "excluded": [
+    {
+      "id": "2106.09685",
+      "title": "LoRA: Low-Rank Adaptation of Large Language Models",
+      "year": 2021,
+      "reason": "LoRA is a generic parameter-efficient fine-tuning method, not a preference optimization method."
+    },
+    {
+      "id": "2112.09332",
+      "title": "WebGPT: Browser-assisted question-answering with human feedback",
+      "year": 2021,
+      "reason": "WebGPT is mainly an application of RLHF to browsing QA and adds no new method beyond InstructGPT's lineage."
+    },
+    {
+      "id": "2307.15217",
+      "title": "Open Problems and Fundamental Limitations of Reinforcement Learning from Human Feedback",
+      "year": 2023,
+      "reason": "A survey of open problems; useful background but not a method."
+    },
+    {
+      "id": "2311.12908",
+      "title": "Diffusion Model Alignment Using Direct Preference Optimization",
+      "year": 2023,
+      "reason": "Applies DPO to diffusion models, which is outside LLM alignment."
+    },
+    {
+      "id": "2310.12773",
+      "title": "Safe RLHF: Safe Reinforcement Learning from Human Feedback",
+      "year": 2023,
+      "reason": "Safe RLHF is a constrained multi-objective variant, peripheral to the main preference optimization lineages."
+    },
+    {
+      "id": "2310.02743",
+      "title": "Reward Model Ensembles Help Mitigate Overoptimization",
+      "year": 2023,
+      "reason": "Reward model ensembles are a minor mitigation; overoptimization is already covered by Gao et al."
+    },
+    {
+      "id": "2404.11999",
+      "title": "Token-level Direct Preference Optimization",
+      "year": 2024,
+      "reason": "Token-level DPO is a minor variant of DPO."
+    },
+    {
+      "id": "2306.17492",
+      "title": "Preference Ranking Optimization for Human Alignment",
+      "year": 2023,
+      "reason": "PRO overlaps closely with RRHF as a ranking-loss method."
+    },
+    {
+      "id": "2303.17651",
+      "title": "Self-Refine: Iterative Refinement with Self-Feedback",
+      "year": 2023,
+      "reason": "Self-Refine is inference-time refinement, not preference training."
+    },
+    {
+      "id": "1511.06732",
+      "title": "Sequence Level Training with Recurrent Neural Networks",
+      "year": 2015,
+      "reason": "Sequence-level RL for NLP predates and sits outside preference-based alignment."
+    }
+  ],
+  "references": [
+    {
+      "url": "https://huggingface.co/blog/rlhf",
+      "title": "Illustrating Reinforcement Learning from Human Feedback (RLHF)",
+      "kind": "article"
+    }
+  ],
+  "sources": [
+    "DataCite: 3 requests (0 failed)",
+    "OpenAlex: 18 requests (0 failed)",
+    "Semantic Scholar: 1 requests (0 failed)",
+    "arXiv: 11 requests (0 failed)",
+    "Semantic Scholar citation data for 270 candidates",
+    "References: 21 papers linked, 21 found in the indexes"
+  ],
+  "notes": [
+    "3 candidate(s) with neither an arXiv id nor a DOI were left out (the write stage cannot resolve them)."
+  ]
+}
