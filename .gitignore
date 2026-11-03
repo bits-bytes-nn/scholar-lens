@@ -220,5 +220,8 @@ logs/
 papers/
 tokenizers/
 
-# Local-only quality rubrics + LLM-judge evaluation (not shipped)
-eval/
+# Evaluation outputs: generated posts and run manifests are large and
+# reproducible from eval/sets; rubrics, sets, judge results and metrics are
+# tracked (the Docker context is an allowlist, so none of eval/ ships).
+eval/baselines/*/out/
+eval/baselines/*/*.result.json

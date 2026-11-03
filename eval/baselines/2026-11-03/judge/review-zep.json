@@ -1,0 +1,85 @@
+{
+  "item": "review-zep",
+  "post": "/tmp/baseline/out/review-zep.md",
+  "source": "arXiv 2501.13956v1 (HTML + PDF, full text read)",
+  "scores": {
+    "A": 8.0,
+    "B": 8.0,
+    "C": 8.0,
+    "D": 7.5,
+    "E": 8.0,
+    "F": 4.0,
+    "R1": 9.0,
+    "R2": 7.5,
+    "R3": 7.0,
+    "G": 9.0
+  },
+  "score_notes": {
+    "A": "Front matter complete (subtitle, paper_author 'Zep AI', paper_doi, two-level categories, use_math true, no author). All math $$...$$; 0 \\( \\) / \\[ \\] / single $. No skipped levels. Deductions: L35-45 is an intro/abstract section after the TL;DR that re-states abstract numbers (L45 '94.8%로 MemGPT의 93.4%를 앞섰습니다 ... 최대 18.5% 높이고 ... 90% 줄였다'); L467 '### 논문의 결론' only re-tells the paper's conclusion.",
+    "B": "Natural Korean, consistent 입니다 register, no 즉/이러한/결국. Deductions: noun/formulaic frames L343 '...최근 대화를 검색에 끌어들인다는 점입니다' (-> '...끌어들이는 것이 BFS의 장점입니다'); L116 '...범위로 읽는 것이 정확합니다' (-> '...범위로 읽어야 합니다'); L124 '설계상 가능성으로만 보는 편이 맞습니다'; L211 '...보는 것이 자연스럽습니다'; L99 '예를 들어 보겠습니다.'; L207 '따라가 보면 다음과 같습니다.'",
+    "C": "Good ordering, concepts introduced before use, running example threads sections. Deductions: facts repeated rather than pointed to: 115k->1.6k at L30, L442, L473; ~90% latency at L30, L45, L442; 'LongMemEval 비교 대상은 전체 컨텍스트뿐' at L423, L469, L473; L475 re-lists caveats already made at L124, L272, L365.",
+    "D": "Strong help at hard points (t_ref date example L99, Alice job-change four-timestamp walk-through L209-213, Seoul/Busan overlap L233-236, label-propagation 3-vs-2 example L268). Deductions for padding the trivial for a competent reader: KG definition L51; Neo4j/Cypher primer L158; BM25/IDF primer L325; RRF/MMR textbook L351-352; IQR definition L442 'IQR은 측정값의 가운데 50%가 놓이는 구간의 폭입니다'; LLM-judge definition L371. ~32.5k body chars for a 9-page systems paper.",
+    "E": "Tables for subgraphs, timestamps, search fields, DMR, LME, per-type; cells match source. Deductions: per-type table (L446-455) drops four gpt-4o rows of a 12-row table and then restates them in prose at L457, instead of keeping the whole table; argmax formula L265 is the writer's formalization of 'plurality of its neighbors' but is not marked as such (contrast L229, which is marked); no architecture figure for the three-tier graph/pipeline.",
+    "F": "Most numbers check out cell for cell (DMR and both LME tables). Found cases: (1) L31 TL;DR calls single-session-preference, temporal-reasoning, multi-session '세션을 넘나드는 복잡한 질문' - single-session-preference is single-session by definition (the post's own L412); paper only says 'complex question types'. (2) L17 TL;DR 'MemGPT 같은 기존 메모리 시스템도 사실이 시간에 따라 바뀌는 과정을 구조적으로 보존하지는 않습니다' - the paper makes no such claim about MemGPT (its novelty claim is vs 'previous graph-based RAG proposals'). (3) L293 writes the reranker as '\\rho: \\{\\varphi(\\alpha), \\dots\\}' and then argues '입력이 집합으로 표기되어 있어서'; the source LaTeX is '\\rho:{\\varphi(\\alpha),...}' - TeX grouping braces, not a set, so the formula is altered and the interpretation rests on the alteration. Hedged nit (not separately deducted): L440 explains 18.3% vs 18.5% as '반올림 전 값을 썼기 때문일 수 있습니다' - with inputs rounded to 0.05 the ratio maxes at ~18.45%, so the explanation is barely possible and unsupported.",
+    "R3": "TL;DR is concise with model/setting on numbers, but contains the two F errors (L17, L31). Closing L473-479 has real writer judgement (ingest cost unmeasured, structured data untested, when to use), but L477 re-tells the paper's future work list and L467-469 re-tells its conclusion.",
+    "G": "description 158 chars, starts with 'Zep', numbers 94.8/93.4/18.5/90 all in TL;DR; use_math true with $$ present. Blog lint not run."
+  },
+  "principles": {
+    "claim_headings": {"status": "partly met", "evidence": "Claim headings: L47 '세 층으로 쌓은 기억', L260 '새 엔티티는 이웃 다수의 커뮤니티로 들어간다', L361 'MemGPT를 앞섰지만 너무 쉬운 벤치마크', L444 '이득이 고르지 않다'. Topic headings: L89 '에피소드 수집과 이중 시간 모델', L126 '엔티티와 사실의 추출, 그리고 중복 해소', L363 '공통 실험 설정', L467 '논문의 결론', L471 '한계와 시사점'. L89, L361, L402 open straight into an H3 with no one-line thesis."},
+    "running_example": {"status": "met", "evidence": "Alice/Acme -> Betacorp carried through L75, L147, L154, L209-213, L236, L246, L268, L319, L343."},
+    "mechanism_choice_formula_example": {"status": "met", "evidence": "Edge invalidation: problem L240 (overwrite vs accumulate), rule L226, worked examples L209-213 and L233-236. Communities: Leiden vs label propagation reason L256-258, rule L265, example L268, drift trade-off L272. Dedup scope L170."},
+    "facts_said_once": {"status": "partly met", "evidence": "115k->1.6k at L30/L442/L473; ~90% latency L30/L45/L442; DMR 94.8 vs 93.4 at L8/L29/L45/L381-388; MemGPT-not-on-LME L423/L469/L473."},
+    "numbers_with_scope": {"status": "partly met", "evidence": "Mostly scoped (L29 'DMR(gpt-4-turbo)', L30 'LongMemEval_s(gpt-4o) ... 상대 개선율'), relative vs %p separated at L434-440. Exception L45 '정확도를 최대 18.5% 높이고' with no model and no relative/absolute marker."},
+    "nothing_invented": {"status": "partly met", "evidence": "Illustrative examples are labelled (L100 '날짜 값은 예시를 위해 정한 것입니다', L183, L207, L268, L343). Unlabelled: argmax formula L265; set-brace alteration of rho L293; L162 '술어는 필터링에, 서술은 답변 생성에 쓸 수 있습니다' (speculation); TL;DR claims L17 and L31."},
+    "writer_assessment_at_end": {"status": "partly met", "evidence": "L473-475, L479 give own judgement (most useful contribution; ingest-path LLM cost unmeasured; structured data untested; when full context is better). But L477 restates the paper's future work and L467-469 its conclusion."},
+    "length_fitted_to_difficulty": {"status": "not met", "evidence": "484 lines / ~32.5k body chars for a short systems paper; background primers (L51, L103, L158, L325, L351-355, L442) inflate length rather than the hard steps."},
+    "type_specific_shape": {"status": "partly met", "evidence": "Review shape present (TL;DR four questions, method, experiments, limitations). But L35-45 is an introduction-style section after the TL;DR that repeats abstract numbers."},
+    "korean_style": {"status": "met", "evidence": "Varied sentences, 입니다 register, 0 occurrences of 즉/이러한/결국, Korean headings. Minor formulaic frames at L99, L116, L124, L207, L343."}
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 11,
+    "unsupported": 2,
+    "wrong": 2,
+    "unverifiable": 0,
+    "examples": [
+      {"line": 29, "claim": "DMR (gpt-4-turbo) Zep 94.8% vs MemGPT 93.4%; full-context 94.4%", "verdict": "supported", "source": "Table 1; 'Using gpt-4-turbo, the full-conversation baseline achieved 94.4% accuracy'"},
+      {"line": 30, "claim": "LME_s gpt-4o 60.2%->71.2%, paper reports 18.5% relative; latency 28.9 s->2.58 s; context 115k->1.6k", "verdict": "supported", "source": "Table 2; §4.3.2 'gpt-4o showed an 18.5% improvement'"},
+      {"line": 31, "claim": "Gains largest in single-session-preference, temporal-reasoning, multi-session, characterised as '세션을 넘나드는' questions", "verdict": "wrong", "source": "§4.3.2 'most substantial gains in complex question types: single-session-preference, multi-session, and temporal-reasoning' (said of gpt-4o-mini); single-session-preference is not cross-session"},
+      {"line": 17, "claim": "MemGPT-like memory systems do not structurally preserve how facts change over time", "verdict": "unsupported", "source": "No such statement; §2.1 novelty claim is 'compared to previous graph-based RAG proposals'"},
+      {"line": 132, "claim": "n=4 previous messages, two conversation turns", "verdict": "supported", "source": "§2.2.1 'n = 4, providing two complete conversation turns'"},
+      {"line": 149, "claim": "Entity names embedded into 1024-dim vectors", "verdict": "supported", "source": "§2.2.1 '1024-dimensional vector space'"},
+      {"line": 365, "claim": "Overview says 20 items retrieved; DMR text says top 10 nodes and edges", "verdict": "supported", "source": "§4 'retrieve the 20 most relevant edges'; §4.2 'top 10 most relevant nodes and edges'"},
+      {"line": 371, "claim": "DMR: 500 conversations, 5 sessions each, up to 12 messages per session", "verdict": "supported", "source": "§4.2"},
+      {"line": 406, "claim": "LongMemEval_s average ~115,000 tokens", "verdict": "supported", "source": "§4 / §4.3"},
+      {"line": 440, "claim": "18.3% computed vs 18.5% stated 'may be because unrounded values were used'", "verdict": "unsupported", "source": "Paper gives no explanation; inputs rounded to 0.05 cap the ratio at ~18.45%"},
+      {"line": 442, "claim": "Latency -89.8% (31.3->3.20 s) and -91.1% (28.9->2.58 s); IQR 8.76->1.31 s, 6.01->0.684 s", "verdict": "supported", "source": "Table 2 (arithmetic checked)"},
+      {"line": 457, "claim": "gpt-4o rows: temporal 45.1->62.4 (38.4%), multi 44.3->57.9 (30.7%), KU 78.2->83.3 (6.52%), SSU 81.4->92.9 (14.1%)", "verdict": "supported", "source": "Table 3"},
+      {"line": 459, "claim": "SSP gpt-4o +36.7 pp; temporal +17.6/+17.3 pp; multi +6.8/+13.6 pp; gpt-4o-mini improved in 4 of 6", "verdict": "supported", "source": "Table 3 arithmetic; §4.3.2 'four of the six categories'"},
+      {"line": 465, "claim": "single-session-assistant gpt-4o 94.6->80.4 (-17.7%, 14.2 pp); gpt-4o-mini 81.8->75.0 (-9.06%, 6.8 pp)", "verdict": "supported", "source": "Table 3; §4.3.2 last paragraph"},
+      {"line": 293, "claim": "Reranker typed as rho: \\{phi(alpha), ...\\} -> ..., 'input is written as a set'", "verdict": "wrong", "source": "Source LaTeX alttext '\\rho:{\\varphi(\\alpha),...}\\to...' - TeX grouping braces, rendered without braces; not set notation"}
+    ]
+  },
+  "checklist": {
+    "repeated": 0,
+    "avoided": 6,
+    "na": 0,
+    "repeated_ids": [],
+    "details": [
+      {"id": "inline-math-delimiters", "result": "avoided", "evidence": "0 matches for \\( \\) or \\[ \\]; inline math is $$...$$ e.g. L57 '$$\\mathcal{N}$$은 노드 집합'"},
+      {"id": "longmemeval-tldr-relative", "result": "avoided", "evidence": "L30 '60.2%에서 71.2%로 올랐습니다. 저자들은 이를 상대 개선율로 최대 18.5%라고 보고합니다' (no %포인트; 15.2% not in TL;DR)"},
+      {"id": "longmemeval-results-relative", "result": "avoided", "evidence": "L440 '55.4%에서 63.8%로 ... 절대 차이는 8.4%p이고, 상대 개선율은 ... 15.2%' and '60.2%에서 71.2%로 ... 11.0%p'; %p used only for absolute differences"},
+      {"id": "longmemeval-baseline-misattributed", "result": "avoided", "evidence": "L30 'LongMemEval_s(gpt-4o)에서 정확도가 전체 컨텍스트 기준선의 60.2%에서'; L434 'gpt-4o-mini 15.2% 개선' framed as the model used"},
+      {"id": "longmemeval-185-arithmetic", "result": "avoided", "evidence": "L440 '11.0/60.2 ≈ 18.3%로, 논문의 18.5%와 조금 다른데' (marked as paper's figure; added rounding speculation is a separate nit)"},
+      {"id": "missing-description", "result": "avoided", "evidence": "L8 description starts 'Zep은', 158 chars, numbers 94.8/93.4/18.5/90 all in TL;DR"}
+    ]
+  },
+  "extras": {"applicable": false, "note": "Review item; survey/guide extras do not apply."},
+  "top_issues": [
+    "L31 (TL;DR): single-session-preference/temporal-reasoning/multi-session described as '세션을 넘나드는' questions; single-session-preference is single-session (post's own L412) and the paper only says 'complex question types'.",
+    "L17 (TL;DR): unsupported claim that MemGPT-like systems do not structurally preserve fact changes; the paper's novelty claim is only against prior graph-based RAG.",
+    "L293: reranker signature altered to set notation '\\{\\varphi(\\alpha), \\dots\\}' and interpreted from that; source braces are TeX grouping.",
+    "Length/padding: ~32.5k chars with textbook primers (KG L51, Neo4j/Cypher L158, BM25 L325, RRF/MMR L351-352, IQR L442) for a short systems paper; key numbers repeated across L30/L45/L442/L473.",
+    "Per-type table L446-455 drops four gpt-4o rows of a 12-row table and restates them in prose at L457; plus unlabelled writer formula L265 and speculative rounding explanation L440."
+  ]
+}

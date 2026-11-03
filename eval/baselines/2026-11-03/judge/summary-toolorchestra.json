@@ -1,0 +1,62 @@
+{
+  "item": "summary-toolorchestra",
+  "post": "/tmp/baseline/out/summary-toolorchestra.md",
+  "source": "arXiv 2511.21689v1 (HTML)",
+  "scores": {"A": 7, "B": 7, "C": 8, "D": 7, "E": 8, "F": 7, "U1": 9, "U2": 8, "X1": 5, "G": 9},
+  "score_notes": {
+    "A": "Arc is clean (TL;DR, background, method, implementation, results, significance/limitations), no body H1, no skipped levels, real table, display math has blank lines. Deduction: L51 uses bare single dollar signs in body text '비용 $0.10)와 B(비용 $0.40)', which the rubric forbids ('no single $'); with inline-$ MathJax this pairs into a math span. L61-63 list mixes a full sentence ('신호가 약하기 때문입니다.') with noun fragments. Section headings are topic names, not claims (L19, L29, L57, L69, L95).",
+    "B": "Register is consistent 입니다 and terms mostly established. Deductions: L31 '체인 오브 소트로 상황을 분석하고' is a transliteration (-> 'Chain-of-Thought(CoT)로 상황을 분석하고'); L35 noun frame '주목할 부분은 세 종류의 도구가 같은 인터페이스로 묶여 있다는 점입니다' (-> '구조도에서 세 종류의 도구는 모두 같은 인터페이스로 묶입니다'); L97 '프런티어 모델을 넘을 수 있음을 보여 줍니다' (-> '작은 조율 모델이 ... 프런티어 모델을 넘습니다'); L99 formulaic opener '한계도 분명합니다.'; terms like '클리핑된 대리 목적 함수' (L55), '어드밴티지' (L55), '마르코프 결정 과정' (L31) get no English on first use.",
+    "C": "Motivation (biased prompted orchestrators, L23-27) leads naturally into the reward design and the results reuse the bias story (L87). Deductions: L55 introduces GRPO's 'clipped surrogate objective' with no definition and it never returns; L93 crams unseen-tool generalization, unseen pricing and preference results into one paragraph, which reads as a dump.",
+    "D": "Hard part (reward vector, batch min-max normalisation, preference dot product) gets formula plus a labelled toy example (L51) and a key-idea box (L53). Deductions: the L51 example ignores that the wrong trajectory C is also in the batch, so 'A가 1, B가 0으로 정규화' holds only if C's cost lies between $0.10 and $0.40 (C's cost is never given); L93 preference scores '46.7, 68.4, 79.5' are not explained (sum of preference-aware rewards relative to Qwen3-8B, per Appendix L) until a one-clause caveat in L99; GRPO clipping (L55) left unexplained.",
+    "E": "One results table copied cell-for-cell from the paper's main table (L75-83), three figures placed at their discussion and described without paper numbering. Deductions: L85 mis-describes what was cut ('도구 없음 구성과 Llama 계열 일부 행은 생략') when all Llama-Nemotron/Llama-3.3-70B rows, the basic-tools Qwen3-8B/Qwen3-235B rows and the reported-SOTA rows are also gone; L93's 12 numbers across three tables would read better as a small table.",
+    "F": "13 of 15 sampled claims check out, including every table cell. Deductions: L99 ' 성능의 상당 부분은 여전히 GPT-5 같은 프런티어 모델 호출에서 나오므로' is unsupported (the paper gives no attribution of accuracy to GPT-5 calls; Orchestrator calls GPT-5 1.6 times per instance, Table 15); L87 attaches the cost '30.2센트에서 9.2센트' to HLE ('HLE에서 ... 비용은') although cost is the HLE+FRAMES average; L85 omitted-rows note is inaccurate; L27 'Orchestrator-8B는 ... 비교적 고르게 나눕니다' is read off a figure.",
+    "U1": "All five questions covered: motivation (L21-27), method (L31-55), implementation and data (L59-67), results (L71-93), significance (L97).",
+    "U2": "About 5,900 body characters, TL;DR plain prose without math (L17), one distilled table, grounded limitations (L99: text-only HLE subset, 84.2 not reproduced). L93 is dense.",
+    "X1": "Category Agentic-AI fits. Tags are mostly descriptive phrases, not the paper's terms: 'Synthetic-Tool-Use-Environments' and 'Efficiency-Aware-Reward' (both warned by the generator), 'Reasoning-Models' is generic; the paper's own names ToolOrchestra, ToolScale and GRPO are absent.",
+    "G": "use_math true with $$ present; description 146 chars, longer than the title, opens with 'ToolOrchestra', numbers 37.1/35.1/2.5배 all from the TL;DR; file date 2026-10-16 not before date 2025-11-26. Blog lint not run."
+  },
+  "principles": {
+    "claim_headings": {"status": "not met", "evidence": "All H2 are topic names: L19 '연구 배경', L29 '제안 방법', L57 '구현 방식', L69 '실험 결과', L95 '의의와 한계'; L73 '주요 비교'."},
+    "running_example": {"status": "not met", "evidence": "No input carried through; the A/B/C trajectory example appears only at L51. The HLE pilot (L23) is not reused."},
+    "mechanism_design_formula_example": {"status": "met", "evidence": "Reward: problem L31 -> design reason L53 (no fixed weights; per-query preference) -> formulas L40, L46 -> numeric toy example L51 (flawed: C's cost missing)."},
+    "facts_said_once": {"status": "partly met", "evidence": "37.1 vs 35.1 at L9, L17, L87 (as '2.0점') and L83; table costs 30.2/9.2 and latencies 19.8/8.2 restated in prose L87; GPT-5's GPT-5-mini bias at L27 and L87."},
+    "numbers_with_scope": {"status": "partly met", "evidence": "Most carry model/tool setting (L77-83, L93). Slips: L87 cost tied to HLE though averaged over HLE+FRAMES (L85); L87 call counts lack 'averaged across HLE, FRAMES, τ²-Bench'; L93 '비용은 102.4 대 34.8' has no unit."},
+    "nothing_invented": {"status": "partly met", "evidence": "Toy example labelled '설명용 가상 수치로' (L51). L99 frontier-share claim is not in the paper."},
+    "own_assessment_at_end": {"status": "met", "evidence": "L99 gives the writer's own critique: untrained baselines, no reward ablation, text-only HLE vs full-set 35.2, unreproduced 84.2, GPT-5 judge dependence, relative preference metric, and a usage framing ('강한 모델을 덜, 더 잘 쓰게'). One sentence unsupported."},
+    "length_fitted": {"status": "met", "evidence": "About 5,900 body characters; method weighted over background."},
+    "type_specific_shape": {"status": "met", "evidence": "Summary: TL;DR first (L15-17), no abstract/intro section, one distilled results table (L75-83), limitation section."},
+    "korean_style": {"status": "partly met", "evidence": "입니다 register kept; varied sentence shapes. Noun frames L35, L97; transliteration L31; formulaic L99 '한계도 분명합니다.'"}
+  },
+  "claims": {
+    "checked": 15, "supported": 12, "unsupported": 1, "wrong": 1, "unverifiable": 1,
+    "examples": [
+      {"line": 17, "claim": "HLE 37.1% vs GPT-5 35.1%, 2.5x more efficient", "verdict": "supported", "source": "Abstract: 'On HLE, Orchestrator achieves a score of 37.1%, outperforming GPT-5 (35.1%) while being 2.5x more efficient.'"},
+      {"line": 17, "claim": "τ²-Bench and FRAMES beat GPT-5 at about 30% of cost", "verdict": "supported", "source": "Abstract: 'On τ2-Bench and FRAMES, Orchestrator surpasses GPT-5 by a wide margin while using only about 30% of the cost.'"},
+      {"line": 23, "claim": "Pilot on 300 HLE problems with GPT-5, GPT-5-mini, Qwen3-32B, Qwen2.5-Coder-32B as tools", "verdict": "supported", "source": "App. A: 'allowing them to use GPT-5, GPT-5-mini, Qwen3-32B, and Qwen2.5-Coder-32B as tools ... a set of 300 HLE problems'"},
+      {"line": 27, "claim": "Qwen3-8B delegates about 73% to GPT-5", "verdict": "supported", "source": "App. A: 'it exhibits a strong tendency to delegate the task to GPT-5 (73% of the cases)'"},
+      {"line": 27, "claim": "Orchestrator-8B spreads calls fairly evenly over GPT-5, GPT-5-mini, Qwen3-32B in the pilot", "verdict": "unverifiable", "source": "Only in Figure 3 (image); text gives no Orchestrator pilot numbers."},
+      {"line": 43, "claim": "Binary outcome judged by GPT-5; min-max normalisation over rollout batch; zero when max = min", "verdict": "supported", "source": "§3.2: 'We leverage GPT-5 as a judge'; 'normalize each element ... over the rollout batch T'; 'If MmaxT[k]=MminT[k], we disregard Mτ[k] by setting it to zero.'"},
+      {"line": 59, "claim": "Qwen3-8B backbone; lr 1e-6; 24,000 input / 8,000 generation; train batch 16, rollout batch 8; 50 turns; 16 H100", "verdict": "supported", "source": "§4.4 verbatim values."},
+      {"line": 65, "claim": "10 domains; drop tasks unsolved at pass@8, erroring golden calls, or solvable without actions", "verdict": "supported", "source": "§1 'across 10 domains'; §3.3 filter list; Table 5 domains."},
+      {"line": 75, "claim": "Table rows (e.g. GPT-5 basic 35.1/74.0/77.7/30.2/19.8; Orchestrator 37.1/76.3/80.2/9.2/8.2; GPT-5 full 21.2/57.5/62.3/17.8/13.6)", "verdict": "supported", "source": "Table 1, all 35 copied cells match."},
+      {"line": 85, "claim": "Omitted only the no-tool configuration and some Llama rows", "verdict": "wrong", "source": "Table 1 also has basic-tools Qwen3-8B, Llama-Nemotron-49B, Llama-3.3-70B, Qwen3-235B rows, full-toolset Llama-Nemotron/Llama-3.3-70B rows and 'Existing reported SOTA' rows, all omitted; all Llama rows were dropped, not some."},
+      {"line": 87, "claim": "HLE +2.0 over GPT-5 basic; cost 30.2 -> 9.2 cents (~30%); latency 19.8 -> 8.2 min", "verdict": "supported", "source": "Table 1; but cost/latency are 'averaged between HLE and Frames', while the sentence attaches them to HLE (scope slip)."},
+      {"line": 87, "claim": "Per-instance calls: GPT-5 orchestrator -> GPT-5-mini 5.6; Claude Opus 4.1 -> GPT-5 6.2; Orchestrator -> GPT-5 1.6, local search 1.8, Qwen3-32B 1.3", "verdict": "supported", "source": "Table 15 (averaged across HLE, Frames and τ2-bench)."},
+      {"line": 93, "claim": "Unseen tools: Orchestrator 22.0/73.8/48.8 vs Claude Opus 4.1 17.8/53.6/43.4, cost 34.8 vs 102.4; preference 46.7/68.4/79.5 vs 40.2/63.4/73.5", "verdict": "supported", "source": "Table 2 and Table 3."},
+      {"line": 99, "claim": "Reported GPT-5 HLE 35.2 on full set; τ²-Bench 84.2 not reproduced, 77.7 used", "verdict": "supported", "source": "Table 1 footnotes † and ‡."},
+      {"line": 99, "claim": "A large share of performance still comes from frontier-model calls such as GPT-5", "verdict": "unsupported", "source": "No ablation or attribution in the paper; Table 15 shows Orchestrator calls GPT-5 1.6 times per instance, and §1 says GPT-5 is called in ~40% of τ²-Bench steps, neither of which measures its share of accuracy."}
+    ]
+  },
+  "checklist": {
+    "repeated": 0, "avoided": 1, "na": 0, "repeated_ids": [],
+    "items": [
+      {"id": "tags-not-in-paper", "result": "avoided", "evidence": "L11 tags 'Efficiency-Aware-Reward' and 'Synthetic-Tool-Use-Environments' are not paper terms, but both are flagged in the run's warnings (summary-toolorchestra.result.json: \"Tag 'Efficiency-Aware-Reward' (or its acronym) does not appear in the paper; check it fits.\"), which satisfies the check's 'or is flagged' clause. 'Tool-Orchestration', 'Orchestrator-Model', 'Reasoning-Models', 'Agentic-AI' do appear in the paper. Caveat: the generator still chooses non-paper tags."}
+    ]
+  },
+  "extras": {},
+  "top_issues": [
+    "L99 states as fact that much of the performance still comes from GPT-5 calls; the paper has no such attribution (unsupported claim in the closing assessment).",
+    "L51 uses bare single '$' in body text ('비용 $0.10', '$0.40'), forbidden by the blog math rule, and the toy reward example omits the wrong trajectory's cost, which also enters the batch min-max normalisation.",
+    "Scope and table-note slips: L87 ties the HLE+FRAMES-averaged cost to HLE; L85 says only the no-tool and 'some Llama' rows were cut when many more were; tags L11 are descriptive phrases rather than the paper's terms (ToolOrchestra, ToolScale, GRPO missing)."
+  ]
+}

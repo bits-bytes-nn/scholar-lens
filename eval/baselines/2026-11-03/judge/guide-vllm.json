@@ -1,0 +1,110 @@
+{
+  "item": "guide-vllm",
+  "post": "/tmp/baseline/out/guide-vllm.md",
+  "scores": {"A": 6.0, "B": 8.0, "C": 7.0, "D": 7.0, "E": 7.5, "F": 9.0},
+  "type_scores": {"T1": 8.5, "T2": 7.0, "T3": 6.5},
+  "deductions": {
+    "A": [
+      "No TL;DR: post opens at L11 '## vLLM이 해결하는 문제와 핵심 아이디어' and goes straight to install at L23.",
+      "Architecture/internals first appear at L484 ('## 페이징된 KV 캐시 메모리 관리') after ~460 lines of install (L23-216) and API usage (L218-482).",
+      "Near-empty section L652-654 '### 해시 키와 해시 알고리즘': one generic paragraph ('일반적으로 해시 함수는 계산 비용과 충돌 내성 사이에서 차이가 납니다.') with no algorithm, flag or default.",
+      "No closing section: the body ends at L1253 (queue-limit tuning) and goes straight to '- - -' / Sources; no when-to-choose, failure modes or assessment.",
+      "Headings are topic names, not claims (e.g., L218 '## 오프라인 배치 추론', L622 '## 자동 프리픽스 캐싱', L874 '## 다중 GPU 분산 실행')."
+    ],
+    "B": [
+      "L732 noun frame: '숫자가 작을수록 먼저 처리된다는 점을 클라이언트 쪽 규칙과 맞춰야 합니다' -> '숫자가 작을수록 먼저 처리되므로 클라이언트 규칙도 그 방향에 맞춥니다'.",
+      "L609 formulaic lead-in: '손으로 따라가면 흐름은 이렇습니다.'",
+      "22 occurrences of '수 있습니다', several for things that simply happen (e.g., L272 '실제로 적용되는 샘플링 설정이 달라질 수 있습니다')."
+    ],
+    "C": [
+      "Facts restated instead of pointed back to: 60-80% waste (L13 and L500), under-4% waste (L19 and L509), download-kernels rationale (L77-81 and L872), shared-memory/--ipc=host (L128 and L936).",
+      "Ordering reads as install manual + internals essay + tuning manual glued together; L624 switches to v0.6.2 docs mid-flow, after L496/L542 had already used the older BlockSpaceManagerV1 implementation."
+    ],
+    "D": [
+      "L540 'Orca(Oracle) 대비' is used without saying what Orca or the Oracle variant is (Orca is first explained only at L699).",
+      "L781 'V2 모델 실행기', 'VMM', '확장형 KV 캐시' arrive without definition.",
+      "Install section is padded for a competent reader (ROCm variant details L97-106, Podman/SELinux L128, ROCm bake L194-199), while the hard current-version internals (V1 KV cache manager, chunked prefill scheduling) are deferred to '--help' (L707, L763)."
+    ],
+    "E": [
+      "No diagram of the current request path (API server -> EngineCore/scheduler -> workers), even though 'Architecture Overview' is cited (L1272).",
+      "Good: toy block manager code (L548-607), preemption walk-through (L742-746), comparison tables (L756-761, L839-846). The L17 GIF is hotlinked to vllm.ai/blog-assets (resolves, HTTP 200). L517/L529 local images could not be checked."
+    ],
+    "F": [
+      "L624/L642 use the v0.6.2 automatic-prefix-caching doc (labelled as such), but that page is missing from Sources (L1257-1274), and the current design (sha256 default, --prefix-caching-hash-algo, cache_salt, prefix caching on by default) is left out.",
+      "L752 says 'vLLM은 내보낸 블록을 CPU 메모리로 복사합니다' in the present tense. L763 defers the recovery mode to '--help', but the cited Optimization doc (L1273) says V1 defaults to RECOMPUTE rather than SWAP, so a reader may take swap as current behaviour.",
+      "L707 defers the chunked-prefill flags and defaults to '--help', but the cited Optimization doc says chunked prefill is on by default in V1 and that the scheduler puts decodes first."
+    ]
+  },
+  "principles": {
+    "claim_headings": {"status": "not met", "evidence": "Topic headings throughout: L218, L484, L622, L691, L874, L1026, L1127."},
+    "running_example": {"status": "partly met", "evidence": "Qwen/Qwen2.5-1.5B-Instruct recurs from L280 through serving, scheduling, memory and logging (L333, L721, L777, L1194), but there is no single application threaded through the post; models switch (opt-125m, Llama-2-7b, opt-13b, Llama-3.2-1B)."},
+    "mechanism_design_formula_example": {"status": "met (core)", "evidence": "PagedAttention: OS analogy (L486), block table (L488-496), waste bound formula (L504-507), toy code plus hand trace (L548-609), block-size trade-off with paper data (L611-620). Prefix caching has a formula (L633) but no worked example."},
+    "facts_said_once": {"status": "not met", "evidence": "60-80% (L13, L500); <4% (L19, L509); download-kernels (L77-81, L872); --ipc=host/shm (L128, L936)."},
+    "numbers_with_scope": {"status": "met", "evidence": "L19 24x scoped to LLaMA-7B/A10G and LLaMA-13B/A100-40GB with ShareGPT; L540 scoped to OPT-13B and Alpaca with beam width 6; L535-538 savings by dataset."},
+    "nothing_invented": {"status": "met", "evidence": "Toy simulation and preemption scenario are labelled as examples (L546, L740). The KV-per-token formula L818 is standard but unsourced."},
+    "own_assessment_at_end": {"status": "not met", "evidence": "No conclusion; the last body paragraph is L1253 on tuning queue depth."},
+    "length_fitted_to_difficulty": {"status": "partly met", "evidence": "1274 lines; install/build L23-216 is long and platform-exhaustive, while current V1 internals are thin or deferred (L707, L763)."},
+    "type_shape_guide": {"status": "partly met", "evidence": "Opens with the problem (L13) but has no TL;DR; architecture comes after install and usage (L484); no 'when to choose / how it fails' close; the comparison sources (L1266, L1269) are never used in the body."},
+    "korean_style": {"status": "mostly met", "evidence": "Consistent 입니다 register and Korean headings; few hype words; minor noun frames (L732) and formulaic lines (L609)."}
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 15,
+    "unsupported": 0,
+    "wrong": 0,
+    "unverifiable": 0,
+    "examples": [
+      {"line": 13, "claim": "KV cache up to 1.7GB per sequence in LLaMA-13B; existing systems waste 60-80%", "verdict": "supported", "source": "blog.vllm.ai: 'Takes up to 1.7GB for a single sequence in LLaMA-13B' / 'waste 60% – 80% of memory'"},
+      {"line": 19, "claim": "waste under 4%; up to 24x over HF Transformers on LLaMA-7B/A10G and LLaMA-13B/A100 40GB with ShareGPT lengths", "verdict": "supported", "source": "blog.vllm.ai: 'mere waste of under 4%' / 'LLaMA-7B on an NVIDIA A10G GPU and LLaMA-13B on an NVIDIA A100 GPU (40GB)... up to 24x higher throughput compared to HF'"},
+      {"line": 25, "claim": "Python 3.11-3.14, Linux", "verdict": "supported", "source": "docs/getting_started/installation/gpu.md: 'Python: 3.11 -- 3.14'"},
+      {"line": 27, "claim": "compute capability 7.5+ (T4, RTX20xx, A100, L4, H100, B200); CUDA 12.9 binaries", "verdict": "supported", "source": "gpu.cuda.inc.md L4, L9"},
+      {"line": 97, "claim": "ROCm 6.3+, MI350 needs 7.0+, Ryzen AI MAX/AI 300 needs 7.0.2+; Python 3.12-only wheels silently fall back to CUDA wheel with libcudart.so error", "verdict": "supported", "source": "gpu.rocm.inc.md L18-21, L32-34"},
+      {"line": 535, "claim": "Memory saving: parallel sampling 6.1-9.8% (Alpaca), 16.2-30.5% (ShareGPT); beam search 37.6-55.2% / 44.3-66.3%", "verdict": "supported", "source": "arXiv 2309.06180 §6.3: 'We show 6.1% - 9.8% ... 37.6% - 55.2% ... 16.2% - 30.5% ... 44.3% - 66.3%'"},
+      {"line": 540, "claim": "vLLM over Orca (Oracle), OPT-13B + Alpaca: 1.3x basic sampling to 2.3x beam width 6", "verdict": "supported", "source": "arXiv 2309.06180 §6.3"},
+      {"line": 620, "claim": "Block size: ShareGPT best 16-128; Alpaca 16 and 32 work, larger degrades; default 16", "verdict": "supported", "source": "arXiv 2309.06180 §7.2"},
+      {"line": 646, "claim": "v0.6.2 eviction: refcount 0, then LRU, then longest-prefix tail; equals RadixAttention for full attention", "verdict": "supported", "source": "v0.6.2 docs/source/automatic_prefix_caching/details.md L34-38"},
+      {"line": 713, "claim": "--scheduling-policy fcfs (default) | priority, lower value earlier, ties by arrival", "verdict": "supported", "source": "vllm/config/scheduler.py: policy: SchedulerPolicy = 'fcfs'"},
+      {"line": 781, "claim": "gpu-memory-utilization default 1.0 with extensible KV cache, 0.92 otherwise", "verdict": "supported", "source": "vllm/config/cache.py L226-227"},
+      {"line": 831, "claim": "--cpu-offload-gb: 24GB GPU + 10 behaves like 34GB, loads 13B BF16 model needing >=26GB", "verdict": "supported", "source": "Engine Arguments doc (cpu_offload_gb docstring)"},
+      {"line": 1021, "claim": "CPU defaults: max-num-batched-tokens 4096*ws offline / 2048*ws online; max-num-seqs 256*ws / 128*ws; block-size multiple of 32, default 128", "verdict": "supported", "source": "docs/getting_started/installation/cpu.md L302-311"},
+      {"line": 1083, "claim": "Helm probes readiness 5s/5s/3, liveness 15s/10s/3; resources 4 CPU/16Gi/1 GPU; autoscaling 1-100 at 80% CPU; aws-cli 2.6.4; pvcStorage 1Gi", "verdict": "supported", "source": "docs/deployment/frameworks/helm.md values table L55-107"},
+      {"line": 1237, "claim": "--max-num-queued-reqs rejects with HTTP 503, unbounded by default, enforced in API server across DP ranks; size ~ dp*max_num_seqs + depth", "verdict": "supported", "source": "vllm/config/scheduler.py L92-104"}
+    ],
+    "notes": "No wrong numbers found. Problems are omission and staleness: v0.6.2 doc used but unlisted, current V1 RECOMPUTE default and chunked-prefill default not stated."
+  },
+  "checklist": {
+    "defined_checks": 0,
+    "note": "human_fixes.yaml guide-vllm has fixes: []. The six checks below are derived from its notes (generic guide defects) and counted here.",
+    "repeated": 0,
+    "avoided": 6,
+    "na": 0,
+    "repeated_ids": [],
+    "derived": [
+      {"id": "nonexistent-chapter-xref", "result": "avoided", "evidence": "No 'N장' cross-references; uses '앞서 본 ...' (e.g., L689, L801) that resolve."},
+      {"id": "tag-remnant", "result": "avoided", "evidence": "No '</path>' or '</name>' in the file."},
+      {"id": "entity-leak", "result": "avoided", "evidence": "No '&gt;'/'&lt;'. One '&#124;' in Sources link text, L1263 (renders as '|'; minor)."},
+      {"id": "unclosed-code-fence", "result": "avoided", "evidence": "126 fence lines (even); all blocks close."},
+      {"id": "stale-third-party-cli-flags", "result": "avoided", "evidence": "Spot-checked flags (--torch-backend, download-kernels, --help=, --attention-backend, -dph/-dpe, --max-num-queued-reqs, --custom-histogram-buckets, bench forward) match current docs and config."},
+      {"id": "install-usage-centric", "result": "avoided (structurally weak)", "evidence": "Substantial internals at L484-766 (paged KV, CoW, prefix caching, scheduler, preemption), but they come after ~460 lines of install and usage."}
+    ]
+  },
+  "extras": {
+    "architecture_first_line": 484,
+    "architecture_note": "The problem framing at L13-19 is conceptual only; the first real mechanism section is L484. Current V1 process architecture (API server / EngineCore / workers) is never explained; EngineCore is mentioned once, at L1201.",
+    "sources_total": 17,
+    "non_official_sources": 5,
+    "non_official_share": 0.29,
+    "non_official_list": ["arXiv 2309.06180", "zhihu p/700780161", "artifacthub arktec vllm chart", "llm-academy.dev vllm-vs-sglang (unused in body)", "dev.to engines compared 2026 (unused in body)"],
+    "unlisted_source_used": "vLLM v0.6.2 automatic prefix caching doc (L624, L642)",
+    "opens_with_problem": true,
+    "has_tldr": false,
+    "closes_with_when_to_choose_and_failure_modes": false
+  },
+  "top_issues": [
+    "Guide shape violated: no TL;DR, and architecture/internals first appear at L484 after ~460 lines of install and API usage; no current V1 engine architecture (API server/EngineCore/workers).",
+    "No closing: ends at L1253 with no when-to-choose, no failure modes, no comparison with SGLang/TGI (two comparison sources at L1266/L1269 are unused), and no assessment of its own.",
+    "Current-version internals deferred or missing: chunked prefill (L707) and preemption recovery mode (L763) are pushed to '--help' though the cited Optimization doc says V1 turns chunked prefill on by default and uses RECOMPUTE; L752 describes swap in the present tense.",
+    "Near-empty section L652-654 on hash algorithm omits the documented sha256 default, --prefix-caching-hash-algo options and cache_salt. The prefix-caching mechanism rests on the v0.6.2 doc, which is not in Sources.",
+    "Facts repeated instead of pointed back to (60-80% L13/L500, <4% L19/L509, download-kernels L77-81/L872, --ipc=host L128/L936). The install section is padded with platform minutiae while Orca(Oracle) (L540) and V2 runner/VMM (L781) go unexplained."
+  ]
+}
