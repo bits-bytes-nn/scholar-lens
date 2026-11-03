@@ -55,8 +55,10 @@ Record evidence the post needs about this paper, in the survey's language for
   noun phrase); never a limitation about what the paper's text does not
   contain;
 - how it relates to earlier work it names (relation);
-- up to two figures that explain the method or the main result (figure, by
-  F-id, with a claim saying what the figure shows).
+- every figure that explains the method, an architecture or a main result
+  (figure, by F-id, with a claim saying what the caption shows): up to four
+  for a core paper, one or two for a supporting paper. Visuals make the post;
+  skip only decorative or redundant figures.
 `quote` is copied verbatim from the section at `anchor` (one to three
 sentences), and every number in `claim` or `cell` must be in the quote.
 Read the sections you need: the method and experiments of a core paper in
@@ -83,6 +85,10 @@ Sections, in this order:
 - insights (exactly one): trends, trade-offs and open problems across the
   lineages, from the evidence, as the post's view.
 - conclusion (optional, last, short).
+Give each section the visuals its evidence has: every core paper's figure
+and key equation evidence goes to the section that explains that paper
+(deep sections need at least two visuals; a section may also build a small
+table from its number evidence).
 Titles are claims, not labels, written in the post's register (Korean: a
 "~입니다/~합니다" sentence or a noun phrase, never a "~다" ending); each
 section has a one-sentence thesis and the reader's question it answers. Depth: deep for the hard core mechanisms,

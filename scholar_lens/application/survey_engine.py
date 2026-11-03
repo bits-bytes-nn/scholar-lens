@@ -524,6 +524,11 @@ class EvidenceSurveyEngine:
                 earlier_numbers=numbers,
                 figure_urls=figures,
                 free_numbers=free,
+                depth=(
+                    section.depth
+                    if section.kind in ("lineage", "cross_cutting")
+                    else ""
+                ),
             )
 
         for round_ in range(self.settings.max_fix_rounds + 1):

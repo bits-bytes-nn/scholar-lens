@@ -429,3 +429,32 @@ def test_numbered_references_and_ids_as_names_are_problems() -> None:
     )
     assert any("by its id" in p for p in issues)
     assert not any("must start" in p for p in issues)  # any '## ' heading is fine
+
+
+def test_visual_minimum_example_numbers_and_model_sizes() -> None:
+    url = "https://arxiv.org/html/2305.18290v3/x1.png"
+
+    def check(
+        md: str, depth: str = "", numbers: dict[str, str] | None = None
+    ) -> list[str]:
+        return draft_problems(
+            md,
+            title="t",
+            own=["E2", "E4"],
+            earlier=[],
+            ledger=_ledger(),
+            earlier_numbers=numbers or {},
+            figure_urls=[url],
+            free_numbers="",
+            depth=depth,
+        )
+
+    one_visual = f"## 제목입니다\n\nDPO는 61% 승률입니다 [[E2]].\n\n![비교]({url})\n"
+    assert any("at least 2 visuals" in p for p in check(one_visual, "deep"))
+    assert not any("visuals" in p for p in check(one_visual + "\n$$a=b$$\n", "deep"))
+    example = f"## 제목입니다\n\n예를 들어 보상이 0.42와 0.18이면 차이는 0.24입니다.\n\n![비교]({url})\n"
+    assert not any("without evidence" in p for p in check(example))
+    sizes = (
+        f"## 제목입니다\n\nLlama 2 7B에서도 같은 경향입니다 [[E2]].\n\n![비교]({url})\n"
+    )
+    assert not any("already stated" in p for p in check(sizes, numbers={"7B": "앞 절"}))

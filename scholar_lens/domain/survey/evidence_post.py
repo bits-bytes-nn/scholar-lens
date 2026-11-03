@@ -185,6 +185,16 @@ def outline_problems(
                 problems.append(f"table row {row.paper}: {eid} is not a limitation")
     if missing := sorted(core - {r.paper for r in outline.table}):
         problems.append(f"the table misses core papers {missing}")
+    for item in ledger:
+        if (
+            item.paper_id in core
+            and item.kind in ("figure", "equation")
+            and item.id not in owner
+        ):
+            problems.append(
+                f"{item.paper_id}'s {item.kind} {item.id} is given to no section: "
+                "give it to the section that explains the paper"
+            )
     return problems
 
 
@@ -289,6 +299,24 @@ def stated_numbers(sentence: str, free: str) -> list[str]:
     return unsourced_numbers(_plain(sentence), free)
 
 
+# Visuals a lineage or cross-cutting section needs by depth (images, display
+# equations and tables); the code-built tables follow other kinds.
+MIN_VISUALS = {"deep": 2, "standard": 1, "brief": 0}
+# A sentence the writer marks as its own illustration: its numbers need no
+# evidence (the claim check still reads it).
+_EXAMPLE = re.compile(
+    r"예를 들어|가령|가상의|예시로|for example|e\.g\.|suppose", re.IGNORECASE
+)
+# A number with a size unit names a model ("Llama 2 7B"), not a result.
+_MODEL_SIZE = re.compile(r"^\d+(?:\.\d+)?[BMK]$", re.IGNORECASE)
+
+
+def visual_count(markdown: str) -> int:
+    body = _FENCE.sub("\n", markdown)
+    tables = len(re.findall(r"^\s*\|?\s*:?-{3,}", body, re.M))
+    return len(_IMAGE.findall(body)) + len(_DISPLAY_MATH.findall(body)) + tables
+
+
 def draft_problems(
     markdown: str,
     *,
@@ -299,6 +327,7 @@ def draft_problems(
     earlier_numbers: Mapping[str, str],
     figure_urls: Iterable[str],
     free_numbers: str,
+    depth: str = "",
 ) -> list[str]:
     """Deterministic problems of a section draft (each quotes its sentence):
     a missing heading, unknown or foreign evidence ids, a number without
@@ -320,9 +349,10 @@ def draft_problems(
                 f"evidence {foreign} belongs to another section; leave it out: {quoted}"
             )
         numbers = stated_numbers(sentence, free_numbers)
-        if numbers and not ids:
+        example = bool(_EXAMPLE.search(sentence))
+        if numbers and not ids and not example:
             problems.append(f"numbers {numbers} without evidence: {quoted}")
-        elif numbers:
+        elif numbers and not example:
             support = " ".join(
                 f"{e.quote} {e.scope} {e.claim} {e.cell}"
                 for i in ids
@@ -334,7 +364,9 @@ def draft_problems(
                 problems.append(
                     f"numbers {missing} are not in the cited evidence: {quoted}"
                 )
-        if repeated := [n for n in numbers if n in earlier_numbers]:
+        if repeated := [
+            n for n in numbers if n in earlier_numbers and not _MODEL_SIZE.match(n)
+        ]:
             problems.append(
                 f"{repeated} already stated in '{earlier_numbers[repeated[0]]}': "
                 f"refer back without repeating: {quoted}"
@@ -348,6 +380,11 @@ def draft_problems(
                 "describes the post's inputs instead of the papers; state what "
                 f"the paper does or leave it out: {quoted}"
             )
+    if (need := MIN_VISUALS.get(depth, 0)) and visual_count(markdown) < need:
+        problems.append(
+            f"a {depth} section needs at least {need} visuals (its figures, an "
+            "equation, or a small table from its number evidence)"
+        )
     expected = set(figure_urls)
     shown = set(_IMAGE.findall(markdown))
     if extra := sorted(shown - expected):
