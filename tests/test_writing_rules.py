@@ -14,8 +14,7 @@ from scholar_lens.domain.markdown.lint import (
     lint_markdown,
     writing_issues,
 )
-from scholar_lens.domain.validation import body_errors, validate_post
-from scholar_lens.src.review_plan import (
+from scholar_lens.domain.review_plan import (
     HARD_OVERRUN,
     MIN_HARD_SCALE,
     MIN_SECTION_WORDS,
@@ -29,6 +28,7 @@ from scholar_lens.src.review_plan import (
     review_word_budget,
     target_words,
 )
+from scholar_lens.domain.validation import body_errors, validate_post
 
 
 @pytest.mark.parametrize(
@@ -476,7 +476,7 @@ def test_html_attribute_text_is_not_prose() -> None:
 
 
 def test_edit_that_adds_a_rule_slip_is_skipped() -> None:
-    from scholar_lens.src.review_plan import Edit, apply_edits
+    from scholar_lens.domain.review_plan import Edit, apply_edits
 
     text = "## 방법\n\n결과를 정리합니다."
     out, applied, skipped = apply_edits(
@@ -488,7 +488,7 @@ def test_edit_that_adds_a_rule_slip_is_skipped() -> None:
 
 
 def test_skipped_slip_edit_names_the_new_slip() -> None:
-    from scholar_lens.src.review_plan import Edit, apply_edits
+    from scholar_lens.domain.review_plan import Edit, apply_edits
 
     text = "## 방법\n\n결과를 정리합니다."
     _, _, skipped = apply_edits(
@@ -584,7 +584,7 @@ def test_writing_notes_count_the_hits_past_the_cap() -> None:
 
 
 def test_edit_that_trades_one_slip_for_another_is_skipped() -> None:
-    from scholar_lens.src.review_plan import Edit, apply_edits
+    from scholar_lens.domain.review_plan import Edit, apply_edits
 
     text = "## 방법\n\nTable 2에서 결과를 정리합니다."
     edit = Edit(find="Table 2에서 결과를", replace="이 절에서 결과를")
@@ -626,7 +626,7 @@ def test_close_open_fence(text: str, closed: bool) -> None:
 
 
 def test_section_with_open_fence_does_not_swallow_the_next_heading() -> None:
-    from scholar_lens.src.review_plan import ensure_section_heading
+    from scholar_lens.domain.review_plan import ensure_section_heading
 
     section = ensure_section_heading("```python\nprint(1)\n", "예제")
     joined = section + "\n\n## 다음 절\n\n본문입니다."
@@ -634,7 +634,7 @@ def test_section_with_open_fence_does_not_swallow_the_next_heading() -> None:
 
 
 def test_edit_that_drops_a_closing_fence_is_skipped() -> None:
-    from scholar_lens.src.review_plan import Edit, apply_edits
+    from scholar_lens.domain.review_plan import Edit, apply_edits
 
     text = "## A\n\n```python\nx = 1\n```\n\n본문입니다.\n\n## B\n\n끝입니다."
     edit = Edit(find="x = 1\n```\n", replace="x = 1\n")
@@ -647,7 +647,7 @@ def test_edit_that_drops_a_closing_fence_is_skipped() -> None:
     [("본문.", "본문.\n\n```"), ("ls\n```", "ls")],
 )
 def test_edit_that_unbalances_a_fence_is_skipped(find: str, replace: str) -> None:
-    from scholar_lens.src.review_plan import Edit, apply_edits
+    from scholar_lens.domain.review_plan import Edit, apply_edits
 
     text = "## A\n\n본문.\n\n```bash\nls\n```\n\n## B\n\n끝."
     out, applied, skipped = apply_edits(
@@ -657,7 +657,7 @@ def test_edit_that_unbalances_a_fence_is_skipped(find: str, replace: str) -> Non
 
 
 def test_edit_inside_a_whole_code_block_is_applied() -> None:
-    from scholar_lens.src.review_plan import Edit, apply_edits
+    from scholar_lens.domain.review_plan import Edit, apply_edits
 
     text = "## A\n\n```bash\nls\n```\n"
     out, applied, _ = apply_edits(
@@ -700,7 +700,7 @@ def test_edit_inside_a_whole_code_block_is_applied() -> None:
 def test_edits_that_repair_a_fence_are_applied(
     text: str, find: str, replace: str, expected: str
 ) -> None:
-    from scholar_lens.src.review_plan import Edit, apply_edits
+    from scholar_lens.domain.review_plan import Edit, apply_edits
 
     out, applied, skipped = apply_edits(
         text, [Edit(find=find, replace=replace)], max_edits=3
@@ -710,7 +710,7 @@ def test_edits_that_repair_a_fence_are_applied(
 
 
 def test_closing_an_unclosed_fence_may_bring_back_a_swallowed_heading() -> None:
-    from scholar_lens.src.review_plan import Edit, apply_edits
+    from scholar_lens.domain.review_plan import Edit, apply_edits
 
     text = "## A\n\n```python\nx = 1\n\n## B\n\n끝."
     out, applied, skipped = apply_edits(
@@ -730,7 +730,7 @@ def test_closing_an_unclosed_fence_may_bring_back_a_swallowed_heading() -> None:
     ],
 )
 def test_closing_an_unclosed_fence_changes_nothing_else(replace: str) -> None:
-    from scholar_lens.src.review_plan import Edit, apply_edits
+    from scholar_lens.domain.review_plan import Edit, apply_edits
 
     text = "## A\n\n```python\nx = 1\n\n## B\n\n끝."
     out, applied, _ = apply_edits(

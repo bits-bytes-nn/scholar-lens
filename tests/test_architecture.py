@@ -57,7 +57,6 @@ def _modules(pattern: str) -> list[Path]:
 # (modules, the modules none of them may import)
 CONTRACTS = [
     ("survey_*.py", ("tech_guide", "explainer")),
-    ("web_research.py", ("review_plan",)),
     ("section_loop.py", ("tech_guide", "explainer", "survey_*")),
     # The publish types stay free of the run context, pipelines and
     # publisher. The post checks and fixes moved to scholar_lens.domain,

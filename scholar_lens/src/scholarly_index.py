@@ -1,6 +1,6 @@
 """Paper-index adapters for the survey plan: OpenAlex works, arXiv search,
 arXiv's DOI records at DataCite and Semantic Scholar citation data, turned
-into :class:`~scholar_lens.src.survey_plan.SourceRecord` values.
+into :class:`~scholar_lens.domain.survey.plan.SourceRecord` values.
 
 HTTP pacing and the single 429/5xx retry come from
 ``citation_metadata._get_json`` (the one retry layer for these APIs); arXiv
@@ -17,17 +17,17 @@ import re
 from datetime import date
 from typing import Any
 
-from . import citation_metadata
-from .arxiv_handler import ArxivMetadata
-from .constants import EnvVars
-from .logger import logger
-from .rate_limiter import RateLimiter
-from .survey_plan import (
+from ..domain.survey.plan import (
     CitationData,
     SourceRecord,
     normalize_doi,
     unversioned_arxiv_id,
 )
+from . import citation_metadata
+from .arxiv_handler import ArxivMetadata
+from .constants import EnvVars
+from .logger import logger
+from .rate_limiter import RateLimiter
 
 _OPENALEX_URL = "https://api.openalex.org/works"
 _SEMANTIC_SCHOLAR_BATCH_URL = "https://api.semanticscholar.org/graph/v1/paper/batch"

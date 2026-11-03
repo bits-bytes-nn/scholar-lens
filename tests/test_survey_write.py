@@ -29,29 +29,8 @@ from scholar_lens.domain.conventions import (
     TypeSpec,
     load_local_conventions,
 )
-from scholar_lens.domain.validation import validate_post
-from scholar_lens.src import runtime, survey_writer
-from scholar_lens.src.jobs import JobRequest
-from scholar_lens.src.metrics import TokenUsageTracker
-from scholar_lens.src.prompt_safety import strip_defanging
-from scholar_lens.src.prompts import (
-    SurveyCardPrompt,
-    SurveyEvaluationPrompt,
-    SurveyGroundingPrompt,
-    SurveyOutlinePrompt,
-    SurveySectionPrompt,
-)
-from scholar_lens.src.prompts.survey import (
-    CONNECTION_RULES,
-    DEPTH_GUIDANCE,
-    NARRATION_RULE,
-    REFERENCE_MATERIAL_RULE,
-    SECTION_ROLES,
-)
-from scholar_lens.src.publisher import Publisher
-from scholar_lens.src.runtime import RunContext
-from scholar_lens.src.survey_plan import SourceRecord, SurveyInputError, SurveyPlan
-from scholar_lens.src.survey_post import (
+from scholar_lens.domain.survey.plan import SourceRecord, SurveyInputError, SurveyPlan
+from scholar_lens.domain.survey.post import (
     PANEL_NOTE,
     CardAnswer,
     CardEquation,
@@ -80,6 +59,27 @@ from scholar_lens.src.survey_post import (
     timeline_table,
     unlink_foreign_papers,
 )
+from scholar_lens.domain.validation import validate_post
+from scholar_lens.src import runtime, survey_writer
+from scholar_lens.src.jobs import JobRequest
+from scholar_lens.src.metrics import TokenUsageTracker
+from scholar_lens.src.prompt_safety import strip_defanging
+from scholar_lens.src.prompts import (
+    SurveyCardPrompt,
+    SurveyEvaluationPrompt,
+    SurveyGroundingPrompt,
+    SurveyOutlinePrompt,
+    SurveySectionPrompt,
+)
+from scholar_lens.src.prompts.survey import (
+    CONNECTION_RULES,
+    DEPTH_GUIDANCE,
+    NARRATION_RULE,
+    REFERENCE_MATERIAL_RULE,
+    SECTION_ROLES,
+)
+from scholar_lens.src.publisher import Publisher
+from scholar_lens.src.runtime import RunContext
 from scholar_lens.src.survey_writer import (
     CardStore,
     PaperIndex,

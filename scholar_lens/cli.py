@@ -35,8 +35,8 @@ from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
+from scholar_lens.domain.survey.plan import SurveyInputError
 from scholar_lens.src.jobs import JobRequest, JobResult
-from scholar_lens.src.survey_plan import SurveyInputError
 
 EXIT_OK, EXIT_FAILED, EXIT_REJECTED, EXIT_PENDING, EXIT_ERROR = 0, 1, 2, 3, 4
 _EXIT_BY_STATUS = {

@@ -29,27 +29,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import Runnable
 
 from ..application.usage import staged
-from .arxiv_handler import ArxivHandler, ArxivPaperError
-from .aws_helpers import S3Handler
-from .citation_metadata import ProviderUnavailableError, titles_match
-from .constants import LanguageModelId, LocalPaths, S3Paths
-from .jobs import JobRequest
-from .logger import logger
-from .metrics import TokenBudgetGuard, TokenUsageTracker
-from .prompt_safety import neutralize_prompt_tags
-from .prompts import BasePrompt, SurveyScopePrompt, SurveySelectionPrompt
-from .runtime import ROOT_DIR, PipelineOutcome, RunContext
-from .scholarly_index import (
-    DATACITE_MAX_IDS,
-    OPENALEX_MAX_DOIS,
-    DataCiteIndex,
-    OpenAlexIndex,
-    SemanticScholarIndex,
-    arxiv_record,
-    datacite_record,
-    openalex_record,
-)
-from .survey_plan import (
+from ..domain.survey.plan import (
     Candidate,
     PlanReference,
     ReferenceKind,
@@ -77,6 +57,26 @@ from .survey_plan import (
     shortlist_digest,
     survey_slug,
     unversioned_arxiv_id,
+)
+from .arxiv_handler import ArxivHandler, ArxivPaperError
+from .aws_helpers import S3Handler
+from .citation_metadata import ProviderUnavailableError, titles_match
+from .constants import LanguageModelId, LocalPaths, S3Paths
+from .jobs import JobRequest
+from .logger import logger
+from .metrics import TokenBudgetGuard, TokenUsageTracker
+from .prompt_safety import neutralize_prompt_tags
+from .prompts import BasePrompt, SurveyScopePrompt, SurveySelectionPrompt
+from .runtime import ROOT_DIR, PipelineOutcome, RunContext
+from .scholarly_index import (
+    DATACITE_MAX_IDS,
+    OPENALEX_MAX_DOIS,
+    DataCiteIndex,
+    OpenAlexIndex,
+    SemanticScholarIndex,
+    arxiv_record,
+    datacite_record,
+    openalex_record,
 )
 from .utils import BedrockLanguageModelFactory, RetryableBase
 from .web_research import (

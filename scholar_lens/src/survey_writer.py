@@ -33,65 +33,12 @@ from ..application.usage import staged
 from ..domain.markdown.lint import drop_unknown_images, fill_image_alts
 from ..domain.markdown.math import has_math, normalize_math
 from ..domain.quality_gate import rule_issues
-from ..domain.tags import controlled_tag_problems
-from ..domain.validation import description_markup, description_problems
-from .aws_helpers import S3Handler
-from .constants import LanguageModelId, LocalPaths, S3Paths
-from .formatting import build_post_meta, cut_title, render_front_matter
-from .jobs import JobRequest
-from .logger import logger
-from .metrics import TokenUsageTracker
-from .prompt_safety import neutralize_prompt_tags
-from .prompts import (
-    BasePrompt,
-    SurveyCardPrompt,
-    SurveyEvaluationPrompt,
-    SurveyFinalizationPrompt,
-    SurveyGroundingPrompt,
-    SurveyOutlinePrompt,
-    SurveySectionPrompt,
-)
-from .prompts.base import PROSE_UNIT, blocking_issues_block
-from .prompts.survey import DEPTH_GUIDANCE, SECTION_ROLES
-from .publish_types import title_slug
-from .publisher import PublishRequest, build_pr_body
-from .review_plan import (
+from ..domain.review_plan import (
     article_ledger,
     digest_sections,
     ensure_section_heading,
 )
-from .runtime import (
-    ROOT_DIR,
-    PipelineOutcome,
-    RunContext,
-    find_published_post,
-    load_translation_guideline,
-    publish_artifact,
-)
-from .scholarly_index import (
-    DataCiteIndex,
-    OpenAlexIndex,
-    datacite_record,
-    openalex_record,
-)
-from .section_loop import (
-    EMPTY_DRAFT,
-    FIXING,
-    REVISING,
-    checked_grounding,
-    feedback_or_generic,
-    glossary_view,
-    measured_length,
-    owned_elsewhere,
-    parse_section_output,
-    revise_section,
-)
-from .survey_pipeline import (
-    SurveyCalls,
-    read_references,
-    reference_excerpts,
-)
-from .survey_plan import (
+from ..domain.survey.plan import (
     PlanPaper,
     SourceRecord,
     SurveyInputError,
@@ -101,7 +48,7 @@ from .survey_plan import (
     survey_slug,
     unversioned_arxiv_id,
 )
-from .survey_post import (
+from ..domain.survey.post import (
     CardAnswer,
     CardSource,
     OutlineSection,
@@ -136,6 +83,59 @@ from .survey_post import (
     unlink_foreign_papers,
     validate_plan,
     without_papers,
+)
+from ..domain.tags import controlled_tag_problems
+from ..domain.validation import description_markup, description_problems
+from .aws_helpers import S3Handler
+from .constants import LanguageModelId, LocalPaths, S3Paths
+from .formatting import build_post_meta, cut_title, render_front_matter
+from .jobs import JobRequest
+from .logger import logger
+from .metrics import TokenUsageTracker
+from .prompt_safety import neutralize_prompt_tags
+from .prompts import (
+    BasePrompt,
+    SurveyCardPrompt,
+    SurveyEvaluationPrompt,
+    SurveyFinalizationPrompt,
+    SurveyGroundingPrompt,
+    SurveyOutlinePrompt,
+    SurveySectionPrompt,
+)
+from .prompts.base import PROSE_UNIT, blocking_issues_block
+from .prompts.survey import DEPTH_GUIDANCE, SECTION_ROLES
+from .publish_types import title_slug
+from .publisher import PublishRequest, build_pr_body
+from .runtime import (
+    ROOT_DIR,
+    PipelineOutcome,
+    RunContext,
+    find_published_post,
+    load_translation_guideline,
+    publish_artifact,
+)
+from .scholarly_index import (
+    DataCiteIndex,
+    OpenAlexIndex,
+    datacite_record,
+    openalex_record,
+)
+from .section_loop import (
+    EMPTY_DRAFT,
+    FIXING,
+    REVISING,
+    checked_grounding,
+    feedback_or_generic,
+    glossary_view,
+    measured_length,
+    owned_elsewhere,
+    parse_section_output,
+    revise_section,
+)
+from .survey_pipeline import (
+    SurveyCalls,
+    read_references,
+    reference_excerpts,
 )
 from .utils import (
     BedrockLanguageModelFactory,

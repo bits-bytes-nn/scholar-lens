@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from scholar_lens.src.review_plan import (
+from scholar_lens.domain.review_plan import (
     MIN_SECTION_WORDS,
     CoverItem,
     Edit,
@@ -361,7 +361,7 @@ class TestArticleContext:
 
 
 def test_ledger_ignores_prose_that_starts_with_inline_math() -> None:
-    from scholar_lens.src.review_plan import article_ledger
+    from scholar_lens.domain.review_plan import article_ledger
 
     section = (
         "## 방법\n\n$$W_0$$는 동결되고 $$A$$와 $$B$$만 학습합니다.\n\n"
@@ -373,7 +373,7 @@ def test_ledger_ignores_prose_that_starts_with_inline_math() -> None:
 
 
 def test_paper_conclusion_goes_to_the_closing_only() -> None:
-    from scholar_lens.src.review_plan import SourceText
+    from scholar_lens.domain.review_plan import SourceText
 
     text = "## 1 Method\n\nA. B.\n\n## 7 Conclusion and Future Work\n\nC. D.\n\n## References\n\nE."
     source = SourceText.from_text(text, lambda chunk: [(0, len(chunk))])
@@ -421,7 +421,7 @@ def test_conclusion_ranges_leave_body_sections() -> None:
     ],
 )
 def test_closing_heading_must_be_the_whole_title(heading: str, closing: bool) -> None:
-    from scholar_lens.src.review_plan import SourceText
+    from scholar_lens.domain.review_plan import SourceText
 
     text = f"## {heading}\n\nA sentence.\n\n## Next\n\nMore."
     source = SourceText.from_text(text, lambda chunk: [(0, len(chunk))])

@@ -40,6 +40,10 @@ from langchain_core.runnables import Runnable, RunnableLambda
 
 from ..application.usage import staged
 from ..domain.markdown.lint import close_open_fence
+from ..domain.review_plan import (
+    article_ledger,
+    digest_sections,
+)
 from ..domain.tags import controlled_tag_problems
 from ..domain.validation import description_markup, description_problems
 from .constants import LanguageModelId
@@ -70,10 +74,6 @@ from .prompts.tech_guide import (
     NON_KOREAN_CHAR_FACTOR,
     REFERENCE_LABEL,
     TechGuideTaxonomyPrompt,
-)
-from .review_plan import (
-    article_ledger,
-    digest_sections,
 )
 from .section_loop import (
     EMPTY_DRAFT,

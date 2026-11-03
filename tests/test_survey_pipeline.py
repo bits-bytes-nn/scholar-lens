@@ -19,6 +19,17 @@ from pydantic import ValidationError
 
 from scholar_lens import cli
 from scholar_lens.configs.config import Config, Survey
+from scholar_lens.domain.survey.plan import (
+    Candidate,
+    CitationData,
+    PlanReference,
+    SurveyInputError,
+    SurveyPlan,
+    SurveyPlanError,
+    SurveyScope,
+    TimeRange,
+    survey_slug,
+)
 from scholar_lens.src import citation_metadata, scholarly_index
 from scholar_lens.src.arxiv_handler import ArxivMetadata, ArxivPaperError
 from scholar_lens.src.citation_metadata import QuotaExhaustedError
@@ -38,17 +49,6 @@ from scholar_lens.src.survey_pipeline import (
     plan_survey,
     read_references,
     save_plan,
-)
-from scholar_lens.src.survey_plan import (
-    Candidate,
-    CitationData,
-    PlanReference,
-    SurveyInputError,
-    SurveyPlan,
-    SurveyPlanError,
-    SurveyScope,
-    TimeRange,
-    survey_slug,
 )
 from scholar_lens.src.web_research import PageContent, ResearchCorpus, SourceFetchError
 

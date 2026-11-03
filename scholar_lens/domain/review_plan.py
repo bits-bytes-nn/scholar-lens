@@ -14,6 +14,7 @@ exact-match only.
 from __future__ import annotations
 
 import json
+import logging
 import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -21,8 +22,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
-from ..domain.markdown.lint import FIGURE_MARKER, callout_lines, close_open_fence
-from ..domain.markdown.math import (
+from .markdown.lint import FIGURE_MARKER, callout_lines, close_open_fence
+from .markdown.math import (
     DISPLAY_MATH,
     HANGUL,
     fence_roles,
@@ -30,9 +31,8 @@ from ..domain.markdown.math import (
     open_fence,
     without_fences,
 )
-from ..domain.quality_gate import added_slips
-from .logger import logger
-from .utils.helpers import first_sentence
+from .quality_gate import added_slips
+from .text import first_sentence
 
 Difficulty = Literal["easy", "medium", "hard"]
 Importance = Literal["core", "supporting", "context"]
@@ -65,6 +65,8 @@ MIN_ITEMS_FOR_SHARE_CHECK = 10
 # Paper text left out of every section is attached to the nearest section once
 # it is at least this many sentences long; shorter gaps are stray captions etc.
 MIN_UNCOVERED_SENTENCES = 3
+
+logger = logging.getLogger(__name__)
 
 _UNIT_HEADING = re.compile(r"^(#{1,6})\s+(.*)$")
 # The whole heading must be a closing title ("8 Conclusion and Future Work",

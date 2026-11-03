@@ -9,6 +9,15 @@ from urllib.parse import urljoin
 from bs4 import BeautifulSoup, NavigableString, Tag
 from bs4.element import PreformattedString
 
+from ...domain.markdown.tables import (  # noqa: F401 - moved; re-exported
+    _MATH_SPAN,
+    escape_cell_pipes,
+)
+from ...domain.text import (  # noqa: F401 - moved; re-exported  # noqa: F401 - moved; re-exported
+    first_sentence,
+    is_affirmative,
+    is_placeholder,
+)
 from ..logger import logger
 
 
@@ -22,29 +31,6 @@ def parse_quality_score(raw: Any) -> int:
     """
     match = re.search(r"\d+", str(raw if raw is not None else ""))
     return max(0, min(100, int(match.group()))) if match else 0
-
-
-# The yes/no and missing-value answers the prompts ask for.
-_AFFIRMATIVE = frozenset({"y", "yes"})
-# "Unknown" is what ``paper_source`` sets for a source without authors.
-_PLACEHOLDER = frozenset({"n/a", "unknown", "none", "not specified"})
-
-
-def _bare(value: str) -> str:
-    return value.strip().rstrip(".").strip().lower()
-
-
-def is_affirmative(value: str | None) -> bool:
-    """Whether an LLM yes/no field ("y or n", "yes or no") means "yes"; case,
-    surrounding space and a trailing period are ignored. Anything else (incl.
-    None) is no."""
-    return value is not None and _bare(value) in _AFFIRMATIVE
-
-
-def is_placeholder(value: str | None) -> bool:
-    """Whether a value is empty or a missing-value marker (N/A, Unknown, None,
-    Not specified), with or without a trailing period."""
-    return not value or _bare(value) in _PLACEHOLDER
 
 
 _NONE_ANSWERS = {
@@ -83,19 +69,6 @@ def tag_body(raw: str, tag: str) -> str | None:
     """Raw body of the last ``<tag>…</tag>`` in ``raw`` (no unescaping)."""
     matches = re.findall(rf"<{tag}>(.*?)</{tag}>", raw or "", re.DOTALL)
     return matches[-1] if matches else None
-
-
-_ABBREVIATIONS = re.compile(r"\b(?:e\.g|i\.e|et al|vs|cf|etc)\.$", re.IGNORECASE)
-
-
-def first_sentence(text: str) -> str:
-    """``text`` up to its first sentence end (``.!?。`` before whitespace),
-    not counting abbreviations such as "e.g." or "et al."; all of ``text``
-    when it has none."""
-    for match in re.finditer(r"[.!?。](?=\s)", text):
-        if not _ABBREVIATIONS.search(text[: match.end()]):
-            return text[: match.end()]
-    return text
 
 
 def escape_yaml_double_quoted(value: str) -> str:
@@ -144,7 +117,6 @@ _BULLETS = frozenset({"•", "∙", "◦", "▪", "‣", "–", "-", "∗", "*",
 _LISTING_SPACE = re.compile(r"(<span[^>]*\bltx_lst_space\b[^>]*>)( +)(</span>)")
 # LaTeXML renders numbered display equations as tables; they are math, not data.
 _EQUATION_TABLE_CLASSES = ("ltx_equation", "ltx_eqn_table", "ltx_equationgroup")
-_MATH_SPAN = re.compile(r"\$\$.+?\$\$", re.DOTALL)
 _BLOCK_TAGS = frozenset(
     {
         "p",
@@ -257,21 +229,6 @@ def _cell_span(cell: Tag, attr: str) -> int:
 def _own_rows(table: Tag) -> list[Tag]:
     """``<tr>`` rows of ``table`` itself, excluding rows of nested tables."""
     return [tr for tr in table.find_all("tr") if tr.find_parent("table") is table]
-
-
-def _escape_cell_pipes(cell: str) -> str:
-    """Make a table cell pipe-safe without changing its meaning: prose pipes are
-    escaped (``\\|``); inside ``$$…$$`` a norm ``\\|`` becomes ``\\Vert`` and a
-    bare ``|`` becomes ``\\vert`` (escaping them would turn ``|x|`` into a norm
-    or ``\\|W\\|`` into a line break)."""
-    out, pos = [], 0
-    for m in _MATH_SPAN.finditer(cell):
-        out.append(cell[pos : m.start()].replace("|", "\\|"))
-        math = m.group(0).replace("\\|", "\\Vert ")
-        out.append(re.sub(r"(?<!\\)\|", r"\\vert ", math))
-        pos = m.end()
-    out.append(cell[pos:].replace("|", "\\|"))
-    return "".join(out)
 
 
 def _classes(element: Tag) -> list[str]:
@@ -436,7 +393,7 @@ def table_to_markdown(table: Tag, render_cell: Callable[[Tag], str]) -> str:
         for i, cell in enumerate(cells):
             if not cell and not (is_header and i == 0):
                 cell = "-"
-            out.append(_escape_cell_pipes(cell))
+            out.append(escape_cell_pipes(cell))
         return "| " + " | ".join(out) + " |"
 
     lines = [fmt(header, is_header=True), "| " + " | ".join(["---"] * width) + " |"]

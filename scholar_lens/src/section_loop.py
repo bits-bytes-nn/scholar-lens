@@ -17,6 +17,10 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from ..application.usage import usage_stage
+from ..domain.glossary import (  # noqa: F401 - moved; re-exported
+    glossary_view,
+    parse_glossary,
+)
 from ..domain.markdown.lint import TABLE_DELIMITER, TABLE_ROW, close_open_fence
 from ..domain.markdown.math import (
     DISPLAY_MATH,
@@ -26,9 +30,9 @@ from ..domain.markdown.math import (
     without_fences,
 )
 from ..domain.quality_gate import added_slips, publish_blockers, rule_issues
+from ..domain.review_plan import draft_rank
 from .logger import logger
 from .prompts.base import PROSE_UNIT
-from .review_plan import draft_rank
 
 # Evaluator feedback logged per section (the full text goes to the writer).
 _LOGGED_FEEDBACK_CHARS: int = 300
@@ -101,41 +105,6 @@ def owned_elsewhere(sections: Sequence[OwningSection], index: int) -> str:
         if i != index and owns:
             where = "earlier" if i < index else "later"
             lines.append(f"- {where}, '{s.title}': {'; '.join(owns)}")
-    return "\n".join(lines) or "- none"
-
-
-_PARENTHETICAL = re.compile(r"\s*\([^)]*\)")
-
-
-def parse_glossary(raw: str) -> dict[str, str]:
-    """English term -> rendering from the synopsis's ``<glossary>`` lines
-    ("English term | rendering"); a parenthetical left in a rendering is
-    dropped, since the writer adds the English at first use."""
-    glossary: dict[str, str] = {}
-    for line in raw.splitlines():
-        english, sep, rendering = line.strip().lstrip("-* ").partition("|")
-        english = english.strip()
-        rendering = _PARENTHETICAL.sub("", rendering).strip()
-        if sep and english and rendering:
-            glossary.setdefault(english, rendering)
-    return glossary
-
-
-def glossary_view(glossary: dict[str, str], earlier: list[str]) -> str:
-    """The glossary for one section: each rendering with its English, marked
-    [introduced] when an ``earlier`` section already writes its first-use
-    form "rendering(English)" (case-insensitive, a space before the
-    parenthesis allowed), else [new]; a term written in English alone."""
-    folded = [section.casefold() for section in earlier]
-    lines = []
-    for english, rendering in glossary.items():
-        if rendering.casefold() == english.casefold():
-            lines.append(f"- {rendering}")
-        else:
-            forms = [f"{rendering}{gap}({english})".casefold() for gap in ("", " ")]
-            used = any(form in section for form in forms for section in folded)
-            status = "introduced" if used else "new"
-            lines.append(f"- {rendering} = {english} [{status}]")
     return "\n".join(lines) or "- none"
 
 

@@ -19,18 +19,19 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from ..domain.markdown.lint import writing_issues
-from ..domain.markdown.math import segments
-from ..domain.validation import (
+from ..glossary import parse_glossary
+from ..lengths import DEPTH_CHARS, NON_KOREAN_CHAR_FACTOR
+from ..markdown.links import link_list, md_link_text, md_link_url
+from ..markdown.lint import writing_issues
+from ..markdown.math import segments
+from ..markdown.tables import escape_cell_pipes
+from ..post_names import slugify
+from ..validation import (
     FURTHER_READING_HEADINGS,
     REFERENCES_HEADING,
     unsourced_numbers,
 )
-from .formatting import link_list, md_link_text, md_link_url
-from .prompts.tech_guide import DEPTH_CHARS, NON_KOREAN_CHAR_FACTOR
-from .publish_types import slugify
-from .section_loop import parse_glossary
-from .survey_plan import (
+from .plan import (
     PlanPaper,
     SourceRecord,
     SurveyInputError,
@@ -38,7 +39,6 @@ from .survey_plan import (
     merge_records,
     parse_paper_id,
 )
-from .utils.helpers import _escape_cell_pipes
 
 # Cards are cached by (paper, CARD_SCHEMA_VERSION, model, language, card
 # prompt and source limit): bump the version when the card fields or their
@@ -867,7 +867,7 @@ def labels(language: str) -> dict[str, str]:
 
 
 def _cell(text: str) -> str:
-    return _escape_cell_pipes(" ".join(text.split())) or "-"
+    return escape_cell_pipes(" ".join(text.split())) or "-"
 
 
 def _paper_link(card: PaperCard, paper: PlanPaper) -> str:

@@ -9,7 +9,7 @@ from datetime import UTC, date, datetime
 import pytest
 from pydantic import ValidationError
 
-from scholar_lens.src.survey_plan import (
+from scholar_lens.domain.survey.plan import (
     NO_CORE_PAPER,
     Candidate,
     CitationData,

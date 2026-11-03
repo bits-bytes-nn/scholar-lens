@@ -194,8 +194,8 @@ def test_link_text_brackets_survive_math_normalization() -> None:
 
 
 def test_figure_marker_stays_one_parseable_token() -> None:
+    from scholar_lens.domain.review_plan import figure_catalog
     from scholar_lens.src.parser import Figure, attach_figure_context
-    from scholar_lens.src.review_plan import figure_catalog
 
     fig = Figure(
         figure_id="1",

@@ -426,9 +426,9 @@ def _rejected_input_errors() -> tuple[type[BaseException], ...]:
 
     Imported lazily so ``status``/``submit`` never load the paper stack.
     """
+    from ..domain.survey.plan import SurveyInputError
     from .arxiv_handler import ArxivNotFoundError
     from .paper_source import PaperSourceError
-    from .survey_plan import SurveyInputError
     from .tech_guide import NotTechnicalContentError
     from .url_guard import UnsafeUrlError
 

@@ -21,6 +21,7 @@ from botocore.exceptions import ClientError, HTTPClientError
 from botocore.exceptions import ConnectionError as BotoConnectionError
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
+from ..domain.survey.plan import parse_paper_id
 from ..domain.usage import RunUsage
 from .aws_helpers import (
     BatchJobError,
@@ -30,7 +31,6 @@ from .aws_helpers import (
 )
 from .constants import S3Paths, SSMParams
 from .logger import logger
-from .survey_plan import parse_paper_id
 from .utils.retry import is_transient_error
 
 ArtifactKind = Literal["review", "summarize", "guide", "survey_plan", "survey_write"]
