@@ -138,3 +138,13 @@ class TestConfigLoading:
         )
         with pytest.raises(ValidationError, match="paper_finalization_model_id"):
             Config.from_yaml(str(cfg_file))
+
+
+def test_scholar_lens_config_names_another_config_file(tmp_path, monkeypatch) -> None:
+    from scholar_lens.configs import Config
+    from scholar_lens.configs.config import CONFIG_PATH_ENV
+
+    path = tmp_path / "eval.yaml"
+    path.write_text("survey:\n  engine: evidence\n", encoding="utf-8")
+    monkeypatch.setenv(CONFIG_PATH_ENV, str(path))
+    assert Config.load().survey.engine == "evidence"

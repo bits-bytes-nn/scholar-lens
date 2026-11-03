@@ -39,6 +39,7 @@ from ..adapters.scholarly.index import (
 from ..application.usage import staged
 from ..domain.markdown.lint import drop_unknown_images, fill_image_alts
 from ..domain.markdown.math import has_math, normalize_math
+from ..domain.post_names import slugify
 from ..domain.quality_gate import rule_issues
 from ..domain.review_plan import (
     article_ledger,
@@ -142,6 +143,7 @@ from .survey_pipeline import (
     reference_excerpts,
 )
 from .utils import (
+    BedrockCrossRegionModelHelper,
     BedrockLanguageModelFactory,
     HTMLTagOutputParser,
     parse_lines,
@@ -394,6 +396,8 @@ class Survey:
     # The reference articles that were read: (title, url) for further reading.
     reading: list[tuple[str, str]] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
+    # Figures offered to the writers outside cards: url -> (paper id, caption).
+    figures: dict[str, tuple[str, str]] = field(default_factory=dict)
 
 
 class SurveyWriter(SurveyCalls):
@@ -1211,6 +1215,105 @@ async def write_survey(
     )
 
 
+async def write_survey_with_evidence(
+    context: RunContext,
+    plan: SurveyPlan,
+    *,
+    index: PaperIndex,
+    researcher: WebResearcher,
+    papers_dir: Path,
+    translation_guideline: str,
+    tracker: TokenUsageTracker,
+    title_max_length: int,
+) -> Survey:
+    """The evidence engine (``survey.engine: evidence``): reading agents,
+    an evidence-assigning outline, verified sections (docs/redesign.md)."""
+    from ..adapters.bedrock.strands_models import RoleModel, StrandsLanguageModel
+    from ..application.survey_engine import EngineSettings, EvidenceSurveyEngine
+    from .survey_documents import PaperDocuments, SurveyTextStore
+    from .utils.factories import _allocated_profile
+    from .utils.models import model_info_for_invoked_id
+
+    cfg = context.config.survey
+    session = context.bedrock_boto_session
+    region = context.config.resources.bedrock_region_name or session.region_name or ""
+
+    def role(model_id: str, effort: str, thinking: bool) -> RoleModel:
+        system = BedrockCrossRegionModelHelper.get_cross_region_model_id(
+            session, LanguageModelId(model_id), region
+        )
+        info = model_info_for_invoked_id(system)
+        return RoleModel(
+            invoke_id=_allocated_profile(session, region, system),
+            model_label=system,
+            effort=effort,
+            thinking=thinking,
+            max_tokens=min(64_000, info.max_output_tokens if info else 32_000),
+        )
+
+    model = StrandsLanguageModel(
+        session,
+        {
+            "read": role(cfg.card_model_id, cfg.thinking_effort, False),
+            "outline": role(cfg.outline_model_id, "high", True),
+            "write": role(cfg.writing_model_id, cfg.thinking_effort, True),
+            "evaluate": role(cfg.evaluation_model_id, cfg.thinking_effort, True),
+        },
+        tracker.record,
+    )
+    records = await asyncio.to_thread(index.records, [p.id for p in plan.papers])
+    documents = PaperDocuments(
+        researcher,
+        index.openalex,
+        {pid: r.abstract for pid, r in records.items() if r.abstract},
+    )
+    language = context.config.output_language
+    engine = EvidenceSurveyEngine(
+        model,
+        documents,
+        EngineSettings(
+            language=language,
+            title_max_length=title_max_length,
+            reader_tag=slugify(LanguageModelId(cfg.card_model_id).value),
+        ),
+        store=SurveyTextStore(
+            papers_dir / "survey-evidence",
+            context.s3_handler,
+            context.config.resources.s3_prefix,
+        ),
+    )
+    articles = [r for r in plan.references if r.kind == "article"]
+    read = await asyncio.to_thread(
+        read_references, [r.url for r in articles], researcher
+    )
+    pages = [r.page for r in read if r.page]
+    titles = {r.url: r.title for r in articles}
+    reading = [(titles.get(r.url) or r.page.title, r.url) for r in read if r.page]
+    notes = []
+    if unread := [r.url for r in read if r.page is None]:
+        notes.append(
+            "Reference articles that could not be read (left out): " + ", ".join(unread)
+        )
+    result = await engine.write(
+        plan,
+        references=reference_excerpts(pages, plan.topic, 8_000) if pages else "",
+        guideline=translation_guideline,
+    )
+    return Survey(
+        title=result.title,
+        body=result.body,
+        plan=result.plan,
+        cards={},
+        reading=reading,
+        notes=[*notes, *result.notes],
+        figures={
+            e.figure_url: (e.paper_id, e.caption or "")
+            for e in result.ledger
+            if e.kind == "figure" and e.figure_url
+        },
+    )
+
+
 def survey_body(survey: Survey, language: str) -> tuple[str, list[str]]:
     """The body as published: citation keys rendered (unknown ones removed),
     images the writers were not offered dropped, figures credited to their
@@ -1228,6 +1331,10 @@ def survey_body(survey: Survey, language: str) -> tuple[str, list[str]]:
     captions = {
         f.url: f.caption for card in survey.cards.values() for f in card.figures
     }
+    for url, (paper_id, caption) in survey.figures.items():
+        if paper_id in papers:
+            owners[url] = papers[paper_id]
+            captions[url] = caption
     body = drop_unknown_images(body, set(owners))
     body = fill_image_alts(body, captions, survey.title, korean=language == "Korean")
     body = credit_figures(body, owners, language)
@@ -1288,17 +1395,34 @@ async def run_survey_write_pipeline(
     )
     researcher = WebResearcher(max_images_per_page=MAX_PAPER_IMAGES)
     papers_dir = ROOT_DIR / LocalPaths.PAPERS_DIR.value
+    if cfg.engine == "evidence":
+        write = write_survey_with_evidence(
+            context,
+            plan,
+            index=index,
+            researcher=researcher,
+            papers_dir=papers_dir,
+            translation_guideline=str(guideline or ""),
+            tracker=tracker,
+            title_max_length=spec.seo_title_max_length,
+        )
+    else:
+        write = None
     store = CardStore(
         papers_dir / "survey-cards", context.s3_handler, resources.s3_prefix
     )
     try:
-        survey = await write_survey(
-            plan,
-            writer,
-            store=store,
-            index=index,
-            researcher=researcher,
-            translation_guideline=str(guideline or ""),
+        survey = await (
+            write
+            if write is not None
+            else write_survey(
+                plan,
+                writer,
+                store=store,
+                index=index,
+                researcher=researcher,
+                translation_guideline=str(guideline or ""),
+            )
         )
         body, body_notes = survey_body(survey, writer.language)
         taxonomy = await writer.finalize(

@@ -112,6 +112,23 @@ class TokenUsageTracker(BaseCallbackHandler):
         self.events.append(event)
         logger.info("llm_usage %s", event.model_dump_json())
 
+    def record(self, event: UsageEvent) -> None:
+        """A call made outside LangChain (the Strands engine): priced and
+        counted like a callback's."""
+        read = event.input_tokens + event.cache_read_tokens + event.cache_write_tokens
+        self.input_tokens += read
+        self.output_tokens += event.output_tokens
+        self.call_count += 1
+        bucket = self.per_model.setdefault(
+            event.model_id, {"input_tokens": 0, "output_tokens": 0, "calls": 0}
+        )
+        bucket["input_tokens"] += read
+        bucket["output_tokens"] += event.output_tokens
+        bucket["calls"] += 1
+        cost = event_cost_usd(event)
+        self.cost_usd += cost
+        self._record(event.model_copy(update={"cost_usd": round(cost, 6)}), None)
+
     def run_usage(self) -> RunUsage:
         return RunUsage.of(self.events, PRICE_VERSION)
 
