@@ -161,7 +161,7 @@ Strands에서 쓰는 기능(문서 기준 2026-11-03, Python SDK v1.63.0, 2026-1
 
 Strands의 확인된 제약과 대응입니다.
 
-- 확장 추론(thinking)을 켠 채 구조화 출력을 강제하면 Bedrock이 거부합니다("Thinking may not be enabled when tool_choice forces tool use", 이슈 #1485, 2026-01). 구조화 출력이 필요한 단계(Outline, 판정, 편집 목록)는 thinking 없이 호출하거나, 에이전트가 스스로 부르는 `submit(...)` 도구로 결과를 받습니다. 구현 첫 단계에서 현재 버전으로 다시 확인합니다.
+- 확장 추론(thinking)과 구조화 출력: 이슈 #1485(2026-01)는 thinking을 켠 채 도구 호출을 강제하면 Bedrock이 거부한다는 내용이었습니다. 1.63.0은 강제할 때 thinking 필드를 빼고 요청하므로(`models/bedrock.py::_get_additional_request_fields`) 문제가 없습니다. 2026-11-03에 Opus·Sonnet·Haiku 5.5(us-west-2, adaptive thinking과 effort)로 구조화 출력, 검증 도구가 있는 에이전트 루프와 한도를 확인했습니다.
 - adaptive thinking과 effort는 `additional_request_fields`로 넘겨야 하고, 모델별 허용 값이 다릅니다. 모델 레지스트리가 모델별 요청 필드를 정합니다(지금 `factories.py::_build_model_config`의 역할).
 - 문서가 빠르게 바뀝니다(마이너 버전마다 기능 추가). `strands-agents`는 마이너 버전까지 고정하고, 갱신은 평가셋을 통과한 뒤에만 합니다.
 
@@ -388,7 +388,7 @@ scholar_lens/
 남은 사항:
 
 - ❓ 평가셋과 서지 정답표: 입력 목록과 학회·연도 정답을 함께 확정해야 합니다.
-- ❓ Strands의 thinking과 구조화 출력 충돌이 현재 버전에서도 남아 있는지 구현 첫 단계에서 확인합니다.
+- Strands의 thinking과 구조화 출력 충돌은 1.63.0에서 해결된 것을 확인했습니다(3.5).
 - 위험: 한 번에 재구성하면 리뷰 범위가 커집니다. 단계별 커밋, 계약 테스트, 평가셋 비교로 회귀를 잡습니다.
 - 위험: 근거 인용문 검증이 PDF 추출 텍스트의 줄바꿈·하이픈에 약할 수 있습니다. 정규화 규칙을 문서 어댑터에 두고 실패율을 지표로 봅니다.
 - 위험: 읽기 에이전트의 실행마다 편차가 생깁니다. 근거 장부를 캐시하고 체크포인트에서 다시 실행해 재현합니다.
