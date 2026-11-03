@@ -201,8 +201,10 @@ class TestMetricsEmitter:
             duration_seconds=2.0,
             tracker=tracker,
         )
-        client.put_metric_data.assert_called_once()
-        assert client.put_metric_data.call_args.kwargs["Namespace"] == METRICS_NAMESPACE
+        # One request for the run metrics, one for the per-stage breakdown.
+        assert client.put_metric_data.call_count == 2
+        for call in client.put_metric_data.call_args_list:
+            assert call.kwargs["Namespace"] == METRICS_NAMESPACE
 
     def test_cost_emitted_both_dimensioned_and_dimensionless(self) -> None:
         # The alarm watches a dimensionless series (a CloudWatch alarm can't
@@ -219,7 +221,7 @@ class TestMetricsEmitter:
             duration_seconds=1.0,
             tracker=tracker,
         )
-        data = client.put_metric_data.call_args.kwargs["MetricData"]
+        data = client.put_metric_data.call_args_list[0].kwargs["MetricData"]
         cost_entries = [e for e in data if e["MetricName"] == "EstimatedCostUSD"]
         assert len(cost_entries) == 2
         assert any("Dimensions" not in e for e in cost_entries)  # aggregate
@@ -227,6 +229,31 @@ class TestMetricsEmitter:
             e.get("Dimensions") == [{"Name": "Mode", "Value": "guide"}]
             for e in cost_entries
         )  # per-mode
+
+    def test_stage_breakdown_is_emitted_per_mode_and_stage(self) -> None:
+        from scholar_lens.application.usage import usage_stage
+
+        session = MagicMock()
+        client = session.client.return_value
+        tracker = TokenUsageTracker()
+        with usage_stage("draft"):
+            tracker.on_llm_end(_llm_output_response("opus", 100, 50))
+        MetricsEmitter(boto_session=session).emit_run(
+            mode="guide", success=True, duration_seconds=1.0, tracker=tracker
+        )
+        data = client.put_metric_data.call_args_list[1].kwargs["MetricData"]
+        names = {e["MetricName"] for e in data}
+        assert names == {
+            "StageCostUSD",
+            "StageTokens",
+            "StageCalls",
+            "StageFailedCalls",
+        }
+        assert all(
+            e["Dimensions"]
+            == [{"Name": "Mode", "Value": "guide"}, {"Name": "Stage", "Value": "draft"}]
+            for e in data
+        )
 
     def test_client_failure_is_swallowed(self) -> None:
         session = MagicMock()
@@ -263,13 +290,17 @@ class TestRateAndExtractUsageEdges:
         assert price_per_mtok("some-random-model") == (5.0, 25.0)
 
     def test_malformed_response_returns_zeros(self) -> None:
-        in_tok, out_tok, model = _extract_usage(object())
-        assert (in_tok, out_tok) == (0, 0)
-        assert model == "unknown"
+        event = _extract_usage(object())
+        assert (event.input_tokens, event.output_tokens) == (0, 0)
+        assert event.model_id == "unknown"
 
     def test_none_response_returns_zeros(self) -> None:
-        in_tok, out_tok, model = _extract_usage(None)
-        assert (in_tok, out_tok, model) == (0, 0, "unknown")
+        event = _extract_usage(None)
+        assert (event.input_tokens, event.output_tokens, event.model_id) == (
+            0,
+            0,
+            "unknown",
+        )
 
 
 class TestTieredPricing:

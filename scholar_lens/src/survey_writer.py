@@ -29,6 +29,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import Runnable, RunnableLambda
 from pydantic import ValidationError
 
+from ..application.usage import staged
 from .aws_helpers import S3Handler
 from .constants import LanguageModelId, LocalPaths, S3Paths
 from .formatting import build_post_meta, cut_title, render_front_matter
@@ -481,6 +482,7 @@ class SurveyWriter(SurveyCalls):
 
     # ---- cards ---------------------------------------------------------------------
 
+    @staged("read")
     async def card(
         self, paper: PlanPaper, text: PaperText, translation_guideline: str = ""
     ) -> PaperCard:
@@ -524,6 +526,7 @@ class SurveyWriter(SurveyCalls):
 
     # ---- outline -------------------------------------------------------------------
 
+    @staged("outline")
     async def outline(
         self,
         plan: SurveyPlan,
@@ -601,6 +604,7 @@ class SurveyWriter(SurveyCalls):
 
     # ---- sections ------------------------------------------------------------------
 
+    @staged("draft")
     async def write(
         self,
         plan: SurveyPlan,
@@ -889,6 +893,7 @@ class SurveyWriter(SurveyCalls):
         )
 
     @SurveyCalls._retry("survey_grounding")
+    @staged("verify")
     async def _ground(
         self, draft: str, inputs: dict[str, Any], blocking: list[str] | None = None
     ) -> str:
@@ -964,6 +969,7 @@ class SurveyWriter(SurveyCalls):
         return result
 
     @SurveyCalls._retry("survey_finalization")
+    @staged("finalize")
     async def _finalize(self, payload: dict[str, Any]) -> dict[str, str]:
         self._enforce_hard_token_budget()
         result: dict[str, str] = await self.finalization_chain.ainvoke(payload)

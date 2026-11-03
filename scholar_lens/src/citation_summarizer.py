@@ -8,6 +8,7 @@ import boto3
 import pymupdf
 from langchain_core.output_parsers import StrOutputParser
 
+from ..application.usage import staged
 from .arxiv_handler import ArxivHandler, ArxivPaperError
 from .citation_metadata import ChainedMetadataResolver, arxiv_id_from_doi
 from .constants import AppConstants, LanguageModelId, LocalPaths, normalize_arxiv_id
@@ -107,6 +108,7 @@ class CitationSummarizer(RetryableBase):
             ),
         }
 
+    @staged("enrich")
     async def summarize(
         self, reference_identifiers: list[str], original_content: str
     ) -> list[str]:

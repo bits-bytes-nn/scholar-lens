@@ -28,6 +28,7 @@ import httpx
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import Runnable
 
+from ..application.usage import staged
 from .arxiv_handler import ArxivHandler, ArxivPaperError
 from .aws_helpers import S3Handler
 from .citation_metadata import ProviderUnavailableError, titles_match
@@ -647,6 +648,7 @@ class SurveyPlanner(SurveyCalls):
             SurveySelectionPrompt, selection_model_id, thinking=True
         )
 
+    @staged("scope")
     async def scope(
         self,
         topic: str,
@@ -673,6 +675,7 @@ class SurveyPlanner(SurveyCalls):
 
         return await self._ask(self.scope_chain, payload, parse, tag="scope")
 
+    @staged("select")
     async def select(
         self,
         topic: str,

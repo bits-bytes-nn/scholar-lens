@@ -21,6 +21,7 @@ from botocore.exceptions import ClientError, HTTPClientError
 from botocore.exceptions import ConnectionError as BotoConnectionError
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
+from ..domain.usage import RunUsage
 from .aws_helpers import (
     BatchJobError,
     S3Handler,
@@ -181,6 +182,9 @@ class JobResult(BaseModel):
     input_tokens: int = 0
     output_tokens: int = 0
     estimated_cost_usd: float = 0.0
+    # Calls, tokens (cache included) and cost by stage and model; None in
+    # manifests written before it existed.
+    usage: RunUsage | None = None
     # A failure notification was due but SNS rejected it; the worker then
     # exits with a code the stack's EventBridge rule reports instead.
     notification_failed: bool = Field(default=False, exclude=True)

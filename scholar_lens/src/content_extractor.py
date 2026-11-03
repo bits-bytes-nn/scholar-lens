@@ -9,6 +9,7 @@ import boto3
 from langchain_core.callbacks import BaseCallbackHandler
 from pydantic import BaseModel, Field, field_validator
 
+from ..application.usage import staged
 from .arxiv_handler import ArxivHandler, ArxivMetadata, ArxivPaperError
 from .citation_metadata import titles_match
 from .constants import LanguageModelId, arxiv_id_from_reference
@@ -226,6 +227,7 @@ class ContentExtractor(RetryableBase):
         )
         return extractor
 
+    @staged("extract_citations")
     async def extract_citations(self, html_content: str) -> list[Citation]:
         citations = []
         existing_citations_str = ""
@@ -329,6 +331,7 @@ class ContentExtractor(RetryableBase):
             return None
 
     @RetryableBase._retry("attributes_extraction")
+    @staged("extract_attributes")
     async def extract_attributes(self, html_content: str) -> Attributes:
         result = await self.attributes_extractor.ainvoke(
             {

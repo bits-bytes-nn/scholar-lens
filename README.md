@@ -88,6 +88,7 @@ poetry run python -m scholar_lens survey write \
   --plan papers/survey-preference-optimization-for-llm-alignment/plan.json --no-pr
 poetry run python -m scholar_lens review 2106.09685 --remote     # submit to AWS Batch
 poetry run python -m scholar_lens status <job-id> --wait         # poll a remote job
+poetry run python -m scholar_lens costs --since 2026-11-01 --by stage --billed  # what Batch runs cost
 ```
 
 | Option | Commands | Effect |
@@ -104,6 +105,7 @@ poetry run python -m scholar_lens status <job-id> --wait         # poll a remote
 | `--no-pr` | review, summarize, guide, survey write | Save (and upload) the post but open no PR |
 | `--remote` | review, summarize, guide, survey plan, survey write | Submit to AWS Batch and return the job id |
 | `--wait`, `--timeout S` | status | Poll until the job finishes or `S` seconds pass |
+| `--since D`, `--until D`, `--by kind\|stage\|model\|day`, `--billed` | costs | Group the Batch runs that finished in `[since, until)` (UTC days) by kind, stage, model or day from their result manifests, with what failed runs spent; `--billed` adds Cost Explorer's cost of resources tagged `ProjectName=scholar-lens` |
 
 `survey plan` writes no post: its `JobResult` carries `plan_path` (local `papers/survey-<slug>/plan.json`; empty for a `--remote` run, whose container is gone) and `s3_uri` (its S3 copy, the one to pass to `survey write --plan` after a remote run). Edit the plan (drop, add or move papers, change roles, rename lineages) and pass it to `survey write --plan`; a rerun of the plan stage keeps a plan that differs as `plan.<UTC time>.json`. A paper added by hand needs only `id` (arXiv id or URL, or DOI), `lineage` and `role`; the write stage fills in its title, authors, year and URL. A reference added by hand needs only `url` (its `kind`, `paper` for an arXiv or doi.org link and `article` otherwise, follows from it); only articles are read by the write stage. A plan needs at least one `core` paper. Paper cards are cached (local `papers/survey-cards/`, S3 `<s3_prefix>/surveys/cards/`) by paper, card schema, model, language and a `-<variant>` digest of the card prompt, `card_source_chars` and the translation guideline (changing either writes the cards again), so a rerun or another survey of the same papers reuses them. The plan's fields and the write stage are described in the [design reference](./docs/design.md#43-논문-서베이).
 

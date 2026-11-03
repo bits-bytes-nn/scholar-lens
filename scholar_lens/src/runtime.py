@@ -535,6 +535,7 @@ def run_job(request: JobRequest, *, job_id: str | None = None) -> JobResult:
         result.input_tokens = tracker.input_tokens
         result.output_tokens = tracker.output_tokens
         result.estimated_cost_usd = round(tracker.estimated_cost_usd(), 4)
+        result.usage = tracker.run_usage()
         _finish(context, result, tracker, notify=not interrupted)
     return result
 
@@ -656,6 +657,10 @@ def format_result_notification(result: JobResult) -> tuple[str, str]:
     if result.job_id:
         fields["Batch job"] = result.job_id
     fields["Cost (est.)"] = f"${result.estimated_cost_usd:.2f}"
+    if result.usage and result.usage.by_stage:
+        fields["Costliest stages"] = ", ".join(
+            f"{stage} ${cost:.2f}" for stage, cost in result.usage.top_stages()
+        )
     if result.warnings:
         fields["Warnings"] = "\n".join(f"- {w}" for w in result.warnings)
     if result.error:

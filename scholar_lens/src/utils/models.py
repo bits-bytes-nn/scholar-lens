@@ -122,6 +122,14 @@ _OPUS = (5.0, 25.0)
 # the registry: the Opus 4.x list price, so an unknown model is not
 # under-counted.
 FALLBACK_PRICE_PER_MTOK = _OPUS
+# Prompt-cache tokens are billed as a multiple of the input price (Anthropic
+# models on Bedrock: reads at 0.1x, 5-minute writes at 1.25x).
+CACHE_READ_PRICE_MULTIPLE = 0.1
+CACHE_WRITE_PRICE_MULTIPLE = 1.25
+# Names the price table above; recorded with every run's usage so a cost
+# estimate can be traced to (and re-priced from) the prices it used. Change
+# it whenever a price changes.
+PRICE_VERSION = "2026-11-03"
 
 _LANGUAGE_MODEL_INFO: dict[LanguageModelId, LanguageModelInfo] = {
     LanguageModelId.CLAUDE_V3_HAIKU: _legacy(200_000, 4096, _HAIKU_3),

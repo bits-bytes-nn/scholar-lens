@@ -88,6 +88,7 @@ poetry run python -m scholar_lens survey write \
   --plan papers/survey-preference-optimization-for-llm-alignment/plan.json --no-pr
 poetry run python -m scholar_lens review 2106.09685 --remote     # AWS Batch에 제출
 poetry run python -m scholar_lens status <job-id> --wait         # 원격 작업 조회
+poetry run python -m scholar_lens costs --since 2026-11-01 --by stage --billed  # Batch 실행 비용
 ```
 
 | 옵션 | 명령 | 효과 |
@@ -104,6 +105,7 @@ poetry run python -m scholar_lens status <job-id> --wait         # 원격 작업
 | `--no-pr` | review, summarize, guide, survey write | 글은 저장(·업로드)하되 PR은 열지 않습니다 |
 | `--remote` | review, summarize, guide, survey plan, survey write | AWS Batch에 제출하고 작업 ID를 돌려줍니다 |
 | `--wait`, `--timeout S` | status | 작업이 끝나거나 `S`초가 지날 때까지 조회합니다 |
+| `--since D`, `--until D`, `--by kind\|stage\|model\|day`, `--billed` | costs | `[since, until)`(UTC 날짜)에 끝난 Batch 실행을 결과 매니페스트로 종류·단계·모델·날짜별로 묶고 실패한 실행의 비용도 보여 줍니다. `--billed`는 `ProjectName=scholar-lens` 태그 리소스의 Cost Explorer 청구액을 더합니다 |
 
 `survey plan`은 글을 쓰지 않습니다. `JobResult`의 `plan_path`(로컬 `papers/survey-<slug>/plan.json`. `--remote` 실행은 컨테이너가 사라지므로 비어 있음)와 `s3_uri`(S3 사본. 원격 실행 뒤에는 이 값을 `survey write --plan`에 넘김)가 계획 파일입니다. 계획을 고친 뒤(논문 빼기·더하기·옮기기, 역할 바꾸기, 계보 이름 바꾸기) `survey write --plan`에 넘깁니다. 계획 단계를 다시 실행하면 내용이 다른 기존 계획은 `plan.<UTC 시각>.json`으로 남습니다. 손으로 더하는 논문은 `id`(arXiv ID나 URL, 또는 DOI), `lineage`, `role`만 있으면 되고, 제목·저자·연도·URL은 쓰기 단계가 채웁니다. 손으로 더하는 참고 자료는 `url`만 있으면 되고 `kind`는 URL로 정합니다(arXiv·doi.org 링크는 `paper`, 나머지는 `article`). 쓰기 단계는 `article`만 읽습니다. 계획에는 `core` 논문이 하나 이상 있어야 합니다. 논문 카드는 논문, 카드 스키마, 모델, 언어와 카드 프롬프트·`card_source_chars`·번역 지침의 `-<variant>` 요약값별로 캐시하므로(셋 중 하나가 바뀌면 카드를 다시 만듦)(로컬 `papers/survey-cards/`, S3 `<s3_prefix>/surveys/cards/`) 다시 실행하거나 같은 논문을 다루는 다른 서베이가 재사용합니다. 계획 필드와 쓰기 단계는 [설계 문서](./docs/design.md#43-논문-서베이)에 있습니다.
 

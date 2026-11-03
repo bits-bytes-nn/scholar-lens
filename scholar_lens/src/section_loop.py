@@ -16,6 +16,7 @@ from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
+from ..application.usage import usage_stage
 from .logger import logger
 from .markdown_lint import TABLE_DELIMITER, TABLE_ROW, close_open_fence
 from .markdown_math import (
@@ -306,7 +307,8 @@ async def revise_section(
     """
 
     async def assess(text: str) -> tuple[int, str, list[str], int]:
-        score, feedback, blocking, wording = await evaluate(text)
+        with usage_stage("review"):
+            score, feedback, blocking, wording = await evaluate(text)
         # The issues to fix, and how many of them are about facts.
         return score, feedback, blocking + wording + rules(text), len(blocking)
 
@@ -359,12 +361,14 @@ async def revise_section(
             attempt,
             max_attempts,
         )
-        revised = await revise(feedback, best_markdown)
+        with usage_stage("revise"):
+            revised = await revise(feedback, best_markdown)
         if not revised:
             logger.warning(
                 "Section %s revision came back empty - retrying once.", label
             )
-            revised = await revise(f"{feedback}\n\n{EMPTY_DRAFT}", best_markdown)
+            with usage_stage("revise"):
+                revised = await revise(f"{feedback}\n\n{EMPTY_DRAFT}", best_markdown)
         if not revised:
             break
         score, revised_feedback, issues, factual = await assess(revised)
@@ -392,9 +396,11 @@ async def revise_section(
     )
     outcome = ""
     if best_issues and max_attempts > 0:
-        fixed = await (fix or revise)(
-            TARGETED_FIX + "\n".join(f"- {i}" for i in best_issues), best_markdown
-        )
+        with usage_stage("fix"):
+            fixed = await (fix or revise)(
+                TARGETED_FIX + "\n".join(f"- {i}" for i in best_issues),
+                best_markdown,
+            )
         if not fixed or fixed == best_markdown:
             reason = "no change"
         elif added := added_slips(best_markdown, fixed, rules):

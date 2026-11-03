@@ -19,6 +19,7 @@ from langchain_core.runnables import Runnable
 from PIL import Image
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
+from ..application.usage import staged
 from .constants import AppConstants, EnvVars, LanguageModelId, LocalPaths
 from .logger import logger
 from .metrics import TokenBudgetExceeded
@@ -100,6 +101,7 @@ class Figure(BaseModel, RetryableBase):
         )
 
     @classmethod
+    @staged("figures")
     async def from_llm(
         cls,
         figure_analyser: Runnable,
