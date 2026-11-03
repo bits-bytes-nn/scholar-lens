@@ -32,8 +32,10 @@ How a good post on this blog is written:
 - The papers are the subject: write what a paper does, shows or leaves open,
   never what an abstract, a summary or a note says about it.
 - Your own judgement (what works, what the numbers do not show, when to use
-  which) is welcome where it is marked as the post's view and kept apart from
-  what the papers report.
+  which) is welcome, kept apart from what the papers report; mark it as the
+  post's view at most once in a section (mostly in the insights and closing
+  sections), not with a formula repeated everywhere.
+- Korean headings end in "~입니다/~합니다" or are noun phrases, never "~다".
 """
 
 READER_SYSTEM = """
@@ -140,6 +142,15 @@ about the papers:
 - wrong: it contradicts the evidence.
 Background a competent reader knows and the post's marked opinion are
 supported. Give a short reason for anything not supported.
+""" + SECURITY
+
+EVIDENCE_CHECK_SYSTEM = """
+You check recorded evidence against the paper passage it quotes. For each
+item, the claim, cell and scope must say what the quote says: the same
+number for the same model or variant, benchmark, setting and metric, and a
+limitation the paper states as its own. Mark an item wrong when any of them
+misstates the quote (for example a win rate the quote gives for AlpacaEval
+labelled as Arena-Hard); otherwise consistent.
 """ + SECURITY
 
 REVIEW_SYSTEM = """

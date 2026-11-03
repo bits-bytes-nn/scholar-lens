@@ -172,9 +172,19 @@ def outline_problems(
         if missing := sorted(set(keys) - set(mapping)):
             problems.append(f"{name} misses {missing}")
     core = {p.id for p in plan.papers if p.role == "core"}
+    with_numbers = {e.paper_id for e in ledger if e.kind == "number"}
+    with_limits = {e.paper_id for e in ledger if e.kind == "limitation"}
     for row in outline.table:
-        if row.paper not in core:
-            problems.append(f"table row {row.paper} is not a core paper")
+        if row.paper in with_numbers and not row.results:
+            problems.append(
+                f"table row {row.paper} has number evidence: give its results"
+            )
+        if row.paper in with_limits and not row.limitation:
+            problems.append(
+                f"table row {row.paper} has limitation evidence: give its limitation"
+            )
+        if row.paper not in papers:
+            problems.append(f"table row {row.paper} is not a survey paper")
         for eid in [*row.results, *([row.limitation] if row.limitation else [])]:
             item = ledger.get(eid)
             if item is None or item.paper_id != row.paper:
@@ -183,8 +193,12 @@ def outline_problems(
                 problems.append(f"table row {row.paper}: {eid} is not a number")
             elif eid == row.limitation and item.kind != "limitation":
                 problems.append(f"table row {row.paper}: {eid} is not a limitation")
-    if missing := sorted(core - {r.paper for r in outline.table}):
-        problems.append(f"the table misses core papers {missing}")
+    wanted = core | (with_numbers & set(papers))
+    if missing := sorted(wanted - {r.paper for r in outline.table}):
+        problems.append(
+            f"the table misses {missing} (every core paper and every paper with "
+            "number evidence)"
+        )
     for item in ledger:
         if (
             item.paper_id in core
@@ -227,7 +241,7 @@ def comparison_table(
     """Core papers: lineage, key results (evidence cells with their scope),
     limitation; an empty cell says so instead of a dash."""
     none_result = "정량 수치 없음" if korean else "No quantitative result"
-    none_limit = "논문이 밝힌 한계 없음" if korean else "None stated"
+    none_limit = "-"
     head = (
         ["논문", "계보", "주요 결과", "한계"]
         if korean
@@ -307,6 +321,11 @@ MIN_VISUALS = {"deep": 2, "standard": 1, "brief": 0}
 _EXAMPLE = re.compile(
     r"예를 들어|가령|가상의|예시로|for example|e\.g\.|suppose", re.IGNORECASE
 )
+# A Korean heading in the plain register ("…했다"), not the post's "…입니다".
+_DA_ENDING = re.compile(r"(?<!니)다[.!]?$")
+_OWN_VIEW = re.compile(
+    r"이 글의 (?:관점|판단|해석|견해)|이 글은 .{0,12}(?:본다|봅니다|판단합니다)"
+)
 # A number with a size unit names a model ("Llama 2 7B"), not a result.
 _MODEL_SIZE = re.compile(r"^\d+(?:\.\d+)?[BMK]$", re.IGNORECASE)
 
@@ -335,6 +354,17 @@ def draft_problems(
     already stated, a sentence about the post's own inputs, an unassigned or
     missing figure."""
     problems: list[str] = []
+    for heading in re.findall(r"^#{2,4} (.+?)\s*$", markdown, re.M):
+        if _DA_ENDING.search(heading):
+            problems.append(
+                f"heading ends in '~다': write it as a '~입니다/~합니다' sentence "
+                f"or a noun phrase: {heading}"
+            )
+    if len(_OWN_VIEW.findall(_FENCE.sub("", markdown))) > 1:
+        problems.append(
+            "marks the post's own view more than once; keep one marker in a "
+            "section and state the rest plainly or leave it out"
+        )
     if not markdown.lstrip().startswith("## "):
         problems.append(f"the section must start with its '## ' heading ({title})")
     allowed = set(own) | set(earlier)
@@ -423,12 +453,24 @@ def cite_papers(markdown: str, ledger: EvidenceLedger) -> str:
     return re.sub(r"(\[@[^\]]+\])(\s*\1)+", r"\1", out)
 
 
+_FRAGMENT = re.compile(r"^(?:[-*+]|\d+[.)])?\s*[^\s#|>!$`].{0,24}$")
+_SENTENCE_CLOSE = re.compile(r"[.!?。:)\]]\s*$")
+
+
 def drop_sentences(markdown: str, sentences: Iterable[str]) -> str:
     """``markdown`` without the given sentences (as :func:`prose_sentences`
-    returns them), each removed once."""
+    returns them), each removed once, and without the fragments a removal
+    leaves (a short line that ends no sentence, such as "첫째")."""
     for sentence in sentences:
         markdown = markdown.replace(sentence, "", 1)
-    return re.sub(r"[ \t]{2,}", " ", re.sub(r"\n{3,}", "\n\n", markdown))
+    lines = []
+    for line in markdown.split("\n"):
+        bare = line.strip()
+        if bare and _FRAGMENT.match(bare) and not _SENTENCE_CLOSE.search(bare):
+            continue
+        lines.append(line.rstrip())
+    out = "\n".join(lines)
+    return re.sub(r"[ \t]{2,}", " ", re.sub(r"\n{3,}", "\n\n", out))
 
 
 _HEADINGS = re.compile(r"^#{2,4} .+$", re.M)

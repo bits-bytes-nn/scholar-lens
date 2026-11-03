@@ -55,12 +55,20 @@ _CANONICAL = [
 _CANONICAL_RES = [(re.compile(p, re.IGNORECASE), name) for p, name in _CANONICAL]
 
 
+_FINDINGS_OF = re.compile(r"\b(NAACL|EMNLP|EACL|AACL|ACL)\b")
+
+
 def venue_name(name: str | None) -> str | None:
     """The venue to show for an index's venue string, or None when it names
     a host, an institute or a series rather than a publication venue."""
     text = " ".join((name or "").split())
     if not text:
         return None
+    if re.search(r"\bfindings of\b", text, re.IGNORECASE):
+        # "Findings of the ACL: NAACL 2025" are NAACL's Findings.
+        after = text.split(":", 1)[1] if ":" in text else ""
+        conf = _FINDINGS_OF.search(after)
+        return f"Findings of {conf.group(1) if conf else 'ACL'}"
     for pattern, canonical in _CANONICAL_RES:
         if pattern.search(text):
             return canonical

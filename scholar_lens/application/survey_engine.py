@@ -53,7 +53,7 @@ logger = logging.getLogger(__name__)
 
 # Bump when the reader's prompt or the evidence schema changes meaning; the
 # prompt's wording alone does not invalidate cached evidence.
-READER_VERSION = 2
+READER_VERSION = 3
 _SAFE_KEY = re.compile(r"[^A-Za-z0-9._-]+")
 
 
@@ -95,6 +95,16 @@ class SentenceVerdict(BaseModel):
 
 class ClaimCheck(BaseModel):
     verdicts: list[SentenceVerdict] = Field(default_factory=list)
+
+
+class EvidenceVerdict(BaseModel):
+    id: str
+    verdict: Literal["consistent", "wrong"]
+    reason: str = ""
+
+
+class EvidenceCheck(BaseModel):
+    verdicts: list[EvidenceVerdict] = Field(default_factory=list)
 
 
 class ReviewIssue(BaseModel):
@@ -268,8 +278,25 @@ class EvidenceSurveyEngine:
             )
             return f"recorded {item.id}"
 
+        refusals = 0
+
         def finish(summary: str) -> str:
             """Call when the evidence covers the paper as the survey needs."""
+            nonlocal refusals
+            kinds = {e.kind for e in ledger}
+            missing = []
+            if core and document.kind != "abstract":
+                missing = [
+                    k for k in ("method", "number", "limitation") if k not in kinds
+                ]
+            if missing and refusals < 2:
+                refusals += 1
+                return (
+                    "Not yet: a core paper needs at least one piece of evidence of "
+                    f"each kind {missing} (results and limitations are usually in "
+                    "the experiments, discussion or conclusion sections). Record "
+                    "them, or call finish again if the paper has none."
+                )
             return "done"
 
         core = paper.role == "core"
@@ -392,6 +419,7 @@ class EvidenceSurveyEngine:
             )
             plan = without_papers(plan, missing)
         outline = await self.outline(plan, ledger, references, guideline)
+        outline = await self._check_evidence(outline, ledger)
         glossary = {t.english: t.rendering for t in outline.glossary}
         free = (
             " ".join({str(p.year) for p in plan.papers if p.year})
@@ -439,7 +467,16 @@ class EvidenceSurveyEngine:
         free: str,
     ) -> str:
         own = [e for eid in section.evidence if (e := ledger.get(eid))]
-        earlier_ids = [eid for s, _ in written for eid in s.evidence]
+        # What earlier sections actually state (their final text), so a
+        # back-reference never points at a removed sentence.
+        earlier_ids = list(
+            dict.fromkeys(
+                eid
+                for _, md in written
+                for s in prose_sentences(md)
+                for eid in cited_ids(s)
+            )
+        )
         earlier = [e for eid in earlier_ids if (e := ledger.get(eid))]
         figures = [e.figure_url for e in own if e.kind == "figure" and e.figure_url]
         sections_map = "\n".join(
@@ -563,6 +600,37 @@ class EvidenceSurveyEngine:
             draft = fixed
         claims = await self._check_claims(draft, ledger)
         if claims:
+            # Let the writer narrow or delete them in context first; only what
+            # is still unsupported after that is cut.
+            with usage_stage("fix"):
+                fixed = (
+                    await self.model.text(
+                        role="write",
+                        system=prompts.FIX_SYSTEM,
+                        prompt="\n\n".join(
+                            [
+                                _block("section", draft),
+                                _block(
+                                    "evidence", _evidence_lines(own + earlier[-30:])
+                                ),
+                                _block(
+                                    "problems",
+                                    "These sentences are not supported by their "
+                                    "evidence; narrow each to what the evidence "
+                                    "says or delete it, and mend the sentences "
+                                    "around a deletion:\n"
+                                    + "\n".join(f"- {v}: {s}" for s, v in claims),
+                                ),
+                            ]
+                        ),
+                    )
+                ).strip()
+            if not structure_lost(draft, fixed) and len(checks(fixed)) <= len(
+                checks(draft)
+            ):
+                draft = fixed
+                claims = await self._check_claims(draft, ledger)
+        if claims:
             draft = drop_sentences(draft, [s for s, _ in claims])
             self.notes.append(
                 f"Section '{section.title}': {len(claims)} unsupported sentence(s) removed: "
@@ -573,6 +641,58 @@ class EvidenceSurveyEngine:
                 f"Section '{section.title}' still has: " + " | ".join(leftover[:5])
             )
         return draft
+
+    async def _check_evidence(
+        self, outline: EvidenceOutline, ledger: EvidenceLedger
+    ) -> EvidenceOutline:
+        """Check the claim, scope and cell of every number and limitation the
+        outline uses against its quote (a scope can name the wrong benchmark
+        while every number is in the quote); wrong ones leave the outline."""
+        used = {eid for s in outline.sections for eid in s.evidence} | {
+            eid for r in outline.table for eid in [*r.results, r.limitation] if eid
+        }
+        items = [
+            e
+            for e in ledger
+            if e.id in used and e.kind in ("number", "limitation", "finding")
+        ]
+        if not items:
+            return outline
+        lines = "\n".join(
+            f"[{e.id}] ({e.kind}) claim: {e.claim} | cell: {e.cell} | scope: "
+            f'{e.scope}\n    quote: "{e.quote}"'
+            for e in items
+        )
+        with usage_stage("verify"):
+            check = await self.model.structured(
+                role="evaluate",
+                system=prompts.EVIDENCE_CHECK_SYSTEM,
+                prompt=_block("evidence", lines),
+                schema=EvidenceCheck,
+            )
+        wrong = {v.id for v in check.verdicts if v.verdict == "wrong"}
+        if not wrong:
+            return outline
+        self.notes.append(
+            "Evidence that misstates its quote was left out: "
+            + "; ".join(
+                f"{v.id} ({v.reason[:120]})" for v in check.verdicts if v.id in wrong
+            )
+        )
+        sections = [
+            s.model_copy(update={"evidence": [e for e in s.evidence if e not in wrong]})
+            for s in outline.sections
+        ]
+        table = [
+            r.model_copy(
+                update={
+                    "results": [e for e in r.results if e not in wrong],
+                    "limitation": None if r.limitation in wrong else r.limitation,
+                }
+            )
+            for r in outline.table
+        ]
+        return outline.model_copy(update={"sections": sections, "table": table})
 
     async def _check_claims(
         self, draft: str, ledger: EvidenceLedger

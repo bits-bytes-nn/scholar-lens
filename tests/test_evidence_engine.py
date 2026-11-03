@@ -15,6 +15,7 @@ from scholar_lens.application.ports import AgentLimits, AgentOutcome
 from scholar_lens.application.survey_engine import (
     ClaimCheck,
     EngineSettings,
+    EvidenceCheck,
     EvidenceSurveyEngine,
     SectionReview,
     SentenceVerdict,
@@ -339,6 +340,8 @@ class ScriptedModel:
             )
         if schema is SectionReview:
             return SectionReview()
+        if schema is EvidenceCheck:
+            return EvidenceCheck()
         raise AssertionError(schema)
 
     async def text(self, *, role, system, prompt) -> str:
@@ -458,3 +461,40 @@ def test_visual_minimum_example_numbers_and_model_sizes() -> None:
         f"## 제목입니다\n\nLlama 2 7B에서도 같은 경향입니다 [[E2]].\n\n![비교]({url})\n"
     )
     assert not any("already stated" in p for p in check(sizes, numbers={"7B": "앞 절"}))
+
+
+def test_headings_in_the_plain_register_and_repeated_view_markers() -> None:
+    md = (
+        "## 보상 모델은 먼저 무너진다\n\n이 글의 관점에서 보면 A입니다. "
+        "이 글의 판단으로는 B입니다.\n"
+    )
+    issues = draft_problems(
+        md,
+        title="t",
+        own=[],
+        earlier=[],
+        ledger=_ledger(),
+        earlier_numbers={},
+        figure_urls=[],
+        free_numbers="",
+    )
+    assert any("ends in '~다'" in p for p in issues)
+    assert any("own view more than once" in p for p in issues)
+    ok = "## 보상 모델이 먼저 무너집니다\n\nA입니다.\n"
+    assert not draft_problems(
+        ok,
+        title="t",
+        own=[],
+        earlier=[],
+        ledger=_ledger(),
+        earlier_numbers={},
+        figure_urls=[],
+        free_numbers="",
+    )
+
+
+def test_table_rows_must_use_available_results_and_limitations() -> None:
+    bare = _outline(table=[{"paper": "2305.18290"}])
+    problems = outline_problems(bare, _plan(), _ledger(), title_max_length=70)
+    assert any("give its results" in p for p in problems)
+    assert any("give its limitation" in p for p in problems)

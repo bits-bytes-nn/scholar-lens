@@ -24,6 +24,14 @@ from scholar_lens.domain.venues import venue_name
         ),
         (
             "Findings of the Association for Computational Linguistics: EMNLP 2024",
+            "Findings of EMNLP",
+        ),
+        (
+            "Findings of the Association for Computational Linguistics: NAACL 2025",
+            "Findings of NAACL",
+        ),
+        (
+            "Findings of the Association for Computational Linguistics",
             "Findings of ACL",
         ),
         ("Trans. Mach. Learn. Res.", "TMLR"),
