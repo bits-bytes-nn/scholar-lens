@@ -1,0 +1,61 @@
+{
+  "item": "summary-lora",
+  "post": "/tmp/baseline/out/summary-lora.md",
+  "source": "arXiv 2106.09685v2 (PDF)",
+  "scores": {"A": 9, "B": 7, "C": 8, "D": 7, "E": 8, "F": 8, "U1": 9, "U2": 8, "X1": 5, "G": 9},
+  "score_notes": {
+    "A": "Clean arc, no body H1, no skipped levels, one real table, all math in $$ with blank lines around display blocks, \\lvert\\rvert used for |Θ| (L46). Only nit: H2 headings are topic names (L18, L24, L44, L52, L85).",
+    "B": "입니다 register held; English given on first use for key terms (L20 '전체 미세조정(full fine-tuning)', L22 '어댑터(adapter)', L26 '내재 차원(intrinsic dimension)'). Deductions: L20 noun frame '미세조정이 훨씬 낫다는 점을 보여 줍니다' (-> '부록에서 GPT-3도 퓨 샷보다 미세조정 성능이 훨씬 높습니다'); L38 '$$B$$가 0에서 시작한다는 점을 확인할 수 있습니다' (-> '$$B$$는 0에서 시작합니다'); L77 passive '따로 수행되었습니다' (-> '저자들이 따로 비교했습니다'); L83 awkward '\"시사\"로 제시한 해석입니다'; L89 formulaic '한계도 분명합니다.'; M/B counts left untransformed in prose (L50 '4.7M은', L77 '(1500.0M)', '(1.5B)', L81 '18M 예산').",
+    "C": "Good flow: adapter/prefix weaknesses (L22) motivate the low-rank hypothesis (L26) and the two properties (L40); L79-83 move from budget allocation to rank to subspace evidence. Deduction: L87 drops 'LoRA+PrefixEmbed는 WikiSQL에서 75.0~76.2' into the significance section with no parameter budget or comparison point.",
+    "D": "Hard parts get help: zero-init of B and α/r (L34), a worked parameter count (L38: 12,288² ≈ 1억 5,100만 vs 98,304), merge/swap explanation (L40). Deductions: L83 subspace analysis uses '정규화 유사도', '투영한 노름' and '6.91' without definition (6.91 is ‖ΔW_q‖_F, never stated), so the 21.5x amplification is opaque to a non-expert; the amplification ratio formula is absent.",
+    "E": "GPT-3 175B results table copied cell-for-cell (L58-67), architecture figure and scatter plot placed at discussion, referred to descriptively. Deductions: the rank/placement results (L81, Table 5/6 numbers) and GLUE/E2E comparisons (L77) are packed into prose where a small table would help.",
+    "F": "14 of 15 sampled claims supported, every table cell matches. Deductions: L89 limitation '랭크 분석은 주로 GPT-3의 일부 층(48번째 층 중심)과 두 데이터셋에서 이루어졌습니다' misrepresents scope (main text says 'the conclusion holds for other layers as well, as shown in Section H.1', which plots layers 1/32/64/96; H.2 repeats the rank study on GPT-2), making it a limitation that is not the paper's. Minor: L34 drops the condition 'if we scale the initialization appropriately'; L50 copies the paper's D.4 text '37.7M은 ... 네 행렬 모두 r=2' although the paper's own Table 15 lists r_q=r_k=r_v=r_o=2 as 18.8M (source-internal inconsistency, not a hallucination).",
+    "U1": "Five questions covered: motivation (L20-22), solution (L26-42), implementation (L46-50), results (L54-83), significance and limits (L87-89).",
+    "U2": "About 5,200 body characters; TL;DR plain prose without math (L16); one distilled table; grounded limitations (L89 batching across tasks, small r not universal). L83 is dense.",
+    "X1": "Category Finetuning fits. Tags: 'Low-Rank-Adaptation' restates the title while the acronym 'LoRA' is absent; 'Frozen-Pre-trained-Weights' and 'Adapter-Inference-Latency' are descriptive phrases (both warned by the generator); 'Rank-Decomposition-Matrices', 'Intrinsic-Rank' are paper terms.",
+    "G": "use_math true with $$ present; description 138 chars, opens with 'LoRA', numbers (175B, 10,000배, 3배) from the TL;DR; date 2021-06-17 matches v1. Blog lint not run."
+  },
+  "principles": {
+    "claim_headings": {"status": "not met", "evidence": "H2 are topic names (L18 '연구 배경', L24 '제안 방법', L44 '구현 방식', L52 '실험 결과', L85 '의의와 한계'); only L75 '작은 모델에서의 일관성' is claim-like."},
+    "running_example": {"status": "partly met", "evidence": "GPT-3 175B threads through as the main case (L20 1,750억, L38 d_model 12,288, L48 350GB/35MB, L58 table, L81-83 analysis), but no single task or input is carried through."},
+    "mechanism_design_formula_example": {"status": "met", "evidence": "Problem L22 (adapter latency numbers, prefix limits) -> design choice and reason L26, L40, L42 -> formula L31 and L46 -> numeric example L38."},
+    "facts_said_once": {"status": "partly met", "evidence": "No added latency at L16, L40, L42 and L87; MNLI-m 89.5 at L20, L60 and L69; 73.4 at L66, L69 and L81."},
+    "numbers_with_scope": {"status": "mostly met", "evidence": "Latency L22 carries model, batch, sequence length; L73 low-data '(MNLI 100개 예시)'. Slip: parameter counts left as M/B in prose (L50, L77, L81) instead of 만/억."},
+    "nothing_invented": {"status": "partly met", "evidence": "L38 arithmetic is flagged as the writer's ('규모 감각을 위해 계산해 보면'); L89 scope limitation is not the paper's."},
+    "own_assessment_at_end": {"status": "partly met", "evidence": "L87-89 mostly re-tell the paper's own limitations and future work (batching across tasks, heuristic matrix choice, footnote 6, model-size/rank open question from H.2). Little writer judgement on when to use LoRA or what the numbers do not show."},
+    "length_fitted": {"status": "met", "evidence": "About 5,200 body characters, readable in five minutes."},
+    "type_specific_shape": {"status": "met", "evidence": "TL;DR first (L14-16), no abstract section, one distilled table (L58-67), limitation paragraph."},
+    "korean_style": {"status": "partly met", "evidence": "입니다 register, varied sentences; noun frames L20, L38; passive L77; formulaic L89; M/B not converted."}
+  },
+  "claims": {
+    "checked": 15, "supported": 14, "unsupported": 1, "wrong": 0, "unverifiable": 0,
+    "examples": [
+      {"line": 16, "claim": "vs GPT-3 175B full fine-tuning with Adam: 10,000x fewer trainable params, 3x less GPU memory", "verdict": "supported", "source": "Abstract: 'LoRA can reduce the number of trainable parameters by 10,000 times and the GPU memory requirement by 3 times.'"},
+      {"line": 20, "claim": "GPT-3 few-shot MNLI-m 40.6% -> fine-tuned 89.5%", "verdict": "supported", "source": "Table 8: GPT-3 Few-Shot 40.6, Fine-Tuned 89.5."},
+      {"line": 22, "claim": "GPT-2 medium, batch 1, seq 128: 19.8ms -> AdapterH 25.8ms (+30.3%), AdapterL 23.9ms (+20.7%)", "verdict": "supported", "source": "Table 1, batch size 1 / sequence length 128 column."},
+      {"line": 34, "claim": "A Gaussian, B zero; scale by α/r; α set to the first r tried", "verdict": "supported", "source": "§4.1; the post omits the condition 'if we scale the initialization appropriately'."},
+      {"line": 48, "claim": "VRAM 1.2TB -> 350GB; checkpoint 350GB -> 35MB (~10,000x) with r=4 on q,v; 100 models ≈ 354GB vs 35TB", "verdict": "supported", "source": "§4.2 and footnote 4."},
+      {"line": 48, "claim": "Throughput 32.5 -> 43.1 tokens/s per V100, ~25% speedup", "verdict": "supported", "source": "§4.2 '25% speedup' and footnote 5."},
+      {"line": 50, "claim": "GPT-3: AdamW, 2 epochs, batch 128, LR tuned per method (LoRA 2E-04)", "verdict": "supported", "source": "D.4 and Table 12."},
+      {"line": 50, "claim": "Budgets 4.7M (r_q=r_v=1 or r_v=2) and 37.7M (r_q=r_v=8 or all four r=2)", "verdict": "supported", "source": "D.4 text verbatim; note the paper's Table 15 lists r_q=r_k=r_v=r_o=2 as 18.8M, so the source itself is inconsistent."},
+      {"line": 58, "claim": "GPT-3 175B table (e.g. FT 175,255.8M 73.8/89.5/52.0/28.0/44.5; LoRA 4.7M 73.4/91.7/53.8/29.8/45.9)", "verdict": "supported", "source": "Table 4, all 40 copied cells match."},
+      {"line": 69, "claim": "LoRA 4.7M is 0.4 points below FT on WikiSQL, within ±0.5%", "verdict": "supported", "source": "Table 4 (73.8 vs 73.4) and caption 'WikiSQL have a fluctuation around ±0.5%'."},
+      {"line": 73, "claim": "Prefix methods drop beyond 256 (PreEmbed) / 32 (PreLayer) tokens; MNLI-100: LoRA 63.8, FT 60.2, PrefixEmbed 37.6 vs chance 33.3", "verdict": "supported", "source": "§5.5; Table 16; App. F.3 '(37.6% vs. 33.3%)'."},
+      {"line": 77, "claim": "DeBERTa XXL FT 91.1 vs LoRA 91.3; RoBERTa base LoRA 87.2 vs AdapterDrop 84.4 vs FT 86.4; GPT-2 M E2E BLEU LoRA 70.4, PreLayer 69.7, FT 68.2", "verdict": "supported", "source": "Table 2 and Table 3."},
+      {"line": 81, "claim": "18M budget: W_q r=8 70.4 vs W_q,W_v r=4 73.7; W_q,W_v r=1 gives 73.4 / 91.3", "verdict": "supported", "source": "Table 5 and Table 6."},
+      {"line": 83, "claim": "Projection norms 0.32 / 21.67 / 0.02; amplification 21.5 ≈ 6.91/0.32; top-1 direction overlaps with similarity > 0.5", "verdict": "supported", "source": "Table 7 and §7.3 '21.5 ≈ 6.91/0.32 for r = 4'; §7.2 'share a subspace of dimension 1 with normalized similarity > 0.5'."},
+      {"line": 89, "claim": "Rank analysis was done mainly on some GPT-3 layers (centred on layer 48) and two datasets (stated as a limitation)", "verdict": "unsupported", "source": "§7.2: 'We only look at the 48th layer ... but the conclusion holds for other layers as well, as shown in Section H.1' (Figures 6-7: layers 1, 32, 64, 96); H.2 repeats the rank study on GPT-2 E2E."}
+    ]
+  },
+  "checklist": {
+    "repeated": 0, "avoided": 0, "na": 0, "repeated_ids": [],
+    "items": [],
+    "note": "human_fixes.yaml has no fixes for summary-lora. Its notes list two generic defects from an older local run: the HTML entity leak ('모델 &amp; 방법') is absent (no &amp;/&lt;/&gt; in the post), and the 'Pdf' title is absent (L3 is the paper title)."
+  },
+  "extras": {},
+  "top_issues": [
+    "L89 presents a limitation that is not the paper's: the rank analysis is said to centre on layer 48, but the paper shows other layers (H.1) and a GPT-2 rank study (H.2).",
+    "L83 subspace and amplification analysis is opaque: '정규화 유사도', '투영한 노름' and the 6.91 (‖ΔW_q‖_F) are used without definition, so the 21.5x claim cannot be followed.",
+    "Closing (L87-89) mostly re-tells the paper's own limitations and future work rather than the writer's judgement; tags miss 'LoRA' and use descriptive phrases ('Frozen-Pre-trained-Weights', 'Adapter-Inference-Latency'); M/B counts are left unconverted in prose (L50, L77, L81)."
+  ]
+}

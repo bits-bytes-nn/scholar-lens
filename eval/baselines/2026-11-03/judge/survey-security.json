@@ -1,0 +1,109 @@
+{
+  "item": "survey-security",
+  "post": "/tmp/baseline/out/survey-security.md",
+  "scores": {"A": 4, "B": 7, "C": 5, "D": 7, "E": 6, "F": 5},
+  "score_evidence": {
+    "A": "Three lineage sections are truncated stubs: '## 프롬프트 주입: 목표 가로채기에서 적응형 공격까지' (L59-67) holds only a two-paragraph PromptInject definition with no results, and Greshake/HouYi get no subsection; '### PoisonedRAG: 검색 조건과 생성 조건을 나눠 만족시키기' (L162-164) is one problem-statement paragraph, and PoisonedRAG is re-covered from scratch at L444-452; '### 에이전트 사이로 번지는 주입: Prompt Infection과 AiTM' (L170-179) ends on the four-component list, never reaches results or AiTM, and the next H2 follows straight after (L181). GCG is explained twice (L73-111, L424). No TL;DR. The front-matter title is English (L3) on a Korean post. Markdown is otherwise valid: $$ math, real tables, no H1.",
+    "B": "Generally natural '입니다' prose. Terminology drifts: 미세 조정 (L323) / 미세조정 (L45) / 파인튜닝 (L440, L508); 유용성 (L373) / 유틸리티 (L504); 프롬프트 주입 / 프롬프트 인젝션 (L49, L503). Noun frame at L51 '침해할 수 있다는 점을 보입니다' should be '침해할 수 있음을 실험으로 확인했습니다'. Formulaic lines: L17 '나눠 보면 이해하기 쉽습니다', L207 '결과도 이 해석과 맞습니다'. Table cells pack nested parentheses: L498 '(AdvBench 앞 100개 사례, 단일 문자열·단일 모델 GCG 최적화 (AutoPrompt는 각각 25.0%, 3.0%))'.",
+    "C": "The intro promises six lineages (L17-29), but the attack lineages stop mid-thought (L67→L69, L164→L166, L179→L181). Cross sections reuse material that was never introduced in its own section (ToolHijacker L478, MCP user study L484). The PoisonedRAG card is split across two distant sections (L162, L444).",
+    "D": "Hard parts get real help: GCG's gradient-candidate loop (L83-93), PAIR's stream design (L143), StruQ's front end (L201-205), CaMeL's capability pseudo-code (L258-276), InjecAgent's ASR-valid denominator (L321). Some speculation is offered as explanation: L143 '…설계로 보입니다', L156 '…짐작됩니다… 확인해야 할 부분입니다' (the post admits the check was not done). Meanwhile the hard MCP, ETDI and multi-agent mechanisms get no explanation.",
+    "E": "Good use of a timeline table (L33-57), defense and benchmark comparison tables (L294-299, L411-418), 16 figures with descriptive captions, and labelled illustrative pseudo-code (L258, L343). Deductions: the main comparison table has '-' result cells (L497 Greshake, L511 ToolHijacker); nearly every cell is a full sentence, often repeating the model inside a parenthetical (L504, L505, L507); and 6 plan papers have no row (HouYi, SmoothLLM, BadAgent, AiTM, RAGForensics, ETDI).",
+    "F": "SecAlign gets a false, input-derived limitation: L235 'SecAlign이 어떤 손실을 정확히 쓰는지는 여기서 단정하지 않습니다', and L241/L298 say the utility loss 'cannot be known'. The paper adopts DPO with β=0.1 (Eq. 3) and reports MMLU 65.3→63.1 and other utility tables. PromptInject 'best' loses scope: L496 '목표 가로채기 최고 성공률… 58.6±1.6%', but the paper reports 70.0±3.7% with a longer rogue string. The ToolHijacker limitation cell (L511) states a result as a limitation. Five wrong or garbled venues (L545, L554, L555, L556, L558). Unsourced practice claim at L484: '이 쓰기 권한은 현실에서 생각보다 얻기 쉽습니다. 실무에서는… 더 현실적인 위협일 수 있습니다'. L490 'PromptInject의 수치는… 하한에 가깝습니다': the paper never says lower bound, only that it did not search for the best attack. AgentDojo GPT-4o targeted ASR appears as 47.69% (L373) and 57.69%/57.7% (L375, L377) without reconciling them; both values come from different tables of the paper."
+  },
+  "principles": {
+    "claim_headings": {"status": "partly met", "evidence": "Closing subsections make claims ('### 학습한 경계는 다시 최적화의 표적이 됩니다' L515). Lineage H2s are topic names ('## RAG, 메모리, 백도어 오염' L158; '## 핵심 연구 비교' L480)."},
+    "running_example": {"status": "not met", "evidence": "No example runs through the post. The email-exfiltration example appears only inside CaMeL (L245, L258-276), and the AgentDojo rent example only at L345-363."},
+    "mechanism_design_formula_example": {"status": "partly met", "evidence": "GCG (L75-99), StruQ (L201-207) and CaMeL (L253-286) follow the arc. PoisonedRAG (L164), Prompt Infection (L172-179) and every MCP paper stop before mechanism or results."},
+    "facts_said_once": {"status": "not met", "evidence": "'8개 방어를 모두 우회' appears at L19, L52, L301, L517 and L533. The CaMeL sentence '모든 값에 capability 메타데이터를 붙여 도구 호출 시점에 보안 정책을 강제합니다' appears at L53, L521 and L535. CaMeL's 2.82×/2.73× tokens appear at L288 and L488. StruQ's AlpacaEval figures appear at L207 and L488. The lethal trifecta is explained at L15, L488 and L521. Body numbers are repeated in the L494 table."},
+    "numbers_with_scope_unit": {"status": "partly met", "evidence": "Most numbers carry model, setting and denominator (L99, L323, L373). Exceptions: '최고 성공률' at L496 drops the paper's scope; GPT-4o's AgentDojo ASR is 47.69% at L373 but 57.69% at L377 with no note."},
+    "nothing_invented": {"status": "partly met", "evidence": "The pseudo-code and the DPO formula are labelled as illustrative (L235, L258, L343). Unsourced claims remain: L484 ('실무에서는… 더 현실적인 위협'), L156 and L143 (speculation), and L517 (an analogy to image-classification adversarial examples, with no source)."},
+    "writer_assessment_at_end": {"status": "partly met", "evidence": "L513-529 give the writer's view on trade-offs and gaps, but 맺음말 (L533-539) restates paper results as 'three lessons' and ends with a generic direction (L539) instead of saying when to use which defense."},
+    "length_fitted_to_difficulty": {"status": "not met", "evidence": "About 52.7K non-space characters. GCG and PAIR get about 40 lines (L73-156), while 8 plan papers (Greshake, HouYi, BadAgent, AiTM, RAGForensics, MCP study, ETDI, ToolHijacker) get no section at all."},
+    "type_specific_shape": {"status": "not met", "evidence": "The 'survey numbers in one table' rule is broken: the paper sections hold the full numbers, which are then repeated in the L494 table. Synthesis sections rewrite the cards (L521 repeats the CaMeL card; L533-535 recap)."},
+    "korean_style": {"status": "partly met", "evidence": "The '입니다' register holds, but the title is English (L3), terminology drifts (파인튜닝/미세 조정, 유틸리티/유용성) and table cells are over-packed (L498)."}
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 13,
+    "unsupported": 1,
+    "wrong": 1,
+    "unverifiable": 0,
+    "examples": [
+      {"line": 99, "claim": "GCG harmful-string ASR Vicuna-7B 88.0%, LLaMA-2-7B-Chat 57.0%; AutoPrompt 25.0%/3.0%; multi-behavior test 98.0%/84.0% (AutoPrompt 98.0/35.0)", "verdict": "supported", "source": "arXiv 2307.15043 Table 1"},
+      {"line": 107, "claim": "Transfer ensemble over 388 behaviors: GPT-3.5 86.6, GPT-4 46.9, Claude-1 47.9, PaLM-2 66.0, Claude-2 2.1", "verdict": "supported", "source": "2307.15043 Table 2 'Behavior + Ensemble'; 'averaged over 388 behaviors'"},
+      {"line": 145, "claim": "PAIR (Mixtral) JBB: Vicuna 88%, GPT-3.5 51%, GPT-4 48%, Gemini 73%; Llama-2 4% vs GCG 2%; Claude-2 0%", "verdict": "supported", "source": "2310.08419 results table"},
+      {"line": 149, "claim": "PAIR vs GCG: 10.0 vs 256K queries, 34 s vs 1.8 h, 366 MB CPU vs 72 GB GPU, $0.026", "verdict": "supported", "source": "2310.08419 Table 4"},
+      {"line": 207, "claim": "StruQ Llama Completion-Real 96%→0%, TAP 97%→9%, AlpacaEval 67.2→67.6 / Mistral 80.0→78.7, GCG 58% / 56%", "verdict": "supported", "source": "2402.06363 Table 2"},
+      {"line": 225, "claim": "Instruction hierarchy: system prompt extraction +63%, held-out attacks up to +34%, jailbreak >30%", "verdict": "supported", "source": "2404.13208: 'improved by 63%', 'up to 34%', 'jailbreak robustness increases by over 30%'"},
+      {"line": 317, "claim": "InjecAgent 17 user tools × 62 attacker cases (30 DH + 32 DS) = 1,054; fine-tuned GPT-4 6.6% base / 7.1% enhanced; ReAct GPT-4 23.6/47.0", "verdict": "supported", "source": "2403.02691 Table 3 (the paper's text swaps the fine-tuned values; the post follows the table)"},
+      {"line": 373, "claim": "AgentDojo 97 user tasks / 629 security cases; GPT-4o 69.00 / 50.08 / 47.69; Claude 3.5 Sonnet 78.22 / 33.86", "verdict": "supported", "source": "2406.13352 Table 3 (Table 5 gives 57.69% for the same GPT-4o no-defense setting, a conflict inside the paper)"},
+      {"line": 377, "claim": "GPT-4o defenses targeted ASR: none 57.69, tool filter 6.84, PI detector 7.95, repeat prompt 27.82, delimiters 41.65", "verdict": "supported", "source": "2406.13352 Table 5"},
+      {"line": 401, "claim": "AgentHarm public test: Mistral Large 2 82.2%/1.1%; GPT-4o 48.4→72.7, refusals 48.9→13.6; Claude 3.5 Sonnet 13.5→68.7, 85.2→16.7; non-refusal 81.9 vs 82.0, 84.2 vs 89.9", "verdict": "supported", "source": "2410.09024 Table 9"},
+      {"line": 440, "claim": "Adaptive attacks: 8 defenses all >50% ASR; adv. finetuning 56%→12%; detector DR 61%→1%; paraphrasing 53→79 (Vicuna), 8→54 (Llama3)", "verdict": "supported", "source": "2503.00061 abstract, Table 2, Table 3"},
+      {"line": 286, "claim": "CaMeL: Gemini 2.5 Pro 300→0 successful attacks; 0 vs tool filter 8 (Claude 3.5 Sonnet); 77% vs 84% utility; 2.82× input / 2.73× output tokens; 949 attacks", "verdict": "supported", "source": "2503.18813 abstract, Fig. 11 caption, token-cost section"},
+      {"line": 484, "claim": "MCP user study: 15 of 20 participants (75.0%) chose at least one malicious server; ASR 93.33/59.33/6.67, avg 53.11, RR 4.67", "verdict": "supported", "source": "2506.02040 RQ2/Table 2"},
+      {"line": 496, "claim": "PromptInject '목표 가로채기 최고 성공률… 58.6±1.6%'", "verdict": "unsupported", "source": "2211.09527: 58.6±1.6% is the default-setup value; the paper also reports 70.0±3.7% with a longer rogue string and 63.1±2.4% with no text after {user_input}, so '최고' loses scope"},
+      {"line": 241, "claim": "SecAlign reports utility only as '비슷한 수준', so the utility loss is unknown; the post will not say which loss it uses (L235)", "verdict": "wrong", "source": "2410.05451: 'We adopt DPO … β=0.1' (Eq. 3); Table 4 reports MMLU 65.3→63.1 (Llama3-8B), 62.7→59.5 (Mistral-7B), etc.; AlpacaEval2 differences '<0.7%'"}
+    ]
+  },
+  "checklist": {
+    "repeated": 4,
+    "avoided": 7,
+    "na": 2,
+    "repeated_ids": ["multiagent-integrity-overgeneralized", "jailbroken-cell-duplicated", "toolhijacker-limitation-column", "prompt-infection-venue"],
+    "details": {
+      "houyi-sentence-grammar": {"status": "n/a", "evidence": "The HouYi pilot study is not described. HouYi appears only at L19 and L37."},
+      "heading-english-tool": {"status": "avoided", "evidence": "L166 '## 도구 악용, MCP, 멀티 에이전트 공격'"},
+      "etdi-translationese": {"status": "avoided", "evidence": "No '실무에 바로 대응됩니다'. ETDI appears only at L25, L56 and L525."},
+      "multiagent-integrity-overgeneralized": {"status": "repeated", "evidence": "L521 '시스템 수준 통제를 바탕에 두고 모델 수준 방어를 두 번째 층으로 겹치는 방법은 아직 열린 문제입니다' is a field-wide gap claim, not scoped to the reviewed papers. L529 is properly scoped ('두 벤치마크의 중심 설계 대상이 아닙니다'). Judgement call: L521 differs from the original defect sentence."},
+      "secalign-taskshield-repeated-verb": {"status": "n/a", "evidence": "Task Shield is not covered and '옮겼습니다' never repeats."},
+      "lightweight-defense-practice-claim": {"status": "avoided", "evidence": "No claim about what practitioners deploy first. A related unsourced practice claim sits at L484 ('실무에서는 화이트박스 최적화 공격보다 이쪽이 더 현실적인 위협일 수 있습니다')."},
+      "injecagent-finetuned-variants": {"status": "avoided", "evidence": "L323 '도구 사용용으로 미세 조정한 GPT-4는 기본 6.6%, 강화 7.1%' matches the Table 3 row for fine-tuned GPT-4."},
+      "agentdojo-utility-restated": {"status": "avoided", "evidence": "L373 gives 69.00%/50.08% once in the paragraph, though the L504 table repeats them. The drop is not given as ~20%p."},
+      "agentdojo-baseline-defenses": {"status": "avoided", "evidence": "L377 lists the tool filter, the DeBERTa detector, prompt repetition and Spotlighting-style delimiters, with no dual-LLM pattern."},
+      "benchmark-conclusion-flip": {"status": "avoided", "evidence": "L375 '공격 문구에 따라 성공률이 열 배 넘게 달라집니다'"},
+      "jailbroken-cell-duplicated": {"status": "repeated", "evidence": "Jailbroken is absent, but the same defect appears elsewhere. L504: 'GPT-4o 공격 없는 유틸리티… (GPT-4o, 97개 사용자 과제…)'. L507: 'GPT-4o 템플릿 공격 전후 유해 점수와 거부율: … (GPT-4o, 공개 테스트 세트, …)'. L505: '(AgentPoison, 세 에이전트 평균)'."},
+      "toolhijacker-limitation-column": {"status": "repeated", "evidence": "L511 limitation cell: 'StruQ, SecAlign 같은 예방 기반 방어와 탐지 기반 방어가 모두 충분하지 않았습니다.' The result cell is '-'."},
+      "prompt-infection-venue": {"status": "repeated", "evidence": "L558 '… Multi-Agent Systems. Lecture notes in computer science.' The arXiv page names no venue."}
+    }
+  },
+  "extras": {
+    "kind": "survey",
+    "plan_papers": 24,
+    "plan_papers_never_cited": ["2307.02483 Jailbroken: How Does LLM Safety Training Fail? (absent from body, tables and References)"],
+    "plan_papers_without_own_section": ["2302.12173 Greshake (indirect PI)", "2306.05499 HouYi", "2406.03007 BadAgent", "2502.14847 AiTM", "2504.21668 RAGForensics", "2506.02040 MCP attack vectors", "2506.01333 ETDI", "10.14722/ndss.2026.230675 ToolHijacker"],
+    "thin_sections": [
+      {"line": 59, "heading": "## 프롬프트 주입: 목표 가로채기에서 적응형 공격까지", "issue": "one overview paragraph plus one subsection; no Greshake/HouYi/adaptive-attack coverage here"},
+      {"line": 63, "heading": "### 직접 주입의 체계화: PromptInject", "issue": "two paragraphs with definitions only, no method or results"},
+      {"line": 158, "heading": "## RAG, 메모리, 백도어 오염", "issue": "one intro paragraph plus a one-paragraph subsection; BadAgent and RAGForensics never discussed"},
+      {"line": 162, "heading": "### PoisonedRAG: 검색 조건과 생성 조건을 나눠 만족시키기", "issue": "a single problem-statement paragraph; the content reappears at L444"},
+      {"line": 166, "heading": "## 도구 악용, MCP, 멀티 에이전트 공격", "issue": "one intro paragraph plus a truncated subsection; MCP study, ETDI and ToolHijacker get no section"},
+      {"line": 170, "heading": "### 에이전트 사이로 번지는 주입: Prompt Infection과 AiTM", "issue": "ends at the four-component list; no results, no defense, AiTM never discussed"}
+    ],
+    "wrong_venues": [
+      {"line": 545, "paper": "Greshake et al. 2023", "venue": "CISPA Helmholtz Center", "issue": "an affiliation, not a venue (published at ACM AISec '23)"},
+      {"line": 554, "paper": "BadAgent", "venue": "Proceedings of the conference - Association for Computational Linguistics. Meeting", "issue": "garbled index string (ACL 2024)"},
+      {"line": 555, "paper": "AgentDojo", "venue": "Zenodo (CERN European Organization for Nuclear Research)", "issue": "a data repository, not a venue (NeurIPS 2024 Datasets and Benchmarks)"},
+      {"line": 556, "paper": "AgentPoison", "venue": "neural information processing systems", "issue": "lowercase index name (NeurIPS 2024)"},
+      {"line": 558, "paper": "Prompt Infection", "venue": "Lecture notes in computer science", "issue": "publisher series; the arXiv page names no venue"},
+      {"line": 552, "paper": "InjecAgent (also L560 AiTM)", "venue": "Findings of the Association for Computational Linguistics: ACL (Findings of ACL)", "issue": "index-style string with a redundant parenthetical"},
+      {"line": 564, "paper": "MCP attack vectors (Song et al.)", "venue": "IEEE Transactions on Software Engineering", "issue": "unverified: arXiv v4 (Sep 2025) names no venue"}
+    ],
+    "comparison_table_bad_cells": [
+      {"line": 497, "paper": "Indirect Prompt Injection", "column": "주요 결과", "issue": "'-'"},
+      {"line": 511, "paper": "ToolHijacker", "column": "주요 결과", "issue": "'-'; the limitation cell holds a result"},
+      {"line": 498, "paper": "GCG", "column": "주요 결과", "issue": "prose with nested parentheses"},
+      {"line": 506, "paper": "Prompt Infection", "column": "주요 결과", "issue": "prose with a mixed relative metric ('13.92% 높고… 209% 더 효과적')"},
+      {"lines": "496-511", "issue": "all limitation cells are full '~습니다' sentences (prose)"}
+    ],
+    "comparison_table_missing_rows": ["HouYi", "SmoothLLM", "BadAgent", "AiTM", "RAGForensics", "ETDI"],
+    "description_chars": 124
+  },
+  "top_issues": [
+    "Three lineage sections are truncated stubs: prompt injection (L59-67), poisoning/PoisonedRAG (L158-164) and tool/MCP/multi-agent (L166-179). 8 plan papers (Greshake, HouYi, BadAgent, AiTM, RAGForensics, MCP study, ETDI, ToolHijacker) get no section, and Jailbroken (2307.02483) is never cited.",
+    "False, input-derived limitation for SecAlign: L235 refuses to name the loss and L241/L298 call the utility loss unknown. The paper uses DPO (β=0.1) and reports MMLU and other utility tables.",
+    "Reference venues are wrong or garbled in five entries: CISPA Helmholtz Center (L545), the garbled ACL string (L554), Zenodo (L555), lowercase 'neural information processing systems' (L556) and 'Lecture notes in computer science' (L558; repeats a human-fixed defect).",
+    "The comparison table (L494-511) has '-' result cells (Greshake, ToolHijacker), a ToolHijacker limitation that is really a result (repeats a human-fixed defect), prose cells that duplicate model names in parentheticals, and 6 missing plan papers.",
+    "Facts are repeated instead of said once: '8개 방어를 모두 우회' appears 5×, the CaMeL capability sentence 3×, and the CaMeL token and StruQ AlpacaEval numbers 2× each. The survey-numbers-in-one-table rule is broken. PromptInject's '최고 성공률 58.6%' (L496) loses scope (the paper reports 70.0%), and the AgentDojo GPT-4o ASR shows as both 47.69% (L373) and 57.69% (L377) with no explanation."
+  ]
+}
