@@ -94,6 +94,13 @@ class TestStackWiring:
             "cohere.*",
         }
 
+    def test_bedrock_invoke_covers_the_kind_profiles(
+        self, template: dict[str, Any]
+    ) -> None:
+        (invoke,) = self._statements(template, "BedrockInvoke")
+        arns = ["".join(map(str, r["Fn::Join"][1])) for r in invoke["Resource"]]
+        assert any(a.endswith(":application-inference-profile/*") for a in arns)
+
     def test_bedrock_discovery_is_only_what_the_app_calls(
         self, template: dict[str, Any]
     ) -> None:

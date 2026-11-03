@@ -35,6 +35,7 @@ from .utils.models import (
     FALLBACK_PRICE_PER_MTOK,
     PRICE_VERSION,
     model_info_for_invoked_id,
+    profile_source,
 )
 
 METRICS_NAMESPACE = "ScholarLens"
@@ -227,7 +228,8 @@ def _extract_usage(response: Any) -> UsageEvent:  # noqa: ANN401
         logger.debug("Could not extract token usage: %s", e)
     return UsageEvent(
         stage=current_stage(),
-        model_id=model,
+        # Reported by model, not by the kind's application profile ARN.
+        model_id=profile_source(model),
         input_tokens=in_tok,
         output_tokens=out_tok,
         cache_read_tokens=cache_read,

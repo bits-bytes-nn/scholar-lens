@@ -25,6 +25,7 @@ import boto3
 from botocore.exceptions import ClientError
 from pydantic import BaseModel, ConfigDict
 
+from ..application.usage import cost_allocation
 from ..configs import Config
 from .aws_helpers import S3Handler, get_ssm_param_value
 from .constants import RUN_SECRETS, EnvVars, LocalPaths, S3Paths, SSMParams
@@ -480,7 +481,9 @@ def run_job(request: JobRequest, *, job_id: str | None = None) -> JobResult:
     tracker = TokenUsageTracker()
     started = time.monotonic()
     try:
-        outcome = run_coroutine(_run_pipeline(context, request, tracker))
+        resources = context.config.resources
+        with cost_allocation(resources.project_name, resources.stage, request.kind):
+            outcome = run_coroutine(_run_pipeline(context, request, tracker))
         result.status = "succeeded"
         result.title = outcome.title
         result.markdown_path = (

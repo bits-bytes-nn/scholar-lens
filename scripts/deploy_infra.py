@@ -22,6 +22,9 @@ from aws_cdk import (
     aws_batch as batch,
 )
 from aws_cdk import (
+    aws_bedrock as bedrock,
+)
+from aws_cdk import (
     aws_cloudwatch as cloudwatch,
 )
 from aws_cdk import (
@@ -64,6 +67,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 from scholar_lens.cli import APP_REPORTED_EXIT_CODES
 from scholar_lens.configs import Config
 from scholar_lens.configs.config import CONFIG_PATH
+from scholar_lens.domain.cost_allocation import ARTIFACT_KINDS, application_profile_name
 from scholar_lens.src.aws_helpers import get_account_id
 from scholar_lens.src.constants import (
     RUN_SECRETS,
@@ -227,6 +231,11 @@ class PaperReviewStack(Stack):
         for region in sorted(bedrock_regions):
             bedrock_resources.append(
                 f"arn:{self.partition}:bedrock:{region}:{self.account}:inference-profile/*"
+            )
+            # The per-kind profiles of BedrockProfilesStack (cost allocation).
+            bedrock_resources.append(
+                f"arn:{self.partition}:bedrock:{region}:{self.account}"
+                ":application-inference-profile/*"
             )
         return [
             iam.PolicyStatement(
@@ -640,6 +649,68 @@ class PaperReviewStack(Stack):
         cost_alarm.add_alarm_action(sns_action)
 
 
+class BedrockProfilesStack(Stack):
+    """One application inference profile per artifact kind and model, in
+    the Bedrock region, tagged like the main stack plus ``Kind``: Cost
+    Explorer then splits Bedrock spend by kind (the app finds a profile by
+    :func:`application_profile_name`; without one it calls the system
+    profile, untagged)."""
+
+    def __init__(
+        self,
+        scope: Construct,
+        construct_id: str,
+        *,
+        project_name: str,
+        stage: str,
+        system_profile_ids: list[str],
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(scope, construct_id, **kwargs)
+        for key, value in {
+            "ProjectName": project_name,
+            "Stage": stage,
+            "CostCenter": project_name,
+            "ManagedBy": "CDK",
+        }.items():
+            Tags.of(self).add(key, value)
+        for kind in ARTIFACT_KINDS:
+            for system_id in system_profile_ids:
+                name = application_profile_name(project_name, stage, kind, system_id)
+                profile = bedrock.CfnApplicationInferenceProfile(
+                    self,
+                    name,
+                    inference_profile_name=name,
+                    description=f"{project_name} {stage}: {kind} calls to {system_id}",
+                    model_source=bedrock.CfnApplicationInferenceProfile.InferenceProfileModelSourceProperty(
+                        copy_from=(
+                            f"arn:{self.partition}:bedrock:{self.region}:{self.account}"
+                            f":inference-profile/{system_id}"
+                        )
+                    ),
+                )
+                Tags.of(profile).add("Kind", kind)
+
+
+def configured_system_profiles(config: Config) -> list[str]:
+    """The global cross-region profile of every language model the config
+    names (the app resolves a model to its global profile first)."""
+    found: set[str] = set()
+
+    def walk(value: Any) -> None:
+        if isinstance(value, LanguageModelId):
+            found.add(f"global.{value.value}")
+        elif isinstance(value, dict):
+            for item in value.values():
+                walk(item)
+        elif hasattr(value, "__dict__") and hasattr(type(value), "model_fields"):
+            for name in type(value).model_fields:
+                walk(getattr(value, name))
+
+    walk(config)
+    return sorted(found)
+
+
 def deploy_session(config: Config) -> boto3.Session:
     """Session for the target account: the configured profile, else
     ``AWS_PROFILE_NAME``, else the default credential chain."""
@@ -702,6 +773,17 @@ def main() -> None:
                 account=account_id, region=resources.default_region_name
             ),
         )
+        if resources.bedrock_region_name:
+            BedrockProfilesStack(
+                app,
+                f"ScholarLensBedrockProfiles{resources.stage.capitalize()}Stack",
+                project_name=resources.project_name,
+                stage=resources.stage,
+                system_profile_ids=configured_system_profiles(config),
+                env=core.Environment(
+                    account=account_id, region=resources.bedrock_region_name
+                ),
+            )
         app.synth()
     except Exception as e:
         logger.error("Error occurred: %s", e, exc_info=True)

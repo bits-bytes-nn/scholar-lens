@@ -13,7 +13,7 @@ import functools
 import inspect
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from typing import Any, TypeVar
+from typing import Any, NamedTuple, TypeVar
 
 from ..domain.usage import UNSTAGED
 
@@ -26,6 +26,34 @@ F = TypeVar("F", bound=Callable[..., Any])
 
 def current_stage() -> str:
     return _STAGE.get()
+
+
+class Allocation(NamedTuple):
+    """Whose run a model call is billed to: the deployment and the kind."""
+
+    project: str
+    stage: str
+    kind: str
+
+
+_ALLOCATION: contextvars.ContextVar[Allocation | None] = contextvars.ContextVar(
+    "cost_allocation", default=None
+)
+
+
+def current_allocation() -> Allocation | None:
+    return _ALLOCATION.get()
+
+
+@contextmanager
+def cost_allocation(project: str, stage: str, kind: str) -> Iterator[None]:
+    """Run model calls made inside under the kind's cost allocation (its
+    application inference profiles)."""
+    token = _ALLOCATION.set(Allocation(project, stage, kind))
+    try:
+        yield
+    finally:
+        _ALLOCATION.reset(token)
 
 
 @contextmanager

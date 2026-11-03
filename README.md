@@ -125,7 +125,7 @@ Needs Node.js, Docker and the AWS CDK CLI in addition to the above, and an exist
 
 ```bash
 cdk bootstrap --profile <profile_name>           # once per account/region
-cdk deploy --profile <profile_name>              # cdk.json runs: poetry run python scripts/deploy_infra.py
+cdk deploy --all --profile <profile_name>        # cdk.json runs: poetry run python scripts/deploy_infra.py
 poetry run python scripts/put_secrets.py         # write .env secrets to SSM SecureString
 poetry run python scripts/put_secrets.py github-token   # after rotating one secret
 ```

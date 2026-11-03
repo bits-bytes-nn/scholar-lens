@@ -453,7 +453,7 @@ PR 본문(`build_pr_body`)에는 논문 ID, PDF URL, 파싱 방식, 글자 수, 
 
 ## 10. 인프라
 
-`scripts/deploy_infra.py::PaperReviewStack`(CDK, Python) 구성입니다. `cdk.json`은 `poetry run python scripts/deploy_infra.py`를 실행합니다.
+`scripts/deploy_infra.py`의 CDK(Python) 스택 두 개입니다. `cdk.json`은 `poetry run python scripts/deploy_infra.py`를 실행하고, 배포는 `cdk deploy --all`입니다. `PaperReviewStack`(기본 리전)이 아래 리소스를, `BedrockProfilesStack`(Bedrock 리전, `bedrock_region_name`이 있을 때)이 비용 할당용 응용 추론 프로필을 만듭니다.
 
 - **네트워크**: 기존 VPC를 쓰거나 NAT 게이트웨이 1개인 VPC를 만듭니다. 새로 만들면 S3 게이트웨이 엔드포인트를 붙입니다. 보안 그룹은 443 아웃바운드만 엽니다.
 - **Batch**: 작업 정의 하나(`<project>-<stage>-worker`). 명령은 `JOB_COMMAND`이고 메모리는 8 GiB, 시간 제한은 3시간입니다. 시도는 최대 3회(재시도 2회)지만 재시도는 호스트가 사라진 경우(`Host EC2*` 사유)에만 하며, 나머지는 바로 종료합니다. 컴퓨팅 환경은 온디맨드 하나이고, `update_to_latest_image_version`이 켜져 있어 인프라를 갱신할 때(`cdk deploy`) 최신 ECS 최적화 AMI로 바꿉니다. 스팟 회수는 작업 전체를 다시 실행해 Bedrock 비용을 반복하므로, 아끼는 EC2 비용보다 손해가 큽니다. 실행 템플릿은 IMDSv2(hop limit 1)를 강제하고, 루트 볼륨(`/dev/xvda`, 30 GiB gp3)을 AWS 관리형 EBS 키로 암호화합니다. 컴퓨팅 환경은 실행 템플릿의 최신 버전 번호를 지정하므로, 템플릿이 바뀌면 `cdk deploy`가 컴퓨팅 환경을 교체 없이 인프라 갱신합니다.
@@ -465,6 +465,7 @@ PR 본문(`build_pr_body`)에는 논문 ID, PDF URL, 파싱 방식, 글자 수, 
   - `cloudwatch:PutMetricData`(`ScholarLens` 네임스페이스 조건)
   - SSM 비밀값 8개 읽기(`RUN_SECRETS`)
 - **SSM**: 스택은 `batch-job-queue`, `batch-job-definition`(String)을 씁니다. 비밀값(SecureString)은 CloudFormation이 만들 수 없으므로 `scripts/put_secrets.py`로 따로 기록합니다(이름을 주면 그 비밀값만). `cdk synth`/`diff`는 비밀값을 건드리지 않습니다. 실행 시 기록되지 않은 비밀값(`ParameterNotFound`)은 조용히 건너뛰고, 권한 오류 등은 warning으로 남깁니다.
+- **비용 할당**: 모든 리소스에 `ProjectName`, `Stage`, `CostCenter`, `ManagedBy` 태그를 붙이고 Batch 인스턴스·볼륨에도 실행 템플릿으로 전파합니다. `BedrockProfilesStack`은 산출물 종류(`domain/cost_allocation.py::ARTIFACT_KINDS`)와 설정이 쓰는 모델(global 교차 리전 프로필)의 조합마다 응용 추론 프로필(`<project>-<stage>-<kind>-<model>`, `application_profile_name`)을 만들고 `Kind` 태그를 더합니다. `runtime.run_job`이 실행의 종류를 `cost_allocation`으로 정하고, 모델 팩토리가 그 이름의 프로필 ARN으로 호출합니다(`factories.py::_allocated_profile`, 목록 조회는 프로세스마다 한 번). 프로필이 없거나 조회가 실패하면 시스템 프로필로 호출하므로 실행은 막히지 않고 태그만 빠집니다. 사용량 기록과 가격은 ARN이 아니라 원래 모델로 남깁니다(`utils/models.py::profile_source`). 작업 역할은 계정의 `application-inference-profile/*` 호출도 허용합니다.
 - **설정 파일**: 이미지에는 배포하는 체크아웃의 `scholar_lens/configs/config.yaml`이 들어갑니다. 설정을 고치면 `cdk deploy`를 다시 해야 Batch에 반영됩니다. `deploy_infra.py::check_deployable`은 이 파일이나 `s3_bucket_name`이 없으면 배포를 멈춥니다. `cdk` 명령에는 `resources.profile_name`과 같은 `--profile`을 넘깁니다.
 - **알림**: KMS 암호화 SNS 토픽(SSL 강제)에 이메일을 구독합니다. 토픽 정책은 이 계정의 CloudWatch 경보(`aws:SourceAccount`·`aws:SourceArn` 조건)와 실패 규칙 하나의 EventBridge 게시만 허용합니다. EventBridge 대상이 자동으로 만드는 허용은 조건이 없으므로, 그 규칙이 아닌 게시를 막는 Deny 문을 따로 둡니다. 토픽 KMS 키의 EventBridge 허용은 CDK가 만든 그대로입니다.
 

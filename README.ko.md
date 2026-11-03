@@ -125,7 +125,7 @@ poetry run python -m scholar_lens costs --since 2026-11-01 --by stage --billed  
 
 ```bash
 cdk bootstrap --profile <profile_name>           # 계정·리전당 한 번
-cdk deploy --profile <profile_name>              # cdk.json: poetry run python scripts/deploy_infra.py
+cdk deploy --all --profile <profile_name>        # cdk.json: poetry run python scripts/deploy_infra.py
 poetry run python scripts/put_secrets.py         # .env의 비밀값을 SSM SecureString에 기록
 poetry run python scripts/put_secrets.py github-token   # 비밀값 하나를 교체한 뒤
 ```
