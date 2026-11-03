@@ -4,7 +4,7 @@ into :class:`~scholar_lens.domain.survey.plan.SourceRecord` values.
 
 HTTP pacing and the single 429/5xx retry come from
 ``citation_metadata._get_json`` (the one retry layer for these APIs); arXiv
-calls go through :class:`~scholar_lens.src.arxiv_handler.ArxivHandler` and
+calls go through :class:`~scholar_lens.adapters.scholarly.arxiv.ArxivHandler` and
 its process-wide limiter. Failures raise (``httpx.HTTPError``,
 ``ProviderUnavailableError``, ``ArxivPaperError``): the candidate step decides
 which ones it can do without.
@@ -12,22 +12,24 @@ which ones it can do without.
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 from datetime import date
 from typing import Any
 
-from ..adapters.http.rate_limit import RateLimiter
-from ..domain.survey.plan import (
+from ...domain.survey.plan import (
     CitationData,
     SourceRecord,
     normalize_doi,
     unversioned_arxiv_id,
 )
-from . import citation_metadata
-from .arxiv_handler import ArxivMetadata
-from .constants import EnvVars
-from .logger import logger
+from ...settings import EnvVars
+from ..http.rate_limit import RateLimiter
+from . import metadata as citation_metadata
+from .arxiv import ArxivMetadata
+
+logger = logging.getLogger(__name__)
 
 _OPENALEX_URL = "https://api.openalex.org/works"
 _SEMANTIC_SCHOLAR_BATCH_URL = "https://api.semanticscholar.org/graph/v1/paper/batch"

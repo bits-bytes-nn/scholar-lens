@@ -30,6 +30,12 @@ from langchain_core.runnables import Runnable, RunnableLambda
 from pydantic import ValidationError
 
 from ..adapters.aws.storage import S3Handler
+from ..adapters.scholarly.index import (
+    DataCiteIndex,
+    OpenAlexIndex,
+    datacite_record,
+    openalex_record,
+)
 from ..application.usage import staged
 from ..domain.markdown.lint import drop_unknown_images, fill_image_alts
 from ..domain.markdown.math import has_math, normalize_math
@@ -113,12 +119,6 @@ from .runtime import (
     find_published_post,
     load_translation_guideline,
     publish_artifact,
-)
-from .scholarly_index import (
-    DataCiteIndex,
-    OpenAlexIndex,
-    datacite_record,
-    openalex_record,
 )
 from .section_loop import (
     EMPTY_DRAFT,

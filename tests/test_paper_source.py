@@ -8,6 +8,7 @@ import pytest
 import requests
 import responses
 
+from scholar_lens.adapters.scholarly.pdf import MAX_PDF_BYTES
 from scholar_lens.src.constants import arxiv_id_from_url as extract_arxiv_id_from_url
 from scholar_lens.src.constants import normalize_arxiv_id
 from scholar_lens.src.paper_source import (
@@ -19,7 +20,6 @@ from scholar_lens.src.paper_source import (
     PdfUrlSource,
     resolve_paper_source,
 )
-from scholar_lens.src.pdf_download import MAX_PDF_BYTES
 
 
 def is_arxiv_id(value: str) -> bool:
@@ -319,7 +319,7 @@ class TestPdfUrlSourceDownload:
     def test_body_streamed_past_cap_rejected_and_partial_cleaned_up(
         self, tmp_papers_dir, monkeypatch
     ) -> None:
-        import scholar_lens.src.pdf_download as pdf
+        import scholar_lens.adapters.scholarly.pdf as pdf
 
         monkeypatch.setattr(pdf, "MAX_PDF_BYTES", 10)  # tiny cap for the test
         responses.add(responses.GET, PDF_URL, body=b"%PDF-" + b"x" * 1000, status=200)

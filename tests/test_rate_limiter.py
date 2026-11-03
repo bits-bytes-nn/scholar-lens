@@ -151,8 +151,8 @@ def test_arxiv_pdf_download_is_paced_and_penalty_capped(
     import requests
     import responses
 
-    from scholar_lens.src import arxiv_handler
-    from scholar_lens.src.arxiv_handler import ArxivHandler
+    from scholar_lens.adapters.scholarly.arxiv import ArxivHandler
+    from scholar_lens.adapters.scholarly import arxiv as arxiv_handler
 
     clock, limiter = _fake_clock_arxiv_limiter(
         monkeypatch, arxiv_handler, "_ARXIV_RATE_LIMITER"

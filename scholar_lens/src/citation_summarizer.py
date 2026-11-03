@@ -8,9 +8,9 @@ import boto3
 import pymupdf
 from langchain_core.output_parsers import StrOutputParser
 
+from ..adapters.scholarly.arxiv import ArxivHandler, ArxivPaperError
+from ..adapters.scholarly.metadata import ChainedMetadataResolver, arxiv_id_from_doi
 from ..application.usage import staged
-from .arxiv_handler import ArxivHandler, ArxivPaperError
-from .citation_metadata import ChainedMetadataResolver, arxiv_id_from_doi
 from .constants import AppConstants, LanguageModelId, LocalPaths, normalize_arxiv_id
 from .logger import logger
 from .parser import Content, ContentParseError, HTMLParser

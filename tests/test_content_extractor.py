@@ -112,7 +112,7 @@ class TestContentExtractorSurface:
 def _record(arxiv_id: str, title: str, authors: list[str], year: int) -> Any:
     from datetime import datetime
 
-    from scholar_lens.src.arxiv_handler import ArxivMetadata
+    from scholar_lens.adapters.scholarly.arxiv import ArxivMetadata
 
     published = datetime(year, 6, 1)
     return ArxivMetadata(
@@ -268,7 +268,7 @@ class TestVerifyArxivIds:
         assert len(arxiv.batches) == 1  # one batched lookup for the page
 
     def test_unreachable_arxiv_drops_every_id_and_keeps_the_citations(self) -> None:
-        from scholar_lens.src.arxiv_handler import ArxivPaperError
+        from scholar_lens.adapters.scholarly.arxiv import ArxivPaperError
 
         cites = [
             _cite("Vaswani", 2017, "Attention Is All You Need", "1706.03762"),

@@ -50,7 +50,7 @@ class TestIsRetryable:
         assert is_transient_error(status_error(404)) is False
 
     def test_arxiv_errors_are_not_retried_again(self) -> None:
-        from scholar_lens.src.arxiv_handler import ArxivPaperError
+        from scholar_lens.adapters.scholarly.arxiv import ArxivPaperError
 
         try:
             raise TimeoutError("slow")

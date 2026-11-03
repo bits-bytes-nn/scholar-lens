@@ -9,9 +9,9 @@ import boto3
 from langchain_core.callbacks import BaseCallbackHandler
 from pydantic import BaseModel, Field, field_validator
 
+from ..adapters.scholarly.arxiv import ArxivHandler, ArxivMetadata, ArxivPaperError
+from ..adapters.scholarly.metadata import titles_match
 from ..application.usage import staged
-from .arxiv_handler import ArxivHandler, ArxivMetadata, ArxivPaperError
-from .citation_metadata import titles_match
 from .constants import LanguageModelId, arxiv_id_from_reference
 from .logger import logger
 from .prompt_safety import neutralize_prompt_tags

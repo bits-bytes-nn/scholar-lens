@@ -1,3 +1,4 @@
+import logging
 import re
 from datetime import datetime
 from pathlib import Path
@@ -14,11 +15,10 @@ from pydantic import (
     field_validator,
 )
 
-from ..adapters.http.rate_limit import ARXIV_RATE_LIMITER, arxiv_retry_after_seconds
-from .citation_metadata import title_similarity, titles_match
-from .constants import normalize_arxiv_id
-from .logger import logger
-from .pdf_download import CHUNK_BYTES, save_pdf
+from ...domain.ids import normalize_arxiv_id
+from ..http.rate_limit import ARXIV_RATE_LIMITER, arxiv_retry_after_seconds
+from .metadata import title_similarity, titles_match
+from .pdf import CHUNK_BYTES, save_pdf
 
 # The only retry layer for arXiv API calls (the arxiv client itself makes one
 # attempt): jittered backoff so a momentary 429 does not abort a whole job.
@@ -28,6 +28,9 @@ _ARXIV_FETCH_MAX_WAIT: int = 60
 # (connect, read) timeouts for arXiv API and PDF requests; without them a stalled
 # connection would hang a Batch job until its 3-hour limit.
 _ARXIV_TIMEOUT: tuple[float, float] = (10.0, 60.0)
+
+
+logger = logging.getLogger(__name__)
 
 
 class _TimeoutAdapter(requests.adapters.HTTPAdapter):

@@ -18,6 +18,15 @@ import pytest
 from pydantic import ValidationError
 
 from scholar_lens import cli
+from scholar_lens.adapters.scholarly.arxiv import ArxivMetadata, ArxivPaperError
+from scholar_lens.adapters.scholarly.index import (
+    DataCiteIndex,
+    OpenAlexIndex,
+    SemanticScholarIndex,
+    datacite_record,
+    openalex_record,
+)
+from scholar_lens.adapters.scholarly.metadata import QuotaExhaustedError
 from scholar_lens.configs.config import Config, Survey
 from scholar_lens.domain.survey.plan import (
     Candidate,
@@ -30,18 +39,10 @@ from scholar_lens.domain.survey.plan import (
     TimeRange,
     survey_slug,
 )
-from scholar_lens.src import citation_metadata, scholarly_index
-from scholar_lens.src.arxiv_handler import ArxivMetadata, ArxivPaperError
-from scholar_lens.src.citation_metadata import QuotaExhaustedError
+from scholar_lens.adapters.scholarly import index as scholarly_index
+from scholar_lens.adapters.scholarly import metadata as citation_metadata
 from scholar_lens.src.jobs import JobRequest, JobResult
 from scholar_lens.src.metrics import TokenBudgetExceeded, TokenUsageTracker
-from scholar_lens.src.scholarly_index import (
-    DataCiteIndex,
-    OpenAlexIndex,
-    SemanticScholarIndex,
-    datacite_record,
-    openalex_record,
-)
 from scholar_lens.src.survey_pipeline import (
     CandidateFinder,
     CandidateSearchError,
@@ -495,7 +496,7 @@ class TestAdapters:
 
 class TestArxivSearch:
     def _handler(self, monkeypatch: pytest.MonkeyPatch, results: Any) -> Any:
-        from scholar_lens.src import arxiv_handler
+        from scholar_lens.adapters.scholarly import arxiv as arxiv_handler
 
         limiter = MagicMock()
         monkeypatch.setattr(arxiv_handler, "_ARXIV_RATE_LIMITER", limiter)

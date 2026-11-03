@@ -8,8 +8,8 @@ from typing import Any
 import httpx
 import pytest
 
-from scholar_lens.src import citation_metadata
-from scholar_lens.src.citation_metadata import (
+from scholar_lens.adapters.scholarly import metadata as citation_metadata
+from scholar_lens.adapters.scholarly.metadata import (
     ChainedMetadataResolver,
     CrossrefProvider,
     MetadataProvider,
@@ -62,7 +62,7 @@ def test_429_waits_for_retry_after_then_retries_once(
             request=httpx.Request("GET", url),
         )
 
-    monkeypatch.setattr("scholar_lens.src.citation_metadata.httpx.get", fake_get)
+    monkeypatch.setattr("scholar_lens.adapters.scholarly.metadata.httpx.get", fake_get)
     record = CrossrefProvider().lookup("T")
     assert record is not None and record.abstract == "A."
     assert citation_metadata._CROSSREF_LIMITER.penalties == [7.0]  # type: ignore[attr-defined]
@@ -81,7 +81,7 @@ def test_spent_quota_skips_the_provider_for_the_run(
             429, headers={"Retry-After": "68287"}, request=httpx.Request("GET", url)
         )
 
-    monkeypatch.setattr("scholar_lens.src.citation_metadata.httpx.get", fake_get)
+    monkeypatch.setattr("scholar_lens.adapters.scholarly.metadata.httpx.get", fake_get)
     resolver = ChainedMetadataResolver([OpenAlexProvider()])
     assert resolver.resolve("A Title") is None
     assert resolver.resolve("Another Title") is None
@@ -96,7 +96,7 @@ def test_second_429_loses_only_that_reference(monkeypatch: pytest.MonkeyPatch) -
         calls.append(url)
         return httpx.Response(429, request=httpx.Request("GET", url))
 
-    monkeypatch.setattr("scholar_lens.src.citation_metadata.httpx.get", fake_get)
+    monkeypatch.setattr("scholar_lens.adapters.scholarly.metadata.httpx.get", fake_get)
     resolver = ChainedMetadataResolver([CrossrefProvider()])
     assert resolver.resolve("A Title") is None
     assert resolver.resolve("Another Title") is None
@@ -117,7 +117,7 @@ def test_a_server_error_is_retried_once_after_a_backoff(
             statuses.pop(0), json=body, request=httpx.Request("GET", url)
         )
 
-    monkeypatch.setattr("scholar_lens.src.citation_metadata.httpx.get", fake_get)
+    monkeypatch.setattr("scholar_lens.adapters.scholarly.metadata.httpx.get", fake_get)
     record = CrossrefProvider().lookup("T")
     assert (record is not None) is (calls == 2)  # a 404 is not retried
     assert len(statuses) == 2 - calls
@@ -139,7 +139,7 @@ def test_a_second_server_error_fails_the_call(
         calls.append(url)
         return httpx.Response(502, request=httpx.Request("GET", url))
 
-    monkeypatch.setattr("scholar_lens.src.citation_metadata.httpx.get", fake_get)
+    monkeypatch.setattr("scholar_lens.adapters.scholarly.metadata.httpx.get", fake_get)
     assert CrossrefProvider().lookup("T") is None
     assert len(calls) == 2
 
@@ -154,7 +154,7 @@ def test_a_rejected_key_skips_the_provider_for_the_run(
         calls.append(url)
         return httpx.Response(status, request=httpx.Request("GET", url))
 
-    monkeypatch.setattr("scholar_lens.src.citation_metadata.httpx.get", fake_get)
+    monkeypatch.setattr("scholar_lens.adapters.scholarly.metadata.httpx.get", fake_get)
     resolver = ChainedMetadataResolver([SemanticScholarProvider(api_key="bad")])
     assert resolver.resolve("A Title") is None
     assert resolver.resolve("Another Title") is None
@@ -170,7 +170,7 @@ def test_a_keyless_403_loses_only_that_reference(
         calls.append(url)
         return httpx.Response(403, request=httpx.Request("GET", url))
 
-    monkeypatch.setattr("scholar_lens.src.citation_metadata.httpx.get", fake_get)
+    monkeypatch.setattr("scholar_lens.adapters.scholarly.metadata.httpx.get", fake_get)
     resolver = ChainedMetadataResolver([CrossrefProvider()])
     assert resolver.resolve("A Title") is None
     assert resolver.resolve("Another Title") is None
@@ -184,7 +184,7 @@ def test_semantic_scholar_sends_its_api_key(monkeypatch: pytest.MonkeyPatch) -> 
         seen["headers"] = headers
         return httpx.Response(200, json={"data": []}, request=httpx.Request("GET", url))
 
-    monkeypatch.setattr("scholar_lens.src.citation_metadata.httpx.get", fake_get)
+    monkeypatch.setattr("scholar_lens.adapters.scholarly.metadata.httpx.get", fake_get)
     assert SemanticScholarProvider(api_key="k").lookup("x") is None
     assert seen["headers"] == {"x-api-key": "k"}
 
@@ -204,7 +204,7 @@ def test_openalex_sends_its_api_key_as_a_bearer_header(
         )
 
     monkeypatch.delenv("OPENALEX_API_KEY", raising=False)
-    monkeypatch.setattr("scholar_lens.src.citation_metadata.httpx.get", fake_get)
+    monkeypatch.setattr("scholar_lens.adapters.scholarly.metadata.httpx.get", fake_get)
     assert OpenAlexProvider(api_key=key).lookup("x") is None
     expected = {"Authorization": f"Bearer {key}"} if key else None
     assert seen["headers"] == expected
@@ -228,7 +228,7 @@ def test_openalex_rebuilds_the_abstract_and_sends_mailto(
             200, json={"results": [work]}, request=httpx.Request("GET", url)
         )
 
-    monkeypatch.setattr("scholar_lens.src.citation_metadata.httpx.get", fake_get)
+    monkeypatch.setattr("scholar_lens.adapters.scholarly.metadata.httpx.get", fake_get)
     record = OpenAlexProvider(mailto="me@example.com").lookup(
         "Learning word vectors: sentiment, analysis"
     )
@@ -251,7 +251,7 @@ def _openalex_results(
             200, json={"results": works}, request=httpx.Request("GET", url)
         )
 
-    monkeypatch.setattr("scholar_lens.src.citation_metadata.httpx.get", fake_get)
+    monkeypatch.setattr("scholar_lens.adapters.scholarly.metadata.httpx.get", fake_get)
     return seen
 
 
@@ -437,7 +437,7 @@ def _patch_httpx(monkeypatch: pytest.MonkeyPatch, payload: dict[str, Any]) -> No
     ) -> httpx.Response:
         return httpx.Response(200, json=payload, request=httpx.Request("GET", url))
 
-    monkeypatch.setattr("scholar_lens.src.citation_metadata.httpx.get", fake_get)
+    monkeypatch.setattr("scholar_lens.adapters.scholarly.metadata.httpx.get", fake_get)
 
 
 def test_crossref_provider_parses_and_strips_abstract(
@@ -518,7 +518,7 @@ def test_crossref_takes_the_closest_matching_record_not_the_top_hit(
             200, json={"message": {"items": items}}, request=httpx.Request("GET", url)
         )
 
-    monkeypatch.setattr("scholar_lens.src.citation_metadata.httpx.get", fake_get)
+    monkeypatch.setattr("scholar_lens.adapters.scholarly.metadata.httpx.get", fake_get)
     md = CrossrefProvider().lookup("Deep residual learning for image recognition")
     assert md is not None
     assert md.url == "https://doi.org/10.1109/cvpr.2016.90"
@@ -538,7 +538,7 @@ def test_crossref_provider_never_raises_on_http_error(
     def boom(url: str, **_: Any) -> httpx.Response:
         raise httpx.ConnectError("down")
 
-    monkeypatch.setattr("scholar_lens.src.citation_metadata.httpx.get", boom)
+    monkeypatch.setattr("scholar_lens.adapters.scholarly.metadata.httpx.get", boom)
     assert CrossrefProvider().lookup("x") is None
 
 

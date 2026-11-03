@@ -8,8 +8,8 @@ from typing import Any
 import boto3
 import pytest
 
-from scholar_lens.src.arxiv_handler import ArxivMetadata
-from scholar_lens.src.citation_metadata import ReferenceMetadata
+from scholar_lens.adapters.scholarly.arxiv import ArxivMetadata
+from scholar_lens.adapters.scholarly.metadata import ReferenceMetadata
 from scholar_lens.src.citation_summarizer import CitationSummarizer
 from scholar_lens.src.constants import LanguageModelId
 
@@ -224,7 +224,7 @@ async def test_arxiv_not_found_yields_no_summary(
 ) -> None:
     # Regression: a placeholder "Could not generate summary." used to reach the
     # writer prompts as if it were a citation summary.
-    from scholar_lens.src.arxiv_handler import ArxivNotFoundError
+    from scholar_lens.adapters.scholarly.arxiv import ArxivNotFoundError
 
     def missing(_id: str) -> None:
         raise ArxivNotFoundError("gone")
@@ -279,7 +279,7 @@ async def test_prefer_full_text_keeps_the_arxiv_abstract_when_text_fails(
 ) -> None:
     # Regression: with prefer_full_text an arXiv reference whose full text
     # could not be parsed was dropped although its abstract was fetched.
-    from scholar_lens.src import arxiv_handler as ah
+    from scholar_lens.adapters.scholarly import arxiv as ah
     from scholar_lens.src.parser import ContentParseError
 
     md = ah.ArxivMetadata.model_construct(
@@ -368,7 +368,7 @@ async def test_prefer_full_text_keeps_the_resolved_abstract_when_arxiv_fails(
 ) -> None:
     # Regression: an arXiv metadata failure after its retries threw away the
     # abstract the metadata resolver had already returned.
-    from scholar_lens.src.arxiv_handler import ArxivPaperError
+    from scholar_lens.adapters.scholarly.arxiv import ArxivPaperError
 
     md = ReferenceMetadata(
         title="A Paper", authors=["A B"], abstract="Its abstract.", url=None

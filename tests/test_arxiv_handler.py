@@ -11,8 +11,8 @@ from datetime import datetime
 
 import pytest
 
-from scholar_lens.src import arxiv_handler
-from scholar_lens.src.arxiv_handler import ArxivHandler, ArxivMetadata
+from scholar_lens.adapters.scholarly import arxiv as arxiv_handler
+from scholar_lens.adapters.scholarly.arxiv import ArxivHandler, ArxivMetadata
 
 
 class _NoWaitLimiter:

@@ -15,6 +15,7 @@ the caller can fall back. Network access goes through a shared rate limiter.
 
 from __future__ import annotations
 
+import logging
 import os
 import random
 import re
@@ -27,16 +28,20 @@ from typing import Any
 import httpx
 from bs4 import BeautifulSoup
 
-from ..adapters.http.rate_limit import MAX_RETRY_AFTER_SECONDS, RateLimiter
-from ..domain.ids import arxiv_id_from_doi  # noqa: F401 - re-exported
-from ..domain.titles import (  # noqa: F401 - moved; re-exported
+from ...domain.ids import (
+    arxiv_id_from_doi,  # noqa: F401 - re-exported
+    normalize_arxiv_id,
+)
+from ...domain.titles import (  # noqa: F401 - moved; re-exported
     TITLE_MATCH_THRESHOLD,
     abstract_fits_title,
     title_similarity,
     titles_match,
 )
-from .constants import EnvVars, normalize_arxiv_id
-from .logger import logger
+from ...settings import EnvVars
+from ..http.rate_limit import MAX_RETRY_AFTER_SECONDS, RateLimiter
+
+logger = logging.getLogger(__name__)
 
 _TIMEOUT = 15.0
 _CROSSREF_URL = "https://api.crossref.org/works"
