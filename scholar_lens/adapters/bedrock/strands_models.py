@@ -18,6 +18,7 @@ import boto3
 from botocore.config import Config
 from strands import Agent, tool
 from strands.models import BedrockModel
+from strands.models.model import CacheConfig
 
 from ...application.ports import AgentLimits, AgentOutcome, ModelRole, SchemaT
 from ...application.usage import current_stage
@@ -68,6 +69,12 @@ class StrandsLanguageModel:
             boto_client_config=_CLIENT_CONFIG,
             max_tokens=spec.max_tokens,
             additional_request_fields=fields,
+            # An agent re-sends its conversation every cycle: cached, it is
+            # billed at the cache-read price. "auto" does not recognize an
+            # application profile ARN as Claude, so the format is named.
+            cache_config=CacheConfig(
+                strategy="anthropic", system_prompt_ttl=True, tools_ttl=True
+            ),
         )
 
     def _usage(self, role: ModelRole, result: Any) -> None:
