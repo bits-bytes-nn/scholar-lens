@@ -612,3 +612,16 @@ class TestBlogLintParity:
     )
     def test_http_links(self, body: str, insecure: bool) -> None:
         assert bool(errors_of(make_post(body), "link")) is insecure
+
+
+def test_an_overlong_description_is_cut_at_its_last_fitting_sentence() -> None:
+    from scholar_lens.domain.validation import DESCRIPTION_LENGTH, fit_description
+
+    first = "가" * 130 + "입니다."
+    long = first + " " + "나" * 40 + "입니다."
+    assert len(long) > DESCRIPTION_LENGTH.stop - 1
+    assert fit_description(long) == first
+    # No sentence end in range: left as is (the validator warns).
+    unbroken = "다" * 170
+    assert fit_description(unbroken) == unbroken
+    assert fit_description("짧은 설명입니다.") == "짧은 설명입니다."

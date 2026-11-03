@@ -176,6 +176,23 @@ def description_problems(description: str, sources: str) -> list[str]:
     return problems
 
 
+_SENTENCE_END = re.compile(r"[.!?。](?=\s|$)")
+
+
+def fit_description(description: str) -> str:
+    """A description over the length cut at its last sentence end that keeps
+    it in :data:`DESCRIPTION_LENGTH`; unchanged when it fits or no sentence
+    end does (a cut mid-sentence would read as broken)."""
+    if len(description) < DESCRIPTION_LENGTH.stop:
+        return description
+    ends = [
+        m.end()
+        for m in _SENTENCE_END.finditer(description)
+        if m.end() in DESCRIPTION_LENGTH
+    ]
+    return description[: ends[-1]] if ends else description
+
+
 def unknown_html_tag(text: str) -> str | None:
     """The first ``<name>`` in prose ``text`` the browser would drop, as the
     blog lint finds it (code spans and ``$$`` spans removed), or None."""

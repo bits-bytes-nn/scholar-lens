@@ -92,7 +92,11 @@ from ..domain.survey.post import (
     without_papers,
 )
 from ..domain.tags import controlled_tag_problems
-from ..domain.validation import description_markup, description_problems
+from ..domain.validation import (
+    description_markup,
+    description_problems,
+    fit_description,
+)
 from .constants import LanguageModelId, LocalPaths, S3Paths
 from .formatting import build_post_meta, cut_title, render_front_matter
 from .jobs import JobRequest
@@ -942,7 +946,10 @@ class SurveyWriter(SurveyCalls):
         description = ""
         for attempt in range(2):
             result = await self._finalize(payload)
-            description = " ".join((result.get("description") or "").split())
+            description = fit_description(
+                " ".join((result.get("description") or "").split())
+            )
+            result["description"] = description
             if not (
                 problems := description_problems(description, body)
                 + controlled_tag_problems(

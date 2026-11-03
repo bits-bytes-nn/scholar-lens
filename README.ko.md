@@ -147,6 +147,7 @@ actionlint                                       # GitHub 워크플로 검사
 
 ## 변경 이력
 
+- 수식: 확률·정책 호출 안의 맨 `|`(`p(y|x)`, `\pi_\theta(a|s)`)는 `\mid`로 바꿉니다(전에는 인라인 수식에서 `\vert`, 디스플레이 수식에서는 그대로). MathJax에 없는 `\minimize`, `\maximize`, `\argmin`, `\argmax`는 `\operatorname*{…}`로 바꿉니다. 고쳐 달라고 다시 요청한 뒤에도 160자를 넘는 서베이 설명은 120–160자 안의 마지막 문장 끝에서 자릅니다.
 - 서베이 학회명은 논문이 실린 곳을 씁니다. OpenAlex 학회명은 학회·저널 유형의 첫 위치에서 가져오고(Zenodo 같은 저장소, CISPA 같은 기관, "Lecture notes in computer science" 같은 총서는 제외), OpenAlex·Semantic Scholar·계획의 참고 문헌 학회명은 `domain/venues.py`로 정규화합니다(NeurIPS, ICML, ICLR, ACL, EMNLP, Findings of ACL, TMLR, NDSS 등은 짧은 이름, 모두 소문자인 목록 이름은 단어 첫 글자를 대문자로). `Retry-After` 없는 Semantic Scholar 429는 한 번이 아니라 대기 시간을 두 배씩 늘려(5, 10, 20, 40초) 최대 네 번 재시도합니다. 모델 호출마다 사용량을 기록하고(`llm_usage` 로그, 단계·모델별 `JobResult.usage`, 단계별 CloudWatch 지표, SNS 알림의 비싼 단계 상위 3개) `scholar-lens costs`가 결과 매니페스트로 비용을 보고합니다. Bedrock 호출은 `Kind` 태그가 붙은 종류별 응용 추론 프로필을 거쳐 Cost Explorer가 종류별 Bedrock 비용을 나눕니다(`cdk deploy --all`).
 - 문서나 검색 결과에 상대 경로로 들어 있던 링크(`../_images/x.svg`)는 검색 결과 Markdown을 읽을 때 그 페이지 URL 기준의 절대 URL로 바꿉니다. 게시 단계에서는 블로그가 따라갈 수 없는 링크(http(s), 사이트 내부 경로, 앵커, mailto가 아니거나 텍스트가 빈 링크)의 링크를 풀고 텍스트만 남깁니다. 이미지를 감싼 링크면 이미지만 남깁니다. Ray Serve 가이드가 이런 링크 때문에 블로그 htmlproofer에서 실패했습니다.
 - 2026년 10월 의존성 업데이트를 반영했습니다(arxiv 4.0, requests 2.34, PyMuPDF 1.28, aws-cdk-lib 2.273, Node 24 기반 GitHub Actions). PDF 코드는 `pymupdf`를 가져옵니다. `fitz` 별칭은 이제 stdout에 사용 중단 경고를 출력해 worker의 JSON 한 개 출력 계약을 깨뜨렸습니다. 컴퓨팅 환경은 `optimal`을 직접 지정하지 않습니다. CDK가 넣어 주므로 템플릿에 두 번 들어가 있었습니다. 새 이미지를 쓰려면 다시 배포하세요.

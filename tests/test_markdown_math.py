@@ -231,7 +231,7 @@ class TestInlineBars:
                 "집합 $$\\{x \\vert x > 0\\}$$ 입니다.\n",
             ),
             ("$$\\left| x \\right|$$ 값.\n", "$$\\left\\vert x \\right\\vert$$ 값.\n"),
-            ("조건부 $$p(y|x)$$ 와\n", "조건부 $$p(y\\vert x)$$ 와\n"),
+            ("조건부 $$p(y|x)$$ 와\n", "조건부 $$p(y\\mid x)$$ 와\n"),
             (
                 "크기는 $$|S| +\n|T|$$ 입니다.\n",
                 "크기는 $$\\vert S\\vert + \\vert T\\vert$$ 입니다.\n",
@@ -710,3 +710,26 @@ def test_glued_display_with_a_line_starting_with_minus_stays_in_the_step() -> No
     assert "   $$\n   \\mathcal{L} = -\\log\\sigma(a\n   - b)\n   $$" in out
     assert "   여기서 a, b는" in out and "\n3. 평가합니다." in out
     assert normalize_math(out) == out
+
+
+@pytest.mark.parametrize(
+    ("src", "expected"),
+    [
+        # A bare | in a probability or policy call is the conditional bar.
+        ("$$p(y|x)$$", "$$p(y\\mid x)$$"),
+        ("$$\\pi_\\theta(a|s)$$", "$$\\pi_\\theta(a\\mid s)$$"),
+        ("$$p(x_1|x_2)$$", "$$p(x_1\\mid x_2)$$"),
+        # Two bars inside the call (an absolute value) are left alone.
+        ("$$p(|x|)$$", "$$p(|x|)$$"),
+        # Undefined optimization macros become starred operator names.
+        ("$$\\minimize_{\\theta} L$$", "$$\\operatorname*{minimize}_{\\theta} L$$"),
+        ("$$\\argmax_a Q(s,a)$$", "$$\\operatorname*{arg\\,max}_a Q(s,a)$$"),
+        # \arg\min is defined by MathJax and stays.
+        ("$$\\arg\\min_x f$$", "$$\\arg\\min_x f$$"),
+    ],
+)
+def test_conditional_bars_and_operator_macros(src: str, expected: str) -> None:
+    from scholar_lens.domain.markdown.math import normalize_math
+
+    assert normalize_math(src) == expected
+    assert normalize_math(expected) == expected

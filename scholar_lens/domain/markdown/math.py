@@ -283,12 +283,45 @@ _LENGTH_BOUND = re.compile(
 )
 
 
+# A bare | in a probability call (not \\|, \\vert or a doubled ||).
+_CALL_BARE_BAR = re.compile(r"(?<![\\|])\|(?!\|)")
+# Optimization operators models write as macros MathJax does not define
+# (\\minimize renders as red raw text): written as starred operator names,
+# so limits go under them in display math as with \\min.
+_OPERATOR_NAMES = {
+    "minimize": "minimize",
+    "maximize": "maximize",
+    "argmin": "arg\\,min",
+    "argmax": "arg\\,max",
+}
+_OPERATOR_MACRO = re.compile(r"\\(" + "|".join(_OPERATOR_NAMES) + r")(?![A-Za-z])")
+
+
+def _as_operator(m: re.Match[str]) -> str:
+    return f"\\operatorname*{{{_OPERATOR_NAMES[m.group(1)]}}}"
+
+
 def _fix_bars(math: str) -> str:
-    """Conditional bars written as \\| become \\mid; a \\lVert x \\rVert that
-    bounds a sum (a length) becomes \\lvert x \\rvert everywhere in the span."""
+    """Conditional bars written as \\| or a bare | inside a probability
+    call become \\mid; \\minimize, \\argmin and the like become starred
+    operator names; a \\lVert x \\rVert that bounds a sum (a length) becomes
+    \\lvert x \\rvert everywhere in the span."""
 
     def conditional(m: re.Match[str]) -> str:
         arg = m.group("arg")
+        bare = list(_CALL_BARE_BAR.finditer(arg))
+        if (
+            len(bare) == 1
+            and not _NORM_BAR.search(arg)
+            and {m.group("open"), m.group("close")} in ({"(", ")"}, {"[", "]"})
+        ):
+            # p(y|x): a bare | in the call is the conditional bar too.
+            rest = arg[bare[0].end() :]
+            sep = " " if rest[:1].isalpha() else ""
+            return (
+                f"{m.group('head')}{arg[: bare[0].start()]}\\mid{sep}{rest}"
+                f"{m.group('close')}"
+            )
         if len(_NORM_BAR.findall(arg)) != 1 or {
             m.group("open"),
             m.group("close"),
@@ -307,7 +340,7 @@ def _fix_bars(math: str) -> str:
             f"{m.group('head')}{arg[: bar.start()]}\\mid{sep}{rest}{m.group('close')}"
         )
 
-    math = _CALL.sub(conditional, math)
+    math = _OPERATOR_MACRO.sub(_as_operator, _CALL.sub(conditional, math))
     for x in {m.group("x").strip() for m in _LENGTH_BOUND.finditer(math)}:
         # The same quantity elsewhere in the span, unless subscripted like a
         # norm (\|x\|_2).
