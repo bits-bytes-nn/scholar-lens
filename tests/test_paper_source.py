@@ -391,7 +391,7 @@ class TestPdfUrlSourceSsrfPinning:
         # The arbitrary-PDF-URL path is the primary SSRF vector, so a source built
         # without an injected session must pin every hop to an SSRF-validated IP
         # (closing the DNS-rebinding TOCTOU window a plain requests.Session leaves).
-        from scholar_lens.src.pinned_transport import PinnedRequestsAdapter
+        from scholar_lens.adapters.http.pinned_transport import PinnedRequestsAdapter
 
         src = PdfUrlSource(PDF_URL)
         for scheme in ("https://", "http://"):
@@ -400,7 +400,7 @@ class TestPdfUrlSourceSsrfPinning:
     def test_injected_session_is_left_untouched(self) -> None:
         # An explicitly injected session (e.g. the `responses` transport stub used
         # in the hermetic download tests) must NOT be re-mounted.
-        from scholar_lens.src.pinned_transport import PinnedRequestsAdapter
+        from scholar_lens.adapters.http.pinned_transport import PinnedRequestsAdapter
 
         session = requests.Session()
         src = PdfUrlSource(PDF_URL, session=session)
@@ -452,8 +452,8 @@ def test_dns_failure_at_connect_time_is_classified(
 ) -> None:
     # The pinned adapter resolves again when it connects: a resolver hiccup
     # there is an outage too, not a rejected URL.
+    from scholar_lens.adapters.http.url_guard import UnsafeUrlError
     from scholar_lens.src import paper_source
-    from scholar_lens.src.url_guard import UnsafeUrlError
 
     class FlakySession:
         def request(self, *_a, **_k):  # type: ignore[no-untyped-def]

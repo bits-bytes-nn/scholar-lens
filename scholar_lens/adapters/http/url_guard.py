@@ -22,10 +22,11 @@ runs identical and never sends a request in clear text.
 from __future__ import annotations
 
 import ipaddress
+import logging
 import socket
 from urllib.parse import urlsplit, urlunsplit
 
-from .logger import logger
+logger = logging.getLogger(__name__)
 
 _ALLOWED_SCHEMES = {"http", "https"}
 # The cloud metadata service. Covered by is_link_local already, but called out

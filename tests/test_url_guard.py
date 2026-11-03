@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from scholar_lens.src.url_guard import (
+from scholar_lens.adapters.http.url_guard import (
     UnsafeUrlError,
     assert_url_is_public,
     is_url_public,
@@ -52,7 +52,7 @@ def test_allows_public_hostname_via_mocked_dns(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # Mock DNS so we exercise the hostname path without real network.
-    import scholar_lens.src.url_guard as guard
+    import scholar_lens.adapters.http.url_guard as guard
 
     monkeypatch.setattr(
         guard.socket,
@@ -75,8 +75,8 @@ def test_ipv4_mapped_ipv6_loopback_blocked() -> None:
 def test_resolve_validated_ip_returns_validated_address(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import scholar_lens.src.url_guard as guard
-    from scholar_lens.src.url_guard import resolve_validated_ip
+    import scholar_lens.adapters.http.url_guard as guard
+    from scholar_lens.adapters.http.url_guard import resolve_validated_ip
 
     monkeypatch.setattr(
         guard.socket,
@@ -87,7 +87,7 @@ def test_resolve_validated_ip_returns_validated_address(
 
 
 def test_resolve_validated_ip_none_for_literal() -> None:
-    from scholar_lens.src.url_guard import resolve_validated_ip
+    from scholar_lens.adapters.http.url_guard import resolve_validated_ip
 
     # An IP literal is already the connection target — no rewrite needed.
     assert resolve_validated_ip("https://1.1.1.1/x") is None
@@ -96,8 +96,8 @@ def test_resolve_validated_ip_none_for_literal() -> None:
 def test_resolve_validated_ip_blocks_private_resolution(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import scholar_lens.src.url_guard as guard
-    from scholar_lens.src.url_guard import resolve_validated_ip
+    import scholar_lens.adapters.http.url_guard as guard
+    from scholar_lens.adapters.http.url_guard import resolve_validated_ip
 
     # A hostname that resolves to a private IP (the rebinding payload) is rejected.
     monkeypatch.setattr(
@@ -116,7 +116,7 @@ def test_pinned_transport_rewrites_host_to_validated_ip(
     # hostname for TLS SNI / Host — verified without opening a socket.
     import httpx
 
-    import scholar_lens.src.pinned_transport as pt
+    import scholar_lens.adapters.http.pinned_transport as pt
 
     monkeypatch.setattr(pt, "resolve_validated_ip", lambda url: "93.184.216.34")
     request = httpx.Request("GET", "https://example.com/page")
@@ -151,7 +151,7 @@ def test_pinned_transport_restores_hostname_on_response(
     # resolved against response.url) must keep the hostname.
     import httpx
 
-    import scholar_lens.src.pinned_transport as pt
+    import scholar_lens.adapters.http.pinned_transport as pt
 
     monkeypatch.setattr(pt, "resolve_validated_ip", lambda url: "93.184.216.34")
     seen: list[str] = []
@@ -172,7 +172,7 @@ async def test_pinned_async_transport_restores_hostname(
 ) -> None:
     import httpx
 
-    import scholar_lens.src.pinned_transport as pt
+    import scholar_lens.adapters.http.pinned_transport as pt
 
     monkeypatch.setattr(pt, "resolve_validated_ip", lambda url: "93.184.216.34")
 
@@ -189,7 +189,7 @@ def test_pinned_requests_adapter_sni_and_url(monkeypatch: pytest.MonkeyPatch) ->
     import requests
     from requests.adapters import HTTPAdapter
 
-    import scholar_lens.src.pinned_transport as pt
+    import scholar_lens.adapters.http.pinned_transport as pt
 
     monkeypatch.setattr(pt, "resolve_validated_ip", lambda url: "93.184.216.34")
     adapter = pt.PinnedRequestsAdapter()
@@ -228,7 +228,7 @@ def test_pinned_requests_adapter_sni_and_url(monkeypatch: pytest.MonkeyPatch) ->
     ],
 )
 def test_upgrade_to_https_keeps_host_and_path(url: str, upgraded: str) -> None:
-    from scholar_lens.src.url_guard import upgrade_to_https
+    from scholar_lens.adapters.http.url_guard import upgrade_to_https
 
     assert upgrade_to_https(url) == upgraded
 
@@ -240,7 +240,7 @@ def test_pinned_transport_upgrades_http_to_https(
     # fetched over https on the same host and path.
     import httpx
 
-    import scholar_lens.src.pinned_transport as pt
+    import scholar_lens.adapters.http.pinned_transport as pt
 
     monkeypatch.setattr(pt, "resolve_validated_ip", lambda url: "93.184.216.34")
     seen: list[str] = []
@@ -262,7 +262,7 @@ def test_pinned_requests_adapter_upgrades_http_to_https(
     import requests
     from requests.adapters import HTTPAdapter
 
-    import scholar_lens.src.pinned_transport as pt
+    import scholar_lens.adapters.http.pinned_transport as pt
 
     monkeypatch.setattr(pt, "resolve_validated_ip", lambda url: "93.184.216.34")
     captured: dict = {}

@@ -64,11 +64,11 @@ from aws_cdk.aws_ecr_assets import DockerImageAsset, Platform
 from constructs import Construct
 
 sys.path.append(str(Path(__file__).parent.parent))
+from scholar_lens.adapters.aws.storage import get_account_id
 from scholar_lens.cli import APP_REPORTED_EXIT_CODES
 from scholar_lens.configs import Config
 from scholar_lens.configs.config import CONFIG_PATH
 from scholar_lens.domain.cost_allocation import ARTIFACT_KINDS, application_profile_name
-from scholar_lens.src.aws_helpers import get_account_id
 from scholar_lens.src.constants import (
     RUN_SECRETS,
     EmbeddingModelId,

@@ -9,6 +9,7 @@ same way again (bad request, missing permission, budget breach, invalid or
 truncated output, programming errors).
 """
 
+import logging
 from collections.abc import Callable
 
 import httpx
@@ -22,7 +23,7 @@ from botocore.exceptions import (
     ReadTimeoutError,
 )
 
-from ..logger import logger
+logger = logging.getLogger(__name__)
 
 MAX_RETRIES: int = 5
 # A read timeout means a long generation ran past the client timeout; each

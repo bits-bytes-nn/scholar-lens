@@ -1,3 +1,4 @@
+from ...adapters.retry import RetryableBase
 from .batch import BatchProcessor
 from .factories import (
     BaseBedrockModelFactory,
@@ -20,7 +21,6 @@ from .helpers import (
 )
 from .models import EmbeddingModelInfo, LanguageModelInfo
 from .parsers import HTMLTagOutputParser
-from .retry import RetryableBase
 
 __all__ = [
     "EmbeddingModelInfo",

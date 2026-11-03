@@ -14,11 +14,11 @@ from pydantic import (
     field_validator,
 )
 
+from ..adapters.http.rate_limit import ARXIV_RATE_LIMITER, arxiv_retry_after_seconds
 from .citation_metadata import title_similarity, titles_match
 from .constants import normalize_arxiv_id
 from .logger import logger
 from .pdf_download import CHUNK_BYTES, save_pdf
-from .rate_limiter import ARXIV_RATE_LIMITER, arxiv_retry_after_seconds
 
 # The only retry layer for arXiv API calls (the arxiv client itself makes one
 # attempt): jittered backoff so a momentary 429 does not abort a whole job.

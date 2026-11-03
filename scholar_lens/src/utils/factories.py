@@ -53,7 +53,7 @@ class BaseBedrockModelFactory(Generic[ModelIdT, ModelInfoT, WrapperT], ABC):
     # thinking included, at a few dozen tokens per second), not a socket gap.
     BOTO_READ_TIMEOUT: ClassVar[int] = 3600
     BOTO_CONNECT_TIMEOUT: ClassVar[int] = 30
-    # One attempt: RetryableBase (utils.retry) is the single retry layer, so
+    # One attempt: RetryableBase (adapters.retry) is the single retry layer, so
     # botocore must not multiply it.
     BOTO_MAX_ATTEMPTS: ClassVar[int] = 1
     MAX_POOL_CONNECTIONS: ClassVar[int] = 50

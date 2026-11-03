@@ -17,6 +17,7 @@ import re
 from datetime import date
 from typing import Any
 
+from ..adapters.http.rate_limit import RateLimiter
 from ..domain.survey.plan import (
     CitationData,
     SourceRecord,
@@ -27,7 +28,6 @@ from . import citation_metadata
 from .arxiv_handler import ArxivMetadata
 from .constants import EnvVars
 from .logger import logger
-from .rate_limiter import RateLimiter
 
 _OPENALEX_URL = "https://api.openalex.org/works"
 _SEMANTIC_SCHOLAR_BATCH_URL = "https://api.semanticscholar.org/graph/v1/paper/batch"

@@ -12,11 +12,12 @@ primitive is the right tool and composes with concurrent callers.
 
 from __future__ import annotations
 
+import logging
 import math
 import threading
 import time
 
-from .logger import logger
+logger = logging.getLogger(__name__)
 
 
 class RateLimiter:

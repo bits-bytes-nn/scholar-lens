@@ -83,7 +83,7 @@ class PinnedRequestsAdapter(HTTPAdapter):
     validated IP and sets the ``Host`` header + TLS ``server_hostname`` to the
     original hostname so certificate verification and virtual-hosting still work.
 
-    A non-public target raises :class:`~scholar_lens.src.url_guard.UnsafeUrlError`.
+    A non-public target raises :class:`~scholar_lens.adapters.http.url_guard.UnsafeUrlError`.
     """
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:

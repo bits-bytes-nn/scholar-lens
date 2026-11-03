@@ -401,8 +401,8 @@ def _guideline_context(s3: _FakeS3):  # type: ignore[no-untyped-def]
 async def test_translation_guideline_is_optional(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    from scholar_lens.adapters.aws.storage import S3OperationError
     from scholar_lens.src import runtime
-    from scholar_lens.src.aws_helpers import S3OperationError
 
     monkeypatch.setattr(runtime, "ROOT_DIR", tmp_path)
     load = runtime.load_translation_guideline

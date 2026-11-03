@@ -10,7 +10,7 @@ import pytest
 from boto3.exceptions import S3UploadFailedError
 from moto import mock_aws
 
-from scholar_lens.src.aws_helpers import (
+from scholar_lens.adapters.aws.storage import (
     S3Handler,
     S3OperationError,
     get_account_id,

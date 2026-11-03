@@ -25,6 +25,14 @@ from urllib.parse import urljoin, urlparse
 import httpx
 from bs4 import BeautifulSoup, Tag, UnicodeDammit
 
+from ..adapters.http.pinned_transport import PinnedHTTPTransport
+from ..adapters.http.rate_limit import ARXIV_RATE_LIMITER, arxiv_retry_after_seconds
+from ..adapters.http.url_guard import (
+    UnsafeUrlError,
+    assert_url_is_public,
+    is_temporary_dns_failure,
+    is_url_public,
+)
 from ..domain.markdown.lint import FIGURE_MARKER, close_open_fence
 from ..domain.markdown.math import segments
 from .constants import EnvVars, arxiv_id_from_url, arxiv_paper_key, is_arxiv_host
@@ -35,20 +43,12 @@ from .parser import (
     _real_text,
     figure_caption,
 )
-from .pinned_transport import PinnedHTTPTransport
 from .prompt_safety import neutralize_prompt_tags
 from .prompts.tech_guide import (
     OFFICIAL_LABEL,
     OLDER_DOCS_LABEL,
     REFERENCE_LABEL,
     THIRD_PARTY_LABEL,
-)
-from .rate_limiter import ARXIV_RATE_LIMITER, arxiv_retry_after_seconds
-from .url_guard import (
-    UnsafeUrlError,
-    assert_url_is_public,
-    is_temporary_dns_failure,
-    is_url_public,
 )
 from .utils import extract_text_from_html, parse_lines
 from .utils.helpers import is_page_furniture

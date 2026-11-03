@@ -406,8 +406,8 @@ class TestTruncationGuard:
             await chain.ainvoke("hi")
 
     def test_truncation_is_not_retried(self) -> None:
+        from scholar_lens.adapters.retry import is_transient_error
         from scholar_lens.src.utils.factories import OutputTruncatedError
-        from scholar_lens.src.utils.retry import is_transient_error
 
         assert is_transient_error(OutputTruncatedError("x")) is False
 
@@ -418,7 +418,7 @@ class TestEmbeddingErrors:
 
     @pytest.fixture(autouse=True)
     def _no_backoff(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("scholar_lens.src.utils.retry.RETRY_MAX_WAIT", 0)
+        monkeypatch.setattr("scholar_lens.adapters.retry.RETRY_MAX_WAIT", 0)
 
     @staticmethod
     def _embeddings(
@@ -442,12 +442,12 @@ class TestEmbeddingErrors:
 
     @staticmethod
     def _embed_with_retry(embeddings: fac.BedrockEmbeddingsWrapper) -> None:
-        from scholar_lens.src.utils.retry import RetryableBase
+        from scholar_lens.adapters.retry import RetryableBase
 
         RetryableBase._retry("test")(embeddings.embed_documents)(["text"])
 
     def test_throttling_is_transient_and_retried(self) -> None:
-        from scholar_lens.src.utils.retry import MAX_RETRIES, is_transient_error
+        from scholar_lens.adapters.retry import MAX_RETRIES, is_transient_error
 
         embeddings, client = self._embeddings("ThrottlingException", 429)
         with pytest.raises(ClientError) as excinfo:

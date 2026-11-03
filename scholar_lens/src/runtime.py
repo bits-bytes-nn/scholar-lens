@@ -25,13 +25,13 @@ import boto3
 from botocore.exceptions import ClientError
 from pydantic import BaseModel, ConfigDict
 
+from ..adapters.aws.storage import S3Handler, get_ssm_param_value
 from ..adapters.github.conventions import fetch_blog_posts, load_conventions
 from ..application.usage import cost_allocation
 from ..configs import Config
 from ..domain.conventions import BlogPost, PostConventions, tag_counts
 from ..domain.tags import format_tag
 from ..domain.validation import PostValidationError
-from .aws_helpers import S3Handler, get_ssm_param_value
 from .constants import RUN_SECRETS, EnvVars, LocalPaths, S3Paths, SSMParams
 from .formatting import with_spec_cover
 from .jobs import JobRequest, JobResult, ssm_base, write_result_manifest
@@ -426,11 +426,11 @@ def _rejected_input_errors() -> tuple[type[BaseException], ...]:
 
     Imported lazily so ``status``/``submit`` never load the paper stack.
     """
+    from ..adapters.http.url_guard import UnsafeUrlError
     from ..domain.survey.plan import SurveyInputError
     from .arxiv_handler import ArxivNotFoundError
     from .paper_source import PaperSourceError
     from .tech_guide import NotTechnicalContentError
-    from .url_guard import UnsafeUrlError
 
     return (
         ArxivNotFoundError,

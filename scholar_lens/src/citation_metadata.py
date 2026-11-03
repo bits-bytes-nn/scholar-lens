@@ -27,6 +27,7 @@ from typing import Any
 import httpx
 from bs4 import BeautifulSoup
 
+from ..adapters.http.rate_limit import MAX_RETRY_AFTER_SECONDS, RateLimiter
 from ..domain.ids import arxiv_id_from_doi  # noqa: F401 - re-exported
 from ..domain.titles import (  # noqa: F401 - moved; re-exported
     TITLE_MATCH_THRESHOLD,
@@ -36,7 +37,6 @@ from ..domain.titles import (  # noqa: F401 - moved; re-exported
 )
 from .constants import EnvVars, normalize_arxiv_id
 from .logger import logger
-from .rate_limiter import MAX_RETRY_AFTER_SECONDS, RateLimiter
 
 _TIMEOUT = 15.0
 _CROSSREF_URL = "https://api.crossref.org/works"

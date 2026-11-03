@@ -18,10 +18,10 @@ from github import GithubException
 from moto import mock_aws
 from PIL import Image
 
+from scholar_lens.adapters.aws.storage import S3Handler
 from scholar_lens.configs import Github
 from scholar_lens.domain.conventions import BlogPost
 from scholar_lens.domain.validation import PostValidationError
-from scholar_lens.src.aws_helpers import S3Handler
 from scholar_lens.src.blog_sync import BlogBranchSync
 from scholar_lens.src.publish_types import slugify
 from scholar_lens.src.publisher import (
@@ -1763,8 +1763,8 @@ class TestDownloadImage:
     def test_private_address_is_refused_before_any_request(
         self, monkeypatch: pytest.MonkeyPatch, url: str
     ) -> None:
+        from scholar_lens.adapters.http.url_guard import UnsafeUrlError
         from scholar_lens.src import publisher
-        from scholar_lens.src.url_guard import UnsafeUrlError
 
         def no_transport() -> None:
             raise AssertionError("no request may be made")
@@ -1776,8 +1776,8 @@ class TestDownloadImage:
     def test_redirect_to_a_private_address_is_refused(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        from scholar_lens.adapters.http.url_guard import UnsafeUrlError
         from scholar_lens.src import publisher
-        from scholar_lens.src.url_guard import UnsafeUrlError
 
         hops: list[str] = []
 

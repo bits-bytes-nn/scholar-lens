@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from pathlib import Path
 
 import boto3
@@ -6,7 +7,7 @@ from boto3.exceptions import S3UploadFailedError
 from boto3.s3.transfer import TransferConfig
 from botocore.exceptions import BotoCoreError, ClientError
 
-from .logger import logger
+logger = logging.getLogger(__name__)
 
 
 class AWSHandlerError(Exception):

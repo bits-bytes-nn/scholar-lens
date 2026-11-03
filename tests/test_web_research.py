@@ -621,7 +621,7 @@ class TestPinnedTransportKeepsHostnames:
     ) -> None:
         import httpx
 
-        import scholar_lens.src.pinned_transport as pt
+        import scholar_lens.adapters.http.pinned_transport as pt
         import scholar_lens.src.web_research as wr
         from scholar_lens.src.web_research import WebResearcher
 
@@ -954,8 +954,8 @@ class TestFetchFailures:
     ) -> None:
         import socket
 
+        from scholar_lens.adapters.http.url_guard import UnsafeUrlError
         from scholar_lens.src import web_research
-        from scholar_lens.src.url_guard import UnsafeUrlError
         from scholar_lens.src.web_research import SourceFetchError
 
         def connect_fails(self, url):  # type: ignore[no-untyped-def]
@@ -1305,7 +1305,7 @@ class TestArxivFetching:
     def test_an_arxiv_429_holds_back_later_arxiv_requests(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from scholar_lens.src import rate_limiter
+        from scholar_lens.adapters.http import rate_limit as rate_limiter
 
         penalties: list[float] = []
         monkeypatch.setattr(
@@ -1325,7 +1325,7 @@ class TestArxivFetching:
     def test_every_arxiv_request_waits_for_the_shared_limiter(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from scholar_lens.src import rate_limiter
+        from scholar_lens.adapters.http import rate_limit as rate_limiter
 
         waits: list[None] = []
         monkeypatch.setattr(

@@ -29,6 +29,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import Runnable, RunnableLambda
 from pydantic import ValidationError
 
+from ..adapters.aws.storage import S3Handler
 from ..application.usage import staged
 from ..domain.markdown.lint import drop_unknown_images, fill_image_alts
 from ..domain.markdown.math import has_math, normalize_math
@@ -86,7 +87,6 @@ from ..domain.survey.post import (
 )
 from ..domain.tags import controlled_tag_problems
 from ..domain.validation import description_markup, description_problems
-from .aws_helpers import S3Handler
 from .constants import LanguageModelId, LocalPaths, S3Paths
 from .formatting import build_post_meta, cut_title, render_front_matter
 from .jobs import JobRequest

@@ -28,6 +28,7 @@ import httpx
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import Runnable
 
+from ..adapters.aws.storage import S3Handler
 from ..application.usage import staged
 from ..domain.survey.plan import (
     Candidate,
@@ -59,7 +60,6 @@ from ..domain.survey.plan import (
     unversioned_arxiv_id,
 )
 from .arxiv_handler import ArxivHandler, ArxivPaperError
-from .aws_helpers import S3Handler
 from .citation_metadata import ProviderUnavailableError, titles_match
 from .constants import LanguageModelId, LocalPaths, S3Paths
 from .jobs import JobRequest

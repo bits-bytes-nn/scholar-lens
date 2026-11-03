@@ -19,14 +19,15 @@ from langchain_core.runnables import Runnable
 from PIL import Image
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
+from ..adapters.http.pinned_transport import PinnedAsyncHTTPTransport
+from ..adapters.http.rate_limit import ARXIV_RATE_LIMITER, arxiv_retry_after_seconds
+from ..adapters.http.url_guard import UnsafeUrlError, assert_url_is_public
+from ..adapters.retry import is_transient_error
 from ..application.usage import staged
 from .constants import AppConstants, EnvVars, LanguageModelId, LocalPaths
 from .logger import logger
 from .metrics import TokenBudgetExceeded
-from .pinned_transport import PinnedAsyncHTTPTransport
 from .prompts import FigureAnalysisPrompt
-from .rate_limiter import ARXIV_RATE_LIMITER, arxiv_retry_after_seconds
-from .url_guard import UnsafeUrlError, assert_url_is_public
 from .utils import (
     BedrockLanguageModelFactory,
     RetryableBase,
@@ -34,7 +35,6 @@ from .utils import (
 )
 from .utils.helpers import preserve_listing_spaces
 from .utils.images import is_svg, svg_to_png
-from .utils.retry import is_transient_error
 
 DEFAULT_RESIZE_QUALITY: int = 85
 DEFAULT_TIMEOUT: int = 60

@@ -15,11 +15,11 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.vectorstores import VectorStore
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
+from ..adapters.http.url_guard import UnsafeUrlError, assert_url_is_public
 from ..application.usage import staged
 from .constants import EmbeddingModelId, LanguageModelId, LocalPaths
 from .logger import logger
 from .prompts import CodeAnalysisPrompt, CodebaseSummaryPrompt
-from .url_guard import UnsafeUrlError, assert_url_is_public
 from .utils import (
     BatchProcessor,
     BedrockEmbeddingModelFactory,
