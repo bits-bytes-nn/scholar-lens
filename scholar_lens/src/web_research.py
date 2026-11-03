@@ -25,10 +25,10 @@ from urllib.parse import urljoin, urlparse
 import httpx
 from bs4 import BeautifulSoup, Tag, UnicodeDammit
 
+from ..domain.markdown.lint import FIGURE_MARKER, close_open_fence
+from ..domain.markdown.math import segments
 from .constants import EnvVars, arxiv_id_from_url, arxiv_paper_key, is_arxiv_host
 from .logger import logger
-from .markdown_lint import FIGURE_MARKER, close_open_fence
-from .markdown_math import segments
 from .parser import (
     MIN_PARSED_TEXT_CHARS,
     _readable_chars,

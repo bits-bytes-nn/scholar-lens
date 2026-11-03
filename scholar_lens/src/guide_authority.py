@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 from collections.abc import Collection, Sequence
 
-from .markdown_math import segments
+from ..domain.markdown.math import segments
 from .prompt_safety import neutralize_prompt_tags
 from .utils import parse_lines
 from .web_research import (

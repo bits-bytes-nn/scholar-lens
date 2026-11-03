@@ -17,14 +17,14 @@ import boto3
 import pytest
 
 from scholar_lens.configs import Config
+from scholar_lens.domain.conventions import load_local_conventions
+from scholar_lens.domain.validation import PostValidationError, validate_post
 from scholar_lens.src import guide_pipeline, paper_pipeline, publisher, runtime
 from scholar_lens.src.content_extractor import Attributes
 from scholar_lens.src.explainer import Paper
 from scholar_lens.src.jobs import JobRequest
 from scholar_lens.src.metrics import TokenUsageTracker
 from scholar_lens.src.parser import Content, Figure
-from scholar_lens.src.post_conventions import load_local_conventions
-from scholar_lens.src.post_validator import PostValidationError, validate_post
 from scholar_lens.src.tech_guide import TechGuide
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 64

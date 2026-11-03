@@ -8,8 +8,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from scholar_lens.domain.markdown.lint import writing_issues
 from scholar_lens.src.guide_authority import input_outline
-from scholar_lens.src.markdown_lint import writing_issues
 from scholar_lens.src.prompts.tech_guide import OFFICIAL_LABEL
 from scholar_lens.src.web_research import (
     MAX_REFERENCE_PAGES,

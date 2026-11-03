@@ -7,15 +7,15 @@ import os
 from pathlib import Path
 from urllib.parse import urlparse
 
-from .constants import EnvVars, LanguageModelId, LocalPaths
-from .formatting import build_post_meta, cut_title, format_guide
-from .jobs import JobRequest
-from .logger import logger
-from .markdown_lint import (
+from ..domain.markdown.lint import (
     drop_unknown_images,
     figure_markers_to_images,
     fill_image_alts,
 )
+from .constants import EnvVars, LanguageModelId, LocalPaths
+from .formatting import build_post_meta, cut_title, format_guide
+from .jobs import JobRequest
+from .logger import logger
 from .metrics import TokenUsageTracker
 from .publish_types import slugify, title_slug
 from .publisher import PublishRequest, build_pr_body

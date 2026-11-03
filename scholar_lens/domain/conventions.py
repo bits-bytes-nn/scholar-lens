@@ -12,18 +12,14 @@ and are read from the spec when the blog adds them.
 
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote
 
-import requests
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from .front_matter import split_front_matter_text
-from .logger import logger
+from .markdown.front_matter import split_front_matter_text
 
 LOCAL_CONVENTIONS_PATH = (
     Path(__file__).resolve().parents[2] / "assets" / "post_conventions.yml"
@@ -32,9 +28,7 @@ CANONICAL_PATH = "_data/post_conventions.yml"
 DEFAULT_COVER = "/assets/images/default.jpg"
 # Specific (non-controlled) tags a generated post carries: short and reusable.
 GENERATED_SPECIFIC_TAGS = 5
-_FETCH_TIMEOUT_SECONDS = 20
 # Parallel reads of the blog's posts when collecting their front matter.
-_FETCH_WORKERS = 4  # stays clear of GitHub's secondary rate limits
 
 
 class TypeSpec(BaseModel):
@@ -109,66 +103,6 @@ def load_local_conventions(path: Path = LOCAL_CONVENTIONS_PATH) -> PostConventio
     return PostConventions.from_yaml(path.read_text(encoding="utf-8"))
 
 
-def fetch_blog_conventions(
-    repo_name: str, branch: str, token: str | None
-) -> str | None:
-    """Raw text of the blog's canonical file, or None when it does not exist."""
-    headers = {"Accept": "application/vnd.github.raw+json"}
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-    response = requests.get(
-        f"https://api.github.com/repos/{repo_name}/contents/{CANONICAL_PATH}",
-        params={"ref": branch},
-        headers=headers,
-        timeout=_FETCH_TIMEOUT_SECONDS,
-    )
-    if response.status_code == 404:
-        return None
-    response.raise_for_status()
-    return response.text
-
-
-def load_conventions(
-    *,
-    repo_name: str | None,
-    branch: str,
-    token: str | None,
-    use_blog: bool,
-    fallback: bool = True,
-) -> PostConventions:
-    """The blog's rules when reachable, else the bundled copy.
-
-    The copy is kept identical to the blog file by CI, so falling back to it
-    is safe; a run still logs which source it used and any drift it sees.
-    With ``fallback`` False an unreachable blog raises
-    (``requests.RequestException``) instead.
-    """
-    local = load_local_conventions()
-    if not (use_blog and repo_name):
-        return local
-    try:
-        text = fetch_blog_conventions(repo_name, branch, token)
-    except requests.RequestException as e:
-        if not fallback:
-            raise
-        logger.warning(
-            "Could not read the blog's post conventions (%s); using the bundled copy.",
-            e,
-        )
-        return local
-    if text is None:
-        logger.warning("Blog has no %s yet; using the bundled copy.", CANONICAL_PATH)
-        return local
-    blog = PostConventions.from_yaml(text)
-    if blog != local:
-        logger.warning(
-            "Bundled post conventions differ from %s@%s; following the blog.",
-            repo_name,
-            branch,
-        )
-    return blog
-
-
 class BlogPost(BaseModel):
     """What a new post must agree with in one of the blog's posts: its
     tags (reused), its description (unique site-wide), its translation
@@ -206,7 +140,7 @@ def _utc_date(value: Any) -> datetime | None:
     return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
 
 
-def _blog_post(path: str, text: str) -> BlogPost:
+def parse_blog_post(path: str, text: str) -> BlogPost:
     front, _ = split_front_matter_text(text)
     try:
         data = yaml.safe_load(front[4:-5]) if front else None
@@ -241,60 +175,3 @@ def tag_counts(posts: list[BlogPost]) -> dict[str, int]:
         for tag in post.tags:
             counts[tag] = counts.get(tag, 0) + 1
     return {t: counts[t] for t in sorted(counts, key=lambda t: (-counts[t], t))}
-
-
-def fetch_blog_posts(repo_name: str, branch: str, token: str | None) -> list[BlogPost]:
-    """The front matter of every post on the blog's ``branch``: the tags a
-    new post should reuse before inventing one, and the descriptions and
-    translation ids it must not clash with.
-
-    One recursive tree listing finds every post under ``_posts/`` (also in
-    sub-folders); the posts are then read in parallel. A post that cannot be
-    read is skipped, but when most reads fail (rate limit, outage) the call
-    raises rather than return a partial list that would mark known tags new.
-    """
-    api = f"https://api.github.com/repos/{repo_name}"
-    headers = {"Accept": "application/vnd.github+json"}
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-    listing = requests.get(
-        f"{api}/git/trees/{quote(branch, safe='')}",
-        params={"recursive": "1"},
-        headers=headers,
-        timeout=_FETCH_TIMEOUT_SECONDS,
-    )
-    listing.raise_for_status()
-    tree = listing.json()
-    if tree.get("truncated"):
-        logger.warning("The blog's file listing is truncated; some posts are missed.")
-    entries = [
-        entry
-        for entry in tree.get("tree", [])
-        if entry.get("type") == "blob"
-        and entry.get("path", "").startswith("_posts/")
-        and entry["path"].endswith(".md")
-    ]
-    blob_urls = [f"{api}/git/blobs/{entry['sha']}" for entry in entries]
-    raw_headers = {**headers, "Accept": "application/vnd.github.raw+json"}
-
-    def read(url: str) -> str | None:
-        try:
-            response = requests.get(
-                url, headers=raw_headers, timeout=_FETCH_TIMEOUT_SECONDS
-            )
-            response.raise_for_status()
-            return response.text
-        except requests.RequestException:
-            return None
-
-    with ThreadPoolExecutor(max_workers=_FETCH_WORKERS) as pool:
-        texts = list(pool.map(read, blob_urls))
-    if failed := sum(text is None for text in texts):
-        if failed * 2 > len(texts):
-            raise RuntimeError(f"could not read {failed} of {len(texts)} blog posts")
-        logger.warning("Could not read %d of %d blog posts.", failed, len(texts))
-    return [
-        _blog_post(entry["path"], text)
-        for entry, text in zip(entries, texts, strict=True)
-        if text is not None
-    ]

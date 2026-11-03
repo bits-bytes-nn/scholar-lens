@@ -19,14 +19,14 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from .formatting import link_list, md_link_text, md_link_url
-from .markdown_lint import writing_issues
-from .markdown_math import segments
-from .post_validator import (
+from ..domain.markdown.lint import writing_issues
+from ..domain.markdown.math import segments
+from ..domain.validation import (
     FURTHER_READING_HEADINGS,
     REFERENCES_HEADING,
     unsourced_numbers,
 )
+from .formatting import link_list, md_link_text, md_link_url
 from .prompts.tech_guide import DEPTH_CHARS, NON_KOREAN_CHAR_FACTOR
 from .publish_types import slugify
 from .section_loop import parse_glossary

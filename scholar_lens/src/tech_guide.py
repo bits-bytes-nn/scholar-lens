@@ -39,6 +39,9 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import Runnable, RunnableLambda
 
 from ..application.usage import staged
+from ..domain.markdown.lint import close_open_fence
+from ..domain.tags import controlled_tag_problems
+from ..domain.validation import description_markup, description_problems
 from .constants import LanguageModelId
 from .guide_authority import (
     input_outline,
@@ -50,9 +53,7 @@ from .guide_authority import (
     used_source_urls,
 )
 from .logger import logger
-from .markdown_lint import close_open_fence
 from .metrics import TokenBudgetGuard
-from .post_validator import description_markup, description_problems
 from .prompt_safety import neutralize_prompt_tags
 from .prompts import (
     BasePrompt,
@@ -87,7 +88,6 @@ from .section_loop import (
     parse_section_output,
     revise_section,
 )
-from .tags import controlled_tag_problems
 from .utils import (
     BedrockLanguageModelFactory,
     HTMLTagOutputParser,

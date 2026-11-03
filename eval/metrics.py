@@ -18,10 +18,10 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
-from scholar_lens.src.front_matter import split_front_matter
-from scholar_lens.src.markdown_lint import undefined_macros
-from scholar_lens.src.post_conventions import load_local_conventions
-from scholar_lens.src.post_validator import ArtifactKind, validate_post
+from scholar_lens.domain.conventions import load_local_conventions
+from scholar_lens.domain.markdown.front_matter import split_front_matter
+from scholar_lens.domain.markdown.lint import undefined_macros
+from scholar_lens.domain.validation import ArtifactKind, validate_post
 from scholar_lens.src.section_loop import prose_chars
 
 _FENCE = re.compile(r"^(`{3,}|~{3,}).*?^\1[ \t]*$", re.M | re.S)

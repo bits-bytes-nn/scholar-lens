@@ -59,20 +59,10 @@ CONTRACTS = [
     ("survey_*.py", ("tech_guide", "explainer")),
     ("web_research.py", ("review_plan",)),
     ("section_loop.py", ("tech_guide", "explainer", "survey_*")),
-    # The post checks and fixes are pure: no run context, pipeline or
-    # publisher behind them.
-    *(
-        (f"{name}.py", ("runtime", "*_pipeline", "survey_writer", "publisher"))
-        for name in (
-            "markdown_lint",
-            "markdown_math",
-            "post_validator",
-            "post_conventions",
-            "tags",
-            "publish_types",
-            "quality_gate",
-        )
-    ),
+    # The publish types stay free of the run context, pipelines and
+    # publisher. The post checks and fixes moved to scholar_lens.domain,
+    # whose purity import-linter checks (pyproject.toml).
+    ("publish_types.py", ("runtime", "*_pipeline", "survey_writer", "publisher")),
 ]
 
 

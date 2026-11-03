@@ -16,8 +16,8 @@ from typing import TYPE_CHECKING, Any
 from github import GithubException, InputGitAuthor
 from github import InputGitTreeElement as TreeElement
 
+from ..domain.markdown.front_matter import split_front_matter
 from .constants import LocalPaths
-from .front_matter import split_front_matter
 from .logger import logger
 from .publish_types import (
     BLOG_IMAGES_DIR,

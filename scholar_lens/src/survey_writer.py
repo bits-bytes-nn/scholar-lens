@@ -30,15 +30,17 @@ from langchain_core.runnables import Runnable, RunnableLambda
 from pydantic import ValidationError
 
 from ..application.usage import staged
+from ..domain.markdown.lint import drop_unknown_images, fill_image_alts
+from ..domain.markdown.math import has_math, normalize_math
+from ..domain.quality_gate import rule_issues
+from ..domain.tags import controlled_tag_problems
+from ..domain.validation import description_markup, description_problems
 from .aws_helpers import S3Handler
 from .constants import LanguageModelId, LocalPaths, S3Paths
 from .formatting import build_post_meta, cut_title, render_front_matter
 from .jobs import JobRequest
 from .logger import logger
-from .markdown_lint import drop_unknown_images, fill_image_alts
-from .markdown_math import has_math, normalize_math
 from .metrics import TokenUsageTracker
-from .post_validator import description_markup, description_problems
 from .prompt_safety import neutralize_prompt_tags
 from .prompts import (
     BasePrompt,
@@ -53,7 +55,6 @@ from .prompts.base import PROSE_UNIT, blocking_issues_block
 from .prompts.survey import DEPTH_GUIDANCE, SECTION_ROLES
 from .publish_types import title_slug
 from .publisher import PublishRequest, build_pr_body
-from .quality_gate import rule_issues
 from .review_plan import (
     article_ledger,
     digest_sections,
@@ -136,7 +137,6 @@ from .survey_post import (
     validate_plan,
     without_papers,
 )
-from .tags import controlled_tag_problems
 from .utils import (
     BedrockLanguageModelFactory,
     HTMLTagOutputParser,

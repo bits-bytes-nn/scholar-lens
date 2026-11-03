@@ -149,8 +149,8 @@ def test_a_retitled_arxiv_version_replaces_the_published_post() -> None:
     # of the post the version-free branch published.
     from pathlib import Path
 
+    from scholar_lens.domain.conventions import BlogPost
     from scholar_lens.src.paper_pipeline import _build_publish_request, paper_branch_id
-    from scholar_lens.src.post_conventions import BlogPost
 
     paper = SimpleNamespace(
         arxiv_id="2106.09685v2",

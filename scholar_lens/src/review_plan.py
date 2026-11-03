@@ -21,9 +21,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
-from .logger import logger
-from .markdown_lint import FIGURE_MARKER, callout_lines, close_open_fence
-from .markdown_math import (
+from ..domain.markdown.lint import FIGURE_MARKER, callout_lines, close_open_fence
+from ..domain.markdown.math import (
     DISPLAY_MATH,
     HANGUL,
     fence_roles,
@@ -31,7 +30,8 @@ from .markdown_math import (
     open_fence,
     without_fences,
 )
-from .quality_gate import added_slips
+from ..domain.quality_gate import added_slips
+from .logger import logger
 from .utils.helpers import first_sentence
 
 Difficulty = Literal["easy", "medium", "hard"]

@@ -17,17 +17,17 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from ..application.usage import usage_stage
-from .logger import logger
-from .markdown_lint import TABLE_DELIMITER, TABLE_ROW, close_open_fence
-from .markdown_math import (
+from ..domain.markdown.lint import TABLE_DELIMITER, TABLE_ROW, close_open_fence
+from ..domain.markdown.math import (
     DISPLAY_MATH,
     IMAGE,
     image_sources,
     segments,
     without_fences,
 )
+from ..domain.quality_gate import added_slips, publish_blockers, rule_issues
+from .logger import logger
 from .prompts.base import PROSE_UNIT
-from .quality_gate import added_slips, publish_blockers, rule_issues
 from .review_plan import draft_rank
 
 # Evaluator feedback logged per section (the full text goes to the writer).

@@ -13,7 +13,7 @@ import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 
-from .post_conventions import GENERATED_SPECIFIC_TAGS, PostConventions
+from .conventions import GENERATED_SPECIFIC_TAGS, PostConventions
 
 _SEPARATORS = re.compile(r"[\s_\u2010-\u2015]+")  # incl. en/em dashes
 _DROP_CHARS = re.compile(r"[/\"'`’“”]")  # deleted, not separators

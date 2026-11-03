@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from scholar_lens.src.markdown_math import _fix_bars, has_math
-from scholar_lens.src.markdown_math import normalize_math as norm
+from scholar_lens.domain.markdown.math import _fix_bars, has_math
+from scholar_lens.domain.markdown.math import normalize_math as norm
 
 
 @pytest.mark.parametrize(
@@ -112,7 +112,7 @@ def test_has_math_reads_code_as_the_blog_lint_does() -> None:
 
 class TestFenceSpans:
     def test_four_backtick_fence_holds_a_three_backtick_line(self) -> None:
-        from scholar_lens.src.markdown_math import fence_spans
+        from scholar_lens.domain.markdown.math import fence_spans
 
         text = "Intro\n\n````md\n```\na\n```\nx = \\(y\\_z\\)\n````\nafter \\(q\\)\n"
         ((start, end),) = fence_spans(text)
@@ -122,13 +122,13 @@ class TestFenceSpans:
         assert "after $$q$$" in out
 
     def test_tilde_inside_backtick_fence_is_code(self) -> None:
-        from scholar_lens.src.markdown_math import fence_roles
+        from scholar_lens.domain.markdown.math import fence_roles
 
         lines = ["```bash", "cat <<X", "~~~", "X", "```", "# Heading"]
         assert fence_roles(lines) == ["open", "code", "code", "code", "close", "prose"]
 
     def test_unclosed_fence_runs_to_the_end(self) -> None:
-        from scholar_lens.src.markdown_math import fence_spans, open_fence
+        from scholar_lens.domain.markdown.math import fence_spans, open_fence
 
         text = "a\n```py\nx = 1\n"
         assert fence_spans(text) == [(2, len(text))]
@@ -136,7 +136,7 @@ class TestFenceSpans:
         assert open_fence(text + "```\n") == ""
 
     def test_backtick_info_string_with_backtick_is_not_a_fence(self) -> None:
-        from scholar_lens.src.markdown_math import fence_roles
+        from scholar_lens.domain.markdown.math import fence_roles
 
         assert fence_roles(["``` `x` ```", "text"]) == ["prose", "prose"]
 
@@ -320,8 +320,8 @@ def test_decorated_conditional_heads(src: str, out: str) -> None:
 
 
 def test_stray_dollars_before_a_table_leave_the_table_alone() -> None:
-    from scholar_lens.src.markdown_lint import lint_markdown
-    from scholar_lens.src.post_validator import body_errors
+    from scholar_lens.domain.markdown.lint import lint_markdown
+    from scholar_lens.domain.validation import body_errors
 
     src = (
         "## 비용\n\n비용은 토큰당 $$0.5 수준입니다.\n\n| 모델 | 정확도 |\n"
@@ -690,7 +690,7 @@ def test_fold_stays_fast_on_long_items() -> None:
 
 
 def test_hangul_matches_the_blog_lint() -> None:
-    from scholar_lens.src.markdown_math import HANGUL
+    from scholar_lens.domain.markdown.math import HANGUL
 
     for char in ("한", "ㄱ", "㉠", "ᄒ", "ﾡ"):
         assert HANGUL.search(char)
@@ -704,7 +704,7 @@ def test_glued_display_with_a_line_starting_with_minus_stays_in_the_step() -> No
         "$$\n\\mathcal{L} = -\\log\\sigma(a\n- b)\n$$\n"
         "여기서 a, b는 로그 비율입니다.\n3. 평가합니다.\n"
     )
-    from scholar_lens.src.markdown_math import normalize_math
+    from scholar_lens.domain.markdown.math import normalize_math
 
     out = normalize_math(text)
     assert "   $$\n   \\mathcal{L} = -\\log\\sigma(a\n   - b)\n   $$" in out

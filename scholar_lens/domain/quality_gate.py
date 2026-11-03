@@ -7,8 +7,8 @@ from __future__ import annotations
 from collections import Counter
 from collections.abc import Callable
 
-from .markdown_lint import publish_body, writing_issues
-from .post_validator import body_errors
+from .markdown.lint import publish_body, writing_issues
+from .validation import body_errors
 
 
 def rule_issues(text: str) -> list[str]:

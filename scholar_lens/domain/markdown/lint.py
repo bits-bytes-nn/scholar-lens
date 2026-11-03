@@ -40,15 +40,15 @@ whose source is not a known figure of the artifact.
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass
 from functools import cache
 from typing import Literal
 
-from .citation_metadata import arxiv_id_from_doi
-from .constants import arxiv_paper_key
-from .logger import logger
-from .markdown_math import (
+from ..conventions import load_local_conventions
+from ..ids import arxiv_id_from_doi, arxiv_paper_key
+from .math import (
     BLOG_CODE_SPAN,
     BLOG_FENCE,
     HANGUL,
@@ -68,7 +68,6 @@ from .markdown_math import (
     open_fence,
     segments,
 )
-from .post_conventions import load_local_conventions
 
 # Macros of non-standard packages that writers commonly emit; base MathJax
 # does not load them, so they render as red raw text unless the blog defines
@@ -86,6 +85,9 @@ _EXTENSION_MACROS = frozenset(
         "textsc",  # text mode
     }
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 @cache

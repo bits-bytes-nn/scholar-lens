@@ -6,7 +6,7 @@ from langchain_core.prompts import (
     SystemMessagePromptTemplate,
 )
 
-from ..post_conventions import load_local_conventions
+from ...domain.conventions import load_local_conventions
 from .base import (
     BasePrompt,
 )

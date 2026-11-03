@@ -1399,7 +1399,7 @@ class TestSectionPlan:
         assert guide.notes == []
 
     async def test_classify_asks_again_without_a_controlled_tag(self) -> None:
-        from scholar_lens.src.tags import NO_CONTROLLED_TAG
+        from scholar_lens.domain.tags import NO_CONTROLLED_TAG
         from scholar_lens.src.tech_guide import TechGuide
 
         good = (

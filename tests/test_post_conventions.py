@@ -9,8 +9,10 @@ import pytest
 import requests
 import yaml
 
-from scholar_lens.src import post_conventions
-from scholar_lens.src.post_conventions import load_conventions, load_local_conventions
+from scholar_lens.adapters.github import conventions as post_conventions
+from scholar_lens.adapters.github.conventions import load_conventions
+from scholar_lens.domain import conventions as domain_conventions
+from scholar_lens.domain.conventions import load_local_conventions
 
 
 class _Response:
@@ -64,7 +66,7 @@ class TestFetchBlogPosts:
         assert first.description == "Graph RAG는 전역 질문에 답합니다."
         assert (first.lang, first.translation_id) == ("ko", "a")
         assert posts_read[1].description is None
-        assert list(post_conventions.tag_counts(posts_read).items()) == [
+        assert list(domain_conventions.tag_counts(posts_read).items()) == [
             ("GraphRAG", 2),
             ("Knowledge-Graph", 1),
         ]
@@ -87,7 +89,7 @@ def test_a_post_date_and_categories_are_read(
     # What a regenerated post keeps: the instant Jekyll dates the post at
     # (the blog builds in UTC) and its categories.
     text = f'---\ndate: {date}\ncategories: ["Tech Guides", "Language-Models"]\n---\n'
-    post = post_conventions._blog_post("_posts/2026-01-05-x.md", text)
+    post = domain_conventions.parse_blog_post("_posts/2026-01-05-x.md", text)
     assert post.date == expected
     assert post.categories == ["Tech Guides", "Language-Models"]
     assert post.topic == "Language-Models"
@@ -142,7 +144,7 @@ class TestLoadConventions:
     def test_blog_rules_win_when_they_differ(
         self, monkeypatch: pytest.MonkeyPatch, local: Any
     ) -> None:
-        text = post_conventions.LOCAL_CONVENTIONS_PATH.read_text(encoding="utf-8")
+        text = domain_conventions.LOCAL_CONVENTIONS_PATH.read_text(encoding="utf-8")
         data = yaml.safe_load(text)
         retired = data["tags"]["controlled"].pop()
         self._fetch(monkeypatch, yaml.safe_dump(data))

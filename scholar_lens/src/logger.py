@@ -78,3 +78,6 @@ def get_default_logger(name: str = "app") -> logging.Logger:
 
 
 logger = get_default_logger()
+# Modules of the new layers log through ``logging.getLogger(__name__)``; their
+# records reach the same handlers through the package logger.
+package_logger = get_default_logger("scholar_lens")

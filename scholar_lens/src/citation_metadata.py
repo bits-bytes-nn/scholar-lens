@@ -28,6 +28,7 @@ from typing import Any
 import httpx
 from bs4 import BeautifulSoup
 
+from ..domain.ids import arxiv_id_from_doi  # noqa: F401 - re-exported
 from .constants import EnvVars, normalize_arxiv_id
 from .logger import logger
 from .rate_limiter import MAX_RETRY_AFTER_SECONDS, RateLimiter
@@ -170,16 +171,6 @@ def abstract_fits_title(title: str, abstract: str | None) -> bool:
     work's abstract; such an abstract shares none."""
     words = _content_words(title)
     return not (words and abstract) or bool(words & _content_words(abstract))
-
-
-# arXiv DOIs (10.48550/arXiv.<id>), bare or as a doi.org URL.
-_ARXIV_DOI = re.compile(r"10\.48550/arxiv\.(\S+)$", re.IGNORECASE)
-
-
-def arxiv_id_from_doi(doi: str | None) -> str | None:
-    """The arXiv id behind an arXiv DOI, or None for any other value."""
-    match = _ARXIV_DOI.search((doi or "").strip())
-    return normalize_arxiv_id(match.group(1)) if match else None
 
 
 @dataclass

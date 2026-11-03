@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from scholar_lens.src.markdown_lint import style_hits, writing_issues
+from scholar_lens.domain.markdown.lint import style_hits, writing_issues
 from scholar_lens.src.prompts import (
     AttributesExtractionPrompt,
     PaperEditPrompt,

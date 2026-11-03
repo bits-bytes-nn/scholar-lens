@@ -23,16 +23,16 @@ from pydantic import ValidationError
 
 from scholar_lens import cli
 from scholar_lens.configs.config import Config, Survey
-from scholar_lens.src import runtime, survey_writer
-from scholar_lens.src.jobs import JobRequest
-from scholar_lens.src.metrics import TokenUsageTracker
-from scholar_lens.src.post_conventions import (
+from scholar_lens.domain.conventions import (
     BlogPost,
     PostConventions,
     TypeSpec,
     load_local_conventions,
 )
-from scholar_lens.src.post_validator import validate_post
+from scholar_lens.domain.validation import validate_post
+from scholar_lens.src import runtime, survey_writer
+from scholar_lens.src.jobs import JobRequest
+from scholar_lens.src.metrics import TokenUsageTracker
 from scholar_lens.src.prompt_safety import strip_defanging
 from scholar_lens.src.prompts import (
     SurveyCardPrompt,
@@ -2008,7 +2008,7 @@ def test_a_rerun_replaces_the_post_its_plan_published(
     from datetime import UTC, datetime
 
     from scholar_lens.configs import Github
-    from scholar_lens.src.post_conventions import BlogPost
+    from scholar_lens.domain.conventions import BlogPost
     from tests.test_publisher import FakeGithub, FakeRepo
 
     old = "_posts/2026-10-02-preference-learning-for-llms.md"

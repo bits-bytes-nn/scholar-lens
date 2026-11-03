@@ -6,15 +6,15 @@ import json
 
 import pytest
 
-from scholar_lens.src.markdown_lint import (
+from scholar_lens.domain.conventions import load_local_conventions
+from scholar_lens.domain.markdown.lint import (
     NUMBERED_REF,
     fill_image_alts,
     limit_callouts,
     lint_markdown,
     writing_issues,
 )
-from scholar_lens.src.post_conventions import load_local_conventions
-from scholar_lens.src.post_validator import body_errors, validate_post
+from scholar_lens.domain.validation import body_errors, validate_post
 from scholar_lens.src.review_plan import (
     HARD_OVERRUN,
     MIN_HARD_SCALE,
@@ -459,7 +459,7 @@ def test_emphasised_none_answers_are_empty(answer: str) -> None:
 
 
 def test_config_file_sections_are_not_self_references() -> None:
-    from scholar_lens.src.markdown_lint import writing_issues
+    from scholar_lens.domain.markdown.lint import writing_issues
 
     text = "`config.yaml`에 다음 섹션을 추가합니다.\n\n다음 섹션에서 설치를 다룹니다."
     hits = [h for h in writing_issues(text) if "self" in h.lower()]
@@ -467,7 +467,7 @@ def test_config_file_sections_are_not_self_references() -> None:
 
 
 def test_html_attribute_text_is_not_prose() -> None:
-    from scholar_lens.src.markdown_lint import writing_issues
+    from scholar_lens.domain.markdown.lint import writing_issues
 
     html = (
         '<a data-glightbox="title: 구조 (출처: 논문, Figure 1)" href="/x.png">그림</a>'
@@ -500,7 +500,7 @@ def test_skipped_slip_edit_names_the_new_slip() -> None:
 
 
 def test_copied_figure_marker_is_one_clear_issue() -> None:
-    from scholar_lens.src.markdown_lint import writing_issues
+    from scholar_lens.domain.markdown.lint import writing_issues
 
     text = (
         '본문입니다.\n[Image: alt="Figure 3: curve", src="https://arxiv.org/html/1/x3.png", '
@@ -521,7 +521,7 @@ def test_copied_figure_marker_is_one_clear_issue() -> None:
     ],
 )
 def test_self_reference_endings(text: str, flagged: bool) -> None:
-    from scholar_lens.src.markdown_lint import writing_issues
+    from scholar_lens.domain.markdown.lint import writing_issues
 
     assert any("self-reference" in i for i in writing_issues(text)) is flagged
 
@@ -538,7 +538,7 @@ def test_self_reference_endings(text: str, flagged: bool) -> None:
     ],
 )
 def test_korean_equation_references(text: str, flagged: bool) -> None:
-    from scholar_lens.src.markdown_lint import writing_issues
+    from scholar_lens.domain.markdown.lint import writing_issues
 
     assert any("numbered reference" in i for i in writing_issues(text)) is flagged
 
@@ -573,7 +573,7 @@ def test_real_items_with_parentheticals_are_kept() -> None:
 
 
 def test_writing_notes_count_the_hits_past_the_cap() -> None:
-    from scholar_lens.src.markdown_lint import MAX_WRITING_NOTES, writing_notes
+    from scholar_lens.domain.markdown.lint import MAX_WRITING_NOTES, writing_notes
 
     text = "\n\n".join(f"Table {i}에서 보듯 좋습니다." for i in range(12))
     text += "\n\n이 절에서 정리합니다."
@@ -593,14 +593,14 @@ def test_edit_that_trades_one_slip_for_another_is_skipped() -> None:
 
 
 def test_config_section_is_not_a_self_reference() -> None:
-    from scholar_lens.src.markdown_lint import writing_issues
+    from scholar_lens.domain.markdown.lint import writing_issues
 
     assert writing_issues("설정 파일의 다음 섹션에 키를 추가합니다.") == []
     assert writing_issues("이 섹션에서는 설치를 다룹니다.")
 
 
 def test_callout_lines_ignore_code() -> None:
-    from scholar_lens.src.markdown_lint import callout_lines
+    from scholar_lens.domain.markdown.lint import callout_lines
 
     text = "> **핵심:** a\n\n```\n> **핵심:** b\n```\n"
     assert callout_lines(text) == ["**핵심:** a"]
@@ -617,7 +617,7 @@ def test_callout_lines_ignore_code() -> None:
     ],
 )
 def test_close_open_fence(text: str, closed: bool) -> None:
-    from scholar_lens.src.markdown_lint import close_open_fence
+    from scholar_lens.domain.markdown.lint import close_open_fence
 
     out = close_open_fence(text)
     assert (out != text) is closed

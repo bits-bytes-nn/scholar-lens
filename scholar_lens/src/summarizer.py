@@ -15,18 +15,19 @@ import boto3
 from langchain_core.runnables import Runnable
 
 from ..application.usage import staged
-from .constants import LanguageModelId
-from .explainer import NO_CODEBASE, Paper
-from .formatting import derived_subtitle, split_leading_h1, summary_lead
-from .logger import logger
-from .markdown_math import DISPLAY_MATH, HANGUL, image_sources
-from .metrics import TokenBudgetExceeded, TokenBudgetGuard
-from .post_validator import (
+from ..domain.markdown.math import DISPLAY_MATH, HANGUL, image_sources
+from ..domain.quality_gate import publish_blockers
+from ..domain.validation import (
     description_markup,
     description_problems,
     paper_page_title,
     unsourced_numbers,
 )
+from .constants import LanguageModelId
+from .explainer import NO_CODEBASE, Paper
+from .formatting import derived_subtitle, split_leading_h1, summary_lead
+from .logger import logger
+from .metrics import TokenBudgetExceeded, TokenBudgetGuard
 from .prompt_safety import neutralize_prompt_tags
 from .prompts import (
     BasePrompt,
@@ -34,7 +35,6 @@ from .prompts import (
     PaperSummaryPrompt,
     PaperSummaryShortenPrompt,
 )
-from .quality_gate import publish_blockers
 from .section_loop import TARGETED_FIX, lost_structure
 from .utils import (
     BedrockLanguageModelFactory,

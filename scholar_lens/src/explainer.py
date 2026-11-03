@@ -33,21 +33,22 @@ from nltk.tokenize.punkt import PunktTokenizer
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator
 
 from ..application.usage import staged
+from ..domain.markdown.lint import arxiv_link_key, unlink_unknown_arxiv, writing_issues
+from ..domain.quality_gate import publish_blockers
+from ..domain.validation import (
+    description_markup,
+    description_problems,
+    paper_page_title,
+    unsourced_numbers,
+)
 from .citation_summarizer import CitationSummarizer
 from .code_retriever import CodeRetriever
 from .constants import LanguageModelId, normalize_arxiv_id
 from .content_extractor import Attributes, Citation
 from .formatting import same_as_title
 from .logger import is_running_in_aws, logger
-from .markdown_lint import arxiv_link_key, unlink_unknown_arxiv, writing_issues
 from .metrics import TokenBudgetGuard
 from .parser import Content, Figure
-from .post_validator import (
-    description_markup,
-    description_problems,
-    paper_page_title,
-    unsourced_numbers,
-)
 from .prompt_safety import neutralize_prompt_tags
 from .prompts import (
     BasePrompt,
@@ -57,7 +58,6 @@ from .prompts import (
     PaperSectionCheckPrompt,
     PaperSectionPrompt,
 )
-from .quality_gate import publish_blockers
 from .review_plan import (
     RANGE_PADDING,
     PlanError,

@@ -20,11 +20,11 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from urllib.parse import quote
 
+from ..domain.conventions import BlogPost, PostConventions
+from ..domain.markdown.front_matter import split_front_matter, split_front_matter_text
+from ..domain.markdown.math import has_math, normalize_math
+from ..domain.tags import normalize_tags
 from .constants import bare_doi, normalize_arxiv_id
-from .front_matter import split_front_matter, split_front_matter_text
-from .markdown_math import has_math, normalize_math
-from .post_conventions import BlogPost, PostConventions
-from .tags import normalize_tags
 from .utils import escape_yaml_double_quoted, is_placeholder
 from .utils.helpers import first_sentence
 

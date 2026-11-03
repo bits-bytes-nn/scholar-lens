@@ -25,24 +25,19 @@ import boto3
 from botocore.exceptions import ClientError
 from pydantic import BaseModel, ConfigDict
 
+from ..adapters.github.conventions import fetch_blog_posts, load_conventions
 from ..application.usage import cost_allocation
 from ..configs import Config
+from ..domain.conventions import BlogPost, PostConventions, tag_counts
+from ..domain.tags import format_tag
+from ..domain.validation import PostValidationError
 from .aws_helpers import S3Handler, get_ssm_param_value
 from .constants import RUN_SECRETS, EnvVars, LocalPaths, S3Paths, SSMParams
 from .formatting import with_spec_cover
 from .jobs import JobRequest, JobResult, ssm_base, write_result_manifest
 from .logger import is_running_in_aws, logger
 from .metrics import MetricsEmitter, TokenUsageTracker
-from .post_conventions import (
-    BlogPost,
-    PostConventions,
-    fetch_blog_posts,
-    load_conventions,
-    tag_counts,
-)
-from .post_validator import PostValidationError
 from .publisher import PostAssetError, Publisher, PublishError, PublishRequest
-from .tags import format_tag
 
 # Working directory for papers, figures and generated posts: the container's
 # scratch space in AWS, the repository root locally.
