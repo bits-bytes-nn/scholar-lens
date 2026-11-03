@@ -27,6 +27,7 @@ from ..domain.evidence import (
     evidence_problems,
 )
 from ..domain.glossary import glossary_view
+from ..domain.lengths import DEPTH_CHARS, NON_KOREAN_CHAR_FACTOR
 from ..domain.survey.evidence_post import (
     EvidenceOutline,
     OutlineSection,
@@ -37,6 +38,7 @@ from ..domain.survey.evidence_post import (
     drop_sentences,
     outline_problems,
     prose_sentences,
+    section_heading,
     section_numbers,
     structure_lost,
     timeline_table,
@@ -103,6 +105,10 @@ class ReviewIssue(BaseModel):
 
 class SectionReview(BaseModel):
     issues: list[ReviewIssue] = Field(default_factory=list, max_length=10)
+
+
+def _prose_length(markdown: str) -> int:
+    return len(" ".join(prose_sentences(markdown)))
 
 
 def _block(tag: str, text: str) -> str:
@@ -405,8 +411,9 @@ class EvidenceSurveyEngine:
                 references,
                 free,
             )
+            heading = section_heading(markdown) or section.title
             for n in section_numbers(markdown, free):
-                numbers.setdefault(n, section.title)
+                numbers.setdefault(n, heading)
             written.append((section, markdown))
         body = self._assemble(plan, outline, ledger, written)
         return EvidenceSurvey(
@@ -452,6 +459,14 @@ class EvidenceSurveyEngine:
                 ),
                 _block("evidence", _evidence_lines(own)),
                 _block("already_written_evidence", _evidence_lines(earlier[-60:])),
+                _block(
+                    "paper_names",
+                    "\n".join(
+                        f"- {p.id}: {outline.short_names.get(p.id, p.title)} "
+                        f"({p.authors}, {p.year})"
+                        for p in plan.papers
+                    ),
+                ),
                 _block("glossary", glossary_view(glossary, [m for _, m in written])),
                 _block("previous_section_end", previous),
                 _block(
@@ -471,11 +486,33 @@ class EvidenceSurveyEngine:
                 ),
             ]
         )
+        target = DEPTH_CHARS[section.depth] * (
+            1 if self.settings.korean else NON_KOREAN_CHAR_FACTOR
+        )
         with usage_stage("draft"):
-            draft = await self.model.text(
-                role="write", system=prompts.WRITER_SYSTEM, prompt=prompt
-            )
-        draft = draft.strip()
+            draft = (
+                await self.model.text(
+                    role="write", system=prompts.WRITER_SYSTEM, prompt=prompt
+                )
+            ).strip()
+            if own and _prose_length(draft) < 0.3 * target:
+                logger.warning(
+                    "Section %r came back short (%d chars): %r",
+                    section.title,
+                    _prose_length(draft),
+                    draft[:300],
+                )
+                draft = (
+                    await self.model.text(
+                        role="write",
+                        system=prompts.WRITER_SYSTEM,
+                        prompt=prompt
+                        + "\n\nYour previous answer was too short or empty. This is "
+                        "a survey of published research papers for practitioners: "
+                        f"write the whole section (about {int(target):,} characters "
+                        "of prose) from its evidence.",
+                    )
+                ).strip()
 
         def checks(markdown: str) -> list[str]:
             return draft_problems(

@@ -404,3 +404,28 @@ def test_a_scripted_run_reads_outlines_writes_fixes_and_assembles() -> None:
         ).write(_plan())
     )
     assert "read" not in again.calls
+
+
+def test_numbered_references_and_ids_as_names_are_problems() -> None:
+    problems = evidence_problems(
+        _doc(),
+        kind="number",
+        claim="PPO 대비 승률 61%",
+        quote="DPO reaches a 61% win rate against PPO",
+        anchor="S3",
+        scope="TL;DR, GPT-4 judge, Table 2",
+    )
+    assert any("figure, table" in p for p in problems)
+    md = "## 제목입니다\n\n2305.18290은 보상 모델이 없습니다 [[E2]].\n\n![비교](https://arxiv.org/html/2305.18290v3/x1.png)\n"
+    issues = draft_problems(
+        md,
+        title="제목",
+        own=["E2", "E4"],
+        earlier=[],
+        ledger=_ledger(),
+        earlier_numbers={},
+        figure_urls=["https://arxiv.org/html/2305.18290v3/x1.png"],
+        free_numbers="",
+    )
+    assert any("by its id" in p for p in issues)
+    assert not any("must start" in p for p in issues)  # any '## ' heading is fine

@@ -29,6 +29,8 @@ _IMAGE = re.compile(r"!\[[^\]]*\]\(([^)\s]+)[^)]*\)")
 _TABLE_LINE = re.compile(r"^\s*\|.*\|\s*$", re.M)
 _SENTENCE_END = re.compile(r"(?<=[.!?。])\s+|\n+")
 _CITATION_KEY = re.compile(r"\[@[^\]]+\]")
+# An arXiv id or DOI written as a paper's name in prose.
+_PAPER_ID = re.compile(r"(?<![\d./])(?:\d{4}\.\d{4,5}|10\.\d{4,9}/[^\s,;)]+)(?![\d])")
 # How a post describes its own making: the input it was given (the abstract,
 # a card, a summary) instead of the papers. Closed list from past posts.
 META_SENTENCE = re.compile(
@@ -304,8 +306,8 @@ def draft_problems(
     already stated, a sentence about the post's own inputs, an unassigned or
     missing figure."""
     problems: list[str] = []
-    if not markdown.lstrip().startswith(f"## {title}"):
-        problems.append(f"the section must start with '## {title}'")
+    if not markdown.lstrip().startswith("## "):
+        problems.append(f"the section must start with its '## ' heading ({title})")
     allowed = set(own) | set(earlier)
     for sentence in prose_sentences(markdown):
         quoted = _plain(sentence)[:160]
@@ -337,6 +339,10 @@ def draft_problems(
                 f"{repeated} already stated in '{earlier_numbers[repeated[0]]}': "
                 f"refer back without repeating: {quoted}"
             )
+        if _PAPER_ID.search(_plain(sentence)):
+            problems.append(
+                f"names a paper by its id; use its name or its authors: {quoted}"
+            )
         if META_SENTENCE.search(_plain(sentence)):
             problems.append(
                 "describes the post's inputs instead of the papers; state what "
@@ -349,6 +355,12 @@ def draft_problems(
     if missing := sorted(expected - shown):
         problems.append(f"figures given to this section are missing: {missing}")
     return problems
+
+
+def section_heading(markdown: str) -> str:
+    """The text of the draft's first ``## `` heading ("" without one)."""
+    m = re.search(r"^## (.+?)\s*$", markdown, re.M)
+    return m.group(1) if m else ""
 
 
 def section_numbers(markdown: str, free_numbers: str) -> set[str]:

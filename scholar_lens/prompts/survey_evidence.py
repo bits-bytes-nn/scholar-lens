@@ -83,8 +83,9 @@ Sections, in this order:
 - insights (exactly one): trends, trade-offs and open problems across the
   lineages, from the evidence, as the post's view.
 - conclusion (optional, last, short).
-Titles are claims, not labels; each section has a one-sentence thesis and the
-reader's question it answers. Depth: deep for the hard core mechanisms,
+Titles are claims, not labels, written in the post's register (Korean: a
+"~입니다/~합니다" sentence or a noun phrase, never a "~다" ending); each
+section has a one-sentence thesis and the reader's question it answers. Depth: deep for the hard core mechanisms,
 brief for context. `table` lists every core paper with up to two of its
 number evidence ids and one limitation id. `ideas` gives every paper a noun
 phrase; `short_names` every paper a short name; `lineage_names` every lineage
@@ -109,7 +110,11 @@ Evidence:
   written) by content, citing its id, but never repeat its numbers.
 - Every number must come from the cited evidence (claim, quote or scope).
 - Show each assigned figure where it is discussed as
-  ![what it shows](url), and explain what to look at; show no other image.
+  ![what it shows](url), and explain what to look at from its caption and
+  evidence only (no colours, markers or panels the caption does not name);
+  show no other image.
+- Name a paper by its short name or its authors (as listed), never by its
+  arXiv id or DOI.
 - Use an assigned equation as given, symbols defined right after it.
 """
     + VISUAL_RULES

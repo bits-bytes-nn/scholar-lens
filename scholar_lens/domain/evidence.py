@@ -37,6 +37,11 @@ MIN_QUOTE_CHARS = 12
 MAX_QUOTE_CHARS = 800
 # Short noun-phrase cells for the code-built tables.
 MAX_CELL_CHARS = 90
+# The paper's own numbering means nothing in a post ("Fig. 4", "Table 2").
+_NUMBERED_REFERENCE = re.compile(
+    r"\b(?:fig(?:ure)?s?|tab(?:le)?s?|eq(?:uation)?s?|sec(?:tion)?s?|appendix|§)\.?\s*[A-Z]?\d",
+    re.IGNORECASE,
+)
 
 
 class _Strict(BaseModel):
@@ -211,6 +216,11 @@ def evidence_problems(
         problems.append("the equation is not the paper's LaTeX: copy it exactly")
     if len(cell) > MAX_CELL_CHARS:
         problems.append(f"the cell is longer than {MAX_CELL_CHARS} characters")
+    if _NUMBERED_REFERENCE.search(f"{claim} {scope} {cell}"):
+        problems.append(
+            "claim, scope and cell must not name the paper's figure, table, "
+            "equation or section numbers; say what it is"
+        )
     return problems
 
 
