@@ -146,5 +146,7 @@ def test_scholar_lens_config_names_another_config_file(tmp_path, monkeypatch) ->
 
     path = tmp_path / "eval.yaml"
     path.write_text("survey:\n  engine: evidence\n", encoding="utf-8")
+    # Loading .env would leak this checkout's API keys into later tests.
+    monkeypatch.setattr("scholar_lens.configs.config.load_dotenv", lambda: None)
     monkeypatch.setenv(CONFIG_PATH_ENV, str(path))
     assert Config.load().survey.engine == "evidence"
