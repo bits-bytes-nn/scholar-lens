@@ -12,6 +12,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..evidence import Evidence, EvidenceLedger
+from ..lengths import DEPTH_CHARS, NON_KOREAN_CHAR_FACTOR
 from ..markdown.tables import escape_cell_pipes
 from ..validation import unsourced_numbers
 from .plan import SurveyPlan
@@ -352,6 +353,8 @@ def draft_problems(
     free_numbers: str,
     depth: str = "",
     exhausted: Iterable[str] = (),
+    papers: Iterable[str] = (),
+    target_chars: int = 0,
 ) -> list[str]:
     """Deterministic problems of a section draft (each quotes its sentence):
     a missing heading, unknown or foreign evidence ids, a number without
@@ -429,6 +432,27 @@ def draft_problems(
                 "describes the post's inputs instead of the papers; state what "
                 f"the paper does or leave it out: {quoted}"
             )
+    cited_papers = {
+        e.paper_id
+        for s in prose_sentences(markdown)
+        for i in cited_ids(s)
+        if (e := ledger.get(i))
+    }
+    if uncovered := [p for p in papers if p not in cited_papers]:
+        problems.append(
+            f"papers {uncovered} belong to this section but no sentence cites "
+            "their evidence: cover each"
+        )
+    if (
+        target_chars
+        and (length := len(" ".join(prose_sentences(markdown)))) > 1.5 * target_chars
+    ):
+        problems.append(
+            f"{length:,} characters of prose for a target of {target_chars:,}: "
+            "cut background, repetition and minor detail"
+        )
+    if ends_mid_sentence(markdown):
+        problems.append("the section stops mid-sentence: finish it")
     if (need := MIN_VISUALS.get(depth, 0)) and visual_count(markdown) < need:
         problems.append(
             f"a {depth} section needs at least {need} visuals (its figures, an "
@@ -609,3 +633,51 @@ def repair_outline(
     order = [p.id for p in plan.papers]
     table = sorted(rows.values(), key=lambda r: order.index(r.paper))
     return outline.model_copy(update={"sections": sections, "table": table}), notes
+
+
+def section_targets(
+    outline: EvidenceOutline,
+    plan: SurveyPlan,
+    *,
+    per_core: int,
+    per_supporting: int,
+    min_total: int,
+    max_total: int,
+    korean: bool,
+) -> list[int]:
+    """Prose characters per section: a lineage section its papers' shares,
+    any other section its depth's size; the total scaled into
+    ``[min_total, max_total]`` (Korean characters; other languages need
+    :data:`NON_KOREAN_CHAR_FACTOR` times as many)."""
+    role = {p.id: p.role for p in plan.papers}
+    share = {"core": per_core, "supporting": per_supporting}
+    raw = [
+        (
+            sum(share[role[p]] for p in s.papers if p in role) or DEPTH_CHARS[s.depth]
+            if s.kind == "lineage"
+            else DEPTH_CHARS[s.depth]
+        )
+        for s in outline.sections
+    ]
+    total = sum(raw)
+    scale = min(max(total, min_total), max_total) / total
+    factor = 1.0 if korean else NON_KOREAN_CHAR_FACTOR
+    return [round(r * scale * factor) for r in raw]
+
+
+# The end of a complete paragraph line: a sentence end, a closing mark, a
+# citation or an evidence marker.
+_COMPLETE_END = re.compile(r"(?:[.!?。:)\]」』\"'*]|\]\])\s*$")
+
+
+def ends_mid_sentence(markdown: str) -> bool:
+    """Whether the draft's last prose line stops mid-sentence (a cut-off
+    answer)."""
+    text = _FENCE.sub("\n", markdown)
+    text = _DISPLAY_MATH.sub("\n", text)
+    for line in reversed(text.strip().split("\n")):
+        bare = line.strip()
+        if not bare or bare.startswith(("#", "|", "!", "$$", "<", "- - -")):
+            continue
+        return not _COMPLETE_END.search(bare)
+    return False

@@ -121,6 +121,7 @@ ENVELOPE_TAGS: tuple[str, ...] = (
     "reference_material",
     "problems",
     "sentences",
+    "section_evidence",
     "explanation",
     "has_more",
     "key_takeaways",

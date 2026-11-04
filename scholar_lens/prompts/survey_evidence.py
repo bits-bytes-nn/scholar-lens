@@ -146,8 +146,13 @@ about the papers:
   a broadened scope, a cause, a comparison, a limitation the paper does not
   state, a number's wrong variant or setting);
 - wrong: it contradicts the evidence.
-Background a competent reader knows and the post's marked opinion are
-supported. Give a short reason for anything not supported.
+Judge only specific factual claims about the papers (what a paper does,
+measures, reports or states). Background a competent reader knows, the
+post's own interpretation, connections between papers stated as the post's
+reading, and worked examples marked as such are supported. A claim the
+section's other evidence (listed) supports is supported even when its
+marker names a different item. When in doubt, mark supported; give a short
+reason for anything not supported.
 """ + SECURITY
 
 EVIDENCE_CHECK_SYSTEM = """

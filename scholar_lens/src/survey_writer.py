@@ -1275,6 +1275,10 @@ async def write_survey_with_evidence(
             language=language,
             title_max_length=title_max_length,
             reader_tag=slugify(LanguageModelId(cfg.card_model_id).value),
+            chars_per_core=cfg.chars_per_core_paper,
+            chars_per_supporting=cfg.chars_per_supporting_paper,
+            min_total_chars=cfg.min_total_chars,
+            max_total_chars=cfg.max_total_chars,
         ),
         store=SurveyTextStore(
             papers_dir / "survey-evidence",

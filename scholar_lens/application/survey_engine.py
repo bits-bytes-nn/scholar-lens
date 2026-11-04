@@ -27,7 +27,6 @@ from ..domain.evidence import (
     evidence_problems,
 )
 from ..domain.glossary import glossary_view
-from ..domain.lengths import DEPTH_CHARS, NON_KOREAN_CHAR_FACTOR
 from ..domain.survey.evidence_post import (
     EvidenceOutline,
     OutlineSection,
@@ -37,11 +36,13 @@ from ..domain.survey.evidence_post import (
     comparison_table,
     draft_problems,
     drop_sentences,
+    ends_mid_sentence,
     outline_problems,
     prose_sentences,
     repair_outline,
     section_heading,
     section_numbers,
+    section_targets,
     structure_lost,
     timeline_table,
     unsourced_number_sentences,
@@ -72,6 +73,12 @@ class EngineSettings:
     read_tokens_per_paper: int = 600_000
     concurrency: int = 4
     outline_repairs: int = 2
+    # Prose characters (Korean): per paper of a lineage section, and the
+    # post's total range (survey config).
+    chars_per_core: int = 3_000
+    chars_per_supporting: int = 800
+    min_total_chars: int = 20_000
+    max_total_chars: int = 70_000
 
     @property
     def korean(self) -> bool:
@@ -433,7 +440,16 @@ class EvidenceSurveyEngine:
         )
         written: list[tuple[OutlineSection, str]] = []
         numbers: dict[str, str] = {}
-        for section in outline.sections:
+        targets = section_targets(
+            outline,
+            plan,
+            per_core=self.settings.chars_per_core,
+            per_supporting=self.settings.chars_per_supporting,
+            min_total=self.settings.min_total_chars,
+            max_total=self.settings.max_total_chars,
+            korean=self.settings.korean,
+        )
+        for section, target in zip(outline.sections, targets, strict=True):
             markdown = await self._section(
                 plan,
                 outline,
@@ -444,6 +460,7 @@ class EvidenceSurveyEngine:
                 glossary,
                 references,
                 free,
+                target,
             )
             heading = section_heading(markdown) or section.title
             for n in section_numbers(markdown, free):
@@ -471,6 +488,7 @@ class EvidenceSurveyEngine:
         glossary: dict[str, str],
         references: str,
         free: str,
+        target: int,
     ) -> str:
         own = [e for eid in section.evidence if (e := ledger.get(eid))]
         # What earlier sections actually state (their final text), so a
@@ -505,6 +523,7 @@ class EvidenceSurveyEngine:
                     "section",
                     f"kind: {section.kind}\ntitle: {section.title}\nthesis: {section.thesis}\n"
                     f"question: {section.question}\ndepth: {section.depth}\n"
+                    f"length: about {target:,} characters of prose\n"
                     f"running example: {outline.running_example or 'none'}",
                 ),
                 _block("evidence", _evidence_lines(own)),
@@ -536,16 +555,15 @@ class EvidenceSurveyEngine:
                 ),
             ]
         )
-        target = DEPTH_CHARS[section.depth] * (
-            1 if self.settings.korean else NON_KOREAN_CHAR_FACTOR
-        )
         with usage_stage("draft"):
             draft = (
                 await self.model.text(
                     role="write", system=prompts.WRITER_SYSTEM, prompt=prompt
                 )
             ).strip()
-            if own and _prose_length(draft) < 0.3 * target:
+            if own and (
+                _prose_length(draft) < 0.3 * target or ends_mid_sentence(draft)
+            ):
                 logger.warning(
                     "Section %r came back short (%d chars): %r",
                     section.title,
@@ -575,6 +593,8 @@ class EvidenceSurveyEngine:
                 figure_urls=figures,
                 free_numbers=free,
                 exhausted=exhausted,
+                papers=section.papers if section.kind == "lineage" else (),
+                target_chars=target,
                 depth=(
                     section.depth
                     if section.kind in ("lineage", "cross_cutting")
@@ -584,7 +604,7 @@ class EvidenceSurveyEngine:
 
         for round_ in range(self.settings.max_fix_rounds + 1):
             code = checks(draft)
-            claims = await self._check_claims(draft, ledger)
+            claims = await self._check_claims(draft, ledger, own + earlier)
             review = await self._review(draft, section) if round_ == 0 else []
             issues = code + [f"{v}: {s}" for s, v in claims] + review
             if not issues or round_ == self.settings.max_fix_rounds:
@@ -605,14 +625,16 @@ class EvidenceSurveyEngine:
                         ),
                     )
                 ).strip()
-            if reason := structure_lost(draft, fixed):
+            if reason := structure_lost(draft, fixed) or (
+                "it stops mid-sentence" if ends_mid_sentence(fixed) else ""
+            ):
                 logger.info("Fix of %r rejected: %s", section.title, reason)
                 break
             if len(checks(fixed)) > len(code):
                 logger.info("Fix of %r rejected: adds rule problems", section.title)
                 break
             draft = fixed
-        claims = await self._unsupported(draft, ledger, free)
+        claims = await self._unsupported(draft, ledger, free, own + earlier)
         if claims:
             # Let the writer narrow or delete them in context first; only what
             # is still unsupported after that is cut.
@@ -643,12 +665,20 @@ class EvidenceSurveyEngine:
                 checks(draft)
             ):
                 draft = fixed
-                claims = await self._unsupported(draft, ledger, free)
-        if claims:
-            draft = drop_sentences(draft, [s for s, _ in claims])
+                claims = await self._unsupported(draft, ledger, free, own + earlier)
+        wrong = [(s, v) for s, v in claims if v.startswith("wrong")]
+        if wrong:
+            draft = drop_sentences(draft, [s for s, _ in wrong])
             self.notes.append(
-                f"Section '{section.title}': {len(claims)} unsupported sentence(s) removed: "
-                + " | ".join(f"{s[:120]} ({v})" for s, v in claims[:5])
+                f"Section '{section.title}': {len(wrong)} sentence(s) contradicting "
+                "their evidence removed: "
+                + " | ".join(f"{s[:120]} ({v})" for s, v in wrong[:5])
+            )
+        if unsupported := [(s, v) for s, v in claims if not v.startswith("wrong")]:
+            self.notes.append(
+                f"Section '{section.title}': check {len(unsupported)} sentence(s) "
+                "the evidence may not support: "
+                + " | ".join(f"{s[:120]} ({v})" for s, v in unsupported[:5])
             )
         draft = add_missing_figures(draft, [e for e in own if e.kind == "figure"])
         if leftover := checks(draft):
@@ -708,11 +738,15 @@ class EvidenceSurveyEngine:
         return outline.model_copy(update={"sections": sections, "table": table})
 
     async def _unsupported(
-        self, draft: str, ledger: EvidenceLedger, free: str
+        self,
+        draft: str,
+        ledger: EvidenceLedger,
+        free: str,
+        context: Sequence[Evidence] = (),
     ) -> list[tuple[str, str]]:
         """The claim check's unsupported sentences and the sentences whose
         numbers their evidence does not state."""
-        found = await self._check_claims(draft, ledger)
+        found = await self._check_claims(draft, ledger, context)
         known = {s for s, _ in found}
         found += [
             (s, "numbers not in its evidence")
@@ -722,7 +756,7 @@ class EvidenceSurveyEngine:
         return found
 
     async def _check_claims(
-        self, draft: str, ledger: EvidenceLedger
+        self, draft: str, ledger: EvidenceLedger, context: Sequence[Evidence] = ()
     ) -> list[tuple[str, str]]:
         """(sentence, verdict with reason) of the sentences the evidence does
         not support."""
@@ -746,7 +780,9 @@ class EvidenceSurveyEngine:
             check = await self.model.structured(
                 role="evaluate",
                 system=prompts.CLAIM_CHECK_SYSTEM,
-                prompt=_block("sentences", "\n".join(lines)),
+                prompt=_block("section_evidence", _evidence_lines(list(context)))
+                + "\n\n"
+                + _block("sentences", "\n".join(lines)),
                 schema=ClaimCheck,
             )
         bad = []

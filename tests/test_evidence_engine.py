@@ -550,3 +550,37 @@ def test_assigned_figures_left_out_are_appended() -> None:
     out = add_missing_figures("## 제목\n\n본문입니다.", [figure])
     assert "![DPO와 RLHF 비교](https://arxiv.org/html/2305.18290v3/x1.png)" in out
     assert add_missing_figures(out, [figure]).count("x1.png") == 1
+
+
+def test_cut_off_drafts_targets_and_coverage() -> None:
+    from scholar_lens.domain.survey.evidence_post import (
+        ends_mid_sentence,
+        section_targets,
+    )
+
+    assert ends_mid_sentence("## 제목\n\n개념도의 요점은 공격자와 LLM 사이에 직접 연")
+    assert not ends_mid_sentence("## 제목\n\n끝난 문장입니다 [[E2]].\n\n![a](u)\n")
+    targets = section_targets(
+        _outline(),
+        _plan(),
+        per_core=3000,
+        per_supporting=800,
+        min_total=5000,
+        max_total=70000,
+        korean=True,
+    )
+    assert targets == [2500, 3000, 2500, 2500]  # within the range: unscaled
+    issues = draft_problems(
+        "## 제목\n\n배경만 씁니다.\n",
+        title="t",
+        own=["E2"],
+        earlier=[],
+        ledger=_ledger(),
+        earlier_numbers={},
+        figure_urls=[],
+        free_numbers="",
+        papers=["2305.18290"],
+        target_chars=2,
+    )
+    assert any("no sentence cites" in p for p in issues)
+    assert any("for a target of" in p for p in issues)

@@ -1,0 +1,97 @@
+{
+  "item": "survey-rlhf",
+  "post": "/tmp/eval-evidence/survey-rlhf-v4.md",
+  "scores": {"A": 6.0, "B": 7.0, "C": 6.0, "D": 7.0, "E": 6.5, "F": 6.5},
+  "score_notes": {
+    "A": "Coherent arc (intro+timeline, six lineage sections, two cross-cutting sections, synthesis, outlook, conclusion), noun-phrase headings, valid front matter. Deductions: sections hollowed by sentence removal (L714-722 iterative GRPO is one sentence after the figure; L724-726 '도메인 밖으로도 번진 향상과 남은 약점' is two sentences and never mentions out-of-domain gains; L728-742 begins its key paragraph with a dangling ' 저자들은 이를'), paragraphs starting with a stray space (L722, L736), a trailing '\\\\' inside $$ (L397), '|' used for conditionals in math (L466, L472, L578: 'y|x'), and 94k body characters with 41 figures, far more than a reader needs.",
+    "B": "Mostly natural '입니다' Korean. Deductions: text about the pipeline's own evidence leaks into the prose (L652 '인용한 표 행만으로는 ... 확인되지 않습니다', L261 '여기서 다룬 결과만으로는 특정되지 않습니다', L782 '여기 인용한 결과만으로는 드러나지 않으며', L876 '격차가 몇 %p인지는 여기서 옮기지 않습니다'); filler (L281 '요약 과제의 구체적인 승률은 아래에서 다룹니다.'); a colloquial word (L367 '관전 포인트'); a stammer (L81 '예를 들어 가상의 프롬프트 ... 합시다. 예를 들어 가상의 보상 모델이 ... 합시다'); repeated figure-intro sentences ('~에 주목하면 됩니다' L453, '~을 보면 됩니다' L177, '눈여겨볼 곳은' L650); '이 글의 판단/관점' 8 times; English in table settings (L835 '5k offline vs mock', L849 'Iter3', L839 'RM 12M 등').",
+    "C": "Removed sentences leave references to nothing: L736 '저자들은 이를' and L737 '그 정답' (the Maj@K/Pass@K result sentence was removed); L742 '이런 영역에서는 RL보다 데이터나 사전학습이 먼저 바뀌어야 합니다' follows a sentence about the opposite case; L543 '요구한 간격에 못 미치므로' when γ is never given; L541 '세 배가 됩니다' after the sum/mean computation was removed. L814 puts RRHF in 'this lineage' (DPO) although the post files it under reference-free losses. The running example's prompt changes at L81 ('백신은 어떻게 면역을 만드나요?') from the L24 version. The synthesis sections (L806-830, L853-888) re-narrate the cards instead of comparing lineages.",
+    "D": "Hard steps get worked numbers: BT loss (L81), KL penalty (L115), the Gao peak at d=α/2β (L225), DPO loss and gradient weight (L323-325), IPO σ(0.5/τ) at τ=1 and 0.1 (L361), SPPO's −1/2 derivation (L609). Deductions: the SimPO and GRPO worked examples were truncated into fragments (L541-543, L684), and easy points are re-explained several times (Maj@K/Pass@K defined at L730, L824 and L886; SimPO length normalization at L26, L788, L800, L816 and L876).",
+    "E": "Equations sit where they are discussed, and figures are described in words rather than by number. Deductions: 41 figures, several with no takeaway (Atari L91, iterative GRPO L718, Maj@K/Pass@K L732, whose finding was deleted); comparison-table defects (see extras); 4 of 22 papers missing from the table (Llama 2, Online IPO, DAA overoptimization, GRPO Dynamics); the body repeats most of the table's numbers.",
+    "F": "One wrong attribution repeated across the post: DeepSeekMath's GRPO is said to use a correctness (0/1) verifiable reward (L874, L824 '첫째, 정답을 판정할 수 있는 검증 가능한 보상이 있어야 합니다', L662, L674 heading), but DeepSeekMath scores outputs with a trained reward model (Table 10: GRPO reward function 'Model'; §4.1.2 'A reward model is then used to score the outputs'). The binary reward is Mroueh's (2503.06639) analysis assumption. One unsupported table setting: L836 '1.3B RLHF vs 12B? SFT' (the paper says 'a supervised model 10× its size'). L652 says the table gives no grounds to attribute the gap to iterative relabeling, while the paper labels the row 'Ours (DPO baseline)', 8B, and says 'This demonstrates the advantage of online iterative RLHF'. Every other number sampled matched."
+  },
+  "principles": {
+    "claim_headings": {"status": "met", "evidence": "All H2/H3 are noun phrases carrying a claim, e.g. L201 '프록시를 세게 밀수록 꺾이는 실제 품질', L744 '보상 모델 없이도 되살아나는 굿하트의 혹 모양 곡선'; no 다-form headings (grep for '^#.*다$' finds none). L724's claim ('도메인 밖으로도 번진 향상') is not borne out by its body."},
+    "running_example": {"status": "met", "evidence": "The vaccine prompt with y_w/y_l is set up at L24 and reused in every lineage (L115, L165, L267, L321, L345, L401, L445, L541, L569, L624, L650, L750, L796, L865, L894); the arithmetic problem stands in for GRPO (L28, L684). Minor drift: L81 uses a different prompt."},
+    "mechanism_design_formula_example": {"status": "partly met", "evidence": "Complete for Ziegler KL (L111-115), DPO (L297-327), IPO (L343-383) and Gao (L211-225). The SimPO (L541-543) and GRPO (L684) worked examples were truncated."},
+    "facts_once": {"status": "not met", "evidence": "SimPO length normalization at L26, L788, L800, L816 and L876; Maj@K/Pass@K at L730, L824 and L886; SPPO/PairRM decline at L640, L822, L882 and L886; the DAA setup at L780 and L884; the RLHF Workflow length penalty at L794, L804 and L822; the KTO variant beating ORPO at L423 and L511."},
+    "numbers_scoped": {"status": "partly met", "evidence": "Most numbers carry model, setting and unit (L553 'DPO보다 ... 약 20%, ... 약 10%(모두 상대값)', L423 '13.5점(절대값)'). Exceptions: L836 '12B?'; L850 names three metrics in the setting but gives only the LC value; L839 '임계 데이터 약 2,000 비교' with no metric."},
+    "nothing_invented": {"status": "partly met", "evidence": "Hypothetical examples are labelled ('가상의', L209 '해당 논문이 측정한 결과는 아닙니다'). The GRPO verifiable-reward attribution to DeepSeekMath (L874, L824) is not the paper's."},
+    "own_assessment_at_end": {"status": "met", "evidence": "L898 gives three questions to ask of any new method; per-section judgements at L431, L559, L658, L742, L790, L830."},
+    "length_fitted": {"status": "not met", "evidence": "About 94,000 body characters and 41 figures; long figure-by-figure walk-throughs in the RLHF section (L57-239) and repeated synthesis (L806-898)."},
+    "type_specific_shape": {"status": "not met", "evidence": "Survey numbers are not owned by one table: the body states nearly every table number first (L147/L836 61%/43%; L177/L837 85±3%; L183/L837 69.6%; L283/L843; L337/L842; L421-423/L846; L499/L848; L553/L851; L632/L849; L652/L850; L726/L847). The synthesis sections re-tell the cards (L812-824)."},
+    "korean_style": {"status": "partly met", "evidence": "Consistent '입니다' register and Korean headings, but meta-evidence sentences (L652, L782, L876), repeated figure-intro formulas, '이 글의 판단으로는' used 8 times, and English unit words in table cells."}
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 13,
+    "unsupported": 1,
+    "wrong": 1,
+    "unverifiable": 0,
+    "examples": [
+      {"line": 89, "claim": "MuJoCo: 700 human labels nearly match RL on the true reward", "verdict": "supported", "source": "1706.03741 §3.1.1: 'With 700 labels we are able to nearly match reinforcement learning on all of these tasks.'"},
+      {"line": 123, "claim": "CNN/DM at 60k labels: online beats offline by about 3 R-AVG", "verdict": "supported", "source": "1909.08593 §3.2: 'online tends to be better than offline, with a 3 point R-AVG gain on CNN/DM at 60k labels.'"},
+      {"line": 835, "claim": "Table: 60k online model vs reference summaries, TL;DR 96%, CNN/DM 84%; sentiment, human feedback vs mock 77%", "verdict": "supported", "source": "1909.08593 Table 5 '60k fine-tuned vs. reference summaries | 96% | 84%'; §3.1 'in 77% of contexts, labelers preferred the output of the model trained with real human feedback.'"},
+      {"line": 836, "claim": "Table: '61% vs 43% (1.3B RLHF vs 12B? SFT ...)'", "verdict": "unsupported", "source": "2009.01325 §4.1: '1.3B human feedback model significantly outperforming a supervised model 10× its size (61% versus 43%...)'. The numbers match, but the setting '12B?' is a garbled guess the paper does not state."},
+      {"line": 839, "claim": "Table: about 2,000 comparisons is the threshold (RM 12M, RM data sweep)", "verdict": "supported", "source": "2210.10760 §3.3, Fig. 4 'RM size is held constant (12M)'; 'For all RM sizes ... less than around 2,000 comparisons' (near-chance)."},
+      {"line": 225, "claim": "For RL, α_RL can be held fixed across RM sizes, with β_RL following a clean scaling curve", "verdict": "supported", "source": "2210.10760 §3.1: 'For RL, we find that we can hold α_RL constant across all RM sizes, resulting in a clean scaling curve for β_RL.'"},
+      {"line": 253, "claim": "CAI SL stage: 16 principles, one sampled at random each step", "verdict": "supported", "source": "2212.08073 §3.1: 'We have written a total of 16 different principles ... They are randomly sampled at each revision step.'"},
+      {"line": 283, "claim": "RLAIF 71% / RLHF 73% vs SFT; d-RLAIF 74%; harmless 88% vs 76%; labeling over 10x cheaper", "verdict": "supported", "source": "2309.00267 §4.1 and §4.3; 'We estimate the cost of LLM labeling to be over 10x cheaper than human annotation.'"},
+      {"line": 848, "claim": "Table: ORPO vs DPO 70.9% at OPT-1.3B on HH-RLHF; Phi-2 ORPO AlpacaEval 2.0 6.35% vs SFT+DPO 0.78%", "verdict": "supported", "source": "2403.07691 Table 2 'OPT-1.3B | 78.0 | 70.9 | 65.9'; Table 1 'Phi-2 + SFT + DPO | 50.63% | 0.78%', 'Phi-2 + ORPO | 71.80% | 6.35%'."},
+      {"line": 849, "claim": "Table: SPPO Mistral Iter3 LC 28.52% / overall 31.02%; Llama-3 LC 38.77%", "verdict": "supported", "source": "2405.00675 §5.2 text: '28.52% for the length-controlled version, and 31.02% for the overall win rate'; Table 1 itself shows 28.53, so the paper is inconsistent; 38.77% at §5.2."},
+      {"line": 850, "claim": "Table/L652: iterative DPO AlpacaEval-2 LC 31.3, MT-Bench 8.46, Arena-Hard 29.1 vs offline DPO 22.5/8.17/22.4", "verdict": "supported", "source": "2405.07863 Table 2 'Ours (DPO baseline) | 8B | Vanilla DPO | 22.5 | 8.17 | 22.4', 'Ours (Iterative RLHF) | 8B | Iterative DPO | 31.3 | 8.46 | 29.1'. L652's hedge that the comparability is unknown contradicts the paper's 'consistently outperforms that of vanilla offline DPO (DPO baseline)'."},
+      {"line": 553, "claim": "SimPO cuts run time by about 20% and memory by about 10% (Llama-3-Base, 8×H100); Gemma-2-9B-it rank 36th to 25th", "verdict": "supported", "source": "2405.14734 §4.4 'SimPO cuts run time by roughly 20% and reduces GPU memory usage by about 10%'; §1 'advancing from 36th to 25th place'."},
+      {"line": 421, "claim": "KTO with one output per input on Mistral-7B/OpenAssistant: win rate 0.631 ± 0.036, above DPO", "verdict": "supported", "source": "2402.01306 Table 3 'Mistral-7B + KTO (one y per x) | 0.631 ± 0.036', 'Mistral-7B + DPO | 0.600 ± 0.037'."},
+      {"line": 802, "claim": "SPPO output length 1676 (base) to 2163 (Iter3), while DPO/IPO grow a lot", "verdict": "supported", "source": "2405.00675 §5.2 'DPO and IPO ... 2736 and 2654 ... SPPO ... moving from 1676 in the base model to 2163 at the third iteration.'"},
+      {"line": 874, "claim": "DeepSeekMath framework table: GRPO's reward function is '정답 여부(0/1)'; L824 says GRPO requires a verifiable reward", "verdict": "wrong", "source": "2402.03300 Table 10: 'GRPO | ... | Model | Equation 21' (Rule = answer correctness, Model = trained reward model); §4.1.2 'A reward model is then used to score the outputs'; §4.2 'We train our initial reward model based on the DeepSeekMath-Base 7B'. The binary verifiable reward is 2503.06639's analysis assumption."}
+    ],
+    "other_checks_supported": ["L101 Qbert first level (1706.03741)", "L147 +1.1%/+1.8% RM accuracy and L153 320 GPU-days (2009.01325)", "L183 69.6±0.9 vs 72.4±0.4 (2203.02155)", "L267 CoT clamp 40-60%, L275 438 questions (2212.08073)", "L335 22 runs (a sweep across all methods), L337 61%/57%, 58%, 0.36/0.31 vs 0.26/0.23 (2305.18290)", "L361 σ(0.5τ^-1) (2310.12036)", "L393 HALO gap significant only at 13B+ (2402.01306)", "L447 30 lines, L453 -0.96 RRHF_SP, L788 over-optimization, L814 GPU per query (2304.05302)", "L591 η_t=2/(τ(t+2)), KL ≤ 8/(τ²(T+1)) (2312.00886)", "L696 KL 0.04, lr 1e-6, 64 samples; L716 10% replay; L726 88.2%/51.7% (2402.03300)", "L738 contrastive loss and fixed point above the reference PoS (2503.06639)", "L766 RMSE halved vs a quadratic fit in KL (2406.02900; the post omits that a quadratic in d does about as well)"]
+  },
+  "checklist": {
+    "repeated": 1,
+    "avoided": 5,
+    "na": 0,
+    "repeated_ids": ["grpo-row-reward"],
+    "details": [
+      {"id": "grpo-card-unverified-figure", "result": "avoided", "evidence": "The 2503.06639 paragraph (L738) carries no number or equation; its claims (contrastive loss with samples from the previous policy; PoS fixed point above the reference) match the abstract."},
+      {"id": "copy-explains-preference", "result": "avoided", "evidence": "L129 says only that the copying model 'may be exploiting the fact that labelers rely on simple heuristics', matching 1909.08593 §1; the 96%/84% (L835) are not attributed to it."},
+      {"id": "daa-no-quantification", "result": "avoided", "evidence": "No sentence claims 2406.02900 gives no quantitative figures; L766 even cites its RMSE result."},
+      {"id": "grpo-row-reward", "result": "repeated", "evidence": "The main comparison table (L832-851) has no reward column, but the method framework table gives GRPO's reward function as L874 '정답 여부(0/1)', and L824 makes a verifiable reward a requirement of GRPO. DeepSeekMath's GRPO uses a trained reward model with group-normalized per-output rewards."},
+      {"id": "heading-da-form-offline", "result": "avoided", "evidence": "No 다-form headings; the overoptimization section is L744 '## 보상 모델 없이도 되살아나는 굿하트의 혹 모양 곡선'."},
+      {"id": "heading-da-form-judge", "result": "avoided", "evidence": "No 다-form headings anywhere (e.g. L784 '### AI 판정자와 단순한 손실에서 반복되는 징후')."}
+    ]
+  },
+  "extras": {
+    "uncited_plan_papers": [],
+    "uncited_note": "All 22 plan papers are cited in the body and listed in References.",
+    "papers_missing_from_comparison_table": ["2307.09288 Llama 2", "2403.08635 Online IPO", "2406.02900 DAA overoptimization", "2503.06639 GRPO Dynamics"],
+    "thin_truncated_empty_sections": [
+      "L714-722 '보상 모델과 참조 모델을 함께 갱신하는 반복 GRPO': one paragraph, a figure, then a one-sentence paragraph with a leading space.",
+      "L724-726 '도메인 밖으로도 번진 향상과 남은 약점': two sentences; the out-of-domain claim in the heading was removed (although 2402.03300 supports it: CMATH 84.6%→88.8%).",
+      "L728-742 '능력이 아니라 분포를 다듬는 RL': the Maj@K/Pass@K finding was removed (the verifier wrongly flagged temperature 0.7, which is in the Figure 7 caption), leaving L736 '저자들은 이를', L737 '그 정답' and L742 '이런 영역에서는' with nothing to refer to.",
+      "L541-543 SimPO worked example: the sum/mean computation and γ were removed, leaving '세 배가 됩니다' and '요구한 간격에 못 미치므로' unsupported within the paragraph.",
+      "L684 GRPO worked example: the advantage values were removed, leaving '소수의 오답이 강하게 밀려납니다' without numbers."
+    ],
+    "wrong_venues": [
+      "2402.01306 KTO listed as 'arXiv' (L916); the paper appeared at ICML 2024 (the plan's venue string carries this over).",
+      "2310.12036 IPO venue spelled out as 'International Conference on Artificial Intelligence and Statistics' (L914) while every other entry is abbreviated (NeurIPS, ICML); AISTATS is correct but inconsistent."
+    ],
+    "bad_table_cells": [
+      "L836 Learning to Summarize setting '(1.3B RLHF vs 12B? SFT, ...)': a garbled size with a question mark.",
+      "L838 Anthropic HH-RLHF limitation '-'; its result '온라인 혼합 데이터 정책 선호' has no number.",
+      "L840 Constitutional AI result 'RL-CAI가 무해성 Elo 유의하게 높음' is prose without a number.",
+      "L844 IPO result states the same quantity twice: 'π*(y1)=σ(0.5/τ)' and 'IPO 최적 정책 σ(0.5τ^-1)'.",
+      "L845 NLHF result is a theoretical bound, not a result.",
+      "L850 RLHF Workflow settings list 'AlpacaEval-2 LC / MT-Bench / Chat-Arena-Hard' but each part gives only the LC value.",
+      "L835/L839/L849 English unit and setting words in a Korean table ('5k offline vs mock', 'RM 12M 등', 'Iter3', 'LC')."
+    ],
+    "S1_cards_and_table": "Limitations are the papers' own (e.g. L842 '6B 규모 한정 평가', L846 '저노이즈 선호 데이터에서 과소적합 위험'). Deductions: English setting words in cells and body re-explanations (see facts_once)."
+  },
+  "top_issues": [
+    "DeepSeekMath's GRPO is presented as a verifiable 0/1 correctness reward method (L874 framework table, L824, L662, L674 heading); the paper scores outputs with a trained reward model (Table 10: reward function 'Model'). The binary reward is Mroueh's analysis assumption. This repeats checklist item grpo-row-reward.",
+    "Sentence removal left the GRPO sections broken: L736 '저자들은 이를' and L742 '이런 영역에서는' refer to deleted sentences; L724-726 is a two-sentence section whose heading claim (out-of-domain gains) is gone; the L541-543 SimPO example lost its arithmetic and γ. The removed Maj@K/Pass@K sentence was in fact supported (temperature 0.7 is in Figure 7's caption).",
+    "The survey rule that numbers live in one table is not met: nearly every table number is first stated in the body (L147, L177, L183, L283, L337, L421-423, L499, L553, L632, L652, L726). The synthesis sections (L806-830, L853-888) re-tell the cards, and the same facts recur three or four times.",
+    "Comparison-table defects: garbled '12B?' (L836), a '-' limitation and number-free results (L838, L840), a duplicated IPO result (L844), a bound instead of a result (L845), English setting words, and 4 of 22 papers missing.",
+    "Text about the pipeline's own evidence leaks into the prose and partly contradicts sources: L652 says the cited table gives no grounds for attributing the iterative-DPO gap, while the paper labels the row 'Ours (DPO baseline)', 8B, and claims the advantage; similar asides at L261, L782 and L876. The post is also far too long for its job (about 94k characters, 41 figures)."
+  ]
+}
