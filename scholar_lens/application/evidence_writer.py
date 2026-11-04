@@ -11,6 +11,7 @@ loop. Ports only: the model is injected.
 from __future__ import annotations
 
 import logging
+from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Literal
@@ -191,6 +192,8 @@ class EvidenceWriter:
         ledger = EvidenceLedger()
         rejected = 0
         refusals = 0
+        # Rejection reasons by their first clause, for tuning the reader.
+        reasons: Counter[str] = Counter()
 
         def read_section(anchor: str) -> str:
             """Return the full text of one section of the source by its
@@ -267,6 +270,7 @@ class EvidenceWriter:
                 )
             if problems:
                 rejected += 1
+                reasons.update(f"{kind}: {p.split(':')[0][:60]}" for p in problems)
                 return "REJECTED: " + "; ".join(problems)
             item = ledger.add(
                 document,
@@ -310,6 +314,12 @@ class EvidenceWriter:
             rejected,
             outcome.stop_reason,
         )
+        if reasons:
+            logger.info(
+                "Rejections of %s: %s",
+                document.paper_id,
+                "; ".join(f"{r} x{n}" for r, n in reasons.most_common(6)),
+            )
         if outcome.stop_reason.startswith("limit"):
             self.notes.append(
                 f"Reading {document.paper_id} stopped at its limit "

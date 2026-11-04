@@ -96,8 +96,10 @@ language:
   model, workload and metric);
 - limitations, pitfalls and failure modes the page states (limitation);
 - every figure that explains an architecture, a flow or a result (figure, by
-  F-id, with a claim saying what the caption shows). Visuals make the guide;
-  skip only logos, screenshots of buttons and decorative images.
+  F-id, with a claim saying what it shows, from its caption or, when it has
+  none, the text before it and the section it sits in). Visuals make the
+  guide: an architecture or flow diagram of an official page is always worth
+  recording; skip only logos, screenshots of buttons and decorative images.
 `quote` is copied verbatim from the section at `anchor` (one to three
 sentences); every number and backticked identifier in `claim` or `cell` must
 be in the quote or the code.

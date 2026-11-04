@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import re
 from collections.abc import Sequence
 from typing import Any
 
@@ -40,6 +41,11 @@ _PREFIX: dict[str, str] = {
 }
 # A page shorter than this has nothing to record (a redirect stub, a menu).
 _MIN_PAGE_CHARS = 300
+# Images that never explain anything: logos, icons, badges, avatars.
+_DECORATIVE = re.compile(
+    r"logo|icon|favicon|badge|avatar|shields\.io|emoji|sprite|banner|button",
+    re.IGNORECASE,
+)
 
 
 def guide_documents(
@@ -60,7 +66,11 @@ def guide_documents(
                 page.title or page.url,
                 "full_text",
                 page.text,
-                figures=[(u, c) for u, c in page.image_captions.items() if c],
+                figures=[
+                    (u, page.image_captions.get(u, ""))
+                    for u in page.image_urls
+                    if not _DECORATIVE.search(u)
+                ],
                 url=page.final_url or page.url,
                 authority=authority,
             )

@@ -66,6 +66,10 @@ class SourceFigure(_Strict):
     id: str
     url: str
     caption: str
+    # Where the figure sits (its section) and the text just before it: what
+    # the figure shows when its caption is only a file name.
+    anchor: str = ""
+    context: str = ""
 
 
 class SourceDocument(_Strict):
@@ -109,15 +113,24 @@ class SourceDocument(_Strict):
             sections.append(
                 SourceSection(anchor=f"S{n}", heading=m.group(2).strip(), text=body)
             )
+        placed = []
+        for i, (image, caption) in enumerate(figures, 1):
+            anchor, context = _figure_place(sections, image)
+            placed.append(
+                SourceFigure(
+                    id=f"F{i}",
+                    url=image,
+                    caption="" if _NOT_A_CAPTION.match(caption.strip()) else caption,
+                    anchor=anchor,
+                    context=context,
+                )
+            )
         return cls(
             paper_id=paper_id,
             title=title,
             kind=kind,
             sections=sections,
-            figures=[
-                SourceFigure(id=f"F{i}", url=image, caption=caption)
-                for i, (image, caption) in enumerate(figures, 1)
-            ],
+            figures=placed,
             url=url,
             authority=authority,
         )
@@ -140,7 +153,13 @@ class SourceDocument(_Strict):
             f"{s.anchor} | {s.heading or '(untitled)'} | {len(s.text):,} chars"
             for s in self.sections
         ]
-        lines += [f"{f.id} | figure | {f.caption[:160]}" for f in self.figures]
+        for f in self.figures:
+            line = f"{f.id} | figure" + (f" in {f.anchor}" if f.anchor else "")
+            if f.caption:
+                line += f" | caption: {f.caption[:160]}"
+            if f.context:
+                line += f" | text before it: {f.context}"
+            lines.append(line)
         return "\n".join(lines)
 
     def search(self, query: str, limit: int = 8) -> list[tuple[str, str]]:
@@ -178,6 +197,26 @@ class Evidence(_Strict):
     caption: str | None = None
     latex: str | None = None
     code: str | None = None
+
+
+# Alt text that says nothing about the figure: a file path or name, a
+# placeholder word.
+_NOT_A_CAPTION = re.compile(
+    r"^(?:|[\w./-]+\.(?:png|jpe?g|gif|svg|webp)|pic|image|img|figure|diagram|screenshot)$",
+    re.IGNORECASE,
+)
+_IMAGE_MARKER = re.compile(r"\[Image:[^\]]*\](?:\s*\([^)]*\))?|!\[[^\]]*\]\([^)]*\)")
+
+
+def _figure_place(sections: list[SourceSection], url: str) -> tuple[str, str]:
+    """The anchor of the section that shows ``url`` and up to 240 characters
+    of its text before the image (other image markers removed)."""
+    for s in sections:
+        if (at := s.text.find(url)) >= 0:
+            before = _IMAGE_MARKER.sub(" ", s.text[:at].rsplit("[Image:", 1)[0])
+            words = " ".join(before.split())
+            return s.anchor, (s.heading + ": " if s.heading else "") + words[-240:]
+    return "", ""
 
 
 def _squash(text: str) -> str:

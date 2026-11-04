@@ -459,3 +459,25 @@ def test_a_scripted_guide_run() -> None:
     # The TL;DR is written last.
     assert [c for c in model.calls if c.startswith("text")][-1] == "text:write"
     assert model.calls.count("read") == 2
+
+
+def test_a_figure_without_a_caption_is_placed_with_the_text_before_it() -> None:
+    text = (
+        "## Architecture\n\nServe runs a controller and one proxy per node.\n\n"
+        '[Image: alt="../_images/architecture-2.0.svg", src="https://x/a.svg"] '
+        "(https://x/a.svg)\n\n## Autoscaling\n\nIt adds replicas.\n"
+    )
+    doc = SourceDocument.from_markdown(
+        "D1",
+        "Architecture",
+        "full_text",
+        text,
+        figures=[("https://x/a.svg", "../_images/architecture-2.0.svg")],
+    )
+    (figure,) = doc.figures
+    assert (figure.caption, figure.anchor) == ("", "S1")
+    assert (
+        figure.context
+        == "Architecture: Serve runs a controller and one proxy per node."
+    )
+    assert "F1 | figure in S1 | text before it: Architecture:" in doc.outline()
