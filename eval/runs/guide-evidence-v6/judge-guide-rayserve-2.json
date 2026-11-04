@@ -1,0 +1,104 @@
+{
+  "item": "guide-rayserve",
+  "post": "/tmp/eval-guide/guide-rayserve-v6.md",
+  "judge": "judge-2",
+  "scores": {"A": 8.5, "B": 8.0, "C": 8.0, "D": 9.0, "E": 8.5, "F": 9.0, "T1": 9.0, "T2": 8.5, "T3": 9.0},
+  "deductions": {
+    "A": ["L178 'text_ml.py에서 두 디플로이먼트를 합성하는 부분' and L336 'text_ml.py를 만들고' give two different full listings of the same file; L73 and L331 repeat the same pip install block"],
+    "B": ["Repeated table-intro formula: L117 '각 액터의 역할을 정리하면 아래 표와 같습니다', L283 '…정리하면 아래 표와 같습니다', L310 '장애 유형별로 정리하면 아래 표와 같습니다', L958 '…아래 표와 같습니다' (rewrite e.g. L310 -> '장애 유형별 복구 주체와 유실 범위는 아래 표에 모았습니다')", "L48 '정리하면 Ray Serve는 … 택한 서빙 라이브러리입니다' restates L19 (rewrite: drop the recap and keep only the running-example sentence)", "L19 long noun frame '…확장하려는 서빙 라이브러리입니다'"],
+    "C": ["Contradiction: L122/L128 'HTTP 프록시는 기본적으로 헤드 노드에 하나만 뜹니다' vs L642 '`proxy_location` 기본값 `EveryNode`' (architecture page vs config page disagree; the post reports both without reconciling)", "Controller-failure fact stated three times (L126, L308, L731); KubeRay cluster-recovery limit five times (L15, L318, L322, L779, L954)"],
+    "D": ["L64 replica-state example is padding for an easy point"],
+    "E": ["No real architecture figure (docs have architecture-2.0.svg); ASCII diagrams at L140-152 substitute adequately"],
+    "F": ["L68 '반환값은 디플로이먼트 객체를 감싼 `DeploymentNode`' follows stale tutorial text; on Ray 2.60.0 `.bind()` returns `ray.serve.deployment.Application` (verified locally)", "L122/L128 proxy default head-node-only conflicts with the config page default EveryNode"],
+    "T1": ["L493 `serve run serve_quickstart:translator_app` uses a module name the post never tells the reader to save the FastAPI block as"],
+    "T2": ["L872-930 Ray Data LLM batch section and L870 usage-stats paragraph are tangential to the running example"]
+  },
+  "principles": {
+    "claim_headings": {"status": "met", "evidence": "L111 '컨트롤러·프록시·레플리카 액터로 흐르는 요청 수명', L294 '컴포넌트마다 다른 복구 주체와 클러스터 장애라는 한계'"},
+    "running_example": {"status": "met", "evidence": "Summarizer->Translator t5-small app introduced L25 and carried through config (L614), autoscaling (L741), KubeRay (L775), Grafana (L827), closing L969"},
+    "mechanism_design_code_example": {"status": "met", "evidence": "P2C mechanism L158 -> worked table L162-166; user_config mechanism L690 -> code L577 -> german walkthrough L694; LB drain arithmetic L792"},
+    "facts_said_once": {"status": "partly met", "evidence": "100KiB stated L172 and table L230-233; controller failure L126/L308/L731; max_replicas default 1 L715/L954; Spheron PENDING L731/L954; pip install L73/L331"},
+    "numbers_with_scope_unit": {"status": "met", "evidence": "L706 'Ray 2.59.0 기준으로 \"auto\"는…', L228 '(Ray Serve 2.59.0 기준)', L787 '10.0' seconds with variable name"},
+    "nothing_invented": {"status": "met", "evidence": "15/15 sampled claims supported; writer's examples labelled (L160 '4는 설명을 위해 고른 값', L739 '값은 위 계산에 맞춘 예시')"},
+    "writer_assessment_at_end": {"status": "met", "evidence": "L958 '이 글의 판단으로는…', L969 t5-small scale-up caveat"},
+    "length_fitted": {"status": "partly met", "evidence": "~980 lines; Ray Data LLM (L872-930) and Serve LLM usage stats (L870) add length beyond the core"},
+    "type_specific_shape": {"status": "met", "evidence": "TL;DR L11 then problem L17; architecture L111 before setup L326; non-official sources (Spheron, Suhas, Holy Grail); ends with choice table L960-967 and failure modes L952"},
+    "korean_style": {"status": "partly met", "evidence": "consistent 입니다 register (no ~다 sentences found); repeated '정리하면 아래 표와 같습니다' table intros (L117, L283, L310); '정리하면' x5"}
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 15,
+    "unsupported": 0,
+    "wrong": 0,
+    "unverifiable": 0,
+    "numbers": 9,
+    "sampling": "body paragraphs (non-heading, non-code blocks incl. tables) numbered from 1; paragraph 2 then every third (2,5,8,...,155)",
+    "examples": [
+      {"line": 15, "claim": "http_options host and port cannot be changed after Serve starts", "verdict": "supported", "source": "ray.serve.schema: 'Port for HTTP server. Defaults to 8000. Cannot be updated once Serve has started running.'"},
+      {"line": 126, "claim": "controller dies -> HTTP/gRPC/handle requests still flow, autoscaling paused, metrics lost on recovery", "verdict": "supported", "source": "architecture.html: 'When the controller dies, requests can still be sent via HTTP, gRPC and DeploymentHandle, but autoscaling is paused... all previous metrics collected are lost.'"},
+      {"line": 158, "claim": "power of two choices subject to max_ongoing_requests; handles poll controller for new replicas", "verdict": "supported", "source": "architecture.html: 'Each DeploymentHandle continuously polls the controller... power of two choices scheduling strategy'"},
+      {"line": 172, "claim": "objects 100KiB+ go through object store with zero-copy read", "verdict": "supported", "source": "architecture.html: 'Larger request objects (100KiB+) are written to the object store and the replica can read them via zero-copy read.'"},
+      {"line": 363, "claim": "num_replicas=2, num_cpus 0.2, num_gpus 0; fractional values pack replicas; HPU/TPU via resources", "verdict": "supported", "source": "getting_started.html decorator and 'resources: ... non-GPU accelerators like HPUs or TPUs'"},
+      {"line": 439, "claim": "PyTorch example batch size 1; TF example installs tensorflow>=2.0, requests, ray[serve]; client sends 28x28 random array", "verdict": "supported", "source": "serve-ml-models.html: '# Our current batch size is one', 'pip install \"tensorflow>=2.0\" requests \"ray[serve]\"', 'np.random.randn(28 * 28)'"},
+      {"line": 652, "claim": "serve run with YAML does not update existing apps without code changes; blocks, Ctrl-C shuts down Serve", "verdict": "supported", "source": "serve run --help (Ray 2.60.0): 'If passing a YAML config, existing applications with no code changes will not be updated.'"},
+      {"line": 686, "claim": "PUT /api/serve/applications/ removes apps not in config, starts Serve if not running", "verdict": "supported", "source": "api/index.html PUT section"},
+      {"line": 704, "claim": "num_replicas default 1", "verdict": "supported", "source": "autoscaling-guide.html: 'By default, num_replicas is 1.'"},
+      {"line": 715, "claim": "manual autoscaling_config without auto -> max_replicas default 1; int num_replicas + autoscaling_config -> ValueError", "verdict": "supported", "source": "autoscaling-guide.html 'base default for max_replicas is 1'; schema validate_num_replicas_and_autoscaling_config raises ValueError"},
+      {"line": 787, "claim": "RAY_SERVE_PROXY_HEALTH_CHECK_TIMEOUT_S default 10.0, RAY_SERVE_PROXY_MIN_DRAINING_PERIOD_S default 30.0", "verdict": "supported", "source": "production-guide/config.html proxy env vars"},
+      {"line": 790, "claim": "3 consecutive failed health checks -> controller marks proxy unhealthy and restarts it", "verdict": "supported", "source": "config.html: 'If a proxy fails 3 consecutive health checks, the controller marks it unhealthy and restarts it.'"},
+      {"line": 880, "claim": "install ray[data, llm]>=2.53.0; all stages autoscaling pools except ServeDeployment fixed pool", "verdict": "supported", "source": "data/working-with-llms.html"},
+      {"line": 817, "claim": "dashboard table: Serve view / Application detail / Replica detail items and Grafana-only extras", "verdict": "supported", "source": "ray-observability/getting-started.html Serve view sections"},
+      {"line": 292, "claim": "GET /api/serve/applications has per-app deployment_topology (adjacency list, ingress entry point), alpha", "verdict": "supported", "source": "ray.serve.schema DeploymentTopology @PublicAPI(stability='alpha'), ApplicationDetails.deployment_topology"}
+    ],
+    "outside_sample_notes": [
+      "Also checked and supported: L567 keep-alive 5 s, L696 rolling_update_percentage (0.0, 1.0], L735 max_queued_requests -1 / 503 / BackPressureError / 429 + Retry-After, L767 external_scaler_enabled, L843 engine metrics default since Ray 2.51, L245 nested DeploymentResponse fully deprecated, L719 Locust replicas ~half of users; Spheron (L224, L731), Suhas (L948), Holy Grail (L950) passages match the fetched pages.",
+      "Stale but doc-backed: L68 bind returns DeploymentNode (tutorial text); Ray 2.60.0 returns Application.",
+      "Docs-inconsistent: proxy default head node (architecture page, L122/L128) vs EveryNode (config page, L642)."
+    ]
+  },
+  "checklist": {
+    "repeated": 0,
+    "avoided": 2,
+    "na": 0,
+    "repeated_ids": [],
+    "details": [
+      {"id": "arch-diagram-relative-link", "verdict": "avoided", "evidence": "no '](../' or empty-text links/images anywhere; architecture is shown as an ASCII diagram (L140-152) rather than a broken docs-relative image"},
+      {"id": "proxy-env-ray-start-unsupported", "verdict": "avoided", "evidence": "L783-788 give only the env vars' names, meanings and defaults; no claim about exporting before `ray start` or a specific process (the only `ray start` at L809 is the documented --dashboard-host example)"}
+    ]
+  },
+  "extras": {
+    "architecture_first_line": 111,
+    "architecture_first_mention_line": 13,
+    "sources_total": 19,
+    "non_official_sources": 3,
+    "non_official_share": 0.16,
+    "opens_with_problem": true,
+    "opens_with_problem_evidence": "L17 '정적 그래프 서버로는 다루기 힘든 다중 모델 Python 파이프라인' right after TL;DR",
+    "closes_with_choice_and_failure_modes": true,
+    "closes_evidence": "L932-969: strengths, gaps, third-party boundaries, L952 '운영에서 터지는 지점', L960 choice table"
+  },
+  "runnable_code": {
+    "verdict": "runs as pasted",
+    "environment": "Python 3.12 venv, ray[serve] 2.60.0, transformers, torch; private local cluster (address='local', own temp dir, HTTP port 18731; client URLs edited only for the port)",
+    "results": [
+      "L79-94 MyFirstDeployment: assert passes",
+      "L181-218 composed text_ml (load_t5/generate) + L415-425 client: returns French text",
+      "L339-398 full text_ml.py + client: returns French text; request shape (json= string -> await request.json()) matches",
+      "L448-482 FastAPI Translator + L499-507 client (params=text): 200, French text via response.json(); a JSON-body POST gets 422 as the post warns at L445",
+      "L252-279 Streamer/Caller: handle stream yields [0, 1, 2]",
+      "L520-546 StreamingTranslator: GET /stream?text=a b c -> 'a b c '",
+      "L578-604 Translator with reconfigure + user_config language german: returns German text as L694 says",
+      "serve build text_ml:app -o: works, emits app1/EveryNode/0.0.0.0:8000 as L612 says; L614-636 and the L741-761 autoscaling YAML both validate against ServeDeploySchema"
+    ],
+    "gaps": [
+      "L493 module name serve_quickstart never introduced for the FastAPI block",
+      "Two different listings both called text_ml.py (L180 vs L338); L575 then replaces Translator again",
+      "Not run: Serve LLM / Ray Data LLM blocks (need vLLM + GPU), serve deploy, KubeRay"
+    ]
+  },
+  "top_issues": [
+    "Proxy default contradicts itself: L122/L128 head node only vs L642 EveryNode (docs pages disagree; post does not reconcile)",
+    "Facts repeated across sections (controller failure x3, KubeRay cluster recovery x5, 100KiB x2, max_replicas=1 x2, pip install x2) and two competing text_ml.py listings",
+    "Stale/missing details: L68 bind returns DeploymentNode (Application on 2.60.0); L493 serve_quickstart module name never defined; formulaic '정리하면 아래 표와 같습니다' table intros"
+  ]
+}

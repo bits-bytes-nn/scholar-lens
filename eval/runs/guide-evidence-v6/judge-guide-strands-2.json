@@ -1,0 +1,88 @@
+{
+  "item": "guide-strands",
+  "post": "/tmp/eval-guide/guide-strands-v6.md",
+  "judge_run": 2,
+  "sampling": "prose paragraphs (excluding headings, code, tables, lists, quotes) numbered from the first body paragraph; paragraphs 2, 5, 8, ... (50 sampled), 15 claims chosen from them and their adjacent tables",
+  "scores": {"A": 8, "B": 8, "C": 7.5, "D": 8, "E": 8.5, "F": 7, "T1": 7, "T2": 8.5, "T3": 8.5},
+  "deductions": {
+    "A": ["Very long (~1,040 body lines) for a two-URL input; '- - -' separator before Sources (L1050)"],
+    "B": ["English stem + Korean ending: L270 'short-circuit하고', L282 'short-circuit해도' -> '단락시키고/건너뛰어도'", "L1038 repeats the subject: 'cowork.ink 글은 ... cowork.ink 글은 관측성이 ...' -> merge into one sentence", "L91 '이 설명은 InfoQ가 출시 블로그를 인용해 요약한 내용입니다.' attribution as a trailing standalone sentence"],
+    "C": ["SDK positioning stated three times: L13 'Python과 TypeScript용 오픈소스 SDK ... 호스팅 컨트롤 플레인 없이', L19, L34", "Stateless handler cannot resume interrupts said twice: L1004 and L1036", "Discarded-attempt stream caveat for AfterToolCallEvent.retry said twice: L179 and L702"],
+    "D": ["Strong worked examples (L101 message-count table, L156 hook order table, L790 overshoot table); L21 and L62 re-explain the basic loop already in TL;DR"],
+    "E": ["Good tables and ASCII diagrams; L109 input-token formula is the writer's own approximation (labelled '대략') with no source"],
+    "F": ["L328 '등록 호출은 정리 함수를 반환하며, 이 함수를 부르면 핸들러가 제거됩니다' is wrong for Python (Agent.add_middleware -> None in strands-agents 1.64.0; docs state the cleanup function only after the TypeScript example) in a post whose code is all Python (L54)", "L1006 'AWS 블로그가 정리한 배치 방식에 따르면 ... Lambda ... Fargate ... return-of-control' is not in any listed source (checked the AWS eval blog, InfoQ, Builder Center)", "L479 no-limit column 'content_filtered 같은 정지 사유로 종료' is not stated by the docs (they describe it only with a limit set)", "L964-996 presents the capstone handler as a working composition, but its Cedar policy default-denies the structured-output tool, so it can never complete (see runnable_code)"],
+    "T1": ["Install line L186 'pip install strands-agents pydantic' omits the cedar extra; L550 import raises ImportError(\"... requires 'cedarpy'. Install it with: pip install strands-agents[cedar]\")", "Capstone handle_request always ends in limit_turns -> BUDGET_EXCEEDED because Cedar denies the CustomerInfo structured-output tool"],
+    "T2": ["Covers agent loop, hooks, events, middleware, retry, structured output, interventions, steering, HITL, lifecycle controls, conversation management in a sensible order"],
+    "T3": ["Explains why (After reverse order, middleware vs hooks visibility, limit check at iteration boundary, strategy x middleware multiplication), system fit (per-request agents, typed outcomes, OTEL, eval tiers) and failure modes; design advice phrased as recommendation"]
+  },
+  "principles": {
+    "claim_headings": {"status": "met", "evidence": "L17 '직접 짠 에이전트 루프 대신 프로세스 내 SDK가 맡는 수명주기 제어', L780 '반복 경계에서 검사되는 호출 한도, 협조적 취소, 정지 사유'"},
+    "running_example": {"status": "met", "evidence": "order-support agent introduced L23 and carried through hooks, middleware, structured output, Cedar/HITL, retry, limits to handle_request L966"},
+    "mechanism_design_formula_example": {"status": "met", "evidence": "limits: mechanism L788, reason, table L790-795, guidance L797"},
+    "facts_said_once": {"status": "partly met", "evidence": "L13/L19/L34 SDK positioning; L1004/L1036 interrupts; L179/L702 retry stream caveat"},
+    "numbers_with_scope_and_unit": {"status": "met", "evidence": "L631-633 defaults with units; L1017 '1–5퍼센트', L1018 '최소 4시간 ... 2퍼센트'"},
+    "nothing_invented": {"status": "partly met", "evidence": "L328 Python cleanup function; L1006 uncited AWS blog; L109 own formula labelled approximate"},
+    "writer_assessment_at_end": {"status": "met", "evidence": "L1048 '이 글의 판단으로는 다음 기준이 실용적입니다 ...'"},
+    "length_fitted": {"status": "partly met", "evidence": "~1,040 lines; TS asides throughout a Python-only post"},
+    "type_specific_shape": {"status": "met", "evidence": "TL;DR L11, problem L23, architecture diagram L34-48 before config detail, closes with when-to-choose and limits L1022-1048"},
+    "korean_style": {"status": "partly met", "evidence": "L270/L282 English stems; L1038 repeated subject; otherwise natural 입니다 register"}
+  },
+  "claims": {
+    "checked": 15, "supported": 13, "unsupported": 1, "wrong": 1, "unverifiable": 0,
+    "examples": [
+      {"line": 15, "claim": "default retry: throttling only, 6 attempts (5 retries), 4 s start, max_delay 128 (table L631-633)", "verdict": "supported", "source": "retry-strategies: 'retry throttling errors up to 5 times (6 total attempts) with exponential backoff starting at 4 seconds'; max_attempts 6 / initial_delay 4 / max_delay 128"},
+      {"line": 152, "claim": "HookOrder.SDK_FIRST -100, DEFAULT 0, SDK_LAST 100; not enforced bounds; within an order group Before keeps and After reverses registration order", "verdict": "supported", "source": "hooks: 'HookOrder.SDK_FIRST (-100) ... These are not enforced bounds ... Within the same order group, Before events preserve registration order and After events reverse it.'"},
+      {"line": 177, "claim": "TypeScript adds cancel on BeforeInvocationEvent and BeforeModelCallEvent", "verdict": "supported", "source": "hooks-events TS: 'BeforeInvocationEvent ... cancel', 'BeforeModelCallEvent cancel - Cancel the model call'"},
+      {"line": 270, "claim": "Input/Wrap/Output run in fixed order; next called 0/1/many = short-circuit/pass/retry", "verdict": "supported", "source": "middleware: 'Calling next zero times short-circuits the stage, once passes it through, and more than once retries it.'"},
+      {"line": 328, "claim": "registration returns a cleanup function that removes the handler (stated for the Python agent.add_middleware)", "verdict": "wrong", "source": "middleware: stated only after the TypeScript example; strands-agents 1.64.0 Agent.add_middleware signature '-> None'"},
+      {"line": 376, "claim": "Writer: Palmyra X5/X4 via Bedrock with structured output disables streaming", "verdict": "supported", "source": "dev.writer.com: 'Structured output disables streaming and returns the complete response at once'"},
+      {"line": 443, "claim": "forced retry adds 'You must format the previous response as structured output.'; call-level structured_output_prompt overrides agent's", "verdict": "supported", "source": "structured-output-behavior 'Forced tool call'"},
+      {"line": 472, "claim": "TS counts a content-filtered forced retry as a failed attempt; Python ends with content_filtered", "verdict": "supported", "source": "structured-output-behavior 'Limit attempts'"},
+      {"line": 499, "claim": "allowed actions per lifecycle method (before_tool_call all five; after_tool_call Proceed/Transform; after_model_call Proceed/Guide/Transform)", "verdict": "supported", "source": "interventions 'Lifecycle Methods' table"},
+      {"line": 538, "claim": "default Confirm evaluate accepts True, 'y', 'yes' case-insensitively; with response the agent never pauses", "verdict": "supported", "source": "interventions: 'The default accepts True, \"y\", or \"yes\" (case-insensitive).'"},
+      {"line": 654, "claim": "max_attempts=4, initial_delay=2, max_delay=60 -> 3 retries waiting 2, 4, 8 s", "verdict": "supported", "source": "retry-strategies: 'Subsequent retries double this value'; same subclass example"},
+      {"line": 750, "claim": "proactive_compression=True uses threshold 0.7; dict with compression_threshold ratio 0-1", "verdict": "supported", "source": "conversation-management: 'Use True for the default 0.7 threshold, or pass a dict with a custom compression_threshold ratio between 0 and 1'"},
+      {"line": 797, "claim": "total-token limit counts prompt-cache reads/writes in full on Bedrock, Anthropic, OpenAI, Gemini; aux calls not bound; priority turns > total > output > structured-output attempts (L799)", "verdict": "supported", "source": "agent-loop and lifecycle-controls passages"},
+      {"line": 1006, "claim": "AWS blog lists monolith, tools on Lambda / agent on Fargate, return-of-control deployment patterns", "verdict": "unsupported", "source": "not in the AWS eval blog, InfoQ or Builder Center article; no listed source carries it"},
+      {"line": 1017, "claim": "online eval sampling 1–5% recommended, up to 10 evaluators; shadow at least 4 h with 2% deviation threshold", "verdict": "supported", "source": "AWS ML blog: 'Configure a sampling rate (1–5 percent is recommended), select up to 10 evaluators'; 'Run this for at least 4 hours with a 2 percent deviation threshold.'"}
+    ],
+    "numeric_claims": 8
+  },
+  "checklist": {
+    "repeated": 3, "avoided": 1, "na": 1,
+    "repeated_ids": ["shared-agent-throw-scope", "shared-agent-history-leak", "result-fields-incomplete"],
+    "details": [
+      {"id": "loop-diagram-remote", "verdict": "avoided", "evidence": "no image links at all; loop drawn as a text block L71-89"},
+      {"id": "shared-agent-throw-scope", "verdict": "repeated", "evidence": "L909 '한 인스턴스에 호출이 겹치면 ... ConcurrencyException이 발생합니다' with no tie to invoke_async and no note that sync agent(...) in an async handler blocks instead of raising"},
+      {"id": "shared-agent-history-leak", "verdict": "repeated", "evidence": "L909/L917 recommend per-request agents for concurrency but never say a shared agent carries the previous request's conversation into the next; invoke_async is not recommended for async handlers"},
+      {"id": "result-fields-incomplete", "verdict": "repeated", "evidence": "stop_reason is shown (L466, L824) but result.metrics.get_summary() never appears"},
+      {"id": "multi-agent-subject", "verdict": "n/a", "evidence": "no 최소 실행 단위 sentence; multi-agent mention at L1030 is phrased differently"}
+    ]
+  },
+  "extras": {
+    "architecture_first_line": 34,
+    "internals_first_line": 56,
+    "sources_total": 19,
+    "official_sources": 12,
+    "non_official_sources": 7,
+    "non_official_share": 0.37,
+    "opens_with_problem": true,
+    "closes_with_when_to_choose_and_failure_modes": true
+  },
+  "runnable_code": {
+    "verdict": "partly runs",
+    "method": "strands-agents 1.64.0 in a temp venv; all 19 python blocks executed in order in one namespace with BedrockModel replaced by a scripted fake model (no paid calls)",
+    "findings": [
+      "All imports and names resolve once blocks run in order (send_email, lookup_order, cedar, CustomerInfo, OrderRetryStrategy defined earlier); request shapes match the SDK (Agent kwargs aux_model/interventions/retry_strategy, __call__ limits/cancel_signal/idempotency_token/invocation_state, ToolContext.cancel_signal, SlidingWindowConversationManager proactive_compression).",
+      "As pasted, the Cedar block L550 fails: ImportError requiring 'pip install strands-agents[cedar]'; the post's install line L186 omits the extra.",
+      "Capstone handle_request (L966) can never return COMPLETED: interventions=[cedar] default-denies the structured-output tool CustomerInfo ('DENIED: Access denied by Cedar policy' repeated), so every request ends limit_turns -> BUDGET_EXCEEDED with customer=None (reproduced for alice and bob).",
+      "One CedarAuthorization instance is shared across per-request agents in handle_request (minor; post stresses per-agent instances only for retry strategies).",
+      "L900 Opus id 'global.anthropic.claude-opus-5-20260301-v1:0' comes from the Strands model-providers page but is not a Bedrock global inference profile (ListInferenceProfiles us-east-1 lists 'global.anthropic.claude-opus-5'); MODEL_ID 'global.anthropic.claude-sonnet-5' is valid."
+    ]
+  },
+  "top_issues": [
+    "Capstone handle_request is broken: the Cedar policy has no permit for the CustomerInfo structured-output tool, so it always ends in limit_turns/BUDGET_EXCEEDED; and the install line lacks strands-agents[cedar], so the Cedar import fails as pasted.",
+    "Factual slips: L328 says the Python add_middleware returns a cleanup function (it returns None; docs show this for TypeScript only); L1006 credits deployment patterns to an AWS blog that is not among the sources; L479 no-limit content-filter cell has no source.",
+    "Human-fix checklist regressions: the concurrency warning is not tied to invoke_async, history carry-over between requests on a shared agent is not stated, and metrics.get_summary() is missing; plus repeated facts (SDK positioning x3) in a very long post."
+  ]
+}
