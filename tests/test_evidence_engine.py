@@ -584,3 +584,10 @@ def test_cut_off_drafts_targets_and_coverage() -> None:
     )
     assert any("no sentence cites" in p for p in issues)
     assert any("for a target of" in p for p in issues)
+
+
+def test_a_lone_display_math_marker_is_removed() -> None:
+    from scholar_lens.domain.survey.evidence_post import balance_math
+
+    assert balance_math("식 $$a=b$$ 와 $$c") == ("식 $$a=b$$ 와 c", True)
+    assert balance_math("```\n$$\n```\n$$x$$") == ("```\n$$\n```\n$$x$$", False)

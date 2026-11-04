@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from ..evidence import Evidence, EvidenceLedger
 from ..lengths import DEPTH_CHARS, NON_KOREAN_CHAR_FACTOR
 from ..markdown.tables import escape_cell_pipes
+from ..quality_gate import rule_issues
 from ..validation import unsourced_numbers
 from .plan import SurveyPlan
 
@@ -453,6 +454,9 @@ def draft_problems(
         )
     if ends_mid_sentence(markdown):
         problems.append("the section stops mid-sentence: finish it")
+    # The blog's Markdown and math rules (an unbalanced $$ breaks every
+    # later equation of the post).
+    problems += rule_issues(MARKER.sub("", markdown))
     if (need := MIN_VISUALS.get(depth, 0)) and visual_count(markdown) < need:
         problems.append(
             f"a {depth} section needs at least {need} visuals (its figures, an "
@@ -495,11 +499,12 @@ def unsourced_number_sentences(
 
 def add_missing_figures(markdown: str, figures: Sequence[Evidence]) -> str:
     """The section with each assigned figure the writer left out appended
-    as an image (its claim as alt text, its caption below)."""
+    as an image (its claim as alt text)."""
     shown = set(_IMAGE.findall(markdown))
+    # The alt text says what it shows; the paper's caption is not copied
+    # (it names the paper's own figure numbers).
     extra = [
         f"![{' '.join(f.claim.split())}]({f.figure_url})"
-        + (f"\n*{' '.join((f.caption or '').split())[:300]}*" if f.caption else "")
         for f in figures
         if f.figure_url and f.figure_url not in shown
     ]
@@ -681,3 +686,19 @@ def ends_mid_sentence(markdown: str) -> bool:
             continue
         return not _COMPLETE_END.search(bare)
     return False
+
+
+def balance_math(markdown: str) -> tuple[str, bool]:
+    """An odd ``$$`` count outside code makes every later equation of the
+    post flip into prose: the last lone ``$$`` is removed. Returns the text
+    and whether it changed."""
+    code = [(m.start(), m.end()) for m in _FENCE.finditer(markdown)]
+    marks = [
+        m.start()
+        for m in re.finditer(r"\$\$", markdown)
+        if not any(s <= m.start() < e for s, e in code)
+    ]
+    if len(marks) % 2 == 0:
+        return markdown, False
+    last = marks[-1]
+    return markdown[:last] + markdown[last + 2 :], True

@@ -31,6 +31,7 @@ from ..domain.survey.evidence_post import (
     EvidenceOutline,
     OutlineSection,
     add_missing_figures,
+    balance_math,
     cite_papers,
     cited_ids,
     comparison_table,
@@ -681,6 +682,9 @@ class EvidenceSurveyEngine:
                 + " | ".join(f"{s[:120]} ({v})" for s, v in unsupported[:5])
             )
         draft = add_missing_figures(draft, [e for e in own if e.kind == "figure"])
+        draft, unbalanced = balance_math(draft)
+        if unbalanced:
+            self.notes.append(f"Section '{section.title}': a lone $$ was removed.")
         if leftover := checks(draft):
             self.notes.append(
                 f"Section '{section.title}' still has: " + " | ".join(leftover[:5])
