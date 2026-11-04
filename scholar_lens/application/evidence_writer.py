@@ -47,6 +47,10 @@ logger = logging.getLogger(__name__)
 _EVIDENCE_KINDS: tuple[str, ...] = Evidence.model_fields["kind"].annotation.__args__  # type: ignore[union-attr]
 
 
+# Turns of the follow-up that asks a reader for a required kind it skipped.
+FOLLOW_UP_TURNS = 8
+
+
 class SentenceVerdict(BaseModel):
     n: int
     verdict: Literal["supported", "unsupported", "wrong"]
@@ -309,6 +313,28 @@ class EvidenceWriter:
             tools=[read_section, search_source, record_evidence, finish],
             limits=limits,
         )
+        # The agent may end its turn without calling finish: ask once, in a
+        # short follow-up, for the required kinds it has not recorded.
+        if missing := [k for k in required if k not in {e.kind for e in ledger}]:
+            recorded = "\n".join(f"- ({e.kind}) {e.claim[:120]}" for e in ledger)
+            await self.model.run_agent(
+                role="read",
+                system=self.prompts.reader,
+                prompt="\n\n".join(
+                    [
+                        prompt,
+                        block("already_recorded", recorded),
+                        f"Evidence of kind {missing} is still missing. Record "
+                        "it now if the source has it (for a figure: the one "
+                        "that best shows the architecture, a flow or a result, "
+                        "described from the text before it), then call finish.",
+                    ]
+                ),
+                tools=[read_section, search_source, record_evidence, finish],
+                limits=AgentLimits(
+                    turns=FOLLOW_UP_TURNS, total_tokens=limits.total_tokens
+                ),
+            )
         logger.info(
             "Read %s: %d evidence, %d rejected records (%s).",
             document.paper_id,

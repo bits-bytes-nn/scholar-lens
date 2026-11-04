@@ -595,3 +595,30 @@ def test_sources_are_listed_once_however_spelled() -> None:
     assert _source_urls([page], ["https://docs.ray.io/serve/batching.html/"]) == [
         "https://docs.ray.io/serve/batching.html"
     ]
+
+
+def test_a_reader_that_skips_a_required_figure_is_asked_once_more() -> None:
+    from scholar_lens.application.evidence_writer import EvidenceWriter
+    from scholar_lens.application.guide_engine import GUIDE_PROMPTS
+
+    prompts: list[str] = []
+
+    class SkipsFigures:
+        async def run_agent(self, *, role, system, prompt, tools, limits):
+            prompts.append(prompt)
+            record = {t.__name__: t for t in tools}["record_evidence"]
+            if len(prompts) == 2:
+                record("figure", "Serve 구조", "", "S3", "", "", "F1")
+            return AgentOutcome(text="", stop_reason="end_turn")
+
+    writer = EvidenceWriter(SkipsFigures(), GUIDE_PROMPTS, max_fix_rounds=0)
+    items = asyncio.run(
+        writer.read_document(
+            _official(),
+            prompt="read",
+            limits=AgentLimits(turns=5, total_tokens=1000),
+            required=("figure",),
+        )
+    )
+    assert [e.kind for e in items] == ["figure"]
+    assert len(prompts) == 2 and "['figure'] is still missing" in prompts[1]

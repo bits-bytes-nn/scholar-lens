@@ -1,0 +1,156 @@
+{
+  "kind": "guide",
+  "status": "succeeded",
+  "input": "https://docs.vllm.ai/en/latest/getting_started/quickstart.html, https://arxiv.org/abs/2309.06180, https://blog.vllm.ai/2023/06/20/vllm.html",
+  "title": "vLLM: PagedAttention-Based LLM Serving from Kernel to Production",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/guide-vllm-pagedattention-based-llm-serving-from-kernel-to-production/2026-11-04-vllm-pagedattention-based-llm-serving-from-kernel-to-production.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-11-04-vllm-pagedattention-based-llm-serving-from-kernel-to-production.md",
+  "pr_url": null,
+  "warnings": [
+    "Section 'OS 가상 메모리에서 착안한 PagedAttention 알고리즘과 블록 단위 어텐션 커널' still has: points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 비어 있는 자리는 많아야 블록 하나 안의 몇 칸이고, 앞서 본 연속 할당처럼 최대 길이만큼 공간을 비워 둘 일이 없습니다.",
+    "Section '블록 테이블과 공유 블록 풀에 기반한 온디맨드 KV 블록 할당' still has: points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 앞서 소개한 PagedAttention 논문의 아래 그림에서 블록 테이블의 `#filled` 값은 디코딩 단계마다 하나씩 커지고, 마지막 블록이 가득 찬 다음 단계에서 새 물리 블록이 표에 추가됩니다 . | ['16'] already stated in 'OS 가상 메모리에서 착안한 PagedAttention 알고리즘과 블록 단위 어텐션 커널': refer back without repeating: 저자들은 이 균형에 따라 기본 블록 크기를 16으로 정했으며, 이는 논문 시점의 기본값입니다 .",
+    "Section '참조 카운트와 쓰기 시 복사를 이용한 KV 블록 공유와 프리픽스 캐싱' still has: evidence ['E60'] was already referred back to once; do not restate it again: 복사하는 양도 블록 하나 분량이며, 이 작업은 블록 복사 융합 커널이 맡습니다 . | a deep section needs at least 2 visuals (its figures, an equation, or a small table from its number evidence)",
+    "Section '중앙 스케줄러, EngineCore, GPU 워커로 이어지는 요청 처리 경로': check 2 sentence(s) the evidence may not support: 워커 프로세스를 띄우는 분산 실행 백엔드는 `mp`와 `ray` 중 하나입니다. (unsupported: Backend options come only from the v0.6.4 docs (E106); they are stated as current without a version qualifier, and no current official source is given.) | 실행 예시처럼 모델이 GPU 한 장에 들어가 병렬화가 필요 없으면 두 병렬도의 곱이 GPU 수를 넘지 않으므로, 이 규칙에 따라 단일 호스트의 `mp` 백엔드가 쓰입니다. (unsupported: Applies the backend-selection rule as current behaviour, but the rule comes only from the v0.6.4/v0.7.3 docs (E106, E132).)",
+    "Section '중앙 스케줄러, EngineCore, GPU 워커로 이어지는 요청 처리 경로' still has: names the page a fact came from; state the fact itself: v0.6.4와 v0.7.3 문서에서는 `pipeline_parallel_size`와 `tensor_parallel_size`의 곱이 사용 가능한 GPU 수 이하이면 단일 호스트용 `mp`를 쓰고, 그렇지 않으면 Ray가 설치된 경우 `ray`를, 설치되지 않았으면 실패하도록 되어 있습니 | names the page a fact came from; state the fact itself: v0.6.4 문서에서는 TPU와 HPU가 Ray만 지원합니다 .",
+    "Section '반복 단위 연속 배칭, chunked prefill, 재계산·스왑 기반 선점' still has: points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 이 값은 앞서 본 `--max-num-batched-tokens`와 같은 설정입니다 . | points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 앞서 소개한 PagedAttention 논문에서 FCFS 스케줄러는 가장 늦게 도착한 요청을 먼저 선점하고, 그 시퀀스의 블록을 전부 내보내거나 하나도 내보내지 않는 전부-아니면-전무 정책을 씁니다 .",
+    "Section '하드웨어 백엔드별 설치: CUDA, ROCm, TPU, Apple Silicon, CPU' still has: the section must start with its '## ' heading (하드웨어 백엔드별 설치: CUDA, ROCm, TPU, Apple Silicon, CPU)",
+    "Section 'Prometheus 메트릭 기반 관측성과 production-stack KEDA 오토스케일링' still has: ['0.95'] already stated in '서버 없이 Python 프로세스 안에서 끝나는 배치 생성, `LLM`과 `SamplingParams`': refer back without repeating: 대응책은 최대 시퀀스 길이 축소, `--gpu-memory-utilization`을 0.95 쪽으로 올리기, 스케일 아웃 가운데 하나입니다 . | flags or arguments no official page mentions; use the documented ones or leave them out: vllm:num_requests_running, vllm:gpu_cache_usage_perc, vllm:time_to_first_token_seconds_bucket, vllm:time_per_output_token_seconds_bucket, process_resident_memory_bytes, process_virtual_memory_bytes, --prometheus-endpoint, --prometheus-scrape-interval",
+    "Section 'vLLM 선택 기준: 고동시성 처리량의 이점과 단일 요청 지연·벤치마크 해석의 한계' still has: the section must start with its '## ' heading (vLLM 선택 기준: 고동시성 처리량의 이점과 단일 요청 지연·벤치마크 해석의 한계) | points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 이 이점은 앞서 설명한 블록 단위 KV 캐시 관리와 반복 단위 연속 배칭에서 나옵니다. | ['24'] already stated in '메모리 바운드 LLM 서빙과 연속 할당 방식의 60~80% 메모리 낭비': refer back without repeating: ShareGPT 길이 분포에서 vLLM 블로그가 요약한 최대치는 HF 대비 24배, TGI 대비 3.5배입니다 . | ['2023', '50'] already stated in '메모리 바운드 LLM 서빙과 연속 할당 방식의 60~80% 메모리 낭비': refer back without repeating: 2023년 4~5월에 FastChat-vLLM 통합으로 최대 5배의 트래픽을 감당하면서 서빙 GPU 수를 50% 줄였고, 하루 평균 3만 건, 피크 6만 건의 요청을 처리했습니다 . | points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 앞서 본 Linux 중심의 설치 경로와 백엔드별 휠 관리, 한 서버에 모델 하나라는 제약 같은 운영 비용은 그대로 남습니다.",
+    "Flags/metrics the official pages fetched for this guide never mention; verify them against the current reference: vllm:num_requests_running, vllm:gpu_cache_usage_perc, vllm:time_to_first_token_seconds_bucket, vllm:time_per_output_token_seconds_bucket, process_resident_memory_bytes, process_virtual_memory_bytes, --prometheus-endpoint, --prometheus-scrape-interval",
+    "[image] line 107: remote image not localized (linked to its source): https://vllm.ai/blog-assets/figures/annimation1.gif",
+    "[image] line 170: remote image not localized (linked to its source): https://vllm.ai/blog-assets/figures/annimation3.gif",
+    "[image] line 634: remote image not localized (linked to its source): https://vllm.ai/blog-assets/figures/perf_a100_n3_light.png"
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 2988.5,
+  "input_tokens": 2538331,
+  "output_tokens": 388826,
+  "estimated_cost_usd": 13.9776,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 201,
+      "failed_calls": 0,
+      "input_tokens": 14548,
+      "output_tokens": 388826,
+      "cache_read_tokens": 1081356,
+      "cache_write_tokens": 1442427,
+      "cost_usd": 13.977562
+    },
+    "by_stage": {
+      "relevance": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 1610,
+        "output_tokens": 618,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.00047
+      },
+      "research_plan": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 2439,
+        "output_tokens": 688,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.000588
+      },
+      "read": {
+        "calls": 90,
+        "failed_calls": 0,
+        "input_tokens": 218,
+        "output_tokens": 82953,
+        "cache_read_tokens": 628543,
+        "cache_write_tokens": 178896,
+        "cost_usd": 1.402913
+      },
+      "outline": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 6130,
+        "cache_read_tokens": 1830,
+        "cache_write_tokens": 17736,
+        "cost_usd": 0.212028
+      },
+      "verify": {
+        "calls": 51,
+        "failed_calls": 0,
+        "input_tokens": 204,
+        "output_tokens": 103445,
+        "cache_read_tokens": 332683,
+        "cache_write_tokens": 700034,
+        "cost_usd": 5.702944
+      },
+      "draft": {
+        "calls": 14,
+        "failed_calls": 0,
+        "input_tokens": 56,
+        "output_tokens": 49671,
+        "cache_read_tokens": 49476,
+        "cache_write_tokens": 205623,
+        "cost_usd": 2.041555
+      },
+      "review": {
+        "calls": 14,
+        "failed_calls": 0,
+        "input_tokens": 56,
+        "output_tokens": 26724,
+        "cache_read_tokens": 26544,
+        "cache_write_tokens": 42408,
+        "cost_usd": 0.757356
+      },
+      "fix": {
+        "calls": 28,
+        "failed_calls": 0,
+        "input_tokens": 112,
+        "output_tokens": 117611,
+        "cache_read_tokens": 42280,
+        "cache_write_tokens": 297730,
+        "cost_usd": 3.85823
+      },
+      "finalize": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 9849,
+        "output_tokens": 986,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.001478
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-haiku-5-5": {
+        "calls": 3,
+        "failed_calls": 0,
+        "input_tokens": 13898,
+        "output_tokens": 2292,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.002536
+      },
+      "global.anthropic.claude-sonnet-5-5": {
+        "calls": 90,
+        "failed_calls": 0,
+        "input_tokens": 218,
+        "output_tokens": 82953,
+        "cache_read_tokens": 628543,
+        "cache_write_tokens": 178896,
+        "cost_usd": 1.402913
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 108,
+        "failed_calls": 0,
+        "input_tokens": 432,
+        "output_tokens": 303581,
+        "cache_read_tokens": 452813,
+        "cache_write_tokens": 1263531,
+        "cost_usd": 12.572113
+      }
+    }
+  }
+}
