@@ -541,3 +541,12 @@ def test_unsourced_number_sentences_spare_marked_examples() -> None:
     assert unsourced_number_sentences(md, _ledger(), "0 1") == [
         "원칙은 모두 16개입니다."
     ]
+
+
+def test_assigned_figures_left_out_are_appended() -> None:
+    from scholar_lens.domain.survey.evidence_post import add_missing_figures
+
+    figure = _ledger().get("E4")
+    out = add_missing_figures("## 제목\n\n본문입니다.", [figure])
+    assert "![DPO와 RLHF 비교](https://arxiv.org/html/2305.18290v3/x1.png)" in out
+    assert add_missing_figures(out, [figure]).count("x1.png") == 1

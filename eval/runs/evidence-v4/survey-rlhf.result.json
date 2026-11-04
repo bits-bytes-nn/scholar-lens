@@ -1,0 +1,121 @@
+{
+  "kind": "survey_write",
+  "status": "succeeded",
+  "input": "eval/sets/plans/survey-rlhf.json",
+  "title": "Preference Optimization for LLM Alignment: From RLHF to DPO and GRPO",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/survey-llm-rlhf-dpo-da36ac9a/2026-11-04-preference-optimization-for-llm-alignment-from-rlhf-to-dpo-and-grpo.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-11-04-preference-optimization-for-llm-alignment-from-rlhf-to-dpo-and-grpo.md",
+  "pr_url": null,
+  "warnings": [
+    "Section '참조 모델과 SFT 단계를 덜어낸 랭킹·오즈비·길이 정규화 손실': 4 unsupported sentence(s) removed: PPO에 필요한 구성 요소들 대신, RRHF는 여러 출처의 응답에 보상 순서를 매기고 정책의 점수를 그 순서에 맞추는 한 단계로 학습을 끝냅니다 [[E96]]. (unsupported: E96 is only a figure caption (\"Workflow of RRHF compared with PPO\"). It doesn't support the specific claims that RRHF ranks responses from many sources and finishes training in one step instead of using PPO's components.) | 로그확률을 합으로 보면 $$y_w$$의 점수는 4, $$y_l$$의 점수는 12만큼 오릅니다. (numbers not in its evidence) | 평균으로 보면 둘 다 0.1씩 오르므로 길이가 점수를 부풀리지 않습니다. (numbers not in its evidence) | $$\\gamma=0$$이면 손실은 $$-\\log\\sigma(0.6)\\approx0.44$$이지만, $$\\gamma=1$$이면 $$-\\log\\sigma(-0.4)\\approx0.91$$입니다. (numbers not in its evidence)",
+    "Section '참조 모델과 SFT 단계를 덜어낸 랭킹·오즈비·길이 정규화 손실' still has: ['40', '0.1'] already stated in '사람의 유해성 라벨을 헌법 원칙과 AI 판정으로 바꾼 확장 가능한 감독': refer back without repeating: 예를 들어 가상의 $$y_w$$가 40토큰, $$y_l$$이 120토큰이고, 학습 한 스텝이 두 응답의 토큰별 로그확률을 똑같이 0.1씩 올린다고 해 봅시다. | ['0.6'] already stated in '사람의 유해성 라벨을 헌법 원칙과 AI 판정으로 바꾼 확장 가능한 감독': refer back without repeating: 가상의 값으로 $$y_w$$의 평균 로그확률이 -1.2, $$y_l$$이 -1.5이고 $$\\beta=2$$라면 보상 차이는 $$2\\times0.3=0.6$$입니다.",
+    "Section '가치 모델 대신 그룹 평균을 기준선으로 삼은 검증 가능 보상의 추론 강화학습': 9 unsupported sentence(s) removed: RL 데이터가 GSM8K·MATH 관련 질문으로 좁게 제한되었는데도, 이 모델은 출발점인 DeepSeekMath-Instruct 7B를 모든 평가 지표에서 앞섰고 도메인 밖 벤치마크에서도 향상을 보였습니다 [[E16 (unsupported: Evidence says only that the training data had a constrained scope; it does not say the RL data was limited to GSM8K/MATH-related questions.) | 온도 0.7에서 측정한 이 비교를 보면 RL은 Maj@K를 끌어올리지만 Pass@K는 높이지 못합니다 [[E167]]. (unsupported: The temperature 0.7 setting is not in the cited evidence.) | 정답 27에 도달한 풀이는 보상 1, 그렇지 않은 풀이는 0을 받는 검증 가능한 보상(verifiable reward) 설정입니다. (numbers not in its evidence) | 맞힌 풀이의 어드밴티지는 $$(1-0.75)/0.433 \\approx 0.58$$, 틀린 풀이는 $$(0-0.75)/0.433 \\approx -1.73$$이 됩니다. (numbers not in its evidence) | 반대로 64개 중 몇 개만 맞히는 어려운 문제에서는 드문 정답이 큰 양의 신호를 받습니다. (numbers not in its evidence)",
+    "Section '가치 모델 대신 그룹 평균을 기준선으로 삼은 검증 가능 보상의 추론 강화학습' still has: ['64', '0.25'] already stated in '사람의 쌍별 비교에서 갈라져 나온 여섯 갈래의 선호 최적화': refer back without repeating: 예를 들어 가상의 경우로 64개 풀이 중 48개가 27에 도달했다면 평균은 0.75, 표준편차는 $$\\sqrt{0.75 \\times 0.25} \\approx 0.433$$입니다.",
+    "verification hedge (fix the claim from an official source or drop it): al 1.0/2.0) | 7B 초과 규모·다양한 비교 미검증 |"
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 3167.7,
+  "input_tokens": 2624556,
+  "output_tokens": 467954,
+  "estimated_cost_usd": 13.7083,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 213,
+      "failed_calls": 0,
+      "input_tokens": 14261,
+      "output_tokens": 467954,
+      "cache_read_tokens": 1415117,
+      "cache_write_tokens": 1195178,
+      "cost_usd": 13.708315
+    },
+    "by_stage": {
+      "read": {
+        "calls": 126,
+        "failed_calls": 0,
+        "input_tokens": 296,
+        "output_tokens": 120117,
+        "cache_read_tokens": 1234898,
+        "cache_write_tokens": 320397,
+        "cost_usd": 2.249736
+      },
+      "outline": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 12170,
+        "cache_read_tokens": 2034,
+        "cache_write_tokens": 53192,
+        "cost_usd": 0.51019
+      },
+      "verify": {
+        "calls": 41,
+        "failed_calls": 0,
+        "input_tokens": 164,
+        "output_tokens": 66447,
+        "cache_read_tokens": 110878,
+        "cache_write_tokens": 208422,
+        "cost_usd": 2.416058
+      },
+      "draft": {
+        "calls": 12,
+        "failed_calls": 0,
+        "input_tokens": 48,
+        "output_tokens": 80397,
+        "cache_read_tokens": 31236,
+        "cache_write_tokens": 235961,
+        "cost_usd": 2.800429
+      },
+      "review": {
+        "calls": 12,
+        "failed_calls": 0,
+        "input_tokens": 48,
+        "output_tokens": 34673,
+        "cache_read_tokens": 14751,
+        "cache_write_tokens": 65238,
+        "cost_usd": 1.025738
+      },
+      "fix": {
+        "calls": 20,
+        "failed_calls": 0,
+        "input_tokens": 80,
+        "output_tokens": 153259,
+        "cache_read_tokens": 21320,
+        "cache_write_tokens": 311968,
+        "cost_usd": 4.63386
+      },
+      "finalize": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 13621,
+        "output_tokens": 891,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.072304
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-sonnet-5-5": {
+        "calls": 126,
+        "failed_calls": 0,
+        "input_tokens": 296,
+        "output_tokens": 120117,
+        "cache_read_tokens": 1234898,
+        "cache_write_tokens": 320397,
+        "cost_usd": 2.249736
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 87,
+        "failed_calls": 0,
+        "input_tokens": 13965,
+        "output_tokens": 347837,
+        "cache_read_tokens": 180219,
+        "cache_write_tokens": 874781,
+        "cost_usd": 11.458579
+      }
+    }
+  }
+}

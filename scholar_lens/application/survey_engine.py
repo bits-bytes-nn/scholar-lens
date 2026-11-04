@@ -31,6 +31,7 @@ from ..domain.lengths import DEPTH_CHARS, NON_KOREAN_CHAR_FACTOR
 from ..domain.survey.evidence_post import (
     EvidenceOutline,
     OutlineSection,
+    add_missing_figures,
     cite_papers,
     cited_ids,
     comparison_table,
@@ -649,6 +650,7 @@ class EvidenceSurveyEngine:
                 f"Section '{section.title}': {len(claims)} unsupported sentence(s) removed: "
                 + " | ".join(f"{s[:120]} ({v})" for s, v in claims[:5])
             )
+        draft = add_missing_figures(draft, [e for e in own if e.kind == "figure"])
         if leftover := checks(draft):
             self.notes.append(
                 f"Section '{section.title}' still has: " + " | ".join(leftover[:5])

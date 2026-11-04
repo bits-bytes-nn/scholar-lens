@@ -411,9 +411,11 @@ def draft_problems(
                 problems.append(
                     f"numbers {missing} are not in the cited evidence: {quoted}"
                 )
-        if repeated := [
-            n for n in numbers if n in earlier_numbers and not _MODEL_SIZE.match(n)
-        ]:
+        if not example and (
+            repeated := [
+                n for n in numbers if n in earlier_numbers and not _MODEL_SIZE.match(n)
+            ]
+        ):
             problems.append(
                 f"{repeated} already stated in '{earlier_numbers[repeated[0]]}': "
                 f"refer back without repeating: {quoted}"
@@ -465,6 +467,19 @@ def unsourced_number_sentences(
         if unsourced_numbers(_plain(sentence), f"{support} {free_numbers}"):
             found.append(sentence)
     return found
+
+
+def add_missing_figures(markdown: str, figures: Sequence[Evidence]) -> str:
+    """The section with each assigned figure the writer left out appended
+    as an image (its claim as alt text, its caption below)."""
+    shown = set(_IMAGE.findall(markdown))
+    extra = [
+        f"![{' '.join(f.claim.split())}]({f.figure_url})"
+        + (f"\n*{' '.join((f.caption or '').split())[:300]}*" if f.caption else "")
+        for f in figures
+        if f.figure_url and f.figure_url not in shown
+    ]
+    return markdown.rstrip() + ("\n\n" + "\n\n".join(extra) + "\n" if extra else "\n")
 
 
 def section_numbers(markdown: str, free_numbers: str) -> set[str]:
