@@ -44,7 +44,7 @@ How a good post on this blog is written:
 READER_SYSTEM = """
 You read one research paper for a survey post and record the evidence the
 post may use. You see the paper's outline; open sections with read_section,
-find passages with search_paper, and record each piece of evidence with
+find passages with search_source, and record each piece of evidence with
 record_evidence. A record is checked against the paper at once: when it is
 rejected, the reason says what to fix; fix it and record again.
 

@@ -1,10 +1,10 @@
 """Source documents and the evidence ledger (docs/redesign.md, 3.3).
 
-A reading agent records what a post may say about a paper as evidence: a
-claim with the verbatim passage that supports it and where it is. Code checks
-every record against the document before it enters the ledger, so a post can
-only state what its sources show, and the outline can give each piece of
-evidence to one section.
+A reading agent records what a post may say about a source (a paper, a
+documentation page, a design post) as evidence: a claim with the verbatim
+passage that supports it and where it is. Code checks every record against
+the document before it enters the ledger, so a post can only state what its
+sources show, and the outline can give each piece of evidence to one section.
 """
 
 from __future__ import annotations
@@ -20,6 +20,9 @@ from .survey.post import equation_in_source
 from .validation import unsourced_numbers
 
 DocumentKind = Literal["full_text", "pdf_text", "abstract"]
+# Who decides what a guide may state (``web_research.source_label``): official
+# pages own commands, flags and defaults; the rest explain. "" for papers.
+Authority = Literal["", "official", "reference", "third_party", "older_docs"]
 EvidenceKind = Literal[
     "finding",  # a result, observation or conclusion the paper reports
     "number",  # a measured value, with its model, setting and metric
@@ -29,6 +32,8 @@ EvidenceKind = Literal[
     "relation",  # how the paper builds on, compares with or replaces another
     "equation",  # an equation, copied as LaTeX from the paper
     "figure",  # a figure of the paper, by its id
+    "code",  # a code block or command, copied from the source
+    "setting",  # a flag, parameter, config key, env variable or default
 ]
 
 _HEADING = re.compile(r"^(#{1,6})\s+(.+?)\s*$", re.M)
@@ -38,6 +43,8 @@ MIN_QUOTE_CHARS = 12
 MAX_QUOTE_CHARS = 800
 # Short noun-phrase cells for the code-built tables.
 MAX_CELL_CHARS = 90
+MAX_CODE_CHARS = 6_000
+_CODE_SPAN = re.compile(r"`([^`\n]+)`")
 # The paper's own numbering means nothing in a post ("Fig. 4", "Table 2").
 _NUMBERED_REFERENCE = re.compile(
     r"\b(?:fig(?:ure)?s?|tab(?:le)?s?|eq(?:uation)?s?|sec(?:tion)?s?|appendix|§)\.?\s*[A-Z]?\d",
@@ -70,6 +77,8 @@ class SourceDocument(_Strict):
     kind: DocumentKind
     sections: list[SourceSection]
     figures: list[SourceFigure] = Field(default_factory=list)
+    url: str = ""
+    authority: Authority = ""
 
     @classmethod
     def from_markdown(
@@ -79,6 +88,9 @@ class SourceDocument(_Strict):
         kind: DocumentKind,
         markdown: str,
         figures: Iterable[tuple[str, str]] = (),
+        *,
+        url: str = "",
+        authority: Authority = "",
     ) -> SourceDocument:
         """Split Markdown at its headings (``S1``, ``S2``, … in order; text
         before the first heading is ``S0``). ``figures`` are (url, caption)
@@ -103,9 +115,11 @@ class SourceDocument(_Strict):
             kind=kind,
             sections=sections,
             figures=[
-                SourceFigure(id=f"F{i}", url=url, caption=caption)
-                for i, (url, caption) in enumerate(figures, 1)
+                SourceFigure(id=f"F{i}", url=image, caption=caption)
+                for i, (image, caption) in enumerate(figures, 1)
             ],
+            url=url,
+            authority=authority,
         )
 
     @property
@@ -163,6 +177,7 @@ class Evidence(_Strict):
     figure_url: str | None = None
     caption: str | None = None
     latex: str | None = None
+    code: str | None = None
 
 
 def _squash(text: str) -> str:
@@ -180,10 +195,12 @@ def evidence_problems(
     cell: str = "",
     figure_id: str | None = None,
     latex: str | None = None,
+    code: str | None = None,
 ) -> list[str]:
-    """Why a record cannot enter the ledger: its quote is not the paper's
-    words at ``anchor``, it states numbers the quote does not, a number has
-    no scope, an equation is not the paper's LaTeX, a figure is unknown."""
+    """Why a record cannot enter the ledger: its quote is not the source's
+    words at ``anchor``, it states numbers or names identifiers the quote
+    does not, a number or setting has no scope, an equation is not the
+    source's LaTeX, code is not the source's code, a figure is unknown."""
     problems: list[str] = []
     section = document.section(anchor)
     if section is None:
@@ -196,7 +213,19 @@ def evidence_problems(
                 f"unknown figure {figure_id!r}: use an F-id from the outline"
             )
         return problems
-    if not MIN_QUOTE_CHARS <= len(quote.strip()) <= MAX_QUOTE_CHARS:
+    if kind == "code":
+        if not code or not code.strip():
+            problems.append("a code record needs `code` copied from the source")
+        elif len(code) > MAX_CODE_CHARS:
+            problems.append(f"the code is longer than {MAX_CODE_CHARS} characters")
+        elif _squash(code) not in _squash(section.text):
+            problems.append(f"the code is not verbatim in {anchor}: copy it exactly")
+        if quote.strip() and _squash(quote) not in _squash(section.text):
+            problems.append(
+                f"the quote is not verbatim in {anchor}: copy the source's words "
+                "exactly, or leave it empty"
+            )
+    elif not MIN_QUOTE_CHARS <= len(quote.strip()) <= MAX_QUOTE_CHARS:
         problems.append(
             f"the quote must be {MIN_QUOTE_CHARS}-{MAX_QUOTE_CHARS} characters of "
             "the paper's text"
@@ -205,13 +234,27 @@ def evidence_problems(
         problems.append(
             f"the quote is not verbatim in {anchor}: copy the paper's words exactly"
         )
-    if missing := unsourced_numbers(f"{claim} {cell}", f"{quote} {scope}"):
+    support = f"{quote} {scope} {code or ''} {latex or ''}"
+    if missing := unsourced_numbers(f"{claim} {cell}", support):
         problems.append(
             "the claim or cell states numbers the quote does not: " + ", ".join(missing)
+        )
+    if names := [
+        n
+        for n in _CODE_SPAN.findall(f"{claim} {cell}")
+        if _squash(n) not in _squash(support)
+    ]:
+        problems.append(
+            "the claim names identifiers the quote and code do not: " + ", ".join(names)
         )
     if kind == "number" and not scope.strip():
         problems.append(
             "a number needs its scope: model or variant, benchmark, setting, metric"
+        )
+    if kind == "setting" and not scope.strip():
+        problems.append(
+            "a setting needs its scope: the API, CLI, config file or version it "
+            "belongs to"
         )
     if kind == "equation" and not (latex and equation_in_source(latex, section.text)):
         problems.append("the equation is not the paper's LaTeX: copy it exactly")

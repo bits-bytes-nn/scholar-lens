@@ -25,13 +25,15 @@ from scholar_lens.domain.evidence import (
     SourceDocument,
     evidence_problems,
 )
+from scholar_lens.domain.evidence_draft import (
+    draft_problems,
+    structure_lost,
+)
 from scholar_lens.domain.survey.evidence_post import (
     EvidenceOutline,
     cite_papers,
     comparison_table,
-    draft_problems,
     outline_problems,
-    structure_lost,
 )
 from scholar_lens.domain.survey.plan import SurveyPlan
 
@@ -528,7 +530,7 @@ def test_mechanical_outline_problems_are_repaired_in_code() -> None:
 
 
 def test_unsourced_number_sentences_spare_marked_examples() -> None:
-    from scholar_lens.domain.survey.evidence_post import unsourced_number_sentences
+    from scholar_lens.domain.evidence_draft import unsourced_number_sentences
 
     md = (
         "## 제목\n\n원칙은 모두 16개입니다.\n\n"
@@ -541,7 +543,7 @@ def test_unsourced_number_sentences_spare_marked_examples() -> None:
 
 
 def test_assigned_figures_left_out_are_appended() -> None:
-    from scholar_lens.domain.survey.evidence_post import add_missing_figures
+    from scholar_lens.domain.evidence_draft import add_missing_figures
 
     figure = _ledger().get("E4")
     out = add_missing_figures("## 제목\n\n본문입니다.", [figure])
@@ -550,10 +552,8 @@ def test_assigned_figures_left_out_are_appended() -> None:
 
 
 def test_cut_off_drafts_targets_and_coverage() -> None:
-    from scholar_lens.domain.survey.evidence_post import (
-        ends_mid_sentence,
-        section_targets,
-    )
+    from scholar_lens.domain.evidence_draft import ends_mid_sentence
+    from scholar_lens.domain.survey.evidence_post import section_targets
 
     assert ends_mid_sentence("## 제목\n\n개념도의 요점은 공격자와 LLM 사이에 직접 연")
     assert not ends_mid_sentence("## 제목\n\n끝난 문장입니다 [[E2]].\n\n![a](u)\n")
@@ -584,14 +584,14 @@ def test_cut_off_drafts_targets_and_coverage() -> None:
 
 
 def test_a_lone_display_math_marker_is_removed() -> None:
-    from scholar_lens.domain.survey.evidence_post import balance_math
+    from scholar_lens.domain.evidence_draft import balance_math
 
     assert balance_math("식 $$a=b$$ 와 $$c") == ("식 $$a=b$$ 와 c", True)
     assert balance_math("```\n$$\n```\n$$x$$") == ("```\n$$\n```\n$$x$$", False)
 
 
 def test_revision_notes_and_quoted_markup_are_neutralized() -> None:
-    from scholar_lens.domain.survey.evidence_post import (
+    from scholar_lens.domain.evidence_draft import (
         quote_for_prompt,
         strip_revision_notes,
     )
