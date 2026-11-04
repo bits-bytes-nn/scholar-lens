@@ -64,7 +64,7 @@ from .usage import usage_stage
 logger = logging.getLogger(__name__)
 
 # Bump when the reader's prompt or the evidence schema changes meaning.
-GUIDE_READER_VERSION = 5
+GUIDE_READER_VERSION = 6
 _SAFE_KEY = re.compile(r"[^A-Za-z0-9._-]+")
 # Small counts and ordinals a guide states without evidence.
 _FREE_NUMBERS = " ".join(str(n) for n in range(11))

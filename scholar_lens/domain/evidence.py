@@ -241,6 +241,12 @@ def evidence_problems(
     does not, a number or setting has no scope, an equation is not the
     source's LaTeX, code is not the source's code, a figure is unknown."""
     problems: list[str] = []
+    if kind == "figure" and figure_id and (figure := document.figure(figure_id)):
+        # A figure is placed by its id; its section is known.
+        if figure.anchor or document.section(anchor) is None:
+            anchor = figure.anchor or (
+                document.sections[0].anchor if document.sections else anchor
+            )
     section = document.section(anchor)
     if section is None:
         return [f"unknown anchor {anchor!r}: use an anchor from the outline"]
@@ -360,10 +366,13 @@ class EvidenceLedger(BaseModel):
 
     def add(self, document: SourceDocument, **fields: object) -> Evidence:
         """Record evidence the caller has already checked
-        (:func:`evidence_problems`); a figure gets its URL and caption."""
+        (:func:`evidence_problems`); a figure gets its URL, caption and the
+        section it sits in."""
         figure = None
         if fields.get("kind") == "figure" and fields.get("figure_id"):
             figure = document.figure(str(fields["figure_id"]))
+            if figure is not None and figure.anchor:
+                fields["anchor"] = figure.anchor
         evidence = Evidence(
             id=f"E{len(self.items) + 1}",
             paper_id=document.paper_id,

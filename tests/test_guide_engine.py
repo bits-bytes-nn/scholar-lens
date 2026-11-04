@@ -655,3 +655,18 @@ def test_empty_headings_respect_levels_and_code() -> None:
     assert drop_empty_headings(md) == (
         "## A\n\n### A1\n\n본문입니다.\n\n## C\n\n```md\n## not a heading\n```\n"
     )
+
+
+def test_a_figure_is_placed_by_its_id_whatever_anchor_the_reader_gives() -> None:
+    doc = _official()
+    assert (
+        evidence_problems(
+            doc, kind="figure", claim="구조도", quote="", anchor="F1", figure_id="F1"
+        )
+        == []
+    )
+    ledger = EvidenceLedger()
+    item = ledger.add(
+        doc, kind="figure", claim="구조도", quote="", anchor="F1", figure_id="F1"
+    )
+    assert item.figure_url == "https://docs.ray.io/arch.png"

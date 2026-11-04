@@ -1,0 +1,146 @@
+{
+  "kind": "guide",
+  "status": "succeeded",
+  "input": "https://docs.ray.io/en/latest/serve/getting_started.html",
+  "title": "Ray Serve in Production: Deployments, Routing, Autoscaling, KubeRay",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/guide-ray-serve-in-production-deployments-routing-autoscaling-kuberay/2026-11-04-ray-serve-in-production-deployments-routing-autoscaling-kuberay.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-11-04-ray-serve-in-production-deployments-routing-autoscaling-kuberay.md",
+  "pr_url": null,
+  "warnings": [
+    "Evidence that misstates its quote was left out: E41 (Scope names Ray 2.60.0, which the quote doesn't state and which conflicts with the 2.59.0 version in the other scopes fr)",
+    "Section 'TL;DR' still has: 1,700 characters of prose for a target of 1,000: cut background, repetition and minor detail",
+    "self-reference '이 절': 감싸는 RayService 리소스의 클러스터 사양은 이 절에서 보여 주지 않습니다."
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 3521.0,
+  "input_tokens": 3506428,
+  "output_tokens": 440709,
+  "estimated_cost_usd": 20.5527,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 171,
+      "failed_calls": 0,
+      "input_tokens": 21400,
+      "output_tokens": 440709,
+      "cache_read_tokens": 1037935,
+      "cache_write_tokens": 2447093,
+      "cost_usd": 20.55266
+    },
+    "by_stage": {
+      "relevance": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 2617,
+        "output_tokens": 196,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.00036
+      },
+      "research_plan": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 2786,
+        "output_tokens": 767,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.000662
+      },
+      "read": {
+        "calls": 52,
+        "failed_calls": 0,
+        "input_tokens": 124,
+        "output_tokens": 50868,
+        "cache_read_tokens": 408718,
+        "cache_write_tokens": 107421,
+        "cost_usd": 0.859223
+      },
+      "outline": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 7415,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 22693,
+        "cost_usd": 0.261781
+      },
+      "verify": {
+        "calls": 56,
+        "failed_calls": 0,
+        "input_tokens": 224,
+        "output_tokens": 130950,
+        "cache_read_tokens": 513589,
+        "cache_write_tokens": 1259428,
+        "cost_usd": 9.122479
+      },
+      "draft": {
+        "calls": 14,
+        "failed_calls": 0,
+        "input_tokens": 56,
+        "output_tokens": 64328,
+        "cache_read_tokens": 47190,
+        "cache_write_tokens": 362271,
+        "cost_usd": 3.117015
+      },
+      "review": {
+        "calls": 15,
+        "failed_calls": 0,
+        "input_tokens": 60,
+        "output_tokens": 32894,
+        "cache_read_tokens": 24648,
+        "cache_write_tokens": 76452,
+        "cost_usd": 1.050234
+      },
+      "fix": {
+        "calls": 30,
+        "failed_calls": 0,
+        "input_tokens": 120,
+        "output_tokens": 151312,
+        "cache_read_tokens": 43790,
+        "cache_write_tokens": 618828,
+        "cost_usd": 6.138376
+      },
+      "finalize": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 15409,
+        "output_tokens": 1979,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.00253
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-haiku-5-5": {
+        "calls": 3,
+        "failed_calls": 0,
+        "input_tokens": 20812,
+        "output_tokens": 2942,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.003552
+      },
+      "global.anthropic.claude-sonnet-5-5": {
+        "calls": 52,
+        "failed_calls": 0,
+        "input_tokens": 124,
+        "output_tokens": 50868,
+        "cache_read_tokens": 408718,
+        "cache_write_tokens": 107421,
+        "cost_usd": 0.859223
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 116,
+        "failed_calls": 0,
+        "input_tokens": 464,
+        "output_tokens": 386899,
+        "cache_read_tokens": 629217,
+        "cache_write_tokens": 2339672,
+        "cost_usd": 19.689885
+      }
+    }
+  }
+}
