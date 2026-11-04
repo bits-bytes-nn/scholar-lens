@@ -216,7 +216,7 @@ class Survey(_Section):
     # The write stage's engine: "cards" (paper cards, then sections revised
     # by score) or "evidence" (reading agents record checked evidence that the
     # outline gives to sections; docs/redesign.md).
-    engine: Literal["cards", "evidence"] = Field(default="cards")
+    engine: Literal["cards", "evidence"] = Field(default="evidence")
     thinking_effort: ThinkingEffort = Field(default="medium")
     # Papers a survey covers; the selection call picks the count in between
     # from the topic's breadth and the pool.

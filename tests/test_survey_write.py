@@ -1197,8 +1197,11 @@ def stage(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
 
     monkeypatch.setattr(runtime, "build_publisher", publisher)
     session = boto3.Session(region_name="us-east-1")
+    # These tests exercise the cards engine; the evidence engine has its own.
+    config = Config()
+    config.survey.engine = "cards"
     context = RunContext(
-        config=Config(),
+        config=config,
         default_boto_session=session,
         bedrock_boto_session=session,
         conventions=spec,

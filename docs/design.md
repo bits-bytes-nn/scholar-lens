@@ -266,7 +266,7 @@ OpenAlex는 arXiv 시대 ML 논문의 인용 수를 크게 적게 세고(실측:
 
 #### 4.3.2 근거 장부 엔진(`survey.engine: evidence`)
 
-`survey.engine`이 `evidence`이면 쓰기 단계의 카드·개요·절 반복을 근거 장부 엔진(`application/survey_engine.py::EvidenceSurveyEngine`)이 맡습니다. 기본값은 `cards`(4.3.1)입니다. 계획 재검증, 참고 글 읽기, 인용 렌더링(`survey_body`), 마무리 분류, 발행은 같습니다. 설계 배경은 `docs/redesign.md` 3장입니다.
+`survey.engine`의 기본값 `evidence`이면 쓰기 단계의 카드·개요·절 반복을 근거 장부 엔진(`application/survey_engine.py::EvidenceSurveyEngine`)이 맡습니다. `cards`이면 4.3.1의 카드 엔진입니다. 평가 결과는 `docs/redesign.md` 7.2절입니다. 계획 재검증, 참고 글 읽기, 인용 렌더링(`survey_body`), 마무리 분류, 발행은 같습니다. 설계 배경은 `docs/redesign.md` 3장입니다.
 
 1. **원문**(`src/survey_documents.py::PaperDocuments`): 논문마다 arXiv HTML(절, LaTeX, 그림)을 읽고, 없으면 PDF(arXiv, DOI면 OpenAlex의 오픈 액세스 사본, 앞 40쪽 텍스트), 그것도 없으면 색인의 초록을 씁니다. 보조 논문도 같은 순서로 읽습니다. 핵심 논문을 초록으로만 읽으면 PR 메모가 남습니다.
 2. **읽기**(`read`, 모델 역할 `read` = `survey.card_model_id`): 논문마다 Strands 에이전트 하나가 절 목록을 보고 `read_section`·`search_paper`로 필요한 절을 읽으며 `record_evidence`로 근거를 기록합니다(동시 4개, 핵심 논문 30턴·보조 논문 12턴, 논문당 60만 토큰 한도). 기록은 도구 안에서 코드가 검사하고(`domain/evidence.py::evidence_problems`) 통과하지 못하면 이유와 함께 거부되어 에이전트가 고칩니다. 인용문이 그 절에 글자 그대로 있어야 하고(공백 정규화, 대소문자 무시), 주장·표 칸의 모든 수치가 인용문에 있어야 하며, 수치 근거는 범위(모델·벤치마크·설정·지표)가 있어야 하고, 수식은 원문 LaTeX여야 하고, 그림은 원문 그림 목록에 있어야 합니다. 근거는 논문·읽기 버전(`READER_VERSION`)·모델·언어·역할·원문 종류별로 `papers/survey-evidence/`와 S3 `<prefix>/surveys/evidence/`에 캐시합니다. 프롬프트 문구 변경은 캐시를 무효화하지 않습니다.

@@ -124,6 +124,11 @@ survey:
   candidate_pool: 60
   # Soft limit: past it the repair round is skipped; past 1.5x the run aborts.
   max_total_tokens: 300000
+  # Write stage engine: evidence (reading agents record checked evidence;
+  # the outline gives it to sections; claim-checked drafts) or cards (below).
+  # The model ids below serve both: card_model_id reads (and is the writer's
+  # fallback), outline/writing/evaluation as named.
+  engine: evidence
   # Write stage (`survey write --plan`): one card call per paper (cached by
   # paper, card schema, model and language), one outline call, per section a
   # writer, an evaluator, up to max_revision_attempts revisions and a

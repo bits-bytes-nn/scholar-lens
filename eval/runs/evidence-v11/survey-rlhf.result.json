@@ -1,0 +1,126 @@
+{
+  "kind": "survey_write",
+  "status": "succeeded",
+  "input": "eval/sets/plans/survey-rlhf.json",
+  "title": "From RLHF to DPO and GRPO: Lineages of LLM Preference Optimization",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/survey-llm-rlhf-dpo-da36ac9a/2026-11-04-from-rlhf-to-dpo-and-grpo-lineages-of-llm-preference-optimization.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-11-04-from-rlhf-to-dpo-and-grpo-lineages-of-llm-preference-optimization.md",
+  "pr_url": null,
+  "warnings": [
+    "Evidence that misstates its quote was left out: E221 (The quote is a baseline table row for another, larger model (LLaMA-3-70B-it), not a limitation the paper states about it)",
+    "Section '비교 라벨로 배운 보상 모델과 KL 고삐를 단 PPO, 그리고 그 보상의 배신' still has: points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 앞서 본 Anthropic HH-RLHF의 관찰, 즉 RL에서 최적화하는 보상이 $$\\sqrt{\\text{KL}}$$에 대략 선형으로 오른다는 관찰은 학습에 쓰인 선호 모델의 보상에 대한 것이고 , Gao 등의 두 함수형은 gold 점수가 그런 선형 상승을 끝까지 따라가지 않음을 나타냅 | papers ['2307.09288'] belong to this section but no sentence cites their evidence: cover each",
+    "Section '보상 모델을 정책의 로그비로 흡수한 닫힌 형태 재매개화와 그 일반화·실패 양상' still has: points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 앞서 본 IPO의 유계 목적이 장난감 예시 밖에서도 어느 정도 효과를 낸 셈입니다. | evidence ['E77'] was already referred back to once; do not restate it again: Gao 등이 학습된 보상 모델을 대상으로 측정한 증가 후 감소 와 같은 모양이, 이번에는 정책 안에 숨은 암묵적 보상을 대상으로 나타납니다. | papers ['2310.12036'] belong to this section but no sentence cites their evidence: cover each",
+    "Section '참조 모델과 SFT 단계를 덜어낸 순위·승산비·길이 정규화 손실': check 4 sentence(s) the evidence may not support: PPO와 비교한 워크플로 그림에서는 가치 모델과 온라인 RL 루프가 빠지고, 순위 손실 하나가 그 자리를 대신합니다. (unsupported: E108 is only the caption 'Workflow of RRHF compared with PPO'; it does not show that the value model and online RL loop are removed and replaced by a single ranking loss.) | 사람이 고른 요약 $$y_w$$는 20토큰에 합산 로그확률이 $$-30$$이고, 버려진 요약 $$y_l$$은 60토큰에 합산 로그확률이 $$-60$$이라고 하겠습니다. (numbers not in its evidence) | 합산 기준으로는 $$y_w$$가 이미 더 그럴듯합니다($$-30>-60$$). (numbers not in its evidence) | 하지만 토큰당 평균은 $$y_w$$가 $$-1.5$$, $$y_l$$이 $$-1.0$$이어서 생성 과정은 긴 요약 쪽으로 기웁니다. (numbers not in its evidence)",
+    "Section '참조 모델과 SFT 단계를 덜어낸 순위·승산비·길이 정규화 손실' still has: numbers ['20', '30', '60'] without evidence: 사람이 고른 요약 $$y_w$$는 20토큰에 합산 로그확률이 $$-30$$이고, 버려진 요약 $$y_l$$은 60토큰에 합산 로그확률이 $$-60$$이라고 하겠습니다. | ['20', '60'] already stated in '사람 라벨러를 헌법과 AI 판정자로 바꾼 무해성 라벨링': refer back without repeating: 사람이 고른 요약 $$y_w$$는 20토큰에 합산 로그확률이 $$-30$$이고, 버려진 요약 $$y_l$$은 60토큰에 합산 로그확률이 $$-60$$이라고 하겠습니다. | numbers ['30', '60'] without evidence: 합산 기준으로는 $$y_w$$가 이미 더 그럴듯합니다($$-30>-60$$). | ['60'] already stated in '사람 라벨러를 헌법과 AI 판정자로 바꾼 무해성 라벨링': refer back without repeating: 합산 기준으로는 $$y_w$$가 이미 더 그럴듯합니다($$-30>-60$$). | numbers ['1.5'] without evidence: 하지만 토큰당 평균은 $$y_w$$가 $$-1.5$$, $$y_l$$이 $$-1.0$$이어서 생성 과정은 긴 요약 쪽으로 기웁니다.",
+    "Section '가치 모델 대신 그룹 평균을 기준선으로 삼은 GRPO와 검증 가능한 보상': check 1 sentence(s) the evidence may not support: GSM8K와 MATH에서 DeepSeekMath 7B의 SFT 모델과 RL 모델을 비교하면, RL은 Maj@K만 올리고 Pass@K는 올리지 못합니다 [[E172]]. (numbers not in its evidence)",
+    "Section '가치 모델 대신 그룹 평균을 기준선으로 삼은 GRPO와 검증 가능한 보상' still has: numbers ['7B'] are not in the cited evidence: GSM8K와 MATH에서 DeepSeekMath 7B의 SFT 모델과 RL 모델을 비교하면, RL은 Maj@K만 올리고 Pass@K는 올리지 못합니다 . | points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 이 글의 판단으로는, 앞서 본 Pass@K 정체와 흡수 고정점은 같은 현상을 실험과 이론 양쪽에서 확인한 결과입니다.",
+    "Section '단순함·데이터 형태·온폴리시성 사이에서 갈리는 방법별 득실' still has: evidence ['E203'] was already referred back to once; do not restate it again: Online IPO의 실험은 770M 모델의 단일 요약 과제로 제한되어 있어, 대화형 에이전트나 더 큰 모델로 일반화되는지는 검증되지 않았습니다 .",
+    "Section '사라지지 않는 Goodhart, 정렬세, 그리고 분포를 다듬을 뿐인 RL' still has: evidence ['E110'] was already referred back to once; do not restate it again: DPO는 같은 쌍을 정책과 참조 정책의 로그비 차이로 직접 학습합니다 . | evidence ['E238', 'E241'] was already referred back to once; do not restate it again: 별도 보상 모델이 없으니 속일 대상도 없어 보이지만, DPO·IPO·SLiC 모두 KL 예산이 커지면 승률이 혹 모양으로 오르다 꺾이는 과최적화를 보였습니다 . | evidence ['E204'] was already referred back to once; do not restate it again: 라벨러를 AI로 바꾸거나 Online IPO처럼 현재 정책에서 새 요약 쌍을 뽑아 선호 모델에 판정을 맡겨도  구조는 같습니다. | points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 앞서 본 비교표처럼 각 논문이 고른 학술 벤치마크도 서로 달라서, 이 차이가 레시피에서 오는지 평가 범위에서 오는지는 현재 근거로 가를 수 없습니다. | evidence ['E168'] was already referred back to once; do not restate it again: DeepSeekMath에서 RL은 다수결 정확도를 올렸지만 Pass@K는 올리지 못했습니다 .",
+    "Section '보상 모델에서 정책 자체로, 다시 온폴리시 RL로 돌아온 순환' still has: evidence ['E238'] was already referred back to once; do not restate it again: 그래도 앞서 본 과최적화 문제는 그대로 남았습니다 . | evidence ['E204'] was already referred back to once; do not restate it again: 앞서 본 대로 Online IPO는 현재 정책에서 뽑은 요약 쌍을 선호 모델로 판정하는 학습을 셀프 플레이로 읽어 냈습니다 . | evidence ['E171'] was already referred back to once; do not restate it again: 앞서 본 GRPO의 그룹 평균 기준선은 RL을 다시 가볍게 만들었고, 정답 검증 같은 검증 가능한 이진 보상과 짝을 이루었습니다 . | evidence ['E179'] was already referred back to once; do not restate it again: 앞서 본 결과, 곧 학습 후반부에 온라인 RFT가 오프라인 RFT를 앞선 결과 가 그 방향을 뒷받침합니다. | evidence ['E168', 'E246'] was already referred back to once; do not restate it again: 검증 가능한 보상을 쓰는 RL에는 앞서 본 한계에 맞춰 분포를 다듬는 정도의 기대치를 잡아야 합니다 ."
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 3134.2,
+  "input_tokens": 3305353,
+  "output_tokens": 459602,
+  "estimated_cost_usd": 15.3592,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 220,
+      "failed_calls": 0,
+      "input_tokens": 13984,
+      "output_tokens": 459602,
+      "cache_read_tokens": 1737322,
+      "cache_write_tokens": 1554047,
+      "cost_usd": 15.359129
+    },
+    "by_stage": {
+      "read": {
+        "calls": 138,
+        "failed_calls": 0,
+        "input_tokens": 320,
+        "output_tokens": 124962,
+        "cache_read_tokens": 1396896,
+        "cache_write_tokens": 329739,
+        "cost_usd": 2.353987
+      },
+      "outline": {
+        "calls": 2,
+        "failed_calls": 0,
+        "input_tokens": 8,
+        "output_tokens": 22084,
+        "cache_read_tokens": 4092,
+        "cache_write_tokens": 109546,
+        "cost_usd": 0.991078
+      },
+      "verify": {
+        "calls": 35,
+        "failed_calls": 0,
+        "input_tokens": 140,
+        "output_tokens": 47264,
+        "cache_read_tokens": 263350,
+        "cache_write_tokens": 513513,
+        "cost_usd": 3.618736
+      },
+      "draft": {
+        "calls": 15,
+        "failed_calls": 0,
+        "input_tokens": 60,
+        "output_tokens": 123310,
+        "cache_read_tokens": 39045,
+        "cache_write_tokens": 290565,
+        "cost_usd": 3.93488
+      },
+      "review": {
+        "calls": 11,
+        "failed_calls": 0,
+        "input_tokens": 44,
+        "output_tokens": 29297,
+        "cache_read_tokens": 14751,
+        "cache_write_tokens": 52716,
+        "cost_usd": 0.855592
+      },
+      "fix": {
+        "calls": 18,
+        "failed_calls": 0,
+        "input_tokens": 72,
+        "output_tokens": 111806,
+        "cache_read_tokens": 19188,
+        "cache_write_tokens": 257968,
+        "cost_usd": 3.533916
+      },
+      "finalize": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 13340,
+        "output_tokens": 879,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.07094
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-sonnet-5-5": {
+        "calls": 138,
+        "failed_calls": 0,
+        "input_tokens": 320,
+        "output_tokens": 124962,
+        "cache_read_tokens": 1396896,
+        "cache_write_tokens": 329739,
+        "cost_usd": 2.353987
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 82,
+        "failed_calls": 0,
+        "input_tokens": 13664,
+        "output_tokens": 334640,
+        "cache_read_tokens": 340426,
+        "cache_write_tokens": 1224308,
+        "cost_usd": 13.005142
+      }
+    }
+  }
+}
