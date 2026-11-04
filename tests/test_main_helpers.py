@@ -7,6 +7,7 @@ from datetime import datetime
 import pytest
 
 from scholar_lens.configs import Github
+from scholar_lens.domain.conventions import load_local_conventions
 from scholar_lens.src.content_extractor import Attributes
 from scholar_lens.src.explainer import Paper, ReviewText
 from scholar_lens.src.formatting import (
@@ -18,7 +19,6 @@ from scholar_lens.src.formatting import (
     paper_post_meta,
 )
 from scholar_lens.src.parser import Content, Figure, attach_figure_context
-from scholar_lens.src.post_conventions import load_local_conventions
 from scholar_lens.src.publish_types import slugify as _slugify
 from scholar_lens.src.tech_guide import TechGuide
 
@@ -185,8 +185,8 @@ class TestFormatExplanation:
 
 
 def test_link_text_brackets_survive_math_normalization() -> None:
+    from scholar_lens.domain.markdown.math import normalize_math
     from scholar_lens.src.formatting import md_link_text
-    from scholar_lens.src.markdown_math import normalize_math
 
     line = f"* [{md_link_text('[Re] Reproducing Foo [v2]')}](https://x.org/p)"
     assert normalize_math(line) == line
@@ -194,8 +194,8 @@ def test_link_text_brackets_survive_math_normalization() -> None:
 
 
 def test_figure_marker_stays_one_parseable_token() -> None:
+    from scholar_lens.domain.review_plan import figure_catalog
     from scholar_lens.src.parser import Figure, attach_figure_context
-    from scholar_lens.src.review_plan import figure_catalog
 
     fig = Figure(
         figure_id="1",

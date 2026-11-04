@@ -1,0 +1,461 @@
+"""Reference metadata resolution from lenient, non-arXiv sources.
+
+The citation stage used to hit the arXiv API up to three times per reference
+(title search + content fetch + title/author fetch), which is both slow and the
+direct cause of arXiv 429 storms. This module resolves a citation's title,
+authors, abstract, and URL from APIs with generous rate limits — Crossref first
+(no key, abstract often present), OpenAlex second (optional key, broad
+abstract coverage), Semantic Scholar last and only with an API key (its keyless pool is
+shared and mostly answers 429) — and exposes the result so the summariser can work from an *abstract* instead of downloading the
+full paper. arXiv stays available as a fallback in the summariser.
+
+Every provider is best-effort and never raises: a lookup miss returns ``None`` so
+the caller can fall back. Network access goes through a shared rate limiter.
+"""
+
+from __future__ import annotations
+
+import logging
+import os
+import random
+import re
+import threading
+import time
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from typing import Any
+
+import httpx
+from bs4 import BeautifulSoup
+
+from ...domain.ids import (
+    arxiv_id_from_doi,  # noqa: F401 - re-exported
+    normalize_arxiv_id,
+)
+from ...domain.titles import (  # noqa: F401 - moved; re-exported
+    TITLE_MATCH_THRESHOLD,
+    abstract_fits_title,
+    title_similarity,
+    titles_match,
+)
+from ...settings import EnvVars
+from ..http.rate_limit import MAX_RETRY_AFTER_SECONDS, RateLimiter
+
+logger = logging.getLogger(__name__)
+
+_TIMEOUT = 15.0
+_CROSSREF_URL = "https://api.crossref.org/works"
+_OPENALEX_URL = "https://api.openalex.org/works"
+_SEMANTIC_SCHOLAR_URL = "https://api.semanticscholar.org/graph/v1/paper/search"
+
+# Shared limiters sized to each API's published limits: Crossref's public pool
+# allows 1 request per second, one at a time (x-rate-limit-limit: 1,
+# x-concurrency-limit: 1); OpenAlex allows 10 per second (kept well below);
+# Semantic Scholar's pool throttles bursts.
+_CROSSREF_LIMITER = RateLimiter(rate=1.0, per=1.0, name="crossref")
+_CROSSREF_CONCURRENCY = threading.Lock()
+_OPENALEX_LIMITER = RateLimiter(rate=2.0, per=1.0, name="openalex")
+# Search results scanned for a matching record (one request either way).
+_SEARCH_CANDIDATES = 5
+_SEMANTIC_SCHOLAR_LIMITER = RateLimiter(rate=1.0, per=1.0, name="semantic-scholar")
+# Semantic Scholar answers bursts with 429s and no Retry-After (more so
+# without a key, on the shared pool): retried with doubling waits.
+SEMANTIC_SCHOLAR_RATE_LIMIT_RETRIES = 4
+# A 429 without Retry-After waits this long before the single retry.
+_DEFAULT_RETRY_AFTER = 5.0
+_MAX_RETRY_AFTER = MAX_RETRY_AFTER_SECONDS
+# A 5xx waits this long (plus up to the same again, at random) before the
+# single retry.
+_SERVER_ERROR_BACKOFF = 2.0
+# Patched by tests so a retry does not really wait.
+_sleep = time.sleep
+
+# Crossref work types whose URL we trust as the primary publication of a cited
+# paper. Book chapters / encyclopedia entries / monographs are EXCLUDED: for an
+# AI/ML reference they are almost always a different work that merely cites the
+# original, so their URL would mis-attribute the citation.
+_CROSSREF_PRIMARY_TYPES = frozenset(
+    {
+        "journal-article",
+        "proceedings-article",
+        "posted-content",  # preprints (arXiv, bioRxiv, …)
+    }
+)
+
+
+@dataclass
+class ReferenceMetadata:
+    title: str
+    authors: list[str]
+    abstract: str | None = None
+    url: str | None = None
+
+    @property
+    def author_str(self) -> str:
+        return ", ".join(self.authors)
+
+    @property
+    def has_abstract(self) -> bool:
+        return bool(self.abstract and self.abstract.strip())
+
+
+class MetadataProvider(ABC):
+    """Resolves a free-text reference title to structured metadata."""
+
+    @abstractmethod
+    def lookup(self, title: str) -> ReferenceMetadata | None: ...
+
+
+class ProviderUnavailableError(RuntimeError):
+    """The provider cannot answer for the rest of the run: callers skip it."""
+
+
+class QuotaExhaustedError(ProviderUnavailableError):
+    """The API asked for a wait longer than ``_MAX_RETRY_AFTER`` (a spent daily
+    quota): waiting is pointless, so the provider is skipped for the run."""
+
+
+class ProviderAuthError(ProviderUnavailableError):
+    """The API rejected its key (401/403): every later call would too, so the
+    provider is skipped for the run."""
+
+
+def _retry_after(response: httpx.Response) -> float:
+    try:
+        seconds = float(response.headers.get("Retry-After", ""))
+    except ValueError:
+        seconds = _DEFAULT_RETRY_AFTER
+    seconds = max(seconds, 0.0)
+    if seconds > _MAX_RETRY_AFTER:
+        raise QuotaExhaustedError(
+            f"{response.url.host} asks to retry in {seconds:.0f}s"
+        )
+    return seconds
+
+
+def _get_json(
+    url: str,
+    *,
+    params: dict[str, str],
+    limiter: RateLimiter,
+    timeout: float,
+    headers: dict[str, str] | None = None,
+    serial: threading.Lock | None = None,
+    json_body: Any = None,
+    rate_limit_retries: int = 1,
+) -> Any:
+    """GET JSON at the API's pace (POST ``json_body`` when given). This is
+    the one retry layer for these APIs: a 429 pauses every caller of the API
+    for its ``Retry-After`` (doubling from the default when the API sends
+    none, as Semantic Scholar's shared pool does) and is retried up to
+    ``rate_limit_retries`` times, a 5xx is retried once after
+    a short randomized backoff. A wait beyond ``_MAX_RETRY_AFTER`` raises
+    ``QuotaExhaustedError``; a 401/403 to a keyed request (``headers`` carry
+    the API key) raises ``ProviderAuthError``; any other failure
+    ``httpx.HTTPError``."""
+
+    def send() -> httpx.Response:
+        if json_body is not None:
+            return httpx.post(
+                url, params=params, json=json_body, headers=headers, timeout=timeout
+            )
+        return httpx.get(url, params=params, headers=headers, timeout=timeout)
+
+    throttled = server_errors = 0
+    while True:
+        limiter.acquire()
+        if serial is not None:
+            with serial:
+                response = send()
+        else:
+            response = send()
+        if response.status_code == 429 and throttled < rate_limit_retries:
+            wait = _retry_after(response)
+            if "Retry-After" not in response.headers:
+                wait = min(wait * 2**throttled, _MAX_RETRY_AFTER)
+            throttled += 1
+            limiter.penalize(wait)
+            continue
+        if response.status_code >= 500 and server_errors == 0:
+            server_errors += 1
+            logger.info(
+                "%s answered %d; retrying once",
+                response.url.host,
+                response.status_code,
+            )
+            _sleep(_SERVER_ERROR_BACKOFF * (1 + random.random()))
+            continue
+        if response.status_code in (401, 403) and headers:
+            raise ProviderAuthError(
+                f"{response.url.host} rejected the API key ({response.status_code})"
+            )
+        response.raise_for_status()
+        return response.json()
+
+
+class CrossrefProvider(MetadataProvider):
+    """Crossref REST API — no key, broad coverage, abstracts when available."""
+
+    def __init__(self, *, timeout: float = _TIMEOUT, mailto: str | None = None) -> None:
+        self.timeout = timeout
+        self.mailto = mailto or os.environ.get(EnvVars.CROSSREF_MAILTO.value)
+
+    def lookup(self, title: str) -> ReferenceMetadata | None:
+        params = {
+            "query.bibliographic": title,
+            "rows": str(_SEARCH_CANDIDATES),
+            "select": "title,author,abstract,URL,type",
+        }
+        if self.mailto:
+            params["mailto"] = self.mailto
+        try:
+            data = _get_json(
+                _CROSSREF_URL,
+                params=params,
+                limiter=_CROSSREF_LIMITER,
+                timeout=self.timeout,
+                serial=_CROSSREF_CONCURRENCY,
+            )
+            items = data.get("message", {}).get("items", [])
+        except (httpx.HTTPError, ValueError) as e:
+            logger.warning("Crossref lookup failed for '%s': %s", title, e)
+            return None
+        # The top fuzzy hit is often another paper (a survey of ResNet ranks
+        # above ResNet itself); take the matching record whose title is
+        # closest to the queried one, the earliest on a tie.
+        matches = [
+            (" ".join(item.get("title") or []).strip(), item)
+            for item in items
+            if titles_match(title, " ".join(item.get("title") or []))
+        ]
+        if not matches:
+            return None
+        found_title, item = max(matches, key=lambda m: title_similarity(title, m[0]))
+        authors = [
+            " ".join(filter(None, [a.get("given"), a.get("family")]))
+            for a in item.get("author", [])
+        ]
+        abstract = _strip_jats(item.get("abstract"))
+        # Crossref's top fuzzy hit for an AI/ML paper is frequently a book
+        # chapter / encyclopedia entry that merely CITES the work (e.g. a Springer
+        # chapter matching "Attention Is All You Need"). Linking to it
+        # mis-attributes the citation, so only trust the URL for primary
+        # article-like types; otherwise keep title/abstract but drop the link.
+        url = item.get("URL") if item.get("type") in _CROSSREF_PRIMARY_TYPES else None
+        return ReferenceMetadata(
+            title=found_title,
+            authors=[a for a in authors if a],
+            abstract=abstract,
+            url=url,
+        )
+
+
+def _inverted_index_text(index: Any) -> str | None:
+    """OpenAlex ships abstracts as ``{word: [positions]}``; put the words back
+    in position order."""
+    if not isinstance(index, dict):
+        return None
+    placed = sorted(
+        (pos, word)
+        for word, positions in index.items()
+        if isinstance(positions, list)
+        for pos in positions
+        if isinstance(pos, int) and not isinstance(pos, bool)
+    )
+    text = " ".join(word for _, word in placed)
+    return text or None
+
+
+class OpenAlexProvider(MetadataProvider):
+    """OpenAlex works search — broad coverage, abstracts for most papers.
+    Works without a key on a small daily budget per IP; an optional API key
+    (sent as a Bearer token, never in the URL) raises it. ``mailto`` (the
+    Crossref contact) identifies the caller."""
+
+    def __init__(
+        self,
+        *,
+        timeout: float = _TIMEOUT,
+        mailto: str | None = None,
+        api_key: str | None = None,
+    ) -> None:
+        self.timeout = timeout
+        self.mailto = mailto or os.environ.get(EnvVars.CROSSREF_MAILTO.value)
+        self.api_key = api_key or os.environ.get(EnvVars.OPENALEX_API_KEY.value)
+
+    def lookup(self, title: str) -> ReferenceMetadata | None:
+        # Commas and colons are filter syntax in OpenAlex's search parameter.
+        params = {
+            "search": " ".join(re.sub(r"[,:]", " ", title).split()),
+            "per-page": str(_SEARCH_CANDIDATES),
+            "select": "title,authorships,abstract_inverted_index,doi,id",
+        }
+        if self.mailto:
+            params["mailto"] = self.mailto
+        try:
+            results = _get_json(
+                _OPENALEX_URL,
+                params=params,
+                limiter=_OPENALEX_LIMITER,
+                timeout=self.timeout,
+                headers=(
+                    {"Authorization": f"Bearer {self.api_key}"}
+                    if self.api_key
+                    else None
+                ),
+            ).get("results", [])
+        except (httpx.HTTPError, ValueError) as e:
+            logger.warning("OpenAlex lookup failed for '%s': %s", title, e)
+            return None
+        # The top hit is often a sibling paper ("QA-LoRA" for "LoRA") or a
+        # record pairing the right title with another work's abstract and DOI;
+        # take the first whose title matches and whose abstract fits it.
+        for item in results:
+            found_title = (item.get("title") or "").strip()
+            abstract = _inverted_index_text(item.get("abstract_inverted_index"))
+            if not titles_match(title, found_title) or not abstract_fits_title(
+                title, abstract
+            ):
+                continue
+            url = item.get("doi") or item.get("id")
+            if arxiv_id_from_doi(url):
+                # OpenAlex's abstracts for arXiv records are unreliable (one
+                # paper's DOI carried another's abstract); arXiv supplies them.
+                abstract = None
+            authors = [
+                (a.get("author") or {}).get("display_name") or ""
+                for a in item.get("authorships") or []
+            ]
+            return ReferenceMetadata(
+                title=found_title,
+                # Drop placeholder names without letters (e.g. ":").
+                authors=[a for a in authors if re.search(r"[^\W\d_]", a)],
+                abstract=abstract,
+                url=url,
+            )
+        return None
+
+
+class SemanticScholarProvider(MetadataProvider):
+    """Semantic Scholar graph search — good abstract coverage for CS/ML."""
+
+    def __init__(
+        self, *, timeout: float = _TIMEOUT, api_key: str | None = None
+    ) -> None:
+        self.timeout = timeout
+        self.api_key = api_key or os.environ.get(EnvVars.SEMANTIC_SCHOLAR_API_KEY.value)
+
+    def lookup(self, title: str) -> ReferenceMetadata | None:
+        params = {
+            "query": title,
+            "limit": "1",
+            "fields": "title,abstract,authors,url,externalIds",
+        }
+        try:
+            data = _get_json(
+                _SEMANTIC_SCHOLAR_URL,
+                params=params,
+                limiter=_SEMANTIC_SCHOLAR_LIMITER,
+                rate_limit_retries=SEMANTIC_SCHOLAR_RATE_LIMIT_RETRIES,
+                timeout=self.timeout,
+                headers={"x-api-key": self.api_key} if self.api_key else None,
+            ).get("data", [])
+        except (httpx.HTTPError, ValueError) as e:
+            logger.warning("Semantic Scholar lookup failed for '%s': %s", title, e)
+            return None
+        if not data:
+            return None
+        item = data[0]
+        if not (item.get("title") or "").strip():
+            return None
+        return ReferenceMetadata(
+            title=item["title"],
+            authors=[
+                a.get("name", "") for a in item.get("authors", []) if a.get("name")
+            ],
+            abstract=item.get("abstract"),
+            url=_semantic_scholar_url(item),
+        )
+
+
+def _semantic_scholar_url(item: dict[str, Any]) -> str | None:
+    """The paper's own link: its arXiv DOI (so the caller can fetch it by id)
+    or DOI, else the Semantic Scholar page."""
+    ids = item.get("externalIds") or {}
+    if arxiv_id := normalize_arxiv_id(str(ids.get("ArXiv") or "")):
+        return f"https://doi.org/10.48550/arXiv.{arxiv_id}"
+    if doi := str(ids.get("DOI") or "").strip():
+        return f"https://doi.org/{doi}"
+    return item.get("url")
+
+
+class ChainedMetadataResolver:
+    """Tries each provider in order, returning the first usable hit.
+
+    "Usable" prefers a result *with* an abstract (so the summariser can work from
+    it); if no provider yields an abstract, the first non-empty hit is returned so
+    at least title/authors/url are available.
+    """
+
+    def __init__(self, providers: list[MetadataProvider] | None = None) -> None:
+        if providers is None:
+            providers = [CrossrefProvider(), OpenAlexProvider()]
+            # Without a key every call (and every 429 pause) is wasted time.
+            if os.environ.get(EnvVars.SEMANTIC_SCHOLAR_API_KEY.value):
+                providers.append(SemanticScholarProvider())
+        self.providers = providers
+        self._exhausted: set[int] = set()
+
+    def resolve(self, title: str) -> ReferenceMetadata | None:
+        """Return the best record whose title matches ``title``.
+
+        Stops at the first matching record that has both an abstract and its
+        own URL (later providers are not queried); otherwise prefers a matching
+        record with an abstract, then one with a URL (an arXiv DOI lets the
+        caller fetch the paper by id), then any matching record. Records for
+        other papers are discarded, an abstract that shares no content word
+        with the title is dropped as another work's, and URLs are never
+        grafted across records.
+        """
+        hits: list[ReferenceMetadata] = []
+        for provider in self.providers:
+            if id(provider) in self._exhausted:
+                continue
+            try:
+                result = provider.lookup(title)
+            except ProviderUnavailableError as e:
+                self._exhausted.add(id(provider))
+                logger.warning("Skipping %s for the rest of the run: %s", provider, e)
+                continue
+            except Exception as e:  # noqa: BLE001 - resolution must never raise
+                logger.warning("Provider %s raised for '%s': %s", provider, title, e)
+                continue
+            if result is None or not titles_match(title, result.title):
+                continue
+            if not abstract_fits_title(title, result.abstract):
+                result.abstract = None  # another work's abstract
+            if result.has_abstract and result.url:
+                return result
+            hits.append(result)
+        if not hits:
+            return None
+        return next(
+            (h for h in hits if h.has_abstract),
+            next((h for h in hits if h.url), hits[0]),
+        )
+
+
+def _strip_jats(abstract: str | None) -> str | None:
+    """Crossref abstracts are JATS XML; extract plain text.
+
+    Parse with an XML/HTML parser rather than a ``<[^>]+>`` regex: many real
+    Crossref records contain raw inequality signs in prose ("for all x < y and
+    a > b"), which a greedy tag-strip would treat as a tag and delete, silently
+    dropping the clause between them. The parser also decodes entities
+    (``&amp;`` -> ``&``) so the summarizer sees clean text.
+    """
+    if not abstract:
+        return None
+    text = BeautifulSoup(abstract, "html.parser").get_text(separator=" ")
+    text = " ".join(text.split())
+    return text or None

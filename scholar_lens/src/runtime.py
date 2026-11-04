@@ -25,23 +25,19 @@ import boto3
 from botocore.exceptions import ClientError
 from pydantic import BaseModel, ConfigDict
 
+from ..adapters.aws.storage import S3Handler, get_ssm_param_value
+from ..adapters.github.conventions import fetch_blog_posts, load_conventions
+from ..application.usage import cost_allocation
 from ..configs import Config
-from .aws_helpers import S3Handler, get_ssm_param_value
+from ..domain.conventions import BlogPost, PostConventions, tag_counts
+from ..domain.tags import format_tag
+from ..domain.validation import PostValidationError
 from .constants import RUN_SECRETS, EnvVars, LocalPaths, S3Paths, SSMParams
 from .formatting import with_spec_cover
 from .jobs import JobRequest, JobResult, ssm_base, write_result_manifest
 from .logger import is_running_in_aws, logger
 from .metrics import MetricsEmitter, TokenUsageTracker
-from .post_conventions import (
-    BlogPost,
-    PostConventions,
-    fetch_blog_posts,
-    load_conventions,
-    tag_counts,
-)
-from .post_validator import PostValidationError
 from .publisher import PostAssetError, Publisher, PublishError, PublishRequest
-from .tags import format_tag
 
 # Working directory for papers, figures and generated posts: the container's
 # scratch space in AWS, the repository root locally.
@@ -430,11 +426,11 @@ def _rejected_input_errors() -> tuple[type[BaseException], ...]:
 
     Imported lazily so ``status``/``submit`` never load the paper stack.
     """
-    from .arxiv_handler import ArxivNotFoundError
+    from ..adapters.http.url_guard import UnsafeUrlError
+    from ..adapters.scholarly.arxiv import ArxivNotFoundError
+    from ..domain.survey.plan import SurveyInputError
     from .paper_source import PaperSourceError
-    from .survey_plan import SurveyInputError
     from .tech_guide import NotTechnicalContentError
-    from .url_guard import UnsafeUrlError
 
     return (
         ArxivNotFoundError,
@@ -480,7 +476,9 @@ def run_job(request: JobRequest, *, job_id: str | None = None) -> JobResult:
     tracker = TokenUsageTracker()
     started = time.monotonic()
     try:
-        outcome = run_coroutine(_run_pipeline(context, request, tracker))
+        resources = context.config.resources
+        with cost_allocation(resources.project_name, resources.stage, request.kind):
+            outcome = run_coroutine(_run_pipeline(context, request, tracker))
         result.status = "succeeded"
         result.title = outcome.title
         result.markdown_path = (
@@ -535,6 +533,7 @@ def run_job(request: JobRequest, *, job_id: str | None = None) -> JobResult:
         result.input_tokens = tracker.input_tokens
         result.output_tokens = tracker.output_tokens
         result.estimated_cost_usd = round(tracker.estimated_cost_usd(), 4)
+        result.usage = tracker.run_usage()
         _finish(context, result, tracker, notify=not interrupted)
     return result
 
@@ -656,6 +655,10 @@ def format_result_notification(result: JobResult) -> tuple[str, str]:
     if result.job_id:
         fields["Batch job"] = result.job_id
     fields["Cost (est.)"] = f"${result.estimated_cost_usd:.2f}"
+    if result.usage and result.usage.by_stage:
+        fields["Costliest stages"] = ", ".join(
+            f"{stage} ${cost:.2f}" for stage, cost in result.usage.top_stages()
+        )
     if result.warnings:
         fields["Warnings"] = "\n".join(f"- {w}" for w in result.warnings)
     if result.error:

@@ -8,6 +8,7 @@ import pytest
 import requests
 import responses
 
+from scholar_lens.adapters.scholarly.pdf import MAX_PDF_BYTES
 from scholar_lens.src.constants import arxiv_id_from_url as extract_arxiv_id_from_url
 from scholar_lens.src.constants import normalize_arxiv_id
 from scholar_lens.src.paper_source import (
@@ -19,7 +20,6 @@ from scholar_lens.src.paper_source import (
     PdfUrlSource,
     resolve_paper_source,
 )
-from scholar_lens.src.pdf_download import MAX_PDF_BYTES
 
 
 def is_arxiv_id(value: str) -> bool:
@@ -319,7 +319,7 @@ class TestPdfUrlSourceDownload:
     def test_body_streamed_past_cap_rejected_and_partial_cleaned_up(
         self, tmp_papers_dir, monkeypatch
     ) -> None:
-        import scholar_lens.src.pdf_download as pdf
+        import scholar_lens.adapters.scholarly.pdf as pdf
 
         monkeypatch.setattr(pdf, "MAX_PDF_BYTES", 10)  # tiny cap for the test
         responses.add(responses.GET, PDF_URL, body=b"%PDF-" + b"x" * 1000, status=200)
@@ -391,7 +391,7 @@ class TestPdfUrlSourceSsrfPinning:
         # The arbitrary-PDF-URL path is the primary SSRF vector, so a source built
         # without an injected session must pin every hop to an SSRF-validated IP
         # (closing the DNS-rebinding TOCTOU window a plain requests.Session leaves).
-        from scholar_lens.src.pinned_transport import PinnedRequestsAdapter
+        from scholar_lens.adapters.http.pinned_transport import PinnedRequestsAdapter
 
         src = PdfUrlSource(PDF_URL)
         for scheme in ("https://", "http://"):
@@ -400,7 +400,7 @@ class TestPdfUrlSourceSsrfPinning:
     def test_injected_session_is_left_untouched(self) -> None:
         # An explicitly injected session (e.g. the `responses` transport stub used
         # in the hermetic download tests) must NOT be re-mounted.
-        from scholar_lens.src.pinned_transport import PinnedRequestsAdapter
+        from scholar_lens.adapters.http.pinned_transport import PinnedRequestsAdapter
 
         session = requests.Session()
         src = PdfUrlSource(PDF_URL, session=session)
@@ -452,8 +452,8 @@ def test_dns_failure_at_connect_time_is_classified(
 ) -> None:
     # The pinned adapter resolves again when it connects: a resolver hiccup
     # there is an outage too, not a rejected URL.
+    from scholar_lens.adapters.http.url_guard import UnsafeUrlError
     from scholar_lens.src import paper_source
-    from scholar_lens.src.url_guard import UnsafeUrlError
 
     class FlakySession:
         def request(self, *_a, **_k):  # type: ignore[no-untyped-def]

@@ -7,6 +7,8 @@ from datetime import UTC, datetime
 import pytest
 
 from scholar_lens.configs import Github
+from scholar_lens.domain.conventions import BlogPost, load_local_conventions
+from scholar_lens.domain.validation import validate_post
 from scholar_lens.src.content_extractor import Attributes
 from scholar_lens.src.explainer import Paper
 from scholar_lens.src.formatting import (
@@ -17,8 +19,6 @@ from scholar_lens.src.formatting import (
     paper_post_meta,
 )
 from scholar_lens.src.parser import Content
-from scholar_lens.src.post_conventions import BlogPost, load_local_conventions
-from scholar_lens.src.post_validator import validate_post
 from scholar_lens.src.prompts import (
     PaperEditPrompt,
     PaperFinalizationPrompt,

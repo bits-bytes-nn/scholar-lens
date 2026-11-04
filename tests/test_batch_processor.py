@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 from botocore.exceptions import ClientError
 
-from scholar_lens.src.utils import retry as retry_module
+from scholar_lens.adapters import retry as retry_module
 from scholar_lens.src.utils.batch import BatchProcessor
 
 

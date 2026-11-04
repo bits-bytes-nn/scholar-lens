@@ -1,0 +1,114 @@
+{
+  "item": "review-kimi",
+  "post": "/tmp/baseline/out/review-kimi.md",
+  "source": "arXiv 2507.20534 (HTML, full text incl. appendices B-G)",
+  "scores": {"A": 7.5, "B": 7.5, "C": 8.0, "D": 7.5, "E": 7.5, "F": 8.0},
+  "type_scores": {"R1": 9.0, "R2": 8.5, "R3": 8.0},
+  "deductions": {
+    "A": [
+      "L34-50 '## Kimi K2 개요: ...' is an abstract/intro section placed right after the TL;DR (redesign 5.1 forbids an abstract/intro section after TL;DR); L50 re-lists all eight headline scores already in TL;DR L28-29.",
+      "L840-842 '### 결론부의 요약' only restates the paper's Conclusions ('최고의 오픈 웨이트 모델이 되었습니다') before the writer's closing.",
+      "RL is split into three sibling H2 sections (L472 '## 검증 가능한 보상 Gym', L519 '## 검증을 넘어서', L600 '## RL 알고리즘') with no single RL parent heading.",
+      "Markup is otherwise clean: no body H1, no skipped levels, $$ only, use_math true, subtitle/paper_author/paper_doi present, no author key, description 131 chars starting with 'Kimi K2'."
+    ],
+    "B": [
+      "Repeated figure lead-in formula: L175 '다음 그래프에서는 ... 흐름을 보면 됩니다', L189 '다음 그래프에서는 ... 비교하면 됩니다', L287 '아래 그래프에서는 ... 순서를 보면 됩니다', L297 '... 아래에 있다는 점을 보면 됩니다' -> vary, e.g. '그래프에서 2배 헤드 모델(원)은 예산마다 기준 모델(사각형)보다 조금 아래에 있을 뿐입니다.'",
+      "Formulaic worked-example openers: L146 '예시 숫자로 따라가 보겠습니다.', L572 '가상의 시나리오로 따라가 보겠습니다.', L628 '가상의 숫자로 따라가 보겠습니다.'; L58/L525 '...부터 짚습니다.'",
+      "Noun frames: L301 '...정당화하지 못한다는 것이 저자들의 판단입니다' -> '저자들은 이 정도 이득으로는 ... 83% 증가를 정당화할 수 없다고 판단했습니다'; L574 '...확장할 수 있다는 것이 저자들의 설명입니다'.",
+      "English default verb L626 '이 항이 KL 형태의 정칙화 역할을 합니다' -> '이 항이 KL 정칙화처럼 작동합니다'; register slip L221 '...라고 합시다'.",
+      "Stacked modifier L773 '8개 도메인 4.5K API를 쓰는 영·중 이중언어 벤치마크 ACEBench의 영어 Overall은 76.5로' -> split into two sentences. 22 occurrences of '수 있습니다'."
+    ],
+    "C": [
+      "Facts restated: Muon-vs-AdamW logit explosion frequency at L76 and again L96; QK-Norm inapplicable to MLA at L88 and again L104; LMSYS Arena rank at L30, L50 and L797; 15.5T tokens at L42, L54, L263, L355, L842.",
+      "Otherwise good ordering: MLA is explained (L82-88) before per-component clipping (L148-156); cross-references ('앞서 설명한 중간 난이도 선별', L628) are accurate."
+    ],
+    "D": [
+      "Strong help at hard points: QK-Clip numeric example L146, RMS-matching arithmetic L74, effective-rank example L201, 2x2 alignment toy L221, K1.5 objective worked example L628.",
+      "Padding of what a competent reader knows: AdamW decoupled decay L58, MoE basics L80, RLHF reward-model loss L525-531, policy-gradient baseline/KL L604-608, Gym reset/step L734, ZeRO definition L317.",
+      "L484 defines pass@k as '문제당 k개를 샘플링했을 때 측정한 정답 정확도' and then drops problems where all 8 are correct; under pass@k an all-correct and a partly-correct problem both score 1, so the definition and the example disagree.",
+      "Evaluation sections L773-787 give ~45 numbers in running prose with no help for the reader to compare."
+    ],
+    "E": [
+      "L773-787 (tool use, math, general, factuality, long context) and L809-811 (base model) are dense numeric prose where a comparison table is clearly needed.",
+      "L754-765 coding table drops the Gemini 2.5 Flash column ('Gemini 2.5 Flash 열은 생략했습니다') rather than shortening by whole rows.",
+      "Figures (18) are placed where discussed and referred to descriptively; architecture (L269-279), SimpleQA (L249-253) and safety (L827-834) tables match source cells."
+    ],
+    "F": [
+      "L848 '저자들은 후속 릴리스에서 이 문제들을 해결하고 ...' attributes a future-work promise to the whole writer-compiled list (rubric overconfidence, red-team subjectivity, non-thinking-only comparison, empty cells); the paper (Sec. 5) promises fixes only for its three listed limitations.",
+      "L76 places the K2 authors' observation 'Muon을 크게 키우면 어텐션 로짓 폭발이 AdamW보다 자주 일어났습니다' inside the 'Moonlight 실험에서는' paragraph; the paper says 'in our experiments' when scaling Muon for K2 (Sec. 2.1).",
+      "L654 '학습 엔진은 앞서 설명한 PP·EP·ZeRO-1 조합으로 파라미터를 나눕니다' is not stated for the RL training engine.",
+      "L838 groups 'Criminal·Privacy·Security의 프롬프트 인젝션과 반복 탈옥' as weak spots, but on Criminal-Iterative Jailbreak K2 is the best model (57.57 vs 21.21/25.76/53.03).",
+      "No fabricated numbers found: every checked table cell and in-text number matched the source."
+    ]
+  },
+  "principles": {
+    "claim_headings": {"status": "partly met", "evidence": "Claim headings at L92 '문제: Muon을 키우면 어텐션 로짓이 폭발합니다', L680 '설계 트레이드오프: 더 많이 보내는데 더 빠릅니다'; topic-name headings at L106 '최대 로짓 정의', L307 '컴퓨팅 클러스터', L353 '사전학습 레시피', L769 '도구 사용', L779 '일반 능력'."},
+    "running_example": {"status": "not met", "evidence": "No single input carried through; each section uses its own toy (L146 tau=100/S=400, L408 flight booking, L468 get_weather, L628 K=4 rewards, L701 shards A/B/C)."},
+    "mechanism_choice_formula_example": {"status": "met", "evidence": "QK-Clip: problem L92-96, rejected alternatives L98-104, formula L134-144, worked example L146, MLA-specific choice L148-156; K1.5 objective L612-628 likewise."},
+    "facts_said_once": {"status": "not met", "evidence": "LMSYS rank L30/L50/L797; QK-Norm-MLA L88/L104; Muon logit frequency L76/L96; headline scores TL;DR L28 and again L50."},
+    "numbers_with_scope": {"status": "met", "evidence": "Non-thinking setting L46/L740, Avg@k L740, '*' report-cited values flagged L742/L767/L777, Agentless vs agentic modes L746-748, B/T converted (L36 '1.04T(1조 400억)', L169 '9B(90억)')."},
+    "nothing_invented": {"status": "partly met", "evidence": "Hypotheticals labeled (L408, L484, L559, L572, L701); but L848 future-work overreach, L654 unsupported RL-engine sharding claim, L76 context misattribution."},
+    "own_assessment_at_end": {"status": "partly met", "evidence": "L846 and L850 give the writer's judgment (ablation only at 0.5B/tau=30, H800-specific choices, when to use, injection weakness); but L840-842 rehashes the Conclusions and L848 mostly re-lists the paper's limitations."},
+    "length_fitted": {"status": "partly met", "evidence": "855 lines for a long technical report is defensible, but background padding (L58, L80, L525-531, L604-608, L734) and prose number lists (L773-787) add length without help."},
+    "type_specific_shape": {"status": "partly met", "evidence": "TL;DR answers four questions concisely with settings (L16-30); but an intro/overview section follows the TL;DR (L34)."},
+    "korean_style": {"status": "partly met", "evidence": "Consistent 입니다 register and Korean headings; repeated figure intro sentences (L175, L189, L287, L297) and '따라가 보겠습니다' (L146, L572, L628), noun frames L301/L574."}
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 12,
+    "unsupported": 3,
+    "wrong": 0,
+    "unverifiable": 0,
+    "examples": [
+      {"line": 195, "claim": "First 70,000 steps: 12.7% of heads triggered QK-Clip; afterwards inactive", "verdict": "supported", "source": "App. D: 'Initial 70000 steps: 12.7% of attention heads triggered QK-Clip for at least once ... Post-70000 steps: ... rendering QK-Clip inactive.'"},
+      {"line": 179, "claim": "Max logits decay to a stable range after about 30% of training", "verdict": "supported", "source": "Fig. 2 caption: 'only decay to a stable range after approximately 30% of the training steps'"},
+      {"line": 169, "claim": "Mid-scale 9B activated / 53B total MoE with vanilla Muon; max logits exceed 1000", "verdict": "supported", "source": "Sec. 2.1: 'mid-scale 9B activated and 53B total ... quickly exceed a magnitude of 1000'"},
+      {"line": 189, "claim": "Ablation: 0.5B activated / 3B total, MuonClip with tau=30", "verdict": "supported", "source": "App. D: 'two small-scale 0.5B activated and 3B total parameters MoE models ... (tau=30)'"},
+      {"line": 251, "claim": "SimpleQA 23.76 / 27.39 / 28.94 for 0x10, 1x10, 10x1 rephrasings x epochs", "verdict": "supported", "source": "Table 1"},
+      {"line": 291, "claim": "At val loss 1.5, sparsity 48 needs 1.69x/1.39x/1.15x fewer FLOPs than 8/16/32", "verdict": "supported", "source": "Sec. 2.3 Sparsity Scaling Law"},
+      {"line": 295, "claim": "128k context, 64->128 heads with 384 experts: +83% inference FLOPs; doubling heads improves val loss 0.5-1.2%", "verdict": "supported", "source": "Sec. 2.3 Number of Attention Heads"},
+      {"line": 319, "claim": "BF16 params + FP32 grad buffer ~6 TB over 256 GPUs; ~30 GB per GPU for all states", "verdict": "supported", "source": "Sec. 2.4.2"},
+      {"line": 357, "claim": "10T tokens at 2e-4 after 500-step warm-up, 5.5T cosine to 2e-5, then 400B@4k + 60B@32k with 2e-5->7e-6, batch 67M", "verdict": "supported", "source": "Sec. 2.5"},
+      {"line": 686, "claim": "Full parameter update in under 30 seconds", "verdict": "supported", "source": "Sec. 3.3.2: 'complete a full parameter update for Kimi K2 with less than 30 seconds'"},
+      {"line": 777, "claim": "Math average beats Gemini 2.5 Flash by 5.3, DeepSeek-V3-0324 by 5.5, GPT-4.1 by 15.8; HLE 4.7 below all baselines except GPT-4.1 (3.7)", "verdict": "supported", "source": "App. C Math; Table 3 HLE row 4.7/5.2/5.7/5.8/7.1/3.7/5.6"},
+      {"line": 777, "claim": "GPQA-Diamond 75.1 mostly 5+ points above non-thinking baselines, on par with Claude Opus 4 (74.9*)", "verdict": "supported", "source": "Table 3 GPQA row; post correctly qualifies App. C's 'all non-thinking baselines by at least 5 points', which Opus 4 74.9* contradicts"},
+      {"line": 76, "claim": "Logit explosion more frequent with Muon than AdamW, presented within the Moonlight-experiments paragraph", "verdict": "unsupported", "source": "Sec. 2.1 attributes this to K2 scaling ('in our experiments'), not to Moonlight's reported experiments"},
+      {"line": 654, "claim": "RL training engine shards parameters with the PP/EP/ZeRO-1 combination described for pre-training", "verdict": "unsupported", "source": "Sec. 3.3 only says the inference engine uses 'a different sharding paradigm'; no RL training-engine parallelism stated"},
+      {"line": 848, "claim": "Authors will address 'these problems' (incl. rubric overconfidence, red-team subjectivity, non-thinking-only comparison, empty cells) in later releases", "verdict": "unsupported", "source": "Sec. 5 promises future-release fixes only for excessive tokens, unnecessary tool use and one-shot project building"}
+    ]
+  },
+  "checklist": {
+    "total": 17,
+    "repeated": 1,
+    "avoided": 16,
+    "na": 0,
+    "repeated_ids": ["rl-subheading-levels"],
+    "details": {
+      "rl-section-duplicated": {"result": "avoided", "evidence": "One each: L472 '## 검증 가능한 보상 Gym', L650 '## RL 인프라', L652 '### 공동 배치 아키텍처'."},
+      "rl-subheading-levels": {"result": "repeated", "evidence": "No single RL heading; verifiable rewards (L472), self-critique (L519) and RL algorithm (L600) are sibling H2s rather than nested below one RL section."},
+      "ppo-claim": {"result": "avoided", "evidence": "L602 'K2는 Kimi K1.5의 정책 최적화 알고리즘을 그대로 가져와 기반으로 삼습니다. 이 목적함수는 PPO의 클리핑 목적함수와 달리 제곱 오차 꼴'."},
+      "invented-budget-formula": {"result": "avoided", "evidence": "L638 describes per-sample maximum token budget by task type, truncation and penalty; no formula."},
+      "invented-ptx-formula": {"result": "avoided", "evidence": "L642 gives only InstructGPT's own PTX term (correctly attributed); L644 'K2는 사전학습 데이터 대신 직접 엄선한 고품질 샘플로 데이터셋을 만들고'. No L_total/alpha_PTX."},
+      "invented-temperature-formula": {"result": "avoided", "evidence": "L648 describes a decay schedule in prose only."},
+      "invented-env-code": {"result": "avoided", "evidence": "L734 describes the Gym-inspired interface in prose; no AgenticEnvironment code."},
+      "invented-math-verifier": {"result": "avoided", "evidence": "L480-484 coverage via tagging plus SFT pass@k moderate-difficulty selection."},
+      "invented-logic-verifier": {"result": "avoided", "evidence": "L482 lists logic task formats only; no formal-logic step verifier."},
+      "invented-code-quality-eval": {"result": "avoided", "evidence": "L507 unit tests, Kubernetes sandbox, 10,000+ concurrent instances."},
+      "invented-safety-monitoring": {"result": "avoided", "evidence": "L511-517 attack/target/judge pipeline with task-specific rubric and binary label."},
+      "invented-self-refine-loop": {"result": "avoided", "evidence": "L545-547 generate, pairwise compare, rank."},
+      "invented-human-rubric-content": {"result": "avoided", "evidence": "L555 '데이터팀이 특정 지시 맥락에 맞춰 직접 작성한 루브릭입니다.'"},
+      "rubric-limitation-garbled": {"result": "avoided", "evidence": "L595 prescriptive rules ban self-assessment, disclaimers and hedging; L598 overstated certainty."},
+      "invented-infra-mechanisms": {"result": "avoided", "evidence": "L666-686 checkpoint engine, per-parameter pipelining, full broadcast, <30 s; no progressive loading/hierarchical broadcast/real-time debugging."},
+      "missing-description": {"result": "avoided", "evidence": "L8 description starts 'Kimi K2는', numbers 65.8 and 66.1 both in TL;DR L28."},
+      "arxiv-https": {"result": "avoided", "evidence": "No http:// links; L855 'https://arxiv.org/pdf/2507.20534v2'."}
+    }
+  },
+  "extras": {},
+  "top_issues": [
+    "Overview section after the TL;DR (L34-50) restates the abstract and the TL;DR's headline numbers; facts repeat across the post (LMSYS L30/L50/L797, QK-Norm-MLA L88/L104, Muon vs AdamW L76/L96), and L840-842 rehashes the Conclusions.",
+    "Instruct and base evaluation results (L773-787, L809-811) are ~60 numbers in running prose with no comparison table; the coding table drops the Gemini column (L765) instead of whole rows.",
+    "RL is three sibling H2 sections (L472, L519, L600) with no single RL parent (checklist rl-subheading-levels repeated).",
+    "Unsupported attributions: L848 credits the authors with future-work plans for the writer's own limitation list; L76 places a K2 observation inside the Moonlight paragraph; L654 RL-engine sharding claim; L838 lumps Criminal-Iterative Jailbreak (where K2 is best) into the weak spots; L484 pass@k definition contradicts its example.",
+    "Korean formulas and padding: repeated '...보면 됩니다' figure intros (L175, L189, L287, L297), '따라가 보겠습니다' (L146, L572, L628), noun frames (L301, L574), '역할을 합니다' (L626); textbook background on AdamW, MoE, RLHF, policy gradient and Gym (L58, L80, L525-531, L604-608, L734)."
+  ]
+}

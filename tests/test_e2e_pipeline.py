@@ -17,14 +17,14 @@ import boto3
 import pytest
 
 from scholar_lens.configs import Config
+from scholar_lens.domain.conventions import load_local_conventions
+from scholar_lens.domain.validation import PostValidationError, validate_post
 from scholar_lens.src import guide_pipeline, paper_pipeline, publisher, runtime
 from scholar_lens.src.content_extractor import Attributes
 from scholar_lens.src.explainer import Paper
 from scholar_lens.src.jobs import JobRequest
 from scholar_lens.src.metrics import TokenUsageTracker
 from scholar_lens.src.parser import Content, Figure
-from scholar_lens.src.post_conventions import load_local_conventions
-from scholar_lens.src.post_validator import PostValidationError, validate_post
 from scholar_lens.src.tech_guide import TechGuide
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 64
@@ -401,8 +401,8 @@ def _guideline_context(s3: _FakeS3):  # type: ignore[no-untyped-def]
 async def test_translation_guideline_is_optional(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    from scholar_lens.adapters.aws.storage import S3OperationError
     from scholar_lens.src import runtime
-    from scholar_lens.src.aws_helpers import S3OperationError
 
     monkeypatch.setattr(runtime, "ROOT_DIR", tmp_path)
     load = runtime.load_translation_guideline

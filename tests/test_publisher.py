@@ -18,11 +18,11 @@ from github import GithubException
 from moto import mock_aws
 from PIL import Image
 
+from scholar_lens.adapters.aws.storage import S3Handler
 from scholar_lens.configs import Github
-from scholar_lens.src.aws_helpers import S3Handler
+from scholar_lens.domain.conventions import BlogPost
+from scholar_lens.domain.validation import PostValidationError
 from scholar_lens.src.blog_sync import BlogBranchSync
-from scholar_lens.src.post_conventions import BlogPost
-from scholar_lens.src.post_validator import PostValidationError
 from scholar_lens.src.publish_types import slugify
 from scholar_lens.src.publisher import (
     PostAssetError,
@@ -1567,7 +1567,7 @@ class TestValidationGate:
         assert md_path.exists()
 
     async def test_invalid_post_is_rejected_and_kept(self, tmp_path: Path) -> None:
-        from scholar_lens.src.post_validator import PostValidationError
+        from scholar_lens.domain.validation import PostValidationError
 
         broken = VALID_POST.replace('paper_author: "Microsoft"', 'author: "Edward Hu"')
         pub = Publisher(Github(), root_dir=tmp_path)
@@ -1600,7 +1600,7 @@ class TestRejectedCopy:
     async def test_rejected_post_is_copied_under_the_rejected_prefix(
         self, tmp_path: Path
     ) -> None:
-        from scholar_lens.src.post_validator import PostValidationError
+        from scholar_lens.domain.validation import PostValidationError
 
         with mock_aws():
             client = boto3.client("s3", region_name="us-east-1")
@@ -1626,7 +1626,7 @@ class TestRejectedCopy:
     async def test_failed_copy_still_reports_the_rejection(
         self, tmp_path: Path
     ) -> None:
-        from scholar_lens.src.post_validator import PostValidationError
+        from scholar_lens.domain.validation import PostValidationError
 
         class FailingS3:
             async def upload_file_async(self, *_args: Any) -> None:
@@ -1763,8 +1763,8 @@ class TestDownloadImage:
     def test_private_address_is_refused_before_any_request(
         self, monkeypatch: pytest.MonkeyPatch, url: str
     ) -> None:
+        from scholar_lens.adapters.http.url_guard import UnsafeUrlError
         from scholar_lens.src import publisher
-        from scholar_lens.src.url_guard import UnsafeUrlError
 
         def no_transport() -> None:
             raise AssertionError("no request may be made")
@@ -1776,8 +1776,8 @@ class TestDownloadImage:
     def test_redirect_to_a_private_address_is_refused(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        from scholar_lens.adapters.http.url_guard import UnsafeUrlError
         from scholar_lens.src import publisher
-        from scholar_lens.src.url_guard import UnsafeUrlError
 
         hops: list[str] = []
 

@@ -32,32 +32,10 @@ from langchain_core.runnables import Runnable
 from nltk.tokenize.punkt import PunktTokenizer
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator
 
-from .citation_summarizer import CitationSummarizer
-from .code_retriever import CodeRetriever
-from .constants import LanguageModelId, normalize_arxiv_id
-from .content_extractor import Attributes, Citation
-from .formatting import same_as_title
-from .logger import is_running_in_aws, logger
-from .markdown_lint import arxiv_link_key, unlink_unknown_arxiv, writing_issues
-from .metrics import TokenBudgetGuard
-from .parser import Content, Figure
-from .post_validator import (
-    description_markup,
-    description_problems,
-    paper_page_title,
-    unsourced_numbers,
-)
-from .prompt_safety import neutralize_prompt_tags
-from .prompts import (
-    BasePrompt,
-    PaperEditPrompt,
-    PaperFinalizationPrompt,
-    PaperPlanningPrompt,
-    PaperSectionCheckPrompt,
-    PaperSectionPrompt,
-)
-from .quality_gate import publish_blockers
-from .review_plan import (
+from ..application.usage import staged
+from ..domain.markdown.lint import arxiv_link_key, unlink_unknown_arxiv, writing_issues
+from ..domain.quality_gate import publish_blockers
+from ..domain.review_plan import (
     RANGE_PADDING,
     PlanError,
     ReviewPlan,
@@ -83,6 +61,29 @@ from .review_plan import (
     render_glossary,
     render_outline,
     section_source,
+)
+from ..domain.validation import (
+    description_markup,
+    description_problems,
+    paper_page_title,
+    unsourced_numbers,
+)
+from .citation_summarizer import CitationSummarizer
+from .code_retriever import CodeRetriever
+from .constants import LanguageModelId, normalize_arxiv_id
+from .content_extractor import Attributes, Citation
+from .formatting import same_as_title
+from .logger import is_running_in_aws, logger
+from .metrics import TokenBudgetGuard
+from .parser import Content, Figure
+from .prompt_safety import neutralize_prompt_tags
+from .prompts import (
+    BasePrompt,
+    PaperEditPrompt,
+    PaperFinalizationPrompt,
+    PaperPlanningPrompt,
+    PaperSectionCheckPrompt,
+    PaperSectionPrompt,
 )
 from .utils import (
     BedrockLanguageModelFactory,
@@ -354,6 +355,7 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
 
     # ---- stages -----------------------------------------------------------
 
+    @staged("plan")
     async def _plan(
         self, source: SourceText, figures: list[tuple[str, str]]
     ) -> ReviewPlan:
@@ -405,6 +407,7 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
             return plan
         raise PlanError(f"The planner did not return a usable plan: {last_error}")
 
+    @staged("enrich")
     async def _enrich(
         self, plan: ReviewPlan, index: int, source: str, reference_ids: dict[str, str]
     ) -> Enrichment:
@@ -442,6 +445,7 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
                 logger.warning("Code search failed for '%s': %s", section.title, e)
         return enrichment
 
+    @staged("draft")
     async def _write(
         self,
         base: dict[str, Any],
@@ -473,6 +477,7 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
                 break
         return written, list(dict.fromkeys(missing_source))
 
+    @staged("review")
     async def _check(
         self,
         base: dict[str, Any],
@@ -613,6 +618,7 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
             )
         return ensure_section_heading(best_draft, section.title) if best_draft else ""
 
+    @staged("edit")
     async def _edit(self, plan: ReviewPlan, article: str, paper_text: str) -> str:
         notes: list[str] = []
         if self.open_defects:
@@ -698,6 +704,7 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
             return points
         return f"{points}\n\nThe paper's own conclusion:\n{conclusion[:12000]}"
 
+    @staged("finalize")
     async def _finalize(self, plan: ReviewPlan, article: str) -> dict[str, str]:
         payload = {
             "explanation": article,

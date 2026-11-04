@@ -1,0 +1,93 @@
+{
+  "item": "guide-strands",
+  "post": "/tmp/baseline/out/guide-strands.md",
+  "scores": {
+    "A": 7, "B": 8, "C": 8, "D": 8, "E": 7, "F": 8,
+    "T1": 9, "T2": 8, "T3": 7
+  },
+  "score_evidence": {
+    "A": "No body H1 and no skipped levels; math only as $$; front matter fine (description 142 chars, opens with 'Strands Agents SDK'). Deductions: there is no TL;DR, and the post opens straight into '## 에이전트 루프의 동작 원리' (L11). There are 14 H2 sections running through about 14 docs pages, so it reads as a docs walk-through. The sources block uses an English '### Sources' heading after a '- - -' rule, with '&#124;' entities in link titles (L2650-2668). L2598 has a bare URL '(https://github.com/strands-agents/agent-sop)' instead of [title](link). The tag 'Agentic-AI' repeats the category (L6-7).",
+    "B": "The 입니다 register holds and the Korean mostly reads naturally. Deductions: code comments drop into the 한다 register, e.g. L52 '각 결과를 요청 ID로 짝짓는다' and L54 '이력에 넣는다' (rewrite: '짝짓습니다'/'넣습니다'). Table cells use 음슴체 (L79-83, L191 '더 할 행동이 없음'). '할 수 있습니다' appears 15 times, and there are 3 '> **핵심:**' callouts (L177, L482, L788). L37 '이 구조에는 설계 철학이 담겨 있습니다' is a formulaic opener (rewrite: 'Strands가 이 구조를 고른 이유는 …입니다').",
+    "C": "Back-references ('앞서 …') are accurate, and concepts are introduced before use. Deductions: the running example (codebase security analysis, L73-173) stops after section 1. The second half (interventions L2097, steering L2434) reads as stitched doc pages. In L2225-2233 the comment '# 거부된 도구 호출에 대해서는 실행되지 않습니다' implies a before_tool_call Deny skips an after_model_call handler, but Deny short-circuits only handlers on the same event.",
+    "D": "Hard points get worked traces: hook order with order and reverse groups (L781-788), the limit-check overshoot (L313), the tool-count trace (L980-987) and the proactive-compression trace (L1865-1874). Deductions: easy material is padded, with Python and TypeScript twins for almost every feature, and the same 'tool error becomes an error result' point is re-explained at L69, L151, L155, L211 and L1073.",
+    "E": "28 tables, 75 code blocks, one ASCII loop diagram (L19-33) and two formulas. There is no real architecture figure, only ASCII. The history formula $$H_k = H_{k-1} \\oplus a_k \\oplus r_k$$ (L98) adds nothing. Code is heavily duplicated across Python and TypeScript, and the production handler is shown twice (L215-242 and L2610-2646).",
+    "F": "Very high fidelity to the official docs, including API reference details (add_callback list/None/union ValueError, AttributeError on writes). One clear error: L2180 '주민번호 형식의 개인정보를 가립니다' with regex \\d{3}-\\d{2}-\\d{4} (L2190). The source calls this ssn_pattern, the US SSN format; a Korean resident number is 6-7 digits. -2.",
+    "T1": "Concrete snippets with real APIs, flags and defaults, in both SDKs. A few snippets leave out imports (L136, L2111, L2165).",
+    "T2": "Coverage is grounded in official pages and the learning order is sensible. It expands far beyond the two input URLs (agent-loop, hooks) to 14 doc pages, which pads breadth.",
+    "T3": "Internals are good: cancellation checkpoints (L362-373), limit-check timing (L309-317), callback-order semantics (L781-790), middleware vs hooks (L1490-1502). Deductions: only 1 of 16 sources is non-official (AWS ML blog, L2666). There is no 'when to choose Strands vs alternatives'. Observability gets little: only the trace-span note at L1502, and no metrics or AgentResult.metrics."
+  },
+  "principles": {
+    "claim_headings": {"status": "partly met", "evidence": "Some are claims: L185 '정지 이유는 \"다음에 무엇을 할지\"를 정합니다', L309 'SDK는 반복이 시작될 때 한도를 검사합니다', L319. Many are topic names: L573 '훅과 이벤트 모델', L1504 '재시도 전략', L1660 '대화 관리', L1952 '구조화된 출력', L2434 '스티어링(Steering)'."},
+    "running_example": {"status": "partly met", "evidence": "The security-analysis example runs through L73-173 (and is reused at L104 and L157) and then disappears. Later examples are unrelated ('Summarize this document' L273, sleep L971, calculator L856, email L1233, haiku L1218)."},
+    "mechanism_design_code_example": {"status": "met", "evidence": "Limits: mechanism L311, reason L315, code L267, numeric example L313. Hook order: rule L719, reason L721, code L733, trace L783. Cancellation: checkpoints table L362, then cooperative-tool code L443."},
+    "facts_once": {"status": "partly met", "evidence": "max_tokens raises instead of returning, stated at L199, L209 and L2606. Tool errors become error results at L151, L155, L211 and L1073. Context exhaustion at L106 and L2602. History stays valid after limits at L201, L315, L325 and L495."},
+    "numbers_with_scope_unit": {"status": "met", "evidence": "Retry waits in seconds per attempt (L1512-1519), max_delay in seconds (L1545), ms for TypeScript (L1560). Hypothetical numbers are labelled as such (L313, L1865 '토큰 수는 임의로 정한 값입니다')."},
+    "nothing_invented": {"status": "partly met", "evidence": "Illustrations are labelled (L39-42 pseudo-code, L75, L157, L781, L980). Two problems: the SSN regex is mislabelled '주민번호 형식' (L2180), and the writer's own history formula at L98 is not marked as the writer's."},
+    "writer_assessment_at_end": {"status": "not met", "evidence": "The last section, '자주 겪는 문제와 설계 권장사항' (L2600-2648), restates the docs' Common Problems and the lifecycle-controls worked example. There is no assessment of its own (what works, what the docs don't show, when to choose Strands)."},
+    "length_fitted": {"status": "not met", "evidence": "2668 lines, about 65k prose characters, 75 code blocks and 28 tables. Most features get both a Python and a TypeScript version, even simple ones (retry off L1592-1602, NullConversationManager L1676-1689)."},
+    "type_specific_shape": {"status": "partly met", "evidence": "It opens with the problem (L13) and puts the architecture first (loop diagram L19, pseudo-code L41). Missing: a TL;DR, a 'when to choose / how it fails' closing, and real non-official design sources (1/16)."},
+    "korean_style": {"status": "mostly met", "evidence": "The 입니다 register holds and subjects are named. The 핵심 callouts repeat (L177, L482, L788), '할 수 있습니다' appears 15 times, and code comments use the 한다 register (L52, L54)."}
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 14,
+    "unsupported": 0,
+    "wrong": 1,
+    "unverifiable": 0,
+    "examples": [
+      {"line": 82, "claim": "Iteration 4's search returns 12 call sites, in a 5-iteration trace", "verdict": "supported", "source": "agent-loop: 'The model sees 12 call sites in the search results.' (steps 1-5)"},
+      {"line": 317, "claim": "Limit priority when several trip: turns, total tokens, output tokens, structured output attempts", "verdict": "supported", "source": "lifecycle-controls: 'turns, then total tokens, then output tokens, then structured output attempts'"},
+      {"line": 410, "claim": "Polling latency up to about 50 ms, compounding per as_tool() nesting", "verdict": "supported", "source": "agent-loop: 'up to ~50 ms latency, compounding per as_tool() nesting level'"},
+      {"line": 727, "claim": "HookOrder.SDK_FIRST -100, DEFAULT 0, SDK_LAST 100", "verdict": "supported", "source": "hooks: 'HookOrder.SDK_FIRST (-100) … DEFAULT (0) … SDK_LAST (100)'"},
+      {"line": 1510, "claim": "Default retries throttling up to 5 times (6 attempts), 4 s doubling", "verdict": "supported", "source": "retry-strategies: 'up to 5 times (6 total attempts) with exponential backoff starting at 4 seconds'"},
+      {"line": 1545, "claim": "max_delay default 128; TS backoff ExponentialBackoff({ baseMs: 4000, maxMs: 240000 })", "verdict": "supported", "source": "retry-strategies parameter tables"},
+      {"line": 1742, "claim": "summary_ratio default 0.3, clamped 0.1-0.8; preserve_recent_messages default 10", "verdict": "supported", "source": "conversation-management: 'summary_ratio (float, default: 0.3) … (clamped between 0.1 and 0.8)', 'preserve_recent_messages (int, default: 10)'"},
+      {"line": 1834, "claim": "proactive_compression=True uses a default threshold of 0.7", "verdict": "supported", "source": "conversation-management: 'Use True for the default 0.7 threshold'"},
+      {"line": 2507, "claim": "ToolLedgerProvider maxEntries default 100 (oldest dropped)", "verdict": "supported", "source": "steering: '| maxEntries | number | 100 | Maximum tool calls to retain (oldest dropped) |'"},
+      {"line": 2436, "claim": "Tasks with more than 30 steps hit a prompting wall", "verdict": "supported", "source": "steering: 'For tasks with 30+ steps, monolithic prompts become unwieldy'"},
+      {"line": 971, "claim": "LimitToolCounts({'sleep': 3}): 3 successful sleeps, the 4th cancelled, reset each invocation", "verdict": "supported", "source": "hooks cookbook: 'This call will only have 3 successful sleeps … count resets every invocation'"},
+      {"line": 2190, "claim": "Regex \\d{3}-\\d{2}-\\d{4} redacts '주민번호 형식의 개인정보' (L2180)", "verdict": "wrong", "source": "interventions: 'ssn_pattern = r\"\\b\\d{3}-\\d{2}-\\d{4}\\b\"'. This is the US SSN format, not a Korean resident registration number (6-7 digits)."},
+      {"line": 37, "claim": "Model-driven approach; developer supplies model, system prompt and tools; ReAct-style loop", "verdict": "supported", "source": "AWS ML blog: 'model-driven approach centered around three key components: a language model, a system prompt, and a set of tools'; 'the ReAct paradigm of reasoning and tool use'"},
+      {"line": 2095, "claim": "TS counts a content-filtered forced retry as a failed attempt; Python ends with content_filtered", "verdict": "supported", "source": "structured-output-behavior: 'In TypeScript, a forced retry that a content filter or guardrail stops also counts as a failed attempt … In Python, that retry ends the call with its own stop reason'"},
+      {"line": 619, "claim": "add_callback raises ValueError when the type can't be inferred, the list is empty, or an async callback is registered for AgentInitializedEvent", "verdict": "supported", "source": "API ref strands.hooks.registry: 'ValueError - If event_type is not provided and cannot be inferred …, or if AgentInitializedEvent is registered with an async callback, or if the event_type list is empty.'"}
+    ],
+    "number_claims": 10
+  },
+  "checklist": {
+    "repeated": 2,
+    "avoided": 1,
+    "na": 2,
+    "repeated_ids": ["shared-agent-history-leak", "result-fields-incomplete"],
+    "details": [
+      {"id": "loop-diagram-remote", "verdict": "avoided", "evidence": "The post has no image links; the only '![' hits are TypeScript non-null assertions (L2371, L2376). The loop diagram is an inline ASCII block (L19-33), not a remote docs image. Note: there is no local /assets/ diagram either."},
+      {"id": "shared-agent-throw-scope", "verdict": "n/a", "evidence": "No shared module-level agent / async-handler warning. THROW/ConcurrencyException is described generically per the docs (L503), and sync calls blocking inside async handlers are not discussed."},
+      {"id": "shared-agent-history-leak", "verdict": "repeated", "evidence": "L2608 recommends per-request agents only because '인스턴스를 공유하지 않으니 동시 호출 가드에 걸리지 않습니다'. There is no statement that a shared agent carries the previous request's conversation into the next, and no invoke_async recommendation for async handlers (only the code comment at L2627 hints at it)."},
+      {"id": "result-fields-incomplete", "verdict": "repeated", "evidence": "result.stop_reason is shown (L281, L404, L2643), but result.metrics.get_summary() never appears. Metrics are mentioned only in prose (L183, L317)."},
+      {"id": "multi-agent-subject", "verdict": "n/a", "evidence": "The post has no '최소 실행 단위' multi-agent sentence; multi-agent hooks (L1271-1309) don't use it."}
+    ]
+  },
+  "extras": {
+    "kind": "guide",
+    "architecture_first_line": 11,
+    "architecture_notes": "Loop mechanism at L15-71 (ASCII diagram L19, pseudo-code L41) comes before any configuration.",
+    "sources_total": 16,
+    "non_official_sources": 1,
+    "non_official_share": 0.06,
+    "non_official_list": ["AWS ML blog 'Strands Agents SDK: A technical deep dive…' (L2666)"],
+    "opens_with_problem": true,
+    "opens_with_tldr": false,
+    "closes_with_when_to_choose": false,
+    "closes_with_failure_modes": "partly (L2602-2606 restate the docs' Common Problems)",
+    "length_lines": 2668,
+    "code_blocks": 75,
+    "tables": 28,
+    "input_urls_vs_coverage": "2 input URLs (agent-loop, hooks); the post covers 14 doc pages"
+  },
+  "top_issues": [
+    "Guide shape: no TL;DR (opens at L11), and no ending with the writer's own view of when to choose Strands and how it fails. L2600-2648 restate the docs' Common Problems and worked example.",
+    "Length not fitted: 2668 lines, 75 code blocks, 28 tables, Python and TypeScript twins for nearly every feature, and facts repeated (max_tokens L199/L209/L2606; tool-error-as-result L151/L155/L211/L1073).",
+    "Factual error: L2180/L2190 call the US SSN regex \\d{3}-\\d{2}-\\d{4} '주민번호 형식' (the source names it ssn_pattern).",
+    "Human-fix regressions: no result.metrics.get_summary() anywhere, and no warning that a shared module-level agent leaks conversation history across requests or that invoke_async should be used (L2608).",
+    "Weak running example and sourcing: the security-analysis example stops after L173, many headings are topic names (L573, L1504, L1660, L1952, L2434), only 1 of 16 sources is non-official, and the diagram is ASCII with no local asset. Minor: the misleading short-circuit comment at L2225-2233."
+  ]
+}

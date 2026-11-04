@@ -14,17 +14,20 @@ from __future__ import annotations
 
 import html
 import re
-from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
-from urllib.parse import quote
 
+from ..domain.conventions import BlogPost, PostConventions
+from ..domain.markdown.front_matter import split_front_matter, split_front_matter_text
+from ..domain.markdown.links import (  # noqa: F401 - moved; re-exported
+    link_list,
+    md_link_text,
+    md_link_url,
+)
+from ..domain.markdown.math import has_math, normalize_math
+from ..domain.tags import normalize_tags
 from .constants import bare_doi, normalize_arxiv_id
-from .front_matter import split_front_matter, split_front_matter_text
-from .markdown_math import has_math, normalize_math
-from .post_conventions import BlogPost, PostConventions
-from .tags import normalize_tags
 from .utils import escape_yaml_double_quoted, is_placeholder
 from .utils.helpers import first_sentence
 
@@ -100,32 +103,6 @@ def split_leading_h1(body: str) -> tuple[str | None, str]:
     if not m:
         return None, body
     return m.group("title").strip(), body[m.end() :]
-
-
-# Characters of an untrusted title that kramdown or Liquid would read as
-# markup inside "[text](url)": brackets end the link, a | turns the list item
-# into a table, braces open Liquid. Each becomes an entity (shown as itself).
-_LINK_TEXT_ENTITIES = str.maketrans(
-    {"[": "&#91;", "]": "&#93;", "|": "&#124;", "{": "&#123;", "}": "&#125;"}
-)
-# What a link target keeps as is: RFC 3986 reserved characters and "%" (so an
-# encoded URL stays the same). Parentheses, spaces and | are encoded: an
-# unbalanced ")" ends the target, a space ends it, a | splits a table cell.
-_URL_SAFE = ":/?#@!$&'*+,;=%~"
-
-
-def md_link_text(text: str) -> str:
-    """``text`` (a page or paper title) as plain link text: HTML escaped
-    (entities in it decoded first, so ``&amp;`` stays one ampersand) and with
-    the characters Markdown or Liquid would read as markup as entities."""
-    return html.escape(html.unescape(text), quote=False).translate(_LINK_TEXT_ENTITIES)
-
-
-def md_link_url(url: str) -> str:
-    """``url`` as a Markdown link target: characters that would end the
-    target or split a table cell percent-encoded, anything already encoded
-    kept."""
-    return quote(url, safe=_URL_SAFE)
 
 
 def _paper_author(paper: Paper) -> str | None:
@@ -307,23 +284,6 @@ def paper_front_matter(
         lang=meta.lang,
         translation_id=meta.translation_id,
     )
-
-
-def link_list(links: Iterable[tuple[str | None, str]]) -> str:
-    """``* [title](url)`` lines for ``(title, url)`` pairs, one per URL
-    (a trailing slash ignored); a missing or placeholder title, or one that
-    is just the URL, shows the URL itself."""
-    seen: set[str] = set()
-    lines: list[str] = []
-    for title, url in links:
-        if url.rstrip("/") in seen:
-            continue
-        seen.add(url.rstrip("/"))
-        text = " ".join((title or "").split())
-        if is_placeholder(text) or text == url:
-            text = url
-        lines.append(f"* [{md_link_text(text)}]({md_link_url(url)})")
-    return "\n".join(lines)
 
 
 def _paper_references(paper: Paper, extra_links: list[tuple[str, str]]) -> str:

@@ -14,14 +14,14 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from scholar_lens.domain.quality_gate import publish_blockers, rule_issues
+from scholar_lens.domain.review_plan import PlanError, SourceText, draft_rank
+from scholar_lens.domain.validation import body_errors
 from scholar_lens.src.citation_summarizer import CitationSummarizer
 from scholar_lens.src.content_extractor import Attributes, Citation
 from scholar_lens.src.explainer import Paper, PaperReviewer, ReviewText
 from scholar_lens.src.metrics import TokenBudgetExceeded, TokenUsageTracker
 from scholar_lens.src.parser import Content
-from scholar_lens.src.post_validator import body_errors
-from scholar_lens.src.quality_gate import publish_blockers, rule_issues
-from scholar_lens.src.review_plan import PlanError, SourceText, draft_rank
 
 MARKER = '[Image: alt="arch", src="/p/figures/0.png", caption="The architecture."]'
 SENTENCES = [

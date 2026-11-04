@@ -29,22 +29,22 @@ from urllib.parse import parse_qs, unquote, urljoin, urlparse
 import requests
 from pydantic import HttpUrl
 
-from .arxiv_handler import ArxivHandler, ArxivMetadata
-from .constants import arxiv_id_from_url, normalize_arxiv_id
-from .logger import logger
-from .pdf_download import (
-    CHUNK_BYTES,
-    NotPdfContentError,
-    PdfTooLargeError,
-    save_pdf,
-)
-from .pinned_transport import PinnedRequestsAdapter
-from .url_guard import (
+from ..adapters.http.pinned_transport import PinnedRequestsAdapter
+from ..adapters.http.url_guard import (
     UnsafeUrlError,
     assert_url_is_public,
     assert_url_scheme_and_literal,
     is_temporary_dns_failure,
 )
+from ..adapters.scholarly.arxiv import ArxivHandler, ArxivMetadata
+from ..adapters.scholarly.pdf import (
+    CHUNK_BYTES,
+    NotPdfContentError,
+    PdfTooLargeError,
+    save_pdf,
+)
+from .constants import arxiv_id_from_url, normalize_arxiv_id
+from .logger import logger
 
 # "arxiv.org/abs/2106.09685" or "openreview.net/pdf?id=…" typed without a scheme.
 _SCHEMELESS_URL = re.compile(r"^[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}/", re.IGNORECASE)

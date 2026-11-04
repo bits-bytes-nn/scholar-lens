@@ -46,6 +46,8 @@ jobs:
         run: poetry run black --check scholar_lens scripts tests
       - name: Mypy (type check)
         run: poetry run mypy scholar_lens scripts
+      - name: Layer import contracts (import-linter)
+        run: poetry run lint-imports
 
   test:
     name: Test (py${{ matrix.python-version }})

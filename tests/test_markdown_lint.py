@@ -6,7 +6,8 @@ import logging
 
 import pytest
 
-from scholar_lens.src.markdown_lint import (
+from scholar_lens.domain.conventions import load_local_conventions
+from scholar_lens.domain.markdown.lint import (
     drop_unknown_images,
     lint_markdown,
     undefined_macros,
@@ -14,21 +15,22 @@ from scholar_lens.src.markdown_lint import (
     unlink_unknown_arxiv,
     upgrade_http_links,
 )
-from scholar_lens.src.post_conventions import load_local_conventions
 
 
 @pytest.fixture
 def _capture_app_logs():
-    """The app logger has propagate=False (so it won't reach caplog's root
-    handler); enable propagation for the duration of a test so caplog sees the
-    lint warnings."""
-    app_logger = logging.getLogger("app")
-    previous = app_logger.propagate
-    app_logger.propagate = True
+    """The app loggers have propagate=False (so they won't reach caplog's
+    root handler); enable propagation for the duration of a test so caplog
+    sees the lint warnings."""
+    loggers = [logging.getLogger(name) for name in ("app", "scholar_lens")]
+    previous = [lg.propagate for lg in loggers]
+    for lg in loggers:
+        lg.propagate = True
     try:
         yield
     finally:
-        app_logger.propagate = previous
+        for lg, value in zip(loggers, previous, strict=True):
+            lg.propagate = value
 
 
 class TestHeadingBlankLine:
@@ -109,7 +111,7 @@ class TestPlaceholderTagEscaping:
 class TestPipeInMath:
     def test_bare_pipe_in_math_warns_not_rewritten(self, caplog) -> None:
         # NOT auto-rewritten (\vert would break \left|, array{c|c}); warn instead.
-        with caplog.at_level(logging.WARNING, logger="app"):
+        with caplog.at_level(logging.WARNING, logger="scholar_lens"):
             out = lint_markdown(r"prob $$P(a|b)$$ here")
         assert out == r"prob $$P(a|b)$$ here"  # text unchanged
         assert any("bare '|'" in r.message for r in caplog.records)
@@ -117,11 +119,11 @@ class TestPipeInMath:
     def test_left_right_delimiters_not_broken(self, caplog) -> None:
         # The whole point: a \vert rewrite would corrupt these — confirm we don't.
         src = r"$$\left| x \right| + \begin{array}{c|c} a & b \end{array}$$"
-        with caplog.at_level(logging.WARNING, logger="app"):
+        with caplog.at_level(logging.WARNING, logger="scholar_lens"):
             assert lint_markdown(src) == src
 
     def test_no_warning_when_no_bare_pipe(self, caplog) -> None:
-        with caplog.at_level(logging.WARNING, logger="app"):
+        with caplog.at_level(logging.WARNING, logger="scholar_lens"):
             lint_markdown(r"clean \(P(a \mid b)\) here")
         assert not any("bare '|'" in r.message for r in caplog.records)
 
@@ -129,42 +131,42 @@ class TestPipeInMath:
 @pytest.mark.usefixtures("_capture_app_logs")
 class TestWarnings:
     def test_single_dollar_math_warns(self, caplog) -> None:
-        with caplog.at_level(logging.WARNING, logger="app"):
+        with caplog.at_level(logging.WARNING, logger="scholar_lens"):
             lint_markdown(r"inline \(x_1\) ok but $y_2$ bad")
         assert any("single-$" in r.message for r in caplog.records)
 
     def test_currency_in_code_does_not_warn(self, caplog) -> None:
-        with caplog.at_level(logging.WARNING, logger="app"):
+        with caplog.at_level(logging.WARNING, logger="scholar_lens"):
             lint_markdown(r"the price `$5` is fine")
         assert not any("single-$" in r.message for r in caplog.records)
 
     def test_fragile_math_env_and_bm_warn(self, caplog) -> None:
-        with caplog.at_level(logging.WARNING, logger="app"):
+        with caplog.at_level(logging.WARNING, logger="scholar_lens"):
             lint_markdown(r"$$\begin{align} a &= b \end{align}$$ and \(\bm{x}\)")
         msgs = " ".join(r.message for r in caplog.records)
         assert "render poorly" in msgs
 
     def test_aligned_env_does_not_warn(self, caplog) -> None:
         # The recommended \begin{aligned} form must NOT trigger the fragile warning.
-        with caplog.at_level(logging.WARNING, logger="app"):
+        with caplog.at_level(logging.WARNING, logger="scholar_lens"):
             lint_markdown(r"$$\begin{aligned} a &= b \end{aligned}$$")
         assert not any("render poorly" in r.message for r in caplog.records)
 
     def test_standard_macros_do_not_warn(self, caplog) -> None:
         # Base-MathJax macros (and unknown-but-not-flagged ones) must not warn —
         # we only flag the explicit known-undefined set, never allowlist base.
-        with caplog.at_level(logging.WARNING, logger="app"):
+        with caplog.at_level(logging.WARNING, logger="scholar_lens"):
             lint_markdown(r"math \(\alpha + \frac{a}{b} + \mathbb{R}\)")
         assert not any("render as red raw text" in r.message for r in caplog.records)
 
     def test_known_undefined_macro_warns(self, caplog) -> None:
-        with caplog.at_level(logging.WARNING, logger="app"):
+        with caplog.at_level(logging.WARNING, logger="scholar_lens"):
             lint_markdown(r"math $$a \coloneqq b$$")
         assert any("coloneqq" in r.message for r in caplog.records)
 
     def test_blog_defined_macros_do_not_warn(self, caplog) -> None:
         # \llbracket, \rrbracket and \textsc are defined in the blog's head.html.
-        with caplog.at_level(logging.WARNING, logger="app"):
+        with caplog.at_level(logging.WARNING, logger="scholar_lens"):
             lint_markdown(r"math $$\llbracket x \rrbracket \textsc{a}$$")
         assert not any("does not define" in r.message for r in caplog.records)
 
@@ -249,7 +251,7 @@ class TestDropUnknownImages:
 
 class TestFillImageAlts:
     def test_caption_without_label_becomes_alt(self) -> None:
-        from scholar_lens.src.markdown_lint import fill_image_alts
+        from scholar_lens.domain.markdown.lint import fill_image_alts
 
         out = fill_image_alts(
             "![](https://arxiv.org/html/x/x1.png)\n![kept](/a.png)\n![](/u.png)",
@@ -267,7 +269,7 @@ class TestFillImageAlts:
 
 class TestFigureMarkersToImages:
     def test_marker_becomes_image_with_caption_alt(self) -> None:
-        from scholar_lens.src.markdown_lint import figure_markers_to_images
+        from scholar_lens.domain.markdown.lint import figure_markers_to_images
 
         text = (
             '앞 문장.\n[Image: alt="Refer to caption", src="https://arxiv.org/html/x/a.png", '
@@ -281,14 +283,14 @@ class TestFigureMarkersToImages:
         )
 
     def test_markers_inside_code_are_kept(self) -> None:
-        from scholar_lens.src.markdown_lint import figure_markers_to_images
+        from scholar_lens.domain.markdown.lint import figure_markers_to_images
 
         text = '`[Image: alt="a", src="b.png"]`'
         assert figure_markers_to_images(text) == text
 
 
 def test_marker_in_table_row_stays_on_the_row() -> None:
-    from scholar_lens.src.markdown_lint import figure_markers_to_images
+    from scholar_lens.domain.markdown.lint import figure_markers_to_images
 
     row = '| [Image: alt="cat", src="https://x/a.png", caption="c"] | A cat |'
     assert figure_markers_to_images(row) == "| ![cat](https://x/a.png) | A cat |"
@@ -352,7 +354,7 @@ def test_open_angle_bracket_does_not_escape_later_lines(src: str, kept: str) -> 
 
 
 def test_publish_body_is_idempotent_with_an_unboxed_callout() -> None:
-    from scholar_lens.src.markdown_lint import MAX_CALLOUTS, publish_body
+    from scholar_lens.domain.markdown.lint import MAX_CALLOUTS, publish_body
 
     callouts = "\n\n".join(f"> **핵심:** 요점 {i}." for i in range(MAX_CALLOUTS))
     src = callouts + "\n\n> **핵심:** 아래 식\n> $$\n> a = b\n> $$\n> 설명\n"
@@ -361,7 +363,7 @@ def test_publish_body_is_idempotent_with_an_unboxed_callout() -> None:
 
 
 def test_bos_eos_tokens_are_escaped_not_strikethrough() -> None:
-    from scholar_lens.src.markdown_lint import lint_markdown
+    from scholar_lens.domain.markdown.lint import lint_markdown
 
     out = lint_markdown("BOS 토큰 <s>를 문장 앞에, EOS 토큰 </s>를 끝에 붙입니다.")
     assert "&lt;s&gt;" in out and "&lt;/s&gt;" in out
@@ -468,8 +470,8 @@ def test_http_links_are_upgraded(src: str, expected: str) -> None:
 def test_quoted_fences_close_where_their_blockquote_ends(
     src: str, expected: str
 ) -> None:
-    from scholar_lens.src.markdown_lint import close_quoted_fences
-    from scholar_lens.src.markdown_math import blog_unclosed_fence_lines
+    from scholar_lens.domain.markdown.lint import close_quoted_fences
+    from scholar_lens.domain.markdown.math import blog_unclosed_fence_lines
 
     fixed = close_quoted_fences(src)
     assert fixed == expected

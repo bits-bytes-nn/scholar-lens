@@ -11,7 +11,7 @@ from moto import mock_aws
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from scholar_lens import cli
-from scholar_lens.src.aws_helpers import BatchJobError, S3Handler, S3OperationError
+from scholar_lens.adapters.aws.storage import BatchJobError, S3Handler, S3OperationError
 from scholar_lens.src.jobs import (
     JobRequest,
     JobResult,
@@ -242,7 +242,7 @@ class TestWaitForJob:
     def test_transient_manifest_read_is_polled_again(self) -> None:
         from botocore.exceptions import ClientError
 
-        from scholar_lens.src.aws_helpers import S3OperationError
+        from scholar_lens.adapters.aws.storage import S3OperationError
 
         slow_down = ClientError(
             {

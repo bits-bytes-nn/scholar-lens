@@ -12,6 +12,8 @@ from langchain_core.messages import BaseMessage
 from langchain_core.outputs import ChatResult
 from pydantic import Field
 
+from ...application.usage import current_allocation
+from ...domain.cost_allocation import application_profile_name
 from ..constants import EmbeddingModelId, LanguageModelId
 from ..logger import logger
 from .models import (
@@ -19,6 +21,7 @@ from .models import (
     _LANGUAGE_MODEL_INFO,
     EmbeddingModelInfo,
     LanguageModelInfo,
+    register_profile_source,
 )
 
 ModelIdT = TypeVar("ModelIdT")
@@ -50,7 +53,7 @@ class BaseBedrockModelFactory(Generic[ModelIdT, ModelInfoT, WrapperT], ABC):
     # thinking included, at a few dozen tokens per second), not a socket gap.
     BOTO_READ_TIMEOUT: ClassVar[int] = 3600
     BOTO_CONNECT_TIMEOUT: ClassVar[int] = 30
-    # One attempt: RetryableBase (utils.retry) is the single retry layer, so
+    # One attempt: RetryableBase (adapters.retry) is the single retry layer, so
     # botocore must not multiply it.
     BOTO_MAX_ATTEMPTS: ClassVar[int] = 1
     MAX_POOL_CONNECTIONS: ClassVar[int] = 50
@@ -157,6 +160,51 @@ def _resolve_inference_profile(
             return candidate
     logger.debug("No inference profile for '%s'; using the base id.", model_id.value)
     return model_id.value
+
+
+def _allocated_profile(
+    boto_session: boto3.Session, region_name: str, system_profile_id: str
+) -> str:
+    """The kind's application inference profile ARN for the model when the
+    run has a cost allocation and the stack created that profile; otherwise
+    the system profile (calls still work, untagged)."""
+    allocation = current_allocation()
+    if allocation is None:
+        return system_profile_id
+    name = application_profile_name(*allocation, system_profile_id)
+    arn = _application_profiles(boto_session, region_name).get(name)
+    if arn is None:
+        logger.debug("No application inference profile '%s'.", name)
+        return system_profile_id
+    register_profile_source(arn, system_profile_id)
+    return arn
+
+
+@lru_cache(maxsize=8)
+def _application_profiles(
+    boto_session: boto3.Session, region_name: str
+) -> dict[str, str]:
+    """Name -> ARN of the account's application inference profiles; empty
+    when they cannot be listed (calls then go through system profiles)."""
+    client = boto_session.client("bedrock", region_name=region_name)
+    found: dict[str, str] = {}
+    kwargs: dict[str, Any] = {"typeEquals": "APPLICATION"}
+    try:
+        while True:
+            response = client.list_inference_profiles(**kwargs)
+            for p in response.get("inferenceProfileSummaries", []):
+                found[p["inferenceProfileName"]] = p["inferenceProfileArn"]
+            if not response.get("nextToken"):
+                return found
+            kwargs["nextToken"] = response["nextToken"]
+    except ClientError as e:
+        logger.warning(
+            "Could not list application inference profiles in '%s' (%s); "
+            "Bedrock calls are not tagged by kind.",
+            region_name,
+            e,
+        )
+        return {}
 
 
 class BedrockEmbeddingsWrapper(BaseBedrockWrapper, BedrockEmbeddings):
@@ -304,7 +352,16 @@ class BedrockLanguageModelFactory(
         resolved_model_id = BedrockCrossRegionModelHelper.get_cross_region_model_id(
             self.boto_session, model_id, self.region_name or ""
         )
+        system_profile_id = resolved_model_id
+        resolved_model_id = _allocated_profile(
+            self.boto_session, self.region_name or "", system_profile_id
+        )
         config = self._build_model_config(model_info, resolved_model_id, **kwargs)
+        if resolved_model_id != system_profile_id:
+            # An ARN names no provider or model: LangChain needs both to pick
+            # the request format and streaming support.
+            config["provider"] = model_id.value.split(".", 1)[0]
+            config["base_model"] = system_profile_id
         logger.debug("Created language model '%s'", resolved_model_id)
         return CheckedChatBedrockConverse(**config)
 

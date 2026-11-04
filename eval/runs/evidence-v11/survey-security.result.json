@@ -1,0 +1,123 @@
+{
+  "kind": "survey_write",
+  "status": "succeeded",
+  "input": "eval/sets/plans/survey-security.json",
+  "title": "From Prompt Injection to MCP: A Survey of LLM Agent Security",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/survey-security-of-llm-based-ai-agents-prompt-injection-jailbreak-rag-poisoning-tool/2026-11-03-securing-llm-agents-from-prompt-injection-to-mcp-and-defenses.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-11-03-securing-llm-agents-from-prompt-injection-to-mcp-and-defenses.md",
+  "pr_url": null,
+  "warnings": [
+    "Figures arXiv does not serve were left out: https://arxiv.org/html/2503.00061v2/tex/figures/asr_defense_adaptive_attack_bar_spaced.png, https://arxiv.org/html/2503.00061v2/tex/figures/system.png",
+    "Section '정적 단일 턴에서 동적 환경으로 옮겨간 에이전트 보안 측정': check 1 sentence(s) the evidence may not support: 또 고정 문구나 정해진 템플릿으로 방어를 평가하면 적응형 공격이 보여 준 우회를 놓친다는 점이 InjecAgent의 한계로 드러났고, AgentDojo가 적응형 공격 항목을 넣은 이유도 같습니다 [[E118, E15 (unsupported: E153 only reports Max attack boosting success ~10%; no evidence states AgentDojo included adaptive attacks for the same reason as InjecAgent's fixed-prompt limitation — added motive.)",
+    "Section '정적 단일 턴에서 동적 환경으로 옮겨간 에이전트 보안 측정' still has: points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 이 고정성은 앞서 본 적응형 공격 연구가 기존 방어를 모두 우회한 지점과 정확히 겹칩니다. | ['20'] already stated in '안전 학습의 구조적 틈을 파고드는 탈옥의 자동화': refer back without repeating: 모든 방어가 공격 하에서 유틸리티를 15–20% 잃었습니다 . | says what a paper does not state or report; that is rarely evidence (the reader saw only part of it): leave it out or state what the paper does say: 그렇지만 세 곳 모두 검색 문서, 메모리, MCP 도구 설명, 다른 에이전트의 메시지 같은 경로는 직접 다루지 않습니다.",
+    "Section '도구 설명과 에이전트 간 메시지로 번지는 공급망형 공격' still has: ['76'] already stated in '사용자 입력에서 검색 데이터로, 다시 방어 우회로 옮겨 간 인젝션 공격': refer back without repeating: 이때 공격의 76%가 통과했습니다 . | ['20', '75'] already stated in '안전 학습의 구조적 틈을 파고드는 탈옥의 자동화': refer back without repeating: 참가자 20명의 사용자 연구에서 75%가 악성 서버를 하나 이상 골랐고, 모든 악성 서버를 식별한 참가자는 1명뿐이었습니다 . | ['100', '99'] already stated in '사용자 입력에서 검색 데이터로, 다시 방어 우회로 옮겨 간 인젝션 공격': refer back without repeating: gradient-free 절제 실험에서 $$R$$을 빼면 검색 단계 지표인 AHR이 100%에서 65%로, $$S$$를 빼면 ASR이 99%에서 5%로 떨어집니다 . | ['0.74'] already stated in '소수의 문서로 충분한 지식베이스·메모리·학습 데이터 오염': refer back without repeating: 문서를 일정 길이의 윈도로 나눠 구간별 퍼플렉시티를 보는 PPL-W도 0.74에 머물렀습니다 . | self-reference '앞 절': 리 중요도 점수를 거의 최댓값까지 끌어올린다는 결과는 앞 절에서 수치와 함께 다뤘습니다 . 이 조작이 있으면 에이",
+    "Section '탈옥 최적화가 인젝션 방어를 무너뜨리는 공격 기법의 이식' still has: points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 앞서 다룬 공격과 방어의 수치를 한 표에 정리하면 다음과 같습니다.",
+    "Section '능력이 곧 취약성이 되는 에이전트 보안의 역설' still has: ['3.5'] already stated in '안전 학습의 구조적 틈을 파고드는 탈옥의 자동화': refer back without repeating: Prompt Infection의 다중 에이전트 실험에서 GPT-4o는 GPT-3.5보다 공격을 훨씬 잘 무시했습니다 . | ['54', '3.5', '20'] already stated in '사용자 입력에서 검색 데이터로, 다시 방어 우회로 옮겨 간 인젝션 공격': refer back without repeating: 공격 무시 비율로 보면 GPT-4o는 자기복제 공격의 66%, 비자기복제 공격의 54%를 무시했고, GPT-3.5는 각각 9%와 20%에 그쳤습니다 . | ['3.5'] already stated in '안전 학습의 구조적 틈을 파고드는 탈옥의 자동화': refer back without repeating: CaMeL은 Claude 3.5 Sonnet 기준 AgentDojo 중앙값 과제에서 네이티브 tool calling보다 입력 토큰이 2.82배, 출력 토큰이 2.73배 들었습니다 .",
+    "self-reference '앞 절': 리 중요도 점수를 거의 최댓값까지 끌어올린다는 결과는 앞 절에서 수치와 함께 다뤘습니다 ([Lee et al.,"
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 3124.3,
+  "input_tokens": 4491299,
+  "output_tokens": 463149,
+  "estimated_cost_usd": 17.7878,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 253,
+      "failed_calls": 0,
+      "input_tokens": 14766,
+      "output_tokens": 463149,
+      "cache_read_tokens": 2356177,
+      "cache_write_tokens": 2120356,
+      "cost_usd": 17.787764
+    },
+    "by_stage": {
+      "read": {
+        "calls": 150,
+        "failed_calls": 0,
+        "input_tokens": 348,
+        "output_tokens": 137314,
+        "cache_read_tokens": 1578237,
+        "cache_write_tokens": 374895,
+        "cost_usd": 2.626729
+      },
+      "outline": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 12755,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 59000,
+        "cost_usd": 0.550116
+      },
+      "verify": {
+        "calls": 41,
+        "failed_calls": 0,
+        "input_tokens": 164,
+        "output_tokens": 60726,
+        "cache_read_tokens": 404582,
+        "cache_write_tokens": 1053041,
+        "cost_usd": 6.642201
+      },
+      "draft": {
+        "calls": 28,
+        "failed_calls": 0,
+        "input_tokens": 112,
+        "output_tokens": 100725,
+        "cache_read_tokens": 330493,
+        "cache_write_tokens": 302853,
+        "cost_usd": 3.209617
+      },
+      "review": {
+        "calls": 12,
+        "failed_calls": 0,
+        "input_tokens": 46,
+        "output_tokens": 29689,
+        "cache_read_tokens": 22611,
+        "cache_write_tokens": 53059,
+        "cost_usd": 0.868299
+      },
+      "fix": {
+        "calls": 20,
+        "failed_calls": 0,
+        "input_tokens": 80,
+        "output_tokens": 120794,
+        "cache_read_tokens": 20254,
+        "cache_write_tokens": 277508,
+        "cost_usd": 3.811834
+      },
+      "finalize": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 14012,
+        "output_tokens": 1146,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.078968
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-sonnet-5-5": {
+        "calls": 154,
+        "failed_calls": 0,
+        "input_tokens": 364,
+        "output_tokens": 160888,
+        "cache_read_tokens": 1583443,
+        "cache_write_tokens": 460885,
+        "cost_usd": 3.078518
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 99,
+        "failed_calls": 0,
+        "input_tokens": 14402,
+        "output_tokens": 302261,
+        "cache_read_tokens": 772734,
+        "cache_write_tokens": 1659471,
+        "cost_usd": 14.709246
+      }
+    }
+  }
+}

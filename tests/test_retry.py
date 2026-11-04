@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from scholar_lens.src.utils.retry import is_transient_error
+from scholar_lens.adapters.retry import is_transient_error
 
 
 class _CustomValueError(ValueError):
@@ -50,7 +50,7 @@ class TestIsRetryable:
         assert is_transient_error(status_error(404)) is False
 
     def test_arxiv_errors_are_not_retried_again(self) -> None:
-        from scholar_lens.src.arxiv_handler import ArxivPaperError
+        from scholar_lens.adapters.scholarly.arxiv import ArxivPaperError
 
         try:
             raise TimeoutError("slow")
@@ -75,8 +75,8 @@ class TestIsRetryable:
         assert is_transient_error(TokenBudgetExceeded("over")) is False
 
     def test_domain_rejections_are_terminal(self) -> None:
+        from scholar_lens.adapters.http.url_guard import UnsafeUrlError
         from scholar_lens.src.paper_source import NotAPdfError
-        from scholar_lens.src.url_guard import UnsafeUrlError
 
         assert is_transient_error(NotAPdfError("nope")) is False
         assert is_transient_error(UnsafeUrlError("internal")) is False
@@ -104,7 +104,7 @@ class TestRetryPredicate:
         ],
     )
     def test_transient_aws_errors_retried(self, code: str, status: int) -> None:
-        from scholar_lens.src.utils.retry import is_transient_error
+        from scholar_lens.adapters.retry import is_transient_error
 
         assert is_transient_error(self._client_error(code, status))
 
@@ -113,14 +113,14 @@ class TestRetryPredicate:
         ["AccessDeniedException", "ValidationException", "ResourceNotFoundException"],
     )
     def test_deterministic_aws_errors_not_retried(self, code: str) -> None:
-        from scholar_lens.src.utils.retry import is_transient_error
+        from scholar_lens.adapters.retry import is_transient_error
 
         assert not is_transient_error(self._client_error(code))
 
     def test_read_timeout_retried(self) -> None:
         from botocore.exceptions import ReadTimeoutError
 
-        from scholar_lens.src.utils.retry import is_transient_error
+        from scholar_lens.adapters.retry import is_transient_error
 
         assert is_transient_error(ReadTimeoutError(endpoint_url="https://bedrock"))
 
@@ -129,11 +129,11 @@ class TestRetryBudget:
     @pytest.fixture(autouse=True)
     def _no_backoff(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # The backoff is capped by RETRY_MAX_WAIT, read when decorating.
-        monkeypatch.setattr("scholar_lens.src.utils.retry.RETRY_MAX_WAIT", 0)
+        monkeypatch.setattr("scholar_lens.adapters.retry.RETRY_MAX_WAIT", 0)
 
     @staticmethod
     def _call_failing_with(error: BaseException) -> int:
-        from scholar_lens.src.utils.retry import RetryableBase
+        from scholar_lens.adapters.retry import RetryableBase
 
         calls = 0
 
@@ -154,6 +154,6 @@ class TestRetryBudget:
         assert self._call_failing_with(error) == 2
 
     def test_other_transient_errors_use_the_full_budget(self) -> None:
-        from scholar_lens.src.utils.retry import MAX_RETRIES
+        from scholar_lens.adapters.retry import MAX_RETRIES
 
         assert self._call_failing_with(ConnectionError("reset")) == MAX_RETRIES

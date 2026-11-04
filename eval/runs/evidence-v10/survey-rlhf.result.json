@@ -1,0 +1,122 @@
+{
+  "kind": "survey_write",
+  "status": "succeeded",
+  "input": "eval/sets/plans/survey-rlhf.json",
+  "title": "From RLHF to DPO and GRPO: Preference Optimization for LLM Alignment",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/survey-llm-rlhf-dpo-da36ac9a/2026-11-04-from-rlhf-to-dpo-and-grpo-preference-optimization-for-llm-alignment.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-11-04-from-rlhf-to-dpo-and-grpo-preference-optimization-for-llm-alignment.md",
+  "pr_url": null,
+  "warnings": [
+    "Evidence that misstates its quote was left out: E227 (Quote is only a table row of a different model (LLaMA-3-70B-it); it is a result about another model, not a limitation th)",
+    "Section '보상 모델을 정책 안에 숨긴 닫힌 형태 재매개화와 그 일반화' still has: points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 앞서 본 이른 정점이 위쪽 줄에 나타납니다  . | papers ['2310.12036'] belong to this section but no sentence cites their evidence: cover each",
+    "Section '가치 모델 없는 그룹 상대 이점과 검증 가능한 보상의 성공 증폭' still has: points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: DeepSeekMath-RL 7B 학습에서는 정책 학습률을 1e-6, KL 계수를 0.04로 두었고, 질문마다 앞서 소개한 수만큼 출력을 샘플링했습니다 . | points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 이 그림은 Pass@K(샘플 $$K$$개 중 하나라도 맞으면 정답)와 Maj@K($$K$$개의 다수결 답이 맞으면 정답)를 GSM8K와 MATH에서 SFT 모델과 RL 모델로 비교하며, 샘플링 온도는 앞서 소개한 값과 같습니다. | points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 앞서 본 넉넉한 질문당 샘플 수도 성공 확률이 0에 가까운 질문에서 신호를 얻기 위한 장치로 읽힙니다.",
+    "Section '선호 정렬이 남긴 과최적화, 평가자 의존, 능력 확장의 숙제' still has: evidence ['E250'] was already referred back to once; do not restate it again: 이 연구는 이런 질문에서 GRPO가 성공을 새로 만들지 못하며, 참조 모델의 성공확률이 0이면 0이 흡수 고정점이 된다고 보입니다 . | points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 앞서 본 사람 간 일치도 수준만으로도 평가의 한계가 드러납니다 .",
+    "Section '보상 모델의 제거보다 데이터 분포의 관리로 옮겨간 중심' still has: evidence ['E245', 'E244'] was already referred back to once; do not restate it again: 그러나 보상 모델을 지운 직접 정렬 방법들도 앞서 본 과최적화 곡선을 그대로 보였습니다 . | evidence ['E206'] was already referred back to once; do not restate it again: 앞서 다룬 온라인 IPO는 바로 이 분포 쪽을 건드린 시도였습니다 . | evidence ['E181'] was already referred back to once; do not restate it again: DeepSeekMath에서는 앞서 본 온라인 RFT와 오프라인 RFT의 비교가 같은 방향을 가리켰습니다 . | evidence ['E171'] was already referred back to once; do not restate it again: 앞서 설명한 반복 GRPO 역시 보상 모델과 참조 모델을 정책 쪽으로 따라 움직였습니다 . | evidence ['E250'] was already referred back to once; do not restate it again: 앞서 본 GRPO 동역학 분석의 흡수 고정점 결과도 같은 빈칸을 가리킵니다 .",
+    "verification hedge (fix the claim from an official source or drop it): caEval 81.26% / 9.44% | 7B 초과 미검증, 비교 방법 제한 |"
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 3251.7,
+  "input_tokens": 3384590,
+  "output_tokens": 476097,
+  "estimated_cost_usd": 16.619,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 219,
+      "failed_calls": 0,
+      "input_tokens": 13940,
+      "output_tokens": 476097,
+      "cache_read_tokens": 1633303,
+      "cache_write_tokens": 1737347,
+      "cost_usd": 16.61901
+    },
+    "by_stage": {
+      "read": {
+        "calls": 129,
+        "failed_calls": 0,
+        "input_tokens": 302,
+        "output_tokens": 122392,
+        "cache_read_tokens": 1276354,
+        "cache_write_tokens": 327572,
+        "cost_usd": 2.29873
+      },
+      "outline": {
+        "calls": 2,
+        "failed_calls": 0,
+        "input_tokens": 8,
+        "output_tokens": 24578,
+        "cache_read_tokens": 2046,
+        "cache_write_tokens": 113266,
+        "cost_usd": 1.05874
+      },
+      "verify": {
+        "calls": 42,
+        "failed_calls": 0,
+        "input_tokens": 168,
+        "output_tokens": 63760,
+        "cache_read_tokens": 283927,
+        "cache_write_tokens": 698903,
+        "cost_usd": 4.883947
+      },
+      "draft": {
+        "calls": 13,
+        "failed_calls": 0,
+        "input_tokens": 52,
+        "output_tokens": 100935,
+        "cache_read_tokens": 33839,
+        "cache_write_tokens": 240220,
+        "cost_usd": 3.233541
+      },
+      "review": {
+        "calls": 11,
+        "failed_calls": 0,
+        "input_tokens": 44,
+        "output_tokens": 30105,
+        "cache_read_tokens": 14751,
+        "cache_write_tokens": 51373,
+        "cost_usd": 0.865037
+      },
+      "fix": {
+        "calls": 21,
+        "failed_calls": 0,
+        "input_tokens": 84,
+        "output_tokens": 133418,
+        "cache_read_tokens": 22386,
+        "cache_write_tokens": 306013,
+        "cost_usd": 4.207707
+      },
+      "finalize": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 13282,
+        "output_tokens": 909,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.071308
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-sonnet-5-5": {
+        "calls": 129,
+        "failed_calls": 0,
+        "input_tokens": 302,
+        "output_tokens": 122392,
+        "cache_read_tokens": 1276354,
+        "cache_write_tokens": 327572,
+        "cost_usd": 2.29873
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 90,
+        "failed_calls": 0,
+        "input_tokens": 13638,
+        "output_tokens": 353705,
+        "cache_read_tokens": 356949,
+        "cache_write_tokens": 1409775,
+        "cost_usd": 14.32028
+      }
+    }
+  }
+}

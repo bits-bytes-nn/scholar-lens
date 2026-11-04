@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
+from scholar_lens.adapters.http.url_guard import UnsafeUrlError
 from scholar_lens.src.code_retriever import CodeRetriever
-from scholar_lens.src.url_guard import UnsafeUrlError
 
 
 class TestAssertClonable:

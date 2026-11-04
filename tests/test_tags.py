@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import pytest
 
-from scholar_lens.src.post_conventions import (
+from scholar_lens.domain.conventions import (
     GENERATED_SPECIFIC_TAGS,
     load_local_conventions,
 )
-from scholar_lens.src.tags import (
+from scholar_lens.domain.tags import (
     format_tag,
     normalize_tags,
     tag_problem,
@@ -159,7 +159,7 @@ class TestSpellingAndStylizedNames:
 
 
 def test_a_taxonomy_answer_needs_a_controlled_tag() -> None:
-    from scholar_lens.src.tags import NO_CONTROLLED_TAG, controlled_tag_problems
+    from scholar_lens.domain.tags import NO_CONTROLLED_TAG, controlled_tag_problems
 
     options = ["Quantization", "Agentic-AI"]
     assert controlled_tag_problems("quantization, Other", options) == []

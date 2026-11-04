@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from scholar_lens.src import pdf_download
-from scholar_lens.src.pdf_download import (
+from scholar_lens.adapters.scholarly import pdf as pdf_download
+from scholar_lens.adapters.scholarly.pdf import (
     NotPdfContentError,
     PdfTooLargeError,
     save_pdf,

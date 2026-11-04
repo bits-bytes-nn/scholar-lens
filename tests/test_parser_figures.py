@@ -14,6 +14,7 @@ import pymupdf
 import pytest
 import tenacity
 
+from scholar_lens.adapters.retry import MAX_RETRIES
 from scholar_lens.src.parser import (
     Content,
     Figure,
@@ -21,7 +22,6 @@ from scholar_lens.src.parser import (
     _is_valid_region,
     extract_figures_from_pdf,
 )
-from scholar_lens.src.utils.retry import MAX_RETRIES
 
 # A simple rectangle covering most of the page (normalised corner coords).
 SQUARE_COORDS: list[dict[str, float]] = [

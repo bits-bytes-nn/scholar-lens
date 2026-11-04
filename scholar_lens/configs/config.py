@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from typing import Literal
 
@@ -15,6 +16,7 @@ from scholar_lens.src.constants import EmbeddingModelId, LanguageModelId
 from scholar_lens.src.logger import is_running_in_aws
 
 CONFIG_PATH = Path(__file__).parent / "config.yaml"
+CONFIG_PATH_ENV = "SCHOLAR_LENS_CONFIG"
 
 # Effort level for adaptive-thinking models (e.g. Opus 4.8, Opus 5.5). Lower
 # effort means shorter reasoning traces — faster and cheaper. Ignored by legacy
@@ -211,6 +213,10 @@ class Survey(_Section):
     selection_model_id: LanguageModelId = Field(
         default=LanguageModelId.CLAUDE_V5_5_OPUS
     )
+    # The write stage's engine: "cards" (paper cards, then sections revised
+    # by score) or "evidence" (reading agents record checked evidence that the
+    # outline gives to sections; docs/redesign.md).
+    engine: Literal["cards", "evidence"] = Field(default="evidence")
     thinking_effort: ThinkingEffort = Field(default="medium")
     # Papers a survey covers; the selection call picks the count in between
     # from the topic's breadth and the pool.
@@ -289,7 +295,11 @@ class Config(_Section):
 
     @classmethod
     def load(cls) -> "Config":
+        """``config.yaml`` next to this module, or the file named by
+        ``SCHOLAR_LENS_CONFIG`` (an evaluation run with other settings)."""
         load_dotenv()
+        if override := os.environ.get(CONFIG_PATH_ENV):
+            return cls.from_yaml(override)
         if CONFIG_PATH.exists():
             return cls.from_yaml(CONFIG_PATH)
         if is_running_in_aws():

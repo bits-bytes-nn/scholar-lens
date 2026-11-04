@@ -1,0 +1,80 @@
+{
+  "item": "survey-security",
+  "post": "/tmp/eval-evidence/survey-security-v11.md",
+  "judge_run": 2,
+  "scores": {"A": 7.5, "B": 6.5, "C": 6.5, "D": 8.0, "E": 7.0, "F": 7.5, "S1": 6.5},
+  "score_evidence": {
+    "A": "Coherent arc (attack surface -> six lineages -> cross-lineage transfer -> asymmetry/comparison -> paradox -> close); all headings are noun-phrase claims; all 24 plan papers cited. Deductions: L666 says '아래 비교표는 이 비대칭을 논문별로 정리한 것입니다' but three prose subsections (L668-680) come before the table at L682; numbers are split over two result tables (L652-658 and L682-705), against the survey-numbers-in-one-table rule; the AgentDojo overview figure (L336) sits at the end of the benchmark section after its limitations paragraph instead of where AgentDojo is introduced (L288).",
+    "B": "Register break in a figure caption: L336 '...보안을 평가한다.' (rewrite: '...보안을 함께 평가하는 AgentDojo'). Pipeline/input meta leaks: L640 '같은 설정에서 측정한 PoisonedRAG 자체의 ASR 값은 여기서 옮기지 않았으므로, 아래 비교는 상대적 순서만 다룹니다' (drop; give 0.97); L634 '기반 LLM의 이름과, 범위가 ... 어느 변형에 해당하는지는 이 결과와 함께 제시되지 않았습니다'. Formulaic hedging tails repeated: L252 '이는 이 글의 해석입니다.', L290 '이 판단은 글쓴이의 해석입니다.', L314 '이 예시는 글쓴이가 든 가상의 사례입니다.', L318 '이 취지는 글쓴이의 해석입니다.', L362 '이 대입은 설명을 위한 가상의 예입니다.', L382 '이 역시 가상의 예입니다.' (fold into the sentence: '가상의 예로, ...'). English default verb L558 '프롬프트 최적화기 역할을 합니다' (-> '프롬프트 최적화기처럼 지시를 다듬습니다'). English fragments in table cells: L687 'GPT-4 combination_3 Bad Bot 0.94', L688 'Vicuna-7B harmful string ASR 88%'.",
+    "C": "False back-reference: L542 '이 문구가 두 모델 모두에서 메모리 중요도 점수를 거의 최댓값까지 끌어올린다는 결과는 앞 절에서 수치와 함께 다뤘습니다' - no earlier section gives the 10 / 9.84 scores. Facts restated: ToolHijacker's one-document, retrieval+selection definition at L616, again at L632 and L674; tree-of-attack gradient-free optimisation at L620 and L632; BadAgent 13B scope at L512, L678 and L694; AgentPoison perplexity overlap at L506 and L648; Marking bypass at L554 and L674. The running assistant-agent example ties sections together well.",
+    "D": "Hard parts get help where they appear: SecAlign DPO worked numbers (L394), AgentPoison uniqueness/compactness losses explained term by term (L494), GCG candidate-vs-exact-loss design reason (L176), PoisonedRAG retrieval/generation split with a worked assistant example (L468). Minor padding from repeated assistant-agent restatements (e.g. L670, L674, L731).",
+    "E": "Figures referred to descriptively and placed by their discussion, equations used for each method. Deductions: L336 caption uses paper numbering '그림 1:'; the comparison table (L682-705) omits SmoothLLM and ETDI; L655-656 '방어' cells are '—'; English cell fragments (L687-688); 'Claude 2.1%' at L688 is ambiguous (Claude-2 at 2.1%, reads as Claude 2.1).",
+    "F": "1 wrong claim of 15 checked: L634/L654 put StruQ and SecAlign together at 'ASR 84.6%~97.5%' and say the variant split is not given; ToolHijacker Table IX gives 84.6-97.5% for SecAlign only, StruQ is 90.8-99.6%, and every cell is split by gradient-free/gradient-based (also a false claim about what the paper leaves out). All other sampled numbers matched cell for cell.",
+    "S1": "Comparison table omits two plan papers (SmoothLLM, ETDI). Limitation cells are mostly the papers' own (BadAgent L694 matches its Limitations; CaMeL L702), but L684 '완전한 방어 보장 없음' is the paper's conclusion rather than a limitation and L687 '비공개 모델에 의한 간접 검증' is unclear. The cross-lineage and asymmetry sections re-explain ToolHijacker, Marking and ETDI already covered in their cards (L632, L674)."
+  },
+  "principles": {
+    "claim_headings": {"status": "met", "evidence": "L440 '## 소수의 문서로 충분한 지식베이스·메모리·학습 데이터 오염', L664 '## 싸게 이기는 공격과 비싸게 막는 방어의 비대칭'."},
+    "running_example": {"status": "met", "evidence": "The 'forward the address book' assistant agent runs from L13 to L731 (L362, L414, L468, L508, L632)."},
+    "mechanism_design_formula_example": {"status": "met", "evidence": "SecAlign L386-394 (mechanism, why preference pairs over SFT, DPO loss, worked numbers); PoisonedRAG L454-468."},
+    "facts_said_once": {"status": "not met", "evidence": "ToolHijacker definition L616/L632/L674; BadAgent 13B L512/L678/L694; Marking bypass L554/L674."},
+    "numbers_with_variant_scope_unit": {"status": "partly met", "evidence": "Most numbers carry model/dataset (L470, L420, L426); L634/L654 merge StruQ and SecAlign into one range; L688 'Claude 2.1%' ambiguous."},
+    "nothing_invented": {"status": "partly met", "evidence": "L634 false claim that the ToolHijacker variant split is not given; L542 false back-reference."},
+    "own_assessment_at_end": {"status": "met", "evidence": "L723-739 '능력과 권한의 분리라는 남은 과제' and the closing sentence L739."},
+    "length_fitted": {"status": "partly met", "evidence": "771 lines for 24 papers is justified by breadth, but L664-680 and L626-662 mostly restate earlier cards."},
+    "type_specific_shape": {"status": "partly met", "evidence": "Timeline table L21-46 and a per-paper comparison table L682, but result numbers split across two tables (L652, L682) and the comparison table lacks SmoothLLM/ETDI."},
+    "korean_style": {"status": "partly met", "evidence": "Natural overall; repeated '이는 글쓴이의 해석입니다' tails, meta sentence L640, caption register break L336."}
+  },
+  "claims": {
+    "checked": 15, "supported": 14, "unsupported": 0, "wrong": 1, "unverifiable": 0, "from_table": 6, "numbers": 15,
+    "examples": [
+      {"line": 400, "claim": "SecAlign lowers mean log prob of unsafe output to -300 vs StruQ -140", "verdict": "supported", "source": "arXiv 2410.05451: 'StruQ decreases the average log probabilities of y_l to only -140, but SecAlign decreases ... to as low as -300'"},
+      {"line": 420, "claim": "CaMeL without policies: Gemini 2.5 Pro successful attacks 300 -> 0", "verdict": "supported", "source": "arXiv 2503.18813 §security: 'here we install no security policy ... Gemini 2.5 Pro drops from 300 without to 0 with CaMeL'"},
+      {"line": 426, "claim": "Travel suite utility for Claude Sonnet 3.7 55%, 4 75%, with no change to CaMeL or its prompt", "verdict": "supported", "source": "arXiv 2503.18813: 'went from 25% (3.5), to 55% (3.7), to 75% (4), with no changes in CaMeL and its system prompt'"},
+      {"line": 470, "claim": "PoisonedRAG black-box on ReAct agent: NQ 0.72, HotpotQA 0.58, MS-MARCO 0.52", "verdict": "supported", "source": "arXiv 2402.07867: 'Our black-box attack achieves 0.72, 0.58, and 0.52 ASR, respectively'"},
+      {"line": 472, "claim": "Paraphrasing defense NQ black-box ASR 0.97 -> 0.87; knowledge expansion k=50 HotpotQA 41% / 43%", "verdict": "supported", "source": "arXiv 2402.07867 Table 12 'NQ PoisonedRAG (Black-Box) 0.97 0.96 0.87 0.83'; §7.4 '41% (black-box) and 43% (white-box) ASR on HotpotQA when k=50'"},
+      {"line": 508, "claim": "AgentPoison benign drop 0.74%, retrieval success 81.2%, 59.4% target action, 62.6% target impact", "verdict": "supported", "source": "arXiv 2407.12784: 'minimal impact on benign performance of average 0.74% ... retrieval success rate of 81.2% ... 59.4% generates target actions where 62.6% result in actual target impact'"},
+      {"line": 554, "claim": "Marking bypassed by an underbar-interleaving counterattack, 76% of attacks pass", "verdict": "supported", "source": "arXiv 2410.07283: 'the Marking strategy is the most promising but still permits 76% of attacks ... interleaving each word ... with underbars'"},
+      {"line": 596, "claim": "Malicious MCP server uploaded to all 3 platforms without warning; user study 20 participants, 75% picked a malicious server, only 1 identified all", "verdict": "supported", "source": "arXiv 2506.02040: 'successfully uploads to all three platforms without warnings or rejections'; '75.0% of participants selected at least one malicious server ... only one participant identified all four'"},
+      {"line": 620, "claim": "ToolHijacker gradient-free ablation: without R AHR 100% -> 65%, without S ASR 99% -> 5%; gradient-based ASR 32% (1 shadow description) -> 98% (7), MetaTool task 1, GPT-4o", "verdict": "supported", "source": "arXiv 2504.19793 §IV-C: 'AHR drops from 100% to 65% without R ... ASR drops from 99% to 5%'; 'rises from 32% with a single shadow task description to 98% with seven'; ablation default 'task 1 from the MetaTool dataset, with GPT-4o'"},
+      {"line": 634, "claim": "StruQ- or SecAlign-fine-tuned LLMs: ASR 84.6%-97.5% on MetaTool/ToolBench; the range pools all attack strategies and the variant is not given (also table L654)", "verdict": "wrong", "source": "arXiv 2504.19793 Table IX: StruQ ASR 99.6/90.8 (gradient-free), 97.9/92.1 (gradient-based); SecAlign 97.5/86.9, 92.1/84.6. Text: 'Although SecAlign yields slightly lower ASR values than StruQ ... the ASR still ranges from 84.6% to 97.5%'. The range is SecAlign's only; StruQ reaches 99.6%; the table splits every value by variant."},
+      {"line": 636, "claim": "GPT-4o-mini with the tool-calling API (instruction hierarchy by default) vulnerable to 276 AgentDojo attacks; not vulnerable with CaMeL (also table L657-658)", "verdict": "supported", "source": "arXiv 2503.18813: 'GPT-4o Mini with CaMeL is not vulnerable to any of the attacks ... with the tool calling API ... is vulnerable to 276 attacks'"},
+      {"line": 640, "claim": "PoisonedRAG baseline comparison on NQ: GCG ASR 0.02, prompt-injection baseline 0.62, both below PoisonedRAG (also table L655-656)", "verdict": "supported", "source": "arXiv 2402.07867 Table 4: NQ 'Prompt Injection Attack 0.62 ... GCG Attack 0.02 ... PoisonedRAG (Black-Box) 0.97'"},
+      {"line": 697, "claim": "Table: SecAlign strongest optimisation attack ASR 1% / 8%", "verdict": "supported", "source": "arXiv 2410.05451: 'SecAlign decreases the ASRs of the strongest prompt injections to 1% and 8%'"},
+      {"line": 702, "claim": "Table: CaMeL solves 77% of AgentDojo tasks (84% undefended); 0 successful attacks vs tool filter 8", "verdict": "supported", "source": "arXiv 2503.18813 abstract '77% of tasks with provable security (compared to 84% with an undefended system)'; §6.3 'number of successful attacks with CaMeL is 0, while ... tool filter is 8'"},
+      {"line": 704, "claim": "Table: MCP attacks average ASR about 53.00%, RR under 5.00%; Gemini 2.5 Pro average ASR 67.78%", "verdict": "supported", "source": "arXiv 2506.02040: 'these attacks achieve an ASR of around 53.00%, while the RR remains under 5.00%'; Table 3 'Gemini 2.5 Pro ... 67.78% 0.00%'"}
+    ],
+    "additional_spot_checks_supported": ["L598 GPT-4o lowest ASR 40.00% attributed to tool-use limits", "L604 Cherry Studio RR 33.89%", "L622 PPL AUC 0.64, PPL-W 0.74", "L713 GPT-4o ignores 66%/54%, GPT-3.5 9%/20%", "L719 CaMeL 2.82x input / 2.73x output tokens", "L698 Prompt Infection +13.92% / +209%, Instruction Defense+Tagging 3%", "L700 AiTM AutoGen Chain HumanEval 95.2%, >40% all cases", "L695 AgentDojo end-position 70%, tool filter 7.5%", "L705 ToolHijacker GPT-4o MetaTool 96.7%, ToolBench AHR 96.1%", "L512/L694 BadAgent >85%, at most 13B, three tasks (Limitations)"]
+  },
+  "checklist": {
+    "repeated": 1, "avoided": 10, "na": 2,
+    "repeated_ids": ["multiagent-integrity-overgeneralized"],
+    "details": {
+      "houyi-sentence-grammar": {"status": "n/a", "evidence": "No HouYi pilot-study sentence (L109-119)."},
+      "heading-english-tool": {"status": "avoided", "evidence": "L520 '## 도구 설명과 에이전트 간 메시지로 번지는 공급망형 공격'."},
+      "etdi-translationese": {"status": "avoided", "evidence": "ETDI covered at L606-612 with no '실무에 바로 대응됩니다'."},
+      "multiagent-integrity-overgeneralized": {"status": "repeated", "evidence": "L725 '분리의 비용을 줄일 정책 자동화가 아직 없습니다' and '적응형 공격을 기본 평가 조건으로 삼는 벤치마크도 아직 드뭅니다' are field-wide gap claims not scoped to the reviewed papers (L334 and L715 are scoped)."},
+      "secalign-taskshield-repeated-verb": {"status": "n/a", "evidence": "No Task Shield sentence; '옮겼습니다' absent."},
+      "lightweight-defense-practice-claim": {"status": "avoided", "evidence": "No claim about what practitioners deploy first; L438 layering is marked '이 글의 판단으로는'."},
+      "injecagent-finetuned-variants": {"status": "avoided", "evidence": "L692 '파인튜닝 에이전트 ASR 3.8%/6.6%' without GPT-4/GPT-3.5 assignment."},
+      "agentdojo-utility-restated": {"status": "avoided", "evidence": "L298 gives the drop once as '절대 유틸리티가 10%–25% 줄었습니다'; 69.00/50.08 not restated."},
+      "agentdojo-baseline-defenses": {"status": "avoided", "evidence": "L308 '데이터 구분자, BERT 기반 인젝션 탐지기, 프롬프트 샌드위치, 도구 필터' - tool filter included, no dual-LLM."},
+      "benchmark-conclusion-flip": {"status": "avoided", "evidence": "No 'conclusion flips' wording; L666 states rows are not comparable across models/metrics."},
+      "jailbroken-cell-duplicated": {"status": "avoided", "evidence": "L687 'GPT-4 combination_3 Bad Bot 0.94' states model/condition once."},
+      "toolhijacker-limitation-column": {"status": "avoided", "evidence": "L705 limitation 'gradient-based 가독성 저하', not a defense-failure finding."},
+      "prompt-infection-venue": {"status": "avoided", "evidence": "L759 no 'Lecture notes in computer science' (venue left blank)."}
+    }
+  },
+  "extras": {
+    "plan_papers_not_cited": [],
+    "plan_papers_missing_from_comparison_table": ["2310.03684 SmoothLLM", "2506.01333 ETDI"],
+    "thin_sections": ["### 평가 조건의 비대칭 L676-680 (two short paragraphs)"],
+    "venue_issues": ["Greshake (L745), AgentDojo (L756), Prompt Infection (L759) carry no venue; no garbled plan strings (CISPA, Zenodo, LNCS dropped)"],
+    "table_cells_prose_or_empty": ["L655-656 방어 cells '—'", "L687 'combination_3 Bad Bot', L688 'harmful string' English fragments", "L688 'Claude 2.1%' ambiguous"],
+    "other": ["L336 figure caption with paper numbering '그림 1:' and 한다-form, placed after the benchmark limitations", "L542 false back-reference to an earlier section", "L640 input-meta sentence about values not carried over"]
+  },
+  "top_issues": [
+    "Wrong number scope: L634/L654 give 'StruQ / SecAlign ASR 84.6%~97.5%' and claim the variant split is not given; ToolHijacker Table IX gives that range for SecAlign only (StruQ 90.8-99.6%) and splits every cell by gradient-free/gradient-based.",
+    "False back-reference and repetition: L542 says the importance-score numbers were given 'in an earlier section' (they never are); ToolHijacker, Marking, BadAgent 13B and AgentPoison perplexity are each re-explained 2-3 times (L616/L632/L674, L554/L674, L512/L678/L694).",
+    "Meta and hedging prose plus table hygiene: L640 '...ASR 값은 여기서 옮기지 않았으므로', six '이는 글쓴이의 해석입니다'-style tails, L336 '그림 1: ... 평가한다.' caption, numbers split over two result tables, comparison table missing SmoothLLM and ETDI with '—' and English fragment cells."
+  ]
+}

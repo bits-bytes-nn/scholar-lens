@@ -18,28 +18,19 @@ import pytest
 from pydantic import ValidationError
 
 from scholar_lens import cli
-from scholar_lens.configs.config import Config, Survey
-from scholar_lens.src import citation_metadata, scholarly_index
-from scholar_lens.src.arxiv_handler import ArxivMetadata, ArxivPaperError
-from scholar_lens.src.citation_metadata import QuotaExhaustedError
-from scholar_lens.src.jobs import JobRequest, JobResult
-from scholar_lens.src.metrics import TokenBudgetExceeded, TokenUsageTracker
-from scholar_lens.src.scholarly_index import (
+from scholar_lens.adapters.scholarly import index as scholarly_index
+from scholar_lens.adapters.scholarly import metadata as citation_metadata
+from scholar_lens.adapters.scholarly.arxiv import ArxivMetadata, ArxivPaperError
+from scholar_lens.adapters.scholarly.index import (
     DataCiteIndex,
     OpenAlexIndex,
     SemanticScholarIndex,
     datacite_record,
     openalex_record,
 )
-from scholar_lens.src.survey_pipeline import (
-    CandidateFinder,
-    CandidateSearchError,
-    SurveyPlanner,
-    plan_survey,
-    read_references,
-    save_plan,
-)
-from scholar_lens.src.survey_plan import (
+from scholar_lens.adapters.scholarly.metadata import QuotaExhaustedError
+from scholar_lens.configs.config import Config, Survey
+from scholar_lens.domain.survey.plan import (
     Candidate,
     CitationData,
     PlanReference,
@@ -49,6 +40,16 @@ from scholar_lens.src.survey_plan import (
     SurveyScope,
     TimeRange,
     survey_slug,
+)
+from scholar_lens.src.jobs import JobRequest, JobResult
+from scholar_lens.src.metrics import TokenBudgetExceeded, TokenUsageTracker
+from scholar_lens.src.survey_pipeline import (
+    CandidateFinder,
+    CandidateSearchError,
+    SurveyPlanner,
+    plan_survey,
+    read_references,
+    save_plan,
 )
 from scholar_lens.src.web_research import PageContent, ResearchCorpus, SourceFetchError
 
@@ -323,10 +324,17 @@ WORK = {
         {"author": {"display_name": ":"}},
     ],
     "publication_date": "2023-05-29",
-    "primary_location": {"source": {"display_name": "arXiv (Cornell University)"}},
+    "primary_location": {
+        "source": {"display_name": "arXiv (Cornell University)", "type": "repository"}
+    },
     "locations": [
         {"landing_page_url": "http://arxiv.org/abs/2305.18290"},
-        {"source": {"display_name": "Neural Information Processing Systems"}},
+        {
+            "source": {
+                "display_name": "Neural Information Processing Systems",
+                "type": "conference",
+            }
+        },
     ],
     "cited_by_count": 293,
     "abstract_inverted_index": {"We": [0], "propose": [1]},
@@ -385,7 +393,7 @@ class TestAdapters:
         assert record is not None
         assert record.arxiv_id == "2305.18290" and record.doi is None
         assert record.openalex_id == "W4378771755"
-        assert record.venue == "Neural Information Processing Systems"
+        assert record.venue == "NeurIPS"
         assert record.authors == ["Rafael Rafailov"]
         # arXiv supplies abstracts of arXiv papers (OpenAlex's are unreliable).
         assert record.abstract is None
@@ -495,7 +503,7 @@ class TestAdapters:
 
 class TestArxivSearch:
     def _handler(self, monkeypatch: pytest.MonkeyPatch, results: Any) -> Any:
-        from scholar_lens.src import arxiv_handler
+        from scholar_lens.adapters.scholarly import arxiv as arxiv_handler
 
         limiter = MagicMock()
         monkeypatch.setattr(arxiv_handler, "_ARXIV_RATE_LIMITER", limiter)

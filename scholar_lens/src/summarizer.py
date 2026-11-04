@@ -14,18 +14,20 @@ from typing import Any
 import boto3
 from langchain_core.runnables import Runnable
 
-from .constants import LanguageModelId
-from .explainer import NO_CODEBASE, Paper
-from .formatting import derived_subtitle, split_leading_h1, summary_lead
-from .logger import logger
-from .markdown_math import DISPLAY_MATH, HANGUL, image_sources
-from .metrics import TokenBudgetExceeded, TokenBudgetGuard
-from .post_validator import (
+from ..application.usage import staged
+from ..domain.markdown.math import DISPLAY_MATH, HANGUL, image_sources
+from ..domain.quality_gate import publish_blockers
+from ..domain.validation import (
     description_markup,
     description_problems,
     paper_page_title,
     unsourced_numbers,
 )
+from .constants import LanguageModelId
+from .explainer import NO_CODEBASE, Paper
+from .formatting import derived_subtitle, split_leading_h1, summary_lead
+from .logger import logger
+from .metrics import TokenBudgetExceeded, TokenBudgetGuard
 from .prompt_safety import neutralize_prompt_tags
 from .prompts import (
     BasePrompt,
@@ -33,7 +35,6 @@ from .prompts import (
     PaperSummaryPrompt,
     PaperSummaryShortenPrompt,
 )
-from .quality_gate import publish_blockers
 from .section_loop import TARGETED_FIX, lost_structure
 from .utils import (
     BedrockLanguageModelFactory,
@@ -269,12 +270,14 @@ class PaperSummarizer(RetryableBase, TokenBudgetGuard):
         return fixed
 
     @RetryableBase._retry("paper_summary_fix")
+    @staged("fix")
     async def _fix(self, request: str, summary: str) -> dict[str, str]:
         return await self.fix_chain.ainvoke(
             {"request": request, "summary": summary, "language": self.language}
         )
 
     @RetryableBase._retry("paper_summary_shortening")
+    @staged("shorten")
     async def _shorten(self, summary: str) -> dict[str, str]:
         return await self.shorten_chain.ainvoke(
             {
@@ -285,6 +288,7 @@ class PaperSummarizer(RetryableBase, TokenBudgetGuard):
         )
 
     @RetryableBase._retry("paper_summarization")
+    @staged("draft")
     async def _summarize(
         self, content: str, codebase_summary: str | None = None
     ) -> dict[str, str]:

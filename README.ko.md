@@ -88,6 +88,7 @@ poetry run python -m scholar_lens survey write \
   --plan papers/survey-preference-optimization-for-llm-alignment/plan.json --no-pr
 poetry run python -m scholar_lens review 2106.09685 --remote     # AWS Batch에 제출
 poetry run python -m scholar_lens status <job-id> --wait         # 원격 작업 조회
+poetry run python -m scholar_lens costs --since 2026-11-01 --by stage --billed  # Batch 실행 비용
 ```
 
 | 옵션 | 명령 | 효과 |
@@ -104,6 +105,7 @@ poetry run python -m scholar_lens status <job-id> --wait         # 원격 작업
 | `--no-pr` | review, summarize, guide, survey write | 글은 저장(·업로드)하되 PR은 열지 않습니다 |
 | `--remote` | review, summarize, guide, survey plan, survey write | AWS Batch에 제출하고 작업 ID를 돌려줍니다 |
 | `--wait`, `--timeout S` | status | 작업이 끝나거나 `S`초가 지날 때까지 조회합니다 |
+| `--since D`, `--until D`, `--by kind\|stage\|model\|day`, `--billed` | costs | `[since, until)`(UTC 날짜)에 끝난 Batch 실행을 결과 매니페스트로 종류·단계·모델·날짜별로 묶고 실패한 실행의 비용도 보여 줍니다. `--billed`는 `ProjectName=scholar-lens` 태그 리소스의 Cost Explorer 청구액을 더합니다 |
 
 `survey plan`은 글을 쓰지 않습니다. `JobResult`의 `plan_path`(로컬 `papers/survey-<slug>/plan.json`. `--remote` 실행은 컨테이너가 사라지므로 비어 있음)와 `s3_uri`(S3 사본. 원격 실행 뒤에는 이 값을 `survey write --plan`에 넘김)가 계획 파일입니다. 계획을 고친 뒤(논문 빼기·더하기·옮기기, 역할 바꾸기, 계보 이름 바꾸기) `survey write --plan`에 넘깁니다. 계획 단계를 다시 실행하면 내용이 다른 기존 계획은 `plan.<UTC 시각>.json`으로 남습니다. 손으로 더하는 논문은 `id`(arXiv ID나 URL, 또는 DOI), `lineage`, `role`만 있으면 되고, 제목·저자·연도·URL은 쓰기 단계가 채웁니다. 손으로 더하는 참고 자료는 `url`만 있으면 되고 `kind`는 URL로 정합니다(arXiv·doi.org 링크는 `paper`, 나머지는 `article`). 쓰기 단계는 `article`만 읽습니다. 계획에는 `core` 논문이 하나 이상 있어야 합니다. 논문 카드는 논문, 카드 스키마, 모델, 언어와 카드 프롬프트·`card_source_chars`·번역 지침의 `-<variant>` 요약값별로 캐시하므로(셋 중 하나가 바뀌면 카드를 다시 만듦)(로컬 `papers/survey-cards/`, S3 `<s3_prefix>/surveys/cards/`) 다시 실행하거나 같은 논문을 다루는 다른 서베이가 재사용합니다. 계획 필드와 쓰기 단계는 [설계 문서](./docs/design.md#43-논문-서베이)에 있습니다.
 
@@ -123,7 +125,7 @@ poetry run python -m scholar_lens status <job-id> --wait         # 원격 작업
 
 ```bash
 cdk bootstrap --profile <profile_name>           # 계정·리전당 한 번
-cdk deploy --profile <profile_name>              # cdk.json: poetry run python scripts/deploy_infra.py
+cdk deploy --all --profile <profile_name>        # cdk.json: poetry run python scripts/deploy_infra.py
 poetry run python scripts/put_secrets.py         # .env의 비밀값을 SSM SecureString에 기록
 poetry run python scripts/put_secrets.py github-token   # 비밀값 하나를 교체한 뒤
 ```
@@ -145,6 +147,9 @@ actionlint                                       # GitHub 워크플로 검사
 
 ## 변경 이력
 
+- 서베이는 기본으로 근거 장부 엔진이 씁니다(`survey.engine: evidence`, `cards`는 이전 엔진). 읽기 에이전트가 사실마다 논문 원문 인용을 기록하고 코드가 검사합니다. 개요가 사실 하나를 한 절에 주고 비교표가 수치를 가지며, 절은 수치·주장 단위로 검사하고 근거와 모순되는 문장만 지웁니다. 평가셋(판정 3회)에서 두 서베이 모두 모든 항목이 이전 엔진의 중앙값 이상이고, 수치 반복은 크게 줄고 그림은 두 배 가까이 늘었습니다([결과](./docs/redesign.md)). 공격 기법 절의 생성을 중간에 멈추던 Bedrock 콘텐츠 필터는 재시도한 뒤 읽기 모델로 넘깁니다.
+- 수식: 확률·정책 호출 안의 맨 `|`(`p(y|x)`, `\pi_\theta(a|s)`)는 `\mid`로 바꿉니다(전에는 인라인 수식에서 `\vert`, 디스플레이 수식에서는 그대로). MathJax에 없는 `\minimize`, `\maximize`, `\argmin`, `\argmax`는 `\operatorname*{…}`로 바꿉니다. 고쳐 달라고 다시 요청한 뒤에도 160자를 넘는 서베이 설명은 120–160자 안의 마지막 문장 끝에서 자릅니다.
+- 서베이 학회명은 논문이 실린 곳을 씁니다. OpenAlex 학회명은 학회·저널 유형의 첫 위치에서 가져오고(Zenodo 같은 저장소, CISPA 같은 기관, "Lecture notes in computer science" 같은 총서는 제외), OpenAlex·Semantic Scholar·계획의 참고 문헌 학회명은 `domain/venues.py`로 정규화합니다(NeurIPS, ICML, ICLR, ACL, EMNLP, Findings of ACL, TMLR, NDSS 등은 짧은 이름, 모두 소문자인 목록 이름은 단어 첫 글자를 대문자로). `Retry-After` 없는 Semantic Scholar 429는 한 번이 아니라 대기 시간을 두 배씩 늘려(5, 10, 20, 40초) 최대 네 번 재시도합니다. 모델 호출마다 사용량을 기록하고(`llm_usage` 로그, 단계·모델별 `JobResult.usage`, 단계별 CloudWatch 지표, SNS 알림의 비싼 단계 상위 3개) `scholar-lens costs`가 결과 매니페스트로 비용을 보고합니다. Bedrock 호출은 `Kind` 태그가 붙은 종류별 응용 추론 프로필을 거쳐 Cost Explorer가 종류별 Bedrock 비용을 나눕니다(`cdk deploy --all`).
 - 문서나 검색 결과에 상대 경로로 들어 있던 링크(`../_images/x.svg`)는 검색 결과 Markdown을 읽을 때 그 페이지 URL 기준의 절대 URL로 바꿉니다. 게시 단계에서는 블로그가 따라갈 수 없는 링크(http(s), 사이트 내부 경로, 앵커, mailto가 아니거나 텍스트가 빈 링크)의 링크를 풀고 텍스트만 남깁니다. 이미지를 감싼 링크면 이미지만 남깁니다. Ray Serve 가이드가 이런 링크 때문에 블로그 htmlproofer에서 실패했습니다.
 - 2026년 10월 의존성 업데이트를 반영했습니다(arxiv 4.0, requests 2.34, PyMuPDF 1.28, aws-cdk-lib 2.273, Node 24 기반 GitHub Actions). PDF 코드는 `pymupdf`를 가져옵니다. `fitz` 별칭은 이제 stdout에 사용 중단 경고를 출력해 worker의 JSON 한 개 출력 계약을 깨뜨렸습니다. 컴퓨팅 환경은 `optimal`을 직접 지정하지 않습니다. CDK가 넣어 주므로 템플릿에 두 번 들어가 있었습니다. 새 이미지를 쓰려면 다시 배포하세요.
 - 가이드·서베이 절은 표적 수정 뒤 같은 평가 호출로 한 번 다시 평가합니다(표적 수정이 필요한 절마다 평가 호출 1회 추가). 고친 초안은 순위(통과, 게시 가능, 사실 문제 수, 점수, 문체 문제와 규칙 위반 순)가 고치기 전 초안보다 낮지 않을 때만 남기고, 낮으면 고치기 전 초안을 씁니다. 기준 미달 PR 메모는 다시 평가한 점수와 남은 문제, 표적 수정의 적용·되돌림·거부 여부를 적습니다. 소프트 토큰 예산에 이르면 다시 평가를 건너뛰고 메모에 고치기 전 문제를 남깁니다. 발행 직전에는 블로그 글 규칙을 다시 읽어, 실행 중에 블로그가 규칙을 바꿨으면(주제 커버 등) 현재 규칙으로 검증하고 `cover`를 분류에서 다시 정하며 PR에 "Blog conventions changed during the run" 메모를 남깁니다. 다시 읽지 못하면 시작 때 규칙을 씁니다.

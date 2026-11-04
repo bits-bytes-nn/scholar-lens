@@ -1,0 +1,461 @@
+{
+  "schema_version": 3,
+  "generator": "scholar-lens survey-plan/3",
+  "created_at": "2026-11-02T12:17:11.349752Z",
+  "topic": "security of LLM-based AI agents: prompt injection, jailbreak, RAG poisoning, tool abuse, MCP and multi-agent security, defenses and benchmarks",
+  "scope": "Security of LLM-based agents from 2022 onward: how prompt injection (direct and indirect), jailbreaks, RAG and memory poisoning, tool abuse, and MCP and multi-agent attack surfaces emerged, and how defenses and benchmarks responded. It stops at attacks and defenses on LLM agents and applications, and leaves out general model robustness, classic adversarial examples and pure privacy attacks.",
+  "time_range": {
+    "since": 2022,
+    "until": null
+  },
+  "paper_count_reason": "The topic is broad, with six active lineages: injection, jailbreaks, poisoning, tool/MCP/multi-agent, defenses and benchmarks. The pool is large but uneven. 24 papers cover each lineage's founding work, turning points and key successors without minor variants.",
+  "lineages": [
+    {
+      "id": "prompt-injection-attacks",
+      "name": "Prompt injection and indirect injection attacks",
+      "description": "From goal hijacking in GPT-3 apps to indirect injection through retrieved content and adaptive attacks on agent defenses."
+    },
+    {
+      "id": "jailbreaks",
+      "name": "Jailbreak attacks and jailbreak defenses",
+      "description": "Why safety training fails, optimization-based and automated jailbreaks, and smoothing and prompt-based defenses."
+    },
+    {
+      "id": "rag-memory-poisoning",
+      "name": "RAG, memory and backdoor poisoning",
+      "description": "Corrupting knowledge bases, agent memory or fine-tuning data so that agents follow attacker-chosen content."
+    },
+    {
+      "id": "tool-mcp-multiagent",
+      "name": "Tool abuse, MCP and multi-agent security",
+      "description": "Attacks on tool selection, MCP tool descriptions and servers, and injection spreading between communicating agents."
+    },
+    {
+      "id": "defenses",
+      "name": "Prompt injection defenses and system-level mitigations",
+      "description": "Detection, structured queries, instruction hierarchy, preference-trained models, task alignment and capability-based designs like CaMeL."
+    },
+    {
+      "id": "benchmarks",
+      "name": "Agent security benchmarks",
+      "description": "Environments and datasets measuring agent vulnerability to indirect injection and harmful misuse."
+    }
+  ],
+  "papers": [
+    {
+      "id": "2211.09527",
+      "title": "Ignore Previous Prompt: Attack Techniques For Language Models",
+      "authors": "Fábio Perez, Ian Ribeiro",
+      "year": 2022,
+      "date": "2022-11-17",
+      "venue": "arXiv",
+      "citation_count": 110,
+      "url": "https://arxiv.org/abs/2211.09527",
+      "lineage": "prompt-injection-attacks",
+      "role": "core",
+      "reason": "PromptInject: the founding work on goal hijacking and prompt leaking via 'ignore previous instructions'."
+    },
+    {
+      "id": "2302.12173",
+      "title": "Not what you've signed up for: Compromising Real-World LLM-Integrated Applications with Indirect Prompt Injection",
+      "authors": "Kai Greshake, Sahar Abdelnabi, Shailesh Mishra et al.",
+      "year": 2023,
+      "date": "2023-02-23",
+      "venue": "CISPA Helmholtz Center",
+      "citation_count": 667,
+      "url": "https://arxiv.org/abs/2302.12173",
+      "lineage": "prompt-injection-attacks",
+      "role": "core",
+      "reason": "Introduces indirect prompt injection and shows real-world compromise of LLM-integrated applications."
+    },
+    {
+      "id": "2306.05499",
+      "title": "Prompt Injection attack against LLM-integrated Applications",
+      "authors": "Yi Liu, Gelei Deng, Yuekang Li et al.",
+      "year": 2023,
+      "date": "2023-06-08",
+      "venue": "arXiv",
+      "citation_count": 100,
+      "url": "https://arxiv.org/abs/2306.05499",
+      "lineage": "prompt-injection-attacks",
+      "role": "supporting",
+      "reason": "HouYi: systematic black-box injection attack against deployed LLM apps."
+    },
+    {
+      "id": "2307.02483",
+      "title": "Jailbroken: How Does LLM Safety Training Fail?",
+      "authors": "Alexander Wei, Nika Haghtalab, Jacob Steinhardt",
+      "year": 2023,
+      "date": "2023-07-05",
+      "venue": "neural information processing systems",
+      "citation_count": 282,
+      "url": "https://arxiv.org/abs/2307.02483",
+      "lineage": "jailbreaks",
+      "role": "core",
+      "reason": "Explains jailbreaks through the competing-objectives and mismatched-generalization failure modes."
+    },
+    {
+      "id": "2307.15043",
+      "title": "Universal and Transferable Adversarial Attacks on Aligned Language Models",
+      "authors": "Andy Zou, Zifan Wang, Nicholas Carlini et al.",
+      "year": 2023,
+      "date": "2023-07-27",
+      "venue": "arXiv",
+      "citation_count": 197,
+      "url": "https://arxiv.org/abs/2307.15043",
+      "lineage": "jailbreaks",
+      "role": "core",
+      "reason": "GCG: universal, transferable optimization-based adversarial suffixes."
+    },
+    {
+      "id": "2310.03684",
+      "title": "SmoothLLM: Defending Large Language Models Against Jailbreaking Attacks",
+      "authors": "Alexander Robey, Eric Wong, Hamed Hassani et al.",
+      "year": 2023,
+      "date": "2023-10-05",
+      "venue": "arXiv",
+      "citation_count": 37,
+      "url": "https://arxiv.org/abs/2310.03684",
+      "lineage": "jailbreaks",
+      "role": "supporting",
+      "reason": "SmoothLLM: randomized perturbation defense against suffix jailbreaks."
+    },
+    {
+      "id": "2310.08419",
+      "title": "Jailbreaking Black Box Large Language Models in Twenty Queries",
+      "authors": "Patrick Chao, Alexander Robey, Edgar Dobriban et al.",
+      "year": 2023,
+      "date": "2023-10-12",
+      "venue": "IEEE Conference on Secure and Trustworthy Machine Learning (SaTML)",
+      "citation_count": 229,
+      "url": "https://arxiv.org/abs/2310.08419",
+      "lineage": "jailbreaks",
+      "role": "core",
+      "reason": "PAIR: automated black-box jailbreaking in which an attacker LLM refines prompts."
+    },
+    {
+      "id": "2402.06363",
+      "title": "StruQ: Defending Against Prompt Injection with Structured Queries",
+      "authors": "Sizhe Chen, Julien Piet, Chawin Sitawarin et al.",
+      "year": 2024,
+      "date": "2024-02-09",
+      "venue": "arXiv",
+      "citation_count": 10,
+      "url": "https://arxiv.org/abs/2402.06363",
+      "lineage": "defenses",
+      "role": "core",
+      "reason": "StruQ: separates instructions from data through structured queries and fine-tuning."
+    },
+    {
+      "id": "2402.07867",
+      "title": "PoisonedRAG: Knowledge Corruption Attacks to Retrieval-Augmented Generation of Large Language Models",
+      "authors": "Wei Zou, Runpeng Geng, Binghui Wang et al.",
+      "year": 2024,
+      "date": "2024-02-12",
+      "venue": "arXiv",
+      "citation_count": 16,
+      "url": "https://arxiv.org/abs/2402.07867",
+      "lineage": "rag-memory-poisoning",
+      "role": "core",
+      "reason": "PoisonedRAG: canonical knowledge-corruption attack on RAG."
+    },
+    {
+      "id": "2403.02691",
+      "title": "InjecAgent: Benchmarking Indirect Prompt Injections in Tool-Integrated Large Language Model Agents",
+      "authors": "Qiusi Zhan, Zhixiang Liang, Zifan Ying et al.",
+      "year": 2024,
+      "date": "2024-03-05",
+      "venue": "Findings of the Association for Computational Linguistics: ACL (Findings of ACL)",
+      "citation_count": 147,
+      "url": "https://arxiv.org/abs/2403.02691",
+      "lineage": "benchmarks",
+      "role": "core",
+      "reason": "InjecAgent: first benchmark for indirect injection in tool-integrated agents."
+    },
+    {
+      "id": "2404.13208",
+      "title": "The Instruction Hierarchy: Training LLMs to Prioritize Privileged Instructions",
+      "authors": "Eric Wallace, Kai Xiao, Reimar Leike et al.",
+      "year": 2024,
+      "date": "2024-04-19",
+      "venue": "arXiv",
+      "citation_count": 14,
+      "url": "https://arxiv.org/abs/2404.13208",
+      "lineage": "defenses",
+      "role": "core",
+      "reason": "Instruction hierarchy: trains models to prioritize privileged instructions."
+    },
+    {
+      "id": "2406.03007",
+      "title": "BadAgent: Inserting and Activating Backdoor Attacks in LLM Agents",
+      "authors": "Yifei Wang, Dizhan Xue, Shengjie Zhang et al.",
+      "year": 2024,
+      "date": "2024-06-05",
+      "venue": "Proceedings of the conference - Association for Computational Linguistics. Meeting",
+      "citation_count": 26,
+      "url": "https://arxiv.org/abs/2406.03007",
+      "lineage": "rag-memory-poisoning",
+      "role": "supporting",
+      "reason": "BadAgent: backdoors inserted into agents through fine-tuning data."
+    },
+    {
+      "id": "2406.13352",
+      "title": "AgentDojo: A Dynamic Environment to Evaluate Prompt Injection Attacks and Defenses for LLM Agents",
+      "authors": "Edoardo Debenedetti, Jie Zhang, Mislav Balunović et al.",
+      "year": 2024,
+      "date": "2024-06-19",
+      "venue": "Zenodo (CERN European Organization for Nuclear Research)",
+      "citation_count": 144,
+      "url": "https://arxiv.org/abs/2406.13352",
+      "lineage": "benchmarks",
+      "role": "core",
+      "reason": "AgentDojo: dynamic environment that is the standard for comparing injection attacks and defenses."
+    },
+    {
+      "id": "2407.12784",
+      "title": "AgentPoison: Red-teaming LLM Agents via Poisoning Memory or Knowledge Bases",
+      "authors": "Zhaorun Chen, Zhen Xiang, Chaowei Xiao et al.",
+      "year": 2024,
+      "date": "2024-07-17",
+      "venue": "neural information processing systems",
+      "citation_count": 69,
+      "url": "https://arxiv.org/abs/2407.12784",
+      "lineage": "rag-memory-poisoning",
+      "role": "core",
+      "reason": "AgentPoison: backdoor triggers placed in agent memory or knowledge bases."
+    },
+    {
+      "id": "2410.05451",
+      "title": "SecAlign: Defending Against Prompt Injection with Preference Optimization",
+      "authors": "Sizhe Chen, Arman Zharmagambetov, Saeed Mahloujifar et al.",
+      "year": 2024,
+      "date": "2024-10-07",
+      "venue": "ACM SIGSAC Conference on Computer and Communications Security (CCS)",
+      "citation_count": 31,
+      "url": "https://arxiv.org/abs/2410.05451",
+      "lineage": "defenses",
+      "role": "supporting",
+      "reason": "SecAlign: preference optimization for injection robustness."
+    },
+    {
+      "id": "2410.07283",
+      "title": "Prompt Infection: LLM-to-LLM Prompt Injection within Multi-Agent Systems",
+      "authors": "Donghyun Lee, Mo Tiwari",
+      "year": 2024,
+      "date": "2024-10-09",
+      "venue": "Lecture notes in computer science",
+      "citation_count": 20,
+      "url": "https://arxiv.org/abs/2410.07283",
+      "lineage": "tool-mcp-multiagent",
+      "role": "core",
+      "reason": "Prompt Infection: self-replicating LLM-to-LLM injection across multi-agent systems."
+    },
+    {
+      "id": "2410.09024",
+      "title": "AgentHarm: A Benchmark for Measuring Harmfulness of LLM Agents",
+      "authors": "Maksym Andriushchenko, Alexandra Souly, Mateusz Dziemian et al.",
+      "year": 2024,
+      "date": "2024-10-11",
+      "venue": "arXiv",
+      "citation_count": null,
+      "url": "https://arxiv.org/abs/2410.09024",
+      "lineage": "benchmarks",
+      "role": "core",
+      "reason": "AgentHarm: measures harmful misuse and jailbreak robustness of agents."
+    },
+    {
+      "id": "2502.14847",
+      "title": "Red-Teaming LLM Multi-Agent Systems via Communication Attacks",
+      "authors": "Pengfei He, Yupin Lin, Shen Dong et al.",
+      "year": 2025,
+      "date": "2025-02-20",
+      "venue": "Findings of the Association for Computational Linguistics: ACL (Findings of ACL)",
+      "citation_count": 15,
+      "url": "https://arxiv.org/abs/2502.14847",
+      "lineage": "tool-mcp-multiagent",
+      "role": "supporting",
+      "reason": "Agent-in-the-Middle: attacks that intercept and alter inter-agent communication."
+    },
+    {
+      "id": "2503.00061",
+      "title": "Adaptive Attacks Break Defenses Against Indirect Prompt Injection Attacks on LLM Agents",
+      "authors": "Qiusi Zhan, Richard Fang, Henil Shalin Panchal et al.",
+      "year": 2025,
+      "date": "2025-02-27",
+      "venue": "Findings of the Association for Computational Linguistics: NAACL",
+      "citation_count": 28,
+      "url": "https://arxiv.org/abs/2503.00061",
+      "lineage": "prompt-injection-attacks",
+      "role": "core",
+      "reason": "Shows that adaptive attacks break published indirect-injection defenses, a key evaluation turning point."
+    },
+    {
+      "id": "2503.18813",
+      "title": "Defeating Prompt Injections by Design",
+      "authors": "Edoardo Debenedetti, Ilia Shumailov, Tianqi Fan et al.",
+      "year": 2025,
+      "date": "2025-03-24",
+      "venue": "arXiv",
+      "citation_count": null,
+      "url": "https://arxiv.org/abs/2503.18813",
+      "lineage": "defenses",
+      "role": "core",
+      "reason": "CaMeL: capability and control/data-flow isolation that defeats injection by design."
+    },
+    {
+      "id": "2504.21668",
+      "title": "Traceback of Poisoning Attacks to Retrieval-Augmented Generation",
+      "authors": "Baolei Zhang, Haoran Xin, Minghong Fang et al.",
+      "year": 2025,
+      "date": "2025-04-30",
+      "venue": "International World Wide Web Conference (WWW)",
+      "citation_count": 19,
+      "url": "https://arxiv.org/abs/2504.21668",
+      "lineage": "rag-memory-poisoning",
+      "role": "supporting",
+      "reason": "RAGForensics: traceback as a post-hoc response to RAG poisoning."
+    },
+    {
+      "id": "2506.02040",
+      "title": "Beyond the Protocol: Unveiling Attack Vectors in the Model Context Protocol (MCP) Ecosystem",
+      "authors": "Hao Song, Yiming Shen, Wenxuan Luo et al.",
+      "year": 2025,
+      "date": "2025-05-31",
+      "venue": "IEEE Transactions on Software Engineering",
+      "citation_count": 5,
+      "url": "https://arxiv.org/abs/2506.02040",
+      "lineage": "tool-mcp-multiagent",
+      "role": "core",
+      "reason": "Maps attack vectors across the MCP ecosystem, including malicious servers and tool poisoning."
+    },
+    {
+      "id": "2506.01333",
+      "title": "ETDI: Mitigating Tool Squatting and Rug Pull Attacks in Model Context Protocol (MCP) by using OAuth-Enhanced Tool Definitions and Policy-Based Access Control",
+      "authors": "Manish Bhatt, Vineeth Sai Narajala, Idan Habler",
+      "year": 2025,
+      "date": "2025-06-02",
+      "venue": "Cyber Awareness and Research Symposium (CARS)",
+      "citation_count": 6,
+      "url": "https://arxiv.org/abs/2506.01333",
+      "lineage": "tool-mcp-multiagent",
+      "role": "supporting",
+      "reason": "ETDI: OAuth-signed tool definitions against tool squatting and rug pulls in MCP."
+    },
+    {
+      "id": "10.14722/ndss.2026.230675",
+      "title": "Prompt Injection Attack to Tool Selection in LLM Agents",
+      "authors": "Jiawen Shi, Zenghui Yuan, Guiyao Tie et al.",
+      "year": 2026,
+      "date": "2026-01-01",
+      "venue": "Network and Distributed System Security Symposium",
+      "citation_count": 17,
+      "url": "https://doi.org/10.14722/ndss.2026.230675",
+      "lineage": "tool-mcp-multiagent",
+      "role": "core",
+      "reason": "ToolHijacker: injects malicious tool documents to manipulate tool selection."
+    }
+  ],
+  "edges": [
+    {
+      "from": "2310.08419",
+      "to": "2307.02483"
+    },
+    {
+      "from": "2310.08419",
+      "to": "2310.03684"
+    },
+    {
+      "from": "2410.05451",
+      "to": "2403.02691"
+    },
+    {
+      "from": "2504.21668",
+      "to": "2302.12173"
+    }
+  ],
+  "excluded": [
+    {
+      "id": "2410.02644",
+      "title": "Agent Security Bench (ASB): Formalizing and Benchmarking Attacks and Defenses in LLM-based Agents",
+      "year": 2024,
+      "reason": "ASB overlaps with AgentDojo and InjecAgent as a broad agent benchmark."
+    },
+    {
+      "id": "2312.14197",
+      "title": "Benchmarking and Defending Against Indirect Prompt Injection Attacks on Large Language Models",
+      "year": 2023,
+      "reason": "BIPIA is an early indirect-injection benchmark, superseded by agent-focused benchmarks."
+    },
+    {
+      "id": "2411.00348",
+      "title": "Attention Tracker: Detecting Prompt Injection Attacks in LLMs",
+      "year": 2024,
+      "reason": "Attention Tracker is one of many detection methods; StruQ and SecAlign cover the defense line."
+    },
+    {
+      "id": "2412.16682",
+      "title": "The Task Shield: Enforcing Task Alignment to Defend Against Indirect Prompt Injection in LLM Agents",
+      "year": 2024,
+      "reason": "Task Shield is a task-alignment defense that sits between the instruction hierarchy and CaMeL ideas."
+    },
+    {
+      "id": "2403.17710",
+      "title": "Optimization-based Prompt Injection Attack to LLM-as-a-Judge",
+      "year": 2024,
+      "reason": "JudgeDeceiver targets LLM-as-a-judge, which is peripheral to agents."
+    },
+    {
+      "id": "2504.08623",
+      "title": "Enterprise-Grade Security for the Model Context Protocol (MCP): Frameworks and Mitigation Strategies",
+      "year": 2025,
+      "reason": "Enterprise MCP framework is a practitioner overview, less substantive than the attack-vector study."
+    },
+    {
+      "id": "2506.04133",
+      "title": "TRiSM for Agentic AI: A Review of Trust, Risk, and Security Management in LLM-based Agentic Multi-Agent Systems",
+      "year": 2025,
+      "reason": "TRiSM is a broad review rather than a primary method."
+    },
+    {
+      "id": "2402.11208",
+      "title": "Watch Out for Your Agents! Investigating Backdoor Threats to LLM-Based Agents",
+      "year": 2024,
+      "reason": "Agent backdoor study is a near-duplicate of BadAgent's contribution."
+    },
+    {
+      "id": "2307.14539",
+      "title": "Jailbreak in pieces: Compositional Adversarial Attacks on Multi-Modal Language Models",
+      "year": 2023,
+      "reason": "Multimodal VLM jailbreak lies outside the agent focus."
+    },
+    {
+      "id": "2402.13457",
+      "title": "A Comprehensive Study of Jailbreak Attack versus Defense for Large Language Models",
+      "year": 2024,
+      "reason": "Jailbreak attack-versus-defense comparison study is not a new method."
+    }
+  ],
+  "references": [
+    {
+      "url": "https://genai.owasp.org/llm-top-10/",
+      "title": "LLMRisks Archive - OWASP Gen AI Security Project",
+      "kind": "article"
+    },
+    {
+      "url": "https://simonwillison.net/2025/Jun/16/the-lethal-trifecta/",
+      "title": "The lethal trifecta for AI agents: private data, untrusted content, and external communication",
+      "kind": "article"
+    }
+  ],
+  "sources": [
+    "DataCite: 7 requests (0 failed)",
+    "OpenAlex: 28 requests (0 failed)",
+    "Semantic Scholar: 1 requests (1 failed)",
+    "arXiv: 10 requests (0 failed)"
+  ],
+  "notes": [
+    "Citation counts are OpenAlex's, which undercount arXiv-era ML papers and list few of their references (so few citation edges); set SEMANTIC_SCHOLAR_API_KEY for fuller counts and edges.",
+    "3 candidate(s) with neither an arXiv id nor a DOI were left out (the write stage cannot resolve them).",
+    "1 of 1 Semantic Scholar requests failed; the pool may miss papers."
+  ]
+}

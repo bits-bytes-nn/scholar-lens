@@ -38,6 +38,14 @@ import boto3
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import Runnable, RunnableLambda
 
+from ..application.usage import staged
+from ..domain.markdown.lint import close_open_fence
+from ..domain.review_plan import (
+    article_ledger,
+    digest_sections,
+)
+from ..domain.tags import controlled_tag_problems
+from ..domain.validation import description_markup, description_problems
 from .constants import LanguageModelId
 from .guide_authority import (
     input_outline,
@@ -49,9 +57,7 @@ from .guide_authority import (
     used_source_urls,
 )
 from .logger import logger
-from .markdown_lint import close_open_fence
 from .metrics import TokenBudgetGuard
-from .post_validator import description_markup, description_problems
 from .prompt_safety import neutralize_prompt_tags
 from .prompts import (
     BasePrompt,
@@ -69,10 +75,6 @@ from .prompts.tech_guide import (
     REFERENCE_LABEL,
     TechGuideTaxonomyPrompt,
 )
-from .review_plan import (
-    article_ledger,
-    digest_sections,
-)
 from .section_loop import (
     EMPTY_DRAFT,
     FIXING,
@@ -86,7 +88,6 @@ from .section_loop import (
     parse_section_output,
     revise_section,
 )
-from .tags import controlled_tag_problems
 from .utils import (
     BedrockLanguageModelFactory,
     HTMLTagOutputParser,
@@ -632,11 +633,13 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
         return result
 
     @RetryableBase._retry("tech_guide_taxonomy")
+    @staged("finalize")
     async def _classify(self, payload: dict[str, Any]) -> dict[str, str]:
         self._enforce_hard_token_budget()
         result: dict[str, str] = await self.taxonomy_chain.ainvoke(payload)
         return result
 
+    @staged("research_plan")
     async def _plan_research(
         self, corpus: ResearchCorpus
     ) -> tuple[str | None, list[str]]:
@@ -665,6 +668,7 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
             logger.warning("Research planning failed; using seed URLs only: %s", e)
             return None, []
 
+    @staged("relevance")
     async def _assert_relevant(self, corpus: ResearchCorpus) -> str:
         sources = self._sources_digest(corpus)
         result = await self.relevance_chain.ainvoke({"sources": sources})
@@ -685,6 +689,7 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
         )
         return topic
 
+    @staged("outline")
     async def _draft_synopsis(
         self, topic: str, corpus: ResearchCorpus
     ) -> tuple[str, str]:
@@ -719,6 +724,7 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
         logger.info("Guide type: %s; title: '%s'", self._guide_type or "?", title)
         return title, synopsis
 
+    @staged("draft")
     async def _write_sections(
         self, topic: str, synopsis: str, corpus: ResearchCorpus
     ) -> str:
@@ -854,6 +860,7 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
             await self._ground_sections(written, to_ground, corpus)
         return "\n\n".join(written)
 
+    @staged("verify")
     async def _ground_sections(
         self,
         written: list[str],
@@ -918,6 +925,7 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
                 )
             written[index] = grounded
 
+    @staged("official_lookup")
     async def _find_official_source(
         self, corpus: ResearchCorpus, planned: PlannedSection
     ) -> None:
@@ -949,6 +957,7 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
         if not added:
             logger.info("Section '%s' has no official source.", planned.title)
 
+    @staged("official_lookup")
     async def _add_reference(
         self,
         corpus: ResearchCorpus,

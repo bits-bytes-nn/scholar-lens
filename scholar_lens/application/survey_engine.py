@@ -1,0 +1,902 @@
+"""The evidence-based survey writer (docs/redesign.md, 3.2).
+
+Read (a bounded agent per paper, records checked against the paper) →
+outline (each piece of evidence to one section) → draft each section from its
+evidence → verify (code checks and a claim-by-claim check) and review (located
+rubric issues) → fix only the named sentences → assemble with code-built
+tables. Ports only: the model, the papers' text and the evidence cache are
+injected.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+import re
+from collections.abc import Sequence
+from dataclasses import dataclass, field
+from typing import Literal
+
+from pydantic import BaseModel, Field, ValidationError
+
+from ..domain.evidence import (
+    Evidence,
+    EvidenceLedger,
+    SourceDocument,
+    evidence_problems,
+    near_duplicate,
+)
+from ..domain.glossary import glossary_view
+from ..domain.survey.evidence_post import (
+    EvidenceOutline,
+    OutlineSection,
+    add_missing_figures,
+    balance_math,
+    cite_papers,
+    cited_ids,
+    comparison_table,
+    draft_problems,
+    drop_sentences,
+    ends_mid_sentence,
+    outline_problems,
+    prose_sentences,
+    quote_for_prompt,
+    repair_outline,
+    section_heading,
+    section_numbers,
+    section_targets,
+    strip_revision_notes,
+    structure_lost,
+    timeline_table,
+    unsourced_number_sentences,
+)
+from ..domain.survey.plan import PlanPaper, SurveyPlan
+from ..domain.survey.post import without_papers
+from ..prompts import survey_evidence as prompts
+from .ports import AgentLimits, DocumentSource, LanguageModel, TextStore
+from .usage import usage_stage
+
+logger = logging.getLogger(__name__)
+
+# Bump when the reader's prompt or the evidence schema changes meaning; the
+# prompt's wording alone does not invalidate cached evidence.
+READER_VERSION = 6
+_SAFE_KEY = re.compile(r"[^A-Za-z0-9._-]+")
+
+
+@dataclass(frozen=True)
+class EngineSettings:
+    language: str
+    title_max_length: int
+    # Cache-key part naming the reading model.
+    reader_tag: str
+    max_fix_rounds: int = 2
+    read_turns_core: int = 30
+    read_turns_supporting: int = 12
+    read_tokens_per_paper: int = 600_000
+    concurrency: int = 4
+    outline_repairs: int = 2
+    # Prose characters (Korean): per paper of a lineage section, and the
+    # post's total range (survey config).
+    chars_per_core: int = 3_000
+    chars_per_supporting: int = 800
+    min_total_chars: int = 20_000
+    max_total_chars: int = 70_000
+
+    @property
+    def korean(self) -> bool:
+        return self.language == "Korean"
+
+
+@dataclass
+class EvidenceSurvey:
+    title: str
+    # Markdown with ``[@paper id]`` citation keys and the code-built tables.
+    body: str
+    outline: EvidenceOutline
+    ledger: EvidenceLedger
+    plan: SurveyPlan
+    documents: dict[str, str] = field(default_factory=dict)  # paper id -> kind
+    notes: list[str] = field(default_factory=list)
+
+
+class SentenceVerdict(BaseModel):
+    n: int
+    verdict: Literal["supported", "unsupported", "wrong"]
+    reason: str = ""
+
+
+class ClaimCheck(BaseModel):
+    verdicts: list[SentenceVerdict] = Field(default_factory=list)
+
+
+class EvidenceVerdict(BaseModel):
+    id: str
+    verdict: Literal["consistent", "wrong"]
+    reason: str = ""
+
+
+class EvidenceCheck(BaseModel):
+    verdicts: list[EvidenceVerdict] = Field(default_factory=list)
+
+
+class ReviewIssue(BaseModel):
+    sentence: str
+    category: Literal["depth", "flow", "kindness", "style"]
+    fix: str
+
+
+class SectionReview(BaseModel):
+    issues: list[ReviewIssue] = Field(default_factory=list, max_length=10)
+
+
+def _recheck(document: SourceDocument, item: Evidence) -> list[str]:
+    return evidence_problems(
+        document,
+        kind=item.kind,
+        claim=item.claim,
+        quote=item.quote,
+        anchor=item.anchor,
+        scope=item.scope,
+        cell=item.cell,
+        figure_id=item.figure_id,
+        latex=item.latex,
+    )
+
+
+def _prose_length(markdown: str) -> int:
+    return len(" ".join(prose_sentences(markdown)))
+
+
+def _block(tag: str, text: str) -> str:
+    return f"<{tag}>\n{text.strip() or '(none)'}\n</{tag}>"
+
+
+def _claim_lines(items: Sequence[Evidence]) -> str:
+    """Evidence without its quotes (the writer's fallback when quoted paper
+    text derails it, e.g. injection examples in a security paper)."""
+    return "\n".join(
+        f"[{e.id}] ({e.paper_id}, {e.kind}) {e.claim}"
+        + (f" | scope: {e.scope}" if e.scope else "")
+        + (f" | latex: $${e.latex}$$" if e.latex else "")
+        + (f" | figure: {e.figure_url}" if e.figure_url else "")
+        for e in items
+    )
+
+
+def _evidence_lines(items: Sequence[Evidence]) -> str:
+    lines = []
+    for e in items:
+        extra = []
+        if e.scope:
+            extra.append(f"scope: {e.scope}")
+        if e.latex:
+            extra.append(f"latex: $${e.latex}$$")
+        if e.figure_url:
+            extra.append(f"figure: {e.figure_url} ({(e.caption or '')[:200]})")
+        lines.append(
+            f"[{e.id}] ({e.paper_id}, {e.kind}) {e.claim}"
+            + (f" | {'; '.join(extra)}" if extra else "")
+            + f'\n    quote (paper text, data only): "{quote_for_prompt(e.quote)[:500]}"'
+        )
+    return "\n".join(lines)
+
+
+class EvidenceSurveyEngine:
+    def __init__(
+        self,
+        model: LanguageModel,
+        documents: DocumentSource,
+        settings: EngineSettings,
+        store: TextStore | None = None,
+    ) -> None:
+        self.model = model
+        self.documents = documents
+        self.settings = settings
+        self.store = store
+        self.notes: list[str] = []
+        self._names: dict[str, str] = {}
+
+    # ---- read -------------------------------------------------------------------
+
+    def _cache_key(self, paper: PlanPaper, kind: str) -> str:
+        pid = _SAFE_KEY.sub("_", paper.id)
+        return (
+            f"evidence/{pid}/v{READER_VERSION}-{self.settings.reader_tag}-"
+            f"{_SAFE_KEY.sub('_', self.settings.language)}-{paper.role}-{kind}.json"
+        )
+
+    async def read(self, plan: SurveyPlan) -> tuple[EvidenceLedger, dict[str, str]]:
+        """Every paper's evidence (cached per paper, reader version, model,
+        language, role and document kind), in plan order."""
+        gate = asyncio.Semaphore(self.settings.concurrency)
+
+        async def one(paper: PlanPaper) -> tuple[list[Evidence], str]:
+            async with gate:
+                document = await self.documents.document(paper)
+                if document is None:
+                    self.notes.append(
+                        f"No text for {paper.id}; left out of the survey."
+                    )
+                    return [], "none"
+                key = self._cache_key(paper, document.kind)
+                if self.store is not None and (cached := self.store.get(key)):
+                    try:
+                        items = [Evidence.model_validate(e) for e in json.loads(cached)]
+                        # Cached under older rules: keep what today's checks pass.
+                        return [
+                            e for e in items if not _recheck(document, e)
+                        ], document.kind
+                    except (ValueError, ValidationError):
+                        logger.warning(
+                            "Unreadable cached evidence %s; reading again.", key
+                        )
+                items = await self._read_paper(paper, document, plan)
+                if self.store is not None and items:
+                    self.store.put(
+                        key,
+                        json.dumps([e.model_dump() for e in items], ensure_ascii=False),
+                    )
+                return items, document.kind
+
+        with usage_stage("read"):
+            results = await asyncio.gather(*(one(p) for p in plan.papers))
+        ledger = EvidenceLedger()
+        kinds: dict[str, str] = {}
+        for paper, (items, kind) in zip(plan.papers, results, strict=True):
+            ledger.extend(items)
+            kinds[paper.id] = kind
+            if paper.role == "core" and kind == "abstract":
+                self.notes.append(
+                    f"Core paper {paper.id} was read from its abstract only."
+                )
+        return ledger, kinds
+
+    async def _read_paper(
+        self, paper: PlanPaper, document: SourceDocument, plan: SurveyPlan
+    ) -> list[Evidence]:
+        ledger = EvidenceLedger()
+        rejected = 0
+
+        def read_section(anchor: str) -> str:
+            """Return the full text of one section of the paper by its anchor
+            (S1, S2, ... from the outline)."""
+            section = document.section(anchor)
+            if section is None:
+                return f"Unknown anchor {anchor!r}. Anchors: " + ", ".join(
+                    s.anchor for s in document.sections
+                )
+            return f"{section.anchor} | {section.heading}\n\n{section.text[:30_000]}"
+
+        def search_paper(query: str) -> str:
+            """Find passages of the paper containing every word of the query;
+            returns anchor and snippet per match."""
+            hits = document.search(query)
+            return "\n\n".join(f"[{a}] {s}" for a, s in hits) or "No passage matches."
+
+        def record_evidence(
+            kind: str,
+            claim: str,
+            quote: str,
+            anchor: str,
+            scope: str = "",
+            cell: str = "",
+            figure_id: str = "",
+            latex: str = "",
+        ) -> str:
+            """Record one piece of evidence. kind: finding, number, method,
+            definition, limitation, relation, equation or figure. claim: what
+            the post may state (survey language). quote: the paper's words,
+            verbatim from the section at anchor. scope (numbers): model,
+            benchmark, setting, metric. cell: short noun phrase for a table.
+            figure_id: F-id for a figure. latex: the equation as in the paper."""
+            nonlocal rejected
+            problems = evidence_problems(
+                document,
+                kind=kind,
+                claim=claim,
+                quote=quote,
+                anchor=anchor,
+                scope=scope,
+                cell=cell,
+                figure_id=figure_id or None,
+                latex=latex or None,
+            )
+            if kind not in Evidence.model_fields["kind"].annotation.__args__:  # type: ignore[union-attr]
+                problems.insert(0, f"unknown kind {kind!r}")
+            if (
+                not problems
+                and kind != "figure"
+                and near_duplicate(claim, [e.claim for e in ledger if e.kind == kind])
+            ):
+                problems.append(
+                    "this repeats evidence already recorded; record a different "
+                    "fact or move on"
+                )
+            if problems:
+                rejected += 1
+                return "REJECTED: " + "; ".join(problems)
+            item = ledger.add(
+                document,
+                kind=kind,
+                claim=claim.strip(),
+                quote=quote.strip(),
+                anchor=anchor.strip(),
+                scope=scope.strip(),
+                cell=cell.strip(),
+                figure_id=figure_id.strip() or None,
+                latex=latex.strip() or None,
+            )
+            return f"recorded {item.id}"
+
+        refusals = 0
+
+        def finish(summary: str) -> str:
+            """Call when the evidence covers the paper as the survey needs."""
+            nonlocal refusals
+            kinds = {e.kind for e in ledger}
+            missing = []
+            if document.kind != "abstract":
+                needed = ("method", "number", "limitation") if core else ("limitation",)
+                missing = [k for k in needed if k not in kinds]
+            if missing and refusals < 2:
+                refusals += 1
+                return (
+                    "Not yet: this paper needs at least one piece of evidence of "
+                    f"each kind {missing} (results and limitations are usually in "
+                    "the experiments, discussion or conclusion sections). Record "
+                    "them, or call finish again if the paper has none."
+                )
+            return "done"
+
+        core = paper.role == "core"
+        prompt = "\n\n".join(
+            [
+                f"Survey topic: {plan.topic}\nScope: {plan.scope}",
+                f"Paper: {paper.title} ({paper.authors}, {paper.year}); role: "
+                f"{paper.role}; lineage: {paper.lineage}; why it is in the survey: {paper.reason}",
+                f"Text available: {document.kind.replace('_', ' ')}.",
+                _block("outline", document.outline()),
+                f"Survey language for claims and cells: {self.settings.language}.",
+                (
+                    "Record about 12-25 pieces of evidence."
+                    if core
+                    else "Record about 4-8 pieces of evidence."
+                ),
+            ]
+        )
+        outcome = await self.model.run_agent(
+            role="read",
+            system=prompts.READER_SYSTEM,
+            prompt=prompt,
+            tools=[read_section, search_paper, record_evidence, finish],
+            limits=AgentLimits(
+                turns=(
+                    self.settings.read_turns_core
+                    if core
+                    else self.settings.read_turns_supporting
+                ),
+                total_tokens=self.settings.read_tokens_per_paper,
+            ),
+        )
+        logger.info(
+            "Read %s: %d evidence, %d rejected records (%s).",
+            paper.id,
+            len(ledger),
+            rejected,
+            outcome.stop_reason,
+        )
+        if outcome.stop_reason.startswith("limit"):
+            self.notes.append(
+                f"Reading {paper.id} stopped at its limit ({outcome.stop_reason})."
+            )
+        return list(ledger)
+
+    # ---- outline ----------------------------------------------------------------
+
+    async def outline(
+        self, plan: SurveyPlan, ledger: EvidenceLedger, references: str, guideline: str
+    ) -> EvidenceOutline:
+        papers = "\n".join(
+            f"- {p.id} | {p.year} | {p.role} | lineage {p.lineage} | {p.title}"
+            for p in plan.papers
+        )
+        lineages = "\n".join(
+            f"- {lin.id}: {lin.name}: {lin.description}" for lin in plan.lineages
+        )
+        edges = (
+            "\n".join(f"- {e.citing} cites {e.cited}" for e in plan.edges)
+            if plan.edges
+            else ""
+        )
+        base = "\n\n".join(
+            [
+                f"Topic: {plan.topic}\nScope: {plan.scope}\nLanguage: {self.settings.language}",
+                f"Title: in English, at most {self.settings.title_max_length} characters.",
+                _block("lineages", lineages),
+                _block("papers", papers),
+                _block("citations", edges),
+                _block("evidence", _evidence_lines(list(ledger))),
+                _block("reference_material", references),
+                _block("translation_guideline", guideline),
+            ]
+        )
+        prompt = base
+        with usage_stage("outline"):
+            for attempt in range(self.settings.outline_repairs + 1):
+                outline = await self.model.structured(
+                    role="outline",
+                    system=prompts.OUTLINE_SYSTEM,
+                    prompt=prompt,
+                    schema=EvidenceOutline,
+                )
+                outline, repaired = repair_outline(outline, plan, ledger)
+                if repaired:
+                    logger.info("Outline repaired in code: %s", "; ".join(repaired))
+                problems = outline_problems(
+                    outline,
+                    plan,
+                    ledger,
+                    title_max_length=self.settings.title_max_length,
+                )
+                if not problems:
+                    return outline
+                logger.warning("Outline attempt %d unusable: %s", attempt + 1, problems)
+                prompt = (
+                    base
+                    + "\n\n"
+                    + _block(
+                        "previous_problems",
+                        "Fix these in your next outline:\n"
+                        + "\n".join(f"- {p}" for p in problems),
+                    )
+                )
+        raise ValueError(
+            "The outline breaks the rules after repairs: " + "; ".join(problems)
+        )
+
+    # ---- sections ---------------------------------------------------------------
+
+    async def write(
+        self,
+        plan: SurveyPlan,
+        *,
+        references: str = "",
+        guideline: str = "",
+    ) -> EvidenceSurvey:
+        ledger, kinds = await self.read(plan)
+        missing = [p.id for p in plan.papers if not ledger.of_paper(p.id)]
+        if missing:
+            self.notes.append(
+                "Papers without evidence (left out): " + ", ".join(missing)
+            )
+            plan = without_papers(plan, missing)
+        outline = await self.outline(plan, ledger, references, guideline)
+        outline = await self._check_evidence(outline, ledger)
+        self._names = dict(outline.short_names)
+        glossary = {t.english: t.rendering for t in outline.glossary}
+        free = (
+            " ".join({str(p.year) for p in plan.papers if p.year})
+            + " 0 1 2 3 4 5 6 7 8 9 10"
+        )
+        written: list[tuple[OutlineSection, str]] = []
+        numbers: dict[str, str] = {}
+        targets = section_targets(
+            outline,
+            plan,
+            per_core=self.settings.chars_per_core,
+            per_supporting=self.settings.chars_per_supporting,
+            min_total=self.settings.min_total_chars,
+            max_total=self.settings.max_total_chars,
+            korean=self.settings.korean,
+        )
+        for section, target in zip(outline.sections, targets, strict=True):
+            markdown = await self._section(
+                plan,
+                outline,
+                ledger,
+                section,
+                written,
+                numbers,
+                glossary,
+                references,
+                free,
+                target,
+            )
+            heading = section_heading(markdown) or section.title
+            for n in section_numbers(markdown, free):
+                numbers.setdefault(n, heading)
+            written.append((section, markdown))
+        body = self._assemble(plan, outline, ledger, written)
+        return EvidenceSurvey(
+            title=outline.title,
+            body=body,
+            outline=outline,
+            ledger=ledger,
+            plan=plan,
+            documents=kinds,
+            notes=self.notes,
+        )
+
+    async def _section(
+        self,
+        plan: SurveyPlan,
+        outline: EvidenceOutline,
+        ledger: EvidenceLedger,
+        section: OutlineSection,
+        written: list[tuple[OutlineSection, str]],
+        numbers: dict[str, str],
+        glossary: dict[str, str],
+        references: str,
+        free: str,
+        target: int,
+    ) -> str:
+        own = [e for eid in section.evidence if (e := ledger.get(eid))]
+        # What earlier sections actually state (their final text), so a
+        # back-reference never points at a removed sentence.
+        earlier_ids = list(
+            dict.fromkeys(
+                eid
+                for _, md in written
+                for s in prose_sentences(md)
+                for eid in cited_ids(s)
+            )
+        )
+        earlier = [e for eid in earlier_ids if (e := ledger.get(eid))]
+        # Evidence that later sections already cited (referred back to) twice.
+        cites: dict[str, int] = {}
+        for s, md in written:
+            for eid in {i for snt in prose_sentences(md) for i in cited_ids(snt)}:
+                if eid not in s.evidence:
+                    cites[eid] = cites.get(eid, 0) + 1
+        exhausted = {eid for eid, n in cites.items() if n >= 1}
+        figures = [e.figure_url for e in own if e.kind == "figure" and e.figure_url]
+        sections_map = "\n".join(
+            f"- {'(this) ' if s is section else ''}{s.kind}: {s.title} — {s.thesis}"
+            for s in outline.sections
+        )
+        previous = written[-1][1][-2500:] if written else ""
+        prompt = "\n\n".join(
+            [
+                f"Language: {self.settings.language}. Topic: {plan.topic}.",
+                _block("outline", sections_map),
+                _block(
+                    "section",
+                    f"kind: {section.kind}\ntitle: {section.title}\nthesis: {section.thesis}\n"
+                    f"question: {section.question}\ndepth: {section.depth}\n"
+                    f"length: about {target:,} characters of prose\n"
+                    f"running example: {outline.running_example or 'none'}",
+                ),
+                _block("evidence", _evidence_lines(own)),
+                _block("already_written_evidence", _evidence_lines(earlier[-60:])),
+                _block(
+                    "paper_names",
+                    "\n".join(
+                        f"- {p.id}: {outline.short_names.get(p.id, p.title)} "
+                        f"({p.authors}, {p.year})"
+                        for p in plan.papers
+                    ),
+                ),
+                _block("glossary", glossary_view(glossary, [m for _, m in written])),
+                _block("previous_section_end", previous),
+                _block(
+                    "reference_material",
+                    (
+                        references
+                        if section.kind in ("introduction", "cross_cutting", "insights")
+                        else ""
+                    ),
+                ),
+                (
+                    "The code appends this table after the section; introduce and "
+                    "interpret it (its columns are exactly these), do not "
+                    "reproduce it:\n"
+                    + (
+                        timeline_table(plan, outline, self.settings.korean)
+                        if section.kind == "introduction"
+                        else comparison_table(
+                            plan, outline, ledger, self.settings.korean
+                        )
+                    )
+                    if section.kind in ("introduction", "comparison")
+                    else ""
+                ),
+            ]
+        )
+        with usage_stage("draft"):
+            draft = (
+                await self.model.text(
+                    role="write", system=prompts.WRITER_SYSTEM, prompt=prompt
+                )
+            ).strip()
+            if own and (
+                _prose_length(draft) < 0.3 * target or ends_mid_sentence(draft)
+            ):
+                logger.warning(
+                    "Section %r came back short (%d chars): %r",
+                    section.title,
+                    _prose_length(draft),
+                    draft[:300],
+                )
+                draft = (
+                    await self.model.text(
+                        role="write",
+                        system=prompts.WRITER_SYSTEM,
+                        prompt=prompt
+                        + "\n\nYour previous answer was too short or empty. This is "
+                        "a survey of published research papers for practitioners: "
+                        f"write the whole section (about {int(target):,} characters "
+                        "of prose) from its evidence.",
+                    )
+                ).strip()
+            if own and (
+                _prose_length(draft) < 0.3 * target or ends_mid_sentence(draft)
+            ):
+                logger.warning(
+                    "Section %r still short; writing it from the claims alone.",
+                    section.title,
+                )
+                draft = (
+                    await self.model.text(
+                        role="write",
+                        system=prompts.WRITER_SYSTEM,
+                        prompt=prompt.replace(
+                            _block("evidence", _evidence_lines(own)),
+                            _block("evidence", _claim_lines(own)),
+                        ),
+                    )
+                ).strip()
+
+        def checks(markdown: str) -> list[str]:
+            return draft_problems(
+                markdown,
+                title=section.title,
+                own=section.evidence,
+                earlier=earlier_ids,
+                ledger=ledger,
+                earlier_numbers=numbers,
+                figure_urls=figures,
+                free_numbers=free,
+                exhausted=exhausted,
+                papers=section.papers if section.kind == "lineage" else (),
+                target_chars=target,
+                depth=(
+                    section.depth
+                    if section.kind in ("lineage", "cross_cutting")
+                    else ""
+                ),
+            )
+
+        for round_ in range(self.settings.max_fix_rounds + 1):
+            code = checks(draft)
+            claims = await self._check_claims(draft, ledger, own + earlier)
+            review = await self._review(draft, section) if round_ == 0 else []
+            issues = code + [f"{v}: {s}" for s, v in claims] + review
+            if not issues or round_ == self.settings.max_fix_rounds:
+                break
+            with usage_stage("fix"):
+                fixed = (
+                    await self.model.text(
+                        role="write",
+                        system=prompts.FIX_SYSTEM,
+                        prompt="\n\n".join(
+                            [
+                                _block("section", draft),
+                                _block(
+                                    "evidence", _evidence_lines(own + earlier[-30:])
+                                ),
+                                _block("problems", "\n".join(f"- {i}" for i in issues)),
+                            ]
+                        ),
+                    )
+                ).strip()
+            fixed = strip_revision_notes(fixed)
+            if reason := structure_lost(draft, fixed) or (
+                "it stops mid-sentence" if ends_mid_sentence(fixed) else ""
+            ):
+                logger.info("Fix of %r rejected: %s", section.title, reason)
+                break
+            if len(checks(fixed)) > len(code):
+                logger.info("Fix of %r rejected: adds rule problems", section.title)
+                break
+            draft = fixed
+        claims = await self._unsupported(draft, ledger, free, own + earlier)
+        if claims:
+            # Let the writer narrow or delete them in context first; only what
+            # is still unsupported after that is cut.
+            with usage_stage("fix"):
+                fixed = (
+                    await self.model.text(
+                        role="write",
+                        system=prompts.FIX_SYSTEM,
+                        prompt="\n\n".join(
+                            [
+                                _block("section", draft),
+                                _block(
+                                    "evidence", _evidence_lines(own + earlier[-30:])
+                                ),
+                                _block(
+                                    "problems",
+                                    "These sentences are not supported by their "
+                                    "evidence; narrow each to what the evidence "
+                                    "says or delete it, and mend the sentences "
+                                    "around a deletion:\n"
+                                    + "\n".join(f"- {v}: {s}" for s, v in claims),
+                                ),
+                            ]
+                        ),
+                    )
+                ).strip()
+            if not structure_lost(draft, fixed) and len(checks(fixed)) <= len(
+                checks(draft)
+            ):
+                draft = fixed
+                claims = await self._unsupported(draft, ledger, free, own + earlier)
+        wrong = [(s, v) for s, v in claims if v.startswith("wrong")]
+        if wrong:
+            draft = drop_sentences(draft, [s for s, _ in wrong])
+            self.notes.append(
+                f"Section '{section.title}': {len(wrong)} sentence(s) contradicting "
+                "their evidence removed: "
+                + " | ".join(f"{s[:120]} ({v})" for s, v in wrong[:5])
+            )
+        if unsupported := [(s, v) for s, v in claims if not v.startswith("wrong")]:
+            self.notes.append(
+                f"Section '{section.title}': check {len(unsupported)} sentence(s) "
+                "the evidence may not support: "
+                + " | ".join(f"{s[:120]} ({v})" for s, v in unsupported[:5])
+            )
+        draft = add_missing_figures(draft, [e for e in own if e.kind == "figure"])
+        draft, unbalanced = balance_math(draft)
+        if unbalanced:
+            self.notes.append(f"Section '{section.title}': a lone $$ was removed.")
+        if leftover := checks(draft):
+            self.notes.append(
+                f"Section '{section.title}' still has: " + " | ".join(leftover[:5])
+            )
+        return draft
+
+    async def _check_evidence(
+        self, outline: EvidenceOutline, ledger: EvidenceLedger
+    ) -> EvidenceOutline:
+        """Check the claim, scope and cell of every number and limitation the
+        outline uses against its quote (a scope can name the wrong benchmark
+        while every number is in the quote); wrong ones leave the outline."""
+        used = {eid for s in outline.sections for eid in s.evidence} | {
+            eid for r in outline.table for eid in [*r.results, r.limitation] if eid
+        }
+        items = [
+            e for e in ledger if e.id in used and e.kind not in ("figure", "equation")
+        ]
+        if not items:
+            return outline
+        lines = "\n".join(
+            f"[{e.id}] ({e.kind}) claim: {e.claim} | cell: {e.cell} | scope: "
+            f'{e.scope}\n    quote: "{e.quote}"'
+            for e in items
+        )
+        with usage_stage("verify"):
+            check = await self.model.structured(
+                role="evaluate",
+                system=prompts.EVIDENCE_CHECK_SYSTEM,
+                prompt=_block("evidence", lines),
+                schema=EvidenceCheck,
+            )
+        wrong = {v.id for v in check.verdicts if v.verdict == "wrong"}
+        if not wrong:
+            return outline
+        self.notes.append(
+            "Evidence that misstates its quote was left out: "
+            + "; ".join(
+                f"{v.id} ({v.reason[:120]})" for v in check.verdicts if v.id in wrong
+            )
+        )
+        sections = [
+            s.model_copy(update={"evidence": [e for e in s.evidence if e not in wrong]})
+            for s in outline.sections
+        ]
+        table = [
+            r.model_copy(
+                update={
+                    "results": [e for e in r.results if e not in wrong],
+                    "limitation": None if r.limitation in wrong else r.limitation,
+                }
+            )
+            for r in outline.table
+        ]
+        return outline.model_copy(update={"sections": sections, "table": table})
+
+    async def _unsupported(
+        self,
+        draft: str,
+        ledger: EvidenceLedger,
+        free: str,
+        context: Sequence[Evidence] = (),
+    ) -> list[tuple[str, str]]:
+        """The claim check's unsupported sentences and the sentences whose
+        numbers their evidence does not state."""
+        found = await self._check_claims(draft, ledger, context)
+        known = {s for s, _ in found}
+        found += [
+            (s, "numbers not in its evidence")
+            for s in unsourced_number_sentences(draft, ledger, free)
+            if s not in known
+        ]
+        return found
+
+    async def _check_claims(
+        self, draft: str, ledger: EvidenceLedger, context: Sequence[Evidence] = ()
+    ) -> list[tuple[str, str]]:
+        """(sentence, verdict with reason) of the sentences the evidence does
+        not support."""
+        sentences = prose_sentences(draft)
+        if not sentences:
+            return []
+        lines = []
+        for n, sentence in enumerate(sentences, 1):
+            cited = [e for i in cited_ids(sentence) if (e := ledger.get(i))]
+            lines.append(
+                f"{n}. {sentence}\n   evidence: "
+                + (
+                    " || ".join(
+                        f"[{e.id}, from {self._names.get(e.paper_id, e.paper_id)}] "
+                        f'{e.claim} — "{e.quote[:300]}" {e.scope}'
+                        for e in cited
+                    )
+                    or "(none)"
+                )
+            )
+        with usage_stage("verify"):
+            check = await self.model.structured(
+                role="evaluate",
+                system=prompts.CLAIM_CHECK_SYSTEM,
+                prompt=_block("section_evidence", _evidence_lines(list(context)))
+                + "\n\n"
+                + _block("sentences", "\n".join(lines)),
+                schema=ClaimCheck,
+            )
+        bad = []
+        for v in check.verdicts:
+            if v.verdict != "supported" and 1 <= v.n <= len(sentences):
+                bad.append((sentences[v.n - 1], f"{v.verdict}: {v.reason}"))
+        return bad
+
+    async def _review(self, draft: str, section: OutlineSection) -> list[str]:
+        with usage_stage("review"):
+            review = await self.model.structured(
+                role="evaluate",
+                system=prompts.REVIEW_SYSTEM,
+                prompt="\n\n".join(
+                    [
+                        f"Section kind: {section.kind}; thesis: {section.thesis}; depth: {section.depth}.",
+                        _block("section", draft),
+                    ]
+                ),
+                schema=SectionReview,
+            )
+        return [
+            f"{i.category}: {i.fix} — in: {i.sentence[:200]}" for i in review.issues
+        ]
+
+    # ---- assemble ---------------------------------------------------------------
+
+    def _assemble(
+        self,
+        plan: SurveyPlan,
+        outline: EvidenceOutline,
+        ledger: EvidenceLedger,
+        written: list[tuple[OutlineSection, str]],
+    ) -> str:
+        parts = []
+        for section, markdown in written:
+            if not markdown.lstrip().startswith("## "):
+                markdown = f"## {section.title}\n\n{markdown.lstrip()}"
+            parts.append(markdown)
+            if section.kind == "introduction":
+                parts.append(timeline_table(plan, outline, self.settings.korean))
+            elif section.kind == "comparison":
+                parts.append(
+                    comparison_table(plan, outline, ledger, self.settings.korean)
+                )
+        return cite_papers("\n\n".join(p.strip() for p in parts if p.strip()), ledger)

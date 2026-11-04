@@ -23,35 +23,14 @@ from pydantic import ValidationError
 
 from scholar_lens import cli
 from scholar_lens.configs.config import Config, Survey
-from scholar_lens.src import runtime, survey_writer
-from scholar_lens.src.jobs import JobRequest
-from scholar_lens.src.metrics import TokenUsageTracker
-from scholar_lens.src.post_conventions import (
+from scholar_lens.domain.conventions import (
     BlogPost,
     PostConventions,
     TypeSpec,
     load_local_conventions,
 )
-from scholar_lens.src.post_validator import validate_post
-from scholar_lens.src.prompt_safety import strip_defanging
-from scholar_lens.src.prompts import (
-    SurveyCardPrompt,
-    SurveyEvaluationPrompt,
-    SurveyGroundingPrompt,
-    SurveyOutlinePrompt,
-    SurveySectionPrompt,
-)
-from scholar_lens.src.prompts.survey import (
-    CONNECTION_RULES,
-    DEPTH_GUIDANCE,
-    NARRATION_RULE,
-    REFERENCE_MATERIAL_RULE,
-    SECTION_ROLES,
-)
-from scholar_lens.src.publisher import Publisher
-from scholar_lens.src.runtime import RunContext
-from scholar_lens.src.survey_plan import SourceRecord, SurveyInputError, SurveyPlan
-from scholar_lens.src.survey_post import (
+from scholar_lens.domain.survey.plan import SourceRecord, SurveyInputError, SurveyPlan
+from scholar_lens.domain.survey.post import (
     PANEL_NOTE,
     CardAnswer,
     CardEquation,
@@ -80,6 +59,27 @@ from scholar_lens.src.survey_post import (
     timeline_table,
     unlink_foreign_papers,
 )
+from scholar_lens.domain.validation import validate_post
+from scholar_lens.src import runtime, survey_writer
+from scholar_lens.src.jobs import JobRequest
+from scholar_lens.src.metrics import TokenUsageTracker
+from scholar_lens.src.prompt_safety import strip_defanging
+from scholar_lens.src.prompts import (
+    SurveyCardPrompt,
+    SurveyEvaluationPrompt,
+    SurveyGroundingPrompt,
+    SurveyOutlinePrompt,
+    SurveySectionPrompt,
+)
+from scholar_lens.src.prompts.survey import (
+    CONNECTION_RULES,
+    DEPTH_GUIDANCE,
+    NARRATION_RULE,
+    REFERENCE_MATERIAL_RULE,
+    SECTION_ROLES,
+)
+from scholar_lens.src.publisher import Publisher
+from scholar_lens.src.runtime import RunContext
 from scholar_lens.src.survey_writer import (
     CardStore,
     PaperIndex,
@@ -1197,8 +1197,11 @@ def stage(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
 
     monkeypatch.setattr(runtime, "build_publisher", publisher)
     session = boto3.Session(region_name="us-east-1")
+    # These tests exercise the cards engine; the evidence engine has its own.
+    config = Config()
+    config.survey.engine = "cards"
     context = RunContext(
-        config=Config(),
+        config=config,
         default_boto_session=session,
         bedrock_boto_session=session,
         conventions=spec,
@@ -2008,7 +2011,7 @@ def test_a_rerun_replaces_the_post_its_plan_published(
     from datetime import UTC, datetime
 
     from scholar_lens.configs import Github
-    from scholar_lens.src.post_conventions import BlogPost
+    from scholar_lens.domain.conventions import BlogPost
     from tests.test_publisher import FakeGithub, FakeRepo
 
     old = "_posts/2026-10-02-preference-learning-for-llms.md"

@@ -1,5 +1,9 @@
 """Prompts for the tech-guide pipeline: research planning, relevance, synopsis, section writing, grounding, and evaluation."""
 
+from ...domain.lengths import (  # noqa: F401 - moved; re-exported
+    DEPTH_CHARS,
+    NON_KOREAN_CHAR_FACTOR,
+)
 from .base import (
     HEADING_STRUCTURE_RULES,
     IMAGE_PATH_RULES,
@@ -23,12 +27,6 @@ OFFICIAL_LABEL = "official documentation"
 OLDER_DOCS_LABEL = "older docs version"
 REFERENCE_LABEL = "reference material"
 THIRD_PARTY_LABEL = "third-party"
-# Prose-length target per section depth, in Korean characters of prose as
-# ``section_loop.prose_chars`` measures it (PROSE_UNIT). Single source for the
-# synopsis budget, the section directives and the evaluator's length report.
-DEPTH_CHARS: dict[str, int] = {"deep": 5_000, "standard": 2_500, "brief": 1_000}
-# Other languages need about this many times the characters for the same content.
-NON_KOREAN_CHAR_FACTOR: float = 2.5
 LENGTH_BUDGET = (
     f"LENGTH BUDGET ({PROSE_UNIT}; in a language other than Korean, about "
     f"{NON_KOREAN_CHAR_FACTOR:g}x these numbers):\n"

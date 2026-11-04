@@ -15,10 +15,11 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.vectorstores import VectorStore
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
+from ..adapters.http.url_guard import UnsafeUrlError, assert_url_is_public
+from ..application.usage import staged
 from .constants import EmbeddingModelId, LanguageModelId, LocalPaths
 from .logger import logger
 from .prompts import CodeAnalysisPrompt, CodebaseSummaryPrompt
-from .url_guard import UnsafeUrlError, assert_url_is_public
 from .utils import (
     BatchProcessor,
     BedrockEmbeddingModelFactory,
@@ -353,6 +354,7 @@ class CodeRetriever(RetryableBase):
     def _prepare_augmentation_inputs(documents: list[Document]) -> list[dict[str, str]]:
         return [{"code": doc.page_content} for doc in documents]
 
+    @staged("code_analysis")
     async def _augment_documents(self, documents: list[Document]) -> list[Document]:
         results = await self.batch_processor.aexecute_with_fallback(
             items_to_process=documents,
@@ -416,6 +418,7 @@ class CodeRetriever(RetryableBase):
         """Release the in-memory index."""
         self.vector_store = None
 
+    @staged("code_summary")
     async def generate_codebase_summary(
         self, repo_paths: list[Path] | None = None
     ) -> str:

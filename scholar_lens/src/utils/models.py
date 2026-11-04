@@ -122,6 +122,14 @@ _OPUS = (5.0, 25.0)
 # the registry: the Opus 4.x list price, so an unknown model is not
 # under-counted.
 FALLBACK_PRICE_PER_MTOK = _OPUS
+# Prompt-cache tokens are billed as a multiple of the input price (Anthropic
+# models on Bedrock: reads at 0.1x, 5-minute writes at 1.25x).
+CACHE_READ_PRICE_MULTIPLE = 0.1
+CACHE_WRITE_PRICE_MULTIPLE = 1.25
+# Names the price table above; recorded with every run's usage so a cost
+# estimate can be traced to (and re-priced from) the prices it used. Change
+# it whenever a price changes.
+PRICE_VERSION = "2026-11-03"
 
 _LANGUAGE_MODEL_INFO: dict[LanguageModelId, LanguageModelInfo] = {
     LanguageModelId.CLAUDE_V3_HAIKU: _legacy(200_000, 4096, _HAIKU_3),
@@ -203,6 +211,21 @@ _LANGUAGE_MODEL_INFO: dict[LanguageModelId, LanguageModelInfo] = {
 }
 
 
+# Application inference profile ARN -> the system-defined profile it copies,
+# filled as the profiles are resolved, so a call reported under an ARN is
+# priced as its model.
+_PROFILE_SOURCES: dict[str, str] = {}
+
+
+def register_profile_source(profile_arn: str, system_profile_id: str) -> None:
+    _PROFILE_SOURCES[profile_arn] = system_profile_id
+
+
+def profile_source(invoked_id: str) -> str:
+    """The system profile behind an application profile ARN; other ids as is."""
+    return _PROFILE_SOURCES.get(invoked_id, invoked_id)
+
+
 def model_info_for_invoked_id(invoked_id: str) -> LanguageModelInfo | None:
     """Registry entry for an id as Bedrock or LangChain reports it: with or
     without an inference-profile prefix (``global.``/``us.``) or ``anthropic.``."""
@@ -210,7 +233,7 @@ def model_info_for_invoked_id(invoked_id: str) -> LanguageModelInfo | None:
     def bare(value: str) -> str:
         return value.rsplit("anthropic.", 1)[-1]
 
-    target = bare(invoked_id)
+    target = bare(_PROFILE_SOURCES.get(invoked_id, invoked_id))
     for model_id, info in _LANGUAGE_MODEL_INFO.items():
         if bare(model_id.value) == target:
             return info

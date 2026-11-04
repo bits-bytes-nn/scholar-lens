@@ -11,8 +11,8 @@ from pathlib import Path
 
 import pytest
 
-from scholar_lens.src.post_conventions import load_local_conventions
-from scholar_lens.src.post_validator import Violation, errors, validate_post
+from scholar_lens.domain.conventions import load_local_conventions
+from scholar_lens.domain.validation import Violation, errors, validate_post
 
 FIXTURES = Path(__file__).parent / "fixtures" / "blog_defects"
 SPEC = load_local_conventions()
@@ -306,7 +306,7 @@ class TestDescription:
         assert [v.level for v in found] == ["warning"]
 
     def test_another_posts_description_is_an_error(self) -> None:
-        from scholar_lens.src.post_conventions import BlogPost
+        from scholar_lens.domain.conventions import BlogPost
 
         def site(path: str) -> list[BlogPost]:
             return [BlogPost(path=path, description=f"  {DESCRIPTION}\n")]
@@ -359,7 +359,7 @@ def test_date_is_not_after_the_file_name(date: str, ok: bool) -> None:
 
 class TestBodyErrors:
     def test_table_and_inline_pipe_errors_are_exposed_for_writers(self) -> None:
-        from scholar_lens.src.post_validator import body_errors
+        from scholar_lens.domain.validation import body_errors
 
         body = (
             "| A | B |\n| --- | --- |\n| 1 | 2 | 3 |\n\n"
@@ -376,7 +376,7 @@ class TestBodyErrors:
         )
 
     def test_unclosed_fence_is_an_error_not_silent_code(self) -> None:
-        from scholar_lens.src.post_validator import body_errors
+        from scholar_lens.domain.validation import body_errors
 
         assert any("never closed" in i for i in body_errors("```py\nx = 1\n"))
 
@@ -443,7 +443,7 @@ class TestUnsourcedNumbers:
         ],
     )
     def test_numbers_match_the_source(self, text: str, missing: list[str]) -> None:
-        from scholar_lens.src.post_validator import unsourced_numbers
+        from scholar_lens.domain.validation import unsourced_numbers
 
         assert unsourced_numbers(text, self.SOURCE) == missing
 
@@ -466,12 +466,12 @@ class TestUnsourcedNumbers:
     def test_man_is_sourced_as_either_reading(
         self, text: str, source: str, missing: list[str]
     ) -> None:
-        from scholar_lens.src.post_validator import unsourced_numbers
+        from scholar_lens.domain.validation import unsourced_numbers
 
         assert unsourced_numbers(text, source) == missing
 
     def test_description_problems(self) -> None:
-        from scholar_lens.src.post_validator import description_problems
+        from scholar_lens.domain.validation import description_problems
 
         tldr = "DeepSeek-V3는 671B MoE 모델로 2.788M GPU 시간에 학습했습니다."
         assert description_problems(DESCRIPTION, tldr + " 37B H800") == []
@@ -612,3 +612,16 @@ class TestBlogLintParity:
     )
     def test_http_links(self, body: str, insecure: bool) -> None:
         assert bool(errors_of(make_post(body), "link")) is insecure
+
+
+def test_an_overlong_description_is_cut_at_its_last_fitting_sentence() -> None:
+    from scholar_lens.domain.validation import DESCRIPTION_LENGTH, fit_description
+
+    first = "가" * 130 + "입니다."
+    long = first + " " + "나" * 40 + "입니다."
+    assert len(long) > DESCRIPTION_LENGTH.stop - 1
+    assert fit_description(long) == first
+    # No sentence end in range: left as is (the validator warns).
+    unbroken = "다" * 170
+    assert fit_description(unbroken) == unbroken
+    assert fit_description("짧은 설명입니다.") == "짧은 설명입니다."

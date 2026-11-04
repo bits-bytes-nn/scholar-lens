@@ -26,6 +26,7 @@ pyyaml = ">=6.0.3"
 requests = ">=2.32.5"
 tenacity = ">=8.0.0"
 resvg-py = ">=0.5.0"
+strands-agents = "1.63.0"
 
 [tool.poetry.scripts]
 scholar-lens = "scholar_lens.cli:main"
@@ -43,6 +44,7 @@ moto = { extras = ["s3", "sns", "ssm", "batch", "sts"], version = ">=5.0" }
 responses = ">=0.25"
 ruff = ">=0.6"
 mypy = ">=1.11"
+import-linter = "^2.15"
 
 [build-system]
 requires = ["poetry-core"]
@@ -102,3 +104,57 @@ exclude = "(cdk\\.out|logs|papers)"
 #   names, not the dynamic `str` we pass.
 # - misc: Pydantic class-level field defaults accessed via the class object.
 disable_error_code = ["call-overload", "misc"]
+
+# Dependency rules of the hexagonal layers (docs/redesign.md, section 4.1).
+# The legacy scholar_lens.src package may use the new layers while it is
+# being migrated; the new layers never import it.
+[tool.importlinter]
+root_package = "scholar_lens"
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "The domain is pure"
+type = "forbidden"
+source_modules = ["scholar_lens.domain"]
+forbidden_modules = [
+    "scholar_lens.application",
+    "scholar_lens.adapters",
+    "scholar_lens.src",
+    "scholar_lens.configs",
+    "scholar_lens.cli",
+    "boto3",
+    "botocore",
+    "httpx",
+    "requests",
+    "langchain_core",
+    "strands",
+]
+
+[[tool.importlinter.contracts]]
+name = "The application depends on the domain and ports only"
+type = "forbidden"
+source_modules = ["scholar_lens.application"]
+forbidden_modules = [
+    "scholar_lens.adapters",
+    "scholar_lens.src",
+    "scholar_lens.configs",
+    "scholar_lens.cli",
+    "boto3",
+    "botocore",
+    "httpx",
+    "requests",
+    "langchain_core",
+    "strands",
+]
+
+[[tool.importlinter.contracts]]
+name = "Adapters do not use the legacy package"
+type = "forbidden"
+source_modules = ["scholar_lens.adapters"]
+forbidden_modules = ["scholar_lens.src", "scholar_lens.cli"]
+
+[[tool.importlinter.contracts]]
+name = "Web research does not depend on the review plan"
+type = "forbidden"
+source_modules = ["scholar_lens.src.web_research"]
+forbidden_modules = ["scholar_lens.domain.review_plan"]

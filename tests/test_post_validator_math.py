@@ -5,8 +5,8 @@ from __future__ import annotations
 
 import pytest
 
-from scholar_lens.src.markdown_math import normalize_math
-from scholar_lens.src.post_validator import (
+from scholar_lens.domain.markdown.math import normalize_math
+from scholar_lens.domain.validation import (
     errors,
     unsourced_table_numbers,
     validate_post,

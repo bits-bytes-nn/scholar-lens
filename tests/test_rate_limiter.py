@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from scholar_lens.src.rate_limiter import RateLimiter
+from scholar_lens.adapters.http.rate_limit import RateLimiter
 
 
 class _FakeClock:
@@ -38,7 +38,7 @@ def test_rate_limiter_rejects_nonpositive_args() -> None:
 
 def test_rate_limiter_allows_burst_then_paces(monkeypatch: pytest.MonkeyPatch) -> None:
     clock = _FakeClock()
-    monkeypatch.setattr("scholar_lens.src.rate_limiter.time.sleep", clock.sleep)
+    monkeypatch.setattr("scholar_lens.adapters.http.rate_limit.time.sleep", clock.sleep)
     # 1 token per 2s, capacity 1 → first acquire is free, second must wait ~2s.
     limiter = _limiter_with_clock(clock, rate=1.0, per=2.0, name="t")
 
@@ -53,7 +53,7 @@ def test_rate_limiter_penalize_blocks_until_retry_after(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     clock = _FakeClock()
-    monkeypatch.setattr("scholar_lens.src.rate_limiter.time.sleep", clock.sleep)
+    monkeypatch.setattr("scholar_lens.adapters.http.rate_limit.time.sleep", clock.sleep)
     limiter = _limiter_with_clock(clock, rate=10.0, per=1.0, name="t")
 
     start = clock.now
@@ -76,7 +76,7 @@ def test_rate_limiter_no_unbounded_burst_after_penalty(
     # the bucket capacity when it clears. Drive the refill clock across a 30s
     # penalty and assert tokens are capped at capacity (== rate), not 30*rate.
     clock = _FakeClock()
-    monkeypatch.setattr("scholar_lens.src.rate_limiter.time.sleep", clock.sleep)
+    monkeypatch.setattr("scholar_lens.adapters.http.rate_limit.time.sleep", clock.sleep)
     limiter = _limiter_with_clock(clock, rate=5.0, per=1.0, name="t")
 
     limiter.penalize(30.0)
@@ -97,7 +97,7 @@ def test_rate_limiter_no_unbounded_burst_after_penalty(
 def test_arxiv_retry_after_is_capped(header: str, expected: float) -> None:
     from types import SimpleNamespace
 
-    from scholar_lens.src.rate_limiter import (
+    from scholar_lens.adapters.http.rate_limit import (
         MAX_RETRY_AFTER_SECONDS,
         arxiv_retry_after_seconds,
     )
@@ -112,7 +112,7 @@ def _fake_clock_arxiv_limiter(
     monkeypatch: pytest.MonkeyPatch, module: Any, name: str
 ) -> tuple[_FakeClock, RateLimiter]:
     clock = _FakeClock()
-    monkeypatch.setattr("scholar_lens.src.rate_limiter.time.sleep", clock.sleep)
+    monkeypatch.setattr("scholar_lens.adapters.http.rate_limit.time.sleep", clock.sleep)
     limiter = _limiter_with_clock(clock, rate=1.0, per=3.0, name="arxiv")
     monkeypatch.setattr(module, name, limiter)
     return clock, limiter
@@ -151,8 +151,8 @@ def test_arxiv_pdf_download_is_paced_and_penalty_capped(
     import requests
     import responses
 
-    from scholar_lens.src import arxiv_handler
-    from scholar_lens.src.arxiv_handler import ArxivHandler
+    from scholar_lens.adapters.scholarly import arxiv as arxiv_handler
+    from scholar_lens.adapters.scholarly.arxiv import ArxivHandler
 
     clock, limiter = _fake_clock_arxiv_limiter(
         monkeypatch, arxiv_handler, "_ARXIV_RATE_LIMITER"
@@ -184,7 +184,7 @@ def test_arxiv_pdf_download_is_paced_and_penalty_capped(
 def test_a_429_in_the_message_alone_is_not_a_rate_limit() -> None:
     from types import SimpleNamespace
 
-    from scholar_lens.src.rate_limiter import arxiv_retry_after_seconds
+    from scholar_lens.adapters.http.rate_limit import arxiv_retry_after_seconds
 
     not_found = Exception("404 for https://arxiv.org/abs/2405.04291")
     not_found.response = SimpleNamespace(headers={}, status_code=404)  # type: ignore[attr-defined]

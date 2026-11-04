@@ -6,8 +6,8 @@ from __future__ import annotations
 
 import pytest
 
-from scholar_lens.src.markdown_lint import publish_body
-from scholar_lens.src.post_validator import errors, validate_post
+from scholar_lens.domain.markdown.lint import publish_body
+from scholar_lens.domain.validation import errors, validate_post
 from tests.test_post_validator import DESCRIPTION, SPEC, make_post
 
 
@@ -82,7 +82,7 @@ def test_translation_file_name(name: str, front: dict[str, str], ok: bool) -> No
 
 
 def test_a_published_translation_keeps_its_pair() -> None:
-    from scholar_lens.src.post_conventions import BlogPost
+    from scholar_lens.domain.conventions import BlogPost
 
     twin = BlogPost(path="_posts/2026-04-06-x-en.md", lang="en", translation_id="x")
     name = "2026-10-13-x.md"
@@ -212,7 +212,7 @@ class TestBlogLineRoles:
     def test_a_quoted_fence_left_open_is_an_error(self) -> None:
         # A fence inside a blockquote is code and ends with it: at the first
         # blank line, or at the end of the post.
-        from scholar_lens.src.post_validator import body_errors
+        from scholar_lens.domain.validation import body_errors
 
         for body in (
             "> ```python\n> x = 1\n\n뒤 문단입니다.\n",
@@ -222,7 +222,7 @@ class TestBlogLineRoles:
             assert any("fence is never closed" in e for e in body_errors(body))
 
     def test_fence_roles_read_quoted_fences_as_the_lint_does(self) -> None:
-        from scholar_lens.src.markdown_math import (
+        from scholar_lens.domain.markdown.math import (
             blog_fence_roles,
             blog_unclosed_fence_lines,
         )
@@ -247,7 +247,7 @@ class TestBlogLineRoles:
         assert not [m for m in messages(body) if "read as HTML" in m]
 
     def test_a_tag_in_an_indented_code_block_is_fenced_at_publish(self) -> None:
-        from scholar_lens.src.quality_gate import publish_blockers
+        from scholar_lens.domain.quality_gate import publish_blockers
 
         body = "예시입니다.\n\n    <think>\n    x = 1\n\n끝입니다.\n"
         assert any("<think> is read as HTML" in m for m in messages(body))
@@ -258,7 +258,7 @@ class TestBlogLineRoles:
         assert publish_blockers(body) == []
 
     def test_indented_code_in_a_list_item_is_fenced_at_its_column(self) -> None:
-        from scholar_lens.src.markdown_lint import _fence_indented_code
+        from scholar_lens.domain.markdown.lint import _fence_indented_code
 
         body = "- 항목\n\n      code <b>\n        more\n\n- 다음\n"
         assert _fence_indented_code(body) == (

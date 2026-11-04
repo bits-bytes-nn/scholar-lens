@@ -11,7 +11,7 @@ from botocore.exceptions import ClientError
 from pydantic import BaseModel, ValidationError
 
 from scholar_lens import cli
-from scholar_lens.src.aws_helpers import BatchJobError
+from scholar_lens.adapters.aws.storage import BatchJobError
 from scholar_lens.src.jobs import (
     JobRequest,
     JobResult,

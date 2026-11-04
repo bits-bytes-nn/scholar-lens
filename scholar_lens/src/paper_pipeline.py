@@ -10,20 +10,23 @@ from typing import Any
 
 from pydantic import HttpUrl
 
+from ..domain.conventions import BlogPost
+from ..domain.markdown.front_matter import split_front_matter
+from ..domain.markdown.lint import (
+    drop_unknown_images,
+    figure_markers_to_images,
+    fill_image_alts,
+)
+from ..domain.tags import unsupported_tags
+from ..domain.validation import unsourced_table_numbers
 from .citation_summarizer import CitationSummarizer
 from .code_retriever import CodeRetriever, NoPythonFilesError
 from .constants import EmbeddingModelId, LanguageModelId, LocalPaths
 from .content_extractor import Attributes, ContentExtractor
 from .explainer import Paper, PaperReviewer
 from .formatting import format_review, format_summary, paper_post_meta
-from .front_matter import split_front_matter
 from .jobs import JobRequest
 from .logger import logger
-from .markdown_lint import (
-    drop_unknown_images,
-    figure_markers_to_images,
-    fill_image_alts,
-)
 from .metrics import TokenUsageTracker
 from .paper_source import PaperSource, resolve_paper_source
 from .parser import (
@@ -34,8 +37,6 @@ from .parser import (
     PDFParser,
     attach_figure_context,
 )
-from .post_conventions import BlogPost
-from .post_validator import unsourced_table_numbers
 from .publish_types import title_slug
 from .publisher import PublishRequest, build_pr_body
 from .runtime import (
@@ -47,7 +48,6 @@ from .runtime import (
     publish_artifact,
 )
 from .summarizer import PaperSummarizer
-from .tags import unsupported_tags
 from .utils import is_placeholder
 
 # The blog's most-used tags shown to the tagging prompt (all of them are

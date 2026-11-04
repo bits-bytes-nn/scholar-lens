@@ -111,6 +111,18 @@ def tmp_papers_dir(tmp_path: Path) -> Path:
 def _no_arxiv_rate_limit(monkeypatch: pytest.MonkeyPatch) -> None:
     """The process-wide arXiv limiter (1 request per 3 s) would make every test
     that touches the arXiv client wait in real time."""
-    from scholar_lens.src import arxiv_handler
+    from scholar_lens.adapters.scholarly import arxiv as arxiv_handler
 
     monkeypatch.setattr(arxiv_handler._ARXIV_RATE_LIMITER, "acquire", lambda: None)
+
+
+@pytest.fixture(autouse=True)
+def _no_developer_keys(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Tests see no API key, token or alternate config from the developer's
+    shell or .env (a key changes which providers a pipeline calls)."""
+    from scholar_lens.configs.config import CONFIG_PATH_ENV
+    from scholar_lens.settings import EnvVars
+
+    for name in [*(v.value for v in EnvVars), CONFIG_PATH_ENV]:
+        if name not in ("LOG_LEVEL", "AWS_PROFILE_NAME"):
+            monkeypatch.delenv(name, raising=False)

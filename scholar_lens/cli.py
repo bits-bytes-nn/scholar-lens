@@ -10,6 +10,7 @@ and scripts can parse the outcome directly::
     scholar-lens survey plan "LLM preference optimization" --paper 2305.18290 --reference "https://huggingface.co/blog/rlhf"
     scholar-lens survey write --plan papers/survey-llm-preference-optimization/plan.json
     scholar-lens status <job-id> --wait
+    scholar-lens costs --since 2026-11-01 --by stage --billed
 
 Exit codes: 0 succeeded (or submitted), 1 failed, 2 rejected input,
 3 still running (``status``), 4 the command itself failed (``"status":
@@ -34,8 +35,8 @@ from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
+from scholar_lens.domain.survey.plan import SurveyInputError
 from scholar_lens.src.jobs import JobRequest, JobResult
-from scholar_lens.src.survey_plan import SurveyInputError
 
 EXIT_OK, EXIT_FAILED, EXIT_REJECTED, EXIT_PENDING, EXIT_ERROR = 0, 1, 2, 3, 4
 _EXIT_BY_STATUS = {
@@ -55,9 +56,22 @@ _WORKER_EXIT_BY_STATUS = {
     "rejected": WORKER_REPORTED_REJECTED,
 }
 
+# The cost allocation tag on every stack resource (scripts/deploy_infra.py).
+COST_TAG_KEY, COST_TAG_VALUE = "ProjectName", "scholar-lens"
+
 # How long `status --wait` polls before returning the current state: one
 # 3-hour Batch attempt plus queueing time.
 DEFAULT_WAIT_SECONDS = 4 * 60 * 60
+
+
+def _day(value: str) -> Any:
+    """A UTC day (YYYY-MM-DD) as the datetime of its midnight."""
+    from datetime import UTC, datetime
+
+    try:
+        return datetime.strptime(value, "%Y-%m-%d").replace(tzinfo=UTC)
+    except ValueError as e:
+        raise argparse.ArgumentTypeError(f"not a YYYY-MM-DD day: {value!r}") from e
 
 
 def _seconds(value: str) -> float:
@@ -263,6 +277,31 @@ def build_parser() -> argparse.ArgumentParser:
         help="Seconds to wait with --wait (default: %(default)s).",
     )
 
+    costs = commands.add_parser(
+        "costs",
+        help="Report what the Batch runs of a period cost (from result manifests).",
+    )
+    costs.add_argument(
+        "--since", required=True, type=_day, help="First day, YYYY-MM-DD (UTC)."
+    )
+    costs.add_argument(
+        "--until",
+        type=_day,
+        default=None,
+        help="Day after the last, YYYY-MM-DD (UTC; default: tomorrow).",
+    )
+    costs.add_argument(
+        "--by",
+        choices=["kind", "stage", "model", "day"],
+        default="kind",
+        help="Group the runs by (default: %(default)s).",
+    )
+    costs.add_argument(
+        "--billed",
+        action="store_true",
+        help="Add the billed cost of the project's tagged resources (Cost Explorer).",
+    )
+
     worker = commands.add_parser(
         "worker", help="Run a JSON job request (AWS Batch entrypoint)."
     )
@@ -387,6 +426,45 @@ def _status(job_id: str, *, wait: bool, timeout: float) -> int:
     return EXIT_PENDING  # not finished yet: ask again later
 
 
+def _costs(args: argparse.Namespace) -> int:
+    from datetime import UTC, datetime, timedelta
+
+    from scholar_lens.adapters.aws.billing import CostExplorerBilling
+    from scholar_lens.adapters.aws.run_ledger import S3RunLedger
+    from scholar_lens.application.costs import report_costs
+    from scholar_lens.src.constants import S3Paths
+
+    context = _aws_context()
+    resources = context.config.resources
+    if not resources.s3_bucket_name:
+        _emit({"status": "error", "error": "No S3 bucket is configured."})
+        return EXIT_ERROR
+    session = context.default_boto_session
+    ledger = S3RunLedger(
+        session.client("s3"),
+        resources.s3_bucket_name,
+        f"{resources.s3_prefix}/{S3Paths.RESULTS.value}".lstrip("/"),
+    )
+    until = args.until or datetime.now(UTC).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    ) + timedelta(days=1)
+    billing = (
+        CostExplorerBilling(
+            # Cost Explorer's API endpoint is in us-east-1.
+            session.client("ce", region_name="us-east-1"),
+            COST_TAG_KEY,
+            COST_TAG_VALUE,
+        )
+        if args.billed
+        else None
+    )
+    report = report_costs(
+        ledger, since=args.since, until=until, by=args.by, billing=billing
+    )
+    _emit(report)
+    return EXIT_OK
+
+
 def _run(request: JobRequest, *, job_id: str | None = None) -> JobResult:
     from scholar_lens.src.runtime import run_job
 
@@ -500,6 +578,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     if args.command == "worker":
         return _work(args.request)
+    if args.command == "costs":
+        try:
+            return _costs(args)
+        except Exception as e:  # noqa: BLE001 - report AWS/config errors as JSON
+            _emit({"status": "error", "error": f"{type(e).__name__}: {e}"})
+            return EXIT_ERROR
     if args.command != "status":
         try:
             request = _request_from_args(args)

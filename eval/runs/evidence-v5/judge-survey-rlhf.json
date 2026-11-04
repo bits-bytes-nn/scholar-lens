@@ -1,0 +1,77 @@
+{
+  "item": "survey-rlhf",
+  "post": "/tmp/eval-evidence/survey-rlhf-v5.md",
+  "scores": {"A": 7.5, "B": 7.5, "C": 7.5, "D": 8.5, "E": 7.5, "F": 4.0, "S1": 6.5},
+  "score_notes": {
+    "A": "Coherent arc (intro -> six lineages -> cross-cutting failure modes -> comparison -> open problems -> conclusion), no body H1, no skipped levels. Math markup breaks blog rules: single $ inside display math L237 `\\beta_{\\text{bo$n$}}`; stray trailing `\\\\` inside $$ at L395; pipe conditionals `\\rho(y|x)` L110, `\\mu(.|x)` L359, `|x` L557, `\\cdot|\\mathbf{x}` L585.",
+    "B": "Mostly natural 입니다 register. Calque the rubric names: L323 '보상에 대한 손실을 정책에 대한 손실로 바꾼 것입니다' (rewrite: '보상을 맞추던 손실을 정책을 직접 맞추는 손실로 바꾼 것입니다'). Formulaic '~셈입니다' x5 (L80, L162, L191, L435, L650) and '이 글의 판단으로는' x4 (L259, L626, L738, L758). Tangled L17 '정책이 SFT 모델에서 너무 멀어지지 않도록 KL 페널티의 기준으로 삼는 이 SFT 모델, 즉 참조 모델(reference model)까지 덜어 낸 목적함수들입니다'; L461 'Reddit TL;DR 요약 데이터셋의 선호 쌍처럼 생긴 가상의 요약 선호 쌍에 대입하면 ... 예를 들어 가상의 경우로'. English left in table cells: L763 '5k offline vs mock', L764 'GPU-days'.",
+    "C": "The running TL;DR pair carries the transitions well. Dangling back-reference L537 '앞서 소개한 Chatbot Arena 순위 상승도' (Chatbot Arena is never mentioned before). L787 '반대 방향의 증거도 같은 그림을 그립니다' gives alignment-tax evidence that does not point the opposite way. The same findings come back section after section, which reads as stitched fragments (see facts-once).",
+    "D": "Good worked examples at the hard steps: BT loss L74, KL-penalised reward L114, Gao peak L243, DPO gradient weight L337, RRHF vs SimPO margin L461/L535, SPPO target L594, GRPO advantages L650. Hard steps are not padded much.",
+    "E": "Timeline table plus one comparison table, equations wherever a mechanism is defined. 42 figures, several with a one-sentence gloss that adds nothing (L90, L281, L405, L531) and paired near-duplicate plots (L82/L86 MuJoCo/Atari). Bad comparison-table cells: L766 limitation '-', L766 result in prose ('온라인 혼합 데이터 정책 선호'), L764 '12B?', L762 says the same thing twice ('MuJoCo 사람 700 질의 (MuJoCo 8개 과제, 700 질의)').",
+    "F": "Three cases at -2 each. (1) L128 reverses the source: the post says '보상 부호를 뒤집는 버그가 KL 페널티 부호까지 뒤집지는 않아서', but 1909.08593 §4.4 says 'the same bug also flipped the sign of the KL penalty'. (2) L126 credits the 96%/84% preference rates to labeler-heuristic exploitation ('이 높은 수치가 라벨러의 휴리스틱을 악용한 결과일 수 있다고 의심'). The paper attributes the copying behaviour to labelers checking for copying; it does not say the heuristic explains the rates. (3) L764 table cell '1.3B RLHF vs 12B? SFT' is a guessed model size with a question mark; the paper says '10× its size'. Also: KL written with `\\mid\\mid` at L313 (should be `\\|`). L801 '어느 계보도 제시하지 못했습니다' is a literature-wide claim with no support."
+  },
+  "principles": {
+    "claim_headings": {"status": "met", "evidence": "All headings are noun phrases (e.g. L425 '보상 모델이 없어도 KL 예산을 따라 되돌아오는 과최적화'); none is in 다-form. A few H3 are topic labels: L257 '파이프라인이 남긴 것', L799 '추론 능력의 손실'."},
+    "running_example": {"status": "met", "evidence": "The Reddit TL;DR preference pair is set up at L15 and followed through RLHF L146, DPO L337, KTO L399, NLHF L551, online IPO L573, GRPO L662 and the synthesis L746/L809."},
+    "mechanism_design_formula_example": {"status": "met", "evidence": "e.g. DPO L311-337: problem, closed-form inversion, loss, numeric gradient example; GRPO L634-650."},
+    "facts_said_once": {"status": "not met", "evidence": "DAA over-optimisation is restated at L427, L541, L736, L748 and L811. SimPO reward-hacking risk at L539, L736, L752 and L779. Ziegler copying at L126, L716 and L797. 320 GPU-days at L154 and L259. KTO's no-SFT DPO verbosity at L417 and L730. SPPO's Mistral leaderboard decline at L602, L754 and L797. RLAIF's no gain from combining at L722 and L797."},
+    "numbers_scoped": {"status": "partly met", "evidence": "Most numbers carry model/benchmark/setting (e.g. L602). Exceptions: L764 '12B?'; L767 'RM 12M 등' (the paper holds the RM fixed at 12M)."},
+    "nothing_invented": {"status": "partly met", "evidence": "Hypothetical examples are marked '가상의' throughout. But L128 inverts the KL-sign fact and L801 makes an unsupported field-wide claim."},
+    "writer_assessment_at_end": {"status": "met", "evidence": "L813 chooses methods by failure mode rather than benchmark rank; L758 gives selection criteria."},
+    "length_fitted": {"status": "partly met", "evidence": "About 71.8k non-space characters, 842 lines and 42 figures. The density is justified for 22 papers, but repetition inflates it."},
+    "type_specific_shape": {"status": "partly met", "evidence": "The survey has the required timeline, lineage sections, cross-cutting section, comparison table and synthesis. But the rule that numbers live in one table is not met: nearly every table number is first given in the body (DPO 61/57 at L349 and L770; KTO +13.5 at L423 and L774; SPPO 28.52 at L602 and L777; Iterative DPO 31.3 at L622 and L778)."},
+    "korean_style": {"status": "partly met", "evidence": "The 입니다 register holds and subjects are explicit. Formulaic '셈입니다'/'이 글의 판단으로는' and the 에 대한 calque at L323 remain."}
+  },
+  "claims": {
+    "checked": 15, "supported": 12, "unsupported": 2, "wrong": 1, "unverifiable": 0,
+    "examples": [
+      {"line": 128, "claim": "보상 부호를 뒤집는 버그가 KL 페널티 부호까지 뒤집지는 않아서", "verdict": "wrong", "source": "1909.08593 §4.4: 'a bug which flipped the sign of the reward ... but the same bug also flipped the sign of the KL penalty.'"},
+      {"line": 126, "claim": "저자들은 이 높은 수치(96%/84%)가 라벨러의 휴리스틱을 악용한 결과일 수 있다고 의심했습니다", "verdict": "unsupported", "source": "1909.08593 §3.2.1 links copying to 'some labelers check for copying as a fast heuristic'. It does not say this explains the 96%/84% rates against references (Table 5)."},
+      {"line": 764, "table": true, "claim": "61% vs 43% (1.3B RLHF vs 12B? SFT ...)", "verdict": "unsupported", "source": "2009.01325: '1.3B human feedback model significantly outperforming a supervised model 10× its size (61% versus 43% ...)'. The 61/43 figures are right, but the '12B?' size is a guess."},
+      {"line": 770, "table": true, "claim": "DPO 61% vs PPO 57% (GPT-J SFT, TL;DR, GPT-4 win rate); 22 runs frontier", "verdict": "supported", "source": "2305.18290: 'DPO has a win rate of approximately 61% at a temperature of 0.0, exceeding ... PPO at 57%'; 'This sweep includes 22 runs in total.'"},
+      {"line": 774, "table": true, "claim": "KTO GSM8K +13.5 (Zephyr-β-SFT, UltraFeedback); 0.631±0.036 (Mistral-7B, OpenAssistant, one y per x)", "verdict": "supported", "source": "2402.01306: 'improves performance by 13.5 points'; table 'Mistral-7B + KTO (one y per x) 0.631 ± 0.036'."},
+      {"line": 773, "table": true, "claim": "Nash-MD KL ≤ 8/(τ²(T+1)) with η_t=2/(τ(t+2)), tabular", "verdict": "supported", "source": "2312.00886: 'for the choice η_t=2/(τ(t+2)) we have KL(π*_τ,π_T) ≤ 8/(τ²(T+1))'."},
+      {"line": 423, "claim": "KTO MMLU 58.6, GSM8k 53.5, HumanEval 30.9, BBH 52.6; no-π_ref variant beats ORPO", "verdict": "supported", "source": "2402.01306 Table: 'KTO (β=0.1, λ_D=1) 58.6 53.5 30.9 52.6'; ORPO 36.5 GSM8k vs KTO(no π_ref) 47.5."},
+      {"line": 411, "claim": "KTO alone > DPO alone on Llama 7B/13B/30B, p<0.01 at 7B and 30B after multiple-comparison correction", "verdict": "supported", "source": "2402.01306: 'this gap is significant (p<0.01) at 7B and 30B even after correcting for multiple comparisons'."},
+      {"line": 435, "claim": "DAA scaling law halves the RMSE versus a quadratic fit in KL", "verdict": "supported", "source": "2406.02900: 'Compared to a quadratic fit between D_KL and winrates, this scaling law halves the RMSE.'"},
+      {"line": 537, "claim": "SimPO cuts run time ~20%, GPU memory ~10% (8×H100, Llama-3-Base); +6.4 AlpacaEval 2, +7.5 Arena-Hard; Gemma-2-9B-it-SimPO LC 72.4%", "verdict": "supported", "source": "2405.14734 §4 and abstract, verbatim figures."},
+      {"line": 602, "claim": "Mistral-7B SPPO Iter3 LC 28.52% / 31.02%, Arena-Hard 23.3; Llama-3 LC 38.77%; Open LLM avg 66.75 (Mistral iter2) / 70.29", "verdict": "supported", "source": "2405.00675: '28.52% for the length-controlled version, and 31.02%' (the abstract says 28.53%); 'achieving an average score of 23.3'; Table 3: 66.75 at Iter2, 70.29."},
+      {"line": 622, "claim": "Iterative DPO 31.3 / 8.46 / 29.1 vs offline DPO 22.5 / 8.17 / 22.4 (8B)", "verdict": "supported", "source": "2405.07863 Table: 'Ours (DPO baseline) 8B Vanilla DPO 22.5 8.17 22.4; Ours (Iterative RLHF) 8B Iterative DPO 31.3 8.46 29.1'."},
+      {"line": 666, "claim": "GRPO: 64 outputs per question, KL coefficient 0.04, policy lr 1e-6", "verdict": "supported", "source": "2402.03300 §4.2: 'learning rate of the policy model as 1e-6. The KL coefficient is 0.04. For each question, we sample 64 outputs.'"},
+      {"line": 696, "claim": "Binary reward: advantages sqrt((1-p)/p) for correct and -sqrt(p/(1-p)) for wrong; contrastive loss against old-policy samples", "verdict": "supported", "source": "2503.06639 §2.1 eq. (3) and abstract: 'induces a contrastive loss in which the contrastive samples are synthetic data drawn from the previous policy'."},
+      {"line": 728, "claim": "SPPO length 1676 (base) -> 2163 (iter 3), while DPO/IPO grow more", "verdict": "supported", "source": "2405.00675: 'SPPO shows a more moderate length increase, moving from 1676 in the base model to 2163 at the third iteration.'"}
+    ],
+    "additional_checked_supported": ["L497 ORPO 78.0/79.4/70.9 (quoted from the paper's text, which itself mismatches its Table 2)", "L503 Phi-2 50.63/0.78 vs 71.80/6.35", "L301 RLAIF harmless 88/76/64", "L199 InstructGPT 69.6±0.9 / 72.4±0.4", "L377 IPO π*(y1)=σ(0.5τ^-1)", "L245 α_RL nearly independent of RM size", "L767 ~2,000 comparisons threshold at RM 12M", "L116 RM retrained 19 more times", "L118 124M mock sentiment 20k-60k queries", "L775 DeepSeekMath geometry/theorem-proof weakness", "L801 SimPO GSM8k drop"]
+  },
+  "checklist": {
+    "repeated": 1, "avoided": 4, "na": 1,
+    "repeated_ids": ["copy-explains-preference"],
+    "details": [
+      {"id": "grpo-card-unverified-figure", "result": "avoided", "evidence": "The 2503.06639 paragraph at L696 gives mean p, std sqrt(p(1-p)) and advantages sqrt((1-p)/p), -sqrt(p/(1-p)), all in the paper's eq. (3). The +1.73/-0.58 values are labelled as the post's own hypothetical example."},
+      {"id": "copy-explains-preference", "result": "repeated", "evidence": "L126: '6만 라벨 온라인 강화학습 모델이 참조 요약을 TL;DR에서 96%, CNN/Daily Mail에서 84%의 비율로 이겼습니다 ... 저자들은 이 높은 수치가 라벨러의 휴리스틱을 악용한 결과일 수 있다고 의심했습니다'."},
+      {"id": "daa-no-quantification", "result": "avoided", "evidence": "There is no claim that 2406.02900 lacks figures; L435 cites its RMSE result."},
+      {"id": "grpo-row-reward", "result": "n/a", "evidence": "The comparison table (L760) has no reward column; the GRPO row L775 gives only results and a limitation."},
+      {"id": "heading-da-form-offline", "result": "avoided", "evidence": "No 다-form heading; the DAA section is '### 보상 모델이 없어도 KL 예산을 따라 되돌아오는 과최적화' (L425)."},
+      {"id": "heading-da-form-judge", "result": "avoided", "evidence": "No heading ends in 다 (checked all headings)."}
+    ]
+  },
+  "extras": {
+    "uncited_plan_papers": [],
+    "weakly_covered_plan_papers": {"2307.09288": "only L201-209 (one paragraph plus equations)", "2503.06639": "one paragraph L696 plus L758"},
+    "thin_sections": ["L714 '### 2019년 요약 모델에서 이미 보인 휴리스틱 악용': one paragraph that repeats L126", "L624 '### 선호 신호가 들어가는 자리의 변화': one paragraph", "L257 '### 파이프라인이 남긴 것': one paragraph", "L791, L795, L799: open-problem subsections of one paragraph each"],
+    "truncated_or_empty_sections": [],
+    "dangling_back_references": ["L537 '앞서 소개한 Chatbot Arena 순위 상승도' (never introduced earlier)"],
+    "wrong_venues": [],
+    "venue_notes": "References use NeurIPS/ICML/ICLR/EMNLP/TMLR/arXiv. Azar et al. (L829) is written out in full as 'International Conference on Artificial Intelligence and Statistics' while every other entry is abbreviated; this is inconsistent but not wrong.",
+    "bad_table_cells": ["L766 Anthropic HH-RLHF limitation '-'", "L766 result is prose '온라인 혼합 데이터 정책 선호 (...)' with no number", "L764 '12B? SFT' (guessed size) and 'GPU-days' in English", "L763 '5k offline vs mock' English setting string", "L762 says the same thing twice: 'MuJoCo 사람 700 질의 (MuJoCo 8개 과제, 700 질의)'", "L767 'RM 12M 등' (RM was held at 12M; '등' is inaccurate)"],
+    "math_markup": ["L237 single $ inside $$ (`\\text{bo$n$}`)", "L395 trailing `\\\\` in display math", "L313 KL written with `\\mid\\mid`", "L110/L359/L557/L585 bare `|` conditionals"]
+  },
+  "length": {"lines": 842, "non_space_chars_body": 71814, "chars_body": 85704, "figures": 42, "tables": 2},
+  "top_issues": [
+    "L128 reverses a source fact: Ziegler et al. say the bug ALSO flipped the KL-penalty sign; the post says it did not.",
+    "L126 repeats the checklist misattribution: it credits the 96%/84% preference rates to labeler-heuristic exploitation (copy-explains-preference).",
+    "The comparison table has defective cells: '-' (L766), prose result (L766), '12B?' guess (L764), English setting strings (L763/L764). Almost every table number also appears in the body, which breaks the survey rule that numbers live in one table.",
+    "Facts restated across sections: DAA over-optimisation 5x, SimPO reward-hacking 4x, Ziegler copying 3x, SPPO Mistral decline 3x. This inflates an already very long post (about 72k non-space characters, 42 figures).",
+    "Blog markup and math: single $ inside $$ (L237), stray `\\\\` (L395), `\\mid\\mid` for KL (L313), bare `|` conditionals; the dangling back-reference to Chatbot Arena (L537); L801's unsupported field-wide claim."
+  ]
+}
