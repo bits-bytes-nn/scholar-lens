@@ -1299,6 +1299,29 @@ async def write_survey_with_evidence(
         references=reference_excerpts(pages, plan.topic, 8_000) if pages else "",
         guideline=translation_guideline,
     )
+    figures = {
+        e.figure_url: (e.paper_id, e.caption or "")
+        for e in result.ledger
+        if e.kind == "figure" and e.figure_url and e.figure_url in result.body
+    }
+    # arXiv HTML lists some figures it does not serve (404): an image that
+    # cannot be downloaded would fail the publish step, so it is dropped
+    # here (survey_body removes images without an owner).
+    broken = [
+        url
+        for url, ok in zip(
+            figures,
+            await asyncio.gather(
+                *(asyncio.to_thread(_downloadable, u) for u in figures)
+            ),
+            strict=True,
+        )
+        if not ok
+    ]
+    for url in broken:
+        figures.pop(url)
+    if broken:
+        notes.append("Figures arXiv does not serve were left out: " + ", ".join(broken))
     return Survey(
         title=result.title,
         body=result.body,
@@ -1306,12 +1329,19 @@ async def write_survey_with_evidence(
         cards={},
         reading=reading,
         notes=[*notes, *result.notes],
-        figures={
-            e.figure_url: (e.paper_id, e.caption or "")
-            for e in result.ledger
-            if e.kind == "figure" and e.figure_url
-        },
+        figures=figures,
     )
+
+
+def _downloadable(url: str) -> bool:
+    from .publisher import download_image
+
+    try:
+        download_image(url)
+    except Exception as e:  # noqa: BLE001 - any failure means it cannot be published
+        logger.warning("Figure %s cannot be downloaded: %s", url, e)
+        return False
+    return True
 
 
 def survey_body(survey: Survey, language: str) -> tuple[str, list[str]]:
