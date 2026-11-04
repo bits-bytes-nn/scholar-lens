@@ -1,0 +1,88 @@
+{
+  "item": "guide-rayserve",
+  "post": "/tmp/eval-guide/guide-rayserve-v2.md",
+  "judge_run": 1,
+  "sampling": "154 prose paragraphs (blank-line blocks excluding headings, code, tables, sources); paragraphs 1,4,7,...,154 sampled; claims taken from those paragraphs and tables directly attached to them",
+  "scores": {"A": 7.5, "B": 8.0, "C": 8.0, "D": 8.5, "E": 8.0, "F": 5.0, "T1": 7.5, "T2": 8.5, "T3": 8.0},
+  "deductions": {
+    "A": ["L396 and L399 carry the same heading '## serve run으로 시작하는 로컬 개발 루프와 프레임워크별 모델 배포'; the first is an empty section"],
+    "B": ["L649/L661 '단일 진실 공급원' is a calque of 'single source of truth' (rewrite: '설정의 기준이 되는 파일')", "frequent '~할 수 있습니다' for what simply happens, e.g. L25 '여러 모델이 나눠 쓰게 할 수 있습니다'", "L817 one-sentence orphan paragraph '상태 코드는 앞서 본 두 허용값 가운데 ... 고릅니다.'"],
+    "C": ["L557-647 LLMConfig section drops the text_ml:app running example and sits between FastAPI and config-file sections, interrupting the dev-to-production arc"],
+    "D": ["L288-302 a table plus a display equation to show 100+100=200ms vs max(100,100)=100ms over-explains a trivial point"],
+    "E": ["no official architecture figure; ASCII sketches at L31, L133, L740 stand in", "L475 table cell '해당 튜토리얼의 설치 명령' is prose instead of the docs' 'pip install scikit-learn requests \"ray[serve]\"'"],
+    "F": ["L921/L931 TLS must be terminated in front because Serve HTTPS needs code changes - wrong against current HTTPOptions (ssl_keyfile/ssl_certfile enable HTTPS); based on a 2023 forum thread", "L948 (and L760) 'autoscaling only adds replicas, not GPU nodes' stated unconditionally from a Spheron blog; official AutoscalingConfig says Serve relies on the Ray Autoscaler to add nodes", "L282 'Ray 2.x에서 ... 직렬화 ... 지연이 사라집니다' overstates Spheron's point (HTTP serialization overhead) and misattaches 'Ray 2.x'; arguments are still serialized/sent by network call or object store (architecture page)"],
+    "T1": ["L884-891 X-Request-ID client posts json=<str> but Summarizer does (await request.json())[\"text\"] -> TypeError/500; also posts to '/' though the FastAPI version only routes /summarize", "L706-707 reconfigure sets self.language but Translator.__call__ (L423) reads self._language, so the language change never applies", "L681-684 YAML sets user_config for Translator whose text_ml.py definition (L416-423) has no reconfigure; Serve rejects user_config without reconfigure"],
+    "T3": ["design advice partly rests on stale or non-official sources (TLS, GPU nodes) presented as documented behaviour", "L915-917 anchors dashboard facts to Ray 2.5.0 docs though the current page says the same"]
+  },
+  "principles": {
+    "claim_headings": {"status": "met", "evidence": "L101 '컨트롤러·프록시·레플리카로 이어지는 요청 경로와 장애 복구 범위', L168 '두 레플리카 중 덜 바쁜 쪽을 고르는 기본 라우터...' each with a one-line thesis"},
+    "running_example": {"status": "met", "evidence": "text_ml:app (Summarizer -> Translator) introduced L29 and used through routing, composition, config, autoscaling, KubeRay, monitoring; dropped only in the LLMConfig section"},
+    "mechanism_choice_code_example": {"status": "met", "evidence": "routing: mechanism L180, why two choices L182, worked example L184-197 with all six pairs; queueing math L145"},
+    "facts_said_once": {"status": "partly met", "evidence": "controller-death/autoscaling-paused stated at L15, L103, L153, L155; GPU-node limit at L760, L843, L948; empty runtime_env at L661 and L948"},
+    "numbers_with_scope": {"status": "met", "evidence": "illustrative numbers flagged (L184 '설명용 숫자', L288 '실측값이 아니라'); version scopes L559 'Ray 2.59.0 기준', L915 'Ray 2.5.0 기준'"},
+    "nothing_invented": {"status": "partly met", "evidence": "TLS claim L931 contradicted by current HTTPOptions; L282 overstated; code examples are the writer's own and labeled as placeholders"},
+    "writer_assessment_at_end": {"status": "met", "evidence": "L939-948 '이 글의 판단: 고를 때와 피할 때' table plus four failure modes"},
+    "length_fitted": {"status": "partly met", "evidence": "~940 body lines; LLMConfig field tables (L579-598) and Ray 2.5.0 dashboard detail (L915-917) pad beyond the running example"},
+    "type_specific_shape": {"status": "met", "evidence": "TL;DR L11, problem L21, architecture L101 before config (L649), non-official sources (Anyscale, Spheron), closes with when-to-choose L939"},
+    "korean_style": {"status": "partly met", "evidence": "natural 입니다 register throughout; calque '단일 진실 공급원' L649/L661; many '할 수 있습니다'"}
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 12,
+    "unsupported": 2,
+    "wrong": 1,
+    "numeric": 8,
+    "examples": [
+      {"line": 109, "claim": "architecture page: one proxy on head node by default; config page: EveryNode default", "verdict": "supported", "source": "architecture.html 'By default there is one HTTP proxy actor on the head node'; config.html 'EveryNode (default)'"},
+      {"line": 149, "claim": "application exceptions return 500 with traceback; replica keeps serving", "numeric": true, "verdict": "supported", "source": "architecture.html 'A 500 status code will be returned with the traceback information'"},
+      {"line": 155, "claim": "after controller recovery autoscaling resumes but previous metrics are lost", "verdict": "supported", "source": "architecture.html 'all previous metrics collected are lost'"},
+      {"line": 180, "claim": "RequestRouterConfig defaults to PowerOfTwoChoicesRequestRouter", "verdict": "supported", "source": "_modules/ray/serve/config 'Default to Serve's PowerOfTwoChoicesRequestRouter.'"},
+      {"line": 203, "claim": "router config alpha; request_router_kwargs passed to initialize_state and must be JSON-serializable", "verdict": "supported", "source": "config module @PublicAPI(stability='alpha'), 'initialize_state method', 'request_router_kwargs is not JSON-serializable'"},
+      {"line": 241, "claim": "PrefixCacheAffinityRouter keeps a character-level prefix tree; falls back to power of two on no strong match or high imbalance", "verdict": "supported", "source": "Anyscale blog 'maintains a character-level prefix tree ... If there is no strong match, or replica load is highly unbalanced, the router falls back'"},
+      {"line": 282, "claim": "in Ray 2.x in-cluster handle calls remove serialization and HTTP round-trip latency", "verdict": "unsupported", "source": "Spheron: 'removes the serialization overhead and inter-service latency of HTTP round-trips'; 'Ray 2.x' refers to a different API change; architecture.html: requests still sent via network call or object store"},
+      {"line": 453, "claim": "local default address http://127.0.0.1:8000/", "numeric": true, "verdict": "supported", "source": "getting_started.html 'http://127.0.0.1:8000/'"},
+      {"line": 477, "claim": "PyTorch tutorial fixes batch size to 1", "numeric": true, "verdict": "supported", "source": "serve-ml-models.html '# Our current batch size is one'"},
+      {"line": 559, "claim": "only model_loading_config is required, every other field has a default (Ray 2.59.0)", "numeric": true, "verdict": "supported", "source": "llm configuration reference 'Only model_loading_config is required. Every other field has a default.' (page now 2.60.0)"},
+      {"line": 586, "claim": "table: llm_engine default \"vLLM\"; log_engine_metrics default True", "verdict": "supported", "source": "configuration reference field table"},
+      {"line": 594, "claim": "bundle_per_worker auto-replicated tensor_parallel_size * pipeline_parallel_size; TP 2, PP 1 -> 2 bundles", "numeric": true, "verdict": "supported", "source": "configuration reference 'bundle_per_worker (auto-replicated by tensor_parallel_size * pipeline_parallel_size)'"},
+      {"line": 750, "claim": "target_ongoing_requests default 2", "numeric": true, "verdict": "supported", "source": "AutoscalingConfig 'Defaults to 2.'"},
+      {"line": 764, "claim": "min_replicas default 1, 0 allows scale to zero; initial_replicas defaults to min_replicas; upscaling_factor is a multiplicative gain", "numeric": true, "verdict": "supported", "source": "AutoscalingConfig min_replicas default=1, initial_replicas 'If not set, defaults to the value of min_replicas', upscaling_factor 'Multiplicative \"gain\" factor'"},
+      {"line": 931, "claim": "Serve proxy HTTPS needs code changes, so TLS must be terminated in front; HTTPS request is an open GitHub issue", "verdict": "wrong", "source": "current ray.serve.config HTTPOptions: 'ssl_keyfile ... If provided with ssl_certfile, the HTTP server will use HTTPS'; the post relies on a 2023 discuss.ray.io thread"}
+    ],
+    "additional_observations": [
+      {"line": 948, "claim": "autoscaling adds replicas but not GPU nodes, so extra replicas stay PENDING", "verdict": "unsupported as an unconditional statement", "source": "Spheron blog; official AutoscalingConfig.max_replicas: 'Ray Serve relies on the Ray Autoscaler to add cluster nodes when existing nodes lack the resources'"}
+    ]
+  },
+  "checklist": {
+    "repeated": 0,
+    "avoided": 1,
+    "na": 1,
+    "repeated_ids": [],
+    "items": [
+      {"id": "arch-diagram-relative-link", "result": "avoided", "evidence": "the body has no links or images at all (no empty-text or ../_images paths); the architecture is drawn as ASCII text blocks (L133) rather than the official diagram image"},
+      {"id": "proxy-env-ray-start-unsupported", "result": "n/a", "evidence": "no proxy env-var section; the only 'ray start' is the dashboard flag at L915, which the docs support"}
+    ]
+  },
+  "extras": {
+    "architecture_first_line": 15,
+    "architecture_first_section_line": 101,
+    "sources_total": 22,
+    "non_official_sources": 5,
+    "non_official_share": 0.23,
+    "non_official_list": ["anyscale.com ray-serve-faster-first-token-custom-routing", "spheron.network ray-serve-gpu-cloud", "github.com/alipay/ray-contrib (titled ant-kuberay)", "anyscale.com/blog/kuberay", "discuss.ray.io can-ray-serve-handle-https-2023"],
+    "opens_with_problem": true,
+    "opens_with_problem_evidence": "L21 '온라인 추론 API는 모델 하나로 끝나는 경우가 드뭅니다...'",
+    "closes_with_when_to_choose_and_failures": true,
+    "closes_evidence": "L939-948 choice table and four failure modes"
+  },
+  "runnable_code": {
+    "verdict": "core loop runs; three running-example snippets fail or misbehave as pasted",
+    "runs": ["L56-73 single Translator via serve.run", "L409-441 text_ml.py + L448 serve run + L455-462 POST client (returns '[french] Ray Serve is a scalable model serving library')", "L255-277, L325-355, L363-389 composition, ObjectRef and streaming blocks (Translator defined earlier in the same file as stated)", "L797-813 BackpressureConfig import exists in current docs"],
+    "fails": ["L880-892 client sends json=<plain string>; Summarizer.__call__ indexes ['text'] -> TypeError -> HTTP 500; after the FastAPI rewrite (L488-526) POST / has no route -> 404", "L665-687 YAML user_config for Translator while text_ml.py's Translator has no reconfigure -> deploy fails", "L701-707 reconfigure writes self.language but __call__ (L423) reads self._language -> language update never takes effect"]
+  },
+  "top_issues": [
+    "TLS/HTTPS claim (L921, L931) is stale: current HTTPOptions supports ssl_keyfile/ssl_certfile, yet the post says Serve needs code changes and TLS must be terminated in front",
+    "Running-example code mismatches: X-Request-ID client sends a bare string (L884-890) to an endpoint expecting {\"text\":...}; reconfigure sets self.language vs self._language (L707 vs L423); YAML user_config without reconfigure (L683)",
+    "Duplicate empty heading L396/L399, plus non-official claims stated as documented behaviour (GPU nodes L760/L948 from Spheron, 'Ray 2.x serialization disappears' L282)"
+  ]
+}

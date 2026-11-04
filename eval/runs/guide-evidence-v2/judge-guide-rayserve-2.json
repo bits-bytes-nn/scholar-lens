@@ -1,0 +1,81 @@
+{
+  "item": "guide-rayserve",
+  "post": "/tmp/eval-guide/guide-rayserve-v2.md",
+  "judge_run": 2,
+  "sampling": "non-empty blocks (paragraphs, tables, code, lists) after front matter, headings excluded; block 2 (line 15) then every third block; claims picked from sampled blocks",
+  "scores": {"A": 7.0, "B": 8.0, "C": 8.0, "D": 8.5, "E": 8.0, "F": 6.5, "T1": 7.0, "T2": 8.5, "T3": 8.0},
+  "deductions": {
+    "A": ["L396 and L399: the heading '## serve run으로 시작하는 로컬 개발 루프와 프레임워크별 모델 배포' appears twice, the first an empty section", "L971, L973, L974: HTML entity leaks in Sources ('&#124; Spheron', '&#91;2023&#93;')"],
+    "B": ["L649 heading '단일 진실 공급원인 Serve 설정 파일' is a calque of 'single source of truth' (rewrite: '애플리케이션의 정본이 되는 Serve 설정 파일')", "L288 '숫자로 보면 차이가 분명합니다.' and L145 '숫자로 따져 보면 이렇습니다.' are formulaic lead-ins", "L319 '이 전달이 성립하는 이유는 내부 구조에 있습니다.' formulaic"],
+    "C": ["Power of Two Choices is explained three times (L15, L129, L180-182)", "GPU-node limit repeated at L760, L843, L948; empty runtime_env repeated at L661 and L948; target_ongoing_requests redefined at L907 after L746"],
+    "D": ["L184-197 worked P2C example and six-pair table are slightly padded for a simple rule"],
+    "E": ["No architecture figure: the official architecture-2.0.svg is not used, only ASCII sketches (L31-42, L133-141, L740-744)"],
+    "F": ["L931 'Serve 프록시가 HTTPS를 직접 받으려면 코드 변경이 필요한 상태였으므로 TLS는 앞단에서 종료합니다' rests on a 2023 forum thread; the cited ray.serve.config (2.59.0) HTTPOptions has ssl_keyfile/ssl_certfile ('the HTTP server will use HTTPS') - stale/wrong", "L282 'Ray 2.x에서 클러스터 안에 머무는 호출이라면 직렬화와 서비스 간 HTTP 왕복 지연이 사라집니다' - Spheron's 'Ray 2.x' belongs to the get_handle removal sentence; official architecture says large requests still go through the object store", "L23 'TensorFlow도 특정 버전을 요구하지 않으며, TensorFlow 2와 Keras로 만든 모델도' not in the fetched docs (tutorial installs tensorflow>=2.0)", "L884-889 client sends json=<str> to a server that reads ['text'] (request-shape mismatch within the running example)"],
+    "T1": ["L665-687 config sets user_config on Translator but text_ml.py's Translator (L416-423) has no reconfigure, so deploying it fails; the L701-707 reconfigure sets self.language while __call__ reads self._language, so the language change never takes effect", "L880-893 request-ID client posts a bare string; Summarizer's (await request.json())['text'] raises TypeError -> 500"],
+    "T3": ["L921/L929-931: TLS-termination advice built on outdated HTTPS limitation"]
+  },
+  "principles": {
+    "claim_headings": {"status": "met", "evidence": "L46 '독립 확장 단위인 디플로이먼트와 이를 묶는 bind 기반 애플리케이션', L730 '진행 중 요청 기반 오토스케일링과 큐 한도 백프레셔'; one duplicated heading L396/L399"},
+    "running_example": {"status": "met", "evidence": "text_ml:app Summarizer->Translator from L29 through L948"},
+    "mechanism_design_code_example": {"status": "met", "evidence": "routing L178-197 (mechanism, why two choices, pair table); queue math L145; concurrent responses L288-302"},
+    "facts_said_once": {"status": "partly met", "evidence": "P2C L15/L129/L180; GPU-node limit L760/L843/L948; runtime_env empty L661/L948"},
+    "numbers_with_scope_unit": {"status": "met", "evidence": "L143 '100KiB 이상'; L559 'Ray 2.59.0 기준'; L915 'Ray 2.5.0 기준'; illustrative numbers labelled (L184, L288)"},
+    "nothing_invented": {"status": "partly met", "evidence": "illustrative values labelled, but L931 HTTPS limitation stale and L282 'Ray 2.x' scope stitched from another sentence"},
+    "writer_assessment_at_end": {"status": "met", "evidence": "L939-948 '이 글의 판단: 고를 때와 피할 때' table plus four failure modes"},
+    "length_fitted": {"status": "partly met", "evidence": "~960 body lines; repeated explanations and the six-pair table (L188-197) add length"},
+    "type_specific_shape": {"status": "met", "evidence": "TL;DR L11, problem L21, architecture L101 before config L649, non-official sources 5/22, ends with when-to-choose L939"},
+    "korean_style": {"status": "partly met", "evidence": "consistent 입니다 register; calque '단일 진실 공급원' L649; formulaic lead-ins L145, L288, L319"}
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 12,
+    "unsupported": 2,
+    "wrong": 1,
+    "unverifiable": 0,
+    "examples": [
+      {"line": 15, "claim": "default router samples two replicas at random and picks the one with fewer ongoing requests", "verdict": "supported", "source": "routing-policies: 'Randomly sample two replicas. Route to the replica with fewer ongoing requests.'"},
+      {"line": 15, "claim": "controller death: HTTP/gRPC/handle requests continue, autoscaling paused, metrics lost on recovery", "verdict": "supported", "source": "architecture: 'When the controller dies, requests can still be sent via HTTP, gRPC and DeploymentHandle, but autoscaling is paused... all previous metrics collected are lost.'"},
+      {"line": 23, "claim": "TensorFlow needs no specific version; TF2 and Keras models supported", "verdict": "unsupported", "source": "index only says 'PyTorch, TensorFlow, and Keras'; tutorial installs 'tensorflow>=2.0'"},
+      {"line": 111, "claim": "proxy_location EveryNode (default, nodes with >=1 replica), HeadOnly, Disabled (handles only)", "verdict": "supported", "source": "config: 'EveryNode (default): Run a proxy on every node in the cluster that has at least one replica actor... Disabled: ... only making calls ... using deployment handles.'"},
+      {"line": 159, "claim": "failure table: replica/proxy replaced by controller, controller restarted by Ray, GCS checkpoint kept, connections/queues lost", "verdict": "supported", "source": "architecture: 'When replica Actors fail, the Controller Actor replaces them... Transient data in the router and the replica (like network connections and internal request queues) will be lost'"},
+      {"line": 203, "claim": "RequestRouterConfig alpha; request_router_kwargs passed to initialize_state, must be JSON-serializable", "verdict": "supported", "source": "ray.serve.config: '@PublicAPI(stability=\"alpha\") class RequestRouterConfig', '...initialize_state method', validator request_router_kwargs_json_serializable"},
+      {"line": 243, "claim": "Anyscale blog: prefix-aware hit rate constant as replicas grow; P2C hit rate drops", "verdict": "supported", "source": "Anyscale blog: 'prefix cache hit rate stays constant as the number of replicas scales. In contrast, the power of two router's random choices quickly decreases KV cache hit rate.'"},
+      {"line": 282, "claim": "'Ray 2.x에서' in-cluster handle calls remove serialization and HTTP round-trip latency", "verdict": "unsupported", "source": "Spheron: 'removes the serialization overhead and inter-service latency of HTTP round-trips'; 'One Ray 2.x API change...' is about get_handle removal; official architecture: 100KiB+ requests go via object store"},
+      {"line": 453, "claim": "local default address http://127.0.0.1:8000/", "verdict": "supported", "source": "getting_started: 'http://127.0.0.1:8000/'"},
+      {"line": 473, "claim": "framework table: pip install torch torchvision requests \"ray[serve]\"; tensorflow>=2.0; reshape (1, 28, 28); serve run tutorial_pytorch:image_model / tutorial_tensorflow:mnist_model / tutorial_sklearn:boosting_model", "verdict": "supported", "source": "serve-ml-models tutorial, same commands and reshape((1, 28, 28))"},
+      {"line": 581, "claim": "LLMConfig defaults llm_engine \"vLLM\", server_cls None, runtime_env None, log_engine_metrics True", "verdict": "supported", "source": "LLM configuration reference table rows"},
+      {"line": 594, "claim": "bundle_per_worker auto-replicated tensor_parallel_size * pipeline_parallel_size times", "verdict": "supported", "source": "configuration: 'bundle_per_worker (auto-replicated by tensor_parallel_size * pipeline_parallel_size)'"},
+      {"line": 746, "claim": "target_ongoing_requests default 2, counts processing plus queued", "verdict": "supported", "source": "advanced-autoscaling: 'target_ongoing_requests [default=2]... roughly that number of requests being processed and waiting in the queue'"},
+      {"line": 795, "claim": "BackpressureConfig alpha; status_code 503 (default) or 429 only; retry_after_s", "verdict": "supported", "source": "ray.serve.config: 'status_code: Literal[503, 429] = 503', 'retry_after_s', @PublicAPI(stability=\"alpha\")"},
+      {"line": 931, "claim": "Serve proxy cannot take HTTPS without code changes, so TLS is terminated in front", "verdict": "wrong", "source": "ray.serve.config (2.59.0, in the post's Sources) HTTPOptions: 'ssl_keyfile ... If provided with ssl_certfile, the HTTP server will use HTTPS.' The 2023 forum state is presented as current"}
+    ]
+  },
+  "checklist": {
+    "repeated": 0,
+    "avoided": 1,
+    "na": 1,
+    "repeated_ids": [],
+    "items": [
+      {"id": "arch-diagram-relative-link", "result": "avoided", "evidence": "no empty-text or ../_images links in the post; note the post has no architecture image at all (ASCII sketches only)"},
+      {"id": "proxy-env-ray-start-unsupported", "result": "n/a", "evidence": "no proxy env-var section; 'ray start' appears only for dashboard flags (L915)"}
+    ],
+    "generic_guide_checks": {"cross_reference_errors": "none", "tag_remnants": "none", "entity_leaks": "repeated: L971, L973, L974 '&#124;', '&#91;2023&#93;'", "unclosed_fence": "none", "install_centric": "no"}
+  },
+  "extras": {
+    "architecture_first_line": 101,
+    "architecture_note": "TL;DR mentions proxy/controller at L15; the architecture section starts at L101 before config details (L649)",
+    "non_official_sources": {"count": 5, "total": 22, "share": 0.23, "list": ["anyscale.com custom-routing blog", "spheron.network blog", "github alipay/ray-contrib (ant-kuberay)", "anyscale.com KubeRay blog", "discuss.ray.io HTTPS thread"]},
+    "opens_with_problem": true,
+    "closes_with_when_to_choose_and_failure_modes": true
+  },
+  "runnable_code": {
+    "verdict": "partly",
+    "runs": ["L56-74 Translator + serve.run", "L409-441 text_ml.py with L455-462 client (shapes match)", "L255-278 and L325-355 composition (with Translator from the same file)", "L363-390 streaming", "L488-527 FastAPI (Translator defined above, POST /summarize)"],
+    "breaks": ["L665-687 serve_config.yaml sets user_config on Translator, but text_ml.py's Translator has no reconfigure -> deploy error", "L701-707 reconfigure writes self.language; __call__ (L422-423) reads self._language -> language change has no effect", "L880-893 client posts json=<str>; Summarizer indexes ['text'] -> TypeError/500"]
+  },
+  "top_issues": [
+    "HTTPS/TLS section (L921, L929-931) is stale: current HTTPOptions supports ssl_keyfile/ssl_certfile, yet the post says the proxy cannot do HTTPS",
+    "Running example breaks on the config path: user_config without reconfigure in text_ml.py, and reconfigure sets self.language while __call__ reads self._language; request-ID client sends a bare string",
+    "Duplicate empty heading (L396/L399) and HTML entity leaks in Sources (L971-974); repeated explanations (P2C x3, GPU-node limit x3)"
+  ]
+}

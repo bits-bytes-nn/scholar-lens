@@ -77,7 +77,14 @@ How a good guide on this blog is written:
   default on one page, another on a second), say so with each page's scope
   instead of picking one silently.
 - Write only the section. Never address the requester or describe your
-  edits ("요청하신 …", "Notes on fixes").
+  edits ("요청하신 …", "Notes on fixes"), and never hedge about what you
+  could not settle ("버전에서 확인해야 합니다", "확정하지 않았습니다"): state
+  what the evidence shows or leave the point out.
+- Evidence markers end a sentence; never let one stand for a word ("근거는
+  [[E3]]입니다" breaks when code removes the marker).
+- A limitation or missing feature only a third-party page states is that
+  page's report (name it and its date or version), never the tool's current
+  behaviour.
 - Vary how a figure, table or code block is introduced; never the same
   formula twice ("다음과 같습니다"), and avoid noun frames such as "~다는 점".
 """
@@ -98,8 +105,9 @@ language:
   replaces an alternative);
 - terms and quantities it defines (definition), equations as LaTeX (equation);
 - code that shows the API or a pattern (code: `code` copied exactly from the
-  section, the shortest block that shows it; `claim` says what it does;
-  `quote` the sentence that explains it, or empty);
+  section, the shortest block that shows it, with the import lines the page
+  gives for it; `claim` says what it does; `quote` the sentence that explains
+  it, or empty); record a page's import statements as code too;
 - commands, flags, parameters, config keys, environment variables and
   defaults (setting: `quote` the passage that states it, `scope` the API, CLI,
   config file or version it belongs to; write identifiers in backticks
@@ -120,7 +128,11 @@ language:
 sentences); every number and backticked identifier in `claim` or `cell` must
 be in the quote or the code.
 Read what the guide needs: an official or reference page in depth, a
-third-party page for what it adds (internals, design, operations).
+third-party page for what it adds: design, internals, benchmarks and
+production experience. What the tool currently supports, lacks or requires
+is the official docs' to state: from a third-party page (a forum thread, a
+vendor comparison, an old post) record it only as that page's report, with
+its date or version when the page gives one.
 Stop with finish when the evidence covers the page as the guide needs it.
 """
     + SOURCE_AUTHORITY
@@ -155,7 +167,8 @@ material its sections. Titles are claims written as noun phrases, not
 sentences and not topic labels; each section has a one-sentence thesis and
 the reader's question it answers. Depth: deep for the hard mechanisms,
 brief for routine material. `running_example` is one application or workload
-the code builds on; `code_language` the one SDK language the code uses. The
+the code builds on end to end (run or deploy it, send a request, read the
+answer); `code_language` the one SDK language the code uses. The
 glossary has the topic's key terms (English | rendering in the guide's
 language, no parentheses). The title is in English.
 """

@@ -60,7 +60,7 @@ from .usage import usage_stage
 logger = logging.getLogger(__name__)
 
 # Bump when the reader's prompt or the evidence schema changes meaning.
-GUIDE_READER_VERSION = 3
+GUIDE_READER_VERSION = 4
 _SAFE_KEY = re.compile(r"[^A-Za-z0-9._-]+")
 # Small counts and ordinals a guide states without evidence.
 _FREE_NUMBERS = " ".join(str(n) for n in range(11))
@@ -449,7 +449,7 @@ class EvidenceGuideEngine(EvidenceWriter):
         cited = [by_id[s] for s in cited_sources(body, ledger) if s in by_id]
         return EvidenceGuide(
             title=outline.title,
-            body=strip_markers(body) + "\n",
+            body=strip_markers(body),
             outline=outline,
             ledger=ledger,
             cited=cited,

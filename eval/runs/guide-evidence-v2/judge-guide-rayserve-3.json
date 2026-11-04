@@ -1,0 +1,111 @@
+{
+  "item": "guide-rayserve",
+  "post": "/tmp/eval-guide/guide-rayserve-v2.md",
+  "judge_run": 3,
+  "sampling": "body blocks (prose, tables, code) after front matter, headings excluded; block 3 then every third block (3, 6, 9, ... 192); 15 claims picked from the sampled blocks",
+  "scores": {"A": 7, "B": 7.5, "C": 8, "D": 8, "E": 7.5, "F": 6, "T1": 6.5, "T2": 8, "T3": 8},
+  "deductions": {
+    "A": [
+      "L396 and L399: the same H2 '## serve run으로 시작하는 로컬 개발 루프와 프레임워크별 모델 배포' twice; the first is an empty section",
+      "L971, L974: HTML entity leaks in Sources titles ('&#124; Spheron', '&#91;2023&#93;')",
+      "L3: English title on a Korean post; L952 '### Sources' nested under the closing H2 section"
+    ],
+    "B": [
+      "L649 '단일 진실 공급원인 Serve 설정 파일' is a calque of 'single source of truth' -> 'Serve 설정 파일을 정본으로 두는 배포와 reconfigure 무중단 갱신'",
+      "L785 '레플리카 쪽 주기와 핸들 쪽 주기가 따로 나뉘는 셈이므로' -> '레플리카와 핸들의 주기를 따로 정하게 되므로'",
+      "L25 '...나눠 쓰게 할 수 있습니다' and many '할 수 있습니다' for what simply happens",
+      "L282 'Ray 2.x에서 클러스터 안에 머무는 호출이라면 직렬화와 서비스 간 HTTP 왕복 지연이 사라집니다' is vague and overstated"
+    ],
+    "C": [
+      "L557-647: the LLM serving section switches to a separate Qwen app between FastAPI and config files, breaking the text_ml:app arc; L766 '상한과 하한 값은 LLM 배포 예시와 같게 맞췄습니다' is an odd tie-back",
+      "L306-317: SummaryModel fragment assumes a constructor never shown"
+    ],
+    "D": [
+      "L915-917: Ray 2.5.0 dashboard ports, Grafana host and ingress details are more than this guide needs",
+      "L297-302: display math for 100+100=200 ms is padding"
+    ],
+    "E": [
+      "L475: table cell '해당 튜토리얼의 설치 명령' instead of the docs command pip install scikit-learn requests \"ray[serve]\"",
+      "No official architecture image; ASCII boxes only (L31-42, L133-141, L740-744), which is acceptable but loses the docs diagram",
+      "L297-302: decorative equation"
+    ],
+    "F": [
+      "L661 'serve build는 기본 애플리케이션 이름을 넣어 주는데, 이 이름은 바꿀 수 있습니다': the docs say serve build includes the default HTTP and gRPC options, which you can modify (wrong)",
+      "L760/L843/L948 'Autoscaling adds replicas but does not provision GPU nodes' comes from the Spheron blog and is stated as general behaviour, but the official autoscaling guide says the Serve autoscaler asks Ray to start replicas and the Ray Autoscaler then requests more nodes (unsupported in this scope)",
+      "L710 '`__call__`이 `self.language`를 읽는 한': the post's own Translator.__call__ reads self._language (L68, L423), so the stated update path does not hold for the running example",
+      "L76: TPU is not in the docs' accelerator example (HPU only); num_replicas also accepts \"auto\""
+    ]
+  },
+  "principles": {
+    "claim_headings": {"status": "met", "evidence": "L101 '컨트롤러·프록시·레플리카로 이어지는 요청 경로와 장애 복구 범위', L168 '두 레플리카 중 덜 바쁜 쪽을 고르는 기본 라우터와 프리픽스 인식 라우팅'; each H2 opens with a one-line thesis"},
+    "running_example": {"status": "met", "evidence": "text_ml:app Summarizer -> Translator from L29 to L948; code consistency issues are under T1"},
+    "mechanism_design_code_example": {"status": "met", "evidence": "P2C: L178-197 mechanism, reason (coordination cost), six-pair worked table; queueing L145; concurrent await L286-302"},
+    "facts_once": {"status": "partly met", "evidence": "RayService two parts at L821 and L837; no GPU-node provisioning at L760, L843, L948; empty runtime_env at L661 and L948; target_ongoing_requests definition at L746 and L907; P2C at L15, L129, L180"},
+    "numbers_with_scope": {"status": "met", "evidence": "illustrative numbers labelled (L184 '설명용 숫자', L288 '실측값이 아니라'); defaults with version (L559 'Ray 2.59.0 기준')"},
+    "nothing_invented": {"status": "partly met", "evidence": "L661 serve build default application-name claim; L710 self.language vs self._language"},
+    "writers_assessment_at_end": {"status": "met", "evidence": "L939-948 '이 글의 판단: 고를 때와 피할 때' table and four failure modes"},
+    "length_fitted": {"status": "partly met", "evidence": "92 KB / 974 lines; 2.5.0 dashboard details (L915-917) and the LLM config tables are long next to the core"},
+    "type_specific_shape": {"status": "met", "evidence": "TL;DR L11, problem L21, concepts L46 and architecture L101 before config details, non-official sources included, ends with when-to-choose and failure modes"},
+    "korean_style": {"status": "partly met", "evidence": "consistent 입니다 register; calques like L649 '단일 진실 공급원'; frequent '할 수 있습니다'"}
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 13,
+    "unsupported": 1,
+    "wrong": 1,
+    "unverifiable": 0,
+    "examples": [
+      {"line": 25, "claim": "fractional GPU scheduling; three scaling primitives (replicas, batching for vectorized ops, flexible allocation)", "verdict": "supported", "source": "serve/index: 'flexible scheduling support such as fractional GPUs'; 'dynamically scaling ... adjusting the number of replicas, batching requests to take advantage of efficient vectorized operations ... flexible resource allocation model'"},
+      {"line": 107, "claim": "one controller per Serve instance; creates, updates, destroys other actors", "verdict": "supported", "source": "serve/architecture: 'A global actor unique to each Serve instance ... responsible for creating, updating, and destroying other actors'"},
+      {"line": 127, "claim": "requests wait when every replica exceeds max_ongoing_requests; a handle request skips to step 3", "verdict": "supported", "source": "serve/architecture: 'If no replicas are available (that is, more than max_ongoing_requests ...)' and '... and we skip to step 3 above'"},
+      {"line": 155, "claim": "after controller recovery autoscaling resumes but all earlier metrics are lost", "verdict": "supported", "source": "serve/architecture: 'When the controller recovers, the autoscaling resumes, but all previous metrics collected are lost.'"},
+      {"line": 243, "claim": "Anyscale blog: prefix-aware hit rate stays constant as replicas grow; P2C hit rate falls; KV-event design left aside for a character-based baseline", "verdict": "supported", "source": "anyscale.com blog: 'prefix cache hit rate stays constant as the number of replicas scales ... power of two router's random choices quickly decreases KV cache hit rate'; 'took the simpler, character-based, approach to set a baseline'"},
+      {"line": 474, "claim": "TensorFlow tutorial: pip install \"tensorflow>=2.0\" requests \"ray[serve]\", reshape to (1, 28, 28), serve run tutorial_tensorflow:mnist_model; PyTorch resnet18(pretrained=True), batch size one", "verdict": "supported", "source": "serve/tutorials/serve-ml-models: same commands and code"},
+      {"line": 559, "claim": "only model_loading_config is required; every other field has a default", "verdict": "supported", "source": "serve/llm/user-guides/configuration: 'Only model_loading_config is required. Every other field has a default.'"},
+      {"line": 577, "claim": "tokenizer_source Hugging Face IDs only; CloudMirrorConfig supports s3://, gs://, abfss://, azure://", "verdict": "supported", "source": "configuration reference: 'Hugging Face IDs only'; 'supports s3://, gs://, abfss://, and azure:// URIs'"},
+      {"line": 588, "claim": "disable_log_stats=True rejected with log_engine_metrics; download_timeout_s default 30, <= 0 disables", "verdict": "supported", "source": "configuration reference: 'disable_log_stats=True is rejected when log_engine_metrics is enabled'; 'download_timeout_s float 30 ... A value <= 0 disables the timeout.'"},
+      {"line": 598, "claim": "deployment_config supports 13 listed keys ending in request_router_config", "verdict": "supported", "source": "configuration reference: 'Supported keys: name, num_replicas, ray_actor_options, max_ongoing_requests, autoscaling_config, max_queued_requests, user_config, health_check_period_s, health_check_timeout_s, graceful_shutdown_wait_loop_s, graceful_shutdown_timeout_s, logging_config, and request_router_config'"},
+      {"line": 661, "claim": "serve build inserts a default application name, which you can change", "verdict": "wrong", "source": "serve/production-guide/config: 'serve build includes the default HTTP and gPRC options in its autogenerated files. You can modify these parameters.' (runtime_env always empty and grpc_servicer_functions [] = no gRPC server are supported)"},
+      {"line": 750, "claim": "target_ongoing_requests default 2", "verdict": "supported", "source": "advanced-autoscaling: 'target_ongoing_requests [default=2]'; ray.serve.config: 'Defaults to 2.'"},
+      {"line": 760, "claim": "Serve autoscaling adds replicas but does not provision GPU nodes; max_replicas 4 with 2 GPUs leaves 2 PENDING", "verdict": "unsupported", "source": "Taken from the Spheron blog ('Autoscaling adds replicas but does not provision new GPU nodes'); official autoscaling-guide: 'If the Ray Autoscaler determines there aren't enough available resources ... it responds by requesting more Ray nodes'; max_replicas doc: 'Ray Serve relies on the Ray Autoscaler to add cluster nodes'. Stated as general behaviour at L760 and L948"},
+      {"line": 791, "claim": "external_scaler_enabled default False; when enabled no deployment in the app may use autoscaling_config", "verdict": "supported", "source": "config: 'When enabled, you can't use built-in autoscaling (autoscaling_config) for any deployment in this application. Defaults to False.'"},
+      {"line": 915, "claim": "dashboard on head-node port 8265, --dashboard-port, default URL localhost:8265, --dashboard-host required in Docker, Grafana assumed at localhost:3000", "verdict": "supported", "source": "releases-2.5.0 configure-manage-dashboard (8265, --dashboard-port, localhost:3000, RAY_GRAFANA_HOST) and latest ray-observability/getting-started ('If you start Ray in a docker container, --dashboard-host is a required parameter'); mixes a 2.5.0 page with the current one"}
+    ]
+  },
+  "checklist": {
+    "repeated": 0,
+    "avoided": 1,
+    "na": 1,
+    "repeated_ids": [],
+    "items": [
+      {"id": "arch-diagram-relative-link", "result": "avoided", "evidence": "No image or link with empty text or a ../_images path (grep finds no '](../' or '[](' and no '![' at all); the architecture is drawn as labelled ASCII blocks (L133-141) instead of the docs image"},
+      {"id": "proxy-env-ray-start-unsupported", "result": "n/a", "evidence": "No proxy env-var section; the only 'ray start' mention is the dashboard flag at L915, with no claim about exporting env vars before ray start"}
+    ]
+  },
+  "extras": {
+    "architecture_first_line": 101,
+    "architecture_note": "Concepts (deployment/replica/bind) at L46; controller/proxy/replica architecture and request path at L101-166, before routing, config and autoscaling details",
+    "sources_total": 22,
+    "non_official_sources": 5,
+    "non_official_share": 0.23,
+    "non_official_list": ["anyscale.com custom-routing blog", "spheron.network blog", "github.com/alipay/ray-contrib (ant-kuberay)", "anyscale.com KubeRay blog", "discuss.ray.io HTTPS thread"],
+    "older_docs_version_pages": ["releases-2.5.0 configure-manage-dashboard (L915-917, L948), labelled as 2.5.0"],
+    "opens_with_problem": true,
+    "closes_with_when_to_choose_and_failure_modes": true
+  },
+  "runnable_code": {
+    "verdict": "partly runnable",
+    "details": [
+      "text_ml.py (L409-441) is complete; serve run text_ml:app plus the POST client (L455-463) works and returns '[french] Ray Serve is a scalable model serving library'",
+      "X-Request-ID client (L884-890) sends json=english_text where english_text is a bare string; Summarizer.__call__ does (await request.json())[\"text\"] -> TypeError -> HTTP 500",
+      "serve_config.yaml (L665-687) sets user_config on Translator, but the text_ml.py Translator has no reconfigure; Serve raises RayServeException 'user_config or rank specified but deployment ... missing reconfigure method' at replica start",
+      "reconfigure snippet (L706-707) sets self.language while Translator.__call__ reads self._language (L68, L423), so changing language via serve deploy has no effect; L710 asserts the opposite",
+      "Fragments (L255-278, L308-317, L325-355, L488-527, L768-783, L797-813) depend on Translator defined elsewhere or have '...' bodies; stated in the text"
+    ]
+  },
+  "top_issues": [
+    "Running-example code breaks: X-Request-ID client sends a bare string to a handler that indexes ['text'] (L884-890); config user_config without reconfigure fails deploy; reconfigure writes self.language but __call__ reads self._language (L706-710)",
+    "Wrong or unsupported facts: serve build 'default application name' (L661) misreads the docs' default HTTP/gRPC options; the Spheron claim that autoscaling never provisions GPU nodes (L760, L948) contradicts the official Ray Autoscaler path",
+    "Structure: duplicate empty H2 at L396/L399, entity leaks in Sources (L971, L974), repeated facts across sections, and a placeholder table cell (L475)"
+  ]
+}

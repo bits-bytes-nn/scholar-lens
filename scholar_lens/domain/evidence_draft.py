@@ -374,7 +374,11 @@ def drop_sentences(markdown: str, sentences: Iterable[str]) -> str:
         if sentence.startswith("|"):
             # A table row goes with its line, or the table splits in two.
             markdown = re.sub(
-                r"^[ \t]*" + re.escape(sentence) + r"[ \t]*\n?", "", markdown, count=1, flags=re.M
+                r"^[ \t]*" + re.escape(sentence) + r"[ \t]*\n?",
+                "",
+                markdown,
+                count=1,
+                flags=re.M,
             )
         else:
             markdown = markdown.replace(sentence, "", 1)

@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 from urllib.parse import urlparse
 
+from ..domain.evidence_draft import drop_empty_headings
 from ..domain.markdown.lint import (
     drop_unknown_images,
     figure_markers_to_images,
@@ -175,6 +176,8 @@ def guide_document(document: str, guide: TechGuide, *, korean: bool) -> str:
     pipeline's order."""
     document = figure_markers_to_images(document)
     document = drop_unknown_images(document, set(guide.image_urls))
+    # A section whose only content was a dropped image heads nothing.
+    document = drop_empty_headings(document)
     return fill_image_alts(document, {}, guide.topic, korean=korean)
 
 

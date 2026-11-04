@@ -296,7 +296,7 @@ def test_guide_draft_problems() -> None:
 
 
 def test_markers_are_stripped_and_cited_sources_listed() -> None:
-    assert strip_markers("기본값은 10입니다 [[E2, E3]].") == "기본값은 10입니다."
+    assert strip_markers("기본값은 10입니다 [[E2, E3]].") == "기본값은 10입니다.\n"
     urls = _source_urls(
         [_blog(), _official()],
         ["https://docs.ray.io/serve/batching.html", "https://x.dev/ref"],
@@ -570,4 +570,28 @@ def test_code_defined_earlier_lists_the_running_examples_definitions() -> None:
         "@serve.deployment",
         "class Translator:",
         "def translate(self, text: str) -> str:",
+    ]
+
+
+def test_a_marker_standing_for_a_word_and_hedges_are_problems() -> None:
+    draft = (
+        "## 설치\n\n표의 근거는 [[E3]]입니다.\n\n"
+        "import 경로는 쓰는 SDK 버전에서 확인해야 합니다 [[E2]].\n"
+    )
+    problems = guide_draft_problems(draft)
+    assert any("stands for a word" in p for p in problems)
+    assert any("hedges" in p for p in problems)
+
+
+def test_stripping_markers_leaves_no_empty_heading_or_marker_line() -> None:
+    body = "## A\n\n[[E1]]\n\n## B\n\n내용입니다 [[E2]].\n"
+    assert strip_markers(body) == "## B\n\n내용입니다.\n"
+
+
+def test_sources_are_listed_once_however_spelled() -> None:
+    page = _official().model_copy(
+        update={"url": "https://docs.ray.io/serve/batching.html"}
+    )
+    assert _source_urls([page], ["https://docs.ray.io/serve/batching.html/"]) == [
+        "https://docs.ray.io/serve/batching.html"
     ]

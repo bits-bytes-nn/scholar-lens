@@ -8,6 +8,7 @@ pipeline classifies and publishes as before."""
 from __future__ import annotations
 
 import dataclasses
+import html
 import json
 import re
 from collections.abc import Sequence
@@ -26,7 +27,13 @@ from .prompts.tech_guide import (
 )
 from .runtime import ROOT_DIR, RunContext
 from .tech_guide import TechGuide, TechGuideGenerator
-from .web_research import OfficialDocs, PageContent, ResearchCorpus, source_label
+from .web_research import (
+    OfficialDocs,
+    PageContent,
+    ResearchCorpus,
+    page_key,
+    source_label,
+)
 
 _AUTHORITY: dict[str, Authority] = {
     OFFICIAL_LABEL: "official",
@@ -63,7 +70,7 @@ def guide_documents(
         documents.append(
             SourceDocument.from_markdown(
                 f"{_PREFIX[authority]}{counts[authority]}",
-                page.title or page.url,
+                html.unescape(page.title or page.url),
                 "full_text",
                 page.text,
                 figures=[
@@ -87,7 +94,11 @@ def _source_urls(
     urls = [
         d.url for d in sorted(cited, key=lambda d: order[d.authority or "third_party"])
     ]
-    return list(dict.fromkeys([*urls, *requested]))
+    # One entry per page however it was spelled (a trailing slash, .html).
+    seen: dict[str, str] = {}
+    for url in [*urls, *requested]:
+        seen.setdefault(page_key(url), url)
+    return list(seen.values())
 
 
 async def write_guide_with_evidence(
@@ -194,7 +205,9 @@ async def write_guide_with_evidence(
         topic=result.title,
         body=result.body,
         source_urls=source_urls,
-        source_titles={u: titles[u] for u in source_urls if titles.get(u)},
+        source_titles={
+            u: html.unescape(titles[u]) for u in source_urls if titles.get(u)
+        },
         notes=notes,
         image_urls=[u for u in figures if u not in set(broken)],
     )

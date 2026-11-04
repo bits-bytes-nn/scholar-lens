@@ -1,0 +1,99 @@
+{
+  "item": "guide-vllm",
+  "post": "/tmp/eval-guide/guide-vllm-v2.md",
+  "judge_run": 3,
+  "sampling": "non-heading paragraphs (blank-line blocks after front matter, tables/lists/fences counted as one block) numbered 1..188; sampled 3, 6, 9, ...; 15 claims drawn from sampled paragraphs 42, 78, 93, 96, 105, 111, 114, 123, 141, 153, 156, 168, 174, 183",
+  "scores": {"A": 7, "B": 7.5, "C": 6.5, "D": 8, "E": 8, "F": 6, "T1": 7, "T2": 8, "T3": 8},
+  "deductions": {
+    "A": ["L347 '표의 근거는입니다.' and L682 '출처는입니다.' are broken sentences (source name dropped)", "Sources list repeats Quickstart (L702/L721), the vLLM blog (L708/L723) and the paper (L709/L722)", "L50 repeats the TL;DR's 'vLLM은 UC Berkeley에서 개발한 오픈소스 LLM 추론·서빙 라이브러리' verbatim; L333 repeats the L15 hardware list"],
+    "B": ["L347/L682 broken sentences", "L548 '다만 이 글이 이 인자에 대해 드는 수치는 서드파티 자료에서 나온 것입니다' -> '이 인자의 수치는 서드파티 자료에서 가져왔습니다'", "L15 'vLLM이 첫 후보입니다' slightly marketing-toned"],
+    "C": ["L248 '앞서 설명했듯 매 반복의 입력은 ... 이어 붙인 시퀀스 하나' - never explained earlier", "L397 'x86 CPU 설치 절차는 뒤의 CPU 백엔드 절에서 다룸' - the CPU section (L552-) gives no install/build steps", "L517 '앞서 소개한 fp8 KV 캐시의 절감 수치' - no fp8 savings figure appears earlier", "L521 '앞서 본 예처럼, 지정한 양만큼 GPU 메모리를 가상으로 늘린' - no earlier example"],
+    "D": ["L325 full ROCm backend enum list and L363-369 Metal roadmap detail are more than the reader needs; otherwise worked examples (L85-98, L134-141, L177-185, L236-244) land at the hard points"],
+    "E": ["L265-268 swap/recompute table has only two rows and the 'large block' case is missing", "duplicated Sources entries"],
+    "F": ["L340/L349/L395 'Intel XPU 사전 빌드 휠 미제공' - GPU install docs: 'Pre-built vLLM XPU wheels are published to wheels.vllm.ai' (nightly and per-commit indexes)", "L394 ROCm wheel row 'ROCm 7.0' - docs: default variant rocm100 (ROCm 10.0); rocm700 covers only 0.14.0-0.18.0, and the shown command installs 'Python 3.12, ROCm 10.0 and glibc >= 2.35'", "L554/L558 present VLLM_CPU_KVCACHE_SPACE as the CPU way to size the KV cache; CPU docs: 'This is a legacy setting; use --kv-cache-memory-bytes instead'", "L517 refers to an fp8 savings number the post never gives"],
+    "T1": ["no OpenAI client request is shown anywhere although the running example is an OpenAI-compatible chat service (L429, L594)", "L588 '-e VLLM_CPU_OMP_THREADS_BIND=<CPU cores for inference>' is parsed by the shell as a redirect when pasted; the vllm-cpu-env image build step is never given", "L636-641 scale-to-zero snippet omits the keepalive trigger the text says is required"]
+  },
+  "principles": {
+    "claim_headings": {"status": "met", "evidence": "L56 '고정 크기 블록과 블록 테이블로 가상화한 KV 캐시', L122 '블록 크기가 결정하는 단편화와 GPU 병렬성 사이의 균형'"},
+    "running_example": {"status": "met", "evidence": "Qwen/Qwen2.5-1.5B-Instruct chat service carried from L132 through L322, L413, L426, L528, L590, L612, L696"},
+    "mechanism_choice_formula_example": {"status": "met", "evidence": "block table L73-98 (mechanism, 7-token worked example), block-wise attention formula L104, block-size trade-off table L134-141, CoW table L177-183"},
+    "facts_said_once": {"status": "not met", "evidence": "60-80% waste at L13, L33, L118; under 4% at L13, L118; 2-4x at L13, L54; UC Berkeley sentence verbatim at L13 and L50; hardware list at L15 and L333"},
+    "numbers_with_scope": {"status": "partly met", "evidence": "third-party numbers flagged (L548, L610, L686-688); L46 '원 예시는 ... 약 40% 낭비' cites an unnamed 'original example'; L112 '한 분석은' unattributed"},
+    "nothing_invented": {"status": "partly met", "evidence": "illustrative tables labelled '실측이 아닌 예시' (L37, L132, L175); but XPU wheels/ROCm 7.0 contradict docs and L517 references a figure that does not exist"},
+    "writers_assessment_at_end": {"status": "met", "evidence": "L696 '이 글의 판단으로는 ... vLLM이 가장 무난한 출발점입니다' with TensorRT-LLM/SGLang/Ollama/HF conditions"},
+    "length_fitted": {"status": "partly met", "evidence": "723 lines; Metal roadmap (L363-369), ROCm backend list (L325) and repeated waste numbers pad it"},
+    "type_shape": {"status": "met", "evidence": "TL;DR L11, problem section L17, internals L56 and engine architecture L205 before install L373 and config L455, non-official sources included, closes with when-to-choose L664-696"},
+    "korean_style": {"status": "partly met", "evidence": "consistent 입니다 register; broken L347/L682; L548 awkward framing"}
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 13,
+    "unsupported": 1,
+    "wrong": 1,
+    "unverifiable": 0,
+    "examples": [
+      {"para": 42, "line": 145, "claim": "paper chose 16 as vLLM's default block size", "verdict": "supported", "source": "arXiv 2309.06180: 'Accordingly, vLLM sets its default block size as 16.'"},
+      {"para": 78, "line": 263, "claim": "swap vs recompute comparable for block sizes 16-64", "verdict": "supported", "source": "paper: 'For medium block sizes from 16 to 64, the two methods exhibit comparable end-to-end performance.'"},
+      {"para": 93, "line": 325, "claim": "ROCm attention backends TRITON_ATTN ... ROCM_AITER_TRITON_MLA", "verdict": "supported", "source": "Quickstart: 'On AMD ROCm: TRITON_ATTN, ROCM_ATTN, ROCM_AITER_FA, ROCM_AITER_UNIFIED_ATTN, TRITON_MLA, ROCM_AITER_MLA or ROCM_AITER_TRITON_MLA'"},
+      {"para": 96, "line": 340, "claim": "Intel XPU: no pre-built wheels; official Docker image from v0.26.0", "verdict": "wrong", "source": "GPU install docs: 'Pre-built vLLM XPU wheels are published to wheels.vllm.ai' (uv pip install vllm --extra-index-url https://wheels.vllm.ai/nightly/xpu ...); Docker part correct: 'vllm/vllm-openai-xpu:latest - stable release, available starting from v0.26.0'"},
+      {"para": 96, "line": 342, "claim": "Apple silicon CPU: experimental, source build, FP32/FP16 only", "verdict": "supported", "source": "CPU docs: 'experimental support for macOS with Apple Silicon ... must build from source ... supports FP32 and FP16 datatypes'"},
+      {"para": 105, "line": 369, "claim": "phase-1 paged KV prototype: 83x TTFT, 3.6x throughput", "verdict": "supported", "source": "vllm-metal issue #148: '83x TTFT', '3.6x throughput'"},
+      {"para": 111, "line": 388, "claim": "vllm download-kernels fetches FlashInfer precompiled kernels; without them startup compiles and can add minutes on Hopper+/Blackwell; rerun after each install/upgrade", "verdict": "supported", "source": "GPU docs: 'Without them, vLLM downloads and compiles kernels at startup, which can add several minutes on Hopper and newer GPUs, especially Blackwell, and logs a warning. Run it ... after every vLLM install or upgrade'"},
+      {"para": 114, "line": 399, "claim": "ROCm wheels support Python 3.12; XPU kernel wheel is 3.12-only", "verdict": "supported", "source": "GPU docs: 'ROCm pre-built wheels are only available for Python 3.12'; 'The provided vllm-xpu-kernels whl is Python3.12 specific so this version is a MUST.'"},
+      {"para": 123, "line": 431, "claim": "--api-key or VLLM_API_KEY; multiple keys accepted for rotation", "verdict": "supported", "source": "Quickstart: 'You can pass multiple keys after --api-key, and the server will accept any of the keys passed, this can be useful for key rotation.'"},
+      {"para": 141, "line": 494, "claim": "cudagraph_capture_sizes in CompilationConfig with CompilationMode.VLLM_COMPILE; default goes up to max_num_seqs; enforce_eager disables capture", "verdict": "supported", "source": "Conserving Memory doc code: '# By default, it goes up to max_num_seqs', 'disable graph capturing completely via the enforce_eager flag'"},
+      {"para": 153, "line": 554, "claim": "CPU backend sizes KV cache via VLLM_CPU_KVCACHE_SPACE instead of a GPU memory ratio; a CPU-only mechanism", "verdict": "unsupported", "source": "CPU docs: default 0 semantics match, but 'This is a legacy setting; use --kv-cache-memory-bytes instead.' The post presents the legacy env var as the current method"},
+      {"para": 156, "line": 566, "claim": "CPU defaults: max-num-seqs 256/128 x world_size, max-num-batched-tokens 4096/2048 x world_size (offline/online)", "verdict": "supported", "source": "CPU docs: 'Offline Inference: 4096 * world_size / Online Serving: 2048 * world_size' and '256 * world_size / 128 * world_size'"},
+      {"para": 168, "line": 610, "claim": "Helm chart v0.1.11+ integrates KEDA and monitoring; Introl claims 3-10x latency, 2-5x throughput from cross-instance cache sharing", "verdict": "supported", "source": "KEDA doc: 'With the vLLM Production Stack Helm chart (v0.1.11+), KEDA autoscaling and monitoring are integrated'; Introl: '3-10x latency reduction and 2-5x throughput improvement'"},
+      {"para": 174, "line": 643, "claim": "fallback failureThreshold 3, replicas 2; scaleDown 300 s window, 50% per 60 s", "verdict": "supported", "source": "KEDA doc Advanced Configuration blocks match cell for cell"},
+      {"para": 183, "line": 686, "claim": "Spheron: TensorRT-LLM ahead at every concurrency, gap 8% at 1 request to 16% at 100", "verdict": "supported", "source": "Spheron: 'the gap widened as load increased, from 8% at a single request to 16% at 100 concurrent requests'"}
+    ],
+    "out_of_sample_errors": [
+      {"line": 394, "claim": "ROCm wheel row 'Python 3.12, ROCm 7.0, glibc >= 2.35'", "verdict": "wrong", "source": "GPU docs: default wheel variant rocm100 (ROCm 10.0); 'To install the latest version of vLLM for Python 3.12, ROCm 10.0 and glibc >= 2.35'"},
+      {"line": 349, "claim": "'사전 빌드 휠이 아직 없으므로' (XPU) repeated at L395", "verdict": "wrong", "source": "same as claim para 96"}
+    ]
+  },
+  "checklist": {
+    "note": "guide-vllm has fixes: []; the notes' generic guide checks were applied",
+    "repeated": 1,
+    "avoided": 5,
+    "na": 0,
+    "repeated_ids": ["dangling-cross-references"],
+    "details": [
+      {"id": "dangling-cross-references", "status": "repeated", "evidence": "L397 '뒤의 CPU 백엔드 절에서 다룸' (no install there); L517 '앞서 소개한 fp8 KV 캐시의 절감 수치' (none); L521 '앞서 본 예처럼' (none); L248 '앞서 설명했듯 매 반복의 입력은' (not explained)"},
+      {"id": "tag-remnant", "status": "avoided", "evidence": "no </path>, </name> or other closing-tag remnants"},
+      {"id": "entity-leak", "status": "avoided", "evidence": "no &gt;/&lt; in body; &#124;/&#91; only in Sources link titles where they render as | and ["},
+      {"id": "unclosed-code-fence", "status": "avoided", "evidence": "30 fence lines, all paired"},
+      {"id": "stale-third-party-cli-flags", "status": "avoided", "evidence": "third-party/old-version values are labelled: L548 Unsloth defaults 'shown as starting points', L429 v0.7.1/v0.8.5.post1 scoped, L606 0.6.1.post2 scoped"},
+      {"id": "install-usage-centric", "status": "avoided", "evidence": "install starts at L373 after ~320 lines of internals (block table, CoW, scheduler, kernels, TP)"}
+    ]
+  },
+  "extras": {
+    "architecture_first_line": 56,
+    "architecture_note": "internals (block table) at L56; engine component architecture at L205; first problem framing L17",
+    "sources_total": 23,
+    "sources_unique": 20,
+    "non_official_share": "6/23 (26%) third-party (Introl, LinkedIn, LabHub, Spheron, Unsloth, JarvisLabs); 13/23 (57%) if the paper, vLLM blog, GitHub issues and forum count as non-docs",
+    "opens_with_problem": true,
+    "closes_with_when_to_choose": true,
+    "failure_modes_covered": "partly: preemption/swap (L250-270), Metal no-batching (L359-361), NUMA seccomp warning (L577), scale-to-zero cold start (L662), benchmark pitfalls (L690-694); no OOM/startup failure troubleshooting"
+  },
+  "runnable_code": {
+    "verdict": "partly runnable",
+    "details": [
+      "L379-384 install block: runs (matches GPU docs)",
+      "L410-414 offline LLM.generate: runs; imports and names defined; generation_config='vllm' is a documented LLM argument",
+      "L497-511 CompilationConfig example: runs on versions with CompilationMode (matches Conserving Memory doc)",
+      "L322, L426, L434, L528 vllm serve commands: valid flags",
+      "L444-451 GPU docker: matches docs",
+      "L582-592 CPU docker: fails as pasted - '<CPU cores for inference>' is a shell redirect, and the vllm-cpu-env image must be built from source but the build command is never given",
+      "L636-641 scale-to-zero values: incomplete - omits the keepalive trigger the text requires",
+      "No OpenAI client request appears, so the chat-service running example never sends a request; request shape cannot be matched"
+    ]
+  },
+  "top_issues": [
+    "Docs-contradicting install facts: XPU 'no pre-built wheels' (L340/L349/L395) and ROCm wheel 'ROCm 7.0' (L394); CPU KV sizing via legacy VLLM_CPU_KVCACHE_SPACE without the docs' 'use --kv-cache-memory-bytes instead' (L554-558)",
+    "Dangling back/forward references and broken sentences: L248, L397, L517, L521; '표의 근거는입니다.' L347, '출처는입니다.' L682; duplicate Sources entries",
+    "Running example not end-to-end: no OpenAI client call, CPU docker command not pasteable and its image build missing, scale-to-zero snippet missing its required trigger; key facts (60-80%, <4%, 2-4x, hardware list) repeated 2-3 times"
+  ]
+}

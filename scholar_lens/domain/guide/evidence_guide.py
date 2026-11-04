@@ -13,7 +13,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..evidence import EvidenceLedger, SourceDocument
-from ..evidence_draft import MARKER, prose_sentences
+from ..evidence_draft import MARKER, drop_empty_headings, prose_sentences
 from ..lengths import DEPTH_CHARS, NON_KOREAN_CHAR_FACTOR
 
 GuideKind = Literal[
@@ -56,6 +56,16 @@ _SDK_LANGUAGES = {
     "rust": "rust",
 }
 MAX_CODE_LINES = 40
+# Hedging about what the writer did not settle, instead of leaving it out.
+_HEDGE = re.compile(
+    r"(?:버전|환경|문서)에서 (?:직접 )?확인(?:해야|하세요|하십시오|해 보세요|이 필요)|"
+    r"확정하지 (?:않았|못했)|확인하지 못했|확인되지 않았|(?:여기서는|이 가이드에서는) (?:다루지|확정하지)"
+)
+# An evidence marker standing for a word ("근거는 [[E3]]입니다"): removing
+# it breaks the sentence.
+_MARKER_AS_WORD = re.compile(
+    MARKER.pattern + r"\s*(?:입니다|이다|이며|이고|은|는|이|가|을|를|의|에|와|과|로)"
+)
 
 
 class _Strict(BaseModel):
@@ -201,6 +211,16 @@ def guide_draft_problems(markdown: str, *, code_language: str = "") -> list[str]
     problems: list[str] = []
     for sentence in prose_sentences(markdown):
         plain = MARKER.sub("", sentence)
+        if _MARKER_AS_WORD.search(sentence):
+            problems.append(
+                "an evidence marker stands for a word; state the fact and put "
+                f"the marker at the end of the sentence: {sentence[:160]}"
+            )
+        if _HEDGE.search(plain):
+            problems.append(
+                "hedges about what the guide did not settle; state what the "
+                f"evidence shows or leave the point out: {plain[:160]}"
+            )
         if _SOURCE_NARRATION.search(plain):
             problems.append(
                 f"names the page a fact came from; state the fact itself: {plain[:160]}"
@@ -235,5 +255,8 @@ def cited_sources(markdown: str, ledger: EvidenceLedger) -> list[str]:
 
 def strip_markers(markdown: str) -> str:
     """The body without evidence markers (a guide lists its sources at the
-    end instead of citing each sentence)."""
-    return re.sub(r"[ \t]*" + MARKER.pattern, "", markdown)
+    end instead of citing each sentence), and without the lines and headings
+    that only held markers."""
+    out = re.sub(r"[ \t]*" + MARKER.pattern, "", markdown)
+    out = re.sub(r"^[ \t]*[.,]?[ \t]*$\n?", "\n", out, flags=re.M)
+    return drop_empty_headings(re.sub(r"\n{3,}", "\n\n", out)).rstrip() + "\n"
