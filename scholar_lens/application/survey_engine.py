@@ -130,6 +130,20 @@ class SectionReview(BaseModel):
     issues: list[ReviewIssue] = Field(default_factory=list, max_length=10)
 
 
+def _recheck(document: SourceDocument, item: Evidence) -> list[str]:
+    return evidence_problems(
+        document,
+        kind=item.kind,
+        claim=item.claim,
+        quote=item.quote,
+        anchor=item.anchor,
+        scope=item.scope,
+        cell=item.cell,
+        figure_id=item.figure_id,
+        latex=item.latex,
+    )
+
+
 def _prose_length(markdown: str) -> int:
     return len(" ".join(prose_sentences(markdown)))
 
@@ -181,6 +195,7 @@ class EvidenceSurveyEngine:
         self.settings = settings
         self.store = store
         self.notes: list[str] = []
+        self._names: dict[str, str] = {}
 
     # ---- read -------------------------------------------------------------------
 
@@ -207,8 +222,10 @@ class EvidenceSurveyEngine:
                 key = self._cache_key(paper, document.kind)
                 if self.store is not None and (cached := self.store.get(key)):
                     try:
+                        items = [Evidence.model_validate(e) for e in json.loads(cached)]
+                        # Cached under older rules: keep what today's checks pass.
                         return [
-                            Evidence.model_validate(e) for e in json.loads(cached)
+                            e for e in items if not _recheck(document, e)
                         ], document.kind
                     except (ValueError, ValidationError):
                         logger.warning(
@@ -448,6 +465,7 @@ class EvidenceSurveyEngine:
             plan = without_papers(plan, missing)
         outline = await self.outline(plan, ledger, references, guideline)
         outline = await self._check_evidence(outline, ledger)
+        self._names = dict(outline.short_names)
         glossary = {t.english: t.rendering for t in outline.glossary}
         free = (
             " ".join({str(p.year) for p in plan.papers if p.year})
@@ -523,7 +541,7 @@ class EvidenceSurveyEngine:
             for eid in {i for snt in prose_sentences(md) for i in cited_ids(snt)}:
                 if eid not in s.evidence:
                     cites[eid] = cites.get(eid, 0) + 1
-        exhausted = {eid for eid, n in cites.items() if n >= 2}
+        exhausted = {eid for eid, n in cites.items() if n >= 1}
         figures = [e.figure_url for e in own if e.kind == "figure" and e.figure_url]
         sections_map = "\n".join(
             f"- {'(this) ' if s is section else ''}{s.kind}: {s.title} — {s.thesis}"
@@ -806,7 +824,8 @@ class EvidenceSurveyEngine:
                 f"{n}. {sentence}\n   evidence: "
                 + (
                     " || ".join(
-                        f'[{e.id}] {e.claim} — "{e.quote[:300]}" {e.scope}'
+                        f"[{e.id}, from {self._names.get(e.paper_id, e.paper_id)}] "
+                        f'{e.claim} — "{e.quote[:300]}" {e.scope}'
                         for e in cited
                     )
                     or "(none)"

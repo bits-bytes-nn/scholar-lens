@@ -392,7 +392,7 @@ def draft_problems(
             continue
         if spent := [i for i in ids if i in set(exhausted)]:
             problems.append(
-                f"evidence {spent} was already referred back to twice; do not "
+                f"evidence {spent} was already referred back to once; do not "
                 f"restate it again: {quoted}"
             )
         if foreign := [i for i in ids if i not in allowed]:

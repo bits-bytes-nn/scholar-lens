@@ -153,7 +153,9 @@ reading, and worked examples marked as such are supported. A claim the
 section's other evidence (listed) supports is supported even when its
 marker names a different item. Be strict about contradictions: a sentence
 that says the opposite of any listed evidence, or swaps which paper, model or
-setting a fact belongs to, is wrong. Give a short reason for anything not
+setting a fact belongs to, is wrong. Each evidence item names the paper it
+comes from: a fact from one paper attributed to another (an analysis paper's
+assumption stated as what the original method does) is wrong. Give a short reason for anything not
 supported.
 """ + SECURITY
 
