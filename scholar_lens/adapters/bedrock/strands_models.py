@@ -32,6 +32,8 @@ _CLIENT_CONFIG = Config(
     connect_timeout=20,
 )
 _STRUCTURED_ATTEMPTS = 3
+# Repeats of a text call Bedrock's content filter stopped.
+_FILTERED_RETRIES = 2
 
 
 @dataclass(frozen=True)
@@ -115,11 +117,26 @@ class StrandsLanguageModel:
         return output
 
     async def text(self, *, role: ModelRole, system: str, prompt: str) -> str:
-        agent = Agent(
-            model=self._model(role), system_prompt=system, callback_handler=None
-        )
-        result = await agent.invoke_async(prompt)
-        self._usage(role, result)
+        # Bedrock's content filter can stop a long answer about attacks
+        # (jailbreaks, injections) mid-sentence, and not on every attempt:
+        # the call is repeated, the last time without thinking.
+        attempts = [None] * _FILTERED_RETRIES + [False]
+        for n, thinking in enumerate([None, *attempts]):
+            agent = Agent(
+                model=self._model(role, thinking=thinking),
+                system_prompt=system,
+                callback_handler=None,
+            )
+            result = await agent.invoke_async(prompt)
+            self._usage(role, result)
+            if result.stop_reason != "content_filtered" or n == len(attempts):
+                break
+            logger.warning(
+                "%s call content-filtered after %d characters; attempt %d again.",
+                role,
+                len(str(result)),
+                n + 2,
+            )
         text = str(result)
         if result.stop_reason != "end_turn" or len(text.strip()) < 200:
             logger.warning(
