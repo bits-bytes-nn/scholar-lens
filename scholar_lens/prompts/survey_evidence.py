@@ -151,8 +151,10 @@ measures, reports or states). Background a competent reader knows, the
 post's own interpretation, connections between papers stated as the post's
 reading, and worked examples marked as such are supported. A claim the
 section's other evidence (listed) supports is supported even when its
-marker names a different item. When in doubt, mark supported; give a short
-reason for anything not supported.
+marker names a different item. Be strict about contradictions: a sentence
+that says the opposite of any listed evidence, or swaps which paper, model or
+setting a fact belongs to, is wrong. Give a short reason for anything not
+supported.
 """ + SECURITY
 
 EVIDENCE_CHECK_SYSTEM = """

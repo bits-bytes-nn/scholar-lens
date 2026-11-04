@@ -216,6 +216,8 @@ def evidence_problems(
         problems.append("the equation is not the paper's LaTeX: copy it exactly")
     if len(cell) > MAX_CELL_CHARS:
         problems.append(f"the cell is longer than {MAX_CELL_CHARS} characters")
+    if "?" in f"{claim} {scope} {cell}":
+        problems.append("a guess ('?') is not evidence: state only what the quote says")
     if _NUMBERED_REFERENCE.search(f"{claim} {scope} {cell}"):
         problems.append(
             "claim, scope and cell must not name the paper's figure, table, "
