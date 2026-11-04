@@ -1,0 +1,101 @@
+{
+  "item": "guide-strands",
+  "post": "/tmp/eval-guide/guide-strands-v3.md",
+  "judge_run": 3,
+  "sdk_version_checked": "strands-agents 1.63.0 (docs footer: SDK Python v1.63.0, TS v1.23.0)",
+  "scores": {"A": 8, "B": 8, "C": 7, "D": 8, "E": 8, "F": 6, "T1": 6, "T2": 8, "T3": 8},
+  "score_evidence": {
+    "A": "Coherent arc (TL;DR L11, problem L17, loop L40, hooks L110, middleware L210 ... choice L860), claim-style headings, no body H1, fenced code, $$ math. Deductions: running example redefined in place (build_summary_agent at L542 and L604, handle_request at L407 then 'replaced' at L760); code comments in Korean '~한다' (L543, L605, L610, L680).",
+    "B": "Mostly natural Korean. Deductions: register break in code comments ('요청마다 새 에이전트와 새 전략 인스턴스를 만든다' L543); awkward 'L726 결과는 아래 함수가 이 기준대로 상태 문자열 하나로 바꿉니다' -> '아래 함수는 이 결과를 상태 문자열 하나로 바꿉니다'; repeated '눈여겨볼' framing (L96, L794).",
+    "C": "L208 says '구조화된 출력 경로에서는 이벤트가 일부 빠집니다 ... BeforeModelCallEvent는 structured_output 호출에서 발생하지 않습니다' while L435 says this applies only to the deprecated Agent.structured_output() path (API ref: 'not fired for invocations to structured_output'); L742 says handle_request returns result.structured_output via summarize_within_budget, but summarize_within_budget (L674) passes no structured_output_model; same facts restated in several places (see principles.facts_said_once).",
+    "D": "Hard parts get worked numeric examples (hook nesting table L145, limit overshoot table L644, attempt counting table L420, retry schedule L514). Some over-explanation and repetition push length to ~58K chars.",
+    "E": "Good tables and code where useful; ASCII diagrams labelled as illustrations. Deductions: llama.cpp row 'llama.cpp | — | —' (L878) where the docs give Python supported / TypeScript not; trivial formulas 'N ≤ 3k' (L283) and 'attempts = n + n' (L395) add little.",
+    "F": "Two wrong claims in the sample (steering in Python described as an intervention-layer handler, L489; llama.cpp support cells blank, L878). Outside the sample: Cedar's principal_resolver presented as HumanInTheLoop's 'principal' for approvals (L830); 'approval_gate 승인 단계가 바로 이 공식 경로에 해당' conflates middleware interrupt with HumanInTheLoop (L882); 'Guide 재시도에도 프레임워크는 상한을 두지 않으므로' extended from interventions to steering without support (L496).",
+    "T1": "APIs are real (verified imports/signatures in 1.63.0), but the final handler serve_summary_request (L781-785) never passes structured_output_model, so summary is always None on success (reproduced with a fake model: SummaryReply(outcome='ok', summary=None), no structured-output tool offered). HITL snippet (L820-827) uses HumanInTheLoop without importing it (NameError). handle_request (L405) uses a module-level shared Agent, contradicting the per-request pattern. Middleware snippets L277/L308 use an undefined 'agent'.",
+    "T2": "Covers all major source topics (loop, hooks, middleware, structured output, interventions, steering, retry, conversation management, limits/cancel, HITL, telemetry/eval) in a sensible order; little padding.",
+    "T3": "Strong internals: event order and batch vs per-call events, hook-outside-middleware layering, strategy-outside-chain retry stacking, limit check at loop top with overshoot, best-effort proactive compression, token estimator heuristics. Python steering mechanism misdescribed (plugins, not interventions)."
+  },
+  "principles": {
+    "claim_headings": {"status": "met", "evidence": "e.g. L510 '4초에서 시작해 여섯 번째 실패에서 멈추는 기본 일정', L638 '반복 시작에만 걸리는 검문'"},
+    "running_example": {"status": "partly met", "evidence": "Document summary service runs through every section (L25 onward), but its final handler drops structured_output_model (L781) and the example is redefined several times (L407, L542, L604, L760)."},
+    "mechanism_design_code_example": {"status": "met", "evidence": "Retry: mechanism L508, schedule table L514, defaults L525, subclass code L535, wait arithmetic L549."},
+    "facts_said_once": {"status": "not met", "evidence": "Langfuse comparison at L15, L36 and L862; HumanInTheLoop classifier flow at L806-812 and again L882; concurrency mode/idempotency token at L752-754 and again L884; SDK error propagation at L798 and L884."},
+    "numbers_with_scope_unit": {"status": "met", "evidence": "Python max_delay 128 s vs TS maxMs 240000 ms (L529); retry wait sum 4+8+16+32+64 s (L523); illustrative tables labelled (L70, L642)."},
+    "nothing_invented": {"status": "partly met", "evidence": "Writer examples are labelled, but L489 (Python steering as intervention handler), L830 (principal attributed to HITL) and L882 (approval_gate as the official HITL path) are not in the sources."},
+    "own_assessment_at_end": {"status": "met", "evidence": "L888 '이 글의 판단으로는, 단계가 대여섯 개를 넘지 않고 ...'"},
+    "length_fitted": {"status": "partly met", "evidence": "~58K chars, 14 H2 sections; repetition (see facts_said_once) rather than difficulty drives the length."},
+    "type_specific_shape": {"status": "met", "evidence": "Opens with TL;DR (L11) and the problem (L17); architecture/loop at L40 before configuration; closes with when to choose and failure modes (L860-888)."},
+    "korean_style": {"status": "partly met", "evidence": "Natural overall; Korean '~한다' comments inside code (L543, L605, L610, L680); repeated '눈여겨볼' framing (L96, L794)."}
+  },
+  "claims": {
+    "checked": 15,
+    "numbers": 9,
+    "supported": 13,
+    "unsupported": 0,
+    "wrong": 2,
+    "unverifiable": 0,
+    "sampling": "Paragraph blocks (prose, tables, lists; front matter, headings and code excluded) numbered from the body; blocks 3, 6, 9, ... sampled; claims drawn from sampled blocks.",
+    "examples": [
+      {"line": 141, "claim": "HookOrder.SDK_FIRST (-100), DEFAULT (0), SDK_LAST (100); within a group Before keeps registration order, After reverses", "verdict": "supported", "source": "hooks: 'HookOrder.SDK_FIRST (-100) ... SDK_LAST (100)'; 'Within the same order group, Before events preserve registration order and After events reverse it.'"},
+      {"line": 198, "claim": "AfterToolCallEvent.retry=True discards the result and re-invokes with the same tool_use_id; only the final attempt's ToolResultEvent is emitted", "verdict": "supported", "source": "hooks: 'the tool executor discards the current result and invokes the tool again with the same tool_use_id ... Only the final attempt's ToolResultEvent is emitted'"},
+      {"line": 228, "claim": "Input middleware routes calls with projected_input_tokens > 50,000 to a larger-context model via context.replace(), agent state unchanged", "verdict": "supported", "source": "middleware: route_by_size example '(context.projected_input_tokens or 0) > 50_000'; 'without touching agent state'"},
+      {"line": 280, "claim": "retry_on_throttle: at most 3 attempts with 1 s then 2 s waits; the default strategy runs outside the middleware chain so both stack", "verdict": "supported", "source": "middleware: 'for attempt in range(3) ... asyncio.sleep(2 ** attempt)'; 'the strategy runs outside the middleware chain, so each of its retries runs your middleware again'"},
+      {"line": 384, "claim": "Text-only turn triggers one forced retry with the tool required; Python adds 'You must format the previous response as structured output.'; call-level structured_output_prompt beats agent-level", "verdict": "supported", "source": "structured-output-behavior: 'Strands then retries once with the structured output tool required ... A value passed to a call takes precedence over the agent's value.'"},
+      {"line": 392, "claim": "Each failed validation call and each invalid forced retry counts one attempt; at the limit the call stops before the next model call with limit_structured_output_attempts and no structured output", "verdict": "supported", "source": "structured-output-behavior 'Limit attempts' section"},
+      {"line": 508, "claim": "Default strategy retries only ModelThrottledException (TS ModelThrottledError); others propagate immediately", "verdict": "supported", "source": "retry-strategies: 'Default retry strategies handle throttling errors ... Other exceptions propagate immediately without retry.'"},
+      {"line": 523, "claim": "Under persistent throttling a request waits 4+8+16+32+64 s (just over 2 minutes) before the exception", "verdict": "supported", "source": "retry-strategies: 'Attempt 1 ... wait 4s ... Attempt 5: fails → wait 64s; Attempt 6: fails → exception raised'"},
+      {"line": 529, "claim": "TS DefaultModelRetryStrategy maxAttempts default 6 (>=1), backoff default new ExponentialBackoff({ baseMs: 4000, maxMs: 240000 }); Python max_delay 128 s", "verdict": "supported", "source": "retry-strategies parameter tables"},
+      {"line": 616, "claim": "Proactive compression is best-effort (reduce() throwing/returning false is swallowed); count_tokens uses tiktoken cl100k_base, else chars/4 for text and chars/2 for JSON", "verdict": "supported", "source": "conversation-management: 'Proactive compression is best-effort only ...'; strands.models.model API: 'Uses tiktoken's cl100k_base encoding when available, otherwise ... characters / 4 for text, characters / 2 for JSON'"},
+      {"line": 636, "claim": "Cached tokens count in full toward total_tokens; the limit caps tokens, not cost", "verdict": "supported", "source": "agent-loop: 'cached tokens still count toward the total-token limit'; 'The limit caps tokens, not cost.'"},
+      {"line": 662, "claim": "Limits example turns 5, output_tokens 2000, total_tokens 10000; deadline via threading.Timer setting a threading.Event passed as cancel_signal", "verdict": "supported", "source": "lifecycle-controls: same limits dict and 'deadline = threading.Timer(30.0, cancel_signal.set)'"},
+      {"line": 852, "claim": "pass^k is the probability of k consecutive passes; AWS blog says it matters most for customer-facing agents; 75% per trial gives 0.75^3 ≈ 0.42", "verdict": "supported", "source": "AWS ML blog: 'For customer-facing agents, pass^k matters most. An agent with a 75 percent per-trial success rate has only a 42 percent chance of passing three consecutive trials (0.75³).'"},
+      {"line": 489, "claim": "Steering handlers run on top of the intervention layer, evaluated in registration order with the same short-circuit rule (stated generally, Python included)", "verdict": "wrong", "source": "steering: 'in Python, steering handlers are plugins; in TypeScript, they build on the interventions framework' (Python example attaches with plugins=[handler])"},
+      {"line": 878, "claim": "Provider table row 'llama.cpp | — | — | 표시됨'", "verdict": "wrong", "source": "model-providers Supported Providers table: 'llama.cpp ✅ ❌' (Python supported, TypeScript not)"}
+    ]
+  },
+  "claims_outside_sample": [
+    {"line": 830, "verdict": "wrong", "note": "principal_resolver belongs to CedarAuthorization (both SDKs), not HumanInTheLoop; alice is prompted because Cedar permits her delete, not because HITL routes approval per principal."},
+    {"line": 882, "verdict": "wrong", "note": "'앞서 만든 approval_gate 승인 단계가 바로 이 공식 경로에 해당' - approval_gate is the middleware context.interrupt example, not the HumanInTheLoop handler."},
+    {"line": 496, "verdict": "unsupported", "note": "No-retry-cap statement exists for interventions' after_model_call Guide; the steering page does not state it."},
+    {"line": 208, "verdict": "misleading", "note": "Skipped BeforeModelCallEvent/AfterModelCallEvent apply to the deprecated Agent.structured_output() methods, not to structured_output_model calls; only clarified at L435."}
+  ],
+  "checklist": {
+    "repeated": 3,
+    "avoided": 1,
+    "na": 1,
+    "repeated_ids": ["shared-agent-throw-scope", "shared-agent-history-leak", "result-fields-incomplete"],
+    "details": [
+      {"id": "loop-diagram-remote", "status": "avoided", "evidence": "No image links at all; the loop is an ASCII block (L50-64). No remote docs-host image."},
+      {"id": "shared-agent-throw-scope", "status": "repeated", "evidence": "L752 '에이전트 하나를 여러 요청이 나눠 쓰면 동시성 가드에 걸립니다 ... 기본 THROW 모드에서 공유 인스턴스를 쓰는 코드는 예외를 잡는 분기를 따로 둬야 합니다' - not tied to invoke_async; no mention that sync agent(...) in an async handler blocks/serializes instead of raising."},
+      {"id": "shared-agent-history-leak", "status": "repeated", "evidence": "L756 says per-request agents keep '대화 기록도 요청끼리 섞이지 않습니다' but never recommends invoke_async, and the post's own handle_request (L405) uses a module-level shared Agent()."},
+      {"id": "result-fields-incomplete", "status": "repeated", "evidence": "No result.metrics.get_summary() anywhere; L846 mentions metrics only in prose. stop_reason is shown (L413, L730)."},
+      {"id": "multi-agent-subject", "status": "n/a", "evidence": "Post has no multi-agent section or the execution-unit sentence."}
+    ]
+  },
+  "extras": {
+    "architecture_first_line": 40,
+    "architecture_note": "Loop structure and diagram at L40-66, before any configuration; hooks internals L110.",
+    "sources_total": 22,
+    "sources_non_official": 7,
+    "non_official_share": 0.32,
+    "non_official_list": ["Langfuse", "AWS ML blog deep dive", "AWS Open Source blog", "dev.to DEV332", "Medium (Posoldova)", "AWS IBM/Red Hat blog (Instana)", "AWS ML blog evaluation blueprint"],
+    "opens_with_problem": true,
+    "closes_with_when_to_choose_and_failure_modes": true,
+    "runnable_code": {
+      "verdict": "partly runnable",
+      "method": "strands-agents 1.63.0 in a temp venv; imports/signatures checked; running-example handler run with a fake Model (no paid calls).",
+      "passes": ["All imports used by the post resolve (strands.middleware, strands.types._events.ToolResultEvent, ModelRetryStrategy, ToolContext, SlidingWindowConversationManager with pin_first/proactive_compression, Agent aux_model/interventions/limits/cancel_signal)", "build_summary_agent() constructs; @tool(context=True) builds; CustomRetry hook registers"],
+      "failures": [
+        "serve_summary_request (L781-785) and summarize_within_budget (L674-678) omit structured_output_model=DocumentSummary, so result.structured_output is always None: fake-model run returned SummaryReply(outcome='ok', summary=None) with no structured-output tool offered",
+        "HITL snippet (L820-827) uses HumanInTheLoop without 'from strands.vended_interventions.hitl import HumanInTheLoop' -> NameError",
+        "handle_request (L405) uses a module-level shared Agent(), contradicting the per-request pattern the post recommends",
+        "Middleware snippets L277 and L308 call agent.add_middleware on an undefined agent"
+      ]
+    }
+  },
+  "top_issues": [
+    "Running example is broken where it matters: the final serve_summary_request never passes structured_output_model, so a successful request always returns summary=None (reproduced); the HITL snippet lacks its import.",
+    "Python steering is described as an intervention-layer handler (L489, L496-498); the docs say Python steering handlers are plugins, and the 'Confirm vs Interrupt naming differs' explanation follows from that error. Cedar's principal_resolver is also credited to HumanInTheLoop (L830).",
+    "Human-fix checks repeated: shared-agent warning not scoped to invoke_async / blocking sync calls, no invoke_async recommendation (and a module-level shared agent in handle_request), and no result.metrics.get_summary(); facts restated across sections (Langfuse x3, HITL, concurrency)."
+  ]
+}

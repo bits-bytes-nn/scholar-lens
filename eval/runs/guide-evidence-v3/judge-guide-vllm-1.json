@@ -1,0 +1,103 @@
+{
+  "item": "guide-vllm",
+  "post": "/tmp/eval-guide/guide-vllm-v3.md",
+  "judge_run": 1,
+  "scores": {"A": 6.0, "B": 7.5, "C": 6.5, "D": 8.0, "E": 7.0, "F": 6.0, "T1": 6.5, "T2": 8.0, "T3": 8.5},
+  "score_evidence": {
+    "A": "Two heading-only H2 sections duplicated by the next H2: L299 '## 하드웨어 백엔드별 설치: CUDA, ROCm, TPU, Apple Silicon, CPU' followed directly by L302 '## 하드웨어 백엔드마다 다른 설치 경로와 따로 받는 커널'; L610 '## vLLM 선택 기준: ...' followed directly by L613 '## 동시 요청이 많을수록 커지는 vLLM의 이점과 그 한계'. Front matter, $$ math, 40 paired fences and real tables are fine.",
+    "B": "Formulaic frames repeat: L83 '숫자로 따라가 보면 이렇습니다.', L172 '숫자를 넣어 보면 절감 규모를 가늠할 수 있습니다.', L268 '구체적인 숫자로 따라가 보면 동작이 잘 보입니다.' Terminology drifts between '반복' (L248-276) and 'iteration' (L490 '한 iteration에', L517 'iteration당'). Repeated '서드파티인 X 글은' attribution (L51, L65, L109, L137, L139) reads mechanically. Register is consistent '입니다'.",
+    "C": "Running example used before it is introduced: L133 '이 글의 실행 예시 모델도' and L193 '실행 예시의 채팅 서버에서는' come before the model is first named (L172) and before any server is started (L344/L462). L268 '토큰 상한을 앞서 든 예시값으로 두고' refers to an example value never given (L256 defines the flag without a value). L115 '앞서 소개한 PagedAttention 논문' although the paper was never introduced. The OS analogy is restated verbatim at L49 and L103 ('블록은 페이지, 토큰은 바이트, 시퀀스는 프로세스').",
+    "D": "Good help where it is hard: block-wise attention formula with symbol glossary and B=4 worked example (L79-83), block-table table (L121-127), CoW trace (L174-181), chunked-prefill trace (L270-276). Some padding on version disputes (L293 third-party disagreement on default preemption mode).",
+    "E": "Useful tables/code/figures, but L634 image is the blog's perf_a100_n3_light.png (three parallel outputs, A100 only) while the alt text and L632 say '요청당 출력 1개일 때 A100과 A10G'. Three images hot-link the vllm.ai host (L107, L170, L634).",
+    "F": "Two wrong claims in the sample (figure caption L632/L634; stale metric name vllm:gpu_cache_usage_perc L540/L554, renamed vllm:kv_cache_usage_perc in current vLLM). L499 current-docs cell '기존 50%가 다른 vLLM 인스턴스의 몫이면 ... 이 인스턴스의 한도는 GPU 메모리의 90%' is the writer's inference presented as a docs table cell. L15/L260 '청크 단위 프리필을 켜면' implies off by default; SchedulerConfig.enable_chunked_prefill defaults to True.",
+    "T1": "Install commands match docs and would run. But: no request to the running server is ever shown (no curl or OpenAI-client call, though L453 heading promises 'OpenAI 클라이언트가 그대로 붙는'); the config-file subsection (L482-486) shows neither a YAML example nor the --config flag; offline script (L426-439) never prints outputs; metrics script watches a metric current vLLM no longer emits; HPA snippet L599 drops the keda: parent the docs nest it under.",
+    "T2": "Covers the sources' main topics in a sensible order (problem, PagedAttention, allocation, sharing, architecture, scheduler, install, offline, serve, tuning, metrics, autoscaling, choice). Some padding from v0.6.4/v0.7.3 material (L240, L293, L527).",
+    "T3": "Strong internals (kernel fusion, block pool, slot mapping, prefix-cache eviction, TP broadcast, AsyncLLM/EngineCore split) and system fit (metrics, KEDA, scale-to-zero). Old-version material is labelled by version. Failure modes are partly covered (preemption, batch-1, NUMA OOM, FP8 scaling); no startup/OOM troubleshooting."
+  },
+  "principles": {
+    "claim_headings": {"status": "met", "evidence": "L17, L43, L97, L242 are claim-bearing noun phrases; minor topic headings L644 '선택 기준'."},
+    "running_example": {"status": "partly met", "evidence": "Qwen2.5-1.5B-Instruct chat server threads through L172-L654, but it is referenced before introduction (L133, L193), and no request to it is ever shown."},
+    "mechanism_order": {"status": "met", "evidence": "L67-95: problem (contiguous assumption) -> design (block-wise sum, fused kernels, why) -> formula L76 -> worked example L83."},
+    "facts_once": {"status": "not met", "evidence": "60-80% at L13/L35; 24x at L13/L39/L632; <4% at L13/L131; 55%/2.2x at L13/L189; OS analogy L49/L103; engine args go to LLM ctor and vllm serve at L445/L467/L490; generation_config.json at L451/L469."},
+    "numbers_scoped": {"status": "partly met", "evidence": "Most numbers carry model/setting/measurer (L625-630 table). L499 derived cell presented as docs; L632 figure scope wrong."},
+    "nothing_invented": {"status": "partly met", "evidence": "Illustrative diagrams are labelled ('설명용', L51, L119, L172, L268), but L634 caption misdescribes the figure and L499 adds an example the docs do not give."},
+    "own_assessment_at_end": {"status": "met", "evidence": "L646 '이 글의 판단으로는 다음 조건에서 vLLM이 맞습니다.' plus L652-654."},
+    "length_fitted": {"status": "partly met", "evidence": "680 lines; internals justify length, but version-history asides (L240, L293, L527, L567) add bulk."},
+    "type_specific_shape": {"status": "met", "evidence": "Opens with TL;DR and the problem (L11-L41), architecture/internals L43-L297 before install L299, closes with when to choose and limits L610-L654."},
+    "korean_style": {"status": "partly met", "evidence": "Repeated '숫자로 따라가 보면' frames (L83, L172, L268), '반복'/'iteration' mix (L490, L517)."}
+  },
+  "claims": {
+    "sampling": "175 non-heading body blocks (prose, tables, code, images) numbered from the TL;DR; claims drawn from blocks 1, 4, 28, 43, 55, 70, 85, 91, 94, 97, 118, 127, 136, 148, 157, 166.",
+    "checked": 15,
+    "supported": 13,
+    "unsupported": 0,
+    "wrong": 2,
+    "unverifiable": 0,
+    "examples": [
+      {"line": 13, "claim": "existing systems waste 60-80% of KV memory; PagedAttention waste under 4%", "status": "supported", "source": "blog.vllm.ai 2023-06-20: 'existing systems waste 60% – 80% of memory due to fragmentation and over-reservation' ... 'a mere waste of under 4%'"},
+      {"line": 26, "claim": "OPT-13B KV per token = 2 x 5120 x 40 x 2 bytes ~ 800 KB", "status": "supported", "source": "arXiv 2309.06180 §3: 'the KV cache of a single token demands 800 KB of space, calculated as 2 (key and value vectors) × 5120 (hidden state size) × 40 (number of layers) × 2 (bytes per FP16)'"},
+      {"line": 103, "claim": "block table entry holds the physical block and number of filled positions", "status": "supported", "source": "paper §4.3: 'Each block table entry records the corresponding physical blocks of a logical block and the number of filled positions.'"},
+      {"line": 152, "claim": "default block size 16 (paper-time default)", "status": "supported", "source": "paper §7.2: 'Accordingly, vLLM sets its default block size as 16.'"},
+      {"line": 189, "claim": "memory sharing cuts parallel-sampling/beam-search memory up to 55%, throughput up to 2.2x", "status": "supported", "source": "blog: 'cutting their memory usage by up to 55%. This can translate into up to 2.2x improvement in throughput.'"},
+      {"line": 240, "claim": "v0.6.4: mp if pp*tp <= GPUs, else ray if installed, else fail; TPU/HPU Ray only", "status": "supported", "source": "v0.6.4 arg_utils.py --distributed-executor-backend help: '... Otherwise, this will default to \"ray\" if Ray is installed and fail otherwise. Note that tpu and hpu only support Ray for distributed inference.'"},
+      {"line": 289, "claim": "swap space bounded by GPU KV cache size", "status": "supported", "source": "paper §4.5: 'the swap space on the CPU RAM is bounded by the GPU memory allocated for the KV cache.'"},
+      {"line": 311, "claim": "ROCm wheel: Python 3.12, ROCm 7.0, glibc >= 2.35", "status": "supported", "source": "quickstart.md: 'It currently supports Python 3.12, ROCm 7.0 and glibc >= 2.35.' (note: installation/gpu ROCm page now lists rocm100/ROCm 10.0 as the nightly default and rocm700 for 0.14.0-0.18.0)"},
+      {"line": 322, "claim": "uv venv --python 3.12 --seed; uv pip install vllm --torch-backend=auto; vllm download-kernels", "status": "supported", "source": "quickstart.md L25-28; gpu.cuda.inc.md L25-26; vllm/entrypoints/cli/download_kernels.py exists"},
+      {"line": 424, "claim": "quickstart sampling temperature 0.8, top_p 0.95", "status": "supported", "source": "quickstart.md: 'The sampling temperature is set to 0.8 and the nucleus sampling probability is set to 0.95.'"},
+      {"line": 465, "claim": "server defaults to localhost:8000; one model at a time; --host/--port", "status": "supported", "source": "quickstart.md: 'By default, it starts the server at http://localhost:8000 ... The server currently hosts one model at a time'"},
+      {"line": 494, "claim": "--gpu-memory-utilization is per-instance; unset default 1.0 with extensible KV cache, else 0.92; v0.6.4 global limit (50% used, 0.9 -> 40%)", "status": "supported", "source": "vllm/config/cache.py: 'This is a per-instance limit ... If unspecified, 1.0 with the extensible KV cache (sized from measured memory) and 0.92 otherwise'; v0.6.4 arg_utils: 'only 40% of the gpu memory will be allocated to the model executor'"},
+      {"line": 540, "claim": "watch vllm:gpu_cache_usage_perc (and vllm:time_per_output_token_seconds) on /metrics; script L554 filters for it", "status": "wrong", "source": "current vllm/v1/metrics/loggers.py and docs/design/metrics.md expose vllm:kv_cache_usage_perc and vllm:request_time_per_output_token_seconds; no gpu_cache_usage_perc. Name came from GuideLLM issue #457 / forum, not current docs."},
+      {"line": 575, "claim": "KEDA example: scale up when queue > 5, poll every 15 s, 360 s before scale-down; fallback 3 failures -> 2 replicas", "status": "supported", "source": "production-stack autoscaling-keda.rst: 'Scale up when the queue exceeds 5 pending requests / Check metrics every 15 seconds / Wait 360 seconds before scaling down'; fallback failureThreshold: 3, replicas: 2"},
+      {"line": 634, "claim": "figure shows one output per request on A100 and A10G", "status": "wrong", "source": "blog: perf_a100_n3_light.png is captioned 'Serving throughput when each request asks for three parallel output completions' and is the A100 panel only; the one-output figures are perf_a100_n1/perf_a10g_n1."}
+    ],
+    "other_findings_outside_sample": [
+      {"line": 499, "status": "unsupported", "note": "current-docs cell example '이 인스턴스의 한도는 GPU 메모리의 90%' is not in the docs; docs only say per-instance and give a two-instances-at-0.5 example."},
+      {"line": 260, "status": "misleading", "note": "'청크 단위 프리필 설정을 켜면' though enable_chunked_prefill defaults to True in vllm/config/scheduler.py."},
+      {"line": 567, "status": "stale", "note": "GuideLLM #457 is now closed with milestone v1.0.0; post says milestone v0.9.0 as of 2026-06-08 (date-scoped)."}
+    ]
+  },
+  "checklist": {
+    "note": "guide-vllm has fixes: []; the notes' generic guide checks were applied",
+    "repeated": 1,
+    "avoided": 5,
+    "na": 0,
+    "repeated_ids": ["dangling-cross-references"],
+    "details": [
+      {"id": "dangling-cross-references", "status": "repeated", "evidence": "L268 '토큰 상한을 앞서 든 예시값으로 두고' (no earlier value); L115 '앞서 소개한 PagedAttention 논문' (never introduced); L193 '실행 예시의 채팅 서버에서는' before any server exists; no numbered chapter references."},
+      {"id": "tag-remnant", "status": "avoided", "evidence": "no </path>, </name> or other closing-tag remnants"},
+      {"id": "entity-leak", "status": "avoided", "evidence": "no &gt;/&lt;/&amp; in body; &#124; only in Sources link titles (L667-L680), where it renders as |"},
+      {"id": "unclosed-code-fence", "status": "avoided", "evidence": "40 fence lines, all paired"},
+      {"id": "stale-third-party-cli-flags", "status": "avoided", "evidence": "GuideLLM flags labelled unimplemented (L567); v0.6.4/v0.7.3 flags labelled by version (L240, L293, L527). Separate stale metric name counted under claims."},
+      {"id": "install-usage-centric", "status": "avoided", "evidence": "install starts at L299 after ~280 lines of internals (L17-L297)"}
+    ]
+  },
+  "extras": {
+    "architecture_first_line": 43,
+    "architecture_note": "PagedAttention internals from L43; engine process architecture (AsyncLLM/EngineCore/workers) at L205; problem framing L17",
+    "sources_total": 21,
+    "sources_unique": 19,
+    "sources_duplicates": "Quickstart twice (L661, L679); 2023 blog twice (L667 vllm.ai/blog, L680 blog.vllm.ai)",
+    "non_official_share": "7/21 (33%) third-party (Introl, Runpod, DZone, Varun Kruthiventi, LLM Learning, GuideLLM issue, vLLM forum); 10/21 (48%) counting the paper and the two vLLM blog entries as non-docs",
+    "opens_with_problem": true,
+    "closes_with_when_to_choose": true,
+    "failure_modes_covered": "partly: preemption (L278-297), batch-1 gather overhead (L642), NUMA OOM exitcode 9 (L523), FP8 scaling (L504), Docker NUMA warning (L525), multi-tenant hash risk (L203); no startup OOM / model-len error troubleshooting",
+    "remote_images": ["L107 https://vllm.ai/blog-assets/figures/annimation1.gif", "L170 annimation3.gif", "L634 perf_a100_n3_light.png"]
+  },
+  "runnable_code": {
+    "verdict": "mostly runnable as pasted; not end-to-end",
+    "checked_without_gpu": "Python blocks parse (ast); flags verified in vLLM main source: --attention-backend, --prefix-caching-hash-algo, --max-model-len auto, --kv-cache-dtype auto, --gpu-memory-utilization; download-kernels CLI exists; install/build/docker commands match docs.",
+    "issues": [
+      "No client request anywhere: the OpenAI-compatible server is never queried (no curl /v1/chat/completions or OpenAI client), so the running example stops at server start.",
+      "Metrics script (L548-563) filters for vllm:gpu_cache_usage_perc, which current vLLM no longer emits (vllm:kv_cache_usage_perc); it would print only two lines.",
+      "HPA behavior snippet (L598-608) starts at advanced: without the keda: parent the docs nest it under; keepalive trigger (L587-594) is a bare list item without keda.triggers.",
+      "Config-file subsection (L482-486) gives no YAML and never names vllm serve --config.",
+      "Offline script (L426-439) runs but never prints outputs (quickstart iterates output.outputs[0].text).",
+      "CPU docker run (L362-367) and ROCm --attention-backend example are fine per docs; ROCm 7.0 note follows the quickstart while the GPU install page now defaults to ROCm 10.0."
+    ]
+  },
+  "top_issues": [
+    "Two empty duplicate H2 sections (L299/L302, L610/L613).",
+    "Wrong figure: L634 uses the three-output A100 chart but the caption and L632 say one output on A100 and A10G; stale metric vllm:gpu_cache_usage_perc in the table and the monitoring script.",
+    "Running example incomplete: referenced before introduced (L133, L193), no request to the server, config section without --config/YAML; facts repeated (60-80%, 24x, <4%, 55%, OS analogy)."
+  ]
+}

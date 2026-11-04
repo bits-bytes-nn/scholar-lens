@@ -1161,6 +1161,46 @@ def close_quoted_fences(markdown: str) -> str:
     return "\n".join(lines)
 
 
+_HEADING_LINE = re.compile(r"^(#{1,6})[ \t]+\S")
+_FENCE_LINE = re.compile(r"^[ \t]{0,3}(`{3,}|~{3,})")
+
+
+def drop_empty_headings(markdown: str) -> str:
+    """``markdown`` without headings that head nothing: only blank lines
+    follow before a heading of the same or a higher level, or the end (a
+    section whose image or markers were removed, a duplicate left in front
+    of the real heading). Lines inside code fences are never headings."""
+    lines = markdown.split("\n")
+    level: list[int] = []  # heading level of each line, 0 for other lines
+    fence = ""
+    for line in lines:
+        if fence:
+            level.append(0)
+            if line.strip().startswith(fence):
+                fence = ""
+            continue
+        if m := _FENCE_LINE.match(line):
+            fence = m.group(1)
+            level.append(-1)  # content
+            continue
+        h = _HEADING_LINE.match(line)
+        level.append(len(h.group(1)) if h else (-1 if line.strip() else 0))
+    keep = [True] * len(lines)
+    for i, lv in enumerate(level):
+        if lv <= 0:
+            continue
+        nxt = next((j for j in range(i + 1, len(lines)) if level[j] != 0), None)
+        if nxt is None or 0 < level[nxt] <= lv:
+            # The heading and the blank lines after it.
+            for j in range(i, nxt if nxt is not None else len(lines)):
+                keep[j] = False
+    if all(keep):
+        return markdown
+    out = "\n".join(line for line, k in zip(lines, keep, strict=True) if k)
+    out = re.sub(r"\n{3,}", "\n\n", out)
+    return out.rstrip("\n") + "\n" if markdown.endswith("\n") else out.rstrip("\n")
+
+
 def publish_body(markdown: str, *, warn: bool = True) -> str:
     """The publisher's body pipeline, in one place: an open fence closed
     (a quoted one where its blockquote ends),
@@ -1174,4 +1214,4 @@ def publish_body(markdown: str, *, warn: bool = True) -> str:
         normalize_math(limit_callouts(_bare_fence_info(fenced))),
         warn=warn,
     )
-    return _wrap_liquid(linted)
+    return _wrap_liquid(drop_empty_headings(linted))

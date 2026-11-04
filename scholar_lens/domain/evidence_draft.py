@@ -12,6 +12,7 @@ import re
 from collections.abc import Iterable, Mapping, Sequence
 
 from .evidence import Evidence, EvidenceLedger
+from .markdown.lint import drop_empty_headings
 from .quality_gate import rule_issues
 from .validation import unsourced_numbers
 
@@ -87,18 +88,6 @@ def table_rows(markdown: str) -> list[str]:
 def claim_units(markdown: str) -> list[str]:
     """What a claim check judges: the prose sentences, then the table rows."""
     return prose_sentences(markdown) + table_rows(markdown)
-
-
-_EMPTY_HEADING = re.compile(r"^(#{2,4}) [^\n]+\n\s*\n?(?=#{2,4} |\Z)", re.M)
-
-
-def drop_empty_headings(markdown: str) -> str:
-    """The draft without headings that head nothing (a duplicate left in
-    front of the real one, a heading at the very end)."""
-    out = markdown
-    while (new := _EMPTY_HEADING.sub("", out)) != out:
-        out = new
-    return out
 
 
 def cited_ids(sentence: str) -> list[str]:

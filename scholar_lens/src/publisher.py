@@ -36,7 +36,7 @@ from ..adapters.http.rate_limit import ARXIV_RATE_LIMITER, arxiv_retry_after_sec
 from ..adapters.http.url_guard import UnsafeUrlError, assert_url_is_public
 from ..domain.conventions import BlogPost, PostConventions, load_local_conventions
 from ..domain.markdown.front_matter import split_front_matter_text
-from ..domain.markdown.lint import publish_body, writing_notes
+from ..domain.markdown.lint import drop_empty_headings, publish_body, writing_notes
 from ..domain.markdown.math import IMAGE, segments
 from ..domain.validation import PostValidationError, validate_post
 from .blog_sync import BlogBranchSync
@@ -457,6 +457,8 @@ class Publisher:
         )
         try:
             markdown = await asyncio.to_thread(localizer.localize, markdown)
+            # An image the localizer dropped can leave its heading empty.
+            markdown = drop_empty_headings(markdown)
         except PostAssetError as e:
             # The finished text must not be lost with its figures.
             rejected = self._save_rejected(markdown, request, [f"- image: {e}"])

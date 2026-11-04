@@ -622,3 +622,15 @@ def test_a_reader_that_skips_a_required_figure_is_asked_once_more() -> None:
     )
     assert [e.kind for e in items] == ["figure"]
     assert len(prompts) == 2 and "['figure'] is still missing" in prompts[1]
+
+
+def test_empty_headings_respect_levels_and_code() -> None:
+    from scholar_lens.domain.markdown.lint import drop_empty_headings
+
+    md = (
+        "## A\n\n### A1\n\n본문입니다.\n\n## B\n\n\n## C\n\n```md\n## not a heading\n```\n"
+        "\n## D\n"
+    )
+    assert drop_empty_headings(md) == (
+        "## A\n\n### A1\n\n본문입니다.\n\n## C\n\n```md\n## not a heading\n```\n"
+    )
