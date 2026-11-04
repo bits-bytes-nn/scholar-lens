@@ -1,0 +1,89 @@
+{
+  "item": "guide-rayserve",
+  "post": "/tmp/eval-guide/guide-rayserve-v5.md",
+  "judge_run": 1,
+  "scores": {"A": 8.5, "B": 8.0, "C": 8.0, "D": 8.5, "E": 8.0, "F": 6.0, "T1": 7.5, "T2": 8.5, "T3": 8.5},
+  "deductions": {
+    "A": ["L3: English title on a Korean post; otherwise headings, tables, fences, $$ math and front matter are clean (use_math true with $$ at L194-207)"],
+    "B": ["'수 있습니다' 40 times outside code ('할 수 있습니다' 9), e.g. L64 '수평 확장이 됩니다', L1060", "Passives hiding who recommends: L903, L985 '권장됩니다', L1002 '방식이 권장됩니다', L1068 '구성이 권장됩니다' -> '공식 문서는 …을 권장합니다'", "L148 noun frame '레플리카 선택이 … 일어난다는 구조입니다' -> '레플리카는 프록시가 아니라 DeploymentHandle 안에서 고릅니다'", "L52 '즉 추론 엔진을 대체하지 않고, 엔진들을 묶어 확장하는 계층입니다' restates the previous sentence"],
+    "C": ["L767 '실행 예제는 num_replicas=\"auto\"로 오토스케일링하므로' contradicts the running example's code, which uses num_replicas=2 (L423, L737); auto appears only in L333 YAML and L924 manifest", "L797-819: serve_config.yaml sets user_config on Translator before the post adds reconfigure (L833); deploying it with text_ml.py as built at L540 fails (verified)"],
+    "D": ["Strong: power-of-two worked probabilities L196-210, long-poll 2->3 replicas L156, controller recovery table L164-170, batch-size arithmetic L767 and L773, max_ongoing ratio L325", "Mild padding: L105 and L453-455 re-explain decorator/bind roles already given in L58-68"],
+    "E": ["No architecture image although the docs provide one (architecture-2.0.svg); ASCII boxes at L35-46, L135-146, L307-315 stand in (labelled as the writer's own)", "L98-103 table restates the L58 paragraph almost cell for cell"],
+    "F": ["L710 (sampled): 'keep_alive_timeout_s … 기본값은 5초입니다' is wrong for Serve: HTTPOptionsSchema default is 90 ('Defaults to 90 seconds', ray 2.60.0; DEFAULT_UVICORN_KEEP_ALIVE_TIMEOUT_S = 90). The 5 s in http-guide is Uvicorn's own default, not the Serve key's", "L248 (outside sample): '사용자 정의 RequestRouter 서브클래스는 RequestRouterConfig의 import_path로 지정' - RequestRouterConfig has no import_path field; the field is request_router_class (L259 itself uses it)"]
+  },
+  "principles": {
+    "claim_headings": {"status": "met", "evidence": "L56 '디플로이먼트·레플리카·애플리케이션·인그레스의 4층 모델', L268 '진행 중 요청 수를 목표값에 맞추는 2단 오토스케일러', L1054 '서빙 primitive로서의 강점과 ML 플랫폼으로서의 공백'; a few topic subheadings (L1072 '상황별 선택', L1081 '실패 모드 점검')"},
+    "running_example": {"status": "met", "evidence": "text_ml:app (Summarizer->Translator) from L33 through routing L190/L266, autoscaling L325-342, cancellation L699, batching L729/L767, config L797, RayService L909, status L991, closing L1092"},
+    "mechanism_design_code_example": {"status": "met", "evidence": "routing: assumption L184 -> power of two L194 -> numeric example L196-210 -> KV-cache break L216-218 -> prefix tree L222-236 -> config L252; autoscaling L270-342"},
+    "facts_said_once": {"status": "partly met", "evidence": "model-specific optimization vs TFServing/TorchServe/ONNXRuntime/PyTorch JIT at L52 and again L1066; notebook->Kubernetes path L15, L54, L1060; definition L13, L19, L1056; framework list L13 and L31"},
+    "numbers_with_scope": {"status": "met", "evidence": "L242 model, 8x8xL4, RayTurbo for the 60%/40%; L150 'Ray 2.0.0 문서'; L290 'Ray 2.59.0 기준'; L299 2.32.0 default change"},
+    "nothing_invented": {"status": "partly met", "evidence": "writer's estimates labelled (L278 Little's law, L305 diagram, L943 '예시로'); but keep_alive default (L710) and RequestRouterConfig.import_path (L248) are wrong"},
+    "writer_assessment_at_end": {"status": "met", "evidence": "L1090 핵심 box and L1092 '이 글의 판단으로는 …'"},
+    "length_fitted": {"status": "met", "evidence": "~45k chars; time spent on routing, autoscaling and batching internals; framework table L488-494 kept short"},
+    "type_specific_shape": {"status": "met", "evidence": "TL;DR L11, problem L21-25, architecture L56/L107 before config L783; ends with choice table L1074 and failure modes L1081"},
+    "korean_style": {"status": "mostly met", "evidence": "consistent 입니다 register incl. table cells; few restatements (즉 3, 결국 1); heavy '수 있습니다' and some hidden-agent passives"}
+  },
+  "claims": {
+    "checked": 15, "supported": 14, "unsupported": 0, "wrong": 1, "unverifiable": 0,
+    "numbers": 8,
+    "sampling": "prose/table/code blocks of the body (headings excluded) numbered from the TL;DR; blocks 1, 4, 7, ... ; claims taken from sampled blocks, with the http_options table (block 134) and TL;DR block 2 taken next to sampled blocks 133 and 1 to reach 8 numeric claims",
+    "examples": [
+      {"line": 13, "claim": "default router picks two replicas at random and sends to the one with fewer queued requests; custom routers via request_router_config", "verdict": "supported", "source": "serve/architecture: 'Queries are sent to replicas using a power of two choices scheduling strategy'; Anyscale blog code request_router_config=dict(request_router_class=PrefixCacheAffinityRouter)"},
+      {"line": 15, "claim": "target_ongoing_requests default is 2 since Ray 2.32.0", "verdict": "supported", "source": "advanced-autoscaling: 'The default for target_ongoing_requests changed from 1.0 to 2.0 in Ray 2.32.0'"},
+      {"line": 131, "claim": "proxy_location default EveryNode (nodes with at least one replica); HeadOnly single head proxy; Disabled for handle-only calls", "verdict": "supported", "source": "production-guide/config 'EveryNode (default): Run a proxy on every node in the cluster that has at least one replica actor …'"},
+      {"line": 178, "claim": "draining proxy fails health checks so LB stops sending traffic, ongoing requests complete; /-/routes usable as node health check because Serve runs a proxy on every node", "verdict": "supported", "source": "production-guide/kubernetes env var list and 'Ray Serve runs HTTP proxy on every node, allowing you to use /-/routes as the endpoint for node health checks'"},
+      {"line": 242, "claim": "32B model: TTFT -60%, end-to-end throughput >40%; eight 8xL4 machines (64 GPUs) on Anyscale RayTurbo; similar trend on open-source Ray", "verdict": "supported", "source": "Anyscale blog 2025-09-15 'eight 8xL4 machines (64 GPUs total) on the Anyscale platform using RayTurbo. Similar trends were observed on open-source Ray'"},
+      {"line": 259, "claim": "request_router_class accepts a class or import-path string 'ray.serve.llm.request_router:PrefixCacheAffinityRouter'", "verdict": "supported", "source": "ray.serve.config RequestRouterConfig: request_router_class: Union[str, Callable]; import_module_and_attr accepts 'module:attr'; module ray/serve/llm/request_router.py defines PrefixCacheAffinityRouter (2.60.0)"},
+      {"line": 292, "claim": "num_replicas='auto' = max_ongoing_requests 5, target 2, min 1, max 100; manual autoscaling_config max_replicas default 1", "verdict": "supported", "source": "autoscaling-guide 'Setting num_replicas=\"auto\" is equivalent to … max_ongoing_requests: 5 … target_ongoing_requests: 2 min_replicas: 1 max_replicas: 100 … base default for max_replicas is 1'"},
+      {"line": 321, "claim": "set max_ongoing_requests ~20-50% above target_ongoing_requests; proxies respect it", "verdict": "supported", "source": "advanced-autoscaling 'maximum queue limit that proxies respect … Set max_ongoing_requests to ~20 to 50% higher than target_ongoing_requests'"},
+      {"line": 350, "claim": "custom policy returns (target_replicas, policy_state); float target rounded up; keep policies fast", "verdict": "supported", "source": "advanced-autoscaling 'If it returns a float, Ray Serve converts it to an integer replica count by rounding up' and 'Keep policy functions fast and lightweight'"},
+      {"line": 399, "claim": "external_scaler_enabled default False; no autoscaling_config on any deployment of that app; replica count kept across serve deploy", "verdict": "supported", "source": "ServeApplicationSchema.external_scaler_enabled default False (2.60.0); advanced-autoscaling 'you must not configure autoscaling_config on any deployment in that application' and 'the number of replicas you set through the external scaler API stays intact'"},
+      {"line": 453, "claim": "two replicas, 0.2 CPU and 0 GPU each; all parameters optional", "verdict": "supported", "source": "getting_started '@serve.deployment(num_replicas=2, ray_actor_options={\"num_cpus\": 0.2, \"num_gpus\": 0})' and 'All these parameters are optional'"},
+      {"line": 707, "claim": "http_options: host default 0.0.0.0 (must be 0.0.0.0 on Kubernetes), port 8000, request_timeout_s none with retry on another replica, keep_alive_timeout_s default 5 s", "verdict": "wrong", "source": "config page supports host/port/request_timeout_s; HTTPOptionsSchema.keep_alive_timeout_s default=90 'Defaults to 90 seconds' (ray 2.60.0); the http-guide's 5 s is Uvicorn's default, which Serve overrides"},
+      {"line": 729, "claim": "batch handler must be async def else TypeError; returned list length mismatch raises RayServeException", "verdict": "supported", "source": "ray/serve/batching.py: TypeError(\"Functions decorated with @serve.batch must be 'async def'\"); _validate_results raises RayServeException \"Batched function doesn't preserve batch size\""},
+      {"line": 767, "claim": "warning when max_ongoing_requests < max_batch_size x max_concurrent_batches; max_ongoing_requests 5 under auto", "verdict": "supported", "source": "batching.py _warn_if_max_batch_size_exceeds_max_ongoing_requests: 'the replica will never achieve the configured max_batch_size'; autoscaling-guide auto -> 5. Note: the premise that the running example uses auto contradicts L737 num_replicas=2"},
+      {"line": 1006, "claim": "only model_loading_config is required; log_engine_metrics defaults True and exports via Ray Prometheus port", "verdict": "supported", "source": "llm/user-guides/configuration 'Only model_loading_config is required. Every other field has a default' and 'log_engine_metrics bool True Export engine metrics through the Ray Prometheus port'"}
+    ]
+  },
+  "checklist": {
+    "repeated": 0, "avoided": 2, "na": 0, "repeated_ids": [],
+    "details": [
+      {"id": "arch-diagram-relative-link", "result": "avoided", "evidence": "no empty-text or ../_images links anywhere (only Sources links L1097-1118); but no architecture image either, only ASCII diagrams (L35-46, L135-146)"},
+      {"id": "proxy-env-ray-start-unsupported", "result": "avoided", "evidence": "L176-178 give only env var names, meanings and defaults; no claim about exporting before ray start or a specific process"}
+    ]
+  },
+  "extras": {
+    "architecture_first_line": 56,
+    "internals_first_line": 109,
+    "sources_total": 22,
+    "non_official_sources": 6,
+    "non_official_share": 0.27,
+    "non_official_list": ["DeepWiki", "Zread", "themutex substack", "Anyscale blog (vendor)", "GitHub RFC #53016", "TrueFoundry blog"],
+    "opens_with_problem": "TL;DR first (L11), problem at L17-25",
+    "closes_with_choice_and_failure_modes": true
+  },
+  "runnable_code": {
+    "env": "ray[serve] 2.60.0, transformers 5.22.1, torch 2.15.0, Python 3.12; real t5-small; private Ray head on a random port with its own temp dir, HTTP on a non-default port; cluster stopped afterwards",
+    "verdict": "running example runs as pasted; two side snippets have problems",
+    "passed": [
+      "minimal MyFirstDeployment L73-87 (assert passes)",
+      "serve_quickstart Translator L416-450 + handle call L476-482 -> 'Bonjour monde!'",
+      "composed text_ml.py (L416-450 + L505-535) + JSON POST client L548-556 -> French summary; POST 'Hello world!' -> 'Bonjour monde!'",
+      "Streamer/Caller L568-589 -> [0, 1, 2]",
+      "batched Translator L732-760 behind Summarizer -> 200 with translation",
+      "custom policy L353-363 + Translator with AutoscalingPolicy L369-393 (body elided with '...', filled) -> HEALTHY",
+      "FastAPI factory L638-662 with quickstart Translator -> 200 with query param",
+      "StreamingResponder L674-696 -> streamed '0','1','2'"
+    ],
+    "failed": [
+      "L797-819 serve_config.yaml: user_config on Translator with text_ml.py as built at L540 (no reconfigure yet) -> RuntimeError 'Deploying application … failed: Failed to update the deployments [Translator]'; works only after the L833 reconfigure is added",
+      "L603-628 FastAPI Translator: translate(self, text: str) is a query parameter, so the running example's requests.post(json=...) client returns 422 'loc: [query, text] Field required'; no matching client shown"
+    ],
+    "notes": ["L474 output 'Bonjour Monde!' (copied from docs) is actually 'Bonjour monde!' (trivial)"]
+  },
+  "top_issues": [
+    "L710 keep_alive_timeout_s default given as 5 s; Serve's default is 90 s (5 s is Uvicorn's own default)",
+    "L797 serve_config.yaml sets user_config before Translator has reconfigure, so deploying it at that point fails; L767 also claims the running example uses num_replicas='auto' while its code uses num_replicas=2",
+    "L248 says custom routers are set via RequestRouterConfig's import_path (field is request_router_class); FastAPI Translator (L616) takes a query param, mismatching the JSON-body clients used elsewhere"
+  ]
+}
