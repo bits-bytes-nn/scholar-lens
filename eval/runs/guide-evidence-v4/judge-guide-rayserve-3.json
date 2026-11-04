@@ -1,0 +1,123 @@
+{
+  "item": "guide-rayserve",
+  "post": "/tmp/eval-guide/guide-rayserve-v4.md",
+  "judge_run": 3,
+  "sampling": "body blocks after front matter (prose, list and table blocks; headings and code excluded), 179 blocks; blocks 3,6,9,... (59 sampled); 15 claims drawn from sampled blocks spread from L107 to L1251",
+  "scores": {"A": 7.5, "B": 7.5, "C": 7, "D": 8, "E": 7.5, "F": 8, "T1": 7.5, "T2": 8, "T3": 8.5},
+  "score_evidence": {
+    "A": [
+      "Arc is sound: TL;DR (L11) -> problem (L23) -> architecture (L48, L127) -> routing -> autoscaling -> HTTP -> composition -> deploy -> KubeRay ops -> observability -> LLM -> assessment (L1277)",
+      "Duplicate content block: the proxy env-var table appears twice, L162-167 and L1148-1153, with the 3-failure and draining notes repeated (L165/L1155, L169/L1157)",
+      "Topic-name headings in a claim-heading post: L44 '### 끝까지 따라갈 예제', L941 '### 로컬 반복 개발 단계', L1295 '### 선택 기준'",
+      "Markup fine: no body H1, 66 fences (even), $$ display math with blank lines, use_math true with $$ present, description 137 chars opening with 'Ray Serve'"
+    ],
+    "B": [
+      "L21: two sentences restate the same definition already given at L13 ('Ray Serve는 ... 서빙 계층입니다. Ray Serve는 온라인 추론 API를 만드는 확장 가능한 모델 서빙 라이브러리이고...') -> drop the second sentence",
+      "L361/L362: '곱셈 gain 계수' half-translated -> '곱셈 이득 계수(gain)'",
+      "L1161: '...끝나지 않는다는 것입니다' formulaic ending -> '여유 GPU가 없는 클러스터에서는 이 업그레이드가 끝나지 않습니다'",
+      "L427: '...따로 튜닝해야 한다는 것입니다' same pattern",
+      "L1157: '그러니 ... 나란히 놓고 봐야 합니다. 두 값을 함께 맞춰야 합니다.' redundant second sentence",
+      "'~편이 맞습니다/낫습니다/좋습니다' 5 times (L17, L260, L512, L836, L1163); '할 수 있습니다' 13 times"
+    ],
+    "C": [
+      "L46 promises the running example as Summarizer/Translator behind a FastAPI ingress, but the deployed app (L1031, L1058) is Summarizer as ingress; the FastAPI TextPipeline (L762-784) is never deployed or called, and L1211 says '인그레스 Summarizer'",
+      "L125 DeploymentNode aside (tutorial naming) interrupts the bind/serve.run explanation",
+      "L874-935 framework-tutorial section (TF/PyTorch/sklearn) leaves the running example and reads as a stitched docs page",
+      "Back-references are accurate ('운영 부분에서 이미 정리했습니다' L1291 -> L1159)"
+    ],
+    "D": [
+      "Good: P2C worked table with [3,1,5,2] (L219-227), autoscaling 12/2=6 (L366-370), desired vs target replicas 10/2=5 with max 4 (L1190), cancellation applied to Translator's sync generate (L562)",
+      "Over-explained: L660 spells out '핸들.메서드.remote(인자)' word by word; L758 narrates a 4-line example the code already shows"
+    ],
+    "E": [
+      "Many apt tables (proxy_location, RequestRouterConfig, AutoscalingConfig, failure/recovery, metrics by symptom) and an ASCII request-path diagram (L184-192)",
+      "Duplicate table (proxy env vars, L162 and L1148)",
+      "No architecture image although the docs provide one; the ASCII box diagram only covers the request path"
+    ],
+    "F": [
+      "C13 unsupported: L1044 '예제마다 이름이 다릅니다. 단일 Translator 예제는 app1을 받고, 요약·번역 예제는 default를 받습니다' generalises two inconsistent docs examples into a rule; `serve build text_ml:app` on Ray 2.60.0 actually writes 'name: app1'",
+      "L248 and L323: 'from ray.serve.config import RequestRouterConfig, DeploymentConfig' raises ImportError on Ray 2.60.0 (DeploymentConfig is not in ray.serve.config); copied from the RequestRouterConfig docstring, but presented as working code",
+      "L272-296: '락은 생성자에서 만들고' plus 'def __init__(self)' with no args; Serve constructs routers with deployment_id etc., so the skeleton fails with TypeError (state init belongs in initialize_state, which L236 itself names)",
+      "Third-party opinions are labelled as such (L15, L427, L1161, L1285, L1289); Anyscale numbers keep model, hardware and runtime (L334)"
+    ],
+    "T1": [
+      "Running example verified with ray[serve] 2.60.0 (models stubbed, runtime_env pip removed for local run): text_ml.py (L964) + YAML (L1048) via 'serve run', POST json clients L947 and L1213 return translations, X-Request-ID echoed as 123-234; handle call L115 works; autoscaling+BackpressureConfig Translator (L401) deploys and serves 200; TextPipeline (L762, same file) serves GET /?text=",
+      "Failures as pasted: L247 and L322 ImportError (DeploymentConfig); L276 router skeleton TypeError; TextPipeline has no client and the post's only client shape (POST json, L947) gets 405 from it",
+      "Real config, flags and defaults throughout (serve build -o, serve deploy/status/config, env vars, AutoscalingConfig defaults)"
+    ],
+    "T2": [
+      "Covers the documented core in a sensible order; padding: framework tutorials L874-935 and ObjectRef interop L838-872 add little to the stated production focus"
+    ],
+    "T3": [
+      "Internals and why: controller checkpointing (L135), proxy placement and health/drain (L141-169), router runs in the caller process (L206-208), autoscaler in controller with pushed metrics (L342), failure owners per layer (L1128-1142), metrics and their export intervals (L1196)",
+      "System fit: KubeRay RayService, four-layer pending runbook, fractional GPU isolation, LLM KV-cache-aware scaling; advice phrased as recommendation"
+    ]
+  },
+  "principles": {
+    "claim_headings": {"status": "partly met", "evidence": "Most H2/H3 are claim noun phrases (L48, L127, L336, L1090); topic headings at L44, L941, L1295"},
+    "running_example": {"status": "partly met", "evidence": "Summarizer/Translator threaded through routing, autoscaling, cancellation, config, metrics; but promised FastAPI ingress (L46) is not the deployed app (L1031)"},
+    "mechanism_choice_code_example": {"status": "met", "evidence": "P2C: mechanism L212-217 -> why (coordination) -> worked table L221-227; autoscaling: L348 -> table -> formula L368 -> example"},
+    "facts_once": {"status": "not met", "evidence": "Proxy env-var table twice (L162, L1148); 3 consecutive failures L165/L1155; draining L169/L1157; Serve definition L13/L21; replica definition L42/L54"},
+    "numbers_with_scope": {"status": "met", "evidence": "L334 Anyscale results with model, 8x8 L4, RayTurbo, TP 4; L348 'Ray 2.59.0 AutoscalingConfig' defaults"},
+    "nothing_invented": {"status": "partly met", "evidence": "L1044 app-name rule not in docs and contradicted by Ray 2.60; DeploymentConfig import (L248, L323) does not exist"},
+    "writer_assessment": {"status": "met", "evidence": "L1297 '이 글의 판단은 다음과 같습니다' with when-to-choose and alternatives"},
+    "length_fitted": {"status": "partly met", "evidence": "1,324 lines; framework tutorials (L874-935), ObjectRef and streaming-handle detail pad a production guide"},
+    "type_shape": {"status": "met", "evidence": "Opens with TL;DR and problem (L11, L23), architecture (L48/L127) before config (L937), non-official sources included, ends with limits and selection (L1287-1299)"},
+    "korean_style": {"status": "partly met", "evidence": "'입니다' register held; repeated '편이 맞습니다', '~다는 것입니다' (L427, L1161), half-translated 'gain 계수' (L361)"}
+  },
+  "claims": {
+    "checked": 15,
+    "numbers": 9,
+    "supported": 14,
+    "unsupported": 1,
+    "wrong": 0,
+    "unverifiable": 0,
+    "examples": [
+      {"id": "C1", "line": 107, "claim": "Translator: 2 replicas, 0.2 CPU, 0 GPU each", "verdict": "supported", "source": "getting_started: '@serve.deployment(num_replicas=2, ray_actor_options={\"num_cpus\": 0.2, \"num_gpus\": 0})'"},
+      {"id": "C2", "line": 151, "claim": "HTTPOptions host defaults to localhost; 0.0.0.0 / :: to expose; location deprecated", "verdict": "supported", "source": "HTTPOptions API: 'Defaults to localhost. To expose Serve publicly, you probably want to set this to \"0.0.0.0\" for IPv4 or \"::\" for IPv6'; 'location: [DEPRECATED: use proxy_location field instead]' (note: config-file page says host defaults to 0.0.0.0; post does not flag this conflict)"},
+      {"id": "C3", "line": 180, "claim": "Requests of 100KiB+ go through the object store, read zero-copy", "verdict": "supported", "source": "architecture: 'Larger request objects (100KiB+) are written to the object store and the replica can read them via zero-copy read.'"},
+      {"id": "C4", "line": 217, "claim": "Power of two choices; no replica handles more than max_ongoing_requests", "verdict": "supported", "source": "architecture: 'power of two choices scheduling strategy, subject to the constraint that no replica is handling more than max_ongoing_requests requests at a time.'"},
+      {"id": "C5", "line": 243, "claim": "Routing stats call is a no-op actor call by default; record_routing_stats overrides; backoff grows by multiplier up to max", "verdict": "supported", "source": "RequestRouterConfig: 'Recording routing stats is by default a no-op Actor call to the replica, but you can define your own routing stats using the record_routing_stats method'; initial_backoff_s 0.025, backoff_multiplier 2, max_backoff_s 0.5"},
+      {"id": "C6", "line": 306, "claim": "Central-store pattern: single actor becomes bottleneck at thousands of req/s; broadcast is eventually consistent", "verdict": "supported", "source": "routing-policies: 'A single actor can become a bottleneck in high-throughput applications ... (~1000s of requests/s)'; 'Eventual consistency - routers may base decisions on slightly stale data.'"},
+      {"id": "C7", "line": 316, "claim": "PrefixCacheAffinityRouter: match rate >=10% -> highest prefix match; <10% -> lowest cache utilisation; imbalanced -> P2C", "verdict": "supported", "source": "routing-policies: 'High match rate (>=10%) ... Low match rate (<10%): Route to replicas with lowest cache utilization ... Fallback: Use Power of Two Choices when load is imbalanced.'"},
+      {"id": "C8", "line": 334, "claim": "DeepSeek-R1-Distill-Qwen-32B on eight 8xL4 (64 GPUs), RayTurbo, TP 4: TTFT -60%, throughput +40%+, similar on OSS Ray; equal at one replica", "verdict": "supported", "source": "Anyscale blog 2025-09-15: '60% reduction in time-to-first-token (TTFT) and more than 40% improvement in end-to-end throughput'; 'eight 8xL4 machines (64 GPUs total) ... using RayTurbo. Similar trends were observed on open-source Ray'; 'tensor_parallel_size: 4'"},
+      {"id": "C9", "line": 344, "claim": "metrics_interval_s deprecated in favour of two env vars; look_back_period_s must exceed it, warns now and raises later", "verdict": "supported", "source": "AutoscalingConfig: '[DEPRECATED] ... Will be replaced by the environment variables RAY_SERVE_REPLICA_AUTOSCALING_METRIC_PUSH_INTERVAL_S and RAY_SERVE_HANDLE_AUTOSCALING_METRIC_PUSH_INTERVAL_S'; config.py validator: '# Warns currently, will raise an exception in a future release'"},
+      {"id": "C10", "line": 353, "claim": "max_replicas default 1 (with min_replicas 1, target_ongoing_requests 2, look_back_period_s 30.0)", "verdict": "supported", "source": "AutoscalingConfig fields: max_replicas = 1, min_replicas = 1, target_ongoing_requests = 2, look_back_period_s = 30.0"},
+      {"id": "C11", "line": 358, "claim": "upscale_delay_s 30.0, downscale_delay_s 600.0 (so downscale is much slower)", "verdict": "supported", "source": "AutoscalingConfig fields: upscale_delay_s = 30.0, downscale_delay_s = 600.0 'How long to wait before scaling down replicas to a value greater than 0.'"},
+      {"id": "C12", "line": 390, "claim": "BackpressureConfig: not applied to unavailable-deployment rejections; gRPC always RESOURCE_EXHAUSTED; unknown keys fail at parse; alpha; 503 default or 429; Retry-After rounded up", "verdict": "supported", "source": "BackpressureConfig: 'requests rejected because the deployment is unavailable ... always return 503. The gRPC path is unaffected: backpressure rejections always map to RESOURCE_EXHAUSTED'; source: '# Reject unknown keys so typos (e.g. retry_after instead of retry_after_s) fail at config parse time'; 'PublicAPI (alpha)'"},
+      {"id": "C13", "line": 1044, "claim": "serve build writes 5 top-level fields; app names differ per example: app1 for single Translator, default for summarise+translate", "verdict": "unsupported", "source": "config page: 'The file contains proxy_location, http_options, grpc_options, logging_config and applications' (supported); the app-name 'rule' only reflects two inconsistent doc examples (develop-and-deploy shows app1, config page shows default); running 'serve build text_ml:app' on Ray 2.60.0 produced 'name: app1'"},
+      {"id": "C14", "line": 1155, "claim": "Proxy failing 3 consecutive health checks is marked unhealthy and restarted (env defaults 10.0/10.0/5.0/30.0)", "verdict": "supported", "source": "config page: 'If a proxy fails 3 consecutive health checks, the controller marks it unhealthy and restarts it. Default is 10.0.' and READY 5.0, MIN_DRAINING"},
+      {"id": "C15", "line": 1251, "claim": "LLMConfig fields map one-to-one to YAML; entry point ray.serve.llm:build_openai_app; engine_kwargs forwarded to vLLM", "verdict": "supported", "source": "LLM configuration: 'LLMConfig fields map one to one onto YAML keys'; 'import_path: ray.serve.llm:build_openai_app'; 'engine_kwargs | dict | {} | Arguments forwarded to the inference engine (vLLM)'"}
+    ],
+    "third_party_spot_check": "ADR (iotdigitaltwinplm.com) claims at L427, L1161, L1279, L1291-1293 match the page (two schedulers, no fractional-GPU memory isolation/MIG, two batching layers, four pending layers, standby rollout doubles footprint, two scalers in series, no ingress hop); L1293 'KV 캐시 압력' is the post's extension, the ADR ties KV cache to LLM autoscaling only in general"
+  },
+  "checklist": {
+    "repeated": 0,
+    "avoided": 2,
+    "na": 0,
+    "repeated_ids": [],
+    "details": [
+      {"id": "arch-diagram-relative-link", "verdict": "avoided", "evidence": "No '[](' empty-text links and no '../_images' paths anywhere; the post carries no image at all (request path drawn as a text block L184-192), so the 'diagram as image with Korean alt text' half is not exercised"},
+      {"id": "proxy-env-ray-start-unsupported", "verdict": "avoided", "evidence": "L160 '주기와 수명주기는 환경 변수로 조정합니다' and L1146 give only names, meanings and defaults; no 'ray start 전에' or process claim ('ray start' appears only at L1171 for --dashboard-host)"}
+    ],
+    "generic_guide_checks": "No out-of-range chapter references, no tag remnants or entity leaks in body (L1322 source title uses &#124; for '|', renders fine), fences balanced (66), no stale third-party CLI flags, not install-centric"
+  },
+  "extras": {
+    "architecture_first_line": 48,
+    "internals_first_line": 127,
+    "non_official_sources": "4/21 (19%): ADR, Zread, Anyscale blog, Medium; Zread is listed but never used in the body",
+    "opens_with_problem": true,
+    "closes_with_when_to_choose_and_failure_modes": true
+  },
+  "runnable_code": {
+    "verdict": "running example runs; three side snippets fail as pasted",
+    "environment": "ray[serve] 2.60.0, Python 3.12, transformers stubbed (no model download), runtime_env pip block removed for the local run",
+    "passed": ["L964 text_ml.py + L1048 YAML via serve run", "L947 and L1213 clients (POST json, X-Request-ID echoed)", "L115 handle.translate.remote().result()", "L401 autoscaling + BackpressureConfig Translator (body pasted in)", "L762 TextPipeline in the same file (GET /?text=)", "serve build text_ml:app"],
+    "failed": ["L247 and L322: ImportError 'cannot import name DeploymentConfig from ray.serve.config'", "L276 StatefulRouter: TypeError '__init__() got an unexpected keyword argument deployment_id' when the deployment is called", "TextPipeline has no client; the post's POST-json client shape returns 405 against it"]
+  },
+  "top_issues": [
+    "Code that fails as pasted: DeploymentConfig import from ray.serve.config (L248, L323) and the StatefulRouter skeleton whose no-arg __init__ breaks router construction (L276-296; use initialize_state)",
+    "Facts repeated: the proxy env-var table, 3-failure rule and draining explanation appear twice (L162-169 vs L1146-1157), plus repeated definitions at L13/L21 and L42/L54",
+    "Running-example drift and one unsupported rule: FastAPI ingress promised (L46) but Summarizer is the deployed ingress (L1031) and TextPipeline has no matching client; L1044 app-name rule (app1 vs default) is not documented and Ray 2.60 writes app1"
+  ]
+}
