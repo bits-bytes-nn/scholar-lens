@@ -112,6 +112,15 @@ _HEADING = re.compile(r"^#{1,6}[ \t]")
 _HEADING_LINE = re.compile(r"^(#{1,6})[ \t]")
 # Wrapper tags of the generation prompts; never valid in a post.
 ENVELOPE_TAGS: tuple[str, ...] = (
+    # The evidence engine's prompt blocks (a writer may echo one).
+    "section",
+    "evidence",
+    "already_written_evidence",
+    "paper_names",
+    "previous_section_end",
+    "reference_material",
+    "problems",
+    "sentences",
     "explanation",
     "has_more",
     "key_takeaways",

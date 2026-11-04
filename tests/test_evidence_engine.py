@@ -189,13 +189,13 @@ def _outline(**changes: Any) -> EvidenceOutline:
         "sections": [
             {
                 "kind": "introduction",
-                "title": "선호 최적화는 RL 없이도 됩니다",
+                "title": "RL 없는 선호 최적화",
                 "thesis": "t",
                 "evidence": ["E1"],
             },
             {
                 "kind": "lineage",
-                "title": "DPO는 보상 모델을 없앱니다",
+                "title": "보상 모델을 없앤 DPO",
                 "thesis": "t",
                 "lineage": "offline",
                 "papers": ["2305.18290"],
@@ -241,7 +241,7 @@ class TestDraftChecks:
     def _check(self, markdown: str, numbers: dict[str, str] | None = None) -> list[str]:
         return draft_problems(
             markdown,
-            title="DPO는 보상 모델을 없앱니다",
+            title="보상 모델을 없앤 DPO",
             own=["E2", "E4"],
             earlier=["E1"],
             ledger=_ledger(),
@@ -251,7 +251,7 @@ class TestDraftChecks:
         )
 
     def test_a_cited_sentence_with_its_numbers_passes(self) -> None:
-        md = f"## DPO는 보상 모델을 없앱니다\n\nDPO는 PPO 대비 61% 승률을 보입니다 [[E2]].\n\n![비교]({self.URL})\n"
+        md = f"## 보상 모델을 없앤 DPO\n\nDPO는 PPO 대비 61% 승률을 보입니다 [[E2]].\n\n![비교]({self.URL})\n"
         assert self._check(md) == []
 
     @pytest.mark.parametrize(
@@ -264,11 +264,11 @@ class TestDraftChecks:
         ],
     )
     def test_problems(self, sentence: str, fragment: str) -> None:
-        md = f"## DPO는 보상 모델을 없앱니다\n\n{sentence}\n\n![비교]({self.URL})\n"
+        md = f"## 보상 모델을 없앤 DPO\n\n{sentence}\n\n![비교]({self.URL})\n"
         assert any(fragment in p for p in self._check(md)), self._check(md)
 
     def test_a_number_stated_earlier_is_a_repeat(self) -> None:
-        md = f"## DPO는 보상 모델을 없앱니다\n\nDPO는 61% 승률입니다 [[E2]].\n\n![비교]({self.URL})\n"
+        md = f"## 보상 모델을 없앤 DPO\n\nDPO는 61% 승률입니다 [[E2]].\n\n![비교]({self.URL})\n"
         assert any("already stated" in p for p in self._check(md, {"61": "도입"}))
 
     def test_markers_become_paper_citations(self) -> None:
@@ -350,9 +350,9 @@ class ScriptedModel:
             title = prompt.split("## ", 1)[1].split("\n", 1)[0]
             return f"## {title}\n\nDPO는 PPO 대비 61% 승률을 보입니다 [[E2]].\n\n![비교](https://arxiv.org/html/2305.18290v3/x1.png)\n"
         title = prompt.split("title: ", 1)[1].split("\n", 1)[0]
-        if title.startswith("DPO"):
+        if title.startswith("보상 모델"):
             return f"## {title}\n\nDPO는 PPO 대비 71% 승률을 보입니다 [[E2]].\n\n![비교](https://arxiv.org/html/2305.18290v3/x1.png)\n"
-        if title.startswith("선호"):
+        if title.startswith("RL 없는"):
             return f"## {title}\n\nDPO는 보상 모델 없이 선호를 최적화합니다 [[E1]].\n"
         return f"## {title}\n\n두 방법은 서로 다른 장단점을 가집니다.\n"
 
@@ -386,9 +386,9 @@ def test_a_scripted_run_reads_outlines_writes_fixes_and_assembles() -> None:
     assert len(survey.ledger) == 4
     body = survey.body
     assert (
-        body.index("## 선호 최적화는")
+        body.index("## RL 없는")
         < body.index("| 연도 | 논문 |")
-        < body.index("## DPO는")
+        < body.index("## 보상 모델을")
     )
     assert "61% 승률" in body and "71%" not in body
     assert "[@2305.18290]" in body and "[[E" not in body
@@ -419,7 +419,7 @@ def test_numbered_references_and_ids_as_names_are_problems() -> None:
         scope="TL;DR, GPT-4 judge, Table 2",
     )
     assert any("figure, table" in p for p in problems)
-    md = "## 제목입니다\n\n2305.18290은 보상 모델이 없습니다 [[E2]].\n\n![비교](https://arxiv.org/html/2305.18290v3/x1.png)\n"
+    md = "## 제목\n\n2305.18290은 보상 모델이 없습니다 [[E2]].\n\n![비교](https://arxiv.org/html/2305.18290v3/x1.png)\n"
     issues = draft_problems(
         md,
         title="제목",
@@ -452,14 +452,12 @@ def test_visual_minimum_example_numbers_and_model_sizes() -> None:
             depth=depth,
         )
 
-    one_visual = f"## 제목입니다\n\nDPO는 61% 승률입니다 [[E2]].\n\n![비교]({url})\n"
+    one_visual = f"## 제목\n\nDPO는 61% 승률입니다 [[E2]].\n\n![비교]({url})\n"
     assert any("at least 2 visuals" in p for p in check(one_visual, "deep"))
     assert not any("visuals" in p for p in check(one_visual + "\n$$a=b$$\n", "deep"))
-    example = f"## 제목입니다\n\n예를 들어 보상이 0.42와 0.18이면 차이는 0.24입니다.\n\n![비교]({url})\n"
+    example = f"## 제목\n\n예를 들어 보상이 0.42와 0.18이면 차이는 0.24입니다.\n\n![비교]({url})\n"
     assert not any("without evidence" in p for p in check(example))
-    sizes = (
-        f"## 제목입니다\n\nLlama 2 7B에서도 같은 경향입니다 [[E2]].\n\n![비교]({url})\n"
-    )
+    sizes = f"## 제목\n\nLlama 2 7B에서도 같은 경향입니다 [[E2]].\n\n![비교]({url})\n"
     assert not any("already stated" in p for p in check(sizes, numbers={"7B": "앞 절"}))
 
 
@@ -478,9 +476,9 @@ def test_headings_in_the_plain_register_and_repeated_view_markers() -> None:
         figure_urls=[],
         free_numbers="",
     )
-    assert any("ends in '~다'" in p for p in issues)
+    assert any("heading is a sentence" in p for p in issues)
     assert any("own view more than once" in p for p in issues)
-    ok = "## 보상 모델이 먼저 무너집니다\n\nA입니다.\n"
+    ok = "## 정책보다 먼저 무너지는 보상 모델\n\nA입니다.\n"
     assert not draft_problems(
         ok,
         title="t",
@@ -536,7 +534,7 @@ def test_unsourced_number_sentences_spare_marked_examples() -> None:
     from scholar_lens.domain.survey.evidence_post import unsourced_number_sentences
 
     md = (
-        "## 제목입니다\n\n원칙은 모두 16개입니다.\n\n"
+        "## 제목\n\n원칙은 모두 16개입니다.\n\n"
         "보상이 (1, 0, 0, 0)이라고 하면 평균은 0.25입니다.\n\n"
         "DPO는 61% 승률입니다 [[E2]].\n"
     )

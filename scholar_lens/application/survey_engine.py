@@ -483,6 +483,13 @@ class EvidenceSurveyEngine:
             )
         )
         earlier = [e for eid in earlier_ids if (e := ledger.get(eid))]
+        # Evidence that later sections already cited (referred back to) twice.
+        cites: dict[str, int] = {}
+        for s, md in written:
+            for eid in {i for snt in prose_sentences(md) for i in cited_ids(snt)}:
+                if eid not in s.evidence:
+                    cites[eid] = cites.get(eid, 0) + 1
+        exhausted = {eid for eid, n in cites.items() if n >= 2}
         figures = [e.figure_url for e in own if e.kind == "figure" and e.figure_url]
         sections_map = "\n".join(
             f"- {'(this) ' if s is section else ''}{s.kind}: {s.title} — {s.thesis}"
@@ -566,6 +573,7 @@ class EvidenceSurveyEngine:
                 earlier_numbers=numbers,
                 figure_urls=figures,
                 free_numbers=free,
+                exhausted=exhausted,
                 depth=(
                     section.depth
                     if section.kind in ("lineage", "cross_cutting")
@@ -657,9 +665,7 @@ class EvidenceSurveyEngine:
             eid for r in outline.table for eid in [*r.results, r.limitation] if eid
         }
         items = [
-            e
-            for e in ledger
-            if e.id in used and e.kind in ("number", "limitation", "finding")
+            e for e in ledger if e.id in used and e.kind not in ("figure", "equation")
         ]
         if not items:
             return outline

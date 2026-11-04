@@ -35,7 +35,10 @@ How a good post on this blog is written:
   which) is welcome, kept apart from what the papers report; mark it as the
   post's view at most once in a section (mostly in the insights and closing
   sections), not with a formula repeated everywhere.
-- Korean headings end in "~입니다/~합니다" or are noun phrases, never "~다".
+- Headings are noun phrases that carry the claim ("정책보다 먼저 무너지는
+  보상 모델"), never sentences ending in "~다" or "~입니다".
+- Vary how a figure or table is introduced; never the same formula twice
+  ("…를 보면 됩니다"), and avoid noun frames such as "~다는 점".
 """
 
 READER_SYSTEM = """
@@ -51,7 +54,7 @@ Record evidence the post needs about this paper, in the survey's language for
 - how its method works, step by step where the survey needs it (method);
 - the defining equation(s), copied exactly as LaTeX from the text (equation);
 - its main results with numbers (number): `scope` names the model or
-  variant, benchmark, setting and metric; `cell` is a short noun phrase for a
+  variant, benchmark, setting and metric, in the survey's language; `cell` is a short noun phrase for a
   table cell ("MMLU 85.2%"); a relative gain says relative;
 - limitations the paper states or its own results show (limitation; `cell` a
   noun phrase); never a limitation about what the paper's text does not
@@ -91,11 +94,14 @@ Give each section the visuals its evidence has: every core paper's figure
 and key equation evidence goes to the section that explains that paper
 (deep sections need at least two visuals; a section may also build a small
 table from its number evidence).
-Titles are claims, not labels, written in the post's register (Korean: a
-"~입니다/~합니다" sentence or a noun phrase, never a "~다" ending); each
+Titles are claims written as noun phrases, not sentences and not topic
+labels (Korean: "정책보다 먼저 무너지는 보상 모델", never "~다" or
+"~입니다" endings); each
 section has a one-sentence thesis and the reader's question it answers. Depth: deep for the hard core mechanisms,
 brief for context. `table` lists every core paper with up to two of its
-number evidence ids and one limitation id. `ideas` gives every paper a noun
+number evidence ids and one limitation id; a result is an outcome measured
+(accuracy, win rate, score, speed-up), never a dataset size, a count of
+queries or a setting. `ideas` gives every paper a noun
 phrase; `short_names` every paper a short name; `lineage_names` every lineage
 a short name. The glossary has the topic's key terms (English | rendering in
 the survey's language, no parentheses).

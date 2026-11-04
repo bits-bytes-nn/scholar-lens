@@ -324,7 +324,9 @@ _EXAMPLE = re.compile(
     re.IGNORECASE,
 )
 # A Korean heading in the plain register ("…했다"), not the post's "…입니다".
-_DA_ENDING = re.compile(r"(?<!니)다[.!]?$")
+_SENTENCE_HEADING = re.compile(r"(?:다|요)[.!]?$")
+# Formulas a writer falls into, with how often one section may use them.
+_FORMULAS = ((re.compile(r"보면 됩니다"), 1), (re.compile(r"다는 점"), 2))
 _OWN_VIEW = re.compile(
     r"이 글의 (?:관점|판단|해석|견해)|이 글은 .{0,12}(?:본다|봅니다|판단합니다)"
 )
@@ -349,6 +351,7 @@ def draft_problems(
     figure_urls: Iterable[str],
     free_numbers: str,
     depth: str = "",
+    exhausted: Iterable[str] = (),
 ) -> list[str]:
     """Deterministic problems of a section draft (each quotes its sentence):
     a missing heading, unknown or foreign evidence ids, a number without
@@ -357,10 +360,17 @@ def draft_problems(
     missing figure."""
     problems: list[str] = []
     for heading in re.findall(r"^#{2,4} (.+?)\s*$", markdown, re.M):
-        if _DA_ENDING.search(heading):
+        if _SENTENCE_HEADING.search(heading):
             problems.append(
-                f"heading ends in '~다': write it as a '~입니다/~합니다' sentence "
-                f"or a noun phrase: {heading}"
+                "heading is a sentence: write the claim as a noun phrase "
+                f"('정책보다 먼저 무너지는 보상 모델'): {heading}"
+            )
+    plain = _FENCE.sub("", markdown)
+    for formula, limit in _FORMULAS:
+        if (count := len(formula.findall(plain))) > limit:
+            problems.append(
+                f"'{formula.pattern}' {count} times in one section; vary the "
+                "sentence or drop the frame"
             )
     if len(_OWN_VIEW.findall(_FENCE.sub("", markdown))) > 1:
         problems.append(
@@ -376,6 +386,11 @@ def draft_problems(
         if unknown := [i for i in ids if ledger.get(i) is None]:
             problems.append(f"unknown evidence {unknown} in: {quoted}")
             continue
+        if spent := [i for i in ids if i in set(exhausted)]:
+            problems.append(
+                f"evidence {spent} was already referred back to twice; do not "
+                f"restate it again: {quoted}"
+            )
         if foreign := [i for i in ids if i not in allowed]:
             problems.append(
                 f"evidence {foreign} belongs to another section; leave it out: {quoted}"
