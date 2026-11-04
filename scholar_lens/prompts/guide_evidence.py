@@ -155,7 +155,9 @@ Sections, in this order:
   components and how a request or task flows through them, the core
   mechanisms and why they are built that way. Deep where the mechanism is
   hard; figures and equations go here.
-- usage and operations (one or more): installation only as much as needed,
+- usage and operations (one or more): installation only as much as needed
+  but never left out (the install command with the packages and extras the
+  guide's code imports),
   the API built up on the running example, configuration that matters,
   deployment, scaling, observability, tuning.
 - choosing (exactly one, last): when to choose it and when not, the
