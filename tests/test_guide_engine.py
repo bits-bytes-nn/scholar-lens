@@ -670,3 +670,27 @@ def test_a_figure_is_placed_by_its_id_whatever_anchor_the_reader_gives() -> None
         doc, kind="figure", claim="구조도", quote="", anchor="F1", figure_id="F1"
     )
     assert item.figure_url == "https://docs.ray.io/arch.png"
+
+
+def test_third_party_pages_do_not_name_identifiers_when_docs_exist() -> None:
+    rule = authority_rule(has_official=True)
+    claim = {"claim": "`vllm:gpu_cache_usage_perc`로 캐시 사용률을 봅니다"}
+    assert rule(_blog(), "finding", claim)
+    assert rule(_official(), "finding", claim) == []
+    assert authority_rule(has_official=False)(_blog(), "finding", claim) == []
+    assert rule(_blog(), "code", {"claim": "배포"})
+    assert rule(_blog().model_copy(update={"authority": "reference"}), "code", {}) == []
+
+
+def test_a_figure_without_a_quote_takes_the_text_before_it() -> None:
+    text = (
+        "## Results\n\nThroughput with three parallel outputs on A100.\n\n"
+        '[Image: alt="", src="https://x/n3.png"]\n'
+    )
+    doc = SourceDocument.from_markdown(
+        "R1", "Blog", "full_text", text, figures=[("https://x/n3.png", "")]
+    )
+    item = EvidenceLedger().add(
+        doc, kind="figure", claim="처리량", quote="", anchor="S1", figure_id="F1"
+    )
+    assert "three parallel outputs" in item.quote

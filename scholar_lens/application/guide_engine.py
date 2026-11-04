@@ -64,7 +64,7 @@ from .usage import usage_stage
 logger = logging.getLogger(__name__)
 
 # Bump when the reader's prompt or the evidence schema changes meaning.
-GUIDE_READER_VERSION = 6
+GUIDE_READER_VERSION = 7
 _SAFE_KEY = re.compile(r"[^A-Za-z0-9._-]+")
 # Small counts and ordinals a guide states without evidence.
 _FREE_NUMBERS = " ".join(str(n) for n in range(11))
@@ -78,6 +78,7 @@ GUIDE_PROMPTS = WriterPrompts(
     fix=prompts.FIX_SYSTEM,
 )
 _PRIMARY = ("official", "reference")
+_CODE_SPAN = re.compile(r"`[^`\n]+`")
 _AUTHORITY_RANK = {"official": 0, "reference": 1, "third_party": 2, "older_docs": 3}
 # Definitions in a code block: what later code of the running example calls.
 _DEFINITION = re.compile(
@@ -174,6 +175,24 @@ def authority_rule(has_official: bool) -> Callable[..., list[str]]:
     def rule(
         document: SourceDocument, kind: str, fields: Mapping[str, str]
     ) -> list[str]:
+        if (
+            kind == "code"
+            and has_official
+            and document.authority in ("third_party", "older_docs")
+        ):
+            return [
+                "code and commands come from the official docs (another page's "
+                "may be stale); record what this page explains instead"
+            ]
+        if kind not in ("setting", "code", "relation") and (
+            has_official
+            and document.authority in ("third_party", "older_docs")
+            and _CODE_SPAN.search(f"{fields.get('claim', '')} {fields.get('cell', '')}")
+        ):
+            return [
+                "flags, metrics, API and config names come from the official "
+                "docs; state what this page explains without the identifier"
+            ]
         if kind != "setting":
             return []
         if document.authority == "older_docs":

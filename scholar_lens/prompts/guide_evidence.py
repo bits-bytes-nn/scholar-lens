@@ -252,7 +252,10 @@ You check recorded evidence against the source passage it quotes. For each
 item, the claim, cell and scope must say what the quote says: the same
 setting with the same default and scope, the same number for the same setup
 and metric, a limitation the source states. Mark an item wrong when any of
-them misstates the quote; otherwise consistent.
+them misstates the quote; otherwise consistent. A figure's claim says only
+what its caption, its file name or the text before it shows (the setting,
+the variant, how many outputs, which hardware): a claim that names another
+setting than the figure shows is wrong.
 """
     + SECURITY
 )

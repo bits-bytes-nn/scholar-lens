@@ -361,13 +361,16 @@ class EvidenceWriter:
     async def wrong_evidence(self, items: Sequence[Evidence]) -> dict[str, str]:
         """Evidence whose claim, scope or cell misstates its quote (a scope
         can name the wrong benchmark while every number is in the quote):
-        id -> reason. Figures, equations and code are checked in code."""
-        items = [e for e in items if e.kind not in ("figure", "equation", "code")]
+        id -> reason. A figure's claim is checked against its caption and
+        the text before it; equations and code are checked in code."""
+        items = [e for e in items if e.kind not in ("equation", "code")]
+        items = [e for e in items if e.kind != "figure" or e.caption or e.quote]
         if not items:
             return {}
         lines = "\n".join(
             f"[{e.id}] ({e.kind}) claim: {e.claim} | cell: {e.cell} | scope: "
             f'{e.scope}\n    quote: "{e.quote}"'
+            + (f'\n    caption: "{e.caption}"' if e.caption else "")
             for e in items
         )
         with usage_stage("verify"):

@@ -197,7 +197,12 @@ async def write_guide_with_evidence(
         notes.append(
             "Figures that cannot be downloaded were left out: " + ", ".join(broken)
         )
-    source_urls = _source_urls(result.cited, [*urls, *material.references])
+    # A requested page under the address it was served from (after
+    # redirects), as the cited documents have it.
+    served = {p.url: p.final_url or p.url for p in corpus.pages}
+    source_urls = _source_urls(
+        result.cited, [served.get(u, u) for u in [*urls, *material.references]]
+    )
     titles = {d.url: d.title for d in documents} | {
         p.url: p.title for p in corpus.pages if p.title
     }

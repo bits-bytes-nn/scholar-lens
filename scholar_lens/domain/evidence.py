@@ -373,6 +373,10 @@ class EvidenceLedger(BaseModel):
             figure = document.figure(str(fields["figure_id"]))
             if figure is not None and figure.anchor:
                 fields["anchor"] = figure.anchor
+            if figure is not None and not str(fields.get("quote") or "").strip():
+                # What the figure shows, as far as the text says: the check
+                # of its claim reads it.
+                fields["quote"] = figure.context
         evidence = Evidence(
             id=f"E{len(self.items) + 1}",
             paper_id=document.paper_id,

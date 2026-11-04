@@ -1,0 +1,84 @@
+{
+  "item": "guide-strands",
+  "post": "/tmp/eval-guide/guide-strands-v4.md",
+  "judge_run": 1,
+  "sdk_version_checked": "strands-agents 1.63.0 (docs footer: SDK Python v1.63.0, TS v1.23.0, Oct 30 2026)",
+  "scores": {"A": 8, "B": 7.5, "C": 7.5, "D": 8, "E": 8, "F": 6, "T1": 7, "T2": 8, "T3": 8},
+  "score_evidence": {
+    "A": "Coherent arc: TL;DR L11, problem L17, loop cycle L27, hooks L131, middleware L259, retry L370, conversation L498, context_manager L558, structured output L642, interventions L735, steering L842, lifecycle L890, observability/deploy L1032, choice and limits L1124. Claim headings, no body H1, fenced code, $$ math with blank lines, description 142 chars, use_math true with math present. Deductions: the running-example factory make_order_agent is redefined five times (L410, L484, L513, L545, L599), so a reader assembling one file gets only the last one; stray double blank lines L888-889, L1029-1031.",
+    "B": "Mostly natural '입니다' Korean. Deductions: attribution frame '한 서드파티 블로그/가이드/글은 ... 보고합니다' repeated 9 times (L21, L52, L61, L129, L1066, L1078, L1128, L1138), better named once by source; 'L799 기본 분류기는 심판 역할을 하는 LLM으로' -> '기본 분류기는 판정용 LLM이며'; formulaic 'L162 각 속성이 하는 일은 다음과 같습니다(Python 기준).'; odd 'L1136 그 순서 자체를 그래프로 표현하는 편이 정직합니다' -> '... 표현하는 편이 맞습니다'; 'L23 이를 계측할 추적(tracing) 기능을 같은 SDK에 담고 있습니다' (English 'contains' calque).",
+    "C": "Cross-references mostly accurate ('앞서 정의한 공식' L418, '앞서 만든 make_order_agent'). Deductions: L660 '앞서 설정한 재시도 전략과 컨텍스트 관리는 그대로 유지됩니다' but the latest make_order_agent (L599) has no custom retry strategy; L862/L887 say the steering handler goes into the same interventions list as EmailApproval, which is true only for TypeScript; repeated facts (see principles.facts_said_once).",
+    "D": "Hard parts get worked examples at the right moment: concurrent vs sequential latency L61-68, retry schedule table L384-391, limit overshoot walk-through L912, structured-output attempt table L718-727, Cedar/HITL outcome matrix L833-838, stash flow L613-621. Deductions: TL;DR (L13-15) is two long paragraphs restating the whole post; the 'SDK error vs stop reason' and 'Guide has no cap' points are explained three times.",
+    "E": "Tables where comparison helps (hook events L139, middleware stages L265, intervention methods L743, migration L633, stop reasons L922), ASCII diagrams labelled as illustrations, runnable code per mechanism. Deductions: max(1.2, 0.8) display math L63-68 is trivial for the reader; the stash table L617-621 repeats the paragraph above it.",
+    "F": "One wrong claim in the sample: deployment via 'pip install bedrock-agentcore-starter-toolkit' + 'agentcore configure' (L1110-1116) while the current Strands deploy page says 'The AgentCore CLI replaces the previously available bedrock-agentcore-starter-toolkit ... uninstall it' (npm @aws/agentcore, agentcore create/dev/deploy/invoke). Outside the sample: Python steering is a plugin ('Attach the handler with plugins=[handler]'; 'in Python, steering handlers are plugins'), but L862 and L887 put LLMSteeringHandler in the interventions list of the Python order agent. Omission: context_manager is marked 'Experimental Feature' on its docs page; the post (L558-640) presents it without that caveat. Each wrong case -2."
+  },
+  "principles": {
+    "claim_headings": {"status": "met", "evidence": "'스로틀링만 지수 백오프로 재시도하는 기본 재시도 전략' L370, '예외가 아니라 결과로 돌아오는 도구 오류' L85; topic heading only for Sources."},
+    "running_example": {"status": "met", "evidence": "Order-processing agent (normalize_records, send_email) carried from L25 through hooks, middleware, retry, conversation, structured output, interventions, limits, telemetry and AgentCore entrypoint (L1103)."},
+    "mechanism_choice_code_example": {"status": "met", "evidence": "Retry: mechanism L372, formula L378, default schedule table L384, subclass code L403, custom schedule worked L418, choice among strategy/hook/middleware L496."},
+    "facts_said_once": {"status": "partly met", "evidence": "latencyMs=0 in 1.47.0 stated twice (L1062, L1138); tool error vs SDK error (L87, L395); no cap on Guide retries (L757, L887, L1142); TL;DR L15 restates context_manager override (L582)."},
+    "numbers_with_scope": {"status": "met", "evidence": "Retry defaults tied to Python ModelRetryStrategy (L376); travel-demo metrics attributed to the Builder Center post (L1051); latencyMs bug scoped to Strands 1.47.0."},
+    "nothing_invented": {"status": "partly met", "evidence": "Illustrative tables marked as examples (L76, L566, L866). But Python steering registered via interventions (L862, L887) and the deprecated starter-toolkit flow (L1110-1116) contradict the docs."},
+    "writers_assessment": {"status": "met", "evidence": "L1148 '이 글의 판단으로는 ... 그래프로 넘어가는 신호는 두 가지입니다'."},
+    "length_fitted": {"status": "partly met", "evidence": "About 68K characters; depth is warranted for hooks/middleware/retry, but repeated points and a two-paragraph TL;DR add length."},
+    "type_specific_shape": {"status": "met", "evidence": "Opens with TL;DR and the problem (L11-25), architecture (loop cycle, L27-59) before configuration, closes with when-to-choose and pitfalls (L1124-1148); 8 of 24 sources non-official."},
+    "korean_style": {"status": "partly met", "evidence": "No 이러한/즉/결국 restatements; but '한 서드파티 ...' frame x9, '할 수 있습니다' x11, '역할을 하는' L799."}
+  },
+  "claims": {
+    "checked": 15, "numbers": 9, "supported": 14, "unsupported": 0, "wrong": 1, "unverifiable": 0,
+    "sampling": "Body blocks (prose paragraphs, lists, tables; front matter, headings, code and display math excluded) numbered from the TL;DR; blocks 1, 4, 7, ... (57 blocks) sampled; 15 claims drawn from them.",
+    "examples": [
+      {"line": 13, "claim": "tool_use runs the tools and loops again; end_turn returns the final message", "verdict": "supported", "source": "agent-loop Stop Reasons: 'Tool use ... executes the requested tools, appends the results ... and invokes the model again'; 'End turn ... The loop exits and returns the model's final message.'"},
+      {"line": 52, "claim": "An AWS Builder Center third-party guide splits one cycle into steps named by SDK classes (ConversationManager, ToolRegistry, tool_executor default ConcurrentToolExecutor)", "verdict": "supported", "source": "Builder Center Part 1: 'Tool execution — the agent's tool_executor processes the calls. By default, this is the ConcurrentToolExecutor ...'; code: self.tool_executor = tool_executor or ConcurrentToolExecutor()"},
+      {"line": 167, "claim": "AfterToolsEvent.end_turn: True gives a default final message, a string or content blocks become the final message, stop_reason 'end_turn'", "verdict": "supported", "source": "hooks-events: 'Set True for a default final assistant message, a string ..., or a list of content blocks ... The returned result has stop_reason=\"end_turn\".'"},
+      {"line": 376, "claim": "ModelRetryStrategy defaults max_attempts 6, initial_delay 4 s doubling, max_delay 128 s; 5 retries", "verdict": "supported", "source": "retry-strategies table: 'max_attempts int 6', 'initial_delay float 4 ... double', 'max_delay float 128'; 'up to 5 times (6 total attempts)'. Note: installed 1.63.0 source has max_delay=240; docs and code disagree, post follows docs."},
+      {"line": 418, "claim": "max_attempts=4, initial_delay=2 gives waits 2, 4, 8 s and an exception on the 4th failure; retry_strategy=None disables retries", "verdict": "supported", "source": "_retry.py: delay = initial_delay * 2**attempt capped at max_delay; retry-strategies: 'retry_strategy=None'."},
+      {"line": 506, "claim": "per_turn: False (default) after the loop, True before every model call, int N every N calls; not in TypeScript", "verdict": "supported", "source": "conversation-management: 'False (default) ... True: Apply management before every model call; An integer N (must be > 0) ...'; '// Not supported in TypeScript'."},
+      {"line": 533, "claim": "proactive_compression=True uses default threshold 0.7; a dict compression_threshold between 0 and 1; otherwise only reactive recovery", "verdict": "supported", "source": "conversation-management: 'Use True for the default 0.7 threshold, or pass a dict with a custom compression_threshold ratio between 0 and 1'; 'Without proactive_compression, only reactive overflow recovery is used.'"},
+      {"line": 592, "claim": "Offload.truncate(\"tool_results\", {\"preview_tokens\": 500}).when(threshold=2500)", "verdict": "supported", "source": "context-management migration table: 'ContextOffloader(max_result_tokens=2500, preview_tokens=500) | Offload.truncate(\"tool_results\", {\"preview_tokens\": 500}).when(threshold=2500)'."},
+      {"line": 640, "claim": "preserve_recent_messages default 10 vs migration example utilization=0.85, preserve_recent=4", "verdict": "supported", "source": "conversation-management: 'preserve_recent_messages (int, default: 10)'; context-management: 'Offload.summarize(\"*\").when(utilization=0.85, preserve_recent=4)'."},
+      {"line": 710, "claim": "Python adds 'You must format the previous response as structured output.'; call value overrides agent value; TS drops the text and changes only tool choice", "verdict": "supported", "source": "structured-output-behavior Forced tool call section, verbatim."},
+      {"line": 718, "claim": "With limit 3: validation failures and failed forced retries count, other tool calls do not; at the limit the call stops before the next model call with limit_structured_output_attempts; without a limit the forced-retry failure raises", "verdict": "supported", "source": "structured-output-behavior: 'Each model response that fails counts as one attempt ... Calls to your other tools before the forced retry don't count'; 'When the limit is reached, the call stops before the next model call'; 'If the retry still doesn't return valid structured output, the call raises StructuredOutputException'."},
+      {"line": 793, "claim": "Confirm only on before_tool_call; with response no pause; default evaluate accepts True, 'y', 'yes' case-insensitive", "verdict": "supported", "source": "interventions Confirm Action: 'only supported on before_tool_call'; 'The default accepts True, \"y\", or \"yes\" (case-insensitive).'"},
+      {"line": 938, "claim": "Python checks cancellation at four checkpoints: model streaming, before tool execution, during MCP tool execution, after tool execution", "verdict": "supported", "source": "agent-loop: 'The agent checks for cancellation at four checkpoints' with those four rows (Python tab)."},
+      {"line": 1062, "claim": "In Strands 1.47.0 accumulated_metrics.latencyMs reads 0 for some providers; token counts and per-tool timings accurate", "verdict": "supported", "source": "Builder Center 'Observability for AI Agents with OpenTelemetry': 'Honest caveat: in Strands 1.47.0, accumulated_metrics.latencyMs reads 0 for some LLM providers ... Token counts and per-tool timings are accurate everywhere'."},
+      {"line": 1110, "claim": "Deploy with the starter toolkit: pip install bedrock-agentcore-starter-toolkit; agentcore configure (asks entrypoint, name, deps, deployment type, role); agentcore deploy; agentcore invoke", "verdict": "wrong", "source": "Strands Python AgentCore deploy page: 'npm install -g @aws/agentcore', 'agentcore create / dev / deploy / invoke'; 'Note: The AgentCore CLI replaces the previously available bedrock-agentcore-starter-toolkit. If you have the old toolkit installed, uninstall it'."}
+    ]
+  },
+  "claims_outside_sample": [
+    {"line": 862, "claim": "Python LLMSteeringHandler goes into the same interventions list as EmailApproval (also L887 '스티어링 핸들러도 인터벤션 핸들러입니다')", "verdict": "wrong", "source": "steering: 'in Python, steering handlers are plugins; in TypeScript, they build on the interventions framework'; Python: 'Attach the handler with plugins=[handler]'."},
+    {"line": 560, "claim": "context_manager presented as a regular option", "verdict": "unsupported (omission)", "source": "context-management page header: 'Experimental Feature ... may change in future versions. Use with caution in production'."}
+  ],
+  "checklist": {
+    "repeated": 2, "avoided": 2, "na": 1,
+    "repeated_ids": ["shared-agent-throw-scope", "shared-agent-history-leak"],
+    "details": [
+      {"id": "loop-diagram-remote", "status": "avoided", "evidence": "No image links at all; the loop is an ASCII diagram (L31-42). No remote docs-host image."},
+      {"id": "shared-agent-throw-scope", "status": "repeated", "evidence": "L965 '기본 THROW 모드에서 이미 실행 중인 에이전트를 호출하면 ConcurrencyException이 납니다' - not tied to invoke_async; no mention that sync agent(...) inside an async handler blocks and serializes instead of raising."},
+      {"id": "shared-agent-history-leak", "status": "repeated", "evidence": "Partial: per-request agents recommended (L975, L1012 '기록을 공유하지 않음'), but the post never says a shared module-level agent carries the previous request's conversation into the next, and never recommends invoke_async in async handlers."},
+      {"id": "result-fields-incomplete", "status": "avoided", "evidence": "L1047-1048 print(result.stop_reason) and print(result.metrics.get_summary()); L1051 lists total_cycles, accumulated_usage, tool_usage."},
+      {"id": "multi-agent-subject", "status": "n/a", "evidence": "No multi-agent section or execution-unit sentence."}
+    ]
+  },
+  "extras": {
+    "architecture_first_line": 27,
+    "architecture_note": "Loop summary in TL;DR L13; loop cycle section with diagram and cycle steps L27-59, before any configuration; hook internals L131.",
+    "sources_total": 24,
+    "sources_non_official": 8,
+    "non_official_share": 0.33,
+    "non_official_list": ["tech-insider.org setup", "dev.to DEV332", "GitHub elizabethfuentes12 observability sample", "Builder Center Part 1 guide", "Medium (Douglas)", "dev.to Anthropic API", "Builder Center observability post", "YouTube AgentCore 22 minutes"],
+    "opens_with_problem": true,
+    "closes_with_when_to_choose_and_failure_modes": true,
+    "runnable_code": {
+      "verdict": "runs as pasted (Python), with setup gaps",
+      "method": "strands-agents 1.63.0 (+[cedar,otel], bedrock-agentcore) in a temp venv; all 24 Python blocks executed in order in one namespace with a scripted fake Model injected as the default model (no paid calls).",
+      "passes": ["All imports resolve (strands.middleware ModelStopReason/ToolResultEvent, strands.interventions OnError, vended_interventions cedar/hitl, strands.types.tools ToolContext).", "All 24 blocks executed without errors; OrderGuard cancel_tool blocked send_email; resume hook fired once; route/cache middleware ran (cache filled); approval_gate returned stop_reason 'interrupt' with interrupt 'approve_tool' and resumed to end_turn with interruptResponse 'approved'; OrderSummary structured output returned with limits; handle_request returned Reply(COMPLETED); get_summary() has total_cycles/accumulated_usage/tool_usage.", "Request shapes match signatures: agent(prompt, structured_output_model, structured_output_prompt, limits, cancel_signal, idempotency_token, invocation_state)."],
+      "gaps": ["No install command for the SDK itself (pip install strands-agents) and none for the extras the code needs: CedarAuthorization raises ImportError without strands-agents[cedar]; setup_otlp_exporter needs the otel extra; the entrypoint needs bedrock-agentcore.", "Default model is Bedrock; credentials/model access are never mentioned.", "make_order_agent is redefined five times; L660 says retry strategy is kept, but the last definition (L599) has none.", "Deploy commands use the deprecated starter toolkit."]
+    }
+  },
+  "top_issues": [
+    "Deployment uses the deprecated bedrock-agentcore-starter-toolkit and 'agentcore configure' (L1110-1116); current docs say the AgentCore CLI (npm @aws/agentcore) replaces it and to uninstall the toolkit.",
+    "Python steering is a plugin (plugins=[handler]), but L862/L887 register LLMSteeringHandler in the Python agent's interventions list.",
+    "Shared-agent checklist items repeat: THROW not scoped to invoke_async, no sync-blocking note, no history carry-over warning or invoke_async advice (L965-975); plus no SDK install/extras step and context_manager shown without its Experimental label."
+  ]
+}

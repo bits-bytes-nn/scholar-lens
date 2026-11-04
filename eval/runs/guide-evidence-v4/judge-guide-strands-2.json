@@ -1,0 +1,139 @@
+{
+  "item": "guide-strands",
+  "post": "/tmp/eval-guide/guide-strands-v4.md",
+  "judge_run": 2,
+  "sampling": "prose/list paragraphs after front matter (headings, code, tables, display math, Sources excluded): 157 paragraphs; paragraphs 2,5,8,... (52 sampled); 15 claims drawn from sampled paragraphs and the tables/code they introduce",
+  "scores": {"A": 8.5, "B": 8, "C": 7.5, "D": 8, "E": 8.5, "F": 9, "T1": 8, "T2": 8.5, "T3": 9},
+  "score_evidence": {
+    "A": [
+      "Front matter valid: two-level categories, use_math: true with $$ present, description 142 chars, no author key",
+      "Claim-style H2/H3 headings in a coherent arc (loop -> hooks -> middleware -> retry -> context -> structured output -> interventions -> steering -> lifecycle -> observability/deploy -> choice)",
+      "Cosmetic: stray double/triple blank lines L888-889, L1029-1031, L1122-1123; a few topic headings ('### 한 사이클 안의 단계' L50)"
+    ],
+    "B": [
+      "L1136 '그 순서 자체를 그래프로 표현하는 편이 정직합니다' -> '그 순서를 그래프로 고정하는 편이 맞습니다' (odd word choice)",
+      "L162 '각 속성이 하는 일은 다음과 같습니다(Python 기준).' formulaic -> 'Python 기준으로 각 속성의 쓰임은 이렇습니다.'",
+      "L21 '개발자는 비즈니스 문제에 집중합니다' translationese from docs marketing line",
+      "L700 '앞 장에서 다룬' -> '앞 절에서 다룬' (the post has sections, not chapters)",
+      "L180 '변경 내용을 로그로 남기라고 권장합니다' hides who recommends (the docs)",
+      "'한 서드파티 블로그/가이드는' opener repeated L21, L52, L61, L129, L1066, L1088, L1128, L1138"
+    ],
+    "C": [
+      "L660 '앞서 설정한 재시도 전략과 컨텍스트 관리는 그대로 유지됩니다' is false within the post: make_order_agent is redefined at L410, L484, L513, L545, L599 and the last definition (L599-605) has no retry_strategy",
+      "L465 '앞서 정의한 make_order_agent() 팩토리가 retry_strategy=None으로 에이전트를 만든 뒤' - the block actually redefines the factory",
+      "Facts restated: Guide retry has no cap L757/L887/L1142; latencyMs=0 in 1.47.0 L1062/L1138; max_tokens error L48/L932/L1145; stop reason vs exception L87/L395; cache tokens counted L916/L1144",
+      "Cross-references otherwise accurate (OrderGuard, approval_gate, EmailApproval referred back correctly)"
+    ],
+    "D": [
+      "Good worked examples at hard points: retry wait table L384-391, structured-output attempt table L718-725, Cedar/HITL path table L833-838, stash flow table L617-621",
+      "Over-explains the trivial: L63-68 display math for max(1.2, 0.8) vs 1.2+0.8",
+      "L914 meta commentary on which docs page lists how many priorities is not useful to the reader"
+    ],
+    "E": [
+      "Tables are real and source-faithful (metrics table L1053-1060 matches the Builder Center output cell for cell)",
+      "Text box diagrams L31-42, L152-160, L359-364, L568-580 are labelled as illustrative and placed where discussed; no remote images",
+      "L63-68 decorative math"
+    ],
+    "F": [
+      "15/15 sampled claims supported by strandsagents.com docs or the cited Builder Center post",
+      "No invented API: every import in the post resolves in strands-agents 1.63.0",
+      "Doc/code drift noted, not a post error: retry-strategies docs give max_delay default 128 (post L376 follows docs) while installed 1.63.0 signature is max_delay: int = 240",
+      "L838 'classifier model call fails -> ask the human' not found in the approve-before-acting page; SDK runtime log confirms ('classifier failed, defaulting to approval required')"
+    ],
+    "T1": [
+      "Running example code runs as pasted against a stubbed model (see runnable_code)",
+      "No install command for the SDK anywhere; L19 names monorepo dirs 'strands-py'/'strands-ts' instead of PyPI 'strands-agents' / npm '@strands-agents/sdk'",
+      "Cedar block (L803-828) needs strands-agents[cedar] (ImportError: requires 'cedarpy'); telemetry block (L1068-1075) needs the otel extra (ModuleNotFoundError: opentelemetry.exporter); neither install is shown",
+      "Factory drift (L660) means the final agent silently lacks the retry strategy the text says is kept"
+    ],
+    "T2": [
+      "Covers the major official pages in learning order; steering and interventions sections are grounded in the docs",
+      "Some padding from restatement rather than new topics"
+    ],
+    "T3": [
+      "Strong internals: hook placement outside the middleware chain (L357-368), strategy outside middleware causing multiplicative retries (L465), stash + retrieve_context (L609-623), limit check timing (L912)",
+      "System fit: per-request agents, deadlines, typed outcomes, AgentCore microVM isolation, OTel span hierarchy, version/endpoint qualifiers",
+      "Design advice reads as recommendation ('이 글의 판단으로는' L1148)"
+    ]
+  },
+  "principles": {
+    "claim_headings": {"status": "met", "evidence": "L370 '스로틀링만 지수 백오프로 재시도하는 기본 재시도 전략', L642; a few topic H3s (L50)"},
+    "running_example": {"status": "partly met", "evidence": "Order agent with normalize_records/send_email throughout, but make_order_agent is redefined five times and L660 misstates what is kept"},
+    "mechanism_design_code_example": {"status": "met", "evidence": "Retry: mechanism L372 -> formula L378 -> table L384 -> override code L403 -> worked 2/4/8 s L418"},
+    "facts_said_once": {"status": "not met", "evidence": "Guide no-cap x3 (L757, L887, L1142); latencyMs=0 x2 (L1062, L1138); max_tokens x3; cache-token counting x2"},
+    "numbers_with_scope_unit": {"status": "met", "evidence": "L1051 metrics tied to a three-tool travel demo; L1062 tied to Strands 1.47.0"},
+    "nothing_invented": {"status": "met", "evidence": "Illustrative cases labelled (L76, L566, L866, L1078); no API absent from the SDK"},
+    "writer_assessment_at_end": {"status": "met", "evidence": "L1148 '이 글의 판단으로는 ... 그래프로 넘어가는 신호는 두 가지입니다'"},
+    "length_fitted": {"status": "partly met", "evidence": "1,176 lines; trivial latency math L63-68 and repeated pitfalls lengthen it"},
+    "type_specific_shape": {"status": "met", "evidence": "TL;DR L11, problem L23, loop architecture L27 before configuration, non-official sources included, closes with choice and pitfalls L1124-1148"},
+    "korean_style": {"status": "partly met", "evidence": "입니다 register held; repeated '한 서드파티 ~는' openers, L1136 '정직합니다', L162 formulaic"}
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 15,
+    "unsupported": 0,
+    "wrong": 0,
+    "unverifiable": 0,
+    "examples": [
+      {"line": 48, "claim": "max_tokens is unrecoverable in the current loop and ends with an error", "verdict": "supported", "source": "agent-loop: 'This is unrecoverable within the current loop ... the loop terminates with an error.'"},
+      {"line": 141, "claim": "Mutable properties table: BeforeInvocation messages, AfterModelCall retry, BeforeTools cancel, BeforeToolCall cancel_tool/selected_tool/tool_use, AfterToolCall result/retry, AfterTools end_turn, AfterInvocation resume", "verdict": "supported", "source": "hooks-events 'Event Properties' Python tab"},
+      {"line": 276, "claim": "Input handler returns context.replace(); agent.system_prompt unchanged; route when projected_input_tokens > 50_000", "verdict": "supported", "source": "middleware page code and text"},
+      {"line": 376, "claim": "ModelRetryStrategy defaults max_attempts 6 (1 disables), initial_delay 4 doubling, max_delay 128", "verdict": "supported", "source": "retry-strategies parameter table (installed 1.63.0 code has max_delay=240)"},
+      {"line": 393, "claim": "Longest default wait is 64 s, below the 128 s cap", "verdict": "supported", "source": "derived from 4 s doubling over 5 retries with docs defaults"},
+      {"line": 424, "claim": "ServiceUnavailable hook retries up to 3 times with 2 ** retry_count s sleep", "verdict": "supported", "source": "hooks page RetryOnServiceUnavailable(max_retries=3), asyncio.sleep(2 ** self.retry_count)"},
+      {"line": 504, "claim": "Tool-result truncation default on, oldest tool-result message first, head/tail with <truncated chars=\"N\"/> marker", "verdict": "supported", "source": "conversation-management SlidingWindow list"},
+      {"line": 527, "claim": "preserve_recent_messages default 10; pinned via metadata.custom.pinned with pin_first", "verdict": "supported", "source": "conversation-management: 'preserve_recent_messages (int, default: 10)'; Message Pinning section"},
+      {"line": 714, "claim": "Each failed response counts one attempt; other tool calls before the forced retry do not count; stop at limit with limit_structured_output_attempts", "verdict": "supported", "source": "structured-output-behavior 'Limit attempts'"},
+      {"line": 729, "claim": "TS counts filtered forced retry as an attempt; Python ends with content_filtered", "verdict": "supported", "source": "structured-output-behavior 'Limit attempts'"},
+      {"line": 745, "claim": "Five intervention methods with allowed actions; precedence deny > confirm > guide > transform > proceed; on_error default 'throw'", "verdict": "supported", "source": "interventions method table, line 'well-defined precedence', Error Handling table"},
+      {"line": 881, "claim": "contextProviders default [new ToolLedgerProvider()], [] disables; maxEntries default 100, oldest dropped", "verdict": "supported", "source": "steering options tables"},
+      {"line": 914, "claim": "Priority turns > total tokens > output tokens > structured output attempts; loop reference lists only first three", "verdict": "supported", "source": "lifecycle-controls vs agent-loop 'follows priority order: turns, then total tokens, then output tokens.'"},
+      {"line": 938, "claim": "Python checks cancellation at four checkpoints: streaming, before tool, during MCP tool, after tool", "verdict": "supported", "source": "agent-loop 'The agent checks for cancellation at four checkpoints' table"},
+      {"line": 1053, "claim": "Demo metrics: total_cycles 3, input 2,520, output 209, total 2,729, search_flights 0.721 s, book_flight 0.006 s; latencyMs 0 in 1.47.0", "verdict": "supported", "source": "Builder Center 'Observability for AI Agents with OpenTelemetry' JSON output and caveat"},
+      {"line": 1092, "claim": "AgentCore deploy prerequisites Python 3.10+ or Node.js 22+; container engine only for local testing/advanced", "verdict": "supported", "source": "deploy_to_bedrock_agentcore prerequisites"}
+    ],
+    "numeric_claims": 9
+  },
+  "checklist": {
+    "repeated": 0,
+    "avoided": 3,
+    "na": 2,
+    "repeated_ids": [],
+    "details": [
+      {"id": "loop-diagram-remote", "verdict": "avoided", "evidence": "No image links at all; loop drawn as a text diagram L31-42"},
+      {"id": "shared-agent-throw-scope", "verdict": "n/a", "evidence": "No shared-agent-in-async-handler warning; L965 states the docs' general THROW/ConcurrencyException rule and the handler L1011 is sync. invoke_async is never recommended"},
+      {"id": "shared-agent-history-leak", "verdict": "avoided", "evidence": "L965 '호출이 겹치면 메시지가 뒤섞여 기록이 망가집니다', L975 per-request agents, L1012 '요청마다 새 인스턴스: 기록을 공유하지 않음'; the carry-over of a previous request's conversation is implied rather than stated, and invoke_async is not mentioned"},
+      {"id": "result-fields-incomplete", "verdict": "avoided", "evidence": "L1047-1048 print(result.stop_reason); print(result.metrics.get_summary()); L1051 lists total_cycles, accumulated_usage, tool_usage"},
+      {"id": "multi-agent-subject", "verdict": "n/a", "evidence": "No multi-agent sentence in the post"}
+    ]
+  },
+  "extras": {
+    "architecture_first_line": 27,
+    "internals_first_line": 50,
+    "sources_total": 24,
+    "sources_non_official": 8,
+    "non_official_share": 0.33,
+    "opens_with_problem": true,
+    "opens_with_problem_evidence": "TL;DR L11, then L23 '루프를 직접 짜면 몇 줄로 시작하지만 운영 단계에서 요구가 쌓입니다'",
+    "closes_with_choice_and_failure_modes": true,
+    "closes_evidence": "L1124-1148 choice criteria vs graph workflows, pitfall list L1142-1146, writer's judgement L1148"
+  },
+  "runnable_code": {
+    "verdict": "runs as pasted, with missing install steps",
+    "method": "strands-agents 1.63.0 in a temp venv; all 24 python blocks concatenated in post order and exec'd; BedrockModel.stream replaced with a scripted fake (tool_use normalize_records -> send_email -> OrderSummary/end_turn); dummy credentials, no paid model calls",
+    "results": [
+      "All imports resolve (strands.middleware ModelStopReason/ToolResultEvent, strands.interventions OnError, strands.vended_interventions.hitl, strands.types.tools ToolContext, strands.hooks.events/registry)",
+      "Agent(...) accepts retry_strategy, conversation_manager, context_manager, interventions, hooks; agent(...) accepts limits, cancel_signal, idempotency_token, structured_output_model, structured_output_prompt, invocation_state",
+      "resume hook ran exactly once; approval_gate middleware produced stop_reason 'interrupt' and resumed with [{'interruptResponse': {...}}] for both approved and denied paths; structured output returned OrderSummary(order_id='1234', item_count=1, email_sent=True); get_summary() returned total_cycles/accumulated_usage/tool_usage",
+      "Cedar block: ImportError until strands-agents[cedar] (cedarpy) installed; not mentioned in the post. Invocation with HITL classifier not verified (stub model cannot answer the classifier)",
+      "Telemetry block: ModuleNotFoundError opentelemetry.exporter without the otel extra; post names the extra only in prose (L1066) with no install command",
+      "No 'pip install strands-agents' anywhere in the post",
+      "Name drift: make_order_agent redefined five times; the final definition drops retry_strategy despite L660"
+    ]
+  },
+  "top_issues": [
+    "Running-example drift: make_order_agent is redefined five times and L660 says the retry strategy is kept, but the final factory (L599-605) has no retry_strategy",
+    "No install steps: no 'pip install strands-agents' (L19 gives monorepo dirs strands-py/strands-ts), and the Cedar and OpenTelemetry blocks fail without the [cedar] and otel extras",
+    "Facts repeated: Guide retry has no cap (L757/L887/L1142), latencyMs=0 (L1062/L1138), max_tokens error (L48/L932/L1145), cache-token counting (L916/L1144)"
+  ]
+}
