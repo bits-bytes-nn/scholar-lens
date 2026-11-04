@@ -56,6 +56,9 @@ _SDK_LANGUAGES = {
     "rust": "rust",
 }
 MAX_CODE_LINES = 40
+# The engine's source ids (D1 official, R1 reference, W1 third-party, O1
+# older docs) never belong in the text.
+_SOURCE_ID = re.compile(r"(?<![\w`./-])[DRWO]\d{1,3}(?![\w`./-])")
 # Hedging about what the writer did not settle, instead of leaving it out.
 _HEDGE = re.compile(
     r"(?:버전|환경|문서)에서 (?:직접 )?확인(?:해야|하세요|하십시오|해 보세요|이 필요)|"
@@ -211,6 +214,11 @@ def guide_draft_problems(markdown: str, *, code_language: str = "") -> list[str]
     problems: list[str] = []
     for sentence in prose_sentences(markdown):
         plain = MARKER.sub("", sentence)
+        if _SOURCE_ID.search(plain):
+            problems.append(
+                "names a source by its internal id (D1, W8); name the page or "
+                f"leave it out: {plain[:160]}"
+            )
         if _MARKER_AS_WORD.search(sentence):
             problems.append(
                 "an evidence marker stands for a word; state the fact and put "

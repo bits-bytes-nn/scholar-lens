@@ -694,3 +694,11 @@ def test_a_figure_without_a_quote_takes_the_text_before_it() -> None:
         doc, kind="figure", claim="처리량", quote="", anchor="S1", figure_id="F1"
     )
     assert "three parallel outputs" in item.quote
+
+
+def test_internal_source_ids_in_the_text_are_problems() -> None:
+    assert any(
+        "internal id" in p
+        for p in guide_draft_problems("## A\n\n영상 튜토리얼(W8)이 보여 줍니다.\n")
+    )
+    assert guide_draft_problems("## A\n\n`D1` 등급의 GPU를 씁니다.\n") == []

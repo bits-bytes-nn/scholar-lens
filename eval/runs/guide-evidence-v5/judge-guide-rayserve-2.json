@@ -1,0 +1,80 @@
+{
+  "item": "guide-rayserve",
+  "judge": "judge-2",
+  "post": "/tmp/eval-guide/guide-rayserve-v5.md",
+  "sampling": "prose paragraphs (excluding headings, code, tables, display math, front matter); paragraph 2 then every third (2,5,8,...,155); 52 sampled, 15 claims drawn from them",
+  "scores": {"A": 9, "B": 8, "C": 8, "D": 8.5, "E": 8.5, "F": 9, "T1": 8, "T2": 9, "T3": 9},
+  "deductions": {
+    "A": ["No body H1, two-level categories, use_math with $$ present, real tables, fenced code; description 135 chars opening with 'Ray Serve'. Minor: architecture shown only as ASCII (L135-146), no docs architecture image."],
+    "B": ["L212 noun frame '...본다는 지적입니다' -> '...본다고 지적합니다'", "L105 '나눠 읽을 수 있습니다' formulaic 'can' -> '나눠 읽습니다'", "L52 '즉 추론 엔진을 대체하지 않고' restatement", "L172 '...과정에 가깝습니다' after a table that already says it (restatement)"],
+    "C": ["L797 serve_config.yaml sets user_config on Translator before reconfigure exists (added L851); deploying it against text_ml.py as assembled at L540 fails (verified: 'user_config or rank specified but deployment ... missing reconfigure method')", "L600-629 FastAPI Translator changes the request shape to a query param but the post never updates the client (earlier clients use json=)", "L767 says the running example uses num_replicas='auto' while the batching code above (L737) uses num_replicas=2 (only the YAML at L333/L924 sets auto)"],
+    "D": ["Good: P2C probability worked example (L196-210), reconcile table (L164-170), Little's law flagged as author's estimate (L278). Slight over-explanation of the trivial 1/3+1/3 sum (L206-208)."],
+    "E": ["Tables and code placed where discussed; no 'Figure N' references. No real architecture figure although docs provide one."],
+    "F": ["15/15 sampled claims supported. Outside the sample: L781 cites Ray 2.0 'max_concurrent_queries (기본 100)' but labels it as 2.0 and maps it to max_ongoing_requests (acceptable). L1062 TrueFoundry '2026' attribution not checked."],
+    "T1": ["Core path verified on Ray 2.60.0 (quickstart, text_ml:app, streaming, batching, custom policy, StreamingResponder all run). Deductions: FastAPI client shape (422 with json=), user_config ordering, factory example needs opentelemetry-instrumentation-fastapi (not in the install line L406) and an undefined Translator, prefix router string needs ray[llm] (pyarrow/vllm) not installed by L406."],
+    "T2": ["Covers getting started, composition, FastAPI/HTTP, batching, config files, KubeRay, autoscaling, LLM config, routing in a sensible order."],
+    "T3": ["Internals (control/data plane, long-poll, checkpoint recovery, P2C, prefix-tree router, two-tier autoscaling, KubeRay upgrade paths, failure modes); some internals rest on zread/deepwiki code summaries, labelled as such (L160, L180, L248)."]
+  },
+  "principles": {
+    "claim_headings": {"status": "met", "evidence": "L56 '디플로이먼트·레플리카·애플리케이션·인그레스의 4층 모델', L268 '진행 중 요청 수를 목표값에 맞추는 2단 오토스케일러'; L1096 Sources only topic heading"},
+    "running_example": {"status": "met", "evidence": "text_ml:app (Summarizer+Translator) introduced L33, used in routing L190, autoscaling L325, batching L767, config L797, KubeRay L909"},
+    "mechanism_order": {"status": "met", "evidence": "P2C L192-212: mechanism -> assumption -> formula L206 -> worked example table L198; prefix router L214-244"},
+    "facts_once": {"status": "partly met", "evidence": "framework-agnostic / no model optimisation / notebook-to-K8s repeated: L31 vs L1060, L52 vs L1066, L54 vs L1060; 2.32.0 default change L15, L299, L781"},
+    "numbers_scoped": {"status": "met", "evidence": "L242 '8xL4 머신 8대(GPU 64개), 32B 증류 모델, RayTurbo'; L150 'Ray 2.0.0 문서...8코어 단일 머신'; L290 '(Ray 2.59.0 기준)'"},
+    "nothing_invented": {"status": "met", "evidence": "author additions are flagged: L278 '이 글이 덧붙이는 추정', L305 '이 글이 정리한 것', L943 '예시로 정리하면'"},
+    "own_assessment": {"status": "met", "evidence": "L1092 '이 글의 판단으로는...'"},
+    "length_fit": {"status": "partly met", "evidence": "~101KB/1118 lines; long but spends space on hard parts; P2C arithmetic and repeated positioning (L1058-1070) could be cut"},
+    "type_shape": {"status": "met", "evidence": "opens with TL;DR and problem (L11-25), architecture/internals (L56, L107) before config details (L401+), ends with when to choose (L1072) and failure modes (L1081)"},
+    "korean_style": {"status": "partly met", "evidence": "입니다 register held; some formulaic/noun-frame sentences (L105, L172, L212)"}
+  },
+  "claims": {
+    "checked": 15, "supported": 15, "unsupported": 0, "wrong": 0, "unverifiable": 0,
+    "examples": [
+      {"line": 15, "claim": "target_ongoing_requests default 2 since Ray 2.32.0", "verdict": "supported", "source": "advanced-autoscaling: 'The default for target_ongoing_requests changed from 1.0 to 2.0 in Ray 2.32.0.'"},
+      {"line": 64, "claim": "fractional num_cpus/num_gpus pack more replicas than CPUs/GPUs; resources dict for HPU/TPU", "verdict": "supported", "source": "getting_started: 'You can make this a fraction to pack multiple replicas...'; 'non-GPU accelerators like HPUs or TPUs'"},
+      {"line": 148, "claim": "default router is power-of-two-choices (PowerOfTwoChoicesRequestRouter)", "verdict": "supported", "source": "custom-request-router: 'the default power-of-two-choices router'; architecture: 'power of two choices scheduling strategy'"},
+      {"line": 222, "claim": "Ray 2.49 adds custom routing and PrefixCacheAffinityRouter; character-level prefix tree; SGLang-inspired; falls back to P2C on imbalance", "verdict": "supported", "source": "Anyscale blog: '...PrefixCacheAffinityRouter, in Ray 2.49'; 'character-level prefix tree'; 'SGLang team'; prefix-aware-routing doc: falls back to Power of Two Choices"},
+      {"line": 242, "claim": "32B model: TTFT -60%, end-to-end throughput +40% or more", "verdict": "supported", "source": "Anyscale blog: '60% reduction in time-to-first-token (TTFT) and more than 40% improvement in end-to-end throughput'"},
+      {"line": 242, "claim": "eight 8xL4 machines (64 GPUs), RayTurbo, 32B distilled model, similar trend on OSS Ray", "verdict": "supported", "source": "Anyscale blog: 'eight 8xL4 machines (64 GPUs total) on the Anyscale platform using RayTurbo'; 'DeepSeek-R1-Distill-Qwen-32B'"},
+      {"line": 264, "claim": "request_router_class accepts a class or an import-path string", "verdict": "supported", "source": "custom-request-router: 'request_router_class can be passed as the already imported class or as the string of import path'"},
+      {"line": 290, "claim": "num_replicas='auto' = max_ongoing_requests 5, target 2, min 1, max 100", "verdict": "supported", "source": "autoscaling-guide config block: max_ongoing_requests: 5 / target_ongoing_requests: 2 / min_replicas: 1 / max_replicas: 100"},
+      {"line": 346, "claim": "burst knobs: lower upscale_delay_s, upscaling_factor > 1, metrics_interval_s <= upscale_delay_s, lower max_ongoing_requests", "verdict": "supported", "source": "advanced-autoscaling 'High spikes in latency during bursts of traffic' list (omits its warning against very low metrics_interval_s such as 0.1)"},
+      {"line": 453, "claim": "two replicas, 0.2 CPU and 0 GPU each", "verdict": "supported", "source": "getting_started: '@serve.deployment(num_replicas=2, ray_actor_options={\"num_cpus\": 0.2, \"num_gpus\": 0})'"},
+      {"line": 494, "claim": "TF client sends json= with GET; PyTorch posts bytes via data=; sklearn bind(MODEL_PATH, LABEL_PATH)", "verdict": "supported", "source": "serve-ml-models: 'resp = requests.get(\"http://localhost:8000/\", json={\"array\": ...})'; 'requests.post(..., data=ray_logo_bytes)'; 'BoostingModel.bind(MODEL_PATH, LABEL_PATH)'"},
+      {"line": 559, "claim": "Ingress.bind(Adder.bind(increment=1), Adder.bind(increment=2), Combiner.bind())", "verdict": "supported", "source": "serve index: 'app = Ingress.bind(Adder.bind(increment=1), Adder.bind(increment=2), Combiner.bind())'"},
+      {"line": 631, "claim": "route_prefix default '/'; /my_app + @app.get('/fetch_data') -> /my_app/fetch_data", "verdict": "supported", "source": "config: 'It defaults to /.'; http-guide: 'route_prefix = /my_app ... /my_app/fetch_data'"},
+      {"line": 699, "claim": "asyncio.shield cannot protect a DeploymentHandle call", "verdict": "supported", "source": "http-guide: 'asyncio.shield cannot be used on a DeploymentHandle call to prevent the downstream handler from being cancelled'"},
+      {"line": 1002, "claim": "kubectl logs -f on KubeRay operator; controller/deployment logs under /tmp/ray/session_latest/logs/serve/ on head and worker pods", "verdict": "supported", "source": "kubernetes: 'kubectl logs -f <kuberay-operator-pod-name>'; 'located under /tmp/ray/session_latest/logs/serve/ in both the head node pod and worker node pod'"}
+    ],
+    "numbers_in_sample": 9,
+    "additional_spot_checks_supported": ["L150 1-2 ms, 3-4k QPS on 8 cores (Ray 2.0 perf)", "L773 8 vs 6 batch example (Ray 2.0 perf)", "L1026 deployment_config default {} and key list", "L1006 log_engine_metrics default True", "L1024 A10 normalized to A10G", "L176 proxy health check 10.0/10.0/5.0 s and 3 consecutive failures", "L274 RAY_SERVE_CONTROL_LOOP_INTERVAL_S 0.1 s", "L397 RAY_SERVE_RECORD_AUTOSCALING_STATS_TIMEOUT_S 10.0 s"]
+  },
+  "checklist": {
+    "repeated": 0, "avoided": 2, "na": 0, "repeated_ids": [],
+    "details": [
+      {"id": "arch-diagram-relative-link", "verdict": "avoided", "evidence": "no Markdown links/images with empty text or ../_images paths (grep for '](..' and '[](' finds none); the architecture is drawn as ASCII (L135-146) rather than the docs image"},
+      {"id": "proxy-env-ray-start-unsupported", "verdict": "avoided", "evidence": "L176 gives only names, meanings and defaults of RAY_SERVE_PROXY_* vars; no 'ray start' or export instruction anywhere in the post"}
+    ]
+  },
+  "extras": {
+    "architecture_first_line": 13,
+    "architecture_section_line": 107,
+    "sources_total": 22,
+    "non_official_sources": 6,
+    "non_official_share": 0.27,
+    "non_official_list": ["deepwiki.com", "zread.ai", "themutex.substack.com", "anyscale.com blog", "github.com RFC #53016", "truefoundry.com blog"],
+    "opens_with_problem": true,
+    "closes_with_when_to_choose_and_failure_modes": true
+  },
+  "runnable_code": {
+    "verdict": "mostly runs",
+    "environment": "ray 2.60.0, torch 2.15.0, transformers 5.22.1, Python 3.12, private local cluster (ray.init(address='local'), own temp dir, HTTP port 18731)",
+    "ran_ok": ["MyFirstDeployment (L73-87) assert passes", "serve_quickstart translator_app: POST json='Hello world!' -> 200 'Bonjour monde!'; handle.translate.remote -> same", "text_ml:app (L416-450 + L505-535): POST json=paragraph -> 200 French text", "Streamer/Caller streaming (L568-590) -> [0..4]", "batched Translator (L732-761) behind Summarizer -> 200, update_batch_params OK", "custom autoscaling policy (L353-393) deploys HEALTHY", "StreamingResponder (L674-697) streams"],
+    "failures": ["FastAPI Translator (L603-629) takes text as a query param: POST json='Hello world!' -> 422 'Field required loc [query,text]'; works only with params={'text': ...}, which the post never shows (docs use params=)", "serve_config.yaml (L797-819) user_config on the text_ml.py Translator built at L540 fails: 'user_config or rank specified but deployment ... missing reconfigure method'; reconfigure is added only later (L851)", "factory example (L638-663) not standalone: Translator undefined in the block, needs opentelemetry-instrumentation-fastapi not in the install line (not run)", "RequestRouterConfig with 'ray.serve.llm.request_router:PrefixCacheAffinityRouter' imports eagerly and fails without ray[llm] (ModuleNotFoundError pyarrow); post does not say to install ray[llm]"]
+  },
+  "top_issues": [
+    "FastAPI Translator changes the request shape to a query parameter; the post's JSON clients get 422 and the params= client is never shown (L616-617, L470).",
+    "serve_config.yaml adds user_config to Translator before reconfigure exists; deploying it with text_ml.py as built at L540 fails (L815-816 vs L851).",
+    "Install line covers only the base path: the FastAPI factory example needs opentelemetry-instrumentation-fastapi and the prefix router string needs ray[llm]; factory block also uses an undefined Translator (L406, L638-662, L259)."
+  ]
+}

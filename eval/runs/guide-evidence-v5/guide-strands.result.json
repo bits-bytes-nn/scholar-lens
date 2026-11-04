@@ -1,0 +1,158 @@
+{
+  "kind": "guide",
+  "status": "succeeded",
+  "input": "https://strandsagents.com/docs/user-guide/sdk/agents/agent-loop/, https://strandsagents.com/docs/user-guide/sdk/agents/hooks/",
+  "title": "Strands Agent Loop Control: Hooks, Retries, Limits and Steering",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/guide-strands-agent-loop-control-hooks-retries-limits-and-steering/2026-11-04-strands-agent-loop-control-hooks-retries-limits-and-steering.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-11-04-strands-agent-loop-control-hooks-retries-limits-and-steering.md",
+  "pr_url": null,
+  "warnings": [
+    "Section '수명주기 전 구간에 걸친 타입 있는 훅 이벤트와 쓰기 가능한 필드' still has: heading is a sentence: write the claim as a noun phrase ('정책보다 먼저 무너지는 보상 모델'): 읽기 전용이 기본이고, 루프를 움직이는 필드는 일부입니다 | points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 앞서 본 대로 도구 실패는 오류 결과로 모델에 돌아갑니다. | a deep section needs at least 2 visuals (its figures, an equation, or a small table from its number evidence) | a 45-line code block; show the 40 or fewer lines the text explains and say what the rest does",
+    "Section '컨텍스트 윈도우를 토큰 한도 안에 묶어 두는 대화 관리자' still has: points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 앞서 본 반응형 복구, 즉 넘치면 오래된 메시지부터 잘라내는 동작은 오버플로가 난 뒤에야 움직입니다 .",
+    "Section '필요할 때만 맥락 가이던스를 주입하는 모듈형 프롬프팅으로서의 스티어링': check 1 sentence(s) the evidence may not support: 앞서 구조화 출력에서 다룬 환불 요청 \"Please refund order 4512\"를 다시 가져옵니다 [[E66]]. (numbers not in its evidence)",
+    "Section '필요할 때만 맥락 가이던스를 주입하는 모듈형 프롬프팅으로서의 스티어링' still has: numbers ['4512'] are not in the cited evidence: 앞서 구조화 출력에서 다룬 환불 요청 \"Please refund order 4512\"를 다시 가져옵니다 .",
+    "Section '모델 주도 루프가 맞는 경우와 그래프 기반 프레임워크가 나은 경우' still has: the section must start with its '## ' heading (모델 주도 루프가 맞는 경우와 그래프 기반 프레임워크가 나은 경우)",
+    "Section 'TL;DR': check 1 sentence(s) the evidence may not support: LLM 스티어링에서는 별도 모델이 도구 호출 직전 같은 시점에 에이전트의 다음 행동을 판단해 `proceed`, `guide`, `confirm` 같은 결정을 돌려줍니다 [[E91]]. (unsupported: E91은 TypeScript LLMSteeringHandler 범위만 다룹니다. Python 스티어링은 Proceed/Guide/Interrupt를 반환하는데(E92), 문장은 언어 조건 없이 서술합니다. 또 근거는 '별도 모델'이 아니라 평가마다 새로 만드는 내부 에이전트를 말합니다.)"
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 3949.1,
+  "input_tokens": 4268853,
+  "output_tokens": 543176,
+  "estimated_cost_usd": 23.289,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 228,
+      "failed_calls": 1,
+      "input_tokens": 20275,
+      "output_tokens": 543176,
+      "cache_read_tokens": 1481714,
+      "cache_write_tokens": 2766864,
+      "cost_usd": 23.288973
+    },
+    "by_stage": {
+      "relevance": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 2686,
+        "output_tokens": 187,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.000362
+      },
+      "research_plan": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 2855,
+        "output_tokens": 640,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.000606
+      },
+      "read": {
+        "calls": 109,
+        "failed_calls": 0,
+        "input_tokens": 264,
+        "output_tokens": 118413,
+        "cache_read_tokens": 821432,
+        "cache_write_tokens": 246025,
+        "cost_usd": 1.964001
+      },
+      "outline": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 7212,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 27290,
+        "cost_usd": 0.280706
+      },
+      "verify": {
+        "calls": 54,
+        "failed_calls": 0,
+        "input_tokens": 216,
+        "output_tokens": 134222,
+        "cache_read_tokens": 542307,
+        "cache_write_tokens": 1342008,
+        "cost_usd": 9.612274
+      },
+      "draft": {
+        "calls": 14,
+        "failed_calls": 0,
+        "input_tokens": 56,
+        "output_tokens": 75877,
+        "cache_read_tokens": 47190,
+        "cache_write_tokens": 364148,
+        "cost_usd": 3.35738
+      },
+      "review": {
+        "calls": 15,
+        "failed_calls": 0,
+        "input_tokens": 60,
+        "output_tokens": 33174,
+        "cache_read_tokens": 25485,
+        "cache_write_tokens": 75275,
+        "cost_usd": 1.050284
+      },
+      "fix": {
+        "calls": 31,
+        "failed_calls": 0,
+        "input_tokens": 124,
+        "output_tokens": 172104,
+        "cache_read_tokens": 45300,
+        "cache_write_tokens": 712118,
+        "cost_usd": 7.021286
+      },
+      "finalize": {
+        "calls": 2,
+        "failed_calls": 1,
+        "input_tokens": 14010,
+        "output_tokens": 1347,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.002074
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-haiku-5-5": {
+        "calls": 3,
+        "failed_calls": 0,
+        "input_tokens": 19551,
+        "output_tokens": 2174,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.003042
+      },
+      "global.anthropic.claude-sonnet-5-5": {
+        "calls": 109,
+        "failed_calls": 0,
+        "input_tokens": 264,
+        "output_tokens": 118413,
+        "cache_read_tokens": 821432,
+        "cache_write_tokens": 246025,
+        "cost_usd": 1.964001
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 115,
+        "failed_calls": 0,
+        "input_tokens": 460,
+        "output_tokens": 422589,
+        "cache_read_tokens": 660282,
+        "cache_write_tokens": 2520839,
+        "cost_usd": 21.32193
+      },
+      "unknown": {
+        "calls": 1,
+        "failed_calls": 1,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.0
+      }
+    }
+  }
+}

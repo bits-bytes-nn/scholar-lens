@@ -288,6 +288,10 @@ class EvidenceGuideEngine(EvidenceWriter):
             section = document.section(anchor) if document else None
             if document is None or section is None or left <= 0:
                 continue
+            if document.authority not in _PRIMARY:
+                # A third-party page's identifiers are often stale; its
+                # evidence says what the guide may take from it.
+                continue
             text = quote_for_prompt_code(section.text)[:left]
             left -= len(text)
             parts.append(

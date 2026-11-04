@@ -314,7 +314,14 @@ end. Report only problems that stop the code from working as the text says:
   sent a request, a client and server that disagree on the request's
   shape, a config file referred to but never shown);
 - an import path, flag, metric or API name that contradicts the source code
-  listed (the official docs' code wins).
+  listed (the official docs' code wins);
+- the guide's own settings defeating its example: an allow-list, policy or
+  guard shown earlier that blocks a tool the example needs (a structured
+  output tool included), a limit the example always hits;
+- a sentence that recaps or points back to code ("앞서 만든 build_agent에는
+  … 이 있습니다", "앞서 보낸 요청") that the earlier blocks do not show;
+- no install command for the packages and extras the code imports (report
+  it on the first usage section).
 For each problem give the section title exactly as listed, the problem, and
 the fix (the corrected lines, using names and import paths from the guide
 or the source code listed). Return no issues when the code works.

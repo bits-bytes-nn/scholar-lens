@@ -1,0 +1,261 @@
+{
+  "item": "guide-vllm",
+  "post": "/tmp/eval-guide/guide-vllm-v5.md",
+  "judge_run": 2,
+  "scores": {
+    "A": 8.5,
+    "B": 8.0,
+    "C": 7.5,
+    "D": 8.5,
+    "E": 8.5,
+    "F": 7.0,
+    "T1": 8.0,
+    "T2": 8.0,
+    "T3": 8.5
+  },
+  "score_evidence": {
+    "A": "Coherent arc: TL;DR L11, problem L17, mechanism L47, system path L111, sharing L169, scheduler L229, V1 L296, install L372, usage L422, tuning L501, OOM L568, deploy L633, metrics L696, comparison L752. No body H1, no skipped levels, 20 fences all closed, math only $$, use_math set, description 122 chars. Deductions: L27 is a one-sentence orphan paragraph ('어림 계산으로 옮기면, 40GB의 약 30%인 12GB 남짓이...') that the generator itself flagged; L244 table cell '—' for the running-queue OS analogy.",
+    "B": "Mostly natural '입니다' prose with English terms on first use. L509 '이 남은 공간을에서 본 고정 크기 물리 블록으로 잘라' is broken (a dropped referent; rewrite: '이 남은 공간을 앞서 본 고정 크기 물리 블록으로 잘라'). L237 '규칙은 한 문장으로 줄어듭니다.' formulaic lead-in. L133 single 120-word sentence attributing the third-party article. L786 'TGI에 대해서는 ... 것이 이 서드파티 비교의 평가입니다' noun frame.",
+    "C": "L694 '앞서 소개한 premai.io의 비교 글' refers back to a source never introduced earlier (first mention). L509 back-reference garbled. One Runpod article appears as three different sources: L294 'Runpod의 vLLM 해설 글', L782 '서드파티 글 \"vLLM Explained\"', L786 '\"vLLM Explained\"가 인용한 Runpod의 서드파티 비교' (the comparison is in the Runpod article itself). L786 'Kubernetes 배포를 비교한 다른 서드파티 블로그' is premai again, already used at L694. L103 re-states 20.4%~38.2% (3rd time after L13, L39) and '4% 미만' (3rd time).",
+    "D": "Hard parts get worked examples: 7-token block walk L84-101, slot_mapping/block_table table L137-142, CoW refcount table L179-183, beam-search reconstruction L203-217, preemption example L260, KVConnector arithmetic L362-368, metric 0.5 = 500 blocks L712. Over-explanation: the 1000/16=63 calculation is done at L103 and again as a display formula L519-521; L27 trivial arithmetic paragraph.",
+    "E": "Paper figures with descriptive captions (L33, L80, L115, L125, L187), blog animations L148/L193 and A100 throughput chart L760, OS-analogy table L55, scheduler table L239, metrics table L733, source comparison table L766. Deductions: duplicated ceiling calculation L103/L519; L773 table row from a self-described illustrative third-party benchmark sits beside paper numbers.",
+    "F": "Claim sample: 14 supported, 1 wrong. Wrong: L703/L706/L710/L735/L750 use 'vllm:gpu_cache_usage_perc', which current vLLM (main 2026-11-04, vllm/v1/metrics/loggers.py L620; docs/design/metrics.md L27) exports as 'vllm:kv_cache_usage_perc'; the old name comes from a July 2025 forum bot reply (discuss.vllm.ai/t/1260), so the post's curl grep finds no such line (-2). Runpod comparison described as cited by 'vLLM Explained' when it is that article's own content (L786, -1). L418 recommends the Quickstart ROCm 7.0 wheel condition as the safe baseline although the GPU guide's wheel table limits rocm700 to vLLM 0.14.0-0.18.0 with rocm100 as default nightly (stale advice, hedged as recommendation)."
+  },
+  "principles": {
+    "claim_headings": {
+      "status": "met",
+      "evidence": "L17 '연속 사전할당 방식이 낭비하는 GPU 메모리 60~80%', L47, L229, L752 are claim noun phrases; a few subsection topic names (L376 '먼저 확인할 요구사항', L406 '그 밖의 플랫폼', L788 '고르는 기준')."
+    },
+    "running_example": {
+      "status": "met",
+      "evidence": "Qwen2.5-1.5B-Instruct chat service runs from L103 through LLM (L441), serve (L470), tuning (L541), OOM (L586), Docker (L648), Helm (L680), metrics (L698), choice (L790); 7-token prompt with block size 4 carried L84-189."
+    },
+    "mechanism_choice_formula_example": {
+      "status": "met",
+      "evidence": "Problem L21-39 -> paging choice L43 -> blockwise attention formula L70-72 -> 7-token example L84-103; block-size trade-off L105-109; swap vs recompute L254-270 -> V1 code L276-284."
+    },
+    "facts_once": {
+      "status": "partly met",
+      "evidence": "20.4%~38.2% at L13, L39, L103; '4% 미만' at L13, L43, L103; 55%/2.2x at L15 and L227; 2~4배 at L43, L758, L768; block size 16 rationale at L109 and L517; 1000/16 calc at L103 and L519."
+    },
+    "numbers_with_scope": {
+      "status": "met",
+      "evidence": "L327 V1 1.7x with 'V0(multi-step scheduling 제외)', ShareGPT, Llama 3.1 8B/3.3 70B; L758 22x scoped to ShareGPT basic sampling; L769-770 n=1/n=3 rows; L775 separates developer and third-party measurements."
+    },
+    "nothing_invented": {
+      "status": "partly met",
+      "evidence": "Illustrative numbers labelled (L304, L362, L509). Stale metric name vllm:gpu_cache_usage_perc (L703); Runpod/'vLLM Explained' source split (L786)."
+    },
+    "own_assessment": {
+      "status": "met",
+      "evidence": "L788-792 '이 글의 판단은 이렇습니다' with conditions for vLLM, TensorRT-LLM, SGLang, batch-1, and a measure-it-yourself recommendation."
+    },
+    "length_fitted": {
+      "status": "partly met",
+      "evidence": "51k characters; dense internals justify much of it, but L27, L519-523 repeat, and the GuideLLM issue digression L740-750 pad."
+    },
+    "type_specific_shape": {
+      "status": "met",
+      "evidence": "Opens with TL;DR L11 and the memory-waste problem L17; architecture/mechanism L47-L370 before installation L372; ends with trade-offs, failure conditions L777-786 and selection L788."
+    },
+    "korean_style": {
+      "status": "partly met",
+      "evidence": "Natural register overall, 1 '이러한/즉/결국' hit in 51k chars; broken phrase L509 '공간을에서 본'; formulaic L237."
+    }
+  },
+  "sample": {
+    "method": "Body blocks after front matter split on blank lines (code/table/image blocks count, headings excluded): 214 blocks; took block 2 and every third (2,5,8,...,212). Claims drawn from sampled blocks 2,5,32,38,77,92,116,122,125,143,149,152,170,188,203.",
+    "blocks_total": 214
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 14,
+    "unsupported": 0,
+    "wrong": 1,
+    "unverifiable": 0,
+    "numbers": 10,
+    "examples": [
+      {
+        "block": 2,
+        "line": 15,
+        "claim": "Sharing cuts parallel-sampling/beam-search memory up to 55%, throughput up to 2.2x",
+        "verdict": "supported",
+        "source": "vLLM blog 2023-06-20: 'cutting their memory usage by up to 55%. This can translate into up to 2.2x improvement in throughput'"
+      },
+      {
+        "block": 5,
+        "line": 25,
+        "claim": "13B model on A100 40GB: ~65% weights, ~30% KV cache",
+        "verdict": "supported",
+        "source": "arXiv 2309.06180 §1: 'Approximately 65% of the memory is allocated for the model weights ... Close to 30% ... dynamic states'"
+      },
+      {
+        "block": 32,
+        "line": 109,
+        "claim": "Block size measured on ShareGPT and Alpaca traces at fixed request rates; 16 chosen as default",
+        "verdict": "supported",
+        "source": "Paper §7.2: 'using the ShareGPT and Alpaca traces with basic sampling under fixed request rates ... vLLM sets its default block size as 16'"
+      },
+      {
+        "block": 38,
+        "line": 125,
+        "claim": "Figure caption: 7-token prompt, block size 4, logical blocks 0/1/2 -> physical 7/1/3",
+        "verdict": "supported",
+        "source": "Paper Fig. 6 'Block table translation in vLLM' and §4.3 steps 1-3 (physical blocks 7 and 1, then 'physical block 3')"
+      },
+      {
+        "block": 77,
+        "line": 250,
+        "claim": "FCFS for all requests; latest requests preempted first",
+        "verdict": "supported",
+        "source": "Paper §4.5: 'we adopt the first-come-first-serve (FCFS) scheduling policy for all requests ... the latest requests are preempted first'"
+      },
+      {
+        "block": 92,
+        "line": 302,
+        "claim": "V1 scheduling decision is a {request_id: num_tokens} dict general enough for chunked prefill, prefix caching, speculative decoding",
+        "verdict": "supported",
+        "source": "vLLM V1 blog 2025-01-27: 'Scheduling decisions are represented as a simple dictionary, e.g., {request_id: num_tokens} ... chunked prefills, prefix caching, and speculative decoding'"
+      },
+      {
+        "block": 116,
+        "line": 395,
+        "claim": "vllm download-kernels fetches FlashInfer precompiled kernels; without them startup compiles, several minutes on Hopper+ especially Blackwell; rerun after every upgrade; FlashInfer refuses import on mismatch",
+        "verdict": "supported",
+        "source": "docs/getting_started/installation/gpu.cuda.inc.md L36-42"
+      },
+      {
+        "block": 122,
+        "line": 418,
+        "claim": "Quickstart ROCm wheel: Python 3.12, ROCm 7.0, glibc >= 2.35; GPU guide: ROCm 6.3+, MI350 needs 7.0+",
+        "verdict": "supported",
+        "source": "quickstart.md L63; gpu.rocm.inc.md L18-20. Note: same page's wheel table limits rocm700 to vLLM 0.14.0-0.18.0 and makes rocm100 the default nightly, so the post's advice to follow the Quickstart condition is stale"
+      },
+      {
+        "block": 125,
+        "line": 428,
+        "claim": "Quickstart example uses temperature 0.8 and top_p 0.95",
+        "verdict": "supported",
+        "source": "quickstart.md L128, L142 'SamplingParams(temperature=0.8, top_p=0.95)'"
+      },
+      {
+        "block": 143,
+        "line": 509,
+        "claim": "Default gpu_memory_utilization 0.92 (1.0 with extensible KV cache); 24 GiB x 0.92 = ~22.1 GiB",
+        "verdict": "supported",
+        "source": "vllm/config/cache.py L226-227: 'If unspecified, 1.0 with the extensible KV cache ... and 0.92 otherwise'; arithmetic 22.08"
+      },
+      {
+        "block": 149,
+        "line": 527,
+        "claim": "max_num_seqs / max_num_batched_tokens config defaults are for testing; real defaults set in EngineArgs.create_engine_config",
+        "verdict": "supported",
+        "source": "vllm/config/scheduler.py L48-53, L62-67"
+      },
+      {
+        "block": 152,
+        "line": 535,
+        "claim": "--kv-offloading-size in GiB, default None (off), uses kv_offloading_backend, TP>1 means total across ranks",
+        "verdict": "supported",
+        "source": "vllm/config/cache.py L397-406"
+      },
+      {
+        "block": 170,
+        "line": 629,
+        "claim": "mm_processor_cache_gb default 4 GiB; VLLM_CPU_KVCACHE_SPACE in GiB, default 0 = no override",
+        "verdict": "supported",
+        "source": "docs/configuration/conserving_memory.md L91-92"
+      },
+      {
+        "block": 188,
+        "line": 703,
+        "claim": "/metrics exposes vllm:gpu_cache_usage_perc next to vllm:num_requests_running/waiting",
+        "verdict": "wrong",
+        "source": "vllm/v1/metrics/loggers.py L528, L538, L620 register vllm:num_requests_running, vllm:num_requests_waiting and vllm:kv_cache_usage_perc; no gpu_cache_usage_perc anywhere in vllm/ or docs/ (main 42c043c, 2026-11-04); docs/design/metrics.md L27 lists vllm:kv_cache_usage_perc. The name comes from a 2025-07-31 forum bot reply"
+      },
+      {
+        "block": 203,
+        "line": 758,
+        "claim": "Paper: 2-4x over FasterTransformer/Orca without accuracy loss; up to 22x higher request rate than FasterTransformer on ShareGPT basic sampling; blog compared LLaMA-7B on A10G and LLaMA-13B on A100 with ShareGPT lengths",
+        "verdict": "supported",
+        "source": "Paper abstract/§1 '2-4x ... without affecting the model accuracy'; §6.2 'up to 22x higher request rates'; blog 'LLaMA-7B on an NVIDIA A10G GPU and LLaMA-13B on an NVIDIA A100 GPU (40GB) ... ShareGPT'"
+      }
+    ]
+  },
+  "checklist": {
+    "repeated": 2,
+    "avoided": 4,
+    "na": 0,
+    "repeated_ids": [
+      "dangling-cross-reference",
+      "stale-third-party-names"
+    ],
+    "note": "human_fixes.yaml has fixes: [] for guide-vllm; checks are the generic defects in its notes.",
+    "items": [
+      {
+        "id": "dangling-cross-reference",
+        "status": "repeated",
+        "evidence": "L694 '앞서 소개한 premai.io의 비교 글' points to an introduction that does not exist (first mention); L509 '이 남은 공간을에서 본' lost its referent. No numbered chapter references."
+      },
+      {
+        "id": "tag-remnant",
+        "status": "avoided",
+        "evidence": "No '</...>' closing-tag remnants in the file."
+      },
+      {
+        "id": "entity-leak",
+        "status": "avoided",
+        "evidence": "Only '&#124;', '&#91;/&#93;' and '&amp;' inside Sources link text (L803, L806, L808-810), which kramdown renders."
+      },
+      {
+        "id": "unclosed-code-fence",
+        "status": "avoided",
+        "evidence": "20 fences, all closed; all 8 Python blocks parse."
+      },
+      {
+        "id": "stale-third-party-names",
+        "status": "repeated",
+        "evidence": "L703, L706, L710, L735, L750 use vllm:gpu_cache_usage_perc taken from a 2025 forum reply; current vLLM exports vllm:kv_cache_usage_perc."
+      },
+      {
+        "id": "install-usage-centric",
+        "status": "avoided",
+        "evidence": "L17-L370 cover memory waste, PagedAttention, block tables, slot_mapping, TP, CoW, beam search, scheduler, preemption, V1 EngineCore, prefix caching and KVConnector before installation at L372."
+      }
+    ]
+  },
+  "extras": {
+    "architecture_first_line": 47,
+    "system_architecture_line": 111,
+    "installation_first_line": 372,
+    "sources_total": 19,
+    "sources_unique": 19,
+    "official_docs_share": "7/19 docs pages (6 docs.vllm.ai latest incl. production-stack Helm, 1 pinned v0.9.2 Engine Arguments, cited as that version's at L499); plus paper and 2 vLLM project blog posts",
+    "non_official_share": "9/19 = 47% (third-party: Inside vLLM/jacklei, Runpod, Unsloth, premai, buildmvpfast, iotdigitaltwinplm; community: vLLM issue #46383, GuideLLM issue #457, vLLM forum)",
+    "low_quality_sources": "iotdigitaltwinplm Q2 2026 benchmark (self-described illustrative internal run, L773/L775); buildmvpfast table uses vLLM v0.6.1/TGI v2.3.0 in a 2026 post",
+    "opens_with_problem": true,
+    "closes_with_choice_and_failure_modes": true
+  },
+  "runnable_code": {
+    "verdict": "mostly runnable as pasted; one monitoring command silently returns less than claimed, one YAML excerpt is incomplete",
+    "checked": [
+      "L385-388 uv venv/--torch-backend=auto/vllm download-kernels: matches quickstart.md L25-28; download_kernels CLI exists (vllm/entrypoints/cli/download_kernels.py)",
+      "L400-401 pip --extra-index-url cu129: matches gpu.cuda.inc.md",
+      "L430-448 offline LLM/SamplingParams: quickstart example with model swapped; parses",
+      "L454-461 llm.chat(messages): valid, depends on llm from the previous block as the text says",
+      "L470, L477-487 vllm serve + chat completions curl: request shape matches quickstart.md L279",
+      "L541-550 tuned serve: all flags exist in arg_utils.py (--block-size L1397, --kv-cache-dtype L1411, --enable-chunked-prefill L1803); --max-model-len 8k accepted via human_readable_int_or_auto (L404)",
+      "L554-563 kv_cache_memory_bytes/max_num_batched_tokens kwargs valid",
+      "L595-607 CompilationConfig/CompilationMode.VLLM_COMPILE import from vllm.config valid (vllm/config/__init__.py)",
+      "L641-650 docker run matches gpu.cuda.inc.md L288-294",
+      "L702-703 metrics grep: vllm:gpu_cache_usage_perc does not exist in current vLLM, so only the two queue gauges print; should be vllm:kv_cache_usage_perc",
+      "L676-686 Helm values excerpt: chart template requires modelSpec.repository and modelSpec.tag (deployment-vllm-multi.yaml L122 'required'), so pasting the excerpt alone fails helm install; labelled as an excerpt"
+    ],
+    "not_run": "No model download, GPU or helm install; checks are static against vLLM main 42c043c (2026-11-04) and production-stack main"
+  },
+  "top_issues": [
+    "Stale metric name vllm:gpu_cache_usage_perc (L703-L750) from a 2025 forum reply; current vLLM exports vllm:kv_cache_usage_perc, so the post's curl grep and Grafana advice miss the gauge",
+    "Broken back-references and source attribution: L694 '앞서 소개한 premai.io' (never introduced), L509 '공간을에서 본', and one Runpod article presented as three sources (L294, L782, L786)",
+    "Repeated facts: 20.4~38.2% and '4% 미만' three times (L13/L39/L103, L13/L43/L103), 55%/2.2x twice, 1000/16 block calculation twice (L103, L519)"
+  ]
+}
