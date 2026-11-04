@@ -14,6 +14,7 @@ from ..domain.markdown.lint import (
 )
 from .constants import EnvVars, LanguageModelId, LocalPaths
 from .formatting import build_post_meta, cut_title, format_guide
+from .guide_writer import write_guide_with_evidence
 from .jobs import JobRequest
 from .logger import logger
 from .metrics import TokenUsageTracker
@@ -67,18 +68,33 @@ async def run_guide_pipeline(
         fetch_top_results=cfg.fetch_top_results,
         min_quality_score=cfg.min_quality_score,
         max_revision_attempts=cfg.max_revision_attempts,
-        max_total_tokens=cfg.max_total_tokens,
+        # The evidence engine's reading agents are bounded per page; the
+        # token limit guards the score-revised sections.
+        max_total_tokens=None if cfg.engine == "evidence" else cfg.max_total_tokens,
         translation_guideline=translation_guideline,
         callbacks=[tracker],
     )
     github = context.config.resources.github
     try:
-        guide = await generator.generate(
-            request.urls,
-            reference_urls=request.reference_urls,
-            discover_subpages=request.discover_subpages,
-            search_queries=request.search_queries or None,
-        )
+        if cfg.engine == "evidence":
+            guide = await write_guide_with_evidence(
+                context,
+                generator,
+                urls=request.urls,
+                reference_urls=request.reference_urls,
+                discover_subpages=request.discover_subpages,
+                search_queries=request.search_queries or None,
+                translation_guideline=translation_guideline,
+                tracker=tracker,
+                title_max_length=spec.seo_title_max_length,
+            )
+        else:
+            guide = await generator.generate(
+                request.urls,
+                reference_urls=request.reference_urls,
+                discover_subpages=request.discover_subpages,
+                search_queries=request.search_queries or None,
+            )
         taxonomy = await generator.classify(
             guide,
             category_options=list(spec.topics),

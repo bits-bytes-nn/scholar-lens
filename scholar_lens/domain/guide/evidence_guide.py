@@ -1,0 +1,239 @@
+"""The evidence-based guide (docs/redesign.md, 3.2 and 5.1): an outline that
+gives each piece of evidence to one section in the guide's order (TL;DR, the
+problem, concepts and architecture before usage and operations, a closing on
+when to choose it and how it fails), and the guide-only checks of a section
+draft."""
+
+from __future__ import annotations
+
+import re
+from collections.abc import Mapping
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field
+
+from ..evidence import EvidenceLedger, SourceDocument
+from ..evidence_draft import MARKER, prose_sentences
+from ..lengths import DEPTH_CHARS, NON_KOREAN_CHAR_FACTOR
+
+GuideKind = Literal[
+    "tldr", "overview", "concepts", "architecture", "usage", "operations", "choosing"
+]
+Depth = Literal["deep", "standard", "brief"]
+TLDR_TITLE = "TL;DR"
+
+# The guide's order: what it is, the problem, how it works, how to use and
+# run it, when to choose it. Kinds of one rank may interleave.
+_RANK: dict[str, int] = {
+    "tldr": 0,
+    "overview": 1,
+    "concepts": 2,
+    "architecture": 2,
+    "usage": 3,
+    "operations": 3,
+    "choosing": 4,
+}
+_SENTENCE_TITLE = re.compile(r"(?:다|요)[.!]?$")
+# Explaining where a fact came from instead of stating it.
+_SOURCE_NARRATION = re.compile(
+    r"(?:공식 )?(?:문서|가이드|레퍼런스|튜토리얼)(?:에 따르면|에서는|에 (?:나온|나와 있는|적힌|소개된))|"
+    r"(?:공식 )?문서(?:가|는) .{0,20}(?:설명|안내|권장)합니다|according to the (?:docs|documentation)",
+    re.IGNORECASE,
+)
+_FENCE_OPEN = re.compile(
+    r"^(`{3,}|~{3,})[ \t]*([\w+#-]*)[^\n]*\n(.*?)^\1[ \t]*$", re.M | re.S
+)
+# Languages of one SDK family: a guide shows one of them, not each twice.
+_SDK_LANGUAGES = {
+    "python": "python",
+    "py": "python",
+    "typescript": "typescript",
+    "ts": "typescript",
+    "javascript": "javascript",
+    "js": "javascript",
+    "java": "java",
+    "go": "go",
+    "rust": "rust",
+}
+MAX_CODE_LINES = 40
+
+
+class _Strict(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class GuideSection(_Strict):
+    kind: GuideKind
+    # A claim as a noun phrase ("요청마다 다시 짜이는 배치"), not a topic label.
+    title: str = Field(min_length=1)
+    thesis: str = ""
+    question: str = ""
+    depth: Depth = "standard"
+    evidence: list[str] = Field(default_factory=list)
+
+
+class GlossaryTerm(_Strict):
+    english: str
+    rendering: str
+
+
+class GuideOutline(_Strict):
+    title: str = Field(min_length=1)
+    glossary: list[GlossaryTerm] = Field(default_factory=list, max_length=20)
+    # One application or workload threaded through the guide.
+    running_example: str = ""
+    # The SDK language the code uses ("python"); others get a sentence.
+    code_language: str = ""
+    sections: list[GuideSection] = Field(min_length=4)
+
+
+def repair_guide_outline(
+    outline: GuideOutline, ledger: EvidenceLedger
+) -> tuple[GuideOutline, list[str]]:
+    """What code can fix without asking again: unknown evidence ids dropped,
+    evidence given twice kept in its first section, sections stably sorted
+    into the guide's order, and the TL;DR titled, brief and without evidence
+    of its own (it is written last, from what the sections cite)."""
+    notes: list[str] = []
+    seen: set[str] = set()
+    sections = []
+    for s in outline.sections:
+        if s.kind == "tldr":
+            sections.append(
+                s.model_copy(
+                    update={"title": TLDR_TITLE, "depth": "brief", "evidence": []}
+                )
+            )
+            continue
+        kept = []
+        for eid in s.evidence:
+            if ledger.get(eid) is None:
+                notes.append(f"unknown evidence {eid} dropped from '{s.title}'")
+            elif eid in seen:
+                notes.append(f"{eid} given twice; kept in its first section")
+            else:
+                seen.add(eid)
+                kept.append(eid)
+        sections.append(s.model_copy(update={"evidence": kept}))
+    ordered = sorted(sections, key=lambda s: _RANK[s.kind])
+    if [s.kind for s in ordered] != [s.kind for s in sections]:
+        notes.append("sections sorted into the guide's order")
+    return outline.model_copy(update={"sections": ordered}), notes
+
+
+def guide_outline_problems(
+    outline: GuideOutline,
+    ledger: EvidenceLedger,
+    documents: Mapping[str, SourceDocument],
+    *,
+    title_max_length: int,
+    max_sections: int,
+) -> list[str]:
+    """What makes a guide outline unusable: the order of its kinds, a
+    missing TL;DR, architecture or closing section, too many sections,
+    evidence unknown or given twice, a section without evidence, sentence
+    titles, and the user's reference material left unused."""
+    problems: list[str] = []
+    kinds = [s.kind for s in outline.sections]
+    if len(outline.title) > title_max_length:
+        problems.append(f"the title is longer than {title_max_length} characters")
+    if len(outline.sections) > max_sections:
+        problems.append(f"at most {max_sections} sections")
+    if kinds[0] != "tldr" or kinds.count("tldr") != 1:
+        problems.append("the guide starts with exactly one tldr section")
+    if kinds.count("overview") != 1:
+        problems.append("exactly one overview section (the problem it solves)")
+    if "architecture" not in kinds:
+        problems.append("at least one architecture section (how it works inside)")
+    if kinds[-1] != "choosing" or kinds.count("choosing") != 1:
+        problems.append(
+            "the guide ends with exactly one choosing section (when to choose it, "
+            "the alternatives, how it fails)"
+        )
+    if [_RANK[k] for k in kinds] != sorted(_RANK[k] for k in kinds):
+        problems.append(
+            "sections must go tldr, overview, concepts and architecture, usage "
+            "and operations, choosing"
+        )
+    seen: dict[str, str] = {}
+    for s in outline.sections:
+        if s.kind != "tldr" and _SENTENCE_TITLE.search(s.title.strip()):
+            problems.append(f"title '{s.title}' is a sentence; write a noun phrase")
+        if not s.evidence and s.kind != "tldr":
+            problems.append(f"section '{s.title}' has no evidence")
+        for eid in s.evidence:
+            if ledger.get(eid) is None:
+                problems.append(f"unknown evidence {eid} in '{s.title}'")
+            elif eid in seen:
+                problems.append(f"{eid} is in both '{seen[eid]}' and '{s.title}'")
+            else:
+                seen[eid] = s.title
+    used_sources = {e.paper_id for eid in seen if (e := ledger.get(eid))}
+    for sid, document in documents.items():
+        if (
+            document.authority == "reference"
+            and ledger.of_paper(sid)
+            and sid not in used_sources
+        ):
+            problems.append(
+                f"the user's reference material {sid} ({document.title}) has "
+                "evidence but no section uses it"
+            )
+    return problems
+
+
+def guide_section_targets(
+    outline: GuideOutline, *, min_total: int, max_total: int, korean: bool
+) -> list[int]:
+    """Prose characters per section by depth, the total scaled into
+    ``[min_total, max_total]`` (Korean characters)."""
+    raw = [DEPTH_CHARS[s.depth] for s in outline.sections]
+    total = sum(raw)
+    scale = min(max(total, min_total), max_total) / total
+    factor = 1.0 if korean else NON_KOREAN_CHAR_FACTOR
+    return [round(r * scale * factor) for r in raw]
+
+
+def guide_draft_problems(markdown: str, *, code_language: str = "") -> list[str]:
+    """Guide-only problems of a section draft: narrating which page a fact
+    came from, the same code in two SDK languages, and code blocks longer
+    than the paragraph around them can explain."""
+    problems: list[str] = []
+    for sentence in prose_sentences(markdown):
+        plain = MARKER.sub("", sentence)
+        if _SOURCE_NARRATION.search(plain):
+            problems.append(
+                f"names the page a fact came from; state the fact itself: {plain[:160]}"
+            )
+    languages: set[str] = set()
+    for m in _FENCE_OPEN.finditer(markdown):
+        if family := _SDK_LANGUAGES.get(m.group(2).lower()):
+            languages.add(family)
+        if (lines := m.group(3).count("\n")) > MAX_CODE_LINES:
+            problems.append(
+                f"a {lines}-line code block; show the {MAX_CODE_LINES} or fewer "
+                "lines the text explains and say what the rest does"
+            )
+    if len(languages) > 1:
+        keep = code_language or "one language"
+        problems.append(
+            f"code in {sorted(languages)}: show it in {keep} and name the other "
+            "SDK's difference in a sentence"
+        )
+    return problems
+
+
+def cited_sources(markdown: str, ledger: EvidenceLedger) -> list[str]:
+    """Source ids the draft's markers cite, in order of first citation."""
+    ids: list[str] = []
+    for m in MARKER.finditer(markdown):
+        for eid in re.findall(r"E\d+", m.group(1)):
+            if (e := ledger.get(eid)) and e.paper_id not in ids:
+                ids.append(e.paper_id)
+    return ids
+
+
+def strip_markers(markdown: str) -> str:
+    """The body without evidence markers (a guide lists its sources at the
+    end instead of citing each sentence)."""
+    return re.sub(r"[ \t]*" + MARKER.pattern, "", markdown)

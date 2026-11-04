@@ -144,7 +144,6 @@ from .survey_pipeline import (
     reference_excerpts,
 )
 from .utils import (
-    BedrockCrossRegionModelHelper,
     BedrockLanguageModelFactory,
     HTMLTagOutputParser,
     parse_lines,
@@ -1231,29 +1230,16 @@ async def write_survey_with_evidence(
     an evidence-assigning outline, verified sections (docs/redesign.md)."""
     from ..adapters.bedrock.strands_models import RoleModel, StrandsLanguageModel
     from ..application.survey_engine import EngineSettings, EvidenceSurveyEngine
-    from .survey_documents import PaperDocuments, SurveyTextStore
-    from .utils.factories import _allocated_profile
-    from .utils.models import model_info_for_invoked_id
+    from .evidence_models import role_model, unservable
+    from .survey_documents import EvidenceTextStore, PaperDocuments
 
     cfg = context.config.survey
-    session = context.bedrock_boto_session
-    region = context.config.resources.bedrock_region_name or session.region_name or ""
 
     def role(model_id: str, effort: str, thinking: bool) -> RoleModel:
-        system = BedrockCrossRegionModelHelper.get_cross_region_model_id(
-            session, LanguageModelId(model_id), region
-        )
-        info = model_info_for_invoked_id(system)
-        return RoleModel(
-            invoke_id=_allocated_profile(session, region, system),
-            model_label=system,
-            effort=effort,
-            thinking=thinking,
-            max_tokens=min(64_000, info.max_output_tokens if info else 32_000),
-        )
+        return role_model(context, model_id, effort, thinking)
 
     model = StrandsLanguageModel(
-        session,
+        context.bedrock_boto_session,
         {
             "read": role(cfg.card_model_id, cfg.thinking_effort, False),
             "outline": role(cfg.outline_model_id, "high", True),
@@ -1286,7 +1272,7 @@ async def write_survey_with_evidence(
             min_total_chars=cfg.min_total_chars,
             max_total_chars=cfg.max_total_chars,
         ),
-        store=SurveyTextStore(
+        store=EvidenceTextStore(
             papers_dir / "survey-evidence",
             context.s3_handler,
             context.config.resources.s3_prefix,
@@ -1317,17 +1303,7 @@ async def write_survey_with_evidence(
     # arXiv HTML lists some figures it does not serve (404): an image that
     # cannot be downloaded would fail the publish step, so it is dropped
     # here (survey_body removes images without an owner).
-    broken = [
-        url
-        for url, ok in zip(
-            figures,
-            await asyncio.gather(
-                *(asyncio.to_thread(_downloadable, u) for u in figures)
-            ),
-            strict=True,
-        )
-        if not ok
-    ]
+    broken = await unservable(list(figures))
     for url in broken:
         figures.pop(url)
     if broken:
@@ -1341,17 +1317,6 @@ async def write_survey_with_evidence(
         notes=[*notes, *result.notes],
         figures=figures,
     )
-
-
-def _downloadable(url: str) -> bool:
-    from .publisher import download_image
-
-    try:
-        download_image(url)
-    except Exception as e:  # noqa: BLE001 - any failure means it cannot be published
-        logger.warning("Figure %s cannot be downloaded: %s", url, e)
-        return False
-    return True
 
 
 def survey_body(survey: Survey, language: str) -> tuple[str, list[str]]:

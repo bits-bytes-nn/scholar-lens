@@ -204,6 +204,24 @@ class TechGuide(_Section):
     # $15 on Opus 5.5. Past it the remaining sections skip evaluate/revise/
     # grounding; past 1.5x the run aborts.
     max_total_tokens: int | None = Field(default=3_000_000, gt=0)
+    # The writing engine: "sections" (a synopsis, then sections revised by
+    # score) or "evidence" (reading agents record checked evidence per page
+    # that the outline gives to sections; docs/redesign.md). The evidence
+    # engine reads with the synopsis model, plans and writes with the writing
+    # model and checks with the evaluation model; the token limit above
+    # applies to "sections" only.
+    engine: Literal["sections", "evidence"] = Field(default="sections")
+    # Evidence engine: pages read (the docs and reference material first)
+    # and the guide's prose characters (Korean).
+    max_sources_read: int = Field(default=40, ge=1, le=120)
+    min_total_chars: int = Field(default=30_000, ge=5_000, le=200_000)
+    max_total_chars: int = Field(default=55_000, ge=5_000, le=200_000)
+
+    @model_validator(mode="after")
+    def _length_range(self) -> "TechGuide":
+        if self.min_total_chars > self.max_total_chars:
+            raise ValueError("tech_guide.min_total_chars exceeds max_total_chars")
+        return self
 
 
 class Survey(_Section):

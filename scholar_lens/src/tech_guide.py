@@ -246,6 +246,16 @@ class TechGuide:
     description: str = ""
 
 
+@dataclass
+class GuideMaterial:
+    """What :meth:`TechGuideGenerator.gather` collected."""
+
+    topic: str
+    corpus: ResearchCorpus
+    # The user's reference URLs not already among the docs URLs.
+    references: list[str] = field(default_factory=list)
+
+
 class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
     """Generates a self-study technical guide from a list of source URLs."""
 
@@ -421,6 +431,72 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
         commands, flags and defaults) and ``reference_urls``: explanatory
         material to build on, always fetched and listed but never official.
         Either may be empty, not both; without docs no page is official."""
+        material = await self.gather(
+            urls,
+            reference_urls=reference_urls,
+            discover_subpages=discover_subpages,
+            search_queries=search_queries,
+        )
+        corpus = material.corpus
+        # The planned topic steers the searches and the outline; the title
+        # the outline comes with names the scope it actually planned.
+        topic, synopsis = await self._draft_synopsis(material.topic, corpus)
+        body = await self._write_sections(topic, synopsis, corpus)
+        unverified = unverified_identifiers(
+            body, official_reference(self._official, corpus), self._products
+        )
+        if unverified:
+            self.notes.append(
+                "Flags/metrics the official pages fetched for this guide never "
+                "mention; verify them against the current reference: "
+                + ", ".join(unverified)
+            )
+
+        source_urls = used_source_urls(
+            body,
+            corpus,
+            [*urls, *material.references],
+            self._official,
+            self._reference_pages,
+            self._section_source_urls,
+        )
+        titles = {page.url: page.title for page in corpus.pages}
+        return TechGuide(
+            topic=topic,
+            body=body,
+            source_urls=source_urls,
+            source_titles={url: titles[url] for url in source_urls if titles.get(url)},
+            notes=list(self.notes),
+            image_urls=list(corpus.image_urls),
+        )
+
+    @property
+    def official(self) -> OfficialDocs:
+        """The requested docs (set by :meth:`gather`)."""
+        return self._official
+
+    @property
+    def products(self) -> tuple[str, ...]:
+        """The names the docs' commands go by (set by :meth:`gather`)."""
+        return self._products
+
+    @property
+    def reference_pages(self) -> list[PageContent]:
+        """Official reference pages fetched for identifiers this run."""
+        return self._reference_pages
+
+    async def gather(
+        self,
+        urls: list[str],
+        *,
+        reference_urls: list[str] | None = None,
+        discover_subpages: bool = True,
+        search_queries: list[str] | None = None,
+    ) -> GuideMaterial:
+        """Everything a guide is written from: the docs (and sub-pages), the
+        user's reference material, the planned searches' top pages and the
+        official reference pages for third-party identifiers, after the
+        relevance gate (raises :class:`NotTechnicalContentError`)."""
         # One spelling per page (and per arXiv paper: abs, pdf, any version).
         held = {page_key(u) for u in urls}
         references: list[str] = []
@@ -503,37 +579,7 @@ class TechGuideGenerator(RetryableBase, TokenBudgetGuard):
             if planned_topic and not is_placeholder(planned_topic)
             else gate_topic
         )
-        # The planned topic steers the searches and the outline; the title
-        # the outline comes with names the scope it actually planned.
-        topic, synopsis = await self._draft_synopsis(topic, corpus)
-        body = await self._write_sections(topic, synopsis, corpus)
-        unverified = unverified_identifiers(
-            body, official_reference(self._official, corpus), self._products
-        )
-        if unverified:
-            self.notes.append(
-                "Flags/metrics the official pages fetched for this guide never "
-                "mention; verify them against the current reference: "
-                + ", ".join(unverified)
-            )
-
-        source_urls = used_source_urls(
-            body,
-            corpus,
-            [*urls, *references],
-            self._official,
-            self._reference_pages,
-            self._section_source_urls,
-        )
-        titles = {page.url: page.title for page in corpus.pages}
-        return TechGuide(
-            topic=topic,
-            body=body,
-            source_urls=source_urls,
-            source_titles={url: titles[url] for url in source_urls if titles.get(url)},
-            notes=list(self.notes),
-            image_urls=list(corpus.image_urls),
-        )
+        return GuideMaterial(topic=topic, corpus=corpus, references=references)
 
     async def _add_material(
         self, corpus: ResearchCorpus, references: list[str]

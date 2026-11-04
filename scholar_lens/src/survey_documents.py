@@ -117,16 +117,20 @@ class PaperDocuments:
         return SourceDocument.from_markdown(paper.id, paper.title, "pdf_text", text)
 
 
-class SurveyTextStore:
-    """Evidence on disk (``papers/survey-evidence/``) and, with a bucket, in
-    S3 (``<prefix>/surveys/evidence/``)."""
+class EvidenceTextStore:
+    """Evidence on disk (``local_dir``) and, with a bucket, in S3
+    (``<prefix>/<area>/``: ``surveys`` or ``guides``)."""
 
     def __init__(
-        self, local_dir: Path, s3_handler: S3Handler | None, s3_prefix: str
+        self,
+        local_dir: Path,
+        s3_handler: S3Handler | None,
+        s3_prefix: str,
+        area: S3Paths = S3Paths.SURVEYS,
     ) -> None:
         self.local_dir = local_dir
         self.s3_handler = s3_handler
-        self.s3_prefix = f"{s3_prefix}/{S3Paths.SURVEYS.value}".lstrip("/")
+        self.s3_prefix = f"{s3_prefix}/{area.value}".lstrip("/")
 
     def get(self, key: str) -> str | None:
         path = self.local_dir / key
