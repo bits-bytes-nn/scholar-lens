@@ -198,6 +198,11 @@ Evidence:
   running example's names); a block of your own is labelled as an
   illustration in the sentence before it ("예를 들어 …") and uses only APIs
   the evidence shows.
+- source_sections hold the full passages your evidence comes from: take
+  complete code from them (imports, the whole function, the request a
+  client sends), never a fragment that drops what the text relies on.
+  Facts still come from the evidence or these passages, cited by the
+  evidence id whose passage holds them.
 - Show each assigned figure where it is discussed as ![what it shows](url),
   and explain what to look at from its caption and evidence only; show no
   other image. A diagram the evidence lacks may be a small table or a
@@ -222,6 +227,8 @@ states about the tool:
   evidence does not give, a number's wrong setup);
 - wrong: it contradicts the evidence.
 Numbered items include table rows: judge each cell of a row as a claim.
+A claim the listed source_sections state is supported, even when the cited
+evidence item does not state it.
 Judge only specific factual claims about the tool (what it does, how it
 works, its commands, flags, defaults and measured results). A claim the
 evidence makes only for one SDK language, version, provider or condition,
@@ -285,5 +292,27 @@ to what the evidence says or deleted. Return the whole revised section.
 """
     + GUIDE_PRINCIPLES
     + MATH_RULES
+    + SECURITY
+)
+
+CODE_REVIEW_SYSTEM = (
+    """
+You review all the code of a technical guide, in the order a reader meets it,
+as an engineer who pastes each block and runs the running example end to
+end. Report only problems that stop the code from working as the text says:
+- a missing import, or a name, class, method or variable that neither the
+  block nor an earlier block defines;
+- a call whose arguments or result do not match its definition, or a block
+  that silently replaces an earlier definition with a fragment;
+- the running example not doing what the text says it does (a handler that
+  never returns the result it promises, a server that is started but never
+  sent a request, a client and server that disagree on the request's
+  shape, a config file referred to but never shown);
+- an import path, flag, metric or API name that contradicts the source code
+  listed (the official docs' code wins).
+For each problem give the section title exactly as listed, the problem, and
+the fix (the corrected lines, using names and import paths from the guide
+or the source code listed). Return no issues when the code works.
+"""
     + SECURITY
 )

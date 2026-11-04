@@ -14,6 +14,8 @@ from scholar_lens.application.evidence_writer import (
     SentenceVerdict,
 )
 from scholar_lens.application.guide_engine import (
+    CodeIssue,
+    CodeReview,
     EvidenceGuideEngine,
     GuideSettings,
     authority_rule,
@@ -410,10 +412,28 @@ class ScriptedModel:
             return SectionReview()
         if schema is EvidenceCheck:
             return EvidenceCheck()
+        if schema is CodeReview:
+            assert "<guide_code>" in prompt and "@serve.batch" in prompt
+            return CodeReview(
+                issues=[
+                    CodeIssue(
+                        section="데코레이터 하나로 켜는 배치",
+                        problem="serve is not imported.",
+                        fix="from ray import serve",
+                    )
+                ]
+            )
         raise AssertionError(schema)
 
     async def text(self, *, role, system, prompt) -> str:
         self.calls.append(f"text:{role}")
+        if "serve is not imported" in prompt:
+            self.calls.append("code-fix")
+            assert "<source_sections>" in prompt
+            return "## 데코레이터 하나로 켜는 배치\n\n`max_batch_size` 기본값은 10입니다 [[E2]].\n\n```python\nfrom ray import serve\n\n@serve.batch(max_batch_size=8)\n```\n"
+        if "title: 데코레이터" in prompt:
+            # The writer sees the docs section its evidence comes from.
+            assert "[D1 S2: Ray Serve batching | Configuration | official]" in prompt
         if "<problems>" in prompt:
             title = prompt.split("## ", 1)[1].split("\n", 1)[0]
             return f"## {title}\n\n`max_batch_size` 기본값은 10입니다 [[E2]].\n\n```python\n@serve.batch(max_batch_size=8)\n```\n"
@@ -459,6 +479,7 @@ def test_a_scripted_guide_run() -> None:
     # The TL;DR is written last.
     assert [c for c in model.calls if c.startswith("text")][-1] == "text:write"
     assert model.calls.count("read") == 2
+    assert "code-fix" in model.calls and "from ray import serve" in body
 
 
 def test_a_figure_without_a_caption_is_placed_with_the_text_before_it() -> None:

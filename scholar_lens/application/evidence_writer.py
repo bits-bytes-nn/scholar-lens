@@ -180,6 +180,9 @@ class EvidenceWriter:
         self.max_fix_rounds = max_fix_rounds
         self.notes: list[str] = []
         self._names: dict[str, str] = {}
+        # Source passages the current section's evidence comes from (guides):
+        # the claim check and the fix read them besides the evidence.
+        self.reference = ""
 
     # ---- read -------------------------------------------------------------------
 
@@ -516,6 +519,11 @@ class EvidenceWriter:
                         [
                             block("section", draft),
                             block("evidence", evidence_lines(evidence)),
+                            *(
+                                [block("source_sections", self.reference)]
+                                if self.reference
+                                else []
+                            ),
                             block("problems", "\n".join(f"- {i}" for i in issues)),
                         ]
                     ),
@@ -570,6 +578,11 @@ class EvidenceWriter:
                 role="evaluate",
                 system=self.prompts.claim_check,
                 prompt=block("section_evidence", evidence_lines(list(context)))
+                + (
+                    "\n\n" + block("source_sections", self.reference)
+                    if self.reference
+                    else ""
+                )
                 + "\n\n"
                 + block("sentences", "\n".join(lines)),
                 schema=ClaimCheck,
