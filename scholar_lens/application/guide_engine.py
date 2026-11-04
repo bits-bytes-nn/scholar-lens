@@ -20,7 +20,13 @@ from dataclasses import dataclass, field
 
 from pydantic import ValidationError
 
-from ..domain.evidence import Evidence, EvidenceLedger, SourceDocument
+from ..domain.evidence import (
+    Evidence,
+    EvidenceLedger,
+    SourceDocument,
+    duplicate_evidence,
+    near_duplicate,
+)
 from ..domain.evidence_draft import (
     cited_ids,
     draft_problems,
@@ -68,6 +74,53 @@ GUIDE_PROMPTS = WriterPrompts(
     fix=prompts.FIX_SYSTEM,
 )
 _PRIMARY = ("official", "reference")
+_AUTHORITY_RANK = {"official": 0, "reference": 1, "third_party": 2, "older_docs": 3}
+# Definitions in a code block: what later code of the running example calls.
+_DEFINITION = re.compile(
+    r"^\s*(?:(?:async\s+)?def \w+\(.*|class \w+.*|(?:export\s+)?(?:async\s+)?function \w+\(.*"
+    r"|@\w[\w.]*(?:\(.*\))?)$",
+    re.M,
+)
+_CODE_BLOCK = re.compile(r"^(`{3,}|~{3,})[^\n]*\n(.*?)^\1[ \t]*$", re.M | re.S)
+
+
+def defined_in_code(markdowns: Sequence[str], limit: int = 60) -> str:
+    """The definitions (functions, classes, decorators) the earlier
+    sections' code shows, in order: the running example's names and
+    signatures that later code must call as defined."""
+    lines: list[str] = []
+    for md in markdowns:
+        for block_match in _CODE_BLOCK.finditer(md):
+            for m in _DEFINITION.finditer(block_match.group(2)):
+                line = m.group(0).strip()
+                if line not in lines:
+                    lines.append(line)
+    return "\n".join(lines[-limit:])
+
+
+def _canonical(outline: GuideOutline, duplicates: Mapping[str, str]) -> GuideOutline:
+    """Each duplicate evidence id replaced by the id that keeps its fact."""
+    if not duplicates:
+        return outline
+    return outline.model_copy(
+        update={
+            "sections": [
+                s.model_copy(
+                    update={"evidence": [duplicates.get(e, e) for e in s.evidence]}
+                )
+                for s in outline.sections
+            ]
+        }
+    )
+
+
+def _copied(markdown: str, body: Sequence[str]) -> list[str]:
+    """TL;DR sentences that copy a body sentence instead of summing up."""
+    return [
+        f"copies a sentence of the body; sum it up in new words: {s[:160]}"
+        for s in prose_sentences(markdown)
+        if near_duplicate(s, body)
+    ]
 
 
 @dataclass(frozen=True)
@@ -264,6 +317,17 @@ class EvidenceGuideEngine(EvidenceWriter):
         documents: Mapping[str, SourceDocument],
         guideline: str,
     ) -> GuideOutline:
+        # A fact several pages state is offered once, from the most
+        # authoritative page.
+        duplicates = duplicate_evidence(
+            ledger,
+            {
+                sid: _AUTHORITY_RANK.get(d.authority or "third_party", 2)
+                for sid, d in documents.items()
+            },
+        )
+        if duplicates:
+            logger.info("%d evidence items repeat another page's.", len(duplicates))
         sources = "\n".join(
             f"- {sid} | {d.authority or 'third_party'} | {d.title} | {d.url}"
             for sid, d in documents.items()
@@ -274,7 +338,10 @@ class EvidenceGuideEngine(EvidenceWriter):
                 f"Title: in English, at most {self.settings.title_max_length} characters. "
                 f"At most {self.settings.max_sections} sections.",
                 block("sources", sources),
-                block("evidence", _outline_lines(list(ledger))),
+                block(
+                    "evidence",
+                    _outline_lines([e for e in ledger if e.id not in duplicates]),
+                ),
                 block("translation_guideline", guideline),
             ]
         )
@@ -288,7 +355,9 @@ class EvidenceGuideEngine(EvidenceWriter):
                     prompt=prompt,
                     schema=GuideOutline,
                 )
-                outline, repaired = repair_guide_outline(outline, ledger)
+                outline, repaired = repair_guide_outline(
+                    _canonical(outline, duplicates), ledger
+                )
                 if repaired:
                     logger.info(
                         "Guide outline repaired in code: %s", "; ".join(repaired)
@@ -423,6 +492,7 @@ class EvidenceGuideEngine(EvidenceWriter):
                 block(
                     "previous_section_end", written[-1][1][-2500:] if written else ""
                 ),
+                block("code_defined_earlier", defined_in_code([m for _, m in written])),
             ]
         )
 
@@ -456,6 +526,9 @@ class EvidenceGuideEngine(EvidenceWriter):
                     if section.kind in ("concepts", "architecture")
                     else ""
                 ),
+                # Advice is stated plainly; the guide's own judgement is
+                # marked only where it chooses.
+                own_view_limit=1 if section.kind == "choosing" else 0,
             )
             problems += guide_draft_problems(
                 markdown, code_language=outline.code_language
@@ -512,7 +585,8 @@ class EvidenceGuideEngine(EvidenceWriter):
             draft,
             title=section.title,
             review_context=f"Section kind: {section.kind}; thesis: {section.thesis}; "
-            f"depth: {section.depth}; running example: {outline.running_example or 'none'}.",
+            f"depth: {section.depth}; running example: {outline.running_example or 'none'}.\n"
+            + block("code_defined_earlier", defined_in_code([m for _, m in written])),
             checks=self._checks(
                 section, outline, ledger, own, earlier_ids, numbers, exhausted, target
             ),
@@ -571,6 +645,7 @@ class EvidenceGuideEngine(EvidenceWriter):
             target,
             retry_hint="This is the TL;DR of a technical guide for practitioners.",
         )
+        body_sentences = [s for _, md in written for s in prose_sentences(md)]
         # Figures stay in their sections.
         context = [e for e in (*own, *body) if e.kind != "figure"]
         markdown = await self.verify_and_fix(
@@ -589,8 +664,10 @@ class EvidenceGuideEngine(EvidenceWriter):
                     figure_urls=(),
                     free_numbers=_FREE_NUMBERS,
                     target_chars=target,
+                    own_view_limit=0,
                 )
                 + guide_draft_problems(md)
+                + _copied(md, body_sentences)
             ),
             ledger=ledger,
             own=context,

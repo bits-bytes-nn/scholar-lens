@@ -1,0 +1,152 @@
+{
+  "kind": "guide",
+  "status": "succeeded",
+  "input": "https://docs.ray.io/en/latest/serve/getting_started.html",
+  "title": "Ray Serve: Composable Python Inference from Laptop to Kubernetes",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/guide-ray-serve-composable-python-inference-from-laptop-to-kubernetes/2026-11-04-ray-serve-composable-python-inference-from-laptop-to-kubernetes.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-11-04-ray-serve-composable-python-inference-from-laptop-to-kubernetes.md",
+  "pr_url": null,
+  "warnings": [
+    "Section '컨트롤러, 프록시, 레플리카로 이어지는 요청의 수명' still has: a deep section needs at least 2 visuals (its figures, an equation, or a small table from its number evidence)",
+    "Section '파워 오브 투 초이스에서 프리픽스 인식 라우터까지의 레플리카 선택 정책' still has: the section must start with its '## ' heading (파워 오브 투 초이스에서 프리픽스 인식 라우터까지의 레플리카 선택 정책)",
+    "Section '인그레스 프록시 홉을 없애는 LLM 직접 스트리밍' still has: points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 앞서 설명한 대로 디플로이먼트 간 호출은 HTTP 요청과 같은 데이터 경로를 거칩니다. | a standard section needs at least 1 visuals (its figures, an equation, or a small table from its number evidence)",
+    "Section 'DeploymentHandle로 함수 호출처럼 엮는 모델 컴포지션': check 1 sentence(s) the evidence may not support: 분기, 반복, 조건부 호출을 그래프 문법으로 표현하지 않고 평범한 파이썬 제어 흐름으로 씁니다. (unsupported: No evidence says branching, loops or conditional calls are written in plain Python control flow instead of graph syntax; E19 only says calls look like function calls.)",
+    "Section 'DeploymentHandle로 함수 호출처럼 엮는 모델 컴포지션' still has: points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 요약 모델은 GPU 레플리카 두 개, 번역 모델은 CPU 레플리카 네 개처럼 앞서 설명한 `num_replicas`와 자원 옵션을 단계마다 다르게 줄 수 있습니다. | English stem with a Korean ending 'bind된': 여러 모델을 잇는 방법은 단순합니다. bind된 디플로이먼트를 다른 디플로이먼트의 생성자 인자로 넘기 | a deep section needs at least 2 visuals (its figures, an equation, or a small table from its number evidence)",
+    "Section '@serve.ingress로 붙이는 FastAPI 라우트와 HTTP 동작 제어' still has: evidence ['E9'] was already referred back to once; do not restate it again: 라우트 메서드에서 하는 일은 앞서 본 핸들 호출과 같습니다 .",
+    "Section 'Ray 대시보드, Prometheus, Grafana로 구성하는 Serve 관측' still has: points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 앞서 정리한 노드·클러스터 장애가 나도 메트릭에 계속 접근할 수 있어야 하기 때문입니다 .",
+    "Section 'Ray Serve를 고를 때와 Triton·BentoML 같은 대안을 고를 때' still has: points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 앞서 다룬 GCS 장애 허용 설정, 클러스터 밖 Prometheus 같은 요소도 모두 이 클러스터를 운영하는 데 드는 비용에 포함됩니다.",
+    "English stem with a Korean ending 'bind된': 여러 모델을 잇는 방법은 단순합니다. bind된 디플로이먼트를 다른 디플로이먼트의 생성자 인자로 넘기"
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 2579.4,
+  "input_tokens": 2432888,
+  "output_tokens": 362670,
+  "estimated_cost_usd": 12.6731,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 207,
+      "failed_calls": 0,
+      "input_tokens": 15795,
+      "output_tokens": 362670,
+      "cache_read_tokens": 1110344,
+      "cache_write_tokens": 1306749,
+      "cost_usd": 12.673156
+    },
+    "by_stage": {
+      "relevance": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 2617,
+        "output_tokens": 188,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.000356
+      },
+      "research_plan": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 2786,
+        "output_tokens": 696,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.000627
+      },
+      "read": {
+        "calls": 105,
+        "failed_calls": 0,
+        "input_tokens": 250,
+        "output_tokens": 94126,
+        "cache_read_tokens": 686614,
+        "cache_write_tokens": 173940,
+        "cost_usd": 1.513934
+      },
+      "outline": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 6497,
+        "cache_read_tokens": 1810,
+        "cache_write_tokens": 17607,
+        "cost_usd": 0.218715
+      },
+      "verify": {
+        "calls": 45,
+        "failed_calls": 0,
+        "input_tokens": 180,
+        "output_tokens": 80086,
+        "cache_read_tokens": 329393,
+        "cache_write_tokens": 599960,
+        "cost_usd": 4.733997
+      },
+      "draft": {
+        "calls": 14,
+        "failed_calls": 0,
+        "input_tokens": 56,
+        "output_tokens": 48476,
+        "cache_read_tokens": 44142,
+        "cache_write_tokens": 211721,
+        "cost_usd": 2.046003
+      },
+      "review": {
+        "calls": 14,
+        "failed_calls": 0,
+        "input_tokens": 56,
+        "output_tokens": 29822,
+        "cache_read_tokens": 20160,
+        "cache_write_tokens": 40194,
+        "cost_usd": 0.805698
+      },
+      "fix": {
+        "calls": 25,
+        "failed_calls": 0,
+        "input_tokens": 100,
+        "output_tokens": 101186,
+        "cache_read_tokens": 28225,
+        "cache_write_tokens": 263327,
+        "cost_usd": 3.352055
+      },
+      "finalize": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 9746,
+        "output_tokens": 1593,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.001771
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-haiku-5-5": {
+        "calls": 3,
+        "failed_calls": 0,
+        "input_tokens": 15149,
+        "output_tokens": 2477,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.002754
+      },
+      "global.anthropic.claude-sonnet-5-5": {
+        "calls": 105,
+        "failed_calls": 0,
+        "input_tokens": 250,
+        "output_tokens": 94126,
+        "cache_read_tokens": 686614,
+        "cache_write_tokens": 173940,
+        "cost_usd": 1.513934
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 99,
+        "failed_calls": 0,
+        "input_tokens": 396,
+        "output_tokens": 266067,
+        "cache_read_tokens": 423730,
+        "cache_write_tokens": 1132809,
+        "cost_usd": 11.156468
+      }
+    }
+  }
+}

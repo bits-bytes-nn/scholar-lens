@@ -47,7 +47,8 @@ _PAPER_ID = re.compile(r"(?<![\d./])(?:\d{4}\.\d{4,5}|10\.\d{4,9}/[^\s,;)]+)(?![
 # a card, a summary) instead of the papers. Closed list from past posts.
 META_SENTENCE = re.compile(
     r"초록(?:에서|만|에 따르면|에 기대|과 공개|수준|에는|으로는)|공개 요약|카드(?:에|가|만|로|의)|"
-    r"입력 자료|제공된 (?:자료|문서|출처|근거)|근거 자료(?:에|가|로)|"
+    r"입력 자료|제공된 (?:자료|문서|출처|근거)|원래 예시|원문(?:의)? 예시|"
+    r"근거 자료(?:에|가|로)|"
     r"(?:다루는|주어진|받은) (?:자료|근거)|자료에(?:는)? (?:없|나오지)|근거에(?:는)? 없|"
     r"(?:이|본) 글(?:에서)?(?:는|은) .{0,20}(?:살펴봅니다|다룹니다|정리합니다)|이 절에서는|"
     r"\b(?:the|this) (?:abstract|card|summary) (?:says|states|reports)|based on the abstract",
@@ -69,6 +70,34 @@ def prose_sentences(markdown: str) -> list[str]:
             continue
         line = re.sub(r"^(?:>\s*)+|^(?:[-*+]|\d+[.)])\s+", "", line)
         out += [s.strip() for s in _SENTENCE_END.split(line) if s.strip()]
+    return out
+
+
+def table_rows(markdown: str) -> list[str]:
+    """The data rows of the draft's tables (header and rule rows left out),
+    as written: what a claim check reads besides the prose."""
+    rows = []
+    for block in re.split(r"\n(?!\s*\|)", _FENCE.sub("\n", markdown)):
+        lines = [ln.strip() for ln in block.split("\n") if _TABLE_LINE.match(ln)]
+        if len(lines) >= 3 and re.match(r"^\|?\s*:?-{3,}", lines[1]):
+            rows += lines[2:]
+    return rows
+
+
+def claim_units(markdown: str) -> list[str]:
+    """What a claim check judges: the prose sentences, then the table rows."""
+    return prose_sentences(markdown) + table_rows(markdown)
+
+
+_EMPTY_HEADING = re.compile(r"^(#{2,4}) [^\n]+\n\s*\n?(?=#{2,4} |\Z)", re.M)
+
+
+def drop_empty_headings(markdown: str) -> str:
+    """The draft without headings that head nothing (a duplicate left in
+    front of the real one, a heading at the very end)."""
+    out = markdown
+    while (new := _EMPTY_HEADING.sub("", out)) != out:
+        out = new
     return out
 
 
@@ -108,7 +137,8 @@ _FORMULAS = ((re.compile(r"보면 됩니다"), 1), (re.compile(r"다는 점"), 2
 
 
 _OWN_VIEW = re.compile(
-    r"이 글의 (?:관점|판단|해석|견해)|이 글은 .{0,12}(?:본다|봅니다|판단합니다)"
+    r"이 (?:글|가이드)의 (?:관점|판단|해석|견해)|(?:이 )?가이드의 (?:관점|판단|해석|견해)|"
+    r"이 (?:글|가이드)는 .{0,12}(?:본다|봅니다|판단합니다)"
 )
 
 
@@ -149,6 +179,7 @@ def draft_problems(
     exhausted: Iterable[str] = (),
     papers: Iterable[str] = (),
     target_chars: int = 0,
+    own_view_limit: int = 1,
 ) -> list[str]:
     """Deterministic problems of a section draft (each quotes its sentence):
     a missing heading, unknown or foreign evidence ids, a number without
@@ -169,11 +200,19 @@ def draft_problems(
                 f"'{formula.pattern}' {count} times in one section; vary the "
                 "sentence or drop the frame"
             )
-    if len(_OWN_VIEW.findall(_FENCE.sub("", markdown))) > 1:
+    if (views := len(_OWN_VIEW.findall(_FENCE.sub("", markdown)))) > own_view_limit:
         problems.append(
-            "marks the post's own view more than once; keep one marker in a "
-            "section and state the rest plainly or leave it out"
+            f"marks the post's own view {views} times (at most {own_view_limit} "
+            "here); state the advice plainly or leave the marker out"
         )
+    for line in _FENCE.sub("", markdown).split("\n"):
+        if _REVISION_PHRASE.search(line):
+            problems.append(
+                "a note about the writing itself, not content for the reader; "
+                f"delete it: {line.strip()[:160]}"
+            )
+    if drop_empty_headings(markdown) != markdown:
+        problems.append("a heading with nothing under it; delete it or fill it")
     if not markdown.lstrip().startswith("## "):
         problems.append(f"the section must start with its '## ' heading ({title})")
     allowed = set(own) | set(earlier)
@@ -332,7 +371,13 @@ def drop_sentences(markdown: str, sentences: Iterable[str]) -> str:
     returns them), each removed once, and without the fragments a removal
     leaves (a short line that ends no sentence, such as "첫째")."""
     for sentence in sentences:
-        markdown = markdown.replace(sentence, "", 1)
+        if sentence.startswith("|"):
+            # A table row goes with its line, or the table splits in two.
+            markdown = re.sub(
+                r"^[ \t]*" + re.escape(sentence) + r"[ \t]*\n?", "", markdown, count=1, flags=re.M
+            )
+        else:
+            markdown = markdown.replace(sentence, "", 1)
     lines = []
     for line in markdown.split("\n"):
         bare = line.strip()
@@ -406,7 +451,10 @@ _REVISION_NOTE = re.compile(
 
 
 _REVISION_PHRASE = re.compile(
-    r"(?:제시하신|요청하신|지적하신) (?:대로|문제)|\bE\d+ (?:반복 )?(?:제거|삭제|수정)"
+    r"(?:제시하신|요청하신|지적하신|말씀하신)|\bE\d+ (?:반복 )?(?:제거|삭제|수정)|"
+    r"\bnotes? on (?:the )?fix|\bI (?:could not|couldn't|have|did not|didn't|kept|removed|added)\b|"
+    r"\bas requested\b",
+    re.IGNORECASE,
 )
 
 

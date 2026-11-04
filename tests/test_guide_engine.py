@@ -481,3 +481,93 @@ def test_a_figure_without_a_caption_is_placed_with_the_text_before_it() -> None:
         == "Architecture: Serve runs a controller and one proxy per node."
     )
     assert "F1 | figure in S1 | text before it: Architecture:" in doc.outline()
+
+
+def test_table_rows_are_claims_and_a_wrong_row_leaves_whole() -> None:
+    from scholar_lens.domain.evidence_draft import claim_units, drop_sentences
+
+    md = "## 결정\n\n두 결정이 있습니다.\n\n| 결정 | 의미 |\n| --- | --- |\n| Deny | 막음 |\n| Transform | 바꿈 |\n"
+    assert claim_units(md)[1:] == ["| Deny | 막음 |", "| Transform | 바꿈 |"]
+    assert drop_sentences(md, ["| Transform | 바꿈 |"]).endswith("| Deny | 막음 |\n")
+
+
+def test_writer_notes_and_empty_headings_are_problems_and_removed() -> None:
+    from scholar_lens.domain.evidence_draft import (
+        draft_problems,
+        drop_empty_headings,
+        strip_revision_notes,
+    )
+
+    md = (
+        "## 스티어링\n\n## 스티어링 핸들러\n\n핸들러는 도구 호출을 안내합니다 [[E1]].\n\n"
+        "참고: 요청하신 import 줄은 넣지 않았습니다.\n"
+    )
+    problems = draft_problems(
+        md,
+        title="스티어링",
+        own=["E1"],
+        earlier=(),
+        ledger=_ledger(),
+        earlier_numbers={},
+        figure_urls=(),
+        free_numbers="",
+    )
+    assert any("note about the writing" in p for p in problems)
+    assert any("nothing under it" in p for p in problems)
+    assert drop_empty_headings(md).startswith("## 스티어링 핸들러")
+    assert "요청하신" not in strip_revision_notes(md)
+    english = "## A\n\n내용입니다.\n\nNotes on fixes I could not make fully: none.\n"
+    assert "Notes" not in strip_revision_notes(english)
+
+
+def test_the_guides_own_view_is_marked_only_where_it_chooses() -> None:
+    from scholar_lens.domain.evidence_draft import draft_problems
+
+    md = "## 배치\n\n이 글의 판단으로는 배치를 먼저 켭니다.\n"
+    kwargs: dict[str, Any] = {
+        "title": "배치",
+        "own": (),
+        "earlier": (),
+        "ledger": _ledger(),
+        "earlier_numbers": {},
+        "figure_urls": (),
+        "free_numbers": "",
+    }
+    assert any("own view" in p for p in draft_problems(md, own_view_limit=0, **kwargs))
+    assert not any("own view" in p for p in draft_problems(md, **kwargs))
+
+
+def test_a_fact_two_pages_state_is_kept_from_the_official_page() -> None:
+    from scholar_lens.domain.evidence import duplicate_evidence
+
+    ledger = EvidenceLedger()
+    blog, doc = _blog(), _official()
+    ledger.add(
+        blog,
+        kind="finding",
+        claim="배치는 고정 비용을 여러 요청에 나눕니다",
+        quote="Batching amortizes the model's fixed cost over many requests, so the GPU stays busy.",
+        anchor="S1",
+    )
+    ledger.add(
+        doc,
+        kind="finding",
+        claim="배치는 고정 비용을 여러 요청에 나눕니다.",
+        quote="Serve batches requests on each replica to raise throughput.",
+        anchor="S1",
+    )
+    assert duplicate_evidence(ledger, {"D1": 0, "W1": 2}) == {"E1": "E2"}
+
+
+def test_code_defined_earlier_lists_the_running_examples_definitions() -> None:
+    from scholar_lens.application.guide_engine import defined_in_code
+
+    md = (
+        "## A\n\n```python\n@serve.deployment\nclass Translator:\n"
+        "    def translate(self, text: str) -> str:\n        return text\n```\n"
+    )
+    assert defined_in_code([md]).split("\n") == [
+        "@serve.deployment",
+        "class Translator:",
+        "def translate(self, text: str) -> str:",
+    ]

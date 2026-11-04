@@ -476,7 +476,7 @@ def test_headings_in_the_plain_register_and_repeated_view_markers() -> None:
         free_numbers="",
     )
     assert any("heading is a sentence" in p for p in issues)
-    assert any("own view more than once" in p for p in issues)
+    assert any("own view 2 times (at most 1" in p for p in issues)
     ok = "## 정책보다 먼저 무너지는 보상 모델\n\nA입니다.\n"
     assert not draft_problems(
         ok,

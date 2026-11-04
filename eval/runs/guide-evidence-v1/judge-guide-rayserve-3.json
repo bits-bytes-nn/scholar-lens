@@ -1,0 +1,273 @@
+{
+  "item": "guide-rayserve",
+  "post": "/tmp/eval-guide/guide-rayserve-v1.md",
+  "judge_run": 3,
+  "sampling": "Body prose paragraphs (excluding headings, fences, tables, display math) numbered 1..138; claims taken from paragraphs 3, 6, 9, ... (every third from the 3rd); list items and tables directly attached to a sampled paragraph count as part of it.",
+  "scores": {
+    "A": 5,
+    "B": 7,
+    "C": 7,
+    "D": 8,
+    "E": 8,
+    "F": 6,
+    "T1": 8,
+    "T2": 8,
+    "T3": 8
+  },
+  "score_evidence": {
+    "A": [
+      "L162-166: empty duplicate section — '## 파워 오브 투 초이스에서 프리픽스 인식 라우터까지의 레플리카 선택 정책' has no body and is immediately followed by '## 무작위 두 후보에서 프리픽스 트리까지 이어지는 레플리카 선택 정책'.",
+      "L244-247: writer's internal notes leaked into the body in English: 'Notes on fixes I could not make fully: - The evidence has no API for attaching a router to a deployment ...'.",
+      "Front matter otherwise fine: no author key, two-level categories, use_math true with $$ present (L224-233), description 145 chars opening with 'Ray Serve는'. No skipped heading levels; tables and fences render."
+    ],
+    "B": [
+      "L244-247 English meta text in a Korean '입니다' post (register/language break).",
+      "L110: 'Serve REST REST 요청에 응답하는' — doubled word.",
+      "L645: hedges stacked — '지연 증가로 드러난다고 볼 수 있습니다', '버퍼로 볼 수 있습니다', '해당한다고 추정할 수 있지만'; rewrite e.g. '이 대기가 곧 지연 증가입니다. 목표 2와 상한 5 사이의 여유가 새 레플리카가 뜰 때까지 순간 부하를 받아 냅니다.'",
+      "L110: noun frame '정한다는 뜻입니다' -> '컨트롤러가 정합니다'. Otherwise prose is natural Korean engineer writing with established English terms."
+    ],
+    "C": [
+      "L162/L166 duplicate heading breaks the arc; L244 notes interrupt the transition into direct streaming.",
+      "L114 says the HTTP proxy runs by default as one actor on the head node, while L575 says 'EveryNode(기본값)'; the two docs pages differ and the post states both without reconciling them.",
+      "Positive: one running example (text_ml:app, Summarizer -> Translator) threads through every section; back-references ('앞서 설명한 대로', L256, L316, L603) are accurate."
+    ],
+    "D": [
+      "Good worked examples where it is hard: max_ongoing_requests queueing with 2 replicas/5 requests (L141), power-of-two choices with loads 3,0,1,2 (L178), autoscaling 30 concurrent requests (L645).",
+      "Slight over-explanation of easy material: framework-agnostic and three-step bind/serve.run repeated (L13 vs L25 and L47); serve build output description partly padded (L539)."
+    ],
+    "E": [
+      "Tables are used well (unit table L93-98, component table L155-160, config keys L573-580, failure/recovery L713-718, Triton comparison L764-768).",
+      "ASCII diagrams labelled as illustrative (L118, L260); the official architecture image is not used, which would help at L102.",
+      "Router rule as display math (L226-233) is a faithful restatement of the docs' three-branch rule; acceptable."
+    ],
+    "F": [
+      "Wrong (L539): attributes the draft from 'serve build text_ml:app' to have 'app1' default name and 'num_replicas: 2', 'num_cpus: 0.2', 'num_gpus: 0.0'. Those values are from the develop-and-deploy page's 'serve build model:translator_app' output; the config page's text_ml output has 'name: default', 'num_replicas: 1' and no ray_actor_options.",
+      "Wrong (L707): '디플로이먼트 상태는 HEALTHY, UNHEALTHY, UPDATING 중 하나입니다' — the Serve monitoring docs list six deployment statuses (also DEPLOY_FAILED, UPSCALING, DOWNSCALING); the application list adds DELETING, which the monitoring page's four-status list does not include (only the metrics enum does).",
+      "Default-proxy contradiction L114 vs L575 (docs-inherited, not reconciled)."
+    ],
+    "T1": "Runnable commands and config throughout: pip install (L392), serve run text_ml:app (L400), serve build -o (L536), full YAML (L543-565), autoscaling YAML (L611-632), direct-streaming env vars (L280-281). Summarizer code relies on an undefined self.summarize, labelled as illustrative (L320).",
+    "T2": "Covers the topics present in the sources in a sensible order (concepts -> architecture -> routing -> composition -> run -> HTTP -> config -> autoscaling -> K8s -> observability -> when to choose). Direct streaming (experimental, LLM-only) gets a full section that is somewhat outsized for a getting-started-anchored guide.",
+    "T3": "Strong internals: request lifecycle (L116-151), controller/autoscaler placement, 100KiB object-store path, router patterns and prefix tree (L182-239), two-layer autoscaling (L653-672), fault-tolerance matrix (L713-720), metrics pipeline (L728-744). Design advice is marked as the guide's own ('이 가이드의 판단으로는', L241, L300, L672). Deductions: one mis-attributed generated config and an incomplete status enumeration."
+  },
+  "principles": {
+    "claim_headings": {
+      "status": "met",
+      "evidence": "Noun-phrase claim headings, e.g. L102 '컨트롤러, 프록시, 레플리카로 이어지는 요청의 수명', L597 '큐 길이를 따라 레플리카와 노드를 늘리는 2단 오토스케일링'."
+    },
+    "running_example": {
+      "status": "met",
+      "evidence": "text_ml:app (Summarizer -> Translator) introduced L21 and used in every section through L752."
+    },
+    "mechanism_design_code_example": {
+      "status": "met",
+      "evidence": "Routing: problem L180 -> design choice and trade-off L194-197, L237 -> code L201-212 and rule L226-233 -> numeric example L235."
+    },
+    "facts_said_once": {
+      "status": "partly met",
+      "evidence": "keep_alive 5 s stated at L525, L529 and L582; three-step bind/serve.run at L13 and L47; 'app = Summarizer.bind(Translator.bind())' shown at L80 and L311; framework-agnostic at L13 and L25."
+    },
+    "numbers_with_scope_and_unit": {
+      "status": "met",
+      "evidence": "L239 scopes the Anyscale 60%/40% figures to DeepSeek-R1-Distill-Qwen-32B, 64 L4 GPUs, shared-prefix dataset; defaults carry units (L724 '기본 10.0초')."
+    },
+    "nothing_invented": {
+      "status": "partly met",
+      "evidence": "L539 transplants another example's generated values onto text_ml; L707 presents an incomplete status set as exhaustive. Writer examples are labelled ('예시', L118, L684)."
+    },
+    "writer_assessment_at_end": {
+      "status": "met",
+      "evidence": "L772-776 '선택 기준' and failure modes in the writer's voice."
+    },
+    "length_fitted_to_difficulty": {
+      "status": "partly met",
+      "evidence": "About 800 lines; hard parts get depth, but direct streaming (L250-300) and the framework table (L450-458) add length beyond the getting-started scope."
+    },
+    "type_specific_shape": {
+      "status": "partly met",
+      "evidence": "Opens with TL;DR (L11) and the problem (L17-23); architecture (L45, L102) before config (L527); includes non-official design sources; closes with when-to-choose and failure modes (L746-776). Broken by the empty duplicate section (L162) and leaked notes (L244)."
+    },
+    "korean_style": {
+      "status": "partly met",
+      "evidence": "Generally natural '입니다' prose; English notes at L244-247, 'REST REST' at L110, stacked hedges at L645."
+    }
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 13,
+    "unsupported": 0,
+    "wrong": 2,
+    "unverifiable": 0,
+    "numbers": 8,
+    "examples": [
+      {
+        "n": 1,
+        "para": 6,
+        "line": 25,
+        "claim": "TensorFlow는 어떤 버전이든 쓸 수 있습니다",
+        "verdict": "supported",
+        "source": "serve/tutorials/serve-ml-models.html: 'Ray Serve is framework-agnostic–you can use any version of TensorFlow.'"
+      },
+      {
+        "n": 2,
+        "para": 15,
+        "line": 87,
+        "claim": "serve.run은 DeploymentHandle을 돌려주고 handle.remote().result()로 호출",
+        "verdict": "supported",
+        "source": "serve/key-concepts.html: 'assert handle.remote().result() == \"Hello world!\"'"
+      },
+      {
+        "n": 3,
+        "para": 21,
+        "line": 110,
+        "claim": "오토스케일러는 컨트롤러 액터 안에서 실행되고 핸들과 레플리카가 메트릭을 푸시; 노드마다 Serve REST API 서버",
+        "verdict": "supported",
+        "source": "serve/architecture.html: 'The Serve Autoscaler runs in the Serve Controller actor. Each DeploymentHandle and each replica periodically pushes its metrics...' 'Each node in your Ray cluster provides a Serve REST API server'"
+      },
+      {
+        "n": 4,
+        "para": 24,
+        "line": 138,
+        "claim": "100KiB 이상 요청 객체는 객체 저장소에 기록되고 zero-copy로 읽음",
+        "verdict": "supported",
+        "number": true,
+        "source": "serve/architecture.html: 'Larger request objects (100KiB+) are written to the object store and the replica can read them via zero-copy read.'"
+      },
+      {
+        "n": 5,
+        "para": 33,
+        "line": 172,
+        "claim": "인그레스 라우팅은 model_id로 디플로이먼트를, 요청 라우팅은 레플리카를 고름",
+        "verdict": "supported",
+        "source": "serve/llm/architecture/routing-policies.html: 'Ingress routing (model-level): Maps model_id to deployment ... Request routing (replica-level)'"
+      },
+      {
+        "n": 6,
+        "para": 54,
+        "line": 260,
+        "claim": "HAProxy가 LLMRouter의 /internal/route로 레플리카를 고른 뒤 직접 스트림",
+        "verdict": "supported",
+        "source": "serve/llm/user-guides/direct-streaming.html: 'HAProxy calls /internal/route on the LLMRouter deployment to choose an LLMServer replica, then sends the request and the streamed response directly to that replica.'"
+      },
+      {
+        "n": 7,
+        "para": 57,
+        "line": 284,
+        "claim": "직접 스트리밍 기본은 RoundRobinRouter, request_router_config 지정 시 그대로 사용; ConsistentHashRouter 클래스 경로",
+        "verdict": "supported",
+        "source": "direct-streaming.html: 'When you do not configure one, direct streaming defaults to RoundRobinRouter. This differs from Serve’s general default of Power of Two Choices.' and 'ray.serve.experimental.consistent_hash_router.ConsistentHashRouter'"
+      },
+      {
+        "n": 8,
+        "para": 75,
+        "line": 392,
+        "claim": "pip install \"tensorflow>=2.0\" requests \"ray[serve]\"",
+        "verdict": "supported",
+        "number": true,
+        "source": "serve-ml-models.html: '$ pip install \"tensorflow>=2.0\" requests \"ray[serve]\"'"
+      },
+      {
+        "n": 9,
+        "para": 93,
+        "line": 525,
+        "claim": "Uvicorn keep-alive 기본 5초, http_options.keep_alive_timeout_s, 클러스터 전역이며 런타임 갱신 불가",
+        "verdict": "supported",
+        "number": true,
+        "source": "serve/http-guide.html: 'By default, Uvicorn keeps HTTP connections alive for 5 seconds ... This config is global to your Ray cluster, and you can’t update it during runtime.'"
+      },
+      {
+        "n": 10,
+        "para": 96,
+        "line": 539,
+        "claim": "serve build text_ml:app 초안에 app1 기본 이름과 num_replicas: 2, num_cpus: 0.2, num_gpus: 0.0",
+        "verdict": "wrong",
+        "number": true,
+        "source": "serve/production-guide/config.html (text_ml output): '- name: default ... import_path: text_ml:app ... - name: Translator num_replicas: 1'. The app1/num_replicas 2/num_cpus 0.2 values belong to develop-and-deploy.html's 'serve build model:translator_app' output."
+      },
+      {
+        "n": 11,
+        "para": 99,
+        "line": 576,
+        "claim": "http_options.port 기본값 8000",
+        "verdict": "supported",
+        "number": true,
+        "source": "config.html: 'port: The port for Serve’s HTTP proxies ... By default, the port is set to 8000.'"
+      },
+      {
+        "n": 12,
+        "para": 108,
+        "line": 636,
+        "claim": "num_replicas=\"auto\" 기본값 target_ongoing_requests 2, max_ongoing_requests 5, min_replicas 1, max_replicas 100; 수동 autoscaling_config의 max_replicas 기본 1",
+        "verdict": "supported",
+        "number": true,
+        "source": "serve/autoscaling-guide.html: 'max_ongoing_requests: 5 ... target_ongoing_requests: 2 min_replicas: 1 max_replicas: 100' and 'the base default for max_replicas is 1'"
+      },
+      {
+        "n": 13,
+        "para": 111,
+        "line": 647,
+        "claim": "max_replicas는 피크에 필요한 수보다 20% 정도 높게",
+        "verdict": "supported",
+        "number": true,
+        "source": "autoscaling-guide.html: 'Set this to ~20% higher than what you think you need for peak traffic.'"
+      },
+      {
+        "n": 14,
+        "para": 123,
+        "line": 724,
+        "claim": "RAY_SERVE_PROXY_HEALTH_CHECK_TIMEOUT_S 기본 10.0초, 연속 3번 실패 시 재시작, RAY_SERVE_PROXY_MIN_DRAINING_PERIOD_S 기본 30.0초",
+        "verdict": "supported",
+        "number": true,
+        "source": "config.html: '...If a proxy fails 3 consecutive health checks, the controller marks it unhealthy and restarts it. Default is 10.0.' / '...Default is 30.0.'"
+      },
+      {
+        "n": 15,
+        "para": 120,
+        "line": 707,
+        "claim": "디플로이먼트 상태는 HEALTHY, UNHEALTHY, UPDATING 중 하나; 애플리케이션 상태에 DELETING 포함",
+        "verdict": "wrong",
+        "source": "serve/monitoring.html: 'A Serve deployment has six possible statuses: UPDATING, HEALTHY, UNHEALTHY, DEPLOY_FAILED, UPSCALING, DOWNSCALING'; 'A Serve application has four possible overall statuses: NOT_STARTED, DEPLOYING, RUNNING, DEPLOY_FAILED'."
+      }
+    ]
+  },
+  "checklist": {
+    "repeated": 0,
+    "avoided": 2,
+    "na": 0,
+    "repeated_ids": [],
+    "items": [
+      {
+        "id": "arch-diagram-relative-link",
+        "result": "avoided",
+        "evidence": "No Markdown link or image with empty text or a '../_images/' path (grep finds none; the post has no images). The architecture is drawn as labelled ASCII diagrams (L118-131, L262-271) rather than the official SVG with Korean alt text."
+      },
+      {
+        "id": "proxy-env-ray-start-unsupported",
+        "result": "avoided",
+        "evidence": "The proxy env-var paragraph (L724) gives only names, meanings and defaults and does not say where to set them or mention 'ray start'. The only 'before start' instruction is L277 for the direct-streaming vars, which the docs state ('Set both environment variables before starting Serve')."
+      }
+    ]
+  },
+  "extras": {
+    "architecture_first_line": 15,
+    "architecture_first_section_line": 102,
+    "architecture_note": "TL;DR L15 introduces replicas as Ray actors, controller and autoscaler; the concepts section starts L45 and the full architecture section L102, before configuration (L527).",
+    "sources_total": 20,
+    "non_official_sources": 4,
+    "non_official_share": 0.2,
+    "non_official_list": [
+      "cerebrium.ai BentoML alternatives",
+      "anyscale.com blog on custom request routing",
+      "discuss.ray.io KubeRay Prometheus thread",
+      "suhasbhairav.com Triton vs Ray Serve"
+    ],
+    "opens_with_problem": true,
+    "opens_with_problem_evidence": "L17-23: pipelines whose stages need different resources and scale; single-model servers and static graphs scatter logic.",
+    "closes_with_when_to_choose_and_failure_modes": true,
+    "closes_evidence": "L772-776 '선택 기준' plus failure modes (expecting model optimization, platform features, skipping GCS fault tolerance)."
+  },
+  "top_issues": [
+    "Leaked writer notes in English inside the body (L244-247) and an empty duplicate H2 (L162-164).",
+    "Mis-attributed serve build output: app1 / num_replicas 2 / num_cpus 0.2 come from the translator_app example, not text_ml:app (L539).",
+    "Incomplete status enumeration presented as exhaustive (deployment statuses missing DEPLOY_FAILED, UPSCALING, DOWNSCALING; DELETING added to app statuses) (L707); also unreconciled proxy default (head-only at L114 vs EveryNode at L575)."
+  ]
+}

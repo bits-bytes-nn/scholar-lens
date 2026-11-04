@@ -13,8 +13,10 @@ from __future__ import annotations
 
 import math
 import os
+import random
 import re
 import socket
+import time
 from abc import ABC, abstractmethod
 from bisect import bisect_right
 from collections.abc import Callable, Collection
@@ -632,6 +634,12 @@ def absolute_markdown_links(markdown: str, base_url: str) -> str:
     return _MARKDOWN_TARGET.sub(repl, markdown)
 
 
+# A non-arXiv site answering 429/503 is asked again this many times, after
+# its Retry-After or PAGE_RETRY_BASE_SECONDS x 1, 3, 9.
+PAGE_RATE_LIMIT_RETRIES = 3
+PAGE_RETRY_BASE_SECONDS = 5.0
+
+
 class WebResearcher:
     """Fetches pages, discovers in-scope sub-URLs, and extracts text + images."""
 
@@ -643,8 +651,11 @@ class WebResearcher:
         max_subpages: int = DEFAULT_MAX_SUBPAGES,
         max_images_per_page: int = DEFAULT_MAX_IMAGES_PER_PAGE,
         client: httpx.Client | None = None,
+        sleep: Callable[[float], None] = time.sleep,
     ) -> None:
         self.search_provider = search_provider or NullSearchProvider()
+        # Injected so tests do not wait out a rate limit.
+        self._sleep = sleep
         self.timeout = timeout
         self.max_subpages = max_subpages
         self.max_images_per_page = max_images_per_page
@@ -939,8 +950,7 @@ class WebResearcher:
                 )
             else:
                 logger.warning(
-                    "Skipping '%s' — it or a redirect targets a non-public "
-                    "address: %s",
+                    "Skipping '%s' — it or a redirect targets a non-public address: %s",
                     url,
                     e,
                 )
@@ -1033,11 +1043,40 @@ class WebResearcher:
         return self._get_page(abs_url)
 
     def _get_page(self, url: str) -> tuple[str, str] | None:
+        """:meth:`_get_page_once`, with a site that answers 429 or 503 (a
+        docs site behind a bot shield) asked again up to
+        :data:`PAGE_RATE_LIMIT_RETRIES` times after its Retry-After (capped)
+        or a growing wait. arXiv is not retried here: its limiter holds every
+        later request back and the job fails retryably."""
+        for attempt in range(PAGE_RATE_LIMIT_RETRIES + 1):
+            try:
+                return self._get_page_once(url)
+            except httpx.HTTPStatusError as e:
+                status = e.response.status_code
+                if (
+                    status not in (429, 503)
+                    or is_arxiv_host(url)
+                    or attempt == PAGE_RATE_LIMIT_RETRIES
+                ):
+                    raise
+                hinted = "retry-after" in e.response.headers
+                wait = (
+                    arxiv_retry_after_seconds(e)
+                    if hinted
+                    else PAGE_RETRY_BASE_SECONDS * 3**attempt
+                ) or PAGE_RETRY_BASE_SECONDS
+                wait *= 1 + random.uniform(0, 0.25)
+                logger.info(
+                    "'%s' answered %d; asking again in %.0f s.", url, status, wait
+                )
+                self._sleep(wait)
+        raise AssertionError("unreachable")
+
+    def _get_page_once(self, url: str) -> tuple[str, str] | None:
         """Stream ``url``; return (decoded HTML, final URL), or None when the
         resource is not HTML or exceeds :data:`MAX_PAGE_BYTES`. A request to
         arXiv waits for the process-wide arXiv rate limiter, and an arXiv 429
-        holds every later arXiv request back (no retry here: the failure is
-        recorded and the job fails retryably)."""
+        holds every later arXiv request back."""
         on_arxiv = is_arxiv_host(url)
         if on_arxiv:
             ARXIV_RATE_LIMITER.acquire()

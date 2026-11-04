@@ -1440,3 +1440,41 @@ class TestPaperDedup:
         }
         assert keys == {"arxiv:2309.06180"}
         assert page_key("HTTPS://Docs.X.dev/a/") == "https://docs.x.dev/a"
+
+
+def test_a_rate_limited_docs_page_is_asked_again_after_its_wait() -> None:
+    calls: list[str] = []
+    waits: list[float] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(str(request.url))
+        if len(calls) == 1:
+            return httpx.Response(429, headers={"Retry-After": "7"})
+        if len(calls) == 2:
+            return httpx.Response(503)
+        return httpx.Response(
+            200,
+            headers={"Content-Type": "text/html"},
+            text="<html><body><main><h1>Quickstart</h1><p>Run vllm serve.</p></main></body></html>",
+        )
+
+    researcher = WebResearcher(
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+        sleep=waits.append,
+    )
+    html, _ = researcher._get_page("https://docs.example.dev/quickstart")
+    assert "Quickstart" in html and len(calls) == 3
+    assert 7 <= waits[0] <= 7 * 1.25 and 15 <= waits[1] <= 15 * 1.25
+
+
+def test_a_page_rate_limited_past_the_retries_fails() -> None:
+    waits: list[float] = []
+    researcher = WebResearcher(
+        client=httpx.Client(
+            transport=httpx.MockTransport(lambda request: httpx.Response(429))
+        ),
+        sleep=waits.append,
+    )
+    with pytest.raises(httpx.HTTPStatusError):
+        researcher._get_page("https://docs.example.dev/quickstart")
+    assert len(waits) == 3

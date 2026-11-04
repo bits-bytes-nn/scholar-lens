@@ -1,0 +1,119 @@
+{
+  "item": "guide-rayserve",
+  "post": "/tmp/eval-guide/guide-rayserve-v1.md",
+  "judge_run": 1,
+  "sampling": "prose/list paragraphs (headings, code, tables excluded); paragraphs 1,4,7,... (46 of 138 sampled), claims drawn from those",
+  "scores": {"A": 5, "B": 7, "C": 7, "D": 8, "E": 7, "F": 8, "T1": 6, "T2": 8, "T3": 8.5},
+  "score_evidence": {
+    "A": [
+      "L244-247: writer meta notes leaked into the body in English: 'Notes on fixes I could not make fully: - The evidence has no API for attaching a router ...' (blocking)",
+      "L162-166: empty duplicate H2 '## 파워 오브 투 초이스에서 프리픽스 인식 라우터까지의 레플리카 선택 정책' immediately followed by '## 무작위 두 후보에서 프리픽스 트리까지 이어지는 레플리카 선택 정책'",
+      "Front matter, fences, $$ math and {% raw %} are otherwise fine"
+    ],
+    "B": [
+      "L110: 'Serve REST REST 요청에 응답하는 API 서버' (duplicated word) -> 'Serve REST 요청에 응답하는 API 서버'",
+      "L244-247: English meta text in a Korean post",
+      "L529 '단일 진실 원천' calque of 'single source of truth' -> '설정의 기준이 되는 유일한 파일'",
+      "L141/L178/L235/L645: '~라고 가정해 보겠습니다' repeated as the worked-example opener",
+      "L645: 'A로 볼 수 있습니다 ... 볼 수 있습니다 ... 추정할 수 있지만' hedging chain"
+    ],
+    "C": [
+      "L114 'HTTP 프록시는 기본적으로 헤드 노드에 하나 뜨며' vs L575 '`EveryNode`(기본값)' and L603: two contradictory defaults never reconciled (the docs' Architecture and Config pages disagree; the post copies both)",
+      "L70-72 Translator defines only __call__, but L331/L481 call self.translator.translate.remote(...); L417 later asserts Translator has a translate method",
+      "Facts repeated: L13 vs L25 (framework-agnostic definition verbatim), L13/L47 (three steps), L80 and L311 (same bind line), L83/L304/L314 (bind -> handle), L525/L529/L582 (keep_alive_timeout_s three times), L720/L776 (GCS checkpoint), L15/L748/L756 (no model optimisation / no ML platform)"
+    ],
+    "D": [
+      "Good worked examples at the hard points: L141 (max_ongoing_requests=2, 5 requests), L178 (p2c with 3,0,1,2), L235 (prefix router), L645 (autoscaling 30 ongoing)",
+      "L417-448 re-explains the __init__/__call__ pattern already shown at L59-75 and L322-333"
+    ],
+    "E": [
+      "Tables are real and useful (L93, L155, L194, L450, L573, L636, L713, L764)",
+      "L226-233 display equation only restates the three-item list at L220-222 (the leaked note L247 admits it was added to fill a 'second visual')",
+      "No official architecture diagram; ASCII sketches at L27, L120, L262, L657 are labelled as illustrative"
+    ],
+    "F": [
+      "15/15 sampled claims supported",
+      "L329 vs L411 (outside sample, found while reading): Summarizer does `(await request.json())[\"text\"]` but the client posts `json=english_text` (a bare string); the Getting Started page uses `english_text: str = await http_request.json()`. The post altered official code into a version that raises TypeError (-2)"
+    ],
+    "T1": [
+      "Real commands/flags/config: serve run, -r/--reload, serve build -o, serve status output, YAML config, autoscaling block",
+      "The running example is never runnable end to end: self.summarize undefined (L330), request key mismatch (L329 vs L411), Translator without translate in its shown code (L64-74), no complete text_ml.py"
+    ],
+    "T2": [
+      "Covers concepts, architecture, routing, composition, HTTP, config, autoscaling, KubeRay/fault tolerance, metrics, positioning",
+      "Order oddity: experimental LLM direct streaming (L250) comes before model composition (L302) and the first local run (L387)"
+    ],
+    "T3": [
+      "Strong internals: controller/proxy/router/replica data path (L102-160), p2c vs prefix router with design trade-off (L180, L237), two-layer autoscaling and scale-down packing (L653-672), failure/recovery table (L713-720), metrics path (L726-744)",
+      "Design advice marked as the guide's own (L241, L300, L672, L744, L774)"
+    ]
+  },
+  "principles": {
+    "claim_headings": {"status": "partly met", "evidence": "Most H2/H3 are claim noun phrases (L102, L597, L674); topic headings remain: L497 '### 스트리밍 응답', L523 '### keep-alive 시간', L750 '### 잘 맞는 워크로드', L754 '### 비어 있는 부분', L772 '### 선택 기준'"},
+    "running_example": {"status": "met", "evidence": "text_ml:app (Summarizer -> Translator) is introduced at L21 and used in every section (L141, L178, L405, L541, L609, L684, L752)"},
+    "mechanism_choice_code_example": {"status": "met", "evidence": "Routing: p2c mechanism L176 -> example L178 -> why it fails for LLM L180 -> prefix router L218 -> formula L226 -> example L235 -> design choice L237"},
+    "facts_said_once": {"status": "not met", "evidence": "keep_alive_timeout_s at L525, L529, L582; bind->handle at L83, L304, L314; L25 repeats L13 verbatim; GCS checkpoint L720 and L776"},
+    "numbers_with_scope": {"status": "met", "evidence": "L239 Anyscale numbers carry model, GPU count, platform and workload caveat; L636 defaults scoped to num_replicas=auto"},
+    "nothing_invented": {"status": "partly met", "evidence": "Official code altered at L329 (\"text\" key) so it breaks against the L411 client; illustrative skeletons labelled (L320); speculation hedged (L645)"},
+    "own_assessment_at_end": {"status": "met", "evidence": "L772-776 selection order and failure modes in the guide's voice"},
+    "length_fitted_to_difficulty": {"status": "partly met", "evidence": "Hard parts get examples, but repetition and the L417-458 framework tour pad an already long post (~800 lines)"},
+    "type_specific_shape": {"status": "partly met", "evidence": "Opens with TL;DR (L11) and the problem (L17-23); architecture/internals (L102) precede config detail (L527); closes with when-to-choose and failure modes (L746-776). But leaked notes and an empty section break the shape"},
+    "korean_style": {"status": "partly met", "evidence": "Generally natural 입니다 register; 'REST REST' (L110), English meta block (L244-247), repeated '가정해 보겠습니다' openers, '단일 진실 원천' calque"}
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 15,
+    "unsupported": 0,
+    "wrong": 0,
+    "unverifiable": 0,
+    "numbers": 9,
+    "examples": [
+      {"id": 1, "line": 13, "claim": "By default the ingress __call__ receives a Starlette request", "verdict": "supported", "source": "key-concepts.html: 'By default, the __call__ method of the class is called and passed in a Starlette request object.'"},
+      {"id": 2, "line": 77, "claim": "bind returns a DeploymentNode wrapping the deployment, linkable into a deployment graph", "verdict": "supported", "source": "tutorials/serve-ml-models.html: '...returns a DeploymentNode object, a wrapping of the TFMnistModel deployment object...'"},
+      {"id": 3, "line": 114, "claim": "By default one HTTP proxy runs on the head node (Uvicorn); proxy_location runs one per node", "verdict": "supported", "source": "architecture.html: 'By default there is one HTTP proxy actor on the head node.' Note: production-guide/config.html says 'EveryNode (default)', which the post also states at L575 -> docs-internal conflict copied unreconciled"},
+      {"id": 4, "line": 138, "claim": "Request objects of 100KiB+ go through the object store with zero-copy reads; smaller ones by network call", "verdict": "supported", "source": "architecture.html: 'Larger request objects (100KiB+) are written to the object store and the replica can read them via zero-copy read.'"},
+      {"id": 5, "line": 221, "claim": "PrefixCacheAffinityRouter: match rate >=10% -> highest match; <10% -> lowest cache utilisation; imbalanced -> p2c", "verdict": "supported", "source": "llm/architecture/routing-policies.html: 'High match rate (>=10%) ... Low match rate (<10%) ... Fallback: Use Power of Two Choices when load is imbalanced.'"},
+      {"id": 6, "line": 239, "claim": "Anyscale: DeepSeek-R1-Distill-Qwen-32B on 64 L4 (8x 8xL4) with RayTurbo; TTFT -60%, throughput +40%+", "verdict": "supported", "source": "anyscale.com blog: '60% reduction in time-to-first-token (TTFT) and more than 40% improvement in end-to-end throughput'; 'eight 8xL4 machines (64 GPUs total) ... using RayTurbo'; 'deepseek-ai/DeepSeek-R1-Distill-Qwen-32B'"},
+      {"id": 7, "line": 294, "claim": "Body not forwarded to router by default; RAY_SERVE_INGRESS_REQUEST_ROUTER_FORWARD_BODY=1; BUFSIZE cap; TCP_NODELAY on by default (RAY_SERVE_HAPROXY_TCP_NODELAY=1)", "verdict": "supported", "source": "llm/user-guides/direct-streaming.html: 'By default HAProxy doesn't forward the request body to the router'; 'Ray Serve sets TCP_NODELAY by default (RAY_SERVE_HAPROXY_TCP_NODELAY=1)'"},
+      {"id": 8, "line": 383, "claim": "RayServeHandle and RayServeSyncHandle fully removed in Ray 2.10", "verdict": "supported", "source": "model_composition.html: 'The deprecated RayServeHandle and RayServeSyncHandle APIs have been fully removed as of Ray 2.10.'"},
+      {"id": 9, "line": 403, "claim": "serve run blocks and streams logs; Ctrl-C shuts down Serve; -r/--reload is experimental and redeploys on file changes", "verdict": "supported", "source": "serve/api/cli.html: 'If you Ctrl-C the command, it will shut down Serve on the cluster.'; '-r, --reload: This is an experimental feature - Listens for changes to files in the working directory ...'"},
+      {"id": 10, "line": 431, "claim": "TF MNIST example reshapes the JSON array to (1, 28, 28)", "verdict": "supported", "source": "tutorials/serve-ml-models.html: 'reshaped_array = input_array.reshape((1, 28, 28))'"},
+      {"id": 11, "line": 510, "claim": "Cancellation propagates to downstream handle calls; asyncio.shield has no effect on DeploymentHandle calls; the downstream handler must catch the error", "verdict": "supported", "source": "http-guide.html: 'asyncio.shield cannot be used on a DeploymentHandle call to prevent the downstream handler from being cancelled. You need to explicitly handle the cancellation error in that handler as well.'"},
+      {"id": 12, "line": 582, "claim": "keep_alive_timeout_s default 5 s under http_options; cluster-global, not updatable at runtime", "verdict": "supported", "source": "http-guide.html: 'By default, Uvicorn keeps HTTP connections alive for 5 seconds ... This config is global to your Ray cluster, and you can't update it during runtime.'"},
+      {"id": 13, "line": 627, "claim": "num_replicas=auto implies max_ongoing_requests 5, target_ongoing_requests 2, min_replicas 1, max_replicas 100", "verdict": "supported", "source": "autoscaling-guide.html config block: max_ongoing_requests: 5, target_ongoing_requests: 2, min_replicas: 1, max_replicas: 100"},
+      {"id": 14, "line": 651, "claim": "Manual autoscaling_config without auto: max_replicas defaults to 1, so no autoscaling unless raised", "verdict": "supported", "source": "autoscaling-guide.html: 'if you configure autoscaling manually without using num_replicas=\"auto\", the base default for max_replicas is 1, which means autoscaling won't occur unless you explicitly set a higher value.'"},
+      {"id": 15, "line": 682, "claim": "RAY_DASHBOARD_ADDRESS can replace -a; REST PUT is declarative and removes apps not in the new config", "verdict": "supported", "source": "advanced-guides/deploy-vm.html: 'if the RAY_DASHBOARD_ADDRESS environment variable is set, these Serve CLI commands will default to that value'; api/index.html: 'Declaratively deploys ... If Serve is already running ..., removes all applications not listed in the new config.'"}
+    ],
+    "outside_sample_findings": [
+      "L329 vs L411: handler indexes [\"text\"] while the client posts a bare string; official code reads the body as str",
+      "L114 vs L575: conflicting proxy default"
+    ]
+  },
+  "checklist": {
+    "repeated": 0,
+    "avoided": 2,
+    "na": 0,
+    "repeated_ids": [],
+    "details": [
+      {"id": "arch-diagram-relative-link", "result": "avoided", "evidence": "No image or link with empty text or a ../_images path; the only links are the Sources list (L781-800, absolute URLs). The architecture is drawn as ASCII text (L120-131) rather than the docs image"},
+      {"id": "proxy-env-ray-start-unsupported", "result": "avoided", "evidence": "L724 gives RAY_SERVE_PROXY_HEALTH_CHECK_TIMEOUT_S / MIN_DRAINING_PERIOD_S names, meanings and defaults only, with no process or 'before ray start' claim. L277 'Serve를 시작하기 전에 환경 변수 두 개를 모두 설정해야 합니다' concerns the direct-streaming vars and is in the docs ('Set both environment variables before starting Serve')"}
+    ]
+  },
+  "extras": {
+    "architecture_first_line": 15,
+    "architecture_notes": "TL;DR L15 names controller, replicas, autoscaler and routing; stack-position diagram L27; dedicated internals section starts L102, before config detail (L527)",
+    "sources_total": 20,
+    "non_official_sources": 4,
+    "non_official_share": 0.2,
+    "non_official_list": ["cerebrium.ai comparison", "anyscale.com blog", "discuss.ray.io thread", "suhasbhairav.com Triton vs Ray Serve"],
+    "opens_with_problem": true,
+    "opens_with_problem_evidence": "L17-23 problem of per-stage resources in multi-model pipelines, right after TL;DR",
+    "closes_with_when_to_choose_and_failure_modes": true,
+    "closes_evidence": "L772-776 '선택 기준' and failure modes ('실패는 대개 기대와 실제 기능이 어긋나는 데서 시작합니다')"
+  },
+  "top_issues": [
+    "Writer meta notes leaked into the post in English (L244-247) next to an empty duplicate H2 (L162-166)",
+    "Running example is not runnable: handler reads [\"text\"] but the client posts a bare string (L329 vs L411), self.summarize undefined, Translator shown without translate()",
+    "Contradictory proxy default (head node only at L114 vs EveryNode default at L575) and heavy fact repetition (keep_alive x3, bind->handle x3, L25 repeats L13)"
+  ]
+}

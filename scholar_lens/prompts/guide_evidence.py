@@ -64,8 +64,20 @@ How a good guide on this blog is written:
   ("공식 문서에 따르면"). Name a source only for a benchmark, an opinion or the
   paper or design doc a mechanism comes from, once.
 - Your own judgement (when to use what, what to watch in production) is
-  welcome, kept apart from what the sources state; mark it as the guide's
-  view at most once in a section, mostly in the closing section.
+  welcome, kept apart from what the sources state. State advice plainly;
+  mark it as the guide's view ("이 글의 판단") only in the closing section,
+  once.
+- Code a reader would paste runs as shown: it has its imports, and the
+  running example's code calls the functions, classes and methods with the
+  names and signatures earlier sections defined (listed as
+  code_defined_earlier) or defines them first; client and server agree on
+  the request's shape.
+- Keep a fact's qualifier (Python only, a version, a provider, a
+  condition) wherever you state it. When two official pages disagree (a
+  default on one page, another on a second), say so with each page's scope
+  instead of picking one silently.
+- Write only the section. Never address the requester or describe your
+  edits ("요청하신 …", "Notes on fixes").
 - Vary how a figure, table or code block is introduced; never the same
   formula twice ("다음과 같습니다"), and avoid noun frames such as "~다는 점".
 """
@@ -92,6 +104,10 @@ language:
   defaults (setting: `quote` the passage that states it, `scope` the API, CLI,
   config file or version it belongs to; write identifiers in backticks
   exactly as the page does). Only an official page gives settings.
+- Keep every qualifier the page gives in `claim` or `scope`: the SDK
+  language (Python only, TypeScript only), the version, the provider or
+  backend, a condition ("when OpenTelemetry is configured"). A claim true
+  for one of them never reads as true for all.
 - measured results with their setup (number: `scope` names the hardware,
   model, workload and metric);
 - limitations, pitfalls and failure modes the page states (limitation);
@@ -192,8 +208,11 @@ states about the tool:
   behaviour, a broadened scope, a cause, a comparison, a default or flag the
   evidence does not give, a number's wrong setup);
 - wrong: it contradicts the evidence.
+Numbered items include table rows: judge each cell of a row as a claim.
 Judge only specific factual claims about the tool (what it does, how it
-works, its commands, flags, defaults and measured results). Background a
+works, its commands, flags, defaults and measured results). A claim the
+evidence makes only for one SDK language, version, provider or condition,
+stated without that qualifier, is unsupported. Background a
 competent reader knows, the guide's own advice and interpretation, and
 illustrations marked as such are supported. A claim the section's other
 evidence (listed) supports is supported even when its marker names a
@@ -232,7 +251,11 @@ change:
 - kindness: a symbol, term, component or flag left undefined where it
   appears, code the text does not explain;
 - style: a sentence whose grammar or calque hides who does what or changes
-  the meaning, or a "다" ending in a "입니다" guide.
+  the meaning, or a "다" ending in a "입니다" guide;
+- code: code that would not run as pasted: a missing import, a name or
+  method that neither this block nor code_defined_earlier defines, a call
+  that does not match its definition, a client and server that disagree on
+  the request's shape.
 Do not report matters of taste. Return no issues when there are none.
 """
     + GUIDE_PRINCIPLES

@@ -322,6 +322,36 @@ def near_duplicate(claim: str, others: Iterable[str], threshold: float = 0.85) -
     )
 
 
+def duplicate_evidence(
+    items: Iterable[Evidence], rank: dict[str, int] | None = None
+) -> dict[str, str]:
+    """Evidence that states what an earlier item of the same kind states
+    (two pages documenting one flag): duplicate id -> the id kept. With
+    ``rank`` (source id -> lower is more authoritative) the most
+    authoritative source keeps the fact. Figures and code are never
+    duplicates of each other by their claims."""
+    order = sorted(
+        enumerate(items),
+        key=lambda pair: ((rank or {}).get(pair[1].paper_id, 0), pair[0]),
+    )
+    kept: dict[str, list[Evidence]] = {}
+    duplicates: dict[str, str] = {}
+    for _, item in order:
+        if item.kind in ("figure", "code"):
+            continue
+        mine = _squash(item.claim)
+        for other in kept.get(item.kind, []):
+            if other.paper_id == item.paper_id:
+                continue
+            matcher = SequenceMatcher(None, mine, _squash(other.claim))
+            if matcher.quick_ratio() >= 0.85 and matcher.ratio() >= 0.85:
+                duplicates[item.id] = other.id
+                break
+        else:
+            kept.setdefault(item.kind, []).append(item)
+    return duplicates
+
+
 class EvidenceLedger(BaseModel):
     """All evidence of a survey, numbered ``E1``, ``E2``, … in the order it
     was recorded (paper by paper)."""

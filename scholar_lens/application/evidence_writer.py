@@ -29,6 +29,8 @@ from ..domain.evidence_draft import (
     add_missing_figures,
     balance_math,
     cited_ids,
+    claim_units,
+    drop_empty_headings,
     drop_sentences,
     ends_mid_sentence,
     prose_sentences,
@@ -67,7 +69,7 @@ class EvidenceCheck(BaseModel):
 
 class ReviewIssue(BaseModel):
     sentence: str
-    category: Literal["depth", "flow", "kindness", "style"]
+    category: Literal["depth", "flow", "kindness", "style", "code"]
     fix: str
 
 
@@ -466,6 +468,7 @@ class EvidenceWriter:
                 + " | ".join(f"{s[:120]} ({v})" for s, v in unsupported[:5])
             )
         draft = add_missing_figures(draft, [e for e in own if e.kind == "figure"])
+        draft = drop_empty_headings(draft)
         draft, unbalanced = balance_math(draft)
         if unbalanced:
             self.notes.append(f"Section '{title}': a lone $$ was removed.")
@@ -517,7 +520,8 @@ class EvidenceWriter:
     ) -> list[tuple[str, str]]:
         """(sentence, verdict with reason) of the sentences the evidence does
         not support."""
-        sentences = prose_sentences(draft)
+        # Table rows are claims too (a wrong cell is as wrong as a sentence).
+        sentences = claim_units(draft)
         if not sentences:
             return []
         lines = []

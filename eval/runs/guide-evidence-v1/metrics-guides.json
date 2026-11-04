@@ -1,0 +1,61 @@
+{
+  "/tmp/eval-guide/guide-strands-v1.md": {
+    "prose_chars": 42836,
+    "errors": 0,
+    "warnings": 0,
+    "error_rules": [],
+    "sections": 14,
+    "mirrored_sections": [],
+    "distinct_numbers": 7,
+    "repeated_numbers": 1,
+    "repeated_share": 0.143,
+    "meta_sentences": [],
+    "visuals_per_10k": 13.31,
+    "images": 0,
+    "non_http_images": 0,
+    "tables": 15,
+    "display_math": 3,
+    "code_blocks": 39,
+    "undefined_macros": [],
+    "bare_bars_in_math": 0,
+    "math_commands": [
+      "Rightarrow",
+      "qquad"
+    ],
+    "restate_per_1k": 0.3,
+    "intensifier_per_1k": 0.05,
+    "description_chars": 124
+  },
+  "/tmp/eval-guide/guide-rayserve-v1.md": {
+    "prose_chars": 33491,
+    "errors": 0,
+    "warnings": 0,
+    "error_rules": [],
+    "sections": 15,
+    "mirrored_sections": [],
+    "distinct_numbers": 15,
+    "repeated_numbers": 1,
+    "repeated_share": 0.067,
+    "meta_sentences": [],
+    "visuals_per_10k": 11.64,
+    "images": 0,
+    "non_http_images": 0,
+    "tables": 8,
+    "display_math": 2,
+    "code_blocks": 29,
+    "undefined_macros": [],
+    "bare_bars_in_math": 0,
+    "math_commands": [
+      "arg",
+      "begin",
+      "end",
+      "ge",
+      "max",
+      "min",
+      "text"
+    ],
+    "restate_per_1k": 0.15,
+    "intensifier_per_1k": 0.03,
+    "description_chars": 145
+  }
+}
