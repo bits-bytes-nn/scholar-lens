@@ -47,6 +47,8 @@ class RoleModel:
     effort: str = "medium"
     thinking: bool = False
     max_tokens: int = 32_000
+    # Another model for a text call Bedrock's content filter keeps stopping.
+    fallback: RoleModel | None = None
 
 
 class StrandsLanguageModel:
@@ -60,8 +62,14 @@ class StrandsLanguageModel:
         self._roles = roles
         self._record = record_usage
 
-    def _model(self, role: ModelRole, *, thinking: bool | None = None) -> BedrockModel:
-        spec = self._roles[role]
+    def _model(
+        self,
+        role: ModelRole,
+        *,
+        thinking: bool | None = None,
+        spec: RoleModel | None = None,
+    ) -> BedrockModel:
+        spec = spec or self._roles[role]
         fields: dict[str, Any] = {"output_config": {"effort": spec.effort}}
         if spec.thinking if thinking is None else thinking:
             fields["thinking"] = {"type": "adaptive"}
@@ -79,8 +87,8 @@ class StrandsLanguageModel:
             ),
         )
 
-    def _usage(self, role: ModelRole, result: Any) -> None:
-        label = self._roles[role].model_label
+    def _usage(self, role: ModelRole, result: Any, label: str | None = None) -> None:
+        label = label or self._roles[role].model_label
         stage = current_stage()
         invocations = getattr(result.metrics, "agent_invocations", None) or []
         cycles = invocations[-1].cycles if invocations else []
@@ -119,22 +127,29 @@ class StrandsLanguageModel:
     async def text(self, *, role: ModelRole, system: str, prompt: str) -> str:
         # Bedrock's content filter can stop a long answer about attacks
         # (jailbreaks, injections) mid-sentence, and not on every attempt:
-        # the call is repeated, the last time without thinking.
-        attempts = [None] * _FILTERED_RETRIES + [False]
-        for n, thinking in enumerate([None, *attempts]):
+        # the call is repeated, the last time without thinking, then made
+        # with the role's fallback model.
+        spec = self._roles[role]
+        tries: list[tuple[RoleModel, bool | None]] = [(spec, None)] * (
+            1 + _FILTERED_RETRIES
+        ) + [(spec, False)]
+        if spec.fallback is not None:
+            tries.append((spec.fallback, None))
+        for n, (model, thinking) in enumerate(tries):
             agent = Agent(
-                model=self._model(role, thinking=thinking),
+                model=self._model(role, thinking=thinking, spec=model),
                 system_prompt=system,
                 callback_handler=None,
             )
             result = await agent.invoke_async(prompt)
-            self._usage(role, result)
-            if result.stop_reason != "content_filtered" or n == len(attempts):
+            self._usage(role, result, model.model_label)
+            if result.stop_reason != "content_filtered" or n == len(tries) - 1:
                 break
             logger.warning(
-                "%s call content-filtered after %d characters; attempt %d again.",
+                "%s call content-filtered after %d characters (%s); attempt %d.",
                 role,
                 len(str(result)),
+                model.model_label,
                 n + 2,
             )
         text = str(result)

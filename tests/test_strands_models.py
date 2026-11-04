@@ -76,3 +76,37 @@ def test_a_plain_answer_is_not_repeated(monkeypatch) -> None:
     model, seen = _model(monkeypatch, [FakeResult("end_turn", "답입니다.")])
     assert asyncio.run(model.text(role="write", system="s", prompt="p")) == "답입니다."
     assert len(seen) == 1
+
+
+def test_a_filtered_call_ends_on_the_fallback_model(monkeypatch) -> None:
+    results = [FakeResult("content_filtered", "부분")] * 4 + [
+        FakeResult("end_turn", "다른 모델의 절입니다.")
+    ]
+    seen: list = []
+
+    class FakeAgent:
+        def __init__(self, *, model, **_) -> None:
+            seen.append(model["model_id"])
+
+        async def invoke_async(self, prompt, **_):
+            return results.pop(0)
+
+    monkeypatch.setattr(strands_models, "Agent", FakeAgent)
+    monkeypatch.setattr(strands_models, "BedrockModel", lambda **kw: kw)
+    events: list = []
+    fallback = RoleModel("sonnet-arn", "global.anthropic.claude-sonnet-5-5")
+    model = StrandsLanguageModel(
+        None,  # type: ignore[arg-type]
+        {
+            "write": RoleModel(
+                "opus-arn", "global.anthropic.claude-opus-5-5", fallback=fallback
+            )
+        },
+        events.append,
+    )
+    assert (
+        asyncio.run(model.text(role="write", system="s", prompt="p"))
+        == "다른 모델의 절입니다."
+    )
+    assert seen == ["opus-arn"] * 4 + ["sonnet-arn"]
+    assert events[-1].model_id == "global.anthropic.claude-sonnet-5-5"

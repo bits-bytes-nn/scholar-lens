@@ -15,6 +15,7 @@ check on the models' answers is code (``survey_post``).
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import functools
 import hashlib
 import json
@@ -1256,7 +1257,12 @@ async def write_survey_with_evidence(
         {
             "read": role(cfg.card_model_id, cfg.thinking_effort, False),
             "outline": role(cfg.outline_model_id, "high", True),
-            "write": role(cfg.writing_model_id, cfg.thinking_effort, True),
+            # The writer falls back to the reading model when Bedrock's
+            # content filter keeps stopping it (attack-heavy sections).
+            "write": dataclasses.replace(
+                role(cfg.writing_model_id, cfg.thinking_effort, True),
+                fallback=role(cfg.card_model_id, cfg.thinking_effort, True),
+            ),
             "evaluate": role(cfg.evaluation_model_id, cfg.thinking_effort, True),
         },
         tracker.record,
