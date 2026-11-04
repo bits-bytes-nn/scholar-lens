@@ -629,3 +629,17 @@ def test_back_references_must_cite_earlier_evidence() -> None:
     assert not any(
         "points back" in p for p in check("앞서 본 대로 보상 모델이 없습니다 [[E1]].")
     )
+
+
+def test_claims_about_what_a_paper_leaves_out_are_problems() -> None:
+    issues = draft_problems(
+        "## 제목\n\n저자들은 이 수치가 %p인지 상대 비율인지 밝히지 않습니다 [[E2]].\n",
+        title="t",
+        own=["E2"],
+        earlier=[],
+        ledger=_ledger(),
+        earlier_numbers={},
+        figure_urls=[],
+        free_numbers="",
+    )
+    assert any("does not state or report" in p for p in issues)

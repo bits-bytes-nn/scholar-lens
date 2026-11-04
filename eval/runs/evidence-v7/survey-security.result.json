@@ -1,0 +1,111 @@
+{
+  "kind": "survey_write",
+  "status": "succeeded",
+  "input": "eval/sets/plans/survey-security.json",
+  "title": "When Data Becomes Instructions: A Map of LLM Agent Security",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/survey-security-of-llm-based-ai-agents-prompt-injection-jailbreak-rag-poisoning-tool/2026-11-03-securing-llm-agents-from-prompt-injection-to-mcp-and-defenses.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-11-03-securing-llm-agents-from-prompt-injection-to-mcp-and-defenses.md",
+  "pr_url": null,
+  "warnings": [
+    "Figures arXiv does not serve were left out: https://arxiv.org/html/2503.00061v2/tex/figures/asr_defense_adaptive_attack_bar_spaced.png, https://arxiv.org/html/2503.00061v2/tex/figures/system.png",
+    "Evidence that misstates its quote was left out: E83 (Quote is the 'Real delim.' row (96%/0%/90%/0%), but claim/cell describe similar/close delimiters (유사/근접 구분자).)",
+    "Section 'GPT-3 목표 탈취에서 방어를 무너뜨리는 적응형 공격까지 이어진 프롬프트 인젝션' still has: papers ['2306.05499', '2503.00061'] belong to this section but no sentence cites their evidence: cover each | the section stops mid-sentence: finish it",
+    "Section '안전 학습의 구조적 실패와 자동화된 탈옥 탐색': check 1 sentence(s) the evidence may not support: 초기 방어인 SmoothLLM은 문자를 무작위로 흔들어 다수결을 내는 방식으로, 토큰 수준 공격에는 강했지만 의미 수준 공격 앞에서는 효과가 크게 줄었습니다. (unsupported: E59/E58 show GCG ASR cut to below 1 percentage point and PAIR ASR cut by 2x on Vicuna/GPT-4 but 29x on GPT-3.5. The paper does not say the effect 'dropped sharply' against meaning-level attacks, and the 29x cut on GPT-3.5 cuts against that broad claim.)",
+    "Section '안전 학습의 구조적 실패와 자동화된 탈옥 탐색' still has: papers ['2307.02483', '2307.15043', '2310.03684', '2310.08419'] belong to this section but no sentence cites their evidence: cover each | the section stops mid-sentence: finish it",
+    "Section '지시 대신 지식과 기억을 노리는 오염 공격' still has: papers ['2406.03007'] belong to this section but no sentence cites their evidence: cover each",
+    "Section '도구 설명, MCP 서버, 에이전트 간 메시지로 번지는 인젝션' still has: papers ['2502.14847', '2506.01333', '2506.02040', '10.14722/ndss.2026.230675'] belong to this section but no sentence cites their evidence: cover each",
+    "Section '탐지에서 학습된 경계, 설계에 의한 격리로 옮겨 간 방어': check 1 sentence(s) the evidence may not support: Claude 3.5 Sonnet으로 다른 방어들과 비교한 결과는 유용성과 성공한 공격 수를 함께 다룹니다 [[E241]]. (numbers not in its evidence)",
+    "Section '탐지에서 학습된 경계, 설계에 의한 격리로 옮겨 간 방어' still has: numbers ['3.5'] are not in the cited evidence: Claude 3.5 Sonnet으로 다른 방어들과 비교한 결과는 유용성과 성공한 공격 수를 함께 다룹니다 .",
+    "Section '정적 테스트 케이스에서 상태를 가진 환경으로 진화한 에이전트 보안 벤치마크' still has: ['80'] already stated in '지시 대신 지식과 기억을 노리는 오염 공격': refer back without repeating: ReAct 프롬프트로 구동한 GPT-4의 공격 성공률(attack success rate, ASR)은 기본 설정에서 24%, 강화 설정에서 47%였고, Llama2-70B는 두 설정 모두 80%를 넘었습니다 . | ['3.5', '100'] already stated in '탐지에서 학습된 경계, 설계에 의한 격리로 옮겨 간 방어': refer back without repeating: 데이터 탈취를 단계별로 나누면 추출 단계 성공률이 직접 피해 도구 실행보다 높고, 전송 단계가 가장 높아 파인튜닝된 GPT-3.5와 GPT-4 모두 100%를 기록했습니다 . | ['97'] already stated in '탐지에서 학습된 경계, 설계에 의한 격리로 옮겨 간 방어': refer back without repeating: 첫 버전에는 현실적인 과제 97개와 보안 테스트 케이스 629개가 들어 있습니다 . | ['97', '27'] already stated in '탐지에서 학습된 경계, 설계에 의한 격리로 옮겨 간 방어': refer back without repeating: 환경은 Workspace, Slack, Travel, Banking 네 가지이고, 도구 70개, 사용자 과제 97개, 인젝션 목표 27개로 이뤄집니다 . | ['3.5'] already stated in '탐지에서 학습된 경계, 설계에 의한 격리로 옮겨 간 방어': refer back without repeating: 단순한 범용 탈옥 템플릿 하나로 Claude 3.5 Sonnet의 피해 점수는 13.5%에서 68.7%로 올랐고 거절률은 85.2%에서 16.7%로 떨어졌습니다 .",
+    "Section '탈옥 최적화 기법의 인젝션 방어 공략 이식': check 1 sentence(s) the evidence may not support: 퍼플렉서티 기반 탐지인 PPL과 PPL-W도 앞서 오염 공격에서 본 낮은 AUC 그대로 악성 도구 문서를 대부분 놓쳤습니다 [[E285]]. (unsupported: E285 gives AUC 0.64/0.74 for PPL/PPL-W on ToolHijacker only. No listed evidence gives the 'same low AUC seen earlier in poisoning attacks' that the sentence compares to.)",
+    "Section '탈옥 최적화 기법의 인젝션 방어 공략 이식' still has: images not given to this section: ['https://arxiv.org/html/2406.13352v3/baseline-attacks-results.svg']",
+    "[references] line 629: cited only in a table: https://arxiv.org/abs/2310.03684"
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 2580.3,
+  "input_tokens": 1836055,
+  "output_tokens": 283311,
+  "estimated_cost_usd": 12.9627,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 95,
+      "failed_calls": 0,
+      "input_tokens": 10681,
+      "output_tokens": 283311,
+      "cache_read_tokens": 407192,
+      "cache_write_tokens": 1418182,
+      "cost_usd": 12.962719
+    },
+    "by_stage": {
+      "outline": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 12357,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 59147,
+        "cost_usd": 0.542891
+      },
+      "verify": {
+        "calls": 38,
+        "failed_calls": 0,
+        "input_tokens": 152,
+        "output_tokens": 56930,
+        "cache_read_tokens": 316929,
+        "cache_write_tokens": 640704,
+        "cost_usd": 4.469505
+      },
+      "draft": {
+        "calls": 20,
+        "failed_calls": 0,
+        "input_tokens": 80,
+        "output_tokens": 71624,
+        "cache_read_tokens": 52060,
+        "cache_write_tokens": 363862,
+        "cost_usd": 3.27293
+      },
+      "review": {
+        "calls": 12,
+        "failed_calls": 0,
+        "input_tokens": 48,
+        "output_tokens": 27376,
+        "cache_read_tokens": 14751,
+        "cache_write_tokens": 43946,
+        "cost_usd": 0.773338
+      },
+      "fix": {
+        "calls": 23,
+        "failed_calls": 0,
+        "input_tokens": 92,
+        "output_tokens": 113796,
+        "cache_read_tokens": 23452,
+        "cache_write_tokens": 310523,
+        "cost_usd": 3.838275
+      },
+      "finalize": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 10305,
+        "output_tokens": 1228,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.06578
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 95,
+        "failed_calls": 0,
+        "input_tokens": 10681,
+        "output_tokens": 283311,
+        "cache_read_tokens": 407192,
+        "cache_write_tokens": 1418182,
+        "cost_usd": 12.962719
+      }
+    }
+  }
+}

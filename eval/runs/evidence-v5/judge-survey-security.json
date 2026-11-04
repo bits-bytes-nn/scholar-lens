@@ -1,0 +1,324 @@
+{
+  "item": "survey-security",
+  "post": "/tmp/eval-evidence/survey-security-v5.md",
+  "scores": {
+    "A": 4.0,
+    "B": 6.5,
+    "C": 5.0,
+    "D": 8.0,
+    "E": 5.0,
+    "F": 6.0,
+    "S1": 5.0
+  },
+  "score_notes": {
+    "A": "The arc works (attack surface L11, injection L55, jailbreak L176, poisoning L198, tool/MCP L286, benchmarks L334, defenses L426, adaptive loop L520, comparison L550, open problems L596, conclusion L620). No body H1 and no skipped levels. But two lineage sections are cut off: L180 stops mid-sentence ('탈옥은 이와 달리 모델이') and is followed only by four figures (L182-196). L292 stops mid-word ('탈취한 정보를 담는 Data') and is followed by ten figures with no prose (L294-332). The writer's revision notes are left in the post body at L632-649 ('E234 반복 제거', '**수정 내역**', '제시하신 대로 연도를 넣었습니다'). A lone currency '$0.026' sits in a table cell at L578, which breaks the no-single-$ rule.",
+    "B": "Mostly natural 입니다 register. One register break, in the L182 caption: '...ASR을 보여 준다'. Hedges about the input sit in the prose: L264 '(보고된 수치만으로는 상대값인지 %p인지 구분되지 않습니다)', repeated at L264 '(이 역시 상대·절대 구분 없이 보고된 값입니다)', and L380 '논문의 이 문장은 어느 모델 기준인지 ... 밝히지 않습니다'. Rewrite: give the figure as the paper gives it ('정상 성능 하락은 평균 0.74%') and drop the meta comment. '이 글의 판단으로는' appears 7 times (L284, L424, L518, L542, L568, L610, L630). English is left in a table cell: L594 'AHR@5', and L591 'tool filter 8건' (use '도구 필터 8건').",
+    "C": "The email-assistant example ties the sections together. Back-references point to material that was never written: L526-L538 lean on SmoothLLM and PAIR ('PAIR가 SmoothLLM을 비켜 간 이유와 같습니다'), but the jailbreak section never explains either one. L545 'PAIR·TAP류' and L602 'Prompt Infection은 다중 에이전트 감염 실험에서' cite results the truncated section never presents. L568 tells the reader to read '유용성 열' and '보장 열' and to compare rows by '공격자 접근 권한', but the table at L570 has only 논문/계보/주요 결과/한계.",
+    "D": "The hard parts get real help. The M-GCG/T-GCG mechanics come with the email mapping (L150-160). PoisonedRAG has a worked hypothetical (L224). The SecAlign loss has a numeric example (L476). The CaMeL walk-through is at L498. Hedging is over-explained (L162 last two sentences, L264), and the reader gets no help at all on jailbreaks or MCP.",
+    "E": "There are 45 figures. 14 of them stand alone with no discussion (L182-196, L294-332). Several captions use the paper's numbering: L182 '그림 3:', L294 '그림 1:', L298 '그림 6(a):', L302 '그림 4:', L306 '그림 7:', L314 '그림 7은'. The comparison table has a real structure and equal cell counts, but many cells repeat body numbers (StruQ L448/L579, SecAlign L488/L586, AgentHarm L410/L588, CaMeL L504/L591, PoisonedRAG L226/L580).",
+    "F": "Most body numbers matched the full texts (see claims). Wrong: the L576 GCG cell gives '유해 문자열 ASR 88% (GCG, 화이트박스, Vicuna-7B/Llama-2-7B-Chat ...)', but 88% on Harmful Strings is Vicuna-7B only; Llama-2-7B-Chat is 57%, and its 88% is on Harmful Behaviors. Unsupported as stated: the L587 Prompt Infection cell omits the comparison basis. 66% vs 9% is the share of self-replicating attacks that are ignored, and +13.92%/+209% are the gains of self-replicating over non-replicating infection; the cell reads as absolute ASR changes. Scope issue: L504 places the abstract's 77%/84% inside the Claude 3.5 Sonnet comparison paragraph. ToolHijacker's limitation cell L594 states a result.",
+    "S1": "Limitation cells: '-' for BadAgent L583 and SecAlign L586. ToolHijacker L594 gives '기존 방어 불충분', which is a finding, not a limitation. HouYi L574 gives '일부 앱 저항', also a finding. GCG L576 gives '증류 모델 편향', which is cryptic. The Indirect PI result cell L573 is '정량 수치 없음'. Cells repeat model and condition in the value and in the parenthetical (L574, L579, L581, L594). Numbers explained in the body come back in the table, against the rule that the table owns the numbers."
+  },
+  "principles": {
+    "claim_headings": {
+      "status": "met",
+      "evidence": "All H2 and H3 headings are claim noun phrases, e.g. L238 '임베딩 공간의 빈 구석에 트리거를 숨기는 AgentPoison', L490 '모델이 속아도 흐름은 지키는 CaMeL'. None is in 다-form, and the headings use Korean terms."
+    },
+    "running_example": {
+      "status": "met",
+      "evidence": "The email assistant from L15 recurs at L89, L150, L224, L240, L348, L374, L446, L498, L556 and L604."
+    },
+    "mechanism_choice_formula_example": {
+      "status": "partly met",
+      "evidence": "Full chain for Adaptive IPI (L142-160), PoisonedRAG (L212-224) and SecAlign (L468-476). Missing for every jailbreak and tool/MCP paper, whose sections are truncated (L180, L292)."
+    },
+    "facts_said_once": {
+      "status": "not met",
+      "evidence": "CaMeL's text-to-text exclusion is stated at L510, L516, L566, L614 and L628. AgentHarm's single-turn limit at L418, L424, L616 and L628. AgentHarm's custom tools at L418 and L618. The AgentDojo 25%/8% figures at L386 and L394. Body numbers come back in the table (L579, L586, L588, L591)."
+    },
+    "numbers_with_scope_unit": {
+      "status": "partly met",
+      "evidence": "Body numbers mostly carry model and setting (e.g. L166). Exceptions: L581 '기본 ASR 6.6' has no unit, L578 'GPT 50%' does not name the model version, L587 '+13.92%' has no comparison basis, and L577 'GCG ASR 최고 수준 감소' is vague."
+    },
+    "nothing_invented": {
+      "status": "partly met",
+      "evidence": "The hypothetical examples are labelled ('가상의', L224, L348, L446, L476). One misattributed table cell (L576 GCG). The writer's revision notes leaked into the body (L632-649)."
+    },
+    "writer_assessment_at_end": {
+      "status": "met",
+      "evidence": "L610 and L630 give a concrete judgment: fix the permission and data-flow boundary first, then add model-level defenses."
+    },
+    "length_fitted": {
+      "status": "not met",
+      "evidence": "About 65k non-space characters. Defenses and benchmarks are deep, while the jailbreak lineage (L176-196) and the tool/MCP lineage (L286-332) have one or two sentences of prose each."
+    },
+    "type_specific_shape": {
+      "status": "partly met",
+      "evidence": "Has the timeline (L28), the lineage sections, a cross-cutting section (L520), the comparison (L550-594), insights (L596) and a conclusion (L620). Numbers are not owned by the single table: they are given in full in the body and then repeated in the table."
+    },
+    "korean_style": {
+      "status": "partly met",
+      "evidence": "Natural 입니다 register with varied sentences. One 한다-form caption (L182). The input hedges (L264, L380) and the 7x '이 글의 판단으로는' read as formulaic. The leaked notes L634-647 are addressed to an editor ('제시하신 대로')."
+    }
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 13,
+    "unsupported": 1,
+    "wrong": 1,
+    "unverifiable": 0,
+    "examples": [
+      {
+        "line": 77,
+        "claim": "목표 탈취 58.6% ± 1.6, 프롬프트 유출 23.6% ± 2.7; 비해로 rogue string 70.0% ± 3.7; 구분자 없으면 43.6% ± 2.7",
+        "verdict": "supported",
+        "source": "2211.09527: 'success rate of 58.6%±1.6 for goal hijacking and 23.6%±2.7 for prompt leaking'; Table B: 'Non-harmful string 70.0±3.7'; 'No delimiter 43.6±2.7'."
+      },
+      {
+        "line": 124,
+        "claim": "36개 중 31개 앱 취약, Notion 포함 10개 업체 확인",
+        "verdict": "supported",
+        "source": "2306.05499: 'We deploy HouYi on 36 actual LLM-integrated applications and discern 31 ... 10 vendors have validated our discoveries, including Notion'."
+      },
+      {
+        "line": 162,
+        "claim": "Vicuna-7B 무방어 56%, 적대적 파인튜닝 12%; Llama3-8B 9%",
+        "verdict": "supported",
+        "source": "2503.00061 §6: 'most defenses reduce the original ASR from 56% to lower values, such as 12% with adversarial finetuning'; 'original ASR of 9%'."
+      },
+      {
+        "line": 166,
+        "claim": "직접 피해, Llama3-8B: 0.14 → 0.05 ± 0.04 → 0.87 ± 0.10; 패러프레이징 8%→54%; LLM 탐지기 Vicuna 34%→0%",
+        "verdict": "supported",
+        "source": "2503.00061 Table 4 'Direct Harm Llama3-8B 0.14 | 0.05±0.04 | 0.87±0.10'; Table 3 'Paraphrasing Llama3-8B 8 | 54'; Table 2 'LLM-based detector Vicuna-7B 34 | 0'."
+      },
+      {
+        "line": 226,
+        "table_line": 580,
+        "claim": "PaLM 2 블랙박스 NQ 97%, HotpotQA 99%, MS-MARCO 91%",
+        "verdict": "supported",
+        "source": "2402.07867 §5.2: 'in the black-box setting, PoisonedRAG could achieve 97% (on NQ), 99% (on HotpotQA), and 91% (on MS-MARCO) ASRs for RAG with PaLM 2'."
+      },
+      {
+        "line": 264,
+        "table_line": 585,
+        "claim": "검색 성공률 81.2%, 정상 성능 하락 0.74%, 목표 행동 59.4%, 실제 영향 62.6%",
+        "verdict": "supported",
+        "source": "2407.12784: 'minimal impact on benign performance of average 0.74% ... retrieval success rate of 81.2% ... 59.4% generates target actions where 62.6% result in actual target impact'."
+      },
+      {
+        "line": 274,
+        "table_line": 583,
+        "claim": "공격 성공률 85% 초과; OS·WebShop에서 QLoRA 클린 파인튜닝 후에도 90% 이상",
+        "verdict": "supported",
+        "source": "2406.03007: 'with both fine-tuning methods achieving a success rate of over 85%'; §3.5 (OS and WebShop, QLoRA): 'The success rate of the attack still remains above 90%'."
+      },
+      {
+        "line": 350,
+        "table_line": 581,
+        "claim": "ReAct GPT-4 24% / 47%; 파인튜닝 GPT-4 기본 총 ASR 6.6%",
+        "verdict": "supported",
+        "source": "2403.02691 Table 3 row 'Fine-tuned GPT-4 ... Total 6.6' (GPT-3.5 FT 3.8). The prose ('fine-tuned GPT-4 and GPT-3.5 ... 3.8% and 6.6% respectively') reverses the order, and the post follows the table row. '24% in the base setting and ... 47% in the enhanced setting'."
+      },
+      {
+        "line": 368,
+        "table_line": 584,
+        "claim": "97개 과제, 629개 보안 케이스, 도구 70개, 인젝션 목표 27개; Slack 92%",
+        "verdict": "supported",
+        "source": "2406.13352 Table 1: 'a total of 70 tools, 97 realistic user tasks and 27 injection targets'; '629 security test cases'; 'attacks in our “Slack” suite have a 92% success rate'."
+      },
+      {
+        "line": 410,
+        "table_line": 588,
+        "claim": "Claude 3.5 Sonnet 피해 점수 13.5%→68.7%, 거부율 85.2%→16.7%; Mistral Large 2 거부 1.1%, 피해 82.2%",
+        "verdict": "supported",
+        "source": "2410.09024 §4: 'Claude 3.5 Sonnet, increasing its harm score from 13.5% to 68.7% and decreasing refusal rate from 85.2% to 16.7%'; 'Mistral Large 2 refuses just 1.1% ... 82.2%'."
+      },
+      {
+        "line": 448,
+        "table_line": 579,
+        "claim": "Llama-7B에서 TAP 97%→9%, GCG 97%→58%",
+        "verdict": "supported",
+        "source": "2402.06363: 'StruQ decreases the attack success rate of TAP from 97% to 9% and that of GCG from 97% to 58% on Llama'."
+      },
+      {
+        "line": 488,
+        "table_line": 586,
+        "claim": "무방어 89%/97%, StruQ 27%/45%, SecAlign 1%/8% (Mistral-7B-Instruct, Llama3-8B-Instruct)",
+        "verdict": "supported",
+        "source": "2410.05451: 'the undefended model is broken with 89% and 97% ASRs ... StruQ ... (27% and 45% ASRs ...) ... SecAlign decreases the ASRs of the strongest prompt injections to 1% and 8%'."
+      },
+      {
+        "line": 504,
+        "table_line": 591,
+        "claim": "성공 공격 CaMeL 0건 vs 도구 필터 8건; 77% vs 84%; 입력 2.82배, 출력 2.73배",
+        "verdict": "supported",
+        "source": "2503.18813: 'the number of successful attacks with CaMeL is 0, while ... the next best defense (tool filter) is 8'; abstract '77% of tasks ... (compared to 84% with an undefended system)'; '2.82× input tokens and 2.73× more output tokens for the median task'. Scope note: 77/84 is the abstract figure, not the Claude 3.5 Sonnet comparison it is placed under."
+      },
+      {
+        "line": 576,
+        "table": true,
+        "claim": "유해 문자열 ASR 88% (GCG, 화이트박스, Vicuna-7B/Llama-2-7B-Chat)",
+        "verdict": "wrong",
+        "source": "2307.15043 §3: 'For the challenging Harmful Strings setting, our approach is successful on 88% of strings for Vicuna-7B and 57% for Llama-2-7B-Chat'; 88% for Llama-2-7B-Chat is on Harmful Behaviors. The second half, 'GPT-3.5 87.9%, GPT-4 53.6%', is supported."
+      },
+      {
+        "line": 587,
+        "table": true,
+        "claim": "무시율 66% vs 9% (GPT-4o vs GPT-3.5); GPT-4o +13.92%, GPT-3.5 +209% (전역 메시징, 공격 성공률)",
+        "verdict": "unsupported",
+        "source": "2410.07283: 'GPT-4o ... ignoring 66% of self-replicating attacks ... GPT-3.5 only ignores 9%'; 'for GPT-4o, Self-Replicating infection achieves a 13.92% higher success rate, while for GPT-3.5, it is 209% more effective'. The numbers exist, but the cell drops the self-replicating vs non-replicating basis, so it reads as an absolute ASR change."
+      }
+    ],
+    "extra_checks_supported": [
+      "L578 PAIR 'GPT 50%, Gemini 73%; 34초, $0.026 (Mixtral 공격자, Vicuna 표적)' (2310.08419 Table 4, §4)",
+      "L589 AiTM 'ASR 40% 초과', 'MetaGPT 100% (SoftwareDev)' (2502.14847)",
+      "L593 MCP 'RR 5% 미만', 'MER 93.33%' (2506.02040 §5)",
+      "L575 Jailbroken 'adaptive 0.96 / 0.99' (2307.02483 Table 2)",
+      "L594 ToolHijacker 'AHR 96.1%/97.8%', '99.6% under StruQ', AUC 0.64/0.74 (2504.19793)",
+      "L602 AgentDojo inverse scaling; Prompt Infection 'not inherently safer'"
+    ]
+  },
+  "checklist": {
+    "repeated": 3,
+    "avoided": 7,
+    "na": 3,
+    "repeated_ids": [
+      "multiagent-integrity-overgeneralized",
+      "jailbroken-cell-duplicated",
+      "toolhijacker-limitation-column"
+    ],
+    "details": [
+      {
+        "id": "houyi-sentence-grammar",
+        "result": "n/a",
+        "evidence": "There is no pilot-study sentence. L124-138 describe HouYi without the 10-app exploratory analysis."
+      },
+      {
+        "id": "heading-english-tool",
+        "result": "avoided",
+        "evidence": "L286 '## 도구 설명과 에이전트 간 메시지로 번지는 공급망형 인젝션'."
+      },
+      {
+        "id": "etdi-translationese",
+        "result": "n/a",
+        "evidence": "ETDI has no prose, only a figure at L314."
+      },
+      {
+        "id": "multiagent-integrity-overgeneralized",
+        "result": "repeated",
+        "evidence": "Field-wide gap statements are not scoped to the reviewed papers: L616 '여러 차례 대화에 걸쳐 ... 공격은 측정과 방어 양쪽에서 거의 다뤄지지 않았습니다'; L618 '... 따르는지는 아직 검증되지 않았습니다'; L288 '이를 프로토콜 차원에서 막으려는 방어는 아직 설계 문서 단계에 있습니다'."
+      },
+      {
+        "id": "secalign-taskshield-repeated-verb",
+        "result": "n/a",
+        "evidence": "There is no SecAlign/Task Shield sentence. Task Shield is not in the plan."
+      },
+      {
+        "id": "lightweight-defense-practice-claim",
+        "result": "avoided",
+        "evidence": "There is no claim about what practitioners deploy first. L514 only says the methods keep the application structure."
+      },
+      {
+        "id": "injecagent-finetuned-variants",
+        "result": "avoided",
+        "evidence": "L350 and L581 give 'fine-tuned GPT-4 6.6%', which matches the Table 3 row (FT GPT-4 Total 6.6, FT GPT-3.5 3.8)."
+      },
+      {
+        "id": "agentdojo-utility-restated",
+        "result": "avoided",
+        "evidence": "No 69.00%/50.08% anywhere. L386 gives the drop as '절대 유용성이 10~25%p'."
+      },
+      {
+        "id": "agentdojo-baseline-defenses",
+        "result": "avoided",
+        "evidence": "L388 lists data delimiters, BERT detector, prompt sandwich and tool filter. No dual-LLM."
+      },
+      {
+        "id": "benchmark-conclusion-flip",
+        "result": "avoided",
+        "evidence": "L424 says not to compare across benchmarks 'because attack phrasing, success criterion and threat model differ'. There is no 'conclusion flips' claim, though there is no quantified ASR spread either."
+      },
+      {
+        "id": "jailbroken-cell-duplicated",
+        "result": "repeated",
+        "evidence": "L574 '31/36 앱 취약 (HouYi, 36개 상용 LLM 앱, ...)'; L579 'Completion-Real ASR 96%→0% (Llama-7B/Mistral-7B, Completion-Real 공격, ASR)'; L581 'GPT-4 24% → 47% (ReAct 프롬프트 GPT-4, ...)'; L594 'StruQ 하 ASR 99.6% (StruQ, MetaTool, ASR)'."
+      },
+      {
+        "id": "toolhijacker-limitation-column",
+        "result": "repeated",
+        "evidence": "The L594 limitation cell is '기존 방어 불충분', a finding about existing defenses, not the no-box scope or the lack of a new defense."
+      },
+      {
+        "id": "prompt-infection-venue",
+        "result": "avoided",
+        "evidence": "L667 has no 'Lecture notes in computer science'. The entry has no venue at all; arXiv is missing."
+      }
+    ]
+  },
+  "extras": {
+    "uncited_plan_papers": [],
+    "body_uncited_plan_papers": {
+      "2310.03684 SmoothLLM": "only the timeline L35 and the references; no body citation",
+      "2502.14847 AiTM": "only a figure source L312 and table L589; no prose",
+      "2506.01333 ETDI": "only a figure source L316; no prose and no table row"
+    },
+    "weakly_covered_plan_papers": {
+      "2307.02483 Jailbroken": "one sentence L608 plus table",
+      "2307.15043 GCG": "L526 plus table",
+      "2310.08419 PAIR": "L526, L556 plus table",
+      "2410.07283 Prompt Infection": "L292 (truncated) and L602",
+      "2506.02040 MCP Attack Vectors": "L602, L624 and figures only",
+      "10.14722/ndss.2026.230675 ToolHijacker": "one paragraph L536"
+    },
+    "truncated_or_empty_sections": [
+      "L176 '## 안전 학습의 두 실패 모드와 ...': stops mid-sentence at L180 ('탈옥은 이와 달리 모델이'), then 4 orphan figures (L182-196)",
+      "L286 '## 도구 설명과 에이전트 간 메시지로 번지는 공급망형 인젝션' / L290 '### ... Prompt Infection': stops mid-word at L292 ('탈취한 정보를 담는 Data'), then 10 orphan figures (L294-332); AiTM, ETDI and MCP get no text"
+    ],
+    "thin_sections": [
+      "L228 '### 고품질 악성 텍스트 앞에서 무력한 추론 시점 방어': one sentence plus one paragraph",
+      "L524, L528, L534: one or two paragraphs each",
+      "L272 BadAgent: one paragraph"
+    ],
+    "leaked_artifacts": [
+      "L632-649: the writer's revision notes in the body ('E234 반복 제거', 'E240 반복 제거', '**수정 내역**', '제시하신 대로 연도를 넣었습니다', '... 남겨 둘 수 없었습니다')"
+    ],
+    "dangling_back_references": [
+      "L526/L538 SmoothLLM and PAIR are used as known mechanisms, but the jailbreak section never explains them",
+      "L545 'PAIR·TAP류'",
+      "L568 points to '유용성 열', '보장 열' and an attacker-access grouping that the table (L570) does not have",
+      "L602 'Prompt Infection은 다중 에이전트 감염 실험에서 비슷한 결론에 이릅니다': the experiments are never presented",
+      "L178 'PAIR는 ... 이 방어의 효과를 크게 줄였습니다' sets up a section that is cut off"
+    ],
+    "wrong_venues": [],
+    "venue_notes": "No garbled or index-name venues; the plan's 'CISPA Helmholtz Center' and 'Zenodo' were dropped. Missing venues: L653 Indirect PI (AISec 2023), L664 AgentDojo (NeurIPS 2024 Datasets and Benchmarks), L667 Prompt Infection (arXiv). The CARS (L674) and IEEE TSE (L673) venues come from the plan and were not verified.",
+    "bad_table_cells": [
+      "L583 BadAgent limitation '-'",
+      "L586 SecAlign limitation '-'",
+      "L573 Indirect PI result '정량 수치 없음'",
+      "L594 ToolHijacker limitation '기존 방어 불충분' (a result)",
+      "L574 HouYi limitation '일부 앱 저항' (a result)",
+      "L576 GCG '88% (Vicuna-7B/Llama-2-7B-Chat)' (wrong attribution); limitation '증류 모델 편향' (cryptic)",
+      "L577 SmoothLLM 'GCG ASR 최고 수준 감소' (vague prose)",
+      "L578 '$0.026' (lone $); 'GPT 50%' (no version)",
+      "L581 '기본 ASR 6.6' (no unit)",
+      "L587 '+13.92%/+209%' (no comparison basis)"
+    ]
+  },
+  "length": {
+    "body_chars": 77482,
+    "body_chars_no_space": 65010,
+    "hangul_chars": 27156,
+    "lines": 679,
+    "figures": 45,
+    "orphan_figures": 14,
+    "note": "Long for a survey and unevenly distributed: defenses (L426-518) and benchmarks (L334-424) are deep, while two of six lineages have one to two sentences."
+  },
+  "top_issues": [
+    "Two of the six lineage sections are cut off mid-sentence (L180 jailbreak, L292 tool/MCP), followed by 14 figures with no text; GCG, SmoothLLM, PAIR, Jailbroken, AiTM, ETDI and MCP Attack Vectors get no card.",
+    "The writer's revision notes leaked into the published body (L632-649: 'E234 반복 제거', '수정 내역', '제시하신 대로 ...').",
+    "Comparison-table defects: GCG 88% misattributed to Llama-2-7B-Chat (L576); Prompt Infection gains with no basis (L587); '-' limitations (L583, L586); ToolHijacker and HouYi limitations that are results (L594, L574); model and condition repeated in each cell; lone '$0.026' (L578).",
+    "Dangling references to unexplained material: SmoothLLM/PAIR (L526, L538, L545), Prompt Infection results (L602), and non-existent table columns (L568).",
+    "Facts are repeated and gap claims are not scoped: CaMeL's text-to-text exclusion five times (L510, L516, L566, L614, L628), AgentHarm single-turn four times, body numbers repeated in the table; field-wide 'not studied' statements (L616, L618, L288). Also paper-numbered figure captions (L182, L294-314) and input hedges (L264, L380)."
+  ]
+}

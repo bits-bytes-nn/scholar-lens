@@ -332,6 +332,11 @@ _FORMULAS = ((re.compile(r"보면 됩니다"), 1), (re.compile(r"다는 점"), 2
 _OWN_VIEW = re.compile(
     r"이 글의 (?:관점|판단|해석|견해)|이 글은 .{0,12}(?:본다|봅니다|판단합니다)"
 )
+# A sentence about what a paper leaves out ("저자들은 … 적지 않습니다").
+_ABSENCE_CLAIM = re.compile(
+    r"(?:적지|밝히지|제시하지|명시하지|보고하지|구분하지|언급하지|다루지|측정하지|"
+    r"정량화하지|수치화하지)\s*(?:는\s*)?않(?:습니다|았습니다|으며|고)"
+)
 # A sentence pointing back at what the post said before.
 _BACK_REFERENCE = re.compile(
     r"앞서 (?:본|봤던|언급한|소개한|다룬|설명한|살펴본|정리한|나온)|앞에서 (?:본|다룬|설명한)"
@@ -394,6 +399,12 @@ def draft_problems(
         if unknown := [i for i in ids if ledger.get(i) is None]:
             problems.append(f"unknown evidence {unknown} in: {quoted}")
             continue
+        if _ABSENCE_CLAIM.search(_plain(sentence)):
+            problems.append(
+                "says what a paper does not state or report; that is rarely "
+                "evidence (the reader saw only part of it): leave it out or "
+                f"state what the paper does say: {quoted}"
+            )
         if _BACK_REFERENCE.search(sentence) and not set(ids) & set(earlier):
             problems.append(
                 "points back to something earlier without citing the earlier "
