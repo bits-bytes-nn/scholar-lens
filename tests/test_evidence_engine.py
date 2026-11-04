@@ -530,3 +530,16 @@ def test_mechanical_outline_problems_are_repaired_in_code() -> None:
     assert "E4" in lineage.evidence  # the unassigned figure joined its paper
     assert fixed.table[0].results == ["E2"] and fixed.table[0].limitation == "E3"
     assert notes
+
+
+def test_unsourced_number_sentences_spare_marked_examples() -> None:
+    from scholar_lens.domain.survey.evidence_post import unsourced_number_sentences
+
+    md = (
+        "## 제목입니다\n\n원칙은 모두 16개입니다.\n\n"
+        "보상이 (1, 0, 0, 0)이라고 하면 평균은 0.25입니다.\n\n"
+        "DPO는 61% 승률입니다 [[E2]].\n"
+    )
+    assert unsourced_number_sentences(md, _ledger(), "0 1") == [
+        "원칙은 모두 16개입니다."
+    ]

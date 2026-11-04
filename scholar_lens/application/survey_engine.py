@@ -43,6 +43,7 @@ from ..domain.survey.evidence_post import (
     section_numbers,
     structure_lost,
     timeline_table,
+    unsourced_number_sentences,
 )
 from ..domain.survey.plan import PlanPaper, SurveyPlan
 from ..domain.survey.post import without_papers
@@ -602,7 +603,7 @@ class EvidenceSurveyEngine:
                 logger.info("Fix of %r rejected: adds rule problems", section.title)
                 break
             draft = fixed
-        claims = await self._check_claims(draft, ledger)
+        claims = await self._unsupported(draft, ledger, free)
         if claims:
             # Let the writer narrow or delete them in context first; only what
             # is still unsupported after that is cut.
@@ -633,7 +634,7 @@ class EvidenceSurveyEngine:
                 checks(draft)
             ):
                 draft = fixed
-                claims = await self._check_claims(draft, ledger)
+                claims = await self._unsupported(draft, ledger, free)
         if claims:
             draft = drop_sentences(draft, [s for s, _ in claims])
             self.notes.append(
@@ -698,6 +699,20 @@ class EvidenceSurveyEngine:
         ]
         return outline.model_copy(update={"sections": sections, "table": table})
 
+    async def _unsupported(
+        self, draft: str, ledger: EvidenceLedger, free: str
+    ) -> list[tuple[str, str]]:
+        """The claim check's unsupported sentences and the sentences whose
+        numbers their evidence does not state."""
+        found = await self._check_claims(draft, ledger)
+        known = {s for s, _ in found}
+        found += [
+            (s, "numbers not in its evidence")
+            for s in unsourced_number_sentences(draft, ledger, free)
+            if s not in known
+        ]
+        return found
+
     async def _check_claims(
         self, draft: str, ledger: EvidenceLedger
     ) -> list[tuple[str, str]]:
@@ -760,6 +775,8 @@ class EvidenceSurveyEngine:
     ) -> str:
         parts = []
         for section, markdown in written:
+            if not markdown.lstrip().startswith("## "):
+                markdown = f"## {section.title}\n\n{markdown.lstrip()}"
             parts.append(markdown)
             if section.kind == "introduction":
                 parts.append(timeline_table(plan, outline, self.settings.korean))
@@ -767,7 +784,4 @@ class EvidenceSurveyEngine:
                 parts.append(
                     comparison_table(plan, outline, ledger, self.settings.korean)
                 )
-        missing = [s.title for s, m in written if not m.lstrip().startswith("## ")]
-        if missing:
-            self.notes.append("Sections without their heading: " + ", ".join(missing))
         return cite_papers("\n\n".join(p.strip() for p in parts if p.strip()), ledger)

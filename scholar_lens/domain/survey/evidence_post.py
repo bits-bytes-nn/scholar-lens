@@ -319,7 +319,9 @@ MIN_VISUALS = {"deep": 2, "standard": 1, "brief": 0}
 # A sentence the writer marks as its own illustration: its numbers need no
 # evidence (the claim check still reads it).
 _EXAMPLE = re.compile(
-    r"예를 들어|가령|가상의|예시로|for example|e\.g\.|suppose", re.IGNORECASE
+    r"예를 들어|가령|가상의|예시로|(?:이)?라고 (?:해 ?보면|하면|가정)|가정해|"
+    r"for example|e\.g\.|suppose",
+    re.IGNORECASE,
 )
 # A Korean heading in the plain register ("…했다"), not the post's "…입니다".
 _DA_ENDING = re.compile(r"(?<!니)다[.!]?$")
@@ -428,6 +430,26 @@ def section_heading(markdown: str) -> str:
     """The text of the draft's first ``## `` heading ("" without one)."""
     m = re.search(r"^## (.+?)\s*$", markdown, re.M)
     return m.group(1) if m else ""
+
+
+def unsourced_number_sentences(
+    markdown: str, ledger: EvidenceLedger, free_numbers: str
+) -> list[str]:
+    """Sentences stating numbers their cited evidence does not (or citing
+    none); a sentence marked as the writer's own example is left alone."""
+    found = []
+    for sentence in prose_sentences(markdown):
+        numbers = stated_numbers(sentence, free_numbers)
+        if not numbers or _EXAMPLE.search(sentence):
+            continue
+        support = " ".join(
+            f"{e.quote} {e.scope} {e.claim} {e.cell}"
+            for i in cited_ids(sentence)
+            if (e := ledger.get(i))
+        )
+        if unsourced_numbers(_plain(sentence), f"{support} {free_numbers}"):
+            found.append(sentence)
+    return found
 
 
 def section_numbers(markdown: str, free_numbers: str) -> set[str]:

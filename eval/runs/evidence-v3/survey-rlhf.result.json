@@ -1,0 +1,125 @@
+{
+  "kind": "survey_write",
+  "status": "succeeded",
+  "input": "eval/sets/plans/survey-rlhf.json",
+  "title": "Preference Optimization for LLMs: From RLHF to DPO, Nash and GRPO",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/survey-llm-rlhf-dpo-da36ac9a/2026-11-04-preference-optimization-for-llms-from-rlhf-to-dpo-nash-and-grpo.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-11-04-preference-optimization-for-llms-from-rlhf-to-dpo-nash-and-grpo.md",
+  "pr_url": null,
+  "warnings": [
+    "Section '원칙 목록과 AI 판정자가 사람의 무해성 라벨을 대신할 수 있습니다': 2 unsupported sentence(s) removed: 사람의 손을 완전히 뺀 것이 아니라, 사람 라벨링이 가장 까다롭고 불쾌한 무해성 축을 모델에 넘긴 구성입니다. (unsupported: The evidence does not describe harmlessness as the most difficult or unpleasant axis for human labeling.) | 그래프에서 실선은 온도 $$T=1$$, 점선은 $$T=0$$으로 샘플링한 결과이므로, 샘플링 온도와 관계없이 같은 경향이 나타나는지 보면 됩니다 [[E91]]. (unsupported: The evidence does not say that solid lines are T=1 and dashed lines are T=0.)",
+    "Section '원칙 목록과 AI 판정자가 사람의 무해성 라벨을 대신할 수 있습니다' still has: numbers ['16'] without evidence: 저자들이 작성한 원칙은 모두 16개이며, 수정 단계마다 그중 하나를 무작위로 뽑아 씁니다. | numbers ['438'] are not in the cited evidence: 유용성, 정직성, 무해성을 평가하는 이진 비교 438개에서, 사람 피드백으로 학습한 선호 모델과 객관식으로 비교를 푸는 사전학습 언어 모델을 맞세웠습니다 . | numbers ['40', '60'] without evidence: 체인 오브 소트를 거친 라벨은 확률이 0이나 1 근처로 몰려 보정이 맞지 않았고, 저자들은 이 확률을 40-60% 범위로 잘라 냈을 때 학습이 더 안정적이었다고 보고합니다. | numbers ['52B', '64'] without evidence: 0에서 4까지의 절대 유해성 점수로 52B RL 스냅샷을 레드팀 프롬프트 64개에 평가하면 방향 차이가 더 분명합니다.",
+    "Section 'KL 정규화 RLHF의 최적 정책이 닫힌 형태이므로 보상 모델과 RL 루프를 지울 수 있습니다' still has: the section must start with its '## ' heading (KL 정규화 RLHF의 최적 정책이 닫힌 형태이므로 보상 모델과 RL 루프를 지울 수 있습니다) | numbers ['0613'] without evidence: 쌍을 모으기 어려운 환경이라면 KTO가 데이터 형태의 제약을 풀어 주지만, 앞서 본 KTO와 DPO의 규모별 비교가 GPT-4-0613 판정 승률로 측정되었다는 점은 함께 감안해야 합니다.",
+    "Section '그룹 평균을 베이스라인으로 쓰는 GRPO가 크리틱을 없애고 검증 가능한 보상으로 추론을 키웁니다' still has: numbers ['0.25', '0.433'] without evidence: 수학 문제 하나에 출력 4개를 뽑았는데 하나만 정답이라 보상이 $$(1, 0, 0, 0)$$이라고 하면, 평균은 0.25이고 모집단 표준편차는 약 0.433입니다. | numbers ['0.75', '0.433', '1.73', '0.58'] without evidence: 정답 출력의 어드밴티지는 $$0.75/0.433\\approx 1.73$$, 오답 세 개는 각각 약 $$-0.58$$이 됩니다. | numbers ['0.58', '1.73'] without evidence: 반대로 넷 중 셋이 정답이면 정답은 약 $$+0.58$$, 유일한 오답은 약 $$-1.73$$을 받습니다. | ['64'] already stated in '원칙 목록과 AI 판정자가 사람의 무해성 라벨을 대신할 수 있습니다': refer back without repeating: 실제 RL 설정에서 저자들은 SFT 데이터 가운데 GSM8K와 MATH 관련 체인 오브 소트 질문만 썼고, 질문마다 출력을 64개씩 샘플링했으며, KL 계수는 0.04였습니다 . | ['64'] already stated in '원칙 목록과 AI 판정자가 사람의 무해성 라벨을 대신할 수 있습니다': refer back without repeating: 같은 맥락에서 DeepSeekMath 7B의 64개 샘플 자기일관성은 MATH에서 60.9%를 기록했습니다 .",
+    "Section '정적 데이터의 분포 이동이 계보마다 온라인 샘플링으로의 회귀를 불러옵니다': 5 unsupported sentence(s) removed: 2017년 Atari 실험에서 처음 나온 이 결론은 언어 모델 RLHF, DPO 계열, 게임 이론적 방법, GRPO까지 거의 같은 형태로 되풀이됩니다. (unsupported: No evidence that the finding first came from 2017 Atari experiments or recurs in GRPO etc. in the same form) | RLHF Workflow는 현재 정책의 샘플에 프록시 선호 모델로 라벨을 붙이는 반복 DPO가 오프라인 DPO를 AlpacaEval-2 LC에서 크게 앞선다는 것을 보였습니다 [[E225]]. (unsupported: E225 gives only the scores (31.3 vs 22.5); the mechanism of labeling current-policy samples with a proxy preference model is not in the evidence) | SPPO도 현재 정책끼리 승률을 추정하는 반복 학습에서 반복마다 승률이 꾸준히 올랐습니다 [[E209]]. (unsupported: E209 supports steady improvement only; the mechanism of estimating win rates between current policies is not in the evidence) | 정답 검증기가 있어 보상 자체는 흔들리지 않는데도, 오래된 정책의 샘플로만 학습하면 후반으로 갈수록 학습 신호가 현재 정책에 맞지 않게 됩니다. (unsupported: Causal explanation (verifier keeps the reward stable, so the signal becomes mismatched to the policy) is not stated in the evidence) | 완전 온라인은 공학 부담이 크고 완전 오프라인은 분포 이동에 취약하기 때문에, 주간 갱신이나 반복 DPO처럼 수집 주기를 학습보다 느리게 두는 방식이 실무의 기본값이 되었습니다. (unsupported: Claim that slower collection cycles became the industry default is not backed by any evidence)",
+    "Section '같은 승률 숫자라도 판정자, 데이터, KL 예산이 다르면 직접 비교할 수 없습니다' still has: numbers ['79', '85'] without evidence: 나머지 두 비교 조건에서는 GPT-4와 사람의 일치도가 79%와 85%였습니다.",
+    "Sections without their heading: KL 정규화 RLHF의 최적 정책이 닫힌 형태이므로 보상 모델과 RL 루프를 지울 수 있습니다",
+    "self-reference '이 절': 기호와는 관계가 없습니다. 두 변형의 구체적 차이는 이 절에서 다루는 범위 밖입니다. Phi-2(2.7B)에 O",
+    "verification hedge (fix the claim from an official source or drop it): eward model win rate) | 7B 초과 미검증, 비교 방법 제한 |"
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 2711.0,
+  "input_tokens": 2480219,
+  "output_tokens": 411891,
+  "estimated_cost_usd": 11.9855,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 202,
+      "failed_calls": 0,
+      "input_tokens": 15339,
+      "output_tokens": 411891,
+      "cache_read_tokens": 1390669,
+      "cache_write_tokens": 1074211,
+      "cost_usd": 11.985545
+    },
+    "by_stage": {
+      "read": {
+        "calls": 129,
+        "failed_calls": 0,
+        "input_tokens": 302,
+        "output_tokens": 119105,
+        "cache_read_tokens": 1250436,
+        "cache_write_tokens": 319687,
+        "cost_usd": 2.240957
+      },
+      "outline": {
+        "calls": 2,
+        "failed_calls": 0,
+        "input_tokens": 8,
+        "output_tokens": 22674,
+        "cache_read_tokens": 3954,
+        "cache_write_tokens": 107076,
+        "cost_usd": 0.990474
+      },
+      "verify": {
+        "calls": 31,
+        "failed_calls": 0,
+        "input_tokens": 124,
+        "output_tokens": 53797,
+        "cache_read_tokens": 82735,
+        "cache_write_tokens": 127245,
+        "cost_usd": 1.745755
+      },
+      "draft": {
+        "calls": 11,
+        "failed_calls": 0,
+        "input_tokens": 44,
+        "output_tokens": 70768,
+        "cache_read_tokens": 25210,
+        "cache_write_tokens": 206492,
+        "cost_usd": 2.458076
+      },
+      "review": {
+        "calls": 11,
+        "failed_calls": 0,
+        "input_tokens": 44,
+        "output_tokens": 29983,
+        "cache_read_tokens": 12590,
+        "cache_write_tokens": 59451,
+        "cost_usd": 0.902131
+      },
+      "fix": {
+        "calls": 17,
+        "failed_calls": 0,
+        "input_tokens": 68,
+        "output_tokens": 114461,
+        "cache_read_tokens": 15744,
+        "cache_write_tokens": 254260,
+        "cost_usd": 3.567096
+      },
+      "finalize": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 14749,
+        "output_tokens": 1103,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.081056
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-sonnet-5-5": {
+        "calls": 129,
+        "failed_calls": 0,
+        "input_tokens": 302,
+        "output_tokens": 119105,
+        "cache_read_tokens": 1250436,
+        "cache_write_tokens": 319687,
+        "cost_usd": 2.240957
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 73,
+        "failed_calls": 0,
+        "input_tokens": 15037,
+        "output_tokens": 292786,
+        "cache_read_tokens": 140233,
+        "cache_write_tokens": 754524,
+        "cost_usd": 9.744588
+      }
+    }
+  }
+}
