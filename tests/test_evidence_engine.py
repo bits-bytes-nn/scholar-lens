@@ -649,3 +649,33 @@ def test_the_table_owns_its_results() -> None:
     assert "E2" not in fixed.sections[1].evidence  # shown in the table instead
     assert fixed.table[0].results == ["E2"]
     assert any("left ['E2'] to the table" in n for n in notes)
+
+
+def test_sentence_cells_near_duplicates_and_input_talk() -> None:
+    from scholar_lens.domain.evidence import near_duplicate
+
+    problems = evidence_problems(
+        _doc(),
+        kind="number",
+        claim="PPO 대비 승률 61%",
+        quote="DPO reaches a 61% win rate against PPO",
+        anchor="S3",
+        scope="TL;DR, GPT-4 judge",
+        cell="61% 승률을 기록했다.",
+    )
+    assert any("noun phrase" in p for p in problems)
+    assert near_duplicate(
+        "DPO는 PPO 대비 61% 승률", ["DPO는 PPO 대비 61% 승률을 보임"], 0.6
+    )
+    assert not near_duplicate("작은 beta에서 불안정", ["DPO는 PPO 대비 61% 승률"])
+    issues = draft_problems(
+        "## 제목\n\n이 값은 여기서 다루는 자료에 없어 비교하지 않습니다.\n",
+        title="t",
+        own=[],
+        earlier=[],
+        ledger=_ledger(),
+        earlier_numbers={},
+        figure_urls=[],
+        free_numbers="",
+    )
+    assert any("post's inputs" in p for p in issues)

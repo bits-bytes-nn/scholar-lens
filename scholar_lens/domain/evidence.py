@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable, Iterator
+from difflib import SequenceMatcher
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -216,6 +217,8 @@ def evidence_problems(
         problems.append("the equation is not the paper's LaTeX: copy it exactly")
     if len(cell) > MAX_CELL_CHARS:
         problems.append(f"the cell is longer than {MAX_CELL_CHARS} characters")
+    if cell and re.search(r"(?:다|니다)[.]?\s*$", cell.strip()):
+        problems.append("the cell is a sentence: write it as a noun phrase")
     if "?" in f"{claim} {scope} {cell}":
         problems.append("a guess ('?') is not evidence: state only what the quote says")
     if _NUMBERED_REFERENCE.search(f"{claim} {scope} {cell}"):
@@ -224,6 +227,17 @@ def evidence_problems(
             "equation or section numbers; say what it is"
         )
     return problems
+
+
+def near_duplicate(claim: str, others: Iterable[str], threshold: float = 0.85) -> bool:
+    """Whether ``claim`` says nearly what one of ``others`` says (character
+    similarity, which Korean particles do not break as they break word
+    overlap): two records of one fact make the post repeat it."""
+    mine = _squash(claim)
+    return any(
+        SequenceMatcher(None, mine, _squash(other)).ratio() >= threshold
+        for other in others
+    )
 
 
 class EvidenceLedger(BaseModel):

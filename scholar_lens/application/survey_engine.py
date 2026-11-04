@@ -25,6 +25,7 @@ from ..domain.evidence import (
     EvidenceLedger,
     SourceDocument,
     evidence_problems,
+    near_duplicate,
 )
 from ..domain.glossary import glossary_view
 from ..domain.survey.evidence_post import (
@@ -60,7 +61,7 @@ logger = logging.getLogger(__name__)
 
 # Bump when the reader's prompt or the evidence schema changes meaning; the
 # prompt's wording alone does not invalidate cached evidence.
-READER_VERSION = 5
+READER_VERSION = 6
 _SAFE_KEY = re.compile(r"[^A-Za-z0-9._-]+")
 
 
@@ -304,6 +305,15 @@ class EvidenceSurveyEngine:
             )
             if kind not in Evidence.model_fields["kind"].annotation.__args__:  # type: ignore[union-attr]
                 problems.insert(0, f"unknown kind {kind!r}")
+            if (
+                not problems
+                and kind != "figure"
+                and near_duplicate(claim, [e.claim for e in ledger if e.kind == kind])
+            ):
+                problems.append(
+                    "this repeats evidence already recorded; record a different "
+                    "fact or move on"
+                )
             if problems:
                 rejected += 1
                 return "REJECTED: " + "; ".join(problems)
@@ -579,9 +589,16 @@ class EvidenceSurveyEngine:
                     ),
                 ),
                 (
-                    "The code appends the timeline table after the introduction and the "
-                    "comparison table after the comparison section; introduce and "
-                    "interpret them, do not reproduce them."
+                    "The code appends this table after the section; introduce and "
+                    "interpret it (its columns are exactly these), do not "
+                    "reproduce it:\n"
+                    + (
+                        timeline_table(plan, outline, self.settings.korean)
+                        if section.kind == "introduction"
+                        else comparison_table(
+                            plan, outline, ledger, self.settings.korean
+                        )
+                    )
                     if section.kind in ("introduction", "comparison")
                     else ""
                 ),

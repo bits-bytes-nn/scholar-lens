@@ -1,0 +1,84 @@
+{
+  "item": "survey-security",
+  "post": "/tmp/eval-evidence/survey-security-v10.md",
+  "scores": {"A": 7.0, "B": 6.5, "C": 6.5, "D": 8.0, "E": 6.5, "F": 6.0, "S1": 5.5},
+  "score_notes": {
+    "A": "Coherent arc (problem -> six lineages -> cross-lineage -> comparison -> paradox -> close), all 24 plan papers covered. Deductions: sentence-form '~다' headings: L72 '간접 인젝션: 공격자가 대화 밖으로 나가다', L189 'PAIR: 공격자 LLM으로 질의 수를 줄이다', L321 'RAGForensics: 막지 못하면 추적한다'; L673 says '아래 비교표' but three prose subsections (L675-691) come before the table at L693; L738 '남아 있는 공백' is one paragraph.",
+    "B": "Capped at 7 by a register break in a table cell: L696 '...합성 앱·로컬 HTML로 시험했다.' (rewrite: '...시험했습니다' or a noun phrase '합성 앱·로컬 HTML 시험'). Pipeline-meta phrasing leaks to the reader: L519 '수치는 여기서 다루는 자료에 없어, 격차를 %나 %p로 적을 수는 없습니다', L551 '구체적 값은 여기서 다루는 자료에 없습니다', L605/L619 '이 수치가 상대값인지 %p인지는 원문에서 구분되지 않습니다'. Noun frame '다는 점' 7 times (e.g. L174 '토큰은 이산적이라 기울기를 직접 쓸 수 없다는 점이 어려운 단계입니다'). L519 doubled lead-in 'Instruct 모델 결과에서는 ... Instruct 모델 결과를 담은 이 그림에서'.",
+    "C": "Running example ties sections together well. Deductions: facts repeated: InjecAgent sensitivity/transfer-rate definitions given at L577 and again verbatim at L583; StruQ partial vs GCG stated at L477, L655, L677, L683; CaMeL P-LLM/Q-LLM/provenance re-explained at L689 and L734 after L531-L538. Prose contradicts the table: L551 says CaMeL per-defense values are not available, but the table L713 gives 'CaMeL 성공 공격 0 대비 tool filter 8'; L519 says SecAlign ASR numbers are not available, but L708 gives 'ASR 1% / 8%'.",
+    "D": "Hard parts get help at the right moment: GCG discrete-token step (L173), SecAlign log 2 worked example (L507), CaMeL control vs data flow on the email assistant (L529, L539), PoisonedRAG two conditions (L249). Mild padding when narrating figures (L209 '히트맵의 각 칸은 ... 진할수록 비율이 높습니다', L611).",
+    "E": "47 figures; several are narrated without adding information (L197, L209, L591). Table cells mix settings and lose units: L703 '파인튜닝 GPT-3.5 기본 설정 ASR 3.8' (no %), L700 'Mixtral 공격자 88%' (target missing), L699 mixes % and 0.94/0.81 fractions; L696 limitation cell is a prose sentence.",
+    "F": "13/15 checked claims supported against arXiv full text. Wrong: L700 PAIR 'Mixtral 공격자 88%' (88% is the Vicuna-13B target rate with Mixtral as attacker). Unsupported: L715 MCP limitation 'Cline 단일 클라이언트 고정' (only Benchmark 1 fixes Cline; Benchmark 2 compares five clients, and the post itself discusses that at L417). Plus prose/table contradictions on CaMeL and SecAlign numbers.",
+    "S1": "Limitation cells: L715 MCP mis-scoped; L716 ToolHijacker 'gradient-based 섀도 LLM 의존성(최저 34%)' is a sensitivity result, not a stated limitation; L696 Greshake cell is prose with a register break. Earlier explanations repeated (see C)."
+  },
+  "principles": {
+    "claim_headings": {"status": "partly met", "evidence": "Most H2/H3 are claim noun phrases (L50, L147, L229); sentence-form headings at L72, L189, L321."},
+    "running_example": {"status": "met", "evidence": "Email assistant with three entry points (L15) carried through every lineage (L103, L233, L343, L465, L539, L748)."},
+    "mechanism_design_formula_example": {"status": "partly met", "evidence": "Full chain for SecAlign (L499-L507), CaMeL (L523-L540), PoisonedRAG (L243-L257); other cards go formula -> results without a worked example (AgentPoison L285-L313, AiTM L375)."},
+    "facts_once": {"status": "not met", "evidence": "InjecAgent metric definition L577 = L583; StruQ vs GCG at L477/L655/L677/L683; CaMeL mechanism L531/L689/L734."},
+    "numbers_with_scope_unit": {"status": "partly met", "evidence": "Most prose numbers carry model and setting (L175, L225, L637); table cells drop scope/unit (L700 'Mixtral 공격자 88%', L703 'ASR 3.8')."},
+    "nothing_invented": {"status": "partly met", "evidence": "Hypothetical examples flagged ('이는 이 글의 가상 설정입니다' L343, L380, L398); one mis-attributed table number (L700) and one mis-scoped limitation (L715)."},
+    "writers_assessment_at_end": {"status": "met", "evidence": "L744-L751 judgment on design-based isolation plus adaptive re-evaluation; '이 글의 판단' blocks at L561, L645, L691, L736."},
+    "length_fitted": {"status": "partly met", "evidence": "About 27,800 Korean characters and 47 figures; cross-lineage (L647-L669) and comparison prose (L671-L691) mostly restate the cards."},
+    "type_specific_shape": {"status": "not met", "evidence": "Survey rule 'numbers in one table' broken: the prose carries most numbers (L68, L137-L139, L175, L225, L259, L313, L419, L637) and the table repeats some of them (PromptInject 58.6%/23.6% at L68 and L695)."},
+    "korean_style": {"status": "partly met", "evidence": "Natural on the whole; register break L696, meta lines L519/L551, '다는 점' x7, '셈입니다' x3."}
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 13,
+    "unsupported": 1,
+    "wrong": 1,
+    "unverifiable": 0,
+    "examples": [
+      {"line": 68, "claim": "text-davinci-002 hijacking 58.6%; non-harmful rogue string 70.0%; no stop sequence 60.0%; adding 'instead' raises leaking to 23.6%", "verdict": "supported", "source": "2211.09527: '58.6%±1.6 for goal hijacking and 23.6%±2.7 for prompt leaking'; Table: 'Non-harmful string 70.0±3.7', 'Stop sequence No 60.0±0.0'; 'adding the word instead ... boosted the success rate to 23.6±2.7'."},
+      {"line": 137, "claim": "Perplexity filtering Vicuna-7B 24%->76%; paraphrasing Llama3-8B 8%->54%; LLM detector Vicuna-7B 34->0", "verdict": "supported", "source": "2503.00061 Table 3: 'Perplexity filtering Vicuna-7B 24 76', 'Paraphrasing Llama3-8B 8 54'; Table 2: 'LLM-based detector Vicuna-7B 34 0'."},
+      {"line": 175, "claim": "GCG Harmful Strings Vicuna-7B 88%, Llama-2-7B-Chat 57% vs AutoPrompt 25%, 3%; held-out behaviors Llama-2 84% vs 35%", "verdict": "supported", "source": "2307.15043: 'successful on 88% of strings for Vicuna-7B and 57% for Llama-2-7B-Chat ... AutoPrompt ... 25% ... 3%'; 'achieving 35% success rate on held-out test behaviors, compared to 84%'."},
+      {"line": 203, "claim": "PAIR finds a jailbreak in 34 s on average with 366 MB CPU memory", "verdict": "supported", "source": "2310.08419 Table 4: 'PAIR takes 34 seconds ... 366 MB of CPU memory'."},
+      {"line": 313, "claim": "AgentPoison ASR-r 62.0% with one poisoned instance, 79.0% with a one-token trigger", "verdict": "supported", "source": "2407.12784: 'high ASR-r (62.0% in average) when we only poison one instance ... 79.0% ASR-r when the trigger only contains one token'."},
+      {"line": 385, "claim": "AiTM chain structure 95.2% HumanEval, 96.9% MBPP under AutoGen", "verdict": "supported", "source": "2502.14847: 'e.g., 95.2% and 96.9% for HumanEval and MBPP under AutoGen'."},
+      {"line": 419, "claim": "MCP user study: 20 participants, mean 3.15 servers, 15 (75.0%) picked a malicious server", "verdict": "supported", "source": "2506.02040: 'participants select an average of 3.15 MCP servers, with 15 participants (75.0%) choosing at least one malicious server'."},
+      {"line": 427, "claim": "ToolHijacker: Claude-3-Haiku ASR >=70%; k=1 gives AHR and ASR 89%; PPL/PPL-W AUC 0.64/0.74", "verdict": "supported", "source": "2504.19793: 'Claude-3-Haiku is the least sensitive, but it still achieves an ASR of >=70%'; 'When k=1, both AHR and ASR are 89%'; 'AUC scores of 0.64 and 0.74'."},
+      {"line": 476, "claim": "StruQ ablation Naive+Completion-Other: best ASR 0%, AlpacaEval 66.0%; TAP 97%->9%, GCG 97%->58% on Llama", "verdict": "supported", "source": "2402.06363 Table 5: 'Naive + Completion-Other 66.0% 0%'; intro: 'TAP from 97% to 9% and that of GCG from 97% to 58% on Llama'."},
+      {"line": 545, "claim": "CaMeL without policies: Gemini 2.5 Pro successful attacks 300 -> 0; Claude Sonnet Travel utility 25% (3.5), 55% (3.7), 75% (4)", "verdict": "supported", "source": "2503.18813: 'Gemini 2.5 Pro drops from 300 without to 0 with CaMeL' (no policies installed); 'utility on the travel suite went from 25% (3.5), to 55% (3.7), to 75% (4)'."},
+      {"line": 637, "claim": "AgentHarm: GPT-4o mini refuses 22%, harm 62.5%; Mistral Large 2 refuses 1.1%, 82.2%; Claude 3.5 Sonnet template 16% refusal, 81.9% vs benign 82%", "verdict": "supported", "source": "2410.09024: 'GPT-4o mini gets a 62.5% harm score, while refusing just 22% ... Mistral Large 2 refuses just 1.1% ... 82.2%'; 'Claude 3.5 Sonnet scores a 81.9% non-refusal harm score (while refusing just 16%) ... 82% on the benign tasks'."},
+      {"line": 597, "claim": "AgentDojo: 97 tasks, 629 security cases, 70 tools, 27 injection targets", "verdict": "supported", "source": "2406.13352: '97 realistic tasks ... 629 security test cases'; Table 1: 'a total of 70 tools, 97 realistic user tasks and 27 injection targets'."},
+      {"line": 703, "claim": "Table: InjecAgent ReAct GPT-4 ASR 24%->47%; fine-tuned GPT-3.5 base-setting ASR 3.8", "verdict": "supported", "source": "2403.02691 Table 3: Prompted GPT-4 Total base 23.6 / enhanced 47.0; 'Fine-tuned GPT-3.5 ... Total 3.8' (base). The body text says the reverse ('fine-tuned GPT-4 and GPT-3.5 ... 3.8% and 6.6% respectively'); the cell follows the table row. Unit '%' missing."},
+      {"line": 713, "claim": "Table: CaMeL 0 successful attacks vs tool filter 8; 2.82x input / 2.73x output tokens", "verdict": "supported", "source": "2503.18813: 'successful attacks with CaMeL is 0, while ... the next best defense (tool filter) is 8'; 'CaMeL requires only 2.82x more input and 2.73x more output tokens'."},
+      {"line": 700, "claim": "Table: PAIR 'Gemini 탈옥 73%; Mixtral 공격자 88%'", "verdict": "wrong", "source": "2310.08419 Table 2 (Mixtral as attacker for all targets): PAIR Jailbreak % 'Vicuna 88%, Llama-2 4%, GPT-3.5 51%, GPT-4 48%, Claude-1 3%, Claude-2 0%, Gemini 73%'. 88% is the Vicuna-13B target, not a property of the Mixtral attacker."},
+      {"line": 715, "claim": "Table limitation: MCP attack vectors 'Cline 단일 클라이언트 고정'", "verdict": "unsupported", "source": "2506.02040: 'In Benchmark 1 of RQ3, we fix the MCP client to Cline' but Benchmark 2 evaluates 'five commonly used MCP clients: Cherry Studio, Claude Desktop, Cline, Copilot-MCP, and Cursor'; the post itself reports cross-client results at L417."}
+    ]
+  },
+  "checklist": {
+    "repeated": 0,
+    "avoided": 10,
+    "na": 3,
+    "repeated_ids": [],
+    "items": [
+      {"id": "houyi-sentence-grammar", "result": "n/a", "evidence": "HouYi section (L107-L113) has no pilot-study sentence."},
+      {"id": "heading-english-tool", "result": "avoided", "evidence": "L335 '## 에이전트 사이와 도구 설명으로 번지는 인젝션'; no 'Tool' heading."},
+      {"id": "etdi-translationese", "result": "avoided", "evidence": "ETDI section L431-L443 has no '실무에 바로 대응됩니다'."},
+      {"id": "multiagent-integrity-overgeneralized", "result": "avoided", "evidence": "L447 'AiTM처럼 통신을 가로채는 공격에 대해서는 인용한 논문들에 방어를 평가한 결과가 없고'."},
+      {"id": "secalign-taskshield-repeated-verb", "result": "n/a", "evidence": "No Task Shield sentence; SecAlign section L499-L519 has no repeated '옮겼습니다'."},
+      {"id": "lightweight-defense-practice-claim", "result": "avoided", "evidence": "Only '실무' use is a labelled recommendation, L645 '이 글의 판단으로는 실무에서 방어를 고를 때 ...'."},
+      {"id": "injecagent-finetuned-variants", "result": "avoided", "evidence": "L703 '파인튜닝 GPT-3.5 기본 설정 ASR 3.8' matches the Table 3 row (Fine-tuned GPT-3.5, base Total 3.8)."},
+      {"id": "agentdojo-utility-restated", "result": "n/a", "evidence": "69.00%/50.08% do not appear in the post."},
+      {"id": "agentdojo-baseline-defenses", "result": "avoided", "evidence": "L613 '구분자, 인젝션 탐지기, 프롬프트 샌드위치, 도구 필터를 GPT-4o에 적용했습니다'; no dual-LLM."},
+      {"id": "benchmark-conclusion-flip", "result": "avoided", "evidence": "No 'conclusion flips' claim; L583 '공격 문구 하나로 모델 간 순위를 매기기 어렵습니다' (not quantified, though)."},
+      {"id": "jailbroken-cell-duplicated", "result": "avoided", "evidence": "L699 'GPT-4·Claude 탈옥 성공률 96% 이상; combination_3 GPT-4 0.94 / Claude 0.81' does not repeat model/condition."},
+      {"id": "toolhijacker-limitation-column", "result": "avoided", "evidence": "L716 limitation 'gradient-based 섀도 LLM 의존성(최저 34%)' is not the existing-defense finding, but it is still a result rather than the no-box scope."},
+      {"id": "prompt-infection-venue", "result": "avoided", "evidence": "L770 reference has no 'Lecture notes in computer science' (venue omitted rather than 'arXiv')."}
+    ]
+  },
+  "extras": {
+    "plan_papers_uncited": [],
+    "thin_sections": ["L738 '남아 있는 공백' (one paragraph)", "L321 'RAGForensics' (two short paragraphs)"],
+    "venue_issues": ["No wrong venue strings; venue omitted for Greshake (L756), AgentDojo (L767), Prompt Infection (L770)."],
+    "table_cell_issues": ["L696 Greshake: '정량 수치 없음' plus a prose limitation sentence ending '시험했다.'", "L703 InjecAgent '3.8' without unit", "L700 PAIR '88%' without target model", "L715 MCP limitation mis-scoped"]
+  },
+  "length": {"korean_chars_body": 27817, "chars_body": 60611, "figures": 47},
+  "top_issues": [
+    "The prose carries most numbers, breaking the rule that survey numbers live in one table, and the table repeats some of them (PromptInject L68/L695). Prose also contradicts the table: L551/L519 say the CaMeL and SecAlign values are not available, but L713/L708 give them.",
+    "Table accuracy: L700 'Mixtral 공격자 88%' (wrong: 88% is the Vicuna-13B target); L715 MCP limitation 'Cline 단일 클라이언트 고정' (unsupported: Benchmark 2 covers five clients); L703 '3.8' without a unit.",
+    "Repetition and meta leaks: InjecAgent metric definition at L577 and L583, StruQ-vs-GCG four times, CaMeL re-explained at L689/L734; '여기서 다루는 자료에 없어' (L519, L551); register break in a table cell (L696 '시험했다.'); sentence headings (L72, L189, L321)."
+  ]
+}

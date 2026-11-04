@@ -1,0 +1,132 @@
+{
+  "item": "survey-rlhf",
+  "post": "eval/baselines/2026-11-03/out/survey-rlhf.md",
+  "judge_run": 3,
+  "scores": {
+    "A": 7,
+    "B": 7,
+    "C": 7,
+    "D": 8.5,
+    "E": 6.5,
+    "F": 4,
+    "S1": 5
+  },
+  "score_evidence": {
+    "A": [
+      "Coherent arc: intro -> six lineage sections -> cross-lineage synthesis (L640) -> method comparison (L663) -> open problems (L701) -> closing (L720); no body H1, no skipped levels, all headings Korean noun phrases.",
+      "L162-163: display math uses alignment '&' and '\\\\' outside any aligned/split environment ('objective(\\phi)=&E_{...}+\\\\ &\\gamma E...'), which MathJax will not render.",
+      "L195: single '$' inside display math: '\\beta_{\\text{bo$n$}}' (rule: no single $).",
+      "L371: stray trailing '\\\\' inside '$$L_{KTO}...\\\\$$'."
+    ],
+    "B": [
+      "Consistent 입니다 register, mostly natural prose; established terms kept in English.",
+      "Terminology drift: '사고 사슬' (L253, L608, L626) vs '체인 오브 소트' (L692, L696) for chain-of-thought.",
+      "Untranslated / mixed units in cells: L687 '5k 오프라인 라벨', '1400개' vs body '1,400개' (L88); B/M not converted (L140 '1.3B', L185 '3M~3B', '6B') while L42/L213 use '70억~700억'.",
+      "Noun frame: L49 'Nash-MD와 동등하다는 점을 증명하고' -> 'Nash-MD와 동등함을 증명하고'; L594 'Nash-MD는 ... 모델 판정에 기댄다는 점을 감안해' -> '모델 판정에 기대므로 감안해 읽어야 합니다'.",
+      "Input-meta sentences: L586 '논문 요지에는 오프라인 방식 대비 향상 폭을 보여 주는 구체적 수치가 제시되어 있지 않습니다', L593 cell '논문 요지에 명시되지 않음', L637 '초록에는 실험적 검증이 제시되지 않습니다'.",
+      "'에 대한' 20 times (e.g. L21 '선호 데이터에 대한 이진 분류 손실', L667) and '즉' 10 times."
+    ],
+    "C": [
+      "Strong back-references ('앞서 본 Bradley-Terry', L130, L298, L433) and lineage-to-lineage contrasts (L227, L397, L594).",
+      "Same facts restated many times instead of pointed to: Mroueh's 'weighted contrastive loss + fixed point above reference' at L28, L54, L634-636, L703 and L726; DAA 'KL 예산이 커지면 RLHF와 비슷한 성능 저하' at L22, L53, L389, L644, L671 and L724; Stiennon 320 GPU-days at L142, L667 and L689.",
+      "Closing (L722-727) re-summarises cards (Dong, SPPO, CAI, GRPO, Mroueh) rather than adding new synthesis."
+    ],
+    "D": [
+      "Hard steps get help at the moment they appear: DPO gradient weighting (L304), IPO analytic two-action example (L336), CAI clamping example 0.9 -> 0.6 (L254), K=9 -> 36 pairs (L154), k3 KL estimator positivity (L624), Nash-MD last-iterate bound (L531).",
+      "Minor padding: L262 figure paragraph says only what the scatter plot axes are; L445 ORPO figure sentence adds nothing."
+    ],
+    "E": [
+      "26 figures, all referred to descriptively and placed where discussed; per-lineage comparison tables (L217, L391, L487, L587, L654) aid comparison.",
+      "Lineage table L219-226 has six '세부 미기술' cells (Llama 2 row entirely, InstructGPT online/offline, Bai RM loss) and L593 '논문 요지에 명시되지 않음' — effectively empty cells.",
+      "Final results table (L684-699) cells are run-on prose with nested parentheses and semicolons, e.g. L697 'AlpacaEval 2.0 승률: 11.33%, 12.20% (Mistral-ORPO-α, Mistral-ORPO-β (70억), UltraFeedback만 학습, Zephyr β 10.99%와 비교); ...'; it covers 14 of 22 papers (no RRHF, HH-RLHF, Llama 2, RLAIF, IPO-MD, Dong, DAA, Mroueh).",
+      "Figure prose sometimes only describes axes without a takeaway (L262, L445, L471)."
+    ],
+    "F": [
+      "3 wrong claims in the 15-claim sample (each >=2 deduction): CAI per-label principle ensembling (L253), RLAIF 'difference size unknown' (L272/L657), Mroueh 'no experimental validation' (L637).",
+      "Additional same-pattern case outside the sample: L586/L593 present an abstract-only gap for Dong et al. as a property of the paper.",
+      "Minor: L114 '보상 모델을 20번 재학습' — paper trains once before PPO and 'retrain[s] it 19 more times' (20 trainings total)."
+    ],
+    "S1": [
+      "False limitations derived from reading only the abstract: L272 '논문 요지는 RLHF와 비슷한 성능이라고만 밝혀 차이의 크기를 가늠하기 어렵고' and L657 cell 'RLHF 대비 차이 크기 불명' (the paper reports 71% vs 73%, 63% vs 64%, harmless 88% vs 76%, RLAIF vs RLHF 50%); L637 '초록에는 실험적 검증이 제시되지 않습니다' (paper has Appendix A Experimental Validation); L586/L593 for Dong et al.",
+      "Cell units not in post language: L687 '5k 오프라인 라벨', L692 '체인 오브 소트'.",
+      "Numbers explained in sections are repeated in the final table (KTO L381 vs L695, ORPO L447 vs L697, SimPO L481 vs L699, DPO L310 vs L692)."
+    ]
+  },
+  "principles": {
+    "claim_headings": {"status": "partly met", "evidence": "Claim noun phrases: L385 '보상 모델이 없어도 남는 과최적화', L211 '공개 모델로 넘어간 파이프라인', L451 '생성 지표와 맞춘 길이 정규화 보상'. Topic-style: L485 '세 방법이 남긴 것', L701 '흐름과 열린 문제', L231 'AI 피드백: Constitutional AI와 RLAIF'. No 다-form headings."},
+    "running_example": {"status": "not met", "evidence": "No single example carried through the post; TL;DR summarization recurs (L116, L140, L310, L535) but is never used as a deliberate thread across lineages."},
+    "mechanism_design_formula_example": {"status": "met", "evidence": "DPO L288-304 (objective -> closed form -> reparameterization -> loss -> gradient reading), IPO L316-337 with analytic example, GRPO L614-624."},
+    "facts_said_once": {"status": "not met", "evidence": "Mroueh result restated at L28, L54, L634, L703, L726; DAA degradation at L22, L53, L389, L644, L671, L724; 320 GPU-days at L142, L667, L689."},
+    "numbers_with_variant_scope_unit": {"status": "partly met", "evidence": "Mostly scoped (L310 DPO temps/judge; L481 SimPO base models and judge). But B/M not converted (L140 '1.3B', L185 '3M~3B') and L687 '5k'."},
+    "nothing_invented": {"status": "not met", "evidence": "L253 per-label principle ensembling; L272/L657 RLAIF 'difference size unknown'; L637 Mroueh 'no experimental validation'."},
+    "writer_assessment_at_end": {"status": "partly met", "evidence": "L663-681 gives real when-to-use judgment and comparability caveats (L680); but '맺으며' L722-727 largely re-summarises paper cards."},
+    "length_fitted_to_difficulty": {"status": "partly met", "evidence": "Hard parts (DPO, IPO, Nash-MD, SPPO) get depth and easy ones (Llama 2, L213) are short, but 755 lines with heavy restatement of the same findings."},
+    "type_specific_shape": {"status": "not met", "evidence": "Survey rule 'numbers in one comparison table': numbers live in body paragraphs (L88, L116, L140, L171, L310, L381, L447, L481, L569, L626) and are repeated in the final table L684-699; the table covers only 14 of 22 papers."},
+    "korean_style": {"status": "partly met", "evidence": "Consistent 입니다 register and Korean headings; '에 대한' x20, '즉' x10, noun frames L49/L594, mixed '사고 사슬'/'체인 오브 소트'."}
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 12,
+    "unsupported": 0,
+    "wrong": 3,
+    "unverifiable": 0,
+    "from_comparison_table": 4,
+    "numeric": 12,
+    "examples": [
+      {"line": 88, "claim": "700 human queries nearly match RL on MuJoCo; 1,400 synthetic slightly better than true reward; 5,500 Atari queries; 5k labels ~5 h / ~$36, compute ~$25", "source": "1706.03741", "verdict": "supported", "passage": "With 700 labels we are able to nearly match reinforcement learning... by 1400 labels our algorithm performs slightly better than if it had simply been given the true reward... 5,500 queries to a human rater... compute cost is ~$25. Training with 5k labels corresponds roughly to 5 hours of human labour... ~$36."},
+      {"line": 116, "claim": "TL;DR 60k online RL model preferred over supervised baseline 97%; copies whole sentences 71% (TL;DR) / 98% (CNN/DM)", "source": "1909.08593", "verdict": "supported", "passage": "Table 5: 60k fine-tuned vs. supervised 97% 3% (TL;DR)... they copy whole sentences 71% of the time for TL;DR and 98% of the time for CNN/Daily Mail."},
+      {"line": 140, "claim": "1.3B HF model 61% vs 10x supervised 43%; ~65% length-controlled (6.7B); 7/7 overall 45% vs 20% / 23%; CNN/DM RM agreement 62.4% / 66.5% vs inter-labeler 66.9%", "source": "2009.01325", "verdict": "supported", "passage": "(61% versus 43% raw preference score against reference summaries)... still preferred to the reference summaries ~65% of the time... 7/7 overall score 45% of the time (compared to 20% and 23%...)... 62.4% and 66.5%... inter-labeler agreement value of 66.9%."},
+      {"line": 171, "claim": "175B InstructGPT preferred 85±3% vs GPT-3, 71±4% vs few-shot; FLAN 78±4%, T0 79±4%; hallucination 21% vs 41%; agreement 72.6±1.5 / 77.3±1.3", "source": "2203.02155", "verdict": "supported", "passage": "preferred to 175B GPT-3 outputs 85 ± 3%... 71 ± 4%... over our FLAN model 78 ± 4%... T0 model 79 ± 4%... (a 21% vs. 41% hallucination rate)... 72.6 ± 1.5 %... 77.3 ± 1.3 %."},
+      {"line": 205, "claim": "Advance prediction: data up to n=1,000 (KL≈6 nats) predicts up to n=60,000 (KL≈10 nats); below ~2,000 comparisons RMs near chance (comparison table L690)", "source": "2210.10760", "verdict": "supported", "passage": "we performed a BoN experiment with up to n = 60,000 (KL ≈ 10 nats), after only having seen data up to n = 1,000 (KL ≈ 6 nats)... for amounts of data less than around 2,000 comparisons... very little improvement over near-chance loss."},
+      {"line": 250, "claim": "42,496 human + 140,335 model prompts = 182,831; 4 critique-revision pairs per prompt; 135,296 human helpfulness comparisons; CoT probabilities clamped to 40-60%", "source": "2212.08073", "verdict": "supported", "passage": "we collected 42,496 human-written prompts... generated a further 140,335... giving a total of 182,831. We sampled 4 critique-revision pairs per red team prompt... 135,296 HF helpfulness comparisons... clamping the CoT probabilities to lie within the 40-60 percent range."},
+      {"line": 253, "claim": "16 principles; the judgments produced under each principle are ensembled into one label", "source": "2212.08073", "verdict": "wrong", "passage": "we wrote a set of 16 different principles, and randomly sampled a principle for each comparison label. ... ensembling over principles led to notably more robust PM behavior compared to using the same principle for all labels. (One random principle per label; the ensemble is across labels, not per label.)"},
+      {"line": 272, "claim": "The RLAIF paper only says 'comparable' to RLHF, so the size of the difference cannot be judged (repeated as table cell L657 'RLHF 대비 차이 크기 불명')", "source": "2309.00267", "verdict": "wrong", "passage": "RLAIF and RLHF are preferred by humans over a SFT baseline 71% and 73% of the time for summarization and 63% and 64%... for helpful dialogue... Table: RLAIF vs RLHF 50% 52%; Harmless rate SFT 64%, RLHF 76%, RLAIF 88%."},
+      {"line": 310, "claim": "DPO GPT-4 win rate ~61% (temp 0.0) vs PPO 57% at best temp 0.0; CNN/DM OOD DPO 0.36/0.31 vs PPO 0.26/0.23; human eval DPO preferred 58%; GPT-4-human agreement 70/67 vs human-human 65", "source": "2305.18290", "verdict": "supported", "passage": "DPO has a win rate of approximately 61% at a temperature of 0.0, exceeding the performance of PPO at 57% at its optimal sampling temperature of 0.0... DPO 0.36 0.31 PPO 0.26 0.23... preferred 58% times over PPO samples... GPT-4 (S)-H agree 70, GPT-4 (C)-H agree 67, H-H agree 65."},
+      {"line": 535, "claim": "PaLM 2 preference: RLHF over SFT 0.990; BR (β=1) over SFT 0.943; Nash-MD MD1 (β=0.125) over RLHF 0.598", "source": "2312.00886", "verdict": "supported", "passage": "Table 1 (column vs row): SFT row: RLHF 0.990 ... BR 0.943; RLHF row: MD1 0.598. MD1-MD6 (Nash-MD-PG with β ∈ {0.125,...}), BR (Best Response against SFT, equivalent to Nash-MD-PG with β = 1)."},
+      {"line": 626, "claim": "DeepSeekMath-Base 7B GSM8K 64.2% / MATH 36.2% vs Minerva 540B 58.8% / 33.6%; GRPO: Instruct 82.9% / 46.8% -> RL 88.2% / 51.7%; self-consistency over 64 samples MATH 60.9%", "source": "2402.03300", "verdict": "supported", "passage": "DeepSeekMath-Base 7B 64.2% 36.2%... Minerva 540B 58.8% 33.6%... (GSM8K: 82.9% → 88.2%, MATH: 46.8% → 51.7%)... Self-consistency over 64 samples from DeepSeekMath 7B achieves 60.9% on MATH."},
+      {"line": 637, "claim": "Mroueh's analysis is limited to binary rewards and 'the abstract presents no experimental validation' (stated as the paper's limitation)", "source": "2503.06639", "verdict": "wrong", "passage": "Appendix A Experimental Validation. Setup: We use the GSM8K dataset ... and Qwen/Qwen2.5-0.5B-Instruct ... as the reference policy. We use GRPO impl[ementation]... (the paper does validate experimentally; the gap is the writer's abstract-only input)."},
+      {"line": 695, "claim": "KTO table row: GSM8K DPO 40.0 vs KTO 53.5 (Zephyr-β-SFT, UltraFeedback, 1 epoch); OpenAssistant GPT-4 win rate vs SFT target KTO all-y 0.652, one-y 0.631, DPO 0.600, Mistral-7B-Instruct 0.621; one-y setting cuts data 72%", "source": "2402.01306", "verdict": "supported", "passage": "Table 2: Results from aligning Zephyr-β-SFT on UltraFeedback for exactly 1 epoch... DPO 58.2 40.0... KTO 58.6 53.5... Mistral-7B + DPO 0.600 ... KTO (all y per x) 0.652 ... KTO (one y per x) 0.631 ... Mistral-7B-Instruct 0.621... decreasing the amount of training data by 72%."},
+      {"line": 697, "claim": "ORPO table row: AlpacaEval 2.0 11.33% / 12.20% (Mistral-ORPO-α/β 7B) vs Zephyr β 10.99%; MT-Bench 7.23 / 7.32", "source": "2403.07691", "verdict": "supported", "passage": "Zephyr (β) 7B 90.60% 10.99%; Mistral-ORPO-α 7B 87.92% 11.33%; Mistral-ORPO-β 7B 91.41% 12.20%... scored 7.23 and 7.32 in MT-Bench (abstract-side text says 7.24, body and conclusion say 7.23)."},
+      {"line": 699, "claim": "SimPO table row: Gemma-2-9B-it-SimPO AlpacaEval 2 LC 72.4% vs Gemma-2-9B-it 51.1%; Arena-Hard 59.1% vs 40.8%", "source": "2405.14734", "verdict": "supported", "passage": "Gemma-2-9B-it 51.1 40.8 87.4 72.7 ... Gemma-2-9B-SimPO (lr=8e-7)* 72.4 59.1 (AlpacaEval 2 LC, Arena-Hard)."}
+    ]
+  },
+  "checklist": {
+    "repeated": 0,
+    "avoided": 6,
+    "na": 0,
+    "repeated_ids": [],
+    "items": [
+      {"id": "grpo-card-unverified-figure", "result": "avoided", "evidence": "The 2503.06639 section (L630-638) and its table cell (L54) contain no numbers or equations; only prose restating the abstract's claims (but see F: it adds a false 'no experimental validation' limitation)."},
+      {"id": "copy-explains-preference", "result": "avoided", "evidence": "L116: '사실상 추출형 복사기였고, 라벨러가 복사 여부를 간단한 휴리스틱으로 확인하는 점을 악용했을 수 있습니다.' The 97% preference is reported separately and not said to be explained by the heuristic."},
+      {"id": "daa-no-quantification", "result": "avoided", "evidence": "No claim that 2406.02900 lacks quantitative figures (L387-389, L644). The same defect pattern does recur for other papers: RLAIF (L272, L657), Dong et al. (L586, L593), Mroueh (L637)."},
+      {"id": "grpo-row-reward", "result": "avoided", "evidence": "No GRPO (2402.03300) reward cell claims answer-based reward; the binary-reward cell L659 is labelled 'GRPO 이진 보상 분석 ([Mroueh, 2025])' and L614 describes rewards as '보상 모델이 매긴 점수 묶음' normalised within the group."},
+      {"id": "heading-da-form-offline", "result": "avoided", "evidence": "L385 '### 보상 모델이 없어도 남는 과최적화' (noun phrase)."},
+      {"id": "heading-da-form-judge", "result": "avoided", "evidence": "No '남는 차이는 판정자다'-style heading; all 41 headings (L11-L754) are noun phrases or a question (L663)."}
+    ]
+  },
+  "extras": {
+    "plan_papers_not_cited": [],
+    "plan_papers_cited": "22/22 (all in body and References)",
+    "thin_sections": [
+      "L211 '### 공개 모델로 넘어간 파이프라인': one substantive paragraph on Llama 2 (L213) before the lineage table; no method content.",
+      "L175 '### 유용성과 무해성을 함께, 매주 갱신하며': two short paragraphs."
+    ],
+    "venue_issues": [
+      "'arXiv.org' (index name, not a venue string) for 7 references: L732, L735, L737, L740, L744, L745, L752.",
+      "L749 'Trans. Mach. Learn. Res.' abbreviated; should be 'Transactions on Machine Learning Research (TMLR)'.",
+      "L744 KTO listed as 'arXiv.org' although it appeared at ICML 2024 (from general knowledge, not checked against the plan source)."
+    ],
+    "comparison_table_cell_issues": [
+      "L222-225: six '세부 미기술' cells (Llama 2 row all three, InstructGPT online/offline, Bai RM loss) — effectively empty.",
+      "L592: '논문 요지에 명시되지 않음' — input-meta cell.",
+      "L657: 'RLHF 대비 차이 크기 불명' — false limitation (paper reports 71% vs 73%, 88% vs 76%).",
+      "L686-699: '주요 결과' cells are multi-clause prose with nested parentheses; units mixed ('5k', '1400개', '70억' next to '7B')."
+    ],
+    "false_input_limitations": ["L272/L657 (2309.00267)", "L586/L593 (2405.07863)", "L637 (2503.06639)"]
+  },
+  "top_issues": [
+    "Abstract-only gaps written as paper limitations: RLAIF 'difference size unknown' (L272, L657) although the paper reports 71% vs 73% and harmless 88% vs 76%; Mroueh 'no experimental validation' (L637) although Appendix A validates on GSM8K with Qwen2.5-0.5B; Dong 'no numbers in the abstract' (L586, L593).",
+    "Method detail wrong: CAI labels use one randomly sampled principle each; the post says judgments under each principle are ensembled into one label (L253).",
+    "Survey shape: numbers are spread through body paragraphs and repeated in a prose-heavy final table covering 14/22 papers; key findings (Mroueh, DAA degradation, 320 GPU-days) are restated 3-6 times; lineage table has six '세부 미기술' cells; math blocks at L162-163 (& without aligned) and L195 (single $) will not render."
+  ]
+}
