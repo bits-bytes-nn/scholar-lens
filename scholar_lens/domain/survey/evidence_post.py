@@ -332,6 +332,10 @@ _FORMULAS = ((re.compile(r"보면 됩니다"), 1), (re.compile(r"다는 점"), 2
 _OWN_VIEW = re.compile(
     r"이 글의 (?:관점|판단|해석|견해)|이 글은 .{0,12}(?:본다|봅니다|판단합니다)"
 )
+# A sentence pointing back at what the post said before.
+_BACK_REFERENCE = re.compile(
+    r"앞서 (?:본|봤던|언급한|소개한|다룬|설명한|살펴본|정리한|나온)|앞에서 (?:본|다룬|설명한)"
+)
 # A number with a size unit names a model ("Llama 2 7B"), not a result.
 _MODEL_SIZE = re.compile(r"^\d+(?:\.\d+)?[BMK]$", re.IGNORECASE)
 
@@ -390,6 +394,11 @@ def draft_problems(
         if unknown := [i for i in ids if ledger.get(i) is None]:
             problems.append(f"unknown evidence {unknown} in: {quoted}")
             continue
+        if _BACK_REFERENCE.search(sentence) and not set(ids) & set(earlier):
+            problems.append(
+                "points back to something earlier without citing the earlier "
+                f"evidence; cite it or drop the back-reference: {quoted}"
+            )
         if spent := [i for i in ids if i in set(exhausted)]:
             problems.append(
                 f"evidence {spent} was already referred back to once; do not "
