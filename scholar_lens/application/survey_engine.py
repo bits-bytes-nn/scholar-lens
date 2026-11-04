@@ -38,6 +38,7 @@ from ..domain.survey.evidence_post import (
     drop_sentences,
     outline_problems,
     prose_sentences,
+    repair_outline,
     section_heading,
     section_numbers,
     structure_lost,
@@ -380,6 +381,9 @@ class EvidenceSurveyEngine:
                     prompt=prompt,
                     schema=EvidenceOutline,
                 )
+                outline, repaired = repair_outline(outline, plan, ledger)
+                if repaired:
+                    logger.info("Outline repaired in code: %s", "; ".join(repaired))
                 problems = outline_problems(
                     outline,
                     plan,

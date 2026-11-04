@@ -491,3 +491,69 @@ def structure_lost(before: str, after: str) -> str:
     ):
         return "more than a quarter of the prose was cut"
     return ""
+
+
+def repair_outline(
+    outline: EvidenceOutline, plan: SurveyPlan, ledger: EvidenceLedger
+) -> tuple[EvidenceOutline, list[str]]:
+    """Fix what code can fix in an outline, deterministically: evidence given
+    twice keeps its first section; evidence a lineage section does not cover
+    goes to its paper's lineage section; a core paper's unassigned figures
+    and equations go there too; missing table rows and cells are filled from
+    the paper's first number and limitation evidence. Returns the outline
+    and what was changed; what is left for the model is structure."""
+    notes: list[str] = []
+    papers = {p.id: p for p in plan.papers}
+    home = {
+        pid: i
+        for i, s in enumerate(outline.sections)
+        if s.kind == "lineage"
+        for pid in s.papers
+    }
+    sections = [s.model_copy(deep=True) for s in outline.sections]
+    seen: set[str] = set()
+    for i, s in enumerate(sections):
+        kept = []
+        for eid in s.evidence:
+            item = ledger.get(eid)
+            if item is None or eid in seen:
+                continue
+            if s.kind == "lineage" and item.paper_id not in s.papers:
+                target = home.get(item.paper_id)
+                if target is not None and target != i:
+                    sections[target].evidence.append(eid)
+                    notes.append(f"moved {eid} to its paper's lineage section")
+                    seen.add(eid)
+                continue
+            kept.append(eid)
+            seen.add(eid)
+        s.evidence = kept
+    for item in ledger:
+        paper = papers.get(item.paper_id)
+        if (
+            paper is not None
+            and paper.role == "core"
+            and item.kind in ("figure", "equation")
+            and item.id not in seen
+            and (target := home.get(item.paper_id)) is not None
+        ):
+            sections[target].evidence.append(item.id)
+            seen.add(item.id)
+            notes.append(f"gave {item.id} ({item.kind}) to its paper's section")
+    rows = {
+        r.paper: r.model_copy(deep=True) for r in outline.table if r.paper in papers
+    }
+    for pid, paper in papers.items():
+        numbers = [e.id for e in ledger.of_paper(pid) if e.kind == "number"]
+        limits = [e.id for e in ledger.of_paper(pid) if e.kind == "limitation"]
+        if pid not in rows and (paper.role == "core" or numbers):
+            rows[pid] = TableRow(paper=pid)
+            notes.append(f"added {pid} to the table")
+        if pid in rows:
+            row = rows[pid]
+            row.results = [e for e in row.results if e in numbers][:2] or numbers[:2]
+            if row.limitation not in limits:
+                row.limitation = limits[0] if limits else None
+    order = [p.id for p in plan.papers]
+    table = sorted(rows.values(), key=lambda r: order.index(r.paper))
+    return outline.model_copy(update={"sections": sections, "table": table}), notes

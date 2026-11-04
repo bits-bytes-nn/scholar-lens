@@ -498,3 +498,35 @@ def test_table_rows_must_use_available_results_and_limitations() -> None:
     problems = outline_problems(bare, _plan(), _ledger(), title_max_length=70)
     assert any("give its results" in p for p in problems)
     assert any("give its limitation" in p for p in problems)
+
+
+def test_mechanical_outline_problems_are_repaired_in_code() -> None:
+    from scholar_lens.domain.survey.evidence_post import repair_outline
+
+    broken = _outline(
+        table=[],
+        sections=[
+            {
+                "kind": "introduction",
+                "title": "도입입니다",
+                "thesis": "t",
+                "evidence": ["E1", "E2"],
+            },
+            {
+                "kind": "lineage",
+                "title": "DPO입니다",
+                "thesis": "t",
+                "lineage": "offline",
+                "papers": ["2305.18290"],
+                "evidence": ["E2"],
+            },
+            {"kind": "comparison", "title": "비교입니다", "thesis": "t"},
+            {"kind": "insights", "title": "통찰입니다", "thesis": "t"},
+        ],
+    )
+    fixed, notes = repair_outline(broken, _plan(), _ledger())
+    assert not outline_problems(fixed, _plan(), _ledger(), title_max_length=70)
+    lineage = fixed.sections[1]
+    assert "E4" in lineage.evidence  # the unassigned figure joined its paper
+    assert fixed.table[0].results == ["E2"] and fixed.table[0].limitation == "E3"
+    assert notes
