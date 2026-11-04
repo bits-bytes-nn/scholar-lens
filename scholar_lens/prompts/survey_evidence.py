@@ -55,10 +55,13 @@ Record evidence the post needs about this paper, in the survey's language for
 - the defining equation(s), copied exactly as LaTeX from the text (equation);
 - its main results with numbers (number): `scope` names the model or
   variant, benchmark, setting and metric, in the survey's language; `cell` is a short noun phrase for a
-  table cell ("MMLU 85.2%"); a relative gain says relative;
+  table cell that names its model and benchmark ("Vicuna-7B ASR 88%",
+  "AlpacaEval 2 LC 승률 44.7%"), in the survey's language; a relative gain
+  says relative;
 - limitations the paper states or its own results show (limitation; `cell` a
-  noun phrase); never a limitation about what the paper's text does not
-  contain;
+  noun phrase): a weakness of this paper's own method or evaluation, never a
+  finding about other methods and never about what the text does not
+  contain; one for a supporting paper too when it has one;
 - how it relates to earlier work it names (relation);
 - every figure that explains the method, an architecture or a main result
   (figure, by F-id, with a claim saying what the caption shows): up to four
@@ -83,8 +86,8 @@ Sections, in this order:
 - lineage (exactly one per lineage, its papers in date order): each core
   paper's problem, idea and method built up with the evidence of that paper,
   what it inherits, changes and leaves open; supporting papers folded in.
-- cross_cutting (only when lineages interact): a shared idea, one lineage
-  answering another's limitation.
+- cross_cutting (at most one, only when lineages interact): a shared idea,
+  one lineage answering another's limitation, without retelling the papers.
 - comparison (exactly one): interprets the comparison table code builds from
   `table`; its prose interprets trade-offs and does not restate the numbers.
 - insights (exactly one): trends, trade-offs and open problems across the
@@ -163,7 +166,8 @@ EVIDENCE_CHECK_SYSTEM = """
 You check recorded evidence against the paper passage it quotes. For each
 item, the claim, cell and scope must say what the quote says: the same
 number for the same model or variant, benchmark, setting and metric, and a
-limitation the paper states as its own. Mark an item wrong when any of them
+limitation the paper states as its own (a weakness of its own method, not a
+result about other methods). Mark an item wrong when any of them
 misstates the quote (for example a win rate the quote gives for AlpacaEval
 labelled as Arena-Hard); otherwise consistent.
 """ + SECURITY

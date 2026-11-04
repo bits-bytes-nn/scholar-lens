@@ -225,10 +225,7 @@ class TestOutline:
 
     def test_comparison_table_cells(self) -> None:
         table = comparison_table(_plan(), _outline(), _ledger(), korean=True)
-        assert (
-            "| DPO | 오프라인 | 승률 61% (TL;DR, GPT-4 judge) | 작은 beta에서 불안정 |"
-            in table
-        )
+        assert "| DPO | 오프라인 | 승률 61% | 작은 beta에서 불안정 |" in table
         empty = _outline(table=[{"paper": "2305.18290"}])
         assert "정량 수치 없음" in comparison_table(
             _plan(), empty, _ledger(), korean=True
@@ -643,3 +640,12 @@ def test_claims_about_what_a_paper_leaves_out_are_problems() -> None:
         free_numbers="",
     )
     assert any("does not state or report" in p for p in issues)
+
+
+def test_the_table_owns_its_results() -> None:
+    from scholar_lens.domain.survey.evidence_post import repair_outline
+
+    fixed, notes = repair_outline(_outline(), _plan(), _ledger())
+    assert "E2" not in fixed.sections[1].evidence  # shown in the table instead
+    assert fixed.table[0].results == ["E2"]
+    assert any("left ['E2'] to the table" in n for n in notes)

@@ -60,7 +60,7 @@ logger = logging.getLogger(__name__)
 
 # Bump when the reader's prompt or the evidence schema changes meaning; the
 # prompt's wording alone does not invalidate cached evidence.
-READER_VERSION = 4
+READER_VERSION = 5
 _SAFE_KEY = re.compile(r"[^A-Za-z0-9._-]+")
 
 
@@ -327,14 +327,13 @@ class EvidenceSurveyEngine:
             nonlocal refusals
             kinds = {e.kind for e in ledger}
             missing = []
-            if core and document.kind != "abstract":
-                missing = [
-                    k for k in ("method", "number", "limitation") if k not in kinds
-                ]
+            if document.kind != "abstract":
+                needed = ("method", "number", "limitation") if core else ("limitation",)
+                missing = [k for k in needed if k not in kinds]
             if missing and refusals < 2:
                 refusals += 1
                 return (
-                    "Not yet: a core paper needs at least one piece of evidence of "
+                    "Not yet: this paper needs at least one piece of evidence of "
                     f"each kind {missing} (results and limitations are usually in "
                     "the experiments, discussion or conclusion sections). Record "
                     "them, or call finish again if the paper has none."

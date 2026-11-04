@@ -128,6 +128,8 @@ def outline_problems(
             problems.append(f"the outline needs exactly {count} {kind} section")
     if kinds.count("conclusion") > 1:
         problems.append("at most one conclusion section")
+    if kinds.count("cross_cutting") > 1:
+        problems.append("at most one cross-cutting section")
     covered = [s.lineage for s in outline.sections if s.kind == "lineage"]
     for lin in sorted(lineages):
         if covered.count(lin) != 1:
@@ -269,8 +271,16 @@ def comparison_table(
 
 
 def _result_cell(item: Evidence) -> str:
-    cell = item.cell or item.claim
-    return f"{cell} ({item.scope})" if item.scope and item.scope not in cell else cell
+    """The evidence's noun-phrase cell as written (it names its model and
+    benchmark), else its claim with the scope."""
+    if item.cell:
+        return _korean_units(item.cell)
+    text = f"{item.claim} ({item.scope})" if item.scope else item.claim
+    return _korean_units(text)
+
+
+def _korean_units(text: str) -> str:
+    return re.sub(r"\s+vs\.?\s+", " 대비 ", text)
 
 
 def _table(head: Sequence[str], rows: Sequence[Sequence[str]]) -> str:
@@ -657,6 +667,19 @@ def repair_outline(
                 row.limitation = limits[0] if limits else None
     order = [p.id for p in plan.papers]
     table = sorted(rows.values(), key=lambda r: order.index(r.paper))
+    # The table owns its results: a number shown there is not restated in
+    # a section (facts said once; the survey's numbers in one table).
+    in_table = {eid for r in table for eid in r.results}
+    for s in sections:
+        moved = [eid for eid in s.evidence if eid in in_table]
+        if moved:
+            s.evidence = [eid for eid in s.evidence if eid not in in_table]
+            notes.append(f"left {moved} to the table")
+        # Synthesis sections interpret; they are not retellings.
+        if s.kind in ("comparison", "insights", "conclusion") and s.depth == "deep":
+            s.depth = "standard"
+        if s.kind == "conclusion":
+            s.depth = "brief"
     return outline.model_copy(update={"sections": sections, "table": table}), notes
 
 
