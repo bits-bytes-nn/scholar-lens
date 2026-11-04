@@ -60,7 +60,7 @@ from .usage import usage_stage
 logger = logging.getLogger(__name__)
 
 # Bump when the reader's prompt or the evidence schema changes meaning.
-GUIDE_READER_VERSION = 2
+GUIDE_READER_VERSION = 3
 _SAFE_KEY = re.compile(r"[^A-Za-z0-9._-]+")
 # Small counts and ordinals a guide states without evidence.
 _FREE_NUMBERS = " ".join(str(n) for n in range(11))
@@ -293,6 +293,9 @@ class EvidenceGuideEngine(EvidenceWriter):
                         total_tokens=self.settings.read_tokens_per_source,
                     ),
                     rule=rule,
+                    # A docs page's diagrams are its most useful visuals and
+                    # the reader tends to skip them: ask for one.
+                    required=("figure",) if primary and document.figures else (),
                 )
                 if self.store is not None and items:
                     self.store.put(

@@ -1,0 +1,148 @@
+{
+  "kind": "guide",
+  "status": "succeeded",
+  "input": "https://docs.ray.io/en/latest/serve/getting_started.html",
+  "title": "Ray Serve in Practice: Deployments, Composition, and KubeRay Scaling",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/guide-ray-serve-in-practice-deployments-composition-and-kuberay-scaling/2026-11-04-ray-serve-in-practice-deployments-composition-and-kuberay-scaling.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-11-04-ray-serve-in-practice-deployments-composition-and-kuberay-scaling.md",
+  "pr_url": null,
+  "warnings": [
+    "Section '컨트롤러·프록시·레플리카로 이어지는 요청 경로와 장애 복구 범위': check 1 sentence(s) the evidence may not support: 그래서 컨트롤러가 죽어도 트래픽은 계속 흐르고, 장애 때 사라지는 것은 큐와 연결 같은 일시적 상태뿐입니다. (unsupported: E98 says autoscaling metrics are also lost when the controller fails, so the claim that only transient state (queues, connections) is lost goes beyond the evidence.)",
+    "Section 'serve run으로 시작하는 로컬 개발 루프와 프레임워크별 모델 배포' still has: the section must start with its '## ' heading (serve run으로 시작하는 로컬 개발 루프와 프레임워크별 모델 배포) | points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 처리량을 높이려면 앞서 언급한 동적 요청 배칭을 붙이는 편이 맞습니다.",
+    "Section '@serve.ingress로 감싸는 FastAPI 통합과 스트리밍·취소 처리': check 1 sentence(s) the evidence may not support: `HTTPOptions.middlewares` 필드는 deprecated 상태이고, 비어 있지 않은 리스트를 넘기면 오류가 납니다 [[E46, E170]]. (unsupported: Current (2.60) docs only say the field is deprecated; the 'non-empty list raises an error' behaviour comes only from the Ray 2.59.0 config page (older version).)",
+    "Section '진행 중 요청 기반 오토스케일링과 큐 한도 백프레셔' still has: points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 상태 코드는 앞서 본 두 허용값 가운데 클라이언트의 재시도 방식에 맞는 쪽을 고릅니다.",
+    "Section '합성·다중 모델 서빙에 강하고 ML 플랫폼 기능은 없는 Ray Serve의 선택 기준과 한계' still has: ['2.5'] already stated in '상태·로그·지연 메트릭 세 갈래로 들여다보는 실행 중 애플리케이션': refer back without repeating: Ray 2.5.0에서는 클러스터가 종료되면 대시보드 UI와 데이터에 접근할 수 없었고, 프로덕션에서는 로그와 지표를 외부 관측 플랫폼으로 내보내는 방식이 권장됩니다 ."
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 3113.6,
+  "input_tokens": 3007138,
+  "output_tokens": 434305,
+  "estimated_cost_usd": 15.8342,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 220,
+      "failed_calls": 0,
+      "input_tokens": 18764,
+      "output_tokens": 434305,
+      "cache_read_tokens": 1299982,
+      "cache_write_tokens": 1688392,
+      "cost_usd": 15.834147
+    },
+    "by_stage": {
+      "relevance": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 2617,
+        "output_tokens": 186,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.000355
+      },
+      "research_plan": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 2786,
+        "output_tokens": 631,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.000594
+      },
+      "read": {
+        "calls": 110,
+        "failed_calls": 0,
+        "input_tokens": 264,
+        "output_tokens": 109156,
+        "cache_read_tokens": 774981,
+        "cache_write_tokens": 207162,
+        "cost_usd": 1.764989
+      },
+      "outline": {
+        "calls": 2,
+        "failed_calls": 0,
+        "input_tokens": 6,
+        "output_tokens": 8892,
+        "cache_read_tokens": 25345,
+        "cache_write_tokens": 26605,
+        "cost_usd": 0.321027
+      },
+      "verify": {
+        "calls": 49,
+        "failed_calls": 0,
+        "input_tokens": 196,
+        "output_tokens": 102594,
+        "cache_read_tokens": 390204,
+        "cache_write_tokens": 850497,
+        "cost_usd": 6.461218
+      },
+      "draft": {
+        "calls": 14,
+        "failed_calls": 0,
+        "input_tokens": 56,
+        "output_tokens": 56485,
+        "cache_read_tokens": 47264,
+        "cache_write_tokens": 228954,
+        "cost_usd": 2.293594
+      },
+      "review": {
+        "calls": 14,
+        "failed_calls": 0,
+        "input_tokens": 56,
+        "output_tokens": 33091,
+        "cache_read_tokens": 24332,
+        "cache_write_tokens": 48540,
+        "cost_usd": 0.914474
+      },
+      "fix": {
+        "calls": 28,
+        "failed_calls": 0,
+        "input_tokens": 112,
+        "output_tokens": 121345,
+        "cache_read_tokens": 37856,
+        "cache_write_tokens": 326634,
+        "cost_usd": 4.075666
+      },
+      "finalize": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 12671,
+        "output_tokens": 1925,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.00223
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-haiku-5-5": {
+        "calls": 3,
+        "failed_calls": 0,
+        "input_tokens": 18074,
+        "output_tokens": 2742,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.003179
+      },
+      "global.anthropic.claude-sonnet-5-5": {
+        "calls": 110,
+        "failed_calls": 0,
+        "input_tokens": 264,
+        "output_tokens": 109156,
+        "cache_read_tokens": 774981,
+        "cache_write_tokens": 207162,
+        "cost_usd": 1.764989
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 107,
+        "failed_calls": 0,
+        "input_tokens": 426,
+        "output_tokens": 322407,
+        "cache_read_tokens": 525001,
+        "cache_write_tokens": 1481230,
+        "cost_usd": 14.065979
+      }
+    }
+  }
+}
