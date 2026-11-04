@@ -702,3 +702,32 @@ def balance_math(markdown: str) -> tuple[str, bool]:
         return markdown, False
     last = marks[-1]
     return markdown[:last] + markdown[last + 2 :], True
+
+
+# Where a writer starts describing its own edits instead of the section.
+_REVISION_NOTE = re.compile(
+    r"^(?:#+\s*|\*\*|-{3,}\s*$)?\s*(?:수정 ?(?:내역|사항|요약)|변경 ?(?:내역|사항)|"
+    r"고친 (?:부분|내용)|revision notes?|changes made|summary of changes)",
+    re.IGNORECASE | re.M,
+)
+_REVISION_PHRASE = re.compile(
+    r"(?:제시하신|요청하신|지적하신) (?:대로|문제)|\bE\d+ (?:반복 )?(?:제거|삭제|수정)"
+)
+
+
+def strip_revision_notes(markdown: str) -> str:
+    """The section without a writer's notes about its own edits: everything
+    from a "수정 내역"-style heading or line on, and any line that addresses
+    the requester or names evidence ids it removed."""
+    if m := _REVISION_NOTE.search(markdown):
+        markdown = markdown[: m.start()]
+    lines = [line for line in markdown.split("\n") if not _REVISION_PHRASE.search(line)]
+    out = "\n".join(lines).rstrip()
+    # A rule left in front of the cut notes.
+    return re.sub(r"(?:\n\s*(?:-{3,}|\*{3,}|_{3,})\s*)+$", "", out) + "\n"
+
+
+def quote_for_prompt(quote: str) -> str:
+    """A paper's words as inert data in a prompt: tag-like markup defanged,
+    so an injection example quoted from a security paper reads as text."""
+    return re.sub(r"<(/?)([A-Za-z_][\w-]*)", r"‹\1\2", " ".join(quote.split()))

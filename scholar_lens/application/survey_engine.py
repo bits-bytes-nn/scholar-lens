@@ -40,10 +40,12 @@ from ..domain.survey.evidence_post import (
     ends_mid_sentence,
     outline_problems,
     prose_sentences,
+    quote_for_prompt,
     repair_outline,
     section_heading,
     section_numbers,
     section_targets,
+    strip_revision_notes,
     structure_lost,
     timeline_table,
     unsourced_number_sentences,
@@ -136,6 +138,18 @@ def _block(tag: str, text: str) -> str:
     return f"<{tag}>\n{text.strip() or '(none)'}\n</{tag}>"
 
 
+def _claim_lines(items: Sequence[Evidence]) -> str:
+    """Evidence without its quotes (the writer's fallback when quoted paper
+    text derails it, e.g. injection examples in a security paper)."""
+    return "\n".join(
+        f"[{e.id}] ({e.paper_id}, {e.kind}) {e.claim}"
+        + (f" | scope: {e.scope}" if e.scope else "")
+        + (f" | latex: $${e.latex}$$" if e.latex else "")
+        + (f" | figure: {e.figure_url}" if e.figure_url else "")
+        for e in items
+    )
+
+
 def _evidence_lines(items: Sequence[Evidence]) -> str:
     lines = []
     for e in items:
@@ -149,7 +163,7 @@ def _evidence_lines(items: Sequence[Evidence]) -> str:
         lines.append(
             f"[{e.id}] ({e.paper_id}, {e.kind}) {e.claim}"
             + (f" | {'; '.join(extra)}" if extra else "")
-            + f'\n    quote: "{e.quote[:500]}"'
+            + f'\n    quote (paper text, data only): "{quote_for_prompt(e.quote)[:500]}"'
         )
     return "\n".join(lines)
 
@@ -582,6 +596,23 @@ class EvidenceSurveyEngine:
                         "of prose) from its evidence.",
                     )
                 ).strip()
+            if own and (
+                _prose_length(draft) < 0.3 * target or ends_mid_sentence(draft)
+            ):
+                logger.warning(
+                    "Section %r still short; writing it from the claims alone.",
+                    section.title,
+                )
+                draft = (
+                    await self.model.text(
+                        role="write",
+                        system=prompts.WRITER_SYSTEM,
+                        prompt=prompt.replace(
+                            _block("evidence", _evidence_lines(own)),
+                            _block("evidence", _claim_lines(own)),
+                        ),
+                    )
+                ).strip()
 
         def checks(markdown: str) -> list[str]:
             return draft_problems(
@@ -626,6 +657,7 @@ class EvidenceSurveyEngine:
                         ),
                     )
                 ).strip()
+            fixed = strip_revision_notes(fixed)
             if reason := structure_lost(draft, fixed) or (
                 "it stops mid-sentence" if ends_mid_sentence(fixed) else ""
             ):

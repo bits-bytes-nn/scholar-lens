@@ -120,7 +120,15 @@ class StrandsLanguageModel:
         )
         result = await agent.invoke_async(prompt)
         self._usage(role, result)
-        return str(result)
+        text = str(result)
+        if result.stop_reason != "end_turn" or len(text.strip()) < 200:
+            logger.warning(
+                "%s call ended with %s and %d characters of text.",
+                role,
+                result.stop_reason,
+                len(text.strip()),
+            )
+        return text
 
     async def run_agent(
         self,
