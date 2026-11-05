@@ -85,6 +85,11 @@ How a good guide on this blog is written:
 - A limitation or missing feature only a third-party page states is that
   page's report (name it and its date or version), never the tool's current
   behaviour.
+- Credit a source only with what its evidence says, and name each source
+  once by one name: one page is one voice, never two sources that agree.
+  Copy a source's table cells as they are (no "—" where it has content).
+- Never state what the tool does in a case the evidence does not cover
+  (that it rejects, fails or warns): say what the evidence says.
 - Vary how a figure, table or code block is introduced; never the same
   formula twice ("다음과 같습니다"), and avoid noun frames such as "~다는 점".
 """
@@ -237,6 +242,14 @@ its authority in brackets: a mechanism or default only a [reference],
 version's behaviour), stated as what the tool does today, is unsupported
 unless an [official] item confirms it; stated as that paper's or version's
 design, it is supported.
+A sentence that credits a source (by its name, author or site: "Suhas
+Bhairav의 글은 …", "agents-lib에 따르면") is supported only by what that
+source's cited evidence says; anything it adds, or credits to a source whose
+evidence does not say it, is wrong. A claim about what the tool does in a
+case the evidence does not cover (an error, a rejection, a refusal, a default
+somewhere else: a rule documented for the decorator stated for the config
+file) is unsupported. A table row copied from a source keeps the source's
+cells: "—" or a renamed row where the source has content is wrong.
 Judge only specific factual claims about the tool (what it does, how it
 works, its commands, flags, defaults and measured results). A claim the
 evidence makes only for one SDK language, version, provider or condition,
