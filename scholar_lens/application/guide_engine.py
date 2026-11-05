@@ -48,6 +48,7 @@ from ..domain.guide.evidence_guide import (
     guide_outline_problems,
     guide_section_targets,
     misattributed,
+    name_sources,
     repair_guide_outline,
     source_aliases,
     strip_markers,
@@ -559,7 +560,9 @@ class EvidenceGuideEngine(EvidenceWriter):
         cited = [by_id[s] for s in cited_sources(body, ledger) if s in by_id]
         return EvidenceGuide(
             title=outline.title,
-            body=strip_markers(body),
+            body=name_sources(
+                strip_markers(body), {d.paper_id: d.title for d in documents}
+            ),
             outline=outline,
             ledger=ledger,
             cited=cited,

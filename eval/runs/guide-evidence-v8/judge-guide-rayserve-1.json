@@ -1,0 +1,93 @@
+{
+  "item": "guide-rayserve",
+  "post": "/tmp/eval-guide/guide-rayserve-v8.md",
+  "judge_run": 1,
+  "scores": {"A": 8, "B": 8, "C": 8, "D": 8.5, "E": 8.5, "F": 6.5, "T1": 9, "T2": 8.5, "T3": 9},
+  "score_notes": {
+    "A": "No body H1, two-level categories, use_math true with $$ at L235-239 and L511. Deductions: the description is 114 characters (L5; the blog needs 120-160). The install command appears twice (L74 and L571). The Sources list leaks HTML entities ('&#124;' at L1239, '&#91;Serve&#93;' at L1240). 'W2 페이지' (L1200, L1216) is an internal source id shown to readers. The Anyscale blog cited at L243/L251 is missing from Sources.",
+    "B": "The 입니다 register holds throughout, with no colon lists after 다. Deductions: L63 '기본 단위는 셋입니다' then defines only deployment and application; rewrite as '기본 단위는 디플로이먼트, 레플리카, 애플리케이션 셋입니다'. L122 says it is an example twice in one paragraph ('설명을 위해 지어낸 예시입니다 ... (이해를 돕기 위한 예시입니다)') and uses the formulaic '정리하면 다음과 같습니다'. L740 '표로 정리하면 이렇습니다' is formulaic. L1154 is meta commentary about the docs ('설명문에는 ... 나오지만, 예제 코드가 실제로 쓰는 키는'). L21 and L13 are overloaded single sentences.",
+    "C": "Mostly one arc around text_ml:app. Deductions: L214-217 defines a second 'class Translator: ...' with '본문은 다음 절에서 채웁니다', but no later section merges the router config into the running Translator. L509 tells readers to change a serve_config.yaml that is only produced later (L933-961). The 'built' YAML at L941-961 shows Translator num_replicas: 1, while the post's own decorator (L85) has num_replicas=2. serve build on the post's code emits num_replicas: 2 plus ray_actor_options, and names the app app1.",
+    "D": "Help lands where it is hard: the bind/runtime/remote timeline table (L298-302), the backoff table (L226-233), the prefix-tree worked example (L247), the response-type table (L459-463), the histogram bucket example on the running app (L1180) and the proxy state diagram (L1103-1107). Some padding: the L842 examples catalogue and the L33 feature list.",
+    "E": "Tables and code sit where they are discussed, and the cells hold noun phrases. The ASCII stack (L39-55) and the request-path diagram (L169-184) help. The Ray-paper figure (L138) has Korean alt text. Small redundancy: the backoff table and the formula (L226-239) carry the same three defaults. The official Serve architecture figure is not used.",
+    "F": "3 of 15 sampled claims are unsupported. (1) L144 says the policy evaluation time is 5ms or 10ms 'depending on input size'. The paper uses two different models: a residual net (10ms) on 4KB states and a small FC net (5ms) on 100KB states. (2) L1121 credits the Serve config-file doc with a status list (NOT_STARTED…DELETING; HEALTHY/UNHEALTHY/UPDATING). The fetched config page (latest and releases-2.59.0) has no status list. DELETING appears only in the monitoring doc's metrics enum. (3) L1212 credits Suhas Bhairav with KServe judgements. The listed Suhas page never mentions KServe. Outside the sample: L509 says serve deploy rejects num_replicas: 1 next to a code-level autoscaling_config. That is wrong: on a private Ray 2.60.0 cluster, deploy_apps accepted it, the app ran (RUNNING, Translator HEALTHY) and autoscaling_config was kept. L550 calls RFC #63144 '제안 단계, 미구현', but the issue was closed as completed on 2026-09-23. L1192 credits Suhas with Train/Tune/Data integration claims that page does not make, and labels W2 '날짜 표기 없음' though the matching Suhas page says 'Published June 11, 2026'."
+  },
+  "principles": {
+    "claim_headings": {"status": "met", "evidence": "The H2s are claim noun phrases, e.g. L469 '진행 중 요청 수를 목표값에 맞추는 오토스케일러와 큐 한도 기반 백프레셔' and L1184 '동적 Python 파이프라인과 Ray 생태계에 맞춘 Ray Serve의 선택 경계'."},
+    "running_example": {"status": "met", "evidence": "The Summarizer→Translator text_ml:app runs from L27 through the router (L196), autoscaling (L493), FastAPI (L647), config (L933), KubeRay (L1054), observability (L1119, L1180) and the verdict (L1220)."},
+    "mechanism_design_code_example": {"status": "met", "evidence": "Routing: mechanism (L190-194), config code (L198-218), backoff table and formula (L224-239), prefix example (L247). Autoscaling: rule (L475), defaults table (L479-489), decorator (L495-507), numeric example (L511)."},
+    "facts_said_once": {"status": "partly met", "evidence": "The install command is at L74 and L571. The proxy_location options are at L159-165 and again at L1086. 'Serve does no model optimization' is at L17, L59 and L1196. The proxy is introduced at L15 and L155-165."},
+    "numbers_with_scope": {"status": "partly met", "evidence": "Scoped well: L251 '8xL4 머신 8대에서 RayTurbo' and L846 'Ray 2.59.0 기준'. Mis-scoped: L144 ties the 5/10ms evaluation time to input size instead of to two different models."},
+    "nothing_invented": {"status": "partly met", "evidence": "Writer examples are flagged (L122, L167). The L509 'serve deploy가 거절' is wrong at runtime, the L1212 Suhas/KServe attribution has no source, and the L1121 config-doc status list is not on that page."},
+    "writer_assessment_at_end": {"status": "met", "evidence": "L1220 '이 글의 판단은 다음과 같습니다': Serve by default for multi-stage Python pipelines, Triton for single-GPU-bound models, KServe for non-Ray K8s LLM-only teams."},
+    "length_fitted": {"status": "partly met", "evidence": "1,240 lines and about 62k characters. The RFC section (L548-560), the LLM observability notes (L917-925) and the examples catalogue (L842) add length without adding to the running example."},
+    "type_specific_shape": {"status": "met", "evidence": "Opens with TL;DR and the problem (L11-27). Architecture (L61-151) and the request path (L153) come before install/run (L562) and config (L927). Non-official sources are included (Ray paper, RFC, Suhas). It closes with when to choose and the failure modes (L1184-1220)."},
+    "korean_style": {"status": "mostly met", "evidence": "즉 2, 결국 2, 이러한 0 in about 62k characters. Formulaic introductions at L122 and L740, and the L1154 meta sentence."}
+  },
+  "claims": {
+    "checked": 15, "supported": 12, "unsupported": 3, "wrong": 0,
+    "sampling": "166 prose paragraphs (headings, code, tables, images and Sources excluded); paragraphs 1,4,7,...,166 taken; claims drawn from paragraphs 25, 34, 37, 40, 67, 73, 79, 97, 103, 115, 142, 148, 154, 163 (plus the table that follows paragraph 25).",
+    "examples": [
+      {"line": 144, "claim": "p3.8xlarge, batch 64, evaluation takes 5ms or 10ms depending on input size", "verdict": "unsupported", "source": "arXiv 1712.05889 Table 3 caption: 'We use a residual network and a small fully connected network, taking 10ms and 5ms to evaluate, respectively ... states of size 4KB and 100KB respectively in batches of 64'. The time depends on the model, not the input size."},
+      {"line": 146, "claim": "Clipper 4400±15 / 290±1.3, Ray 6200±21 / 6900±150 states/sec", "verdict": "supported", "source": "arXiv 1712.05889 Table 3, cell for cell"},
+      {"line": 192, "claim": "request_router_class takes a string or class; default PowerOfTwoChoicesRequestRouter", "verdict": "supported", "source": "ray.serve.config: 'This value can be a string or a class ... Default to Serve's PowerOfTwoChoicesRequestRouter.'"},
+      {"line": 220, "claim": "request_router_kwargs go to initialize_state, must be JSON-serializable or ValueError", "verdict": "supported", "source": "ray.serve.config field description + request_router_kwargs_json_serializable validator raising ValueError"},
+      {"line": 224, "claim": "backoff 0.025 s initial, x2, max 0.5 s", "verdict": "supported", "source": "RequestRouterConfig: 'Defaults to 0.025', 'Defaults to 2', 'Defaults to 0.5'"},
+      {"line": 491, "claim": "AutoscalingConfig max_replicas default 1; downscale delay (600) longer than upscale (30); relies on the Ray autoscaler for nodes", "verdict": "supported", "source": "ray.serve.config AutoscalingConfig: max_replicas default=1 'Ray Serve relies on the Ray Autoscaler...', downscale_delay_s 600.0, upscale_delay_s 30.0"},
+      {"line": 519, "claim": "external_scaler_enabled default False; when on, no autoscaling_config in any deployment of the app", "verdict": "supported", "source": "Serve Config Files: 'When enabled, you can't use built-in autoscaling (autoscaling_config) for any deployment in this application. Defaults to False.'"},
+      {"line": 560, "claim": "RFC: per-node aggregators in Option B converge to Option A's ServeProxy role, shm natural transport", "verdict": "supported", "source": "Issue #63144 §7: 'Per-node aggregators in Option B would converge to Option A's ServeProxy role, with shm as the natural in-node transport.'"},
+      {"line": 684, "claim": "object pattern needs cloudpickle, blocks FastAPIInstrumentor; factory pattern; get_deployment_handle(..., app_name='default')", "verdict": "supported", "source": "Set Up FastAPI and HTTP, 'FastAPI factory pattern' section and example"},
+      {"line": 734, "claim": "Uvicorn keep-alive 5 s by default, cluster-global, not updatable at runtime; request_timeout_s none by default, retries at another replica", "verdict": "supported", "source": "http-guide 'Set keep alive timeout'; config page 'By default, there is no request timeout.' Note: Ray 2.60.0 code sets DEFAULT_UVICORN_KEEP_ALIVE_TIMEOUT_S = 90, so the docs (and the post) may be stale."},
+      {"line": 852, "claim": "accelerator_type 'A10' normalised to 'A10G'; unsupported values fail validation", "verdict": "supported", "source": "LLMConfig API page lists the allowed values; ray/llm/_internal/serve/core/configs/llm_config.py:405 '# Ensure A10 is converted to A10G.'"},
+      {"line": 1093, "claim": "Draining proxy fails LB health checks, finishes ongoing requests, waits RAY_SERVE_PROXY_MIN_DRAINING_PERIOD_S (30.0); DRAINING/DRAINED meanings", "verdict": "supported", "source": "Serve Config Files env-var list 'Default is 30.0'; Monitoring 'DRAINING: The proxy is healthy but is closed to new requests...'"},
+      {"line": 1121, "claim": "config-file doc lists NOT_STARTED/DEPLOYING/RUNNING/DEPLOY_FAILED/DELETING and HEALTHY/UNHEALTHY/UPDATING; monitoring doc lists six deployment statuses", "verdict": "unsupported", "source": "Monitoring: 'A Serve deployment has six possible statuses' (UPDATING, HEALTHY, UNHEALTHY, DEPLOY_FAILED, UPSCALING, DOWNSCALING) supports the second half. The config-file page (latest and releases-2.59.0) has no status list. The monitoring doc lists four application statuses, and DELETING appears only in its metric enum."},
+      {"line": 1177, "claim": "default latency buckets 1…600000 ms; >600,000 ms goes to +Inf; RAY_SERVE_REQUEST_LATENCY_BUCKETS_MS; restart Serve actors", "verdict": "supported", "source": "Monitoring 'Histogram bucket configuration' (list verbatim, '+Inf bucket', 'require restarting Serve actors')"},
+      {"line": 1212, "claim": "Suhas Bhairav: Ray cluster ops burden for non-Ray orgs, LLM tooling weaker than KServe, KServe more common for new K8s LLM-only clusters", "verdict": "unsupported", "source": "The listed Suhas Bhairav page (Triton vs Ray Serve, Published June 11, 2026) never mentions KServe. Its content matches what the post calls 'W2 페이지' (hybrid Triton+Ray, drift failure modes, comparison table)."}
+    ],
+    "out_of_sample_findings": [
+      {"line": 509, "claim": "serve deploy rejects num_replicas: 1 in the config when the code has autoscaling_config", "verdict": "wrong", "source": "Runtime, Ray 2.60.0: deploy_apps with {Translator: num_replicas: 1} over text_ml_bp (autoscaling decorator) returned RUNNING/HEALTHY, and autoscaling_config min 1 / max 8 was kept"},
+      {"line": 550, "claim": "RFC #63144 is '제안 단계, 미구현'", "verdict": "stale", "source": "GitHub: state closed, state_reason completed, 2026-09-23. Options A/B code is absent from 2.60.0, but the status label is out of date."},
+      {"line": 243, "claim": "Anyscale blog cited", "verdict": "source missing from Sources list"}
+    ]
+  },
+  "checklist": {
+    "repeated": 0, "avoided": 2, "na": 0, "repeated_ids": [],
+    "items": [
+      {"id": "arch-diagram-relative-link", "verdict": "avoided", "evidence": "No '](..', '[](' or '_images' in the post. The only image (L138) has Korean alt text and a site-absolute /assets path."},
+      {"id": "proxy-env-ray-start-unsupported", "verdict": "avoided", "evidence": "L1086-1093 give only the env-var names, meanings and defaults. The post never mentions 'ray start' and names no process to set them in."}
+    ]
+  },
+  "extras": {
+    "architecture_first_line": 13,
+    "architecture_section_line": 61,
+    "request_path_section_line": 153,
+    "non_official_sources_share": "3/16 listed (19%): Ray paper (arXiv), Suhas Bhairav blog, GitHub RFC #63144. The Anyscale blog (L243, L251) is cited but not listed; 'W2 페이지' (L1192, L1200, L1216) is an internal id.",
+    "opens_with_problem": true,
+    "closes_with_when_to_choose_and_failure_modes": true
+  },
+  "runnable_code": {
+    "verdict": "runs as pasted for the running example and all composition/HTTP examples; one block needs an undeclared extra",
+    "environment": "Ray 2.60.0, Python 3.12, CPU torch + transformers, in a temp venv. Private head node: temp dir /tmp/judge-gv8-ray1/rt, GCS port 26493, RAY_AUTH_MODE=disabled, Serve HTTP on 127.0.0.1:18493 (client URLs changed only in the port). Stopped by PID.",
+    "results": {
+      "text_ml.py = Translator (L80-109) + Summarizer (L264-293), client L625-634": "200, French summary",
+      "serve.run(app, route_prefix='/') (L609-614)": "returns DeploymentHandle",
+      "text_ml_pipeline.py (L349-383), DeploymentResponse passed without await": "200, French summary",
+      "text_ml_fastapi.py (L650-677) + streaming route (L697-711), POST /text/summarize and /text/stream with params": "both work; stream yields the summary line, then the translation",
+      "Hello/World Ingress (L311-337)": "'Hello world!'",
+      "_to_object_ref (L395-419)": "\"Ray task got message: 'Hi from Serve deployment'\"",
+      "Streamer/Caller (L429-452)": "[0,1,2,3,4]",
+      "autoscaling + backpressure decorator (L526-541) swapped into Translator": "200, works",
+      "RequestRouterConfig block (L199-217)": "stats_router_config OK; prefix_router_config FAILS with only ray[serve] (ModuleNotFoundError: pyarrow; resolving ray.serve.llm needs ray[serve,llm], which the post introduces only at L861)",
+      "reconfigure Translator (L997-1032) + user_config french->german": "'Bonjour monde!' -> 'Hallo Welt!'",
+      "sklearn train + deploy + client (L753-837)": "{\"result\":\"versicolor\"}",
+      "LoggingConfig(encoding='JSON') + X-Request-ID client (L1131-1151)": "header echoed 'summarize-0001', 'Bonjour monde!'",
+      "YAMLs L942-960, L1057-1077, L896-912": "all validate against ServeDeploySchema",
+      "serve build text_ml:app on the post's code": "emits name app1, Translator num_replicas: 2 + ray_actor_options, grpc_options and logging_config; differs from the L941-961 'generated' file",
+      "LLMConfig Python (L866-883)": "not run (needs ray[llm]/vLLM and a GPU)"
+    }
+  },
+  "top_issues": [
+    "Attribution errors: L1212 (and L1192) credit Suhas Bhairav with KServe and Train/Tune/Data judgements the listed page does not make. The page the post actually draws on is shown under the internal id 'W2 페이지' (L1200, L1216). L1121 credits the config-file doc with a status list it does not contain.",
+    "Wrong or stale behaviour claims: L509 says serve deploy rejects num_replicas: 1 next to a code autoscaling_config, but Ray 2.60.0 accepted it and kept the autoscaling config. L144 ties the 5/10ms evaluation time to input size, though the paper uses two different models. L550 calls RFC #63144 unimplemented though it was closed as completed on 2026-09-23.",
+    "Running-example and markup loose ends: the router-config Translator (L214-217) is never merged. The prefix-router block needs ray[llm] before the post says so. The 'serve build' output (L941-961) disagrees with the post's own num_replicas=2. The description is 114 chars, the install command appears twice (L74/L571), the Anyscale blog is missing from Sources, and the Sources list leaks entities (L1239-1240)."
+  ]
+}

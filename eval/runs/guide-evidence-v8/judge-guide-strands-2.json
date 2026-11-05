@@ -1,0 +1,100 @@
+{
+  "item": "guide-strands",
+  "post": "/tmp/eval-guide/guide-strands-v8.md",
+  "judge": "judge-2",
+  "sampling": "Body blocks split on blank lines, headings excluded (217 paragraphs incl. tables/code); paragraphs 2,5,8,...,215 (72) sampled; 15 claims drawn from them. Two credited-source claims outside the sample checked as supplements.",
+  "scores": {"A": 8.0, "B": 8.0, "C": 7.5, "D": 8.0, "E": 8.0, "F": 9.5, "T1": 8.0, "T2": 9.0, "T3": 9.0},
+  "score_notes": {
+    "A": "Clean heading arc (claim H2s, no body H1, $$ only, use_math true, two-level categories). Deductions: description is 101 chars (L5; rule 120-160, G-gate); the quickstart section (L530) sits after hooks/middleware/interventions, so the 'first agent' arrives in section 7; stray double blank lines L528-529, L598-599.",
+    "B": "Natural Korean engineer prose overall. Deductions: 16x '할 수 있습니다' for things that simply happen (e.g. L35 '가로채 로깅하거나 검증하거나 다른 방향으로 돌릴 수 있습니다', L728-730 per_turn '적용할 수 있습니다'); L575 '권고도 있지만, 이는 서드파티 블로그 AWS SDK Masterclass의 모범 사례입니다' (awkward provenance sentence -> '서드파티 블로그 AWS SDK Masterclass는 예외 대신 설명이 담긴 문자열을 돌려주라고 권합니다'); L35 '정해진 목적을 가진 수단입니다' (가지다 -> '목적이 정해진 수단입니다').",
+    "C": "Cross-reference errors from the architecture-first order: L294 '# letter_counter: 앞서 정의한 글자 세기 도구' but letter_counter is first defined at L552; L162/L237 hooks code uses letter_counter and file_editor before the quickstart; L478 '빠른 시작에서 ... 정의한 스크립트에 이어 붙이는' points forward. Facts repeated: L13 vs L29 (open-source, no hosted control plane, instead of writing your own loop); running example introduced twice (L39 and L57); L59 iteration table re-done at L583; stop-reason handling twice (L79-89 and L824-830).",
+    "D": "Hard parts get numbers at the right moment: 3 model calls -> 2 with end_turn (L207), 140,000/200,000 compression trigger (L779), 4,000+7,000 vs 10,000 budget overshoot (L816), intervention precedence walk-through table (L428-435). Deduction: re-explaining already-covered material (L593 restates L67; L1216 is a pointer list) adds length without help.",
+    "E": "Tables used for comparisons (writable properties L146, stage table L255, hooks vs middleware L384, checkpoints L838), text diagrams for event order (L109) and span tree (L1123), one formula (L775). Deductions: redundant tables (L583 duplicates L59; L824 overlaps L79); no rendered loop/architecture figure.",
+    "F": "All 15 sampled claims and both supplementary credited-source claims are supported by the official docs or cited source. No wrong values found. Small deduction: L294 states letter_counter was 'previously defined' (false in reading order) and L1009 switches to a placeholder model id after other blocks use real ids.",
+    "T1": "Every Python block imports cleanly against strands-agents 1.64.0 / strands-harness 0.3.4 and runs end-to-end against a scripted fake model once the stated prerequisites (quickstart letter_counter, earlier agent) are prepended. Gaps: CedarAuthorization needs 'strands-agents[cedar]' (ImportError: requires cedarpy) but the install block L166-169 omits it; L1009 placeholder 'your-bedrock-model-id'; hook-registration block L234-241 imports only Agent; file_editor requires absolute paths while every prompt says 'answer.txt'.",
+    "T2": "Covers the topics the sources actually carry (loop, stop reasons, hooks, middleware, interventions, retry, context management, lifecycle limits/cancel/concurrency, structured output, steering/HITL, traces, harness) in a sensible order; nothing padded beyond the sources.",
+    "T3": "Explains internals and why (hooks outside the middleware chain, After callbacks reversed for stack symmetry, retry-layer stacking, best-effort proactive compression, cooperative cancellation checkpoints, fail-closed policies), system fit (per-request agents, idempotency scope, OTel exporters, baggage, token accounting) and failure modes; advice is phrased as recommendation. Non-official sources are used for comparison and opinion, labelled as such."
+  },
+  "principles": {
+    "claim_headings": {"status": "met", "evidence": "H2s are claim noun phrases, e.g. L43 '최종 응답이 나올 때까지 모델 호출과 도구 실행을 되풀이하는 추론-행동 사이클', L600 '스로틀링만 다시 시도하는 기본 지수 백오프와 그 확장 방법'; a few H3s are topic names (L534 'Bedrock 자격증명', L781 '직접 만드는 관리자')."},
+    "running_example": {"status": "met", "evidence": "The strawberry letter-counter agent with letter_counter + file_editor runs through every section (L39, L162, L437, L793, L985, L1072, L1121, L1200)."},
+    "mechanism_design_code_example": {"status": "met", "evidence": "Proactive compression: mechanism L773 -> formula L775 -> 200,000x0.7=140,000 example L779; middleware next-count L274 -> numeric example L276-278 -> code L321."},
+    "facts_said_once": {"status": "partly met", "evidence": "L13 and L29 repeat the SDK positioning; L39 and L57 both introduce the running example; L59 and L583 tables describe the same three iterations; L79 and L824 both map stop reasons to handling."},
+    "numbers_with_scope_unit": {"status": "met", "evidence": "Defaults carry units and SDK scope: L621-623 (attempts, seconds), L753 'Python에서 summary_ratio ... 기본값은 0.3', L1066 'TypeScript 기준으로 ... maxEntries 100', L820 'Python 설명 기준으로'."},
+    "nothing_invented": {"status": "met", "evidence": "Writer-made examples are labelled (L57 '예시이며', L581 '이해를 돕기 위한 예시', L1121 '아래 그림은 예시'); third-party claims are attributed (L575, L785, L1184, L1212)."},
+    "writer_assessment_at_end": {"status": "met", "evidence": "L1218-1220 '이 글의 판단은 다음과 같습니다. 도구 몇 개와 통제 몇 가지로 끝나는 서비스라면 SDK로 시작합니다...'"},
+    "length_fitted": {"status": "partly met", "evidence": "About 54,000 non-space characters; repeated tables/introductions (see facts_said_once) and a pointer-only failure-mode section (L1216) add length without new content."},
+    "type_specific_shape": {"status": "met", "evidence": "Opens with TL;DR (L11) and the problem (L19-29); architecture/mechanism (L43-527) precedes quickstart config (L530); includes non-official sources (L27 issue, L1184, L1212); ends with choice and failure modes (L1186-1220). Side effect: code uses letter_counter before its definition."},
+    "korean_style": {"status": "partly met", "evidence": "Consistent 입니다 register incl. tables; no '즉/이러한' restatement; but 16x '할 수 있습니다' and a few awkward sentences (L575, L35)."}
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 15,
+    "unsupported": 0,
+    "wrong": 0,
+    "unverifiable": 0,
+    "numbers_among_checked": 9,
+    "examples": [
+      {"line": 134, "claim": "HookOrder.SDK_FIRST=-100, DEFAULT=0, SDK_LAST=100; values beyond them or float('-inf')/float('inf') give absolute order", "verdict": "supported", "source": "hooks: 'HookOrder.SDK_FIRST (-100) ... HookOrder.DEFAULT (0) ... HookOrder.SDK_LAST (100) ... These are not enforced bounds ... float('-inf')/float('inf') for guaranteed absolute ordering.'"},
+      {"line": 146, "claim": "Python writable properties table: BeforeInvocationEvent.messages, AfterModelCallEvent.retry, BeforeToolsEvent.cancel, BeforeToolCallEvent cancel_tool/selected_tool/tool_use, AfterToolCallEvent result/retry, AfterToolsEvent.end_turn, AfterInvocationEvent.resume", "verdict": "supported", "source": "hooks-events 'Event Properties' Python list, cell for cell."},
+      {"line": 162, "claim": "AfterToolCallEvent.retry=True discards the current result and re-invokes the tool with the same tool_use_id", "verdict": "supported", "source": "hooks: 'When retry is set to True, the tool executor discards the current result and invokes the tool again with the same tool_use_id.'"},
+      {"line": 255, "claim": "Two stages: InvokeModelStage (one model call, InvokeModelContext, InvokeModelResult) and ExecuteToolStage (one tool call, ExecuteToolContext, ExecuteToolResult)", "verdict": "supported", "source": "middleware stage table."},
+      {"line": 276, "claim": "Middleware calling next three times is seen per attempt; hooks see one pair; a cache short-circuit still fires Before/After hooks", "verdict": "supported", "source": "middleware 'How middleware relates to hooks': 'A retry produces one hook pair, not many. Middleware that calls next three times is invisible to hooks'; 'Hooks always fire, even when middleware short-circuits.'"},
+      {"line": 424, "claim": "Handlers run in registration order; precedence deny > confirm > guide > transform > proceed; Deny skips remaining handlers", "verdict": "supported", "source": "interventions: 'handlers always run in registration order with well-defined precedence (deny > confirm > guide > transform > proceed)'; 'If any handler returns Deny, remaining handlers are skipped'."},
+      {"line": 491, "claim": "Confirm with response passes it straight to evaluate without pausing; default evaluate accepts True, 'y', 'yes' case-insensitively", "verdict": "supported", "source": "interventions: 'With response: the value is passed directly to the evaluate function, so the agent never pauses.' 'The default accepts True, \"y\", or \"yes\" (case-insensitive).' Confirm signature in 1.64.0: (prompt, reason, response, evaluate=default_evaluate)."},
+      {"line": 503, "claim": "on_error default is 'throw'; 'proceed' fails open; 'deny' fails closed", "verdict": "supported", "source": "interventions on_error table: \"'throw' Rethrow the error (default). The invocation fails.\""},
+      {"line": 606, "claim": "Default retries throttling up to 5 times (6 total attempts), starting at 4 s and doubling: 4/8/16/32/64 s", "verdict": "supported", "source": "retry-strategies: 'agents retry throttling errors up to 5 times (6 total attempts) with exponential backoff starting at 4 seconds' plus the attempt listing."},
+      {"line": 730, "claim": "should_truncate_results=True by default; text keeps head and tail with a <truncated chars=\"N\"/> marker; per_turn applies management during the loop", "verdict": "supported", "source": "conversation-management: 'When enabled (the default; should_truncate_results=True)'; 'Text payloads keep their head and tail, separated by a <truncated chars=\"N\"/> marker'; per_turn paragraph. SlidingWindowConversationManager signature confirms should_truncate_results=True."},
+      {"line": 773, "claim": "proactive_compression=True uses threshold 0.7; dict compression_threshold between 0 and 1; best-effort, reduce() failure is swallowed", "verdict": "supported", "source": "conversation-management: 'Use True for the default 0.7 threshold, or pass a dict with a custom compression_threshold ratio between 0 and 1'; 'Proactive compression is best-effort only, so if reduce() throws or returns false, the error is swallowed'."},
+      {"line": 816, "claim": "Limits are checked at the top of each loop iteration; a turn can overshoot; tools requested by the previous turn finish first", "verdict": "supported", "source": "lifecycle-controls: 'Limits are checked at the top of each loop iteration, not mid-call. A single turn can overshoot its token budget ... tools requested by the previous turn always finish first.'"},
+      {"line": 836, "claim": "Python checks cancellation at four checkpoints (streaming / before tool / during MCP tool / after tool) with the listed behaviours", "verdict": "supported", "source": "agent-loop: 'The agent checks for cancellation at four checkpoints' table (TypeScript has five, not claimed for Python)."},
+      {"line": 1066, "claim": "Tool ledger records name, input, start/end time, status pending/success/error; TS maxEntries default 100; default model agent.auxModel; default name 'strands:llm-steering-handler'", "verdict": "supported", "source": "steering: ledger paragraph; table rows 'maxEntries number 100', 'model ... agent.auxModel', \"name ... 'strands:llm-steering-handler'\"."},
+      {"line": 1113, "claim": "Interventions run in list order and a denial skips the rest, so Cedar goes first; bob's file edit is denied with no classifier call or prompt", "verdict": "supported", "source": "approve-before-acting: 'Interventions run in the order you list them, and a denial skips the rest, so put Cedar first.' 'Cedar denies any call that no policy permits, so the classifier and the person never see it' and the bob example."}
+    ],
+    "supplementary_credited_source_checks": [
+      {"line": 27, "claim": "A Strands GitHub design issue noted that the event loop runs to completion without interruption, blocking approval, security review, budget approval and external integration scenarios", "verdict": "supported", "source": "strands-agents/harness-sdk#882: 'Currently, once an agent's event loop starts, it runs to completion without interruption. This prevents scenarios like: Tool approval workflows ... Security reviews ... Budget approvals ... External system integration points'."},
+      {"line": 1184, "claim": "AWS Builder Center post: Sudoku agent, both models completed, large cost difference, author calls for statistical analysis over multiple runs", "verdict": "supported", "source": "Builder Center post: 'Both models successfully completed the task ... Significant cost differences'; 'statistical analysis to account for LLM variability'."}
+    ]
+  },
+  "checklist": {
+    "repeated": 2,
+    "avoided": 1,
+    "na": 2,
+    "repeated_ids": ["shared-agent-history-leak", "result-fields-incomplete"],
+    "details": [
+      {"id": "loop-diagram-remote", "verdict": "avoided", "evidence": "The post has no image links at all; the loop and event order are fenced text diagrams (L109-122, L262-268, L1123-1133). Remote docs-host image not repeated (no localized PNG either)."},
+      {"id": "shared-agent-throw-scope", "verdict": "n/a", "evidence": "No shared-module-agent-in-async-handler warning. L869 states the documented generic rule ('Python의 기본 THROW 모드는 이미 실행 중인 에이전트를 다시 호출하면 ConcurrencyException'), and handle_request (L939) is synchronous; invoke_async vs sync-blocking is not discussed."},
+      {"id": "shared-agent-history-leak", "verdict": "repeated", "evidence": "L893 recommends per-request agents only as a way to avoid the concurrency guard, and L941 says '# A fresh agent per request keeps concurrent calls from sharing history'; the post never says a shared agent carries the previous request's conversation into the next sequential request, and never recommends invoke_async in async handlers."},
+      {"id": "result-fields-incomplete", "verdict": "repeated", "evidence": "No code prints result.metrics.get_summary(); L67 only says AgentResult holds '메시지, 메트릭, 트레이스' and L593 mentions stop_reason. Code shows result.stop_reason (L808) and result.structured_output (L1023) but no metrics summary."},
+      {"id": "multi-agent-subject", "verdict": "n/a", "evidence": "No multi-agent execution-unit sentence; multi-agent appears only as an event list (L126)."}
+    ]
+  },
+  "extras": {
+    "architecture_first_line": 43,
+    "architecture_note": "TL;DR L11, problem framing L19-41, agent-loop internals from L43; hooks/middleware/interventions internals L99-527 precede the quickstart at L530.",
+    "sources_total": 21,
+    "non_official_sources": 6,
+    "non_official_share": 0.29,
+    "non_official_list": ["GitHub issue #882 (harness-sdk)", "TrueFoundry Crewai vs LangGraph", "DEV Community customer-support agent", "DataOps Labs AWS SDK Masterclass", "DEV Community Never Forget a Thing", "AWS Builder Center Out-of-the-Box Observability"],
+    "opens_with_problem": true,
+    "closes_with_choice_and_failure_modes": true,
+    "closing_note": "L1186-1220: SDK vs strands-harness vs graph frameworks, then failure modes (L1214-1218) and the writer's verdict (L1220); the failure-mode subsection is mostly pointers back to earlier sections."
+  },
+  "runnable_code": {
+    "verdict": "runs with stated prerequisites; not every block runs as pasted",
+    "method": "Temp venv with strands-agents 1.64.0 (+otel, +cedar), strands-harness 0.3.4, pydantic. All 26 Python blocks import-checked; blocks 1-25 executed against a scripted fake Model subclass injected into Agent (no paid model call). strands_harness block only signature-checked (it would call Bedrock).",
+    "results": [
+      "Standalone, 16 of 26 blocks raise NameError (letter_counter or agent undefined) by design; each says which earlier block it continues from.",
+      "With the quickstart (L548-570) prepended, all blocks run: hooks example ends with stop_reason end_turn and 2 model calls (matches L207 claim); approval_gate and interventions example stop with stop_reason 'interrupt'; structured output returns count=3; handle_request returns Outcome.COMPLETED; limits/idempotency/concurrency blocks run; telemetry block runs (export to unreachable collector retries as expected).",
+      "Cedar block (L1074) fails with ImportError 'requires cedarpy. Install it with: pip install strands-agents[cedar]' until the extra is installed; the post's install lines (L167-168) omit it.",
+      "L1009 uses placeholder model_id 'your-bedrock-model-id' and would fail on a real call as pasted.",
+      "L234-241 imports only Agent but uses file_editor and letter_counter.",
+      "file_editor's spec says 'Files must use absolute paths'; all prompts ask for relative 'answer.txt' (behaviour depends on the model)."
+    ]
+  },
+  "top_issues": [
+    "Code order: letter_counter is used at L162/L237/L295 but defined only in the quickstart at L548, and L294 calls it '앞서 정의한'; 16 of 26 blocks fail standalone.",
+    "Runnability gaps: Cedar example needs the undocumented strands-agents[cedar] extra; L1009 placeholder model id; file_editor needs absolute paths but prompts use 'answer.txt'.",
+    "Human-fix checklist repeats: no result.metrics.get_summary() example, and no statement that a shared agent leaks prior conversation across requests (plus invoke_async advice); also repeated facts/tables (L13/L29, L59/L583, L79/L824) and a 101-char description."
+  ]
+}

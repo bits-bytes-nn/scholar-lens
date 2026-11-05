@@ -400,6 +400,19 @@ def cited_sources(markdown: str, ledger: EvidenceLedger) -> list[str]:
     return ids
 
 
+def name_sources(markdown: str, titles: Mapping[str, str]) -> str:
+    """Internal source ids the writer let into the text ("W2 페이지") as the
+    source's title, outside code; unknown ids are left alone."""
+
+    def repl(m: re.Match[str]) -> str:
+        return titles.get(m.group(0), m.group(0))
+
+    parts = re.split(r"(^(?:`{3,}|~{3,}).*?^(?:`{3,}|~{3,})[ \t]*$|`[^`\n]+`)", markdown, flags=re.M | re.S)
+    return "".join(
+        part if i % 2 else _SOURCE_ID.sub(repl, part) for i, part in enumerate(parts)
+    )
+
+
 def strip_markers(markdown: str) -> str:
     """The body without evidence markers (a guide lists its sources at the
     end instead of citing each sentence), and without the lines and headings

@@ -752,3 +752,12 @@ def test_a_sentence_crediting_a_source_must_cite_it() -> None:
     )
     assert misattributed(bad, ledger, aliases)
     assert misattributed(good, ledger, aliases) == []
+
+
+def test_internal_source_ids_become_titles_outside_code() -> None:
+    from scholar_lens.domain.guide.evidence_guide import name_sources
+
+    md = "W2 페이지는 드리프트를 봅니다.\n\n```python\nW2 = 1\n```\n\n`D1` 등급\n"
+    assert name_sources(md, {"W2": "Ray Serve vs Triton"}) == (
+        "Ray Serve vs Triton 페이지는 드리프트를 봅니다.\n\n```python\nW2 = 1\n```\n\n`D1` 등급\n"
+    )

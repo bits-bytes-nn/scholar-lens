@@ -1,0 +1,83 @@
+{
+  "item": "guide-rayserve",
+  "post": "/tmp/eval-guide/guide-rayserve-v8.md",
+  "judge_run": 2,
+  "sampling": "prose paragraphs after front matter (headings, code fences, tables, list items, images excluded): 165 paragraphs; paragraphs 2,5,8,... (55 sampled, L15 to L1218); 15 claims drawn from sampled paragraphs and the table/code they introduce, 10 of them numbers or defaults",
+  "sources_checked": "docs.ray.io/en/latest (Ray 2.60.0): serve/index, key-concepts, getting_started, model_composition, http-guide, production-guide/index, production-guide/config, monitoring, advanced-guides/advanced-autoscaling, llm/user-guides/observability, api/doc/ray.serve.llm.LLMConfig, serve/api/index (REST API); ray==2.60.0 wheel source (ray/serve/config.py, schema.py, _private/constants.py, ray/llm/_internal/...); arXiv 1712.05889 HTML; Anyscale blog 'Ray Serve: Reduce LLM Inference Latency by 60% with Custom Request Routing' (2025-09-15; credited in the post at L243/L251 but missing from Sources); suhasbhairav.com Triton vs Ray Serve post (cited). Local run: ray[serve] 2.60.0 + torch 2.15 + transformers 5.22 in a temp venv, private head node (GCS 46392, dashboard 48292, HTTP 18292, temp dir under /tmp/judge-gv8-ray2), stopped by PID.",
+  "scores": {"A": 8.0, "B": 7.5, "C": 8.5, "D": 8.0, "E": 7.5, "F": 5.0, "T1": 8.5, "T2": 8.0, "T3": 8.5},
+  "score_evidence": {
+    "A": "Coherent arc: TL;DR (L11), problem and positioning (L19), concepts on actors (L61), request path/router (L153), composition (L255), autoscaling/backpressure (L469), first run (L562), FastAPI/streaming (L639), frameworks (L736), Serve LLM (L844), config file and build/deploy (L927), KubeRay/proxy (L1048), observability (L1111), when to choose (L1184). Deductions: description is 114 characters (L5; the rule is 120-160); category 'Language-Models' for a general serving guide is a stretch (L6); Sources has HTML entity leaks '&#124;' and '&#91;Serve&#93;' (L1239-1240); install command repeated verbatim (L74 and L571).",
+    "B": "Mostly natural Korean in a consistent 입니다 register. Formulaic sentences: L122 '개념 사이의 관계를 정리하면 다음과 같습니다(이해를 돕기 위한 예시입니다).' -> '두 디플로이먼트의 관계는 아래와 같습니다.'; L475 '동작 원리는 하나로 요약됩니다.' -> drop the frame and state the rule. Table cells forced into 입니다 (L462 '동기 제너레이터로 소비하기입니다', L463 '해당 없습니다') -> noun phrases ('동기 제너레이터로 소비', '없음'). Code comments switch to 한다 (L589-590 '붙여 넣는다', L700 '추가한다'). Repeated '~편이 안전합니다' (L251, L491, L1121).",
+    "C": "Running example threads cleanly; cross-reference at L620 to the composition section is accurate; L167 points forward correctly. Minor: the 'generated' serve_config.yaml (L941-961) shows Translator num_replicas 1, which contradicts the post's own Translator (num_replicas=2 at L85), and the later autoscaling edit (L509) is described against that number.",
+    "D": "Good help where it matters: Power of Two Choices worked example (L192), prefix-tree routing example (L247), 24/2=12 autoscaling example (L511), cancellation semantics (L692), drain timing (L1095, L1109), histogram bucket example (L1180). Over-explains the trivial: a six-row table plus a formula for a doubling backoff (L224-239).",
+    "E": "Useful tables (autoscaling defaults L479, response types L459, proxy env vars L1088, Ray paper table L146) and ASCII diagrams labelled as illustrative (L39, L124, L169, L1103). Deductions: Triton vs Ray Serve table (L1202-1206) is not copied verbatim: row 'Model management' renamed '라우팅과 조합', and Triton cells replaced by '—' although the source fills them ('Centralized model repository, versioning, ensembles...', 'Preconfigured deployment patterns with autoscaling on GPUs...'); redundant backoff table plus formula (L226-239).",
+    "F": "Wrong: (1) L509 'num_replicas: 1이 남아 있으면 serve deploy가 거절합니다' - on Ray 2.60.0 a config with Translator num_replicas: 1 over code with autoscaling_config was accepted ('Sent deploy request successfully', app RUNNING). (2) L1192/L1212 claims credited to 'Suhas Bhairav의 블로그 글(날짜 표기 없음)' (replica-per-actor state, Train/Tune/Data integration, KServe comparisons) are absent from the cited Suhas page, which is dated 'Published June 11, 2026'; the content credited to 'W2 페이지' (dynamic routing, actor-style state, Triton table, hybrid, failure modes) is the cited Suhas page. (3) Triton table cells (L1205-1206) replaced by '—'. (4) Generated serve_config.yaml (L941-961) differs from real 'serve build text_ml:app' output (app name 'app1', Translator num_replicas: 2 with ray_actor_options). Citation gaps: the Anyscale blog (L243, L251) and 'W2 페이지' (L1192, L1200, L1216) are not in Sources. Note: keep-alive '기본 5초' (L734) matches the http-guide text but Ray 2.60.0 code default is 90 s (HTTPOptions.keep_alive_timeout_s); BackpressureConfig status_code is limited to 503 (default) or 429, which L523 does not say.",
+    "T1": "Running example actually runs: text_ml:app returned French ('C'était le meilleur des temps, c'était le pire des temps,'); FastAPI /text/summarize and /text/stream, the no-await pipeline, and user_config language switch to German all worked on a local cluster. Deductions: the RequestRouterConfig block (L198-218) raises ModuleNotFoundError (pyarrow) with only ray[serve] installed because the string router path imports ray.serve.llm; ray[serve,llm] is introduced only at L861. text_ml.py skeleton relies on paste-in comments (L589-590), and the streaming block (L696-712) needs manual placement of its imports.",
+    "T2": "Covers the sources' important topics in a sensible order (concepts, composition, HTTP, config/deploy, KubeRay, monitoring). Padding: the RFC section on a proposed metrics path (L548-560) and the Serve LLM section (L844-925) go beyond the input getting-started scope; the examples-list paragraph (L842) is a catalogue.",
+    "T3": "Strong internals: actor/replica model, request router and backoff, prefix-aware routing design and rejected alternative, handle/response semantics, cancellation, autoscaler fields and policy hooks, backpressure, proxy health/drain, metric export pipeline, plus when-to-choose and failure modes. Older Ray paper scheduler is named as the paper's design (L136)."
+  },
+  "principles": {
+    "claim_headings": {"status": "partly met", "evidence": "Most H2/H3 are claim noun phrases (L61, L153, L469, L927); some are topic names: '설치와 파일 구성' (L566), '첫 HTTP 요청' (L618), 'YAML로 옮긴 같은 설정' (L891), 'Triton과 섞는 구성' (L1198)."},
+    "running_example": {"status": "met", "evidence": "text_ml:app (Summarizer -> Translator) from L27 through autoscaling (L493), serve build (L936), KubeRay (L1054), observability (L1119) and the verdict (L1220)."},
+    "mechanism_order": {"status": "partly met", "evidence": "Router: problem -> PoTC -> config -> backoff formula -> example (L188-239); prefix routing with design alternative (L249). Autoscaling gives fields then example but no formula for the decision."},
+    "facts_once": {"status": "partly met", "evidence": "proxy_location options explained twice (L159-165 and L1086); 'no model-specific optimisation' in TL;DR (L17), L59 and L1196; framework-agnostic at L37, L738, L1190; install command at L74 and L571."},
+    "numbers_with_scope": {"status": "met", "evidence": "Anyscale numbers with model size, hardware and RayTurbo (L251); Ray paper table with instance, batch and model times (L144); versions on LLM defaults (L846, L919)."},
+    "nothing_invented": {"status": "partly met", "evidence": "serve deploy rejection (L509), Triton table dashes (L1205-1206), Suhas/W2 misattribution (L1192), generated YAML (L941-961). Illustrative diagrams are labelled (L37, L122, L167)."},
+    "writer_assessment": {"status": "met", "evidence": "L1220 '이 글의 판단은 다음과 같습니다...' with three concrete choices."},
+    "length_fit": {"status": "partly met", "evidence": "1,240 lines (~111 KB) for a getting-started input; RFC (L548-560) and LLM (L844-925) sections lengthen it beyond need."},
+    "type_shape": {"status": "met", "evidence": "Opens with TL;DR and the problem (L11, L23); architecture/internals (L35, L61, L134) before configuration and setup (L562); closes with when to choose and failure modes (L1184-1220)."},
+    "korean_style": {"status": "partly met", "evidence": "Natural overall; formulaic frames (L122, L475), 입니다-forced table cells (L462-463), 한다 code comments (L589, L700)."}
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 11,
+    "unsupported": 0,
+    "wrong": 4,
+    "examples": [
+      {"n": 1, "line": 15, "claim": "default router PowerOfTwoChoicesRequestRouter; all handles of a deployment follow its routing policy", "verdict": "supported", "source": "ray/serve/config.py RequestRouterConfig.request_router_class description"},
+      {"n": 2, "line": 15, "claim": "target_ongoing_requests default 2", "verdict": "supported", "source": "config.py AutoscalingConfig 'Defaults to 2'; DEFAULT_TARGET_ONGOING_REQUESTS = 2"},
+      {"n": 3, "line": 140, "claim": "Ray paper: global scheduler picks the node with lowest estimated waiting time = queueing + remote input transfer; arrow thickness proportional to request rate", "verdict": "supported", "source": "arXiv 1712.05889 section 4.2.2 and Figure 6 caption"},
+      {"n": 4, "line": 146, "claim": "Clipper 4400 ± 15 / 290 ± 1.3 states/sec; Ray 6200 ± 21 / 6900 ± 150; p3.8xlarge, batches of 64, 10 ms / 5 ms", "verdict": "supported", "source": "arXiv 1712.05889 Table 3 and text (note: 10 ms and 5 ms belong to two different models, residual net and FC net, not to input size as L144 implies)"},
+      {"n": 5, "line": 165, "claim": "proxy_location default EveryNode", "verdict": "supported", "source": "production-guide/config: 'EveryNode (default): Run a proxy on every node in the cluster that has at least one replica actor.'"},
+      {"n": 6, "line": 224, "claim": "router retry backoff initial 0.025 s, multiplier 2, max 0.5 s", "verdict": "supported", "source": "config.py RequestRouterConfig fields; constants RAY_SERVE_ROUTER_RETRY_*"},
+      {"n": 7, "line": 251, "claim": "Anyscale blog: 32B model, TTFT -60%, end-to-end throughput +40% or more, eight 8xL4 machines, RayTurbo, similar trend on open-source Ray", "verdict": "supported", "source": "anyscale.com/blog/ray-serve-faster-first-token-custom-routing (2025-09-15); blog not listed in the post's Sources"},
+      {"n": 8, "line": 479, "claim": "AutoscalingConfig defaults min 1, max 1, initial None, look_back 30.0, upscale_delay 30.0, downscale_delay 600.0, downscale_to_zero None, aggregation mean", "verdict": "supported", "source": "config.py AutoscalingConfig field defaults (verified by instantiation on 2.60.0)"},
+      {"n": 9, "line": 509, "claim": "with num_replicas: 1 left in serve_config.yaml over code autoscaling_config, serve deploy rejects the config", "verdict": "wrong", "source": "local test on Ray 2.60.0: deploy accepted ('Sent deploy request successfully'), application RUNNING"},
+      {"n": 10, "line": 544, "claim": "backpressure config not applied to unavailable-deployment rejections; gRPC always RESOURCE_EXHAUSTED; unknown keys fail at parse time", "verdict": "supported", "source": "config.py BackpressureConfig docstring and model_config extra='forbid'"},
+      {"n": 11, "line": 919, "claim": "log_engine_metrics on by default as of Ray 2.51", "verdict": "supported", "source": "serve/llm/user-guides/observability: 'Engine metric logging is on by default as of Ray 2.51.'"},
+      {"n": 12, "line": 939, "claim": "serve build always leaves runtime_env empty; the generated file shown (name default, Translator num_replicas: 1, Summarizer num_replicas: 1)", "verdict": "wrong", "source": "runtime_env sentence matches production-guide/config, but actual 'serve build text_ml:app' on the post's code emits name app1, Translator num_replicas: 2 with ray_actor_options, Summarizer without num_replicas"},
+      {"n": 13, "line": 1088, "claim": "proxy env vars defaults 10.0 / 10.0 / 5.0 / 30.0; 3 consecutive failed health checks mark a proxy unhealthy and restart it", "verdict": "supported", "source": "production-guide/config proxy env var list; constants PROXY_HEALTH_CHECK_UNHEALTHY_THRESHOLD = 3"},
+      {"n": 14, "line": 1192, "claim": "Suhas Bhairav post (no date) says per-replica actor state and Train/Tune/Data integration; W2 page says dynamic routing, actor-style state, data-processing coupling", "verdict": "wrong", "source": "cited Suhas page is dated 'Published June 11, 2026', has no Train/Tune/Data or KServe text, and is itself the source of the 'W2' statements ('Ray Serve shines when ... dynamic routing, actor-style state, and close coupling with data processing steps')"},
+      {"n": 15, "line": 1202, "claim": "Triton vs Ray Serve table rows '라우팅과 조합' and '스케일링' with Triton cells '—'", "verdict": "wrong", "source": "Suhas page table: row is 'Model management' (Triton: 'Centralized model repository, versioning, ensembles, and multi-model endpoints'); 'Scaling model' Triton cell: 'Preconfigured deployment patterns with autoscaling on GPUs; robust batching and queuing'"}
+    ]
+  },
+  "checklist": {
+    "repeated": 0,
+    "avoided": 2,
+    "na": 0,
+    "repeated_ids": [],
+    "items": [
+      {"id": "arch-diagram-relative-link", "result": "avoided", "evidence": "L138 '![드라이버와 워커가 로컬 스케줄러에 작업을 제출하고 ... 구조도](/assets/images/ray-serve-...-1.png)'; no '../_images' paths and no empty link text in the post"},
+      {"id": "proxy-env-ray-start-unsupported", "result": "avoided", "evidence": "L1086 '프록시의 감시 주기와 수명은 환경 변수로 조정하며, 기본값은 아래 표에 정리했습니다.' with no claim about ray start or the process to set them in"}
+    ]
+  },
+  "extras": {
+    "architecture_first_line": 35,
+    "internals_first_line": 61,
+    "sources_total": 16,
+    "non_official_sources": 3,
+    "non_official_share": 0.19,
+    "uncited_named_sources": ["Anyscale blog (L243, L251)", "W2 page (L1192, L1200, L1216)"],
+    "opens_with_problem": true,
+    "closes_with_when_to_choose_and_failure_modes": true
+  },
+  "runnable_code": {
+    "verdict": "runs, with two caveats",
+    "evidence": "Assembled text_ml.py from L578-593 with the L85-107 Translator and L270-291 Summarizer; 'serve run text_ml:app' plus the L625-634 client returned French text; X-Request-ID client (L1131-1140) echoed the header; text_ml_pipeline.py (L348-384) and text_ml_fastapi.py with the /stream route (L649-712) returned correct responses at /pipe, /text/summarize and /text/stream; the reconfigure Translator (L996-1032) with user_config language: german returned German, then French after redeploy. Caveats: the RequestRouterConfig block (L198-218) fails with ModuleNotFoundError: pyarrow under ray[serve] only; skeleton and streaming blocks need manual assembly."
+  },
+  "top_issues": [
+    "Invented behaviour: L509 says serve deploy rejects num_replicas: 1 next to code autoscaling_config; Ray 2.60.0 accepts it.",
+    "Third-party attribution is scrambled: the claims credited to 'W2 페이지' come from the cited Suhas Bhairav page (which is dated), the Suhas-credited claims are not on it, its Triton table cells were replaced by '—', and neither the Anyscale blog nor W2 is in Sources.",
+    "Running-example drift: the 'generated' serve_config.yaml (L941-961) does not match real serve build output for the post's own Translator (num_replicas 2, app1), and the router-config block needs ray[llm] before the post installs it."
+  ]
+}
