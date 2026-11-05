@@ -176,6 +176,7 @@ async def write_guide_with_evidence(
             S3Paths.GUIDES,
         ),
         identifier_check=identifier_check,
+        products=products,
     )
     result = await engine.write(
         material.topic,

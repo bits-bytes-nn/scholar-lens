@@ -332,6 +332,9 @@ says:
   needs, a limit it always hits, a result never returned);
 - no install command for the packages and extras the code imports (report
   it on the first usage section);
+- a config file or command that, where it appears, needs code shown only
+  later (a config setting `user_config` before the `reconfigure` that reads
+  it), or a "changed lines only" fragment the reader cannot assemble;
 - a sentence that points back to something earlier sections never show
   ("앞서 계산한 대로", "앞서 보낸 요청", a recap of code the earlier blocks
   do not contain), or that uses the running example before it is

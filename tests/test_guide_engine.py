@@ -422,7 +422,7 @@ class ScriptedModel:
                         problem="serve is not imported.",
                         fix="from ray import serve",
                     )
-                ]
+                ],
             )
         raise AssertionError(schema)
 
@@ -726,7 +726,9 @@ def test_evidence_for_another_sdk_language_leaves_a_python_guide() -> None:
 def test_product_imports_the_official_pages_never_show_are_flagged() -> None:
     from scholar_lens.domain.guide.evidence_guide import unverified_imports
 
-    official = "from strands import Agent\nfrom strands.vended_tools import file_editor\n"
+    official = (
+        "from strands import Agent\nfrom strands.vended_tools import file_editor\n"
+    )
     code = (
         "```python\nfrom strands import Agent\nfrom strands_tools import file_editor\n"
         "from pydantic import BaseModel\nimport strands.vended_tools\n```\n"
@@ -735,3 +737,18 @@ def test_product_imports_the_official_pages_never_show_are_flagged() -> None:
         "strands_tools"
     ]
     assert unverified_imports(code, "", ["strands"]) == []
+
+
+def test_a_sentence_crediting_a_source_must_cite_it() -> None:
+    from scholar_lens.domain.guide.evidence_guide import misattributed, source_aliases
+
+    blog = _blog().model_copy(update={"url": "https://agents-lib.com/compare/ray"})
+    aliases = source_aliases([_official(), blog], products=["Ray Serve", "ray"])
+    assert aliases == {"W1": ["agents-lib"]}
+    ledger = _ledger()
+    bad = "## 운영\n\nagents-lib에 따르면 GPU 레플리카는 PENDING에 머뭅니다 [[E3]].\n"
+    good = (
+        "## 운영\n\nagents-lib는 오래 기다리는 배치가 지연을 늘린다고 봅니다 [[E5]].\n"
+    )
+    assert misattributed(bad, ledger, aliases)
+    assert misattributed(good, ledger, aliases) == []

@@ -47,7 +47,9 @@ from ..domain.guide.evidence_guide import (
     guide_draft_problems,
     guide_outline_problems,
     guide_section_targets,
+    misattributed,
     repair_guide_outline,
+    source_aliases,
     strip_markers,
 )
 from ..prompts import guide_evidence as prompts
@@ -249,13 +251,18 @@ class EvidenceGuideEngine(EvidenceWriter):
         store: TextStore | None = None,
         *,
         identifier_check: Callable[[str], list[str]] | None = None,
+        products: Sequence[str] = (),
     ) -> None:
         super().__init__(model, GUIDE_PROMPTS, max_fix_rounds=settings.max_fix_rounds)
         self.settings = settings
         self._documents: dict[str, SourceDocument] = {}
+        # Source id -> the names a sentence may credit it by.
+        self._aliases: dict[str, list[str]] = {}
         self.store = store
         # Flags and arguments of a draft that no official page mentions.
         self.identifier_check = identifier_check
+        # The product's names (never a source's name).
+        self.products: tuple[str, ...] = tuple(products)
 
     # ---- source passages ------------------------------------------------------
 
@@ -491,6 +498,7 @@ class EvidenceGuideEngine(EvidenceWriter):
         documents = self.selected(documents)
         by_id = {d.paper_id: d for d in documents}
         self._documents = by_id
+        self._aliases = source_aliases(documents, self.products)
         # The claim check sees which kind of source a fact comes from.
         self._names = {
             d.paper_id: f"{d.title} [{d.authority or 'third_party'}]" for d in documents
@@ -640,6 +648,7 @@ class EvidenceGuideEngine(EvidenceWriter):
             problems += guide_draft_problems(
                 markdown, code_language=outline.code_language
             )
+            problems += misattributed(markdown, ledger, self._aliases)
             if self.identifier_check is not None and (
                 unknown := self.identifier_check(markdown)
             ):

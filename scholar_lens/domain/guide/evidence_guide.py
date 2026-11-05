@@ -328,6 +328,68 @@ def unverified_imports(
     return found
 
 
+def source_aliases(
+    documents: Iterable[SourceDocument], products: Iterable[str] = ()
+) -> dict[str, list[str]]:
+    """How a sentence may name a non-official source: the distinctive label
+    of its host (``spheron`` for blog.spheron.network, ``agents-lib``),
+    never a product's own name or a generic word."""
+    generic = {
+        "docs",
+        "blog",
+        "www",
+        "medium",
+        "github",
+        "youtube",
+        "arxiv",
+        "dev",
+        "news",
+        "discuss",
+        "substack",
+        "linkedin",
+        "reddit",
+        "amazon",
+        "google",
+    }
+    taken = {_package_key(p) for p in products} | generic
+    aliases: dict[str, list[str]] = {}
+    for d in documents:
+        if d.authority == "official" or not d.url:
+            continue
+        host = re.sub(r"^https?://", "", d.url).split("/")[0].lower()
+        labels = host.split(".")
+        # The registered name: the label before the top-level domain.
+        name = labels[-2] if len(labels) >= 2 else ""
+        if len(name) >= 4 and _package_key(name) not in taken:
+            aliases[d.paper_id] = [name]
+    return aliases
+
+
+def misattributed(
+    markdown: str, ledger: EvidenceLedger, aliases: Mapping[str, list[str]]
+) -> list[str]:
+    """Sentences that name a source ("agents-lib에 따르면") while citing no
+    evidence from it: what they credit to the source may not be there."""
+    problems: list[str] = []
+    for sentence in prose_sentences(markdown):
+        plain = MARKER.sub("", sentence).lower()
+        cited = {
+            e.paper_id
+            for m in MARKER.finditer(sentence)
+            for eid in re.findall(r"E\d+", m.group(1))
+            if (e := ledger.get(eid))
+        }
+        for sid, names in aliases.items():
+            if sid not in cited and any(
+                re.search(rf"(?<![a-z0-9-]){re.escape(n)}(?![a-z0-9-])", plain) for n in names
+            ):
+                problems.append(
+                    f"names {names[0]} but cites no evidence from it; cite what "
+                    f"that source says or do not credit it: {plain[:160]}"
+                )
+    return problems
+
+
 def cited_sources(markdown: str, ledger: EvidenceLedger) -> list[str]:
     """Source ids the draft's markers cite, in order of first citation."""
     ids: list[str] = []
