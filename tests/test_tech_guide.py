@@ -231,8 +231,22 @@ class TestBuildSearchProvider:
     def test_prefers_tavily(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from scholar_lens.src.web_research import TavilySearchProvider
 
-        p = self._provider(monkeypatch, tavily="tvly-k", brave="brave-k")
+        p = self._provider(monkeypatch, tavily="tvly-k")
         assert isinstance(p, TavilySearchProvider)
+
+    def test_tavily_falls_back_to_brave_when_both_are_set(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from scholar_lens.src.web_research import (
+            BraveSearchProvider,
+            FallbackSearchProvider,
+            TavilySearchProvider,
+        )
+
+        p = self._provider(monkeypatch, tavily="tvly-k", brave="brave-k")
+        assert isinstance(p, FallbackSearchProvider)
+        assert isinstance(p.primary, TavilySearchProvider)
+        assert isinstance(p.secondary, BraveSearchProvider)
 
     def test_falls_back_to_brave(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from scholar_lens.src.web_research import BraveSearchProvider

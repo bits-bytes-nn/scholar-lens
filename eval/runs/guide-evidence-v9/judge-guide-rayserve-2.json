@@ -1,0 +1,100 @@
+{
+  "item": "guide-rayserve",
+  "post": "/tmp/eval-guide/guide-rayserve-v9.md",
+  "judge_run": 2,
+  "scores": {"A": 7, "B": 7.5, "C": 8, "D": 8, "E": 7, "F": 6, "T1": 7, "T2": 8, "T3": 6.5},
+  "score_notes": {
+    "A": "Coherent arc (TL;DR L11, problem L17, units L43, request path L137, composition L183, local loop L388, FastAPI L460, streaming L643, frameworks L785, config L961, KubeRay L1080, assessment L1128). Deductions: the reconfigure code block L967-1025 lost its indentation (one space everywhere) and the YAML block L1038-1047 and serve status block L1056-1072 are gutted to bare keys; headings are very long (L17, L183, L961).",
+    "B": "Mostly natural 입니다 register. Unnatural: L45 '…애플리케이션(application)이 그것입니다' -> '…애플리케이션입니다'; L171 '숫자를 넣어 한 번 따라가 봅니다' (no numbers follow); L27 '이 그림은 예제 구성을 보여 주는 도식이며 Ray Serve의 출력물은 아닙니다' (unneeded disclaimer); L961 heading calque '단일 진실 공급원 설정 파일'.",
+    "C": "Concepts introduced before use with accurate back-references ('요청 경로 절에서 본', L421, L509). Some restatement: per-deployment scaling told at L133 and again L242-244; 'Ray Serve is not an ML platform' at L15, L1130, L1151.",
+    "D": "Hard parts get help at the right time: the 2x0.2=0.4 CPU and 1/0.2=5 packing example (L131), the r1/r2 chaining trace (L329-336), the cancellation trap applied to Translator.translate (L738), the ?max=10 no-op note (L781). Padding: install command twice (L58, L397), import block re-explained (L415).",
+    "E": "Good tables (units L113, ray_actor_options L123, cancellation L732, frameworks L793) and author-labelled ASCII flow diagrams. Deductions: gutted YAML/status blocks L1038-1047, L1056-1072; table L1107-1112 repeats its own cells ('상태 보고 | 상태 보고'); no Serve architecture figure (controller/proxy).",
+    "F": "No invented APIs found; 13/15 sampled claims match docs. Two copied artefacts do not match the source: the production-guide text_ml.py (L967-1025: decorators @serve.deployment, 'from ray import serve', Dict import, input_ids/num_beams in Summarizer.generate and the __init__ defaults self.min_length=5/self.max_length=15 are missing) and the serve_config.yaml / serve status blocks (L1038-1047, L1056-1072: values num_replicas: 1, language: french, torch/transformers, status: RUNNING, RUNNING: 1 dropped), while L1074 asserts '두 디플로이먼트 모두 YAML에 적은 대로 레플리카 1개씩' which the shown blocks no longer contain. L1054 tells the reader to serve deploy to a local cluster without the docs' 'ray start --head'.",
+    "T1": "Running example verified end to end (see runnable_code). Production step is not runnable as pasted (IndentationError at L975-976; even re-indented, no @serve.deployment so .bind fails, and NameError on Dict); YAML to edit is empty; serve deploy needs a started cluster the post never starts.",
+    "T2": "Covers the docs' getting started, key concepts, composition, HTTP/FastAPI, streaming/cancellation, production and examples in a sensible order. Three framework tutorials (L785-959) copy long training code that adds little; autoscaling and @serve.batch are named (L49, L133) but never shown.",
+    "T3": "Explains bind->DeploymentHandle conversion, DeploymentResponse chaining and its nested-object limit, cancellation semantics, cloudpickle limit of object-based FastAPI. Missing: the controller/proxy architecture and how routing and autoscaling work, any RayService manifest (deferred at L1099), observability beyond one paragraph (L1122-1126); sources are 9/9 official docs."
+  },
+  "principles": {
+    "claim_headings": {"status": "met", "evidence": "L43 '디플로이먼트·레플리카·애플리케이션이라는 세 가지 배포 단위와 레플리카별 자원 선언', L643 '제너레이터로 흘려보내는 응답과 await 지점에서만 걸리는 취소'; some are over-long (L17, L183)."},
+    "running_example": {"status": "met", "evidence": "Summarizer->Translator app introduced L27, reused in units table L113, request path L145, local loop L402, FastAPI L466, cancellation L738, config L965, KubeRay L1083, assessment L1134."},
+    "mechanism_design_code_example": {"status": "partly met", "evidence": "Chaining: mechanism L284, code L289-320, worked example L325 (5+1)x2=12. Resources: L121-131. No such treatment for routing, autoscaling or batching."},
+    "facts_said_once": {"status": "partly met", "evidence": "Install command L58 and L397; 'laptop to Kubernetes with almost no code change' L15, L23, L1134; per-deployment scaling L133 and L244."},
+    "numbers_with_scope": {"status": "met", "evidence": "L131 '레플리카 2개가 각각 CPU 0.2와 GPU 0 … 2 x 0.2 = 0.4'; L781 '1.0초에 10'; L595 Uvicorn keep-alive '기본 5초'."},
+    "nothing_invented": {"status": "partly met", "evidence": "Author diagrams are labelled (L27, L1084). But copied code/config/output blocks are corrupted (L967-1025, L1038-1047, L1056-1072)."},
+    "writers_assessment": {"status": "met", "evidence": "L1161-1163 '이 글의 판단': when to pick Ray Serve vs Triton/TorchServe vs hosted platforms, and the combined layout."},
+    "length_fitted": {"status": "partly met", "evidence": "1176 lines; framework tutorials L803-955 reproduce full training scripts for TF and sklearn."},
+    "type_specific_shape": {"status": "partly met", "evidence": "Opens with TL;DR L11 and the problem L21; deployment units (L43) precede config; closes with when to choose and pitfalls (L1130, L1155). No non-official sources; Serve's own architecture (controller, proxy) never appears."},
+    "korean_style": {"status": "partly met", "evidence": "입니다 register held; Korean headings. Calques/formulae at L45, L171, L27, L961."}
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 13,
+    "unsupported": 0,
+    "wrong": 2,
+    "unverifiable": 0,
+    "sample_rule": "prose paragraphs counted from the body (front matter, headings, code, tables excluded); paragraph 2 then every third (2,5,8,...,131 of 132); claims drawn from those paragraphs and the code/table they introduce",
+    "examples": [
+      {"line": 15, "claim": "RayService handles health checks, status reporting, failure recovery and upgrades", "verdict": "supported", "source": "production-guide/index: 'automatically handles important production requirements such as health checking, status reporting, failure recovery, and upgrades'"},
+      {"line": 23, "claim": "fractional GPUs; LLM features response streaming, dynamic request batching, multi-node/multi-GPU serving", "verdict": "supported", "source": "serve/index: 'flexible scheduling support such as fractional GPUs' / 'response streaming, dynamic request batching, multi-node/multi-GPU serving'"},
+      {"line": 71, "claim": "Translator: num_replicas=2, num_cpus 0.2, num_gpus 0; generate num_beams=4, max_length=300", "verdict": "supported", "number": true, "source": "getting_started serve_quickstart.py"},
+      {"line": 107, "claim": "bind returns a DeploymentNode wrapping the deployment, connectable to other DeploymentNodes", "verdict": "supported", "source": "tutorials/serve-ml-models: 'returns a DeploymentNode object, a wrapping of the … deployment object' (older terminology; current API returns an Application)"},
+      {"line": 123, "claim": "num_cpus/num_gpus are floats, fractions pack more replicas than CPUs/GPUs; resources dict for HPUs/TPUs; num_replicas integer", "verdict": "supported", "source": "getting_started parameter list"},
+      {"line": 169, "claim": "__call__ return value serialized as JSON; Starlette Response returned directly", "verdict": "supported", "source": "key-concepts: 'The response will be serialized as JSON, but other Starlette response objects can also be returned directly'"},
+      {"line": 215, "claim": "composed Summarizer generate num_beams=4, max_length=15; file serve_quickstart_composed.py; app = Summarizer.bind(Translator.bind())", "verdict": "supported", "number": true, "source": "getting_started serve_quickstart_composed.py"},
+      {"line": 427, "claim": "serve run must run from the script's directory, blocks streaming logs, Ctrl-C tears down", "verdict": "supported", "source": "getting_started: 'This command will run … and then block, streaming logs to the console. It can be killed with Ctrl-C'"},
+      {"line": 537, "claim": "route_prefix /hello + POST /{subpath} -> /hello/Serve returns 'Hello from Serve!'", "verdict": "supported", "source": "http-guide FastAPI example"},
+      {"line": 325, "claim": "Adder increment=1, Multiplier multiple=2, input 5 -> 12", "verdict": "supported", "number": true, "source": "model_composition: assert response.result() == 12, '(5 + 1) * 2 = 12'"},
+      {"line": 670, "claim": "streaming example: query param max default '25', 0.1 s between chunks, max=10 yields '0'..'9'", "verdict": "supported", "number": true, "source": "http-guide streaming example and output 'Got result 0.0s … 0.9s … 9'"},
+      {"line": 781, "claim": "client receives '10' at 1.0 s, disconnects, replica logs 'Cancelled! Exiting.'", "verdict": "supported", "number": true, "source": "http-guide: 'Got result 1.0s after start: '10'' … '(ServeReplica:default_StreamingResponder pid=50842) Cancelled! Exiting.'"},
+      {"line": 913, "claim": "GradientBoostingClassifier on Iris, train on data[:100], pickle and label JSON in temp dir", "verdict": "supported", "number": true, "source": "tutorials/serve-ml-models sklearn section"},
+      {"line": 1027, "claim": "production text_ml.py with reconfigure (french/german/romanian; min_length 5, max_length 15 defaults)", "verdict": "wrong", "number": true, "source": "production-guide/index: the source has @serve.deployment on both classes, 'from ray import serve', 'from typing import Dict', self.min_length = 5 / self.max_length = 15 in Summarizer.__init__, and generate(input_ids, num_beams=4, early_stopping=True, min_length=…, max_length=…). The post's block (L967-1025) drops all of these and its indentation, so it is neither the source nor runnable."},
+      {"line": 1074, "claim": "serve status shows both deployments at 1 replica as written in the YAML; Translator with 2 replicas shows RUNNING: 2", "verdict": "wrong", "number": true, "source": "production-guide/index YAML has num_replicas: 1 for both and status shows RUNNING: 1 (develop-and-deploy shows RUNNING: 2). The post's YAML (L1038-1047) and status output (L1056-1072) omit every value (num_replicas, user_config language: french, pip torch/transformers, status: RUNNING, RUNNING: 1), so the copied blocks do not match the source and do not show what L1074 says they show."}
+    ],
+    "also_checked_not_counted": [
+      "L1116 head node fault tolerance recommended: supported (develop-and-deploy)",
+      "L1159 examples list has Triton Server and MLflow Model Registry tutorials and recommendation-system composition: supported (examples page)",
+      "L732 cancellation table rows: supported (http-guide 'Request cancellation')",
+      "L595 Uvicorn keep-alive 5 s, keep_alive_timeout_s in http_options, cluster-global, not runtime-updatable: supported (http-guide)",
+      "L1140-1145 comparison table cells: supported paraphrases of the index FAQ",
+      "L1054 'serve deploy로 로컬 Ray 클러스터에 배포': the source first runs 'ray start --head'; the post omits it"
+    ]
+  },
+  "checklist": {
+    "repeated": 0,
+    "avoided": 1,
+    "na": 1,
+    "repeated_ids": [],
+    "details": [
+      {"id": "arch-diagram-relative-link", "verdict": "avoided", "evidence": "No Markdown links or images with empty text or docs-relative paths anywhere; the post has no images at all (diagrams are fenced text blocks L30, L148, L330, L1087), so the docs architecture diagram is absent rather than broken."},
+      {"id": "proxy-env-ray-start-unsupported", "verdict": "n/a", "evidence": "The post has no proxy env-var section; the only ray start reference is absent entirely (L1054 even omits the docs' ray start --head)."}
+    ]
+  },
+  "extras": {
+    "architecture_first_appears_line": 43,
+    "architecture_note": "Deployment/replica/application units at L43 and the proxy->ingress->replica request path at L137; Serve's controller/proxy architecture and autoscaling internals never appear.",
+    "non_official_source_share": "0/9 (all docs.ray.io)",
+    "opens_with_problem": true,
+    "opens_with_problem_evidence": "L17-21 multi-stage multi-model pipelines expressed as static YAML graphs vs Python composition",
+    "closes_with_when_and_failure_modes": true,
+    "closes_evidence": "L1128-1163: when to choose vs TFServing/TorchServe/Triton and hosted platforms; operational pitfalls L1155 (cancellation without await, sync stream consumption, FastAPI serialization)"
+  },
+  "runnable_code": {
+    "verdict": "running example runs as pasted; production-guide variant does not",
+    "environment": "temp venv Python 3.12, ray 2.60.0, transformers 5.22.1, torch 2.15.0; private Ray head on a unique port and temp dir with a private auth token; Serve HTTP on a private port (client URL port substituted only)",
+    "results": [
+      {"block": "text_ml.py = import block L404-412 + Translator L63-98 + Summarizer L193-234 as L417 instructs; serve run text_ml:app; client L441-452", "result": "ran; response \"C'était le meilleur des temps, c'était le pire des temps,\" (matches the docs output); Translator started 2 replicas"},
+      {"block": "Adder/Multiplier L288-321 (serve.run + assert == 12)", "result": "ran, assert passed"},
+      {"block": "SayHi -> Ray task L346-376", "result": "ran, assert passed"},
+      {"block": "FastAPI /hello/{subpath} L513-535", "result": "ran, assert passed"},
+      {"block": "all 18 python blocks compiled", "result": "17 compile; L968-1025 fails: 'expected an indented block after function definition' (indentation flattened to one space). Even re-indented it lacks @serve.deployment (Summarizer.bind/Translator.bind would fail), 'from ray import serve' and the Dict import (NameError at class definition), and Summarizer.generate has no input_ids; Summarizer.__init__ has no min_length/max_length defaults and the YAML gives Summarizer no user_config, so reconfigure would not set them."},
+      {"block": "serve_config.yaml L1038-1047", "result": "not usable: keys only, no values"},
+      {"block": "serve deploy L1056", "result": "post never starts a cluster (docs: ray start --head first)"}
+    ],
+    "request_shape_check": "Summarizer reads await http_request.json(); client sends json=english_text: matches. FastAPI Translator (L486 text: str) is a query parameter; L505 says so correctly but gives no client."
+  },
+  "top_issues": [
+    "Production section's copied code and config are corrupted: text_ml.py with reconfigure (L967-1025) lost indentation, decorators, imports and generate inputs (IndentationError); serve_config.yaml (L1038-1047) and serve status output (L1056-1072) are bare keys with every value dropped, yet L1074 interprets values that are not shown.",
+    "Internals and integration are thin: no controller/proxy architecture, no autoscaling or @serve.batch usage, KubeRay RayService manifest deferred (L1099), observability one paragraph; 0 of 9 sources are non-official.",
+    "Repetition and padding: install command twice (L58, L397), laptop-to-Kubernetes and not-an-ML-platform points restated (L15/L23/L1134; L15/L1130/L1151), full TF/sklearn training scripts (L805-927); serve deploy step omits ray start --head."
+  ]
+}

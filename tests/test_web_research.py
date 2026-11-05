@@ -1478,3 +1478,30 @@ def test_a_page_rate_limited_past_the_retries_fails() -> None:
     with pytest.raises(httpx.HTTPStatusError):
         researcher._get_page("https://docs.example.dev/quickstart")
     assert len(waits) == 3
+
+
+def test_fallback_search_uses_the_second_backend_after_a_failure() -> None:
+    from scholar_lens.src.web_research import (
+        FallbackSearchProvider,
+        SearchResult,
+        WebSearchProvider,
+    )
+
+    class Spent(WebSearchProvider):
+        calls = 0
+
+        def search(self, query, *, count=5, domains=()):  # type: ignore[no-untyped-def]
+            self.calls += 1
+            self.failed_searches += 1
+            self.exhausted = True
+            return []
+
+    class Works(WebSearchProvider):
+        def search(self, query, *, count=5, domains=()):  # type: ignore[no-untyped-def]
+            return [SearchResult(title=query, url="https://x.dev", description="")]
+
+    primary = Spent()
+    search = FallbackSearchProvider(primary, Works())
+    assert [r.title for r in search.search("a")] == ["a"]
+    assert [r.title for r in search.search("b")] == ["b"]
+    assert primary.calls == 1 and search.failed_searches == 0

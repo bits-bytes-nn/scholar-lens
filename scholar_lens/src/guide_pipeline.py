@@ -32,6 +32,7 @@ from .runtime import (
 from .tech_guide import TechGuide, TechGuideGenerator
 from .web_research import (
     BraveSearchProvider,
+    FallbackSearchProvider,
     NullSearchProvider,
     TavilySearchProvider,
     WebResearcher,
@@ -188,6 +189,9 @@ def _split_list(value: str) -> list[str]:
 def build_search_provider() -> WebSearchProvider:
     """Tavily (LLM-oriented, returns cleaned content) > Brave > no web search."""
     if os.getenv(EnvVars.TAVILY_API_KEY.value):
+        if os.getenv(EnvVars.BRAVE_API_KEY.value):
+            logger.info("Using Tavily Search, falling back to Brave, for web research.")
+            return FallbackSearchProvider(TavilySearchProvider(), BraveSearchProvider())
         logger.info("Using Tavily Search for web research.")
         return TavilySearchProvider()
     if os.getenv(EnvVars.BRAVE_API_KEY.value):

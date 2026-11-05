@@ -122,6 +122,8 @@ _BARE_DOCS_VERSION = re.compile(r"v\d+", re.I)
 _BARE_VERSION_SEGMENTS = 2  # "v2" only right after the root or a language
 _BRAVE_WEB_SEARCH_URL = "https://api.search.brave.com/res/v1/web/search"
 _TAVILY_SEARCH_URL = "https://api.tavily.com/search"
+# Tavily's answers for a spent plan quota or key: no later query succeeds.
+_TAVILY_EXHAUSTED_STATUSES = frozenset({401, 403, 432, 433})
 
 
 def docs_version(url: str) -> str | None:
@@ -488,12 +490,39 @@ class WebSearchProvider(ABC):
     # Searches that failed (429, 5xx, timeout, malformed answer) and so
     # returned nothing; not retried, reported as a run note instead.
     failed_searches: int = 0
+    # True once the backend reports its quota or key spent.
+    exhausted: bool = False
 
     @abstractmethod
     def search(
         self, query: str, *, count: int = 5, domains: Collection[str] = ()
     ) -> list[SearchResult]:
         """Results for ``query``; ``domains`` restricts them to those hosts."""
+
+
+class FallbackSearchProvider(WebSearchProvider):
+    """``primary``, and ``secondary`` for a query ``primary`` answers with
+    nothing because it failed; once ``primary`` reports its quota spent it is
+    skipped. ``failed_searches`` counts queries both failed."""
+
+    def __init__(self, primary: WebSearchProvider, secondary: WebSearchProvider):
+        self.primary = primary
+        self.secondary = secondary
+        self.failed_searches = 0
+
+    def search(
+        self, query: str, *, count: int = 5, domains: Collection[str] = ()
+    ) -> list[SearchResult]:
+        if not self.primary.exhausted:
+            before = self.primary.failed_searches
+            results = self.primary.search(query, count=count, domains=domains)
+            if results or self.primary.failed_searches == before:
+                return results
+        before = self.secondary.failed_searches
+        results = self.secondary.search(query, count=count, domains=domains)
+        if self.secondary.failed_searches > before:
+            self.failed_searches += 1
+        return results
 
 
 class NullSearchProvider(WebSearchProvider):
@@ -598,6 +627,10 @@ class TavilySearchProvider(WebSearchProvider):
             # ValueError covers JSONDecodeError on a malformed/truncated response.
             logger.warning("Tavily search failed for '%s': %s", query, e)
             self.failed_searches += 1
+            status = getattr(getattr(e, "response", None), "status_code", None)
+            if status in _TAVILY_EXHAUSTED_STATUSES:
+                # The plan's quota or key is spent: later queries fail too.
+                self.exhausted = True
             return []
         results = data.get("results") or []
         if not isinstance(results, list):
