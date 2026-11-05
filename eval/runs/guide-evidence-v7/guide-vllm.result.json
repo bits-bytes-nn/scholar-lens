@@ -1,0 +1,161 @@
+{
+  "kind": "guide",
+  "status": "succeeded",
+  "input": "https://docs.vllm.ai/en/latest/getting_started/quickstart.html, https://arxiv.org/abs/2309.06180, https://blog.vllm.ai/2023/06/20/vllm.html",
+  "title": "vLLM: PagedAttention, Continuous Batching, and Production Serving",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/guide-vllm-pagedattention-continuous-batching-and-production-serving/2026-11-05-vllm-pagedattention-continuous-batching-and-production-serving.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-11-05-vllm-pagedattention-continuous-batching-and-production-serving.md",
+  "pr_url": null,
+  "warnings": [
+    "Section '메모리의 60~80%를 버리던 기존 KV 캐시 관리라는 병목': check 1 sentence(s) the evidence may not support: A100 40GB 전체 가운데 모든 요청의 KV 캐시가 나눠 써야 하는 공간은 그 30% 남짓에 불과합니다 [[E41]]. (unsupported: Source says 'close to 30%' (about or just under), not '30% 남짓' (a bit over 30%). The figure also applies only to the 13B model case.)",
+    "Section '고정 크기 블록과 블록 테이블로 KV 캐시를 가상 메모리처럼 다루는 PagedAttention': check 5 sentence(s) the evidence may not support: 대화형 요청처럼 짧은 응답이 많은 Qwen/Qwen2.5-1.5B-Instruct 서빙에서도, 블록 하나에 해당하는 낭비 상한은 요청당 15슬롯입니다. (unsupported: No evidence mentions serving Qwen/Qwen2.5-1.5B-Instruct. The 15-slot cap assumes a current block size of 16, which only the paper's default at the time or a third-party source gives.) | 블록 크기 16에서 100토큰까지 자란 요청은 $$\\lceil 100/16 \\rceil = 7$$개 블록, 즉 112슬롯을 쓰고, 버리는 칸은 12슬롯입니다. (numbers not in its evidence) | 같은 요청에 최대 길이 4096토큰을 연속으로 예약했다면 3996슬롯이 빈 채로 묶입니다. (numbers not in its evidence) | 논문 저자들이 측정한 결과, ShareGPT 트레이스에서는 16~128이 가장 좋았습니다. (numbers not in its evidence) | Alpaca 트레이스에서는 16과 32가 잘 동작했지만 그보다 큰 크기에서는 시퀀스가 블록보다 짧아져 성능이 크게 떨어졌습니다 [[E62]]. (numbers not in its evidence)",
+    "Section '고정 크기 블록과 블록 테이블로 KV 캐시를 가상 메모리처럼 다루는 PagedAttention' still has: numbers ['16', '100', '112', '12'] without evidence: 블록 크기 16에서 100토큰까지 자란 요청은 $$\\lceil 100/16 \\rceil = 7$$개 블록, 즉 112슬롯을 쓰고, 버리는 칸은 12슬롯입니다. | numbers ['4096', '3996'] without evidence: 같은 요청에 최대 길이 4096토큰을 연속으로 예약했다면 3996슬롯이 빈 채로 묶입니다. | points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 앞서 본 기존 시스템의 낮은 활용률이 바로 이 차이에서 나옵니다. | numbers ['16', '128'] without evidence: 논문 저자들이 측정한 결과, ShareGPT 트레이스에서는 16~128이 가장 좋았습니다. | numbers ['32'] are not in the cited evidence: Alpaca 트레이스에서는 16과 32가 잘 동작했지만 그보다 큰 크기에서는 시퀀스가 블록보다 짧아져 성능이 크게 떨어졌습니다 .",
+    "Section '토큰 예산 기반의 반복 단위 스케줄러가 실현하는 연속 배칭': check 7 sentence(s) the evidence may not support: 디코드 스텝 하나가 짧은 작은 모델일수록 스케줄링 시간이 차지하는 비중이 커서, 이 겹치기의 효과가 큽니다. (unsupported: No evidence links the size of the async scheduling gain to model size or decode step length.) | Spheron이 vLLM v0.18.0, Llama 3.3 70B FP8, H100 SXM5 80GB 환경에서 동시성을 4에서 128까지 바꿔 가며 측정했습니다. (numbers not in its evidence) | `--max-num-batched-tokens`는 `1k`(1,000), `1K`(1,024), `25.6k`(25,600) 같은 표기도 받습니다 [[E97]]. (numbers not in its evidence) | 예산은 디코드 토큰을 먼저 채우고 남은 $$2048-48=2000$$토큰을 프롬프트에 줍니다. (numbers not in its evidence) | 세 스텝이면 $$2000+2000+1000=5000$$토큰이 모두 계산되고, 그동안 48개 요청은 매 스텝 한 토큰씩 출력을 이어 갑니다. (numbers not in its evidence)",
+    "Section '토큰 예산 기반의 반복 단위 스케줄러가 실현하는 연속 배칭' still has: points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 앞서 본 PagedAttention의 블록 단위 할당이 이 방식을 받쳐 줍니다. | numbers ['3.3', '70B', '80', '128'] without evidence: Spheron이 vLLM v0.18.0, Llama 3.3 70B FP8, H100 SXM5 80GB 환경에서 동시성을 4에서 128까지 바꿔 가며 측정했습니다. | ['80', '128'] already stated in '메모리의 60~80%를 버리던 기존 KV 캐시 관리라는 병목': refer back without repeating: Spheron이 vLLM v0.18.0, Llama 3.3 70B FP8, H100 SXM5 80GB 환경에서 동시성을 4에서 128까지 바꿔 가며 측정했습니다. | numbers ['1k', '1,000', '1K', '1,024', '25.6k', '25,600'] are not in the cited evidence: `--max-num-batched-tokens`는 `1k`(1,000), `1K`(1,024), `25.6k`(25,600) 같은 표기도 받습니다 . | numbers ['2048', '48', '2000'] without evidence: 예산은 디코드 토큰을 먼저 채우고 남은 $$2048-48=2000$$토큰을 프롬프트에 줍니다.",
+    "Section '블록이 모자랄 때 쓰는 all-or-nothing 선점과 재계산 복구': check 4 sentence(s) the evidence may not support: KV 캐시 블록이 모자라면 vLLM은 가장 늦게 도착한 요청의 블록을 한꺼번에 해제해 대기 큐로 돌려보내고, 다시 받아들일 때는 그 KV 캐시를 재계산(recomputation)으로 복원합니다 [[E47, E129] (unsupported: Combines the paper's design (latest-arrived request preempted first, all-or-nothing eviction; E47) with V1 behaviour (free blocks, return to waiting queue, recompute; E129) as one current mechanism. E129 does not say which request V1 picks to preempt.) | 논문이 기본값으로 둔 블록 크기 16을 쓴다면 이 요청은 $$\\lceil 800/16 \\rceil = 50$$개 블록을 쓰고 있었습니다 [[E62]]. (numbers not in its evidence) | 재계산은 생성된 300토큰을 원래 500토큰 프롬프트에 이어 붙인 프롬프트 하나를 처리하는 일이 됩니다. (numbers not in its evidence) | 300번의 디코드 스텝을 되풀이하지 않고 프롬프트 단계 한 번으로 모든 위치의 KV 캐시가 다시 만들어집니다 [[E48]]. (numbers not in its evidence)",
+    "Section '블록이 모자랄 때 쓰는 all-or-nothing 선점과 재계산 복구' still has: points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 앞서 설명한 쓰기 시 복사로 후보들이 물리 블록을 공유하고 있어서, 후보 하나만 떼어 내면 공유 관계가 깨지기 때문입니다. | numbers ['800', '50'] are not in the cited evidence: 논문이 기본값으로 둔 블록 크기 16을 쓴다면 이 요청은 $$\\lceil 800/16 \\rceil = 50$$개 블록을 쓰고 있었습니다 . | ['16'] already stated in '고정 크기 블록과 블록 테이블로 KV 캐시를 가상 메모리처럼 다루는 PagedAttention': refer back without repeating: 논문이 기본값으로 둔 블록 크기 16을 쓴다면 이 요청은 $$\\lceil 800/16 \\rceil = 50$$개 블록을 쓰고 있었습니다 . | numbers ['300', '500'] without evidence: 재계산은 생성된 300토큰을 원래 500토큰 프롬프트에 이어 붙인 프롬프트 하나를 처리하는 일이 됩니다. | numbers ['300'] are not in the cited evidence: 300번의 디코드 스텝을 되풀이하지 않고 프롬프트 단계 한 번으로 모든 위치의 KV 캐시가 다시 만들어집니다 .",
+    "Section 'API 서버, 엔진 코어, GPU 워커로 나뉜 V1 프로세스 구조' still has: ['3.3'] already stated in '토큰 예산 기반의 반복 단위 스케줄러가 실현하는 연속 배칭': refer back without repeating: 측정에는 ShareGPT 데이터셋의 Llama 3.1 8B·Llama 3.3 70B와 VisionArena 데이터셋의 Qwen2-VL이 쓰였고, Qwen2-VL 같은 비전-언어 모델에서는 향상 폭이 더 컸습니다 .",
+    "Section 'uv와 사전 컴파일 커널을 쓰는 새 환경 설치' still has: the section must start with its '## ' heading (uv와 사전 컴파일 커널을 쓰는 새 환경 설치)",
+    "Section 'vllm serve로 띄우는 단일 모델 OpenAI 호환 서버' still has: ['2023'] already stated in '메모리의 60~80%를 버리던 기존 KV 캐시 관리라는 병목': refer back without repeating: 2023년 vLLM 발표 블로그에서는 `python -m vllm.entrypoints.openai.api_server --model ...` 형태로 OpenAI API 호환 서버를 띄웠습니다 .",
+    "Section 'GPU 메모리 예산을 정하는 엔진 인자: 메모리 비율, 컨텍스트 길이, CUDA 그래프': check 3 sentence(s) the evidence may not support: CLI에서는 앞서 토큰 예산 인자에서 본 `k`/`K` 접미사 표기도 그대로 받습니다. (unsupported: The evidence shows k/K suffix parsing only for --max-model-len. Nothing in the evidence shows the token-budget argument (max_num_batched_tokens) accepting this notation.) | 이 가정에서 남은 18 GiB를 가정한 토큰당 크기로 나누면 캐시에 담을 수 있는 토큰 수가 나옵니다. (numbers not in its evidence) | 아래에서 `max_model_len=4096`으로 묶을 요청이 모두 4,096 토큰을 꽉 채운다고 가정하면, 이 토큰 수를 4,096으로 나눈 약 164개가 동시에 들어가는 셈입니다. (numbers not in its evidence)",
+    "Section 'GPU 메모리 예산을 정하는 엔진 인자: 메모리 비율, 컨텍스트 길이, CUDA 그래프' still has: the section must start with its '## ' heading (GPU 메모리 예산을 정하는 엔진 인자: 메모리 비율, 컨텍스트 길이, CUDA 그래프) | numbers ['18'] without evidence: 이 가정에서 남은 18 GiB를 가정한 토큰당 크기로 나누면 캐시에 담을 수 있는 토큰 수가 나옵니다. | numbers ['4096', '4,096', '164'] without evidence: 아래에서 `max_model_len=4096`으로 묶을 요청이 모두 4,096 토큰을 꽉 채운다고 가정하면, 이 토큰 수를 4,096으로 나눈 약 164개가 동시에 들어가는 셈입니다. | ['4096'] already stated in '고정 크기 블록과 블록 테이블로 KV 캐시를 가상 메모리처럼 다루는 PagedAttention': refer back without repeating: 아래에서 `max_model_len=4096`으로 묶을 요청이 모두 4,096 토큰을 꽉 채운다고 가정하면, 이 토큰 수를 4,096으로 나눈 약 164개가 동시에 들어가는 셈입니다. | ['20', '40'] already stated in 'API 서버, 엔진 코어, GPU 워커로 나뉜 V1 프로세스 구조': refer back without repeating: 워밍업 때 배치 크기별 커널 실행을 기록해 두었다가 재생하고, 입력 형태가 고정되어야 하므로 입력을 기록된 배치 크기로 패딩하며, 작은 배치에서는 스텝당 지연이 20~40% 줄어든다는 주장입니다 .",
+    "Section 'CPU 백엔드의 블록 크기, dtype, NUMA 바인딩 튜닝' still has: ['32', '128'] already stated in '고정 크기 블록과 블록 테이블로 KV 캐시를 가상 메모리처럼 다루는 PagedAttention': refer back without repeating: CPU 백엔드에서 블록 크기 `--block-size`는 32의 배수로 주며, 기본값은 128입니다 . | ['32'] already stated in '고정 크기 블록과 블록 테이블로 KV 캐시를 가상 메모리처럼 다루는 PagedAttention': refer back without repeating: 텐서 병렬 크기를 2로 두어 프로세스가 2개일 때 `0-31|32-63`을 주면, `|`로 나눈 구간이 rank 순서대로 배정되어 첫 구간은 rank0의 스레드에, 둘째 구간은 rank1의 스레드에 바인딩됩니다 .",
+    "Section '높은 동시성 처리량에 강하지만 compute-bound 부하와 오케스트레이션에는 한계가 있는 선택지' still has: the section must start with its '## ' heading (높은 동시성 처리량에 강하지만 compute-bound 부하와 오케스트레이션에는 한계가 있는 선택지) | ['40', '24'] already stated in '메모리의 60~80%를 버리던 기존 KV 캐시 관리라는 병목': refer back without repeating: A10G의 LLaMA-7B와 A100 40GB의 LLaMA-13B로, 요청 길이를 ShareGPT에서 샘플링한 벤치마크에서 vLLM은 HF Transformers보다 최대 24배, TGI보다 최대 3.5배 높은 처리량을 냈습니다 .",
+    "Section 'uv와 사전 컴파일 커널을 쓰는 새 환경 설치': guide review problems left as they were: The section heading is followed immediately by a stray `<section>` tag and a second `## ` heading ('uv 새 가상환경과 사전 컴파일 커널로 끝내는 설치'), so the TOC gets two headings",
+    "[image] line 41: remote image not localized (linked to its source): https://vllm.ai/blog-assets/figures/annimation1.gif",
+    "[image] line 103: remote image not localized (linked to its source): https://vllm.ai/blog-assets/figures/annimation3.gif",
+    "[image] line 631: remote image not localized (linked to its source): https://vllm.ai/blog-assets/figures/perf_a100_n3_light.png"
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 3560.8,
+  "input_tokens": 2718809,
+  "output_tokens": 419202,
+  "estimated_cost_usd": 17.5833,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 177,
+      "failed_calls": 0,
+      "input_tokens": 15102,
+      "output_tokens": 419202,
+      "cache_read_tokens": 815039,
+      "cache_write_tokens": 1888668,
+      "cost_usd": 17.583286
+    },
+    "by_stage": {
+      "relevance": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 1610,
+        "output_tokens": 198,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.00026
+      },
+      "research_plan": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 2439,
+        "output_tokens": 527,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.000507
+      },
+      "read": {
+        "calls": 49,
+        "failed_calls": 0,
+        "input_tokens": 118,
+        "output_tokens": 30299,
+        "cache_read_tokens": 281617,
+        "cache_write_tokens": 63559,
+        "cost_usd": 0.518446
+      },
+      "outline": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 6202,
+        "cache_read_tokens": 1856,
+        "cache_write_tokens": 17846,
+        "cost_usd": 0.214028
+      },
+      "verify": {
+        "calls": 57,
+        "failed_calls": 0,
+        "input_tokens": 228,
+        "output_tokens": 128594,
+        "cache_read_tokens": 395648,
+        "cache_write_tokens": 939991,
+        "cost_usd": 7.431005
+      },
+      "draft": {
+        "calls": 14,
+        "failed_calls": 0,
+        "input_tokens": 56,
+        "output_tokens": 55661,
+        "cache_read_tokens": 50820,
+        "cache_write_tokens": 262079,
+        "cost_usd": 2.444167
+      },
+      "review": {
+        "calls": 15,
+        "failed_calls": 0,
+        "input_tokens": 60,
+        "output_tokens": 35321,
+        "cache_read_tokens": 27718,
+        "cache_write_tokens": 86259,
+        "cost_usd": 1.149037
+      },
+      "fix": {
+        "calls": 38,
+        "failed_calls": 0,
+        "input_tokens": 152,
+        "output_tokens": 160275,
+        "cache_read_tokens": 57380,
+        "cache_write_tokens": 518934,
+        "cost_usd": 5.82373
+      },
+      "finalize": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 10435,
+        "output_tokens": 2125,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.002106
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-haiku-5-5": {
+        "calls": 3,
+        "failed_calls": 0,
+        "input_tokens": 14484,
+        "output_tokens": 2850,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.002873
+      },
+      "global.anthropic.claude-sonnet-5-5": {
+        "calls": 49,
+        "failed_calls": 0,
+        "input_tokens": 118,
+        "output_tokens": 30299,
+        "cache_read_tokens": 281617,
+        "cache_write_tokens": 63559,
+        "cost_usd": 0.518446
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 125,
+        "failed_calls": 0,
+        "input_tokens": 500,
+        "output_tokens": 386053,
+        "cache_read_tokens": 533422,
+        "cache_write_tokens": 1825109,
+        "cost_usd": 17.061967
+      }
+    }
+  }
+}
