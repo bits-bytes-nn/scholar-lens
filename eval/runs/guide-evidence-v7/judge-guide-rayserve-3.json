@@ -1,0 +1,99 @@
+{
+  "item": "guide-rayserve",
+  "post": "/tmp/eval-guide/guide-rayserve-v7.md",
+  "judge_run": 3,
+  "scores": {"A": 8, "B": 8, "C": 7.5, "D": 8.5, "E": 8, "F": 6, "T1": 8.5, "T2": 8, "T3": 8.5},
+  "score_notes": {
+    "A": "Clear arc TL;DR(L11) -> problem(L17) -> units(L62) -> internals(L135) -> composition/autoscaling/FT -> dev loop(L531) -> config/KubeRay/ops -> verdict(L993). Deductions: the full Translator block is printed twice (L85-117 and L543-579) along with the pip line (L82, L536); topic heading '### 이 글의 판단' (L1016); Sources list omits cited Spheron (L260) and TrueFoundry (L1014) posts and the fault-tolerance / Serve LLM observability pages; ASCII box at L45-54 misaligned by Korean full-width text.",
+    "B": "Natural 입니다 register throughout. Deductions: English stem 'import할 때마다' (L663) -> '모듈을 불러올 때마다'; the same figure-intro formula repeats ('예를 들어 ... 상자로 그리면 다음과 같은 모양입니다' L39, '예를 들어 ... 상자로 그리면 다음과 같습니다' L411, '예를 들어 그려 보면 다음 그림과 같습니다' L870); meta sentence '표의 행은 각 계층의 복구 규칙과 체크포인트 범위를 정리한 것입니다' (L512); '...은 이 구조 덕분입니다' (L177).",
+    "C": "Mostly smooth with accurate back-references. Deductions: YAML at L750 already carries 'user_config: language: french' and is called the serve-build output plus runtime_env (L730), but reconfigure is introduced only at L762; Grafana walkthrough speaks of the '/' route (L952) after the app was moved to /text (L853); facts restated: framework-agnostic (L13, L35, L999), KubeRay cluster recovery (L15, L524, L886), static-YAML-graph contrast (L13, L29).",
+    "D": "Hard parts get worked examples tied to the running app: autoscaler arithmetic (L472), cancellation applied to summarize_and_translate (L703), bind-time vs runtime table (L255-258), GPU packing table (L937-940). Minor padding on Serve LLM usage-stats opt-out (L991) and dashboard secret redaction (L983) that the text app never uses.",
+    "E": "Good tables (units L66, transfer path L185, call styles L395, FT matrix L504, http_options L709) and code at the point of use. Deductions: duplicated Translator code block (L85 vs L543); no architecture figure, only text boxes, though the docs ship one; GPU table (L937) rests on an unsupported third-party claim.",
+    "F": "Wrong: 'bind는 디플로이먼트 객체를 감싼 DeploymentNode를 돌려줍니다' (L123); Ray 2.60 .bind() returns ray.serve.deployment.Application (checked in a venv) and no current docs page mentions DeploymentNode. Misattributed: L935 and L942 credit agents-lib with 'autoscaling adds replicas but no GPU nodes, replicas stay PENDING' and 'vLLM main LLM takes whole GPUs only'; the fetched agents-lib page says neither, and L935 contradicts the official autoscaling guide quoted at L429 (Ray Autoscaler requests more nodes); L1014 repeats it. Unsupported: 'VM 위 Ray 클러스터에 배포할 때 고르는 선택지가 바로 이 Serve CLI 방식' (L890, which the generator's own verifier flagged); '항상 upscale_delay_s 이하로 설정' (L474) is stronger than the current advanced-autoscaling text. Spheron/TrueFoundry claims (L260, L1014) cite posts missing from Sources.",
+    "T1": "Every runnable block in the running example ran as pasted on Ray 2.60.0 (private cluster; port changed from 8000 to a private one): quickstart, Summarizer composition, handle .summarize.remote().result(), pipeline_app, FastAPI ingress at route_prefix /text, _to_object_ref, streaming handle. Deduction: the config YAML (L732-754, copied into RayService at L844) sets user_config on Translator; with the Translator defined up to that point Serve fails ('user_config ... specified but deployment ... missing reconfigure method', reproduced), and the reconfigure code (L764-805) is a partial diff with elided bodies.",
+    "T2": "Covers the topics the docs emphasise (key concepts, composition, autoscaling, config files, production/KubeRay, FT, HTTP/FastAPI, observability) in a sensible order. Some sections go past the running example (Serve LLM metrics L985-991); batching is mentioned but never shown.",
+    "T3": "Strong internals: actor roles, the 3-step request path, handle/router data path, object-store threshold, autoscaler in the controller with push/poll metrics, two-layer scaling, FT matrix with what is lost, proxy health/drain timings, GCS as a single point of failure. Deduction: third-party claims are presented as findings (L935, L1014) and contradict official docs."
+  },
+  "principles": {
+    "claim_headings": {"status": "met", "evidence": "e.g. '큐 길이를 기준으로 하는 컨트롤러 내장 오토스케일러' (L403), '계층별 재시작과 GCS 체크포인트로 이루는 장애 허용' (L480); one topic heading '이 글의 판단' (L1016)."},
+    "running_example": {"status": "met", "evidence": "Summarizer -> Translator text app threads through composition (L214), autoscaling (L435), FT (L486), dev loop (L541), FastAPI (L627), config (L732), KubeRay (L844), GPU planning (L935), observability (L952)."},
+    "mechanism_design_code_example": {"status": "met", "evidence": "Autoscaler: mechanism (L409) -> design (L429, L461) -> YAML (L437) -> numbers (L472); handles: L264 -> code L270 -> table L395."},
+    "facts_said_once": {"status": "partly met", "evidence": "Translator code and pip line printed twice (L82/L85 and L536/L543); KubeRay recovery L15/L524/L886; framework-agnostic L13/L35/L999."},
+    "numbers_with_scope": {"status": "met", "evidence": "'Ray 2.59.0 기준으로 \"auto\"는 ...' (L433), 'Ray 2.32.0에서 바뀌었습니다' (L433), four nines scoped to 'Ray 2.0 알파 시점의 특정 구성' (L528)."},
+    "nothing_invented": {"status": "not met", "evidence": "DeploymentNode (L123); agents-lib claims not on the cited page (L935, L942); VM = Serve CLI (L890)."},
+    "writer_assessment": {"status": "met", "evidence": "L1018: when FastAPI alone suffices, BentoML/MLflow + Serve combination, compile models or embed Triton first, budget KubeRay/GCS FT/observability."},
+    "length_fitted": {"status": "partly met", "evidence": "1041 lines; installation is short, but Serve LLM usage stats (L991) and dashboard redaction (L983) are outside the example's needs, and code is duplicated."},
+    "type_shape": {"status": "met", "evidence": "TL;DR (L11) and problem (L17) first; architecture (L135) before config (L718); closes with when to choose and gaps (L993-1018)."},
+    "korean_style": {"status": "partly met", "evidence": "Consistent 입니다 register and Korean headings; repeated figure intros (L39, L411, L870); 'import할' (L663)."}
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 13,
+    "unsupported": 1,
+    "wrong": 1,
+    "unverifiable": 0,
+    "sampling": "Body paragraphs (blank-line blocks, excluding headings and code fences; tables and lists included), starting at paragraph 3 and taking every third: 3, 6, 9, ... 156.",
+    "examples": [
+      {"line": 123, "para": 18, "claim": "bind returns a DeploymentNode wrapping the deployment", "verdict": "wrong", "source": "Ray 2.60.0: type(A.bind()) is ray.serve.deployment.Application; key-concepts says bind 'define[s] an application'; no current docs page has DeploymentNode."},
+      {"line": 131, "para": 21, "claim": "__call__ receives a Starlette request; JSON-serializable return or a Starlette response", "verdict": "supported", "source": "http-guide: 'routed to the deployment's __call__ method with a Starlette Request ... can return any JSON-serializable object or a Starlette Response object'."},
+      {"line": 145, "para": 24, "claim": "gRPC proxy starts only with valid port and grpc_servicer_functions; runs grpcio", "verdict": "supported", "source": "architecture: 'If Serve is started with valid port and grpc_servicer_functions, then the gRPC proxy is started alongside the HTTP proxy. This Actor runs a grpcio server.'"},
+      {"line": 186, "para": 36, "claim": "request objects of 100KiB+ go through the object store with zero-copy read", "verdict": "supported", "source": "architecture: 'Larger request objects (100KiB+) are written to the object store and the replica can read them via zero-copy read.'"},
+      {"line": 196, "para": 39, "claim": "architecture page says one HTTP proxy on the head node by default; config page says EveryNode is the default", "verdict": "supported", "source": "architecture: 'By default there is one HTTP proxy actor on the head node'; config: 'EveryNode (default)'."},
+      {"line": 326, "para": 54, "claim": "DeploymentResponse in nested objects is fully deprecated; top-level arg/kwarg still supported; use _to_object_ref()", "verdict": "supported", "source": "model_composition: 'fully deprecated and no longer supported ... Passing a DeploymentResponse object as a top-level argument or keyword argument is still supported.'"},
+      {"line": 433, "para": 66, "claim": "num_replicas=\"auto\" = max_ongoing_requests 5, target 2, min 1, max 100; defaults changed in 2.32.0 (1.0->2.0, 100->5)", "verdict": "supported", "source": "autoscaling-guide block; advanced-autoscaling: 'changed from 1.0 to 2.0 in Ray 2.32.0', 'changed from 100 to 5 in Ray 2.32.0'."},
+      {"line": 472, "para": 72, "claim": "ResNet50 Locust test: autoscaled replicas roughly half the users because target_ongoing_requests=2", "verdict": "supported", "source": "autoscaling-guide: 'the number of autoscaled replicas is roughly half the number of Locust users ... target_ongoing_requests=2'."},
+      {"line": 516, "para": 81, "claim": "proxy health-check period 10.0 s, timeout 10.0 s, unhealthy after 3 consecutive failures", "verdict": "supported", "source": "config page: RAY_SERVE_PROXY_HEALTH_CHECK_PERIOD_S 'Default is 10.0'; ..._TIMEOUT_S '3 consecutive health checks ... Default is 10.0'."},
+      {"line": 711, "para": 108, "claim": "http_options defaults: host 0.0.0.0, port 8000, no request timeout, keep-alive 5 s", "verdict": "supported", "source": "config page (host/port/request_timeout_s defaults); http-guide: 'Uvicorn keeps HTTP connections alive for 5 seconds'."},
+      {"line": 898, "para": 129, "claim": "num_replicas defaults to 1; in-place update scales out", "verdict": "supported", "source": "autoscaling-guide: 'By default, num_replicas is 1 ... through in place updates.'"},
+      {"line": 931, "para": 132, "claim": "replica counts set via the external scaler API survive serve deploy upgrades", "verdict": "supported", "source": "advanced-autoscaling: 'When you upgrade your service with serve deploy, the number of replicas you set through the external scaler API stays intact.'"},
+      {"line": 942, "para": 135, "claim": "agents-lib says small models share fractional GPUs while the vLLM main LLM takes only whole GPUs", "verdict": "unsupported", "source": "Fetched agents-lib.com/compare/bentoml-vs-fastapi-vs-ray-serve: no mention of fractional GPUs, vLLM or whole-GPU limits (and no PENDING / GPU-node claim cited at L935)."},
+      {"line": 979, "para": 144, "claim": "dashboard on head-node port 8265; change via --dashboard-port or ray.init(dashboard_port)", "verdict": "supported", "source": "configure-manage-dashboard: 'Ray dashboard runs on port 8265 of the head node' ... '--dashboard-port' ... 'dashboard_port in your call to ray.init()'."},
+      {"line": 987, "para": 147, "claim": "engine metric logging is on by default as of Ray 2.51; disable with log_engine_metrics: False", "verdict": "supported", "source": "serve/llm/user-guides/observability: 'Engine metric logging is on by default as of Ray 2.51. To disable ... set log_engine_metrics: False'."}
+    ],
+    "outside_sample_findings": [
+      "L935: agents-lib credited with 'autoscaling adds replicas, never provisions GPU nodes; replicas stay PENDING' - not on the page, and contradicts the official guide paraphrased at L429.",
+      "L890: 'VM 위 Ray 클러스터 배포 = Serve CLI 방식' unsupported (the Production Guide only links a separate Deploy-on-VM page).",
+      "L474: '항상 upscale_delay_s 이하로 설정합니다' is stronger than the current advanced-autoscaling text.",
+      "L260 / L1014: Spheron and TrueFoundry posts cited in the body but absent from Sources."
+    ]
+  },
+  "checklist": {
+    "repeated": 0,
+    "avoided": 2,
+    "na": 0,
+    "repeated_ids": [],
+    "details": [
+      {"id": "arch-diagram-relative-link", "result": "avoided", "evidence": "No empty-text links or ../_images paths anywhere (grep for '](../', '[](' and '![' finds nothing). The post has no architecture image at all; the architecture is drawn as text blocks (L41-58, L162-169)."},
+      {"id": "proxy-env-ray-start-unsupported", "result": "avoided", "evidence": "The proxy env-var paragraphs (L516-518) give only names, meanings and defaults, with no 'export before ray start' instruction. The only ray-start prefix advice (L966) is about the Grafana/Prometheus dashboard variables, and the dashboard docs support it."}
+    ]
+  },
+  "extras": {
+    "architecture_first_line": 15,
+    "architecture_section_line": 135,
+    "non_official_share": "3 of 19 Sources entries (YouTube talk, agents-lib, discuss.ray.io RunLLM bot answer) = 16%; 5 of 21 (24%) counting the Spheron and TrueFoundry posts cited in the body but missing from Sources",
+    "opens_with_problem": true,
+    "opens_with_problem_evidence": "L17-31: tensor-in/tensor-out endpoints and static YAML graphs fall short",
+    "closes_with_choice_and_failure_modes": true,
+    "closes_evidence": "L993-1018: when it fits, what it lacks (model optimisation, lifecycle platform, ops overhead), and the writer's verdict"
+  },
+  "runnable_code": {
+    "verdict": "runs, with one config-ordering failure",
+    "environment": "uv venv Python 3.12, ray[serve] 2.60.0 + transformers + torch (CPU), private head node at 127.0.0.1:47391 in its own temp dir, Serve HTTP on a private port instead of 8000, t5-small from Hugging Face",
+    "results": {
+      "serve_quickstart (L544-578) + client (L594-599)": "OK, 'Bonjour monde!'",
+      "text_ml: Translator + Summarizer (L217-250), POST json": "OK, French summary",
+      "handle = serve.run(app); handle.summarize.remote(...).result() (L604)": "OK, English summary",
+      "pipeline_app (L289-323) in the same file": "OK",
+      "FastAPI Summarizer (L630-660) at route_prefix /text, POST /text/summarize params=text": "OK",
+      "_to_object_ref example (L329-353)": "OK",
+      "streaming handle example (L363-388)": "OK, [0, 1, 2]",
+      "Translator from L544 with user_config as in the YAML at L750/L862": "FAIL: RayServeException 'user_config ... specified but deployment ... missing reconfigure method'"
+    },
+    "notes": "Request shapes match: json= with await request.json(); params= with the FastAPI query parameter. Imports and names resolve when the snippets are combined as the text says ('same file'). The reconfigure snippet (L764-805) is a partial diff with '기존 코드 그대로' placeholders and cannot be pasted as is."
+  },
+  "top_issues": [
+    "Invented/misattributed facts: bind() 'returns DeploymentNode' (L123; it returns Application in Ray 2.60), and agents-lib is credited with GPU-node/PENDING and vLLM whole-GPU claims it does not make (L935, L942, L1014), contradicting the official autoscaler text at L429.",
+    "The config YAML presented as serve-build output (L730-754, copied to RayService at L844) sets user_config on Translator before reconfigure is introduced (L762); with the code shown up to that point the deploy fails (reproduced).",
+    "Repetition and source hygiene: the full Translator block and pip line are printed twice (L82-117, L536-579), KubeRay recovery and framework-agnostic facts are restated, and the Spheron/TrueFoundry posts and the fault-tolerance/LLM-observability pages used are missing from Sources."
+  ]
+}

@@ -721,3 +721,17 @@ def test_evidence_for_another_sdk_language_leaves_a_python_guide() -> None:
     )
     outline, dropped = drop_other_language(_outline(), ledger)
     assert dropped == ["E2"] and outline.sections[3].evidence == []
+
+
+def test_product_imports_the_official_pages_never_show_are_flagged() -> None:
+    from scholar_lens.domain.guide.evidence_guide import unverified_imports
+
+    official = "from strands import Agent\nfrom strands.vended_tools import file_editor\n"
+    code = (
+        "```python\nfrom strands import Agent\nfrom strands_tools import file_editor\n"
+        "from pydantic import BaseModel\nimport strands.vended_tools\n```\n"
+    )
+    assert unverified_imports(code, official, ["Strands", "strands-agents"]) == [
+        "strands_tools"
+    ]
+    assert unverified_imports(code, "", ["strands"]) == []

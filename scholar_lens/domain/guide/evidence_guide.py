@@ -7,7 +7,7 @@ draft."""
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -291,6 +291,41 @@ def drop_other_language(
                 kept.append(eid)
         sections.append(s.model_copy(update={"evidence": kept}))
     return outline.model_copy(update={"sections": sections}), dropped
+
+
+_IMPORT = re.compile(
+    r"^\s*(?:from\s+([\w.]+)\s+import\s+([\w, ()*]+)|import\s+([\w.]+))", re.M
+)
+
+
+def _package_key(name: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", name.lower())
+
+
+def unverified_imports(
+    markdown: str, official_text: str, products: Iterable[str]
+) -> list[str]:
+    """Import lines of the guide's Python code that load a module of the
+    product (its top-level package starts with a product name: ``vllm``,
+    ``ray``, ``strands`` and ``strands_tools``) under a path the official
+    pages never show; an invented path fails as pasted. Empty
+    ``official_text`` checks nothing."""
+    if not official_text.strip():
+        return []
+    keys = [k for p in products if (k := _package_key(p))]
+    known = official_text.lower()
+    found: list[str] = []
+    for m in _FENCE_OPEN.finditer(markdown):
+        if m.group(2).lower() not in ("python", "py", ""):
+            continue
+        for imp in _IMPORT.finditer(m.group(3)):
+            module = imp.group(1) or imp.group(3)
+            top = _package_key(module.split(".")[0])
+            if not any(top.startswith(k) for k in keys):
+                continue
+            if module.lower() not in known and module not in found:
+                found.append(module)
+    return found
 
 
 def cited_sources(markdown: str, ledger: EvidenceLedger) -> list[str]:

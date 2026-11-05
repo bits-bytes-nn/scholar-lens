@@ -15,6 +15,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from ..domain.evidence import Authority, SourceDocument
+from ..domain.guide.evidence_guide import unverified_imports
 from ..domain.post_names import slugify
 from .constants import LanguageModelId, LocalPaths, S3Paths
 from .guide_authority import official_reference, unverified_identifiers
@@ -149,7 +150,12 @@ async def write_guide_with_evidence(
     products = generator.products
 
     def identifier_check(markdown: str) -> list[str]:
-        return unverified_identifiers(markdown, official_text, products)
+        # Flags and arguments, and product import paths, no official page
+        # shows (an invented path fails as pasted).
+        return [
+            *unverified_identifiers(markdown, official_text, products),
+            *unverified_imports(markdown, official_text, products),
+        ]
 
     language = context.config.output_language
     engine = EvidenceGuideEngine(
