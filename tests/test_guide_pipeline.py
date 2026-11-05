@@ -175,9 +175,13 @@ async def test_a_retitled_rerun_updates_the_published_guide(
     )
     session = boto3.Session(region_name="us-east-1")
 
+    config = Config()
+    # The fake generator stands in for the sections engine.
+    config.tech_guide.engine = "sections"
+
     def context(posts: list[BlogPost]) -> RunContext:
         return RunContext(
-            config=Config(),
+            config=config,
             default_boto_session=session,
             bedrock_boto_session=session,
             conventions=spec,
@@ -212,3 +216,45 @@ async def test_a_retitled_rerun_updates_the_published_guide(
     assert 'categories: ["Tech Guides", "Language-Models"]' in post
     assert "cover: /assets/images/language-models.jpg" in post
     assert "](/assets/images/vllm-serving-guide-1.png)" in post
+
+
+async def test_the_evidence_engine_writes_guides_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from unittest.mock import MagicMock
+
+    from scholar_lens.src import guide_pipeline
+
+    assert Config().tech_guide.engine == "evidence"
+    seen: dict[str, object] = {}
+
+    class Stop(Exception):
+        pass
+
+    async def evidence(context, generator, **kwargs):  # type: ignore[no-untyped-def]
+        seen.update(kwargs)
+        raise Stop
+
+    class Generator:
+        notes: list[str] = []
+
+        def __init__(self, *args, **kwargs) -> None:  # type: ignore[no-untyped-def]
+            seen["max_total_tokens"] = kwargs["max_total_tokens"]
+
+        async def generate(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+            raise AssertionError("the sections engine ran")
+
+    monkeypatch.setattr(guide_pipeline, "write_guide_with_evidence", evidence)
+    monkeypatch.setattr(guide_pipeline, "TechGuideGenerator", Generator)
+    monkeypatch.setattr(guide_pipeline, "WebResearcher", MagicMock())
+
+    async def no_guideline(context):  # type: ignore[no-untyped-def]
+        return None
+
+    monkeypatch.setattr(guide_pipeline, "load_translation_guideline", no_guideline)
+    context = MagicMock()
+    context.config = Config()
+    request = MagicMock(urls=[DOCS], reference_urls=[], search_queries=[])
+    with pytest.raises(Stop):
+        await guide_pipeline.run_guide_pipeline(context, request, MagicMock())
+    assert seen["urls"] == [DOCS] and seen["max_total_tokens"] is None

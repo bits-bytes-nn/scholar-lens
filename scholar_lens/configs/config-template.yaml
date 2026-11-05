@@ -113,7 +113,7 @@ tech_guide:
   # Writing engine: sections (synopsis, then score-revised sections) or
   # evidence (reading agents record checked evidence per page; the outline
   # gives it to sections in the guide's order; docs/redesign.md).
-  engine: sections
+  engine: evidence
   # Evidence engine: pages read and the guide's prose characters (Korean).
   max_sources_read: 40
   min_total_chars: 30000

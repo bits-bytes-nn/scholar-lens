@@ -210,7 +210,7 @@ class TechGuide(_Section):
     # engine reads with the synopsis model, plans and writes with the writing
     # model and checks with the evaluation model; the token limit above
     # applies to "sections" only.
-    engine: Literal["sections", "evidence"] = Field(default="sections")
+    engine: Literal["sections", "evidence"] = Field(default="evidence")
     # Evidence engine: pages read (the docs and reference material first)
     # and the guide's prose characters (Korean).
     max_sources_read: int = Field(default=40, ge=1, le=120)

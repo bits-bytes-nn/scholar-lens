@@ -135,7 +135,9 @@ def _fake_summarizer(output: str):  # type: ignore[no-untyped-def]
 
 class TestSummaryEndToEnd:
     async def test_messy_model_output_becomes_a_valid_post(
-        self, pipeline_env, monkeypatch: pytest.MonkeyPatch  # type: ignore[no-untyped-def]
+        self,
+        pipeline_env,
+        monkeypatch: pytest.MonkeyPatch,  # type: ignore[no-untyped-def]
     ) -> None:
         context, fetched = pipeline_env
         monkeypatch.setattr(
@@ -169,7 +171,9 @@ class TestSummaryEndToEnd:
         assert "](/assets/images/" in body and "arxiv.org/html" not in body
 
     async def test_post_without_controlled_tag_is_blocked(
-        self, pipeline_env, monkeypatch: pytest.MonkeyPatch  # type: ignore[no-untyped-def]
+        self,
+        pipeline_env,
+        monkeypatch: pytest.MonkeyPatch,  # type: ignore[no-untyped-def]
     ) -> None:
         context, _ = pipeline_env
         paper = _paper(
@@ -199,9 +203,13 @@ class TestSummaryEndToEnd:
 
 class TestGuideEndToEnd:
     async def test_guide_gets_spec_taxonomy_and_validates(
-        self, pipeline_env, monkeypatch: pytest.MonkeyPatch  # type: ignore[no-untyped-def]
+        self,
+        pipeline_env,
+        monkeypatch: pytest.MonkeyPatch,  # type: ignore[no-untyped-def]
     ) -> None:
         context, _ = pipeline_env
+        # The fake generator stands in for the sections engine.
+        context.config.tech_guide.engine = "sections"
         guide = TechGuide(
             topic="Serving LLMs with vLLM",
             body=(
@@ -272,7 +280,9 @@ $$h = W\_0 x + \Delta W x = W_0 x + B A x$$
 
 class TestReviewEndToEnd:
     async def test_review_layout_and_conventions(
-        self, pipeline_env, monkeypatch: pytest.MonkeyPatch  # type: ignore[no-untyped-def]
+        self,
+        pipeline_env,
+        monkeypatch: pytest.MonkeyPatch,  # type: ignore[no-untyped-def]
     ) -> None:
         from scholar_lens.src.explainer import ReviewText
 
@@ -323,7 +333,8 @@ class TestReviewEndToEnd:
 
 
 async def test_tags_the_paper_never_mentions_become_pr_notes(
-    pipeline_env, monkeypatch: pytest.MonkeyPatch  # type: ignore[no-untyped-def]
+    pipeline_env,
+    monkeypatch: pytest.MonkeyPatch,  # type: ignore[no-untyped-def]
 ) -> None:
     context, _ = pipeline_env
     paper = _paper(keywords=["Low-Rank Adaptation", "Direct Preference Optimization"])
@@ -348,7 +359,8 @@ async def test_tags_the_paper_never_mentions_become_pr_notes(
 
 
 async def test_degraded_output_reaches_pr_notes_and_job_warnings(
-    pipeline_env, monkeypatch: pytest.MonkeyPatch  # type: ignore[no-untyped-def]
+    pipeline_env,
+    monkeypatch: pytest.MonkeyPatch,  # type: ignore[no-untyped-def]
 ) -> None:
     context, _ = pipeline_env
     monkeypatch.setattr(
@@ -418,7 +430,8 @@ async def test_translation_guideline_is_optional(
 
 
 async def test_guideline_failure_stops_before_paid_stages(
-    pipeline_env, monkeypatch: pytest.MonkeyPatch  # type: ignore[no-untyped-def]
+    pipeline_env,
+    monkeypatch: pytest.MonkeyPatch,  # type: ignore[no-untyped-def]
 ) -> None:
     context, _ = pipeline_env
     prepare = MagicMock()
@@ -438,11 +451,13 @@ async def test_guideline_failure_stops_before_paid_stages(
 
 
 async def test_guide_budget_abort_keeps_the_generator_notes(
-    pipeline_env, monkeypatch: pytest.MonkeyPatch  # type: ignore[no-untyped-def]
+    pipeline_env,
+    monkeypatch: pytest.MonkeyPatch,  # type: ignore[no-untyped-def]
 ) -> None:
     from scholar_lens.src.metrics import TokenBudgetExceeded
 
     context, _ = pipeline_env
+    context.config.tech_guide.engine = "sections"
 
     class FakeGenerator:
         def __init__(self, *args, **kwargs) -> None:  # type: ignore[no-untyped-def]
