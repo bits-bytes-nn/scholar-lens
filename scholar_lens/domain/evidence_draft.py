@@ -371,14 +371,31 @@ def drop_sentences(markdown: str, sentences: Iterable[str]) -> str:
             )
         else:
             markdown = markdown.replace(sentence, "", 1)
-    lines = []
-    for line in markdown.split("\n"):
-        bare = line.strip()
-        if bare and _FRAGMENT.match(bare) and not _SENTENCE_CLOSE.search(bare):
-            continue
-        lines.append(line.rstrip())
-    out = "\n".join(lines)
-    return re.sub(r"[ \t]{2,}", " ", re.sub(r"\n{3,}", "\n\n", out))
+    # Code, display math and tables are never cleaned: a YAML key or an
+    # indented line is not a fragment of a removed sentence.
+    parts = re.split(
+        r"(^(`{3,}|~{3,}).*?^\2[ \t]*$|^\s*\$\$.*?\$\$\s*$)",
+        markdown,
+        flags=re.M | re.S,
+    )
+    out_parts = []
+    for i in range(0, len(parts), 3):
+        prose = parts[i]
+        lines = []
+        for line in prose.split("\n"):
+            bare = line.strip()
+            if _TABLE_LINE.match(line):
+                lines.append(line.rstrip())
+                continue
+            if bare and _FRAGMENT.match(bare) and not _SENTENCE_CLOSE.search(bare):
+                continue
+            # Spaces a removal left between words, never the indentation.
+            lead = line[: len(line) - len(line.lstrip())]
+            lines.append(lead + re.sub(r"[ \t]{2,}", " ", line.strip()))
+        out_parts.append("\n".join(lines))
+        if i + 1 < len(parts):
+            out_parts.append(parts[i + 1])
+    return re.sub(r"\n{3,}", "\n\n", "".join(out_parts))
 
 
 _HEADINGS = re.compile(r"^#{2,4} .+$", re.M)

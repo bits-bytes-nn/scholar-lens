@@ -1,0 +1,29 @@
+{
+  "/tmp/eval-guide/guide-rayserve-v9.md": {
+    "prose_chars": 28188,
+    "errors": 0,
+    "warnings": 1,
+    "error_rules": [],
+    "sections": 12,
+    "mirrored_sections": [],
+    "distinct_numbers": 4,
+    "repeated_numbers": 0,
+    "repeated_share": 0.0,
+    "meta_sentences": [],
+    "visuals_per_10k": 15.61,
+    "images": 0,
+    "non_http_images": 0,
+    "tables": 7,
+    "display_math": 3,
+    "code_blocks": 34,
+    "undefined_macros": [],
+    "bare_bars_in_math": 0,
+    "math_commands": [
+      "text",
+      "times"
+    ],
+    "restate_per_1k": 0.32,
+    "intensifier_per_1k": 0.04,
+    "description_chars": 113
+  }
+}

@@ -761,3 +761,16 @@ def test_internal_source_ids_become_titles_outside_code() -> None:
     assert name_sources(md, {"W2": "Ray Serve vs Triton"}) == (
         "Ray Serve vs Triton 페이지는 드리프트를 봅니다.\n\n```python\nW2 = 1\n```\n\n`D1` 등급\n"
     )
+
+
+def test_dropping_a_sentence_leaves_code_and_tables_alone() -> None:
+    from scholar_lens.domain.evidence_draft import drop_sentences
+
+    md = (
+        "## A\n\n틀린 문장입니다. 맞는 문장입니다.\n\n```yaml\napplications:\n"
+        "  - name: app1\n    import_path: text_ml:app\n```\n\n"
+        "| 키 | 값 |\n| --- | --- |\n| a | 1 |\n\n- 첫째\n"
+    )
+    out = drop_sentences(md, ["틀린 문장입니다."])
+    assert "  - name: app1\n    import_path: text_ml:app\n" in out
+    assert "| a | 1 |" in out and "맞는 문장입니다." in out

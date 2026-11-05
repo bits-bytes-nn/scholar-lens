@@ -1,0 +1,135 @@
+{
+  "kind": "guide",
+  "status": "succeeded",
+  "input": "https://docs.ray.io/en/latest/serve/getting_started.html",
+  "title": "Ray Serve: Composable Python Model Serving from Laptop to KubeRay",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/guide-ray-serve-composable-python-model-serving-from-laptop-to-kuberay/2026-11-05-ray-serve-composable-python-model-serving-from-laptop-to-kuberay.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-11-05-ray-serve-composable-python-model-serving-from-laptop-to-kuberay.md",
+  "pr_url": null,
+  "warnings": [
+    "Section '디플로이먼트·레플리카·애플리케이션이라는 세 가지 배포 단위와 레플리카별 자원 선언': check 2 sentence(s) the evidence may not support: 바인딩된 `Translator`를 `Summarizer`의 생성자 인자로 넘기는 방식이며, 이 인자가 런타임에 무엇으로 바뀌는지는 모델 합성을 다룰 때 설명합니다. (unsupported: No evidence describes passing a bound deployment as another deployment's constructor argument (or Summarizer at all).) | 레플리카 2개가 각각 CPU 0.2와 GPU 0을 요구하므로, 이 디플로이먼트가 예약하는 양은 논리 CPU 기준으로 $$2 \\times 0.2 = 0.4$$개이고 GPU는 없습니다 [[E5]]. (numbers not in its evidence)",
+    "Section '디플로이먼트·레플리카·애플리케이션이라는 세 가지 배포 단위와 레플리카별 자원 선언' still has: numbers ['0.4'] are not in the cited evidence: 레플리카 2개가 각각 CPU 0.2와 GPU 0을 요구하므로, 이 디플로이먼트가 예약하는 양은 논리 CPU 기준으로 $$2 \\times 0.2 = 0.4$$개이고 GPU는 없습니다 .",
+    "Section '프록시에서 인그레스 디플로이먼트를 거쳐 레플리카로 가는 HTTP 요청 경로' still has: the section must start with its '## ' heading (프록시에서 인그레스 디플로이먼트를 거쳐 레플리카로 가는 HTTP 요청 경로) | a standard section needs at least 1 visuals (its figures, an equation, or a small table from its number evidence)",
+    "Section '@serve.ingress로 FastAPI 라우팅을 얹은 HTTP 인그레스와 라우트 접두사 규칙': check 1 sentence(s) the evidence may not support: 앞서 만든 `Summarizer`는 `__call__`에서 `await http_request.json()`으로 본문을 직접 꺼냈습니다. (unsupported: No evidence shows Summarizer's __call__ body or its use of await http_request.json().)",
+    "Section '@serve.ingress로 FastAPI 라우팅을 얹은 HTTP 인그레스와 라우트 접두사 규칙' still has: ['0.2'] already stated in '디플로이먼트·레플리카·애플리케이션이라는 세 가지 배포 단위와 레플리카별 자원 선언': refer back without repeating: 레플리카 2개에 레플리카마다 CPU 0.2개, GPU 0개를 배정하는 설정은 앞서 정한 값 그대로입니다 . | English stem with a Korean ending 'import하고': 달라지는 곳은 셋입니다. Serve와 FastAPI를 import하고, `@serve.deployment` 아래에 `@se",
+    "Section 'DeploymentHandle로 바뀌는 바인딩 인자와 DeploymentResponse 체이닝을 이용한 모델 합성': guide review problems left as they were: The subsection \"단계마다 따로 정하는 레플리카와 자원\" explains per-deployment `num_replicas` and raising only Translator's replicas when it is the bottleneck again. The deploym",
+    "Guide description still breaks the rules after a repair: description has 113 characters; write 120-160",
+    "6 web search(es) failed (rate limit, server error or timeout) and were not retried: the research is missing their results.",
+    "English stem with a Korean ending 'import하고': 달라지는 곳은 셋입니다. Serve와 FastAPI를 import하고, `@serve.deployment` 아래에 `@se",
+    "[description] line 1: description has 113 characters; the blog's descriptions run 120-160"
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 2723.4,
+  "input_tokens": 1941249,
+  "output_tokens": 316898,
+  "estimated_cost_usd": 13.9038,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 115,
+      "failed_calls": 0,
+      "input_tokens": 35791,
+      "output_tokens": 316898,
+      "cache_read_tokens": 421725,
+      "cache_write_tokens": 1483733,
+      "cost_usd": 13.903827
+    },
+    "by_stage": {
+      "relevance": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 2617,
+        "output_tokens": 186,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.000355
+      },
+      "research_plan": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 2786,
+        "output_tokens": 752,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.000655
+      },
+      "outline": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 4922,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 11385,
+        "cost_usd": 0.155381
+      },
+      "verify": {
+        "calls": 52,
+        "failed_calls": 0,
+        "input_tokens": 208,
+        "output_tokens": 97791,
+        "cache_read_tokens": 312425,
+        "cache_write_tokens": 708481,
+        "cost_usd": 5.624044
+      },
+      "draft": {
+        "calls": 12,
+        "failed_calls": 0,
+        "input_tokens": 48,
+        "output_tokens": 46720,
+        "cache_read_tokens": 37400,
+        "cache_write_tokens": 226291,
+        "cost_usd": 2.081007
+      },
+      "review": {
+        "calls": 13,
+        "failed_calls": 0,
+        "input_tokens": 52,
+        "output_tokens": 31393,
+        "cache_read_tokens": 20060,
+        "cache_write_tokens": 89030,
+        "cost_usd": 1.081238
+      },
+      "fix": {
+        "calls": 33,
+        "failed_calls": 0,
+        "input_tokens": 132,
+        "output_tokens": 134697,
+        "cache_read_tokens": 51840,
+        "cache_write_tokens": 448546,
+        "cost_usd": 4.957934
+      },
+      "finalize": {
+        "calls": 2,
+        "failed_calls": 0,
+        "input_tokens": 29944,
+        "output_tokens": 437,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.003213
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-haiku-5-5": {
+        "calls": 4,
+        "failed_calls": 0,
+        "input_tokens": 35347,
+        "output_tokens": 1375,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.004223
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 111,
+        "failed_calls": 0,
+        "input_tokens": 444,
+        "output_tokens": 315523,
+        "cache_read_tokens": 421725,
+        "cache_write_tokens": 1483733,
+        "cost_usd": 13.899604
+      }
+    }
+  }
+}
