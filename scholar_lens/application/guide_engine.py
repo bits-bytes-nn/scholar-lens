@@ -43,6 +43,7 @@ from ..domain.guide.evidence_guide import (
     GuideOutline,
     GuideSection,
     cited_sources,
+    drop_other_language,
     guide_draft_problems,
     guide_outline_problems,
     guide_section_targets,
@@ -227,25 +228,17 @@ def _outline_lines(items: Sequence[Evidence]) -> str:
     return "\n".join(lines)
 
 
-class CodeIssue(BaseModel):
+class ReviewFinding(BaseModel):
     section: str
     problem: str
     fix: str
 
 
-class CodeReview(BaseModel):
-    issues: list[CodeIssue] = Field(default_factory=list, max_length=20)
-
-
-def code_listing(written: Sequence[tuple[GuideSection, str]]) -> str:
-    """Every code block of the written sections, in order, under its
-    section's title."""
-    parts = []
-    for section, md in written:
-        blocks = [m.group(0) for m in _CODE_BLOCK.finditer(md)]
-        if blocks:
-            parts.append(f"### {section.title}\n\n" + "\n\n".join(blocks))
-    return "\n\n".join(parts)
+class GuideReview(BaseModel):
+    # One request of the final running example traced through every guard,
+    # policy, limit and handler the guide sets up, with its outcome.
+    trace: str = ""
+    issues: list[ReviewFinding] = Field(default_factory=list, max_length=30)
 
 
 class EvidenceGuideEngine(EvidenceWriter):
@@ -498,12 +491,36 @@ class EvidenceGuideEngine(EvidenceWriter):
         documents = self.selected(documents)
         by_id = {d.paper_id: d for d in documents}
         self._documents = by_id
-        self._names = {d.paper_id: d.title for d in documents}
+        # The claim check sees which kind of source a fact comes from.
+        self._names = {
+            d.paper_id: f"{d.title} [{d.authority or 'third_party'}]" for d in documents
+        }
         ledger = await self.read(topic, documents)
         if not len(ledger):
             raise ValueError("No source page gave usable evidence for the guide.")
         outline = await self.outline(topic, ledger, by_id, guideline)
         outline = await self._drop_wrong(outline, ledger)
+        outline, other = drop_other_language(outline, ledger)
+        if other:
+            logger.info(
+                "Evidence for another SDK language than %s left out: %s",
+                outline.code_language,
+                ", ".join(other),
+            )
+        # A section the checks emptied has nothing to state.
+        if empty := [
+            s.title for s in outline.sections if not s.evidence and s.kind != "tldr"
+        ]:
+            self.notes.append(
+                "Sections left without evidence were dropped: " + "; ".join(empty)
+            )
+            outline = outline.model_copy(
+                update={
+                    "sections": [
+                        s for s in outline.sections if s.evidence or s.kind == "tldr"
+                    ]
+                }
+            )
         glossary = {t.english: t.rendering for t in outline.glossary}
         targets = guide_section_targets(
             outline,
@@ -526,7 +543,7 @@ class EvidenceGuideEngine(EvidenceWriter):
             for n in section_numbers(markdown, _FREE_NUMBERS):
                 numbers.setdefault(n, heading)
             written.append((section, markdown))
-        written = await self._review_code(topic, outline, ledger, written)
+        written = await self._review_guide(topic, outline, ledger, written)
         parts = [md for _, md in written]
         if tldr is not None:
             parts.insert(0, await self._tldr(topic, outline, ledger, *tldr, written))
@@ -692,20 +709,22 @@ class EvidenceGuideEngine(EvidenceWriter):
             markdown = f"## {section.title}\n\n{markdown.lstrip()}"
         return markdown
 
-    async def _review_code(
+    async def _review_guide(
         self,
         topic: str,
         outline: GuideOutline,
         ledger: EvidenceLedger,
         written: list[tuple[GuideSection, str]],
     ) -> list[tuple[GuideSection, str]]:
-        """One review of all the guide's code in reading order (what no
-        section's own check sees: an import an earlier block lacked, a
-        handler that never returns its result, a server never sent a
-        request), then a fix of each section it names."""
-        listing = code_listing(written)
-        if not listing:
+        """One review of the whole guide in reading order: what no
+        section's own check sees (an import an earlier block lacked, a
+        handler that never returns its result, the guide's own policy
+        blocking its example, a back-reference to something never shown, a
+        fact repeated across sections), then a fix of each section it
+        names."""
+        if not written:
             return written
+        guide = "\n\n".join(md for _, md in written)
         source_code = "\n\n".join(
             f"[{e.paper_id}] {e.claim}\n{quote_for_prompt_code(e.code or '')}"
             for e in ledger
@@ -716,27 +735,30 @@ class EvidenceGuideEngine(EvidenceWriter):
         with usage_stage("review"):
             review = await self.model.structured(
                 role="evaluate",
-                system=prompts.CODE_REVIEW_SYSTEM,
+                system=prompts.GUIDE_REVIEW_SYSTEM,
                 prompt="\n\n".join(
                     [
                         f"Topic: {topic}. Running example: "
                         f"{outline.running_example or 'none'}. Code language: "
                         f"{outline.code_language or 'any'}.",
-                        block("guide_code", listing),
+                        block("guide", guide),
                         block("source_code", source_code),
                     ]
                 ),
-                schema=CodeReview,
+                schema=GuideReview,
             )
+        if review.trace:
+            logger.info("Guide review trace: %s", review.trace[:600])
         if not review.issues:
             return written
-        logger.info("Code review: %d issue(s).", len(review.issues))
+        logger.info("Guide review: %d issue(s).", len(review.issues))
         out = []
         for section, md in written:
+            names = {section.title, section_heading(md)}
             issues = [
                 f"{i.problem} Fix: {i.fix}"
                 for i in review.issues
-                if i.section.strip().lstrip("#").strip() == section.title
+                if i.section.strip().lstrip("#").strip() in names
             ]
             if not issues:
                 out.append((section, md))
@@ -746,7 +768,7 @@ class EvidenceGuideEngine(EvidenceWriter):
             fixed = await self._fix(md, own, issues)
             if structure_lost(md, fixed) or ends_mid_sentence(fixed):
                 self.notes.append(
-                    f"Section '{section.title}': code problems left as they were: "
+                    f"Section '{section.title}': guide review problems left as they were: "
                     + " | ".join(i[:160] for i in issues[:3])
                 )
             else:

@@ -230,7 +230,12 @@ states about the tool:
 - wrong: it contradicts the evidence.
 Numbered items include table rows: judge each cell of a row as a claim.
 A claim the listed source_sections state is supported, even when the cited
-evidence item does not state it.
+evidence item does not state it. Each evidence item names its source with
+its authority in brackets: a mechanism or default only a [reference],
+[third_party] or [older_docs] source gives (a paper's design, an earlier
+version's behaviour), stated as what the tool does today, is unsupported
+unless an [official] item confirms it; stated as that paper's or version's
+design, it is supported.
 Judge only specific factual claims about the tool (what it does, how it
 works, its commands, flags, defaults and measured results). A claim the
 evidence makes only for one SDK language, version, provider or condition,
@@ -300,31 +305,42 @@ to what the evidence says or deleted. Return the whole revised section.
     + SECURITY
 )
 
-CODE_REVIEW_SYSTEM = (
+GUIDE_REVIEW_SYSTEM = (
     """
-You review all the code of a technical guide, in the order a reader meets it,
-as an engineer who pastes each block and runs the running example end to
-end. Report only problems that stop the code from working as the text says:
-- a missing import, or a name, class, method or variable that neither the
-  block nor an earlier block defines;
-- a call whose arguments or result do not match its definition, or a block
-  that silently replaces an earlier definition with a fragment;
-- the running example not doing what the text says it does (a handler that
-  never returns the result it promises, a server that is started but never
-  sent a request, a client and server that disagree on the request's
-  shape, a config file referred to but never shown);
-- an import path, flag, metric or API name that contradicts the source code
-  listed (the official docs' code wins);
-- the guide's own settings defeating its example: an allow-list, policy or
-  guard shown earlier that blocks a tool the example needs (a structured
-  output tool included), a limit the example always hits;
-- a sentence that recaps or points back to code ("앞서 만든 build_agent에는
-  … 이 있습니다", "앞서 보낸 요청") that the earlier blocks do not show;
+You review a whole technical guide, in the order a reader meets it, as an
+engineer who pastes each block and runs the running example end to end.
+
+First, in `trace`, follow one request of the final running example through
+every piece the guide sets up on the way (hooks, middleware, guards,
+allow-lists, policies, limits, retries, the handler) and write what each
+does to it and what the caller finally gets. A structured output, a tool or
+a model call the guide's own allow-list or policy does not permit is
+blocked; say so.
+
+Then report each problem that stops the guide from working or reading as it
+says:
+- code: a missing import or install extra, a name or method neither the
+  block nor an earlier block defines, a call that does not match its
+  definition, a block that silently replaces an earlier definition with a
+  fragment, a client and server that disagree on the request's shape, a
+  config file referred to but never shown, an import path, flag, metric or
+  API name that contradicts the source code listed (the official docs'
+  code wins);
+- the example defeating itself: what the trace shows never reaches the
+  result the text promises (a policy or guard blocking a tool the example
+  needs, a limit it always hits, a result never returned);
 - no install command for the packages and extras the code imports (report
-  it on the first usage section).
-For each problem give the section title exactly as listed, the problem, and
-the fix (the corrected lines, using names and import paths from the guide
-or the source code listed). Return no issues when the code works.
+  it on the first usage section);
+- a sentence that points back to something earlier sections never show
+  ("앞서 계산한 대로", "앞서 보낸 요청", a recap of code the earlier blocks
+  do not contain), or that uses the running example before it is
+  introduced;
+- a fact explained again in a later section instead of referred back to
+  (name the section that should keep it; the TL;DR may repeat).
+For each problem give the section title exactly as it appears in the guide's
+`## ` heading, the problem, and the fix (the corrected lines, using names and
+import paths from the guide or the source code listed). Return no issues
+when there are none.
 """
     + SECURITY
 )

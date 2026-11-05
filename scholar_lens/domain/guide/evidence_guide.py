@@ -251,6 +251,48 @@ def guide_draft_problems(markdown: str, *, code_language: str = "") -> list[str]
     return problems
 
 
+_LANGUAGE_ONLY = re.compile(
+    r"\b(python|typescript|javascript|java|go|rust)\b\s*(?:sdk\s*)?(?:only|전용|에서만|만)"
+    r"|(?:only|전용)\s*(?:in|for)?\s*\b(python|typescript|javascript|java|go|rust)\b",
+    re.IGNORECASE,
+)
+
+
+def other_language_only(scope_and_claim: str, code_language: str) -> bool:
+    """Whether evidence holds only for another SDK language than the
+    guide's code ("TypeScript only" in a Python guide): stated in the
+    guide's sections it reads as true for the language the guide uses."""
+    family = _SDK_LANGUAGES.get(code_language.strip().lower(), "")
+    if not family:
+        return False
+    for m in _LANGUAGE_ONLY.finditer(scope_and_claim):
+        named = _SDK_LANGUAGES.get((m.group(1) or m.group(2)).lower(), "")
+        if named and named != family:
+            return True
+    return False
+
+
+def drop_other_language(
+    outline: GuideOutline, ledger: EvidenceLedger
+) -> tuple[GuideOutline, list[str]]:
+    """The outline without evidence that holds only for another SDK
+    language than its code language; returns the dropped ids."""
+    dropped: list[str] = []
+    sections = []
+    for s in outline.sections:
+        kept = []
+        for eid in s.evidence:
+            e = ledger.get(eid)
+            if e is not None and other_language_only(
+                f"{e.scope} {e.claim}", outline.code_language
+            ):
+                dropped.append(eid)
+            else:
+                kept.append(eid)
+        sections.append(s.model_copy(update={"evidence": kept}))
+    return outline.model_copy(update={"sections": sections}), dropped
+
+
 def cited_sources(markdown: str, ledger: EvidenceLedger) -> list[str]:
     """Source ids the draft's markers cite, in order of first citation."""
     ids: list[str] = []

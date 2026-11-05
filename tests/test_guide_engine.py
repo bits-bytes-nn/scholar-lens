@@ -14,10 +14,10 @@ from scholar_lens.application.evidence_writer import (
     SentenceVerdict,
 )
 from scholar_lens.application.guide_engine import (
-    CodeIssue,
-    CodeReview,
     EvidenceGuideEngine,
+    GuideReview,
     GuideSettings,
+    ReviewFinding,
     authority_rule,
 )
 from scholar_lens.application.ports import AgentLimits, AgentOutcome
@@ -412,11 +412,12 @@ class ScriptedModel:
             return SectionReview()
         if schema is EvidenceCheck:
             return EvidenceCheck()
-        if schema is CodeReview:
-            assert "<guide_code>" in prompt and "@serve.batch" in prompt
-            return CodeReview(
+        if schema is GuideReview:
+            assert "<guide>" in prompt and "@serve.batch" in prompt
+            return GuideReview(
+                trace="request -> handler -> result",
                 issues=[
-                    CodeIssue(
+                    ReviewFinding(
                         section="데코레이터 하나로 켜는 배치",
                         problem="serve is not imported.",
                         fix="from ray import serve",
@@ -702,3 +703,21 @@ def test_internal_source_ids_in_the_text_are_problems() -> None:
         for p in guide_draft_problems("## A\n\n영상 튜토리얼(W8)이 보여 줍니다.\n")
     )
     assert guide_draft_problems("## A\n\n`D1` 등급의 GPU를 씁니다.\n") == []
+
+
+def test_evidence_for_another_sdk_language_leaves_a_python_guide() -> None:
+    from scholar_lens.domain.guide.evidence_guide import (
+        drop_other_language,
+        other_language_only,
+    )
+
+    assert other_language_only("TypeScript 전용, 미들웨어 등록", "python")
+    assert other_language_only("only in TypeScript", "py")
+    assert not other_language_only("Python 전용", "python")
+    assert not other_language_only("TypeScript only", "")
+    ledger = _ledger()
+    ledger.items[1] = ledger.items[1].model_copy(
+        update={"scope": "TypeScript 전용 @serve.batch"}
+    )
+    outline, dropped = drop_other_language(_outline(), ledger)
+    assert dropped == ["E2"] and outline.sections[3].evidence == []
