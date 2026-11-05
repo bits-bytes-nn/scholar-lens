@@ -1,0 +1,150 @@
+{
+  "kind": "guide",
+  "status": "succeeded",
+  "input": "https://strandsagents.com/docs/user-guide/sdk/agents/agent-loop/, https://strandsagents.com/docs/user-guide/sdk/agents/hooks/",
+  "title": "Strands Agents: The Agent Loop and Its Control Layer in Practice",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/guide-strands-agents-the-agent-loop-and-its-control-layer-in-practice/2026-11-05-strands-agents-the-agent-loop-and-its-control-layer-in-practice.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-11-05-strands-agents-the-agent-loop-and-its-control-layer-in-practice.md",
+  "pr_url": null,
+  "warnings": [
+    "Section '설치부터 strawberry 글자 세기 에이전트의 첫 실행까지' still has: points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 모델은 앞서 설명한 추론-행동 사이클을 따라 두 도구를 스스로 골라 호출하고, 실행이 끝나면 결과 객체를 돌려줍니다. | evidence ['E4'] was already referred back to once; do not restate it again: 오류는 도구 결과로 모델에 돌아갑니다 .",
+    "Section '스로틀링만 다시 시도하는 기본 지수 백오프와 그 확장 방법' still has: points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 앞서 본 대로 도구 본문의 실패는 오류 결과로 모델에 돌아갑니다.",
+    "Section 'SDK·하네스·그래프형 프레임워크 사이의 선택 기준과 한계' still has: evidence ['E61'] was already referred back to once; do not restate it again: 사람 승인이 필요한 서비스라면 에이전트나 세션 상태와 인터럽트 ID를 따로 보존해야 합니다 . | names truefoundry but cites no evidence from it; cite what that source says or do not credit it: truefoundry 블로그 「crewai vs langgraph」는 두 프레임워크를 이렇게 설명합니다.",
+    "Guide description still breaks the rules after a repair: description has 101 characters; write 120-160",
+    "self-reference '다음 절': 이 훅을 글자 세기 에이전트에 등록하면(등록 코드는 다음 절 끝에 `EndAfterFileEdit`과 함께 나옵니",
+    "self-reference '이 절': 이 절의 Python 코드는 SDK와 `pydantic`이",
+    "[description] line 1: description has 101 characters; the blog's descriptions run 120-160"
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 3684.2,
+  "input_tokens": 3330841,
+  "output_tokens": 441709,
+  "estimated_cost_usd": 20.6314,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 173,
+      "failed_calls": 0,
+      "input_tokens": 36625,
+      "output_tokens": 441709,
+      "cache_read_tokens": 905489,
+      "cache_write_tokens": 2388727,
+      "cost_usd": 20.631403
+    },
+    "by_stage": {
+      "relevance": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 2686,
+        "output_tokens": 188,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.000363
+      },
+      "research_plan": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 2855,
+        "output_tokens": 752,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.000661
+      },
+      "read": {
+        "calls": 48,
+        "failed_calls": 0,
+        "input_tokens": 114,
+        "output_tokens": 27309,
+        "cache_read_tokens": 263048,
+        "cache_write_tokens": 65063,
+        "cost_usd": 0.488586
+      },
+      "outline": {
+        "calls": 2,
+        "failed_calls": 0,
+        "input_tokens": 8,
+        "output_tokens": 14779,
+        "cache_read_tokens": 1879,
+        "cache_write_tokens": 53587,
+        "cost_usd": 0.564299
+      },
+      "verify": {
+        "calls": 57,
+        "failed_calls": 0,
+        "input_tokens": 228,
+        "output_tokens": 130792,
+        "cache_read_tokens": 518508,
+        "cache_write_tokens": 1252745,
+        "cost_usd": 9.08788
+      },
+      "draft": {
+        "calls": 14,
+        "failed_calls": 0,
+        "input_tokens": 56,
+        "output_tokens": 69810,
+        "cache_read_tokens": 47190,
+        "cache_write_tokens": 318302,
+        "cost_usd": 3.00681
+      },
+      "review": {
+        "calls": 15,
+        "failed_calls": 0,
+        "input_tokens": 60,
+        "output_tokens": 33713,
+        "cache_read_tokens": 26544,
+        "cache_write_tokens": 115970,
+        "cost_usd": 1.264962
+      },
+      "fix": {
+        "calls": 33,
+        "failed_calls": 0,
+        "input_tokens": 132,
+        "output_tokens": 163972,
+        "cache_read_tokens": 48320,
+        "cache_write_tokens": 583060,
+        "cost_usd": 6.214596
+      },
+      "finalize": {
+        "calls": 2,
+        "failed_calls": 0,
+        "input_tokens": 30486,
+        "output_tokens": 394,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.003246
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-haiku-5-5": {
+        "calls": 4,
+        "failed_calls": 0,
+        "input_tokens": 36027,
+        "output_tokens": 1334,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.00427
+      },
+      "global.anthropic.claude-sonnet-5-5": {
+        "calls": 48,
+        "failed_calls": 0,
+        "input_tokens": 114,
+        "output_tokens": 27309,
+        "cache_read_tokens": 263048,
+        "cache_write_tokens": 65063,
+        "cost_usd": 0.488586
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 121,
+        "failed_calls": 0,
+        "input_tokens": 484,
+        "output_tokens": 413066,
+        "cache_read_tokens": 642441,
+        "cache_write_tokens": 2323664,
+        "cost_usd": 20.138547
+      }
+    }
+  }
+}

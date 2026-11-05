@@ -1,0 +1,160 @@
+{
+  "kind": "guide",
+  "status": "succeeded",
+  "input": "https://docs.vllm.ai/en/latest/getting_started/quickstart.html, https://arxiv.org/abs/2309.06180, https://blog.vllm.ai/2023/06/20/vllm.html",
+  "title": "vLLM and PagedAttention: Paged KV Cache Serving in Production",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/guide-vllm-and-pagedattention-paged-kv-cache-serving-in-production/2026-11-05-vllm-and-pagedattention-paged-kv-cache-serving-in-production.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-11-05-vllm-and-pagedattention-paged-kv-cache-serving-in-production.md",
+  "pr_url": null,
+  "warnings": [
+    "Reading D6 stopped at its limit (limit_total_tokens).",
+    "Section '중앙 스케줄러, 반복 단위 연속 배칭, 선점 복구': check 1 sentence(s) the evidence may not support: 선점이 자주 일어나는 서버에서는 밀려난 요청의 프리필이 다시 돌면서 GPU 연산이 늘어나고, 그 요청의 지연도 길어집니다. (unsupported: No evidence describes the current server re-running prefill for preempted requests, or the resulting increase in GPU compute and latency.)",
+    "Section '중앙 스케줄러, 반복 단위 연속 배칭, 선점 복구' still has: points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 앞서 본 대로 이 시퀀스들은 블록을 공유할 수 있어서, 한 그룹 안의 시퀀스는 항상 같이 선점되고 같이 재스케줄링됩니다.",
+    "Section '블록 해시와 LRU 제거로 동작하는 자동 프리픽스 캐싱': check 6 sentence(s) the evidence may not support: 해시가 앞 블록의 해시를 입력으로 받으므로 블록 해시는 사슬처럼 이어집니다. (unsupported: Evidence gives hash(prefix tokens, tokens in this block); it does not say the hash takes the previous block's hash as input (chained hashing).) | 자동 프리픽스 캐싱 RFC(#2614)는 등록 절차를 없애는 쪽으로 설계를 바꿉니다. (numbers not in its evidence) | running example인 `Qwen/Qwen2.5-1.5B-Instruct` 서버에 대입해 보겠습니다. (numbers not in its evidence) | 같은 16토큰이라도 앞에 붙은 내용이 다르면 해시가 다르므로, 위치가 다른 블록을 잘못 재사용하는 일도 없습니다. (numbers not in its evidence) | 위 예에서 실제로 건너뛰는 프리필은 40토큰 중 32토큰입니다. (numbers not in its evidence)",
+    "Section '블록 해시와 LRU 제거로 동작하는 자동 프리픽스 캐싱' still has: points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 앞서 본 참조 카운트와 쓰기 시 복사 구조 위에 블록을 찾아 주는 색인 하나를 더 얹은 구조입니다. | numbers ['2614'] without evidence: 자동 프리픽스 캐싱 RFC(#2614)는 등록 절차를 없애는 쪽으로 설계를 바꿉니다. | numbers ['1.5B'] without evidence: running example인 `Qwen/Qwen2.5-1.5B-Instruct` 서버에 대입해 보겠습니다. | numbers ['16'] without evidence: 같은 16토큰이라도 앞에 붙은 내용이 다르면 해시가 다르므로, 위치가 다른 블록을 잘못 재사용하는 일도 없습니다. | ['16'] already stated in 'OS 페이징을 본뜬 고정 크기 KV 블록과 블록 테이블': refer back without repeating: 같은 16토큰이라도 앞에 붙은 내용이 다르면 해시가 다르므로, 위치가 다른 블록을 잘못 재사용하는 일도 없습니다.",
+    "Section 'uv 설치와 Qwen2.5 오프라인 생성 첫 실행': check 1 sentence(s) the evidence may not support: 앞서 설명한 연속 배칭과 페이지드어텐션은 이 호출 안에서 그대로 동작하므로, 코드에서 배치 크기나 블록을 따로 다루지 않아도 됩니다. (unsupported: No evidence states that continuous batching and PagedAttention operate within the offline llm.generate call or that batch size/blocks need no handling.)",
+    "Section 'uv 설치와 Qwen2.5 오프라인 생성 첫 실행' still has: ['0.8'] already stated in '블록 해시와 LRU 제거로 동작하는 자동 프리픽스 캐싱': refer back without repeating: temperature는 `0.8`, nucleus 샘플링 확률은 `0.95`로 둡니다 . | points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 앞서 설명한 연속 배칭과 페이지드어텐션은 이 호출 안에서 그대로 동작하므로, 코드에서 배치 크기나 블록을 따로 다루지 않아도 됩니다. | English stem with a Korean ending 'import되지': 묶여 있고 버전이 맞지 않으면 FlashInfer가 import되지 않습니다. 따라서 vLLM을 설치하거나 업그레이드할",
+    "Section 'vllm serve 하나로 띄우는 OpenAI 호환 서버와 CLI' still has: points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 기동이 끝났는지는 앞서 본 기본 주소의 모델 목록 엔드포인트를 조회해 확인합니다 . | ['2023'] already stated in '메모리의 60~80%를 버리는 기존 KV 캐시 관리와 vLLM의 위치': refer back without repeating: 2023년 vLLM 블로그가 공개될 당시에는 `python -m vllm.entrypoints.openai.api_server --model ...`으로 서버를 띄웠지만 , 현재 진입점은 `vllm serve`입니다 .",
+    "Section '엔진 인자를 통한 메모리·배치·컨텍스트 길이 조정': check 4 sentence(s) the evidence may not support: CLI 인자는 YAML 설정 파일로도 불러올 수 있습니다. (unsupported: YAML config loading is given only by a third_party page (E109); no official source confirms it.) | 이때 파일 안의 인자 이름은 긴 형식으로 씁니다 [[E109]]. (unsupported: The long-form name requirement in YAML comes only from a third_party source (E109).) | 같은 인자가 명령줄과 설정 파일에 모두 있으면 명령줄 값이 우선하며, 우선순위는 명령줄, 설정 파일, 기본값 순서입니다 [[E110]]. (unsupported: The precedence order comes only from a third_party source (E110); no official confirmation.) | 이 값들을 YAML 설정 파일로 옮길 때는 플래그의 긴 형식 이름을 그대로 키로 둡니다. (unsupported: The YAML config file feature and its key naming are supported only by a third_party source.)",
+    "Section '공식 Docker 이미지와 CPU 백엔드 배포': check 1 sentence(s) the evidence may not support: 기본 CUDA 릴리스 이미지의 기반 OS가 바뀌면서 별도의 `-ubuntu2404` 태그는 더 이상 나오지 않습니다. (unsupported: Source says default CUDA images use Ubuntu 24.04 and -ubuntu2404 tags are no longer published; it does not say the base OS changed or that this is the cause.)",
+    "Section 'production-stack 기반 라우팅, 관측성, 분리형 prefill/decode': check 1 sentence(s) the evidence may not support: 분리형 서빙은 KV 캐시를 엔진 사이로 옮기는 전송 비용과 구성 요소를 늘립니다. (unsupported: No evidence states that disaggregated serving adds transfer cost or extra components.)",
+    "Section '동시 처리량에서 강하고 compute-bound 워크로드에서 약한 vLLM: 대안과의 절충' still has: ['40'] already stated in '메모리의 60~80%를 버리는 기존 KV 캐시 관리와 vLLM의 위치': refer back without repeating: vLLM 팀은 A10G GPU에서 LLaMA-7B를, A100 40GB에서 LLaMA-13B를 띄우고, 요청의 입출력 길이를 ShareGPT에서 샘플링해 처리량을 측정했습니다 . | ['24'] already stated in '메모리의 60~80%를 버리는 기존 KV 캐시 관리와 vLLM의 위치': refer back without repeating: 그 결과 vLLM은 HuggingFace Transformers(HF)보다 최대 24배, TGI보다 최대 3.5배 높은 처리량을 냈습니다 . | ['24', '2.2'] already stated in '메모리의 60~80%를 버리는 기존 KV 캐시 관리와 vLLM의 위치': refer back without repeating: 요청당 출력이 하나일 때 격차는 HF 대비 14~24배, TGI 대비 2.2~2.5배였습니다 . | ['3.3'] already stated in 'prefill과 decode의 구분을 없앤 V1 엔진의 토큰 예산 스케줄러': refer back without repeating: 병렬 출력이 셋일 때는 HF 대비 8.5~15배, TGI 대비 3.3~3.5배였습니다 . | points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 앞서 다룬 반복 단위 연속 배칭과 블록 단위 할당이 바로 이 두 지점을 겨냥합니다.",
+    "Flags/metrics the official pages fetched for this guide never mention; verify them against the current reference: --config",
+    "English stem with a Korean ending 'import되지': 묶여 있고 버전이 맞지 않으면 FlashInfer가 import되지 않습니다. 따라서 vLLM을 설치하거나 업그레이드할",
+    "[image] line 77: remote image not localized (linked to its source): https://vllm.ai/blog-assets/figures/annimation1.gif",
+    "[image] line 113: remote image not localized (linked to its source): https://vllm.ai/blog-assets/figures/annimation3.gif",
+    "[image] line 597: remote image not localized (linked to its source): https://vllm.ai/blog-assets/figures/perf_a100_n3_light.png"
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 3232.5,
+  "input_tokens": 2853898,
+  "output_tokens": 381165,
+  "estimated_cost_usd": 16.134,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 164,
+      "failed_calls": 0,
+      "input_tokens": 24395,
+      "output_tokens": 381165,
+      "cache_read_tokens": 1060720,
+      "cache_write_tokens": 1768783,
+      "cost_usd": 16.133973
+    },
+    "by_stage": {
+      "relevance": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 1610,
+        "output_tokens": 224,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.000273
+      },
+      "research_plan": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 2439,
+        "output_tokens": 675,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.000581
+      },
+      "read": {
+        "calls": 49,
+        "failed_calls": 0,
+        "input_tokens": 118,
+        "output_tokens": 28078,
+        "cache_read_tokens": 565596,
+        "cache_write_tokens": 108645,
+        "cost_usd": 0.665746
+      },
+      "outline": {
+        "calls": 2,
+        "failed_calls": 0,
+        "input_tokens": 8,
+        "output_tokens": 11754,
+        "cache_read_tokens": 3758,
+        "cache_write_tokens": 33700,
+        "cost_usd": 0.405116
+      },
+      "verify": {
+        "calls": 51,
+        "failed_calls": 0,
+        "input_tokens": 204,
+        "output_tokens": 118121,
+        "cache_read_tokens": 376999,
+        "cache_write_tokens": 843348,
+        "cost_usd": 6.730776
+      },
+      "draft": {
+        "calls": 13,
+        "failed_calls": 0,
+        "input_tokens": 52,
+        "output_tokens": 52462,
+        "cache_read_tokens": 43560,
+        "cache_write_tokens": 249871,
+        "cost_usd": 2.316227
+      },
+      "review": {
+        "calls": 14,
+        "failed_calls": 0,
+        "input_tokens": 56,
+        "output_tokens": 32390,
+        "cache_read_tokens": 23997,
+        "cache_write_tokens": 84279,
+        "cost_usd": 1.079013
+      },
+      "fix": {
+        "calls": 31,
+        "failed_calls": 0,
+        "input_tokens": 124,
+        "output_tokens": 133416,
+        "cache_read_tokens": 46810,
+        "cache_write_tokens": 448940,
+        "cost_usd": 4.93224
+      },
+      "finalize": {
+        "calls": 2,
+        "failed_calls": 0,
+        "input_tokens": 19784,
+        "output_tokens": 4045,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.004001
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-haiku-5-5": {
+        "calls": 4,
+        "failed_calls": 0,
+        "input_tokens": 23833,
+        "output_tokens": 4944,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.004855
+      },
+      "global.anthropic.claude-sonnet-5-5": {
+        "calls": 49,
+        "failed_calls": 0,
+        "input_tokens": 118,
+        "output_tokens": 28078,
+        "cache_read_tokens": 565596,
+        "cache_write_tokens": 108645,
+        "cost_usd": 0.665746
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 111,
+        "failed_calls": 0,
+        "input_tokens": 444,
+        "output_tokens": 348143,
+        "cache_read_tokens": 495124,
+        "cache_write_tokens": 1660138,
+        "cost_usd": 15.463372
+      }
+    }
+  }
+}

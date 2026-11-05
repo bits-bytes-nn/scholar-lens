@@ -1,0 +1,162 @@
+{
+  "kind": "guide",
+  "status": "succeeded",
+  "input": "https://docs.ray.io/en/latest/serve/getting_started.html",
+  "title": "Ray Serve: Building and Operating Scalable Online ML Inference",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/guide-ray-serve-building-and-operating-scalable-online-ml-inference/2026-11-05-ray-serve-building-and-operating-scalable-online-ml-inference.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-11-05-ray-serve-building-and-operating-scalable-online-ml-inference.md",
+  "pr_url": null,
+  "warnings": [
+    "Section '프록시에서 레플리카까지 이어지는 요청 경로와 요청 라우터' still has: names anyscale but cites no evidence from it; cite what that source says or do not credit it: anyscale 블로그(2025-09-15)는 ray 2.49부터 커스텀 요청 라우팅과 접두사 인식 라우터 `prefixcacheaffinityrouter`를 지원한다고 발표했습니다 .",
+    "Section '진행 중 요청 수 기반 오토스케일링과 백프레셔': check 2 sentence(s) the evidence may not support: 합계를 목표값으로 나눈 $$24 / 2 = 12$$가 각 레플리카를 목표값 가까이 유지하는 레플리카 수입니다. (numbers not in its evidence) | 아래 예시의 64는 레플리카들이 받아 둘 수 있는 대기 요청 수를 정한 값이므로, 허용할 수 있는 대기 지연에 맞춰 고르면 됩니다. (numbers not in its evidence)",
+    "Section '진행 중 요청 수 기반 오토스케일링과 백프레셔' still has: numbers ['24', '12'] without evidence: 합계를 목표값으로 나눈 $$24 / 2 = 12$$가 각 레플리카를 목표값 가까이 유지하는 레플리카 수입니다. | numbers ['64'] without evidence: 아래 예시의 64는 레플리카들이 받아 둘 수 있는 대기 요청 수를 정한 값이므로, 허용할 수 있는 대기 지연에 맞춰 고르면 됩니다. | ['64'] already stated in 'Ray 액터 위에 쌓인 디플로이먼트·레플리카·애플리케이션': refer back without repeating: 아래 예시의 64는 레플리카들이 받아 둘 수 있는 대기 요청 수를 정한 값이므로, 허용할 수 있는 대기 지연에 맞춰 고르면 됩니다.",
+    "Section '대시보드·serve status·로그·메트릭으로 보는 Serve 관측성': check 1 sentence(s) the evidence may not support: 모니터링 문서(Ray 2.59.0)는 디플로이먼트 상태에 `DEPLOY_FAILED`와 오토스케일링 중에 나타나는 `UPSCALING`, `DOWNSCALING`을 더해 여섯 가지를 듭니다 [[E106, E105]] (numbers not in its evidence)",
+    "Section '대시보드·serve status·로그·메트릭으로 보는 Serve 관측성' still has: numbers ['2.59'] are not in the cited evidence: 모니터링 문서(Ray 2.59.0)는 디플로이먼트 상태에 `DEPLOY_FAILED`와 오토스케일링 중에 나타나는 `UPSCALING`, `DOWNSCALING`을 더해 여섯 가지를 듭니다 . | ['2.59'] already stated in 'LLMConfig 하나로 기술하는 Serve LLM 배포와 LLM 전용 관측성': refer back without repeating: 모니터링 문서(Ray 2.59.0)는 디플로이먼트 상태에 `DEPLOY_FAILED`와 오토스케일링 중에 나타나는 `UPSCALING`, `DOWNSCALING`을 더해 여섯 가지를 듭니다 .",
+    "Section 'Ray Serve를 고를 때와 Triton·KServe를 고를 때의 경계' still has: the section must start with its '## ' heading (Ray Serve를 고를 때와 Triton·KServe를 고를 때의 경계) | points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 텍스트 ML 앱에서 모델 버전을 바꾸는 일은 앞서 다룬 `user_config`와 `reconfigure`로 할 수 있습니다. | names a source by its internal id (D1, W8); name the page or leave it out: W2 페이지(날짜 표기 없음)는 동적 라우팅, 액터 방식의 상태 유지, 데이터 처리 단계와의 밀접한 결합이 필요한 Python 파이프라인에서 Ray Serve가 빛난다고 평가합니다 . | names a source by its internal id (D1, W8); name the page or leave it out: 아래 표는 W2 페이지가 제시한 비교 일부를 옮긴 것으로, 벤치마크가 아닌 해당 페이지의 의견입니다 . | names a source by its internal id (D1, W8); name the page or leave it out: W2 페이지는 입력 분포 드리프트, 데이터 드리프트로 인한 모델 성능 저하, 환경 간 하드웨어·소프트웨어 비호환성을 프로덕션 실패 유형으로 듭니다.",
+    "Section 'Ray Serve를 고를 때와 Triton·KServe를 고를 때의 경계': guide review problems left as they were: This heading is immediately followed by a raw `<section>` tag and a second `## ` heading. The section has no content of its own, and the HTML tag shows up as li",
+    "Guide description still breaks the rules after a repair: description has 114 characters; write 120-160",
+    "self-reference '다음 절': 다음 절에서 구성할 `text_ml:app`(Summarize",
+    "[description] line 1: description has 114 characters; the blog's descriptions run 120-160"
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 3945.5,
+  "input_tokens": 3566484,
+  "output_tokens": 457094,
+  "estimated_cost_usd": 22.0798,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 158,
+      "failed_calls": 1,
+      "input_tokens": 37559,
+      "output_tokens": 457094,
+      "cache_read_tokens": 901041,
+      "cache_write_tokens": 2627884,
+      "cost_usd": 22.079777
+    },
+    "by_stage": {
+      "relevance": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 2617,
+        "output_tokens": 171,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.000347
+      },
+      "research_plan": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 2786,
+        "output_tokens": 711,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.000634
+      },
+      "read": {
+        "calls": 25,
+        "failed_calls": 0,
+        "input_tokens": 60,
+        "output_tokens": 30125,
+        "cache_read_tokens": 227107,
+        "cache_write_tokens": 67259,
+        "cost_usd": 0.514938
+      },
+      "outline": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 6909,
+        "cache_read_tokens": 1879,
+        "cache_write_tokens": 19973,
+        "cost_usd": 0.238813
+      },
+      "verify": {
+        "calls": 60,
+        "failed_calls": 0,
+        "input_tokens": 240,
+        "output_tokens": 133653,
+        "cache_read_tokens": 539472,
+        "cache_write_tokens": 1324885,
+        "cost_usd": 9.514234
+      },
+      "draft": {
+        "calls": 14,
+        "failed_calls": 0,
+        "input_tokens": 56,
+        "output_tokens": 59775,
+        "cache_read_tokens": 50820,
+        "cache_write_tokens": 349640,
+        "cost_usd": 2.964252
+      },
+      "review": {
+        "calls": 15,
+        "failed_calls": 0,
+        "input_tokens": 60,
+        "output_tokens": 38704,
+        "cache_read_tokens": 25893,
+        "cache_write_tokens": 108539,
+        "cost_usd": 1.327367
+      },
+      "fix": {
+        "calls": 38,
+        "failed_calls": 0,
+        "input_tokens": 152,
+        "output_tokens": 185211,
+        "cache_read_tokens": 55870,
+        "cache_write_tokens": 757588,
+        "cost_usd": 7.515116
+      },
+      "finalize": {
+        "calls": 3,
+        "failed_calls": 1,
+        "input_tokens": 31584,
+        "output_tokens": 1835,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.004076
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-haiku-5-5": {
+        "calls": 4,
+        "failed_calls": 0,
+        "input_tokens": 36987,
+        "output_tokens": 2717,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.005057
+      },
+      "global.anthropic.claude-sonnet-5-5": {
+        "calls": 25,
+        "failed_calls": 0,
+        "input_tokens": 60,
+        "output_tokens": 30125,
+        "cache_read_tokens": 227107,
+        "cache_write_tokens": 67259,
+        "cost_usd": 0.514938
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 128,
+        "failed_calls": 0,
+        "input_tokens": 512,
+        "output_tokens": 424252,
+        "cache_read_tokens": 673934,
+        "cache_write_tokens": 2560625,
+        "cost_usd": 21.559782
+      },
+      "unknown": {
+        "calls": 1,
+        "failed_calls": 1,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.0
+      }
+    }
+  }
+}
