@@ -1,0 +1,98 @@
+{
+  "item": "guide-rayserve",
+  "post": "/tmp/eval-guide/guide-rayserve-v7.md",
+  "judge": "judge-2 (independent sample: paragraph 2 then every third paragraph; 48 paragraphs sampled, 15 claims drawn from them)",
+  "scores": {"A": 8.0, "B": 7.5, "C": 7.5, "D": 8.0, "E": 7.5, "F": 6.5, "T1": 7.0, "T2": 8.5, "T3": 8.5},
+  "score_notes": {
+    "A": "Coherent arc: TL;DR (L11-15) -> problem (L17) -> units (L62) -> request lifetime (L135) -> composition (L206) -> autoscaling (L403) -> fault tolerance (L480) -> local loop (L531) -> FastAPI (L619) -> config (L718) -> KubeRay (L838) -> capacity (L892) -> observability (L944) -> verdict (L993). Front matter ok (no author, two-level categories, use_math with $$, description 131 chars). Deductions: box-drawing text diagrams whose borders break with Korean width (L45-49, L417-419); trivial arithmetic typeset as display math ($$40 / 2 = 20$$, L472); a blank double line before H2 (L529-531, L617-619).",
+    "B": "Mostly natural Korean in 입니다 register. Deductions: the same figure-intro frame three times ('예를 들어 ... 상자로 그리면 다음과 같은 모양입니다' L39, '예를 들어 ... 상자로 그리면 다음과 같습니다' L411, '예를 들어 그려 보면 다음 그림과 같습니다' L870) -> vary or drop; formulaic lead-ins 'X를 나란히 놓으면 다음 표가 됩니다' (L253), '한데 모으면 이렇습니다' (L393), '갈림길은 요청 객체 크기 하나입니다' (L183, restates L181); filler '이렇게 나누면 역할이 분명해집니다' (L148); inconsistent term 'Kubernetes' vs '쿠버네티스' (L968).",
+    "C": "Good back-references (L425, L512, L581). Deductions: the running example's route prefix wobbles: L602 tells the reader to POST to http://127.0.0.1:8000/summarize, L663-665 says /text/summarize and that the config sets /text, yet the config actually shown at L732-754 and later at L900/L923 keeps route_prefix: / (only the RayService copy at L844 uses /text). The config with Translator user_config (L732) is presented before reconfigure is introduced (L758-805), so the order of steps does not work (confirmed at runtime).",
+    "D": "Hard parts get worked examples: autoscaling arithmetic (L472), cancellation traced through summarize_and_translate (L703), GPU count table (L937). Deductions: the whole Translator block appears twice verbatim (L85-117 and L543-579) and the pip install line twice (L82, L536); the 100KiB rule gets a paragraph, a one-line restatement and a table (L181-190).",
+    "E": "Tables are real and well placed (proxy_location L198, failure table L504, call-mode table L395). Deductions: duplicated 31-line code block (L85 vs L543); redundant 2-row table restating the previous sentence (L185-188); no image of the docs' architecture diagram, only ASCII art with broken alignment.",
+    "F": "Wrong: L123 '`bind`는 디플로이먼트 객체를 감싼 `DeploymentNode`를 돌려줍니다' - on Ray 2.60.0 Translator.bind() returns ray.serve.deployment.Application (verified at runtime); schema.DeploymentNode in the API index is a topology-schema class, not bind's return. Unsupported: L35 'TensorFlow라면 어떤 버전이든 쓸 수 있습니다' (not on index or any fetched page); L935/L942 PENDING replicas and 'vLLM으로 올린 메인 LLM은 정수 GPU만 받는다' attributed to agents-lib, not present on the fetched agents-lib page; L260 'Spheron 블로그' and L1014 'TrueFoundry 블로그의 2026년 비교 글' are cited in the body but absent from Sources and unlinked (unverifiable). Writer's numbers are labelled as examples (L472, L935).",
+    "T1": "Most code runs as pasted (quickstart, Summarizer+Translator composition, pipeline_app, _to_object_ref example, streaming handle example, FastAPI ingress, StreamingResponder). But the Serve config files the guide deploys (L732, L844, L900) set user_config on Translator while the Translator the reader has written has no reconfigure method: DEPLOY_FAILED 'user_config or rank specified but deployment ... missing reconfigure method'. The reconfigure snippet (L764-805) is a 'changed lines only' fragment (translate/summarize do not return), so no complete text_ml.py that matches the YAML exists in the post.",
+    "T2": "Covers the topics the sources support in a sensible order (concepts, architecture, composition, autoscaling, FT, dev loop, HTTP, config, KubeRay, observability). Minor padding: Serve LLM usage-data collection (L991) and the examples catalogue (L1010).",
+    "T3": "Internals explained with mechanism and reason (request lifetime, handle data path, object-store threshold, controller-hosted autoscaler, checkpoint scope, proxy health/draining), fit into the system (Ray Autoscaler two-layer scaling, KubeRay/GCS FT, external scaler, dashboard security), closes with when to choose and gaps. Version-labelled history (2.32.0 default change, Ray 2.0 talk) correctly framed. Deduction: the DeploymentNode remark is an old-API detail stated as current."
+  },
+  "principles": {
+    "claim_headings": {"status": "met", "evidence": "H2s are claim noun phrases, e.g. '큐 길이를 기준으로 하는 컨트롤러 내장 오토스케일러' (L403), '분산·합성 서빙에는 강하고 모델 최적화·플랫폼 기능은 빠진 도구' (L993)."},
+    "running_example": {"status": "partly met", "evidence": "Summarize-then-translate app threads through every section (L25, L214, L627, L732, L844, L952), but its config/code and route prefix do not stay consistent (L602 vs L665; L732 user_config vs Translator without reconfigure)."},
+    "mechanism_choice_code_example": {"status": "met", "evidence": "Autoscaling: mechanism (L409) -> design reason (L461) -> config (L437) -> numeric example (L472); cancellation rule (L701) -> applied trace (L703)."},
+    "facts_said_once": {"status": "partly met", "evidence": "Translator code duplicated (L85, L543), pip line duplicated (L82, L536), framework/laptop-to-K8s claims repeated (L13, L35, L37, L999); elsewhere later sections point back ('장애 허용 절에서 설명했습니다' L886)."},
+    "numbers_with_scope": {"status": "met", "evidence": "'Ray 2.59.0 기준으로 \"auto\"는 ...' (L433), 2.32.0 change (L433), 'Ray 2.0 알파 시점의 특정 구성' for four nines (L528), 100KiB with unit (L181)."},
+    "nothing_invented": {"status": "partly met", "evidence": "DeploymentNode (L123) wrong for current Ray; 'TensorFlow 어떤 버전이든' (L35) and agents-lib GPU claims (L935, L942) not in sources; Spheron/TrueFoundry cited without sources. Writer examples are labelled ('설명용 그림입니다' L160, '계산상' L935)."},
+    "writers_assessment": {"status": "met", "evidence": "'이 글의 판단' (L1016-1018): FastAPI alone suffices for one model, BentoML/MLflow + Serve combination, compile models first, budget KubeRay/GCS FT/observability."},
+    "length_fitted": {"status": "partly met", "evidence": "~1,040 lines; hard parts get space, but duplicated code and restatements (L183-190, L543-579) add bulk without new information."},
+    "type_specific_shape": {"status": "met", "evidence": "Opens with TL;DR and the problem (L11-31); architecture and internals (L135-205) come before setup details (L531+); non-official design sources included (talk L150/L526, forum L716, agents-lib L935); ends with when to choose and failure/gap modes (L993-1018)."},
+    "korean_style": {"status": "partly met", "evidence": "Register consistent; repeated figure-intro frame (L39, L411, L870) and formulaic lead-ins (L253, L393)."}
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 12,
+    "unsupported": 2,
+    "wrong": 1,
+    "numeric_claims": 8,
+    "examples": [
+      {"line": 15, "claim": "Model-code exceptions end as a 500 response; controller restarted by Ray; without KubeRay a Ray cluster failure is unrecoverable", "verdict": "supported", "source": "architecture.html: 'A 500 status code will be returned with the traceback information... If you aren't using KubeRay, when the Ray cluster fails, Ray Serve cannot recover.'"},
+      {"line": 35, "claim": "프레임워크 버전에도 제약이 없어서, 예를 들어 TensorFlow라면 어떤 버전이든 쓸 수 있습니다", "verdict": "unsupported", "source": "index.html says framework-agnostic only; no version statement on any fetched page."},
+      {"line": 123, "claim": "`bind`는 디플로이먼트 객체를 감싼 `DeploymentNode`를 돌려줍니다", "verdict": "wrong", "source": "Ray 2.60.0 runtime: type(Translator.bind()) is ray.serve.deployment.Application; getting_started.html: bind 'defines a Ray Serve application'."},
+      {"line": 181, "claim": "100KiB 이상인 큰 객체는 오브젝트 스토어에 쓰고, 레플리카가 zero-copy로 읽습니다", "verdict": "supported", "source": "architecture.html: 'Larger request objects (100KiB+) are written to the object store and the replica can read them via zero-copy read.'"},
+      {"line": 425, "claim": "Controller death: requests still served, autoscaling paused, metrics lost on recovery", "verdict": "supported", "source": "architecture.html Note: 'autoscaling is paused... all previous metrics collected are lost.'"},
+      {"line": 433, "claim": "\"auto\" = max_ongoing_requests 5, target_ongoing_requests 2", "verdict": "supported", "source": "autoscaling-guide.html equivalent config block."},
+      {"line": 433, "claim": "\"auto\" = min_replicas 1, max_replicas 100; without auto, max_replicas defaults to 1 (L457)", "verdict": "supported", "source": "autoscaling-guide.html Note: 'the base default for max_replicas is 1'."},
+      {"line": 466, "claim": "max_ongoing_requests 20~50% higher than target_ongoing_requests", "verdict": "supported", "source": "advanced-autoscaling.html: 'Set max_ongoing_requests to ~20 to 50% higher than target_ongoing_requests.'"},
+      {"line": 468, "claim": "max_replicas about 20% above peak need", "verdict": "supported", "source": "autoscaling-guide.html: 'Set this to ~20% higher than what you think you need for peak traffic.'"},
+      {"line": 516, "claim": "RAY_SERVE_PROXY_HEALTH_CHECK_PERIOD_S and _TIMEOUT_S default 10.0 s", "verdict": "supported", "source": "production-guide/config.html env-var list: 'Default is 10.0.' (both)"},
+      {"line": 516, "claim": "3 consecutive failed health checks -> proxy marked unhealthy and restarted", "verdict": "supported", "source": "config.html: 'If a proxy fails 3 consecutive health checks, the controller marks it unhealthy and restarts it.'"},
+      {"line": 478, "claim": "Float target_replicas rounded up; app-level policy_state must be Dict[DeploymentID, Dict]", "verdict": "supported", "source": "advanced-autoscaling.html: 'rounding up to the next greatest integer'; 'must be a Dict[DeploymentID, Dict]'."},
+      {"line": 756, "claim": "runtime_env working_dir/py_modules remote URIs only; serve deploy --working-dir must be a remote .zip URI", "verdict": "supported", "source": "config.html runtime_env field; api/cli.html: 'This must be a remote URI to a .zip file (e.g., S3 bucket).'"},
+      {"line": 921, "claim": "external_scaler_enabled defaults to False and forbids autoscaling_config in the app", "verdict": "supported", "source": "config.html: 'When enabled, you can't use built-in autoscaling (autoscaling_config) for any deployment in this application. Defaults to False.'"},
+      {"line": 942, "claim": "agents-lib: small models share fractional GPU but the vLLM main LLM takes only integer GPUs (and L935 PENDING replicas)", "verdict": "unsupported", "source": "Fetched agents-lib compare page has no PENDING, fractional-GPU or vLLM statement."}
+    ],
+    "other_findings_outside_sample": [
+      "L260 Spheron blog and L1014 TrueFoundry 2026 comparison are cited but missing from Sources and unlinked.",
+      "L602 'Bonjour Monde!' matches the docs text; runtime output was 'Bonjour monde!' (harmless)."
+    ]
+  },
+  "checklist": {
+    "repeated": 0,
+    "avoided": 2,
+    "na": 0,
+    "repeated_ids": [],
+    "details": [
+      {"id": "arch-diagram-relative-link", "verdict": "avoided", "evidence": "No Markdown images or links with empty text or ../_images paths anywhere; all links are absolute (Sources L1023-1041). The architecture is drawn as text diagrams instead (L162-169, L490-498), so the docs' diagram is not reused."},
+      {"id": "proxy-env-ray-start-unsupported", "verdict": "avoided", "evidence": "L516-518 give only names, meanings and defaults of the RAY_SERVE_PROXY_* vars, with no process or 'before ray start' claim. (The 'before ray start' instruction at L966 concerns the RAY_GRAFANA_*/RAY_PROMETHEUS_* dashboard vars and is supported by configure-manage-dashboard.html.)"}
+    ]
+  },
+  "extras": {
+    "architecture_first_line": 15,
+    "architecture_section_line": 135,
+    "sources_total": 19,
+    "sources_non_official": 3,
+    "non_official_share": 0.16,
+    "non_official_note": "YouTube talk, agents-lib, discuss.ray.io; Spheron and TrueFoundry cited in the body but not listed.",
+    "opens_with_problem": true,
+    "closes_with_when_to_choose_and_failure_modes": true
+  },
+  "runnable_code": {
+    "verdict": "partly runs",
+    "environment": "Temp venv, Python 3.12, ray[serve] 2.60.0, transformers 5.22.1, torch 2.15.0, fastapi 0.162.0; private local cluster via ray.init(address='local') with its own temp dir, GCS 127.0.0.1:65146, dashboard 28365, HTTP 18765; runtime_env pip removed (packages preinstalled); cluster shut down and all processes from the temp venv confirmed gone.",
+    "results": [
+      {"code": "serve_quickstart.py (L543) + client (L593)", "result": "ok: 'Bonjour monde!'"},
+      {"code": "text_ml.py = Translator (L85) + Summarizer (L216); POST json=; handle.summarize.remote(...).result() (L604)", "result": "ok"},
+      {"code": "pipeline_app (L288)", "result": "ok"},
+      {"code": "_to_object_ref example (L328)", "result": "ok"},
+      {"code": "streaming handle example (L362)", "result": "ok via handle with stream=True; HTTP call 500 as expected (internal-only example)"},
+      {"code": "FastAPI ingress (L629) with route_prefix /text, POST params={'text':...} (L665)", "result": "ok"},
+      {"code": "StreamingResponder (L675)", "result": "ok"},
+      {"code": "serve_config.yaml (L732), RayService config (L844), num_replicas: 10 config (L900) with the post's Translator", "result": "schema valid, serve deploy DEPLOY_FAILED: 'user_config or rank specified but deployment ... Translator ... missing reconfigure method'"},
+      {"code": "num_replicas: auto config (L437)", "result": "RUNNING/HEALTHY"},
+      {"code": "reconfigure snippet (L764)", "result": "not runnable as written: labelled changed-lines fragment; translate/summarize bodies elided"}
+    ]
+  },
+  "top_issues": [
+    "The Serve config files the guide deploys (L732, L844, L900) put user_config on Translator, but no complete Translator with reconfigure exists in the post (L764 is a fragment, introduced after the config). serve deploy fails with 'missing reconfigure method'.",
+    "Wrong API fact: L123 says bind returns a DeploymentNode. On Ray 2.60 it returns an Application.",
+    "Citations that cannot be checked: the agents-lib GPU/vLLM/PENDING claims (L935, L942) are not on the cited page, 'TensorFlow any version' (L35) has no source, and the Spheron/TrueFoundry blogs (L260, L1014) are missing from Sources. Also duplicated code (L85 = L543) and a route prefix that changes between sections (L602 vs L665 vs L732)."
+  ]
+}
