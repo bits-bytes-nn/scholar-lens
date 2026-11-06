@@ -14,19 +14,11 @@ from scholar_lens.src.prompts import (
     PaperSectionPrompt,
     PaperSummaryPrompt,
     PaperSummaryShortenPrompt,
-    SurveyCardPrompt,
-    SurveyEvaluationPrompt,
     SurveyFinalizationPrompt,
-    SurveyGroundingPrompt,
-    SurveySectionPrompt,
-    TechGuideEvaluationPrompt,
-    TechGuideGroundingPrompt,
-    TechGuideSectionPrompt,
 )
 from scholar_lens.src.prompts.base import (
     KOREAN_STYLE,
     NATURALNESS_CHECK,
-    NUMBER_RULES,
     PAPER_TABLE_RULES,
     TABLE_SIZE_RULE,
     TERMINOLOGY_RULES,
@@ -42,7 +34,6 @@ WRITERS = [
     PaperSectionPrompt,
     PaperFinalizationPrompt,
     PaperSummaryPrompt,
-    TechGuideSectionPrompt,
 ]
 
 
@@ -168,8 +159,6 @@ def test_summary_register_and_structure() -> None:
         PaperEditPrompt,
         PaperFinalizationPrompt,
         PaperSummaryPrompt,
-        TechGuideSectionPrompt,
-        TechGuideEvaluationPrompt,
     ],
 )
 def test_one_terminology_rule_is_shared(prompt: type[BasePrompt]) -> None:
@@ -196,13 +185,8 @@ KOREAN_WRITERS = [
     PaperEditPrompt,
     PaperFinalizationPrompt,
     PaperSummaryPrompt,
-    SurveyCardPrompt,
-    SurveySectionPrompt,
-    SurveyGroundingPrompt,
-    TechGuideSectionPrompt,
-    TechGuideGroundingPrompt,
 ]
-CHECKERS = [PaperSectionCheckPrompt, SurveyEvaluationPrompt, TechGuideEvaluationPrompt]
+CHECKERS = [PaperSectionCheckPrompt]
 
 
 @pytest.mark.parametrize("prompt", KOREAN_WRITERS + CHECKERS)
@@ -213,22 +197,6 @@ def test_one_korean_style_block_is_shared(prompt: type[BasePrompt]) -> None:
 @pytest.mark.parametrize("prompt", CHECKERS)
 def test_checkers_carry_the_naturalness_check(prompt: type[BasePrompt]) -> None:
     assert _render(prompt).count(NATURALNESS_CHECK.strip()) == 1
-
-
-@pytest.mark.parametrize("prompt", [SurveyEvaluationPrompt, TechGuideEvaluationPrompt])
-def test_guide_and_survey_evaluators_list_wording_apart_from_facts(
-    prompt: type[BasePrompt],
-) -> None:
-    # Wording issues are ranked after the score, blocking issues before it.
-    text = _render(prompt)
-    assert prompt.output_variables == [
-        "quality_score",
-        "blocking_issues",
-        "wording_issues",
-        "improvement_feedback",
-    ]
-    assert "blocking wording issues go in <wording_issues>" in " ".join(text.split())
-    assert "<wording_issues>one blocking wording issue per line" in text
 
 
 def test_review_checker_lists_blocking_wording_in_must_fix() -> None:
@@ -259,18 +227,11 @@ def test_figure_introductions_carry_no_template_sentence() -> None:
 def test_shared_style_examples_are_topic_neutral() -> None:
     # Examples from one post's topic (a survey of RL, a vLLM guide) pull
     # every post toward its wording.
-    from scholar_lens.src.prompts import SurveyOutlinePrompt
-
     shared = KOREAN_STYLE + TERMINOLOGY_RULES
     for topical in ("Gao", "정책", "가중치", "prefill"):
         assert topical not in shared
-    assert "preference optimization" not in _render(SurveyOutlinePrompt)
     for clause in ("~다는 점/사실", "에게", "셈입니다"):
         assert clause in KOREAN_STYLE
-
-
-def test_cards_get_the_translation_guideline() -> None:
-    assert "<translation_guideline>" in _render(SurveyCardPrompt)
 
 
 @pytest.mark.parametrize(
@@ -295,33 +256,11 @@ def test_korean_style_examples_agree_with_the_lint() -> None:
         assert example in KOREAN_STYLE
 
 
-@pytest.mark.parametrize("prompt", [SurveyEvaluationPrompt, TechGuideEvaluationPrompt])
-def test_survey_and_guide_evaluators_check_the_number_rules(
-    prompt: type[BasePrompt],
-) -> None:
-    assert NUMBER_RULES in _render(prompt)
-
-
 def test_the_table_size_cap_has_one_source() -> None:
     assert PAPER_TABLE_RULES.startswith(TABLE_SIZE_RULE)
     assert _render(PaperSectionPrompt).count("8 rows and 7 columns") == 1
 
 
-def test_survey_evaluator_blocks_re_explaining_earlier_sections() -> None:
-    blocking = _render(SurveyEvaluationPrompt).split("BLOCKING ISSUES", 1)[1]
-    assert "re-explaining what <previously_written_sections>" in blocking
-
-
-def test_card_limitations_are_the_papers_not_the_inputs() -> None:
-    text = _render(SurveyCardPrompt)
-    assert "never of the text you were given" in text
-    assert "leave limitations empty" in text
-
-
 def test_guide_taxonomy_returns_a_description() -> None:
     assert "description" in TechGuideTaxonomyPrompt.output_variables
     assert "120-160 characters" in _render(TechGuideTaxonomyPrompt)
-
-
-def test_survey_citation_example_uses_no_real_paper_key() -> None:
-    assert '"[@key]"' in _render(SurveySectionPrompt)

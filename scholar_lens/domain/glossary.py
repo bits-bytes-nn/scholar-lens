@@ -3,24 +3,6 @@ has yet to introduce."""
 
 from __future__ import annotations
 
-import re
-
-_PARENTHETICAL = re.compile(r"\s*\([^)]*\)")
-
-
-def parse_glossary(raw: str) -> dict[str, str]:
-    """English term -> rendering from the synopsis's ``<glossary>`` lines
-    ("English term | rendering"); a parenthetical left in a rendering is
-    dropped, since the writer adds the English at first use."""
-    glossary: dict[str, str] = {}
-    for line in raw.splitlines():
-        english, sep, rendering = line.strip().lstrip("-* ").partition("|")
-        english = english.strip()
-        rendering = _PARENTHETICAL.sub("", rendering).strip()
-        if sep and english and rendering:
-            glossary.setdefault(english, rendering)
-    return glossary
-
 
 def glossary_view(glossary: dict[str, str], earlier: list[str]) -> str:
     """The glossary for one section: each rendering with its English, marked

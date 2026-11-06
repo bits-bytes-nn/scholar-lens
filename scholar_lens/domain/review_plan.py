@@ -800,9 +800,7 @@ def draft_rank(
     first, then publishable (no error the validator would reject), then the
     score, then fewer blocking defects (missing items, must-fix, rule slips).
     A writing slip never outweighs the score: a faithful draft with one slip
-    beats an invented one. The guide and survey loop
-    (:func:`section_loop.revise_section`) puts fewer factual issues ahead of
-    the score and passes only wording issues and rule slips as ``blocking``."""
+    beats an invented one."""
     return passes, publishable, score, -blocking
 
 

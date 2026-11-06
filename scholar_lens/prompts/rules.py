@@ -232,26 +232,6 @@ NATURALNESS_CHECK: str = """
 """
 
 
-# What the length targets count: the writer is told the unit the evaluator measures.
-PROSE_UNIT = (
-    "characters of prose (spaces included; code blocks, tables and images excluded)"
-)
-
-
-def blocking_issues_block(issues: list[str], sources: str) -> str:
-    """The grounding prompt's ``blocking_issues`` input: the evaluator's
-    blocking issues the revisions left in the section, with the order to fix
-    exactly those claims from ``sources`` (the tag naming the evidence); empty
-    when none are left, so the prompt is unchanged."""
-    if not issues:
-        return ""
-    listed = "\n".join(f"- {issue}" for issue in issues)
-    return (
-        f"\n\nThe reviewer left these blocking issues in the section. Correct or remove exactly these claims using only "
-        f"{sources}; change nothing else for them:\n{listed}"
-    )
-
-
 ILLUSTRATION_MARK: str = """
 An illustration of your own (a toy input, hypothetical numbers) says so in
 words and ends its sentence with [[EX]] instead of evidence ids; its numbers

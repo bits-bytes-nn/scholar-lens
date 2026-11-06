@@ -44,11 +44,7 @@ from ..domain.survey.plan import PlanPaper, SurveyPlan
 from ..domain.survey.post import without_papers
 from ..prompts import survey_evidence as prompts
 from .evidence_writer import (
-    ClaimCheck,
-    EvidenceCheck,
     EvidenceWriter,
-    SectionReview,
-    SentenceVerdict,
     WriterPrompts,
     block,
     cached_evidence,
@@ -58,13 +54,9 @@ from .ports import AgentLimits, DocumentSource, LanguageModel, TextStore
 from .usage import usage_stage
 
 __all__ = [
-    "ClaimCheck",
     "EngineSettings",
-    "EvidenceCheck",
     "EvidenceSurvey",
     "EvidenceSurveyEngine",
-    "SectionReview",
-    "SentenceVerdict",
 ]
 
 logger = logging.getLogger(__name__)

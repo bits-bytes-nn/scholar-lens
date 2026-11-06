@@ -10,7 +10,6 @@ from bs4 import BeautifulSoup, NavigableString, Tag
 from bs4.element import PreformattedString
 
 from ...domain.markdown.tables import (  # noqa: F401 - moved; re-exported
-    _MATH_SPAN,
     escape_cell_pipes,
 )
 from ...domain.text import (  # noqa: F401 - moved; re-exported  # noqa: F401 - moved; re-exported

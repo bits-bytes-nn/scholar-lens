@@ -207,6 +207,10 @@ class Summary(_Section):
 
 
 class TechGuide(_Section):
+    # The guide is written by the evidence engine (docs/redesign.md): the
+    # relevance model gates the sources, plans the searches and files the
+    # guide; reading agents use the synopsis model, the outline and sections
+    # the writing model and the checks the evaluation model.
     relevance_model_id: LanguageModelId = Field(
         default=LanguageModelId.CLAUDE_V5_5_HAIKU
     )
@@ -214,19 +218,10 @@ class TechGuide(_Section):
         default=LanguageModelId.CLAUDE_V5_5_SONNET
     )
     writing_model_id: LanguageModelId = Field(default=LanguageModelId.CLAUDE_V5_5_OPUS)
-    # Per-section evaluator (0-100 score + feedback) gating the revise loop.
     evaluation_model_id: LanguageModelId = Field(
         default=LanguageModelId.CLAUDE_V5_5_OPUS
     )
-    writer_enable_thinking: bool = Field(default=False)
-    # Thinking for the evaluator chain, independent of the writer (parity with
-    # the review pipeline's separate evaluator/synthesizer flags). None → inherit
-    # writer_enable_thinking, preserving prior single-flag behaviour.
-    evaluator_enable_thinking: bool | None = Field(default=None)
     thinking_effort: ThinkingEffort = Field(default="medium")
-    # Fact-check each drafted section against the sources to remove ungrounded
-    # claims (hallucinated APIs/flags). Adds one LLM call per section.
-    verify_grounding: bool = Field(default=True)
     # Deep-research planning: derive web-search queries from the seed docs so the
     # guide draws on complementary material, not just a single page. Requires a
     # configured search provider (Tavily or Brave); a no-op otherwise.
@@ -239,26 +234,11 @@ class TechGuide(_Section):
     # Upper bound on guide sections, told to the outline planner so it plans a
     # self-contained guide (usage, internals and integration) within it.
     max_sections: int = Field(default=14, ge=3, le=30)
-    # Per-section evaluate-and-revise loop (the review pipeline's evaluate gate):
-    # sections scoring below the threshold are revised up to N times.
-    min_quality_score: int = Field(default=75, ge=0, le=100)
-    max_revision_attempts: int = Field(default=1, ge=0, le=5)
-    # Soft limit on one guide run (None = no limit); default keeps a run near
-    # $15 on Opus 5.5. Past it the remaining sections skip evaluate/revise/
-    # grounding; past 1.5x the run aborts.
-    max_total_tokens: int | None = Field(default=3_000_000, gt=0)
-    # Evidence engine: hard ceiling on one run's estimated cost (list prices,
-    # USD; None = no limit). A guide costs about $15-23.
+    # Hard ceiling on one run's estimated cost (list prices, USD; None = no
+    # limit). A guide costs about $15-23.
     max_cost_usd: float | None = Field(default=60.0, gt=0)
-    # The writing engine: "sections" (a synopsis, then sections revised by
-    # score) or "evidence" (reading agents record checked evidence per page
-    # that the outline gives to sections; docs/redesign.md). The evidence
-    # engine reads with the synopsis model, plans and writes with the writing
-    # model and checks with the evaluation model; the token limit above
-    # applies to "sections" only.
-    engine: Literal["sections", "evidence"] = Field(default="evidence")
-    # Evidence engine: pages read (the docs and reference material first)
-    # and the guide's prose characters (Korean).
+    # Pages read (the docs and reference material first) and the guide's
+    # prose characters (Korean).
     max_sources_read: int = Field(default=40, ge=1, le=120)
     min_total_chars: int = Field(default=30_000, ge=5_000, le=200_000)
     max_total_chars: int = Field(default=55_000, ge=5_000, le=200_000)
@@ -277,10 +257,6 @@ class Survey(_Section):
     selection_model_id: LanguageModelId = Field(
         default=LanguageModelId.CLAUDE_V5_5_OPUS
     )
-    # The write stage's engine: "cards" (paper cards, then sections revised
-    # by score) or "evidence" (reading agents record checked evidence that the
-    # outline gives to sections; docs/redesign.md).
-    engine: Literal["cards", "evidence"] = Field(default="evidence")
     thinking_effort: ThinkingEffort = Field(default="medium")
     # Papers a survey covers; the selection call picks the count in between
     # from the topic's breadth and the pool.
@@ -292,20 +268,16 @@ class Survey(_Section):
     # is skipped; past 1.5x the run aborts. A plan uses ~50k tokens.
     max_total_tokens: int | None = Field(default=300_000, gt=0)
 
-    # Write stage (`survey write`). One card call per paper (cached), one
-    # outline call, then per section: writer, evaluator, at most
-    # max_revision_attempts revisions, grounding; one finalization call.
+    # Write stage (`survey write`, the evidence engine; docs/redesign.md):
+    # reading agents use card_model_id, the outline (and the finalization
+    # call) outline_model_id, the sections writing_model_id and the checks
+    # evaluation_model_id.
     card_model_id: LanguageModelId = Field(default=LanguageModelId.CLAUDE_V5_5_SONNET)
     outline_model_id: LanguageModelId = Field(default=LanguageModelId.CLAUDE_V5_5_OPUS)
     writing_model_id: LanguageModelId = Field(default=LanguageModelId.CLAUDE_V5_5_OPUS)
     evaluation_model_id: LanguageModelId = Field(
         default=LanguageModelId.CLAUDE_V5_5_OPUS
     )
-    # Characters of a core paper's arXiv HTML text its card call reads.
-    card_source_chars: int = Field(default=150_000, ge=10_000, le=600_000)
-    min_quality_score: int = Field(default=75, ge=0, le=100)
-    max_revision_attempts: int = Field(default=1, ge=0, le=3)
-    verify_grounding: bool = Field(default=True)
     # Post length in characters of prose (Korean; other languages x2.5):
     # each core and supporting paper adds its share to its lineage section,
     # the other sections their depth's size; the total is then scaled into
@@ -314,11 +286,8 @@ class Survey(_Section):
     chars_per_supporting_paper: int = Field(default=800, ge=100, le=5_000)
     min_total_chars: int = Field(default=20_000, ge=5_000, le=200_000)
     max_total_chars: int = Field(default=70_000, ge=5_000, le=200_000)
-    # Soft limit on one write run: past it sections are written without
-    # evaluation, revision or grounding; past 1.5x the run aborts.
-    write_max_total_tokens: int | None = Field(default=4_500_000, gt=0)
-    # Evidence engine: hard ceiling on one run's estimated cost (list prices,
-    # USD; None = no limit). A survey costs about $15-18.
+    # Hard ceiling on one write run's estimated cost (list prices, USD; None
+    # = no limit). A survey costs about $15-18.
     write_max_cost_usd: float | None = Field(default=60.0, gt=0)
 
     @model_validator(mode="after")

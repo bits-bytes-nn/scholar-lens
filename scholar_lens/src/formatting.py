@@ -23,7 +23,6 @@ from ..domain.markdown.front_matter import split_front_matter, split_front_matte
 from ..domain.markdown.links import (  # noqa: F401 - moved; re-exported
     link_list,
     md_link_text,
-    md_link_url,
 )
 from ..domain.markdown.math import has_math, normalize_math
 from ..domain.tags import normalize_tags

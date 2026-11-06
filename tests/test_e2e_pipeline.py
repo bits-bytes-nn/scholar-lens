@@ -208,8 +208,6 @@ class TestGuideEndToEnd:
         monkeypatch: pytest.MonkeyPatch,  # type: ignore[no-untyped-def]
     ) -> None:
         context, _ = pipeline_env
-        # The fake generator stands in for the sections engine.
-        context.config.tech_guide.engine = "sections"
         guide = TechGuide(
             topic="Serving LLMs with vLLM",
             body=(
@@ -224,9 +222,6 @@ class TestGuideEndToEnd:
             def __init__(self, *args, **kwargs) -> None:  # type: ignore[no-untyped-def]
                 pass
 
-            async def generate(self, *args, **kwargs) -> TechGuide:  # type: ignore[no-untyped-def]
-                return guide
-
             async def classify(self, *args, **kwargs) -> dict[str, str]:  # type: ignore[no-untyped-def]
                 return {
                     "category": "Language Models",
@@ -235,7 +230,11 @@ class TestGuideEndToEnd:
                     "seo_title": "",
                 }
 
+        async def evidence(*args, **kwargs) -> TechGuide:  # type: ignore[no-untyped-def]
+            return guide
+
         monkeypatch.setattr(guide_pipeline, "TechGuideGenerator", FakeGenerator)
+        monkeypatch.setattr(guide_pipeline, "write_guide_with_evidence", evidence)
         monkeypatch.setattr(guide_pipeline, "WebResearcher", MagicMock())
 
         outcome = await guide_pipeline.run_guide_pipeline(
@@ -457,16 +456,16 @@ async def test_guide_budget_abort_keeps_the_generator_notes(
     from scholar_lens.src.metrics import TokenBudgetExceeded
 
     context, _ = pipeline_env
-    context.config.tech_guide.engine = "sections"
 
     class FakeGenerator:
         def __init__(self, *args, **kwargs) -> None:  # type: ignore[no-untyped-def]
-            self.notes = ["Token budget reached: later sections were not refined."]
+            self.notes = ["Reference material that could not be read (left out): x"]
 
-        async def generate(self, *args, **kwargs):  # type: ignore[no-untyped-def]
-            raise TokenBudgetExceeded("4600000 > 4500000")
+    async def evidence(*args, **kwargs):  # type: ignore[no-untyped-def]
+        raise TokenBudgetExceeded("Cost ceiling passed: $61.00 > $60.00")
 
     monkeypatch.setattr(guide_pipeline, "TechGuideGenerator", FakeGenerator)
+    monkeypatch.setattr(guide_pipeline, "write_guide_with_evidence", evidence)
     monkeypatch.setattr(guide_pipeline, "WebResearcher", MagicMock())
     with pytest.raises(TokenBudgetExceeded) as caught:
         await guide_pipeline.run_guide_pipeline(

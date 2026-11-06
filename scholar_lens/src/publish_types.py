@@ -8,8 +8,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ..domain.post_names import (  # noqa: F401 - re-exported
-    SUMMARY_SLUG_SUFFIX,
-    post_key,
     post_slug,
     same_post,
     slugify,

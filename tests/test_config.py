@@ -40,10 +40,23 @@ class TestConfigValidation:
         )
         assert e.max_total_tokens is None
 
-    def test_every_artifact_has_a_default_token_cap(self) -> None:
+    def test_every_artifact_has_a_default_spend_cap(self) -> None:
         config = Config()
-        for section in (config.explanation, config.summary, config.tech_guide):
+        for section in (config.explanation, config.summary):
             assert section.max_total_tokens
+        assert config.tech_guide.max_cost_usd and config.survey.write_max_cost_usd
+
+    @pytest.mark.parametrize(
+        ("section", "key"),
+        [("tech_guide", "engine"), ("survey", "engine"), ("survey", "verify_grounding")],
+    )
+    def test_a_key_of_a_removed_engine_fails_at_load(
+        self, tmp_path: Path, section: str, key: str
+    ) -> None:
+        cfg_file = tmp_path / "config.yaml"
+        cfg_file.write_text(f"{section}:\n  {key}: x\n", encoding="utf-8")
+        with pytest.raises(ValidationError, match=key):
+            Config.from_yaml(str(cfg_file))
 
     def test_guide_research_defaults_read_the_top_results_of_each_query(
         self,
@@ -145,11 +158,11 @@ def test_scholar_lens_config_names_another_config_file(tmp_path, monkeypatch) ->
     from scholar_lens.configs.config import CONFIG_PATH_ENV
 
     path = tmp_path / "eval.yaml"
-    path.write_text("survey:\n  engine: evidence\n", encoding="utf-8")
+    path.write_text("survey:\n  min_papers: 7\n", encoding="utf-8")
     # Loading .env would leak this checkout's API keys into later tests.
     monkeypatch.setattr("scholar_lens.configs.config.load_dotenv", lambda: None)
     monkeypatch.setenv(CONFIG_PATH_ENV, str(path))
-    assert Config.load().survey.engine == "evidence"
+    assert Config.load().survey.min_papers == 7
 
 
 def test_a_github_config_that_cannot_open_a_pr_fails_at_load() -> None:

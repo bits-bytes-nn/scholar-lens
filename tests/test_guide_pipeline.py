@@ -102,7 +102,8 @@ class FakeGuideGenerator:
         self.title, self.topic = title, topic
         self.notes: list[str] = []
 
-    async def generate(self, urls: list[str], **_: Any) -> TechGuide:
+    def guide(self, urls: list[str]) -> TechGuide:
+        """What the evidence engine (faked) writes for this run."""
         body = "## 설치\n\n![구조](https://arxiv.org/html/2309.06180v1/x1.png)\n\n설명입니다.\n"
         return TechGuide(
             topic=self.title,
@@ -129,7 +130,14 @@ async def _run_guide(
         return None
 
     monkeypatch.setattr(guide_pipeline, "ROOT_DIR", tmp_path)
+
+    async def evidence(
+        _context: RunContext, gen: FakeGuideGenerator, *, urls: list[str], **_: Any
+    ) -> TechGuide:
+        return gen.guide(urls)
+
     monkeypatch.setattr(guide_pipeline, "TechGuideGenerator", lambda **_: generator)
+    monkeypatch.setattr(guide_pipeline, "write_guide_with_evidence", evidence)
     monkeypatch.setattr(
         guide_pipeline,
         "WebResearcher",
@@ -176,8 +184,6 @@ async def test_a_retitled_rerun_updates_the_published_guide(
     session = boto3.Session(region_name="us-east-1")
 
     config = Config()
-    # The fake generator stands in for the sections engine.
-    config.tech_guide.engine = "sections"
 
     def context(posts: list[BlogPost]) -> RunContext:
         return RunContext(
@@ -218,35 +224,31 @@ async def test_a_retitled_rerun_updates_the_published_guide(
     assert "](/assets/images/vllm-serving-guide-1.png)" in post
 
 
-async def test_the_evidence_engine_writes_guides_by_default(
+async def test_the_evidence_engine_gets_the_request_and_failures_keep_the_notes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from unittest.mock import MagicMock
 
-    from scholar_lens.src import guide_pipeline
-
-    assert Config().tech_guide.engine == "evidence"
     seen: dict[str, object] = {}
 
     class Stop(Exception):
         pass
 
     async def evidence(context, generator, **kwargs):  # type: ignore[no-untyped-def]
-        seen.update(kwargs)
+        seen.update(kwargs, generator=generator)
+        generator.notes.append("Reference material that could not be read")
         raise Stop
 
     class Generator:
-        notes: list[str] = []
-
         def __init__(self, *args, **kwargs) -> None:  # type: ignore[no-untyped-def]
-            seen["max_total_tokens"] = kwargs["max_total_tokens"]
+            seen["generator_kwargs"] = kwargs
+            self.notes: list[str] = []
 
-        async def generate(self, *args, **kwargs):  # type: ignore[no-untyped-def]
-            raise AssertionError("the sections engine ran")
-
+    researcher = MagicMock()
+    researcher.search_notes.return_value = ["Search fell back to Brave"]
     monkeypatch.setattr(guide_pipeline, "write_guide_with_evidence", evidence)
     monkeypatch.setattr(guide_pipeline, "TechGuideGenerator", Generator)
-    monkeypatch.setattr(guide_pipeline, "WebResearcher", MagicMock())
+    monkeypatch.setattr(guide_pipeline, "WebResearcher", lambda **_: researcher)
 
     async def no_guideline(context):  # type: ignore[no-untyped-def]
         return None
@@ -254,7 +256,23 @@ async def test_the_evidence_engine_writes_guides_by_default(
     monkeypatch.setattr(guide_pipeline, "load_translation_guideline", no_guideline)
     context = MagicMock()
     context.config = Config()
-    request = MagicMock(urls=[DOCS], reference_urls=[], search_queries=[])
-    with pytest.raises(Stop):
+    request = MagicMock(
+        urls=[DOCS],
+        reference_urls=["https://blog.x.io/a"],
+        search_queries=["vllm paged attention"],
+        discover_subpages=False,
+    )
+    with pytest.raises(Stop) as failed:
         await guide_pipeline.run_guide_pipeline(context, request, MagicMock())
-    assert seen["urls"] == [DOCS] and seen["max_total_tokens"] is None
+    assert seen["urls"] == [DOCS]
+    assert seen["reference_urls"] == ["https://blog.x.io/a"]
+    assert seen["search_queries"] == ["vllm paged attention"]
+    assert seen["discover_subpages"] is False
+    assert isinstance(seen["generator"], Generator)
+    cfg = Config().tech_guide
+    assert seen["generator_kwargs"]["max_research_queries"] == cfg.max_research_queries  # type: ignore[index]
+    assert failed.value.run_notes == [  # type: ignore[attr-defined]
+        "Reference material that could not be read",
+        "Search fell back to Brave",
+    ]
+    researcher.close.assert_called_once()

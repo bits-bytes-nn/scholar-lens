@@ -1,9 +1,8 @@
-"""The evidence engine for guides (``tech_guide.engine: evidence``), on the
-legacy acquisition: :meth:`TechGuideGenerator.gather` collects the docs, the
-user's reference material, the planned searches and the official reference
-pages; each page becomes a source document with its authority label; the
-engine reads, plans and writes; the result is a :class:`TechGuide` the guide
-pipeline classifies and publishes as before."""
+"""The evidence engine for guides: :meth:`TechGuideGenerator.gather`
+collects the docs, the user's reference material, the planned searches and
+the official reference pages; each page becomes a source document with its
+authority label; the engine reads, plans and writes; the result is a
+:class:`TechGuide` the guide pipeline classifies and publishes."""
 
 from __future__ import annotations
 

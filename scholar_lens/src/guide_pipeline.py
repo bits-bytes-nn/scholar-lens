@@ -53,57 +53,35 @@ async def run_guide_pipeline(
     spec = context.require_conventions()
     generator = TechGuideGenerator(
         relevance_model_id=LanguageModelId(cfg.relevance_model_id),
-        synopsis_model_id=LanguageModelId(cfg.synopsis_model_id),
-        writing_model_id=LanguageModelId(cfg.writing_model_id),
-        evaluation_model_id=LanguageModelId(cfg.evaluation_model_id),
         boto_session=context.bedrock_boto_session,
         researcher=researcher,
         language=context.config.output_language,
-        enable_thinking=cfg.writer_enable_thinking,
-        evaluator_enable_thinking=cfg.evaluator_enable_thinking,
-        thinking_effort=cfg.thinking_effort,
-        max_sections=cfg.max_sections,
         title_max_length=spec.seo_title_max_length,
-        verify_grounding=cfg.verify_grounding,
         auto_research=cfg.auto_research,
         max_research_queries=cfg.max_research_queries,
         fetch_top_results=cfg.fetch_top_results,
-        min_quality_score=cfg.min_quality_score,
-        max_revision_attempts=cfg.max_revision_attempts,
-        # The evidence engine's reading agents are bounded per page; the
-        # token limit guards the score-revised sections.
-        max_total_tokens=None if cfg.engine == "evidence" else cfg.max_total_tokens,
-        translation_guideline=translation_guideline,
         callbacks=[tracker],
     )
     github = context.config.resources.github
     try:
-        if cfg.engine == "evidence":
-            guide = await write_guide_with_evidence(
-                context,
-                generator,
-                urls=request.urls,
-                reference_urls=request.reference_urls,
-                discover_subpages=request.discover_subpages,
-                search_queries=request.search_queries or None,
-                translation_guideline=translation_guideline,
-                tracker=tracker,
-                title_max_length=spec.seo_title_max_length,
-            )
-        else:
-            guide = await generator.generate(
-                request.urls,
-                reference_urls=request.reference_urls,
-                discover_subpages=request.discover_subpages,
-                search_queries=request.search_queries or None,
-            )
+        guide = await write_guide_with_evidence(
+            context,
+            generator,
+            urls=request.urls,
+            reference_urls=request.reference_urls,
+            discover_subpages=request.discover_subpages,
+            search_queries=request.search_queries or None,
+            translation_guideline=translation_guideline,
+            tracker=tracker,
+            title_max_length=spec.seo_title_max_length,
+        )
         taxonomy = await generator.classify(
             guide,
             category_options=list(spec.topics),
             controlled_tags=spec.tags.controlled,
         )
     except Exception as e:
-        # Keep the generator's notes (e.g. the budget note) on a failed run.
+        # Keep the generator's notes (e.g. unreadable references) on a failed run.
         e.run_notes = [  # type: ignore[attr-defined]
             *generator.notes,
             *researcher.search_notes(),

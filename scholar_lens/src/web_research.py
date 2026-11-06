@@ -310,7 +310,6 @@ class ResearchCorpus:
         *,
         max_chars: int,
         official: OfficialDocs | None = None,
-        included: set[str] | None = None,
         prefer: Collection[str] = (),
     ) -> str:
         """The pages most relevant to ``query`` (word overlap with title and
@@ -323,8 +322,7 @@ class ResearchCorpus:
         the material it needs instead of the whole corpus.
         With ``official``, each source is labelled official, older docs
         version, reference material or third-party so the writer knows which
-        one decides a flag or default.
-        The URL of each page that made the cut is added to ``included``."""
+        one decides a flag or default."""
         words = {w for w in re.findall(r"[a-z0-9][a-z0-9_.-]{2,}", query.lower())}
 
         def score(page: PageContent) -> float:
@@ -353,15 +351,7 @@ class ResearchCorpus:
                 if len(longer) > len(cuts[i]):
                     used += len(longer) - len(cuts[i])
                     cuts[i] = longer
-        if included is not None:
-            included.update(
-                page.url for page, cut in zip(ordered, cuts, strict=True) if cut
-            )
         return "\n\n---\n\n".join(cut for cut in cuts if cut)
-
-    def combined_text(self, official: OfficialDocs | None = None) -> str:
-        """Every page, labelled by authority like :meth:`relevant_text`."""
-        return "\n\n---\n\n".join(_source_block(p, official) for p in self.pages)
 
 
 _HEADING_LINE = re.compile(r"^#{1,6}[ \t]", re.MULTILINE)
@@ -876,20 +866,17 @@ class WebResearcher:
         product: str = "",
         max_searches: int = MAX_REFERENCE_SEARCHES,
         max_pages: int = MAX_REFERENCE_PAGES,
-        follow_links: bool = True,
         settles: Callable[[str], bool] | None = None,
     ) -> list[PageContent]:
         """Fetch reference pages of the ``official`` docs that can settle the
         given flags and metric names, add them to ``corpus`` and return them.
 
         Candidates are search results restricted to those hosts (one query per
-        batch of identifiers, at most ``max_searches``), then (with
-        ``follow_links``) reference-like links (CLI, arguments, configuration,
+        batch of identifiers, at most ``max_searches``), then reference-like links (CLI, arguments, configuration,
         metrics …) of the official pages already fetched, those whose path
         fits the identifiers first. With ``settles``, a page counts only when
         it settles an identifier (``settles(page.text)``); one that does not
-        (an index of the CLI pages) is left out, and with ``follow_links``
-        its reference-like links join the end of the candidates, ranked the
+        (an index of the CLI pages) is left out, and its reference-like links join the end of the candidates, ranked the
         same way. At most ``max_pages`` are added and ``2 * max_pages``
         fetched, each through the same SSRF-guarded fetch.
         """
@@ -916,7 +903,7 @@ class WebResearcher:
             batch = [
                 link
                 for page in pages
-                if follow_links and official.covers(page.final_url or page.url)
+                if official.covers(page.final_url or page.url)
                 for link in page.links
                 if official.covers(link)
                 and _REFERENCE_LINK.search(urlparse(link).path)

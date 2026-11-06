@@ -18,7 +18,6 @@ from ...prompts.rules import (  # noqa: F401 - moved; re-exported
     NATURALNESS_CHECK,
     NUMBER_RULES,
     PAPER_TABLE_RULES,
-    PROSE_UNIT,
     READER_PROFILE,
     STYLE_RULES,
     SUMMARY_DEPTH_RULES,
@@ -27,7 +26,6 @@ from ...prompts.rules import (  # noqa: F401 - moved; re-exported
     TABLE_SIZE_RULE,
     TERMINOLOGY_RULES,
     VISUAL_RULES,
-    blocking_issues_block,
 )
 
 # Shared writing rules for the review, summary and guide prompts. Each block

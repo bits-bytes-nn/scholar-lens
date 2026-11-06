@@ -33,7 +33,6 @@ from ...domain.ids import (
     normalize_arxiv_id,
 )
 from ...domain.titles import (  # noqa: F401 - moved; re-exported
-    TITLE_MATCH_THRESHOLD,
     abstract_fits_title,
     title_similarity,
     titles_match,

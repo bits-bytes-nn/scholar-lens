@@ -34,9 +34,9 @@
 
 - **리뷰**: 계획 단계가 논문 전체를 읽고 집필 계획을 만듭니다. 계획에는 절 구성, 반드시 다룰 항목, 난이도, 선수 개념, 개념별 담당 절, 그림 배정, 용어집이 들어갑니다. 각 절은 지시서대로 쓴 뒤 지시서에 비추어 검수하고, 빠진 항목이 없을 때까지 고칩니다. 마지막으로 글 전체를 한 번 편집해 용어, 중복, 누락을 바로잡습니다.
 - **요약**: 파싱한 논문 전체를 입력으로 한 번 호출합니다.
-- **가이드**: 조사(문서, 참고 자료, 그리고 사용법·내부 구조와 설계·운영 통합을 찾는 웹 검색) → 관련성 판정 → 개요 → 절별 작성·평가·사실 확인 순서입니다. 명령, 플래그, 기본값은 공식 문서가 정하고, 개념·내부 구조·아키텍처는 논문, 설계 문서, 신뢰할 수 있는 기술 글도 근거로 씁니다.
+- **가이드**: 조사(문서, 참고 자료, 그리고 사용법·내부 구조와 설계·운영 통합을 찾는 웹 검색) → 관련성 판정 → 서드파티 페이지에만 나오는 플래그의 공식 레퍼런스 조회 → 근거 장부 엔진 순서입니다. 페이지마다 읽기 에이전트가 근거를 기록하고 코드가 원문과 출처 권한에 비추어 검사합니다. 개요가 사실 하나를 가이드 순서(TL;DR, 문제, 사용·운영보다 앞선 개념·구조, 선택 기준)의 한 절에 주고, 절은 자기 근거로 쓴 뒤 주장 단위로 검사합니다. 명령, 플래그, 기본값은 공식 문서가 정하고, 개념·내부 구조·아키텍처는 논문, 설계 문서, 신뢰할 수 있는 기술 글도 근거로 씁니다.
 - **서베이 계획**: 사용자가 준 참고 자료(블로그 글, 서베이 글, 논문 페이지)를 한 번 읽습니다. 범위 호출이 주제와 그 발췌를 보고 계보, 검색어, 주요 논문 제목을 제안하면 OpenAlex와 arXiv 검색(arXiv 메타데이터는 DataCite로 확인, 키가 있으면 Semantic Scholar 인용 수)으로 후보를 모으고, 참고 자료 자신이나 거기서 링크한 논문(arXiv·doi.org 링크, `arXiv:` ID)도 후보에 더한 뒤 코드가 병합·연결·순위를 정합니다. 선정 호출이 설정 범위 안에서 논문을 고르면 코드가 검증한 뒤 계획을 저장합니다.
-- **서베이 쓰기**: 고친 계획을 다시 검증하고 손으로 더한 논문은 DataCite·OpenAlex로 채웁니다. 논문마다 카드를 만들어 캐시합니다(핵심 논문은 arXiv HTML 전문, 보조 논문은 초록으로 한 번 호출). 카드의 숫자·수식·그림은 코드가 논문과 대조합니다. 개요 호출이 절(도입, 계보별 절, 필요하면 계보를 가로지르는 절, 비교, 통찰)을 정하면 코드가 논문 수로 절 길이를 정하고, 각 절은 가이드처럼 쓰기·평가·한 번 수정·카드 기준 사실 확인을 거칩니다. 분야를 짜는 절(도입, 계보를 가로지르는 절, 비교, 통찰)은 계획의 참고 자료 글 발췌도 설명 자료로 받습니다(논문 사실의 근거로는 쓰지 않고, 견해는 그 글의 이름으로 밝힘). 코드가 `[@id]` 인용 키를 저자-연도 링크로 바꾸고 연표, 비교표, 참고 문헌, 참고 자료 글 목록을 만듭니다.
+- **서베이 쓰기**: 고친 계획을 다시 검증하고 손으로 더한 논문은 DataCite·OpenAlex로 채웁니다. 논문마다 읽기 에이전트(arXiv HTML, 없으면 PDF, 그것도 없으면 초록)가 사실을 논문 원문 인용과 함께 기록하고 코드가 검사합니다. 개요가 사실 하나를 한 절(도입, 계보별 절, 필요하면 계보를 가로지르는 절, 비교, 통찰)에 주면 코드가 논문 수로 절 길이를 정하고, 각 절은 자기 근거로 쓴 뒤 수치·주장 단위로 검사해 근거가 뒷받침하지 않는 문장을 지웁니다. 도입, 계보를 가로지르는 절, 통찰 절은 계획의 참고 자료 글 발췌도 설명 자료로 받습니다. 코드가 연표와 비교표를 만들고 인용을 저자-연도 링크로 바꾸며 참고 문헌과 참고 자료 글 목록을 붙입니다.
 - **발행**: 수식과 Markdown 정규화, 논문 자신의 그림을 블로그로 복사(그 밖의 이미지는 원본 링크로 둠), 블로그 규칙 검사를 거친 뒤 S3에 올리고, 글마다 고정된 브랜치로 GitHub PR을 엽니다.
 
 ![AWS 아키텍처](./docs/diagrams/aws-architecture.png)
@@ -66,8 +66,8 @@ poetry run python -m scholar_lens summarize 2106.09685 --no-pr
 
 - `resources`: `profile_name`, `bedrock_region_name`, `s3_bucket_name`(`cdk deploy`와 Batch 실행에 필요. 없으면 `status`는 저장된 결과 없이 Batch 상태만 보여 줌), `email_address`(SNS 알림)
 - `resources.github`: `enabled`, `repo_name`(예: `owner/owner.github.io`), `base_branch`, `branch_prefix`, `author_email`(이 도구의 커밋 정체성. 글을 다시 생성하려면 필요하며, 없으면 재실행이 슬러그가 같은 글만 바꾸고 브랜치에 남은 예전 사본을 지우지 않음), 산출물 유형별 카테고리 이름
-- 단계별 `*_model_id`, `thinking_effort`, 품질 기준, `max_total_tokens` 비용 상한(기본값: 리뷰 800만, 요약 100만, 가이드 300만, 서베이 계획 30만, 서베이 쓰기 450만 토큰(`survey.write_max_total_tokens`))
-- `survey`: `min_papers`·`max_papers`(6·25), `candidate_pool`(60), 쓰기 단계의 `chars_per_core_paper`·`chars_per_supporting_paper`(3,000·800), `min_total_chars`·`max_total_chars`(20,000·70,000), `card_source_chars`
+- 단계별 `*_model_id`, `thinking_effort`, 품질 기준과 비용 상한: 리뷰·요약·서베이 계획은 `max_total_tokens`(기본값 800만, 100만, 30만 토큰), 근거 장부 엔진은 추정 비용 상한(`tech_guide.max_cost_usd`와 `survey.write_max_cost_usd`는 모두 $60, `engine: evidence`인 리뷰·요약은 `explanation.max_cost_usd`, `summary.max_cost_usd`)
+- `survey`: `min_papers`·`max_papers`(6·25), `candidate_pool`(60), 쓰기 단계의 `chars_per_core_paper`·`chars_per_supporting_paper`(3,000·800), `min_total_chars`·`max_total_chars`(20,000·70,000)
 - `resources.github.survey_category`(`Paper Surveys`): 블로그 글 규칙에 있는 유형이어야 하며, 없으면 `survey write`가 모델을 부르기 전에 멈춥니다
 - `output_language`(기본값 `Korean`)
 
@@ -107,7 +107,7 @@ poetry run python -m scholar_lens costs --since 2026-11-01 --by stage --billed  
 | `--wait`, `--timeout S` | status | 작업이 끝나거나 `S`초가 지날 때까지 조회합니다 |
 | `--since D`, `--until D`, `--by kind\|stage\|model\|day`, `--billed` | costs | `[since, until)`(UTC 날짜)에 끝난 Batch 실행을 결과 매니페스트로 종류·단계·모델·날짜별로 묶고 실패한 실행의 비용도 보여 줍니다. `--billed`는 `ProjectName=scholar-lens` 태그 리소스의 Cost Explorer 청구액을 더합니다 |
 
-`survey plan`은 글을 쓰지 않습니다. `JobResult`의 `plan_path`(로컬 `papers/survey-<slug>/plan.json`. `--remote` 실행은 컨테이너가 사라지므로 비어 있음)와 `s3_uri`(S3 사본. 원격 실행 뒤에는 이 값을 `survey write --plan`에 넘김)가 계획 파일입니다. 계획을 고친 뒤(논문 빼기·더하기·옮기기, 역할 바꾸기, 계보 이름 바꾸기) `survey write --plan`에 넘깁니다. 계획 단계를 다시 실행하면 내용이 다른 기존 계획은 `plan.<UTC 시각>.json`으로 남습니다. 손으로 더하는 논문은 `id`(arXiv ID나 URL, 또는 DOI), `lineage`, `role`만 있으면 되고, 제목·저자·연도·URL은 쓰기 단계가 채웁니다. 손으로 더하는 참고 자료는 `url`만 있으면 되고 `kind`는 URL로 정합니다(arXiv·doi.org 링크는 `paper`, 나머지는 `article`). 쓰기 단계는 `article`만 읽습니다. 계획에는 `core` 논문이 하나 이상 있어야 합니다. 논문 카드는 논문, 카드 스키마, 모델, 언어와 카드 프롬프트·`card_source_chars`·번역 지침의 `-<variant>` 요약값별로 캐시하므로(셋 중 하나가 바뀌면 카드를 다시 만듦)(로컬 `papers/survey-cards/`, S3 `<s3_prefix>/surveys/cards/`) 다시 실행하거나 같은 논문을 다루는 다른 서베이가 재사용합니다. 계획 필드와 쓰기 단계는 [설계 문서](./docs/design.md#43-논문-서베이)에 있습니다.
+`survey plan`은 글을 쓰지 않습니다. `JobResult`의 `plan_path`(로컬 `papers/survey-<slug>/plan.json`. `--remote` 실행은 컨테이너가 사라지므로 비어 있음)와 `s3_uri`(S3 사본. 원격 실행 뒤에는 이 값을 `survey write --plan`에 넘김)가 계획 파일입니다. 계획을 고친 뒤(논문 빼기·더하기·옮기기, 역할 바꾸기, 계보 이름 바꾸기) `survey write --plan`에 넘깁니다. 계획 단계를 다시 실행하면 내용이 다른 기존 계획은 `plan.<UTC 시각>.json`으로 남습니다. 손으로 더하는 논문은 `id`(arXiv ID나 URL, 또는 DOI), `lineage`, `role`만 있으면 되고, 제목·저자·연도·URL은 쓰기 단계가 채웁니다. 손으로 더하는 참고 자료는 `url`만 있으면 되고 `kind`는 URL로 정합니다(arXiv·doi.org 링크는 `paper`, 나머지는 `article`). 쓰기 단계는 `article`만 읽습니다. 계획에는 `core` 논문이 하나 이상 있어야 합니다. 논문마다 기록한 근거는 논문, 읽기 버전, 모델, 언어, 역할, 원문 종류별로 캐시하므로(로컬 `papers/survey-evidence/`, S3 `<s3_prefix>/surveys/evidence/`) 다시 실행하거나 같은 논문을 다루는 다른 서베이가 재사용합니다. 계획 필드와 쓰기 단계는 [설계 문서](./docs/design.md#43-논문-서베이)에 있습니다.
 
 모든 명령은 stdout에 JSON 객체 하나(실행은 `JobResult`, `--remote`는 `job_id`, `status`는 Batch 상태와 저장된 결과)를 출력하고, 로그는 stderr로 보냅니다. 종료 코드는 `0` 성공 또는 제출, `1` 실패, `2` 입력 거부, `3` 진행 중, `4` 명령 자체의 실패입니다. Batch `worker`는 자체 알림을 보낸 뒤 `10`(실패)이나 `11`(거부)로, Batch가 작업을 멈추면 `143`으로 끝납니다([상세](./docs/design.md#21-명령)). URL은 따옴표로 감쌉니다. zsh에서는 따옴표 없는 URL의 `?`가 glob으로 해석되어 명령이 실패합니다.
 
@@ -147,7 +147,8 @@ actionlint                                       # GitHub 워크플로 검사
 
 ## 변경 이력
 
-- 서베이는 기본으로 근거 장부 엔진이 씁니다(`survey.engine: evidence`, `cards`는 이전 엔진). 읽기 에이전트가 사실마다 논문 원문 인용을 기록하고 코드가 검사합니다. 개요가 사실 하나를 한 절에 주고 비교표가 수치를 가지며, 절은 수치·주장 단위로 검사하고 근거와 모순되는 문장만 지웁니다. 평가셋(판정 3회)에서 두 서베이 모두 모든 항목이 이전 엔진의 중앙값 이상이고, 수치 반복은 크게 줄고 그림은 두 배 가까이 늘었습니다([결과](./docs/redesign.md)). 공격 기법 절의 생성을 중간에 멈추던 Bedrock 콘텐츠 필터는 재시도한 뒤 읽기 모델로 넘깁니다.
+- 가이드와 서베이는 근거 장부 엔진만 씁니다. 가이드 `sections` 엔진과 서베이 `cards` 엔진이 없어졌고, 그 설정 키 `tech_guide.engine`, `writer_enable_thinking`, `evaluator_enable_thinking`, `verify_grounding`, `min_quality_score`, `max_revision_attempts`, `max_total_tokens`와 `survey.engine`, `card_source_chars`, `min_quality_score`, `max_revision_attempts`, `verify_grounding`, `write_max_total_tokens`도 없어졌습니다. `config.yaml`에서 지우지 않으면 `extra_forbidden`으로 로드에 실패합니다. 실행 비용은 `tech_guide.max_cost_usd`와 `survey.write_max_cost_usd`가 막습니다. 리뷰와 요약은 두 엔진(`explanation.engine`, `summary.engine`)을 그대로 둡니다.
+- 서베이는 근거 장부 엔진이 씁니다. 읽기 에이전트가 사실마다 논문 원문 인용을 기록하고 코드가 검사합니다. 개요가 사실 하나를 한 절에 주고 비교표가 수치를 가지며, 절은 수치·주장 단위로 검사하고 근거와 모순되는 문장만 지웁니다. 평가셋(판정 3회)에서 두 서베이 모두 모든 항목이 이전 엔진의 중앙값 이상이고, 수치 반복은 크게 줄고 그림은 두 배 가까이 늘었습니다([결과](./docs/redesign.md)). 공격 기법 절의 생성을 중간에 멈추던 Bedrock 콘텐츠 필터는 재시도한 뒤 읽기 모델로 넘깁니다.
 - 수식: 확률·정책 호출 안의 맨 `|`(`p(y|x)`, `\pi_\theta(a|s)`)는 `\mid`로 바꿉니다(전에는 인라인 수식에서 `\vert`, 디스플레이 수식에서는 그대로). MathJax에 없는 `\minimize`, `\maximize`, `\argmin`, `\argmax`는 `\operatorname*{…}`로 바꿉니다. 고쳐 달라고 다시 요청한 뒤에도 160자를 넘는 서베이 설명은 120–160자 안의 마지막 문장 끝에서 자릅니다.
 - 서베이 학회명은 논문이 실린 곳을 씁니다. OpenAlex 학회명은 학회·저널 유형의 첫 위치에서 가져오고(Zenodo 같은 저장소, CISPA 같은 기관, "Lecture notes in computer science" 같은 총서는 제외), OpenAlex·Semantic Scholar·계획의 참고 문헌 학회명은 `domain/venues.py`로 정규화합니다(NeurIPS, ICML, ICLR, ACL, EMNLP, Findings of ACL, TMLR, NDSS 등은 짧은 이름, 모두 소문자인 목록 이름은 단어 첫 글자를 대문자로). `Retry-After` 없는 Semantic Scholar 429는 한 번이 아니라 대기 시간을 두 배씩 늘려(5, 10, 20, 40초) 최대 네 번 재시도합니다. 모델 호출마다 사용량을 기록하고(`llm_usage` 로그, 단계·모델별 `JobResult.usage`, 단계별 CloudWatch 지표, SNS 알림의 비싼 단계 상위 3개) `scholar-lens costs`가 결과 매니페스트로 비용을 보고합니다. Bedrock 호출은 `Kind` 태그가 붙은 종류별 응용 추론 프로필을 거쳐 Cost Explorer가 종류별 Bedrock 비용을 나눕니다(`cdk deploy --all`).
 - 문서나 검색 결과에 상대 경로로 들어 있던 링크(`../_images/x.svg`)는 검색 결과 Markdown을 읽을 때 그 페이지 URL 기준의 절대 URL로 바꿉니다. 게시 단계에서는 블로그가 따라갈 수 없는 링크(http(s), 사이트 내부 경로, 앵커, mailto가 아니거나 텍스트가 빈 링크)의 링크를 풀고 텍스트만 남깁니다. 이미지를 감싼 링크면 이미지만 남깁니다. Ray Serve 가이드가 이런 링크 때문에 블로그 htmlproofer에서 실패했습니다.

@@ -1,16 +1,14 @@
-"""Official-reference lookup, verification hedges and the input outline for
-tech guides (no LLM or network calls)."""
+"""Official-reference lookup and verification hedges for tech guides (no
+LLM or network calls)."""
 
 from __future__ import annotations
 
 from collections.abc import Collection
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 
 from scholar_lens.domain.markdown.lint import writing_issues
-from scholar_lens.src.guide_authority import input_outline
-from scholar_lens.src.prompts.tech_guide import OFFICIAL_LABEL
 from scholar_lens.src.web_research import (
     MAX_REFERENCE_PAGES,
     MAX_REFERENCE_SEARCHES,
@@ -131,103 +129,6 @@ def test_reference_lookup_uses_reference_links_without_search() -> None:
     )
     added = researcher.add_official_reference(corpus, OFFICIAL, ["--x"], product="vllm")
     assert [p.url for p in added] == [ENGINE_ARGS]
-
-
-async def test_stale_flag_pulls_the_official_reference_into_grounding() -> None:
-    gen = _make_generator(verify_grounding=True)
-    quickstart = PageContent(
-        url=QUICKSTART, title="Quickstart", text="## Installation\n\nvllm serve MODEL"
-    )
-    corpus = ResearchCorpus(pages=[quickstart])
-    gen.researcher.research = MagicMock(return_value=corpus)
-    engine_args = PageContent(
-        url=ENGINE_ARGS,
-        title="Engine Arguments",
-        text="--speculative-config JSON speculative decoding settings",
-    )
-
-    def add_reference(corpus, hosts, identifiers, *, product="", follow_links=True, **_):  # type: ignore[no-untyped-def]
-        if not follow_links:
-            return []  # the section's title lookup finds no page
-        # The product is the command the seed page shows ("vllm serve").
-        assert "--preemption-mode" in identifiers and product == "vllm"
-        corpus.pages.append(engine_args)
-        return [engine_args]
-
-    gen.researcher.add_official_reference = MagicMock(side_effect=add_reference)
-    gen.relevance_chain.ainvoke = AsyncMock(
-        return_value={
-            "is_relevant": "yes",
-            "topic": "Using X",
-            "reason": "docs",
-            "commands": "vllm",
-        }
-    )
-    gen.synopsis_chain.ainvoke = AsyncMock(
-        return_value={"synopsis": "1. Serving - run the server"}
-    )
-    gen.section_chain.ainvoke = AsyncMock(
-        return_value={
-            "section_markdown": "## Serving\n\n```bash\nvllm serve m --preemption-mode swap\n```"
-        }
-    )
-    gen.grounding_chain.ainvoke = AsyncMock(
-        return_value={"grounded_markdown": "## Serving\n\n```bash\nvllm serve m\n```"}
-    )
-    guide = await gen.generate([QUICKSTART], discover_subpages=False)
-    sources = gen.grounding_chain.ainvoke.await_args.args[0]["sources"]
-    assert "Engine Arguments" in sources and f"({OFFICIAL_LABEL})" in sources
-    assert "--preemption-mode" not in guide.body
-    assert not any("--preemption-mode" in note for note in guide.notes)
-    synopsis_inputs = gen.synopsis_chain.ainvoke.await_args.args[0]
-    assert "- Installation" in synopsis_inputs["input_outline"]
-
-
-async def test_only_a_section_with_an_unchecked_flag_gets_the_reference() -> None:
-    gen = _make_generator(verify_grounding=True)
-    quickstart = PageContent(QUICKSTART, "Quickstart", "vllm serve MODEL")
-    gen.researcher.research = MagicMock(return_value=ResearchCorpus(pages=[quickstart]))
-    engine_args = PageContent(ENGINE_ARGS, "Engine Arguments", "--preemption-mode")
-
-    def add_reference(corpus, hosts, identifiers, *, follow_links=True, **_):  # type: ignore[no-untyped-def]
-        if not follow_links:
-            return []
-        corpus.pages.append(engine_args)
-        return [engine_args]
-
-    gen.researcher.add_official_reference = MagicMock(side_effect=add_reference)
-    gen.relevance_chain.ainvoke = AsyncMock(
-        return_value={"is_relevant": "yes", "topic": "Using X", "reason": "docs"}
-    )
-    gen.synopsis_chain.ainvoke = AsyncMock(
-        return_value={"synopsis": "1. Serving - run\n2. Concepts - why"}
-    )
-    gen.section_chain.ainvoke = AsyncMock(
-        side_effect=[
-            {"section_markdown": "## Serving\n\n`example serve m --preemption-mode x`"},
-            {"section_markdown": "## Concepts\n\nPlain prose."},
-        ]
-    )
-    gen.grounding_chain.ainvoke = AsyncMock(return_value={})
-    await gen.generate([QUICKSTART], discover_subpages=False)
-    serving, concepts = [
-        c.args[0]["sources"] for c in gen.grounding_chain.ainvoke.await_args_list
-    ]
-    assert "# Engine Arguments" in serving and "# Engine Arguments" not in concepts
-
-
-def test_input_outline_lists_only_the_requested_pages() -> None:
-    corpus = ResearchCorpus(
-        pages=[
-            PageContent(
-                QUICKSTART, "Q", "## Installation\n\nx\n\n## On Attention Backends"
-            ),
-            PageContent("https://blog.example.com/a", "B", "## Unrelated"),
-        ]
-    )
-    outline = input_outline(corpus, [QUICKSTART])
-    assert outline == "- Installation\n- On Attention Backends"
-    assert input_outline(ResearchCorpus(), [QUICKSTART]) == "(none)"
 
 
 def test_reference_lookup_skips_an_older_docs_version() -> None:
@@ -373,7 +274,7 @@ def test_reference_lookup_bounds_a_chain_of_index_pages() -> None:
     assert len(researcher.fetched) == 2 * 3  # type: ignore[attr-defined]
 
 
-def test_reference_lookup_without_links_drops_pages_that_settle_nothing() -> None:
+def test_reference_lookup_drops_pages_that_settle_nothing() -> None:
     hit = f"https://{HOST}/en/latest/cli/serve.html"
     miss = f"https://{HOST}/en/latest/configuration/serve_args.html"
     researcher, _ = _researcher(
@@ -385,27 +286,24 @@ def test_reference_lookup_without_links_drops_pages_that_settle_nothing() -> Non
     corpus = ResearchCorpus(pages=[PageContent(QUICKSTART, "Q", "vllm serve")])
     ids = ["--gpu-memory-utilization"]
     added = researcher.add_official_reference(
-        corpus, OFFICIAL, ids, follow_links=False, settles=_settles(ids)
+        corpus, OFFICIAL, ids, settles=_settles(ids)
     )
     # The API-argument spelling settles the flag, as the unverified check reads it.
     assert [p.url for p in added] == [hit]
 
 
-async def test_only_identifier_lookups_require_a_settling_page() -> None:
+async def test_an_identifier_lookup_requires_a_settling_page() -> None:
     gen, corpus = _budget_generator([])
     lookup = MagicMock(return_value=[])
     gen.researcher.add_official_reference = lookup
     await gen._add_reference(corpus, ["--max-model-len"])
     settles = lookup.call_args.kwargs["settles"]
     assert settles("max_model_len=4096") and not settles("--max-model-length")
-    await gen._add_reference(corpus, ["배포하기"], follow_links=False)
-    assert lookup.call_args.kwargs["settles"] is None
 
 
 async def test_reference_lookups_share_the_per_guide_caps() -> None:
     gen = _make_generator()
     gen._reference_pages, gen._reference_ids = [], []
-    gen._source_urls = (QUICKSTART,)
     gen._official = OFFICIAL
     calls: list[dict] = []
 
@@ -427,77 +325,11 @@ async def test_reference_lookups_share_the_per_guide_caps() -> None:
     assert calls[1]["max_searches"] == MAX_REFERENCE_SEARCHES - 1
 
 
-def test_pre_writing_lookup_leaves_part_of_the_budget_for_grounding() -> None:
+def test_the_identifier_lookup_leaves_part_of_the_budget() -> None:
     from scholar_lens.src import tech_guide
 
-    assert 0 < tech_guide._PRE_WRITE_REFERENCE_PAGES < MAX_REFERENCE_PAGES
-    assert 0 < tech_guide._PRE_WRITE_REFERENCE_SEARCHES < MAX_REFERENCE_SEARCHES
-
-
-def test_source_list_names_only_the_pages_the_body_uses() -> None:
-    from scholar_lens.src.guide_authority import used_source_urls
-
-    old = f"https://{HOST}/en/v0.6.0/serve.html"
-    blog_used = "https://blog.example.com/used"
-    blog_unused = "https://blog.example.com/unused"
-    blog_image = "https://blog.example.com/diagram"
-    image = "https://blog.example.com/arch.png"
-    reference_unused = f"https://{HOST}/en/latest/usage/metrics.html"
-    subpage = f"https://{HOST}/en/latest/features/fp8.html"
-    corpus = ResearchCorpus(
-        pages=[
-            PageContent(QUICKSTART, "Q", "vllm serve m"),
-            PageContent(subpage, "FP8", "E4M3 has 3 mantissa bits."),
-            PageContent(old, "Old", "vllm serve m --max-model-len 4096"),
-            PageContent(blog_used, "B", "from vllm import SamplingParams"),
-            PageContent(blog_unused, "U", "An unrelated benchmark story."),
-            PageContent(blog_image, "D", "A diagram.", image_urls=[image]),
-            PageContent(ENGINE_ARGS, "Args", "--max-model-len: context length"),
-            PageContent(reference_unused, "M", "vllm:num_requests_running"),
-        ]
-    )
-    body = (
-        "```python\nfrom vllm import SamplingParams\n```\n\n"
-        "```bash\nvllm serve m --max-model-len 4096\n```\n\n"
-        f"![Architecture]({image})"
-    )
-    references = [p for p in corpus.pages if p.url in (ENGINE_ARGS, reference_unused)]
-    # A page that fed a section counts even when the body paraphrases it.
-    fed = {QUICKSTART, blog_used, old, reference_unused}
-    used = used_source_urls(body, corpus, [QUICKSTART], OFFICIAL, references, fed)
-    assert used == [QUICKSTART, subpage, blog_used, blog_image, ENGINE_ARGS]
-
-
-def test_a_reference_page_counts_only_for_a_whole_identifier() -> None:
-    from scholar_lens.src.guide_authority import used_source_urls
-
-    corpus = ResearchCorpus(
-        pages=[
-            PageContent(QUICKSTART, "Q", "vllm serve m"),
-            PageContent(ENGINE_ARGS, "Args", "--hostname: the host name"),
-        ]
-    )
-    body = "```bash\nvllm serve m --host 0.0.0.0\n```"
-    references = [corpus.pages[1]]
-    used = used_source_urls(body, corpus, [QUICKSTART], OFFICIAL, references, set())
-    assert used == [QUICKSTART]
-
-
-def test_section_plan_accepts_loose_numbering_and_markdown_links() -> None:
-    from scholar_lens.src.guide_authority import parse_section_plan
-
-    pages = [PageContent(QUICKSTART, "Q", "x")]
-    raw = (
-        f"1. | sources: {QUICKSTART} | owns: a; b\n"
-        f"2 | sources: <{QUICKSTART}>\n"
-        f"3| sources: {QUICKSTART}\n"
-        f"Section 4 | sources: {QUICKSTART};\n"
-        f"5 | sources: [{QUICKSTART}]({QUICKSTART})\n"
-        f"6 | sources: [quickstart]({QUICKSTART}).\n"
-    )
-    plan = parse_section_plan(raw, pages)
-    assert plan[1] == ([QUICKSTART], ["a", "b"])
-    assert all(plan[n] == ([QUICKSTART], []) for n in range(2, 7))
+    assert 0 < tech_guide._IDENTIFIER_REFERENCE_PAGES < MAX_REFERENCE_PAGES
+    assert 0 < tech_guide._IDENTIFIER_REFERENCE_SEARCHES < MAX_REFERENCE_SEARCHES
 
 
 def _budget_generator(search: list[SearchResult] | None):  # type: ignore[no-untyped-def]
@@ -530,58 +362,17 @@ def _budget_generator(search: list[SearchResult] | None):  # type: ignore[no-unt
     return gen, ResearchCorpus(pages=[seed])
 
 
-async def test_title_lookup_needs_a_search_backend() -> None:
-    from scholar_lens.src.tech_guide import PlannedSection
-
+async def test_without_a_search_backend_the_lookup_follows_the_seed_links() -> None:
     gen, corpus = _budget_generator(None)
-    section = PlannedSection("Kubernetes에 배포하기")
-    await gen._find_official_source(corpus, section)
-    # A reference link the seed page happens to have is not the section's page.
-    assert not section.official_source and gen._reference_pages == []
     await gen._add_reference(corpus, ["--gpu-memory-utilization"])
-    assert gen._reference_pages  # grounding still gets the reference budget
+    assert gen._reference_pages
+    assert all(p.url.startswith(f"https://{HOST}/") for p in gen._reference_pages)
 
 
-async def test_title_lookup_counts_only_a_search_result() -> None:
-    from scholar_lens.src.tech_guide import PlannedSection
-
-    gen, corpus = _budget_generator([])  # the search finds nothing
-    section = PlannedSection("Kubernetes에 배포하기")
-    await gen._find_official_source(corpus, section)
-    assert not section.official_source and gen._reference_pages == []
-
-
-async def test_title_lookups_leave_grounding_a_share_of_the_budget() -> None:
-    from scholar_lens.src.tech_guide import (
-        _PRE_WRITE_REFERENCE_PAGES,
-        PlannedSection,
-    )
-
-    results = [
-        SearchResult(title=f"p{i}", url=f"https://{HOST}/en/latest/p{i}.html")
-        for i in range(10)
-    ]
-    gen, corpus = _budget_generator(results)
-    sections = [PlannedSection("배포하기"), PlannedSection("문제 해결")]
-    for section in sections:
-        await gen._find_official_source(corpus, section)
-    assert sections[0].official_source
-    assert sections[0].sources[0].startswith(f"https://{HOST}/")
-    assert len(gen._reference_pages) == _PRE_WRITE_REFERENCE_PAGES
-    # The spent budget ran no search for the second section: it is not told
-    # that no official page covers it.
-    assert sections[1].official_source and sections[1].sources == []
-    before = len(gen._reference_pages)
-    await gen._add_reference(corpus, ["--gpu-memory-utilization"])
-    assert len(gen._reference_pages) == MAX_REFERENCE_PAGES > before
-
-
-async def test_identifier_lookup_leaves_the_title_searches_a_share() -> None:
+async def test_the_identifier_lookup_stays_within_its_share() -> None:
     from scholar_lens.src.tech_guide import (
         _IDENTIFIER_REFERENCE_PAGES,
         _IDENTIFIER_REFERENCE_SEARCHES,
-        _PRE_WRITE_REFERENCE_PAGES,
-        PlannedSection,
     )
 
     results = [
@@ -589,7 +380,7 @@ async def test_identifier_lookup_leaves_the_title_searches_a_share() -> None:
         for i in range(10)
     ]
     gen, corpus = _budget_generator(results)
-    # The pre-writing identifier lookup, as generate() runs it.
+    # The pre-writing identifier lookup, as gather() runs it.
     await gen._add_reference(
         corpus,
         ["--max-model-len", "--tensor-parallel-size"],
@@ -597,42 +388,6 @@ async def test_identifier_lookup_leaves_the_title_searches_a_share() -> None:
         max_searches=_IDENTIFIER_REFERENCE_SEARCHES,
     )
     assert len(gen._reference_pages) == _IDENTIFIER_REFERENCE_PAGES
-    section = PlannedSection("배포하기")
-    await gen._find_official_source(corpus, section)
-    assert section.official_source and section.sources
-    assert len(gen._reference_pages) == _PRE_WRITE_REFERENCE_PAGES
-
-
-def test_section_plan_keeps_only_corpus_urls() -> None:
-    from scholar_lens.src.guide_authority import parse_section_plan
-
-    landed = f"https://{HOST}/en/v1.2/quickstart.html"
-    pages = [
-        PageContent(QUICKSTART, "Q", "x", final_url=landed),
-        PageContent("https://blog.example.com/a", "B", "y"),
-    ]
-    raw = (
-        f"1 | sources: {landed}, https://invented.example/z | owns: install; first run\n"
-        "2. | sources: none | owns: none\n"
-        "3 | sources: (https://blog.example.com/a). | owns: tuning\n"
-        "not a plan line"
-    )
-    assert parse_section_plan(raw, pages) == {
-        1: ([QUICKSTART], ["install", "first run"]),
-        2: ([], []),
-        3: (["https://blog.example.com/a"], ["tuning"]),
-    }
-
-
-def test_source_list_names_one_spelling_of_a_page() -> None:
-    from scholar_lens.src.guide_authority import used_source_urls
-
-    pages = [
-        PageContent(QUICKSTART, "Q", "x"),
-        PageContent(QUICKSTART.removesuffix(".html"), "Q", "x"),
-        PageContent(QUICKSTART.replace("/latest/", "/stable/"), "Q", "x"),
-    ]
-    used = used_source_urls(
-        "", ResearchCorpus(pages=pages), [QUICKSTART], OFFICIAL, [], []
-    )
-    assert used == [QUICKSTART]
+    # A later lookup may use the rest of the per-guide caps.
+    await gen._add_reference(corpus, ["--gpu-memory-utilization"])
+    assert len(gen._reference_pages) == MAX_REFERENCE_PAGES

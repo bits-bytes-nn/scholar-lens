@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-# Prose-length target per section depth, in Korean characters of prose as
-# ``section_loop.prose_chars`` measures it (PROSE_UNIT). Single source for the
-# synopsis budget, the section directives and the evaluator's length report.
+# Prose-length target per section depth, in Korean characters of prose
+# (spaces included; code blocks, tables and images excluded). Single source
+# for the evidence engines' section targets.
 DEPTH_CHARS: dict[str, int] = {"deep": 5_000, "standard": 2_500, "brief": 1_000}
 
 

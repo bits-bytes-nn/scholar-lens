@@ -1,10 +1,7 @@
 from enum import Enum, auto
 
 from ..domain.ids import (  # noqa: F401 - re-exported for the legacy modules
-    ARXIV_DOI_VERSION,
     ARXIV_ID_BODY,
-    ARXIV_ID_PATTERN,
-    BARE_DOI,
     arxiv_id_from_reference,
     arxiv_id_from_url,
     arxiv_paper_key,

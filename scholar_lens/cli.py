@@ -251,7 +251,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Write the survey post from a plan file.",
         description=(
             "Write the survey post from a plan file (as 'survey plan' saved it, "
-            "or edited): paper cards, outline, sections, blog checks, PR."
+            "or edited): paper reading, outline, sections, blog checks, PR."
         ),
     )
     survey_write.add_argument(

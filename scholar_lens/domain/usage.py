@@ -61,11 +61,6 @@ class UsageTotals(BaseModel):
         self.cache_write_tokens += event.cache_write_tokens
         self.cost_usd = round(self.cost_usd + event.cost_usd, 6)
 
-    def merge(self, other: UsageTotals) -> None:
-        for name in type(self).model_fields:
-            setattr(self, name, getattr(self, name) + getattr(other, name))
-        self.cost_usd = round(self.cost_usd, 6)
-
 
 class RunUsage(BaseModel):
     """A run's usage in total, by stage and by model; the price table the

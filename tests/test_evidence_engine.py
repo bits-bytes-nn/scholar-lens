@@ -11,14 +11,16 @@ from typing import Any
 
 import pytest
 
-from scholar_lens.application.ports import AgentLimits, AgentOutcome
-from scholar_lens.application.survey_engine import (
+from scholar_lens.application.evidence_writer import (
     ClaimCheck,
-    EngineSettings,
     EvidenceCheck,
-    EvidenceSurveyEngine,
     SectionReview,
     SentenceVerdict,
+)
+from scholar_lens.application.ports import AgentLimits, AgentOutcome
+from scholar_lens.application.survey_engine import (
+    EngineSettings,
+    EvidenceSurveyEngine,
 )
 from scholar_lens.domain.evidence import (
     EvidenceLedger,

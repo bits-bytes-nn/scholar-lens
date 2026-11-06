@@ -306,10 +306,19 @@ class TestRateAndExtractUsageEdges:
 
 class TestTieredPricing:
     def test_haiku_55_long_prompts_use_the_higher_tier(self) -> None:
-        from scholar_lens.src.metrics import call_cost_usd
+        from scholar_lens.domain.usage import UsageEvent
+        from scholar_lens.src.metrics import event_cost_usd
 
-        short = call_cost_usd("us.anthropic.claude-haiku-5-5", 100_000, 1_000)
-        long = call_cost_usd("us.anthropic.claude-haiku-5-5", 200_000, 1_000)
+        def cost(input_tokens: int) -> float:
+            return event_cost_usd(
+                UsageEvent(
+                    model_id="us.anthropic.claude-haiku-5-5",
+                    input_tokens=input_tokens,
+                    output_tokens=1_000,
+                )
+            )
+
+        short, long = cost(100_000), cost(200_000)
         assert short == pytest.approx(100_000 / 1e6 * 0.10 + 1_000 / 1e6 * 0.50)
         assert long == pytest.approx(200_000 / 1e6 * 0.50 + 1_000 / 1e6 * 2.50)
 

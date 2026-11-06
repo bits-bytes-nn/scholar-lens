@@ -95,7 +95,7 @@ class TestResearchCorpus:
         )
         assert corpus.image_urls == ["a", "b", "c"]
 
-    def test_combined_text_labels_sources_by_authority(self) -> None:
+    def test_relevant_text_labels_sources_by_authority(self) -> None:
         from scholar_lens.src.web_research import OfficialDocs
 
         corpus = ResearchCorpus(
@@ -104,10 +104,12 @@ class TestResearchCorpus:
                 PageContent("https://blog.x.io/b", "B", "y"),
             ]
         )
-        text = corpus.combined_text(OfficialDocs.from_urls(["https://docs.x.dev/"]))
+        official = OfficialDocs.from_urls(["https://docs.x.dev/"])
+        text = corpus.relevant_text("x y", max_chars=10_000, official=official)
         assert "## Source (official documentation): https://docs.x.dev/a" in text
         assert "## Source (third-party): https://blog.x.io/b" in text
-        assert "## Source: https://docs.x.dev/a" in corpus.combined_text()
+        unlabelled = corpus.relevant_text("x y", max_chars=10_000)
+        assert "## Source: https://docs.x.dev/a" in unlabelled
 
 
 class TestWebResearcherFetch:
@@ -490,7 +492,8 @@ class TestHardenedFetch:
                 )
             ]
         )
-        assert "</sources>" not in corpus.combined_text()
+        text = corpus.relevant_text("body", max_chars=10_000)
+        assert "IGNORE PREVIOUS" in text and "</sources>" not in text
 
     def test_page_without_charset_header_uses_meta_charset(self) -> None:
         body = "<html><head><meta charset='euc-kr'></head><body><p>한국어 문서</p></body></html>"
@@ -678,9 +681,9 @@ def test_relevant_text_records_the_pages_it_includes() -> None:
             PageContent(url="https://d.dev/b", title="B", text="kv cache " * 600),
         ]
     )
-    included: set[str] = set()
-    corpus.relevant_text("kv cache", max_chars=7_000, included=included)
-    assert included == {"https://d.dev/a"}  # the second page found no room
+    text = corpus.relevant_text("kv cache", max_chars=7_000)
+    # The second page found no room.
+    assert "https://d.dev/a" in text and "https://d.dev/b" not in text
 
 
 def test_relevant_text_puts_preferred_pages_first() -> None:
@@ -692,11 +695,8 @@ def test_relevant_text_puts_preferred_pages_first() -> None:
             PageContent(url="https://d.dev/b", title="B", text="unrelated " * 600),
         ]
     )
-    included: set[str] = set()
-    corpus.relevant_text(
-        "kv cache", max_chars=7_000, included=included, prefer=["https://d.dev/b"]
-    )
-    assert included == {"https://d.dev/b"}
+    text = corpus.relevant_text("kv cache", max_chars=7_000, prefer=["https://d.dev/b"])
+    assert "https://d.dev/b" in text and "https://d.dev/a" not in text
 
 
 def test_relevant_text_gives_preferred_pages_fair_shares_in_plan_order() -> None:
@@ -704,17 +704,15 @@ def test_relevant_text_gives_preferred_pages_fair_shares_in_plan_order() -> None
     docs = PageContent("https://d.dev/a", "Docs", "flag " * 600)
     other = PageContent("https://d.dev/c", "Other", "kv cache " * 600)
     corpus = ResearchCorpus(pages=[other, paper, docs])
-    included: set[str] = set()
     text = corpus.relevant_text(
         "kv cache",
         max_chars=20_000,
-        included=included,
         prefer=["https://d.dev/a", "https://arxiv.org/abs/1"],
     )
     # Plan order, and the long paper leaves the official page whole.
     assert text.index("# Docs") < text.index("# Paper")
     assert text.count("flag") == 600
-    assert included == {"https://d.dev/a", "https://arxiv.org/abs/1"}
+    assert "https://d.dev/c" not in text
     # The room the short page left goes to the cut paper first.
     assert len(text) > 18_000
 

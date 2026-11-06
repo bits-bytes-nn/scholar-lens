@@ -1,7 +1,7 @@
 """Import contracts between the pipeline modules, read from the source (AST):
-the survey stages and the shared section loop stay independent of the guide
-and review generators, the web research layer of the review plan, and the
-post checks of the run context, the pipelines and the publisher."""
+the survey stages stay independent of the guide and review generators, the
+draft checks (``section_loop``) of every writer that uses them, and the
+publish types of the run context, the pipelines and the publisher."""
 
 from __future__ import annotations
 
@@ -57,7 +57,10 @@ def _modules(pattern: str) -> list[Path]:
 # (modules, the modules none of them may import)
 CONTRACTS = [
     ("survey_*.py", ("tech_guide", "explainer")),
-    ("section_loop.py", ("tech_guide", "explainer", "survey_*")),
+    (
+        "section_loop.py",
+        ("tech_guide", "guide_*", "explainer", "summarizer", "survey_*"),
+    ),
     # The publish types stay free of the run context, pipelines and
     # publisher. The post checks and fixes moved to scholar_lens.domain,
     # whose purity import-linter checks (pyproject.toml).

@@ -1,6 +1,5 @@
 """Deterministic source checks of the tech-guide pipeline: which flags,
-arguments and metric names the official docs never mention, which pages a
-guide draws on, and the synopsis's per-section source and concept plan.
+arguments and metric names the official docs never mention.
 
 No LLM or network calls: everything here reads text the pipeline already has.
 """
@@ -8,19 +7,10 @@ No LLM or network calls: everything here reads text the pipeline already has.
 from __future__ import annotations
 
 import re
-from collections.abc import Collection, Sequence
+from collections.abc import Sequence
 
 from ..domain.markdown.math import segments
-from .prompt_safety import neutralize_prompt_tags
-from .utils import parse_lines
-from .web_research import (
-    METRIC_SUFFIXES,
-    OfficialDocs,
-    PageContent,
-    ResearchCorpus,
-    docs_version,
-    normalize_url,
-)
+from .web_research import METRIC_SUFFIXES, OfficialDocs, ResearchCorpus
 
 # Identifiers a reader copies verbatim: CLI flags and Prometheus-style metric
 # names ("vllm:time_to_first_token_seconds", "..._requests_total").
@@ -35,68 +25,10 @@ _KWARG = re.compile(r"(?<![\w.-])([a-z][a-z0-9]*(?:_[a-z0-9]+)+)=(?!=)")
 MAX_UNVERIFIED = 10
 
 
-_OUTLINE_HEADING = re.compile(r"^##[ \t]+(.+?)[ \t#]*$", re.MULTILINE)
-_MAX_OUTLINE_HEADINGS = 40
-# "1 | sources: …", also "1. |", "3|" or "Section 4 |".
-_PLAN_LINE = re.compile(r"^\s*(?:section\s+)?(\d+)[.)]?(?:\s+|(?=\|))(.*)$", re.I)
-# A URL, bare, in <…> or in a Markdown link "[title](url)".
-_PLAN_URL = re.compile(r"https?://[^\s,;|<>\[\]]+")
-_URL_TRAILER = ").,;:!?'\"`*"
-
-
 def _mentions(text: str, token: str) -> bool:
     """Whether ``text`` has ``token`` as a whole token (``--host`` is not in
     ``--hostname``)."""
     return re.search(rf"(?<![\w-]){re.escape(token)}(?![\w-])", text) is not None
-
-
-def input_outline(corpus: ResearchCorpus, urls: tuple[str, ...] | list[str]) -> str:
-    """The ``##`` headings of the requested pages (not sub-pages or search
-    results), one per line: the topics a getting-started guide must cover."""
-    wanted = {normalize_url(u) for u in urls}
-    headings: list[str] = []
-    for page in corpus.pages:
-        if normalize_url(page.url) not in wanted:
-            continue
-        for title in _OUTLINE_HEADING.findall(page.text):
-            if title not in headings:
-                headings.append(title)
-    lines = [f"- {neutralize_prompt_tags(h)}" for h in headings[:_MAX_OUTLINE_HEADINGS]]
-    return "\n".join(lines) or "(none)"
-
-
-def parse_section_plan(
-    raw: str, pages: Collection[PageContent]
-) -> dict[int, tuple[list[str], list[str]]]:
-    """``{section number: (source URLs, owned concepts)}`` from the synopsis's
-    ``<section_plan>`` lines (``1 | sources: url, url | owns: a; b``),
-    numbered like the outline's sections. A URL
-    counts only when it is a corpus page (as fetched or where it landed),
-    returned as that page's URL; unknown URLs are dropped."""
-    known: dict[str, str] = {}
-    for page in pages:
-        for url in (page.url, page.final_url):
-            if url:
-                known.setdefault(normalize_url(url), page.url)
-    plan: dict[int, tuple[list[str], list[str]]] = {}
-    for line in raw.splitlines():
-        match = _PLAN_LINE.match(line)
-        if not match:
-            continue
-        sources: list[str] = []
-        owns: list[str] = []
-        for part in match.group(2).split("|"):
-            key, _, value = part.partition(":")
-            key = key.strip().lower()
-            if key == "sources":
-                for url in _PLAN_URL.findall(value):
-                    page_url = known.get(normalize_url(url.rstrip(_URL_TRAILER)))
-                    if page_url and page_url not in sources:
-                        sources.append(page_url)
-            elif key == "owns":
-                owns += parse_lines("\n".join(value.split(";")))
-        plan[int(match.group(1))] = (sources, owns)
-    return plan
 
 
 def official_reference(official: OfficialDocs, corpus: ResearchCorpus) -> str:
@@ -232,69 +164,3 @@ def third_party_identifiers(
             if identifier not in found:
                 found.append(identifier)
     return found[:MAX_UNVERIFIED]
-
-
-def used_source_urls(
-    body: str,
-    corpus: ResearchCorpus,
-    urls: list[str] | tuple[str, ...],
-    official: OfficialDocs,
-    reference_pages: list[PageContent],
-    section_sources: Collection[str],
-) -> list[str]:
-    """The pages the guide draws on, for its source list: the requested pages
-    (``urls``: documentation and reference material) and the official pages
-    crawled with them, and any other page that fed a
-    section's sources (``section_sources``) or that the body links or shows
-    an image from. A reference page counts only for an identifier it settled;
-    an older docs version never counts."""
-    requested = {normalize_url(u) for u in urls}
-    references = {normalize_url(p.url) for p in reference_pages}
-    code = " ".join(
-        body[seg.start : seg.end]
-        for seg in segments(body)
-        if seg.kind in ("fence", "icode")
-    )
-    # Each flag or argument in both spellings (``--a-b`` / ``a_b``; a one-word
-    # flag only as itself, since "host" is in any page).
-    identifiers = {
-        spelling
-        for flag in _FLAG.findall(code)
-        for spelling in _flag_spellings(flag, False)
-    }
-    identifiers |= {
-        a for arg in _KWARG.findall(code) for a in (arg, "--" + arg.replace("_", "-"))
-    }
-    linked = {normalize_url(u) for u in re.findall(r"\]\((https?://[^)\s]+)", body)}
-    used: list[str] = []
-    seen: set[str] = set()
-    for page in corpus.pages:
-        norm = normalize_url(page.url)
-        where = page.final_url or page.url
-        text = page.text.lower()
-        if norm in requested:
-            keep = True
-        elif official.on_host(where) and not official.covers(where):
-            keep = False  # an older docs version
-        elif norm in references:
-            keep = any(_mentions(text, i) for i in identifiers)
-        elif official.covers(where):
-            keep = True  # a current page of the requested docs
-        else:
-            keep = (
-                page.url in section_sources
-                or norm in linked
-                or any(u in body for u in page.image_urls)
-            )
-        if keep and _same_page_key(page.url) not in seen:
-            seen.add(_same_page_key(page.url))
-            used.append(page.url)
-    return used
-
-
-def _same_page_key(url: str) -> str:
-    """One key for the spellings of one docs page: with or without ``.html``,
-    under ``latest`` or ``stable``."""
-    key = normalize_url(url).removesuffix(".html")
-    version = docs_version(url)
-    return key.replace(f"/{version}/", "/{v}/", 1) if version else key

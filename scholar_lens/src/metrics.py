@@ -279,15 +279,6 @@ def _prices(model_id: str, input_tokens: int) -> tuple[float, float]:
     return price_per_mtok(model_id)
 
 
-def call_cost_usd(model_id: str, input_tokens: int, output_tokens: int) -> float:
-    """List-price cost of one uncached call, honouring tiered pricing."""
-    return event_cost_usd(
-        UsageEvent(
-            model_id=model_id, input_tokens=input_tokens, output_tokens=output_tokens
-        )
-    )
-
-
 def price_per_mtok(model_id: str) -> tuple[float, float]:
     """(input, output) USD per million tokens for an invoked model id."""
     info = model_info_for_invoked_id(model_id)
