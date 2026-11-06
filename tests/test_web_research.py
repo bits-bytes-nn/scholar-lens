@@ -1535,3 +1535,22 @@ def test_llms_txt_pages_in_scope_come_first_architecture_ahead() -> None:
         "https://d.dev/serve/start.html",
         "https://d.dev/serve/nav-only.html",
     ]
+
+
+def test_pypi_extras_come_from_the_json_api() -> None:
+    from scholar_lens.adapters.packages.pypi import package_extras
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/pypi/strands-agents/json":
+            return httpx.Response(
+                200, json={"info": {"version": "1.64.0", "provides_extra": ["Cedar", "otel"]}}
+            )
+        return httpx.Response(404)
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    assert package_extras("strands-agents", client=client) == (
+        "1.64.0",
+        frozenset({"cedar", "otel"}),
+    )
+    assert package_extras("no-such-package", client=client) is None
+    assert package_extras("bad name;rm", client=client) is None

@@ -89,7 +89,11 @@ How a good guide on this blog is written:
   once by one name: one page is one voice, never two sources that agree.
   Copy a source's table cells as they are (no "—" where it has content).
 - Never state what the tool does in a case the evidence does not cover
-  (that it rejects, fails or warns): say what the evidence says.
+  (that it rejects, fails or warns, which status code or error a caller
+  gets): say what the evidence says.
+- Show a command's output only as the evidence shows it. A file the docs
+  show edited by hand is "a file like this", never what the command prints;
+  never write output you did not see in the evidence.
 - Vary how a figure, table or code block is introduced; never the same
   formula twice ("다음과 같습니다"), and avoid noun frames such as "~다는 점".
 """
@@ -250,6 +254,9 @@ case the evidence does not cover (an error, a rejection, a refusal, a default
 somewhere else: a rule documented for the decorator stated for the config
 file) is unsupported. A table row copied from a source keeps the source's
 cells: "—" or a renamed row where the source has content is wrong.
+A status code, error, exception or warning the tool returns, and a
+command's printed output, are unsupported unless the evidence shows them
+for that case.
 Judge only specific factual claims about the tool (what it does, how it
 works, its commands, flags, defaults and measured results). A claim the
 evidence makes only for one SDK language, version, provider or condition,
@@ -343,8 +350,10 @@ says:
 - the example defeating itself: what the trace shows never reaches the
   result the text promises (a policy or guard blocking a tool the example
   needs, a limit it always hits, a result never returned);
-- no install command for the packages and extras the code imports (report
-  it on the first usage section);
+- no install command for the packages and extras the code imports, or an
+  install command without the extra a feature the code uses needs (the
+  extras each package provides are listed under packages; report it on the
+  first usage section);
 - a config file or command that, where it appears, needs code shown only
   later (a config setting `user_config` before the `reconfigure` that reads
   it), or a "changed lines only" fragment the reader cannot assemble;

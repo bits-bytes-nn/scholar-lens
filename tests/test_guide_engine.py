@@ -776,3 +776,46 @@ def test_dropping_a_sentence_leaves_code_and_tables_alone() -> None:
     out = drop_sentences(md, ["틀린 문장입니다."])
     assert "  - name: app1\n    import_path: text_ml:app\n" in out
     assert "| a | 1 |" in out and "맞는 문장입니다." in out
+
+
+def test_the_projects_own_repository_counts_as_official() -> None:
+    official = OfficialDocs.from_urls(
+        ["https://docs.ray.io/en/latest/serve/index.html"]
+    )
+    edit = "https://github.com/ray-project/ray/edit/master/doc/serve.md"
+    pages = [
+        PageContent(
+            url=f"https://docs.ray.io/en/latest/serve/p{n}.html",
+            title="Docs",
+            text=DOC_TEXT,
+            links=[edit, *(["https://github.com/someone/fork"] if n == 0 else [])],
+        )
+        for n in range(3)
+    ] + [
+        PageContent(
+            url="https://github.com/ray-project/ray/blob/master/doc/source/serve/architecture.md",
+            title="architecture.md",
+            text=BLOG_TEXT * 3,
+        ),
+        PageContent(
+            url="https://github.com/someone/fork", title="Fork", text=BLOG_TEXT * 3
+        ),
+    ]
+    docs = guide_documents(pages, official)
+    assert [d.authority for d in docs[3:]] == ["official", "third_party"]
+
+
+def test_install_commands_are_checked_against_the_package_extras() -> None:
+    from scholar_lens.domain.guide.evidence_guide import (
+        install_requirements,
+        unknown_extras,
+    )
+
+    md = '```bash\npip install "strands-agents[cedar,otel]" pydantic -U\nuv pip install ray[serve]\n```\n'
+    assert install_requirements(md) == [
+        ("strands-agents", frozenset({"cedar", "otel"})),
+        ("pydantic", frozenset()),
+        ("ray", frozenset({"serve"})),
+    ]
+    provided = {"strands-agents": frozenset({"cedar"}), "ray": frozenset({"serve"})}
+    assert unknown_extras(md, provided) == ["strands-agents[otel]"]

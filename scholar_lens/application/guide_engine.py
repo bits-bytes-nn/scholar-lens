@@ -253,6 +253,7 @@ class EvidenceGuideEngine(EvidenceWriter):
         *,
         identifier_check: Callable[[str], list[str]] | None = None,
         products: Sequence[str] = (),
+        package_facts: str = "",
     ) -> None:
         super().__init__(model, GUIDE_PROMPTS, max_fix_rounds=settings.max_fix_rounds)
         self.settings = settings
@@ -264,6 +265,8 @@ class EvidenceGuideEngine(EvidenceWriter):
         self.identifier_check = identifier_check
         # The product's names (never a source's name).
         self.products: tuple[str, ...] = tuple(products)
+        # The packages the docs install, their versions and extras (PyPI).
+        self.package_facts = package_facts
 
     # ---- source passages ------------------------------------------------------
 
@@ -755,6 +758,7 @@ class EvidenceGuideEngine(EvidenceWriter):
                         f"{outline.code_language or 'any'}.",
                         block("guide", guide),
                         block("source_code", source_code),
+                        block("packages", self.package_facts),
                     ]
                 ),
                 schema=GuideReview,

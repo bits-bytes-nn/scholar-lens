@@ -7,6 +7,7 @@ pipeline classifies and publishes as before."""
 
 from __future__ import annotations
 
+import asyncio
 import dataclasses
 import html
 import json
@@ -14,8 +15,13 @@ import re
 from collections.abc import Sequence
 from typing import Any
 
+from ..adapters.packages.pypi import package_extras
 from ..domain.evidence import Authority, SourceDocument
-from ..domain.guide.evidence_guide import unverified_imports
+from ..domain.guide.evidence_guide import (
+    install_requirements,
+    unknown_extras,
+    unverified_imports,
+)
 from ..domain.post_names import slugify
 from .constants import LanguageModelId, LocalPaths, S3Paths
 from .guide_authority import official_reference, unverified_identifiers
@@ -56,6 +62,52 @@ _DECORATIVE = re.compile(
 )
 
 
+_GITHUB_REPO = re.compile(
+    r"^https?://(?:github\.com|raw\.githubusercontent\.com)/([\w.-]+)/([\w.-]+)", re.I
+)
+
+
+def _repository(url: str) -> str:
+    m = _GITHUB_REPO.match(url)
+    return f"{m.group(1)}/{m.group(2)}".lower().removesuffix(".git") if m else ""
+
+
+def official_repositories(
+    pages: Sequence[PageContent], official: OfficialDocs
+) -> set[str]:
+    """The GitHub repositories the official docs pages link to most (their
+    "edit on GitHub" and source links): the project's own repositories,
+    whose pages are as official as the docs."""
+    counts: dict[str, int] = {}
+    for page in pages:
+        if _AUTHORITY.get(source_label(page, official)) != "official":
+            continue
+        for repo in {r for link in page.links if (r := _repository(link))}:
+            counts[repo] = counts.get(repo, 0) + 1
+    if not counts:
+        return set()
+    top = max(counts.values())
+    # Linked from at least half as many pages as the most linked one, and
+    # from more than one page when several docs pages were read.
+    floor = max(2 if len(pages) > 2 else 1, (top + 1) // 2)
+    return {repo for repo, n in counts.items() if n >= floor}
+
+
+# Packages looked up per guide (the docs' install commands name a few).
+_MAX_PACKAGES = 6
+
+
+def docs_packages(official_text: str) -> dict[str, tuple[str, frozenset[str]]]:
+    """name -> (latest version, extras) on PyPI of the packages the official
+    pages install; unknown or unreachable ones are left out."""
+    names = list(dict.fromkeys(n for n, _ in install_requirements(official_text)))
+    found: dict[str, tuple[str, frozenset[str]]] = {}
+    for name in names[:_MAX_PACKAGES]:
+        if (info := package_extras(name)) is not None:
+            found[name] = info
+    return found
+
+
 def guide_documents(
     pages: Sequence[PageContent], official: OfficialDocs
 ) -> list[SourceDocument]:
@@ -63,10 +115,14 @@ def guide_documents(
     official, R1 reference material, W1 third-party, O1 older docs)."""
     counts: dict[str, int] = {}
     documents = []
+    repos = official_repositories(pages, official)
     for page in pages:
         if len(page.text.strip()) < _MIN_PAGE_CHARS:
             continue
         authority = _AUTHORITY.get(source_label(page, official), "third_party")
+        if authority == "third_party" and _repository(page.final_url or page.url) in repos:
+            # The project's own repository (its design docs, source, README).
+            authority = "official"
         counts[authority] = counts.get(authority, 0) + 1
         documents.append(
             SourceDocument.from_markdown(
@@ -149,12 +205,19 @@ async def write_guide_with_evidence(
     official_text = official_reference(generator.official, corpus)
     products = generator.products
 
+    provided = await asyncio.to_thread(docs_packages, official_text)
+    package_facts = "\n".join(
+        f"- {name} {version}: extras {', '.join(sorted(extras)) or 'none'}"
+        for name, (version, extras) in provided.items()
+    )
+
     def identifier_check(markdown: str) -> list[str]:
-        # Flags and arguments, and product import paths, no official page
-        # shows (an invented path fails as pasted).
+        # Flags and arguments, product import paths and install extras no
+        # official page or the package index shows (they fail as pasted).
         return [
             *unverified_identifiers(markdown, official_text, products),
             *unverified_imports(markdown, official_text, products),
+            *unknown_extras(markdown, {n: e for n, (_, e) in provided.items()}),
         ]
 
     language = context.config.output_language
@@ -177,6 +240,7 @@ async def write_guide_with_evidence(
         ),
         identifier_check=identifier_check,
         products=products,
+        package_facts=package_facts,
     )
     result = await engine.write(
         material.topic,

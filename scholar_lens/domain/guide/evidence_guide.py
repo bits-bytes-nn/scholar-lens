@@ -390,6 +390,41 @@ def misattributed(
     return problems
 
 
+# "pip install pkg[extra,extra2] other" (uv pip install too), outside prose.
+_PIP_INSTALL = re.compile(r"(?:uv\s+)?pip3?\s+install\s+([^\n#;&|]+)")
+_REQUIREMENT = re.compile(r"""^['"]?([A-Za-z0-9][A-Za-z0-9._-]*)(?:\[([^\]]*)\])?""")
+
+
+def install_requirements(text: str) -> list[tuple[str, frozenset[str]]]:
+    """(package, extras) of every ``pip install`` the text shows, options
+    and URLs left out."""
+    found: list[tuple[str, frozenset[str]]] = []
+    for m in _PIP_INSTALL.finditer(text):
+        for arg in m.group(1).split():
+            if arg.startswith("-") or "/" in arg or arg.startswith("."):
+                continue
+            if r := _REQUIREMENT.match(arg):
+                extras = frozenset(
+                    e.strip().lower() for e in (r.group(2) or "").split(",") if e.strip()
+                )
+                found.append((r.group(1).lower(), extras))
+    return found
+
+
+def unknown_extras(
+    markdown: str, provided: Mapping[str, frozenset[str]]
+) -> list[str]:
+    """``pkg[extra]`` the guide installs that the package index does not
+    provide (known packages only)."""
+    bad: list[str] = []
+    for package, extras in install_requirements(markdown):
+        if package in provided:
+            for extra in sorted(extras - provided[package]):
+                if (item := f"{package}[{extra}]") not in bad:
+                    bad.append(item)
+    return bad
+
+
 def cited_sources(markdown: str, ledger: EvidenceLedger) -> list[str]:
     """Source ids the draft's markers cite, in order of first citation."""
     ids: list[str] = []
