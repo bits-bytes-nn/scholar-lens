@@ -133,6 +133,22 @@ class Explanation(_Section):
     paper_finalization_model_id: LanguageModelId = Field(
         default=LanguageModelId.CLAUDE_V5_5_OPUS
     )
+    # The writing engine: "sections" (plan, sections scored and revised,
+    # edit, finalize) or "evidence" (reading agents record checked evidence
+    # that the outline gives to sections; docs/redesign.md). The evidence
+    # engine reads with reader_model_id, plans with the planning model,
+    # writes with the synthesis model and checks with the evaluation model.
+    engine: Literal["sections", "evidence"] = Field(default="sections")
+    reader_model_id: LanguageModelId = Field(default=LanguageModelId.CLAUDE_V5_5_SONNET)
+    # Evidence engine: the review's prose characters (Korean).
+    min_total_chars: int = Field(default=25_000, ge=5_000, le=200_000)
+    max_total_chars: int = Field(default=45_000, ge=5_000, le=200_000)
+
+    @model_validator(mode="after")
+    def _review_length_range(self) -> "Explanation":
+        if self.min_total_chars > self.max_total_chars:
+            raise ValueError("explanation.min_total_chars exceeds max_total_chars")
+        return self
     evaluator_enable_thinking: bool = Field(default=False)
     synthesizer_enable_thinking: bool = Field(default=False)
     thinking_effort: ThinkingEffort = Field(default="medium")
@@ -156,6 +172,18 @@ class Explanation(_Section):
 
 class Summary(_Section):
     summary_model_id: LanguageModelId = Field(default=LanguageModelId.CLAUDE_V5_5_OPUS)
+    # "sections" (one summary call) or "evidence" (docs/redesign.md).
+    engine: Literal["sections", "evidence"] = Field(default="sections")
+    reader_model_id: LanguageModelId = Field(default=LanguageModelId.CLAUDE_V5_5_SONNET)
+    # Evidence engine: the summary's prose characters (Korean; five minutes).
+    min_total_chars: int = Field(default=2_500, ge=1_000, le=20_000)
+    max_total_chars: int = Field(default=4_500, ge=1_000, le=20_000)
+
+    @model_validator(mode="after")
+    def _summary_length_range(self) -> "Summary":
+        if self.min_total_chars > self.max_total_chars:
+            raise ValueError("summary.min_total_chars exceeds max_total_chars")
+        return self
     summarizer_enable_thinking: bool = Field(default=False)
     thinking_effort: ThinkingEffort = Field(default="medium")
     # Hard total-token ceiling for one summary run (None = no limit); a typical

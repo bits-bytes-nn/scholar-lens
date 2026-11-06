@@ -58,6 +58,7 @@ from .evidence_writer import (
     EvidenceWriter,
     WriterPrompts,
     block,
+    brief_lines,
     evidence_lines,
     quote_for_prompt_code,
     recheck,
@@ -212,23 +213,6 @@ def authority_rule(has_official: bool) -> Callable[..., list[str]]:
         return []
 
     return rule
-
-
-def _outline_lines(items: Sequence[Evidence]) -> str:
-    """Evidence for the planner: claims, scopes, figures and the first lines
-    of code (quotes stay with the writer)."""
-    lines = []
-    for e in items:
-        line = f"[{e.id}] ({e.paper_id}, {e.kind}) {e.claim}"
-        if e.scope:
-            line += f" | scope: {e.scope}"
-        if e.figure_url:
-            line += f" | figure: {(e.caption or '')[:160]}"
-        if e.code:
-            head = " ⏎ ".join(e.code.strip().split("\n")[:3])
-            line += f" | code: {head[:200]}"
-        lines.append(line)
-    return "\n".join(lines)
 
 
 class ReviewFinding(BaseModel):
@@ -430,7 +414,7 @@ class EvidenceGuideEngine(EvidenceWriter):
                 block("sources", sources),
                 block(
                     "evidence",
-                    _outline_lines([e for e in ledger if e.id not in duplicates]),
+                    brief_lines([e for e in ledger if e.id not in duplicates]),
                 ),
                 block("translation_guideline", guideline),
             ]

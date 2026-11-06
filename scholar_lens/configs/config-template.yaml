@@ -59,6 +59,12 @@ citations:
   prefer_full_text: false
 
 explanation:
+  # Writing engine: sections (plan, scored sections, edit, finalize) or
+  # evidence (reading agents record checked evidence; docs/redesign.md).
+  engine: sections
+  reader_model_id: anthropic.claude-sonnet-5-5   # evidence engine: reading
+  min_total_chars: 25000                         # evidence engine: prose length
+  max_total_chars: 45000
   # Plans the review from the whole paper and edits the finished article.
   paper_planning_model_id: anthropic.claude-opus-5-5
   paper_finalization_model_id: anthropic.claude-opus-5-5
@@ -80,6 +86,10 @@ explanation:
 
 summary:
   summary_model_id: anthropic.claude-opus-5-5
+  engine: sections                               # or evidence
+  reader_model_id: anthropic.claude-sonnet-5-5   # evidence engine: reading
+  min_total_chars: 2500                          # evidence engine: prose length
+  max_total_chars: 4500
   summarizer_enable_thinking: false
   thinking_effort: medium
   max_total_tokens: 1000000        # hard ceiling (null = no limit)

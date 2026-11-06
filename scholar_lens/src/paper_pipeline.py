@@ -23,12 +23,13 @@ from .citation_summarizer import CitationSummarizer
 from .code_retriever import CodeRetriever, NoPythonFilesError
 from .constants import EmbeddingModelId, LanguageModelId, LocalPaths
 from .content_extractor import Attributes, ContentExtractor
-from .explainer import Paper, PaperReviewer
+from .explainer import Paper, PaperReviewer, ReviewText
 from .formatting import format_review, format_summary, paper_post_meta
 from .jobs import JobRequest
 from .logger import logger
 from .metrics import TokenUsageTracker
 from .paper_source import PaperSource, resolve_paper_source
+from .paper_writer import write_paper_with_evidence
 from .parser import (
     Content,
     Figure,
@@ -151,6 +152,24 @@ async def _generate_review(
     published: BlogPost | None,
 ) -> tuple[str, list[str]]:
     cfg = context.config.explanation
+    github = context.config.resources.github
+    if cfg.engine == "evidence":
+        written, notes = await write_paper_with_evidence(
+            context,
+            paper,
+            post="review",
+            translation_guideline=translation_guideline,
+            tracker=tracker,
+        )
+        assert isinstance(written, ReviewText)
+        meta = paper_post_meta(
+            paper,
+            github.review_category,
+            context.require_conventions(),
+            known_tags=context.require_blog_tags(),
+            published=published,
+        )
+        return format_review(github, paper, written, meta=meta), notes
     reviewer = PaperReviewer(
         paper,
         planning_model_id=LanguageModelId(cfg.paper_planning_model_id),
@@ -175,7 +194,6 @@ async def _generate_review(
     )
     review = await reviewer.run()
     logger.info("Generated the review body, TL;DR and closing assessment.")
-    github = context.config.resources.github
     meta = paper_post_meta(
         paper,
         github.review_category,
@@ -197,6 +215,24 @@ async def _generate_summary(
     published: BlogPost | None,
 ) -> tuple[str, list[str]]:
     cfg = context.config.summary
+    if cfg.engine == "evidence":
+        written, notes = await write_paper_with_evidence(
+            context,
+            paper,
+            post="summary",
+            translation_guideline=translation_guideline,
+            tracker=tracker,
+        )
+        assert isinstance(written, dict)
+        github = context.config.resources.github
+        meta = paper_post_meta(
+            paper,
+            github.summary_category,
+            context.require_conventions(),
+            known_tags=context.require_blog_tags(),
+            published=published,
+        )
+        return format_summary(github, paper, written, meta=meta), notes
     summarizer = PaperSummarizer(
         LanguageModelId(cfg.summary_model_id),
         context.bedrock_boto_session,

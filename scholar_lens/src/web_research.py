@@ -1272,7 +1272,7 @@ class WebResearcher:
         self, indexed: list[tuple[str, str]], base_url: str, scope: str
     ) -> list[str]:
         base = urlparse(base_url)
-        found: list[tuple[int, int, str]] = []
+        found: list[tuple[int, int, int, int, str]] = []
         seen = {normalize_url(base_url)}
         for order, (url, label) in enumerate(indexed):
             parsed = urlparse(url)

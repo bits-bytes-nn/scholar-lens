@@ -165,6 +165,23 @@ def evidence_lines(items: Sequence[Evidence]) -> str:
     return "\n".join(lines)
 
 
+def brief_lines(items: Sequence[Evidence]) -> str:
+    """Evidence for a planner: claims, scopes, figures and the first lines
+    of code (quotes stay with the writer)."""
+    lines = []
+    for e in items:
+        line = f"[{e.id}] ({e.paper_id}, {e.kind}) {e.claim}"
+        if e.scope:
+            line += f" | scope: {e.scope}"
+        if e.figure_url:
+            line += f" | figure: {(e.caption or '')[:160]}"
+        if e.code:
+            head = " ⏎ ".join(e.code.strip().split("\n")[:3])
+            line += f" | code: {head[:200]}"
+        lines.append(line)
+    return "\n".join(lines)
+
+
 class EvidenceWriter:
     """Reading, claim checking, review and the fix loop, shared by the
     artifact engines. ``self._names`` maps a source id to the name the
