@@ -1,0 +1,102 @@
+{
+  "item": "guide-rayserve",
+  "post": "/tmp/eval-guide/guide-rayserve-v10.md",
+  "judge": "judge-3",
+  "sample_rule": "prose paragraphs (no headings/code/tables/math lines) counted from the body; paragraph 3 then every third (3, 6, 9, ... 135) gave 45 paragraphs; 15 claims taken from them",
+  "scores": {"A": 8, "B": 7.5, "C": 8, "D": 8, "E": 7.5, "F": 5.5, "T1": 8, "T2": 8, "T3": 7.5},
+  "score_notes": {
+    "A": "Front matter fine (two-level categories, use_math with $$). Deductions: facts stated twice across sections (user_config no restart, host/port fixed, rolling_update_percentage (0.0, 1.0] at L710 and again L796); Sources list omits works the body cites (Suhas Bhairav's Triton blog L986/L995, the discuss.ray.io thread L800, the Serve LLM observability page L982) and lists an unrelated page ('take_batch' Ray Data, L1026).",
+    "B": "Mostly natural. TL;DR (L13-15) restates section 1 (L19, L30, L34, L36) nearly sentence for sentence; '결국 모델마다 자원과 레플리카 수를 따로 정해야 하는데' (L21) and '장애 복구는 결국 ...로 정리됩니다' (L93) are formulaic; '단일 진실 공급원' (L577, L824) is a calque (rewrite: '설정의 기준 파일'); the last heading (L984) '독립 확장이 필요한 Python 파이프라인에 맞고 모델별 최적화 서버로는 부족한 선택지' is overlong.",
+    "C": "Running example threads through cleanly. '(앞서 다룬 스케일링 기본 요소)' (L997) points back to a term never introduced; the Ray 2017-paper section (L155-185) is a detour whose scheduler worked example concerns placement, not Serve request routing (the post says so itself at L183).",
+    "D": "Good worked examples where it is hard: power-of-two-choices table (L124-132), 2x4 concurrency arithmetic (L841), fractional GPU arithmetic (L871). Some padding: chain replication definition (L167), cost formula for global scheduler.",
+    "E": "Tables and code placed where discussed. Deduction: the 'serve build가 막 출력한 파일' YAML (L661-682) is not real tool output; Ray 2.60.0 serve build on the post's own text_ml.py emits name app1, a logging_config block, grpc enable_reflection, and deployments without num_replicas. ASCII figures are marked as illustrations.",
+    "F": "One wrong claim in the sample (backpressure 500) plus out-of-sample wrong statements: backpressure_config.status_code said not to apply behind a handle (L839, disproven at runtime), invented serve build output (L661-682), the official ray-project architecture.md labelled '서드파티 문서' (L97, L794), a cited blog with no link (Bhairav). The working-dir sentence (L749) omits the CLI's 'Ignored when deploying from a config file', which is the reader's path.",
+    "T1": "Running example runs as pasted on Ray 2.60.0 (see runnable_code). Gaps: multi-app YAML imports model:translator_app but no model.py is ever named (L811); the RayService serveConfigV2 (L767-790) has no working_dir, so pods cannot import text_ml although the text says to copy it '그대로' (L763); the FastAPI Translator file is unnamed.",
+    "T2": "Covers concepts, composition, HTTP/FastAPI, config, KubeRay, scaling, observability in a sensible order; Ray-paper scheduler section is somewhat padded relative to Serve.",
+    "T3": "Strong on architecture, request path, fault-tolerance owners, observability. Weak spot: the scaling section never shows autoscaling_config (min/max_replicas, target_ongoing_requests, delays) although autoscaling is a tag and the autoscaler's placement is discussed (L134-140); design advice mostly reads as recommendation."
+  },
+  "principles": {
+    "claim_headings": {"status": "met", "evidence": "H2s are claim noun phrases, e.g. L91 '컨트롤러·프록시·레플리카 액터를 거치는 요청 수명주기와 장애 복구'; some very long (L984)."},
+    "running_example": {"status": "met", "evidence": "translator_app / Summarizer->Translator threaded from L23 to L1011."},
+    "mechanism_design_formula_example": {"status": "partly met", "evidence": "Power-of-two-choices (L122-132) and backpressure (L832-857) follow the order; the backpressure worked example's 500 outcome is wrong (L841)."},
+    "facts_said_once": {"status": "partly met", "evidence": "user_config no-restart, host/port immutability and rolling_update_percentage repeated L710 and L796; TL;DR duplicates section 1."},
+    "numbers_with_scope_unit": {"status": "met", "evidence": "Cold-start figures carry hardware, workload and the author's caveat (L1001); v48.2.1, Ray 2.51 scoped."},
+    "nothing_invented": {"status": "not met", "evidence": "Invented serve build output (L661-682); 500-vs-503 and status_code scope claims (L839, L841) contradict Ray 2.60.0 behaviour."},
+    "writer_assessment_at_end": {"status": "met", "evidence": "L1011 '이 글의 판단으로는 ...' with when to choose FastAPI/Triton instead."},
+    "length_fitted": {"status": "partly met", "evidence": "~1,000 lines; Ray-paper GCS/scheduler section and duplicated TL;DR add length without Serve payoff."},
+    "type_specific_shape": {"status": "met", "evidence": "Opens with TL;DR and problem (L11-38), architecture (L91) before config details (L575), closes with choice and failure modes (L984-1011)."},
+    "korean_style": {"status": "partly met", "evidence": "입니다 register held; '결국' restatements (L21, L93), calque '단일 진실 공급원'."}
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 14,
+    "unsupported": 0,
+    "wrong": 1,
+    "unverifiable": 0,
+    "examples": [
+      {"line": 97, "claim": "Four actor kinds; by default one HTTP proxy actor on the head node, optionally one per node", "verdict": "supported", "source": "docs.ray.io serve/architecture: 'HTTP Proxy: By default there is one HTTP proxy actor on the head node ... run a proxy on each node ... via the proxy_location field' (page says 'three kinds' but lists Controller, HTTP proxy, gRPC proxy, Replicas). Note: post calls this official doc '서드파티 문서'."},
+      {"line": 138, "claim": "Danshyn: CoreWorker processes inference requests as actor tasks; each CoreWorker has a TaskCounter tracking pending/running/finished", "verdict": "supported", "source": "themutex.substack.com/p/ray-serve-autoscaling: 'Every instance of CoreWorker has a TaskCounter that tracks the numbers of pending, running and finished tasks. HTTP requests for model inference end up being processed by CoreWorker as actor tasks.'"},
+      {"line": 253, "claim": "serve run blocks and streams logs; Ctrl-C shuts down Serve on the cluster; import path may point to an Application or a function taking key=val args", "verdict": "supported", "source": "serve run --help (Ray 2.60.0): 'Passed import paths must point to an Application object or a function that returns one ... arguments can be passed to it in key=val format ... If you Ctrl-C the command, it will shut down Serve on the cluster.'"},
+      {"line": 321, "claim": "TF and sklearn tutorial clients use requests.get with json= to localhost:8000; PyTorch posts data=ray_logo_bytes", "verdict": "supported", "source": "serve/tutorials/serve-ml-models: 'resp = requests.get(\"http://localhost:8000/\", json={\"array\": ...})', 'requests.post(\"http://localhost:8000/\", data=ray_logo_bytes)'"},
+      {"line": 472, "claim": "DeploymentResponseGenerator usable sync/async; sync use inside a deployment blocks the replica; cannot be passed to other handle calls", "verdict": "supported", "source": "serve/model_composition: 'avoid using a DeploymentResponseGenerator as a sync generator within a deployment ... Note that you can't pass DeploymentResponseGenerators to other handle calls.'"},
+      {"line": 567, "claim": "asyncio.shield() protects async calls but cannot be used on a DeploymentHandle call", "verdict": "supported", "source": "serve/http-guide: 'Note that asyncio.shield cannot be used on a DeploymentHandle call to prevent the downstream handler from being cancelled.'"},
+      {"line": 659, "claim": "serve build output also contains a grpc_options block (port 9000) and an empty runtime_env", "verdict": "supported", "source": "serve/production-guide/config: generated file shows 'grpc_options: port: 9000' and 'runtime_env: {}'; 'the runtime_env field will always be empty when using serve build'. (The YAML block that follows in the post is not the real output; see issues.)"},
+      {"line": 749, "claim": "serve deploy --working-dir must be a remote .zip URI (e.g. S3)", "verdict": "supported", "source": "serve deploy --help: 'This must be a remote URI to a .zip file (e.g., S3 bucket)' - the post omits the same help text's 'Ignored when deploying from a config file.'"},
+      {"line": 800, "claim": "discuss.ray.io answer linking Ray 2.51.2 docs: one HTTP server (one port) per cluster; use multi-app route prefixes /service1, /service2, single YAML under RayService; Ingress/NGINX for ports", "verdict": "supported", "source": "discuss.ray.io/t/23403 answer (by the RunLLM bot) with links to github ray releases/2.51.2 production-guide/kubernetes.md. Thread is not in the post's Sources list."},
+      {"line": 837, "claim": "max_queued_requests is per caller (proxy or handle), default -1 (no limit); handles get BackPressureError, HTTP gets 503 by default", "verdict": "supported", "source": "ray.serve.schema: 'queued at each caller (proxy or DeploymentHandle) ... raise a BackPressureError (for handles) or return an HTTP 503 status code by default ... Defaults to -1 (no limit).'"},
+      {"line": 841, "claim": "If Summarizer does not catch the BackPressureError from the Translator handle, the client gets 500, not 503", "verdict": "wrong", "source": "Ray 2.60.0 local test: ingress -> handle -> inner deployment (max_ongoing_requests=1, max_queued_requests=1), 6 concurrent HTTP requests, no try/except: codes [200, 503, 503, 503, 503, 503]; with backpressure_config status_code 429 on the inner deployment: [200, 429 x5], body 'Request dropped due to backpressure'. So L839's 'not applicable behind a handle' is also wrong."},
+      {"line": 881, "claim": "Python Data Bench: num_gpus 0.25 lets four lightweight models share one A10G; for embedding models cuts cost per prediction 3-4x", "verdict": "supported", "source": "pythondatabench.com: 'four lightweight models share a single A10G. For embedding models that don't saturate a full GPU, this cuts cost per prediction by 3-4x.'"},
+      {"line": 893, "claim": "KubeRay install.sh installs kube-prometheus-stack v48.2.1 in prometheus-system with PodMonitor and PrometheusRule; --auto-load-dashboard true imports Grafana JSON", "verdict": "supported", "source": "cluster/kubernetes/k8s-ecosystem/prometheus-grafana: 'Install the kube-prometheus-stack v48.2.1 chart ... including PodMonitor ... and PrometheusRule, in the namespace prometheus-system' and the --auto-load-dashboard true bullet."},
+      {"line": 905, "claim": "RayService creates two Services for the head Pod (one RayService-managed, one RayCluster-managed), so PodMonitor avoids double counting", "verdict": "supported", "source": "prometheus-grafana page: 'RayService creates two Kubernetes services for the head Pod; one managed by the RayService and the other by the underlying RayCluster ... double counting'."},
+      {"line": 982, "claim": "Serve LLM engine-metric logging is on by default as of Ray 2.51; disable with log_engine_metrics: False", "verdict": "supported", "source": "serve/llm/user-guides/observability: 'Engine metric logging is on by default as of Ray 2.51. To disable ... set log_engine_metrics: False'. Page is not in the Sources list."}
+    ],
+    "out_of_sample_findings": [
+      {"line": 839, "claim": "backpressure_config.status_code does not apply when the Translator queue behind a handle overflows", "verdict": "wrong", "source": "same runtime test: inner deployment's 429 reached the HTTP client"},
+      {"line": "661-682", "claim": "YAML presented as what serve build just printed (name default, num_replicas: 1, no logging_config)", "verdict": "wrong", "source": "serve build text_ml:app on Ray 2.60.0 printed name app1, logging_config block, grpc enable_reflection: true, deployments '- name: Translator' / '- name: Summarizer' with no num_replicas"},
+      {"line": 97, "claim": "github.com/ray-project/ray doc/source/serve/architecture.md called a 서드파티 문서 (also L794)", "verdict": "wrong attribution", "source": "it is the source of the official docs.ray.io architecture page"},
+      {"line": 268, "claim": "t5-small translates to 'Bonjour Monde!'", "verdict": "minor", "source": "runtime output 'Bonjour monde!' (docs give both casings)"}
+    ]
+  },
+  "checklist": {
+    "repeated": 0,
+    "avoided": 1,
+    "na": 1,
+    "repeated_ids": [],
+    "items": [
+      {"id": "arch-diagram-relative-link", "result": "avoided", "evidence": "No empty-text links or ../_images paths; the only image (L173) has Korean alt text and a site-absolute /assets/images/... URL."},
+      {"id": "proxy-env-ray-start-unsupported", "result": "n/a", "evidence": "No proxy env-var section; 'ray start' and '환경 변수' do not occur in the post."}
+    ]
+  },
+  "extras": {
+    "architecture_first_line": 91,
+    "architecture_note": "Concepts at L40; Serve architecture/internals (controller, proxies, replicas, request path, autoscaler, fault tolerance) first at L91-153; Ray internals L155.",
+    "sources_total": 17,
+    "sources_non_official": 4,
+    "non_official_share": 0.24,
+    "non_official_list": ["paper.lingyunyang.com Ray OSDI notes", "Danshyn substack", "KubeRay issue #2557", "Python Data Bench"],
+    "cited_but_not_listed": ["Suhas Bhairav Triton vs Ray Serve blog (no URL anywhere)", "discuss.ray.io/t/23403", "Serve LLM observability page"],
+    "irrelevant_listed": ["take_batch (Ray Data API)"],
+    "opens_with_problem": true,
+    "closes_with_choice_and_failure_modes": true
+  },
+  "runnable_code": {
+    "verdict": "runs as pasted (main path); deployment-side gaps",
+    "env": "Ray 2.60.0, torch 2.15.0, transformers 5.22.1, Python 3.12, private head node on unique ports, Serve HTTP on a private port (only the client URL port was changed)",
+    "results": [
+      {"block": "MyFirstDeployment (L58-74)", "result": "ran, assert passed"},
+      {"block": "serve_quickstart.py + client (L205-266)", "result": "serve run OK; client printed 'Bonjour monde!'"},
+      {"block": "serve_quickstart_composed.py (L333-388, two blocks concatenated) + client (L404-415)", "result": "serve run OK; 'C'était le meilleur des temps, c'était le pire des temps,'"},
+      {"block": "FastAPI Translator (L488-523) with params={'text': ...} client (L525)", "result": "200, 'Bonjour monde!' via response.json()"},
+      {"block": "Streaming Caller/Streamer (L442-470)", "result": "handle stream yielded [0, 1, 2]"},
+      {"block": "StreamingResponder (L539-565)", "result": "streamed b'0', b'1', b'2'"},
+      {"block": "text_ml.py (L583-651) + edited serve_config.yaml (L686-708, port changed, runtime_env pip dropped because packages were installed)", "result": "serve run config: app RUNNING, Translator/Summarizer HEALTHY, client OK. serve build output differs from the post's 'generated' YAML"}
+    ],
+    "not_run": ["tutorial_sklearn.py (needs pickled model the post says is assumed)", "KubeRay/Prometheus manifests (no cluster)", "serve deploy/serve status (need dashboard; disabled on the private cluster)"],
+    "gaps": ["multi-app YAML imports model:translator_app but no model.py is defined (L811)", "serveConfigV2 lacks working_dir so text_ml cannot be imported on pods (L763-790)"]
+  },
+  "top_issues": [
+    "Backpressure worked example is wrong: an uncaught BackPressureError from the Translator handle reaches HTTP clients as 503 (or the inner deployment's backpressure_config status_code), not 500; L839/L841/L855 build advice on the wrong premise (verified on Ray 2.60.0).",
+    "Invented 'serve build' output (L661-682): real output names the app app1, includes logging_config, and omits num_replicas; the official ray-project architecture doc is mislabelled third-party (L97, L794).",
+    "Production path not runnable as written: serveConfigV2 has no working_dir for text_ml (L763-790), multi-app YAML imports an undefined model:translator_app (L811); Bhairav blog, discuss.ray.io thread and Serve LLM page cited but missing from Sources."
+  ]
+}
