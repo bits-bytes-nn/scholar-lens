@@ -64,7 +64,7 @@ explanation:
   engine: sections
   reader_model_id: anthropic.claude-sonnet-5-5   # evidence engine: reading
   min_total_chars: 25000                         # evidence engine: prose length
-  max_total_chars: 45000
+  max_total_chars: 55000
   # Plans the review from the whole paper and edits the finished article.
   paper_planning_model_id: anthropic.claude-opus-5-5
   paper_finalization_model_id: anthropic.claude-opus-5-5

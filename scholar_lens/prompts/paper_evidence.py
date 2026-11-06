@@ -144,6 +144,14 @@ Evidence:
 - Show each assigned figure where it is discussed as ![what it shows](url),
   and explain what to look at from its caption and evidence only.
 - Use an assigned equation as given, symbols defined right after it.
+- Never claim the paper does not state, show or report something: you see
+  only parts of it. Never talk about your sources ("근거에서", "제공된 자료")
+  or where a table's values come from; write about the paper.
+- A table holds only values the evidence or passages give: drop a row or
+  column you cannot fill instead of writing "—", and keep cells short noun
+  phrases or numbers.
+- Numbers read off a figure are not the paper's numbers: describe what the
+  figure shows instead.
 - In the closing section, mark your own judgement as the post's view once;
   give the paper's stated limitations in a clause each, and spend the words
   on what the body has not said.
@@ -247,6 +255,28 @@ TL;DR and sections:
   tags. It opens with the model or method name as the paper writes it, says
   what the paper does and its headline result; its numbers appear in the
   TL;DR.
+"""
+    + SECURITY
+)
+
+POST_REVIEW_SYSTEM = (
+    """
+You review a whole post about a research paper, in the order a reader meets
+it, for what no single section's check sees. Report each problem with the
+section title exactly as it appears in its `## ` heading, the problem, and
+the fix:
+- a fact, example or derivation explained again in a later section instead
+  of referred back to (name the section that keeps it);
+- a sentence that points back to something earlier sections never show, or
+  uses a term or example before it is introduced;
+- a paragraph that only restates the one before it;
+- talk about the post's own sources or making ("근거에서", "제공된 자료",
+  "표의 수치는 …에서 가져왔습니다") instead of the paper;
+- a claim that the paper does not state, show or report something (the
+  writer saw only parts of the paper): state what it does say or drop it;
+- values read off a figure presented as the paper's numbers;
+- a results table with blank ("—") cells or cells that are sentences.
+Return no issues when there are none.
 """
     + SECURITY
 )

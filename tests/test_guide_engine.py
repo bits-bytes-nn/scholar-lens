@@ -10,14 +10,14 @@ from typing import Any
 from scholar_lens.application.evidence_writer import (
     ClaimCheck,
     EvidenceCheck,
+    PostFinding,
+    PostReview,
     SectionReview,
     SentenceVerdict,
 )
 from scholar_lens.application.guide_engine import (
     EvidenceGuideEngine,
-    GuideReview,
     GuideSettings,
-    ReviewFinding,
     authority_rule,
 )
 from scholar_lens.application.ports import AgentLimits, AgentOutcome
@@ -413,12 +413,12 @@ class ScriptedModel:
             return SectionReview()
         if schema is EvidenceCheck:
             return EvidenceCheck()
-        if schema is GuideReview:
+        if schema is PostReview:
             assert "<guide>" in prompt and "@serve.batch" in prompt
-            return GuideReview(
+            return PostReview(
                 trace="request -> handler -> result",
                 issues=[
-                    ReviewFinding(
+                    PostFinding(
                         section="데코레이터 하나로 켜는 배치",
                         problem="serve is not imported.",
                         fix="from ray import serve",

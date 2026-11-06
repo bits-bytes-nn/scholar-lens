@@ -14,7 +14,7 @@ import logging
 from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, TypeVar
 
 from pydantic import BaseModel, Field
 
@@ -35,6 +35,7 @@ from ..domain.evidence_draft import (
     ends_mid_sentence,
     prose_sentences,
     quote_for_prompt,
+    section_heading,
     strip_revision_notes,
     structure_lost,
     unsourced_number_sentences,
@@ -43,6 +44,8 @@ from .ports import AgentLimits, LanguageModel
 from .usage import usage_stage
 
 logger = logging.getLogger(__name__)
+
+SectionT = TypeVar("SectionT")
 
 _EVIDENCE_KINDS: tuple[str, ...] = Evidence.model_fields["kind"].annotation.__args__  # type: ignore[union-attr]
 
@@ -79,6 +82,21 @@ class ReviewIssue(BaseModel):
 
 class SectionReview(BaseModel):
     issues: list[ReviewIssue] = Field(default_factory=list, max_length=10)
+
+
+class PostFinding(BaseModel):
+    """A problem the whole-post review found, by the section it is in."""
+
+    section: str
+    problem: str
+    fix: str
+
+
+class PostReview(BaseModel):
+    # What the reviewer traced before reporting (a guide: one request of the
+    # final running example through every guard and policy).
+    trace: str = ""
+    issues: list[PostFinding] = Field(default_factory=list, max_length=30)
 
 
 @dataclass(frozen=True)
@@ -530,6 +548,49 @@ class EvidenceWriter:
                 f"Section '{title}' still has: " + " | ".join(leftover[:5])
             )
         return draft
+
+    async def apply_findings(
+        self,
+        written: Sequence[tuple[SectionT, str]],
+        findings: Sequence[PostFinding],
+        ledger: EvidenceLedger,
+        *,
+        title_of: Callable[[SectionT], str],
+        own_of: Callable[[SectionT], list[Evidence]],
+        reference_of: Callable[[Sequence[Evidence]], str],
+    ) -> list[tuple[SectionT, str]]:
+        """Each section a whole-post review names, fixed with its evidence
+        and source passages; a fix that loses structure is not taken, and
+        sentences it makes that contradict the evidence are removed."""
+        out: list[tuple[SectionT, str]] = []
+        for section, md in written:
+            names = {title_of(section), section_heading(md)}
+            issues = [
+                f"{f.problem} Fix: {f.fix}"
+                for f in findings
+                if f.section.strip().lstrip("#").strip() in names
+            ]
+            if not issues:
+                out.append((section, md))
+                continue
+            own = own_of(section)
+            self.reference = reference_of(own)
+            fixed = await self._fix(md, own, issues)
+            if structure_lost(md, fixed) or ends_mid_sentence(fixed):
+                self.notes.append(
+                    f"Section '{title_of(section)}': whole-post review problems "
+                    "left as they were: " + " | ".join(i[:160] for i in issues[:3])
+                )
+            else:
+                wrong = [
+                    s
+                    for s, v in await self.check_claims(fixed, ledger, own)
+                    if v.startswith("wrong")
+                ]
+                md = drop_sentences(fixed, wrong) if wrong else fixed
+            self.reference = ""
+            out.append((section, md))
+        return out
 
     async def _fix(
         self, draft: str, evidence: Sequence[Evidence], issues: Sequence[str]

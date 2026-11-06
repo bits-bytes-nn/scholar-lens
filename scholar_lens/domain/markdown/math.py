@@ -274,7 +274,10 @@ _SUB = rf"(?:'|\s*[_^](?:{_BRACED}|\\[A-Za-z]+|\w|\*))*"
 _BASE = r"(?:\\pi|\\Pr|\\mathbb\{P\}|(?<![\\A-Za-z_^])[pPq])"
 _CALL = re.compile(
     rf"(?P<head>(?:\\(?:hat|tilde|bar|widehat|widetilde)\{{{_BASE}\}}|{_BASE})"
-    rf"{_SUB}\s*(?:\\left\s*)?(?P<open>[(\[]))(?P<arg>[^()\[\]]*)(?P<close>[)\]])"
+    # The argument may hold braced groups and one level of parentheses
+    # (p(y_{\tau(k)}|x), \pi(y \mid f(x))).
+    rf"{_SUB}\s*(?:\\left\s*)?(?P<open>[(\[]))"
+    rf"(?P<arg>(?:{_BRACED}|\([^()\[\]]*\)|[^()\[\]{{}}])*)(?P<close>[)\]])"
 )
 _NORM_BAR = re.compile(r"(?<!\\)\\(?:\||Vert(?![A-Za-z]))")
 _LENGTH_BOUND = re.compile(

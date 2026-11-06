@@ -1,0 +1,84 @@
+{
+  "item": "review-kimi",
+  "post": "/tmp/eval-paper/review-kimi-v2.md",
+  "source": "https://arxiv.org/html/2507.20534 (v2)",
+  "sampling": "113 body paragraphs (prose/list/table blocks, headings/images/display math excluded); paragraphs 1,4,7,...,112 (every third from 1); 15 claims drawn from these",
+  "scores": {"A": 8.0, "B": 7.5, "C": 7.0, "D": 8.0, "E": 7.0, "F": 6.0},
+  "type_scores": {"R1": 7.5, "R2": 8.0, "R3": 7.5},
+  "deductions": {
+    "A": ["L258-263 RL comparison table has an empty row '| 근거 | | |'", "L403-423 QK-Clip self-deactivation/ablation section sits after the Base-model results, far from the QK-Clip mechanism section (L56-114)"],
+    "B": ["'저자들은' appears 32 times; many sentences end '...라고 저자들은 밝힙니다/설명합니다'", "L291 '저울질할 여지를 가집니다' (가지다 default verb) -> '저울질할 수 있습니다'", "L134 formulaic '흐름도의 화살표를 따라가면 데이터가 이렇게 움직입니다.'", "L447 '근거에서 측정되지 않았습니다', L449 '근거에서 확인되지 않습니다' leak the pipeline's evidence-ledger term instead of 'the paper'"],
+    "C": ["QK-Clip per-head scaling for MLA is explained three times: L92-108, again L409 ('가상의 헤드 하나로 따라간 클리핑 과정'), and a third time in the closing L447", "15.5T tokens without loss spike restated at L26, L46, L417"],
+    "D": ["Strong worked examples (L100-108 logit-400 head, L275 K=4 RL loss) but L405-409 re-pads an already-explained step", "Repeated figure-meta sentences that add nothing: L68 '이 그림은 ... QK-Clip의 효과는 담고 있지 않습니다', L212 '이 도식은 속도나 메모리 절감 수치를 제시하지 않습니다', L348/L374/L397 '표의 수치는 ... 가져왔습니다'"],
+    "E": ["L343-346 DeepSeek-V3-0324/Qwen3 cells are '—' although the paper gives 38.8/34.4 (SWE-bench Verified single), 25.8/20.9 (Multilingual), 30.5/24.1 (SWE-Lancer)", "L263 empty table row", "L365 cell '49.5 (논문에 단위·지표 표기 없음)' is wrong: Table 3 labels it AIME 2025 (Avg@64)"],
+    "F": ["L365 says the paper gives no metric for AIME 2025 49.5; Table 3 row is 'AIME 2025 (Avg@64)' (wrong)", "L449 says the paper does not show what calibrates the self-critic's bias; paper 3.2 says the critic is continuously refined with on-policy verifiable-reward rollouts to ground its judgments (contradicts source)", "L343-346 '—' cells imply missing data the paper reports", "L120 '가장 크게 달라진 부분' overstates 'A key advancement ... over Kimi K1.5'", "L269 conditional written '(y_{i}|x)' instead of \\mid"]
+  },
+  "principles": {
+    "claim_headings": {"status": "met", "evidence": "L56 '헤드별 가중치 재스케일로 로짓 성장을 막는 QK-Clip', L152 '전문가는 늘리고 어텐션 헤드는 줄인 희소 MoE 구조', L425 '공격 전략에 따라 크게 달라지는 안전성 통과율'"},
+    "running_example": {"status": "partly met", "evidence": "the logit-400 head runs through QK-Clip (L44, L102, L409, L447) but nothing ties data synthesis, RL and results together"},
+    "mechanism_choice_formula_example": {"status": "met", "evidence": "QK-Clip L60-108 (problem -> soft-cap/QK-Norm rejected -> formula -> numeric walk-through); RL loss L267-275"},
+    "facts_said_once": {"status": "not met", "evidence": "QK-Clip MLA scaling at L92-98, L409, L447; zero-loss-spike claim at L26, L46, L417"},
+    "numbers_with_scope_unit": {"status": "partly met", "evidence": "most numbers carry model/setting (L30 'micro Pass@1', L388 shots); L365 AIME note wrong; L343-346 dash cells"},
+    "nothing_invented": {"status": "partly met", "evidence": "illustrative examples are labelled (L102, L275 '설명용 가정'); L449 false statement about the paper"},
+    "writer_assessment_at_end": {"status": "partly met", "evidence": "L447-451 give a judgment and use cases, but L447 mostly re-explains the mechanism"},
+    "length_fitted": {"status": "partly met", "evidence": "~60 KB; repetition of QK-Clip inflates length while RL details (budget control, PTX, temperature decay, task-specific RL data) are skipped"},
+    "type_specific_shape": {"status": "met", "evidence": "TL;DR with four questions L14-32; '## 한계와 시사점' L441"},
+    "korean_style": {"status": "partly met", "evidence": "consistent 입니다 register, but '저자들은' x32 and pipeline term '근거' leaking L447/L449"}
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 13,
+    "unsupported": 1,
+    "wrong": 1,
+    "unverifiable": 0,
+    "examples": [
+      {"line": 46, "claim": "QK-Norm not applicable to MLA because Key matrices are not fully materialized; soft-cap lets QK dot products grow before capping", "verdict": "supported", "source": "Sec 2.1: 'QK-Norm is not applicable to MLA, because its Key matrices are not fully materialized during inference'"},
+      {"line": 64, "claim": "vanilla Muon on 9B active / 53B total MoE: max logits exceed 1000", "verdict": "supported", "source": "Sec 2.1: 'mid-scale 9B activated and 53B total ... quickly exceed a magnitude of 1000'"},
+      {"line": 88, "claim": "only some heads explode; per-head gamma_h = min(1, tau/S_max^h); enough for MHA", "verdict": "supported", "source": "Sec 2.1: 'only a small subset of heads ... per-head scaling factor ... straightforward for regular MHA'"},
+      {"line": 98, "claim": "MuonClip = Muon + weight decay + Adam-RMS matching + QK-Clip", "verdict": "supported", "source": "'We integrate Muon with weight decay, consistent RMS matching, and QK-Clip into a single optimizer'"},
+      {"line": 120, "claim": "rephrasing is the biggest change in K2 pre-training data vs K1.5 ('가장 크게 달라진 부분')", "verdict": "unsupported", "source": "Sec 2.2: 'A key advancement in the pre-training data of Kimi K2 over Kimi K1.5' (one key advancement, not the largest)"},
+      {"line": 140, "claim": "SimpleQA 23.76 (0 rephrasings,10 epochs) / 27.39 (1,10) / 28.94 (10,1)", "verdict": "supported", "source": "Table 1"},
+      {"line": 158, "claim": "DeepSeek-V3 vs K2: 671B/1.04T (+54%), 37B/32.6B (-13%), 256/384 experts, 128/64 heads, dense layers 3/1 (-67%), grouping yes/no", "verdict": "supported", "source": "Table 2"},
+      {"line": 178, "claim": "at val loss 1.5, sparsity 48 needs 1.69x/1.39x/1.15x fewer FLOPs than 8/16/32", "verdict": "supported", "source": "Sec 2.3 Sparsity Scaling Law"},
+      {"line": 188, "claim": "doubling heads improves val loss only 0.5%-1.2% under iso-token training", "verdict": "supported", "source": "Sec 2.3 Number of Attention Heads"},
+      {"line": 198, "claim": "smallest feasible EP = 16 to hide EP comm under shorter attention; small EP relaxes expert balance", "verdict": "supported", "source": "Sec 2.4.2 Smaller EP size"},
+      {"line": 303, "claim": "checkpoint engine broadcasts the full parameter set; faster than transfer-what-you-need", "verdict": "supported", "source": "Sec 2.5: 'broadcast the full parameter set ... outperforms the transfer-what-you-need method'"},
+      {"line": 341, "claim": "tau2 micro Pass@1 66.1 vs 48.8/37.3, Claude 4 Opus 67.6; ACEBench 76.5 vs 72.7/70.5, GPT-4.1 80.1; SWE-V single 65.8 vs Opus 72.5; multi 71.6 vs Sonnet 80.2; Multilingual 47.3 vs 51.0; SWE-Lancer 39.1 vs 40.8", "verdict": "supported", "source": "Figure 1, Table 3, Appendix C text; note '—' cells L343-346 omit DeepSeek/Qwen values the paper reports"},
+      {"line": 356, "claim": "TerminalBench 25.0% with Terminus, 30% in Moonshot in-house framework", "verdict": "supported", "source": "Appendix C: 'attains 25.0% using the default Terminus framework and rises to 30%'"},
+      {"line": 365, "claim": "AIME 2025 49.5 has no unit/metric in the paper", "verdict": "wrong", "source": "Table 3 row 'AIME 2025 (Avg@64) | 49.5'"},
+      {"line": 380, "claim": "LMSYS Arena July 17 2025: #1 open-source, 5th overall, 3,000+ votes", "verdict": "supported", "source": "Sec 4.1.3 / Appendix"}
+    ],
+    "additional_checked_outside_sample": ["L388-395 Base table matches Table 4 cell for cell", "L431-435 safety table matches Table 6 Kimi-K2-Instruct column", "L421 0.5B/3B, tau=30 matches Appendix D", "L413 12.7% / 70000 steps matches Appendix D", "L216 WSD schedule numbers match Sec 2.4"]
+  },
+  "checklist": {
+    "repeated": 0,
+    "avoided": 14,
+    "na": 3,
+    "repeated_ids": [],
+    "details": {
+      "rl-section-duplicated": {"status": "avoided", "evidence": "single RL section L252 and single infra section L297"},
+      "rl-subheading-levels": {"status": "avoided", "evidence": "RL subsections are H3 (L265, L277, L281) under the H2 RL heading L252"},
+      "ppo-claim": {"status": "avoided", "evidence": "L254 '정책 최적화 알고리즘은 K1.5에서 가져왔고'; L267 K1.5 objective, no PPO"},
+      "invented-budget-formula": {"status": "avoided", "evidence": "no L_budget formula"},
+      "invented-ptx-formula": {"status": "n/a", "evidence": "PTX loss not mentioned"},
+      "invented-temperature-formula": {"status": "avoided", "evidence": "no T(t) formula"},
+      "invented-env-code": {"status": "avoided", "evidence": "no code block; L279 describes Gym-style interface in prose"},
+      "invented-math-verifier": {"status": "n/a", "evidence": "math/STEM RL reward data not described"},
+      "invented-logic-verifier": {"status": "avoided", "evidence": "no formal-logic verifier claim"},
+      "invented-code-quality-eval": {"status": "avoided", "evidence": "L445 refers to sandbox test pass rates; no quality/efficiency/security grading"},
+      "invented-safety-monitoring": {"status": "n/a", "evidence": "safety RL pipeline not described; L425-439 covers red-team evaluation only, no real-time monitoring claim"},
+      "invented-self-refine-loop": {"status": "avoided", "evidence": "L283 'K2 critic이 그 결과 전체를 쌍별 비교로 순위화'"},
+      "invented-human-rubric-content": {"status": "avoided", "evidence": "L289 '데이터 팀이 특정 지시 맥락에 맞춰 직접 만든 기준'"},
+      "rubric-limitation-garbled": {"status": "avoided", "evidence": "L445 '자기 평가나 단서 조항(hedging)을 금지하고 ... 모호한 상황에서도 확실성을 과장할 수 있습니다'"},
+      "invented-infra-mechanisms": {"status": "avoided", "evidence": "L297-325 match paper (full broadcast, 3 buffers, H800 2-stage, selective reads)"},
+      "missing-description": {"status": "avoided", "evidence": "L8 description starts 'Kimi K2', 126 chars, numbers 15.5조/1조/66.1/65.8 all in TL;DR"},
+      "arxiv-https": {"status": "avoided", "evidence": "L456 https://arxiv.org/pdf/2507.20534v2"}
+    }
+  },
+  "extras": {},
+  "top_issues": [
+    "Table-cell accuracy: L365 claims the paper gives no metric for AIME 2025 (it is Avg@64), and L343-346 show '—' for DeepSeek-V3-0324/Qwen3 values the paper reports",
+    "L449 says the paper does not show what calibrates the self-critic, but Sec 3.2 describes refining the critic with on-policy verifiable-reward rollouts; '근거에서' (L447/L449) leaks the pipeline term",
+    "Facts not said once: the QK-Clip MLA scaling is explained three times (L92-108, L409, L447) and the ablation section is split from the mechanism, while RL details (budget control, PTX loss, temperature decay) are absent"
+  ]
+}

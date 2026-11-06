@@ -1,0 +1,170 @@
+{
+  "kind": "review",
+  "status": "succeeded",
+  "input": "2507.20534",
+  "title": "Kimi K2: Open Agentic Intelligence",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/2507_20534/2025-10-03-kimi-k2--open-agentic-intelligence.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2025-10-03-kimi-k2--open-agentic-intelligence.md",
+  "pr_url": null,
+  "warnings": [
+    "Tag 'Agentic-AI' (or its acronym) does not appear in the paper; check it fits.",
+    "Section '토큰 효율과 희소한 에이전트 데이터라는 두 병목': check 6 sentence(s) the evidence may not support: 웹에서 긁어 올 수 있는 고품질 텍스트는 이미 바닥이 보입니다. (unsupported: 논문은 고품질 데이터가 한정돼 있다고만 하고, 웹 텍스트가 바닥나고 있다고는 말하지 않음) | 같은 데이터로 더 많이 배우는 방법은 둘입니다. (unsupported: 이 섹션의 출처에는 그런 두 가지 방법 구분이 나오지 않음) | 옵티마이저(optimizer)가 한 토큰에서 더 많이 배우게 하거나, 데이터 자체를 다시 써서 같은 지식에서 더 많은 신호를 얻는 방법입니다. (unsupported: 데이터 재작성(rephrasing)은 인용된 출처 어디에도 나오지 않음) | softmax는 거의 원-핫이 되고, 그 헤드의 그래디언트는 극단적으로 치우치며, 이런 헤드가 쌓이면 손실 스파이크(loss spike)나 발산으로 번집니다. (unsupported: softmax가 원-핫이 되고 그래디언트가 치우치는 메커니즘은 논문에 서술돼 있지 않음) | 위 가상 예시로 보면 출력은 상한 아래로 눌려도 그 원인인 $$W_q$$, $$W_k$$의 크기는 계속 자랍니다. (unsupported: W_q, W_k 크기가 계속 자란다는 주장은 출처에 없음)",
+    "Section '헤드별 가중치 재스케일로 로짓 성장을 막는 QK-Clip': check 9 sentence(s) the evidence may not support: 대신 매 업데이트 뒤에 로짓이 지나치게 커진 헤드의 query/key 투영 가중치만 줄여서, 다음 스텝부터 로짓이 임계값 근처로 돌아오게 합니다 [[E10, E11]]. (unsupported: The paper does not claim that clipping brings logits back near the threshold starting from the next step.) | 그래서 Muon 쪽이 가중치의 특이값을 고르게 키우기 쉽고, 로짓을 결정하는 곱 $$\\mathbf{W}_q\\mathbf{W}_k^\\top$$에서는 두 행렬의 성장이 곱해져 증폭됩니다 [[E63]]. (unsupported: The quoted passage does not give the amplification mechanism or say that Muon grows singular values evenly.) | 저자들이 바닐라 Muon으로 활성 90억, 총 530억 파라미터 MoE를 학습하자 최대 어텐션 로짓이 금세 1000을 넘었습니다. (numbers not in its evidence) | 업데이트 뒤 $$\\gamma_h=\\min(1, 100/400)=0.25$$를 계산합니다. (numbers not in its evidence) | $$\\mathbf{q}^C$$, $$\\mathbf{k}^C$$의 가중치를 각각 $$\\sqrt{0.25}=0.5$$배, $$\\mathbf{q}^R$$은 0.25배로 줄이고, $$\\mathbf{k}^R$$은 그대로 둡니 (numbers not in its evidence)",
+    "Section '헤드별 가중치 재스케일로 로짓 성장을 막는 QK-Clip' still has: numbers ['90억', '530억', '1000'] without evidence: 저자들이 바닐라 Muon으로 활성 90억, 총 530억 파라미터 MoE를 학습하자 최대 어텐션 로짓이 금세 1000을 넘었습니다. | numbers ['100', '400', '0.25'] without evidence: 업데이트 뒤 $$\\gamma_h=\\min(1, 100/400)=0.25$$를 계산합니다. | ['100', '400'] already stated in '토큰 효율과 희소한 에이전트 데이터라는 두 병목': refer back without repeating: 업데이트 뒤 $$\\gamma_h=\\min(1, 100/400)=0.25$$를 계산합니다. | numbers ['0.25', '0.5'] without evidence: $$\\mathbf{q}^C$$, $$\\mathbf{k}^C$$의 가중치를 각각 $$\\sqrt{0.25}=0.5$$배, $$\\mathbf{q}^R$$은 0.25배로 줄이고, $$\\mathbf{k}^R$$은 그대로 둡니다. | numbers ['400', '100'] without evidence: 입력이 비슷하다면 다음 스텝에서 이 헤드의 로짓은 $$400\\times0.25$$, 즉 약 100으로 돌아옵니다.",
+    "Section '반복 대신 재구성으로 높인 지식 토큰의 효용' still has: images not given to this section: ['https://arxiv.org/html/2507.20534v2/synthetic_data_rephrase.svg']",
+    "Section '전문가는 늘리고 어텐션 헤드는 줄인 희소 MoE 구조': check 1 sentence(s) the evidence may not support: 저자들은 성능과 비용 사이에서 희소도 48을 골랐습니다. (numbers not in its evidence)",
+    "Section '전문가는 늘리고 어텐션 헤드는 줄인 희소 MoE 구조' still has: numbers ['48'] without evidence: 저자들은 성능과 비용 사이에서 희소도 48을 골랐습니다. | ['0.5'] already stated in '헤드별 가중치 재스케일로 로짓 성장을 막는 QK-Clip': refer back without repeating: 하지만 같은 토큰 수로 학습한 조건에서 헤드를 두 배로 늘려도 검증 손실은 0.5%~1.2% 개선에 그쳤습니다 . | images not given to this section: ['https://arxiv.org/html/2507.20534v2/doubleQheads.svg', 'https://arxiv.org/html/2507.20534v2/scaling_law_validation_loss.svg']",
+    "Section '작은 EP, 통신 겹치기, 메모리 절약을 묶은 사전학습 시스템과 일정': check 3 sentence(s) the evidence may not support: EP 크기를 16으로 둔 데에는 앞서 본 어텐션 헤드 수를 줄인 설계가 직접 작용했습니다. (numbers not in its evidence) | **FP8 저장**: MoE up-projection과 SwiGLU의 입력을 FP32 스케일을 붙인 $$1 \\times 128$$ 타일 단위의 FP8-E4M3로 압축해 저장합니다. (numbers not in its evidence) | 끝 무렵의 annealing과 장문 활성화 단계에서는 4k 길이로 4,000억(400 billion) 토큰을 학습한 뒤 32k 길이로 600억(60 billion) 토큰을 더 학습했습니다. (numbers not in its evidence)",
+    "Section '작은 EP, 통신 겹치기, 메모리 절약을 묶은 사전학습 시스템과 일정' still has: ['16'] already stated in '전문가는 늘리고 어텐션 헤드는 줄인 희소 MoE 구조': refer back without repeating: 가상 스테이지를 쓰는 16-way 파이프라인 병렬화(PP), 16-way 전문가 병렬화(expert parallelism, EP), ZeRO-1 데이터 병렬화의 조합입니다 . | points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: EP 크기를 16으로 둔 데에는 앞서 본 어텐션 헤드 수를 줄인 설계가 직접 작용했습니다. | numbers ['16'] without evidence: EP 크기를 16으로 둔 데에는 앞서 본 어텐션 헤드 수를 줄인 설계가 직접 작용했습니다. | ['16'] already stated in '전문가는 늘리고 어텐션 헤드는 줄인 희소 MoE 구조': refer back without repeating: EP 크기를 16으로 둔 데에는 앞서 본 어텐션 헤드 수를 줄인 설계가 직접 작용했습니다. | numbers ['128'] without evidence: **FP8 저장**: MoE up-projection과 SwiGLU의 입력을 FP32 스케일을 붙인 $$1 \\times 128$$ 타일 단위의 FP8-E4M3로 압축해 저장합니다.",
+    "Section '도구 명세부터 궤적까지 세 단계로 만드는 대규모 도구 사용 데이터 합성' still has: images not given to this section: ['https://arxiv.org/html/2507.20534v2/tool_repo_synthesis.svg', 'https://arxiv.org/html/2507.20534v2/tool_traj_synthesis.svg', 'https://arxiv.org/html/2507.20534v2/tsne_tool_mcp.png', 'https://arxiv.org/html/2507.20534v2/tsne_tool_synthetic.png']",
+    "Section '30초 안에 1조 파라미터를 갱신하는 체크포인트 엔진' still has: ['30'] already stated in '헤드별 가중치 재스케일로 로짓 성장을 막는 QK-Clip': refer back without repeating: K2는 학습 엔진과 추론 엔진 사이의 가중치 전환을 체크포인트 엔진(checkpoint engine) 하나로 처리하며, 이 엔진으로 Kimi K2의 전체 파라미터 갱신을 30초 안에 끝냅니다 .",
+    "Section '비사고 모델 중 최상위권인 도구 사용과 소프트웨어 엔지니어링 성능': check 1 sentence(s) the evidence may not support: 오픈 모델 기준으로는 분명한 1위이고, 폐쇄 모델까지 포함하면 비슷한 수준으로 읽는 편이 정확합니다. (unsupported: The sources never say K2 is clearly first among open models on these benchmarks. Reading it as about even once closed models are included is the post's own interpretation.)",
+    "Section '비사고 모델 중 최상위권인 도구 사용과 소프트웨어 엔지니어링 성능' still has: ['30'] already stated in '헤드별 가중치 재스케일로 로짓 성장을 막는 QK-Clip': refer back without repeating: 터미널 조작을 다루는 TerminalBench에서 K2는 기본 Terminus 프레임워크로 25.0%를, Moonshot 자체 에이전트 프레임워크에서는 30%를 기록했습니다 .",
+    "Section '초기에만 잠깐 작동하고 사라지는 QK-Clip': check 2 sentence(s) the evidence may not support: 다만 다음 스텝에서는 가중치가 또 한 번 업데이트되므로 로짓이 정확히 $$\\tau$$가 되지는 않고, 그 근처로 돌아옵니다. (unsupported: The paper does not describe how logits behave at the next step after clipping.) | $$q^{R}$$에는 $$\\gamma_h$$를 통째로 곱하는데, 짝이 되는 $$k^{R}$$이 여러 헤드가 공유하는 키라서 손댈 수 없기 때문입니다. (unsupported: The evidence gives no reason for scaling q^R by the full γ_h. The cited passages do not state that this is because k^R is shared.)",
+    "Section '초기에만 잠깐 작동하고 사라지는 QK-Clip' still has: ['100'] already stated in '토큰 효율과 희소한 에이전트 데이터라는 두 병목': refer back without repeating: $$\\tau=100$$으로 진행한 실제 Kimi K2 사전학습에서도 이와 같은 흐름이 나타났습니다 . | ['15.5조'] already stated in '토큰 효율과 희소한 에이전트 데이터라는 두 병목': refer back without repeating: 저자들은 이 결과를 15.5조 토큰 전체를 MuonClip으로 손실 스파이크 한 번 없이 사전학습했다는 주장의 근거로 제시합니다 . | ['30'] already stated in '헤드별 가중치 재스케일로 로짓 성장을 막는 QK-Clip': refer back without repeating: 하나는 바닐라 Muon을, 다른 하나는 공격적인 임계값 $$\\tau=30$$의 MuonClip을 썼습니다 .",
+    "Section '공격 전략에 따라 크게 달라지는 안전성 통과율': check 5 sentence(s) the evidence may not support: Kimi-K2-Instruct는 단순한 인코딩 공격에는 거의 완벽하게 버티지만, 대화를 여러 턴에 걸쳐 조금씩 몰아가는 공격에서는 통과율이 눈에 띄게 떨어집니다 [[E51]]. (unsupported: Source does not describe Crescendo as a multi-turn gradual attack.) | Basic은 유해한 요청을 그대로 던지고, Base64는 요청을 Base64로 인코딩해 숨깁니다. (unsupported: Strategy mechanisms not described in source.) | Prompt Injection은 입력에 지시문을 끼워 넣어 안전 지침을 우회하려 하고, Iterative Jailbreak는 거부당할 때마다 프롬프트를 고쳐 다시 시도합니다. (unsupported: Strategy mechanisms not described in source.) | 첫 문장에서 말한 다중 턴 공격이 Crescendo로, 여러 턴에 걸쳐 대화를 점점 위험한 방향으로 끌고 갑니다. (unsupported: Crescendo multi-turn mechanism not described in source.) | 다른 모델과 비교하면 결과가 엇갈립니다. (unsupported: The paper does not state this framing.)",
+    "Table values not found in the paper (check each is copied or derived correctly): τ²-Bench micro Pass@1: 66.1 / 48.8 / 37.3 / 4 / 67.6",
+    "English stem with a Korean ending 'decay했습니다': 토큰은 학습률을 2e-4에서 2e-5로 cosine decay했습니다. 끝 무렵의 annealing과 장문 활성화 단계에서"
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 1590.3,
+  "input_tokens": 2689732,
+  "output_tokens": 218823,
+  "estimated_cost_usd": 9.1688,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 190,
+      "failed_calls": 0,
+      "input_tokens": 532136,
+      "output_tokens": 218823,
+      "cache_read_tokens": 1335865,
+      "cache_write_tokens": 821731,
+      "cost_usd": 9.168832
+    },
+    "by_stage": {
+      "figures": {
+        "calls": 19,
+        "failed_calls": 0,
+        "input_tokens": 69842,
+        "output_tokens": 14079,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.014021
+      },
+      "extract_attributes": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 73319,
+        "output_tokens": 186,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.007425
+      },
+      "extract_citations": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 74795,
+        "output_tokens": 5083,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.20042
+      },
+      "read": {
+        "calls": 54,
+        "failed_calls": 0,
+        "input_tokens": 132,
+        "output_tokens": 41843,
+        "cache_read_tokens": 508625,
+        "cache_write_tokens": 168736,
+        "cost_usd": 0.942259
+      },
+      "outline": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 5314,
+        "cache_read_tokens": 1327,
+        "cache_write_tokens": 8163,
+        "cost_usd": 0.147642
+      },
+      "verify": {
+        "calls": 52,
+        "failed_calls": 0,
+        "input_tokens": 220905,
+        "output_tokens": 30151,
+        "cache_read_tokens": 541743,
+        "cache_write_tokens": 199575,
+        "cost_usd": 2.701207
+      },
+      "draft": {
+        "calls": 15,
+        "failed_calls": 0,
+        "input_tokens": 60,
+        "output_tokens": 30512,
+        "cache_read_tokens": 43500,
+        "cache_write_tokens": 255132,
+        "cost_usd": 1.90354
+      },
+      "review": {
+        "calls": 15,
+        "failed_calls": 0,
+        "input_tokens": 60,
+        "output_tokens": 10497,
+        "cache_read_tokens": 19680,
+        "cache_write_tokens": 31984,
+        "cost_usd": 0.377975
+      },
+      "fix": {
+        "calls": 31,
+        "failed_calls": 0,
+        "input_tokens": 93015,
+        "output_tokens": 80966,
+        "cache_read_tokens": 220351,
+        "cache_write_tokens": 156290,
+        "cost_usd": 2.860976
+      },
+      "finalize": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 192,
+        "cache_read_tokens": 639,
+        "cache_write_tokens": 1851,
+        "cost_usd": 0.013367
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-haiku-5-5": {
+        "calls": 20,
+        "failed_calls": 0,
+        "input_tokens": 143161,
+        "output_tokens": 14265,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.021446
+      },
+      "global.anthropic.claude-sonnet-5-5": {
+        "calls": 55,
+        "failed_calls": 0,
+        "input_tokens": 74927,
+        "output_tokens": 46926,
+        "cache_read_tokens": 508625,
+        "cache_write_tokens": 168736,
+        "cost_usd": 1.142679
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 115,
+        "failed_calls": 0,
+        "input_tokens": 314048,
+        "output_tokens": 157632,
+        "cache_read_tokens": 827240,
+        "cache_write_tokens": 652995,
+        "cost_usd": 8.004707
+      }
+    }
+  }
+}

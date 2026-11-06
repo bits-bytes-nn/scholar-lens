@@ -1,0 +1,150 @@
+{
+  "kind": "summarize",
+  "status": "succeeded",
+  "input": "2511.21689",
+  "title": "ToolOrchestra: Elevating Intelligence via Efficient Model and Tool Orchestration",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/2511_21689/2026-10-16-toolorchestra-elevating-intelligence-via-efficient-model-and-tool-orchestration-summary.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-10-16-toolorchestra-elevating-intelligence-via-efficient-model-and-tool-orchestration-summary.md",
+  "pr_url": null,
+  "warnings": [
+    "Tag 'Multi-Objective-Reward' (or its acronym) does not appear in the paper; check it fits.",
+    "Tag 'Cost-Efficient-Tool-Use' (or its acronym) does not appear in the paper; check it fits.",
+    "Tag 'Synthetic-Tool-Use-Environments' (or its acronym) does not appear in the paper; check it fits.",
+    "Evidence that misstates its quote was left out: E13 (Quote supports only the 73% delegation; labeling Qwen3-8B delegating to GPT-5 as self-enhancement bias is not stated and)",
+    "Section '연구 배경': check 1 sentence(s) the evidence may not support: 이런 판단은 프롬프트만으로 얻기 어렵기 때문에, 효율까지 따져 위임하도록 따로 학습한 소형 오케스트레이터가 필요합니다. (unsupported: The provided sections don't say that prompting alone can't achieve efficiency-aware delegation, or that this is why a trained orchestrator is needed.)",
+    "Section '구현 방식' still has: 811 characters of prose for a target of 500: cut background, repetition and minor detail | images not given to this section: ['https://arxiv.org/html/2511.21689v1/fig_algo1.png']",
+    "Section '실험 결과' still has: points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 앞서 본 주 실험의 점수보다 낮지만, 도구 구성이 달라 두 실험의 수치를 직접 비교할 수는 없습니다 ."
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 731.6,
+  "input_tokens": 632598,
+  "output_tokens": 92663,
+  "estimated_cost_usd": 2.7375,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 71,
+      "failed_calls": 0,
+      "input_tokens": 126904,
+      "output_tokens": 92663,
+      "cache_read_tokens": 328634,
+      "cache_write_tokens": 177060,
+      "cost_usd": 2.737499
+    },
+    "by_stage": {
+      "figures": {
+        "calls": 7,
+        "failed_calls": 0,
+        "input_tokens": 16240,
+        "output_tokens": 6478,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.004864
+      },
+      "extract_attributes": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 37560,
+        "output_tokens": 334,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.003923
+      },
+      "read": {
+        "calls": 17,
+        "failed_calls": 0,
+        "input_tokens": 40,
+        "output_tokens": 16562,
+        "cache_read_tokens": 148054,
+        "cache_write_tokens": 40869,
+        "cost_usd": 0.297486
+      },
+      "outline": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 2960,
+        "cache_read_tokens": 1174,
+        "cache_write_tokens": 3532,
+        "cost_usd": 0.077346
+      },
+      "verify": {
+        "calls": 21,
+        "failed_calls": 0,
+        "input_tokens": 54297,
+        "output_tokens": 27317,
+        "cache_read_tokens": 110893,
+        "cache_write_tokens": 38060,
+        "cost_usd": 0.998183
+      },
+      "draft": {
+        "calls": 6,
+        "failed_calls": 0,
+        "input_tokens": 24,
+        "output_tokens": 9537,
+        "cache_read_tokens": 17400,
+        "cache_write_tokens": 51173,
+        "cost_usd": 0.453661
+      },
+      "review": {
+        "calls": 6,
+        "failed_calls": 0,
+        "input_tokens": 24,
+        "output_tokens": 6254,
+        "cache_read_tokens": 7872,
+        "cache_write_tokens": 7944,
+        "cost_usd": 0.168046
+      },
+      "fix": {
+        "calls": 11,
+        "failed_calls": 0,
+        "input_tokens": 18711,
+        "output_tokens": 22384,
+        "cache_read_tokens": 42602,
+        "cache_write_tokens": 34552,
+        "cost_usd": 0.712328
+      },
+      "finalize": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 837,
+        "cache_read_tokens": 639,
+        "cache_write_tokens": 930,
+        "cost_usd": 0.021662
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-haiku-5-5": {
+        "calls": 8,
+        "failed_calls": 0,
+        "input_tokens": 53800,
+        "output_tokens": 6812,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.008787
+      },
+      "global.anthropic.claude-sonnet-5-5": {
+        "calls": 17,
+        "failed_calls": 0,
+        "input_tokens": 40,
+        "output_tokens": 16562,
+        "cache_read_tokens": 148054,
+        "cache_write_tokens": 40869,
+        "cost_usd": 0.297486
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 46,
+        "failed_calls": 0,
+        "input_tokens": 73064,
+        "output_tokens": 69289,
+        "cache_read_tokens": 180580,
+        "cache_write_tokens": 136191,
+        "cost_usd": 2.431226
+      }
+    }
+  }
+}

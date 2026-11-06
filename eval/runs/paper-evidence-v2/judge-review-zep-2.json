@@ -1,0 +1,254 @@
+{
+  "item": "review-zep",
+  "post": "/tmp/eval-paper/review-zep-v2.md",
+  "source": "https://arxiv.org/html/2501.13956v1",
+  "judge_run": 2,
+  "sample_rule": "prose/list/blockquote paragraphs after front matter (headings, tables, display math, rules excluded; 82 total); paragraphs 2, 5, 8, ... (27 paragraphs); 15 claims drawn from them",
+  "scores": {
+    "A": 8,
+    "B": 7,
+    "C": 7,
+    "D": 7.5,
+    "E": 8,
+    "F": 7
+  },
+  "type_scores": {
+    "R1": 8.5,
+    "R2": 8,
+    "R3": 7.5
+  },
+  "score_notes": {
+    "A": "Front matter complete (subtitle, paper_author 'Zep AI', paper_doi, two-level categories, use_math), no H1, $$ math only, real tables. Heading L221 '상위 20개 엣지·노드만 넣는 평가 프로토콜' frames the protocol as shared, but DMR used top 10 (L233).",
+    "B": "입니다 register throughout; but repetitive sentences: L171 opens and repeats '주기적인 전체 갱신이 여전히 필요합니다' within one paragraph; L227 states the Zep-only latency three times ('Zep 쪽에만 더해진 네트워크 지연이 있습니다' ... '이 지연이 기준선 평가에는 없었다고 적습니다. 그래서 이 구간의 네트워크 지연은 Zep 쪽에만 더해졌습니다.'); L269 '가상의 예로 설명하면, 짧은 컨텍스트가 정확도를 높일 수 있는 이유는 앞서 든 이사 예시로 그려 볼 수 있습니다.' -> '짧은 컨텍스트가 왜 정확도를 높이는지 이사 예시로 짐작해 보겠습니다.'; L300 '앞서 든 이사 예시를 이 구분에 대어 보면' awkward; L62 '표에서 볼 수 있듯이' formulaic.",
+    "C": "L223 '절차는 두 실험에서 같습니다 ... 엣지(사실) 20개와 엔티티 노드(엔티티 요약) 20개' contradicts L233 'Zep은 ... 상위 10개씩 꺼냈습니다 ... LongMemEval 프로토콜은 이보다 많은' (the paper has the same inconsistency; the post states both without reconciling). Recap paragraphs L271 and L302 restate the preceding paragraph and read stitched.",
+    "D": "Bi-temporal model and invalidation get exactly the right help (L83 table, L141 rule, L144 worked example). Over-hedging pads easy parts: '가상' appears 11 times; '논문은 ... 분석/검증하지 않았습니다' at L269, L271, L300 (three times in one paragraph), L304.",
+    "E": "DMR, LongMemEval and type-breakdown tables copy cells verbatim (L235-244, L258-263, L281-294); invalidation and composition formulas placed where discussed. L162 vote table repeats L158 prose (decorative).",
+    "F": "No wrong table cells. Deductions: L30 TL;DR 'DMR에서는 gpt-4o-mini 기준 98.2%를 기록했지만, MemGPT와 전체 대화 기준선보다 근소하게 높은 수준' compares a gpt-4o-mini score with MemGPT, which only has a gpt-4-turbo result (93.4%), and the abstract headline is 94.8 vs 93.4 on gpt-4-turbo (-2). L267 '평균만 빨라진 것이 아니라' calls the latency column a mean; the paper never says mean or median (-0.5). L314 places the single-session-assistant drop and 'less capable models' understanding of temporal data' in one limitation bullet; the paper ties the latter to the 4o-mini knowledge-update result, not to single-session-assistant (-0.5). L125 labels '엔티티 쌍으로 범위를 제한하면 ... 잘못된 결합을 피할 수 있습니다' as '필자가 보기에', though the paper states it (Sec 2.2.2) (minor)."
+  },
+  "principles": {
+    "claim_headings": {
+      "status": "met",
+      "evidence": "L34 '정적 RAG와 통째로 넣는 컨텍스트가 놓치는 '변하는 사실'', L148 '동적 확장이 쉬운 레이블 전파 기반 커뮤니티 계층', L252 'LongMemEval에서 정확도는 오르고 지연은 약 90% 줄어든 결과'"
+    },
+    "running_example": {
+      "status": "met",
+      "evidence": "Busan->Seoul move (L36) carried through bi-temporal table L83, invalidation L144, retrieval walk-through L213-219, results L269, closing L322"
+    },
+    "mechanism_choice_formula_example": {
+      "status": "met",
+      "evidence": "Invalidation: mechanism L136 -> formula L141 -> worked example L144; community: choice vs Leiden L150 -> step L156 -> example L158"
+    },
+    "facts_said_once": {
+      "status": "not met",
+      "evidence": "single-session-assistant drop restated at L29, L279, L302, L304, L314, L324; L271 and L302 recap the preceding paragraph; L227 Zep-only latency stated three times; L171 periodic refresh twice"
+    },
+    "numbers_with_scope_unit": {
+      "status": "partly met",
+      "evidence": "LongMemEval gains given as absolute with model named as answering model (L256, L265); but L30 mixes gpt-4o-mini score with MemGPT's gpt-4-turbo result"
+    },
+    "nothing_invented": {
+      "status": "partly met",
+      "evidence": "hypotheticals are labeled (L81, L158, L213); but L267 '평균' and L314 bullet linkage are not in the paper"
+    },
+    "writer_assessment_at_end": {
+      "status": "met",
+      "evidence": "L320-324: no ablation, no vector-RAG baseline at equal budget, ingestion cost unreported, invalidation precision unmeasured, when to adopt"
+    },
+    "length_fitted": {
+      "status": "partly met",
+      "evidence": "~21.8k body chars for a short systems paper; padding from repeated hedges and recaps (L269-271, L300-304)"
+    },
+    "type_specific_shape": {
+      "status": "met",
+      "evidence": "TL;DR answers four questions (L16-30); body follows reader questions; '한계와 시사점' closes (L306)"
+    },
+    "korean_style": {
+      "status": "partly met",
+      "evidence": "입니다 register held, no '다:' list endings, '즉' once; but repeated stock framings ('앞서 든 이사 예시', '가상의') and same-sentence repetition (L171, L227)"
+    }
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 13,
+    "unsupported": 2,
+    "wrong": 0,
+    "unverifiable": 0,
+    "numbers": 8,
+    "examples": [
+      {
+        "n": 1,
+        "line": 38,
+        "claim": "G=(N,E,phi), phi incidence function; three tiers; episodes store message/text/JSON non-lossy",
+        "verdict": "supported",
+        "source": "Sec 2: 'ϕ:ℰ→𝒩×𝒩 represents a formal incidence function ... episode subgraph, a semantic entity subgraph, and a community subgraph'"
+      },
+      {
+        "n": 2,
+        "line": 66,
+        "claim": "Experiments only use the message type; a message is short text with the actor",
+        "verdict": "supported",
+        "source": "Sec 2.1: 'this paper focuses on the message type ... relatively short text ... along with the associated actor'"
+      },
+      {
+        "n": 3,
+        "line": 76,
+        "claim": "t_ref is when the message was sent; resolves 'next Thursday', 'in two weeks', 'last summer'",
+        "verdict": "supported",
+        "source": "Sec 2.1: 'reference timestamp tref indicating when the message was sent ... (e.g., \"next Thursday,\" \"in two weeks,\" or \"last summer\")'"
+      },
+      {
+        "n": 4,
+        "line": 119,
+        "claim": "Predefined Cypher queries instead of LLM-generated queries, for consistent schema and fewer hallucinations",
+        "verdict": "supported",
+        "source": "Sec 2.2.1: 'using predefined Cypher queries. We chose this approach over LLM-generated database queries to ensure consistent schema formats and reduce the potential for hallucinations.'"
+      },
+      {
+        "n": 5,
+        "line": 136,
+        "claim": "LLM compares new edge to semantically related edges; temporally overlapping contradiction sets old t_invalid to new t_valid; new information prioritized along T'",
+        "verdict": "supported",
+        "source": "Sec 2.2.3: 'setting their tinvalid to the tvalid of the invalidating edge. Following the transactional timeline T′, Graphiti consistently prioritizes new information'"
+      },
+      {
+        "n": 6,
+        "line": 156,
+        "claim": "Dynamic extension = single recursive step; new node joins the plurality community of its neighbors; summary updated",
+        "verdict": "supported",
+        "source": "Sec 2.3: 'single recursive step in label propagation ... assigns the new node to the community held by the plurality of its neighbors, then updates the community summary'"
+      },
+      {
+        "n": 7,
+        "line": 197,
+        "claim": "Zep supports five rerankers (RRF, MMR, episode-mentions, node distance, cross-encoder); cross-encoder costliest",
+        "verdict": "supported",
+        "number": true,
+        "source": "Sec 3.2 lists RRF, MMR, episode-mentions, node distance and cross-encoders '... though this approach incurs the highest computational cost'"
+      },
+      {
+        "n": 8,
+        "line": 227,
+        "claim": "Consumer laptop in Boston to Zep on AWS us-west-2; extra latency only on Zep; GPT-4o judge with LongMemEval question-specific prompts",
+        "verdict": "supported",
+        "source": "Sec 4.3: 'consumer laptop from a residential location in Boston, MA, connecting to Zep's service hosted in AWS us-west-2 ... not present in our baseline evaluations ... GPT-4o with the question-specific prompts'"
+      },
+      {
+        "n": 9,
+        "line": 246,
+        "claim": "Full-conversation baseline on gpt-4-turbo already beats MemGPT's reported result (94.4% vs 93.4%); MemGPT not reproduced on gpt-4o-mini for lack of method detail",
+        "verdict": "supported",
+        "number": true,
+        "source": "Sec 4.2: 'full-conversation baseline achieved 94.4% accuracy, slightly surpassing MemGPT's reported results ... unable to reproduce MemGPT's results using gpt-4o-mini due to insufficient methodological details'"
+      },
+      {
+        "n": 10,
+        "line": 254,
+        "claim": "Zep used avg 1.6k context tokens vs 115k for full context",
+        "verdict": "supported",
+        "number": true,
+        "source": "Table 2: Avg Context Tokens 115k / 1.6k"
+      },
+      {
+        "n": 11,
+        "line": 267,
+        "claim": "Latency 31.3 s -> 3.20 s (gpt-4o-mini), 28.9 s -> 2.58 s (gpt-4o), both about 90% lower; attributed to smaller prompt",
+        "verdict": "supported",
+        "number": true,
+        "source": "Table 2 cells; Sec 4.3.2 'reducing response times by approximately 90%'; 'The reduced prompt size also led to significant latency cost reductions'"
+      },
+      {
+        "n": 12,
+        "line": 267,
+        "claim": "Latency IQR 6.01 s -> 0.684 s for gpt-4o, '평균만 빨라진 것이 아니라' (latency column is a mean)",
+        "verdict": "unsupported",
+        "number": true,
+        "source": "Table 2 gives 'Latency' and 'Latency IQR' (6.01 s, 0.684 s) without saying mean or median; IQR cells correct, the 'mean' reading is not in the paper"
+      },
+      {
+        "n": 13,
+        "line": 273,
+        "claim": "Relative gain larger for gpt-4o than gpt-4o-mini; weaker models may not use Zep's temporal data, more development needed",
+        "verdict": "supported",
+        "number": true,
+        "source": "Sec 4.3.2: '15.2% ... gpt-4o showed an 18.5% improvement'; 'additional development may be needed to improve less capable models' understanding of Zep's temporal data'"
+      },
+      {
+        "n": 14,
+        "line": 296,
+        "claim": "Types with large gains had low full-context baselines; single-session-assistant and single-session-user (high baselines) diverge",
+        "verdict": "supported",
+        "number": true,
+        "source": "Table 3: preference 30.0/20.0, temporal 36.5/45.1, multi-session 40.6/44.3 baselines with the largest deltas; ssa 81.8/94.6 down, ssu 81.4 up 14.1%"
+      },
+      {
+        "n": 15,
+        "line": 314,
+        "claim": "'논문이 밝힌 한계는 다섯 가지' with bullet: single-session-assistant drop + weaker models need development to understand temporal data",
+        "verdict": "unsupported",
+        "number": true,
+        "source": "The paper gives no count of limitations; it links the 'less capable models' remark to the knowledge-update result (Sec 4.3.2 para after Table 2), and for single-session-assistant says only 'further research and engineering work is needed'"
+      }
+    ],
+    "outside_sample_findings": [
+      {
+        "line": 30,
+        "issue": "TL;DR compares Zep gpt-4o-mini 98.2% with MemGPT, which has only a gpt-4-turbo result (93.4%); apples-to-apples headline is 94.8% vs 93.4% (gpt-4-turbo)"
+      },
+      {
+        "line": 223,
+        "issue": "'절차는 두 실험에서 같습니다 ... 20개' vs L233 DMR top 10 (mirrors an inconsistency in the paper's Sec 4 vs 4.2)"
+      },
+      {
+        "line": 125,
+        "issue": "Paper's own claim (prevents erroneous combinations between different entities) labelled as the writer's view"
+      }
+    ]
+  },
+  "checklist": {
+    "repeated": 0,
+    "avoided": 6,
+    "na": 0,
+    "repeated_ids": [],
+    "items": [
+      {
+        "id": "inline-math-delimiters",
+        "verdict": "avoided",
+        "evidence": "No \\( \\) or \\[ \\] in the post (grep); inline math like L20 '$$t_{\\text{invalid}}$$'"
+      },
+      {
+        "id": "longmemeval-tldr-relative",
+        "verdict": "avoided",
+        "evidence": "L28 TL;DR gives absolute '정확도 71.2%로 전체 컨텍스트 기준선(60.2%)을 앞섰고'; no '%포인트' (relative 15.2/18.5 not stated in the TL;DR)"
+      },
+      {
+        "id": "longmemeval-results-relative",
+        "verdict": "avoided",
+        "evidence": "L265 '최대 18.5% 향상은 상대 향상률입니다. 절대 수치로 보면 gpt-4o-mini는 55.4%에서 63.8%로, gpt-4o는 60.2%에서 71.2%로'; no '%포인트' (15.2% not restated here)"
+      },
+      {
+        "id": "longmemeval-baseline-misattributed",
+        "verdict": "avoided",
+        "evidence": "L256 '두 방식에 같은 답변 모델(gpt-4o-mini, gpt-4o)을 붙여'"
+      },
+      {
+        "id": "longmemeval-185-arithmetic",
+        "verdict": "avoided",
+        "evidence": "L265 marks 18.5% as '저자들이 말하는' figure before giving 60.2->71.2 (does not state the computed 18.3%)"
+      },
+      {
+        "id": "missing-description",
+        "verdict": "avoided",
+        "evidence": "L8 description starts 'Zep은', 125 chars, numbers 60.2->71.2 and 28.9->2.58 all in TL;DR L28"
+      }
+    ]
+  },
+  "extras": {
+    "taxonomy_X1": 8,
+    "taxonomy_note": "Category Retrieval-Augmented-Generation fits; tags in paper's terms except 'Agentic-AI' and 'Hybrid-Graph-Search' (not paper terms)"
+  },
+  "top_issues": [
+    "Facts repeated: the single-session-assistant drop appears six times (L29, L279, L302, L304, L314, L324) and recap paragraphs (L271, L302) and hedges ('가상' x11, '논문은 ... 분석하지 않았습니다' x3 in L300) pad the post",
+    "Scope slips: TL;DR L30 sets Zep gpt-4o-mini 98.2% against MemGPT (gpt-4-turbo only); L223 says both experiments retrieve 20 items while L233 says DMR used 10",
+    "Unsupported glosses: L267 reads the latency column as a mean; L314 ties the single-session-assistant drop to weaker models' temporal understanding, which the paper says about knowledge-update"
+  ]
+}

@@ -1,0 +1,249 @@
+{
+  "item": "review-zep",
+  "post": "/tmp/eval-paper/review-zep-v2.md",
+  "source": "https://arxiv.org/html/2501.13956 (v1)",
+  "judge_run": 3,
+  "sampling": "97 body paragraphs (blank-line blocks, headings and rules excluded); paragraphs 3, 6, 9, ... 96; claims drawn from these",
+  "scores": {
+    "A": 9.0,
+    "B": 7.5,
+    "C": 7.5,
+    "D": 7.5,
+    "E": 8.0,
+    "F": 8.0
+  },
+  "type_scores": {
+    "R1": 8.5,
+    "R2": 7.5,
+    "R3": 8.5
+  },
+  "deductions": {
+    "B": [
+      "Formulaic 'X를 보면 ... 분명해집니다' repeated: L81 '이사 예시에 대입하면 차이가 분명해집니다', L109 '문맥이 필요한 이유는 사례로 보면 분명해집니다', L225 '비교 대상의 크기를 보면 이 설정의 의미가 분명해집니다' -> e.g. L225 'LongMemEval_s 대화는 평균 약 115,000 토큰이라 프런티어 모델 컨텍스트 창에 그대로 들어갑니다.'",
+      "L269 '가상의 예로 설명하면, 짧은 컨텍스트가 정확도를 높일 수 있는 이유는 앞서 든 이사 예시로 그려 볼 수 있습니다.' (double framing) -> '짧은 컨텍스트가 정확도를 높인 이유를 이사 예시로 추측해 보겠습니다.'",
+      "L62 '표에서 볼 수 있듯이' and repeated '앞서 든 이사 예시' (5x), '가상의' (10x) make the prose formulaic"
+    ],
+    "C": [
+      "L223 '절차는 두 실험에서 같습니다 ... 엣지(사실) 20개와 엔티티 노드 20개' contradicts L233 'Zep은 ... 상위 10개씩 꺼냈습니다' (the paper itself is inconsistent; the post should flag it instead of asserting both); H2 at L221 '상위 20개 엣지·노드만 넣는 평가 프로토콜' covers both experiments",
+      "single-session-assistant decline restated at L29, L279, L296, L300, L302, L304, L314, L324",
+      "L171 repeats itself: '주기적인 전체 갱신이 여전히 필요합니다 ... 그래서 저자들은 주기적인 전체 갱신이 여전히 필요하다고 밝힙니다'; L227 states the Zep-only network latency twice; L271 restates L269"
+    ],
+    "D": [
+      "Hypothetical tables pad easy points: L83-86 (bi-temporal toy table) and L162-167 (vote count already given in L158 '표가 2 대 1이므로')",
+      "Over-hedging: '가상의'/'필자가 만든 가상의 설정' disclaimers 10 times (L72, L81, L88, L109, L125, L144, L158, L160, L213, L269)"
+    ],
+    "E": [
+      "L162-167 table duplicates L158 prose",
+      "Paper tables (DMR, LongMemEval, question types) copied cell for cell; good"
+    ],
+    "F": [
+      "L314 limitation bullet joins the single-session-assistant decline (both models) with '약한 모델이 시간 데이터를 잘 이해하도록 만들려면 추가 개발이 필요할 수 있습니다'; the paper ties the weaker-model remark to the gpt-4o-mini category results (knowledge-update), and the ssa drop is larger for gpt-4o (17.7%), so the juxtaposition misattributes the cause",
+      "L310 '논문이 밝힌 한계는 다섯 가지입니다' — the paper lists no five limitations; the post compiles them from sections 2.3, 4.2, 4.3.1, 4.3.2, 5",
+      "L265 '저자들이 말하는 최대 18.5% 향상은 상대 향상률입니다' paired with 60.2%->71.2% without noting the computed ratio is 18.3%",
+      "L223 vs L233 20/10 retrieval count (see C)"
+    ]
+  },
+  "principles": {
+    "claim_headings": {
+      "status": "met",
+      "evidence": "L34 '정적 RAG와 통째로 넣는 컨텍스트가 놓치는 '변하는 사실'', L229 'DMR에서 MemGPT와 전체 대화 기준선을 근소하게 앞선 결과', L277 '선호·시간 추론 유형에 몰린 개선'; only '한계와 시사점' is a topic heading"
+    },
+    "running_example": {
+      "status": "met",
+      "evidence": "Busan->Seoul move (L36) threads through L42, L72, L144, L213-219, L225, L269, L300, L322; overused"
+    },
+    "mechanism_choice_formula_example": {
+      "status": "met",
+      "evidence": "Edge invalidation L136 rule -> L141 formula -> L144 worked example; label propagation L150 choice vs Leiden -> L156 -> L158 example"
+    },
+    "facts_said_once": {
+      "status": "not met",
+      "evidence": "ssa decline 8 mentions; L171 and L227 restate within the paragraph; L269/L271"
+    },
+    "numbers_with_scope_unit": {
+      "status": "met",
+      "evidence": "L28 'gpt-4o 기준 Zep은 정확도 71.2%로 전체 컨텍스트 기준선(60.2%)'; L256 same answering models; L265 relative vs absolute named"
+    },
+    "nothing_invented": {
+      "status": "partly met",
+      "evidence": "examples labelled hypothetical; L314 cause conflation; L310 'five limitations' framed as the paper's"
+    },
+    "writer_assessment_at_end": {
+      "status": "met",
+      "evidence": "L320 '여기서부터는 이 글의 견해입니다' — no ablation, no vector-RAG baseline, ingestion cost unreported; L324 when to adopt"
+    },
+    "length_fitted": {
+      "status": "partly met",
+      "evidence": "~22k chars for a short systems paper; length comes from repetition and hypothetical padding, not hard steps"
+    },
+    "type_specific_shape": {
+      "status": "met",
+      "evidence": "TL;DR with the four questions (L14-30), no abstract/intro section, closing '한계와 시사점'"
+    },
+    "korean_style": {
+      "status": "partly met",
+      "evidence": "consistent 입니다 register, no %포인트 or noun frames; formulaic '분명해집니다' openers and repeated '앞서 든 이사 예시'"
+    }
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 15,
+    "unsupported": 0,
+    "wrong": 0,
+    "unverifiable": 0,
+    "examples": [
+      {
+        "line": 23,
+        "claim": "entity extraction uses previous 4 messages; 1024-dim embeddings + full-text search; LLM decides duplicates",
+        "number": true,
+        "verdict": "supported",
+        "source": "2.2.1: 'n=4, providing two complete conversation turns'; 'embeds each entity name into a 1024-dimensional vector space'; 'separate full-text search on existing entity names and summaries'"
+      },
+      {
+        "line": 119,
+        "claim": "predefined Cypher queries instead of LLM-generated queries, for consistent schema and fewer hallucinations",
+        "number": false,
+        "verdict": "supported",
+        "source": "2.2.1: 'We chose this approach over LLM-generated database queries to ensure consistent schema formats and reduce the potential for hallucinations.'"
+      },
+      {
+        "line": 127,
+        "claim": "same fact extracted between different entity pairs implements hyper-edges",
+        "number": false,
+        "verdict": "supported",
+        "source": "2.2.2: 'the same fact can be extracted multiple times between different entities ... through an implementation of hyper-edges'"
+      },
+      {
+        "line": 136,
+        "claim": "temporally overlapping contradiction sets old t_invalid to new t_valid; new info prioritised along T'",
+        "number": false,
+        "verdict": "supported",
+        "source": "2.2.3: 'setting their t_invalid to the t_valid of the invalidating edge. Following the transactional timeline T', Graphiti consistently prioritizes new information'"
+      },
+      {
+        "line": 154,
+        "claim": "label propagation chosen over Leiden for its simple dynamic extension, delaying full refresh",
+        "number": false,
+        "verdict": "supported",
+        "source": "2.3: 'label propagation's straightforward dynamic extension ... delaying the need for complete community refreshes'"
+      },
+      {
+        "line": 175,
+        "claim": "community names from key terms of summaries, embedded for cosine search; retrieval differs from GraphRAG map-reduce",
+        "number": false,
+        "verdict": "supported",
+        "source": "2.3 last paragraph"
+      },
+      {
+        "line": 193,
+        "claim": "BFS adds nodes/edges within n hops; recent episodes as seeds; BFS rare in RAG except graph RAG like AriGraph",
+        "number": false,
+        "verdict": "supported",
+        "source": "3.1: 'notable exceptions ... AriGraph [9] and Distill-SynthKG [19]'; 'within n-hops'"
+      },
+      {
+        "line": 225,
+        "claim": "LongMemEval_s conversations average about 115,000 tokens, within frontier context windows",
+        "number": true,
+        "verdict": "supported",
+        "source": "4.3: 'conversations averaging approximately 115,000 tokens ... remains within the context windows of current frontier models'"
+      },
+      {
+        "line": 233,
+        "claim": "DMR: Zep retrieves top 10 nodes and edges; LLM judge vs golden answers; one Q/A pair per conversation",
+        "number": true,
+        "verdict": "supported",
+        "source": "4.2: 'retrieve the top 10 most relevant nodes and edges. An LLM judge compared ...'; note 4 says 20 for both experiments (paper inconsistency)"
+      },
+      {
+        "line": 267,
+        "claim": "latency 31.3s->3.20s (gpt-4o-mini), 28.9s->2.58s (gpt-4o), both about 90% lower",
+        "number": true,
+        "verdict": "supported",
+        "source": "Table 2; 3.20/31.3 = -89.8%, 2.58/28.9 = -91.1%; text 'approximately 90%'"
+      },
+      {
+        "line": 267,
+        "claim": "gpt-4o latency IQR 6.01s -> 0.684s",
+        "number": true,
+        "verdict": "supported",
+        "source": "Table 2 Latency IQR column"
+      },
+      {
+        "line": 273,
+        "claim": "relative gain larger for gpt-4o than gpt-4o-mini; weaker models may not use temporal data, needs development",
+        "number": true,
+        "verdict": "supported",
+        "source": "4.3.2: '15.2% ... gpt-4o showed an 18.5% improvement'; 'additional development may be needed to improve less capable models' understanding of Zep's temporal data'"
+      },
+      {
+        "line": 289,
+        "claim": "single-session-preference gpt-4o 20.0% -> 56.7%, 184% up",
+        "number": true,
+        "verdict": "supported",
+        "source": "Table 3 row single-session-preference/gpt-4o: 20.0% | 56.7% | 184% up"
+      },
+      {
+        "line": 284,
+        "claim": "single-session-assistant gpt-4o-mini 81.8% -> 75.0%, 9.06% down",
+        "number": true,
+        "verdict": "supported",
+        "source": "Table 3 row single-session-assistant/gpt-4o-mini: 81.8% | 75.0% | 9.06% down; all 12 rows match cell for cell"
+      },
+      {
+        "line": 318,
+        "claim": "future work: extraction models fine-tuned for Graphiti prompts, formal ontologies, business-application memory benchmarks",
+        "number": false,
+        "verdict": "supported",
+        "source": "5 Conclusion paragraphs 3-4"
+      }
+    ],
+    "numbers_checked": 8,
+    "out_of_sample_notes": [
+      "L314 cause conflation",
+      "L310 'five limitations' attribution",
+      "L223 '20 for both' vs L233 '10'",
+      "L265 18.5% vs computed 18.3%"
+    ]
+  },
+  "checklist": {
+    "repeated": 0,
+    "avoided": 6,
+    "na": 0,
+    "repeated_ids": [],
+    "details": {
+      "inline-math-delimiters": {
+        "status": "avoided",
+        "evidence": "no \\( \\) or \\[ \\] in the post; L20 '$$t_{\\text{invalid}}$$'"
+      },
+      "longmemeval-tldr-relative": {
+        "status": "avoided",
+        "evidence": "L28 TL;DR gives absolute '정확도 71.2%로 전체 컨텍스트 기준선(60.2%)'; no %포인트 anywhere"
+      },
+      "longmemeval-results-relative": {
+        "status": "avoided",
+        "evidence": "L265 '최대 18.5% 향상은 상대 향상률 ... 55.4%에서 63.8%로, gpt-4o는 60.2%에서 71.2%로'; the 15.2% figure is not stated"
+      },
+      "longmemeval-baseline-misattributed": {
+        "status": "avoided",
+        "evidence": "L256 '두 방식에 같은 답변 모델(gpt-4o-mini, gpt-4o)을 붙여'"
+      },
+      "longmemeval-185-arithmetic": {
+        "status": "avoided",
+        "evidence": "L265 '저자들이 말하는 최대 18.5% 향상' marks it as the paper's figure; does not mention the computed ~18.3%"
+      },
+      "missing-description": {
+        "status": "avoided",
+        "evidence": "L8 description, 125 chars, starts with 'Zep은', numbers 60.2/71.2/28.9/2.58 all in TL;DR L28"
+      }
+    }
+  },
+  "extras": {
+    "blog_markup_notes": "use_math true with $$ present; subtitle, paper_author, paper_doi present; two-level categories; description 125 chars > title 61 chars"
+  },
+  "top_issues": [
+    "Repetition: the single-session-assistant decline is restated 8 times and several paragraphs repeat their own point (L171, L227, L269/L271); 'facts said once' not met",
+    "Retrieval count contradiction: L223 says both experiments use 20 edges/nodes with the same procedure, L233 says DMR uses top 10 (the paper's own inconsistency, asserted rather than flagged)",
+    "Limitations list L310-316 frames a compiled list as the paper's 'five limitations' and joins the ssa decline with the weaker-model temporal-data remark (L314), misattributing the cause"
+  ]
+}

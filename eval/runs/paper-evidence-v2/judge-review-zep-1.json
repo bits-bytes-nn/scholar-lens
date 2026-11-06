@@ -1,0 +1,81 @@
+{
+  "item": "review-zep",
+  "post": "/tmp/eval-paper/review-zep-v2.md",
+  "source": "https://arxiv.org/html/2501.13956 (v1)",
+  "judge_run": 1,
+  "scores": {"A": 8.5, "B": 7.5, "C": 7.0, "D": 7.5, "E": 8.0, "F": 6.0},
+  "type_scores": {"R1": 8.5, "R2": 7.5, "R3": 7.5},
+  "score_notes": {
+    "A": "Front matter complete (subtitle, paper_author, paper_doi, two-level categories, use_math), all math in $$, display blocks blank-line separated (L140-142, L185), no H1, real tables. Deductions: heading L221 '상위 20개 엣지·노드만 넣는 평가 프로토콜' covers both experiments though DMR uses top 10 (L233); one-sentence restatement paragraphs L271, L302; English heading '### References' (L328).",
+    "B": "Mostly natural 입니다 register, no noun frames or calques found. Deductions: L227 says the Zep-only network latency three times in one paragraph ('추가 네트워크 지연을 더했고 ... 기준선 평가에는 없었다 ... 그래서 이 구간의 네트워크 지연은 Zep 쪽에만 더해졌습니다'); L269 '가상의 예로 설명하면, 짧은 컨텍스트가 정확도를 높일 수 있는 이유는 앞서 든 이사 예시로 그려 볼 수 있습니다' -> '짧은 컨텍스트가 왜 도움이 될 수 있는지 이사 예시로 그려 보겠습니다'; L171 repeats '주기적인 전체 갱신이 여전히 필요' twice in one paragraph; '가상의' 10 times and '할 수 있습니다' 8 times; formulaic '표에서 볼 수 있듯이' (L62).",
+    "C": "L223 '절차는 두 실험에서 같습니다 ... 엣지 20개와 엔티티 노드 20개' contradicts L233 'Zep은 ... 상위 10개씩 꺼냈습니다 ... 두 실험의 설정이 이 부분에서 다릅니다' without flagging the paper's own inconsistency; repeated 'not verified by the paper' disclaimers (L269, L271, L300 twice, L304) read as stitched fragments; L302 restates L279.",
+    "D": "Running move-example helps the bi-temporal and invalidation parts (L81-88, L144), but it is reused about ten times, including where it adds nothing (L225, L248 'DMR은 \"지금 어디 살지?\"처럼 ...', L300); trivial label-propagation vote gets prose plus a table (L158-167).",
+    "E": "DMR, LongMemEval and question-type tables copy the source cell for cell; pipeline table (L98-103) and layer table (L56-60) help. The vote table (L162-167) duplicates L158; no reference by paper figure numbers.",
+    "F": "No fabricated numbers; all three result tables match. Deductions: L314 attaches the paper's 'less capable models' understanding of Zep's temporal data' remark (said about knowledge-update / gpt-4o-mini) to the single-session-assistant drop; L265 states '최대 18.5% 향상은 상대 향상률입니다' as fact though the paper does not say so and 60.2->71.2 computes to 18.3%; L125 presents the paper's own claim ('prevents erroneous combinations of similar edges between different entities') as '필자가 보기에'; L267 calls the latency column '평균' though the paper does not say mean or median (an IQR column suggests median).",
+    "R1": "Covers construction (episodes, entities, facts, temporal extraction, communities), retrieval (search, rerankers, constructor), both experiments and limitations with real detail.",
+    "R2": "Mechanism -> reason -> formula -> example order for invalidation (L129-146) and label propagation (L148-167); length is long for a short systems paper with padding from the repeated example.",
+    "R3": "TL;DR answers four questions with model-scoped numbers (L28-30); closing gives own assessment (missing ablation, no RAG baseline, ingestion cost, L320-324). Deduction: '논문이 밝힌 한계' list mislinks a paper statement (L314)."
+  },
+  "principles": {
+    "claim_headings": {"status": "met", "evidence": "L34 '정적 RAG와 통째로 넣는 컨텍스트가 놓치는 변하는 사실', L229, L252; L221 heading is inaccurate for DMR."},
+    "running_example": {"status": "met", "evidence": "Busan->Seoul move used across ingestion, invalidation, retrieval, results (L36, L144, L213, L269); overused."},
+    "mechanism_choice_formula_example": {"status": "met", "evidence": "Edge invalidation L129-146 (rule, formula L140-142, worked example L144); label propagation L150-167."},
+    "facts_said_once": {"status": "not met", "evidence": "Network latency x3 in L227; L279 restated by L302; L269 restated by L271; periodic refresh L154 and twice in L171."},
+    "numbers_with_scope_unit": {"status": "partly met", "evidence": "Numbers carry model and benchmark (L28, L260-263); L265 asserts 18.5% is relative without the 18.3% computed check; L267 '평균' latency."},
+    "nothing_invented": {"status": "partly met", "evidence": "Hypotheticals labelled ('가상의', '필자가 만든'); L314 mislinks a paper statement; L125 misattributes a paper claim to the writer."},
+    "writers_assessment_at_end": {"status": "met", "evidence": "L320 '여기서부터는 이 글의 견해입니다' (no ablation, no vector-RAG baseline, ingestion cost), L324 when to adopt."},
+    "length_fitted_to_difficulty": {"status": "partly met", "evidence": "About 51 KB for a short engineering paper; repeated example and disclaimers inflate L225, L248, L269-271, L300-304."},
+    "type_specific_shape": {"status": "met", "evidence": "Review: TL;DR four questions, 한계와 시사점 closing; guide/survey rules n/a."},
+    "korean_style": {"status": "partly met", "evidence": "입니다 register kept; repetition of '가상의' (10), '할 수 있습니다' (8), repeated disclaimer sentences."}
+  },
+  "sampling": "Body paragraphs (blank-line blocks after TL;DR headings, excluding headings) numbered from line 36; took paragraphs 1, 4, 7, ... 91 and drew the 15 claims from the factual ones among them.",
+  "claims": {
+    "checked": 15,
+    "supported": 13,
+    "unsupported": 1,
+    "wrong": 1,
+    "unverifiable": 0,
+    "examples": [
+      {"line": 117, "claim": "Entity names embedded into 1024-dim vectors; cosine search over existing entity nodes plus full-text search on names and summaries", "verdict": "supported", "source": "2.2.1: 'embeds each entity name into a 1024-dimensional vector space ... separate full-text search on existing entity names and summaries'"},
+      {"line": 42, "claim": "Contradicted old edge's t_invalid set to new edge's t_valid; not deleted", "verdict": "supported", "source": "2.2.3: 'invalidates the affected edges by setting their t_invalid to the t_valid of the invalidating edge'"},
+      {"line": 125, "claim": "'필자가 보기에' restricting to the entity pair avoids wrong merges of different people's facts", "verdict": "wrong", "note": "attribution: the paper itself states it", "source": "2.2.2: 'This constraint not only prevents erroneous combinations of similar edges between different entities'"},
+      {"line": 133, "claim": "Four timestamps; t'_created, t'_expired in T'; t_valid, t_invalid in T", "verdict": "supported", "source": "2.2.3: 'the system tracks four timestamps ...'"},
+      {"line": 150, "claim": "Label propagation instead of Leiden, for its simple dynamic extension", "verdict": "supported", "source": "2.3: 'we employ a label propagation algorithm rather than the Leiden algorithm ... straightforward dynamic extension'"},
+      {"line": 187, "claim": "Search returns a 3-tuple of semantic edges, entity nodes, community nodes", "verdict": "supported", "source": "3: 'φ transforms a query into a 3-tuple containing lists of semantic edges, entity nodes, and community nodes'"},
+      {"line": 191, "claim": "Cosine and BM25 use Neo4j's Lucene; edges search fact, entities name, communities community name", "verdict": "supported", "source": "3.1"},
+      {"line": 197, "claim": "Five rerankers: RRF, MMR, episode-mentions, node distance, cross-encoder (most costly)", "verdict": "supported", "source": "3.2"},
+      {"line": 223, "claim": "Both experiments retrieve the 20 most relevant edges and 20 entity nodes", "verdict": "supported", "note": "matches §4 text, but §4.2 says top 10 for DMR; the post contradicts itself at L233 without flagging the paper's inconsistency", "source": "4: 'For both experiments ... retrieve the 20 most relevant edges (facts) and entity nodes'"},
+      {"line": 231, "claim": "On DMR Zep beat all compared methods but only marginally over MemGPT and full-conversation", "verdict": "supported", "source": "4.2: 'showing marginal improvements over both MemGPT and the respective full-conversation baselines'"},
+      {"line": 246, "claim": "Full-conversation 94.4% already beats MemGPT 93.4% with gpt-4-turbo; MemGPT not reproduced with gpt-4o-mini", "verdict": "supported", "source": "4.2 and Table 1"},
+      {"line": 254, "claim": "Zep used 1.6k-token context versus 115k for full context", "verdict": "supported", "source": "Table 2 'Avg Context Tokens' 115k / 1.6k"},
+      {"line": 265, "claim": "'저자들이 말하는 최대 18.5% 향상은 상대 향상률입니다' paired with 60.2% -> 71.2%", "verdict": "unsupported", "note": "paper never calls it relative; 71.2/60.2 = 1.183 (18.3%), while 63.8/55.4 = 15.2% matches", "source": "4.3.2: 'gpt-4o showed an 18.5% improvement'"},
+      {"line": 279, "claim": "single-session-preference gpt-4o 20.0% -> 56.7%, 184% relative", "verdict": "supported", "source": "Table 3"},
+      {"line": 298, "claim": "gpt-4o-mini improved in four of six types; largest gains preference, multi-session, temporal-reasoning; gpt-4o adds knowledge-update", "verdict": "supported", "source": "4.3.2 paragraph after Table 2"}
+    ],
+    "outside_sample_findings": [
+      {"line": 314, "issue": "Limitation bullet joins the single-session-assistant drop with 'less capable models ... temporal data', which the paper says about knowledge-update / gpt-4o-mini"},
+      {"line": 267, "issue": "'평균만 빨라진 것이 아니라' - paper does not say the latency column is a mean"},
+      {"line": 187, "issue": "'텍스트 정보를 담는 그래프 객체가 이 세 종류뿐' overstates; episodes also hold raw text"}
+    ]
+  },
+  "checklist": {
+    "repeated": 0,
+    "avoided": 6,
+    "na": 0,
+    "repeated_ids": [],
+    "items": {
+      "inline-math-delimiters": {"status": "avoided", "evidence": "All math is $$...$$ (L20, L38, L140-142, L185); no \\( \\) or \\[ \\]."},
+      "longmemeval-tldr-relative": {"status": "avoided", "evidence": "L28 gives absolute 60.2% -> 71.2% (gpt-4o), no %포인트; the TL;DR states no relative gain at all."},
+      "longmemeval-results-relative": {"status": "avoided", "evidence": "L265 '55.4%에서 63.8%로, gpt-4o는 60.2%에서 71.2%로'; no %포인트; the 15.2% figure is absent from the post."},
+      "longmemeval-baseline-misattributed": {"status": "avoided", "evidence": "L256 '두 방식에 같은 답변 모델(gpt-4o-mini, gpt-4o)을 붙여'; L28 '전체 컨텍스트 기준선(60.2%)을 앞섰고'."},
+      "longmemeval-185-arithmetic": {"status": "avoided", "evidence": "L265 marks it as the authors' figure ('저자들이 말하는 최대 18.5% 향상'), but asserts it is relative without noting the computed 18.3%."},
+      "missing-description": {"status": "avoided", "evidence": "L8 description, 125 chars, starts with 'Zep', numbers 60.2/71.2/28.9/2.58 all in TL;DR L28."}
+    }
+  },
+  "extras": {},
+  "top_issues": [
+    "L314: limitation list mislinks the paper's 'less capable models need more development for temporal data' (knowledge-update, gpt-4o-mini) to the single-session-assistant drop; L125 credits a paper claim to the writer.",
+    "L265: 18.5% asserted as a relative gain over 60.2->71.2 (computes to 18.3%) with no caveat; L267 calls latency a mean without source support.",
+    "Repetition and length: network latency said 3x (L227), restating paragraphs (L271, L302), five 'paper did not verify' disclaimers, the move example reused ~10 times; L223 'same for both experiments, 20' vs L233 'DMR top 10' contradiction."
+  ]
+}

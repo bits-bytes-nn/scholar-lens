@@ -18,7 +18,7 @@ import re
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import ValidationError
 
 from ..domain.evidence import (
     Evidence,
@@ -30,12 +30,9 @@ from ..domain.evidence import (
 from ..domain.evidence_draft import (
     cited_ids,
     draft_problems,
-    drop_sentences,
-    ends_mid_sentence,
     prose_sentences,
     section_heading,
     section_numbers,
-    structure_lost,
 )
 from ..domain.glossary import glossary_view
 from ..domain.guide.evidence_guide import (
@@ -56,6 +53,7 @@ from ..domain.guide.evidence_guide import (
 from ..prompts import guide_evidence as prompts
 from .evidence_writer import (
     EvidenceWriter,
+    PostReview,
     WriterPrompts,
     block,
     brief_lines,
@@ -213,19 +211,6 @@ def authority_rule(has_official: bool) -> Callable[..., list[str]]:
         return []
 
     return rule
-
-
-class ReviewFinding(BaseModel):
-    section: str
-    problem: str
-    fix: str
-
-
-class GuideReview(BaseModel):
-    # One request of the final running example traced through every guard,
-    # policy, limit and handler the guide sets up, with its outcome.
-    trace: str = ""
-    issues: list[ReviewFinding] = Field(default_factory=list, max_length=30)
 
 
 class EvidenceGuideEngine(EvidenceWriter):
@@ -749,42 +734,21 @@ class EvidenceGuideEngine(EvidenceWriter):
                         block("packages", self.package_facts),
                     ]
                 ),
-                schema=GuideReview,
+                schema=PostReview,
             )
         if review.trace:
             logger.info("Guide review trace: %s", review.trace[:600])
         if not review.issues:
             return written
         logger.info("Guide review: %d issue(s).", len(review.issues))
-        out = []
-        for section, md in written:
-            names = {section.title, section_heading(md)}
-            issues = [
-                f"{i.problem} Fix: {i.fix}"
-                for i in review.issues
-                if i.section.strip().lstrip("#").strip() in names
-            ]
-            if not issues:
-                out.append((section, md))
-                continue
-            own = [e for eid in section.evidence if (e := ledger.get(eid))]
-            self.reference = self.source_sections(own)
-            fixed = await self._fix(md, own, issues)
-            if structure_lost(md, fixed) or ends_mid_sentence(fixed):
-                self.notes.append(
-                    f"Section '{section.title}': guide review problems left as they were: "
-                    + " | ".join(i[:160] for i in issues[:3])
-                )
-            else:
-                wrong = [
-                    s
-                    for s, v in await self.check_claims(fixed, ledger, own)
-                    if v.startswith("wrong")
-                ]
-                md = drop_sentences(fixed, wrong) if wrong else fixed
-            self.reference = ""
-            out.append((section, md))
-        return out
+        return await self.apply_findings(
+            written,
+            review.issues,
+            ledger,
+            title_of=lambda s: s.title,
+            own_of=lambda s: [e for eid in s.evidence if (e := ledger.get(eid))],
+            reference_of=self.source_sections,
+        )
 
     async def _tldr(
         self,
@@ -850,7 +814,7 @@ class EvidenceGuideEngine(EvidenceWriter):
                     earlier_numbers={},
                     figure_urls=(),
                     free_numbers=_FREE_NUMBERS,
-                passages=self.passages,
+                    passages=self.passages,
                     target_chars=target,
                     own_view_limit=0,
                 )

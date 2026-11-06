@@ -10,6 +10,7 @@ from typing import Any
 from scholar_lens.application.evidence_writer import (
     ClaimCheck,
     EvidenceCheck,
+    PostReview,
     SectionReview,
 )
 from scholar_lens.application.paper_engine import (
@@ -264,6 +265,8 @@ class ScriptedModel:
             return SectionReview()
         if schema is EvidenceCheck:
             return EvidenceCheck()
+        if schema is PostReview:
+            return PostReview()
         if schema is FinalText:
             return FinalText(
                 subtitle="직접 선호 최적화",
@@ -353,3 +356,32 @@ def test_numbers_may_come_from_the_section_the_evidence_is_quoted_from() -> None
     assert any("58" in p for p in draft_problems(md, **kwargs))
     passages = {("2305.18290", "S4"): "61% ... a 58% win rate in the other setting"}
     assert not any("58" in p for p in draft_problems(md, passages=passages, **kwargs))
+
+
+def test_a_conditional_bar_inside_a_nested_call_becomes_mid() -> None:
+    from scholar_lens.domain.markdown.math import normalize_math
+
+    assert normalize_math(r"$$\pi_{\theta}(y_{\tau(k)}|x)$$") == (
+        r"$$\pi_{\theta}(y_{\tau(k)}\mid x)$$"
+    )
+
+
+def test_blank_and_meta_table_cells_are_problems() -> None:
+    from scholar_lens.domain.evidence_draft import draft_problems
+
+    md = (
+        "## 결과\n\n결과는 아래와 같습니다 [[E3]].\n\n| 모델 | 점수 |\n| --- | --- |\n"
+        "| DPO | 61% [[E3]] |\n| Qwen3 | — |\n| AIME | 논문은 지표를 밝히지 않습니다 |\n"
+    )
+    problems = draft_problems(
+        md,
+        title="결과",
+        own=["E3"],
+        earlier=(),
+        ledger=_ledger(),
+        earlier_numbers={},
+        figure_urls=(),
+        free_numbers="",
+    )
+    assert any("blank" in p for p in problems)
+    assert any("leaves out" in p for p in problems)

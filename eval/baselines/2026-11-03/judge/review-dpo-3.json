@@ -1,0 +1,81 @@
+{
+  "item": "review-dpo",
+  "judge_run": 3,
+  "post": "eval/baselines/2026-11-03/out/review-dpo.md",
+  "source": "https://arxiv.org/html/2305.18290v3",
+  "sampling": "body paragraphs (blank-line blocks from line 15), starting at paragraph 3 and taking every third; heading/figure/rule paragraphs replaced by the next content paragraph",
+  "scores": {"A": 8.0, "B": 8.0, "C": 8.5, "D": 8.5, "E": 8.5, "F": 9.0},
+  "type_scores": {"R1": 9.5, "R2": 7.5, "R3": 8.0, "G": "pass (manual: use_math true, description 136 chars starting with DPO, numbers 61%/57% from TL;DR; lint not run)", "X1": 8.0},
+  "deductions": {
+    "A": ["L581 '### 정리: 정책과 보상 사이의 대응' (the paper's conclusion) sits as a subsection of '## 분포 밖 일반화와 GPT-4 평가자의 신뢰성 검증' (L548), not under the closing section", "Topic-name headings in the body: L61 '## 배경: 표준 RLHF 파이프라인 — SFT, 브래들리-테리 보상 모델, KL 제약 강화학습', L447 '## 실험 설계: 세 가지 과제, 평가 방식, 비교 대상'"],
+    "B": ["Heavy '즉' restatement (about 14 uses, e.g. L395 twice: '즉 확률이 양수이고 합이 1이라는 뜻입니다', '즉 DPO는 프롬프트마다'); rewrite L395 as '이 조건은 π가 올바른 분포라는 뜻입니다. 그런데 좌변은 ... Z(x)이므로, DPO는 프롬프트마다 Z(x)=1인 원소를 고릅니다.'", "L254 '이 가중치의 효과는 식만 봐서는 잘 드러나지 않습니다' is vague filler", "L383 '결국 r=r′이 되어' formulaic"],
+    "C": ["The Bradley-Terry 'difference only' point is re-explained at L77, L87, L166, L180, L196 and the 'Z(x) does not depend on y' point at L117, L160, L162, L166, L230; reads as layered but repetitive"],
+    "D": ["Basics padded for a competent reader: L322 reflexive/symmetric/transitive definition with mod-3 example, L97 KL definition, L504 sampling temperature definition", "Hard parts well served: toy A/B/C example L146/L160/L369, gradient-weight table L248-252"],
+    "E": ["L530 and L534 two Best-of-N figures with one-line lead-ins each; the second adds little", "Tables copy source cells correctly (L554-557, L567-575)"],
+    "F": ["L563 says '자원봉사자 25명' without noting that one volunteer completed late and was excluded from the analysis (paper App. D.3)", "L238 defines u = r̂(y_l) − r̂(y_w) (the paper's own appendix definition) with ℓ = −log σ(−u); the derivation is consistent, no sign error"],
+    "R2": ["596 lines (~85 KB) for a moderate-difficulty paper; derivation sections are thorough but the theory and PPO-instability sections repeat the same cancellation argument"],
+    "R3": ["TL;DR answers all four questions with settings (L29-31: GPT-2-large, GPT-J, Pythia-2.8B, temperature 0)", "Closing L589 restates the paper's Future Work list nearly item by item; L583 restates the paper's conclusion; writer's own judgement present at L587 and L591"],
+    "X1": ["'RL-Free-Preference-Learning' and 'Bradley-Terry-Preference-Model' are long, low-reuse tags"]
+  },
+  "principles": {
+    "claim_headings": {"status": "partly met", "evidence": "Claim headings L490 'DPO가 PPO를 엄격히 지배하는 절충', L330 '선호 데이터는 동치류 안을 구분하지 못한다'; topic headings L61, L447, L465 '비교 대상'"},
+    "running_example": {"status": "partly met", "evidence": "Toy 3-response example (0.5/0.3/0.2, rewards 0/1/2) reused at L146, L160, L369; not carried into the gradient or experiment sections"},
+    "mechanism_order": {"status": "met", "evidence": "L234-254: intuition → derivation → gradient formula → numeric table; L182-194 loss → worked loss values"},
+    "facts_once": {"status": "partly met", "evidence": "BT difference-only and Z(x) independence re-explained 4-5 times (L77, L87, L166, L180, L196); β=0.1/0.5 given at L26 and L314"},
+    "numbers_scoped": {"status": "met", "evidence": "L512 '온도 0.0에서 약 61% ... PPO는 가장 좋은 온도인 0.0에서 57%'; L514 'DPO 온도 0.25 vs PPO 온도 0, 58%'; L55 '6B(60억)'"},
+    "nothing_invented": {"status": "met", "evidence": "Writer examples flagged as hypothetical (L146, L194, L246, L328, L429); no invented future work"},
+    "own_assessment_at_end": {"status": "partly met", "evidence": "L587 and L591 give the writer's judgement (when to choose DPO vs PPO); L589 and L583 mostly restate the paper's future work and conclusion"},
+    "length_fitted": {"status": "not met", "evidence": "596 lines; repeated cancellation argument across L164-196, L387-401, L419-443"},
+    "type_shape": {"status": "met", "evidence": "TL;DR four questions L15-31, section-by-section review, limitations section L585"},
+    "korean_style": {"status": "partly met", "evidence": "Consistent 입니다 register and natural prose; frequent '즉' restatements (L395, L417, L427, L488)"}
+  },
+  "claims": {
+    "checked": 15, "supported": 15, "unsupported": 0, "wrong": 0, "unverifiable": 0, "numbers": 10,
+    "examples": [
+      {"line": 21, "claim": "Every reward equivalence class has exactly one reward of the β log(π/π_ref) form", "kind": "method", "verdict": "supported", "source": "Prop./Thm 1: 'all reward classes consistent with ... can be represented with the reparameterization'; uniqueness proof in A.6"},
+      {"line": 55, "claim": "Experiments with models up to 6B (60억) parameters", "kind": "number", "verdict": "supported", "source": "'using language models with up to 6B parameters'"},
+      {"line": 87, "claim": "r_φ initialized from π^SFT plus a linear layer on the final transformer layer; rewards normalized so E[r_φ]=0 for all x", "kind": "method", "verdict": "supported", "source": "§3: 'initialized from the SFT model ... with the addition of a linear layer on top of the final transformer layer ... normalize the rewards, such that E[r_φ(x,y)]=0 for all x'"},
+      {"line": 314, "claim": "β=0.1, batch 64, RMSprop, lr 1e-6, linear warmup over 150 steps; TL;DR uses β=0.5", "kind": "number", "verdict": "supported", "source": "App. B: 'β = 0.1, batch size of 64 and the RMSprop optimizer with a learning rate of 1e-6 ... warmup ... over 150 steps. For TL;DR summarization, we use β = 0.5'"},
+      {"line": 453, "claim": "IMDb prefixes of 2-8 tokens, 4 completions for 25,000 prefixes, 6 pairs each, siebert/sentiment-roberta-large-english as ground-truth reward, GPT-2-large", "kind": "number", "verdict": "supported", "source": "App. C.1: 'prefixes ... of length 2-8 tokens ... siebert/sentiment-roberta-large-english ... gpt2-large ... sample 4 completions for 25000 prefixes and create 6 preference pairs'"},
+      {"line": 457, "claim": "Anthropic HH contains 170k human-assistant dialogues", "kind": "number", "verdict": "supported", "source": "§6: 'containing 170k dialogues between a human and an automated assistant'"},
+      {"line": 472, "claim": "PPO-GT uses an off-the-shelf TRL version and a modified version that normalizes rewards and tunes hyperparameters; the modifications are also used for normal PPO", "kind": "attribution", "verdict": "supported", "source": "§6 Methods: 'two implementations of PPO-GT, one of-the-shelf version ... as well as a modified version ... (we also use these modifications when running normal PPO with learned rewards)'"},
+      {"line": 483, "claim": "PPO target KL ∈ {3,6,9,12}, β ∈ {0.05,0.1,1,5}, α ∈ {0.05,0.1,0.5,1}, 22 runs, evaluated every 100 steps", "kind": "number", "verdict": "supported", "source": "§6.1: 'target KL ∈ {3,6,9,12} for PPO, β ∈ {0.05,0.1,1,5}, α ∈ {0.05,0.1,0.5,1} for unlikelihood ... 22 runs in total. After each 100 training steps'"},
+      {"line": 512, "claim": "DPO ≈61% GPT-4 win rate at temperature 0.0 vs PPO 57% at its best temperature 0.0; DPO's max exceeds Best of N", "kind": "number", "verdict": "supported", "source": "§6.2: 'DPO has a win rate of approximately 61% at a temperature of 0.0, exceeding ... PPO at 57% at its optimal sampling temperature of 0.0. DPO also achieves a higher maximum win rate compared to the best of N'"},
+      {"line": 514, "claim": "Humans preferred DPO (temp 0.25) over PPO (temp 0) 58% of the time", "kind": "number", "verdict": "supported", "source": "§6.2: 'DPO samples at temperature 0.25 were preferred 58% times over PPO samples at temperature 0'"},
+      {"line": 522, "claim": "In dialogue DPO matches or beats Best of 128 Preferred-FT and 2-shot Pythia-2.8B at each method's best temperature", "kind": "comparison", "verdict": "supported", "source": "§6.2: 'best of 128 Preferred-FT completions ... and a 2-shot prompted version of the Pythia-2.8B base model, finding DPO performs as well or better for the best-performing temperatures'"},
+      {"line": 528, "claim": "Best of N saturates after roughly 64-128 samples", "kind": "number", "verdict": "supported", "source": "Fig. 4 caption: 'Performance plateaus after roughly 64-128 samples'"},
+      {"line": 552, "claim": "CNN/DailyMail OOD: temperatures 0 and 0.25, GPT-4 (C) prompt with 'forum post'→'news article'; DPO 0.36/0.31 vs PPO 0.26/0.23", "kind": "number", "verdict": "supported", "source": "§6.3 Table 1 and text: 'best sampling temperatures from TL;DR (0 and 0.25) ... same GPT-4 (C) prompt ... replacing the words forum post with news article'"},
+      {"line": 563, "claim": "25 STEM (mainly CS) Stanford volunteers; two raters for DPO and PPO-1 comparisons, one for SFT; ties (~1%) ignored", "kind": "number", "verdict": "supported", "source": "App. D.3: '25 volunteer human raters ... Stanford students ... STEM (mainly CS) focus'; 'assigning two humans to each ... 125 SFT comparisons, assigning a single human ... ties (about 1%)'. Omission: one volunteer was excluded from the analysis"},
+      {"line": 569, "claim": "Human-study table: N 272/122/199; GPT-4(S) 47/27/13; GPT-4(C) 54/32/12; human 58/43/17; S-H 70/77/86; C-H 67/79/85; H-H 65/-/87", "kind": "number", "verdict": "supported", "source": "Table 2, cell for cell"}
+    ]
+  },
+  "checklist": {
+    "repeated": 2, "avoided": 14, "na": 1,
+    "repeated_ids": ["excluded-participant", "gradient-u-definition"],
+    "items": {
+      "implementation-fragment": {"status": "avoided", "evidence": "No broken math fragment; L271-275 explains π_ref = π^SFT or MLE on y_w alongside the two-step pipeline L266-269"},
+      "beta-tldr": {"status": "avoided", "evidence": "L26 'TL;DR에서만 β=0.5를 썼습니다'; L314 '따로 밝히지 않은 경우 기본 설정은 β=0.1'"},
+      "future-work-ranking-invented": {"status": "avoided", "evidence": "L589 lists automated-evaluator judgments and other modalities; no 'conditional preferences'"},
+      "plackett-luce-not-future": {"status": "avoided", "evidence": "L198-214 present the Plackett-Luce DPO loss as derived"},
+      "ppo-clip-objective": {"status": "n/a", "evidence": "No PPO formula; L103 describes clipping in prose only"},
+      "partition-function-size": {"status": "avoided", "evidence": "L150 '그 수는 |V|^L로 늘어나고'"},
+      "cnn-dm-prompt-variant": {"status": "avoided", "evidence": "L552 'TL;DR에서 쓴 C 프롬프트에서 \"forum post\"를 \"news article\"로만 바꿨습니다'"},
+      "human-study-columns": {"status": "avoided", "evidence": "L563 '모두 가장 좋은 온도인 0의 PPO를 상대로 합니다'; columns DPO/SFT/PPO-1, no PPO-N"},
+      "human-study-respondents": {"status": "avoided", "evidence": "L569 '응답 수 | 272 | 122 | 199'"},
+      "multi-judgment-comparisons": {"status": "avoided", "evidence": "L563 'DPO와 PPO-1 비교에는 평가자를 두 명씩, SFT 비교에는 한 명씩' (both against PPO-0)"},
+      "overoptimization-figure-ref": {"status": "avoided", "evidence": "L589 '대화 학습 곡선 후반의 약간의 성능 하락' (dialogue training progress, i.e. paper Fig. 3 right, described not numbered)"},
+      "gradient-u-definition": {"status": "repeated", "evidence": "L238 'u=r̂_θ(x,y_l)−r̂_θ(x,y_w)' (literal flagged form); paired with ℓ=−log σ(−u) so the result is correct"},
+      "gradient-sigma-argument": {"status": "avoided", "evidence": "L241, L244, L262 all use σ(r̂(y_l)−r̂(y_w)); L252 '틀리게 정렬됨 ... 약 0.953'"},
+      "best-of-n-invented": {"status": "avoided", "evidence": "L528 only '대략 64~128개 샘플 이후로 포화'"},
+      "excluded-participant": {"status": "repeated", "evidence": "L563 '자원봉사자 25명입니다' with no mention of the excluded late participant"},
+      "missing-description": {"status": "avoided", "evidence": "L9 description, 136 chars, starts with 'DPO', numbers 61%/57% from TL;DR L30"},
+      "arxiv-https": {"status": "avoided", "evidence": "L596 'https://arxiv.org/pdf/2305.18290v3'; all arXiv links https"}
+    }
+  },
+  "extras": {},
+  "top_issues": [
+    "Too long for the paper's difficulty (596 lines): the Z(x)-cancellation and Bradley-Terry shift-invariance arguments are re-explained in the derivation, theory and PPO-instability sections (L164-196, L387-401, L419-443)",
+    "Closing is mostly the paper's own words: L583 restates the conclusion (misplaced under the OOD section) and L589 relists the Future Work items; the writer's judgement is limited to L587 and L591",
+    "Human-study participant count omits that one of 25 volunteers was excluded (L563); topic-name headings remain at L61, L447, L465"
+  ]
+}

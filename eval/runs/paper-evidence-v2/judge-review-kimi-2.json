@@ -1,0 +1,114 @@
+{
+  "item": "review-kimi",
+  "post": "/tmp/eval-paper/review-kimi-v2.md",
+  "source": "https://arxiv.org/html/2507.20534",
+  "sampling": "body paragraphs (headings, images, display math excluded) starting at #2, every third: #2,5,8,...,113 (38 paragraphs); 15 claims drawn from these",
+  "scores": {"A": 7.0, "B": 7.5, "C": 6.5, "D": 7.0, "E": 6.5, "F": 6.0},
+  "type_scores": {"R1": 7.5, "R2": 7.5, "R3": 7.5},
+  "deductions": {
+    "A": [
+      "L258-263: RL comparison table ends with an empty row '| 근거 | | |'",
+      "L403-423: the QK-Clip behaviour section ('초기에만 잠깐 작동하고 사라지는 QK-Clip') sits after the Base-model results, split from the QK-Clip section at L56",
+      "L269: Liquid raw tags inside the display formula and '(y_{i}|x)' in the denominator while the numerator uses \\mid"
+    ],
+    "B": [
+      "'가상' appears 9 times; the hypothetical framing '예를 들어 가상의 상황으로 ... 해 봅시다' is reused at L44, L102, L409, L447",
+      "Figure-narration openers repeat: L68 '곡선에 ...', L134 '흐름도의 화살표를 따라가면 데이터가 이렇게 움직입니다.', L212 '도식은 ...', L230 '이 흐름도에서는 ...', L236 '두 산점도를 나란히 놓으면 ...', L242 '이 구조도에서 ...'",
+      "Pipeline vocabulary leaks into the prose: L447 '비용 대비 효과는 근거에서 측정되지 않았습니다', L449 '근거에서 확인되지 않습니다'",
+      "L291 '저울질할 여지를 가집니다' (가지다); rewrite: '저울질할 여지가 있습니다'"
+    ],
+    "C": [
+      "The MLA per-component scaling (q^C,k^C by sqrt(gamma), q^R by gamma, k^R untouched) is explained fully three times: L92-98, L409, L447",
+      "The 'logit 400, tau=100' walk-through appears at L102-108 and again at L409 under a new heading '가상의 헤드 하나로 따라간 클리핑 과정'",
+      "'15.5조 토큰 손실 스파이크 없이' is stated at L26, L46 and L417"
+    ],
+    "D": [
+      "Good: the K=4 worked example of the K1.5 objective (L275) and the gamma_h arithmetic (L104-107) come where they are needed",
+      "Over-explained: the same QK-Clip example is re-taught in the analysis section (L409) and the closing (L447)",
+      "Figure narration describes the obvious (L188 '원 표시가 사각형 표시보다 조금 아래에 있습니다'; L212 '이 도식은 속도나 메모리 절감 수치를 제시하지 않습니다')"
+    ],
+    "E": [
+      "L343-346: DeepSeek-V3-0324 and Qwen3 cells are '—' for SWE-bench Verified single attempt, Multilingual and SWE-Lancer, but the paper reports 38.8/34.4, 25.8/20.9 and 30.5/24.1 (paper uses '—' for not evaluated)",
+      "L339-346: the '폐쇄 모델' column switches model by row (Opus 67.6, GPT-4.1 80.1, Opus 72.5, Sonnet 80.2); for single-attempt SWE-bench Verified it shows Opus 72.5 though Sonnet 72.7 is the higher closed score",
+      "L258-263: RL table cells are tautological ('검증 가능한 과제' / example '정답을 확인할 수 있는 과제') and one row is empty",
+      "Good: figures are referred to descriptively, never by the paper's figure numbers"
+    ],
+    "F": [
+      "L365: 'AIME 2025 | 49.5 (논문에 단위·지표 표기 없음)' is wrong; Table 3 gives 'AIME 2025 (Avg@64) | 49.5'",
+      "L343-346: '—' cells misrepresent reported DeepSeek-V3-0324/Qwen3 values as missing (38.8/34.4, 25.8/20.9, 30.5/24.1)",
+      "Minor: L269 conditional written with '|' in the denominator"
+    ]
+  },
+  "principles": {
+    "claim_headings": {"status": "met", "evidence": "H2s are claim noun phrases, e.g. L56 '헤드별 가중치 재스케일로 로짓 성장을 막는 QK-Clip', L297 '30초 안에 1조 파라미터를 갱신하는 체크포인트 엔진'"},
+    "running_example": {"status": "partly met", "evidence": "The hypothetical head with logit 400 recurs (L44, L102, L409, L447) but is re-told rather than threaded; nothing carries the data, infra or RL sections"},
+    "mechanism_choice_formula_example": {"status": "met", "evidence": "QK-Clip: problem L60-64, design choice vs soft-cap/QK-Norm L78/L46, formulas L74/L84, worked numbers L102-108; RL objective L269 then K=4 example L275"},
+    "facts_said_once": {"status": "not met", "evidence": "MLA scaling explained at L92-98, L409, L447; 15.5T-no-spike at L26, L46, L417; 400-logit example at L102 and L409"},
+    "numbers_with_scope_unit": {"status": "partly met", "evidence": "Most numbers carry setting (L337 temperature 0.0, Avg@4; L178 at validation loss 1.5); L365 wrongly says AIME 2025 has no metric; L339-346 mixes closed models across rows"},
+    "nothing_invented": {"status": "partly met", "evidence": "Hypotheticals are labelled (L275 '이 숫자들은 설명용 가정이며 논문이 보고한 값이 아닙니다'); no invented RL formulas or code; but '—' cells at L343-346 hide reported values"},
+    "writer_assessment_at_end": {"status": "met", "evidence": "L447-451 give a view (QK-Clip most reusable), where the limits bite (medical/legal, tight output budgets) and when to use K2; L447 re-explains the mechanism instead of pointing back"},
+    "length_fitted": {"status": "partly met", "evidence": "456 lines; the length is earned for QK-Clip and infra but padded by the repeated QK-Clip walk-throughs and figure narration"},
+    "type_specific_shape": {"status": "met", "evidence": "## TL;DR with the four questions (L14-32), no abstract/introduction section after it, '한계와 시사점' closing (L441)"},
+    "korean_style": {"status": "partly met", "evidence": "Natural 입니다 register throughout, no register breaks found; repeated figure-intro and '가상의' openers, '근거에서' leaks (L447, L449), '여지를 가집니다' (L291)"}
+  },
+  "claims": {
+    "checked": 15,
+    "numbers": 11,
+    "supported": 15,
+    "unsupported": 0,
+    "wrong": 0,
+    "unverifiable": 0,
+    "examples": [
+      {"line": 114, "para": 23, "claim": "max logits decay to a stable range only after ~30% of training steps, tau not adjusted", "verdict": "supported", "source": "'only decay to a stable range after approximately 30% of the training steps'"},
+      {"line": 182, "para": 41, "claim": "128k seq, 384 experts fixed, heads 64->128 gives +83% inference FLOPs", "verdict": "supported", "source": "'with a sequence length of 128k, increasing the number of attention heads from 64 to 128, while keeping the total expert count fixed at 384, leads to an 83% increase in inference FLOPs'"},
+      {"line": 182, "para": 41, "claim": "DeepSeek-V3 sets heads to about twice the layer count to use memory bandwidth", "verdict": "supported", "source": "'sets the number of attention heads to roughly twice the number of model layers to better utilize memory bandwidth'"},
+      {"line": 216, "para": 50, "claim": "first 10T tokens at constant 2e-4 after 500-step warm-up; then 5.5T cosine 2e-4 -> 2e-5", "verdict": "supported", "source": "'The first 10T tokens were trained with a constant learning rate of 2e-4 after a 500-step warm-up, followed by 5.5T tokens with a cosine decay from 2e-4 to 2e-5'"},
+      {"line": 216, "para": 50, "claim": "400B tokens at 4k then 60B at 32k; YaRN to 128k", "verdict": "supported", "source": "'trained on 400 billion tokens with a 4k sequence length, followed by an additional 60 billion tokens with a 32k sequence length. To extend the context window to 128k, we employed the YaRN method'"},
+      {"line": 230, "para": 53, "claim": "hierarchical domain evolution yields over 20,000 synthetic tools", "verdict": "supported", "source": "'This evolution process produces over 20,000 synthetic tools'"},
+      {"line": 307, "para": 74, "claim": "three equal-size device buffers per GPU: one H2D, two IPC", "verdict": "supported", "source": "'three equal-size device buffers on each GPU: an H2D buffer ... and two IPC buffers for GPU-to-GPU broadcast'"},
+      {"line": 337, "para": 83, "claim": "non-thinking, temperature 0.0, tau2 under Avg@4 seeds with Pass@1, ACEBench English overall", "verdict": "supported", "source": "'All models run in non-thinking mode; we set the temperature to 0.0 ... score tau2 ... under Avg@4 seeds with Pass@1/4, and report overall on ACEBench English'"},
+      {"line": 350, "para": 86, "claim": "paper says K2 substantially outperforms all baselines on both, yet GPT-4.1 is higher on ACEBench (80.1) and Claude 4 Opus slightly higher on tau2 in the figure (67.6 vs 66.1)", "verdict": "supported", "source": "'substantially outperforming all baselines'; 'remains competitive with GPT-4.1 (80.1)'; Figure 1 tau2 Opus 67.6 (consistent with Table 3 domain scores 81.8/60.0/57.0)"},
+      {"line": 399, "para": 98, "claim": "Kimi-K2-Base narrowly behind DeepSeek-V3-Base on CMATH (90.26 vs 90.53)", "verdict": "supported", "source": "'CMATH (90.26%), narrowly behind DeepSeek-V3-Base (90.53%)'"},
+      {"line": 401, "para": 98, "claim": "GPQA-Diamond (avg@8) K2-Base below DeepSeek-V3-Base and Llama4-Maverick-Base; HellaSwag below Qwen2.5", "verdict": "supported", "source": "Table 4: GPQA-Diamond(avg@8) 48.11 | 50.51 | 49.43 | 40.78; HellaSwag 94.60 | 89.44 | 86.02 | 95.27"},
+      {"line": 437, "para": 107, "claim": "Security-Iterative Jailbreak is K2's lowest pass rate; Harmful-Iterative Jailbreak relatively higher than other models; obtained without targeted optimization", "verdict": "supported", "source": "Table 6: Security/Iterative Jailbreak 43.90 (lowest K2 cell); 'Without targeted optimization ... Harmful-Iterative Jailbreak was relatively higher compared to other models'"},
+      {"line": 254, "para": 59, "claim": "RL seen as more token-efficient and general than SFT; policy optimization from K1.5; partial rollout cites K1.5", "verdict": "supported", "source": "'RL is believed to have better token efficiency and generalization than SFT'; 'We adopt the policy optimization algorithm introduced in K1.5 [36]'; 'we employ the partial rollout [36] technique'"},
+      {"line": 267, "para": 62, "claim": "K responses sampled from pi_old per problem; minimize L_RL = E[1/K sum (r - r_bar - tau log pi_theta/pi_old)^2]", "verdict": "supported", "source": "Eq. in 3.2.3 matches term for term"},
+      {"line": 445, "para": 110, "claim": "the critic rubrics for general RL forbid self-assessment and hedging and reward decisive answers, so the model may overstate certainty; simulator fidelity is limited and coding uses real sandboxes with test pass rates", "verdict": "supported", "source": "Appendix F 'K2 Critic Rubrics for General RL', F.3: 'The prescriptive rules prohibit self-assessments, explicit disclaimers, or hedging language'; 3.1: 'we acknowledge the inherent limitation of simulation fidelity ... real execution sandboxes ... test suite pass rates'"}
+    ],
+    "out_of_sample_findings": [
+      {"line": 365, "verdict": "wrong", "claim": "AIME 2025 49.5 '(논문에 단위·지표 표기 없음)'", "source": "Table 3 'AIME 2025 (Avg@64) | 49.5'"},
+      {"line": 343, "verdict": "wrong (table cells)", "claim": "DeepSeek-V3-0324/Qwen3 '—' on SWE-bench Verified single attempt, Multilingual, SWE-Lancer", "source": "Table 3: 38.8/34.4, 25.8/20.9, 30.5/24.1"}
+    ]
+  },
+  "checklist": {
+    "repeated": 0,
+    "avoided": 15,
+    "na": 2,
+    "repeated_ids": [],
+    "details": {
+      "rl-section-duplicated": {"status": "avoided", "evidence": "one RL section (L252) and one checkpoint-engine/RL infra section (L297); no duplicated headings"},
+      "rl-subheading-levels": {"status": "avoided", "evidence": "L265/L277/L281 are H3 under the single H2 at L252"},
+      "ppo-claim": {"status": "avoided", "evidence": "L254 '정책 최적화 알고리즘은 K1.5에서 가져왔고'; L267"},
+      "invented-budget-formula": {"status": "avoided", "evidence": "no L_budget formula (budget control not covered)"},
+      "invented-ptx-formula": {"status": "avoided", "evidence": "no L_total/alpha_PTX; PTX not mentioned"},
+      "invented-temperature-formula": {"status": "avoided", "evidence": "no T(t) formula; temperature decay not mentioned"},
+      "invented-env-code": {"status": "avoided", "evidence": "no code block; L279 describes a Gym-style interface in prose"},
+      "invented-math-verifier": {"status": "n/a", "evidence": "math/STEM RL data preparation is not described"},
+      "invented-logic-verifier": {"status": "avoided", "evidence": "no formal-logic verifier claim"},
+      "invented-code-quality-eval": {"status": "avoided", "evidence": "L445 '실제 샌드박스의 테스트 통과율로 보완'; no quality/efficiency/security grading"},
+      "invented-safety-monitoring": {"status": "n/a", "evidence": "safety section (L425-439) covers red-team results only, not the attack/target/judge data pipeline; no real-time monitoring claim"},
+      "invented-self-refine-loop": {"status": "avoided", "evidence": "L283 'K2 critic이 그 결과 전체를 쌍별 비교로 순위화합니다'"},
+      "invented-human-rubric-content": {"status": "avoided", "evidence": "L289 '데이터 팀이 특정 지시 맥락에 맞춰 직접 만든 기준'"},
+      "rubric-limitation-garbled": {"status": "avoided", "evidence": "L445 '범용 루브릭은 자기 평가나 단서 조항(hedging)을 금지하고 ... 확실성을 과장할 수 있습니다' (names the general-RL rubric set rather than 'prescriptive' rules explicitly)"},
+      "invented-infra-mechanisms": {"status": "avoided", "evidence": "L303-326 follow the paper: broadcast + shard pick, three buffers, H800 two-stage fallback, startup reuse"},
+      "missing-description": {"status": "avoided", "evidence": "L8 description starts 'Kimi K2는', 126 chars, numbers 15.5조/1조/66.1/65.8 all in TL;DR"},
+      "arxiv-https": {"status": "avoided", "evidence": "L456 https://arxiv.org/pdf/2507.20534v2"}
+    }
+  },
+  "extras": {},
+  "top_issues": [
+    "Repetition: the QK-Clip MLA scaling and the 'logit 400' walk-through are taught three times (L92-108, L409, L447), and the QK-Clip behaviour section sits after the Base results (L403)",
+    "Table fidelity: L343-346 shows '—' for DeepSeek-V3-0324/Qwen3 where the paper reports values, and mixes closed models per row; L365 claims AIME 2025 has no metric though Table 3 says Avg@64",
+    "Style: repeated figure-narration and '가상의' openers, 'evidence' vocabulary leaking into prose (L447, L449 '근거에서'), and an empty '근거' row in the RL table (L263)"
+  ]
+}

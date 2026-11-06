@@ -142,7 +142,7 @@ class Explanation(_Section):
     reader_model_id: LanguageModelId = Field(default=LanguageModelId.CLAUDE_V5_5_SONNET)
     # Evidence engine: the review's prose characters (Korean).
     min_total_chars: int = Field(default=25_000, ge=5_000, le=200_000)
-    max_total_chars: int = Field(default=45_000, ge=5_000, le=200_000)
+    max_total_chars: int = Field(default=55_000, ge=5_000, le=200_000)
 
     @model_validator(mode="after")
     def _review_length_range(self) -> "Explanation":

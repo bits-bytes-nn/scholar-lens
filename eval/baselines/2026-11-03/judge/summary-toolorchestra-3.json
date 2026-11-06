@@ -1,0 +1,70 @@
+{
+  "item": "summary-toolorchestra",
+  "run": 3,
+  "post": "eval/baselines/2026-11-03/out/summary-toolorchestra.md",
+  "source": "arXiv 2511.21689v1 (HTML)",
+  "sample": "body paragraphs 3, 6, 9, 12, 15, 18, 21 (L23, L35, L51, L59, L71, L91, L99) plus main-table cells (L77, L83)",
+  "scores": {"A": 7, "B": 7, "C": 8, "D": 7, "E": 7.5, "F": 8, "G": 8, "U1": 9, "U2": 8, "X1": 5},
+  "score_notes": {
+    "A": "Clean five-part arc, no body H1, no skipped levels, real table, display math with blank lines. Deductions: L51 bare single dollars in prose '정답 궤적 A(비용 $0.10)와 B(비용 $0.40)' (rubric forbids single $; MathJax pairs them into a math span); headings are topic names, not claims (L19 '연구 배경', L29 '제안 방법', L57, L69, L95); L61-63 list mixes a full sentence ('신호가 약하기 때문입니다.') with noun fragments.",
+    "B": "Consistent 입니다 register. Deductions: L31 '체인 오브 소트로 상황을 분석하고' transliteration (-> 'Chain-of-Thought(CoT)로 상황을 분석하고'); L35 noun frame '주목할 부분은 세 종류의 도구가 같은 인터페이스로 묶여 있다는 점입니다' (-> '세 종류의 도구는 모두 같은 인터페이스로 묶입니다'); L97 '프런티어 모델을 넘을 수 있음을 보여 줍니다' (-> '작은 조율 모델이 ... 프런티어 모델을 넘습니다'); L99 formulaic '한계도 분명합니다.'; L31 '마르코프 결정 과정', L55 '어드밴티지', '클리핑된 대리 목적 함수' without English on first use.",
+    "C": "Bias story (L23-27) motivates training and returns in results (L87). Deductions: L55 'clipped surrogate objective' named and dropped; L93 packs unseen-tool, unseen-pricing and preference results into one paragraph.",
+    "D": "Reward vector gets formula, preference-vector reading (L49), toy example (L51) and key box (L53). Deductions: L51 toy example omits that min-max runs over the whole batch including wrong trajectory C, so 'A가 1, B가 0으로 정규화' holds only if C's cost lies between $0.10 and $0.40 (never stated); L93 preference scores '46.7, 68.4, 79.5' are summed preference-aware rewards (Appendix L), explained only by a clause in L99.",
+    "E": "One results table copied cell for cell (L75-83, all 7 rows verified), three figures placed where discussed and described without paper numbering. Deductions: L85 '도구 없음 구성과 Llama 계열 일부 행은 생략' understates the cut: all Llama-Nemotron-49B and Llama-3.3-70B rows, basic-tool Qwen3-8B/Qwen3-235B rows and the reported-SOTA rows are also gone; L93's twelve numbers from three tables would read better as a small table.",
+    "F": "15/15 sampled claims supported. Deductions outside the sample: L85 misdescribes which source rows were omitted; L93 '비용은 102.4 대 34.8' has no unit (US cents, averaged over HLE and FRAMES). L87 '세 벤치마크 모두에서 가장 높은 점수' holds only within the post's table; the paper's reported GPT-5 tau2-Bench 84.2 is higher, a caveat given later at L99.",
+    "G": "use_math true with $$ present; description 146 chars, opens with ToolOrchestra, numbers 37.1/35.1/2.5배 from TL;DR. Deduction: L51 single-dollar prices likely trip the blog math lint; description uses '8B' while body unit rule gives 80억.",
+    "U1": "Motivation (L21-27), solution (L31-55), implementation (L59-67), results (L71-93), significance and limits (L97-99) all covered.",
+    "U2": "TL;DR is plain prose, about five minutes, one distilled table, grounded limitations (L99). Deduction: L93 dense number dump.",
+    "X1": "Seven tags. 'Synthetic-Tool-Use-Environments' is not a paper term (paper: 'synthetic data', 'user-agent-tool environments'); 'Efficiency-Aware-Reward' only as a split hyphenation of the abstract's 'outcome-, efficiency-, and user-preference-aware rewards'; 'Reasoning-Models' is not the paper's contribution; 'Agentic-AI' duplicates the category."
+  },
+  "principles": {
+    "claim_headings": {"status": "not met", "evidence": "L19 '## 연구 배경', L29 '## 제안 방법', L57 '## 구현 방식', L69 '## 실험 결과', L95 '## 의의와 한계' are topic names"},
+    "running_example": {"status": "not met", "evidence": "only the local toy in L51; no single input traced through method and results"},
+    "mechanism_order": {"status": "partly met", "evidence": "bias problem (L23-27) -> reward design vs fixed weights (L53) -> formula (L40, L46) -> numeric toy (L51); toy omits C's cost"},
+    "facts_once": {"status": "partly met", "evidence": "GPT-5's GPT-5-mini bias explained at L27 and again at L87"},
+    "numbers_scoped": {"status": "partly met", "evidence": "table and L87 scoped; L93 '102.4 대 34.8' no unit; preference scores' definition deferred to L99"},
+    "nothing_invented": {"status": "met", "evidence": "L51 toy labelled '설명용 가상 수치'; sampled claims all supported"},
+    "writer_assessment": {"status": "met", "evidence": "L99 judges baseline fairness, missing ablation, judge/pricing dependence, reliance on GPT-5 calls"},
+    "length_fitted": {"status": "met", "evidence": "reward design gets the most space; background short"},
+    "type_shape": {"status": "met", "evidence": "TL;DR + five-question arc + one distilled table"},
+    "korean_style": {"status": "partly met", "evidence": "L31, L35, L97, L99 as listed under B"}
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 15,
+    "unsupported": 0,
+    "wrong": 0,
+    "unverifiable": 0,
+    "numbers": 10,
+    "examples": [
+      {"line": 23, "claim": "pilot on 300 HLE problems", "verdict": "supported", "source": "Appendix A: 'ran the model on a set of 300 HLE problems'"},
+      {"line": 23, "claim": "tools GPT-5, GPT-5-mini, Qwen3-32B, Qwen2.5-Coder-32B", "verdict": "supported", "source": "Appendix A"},
+      {"line": 35, "claim": "LLM tool descriptions from 10 randomly sampled training tasks", "verdict": "supported", "source": "§3.1 '(1). randomly sample 10 training tasks'"},
+      {"line": 35, "claim": "description style 'math strong, weak on chemistry nomenclature'", "verdict": "supported", "source": "Appendix C Qwen3-32B description"},
+      {"line": 51, "claim": "reward for correct trajectories = normalized vector dot P; wrong gets 0 (toy)", "verdict": "supported", "source": "Eq. 2; toy arithmetic assumes C's cost inside [0.10, 0.40]"},
+      {"line": 59, "claim": "lr 1e-6, max input 24,000, max generation 8,000", "verdict": "supported", "source": "§4.4"},
+      {"line": 59, "claim": "train batch 16, rollout batch 8, 50 turns, 16 H100", "verdict": "supported", "source": "§4.4"},
+      {"line": 61, "claim": "homogeneity filter at reward std < 0.1", "verdict": "supported", "source": "§3.2 Training techniques (1)"},
+      {"line": 71, "claim": "eval tools Tavily, Python sandbox, Faiss with Qwen3-Embedding-8B, code writers, Qwen2.5-Math-72B/7B, generalists", "verdict": "supported", "source": "§4.1"},
+      {"line": 71, "claim": "temperature 0, TogetherAI pricing for open models", "verdict": "supported", "source": "§4.3"},
+      {"line": 91, "claim": "max turns 10, 20, 50, 100; Orchestrator above others at every budget", "verdict": "supported", "source": "§6.2 'consistently outperforms ... at a given budget'"},
+      {"line": 99, "claim": "public GPT-5 full-set HLE 35.2", "verdict": "supported", "source": "Table 1 reported SOTA row, footnote †"},
+      {"line": 99, "claim": "tau2-Bench 84.2 not reproduced, 77.7 used", "verdict": "supported", "source": "Table 1 footnote ‡"},
+      {"line": 99, "claim": "preference metric relative to base Qwen3-8B", "verdict": "supported", "source": "Appendix L, Eq. 5-6"},
+      {"line": 83, "claim": "Orchestrator-8B 37.1/76.3/80.2/9.2/8.2; basic-tool Claude Opus 4.1 19.8/63.5/46.0/76.2/32.5", "verdict": "supported", "source": "Table 1"}
+    ]
+  },
+  "checklist": {
+    "repeated": 1,
+    "avoided": 0,
+    "na": 0,
+    "repeated_ids": ["tags-not-in-paper"],
+    "evidence": {"tags-not-in-paper": "L11 tag 'Synthetic-Tool-Use-Environments' does not appear in the paper (and 'Efficiency-Aware-Reward' only as split hyphenation); no PR checklist exists for a generated baseline"}
+  },
+  "extras": {},
+  "top_issues": [
+    "L51 bare single-dollar prices ('$0.10', '$0.40') break math rendering, and the toy normalization ignores wrong trajectory C's cost",
+    "Tags include 'Synthetic-Tool-Use-Environments' (not a paper term), 'Reasoning-Models', and 'Agentic-AI' duplicating the category",
+    "Topic-name headings and translationese (L31 '체인 오브 소트', L35/L97 noun frames); L85 misdescribes omitted table rows; L93 number dump without units"
+  ]
+}

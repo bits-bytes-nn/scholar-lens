@@ -46,6 +46,7 @@ from ..domain.validation import description_problems, fit_description
 from ..prompts import paper_evidence as prompts
 from .evidence_writer import (
     EvidenceWriter,
+    PostReview,
     WriterPrompts,
     block,
     brief_lines,
@@ -346,6 +347,7 @@ class EvidencePaperEngine(EvidenceWriter):
             for n in section_numbers(markdown, _FREE_NUMBERS):
                 numbers.setdefault(n, heading)
             written.append((section, markdown))
+        written = await self._review_post(title, ledger, written)
         parts: list[tuple[str, str]] = [(s.kind, md) for s, md in written]
         if tldr is not None:
             parts.insert(0, ("tldr", await self._tldr(title, ledger, *tldr, written)))
@@ -481,6 +483,41 @@ class EvidencePaperEngine(EvidenceWriter):
                 r"^## .*$", f"## {heading}", markdown.lstrip(), count=1, flags=re.M
             )
         return markdown
+
+    async def _review_post(
+        self,
+        title: str,
+        ledger: EvidenceLedger,
+        written: list[tuple[PaperSection, str]],
+    ) -> list[tuple[PaperSection, str]]:
+        """One review of the whole post (repetition, back-references to
+        nothing, talk about the sources, unseen omissions), then a fix of
+        each section it names."""
+        if not written:
+            return written
+        with usage_stage("review"):
+            review = await self.model.structured(
+                role="evaluate",
+                system=prompts.POST_REVIEW_SYSTEM,
+                prompt="\n\n".join(
+                    [
+                        f"Paper: {title}. Post: {self.settings.post}.",
+                        block("post", "\n\n".join(md for _, md in written)),
+                    ]
+                ),
+                schema=PostReview,
+            )
+        if not review.issues:
+            return written
+        logger.info("Post review: %d issue(s).", len(review.issues))
+        return await self.apply_findings(
+            written,
+            review.issues,
+            ledger,
+            title_of=lambda s: s.title,
+            own_of=lambda s: [e for eid in s.evidence if (e := ledger.get(eid))],
+            reference_of=self.source_sections,
+        )
 
     async def _tldr(
         self,

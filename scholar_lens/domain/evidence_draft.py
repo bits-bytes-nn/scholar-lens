@@ -51,6 +51,7 @@ META_SENTENCE = re.compile(
     r"입력 자료|제공된 (?:자료|문서|출처|근거)|원래 예시|원문(?:의)? 예시|"
     r"근거 자료(?:에|가|로)|"
     r"(?:다루는|주어진|받은) (?:자료|근거)|자료에(?:는)? (?:없|나오지)|근거에(?:는)? 없|"
+    r"근거(?:에서|에는|에 따르면|로는|만으로)|(?:에서|로부터) 가져왔습니다|가져온 (?:값|수치)|"
     r"(?:이|본) 글(?:에서)?(?:는|은) .{0,20}(?:살펴봅니다|다룹니다|정리합니다)|이 절에서는|"
     r"\b(?:the|this) (?:abstract|card|summary) (?:says|states|reports)|based on the abstract",
     re.IGNORECASE,
@@ -134,8 +135,12 @@ _OWN_VIEW = re.compile(
 # A sentence about what a paper leaves out ("저자들은 … 적지 않습니다").
 _ABSENCE_CLAIM = re.compile(
     r"(?:적지|밝히지|제시하지|명시하지|보고하지|구분하지|언급하지|다루지|측정하지|"
-    r"정량화하지|수치화하지)\s*(?:는\s*)?않(?:습니다|았습니다|으며|고)"
+    r"정량화하지|수치화하지|보여 ?주지|설명하지|나와 ?있지|공개하지)\s*(?:는\s*)?"
+    r"않(?:습니다|았습니다|으며|고|아)"
 )
+# A table cell a writer left blank: fill it from the evidence or drop the
+# row or column.
+_BLANK_CELL = re.compile(r"\|\s*(?:—|–|-|N/A|n/a)\s*(?=\|)")
 
 
 # A sentence pointing back at what the post said before.
@@ -261,6 +266,19 @@ def draft_problems(
             problems.append(
                 "describes the post's inputs instead of the papers; state what "
                 f"the paper does or leave it out: {quoted}"
+            )
+    for row in table_rows(markdown):
+        plain_row = _plain(row)
+        if _BLANK_CELL.search(plain_row):
+            problems.append(
+                "a table cell is blank ('—'): give the value the evidence or the "
+                "passages state, or drop the row or column it belongs to: "
+                f"{plain_row[:160]}"
+            )
+        if META_SENTENCE.search(plain_row) or _ABSENCE_CLAIM.search(plain_row):
+            problems.append(
+                "a table cell talks about the post's sources or what the paper "
+                f"leaves out; give the value or leave the cell out: {plain_row[:160]}"
             )
     cited_papers = {
         e.paper_id

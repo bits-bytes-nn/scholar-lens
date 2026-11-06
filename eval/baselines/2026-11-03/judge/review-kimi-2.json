@@ -1,0 +1,113 @@
+{
+  "item": "review-kimi",
+  "run": 2,
+  "post": "eval/baselines/2026-11-03/out/review-kimi.md",
+  "source": "arXiv 2507.20534 HTML full text (incl. appendices)",
+  "sampling": "body paragraphs (blank-line blocks, headings excluded, 275 total); paragraph 2 then every third (P2, P5, ..., P275); claims drawn from the sampled paragraphs",
+  "scores": {"A": 7.5, "B": 8.0, "C": 8.0, "D": 8.5, "E": 8.0, "F": 8.5},
+  "type_scores": {"R1": 9.0, "R2": 8.5, "R3": 8.0, "X1": 8.0},
+  "deductions": {
+    "A": [
+      "L34 '## Kimi K2 개요: 에이전틱 지능을 향한 1조 파라미터 오픈 모델' is an intro/abstract section right after the TL;DR (5.1 forbids it); L50 re-lists the headline scores already in TL;DR L28-29.",
+      "L840 '### 결론부의 요약' restates the paper's conclusion ('최고의 오픈 웨이트 모델이 되었습니다') before the closing.",
+      "RL content is three sibling H2s (L472 '## 검증 가능한 보상 Gym', L519 '## 검증을 넘어서', L600 '## RL 알고리즘') with no single RL parent heading.",
+      "Markup otherwise clean: no body H1, no skipped levels, $$-only math (0 single $, no \\( \\)), use_math true, subtitle/paper_author/paper_doi present, no author key, description 131 chars starting with 'Kimi K2'."
+    ],
+    "B": [
+      "Repeated figure lead-in formula: L175 '...흐름을 보면 됩니다', L189 '...얼마나 가까운지 비교하면 됩니다', L297 '...아래에 있다는 점을 보면 됩니다' -> e.g. L297 '그래프에서 2배 헤드 모델(원)은 예산마다 기준 모델(사각형)보다 조금 아래에 있을 뿐입니다.'",
+      "L626 '이 항이 KL 형태의 정칙화 역할을 합니다' (English default verb) -> '이 항이 KL 형태의 정칙화로 작동합니다'.",
+      "8 occurrences of '할 수 있습니다'; register stays in 입니다 throughout, no '다:' list leads."
+    ],
+    "C": [
+      "Flow from Muon background (L52) to QK-Clip problem, design and evidence (L90-227) is well ordered and concepts are introduced before use.",
+      "The RL story is split across three H2s and the closing re-summarises the conclusion (L840) and then lists limitations again (L848), so the end reads as stitched."
+    ],
+    "D": [
+      "Hard parts get help at the right time: K1.5 loss walked through with K=4 rewards 1,1,0,0 and tau=0.5 (L628), QK-Clip bilinear scaling ab=tau/S_max (L124), double-buffer A/B/C example labelled as illustrative (L701).",
+      "Some padding of standard background (ZeRO-1, WSD, YaRN, LiveCodeBench definitions L315-L366, L765) for a competent reader."
+    ],
+    "E": [
+      "Tables copy source cells verbatim (SimpleQA table L249-252 matches paper Table 1); code blocks L438-465 are the paper's own tool-declaration and tool-call templates.",
+      "No paper figure/table numbering used; figure lead-ins formulaic (see B). 58k characters with many figures; some figure captions only describe what to look at."
+    ],
+    "F": [
+      "L838 'Criminal·Privacy·Security의 프롬프트 인젝션과 반복 탈옥 일부 조합에서 K2는 다른 모델보다 통과율이 낮습니다' and L852 '프롬프트 인젝션과 반복 탈옥 조합에서 통과율이 낮기 때문에' overgeneralise paper Table 6: Criminal-Iterative Jailbreak K2 57.57 is the highest (DeepSeek-V3 21.21, R1 25.76, Qwen3 53.03), Security-Prompt Injection K2 87.80 beats R1 65.85 and Qwen3 84.13, and the paper itself says Harmful-Iterative Jailbreak was relatively higher than other models.",
+      "No other fabricated number, formula or attribution found in the 15 sampled claims or in spot checks of the closing (H800, MRCR 55.0, LMSYS 3,000 votes all match)."
+    ]
+  },
+  "principles": {
+    "claim_headings": {"status": "partly met", "evidence": "Several claim-style headings (L90 'MuonClip: QK-Clip으로 어텐션 로짓 폭발 길들이기', L680 '설계 트레이드오프: 더 많이 보내는데 더 빠릅니다'), but many topic headings (L106 '최대 로짓 정의', L307 '컴퓨팅 클러스터', L353 '사전학습 레시피', L801 '베이스 모델 평가 설정')."},
+    "running_example": {"status": "not met", "evidence": "No single input carried through; local hypothetical examples per section (L408 flight booking, L628 K=4 rewards, L701 shards A/B/C)."},
+    "mechanism_order": {"status": "met", "evidence": "QK-Clip: problem L92 -> why QK-Norm/logit soft-cap fail L98-104 -> formula L114-128 -> per-head design L130-156 -> evidence L167-195; K1.5 loss L610 -> worked example L628."},
+    "facts_once": {"status": "partly met", "evidence": "Headline scores in TL;DR L28-29 repeated at L50; 70,000 steps/12.7% in TL;DR L25 and L195; 15.5T at L44, L263, L355, L842."},
+    "numbers_scoped": {"status": "met", "evidence": "Numbers carry model/setting: L773 'τ² ... 세 도메인 마이크로 평균 Pass@1은 66.1', L740 output cap 8192 / 16384 for Agentless, L189 '활성 0.5B(5억)·총 3B(30억)'; B/M converted to 억 correctly."},
+    "nothing_invented": {"status": "partly met", "evidence": "Writer examples labelled (L408 '이해를 돕기 위한 가상의 예시', L482 '이 숫자는 가상의 예시', L701 '논문에 나오는 일정이 아니라 설명용 예시'); L490 '300단어 이내, 글머리표 3개' is unlabelled; red-team weakness overgeneralised (L838)."},
+    "own_assessment": {"status": "met", "evidence": "L846 names gaps (ablation only at 0.5B/τ=30, no AdamW comparison at 1T scale, H800-specific infra choices) and L852 says when to use K2 and when to add defences."},
+    "length_fit": {"status": "partly met", "evidence": "855 lines / 58k chars; hard parts get room but standard background (ZeRO-1, WSD, YaRN, LiveCodeBench) is also explained."},
+    "type_shape": {"status": "partly met", "evidence": "TL;DR answers four questions with set-scoped numbers; intro section after TL;DR (L34) and '결론부의 요약' (L840) break the review shape."},
+    "korean_style": {"status": "partly met", "evidence": "Consistent 입니다 register, subjects stated; repeated '보면 됩니다' figure lead-ins (L175, L189, L297)."}
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 14,
+    "unsupported": 1,
+    "wrong": 0,
+    "unverifiable": 0,
+    "examples": [
+      {"line": 195, "claim": "First 70,000 steps: 12.7% of heads triggered QK-Clip, S_max clamped to 100; after that QK-Clip inactive", "verdict": "supported", "source": "§2.1 'Initial 70000 steps: 12.7% of attention heads triggered QK-Clip for at least once, clamping S_max to 100. Post-70000 steps: ... rendering QK-Clip inactive.'"},
+      {"line": 189, "claim": "Ablation: two 0.5B activated / 3B total MoE, vanilla Muon vs MuonClip τ=30", "verdict": "supported", "source": "Appendix D 'two small-scale 0.5B activated and 3B total parameters MoE models ... low clipping threshold (τ=30)'"},
+      {"line": 169, "claim": "Mid-scale 9B activated / 53B total MoE trained with vanilla Muon", "verdict": "supported", "source": "§2.1 'a mid-scale 9B activated and 53B total parameters ... MoE model using the vanilla Muon'"},
+      {"line": 281, "claim": "Total params 671B -> 1.04T, activated 37B -> 32.6B vs DeepSeek-V3", "verdict": "supported", "source": "Table 2: Total Parameters 671B | 1.04T; Activated Parameters 37B | 32.6B"},
+      {"line": 249, "claim": "SimpleQA: 0 rephrasings/10 epochs 23.76; 1/10 27.39; 10/1 28.94", "verdict": "supported", "source": "Table 1, cell for cell"},
+      {"line": 263, "claim": "15.5T-token corpus over four domains (web text, code, math, knowledge), pipelines mostly follow Kimi K1.5", "verdict": "supported", "source": "§2.2 'comprises 15.5 trillion tokens ... four primary domains: Web Text, Code, Mathematics, and Knowledge. Most data processing pipelines follow ... Kimi K1.5'"},
+      {"line": 315, "claim": "16-way PP with virtual stages, 16-way EP, ZeRO-1 DP", "verdict": "supported", "source": "§2.4.2 '16-way Pipeline Parallelism (PP) with virtual stages ..., 16-way Expert Parallelism (EP), and ZeRO-1 Data Parallelism'"},
+      {"line": 355, "claim": "Pre-training with 4,096-token context, MuonClip and WSD schedule, 15.5T tokens", "verdict": "supported", "source": "§2.5 'We pre-trained the model with a 4,096-token context window using the MuonClip optimizer ... and the WSD learning rate schedule ..., processing a total of 15.5T tokens.'"},
+      {"line": 394, "claim": "Synthetic tools evolved hierarchically from categories (financial trading, software applications, robot control); over 20,000 synthetic tools", "verdict": "supported", "source": "§3.1.1 'key categories (e.g., financial trading, software applications, robot control) ... produces over 20,000 synthetic tools'"},
+      {"line": 507, "claim": "SWE environments on Kubernetes sandbox infra supporting over 10,000 concurrent instances", "verdict": "supported", "source": "§3.2.1 'powered by Kubernetes ... supports over 10,000 concurrent sandbox instances'"},
+      {"line": 740, "claim": "Output cap 8192 tokens except SWE-bench Verified Agentless 16384; Avg@k (AIME Avg@64); long-context window 128K with truncation", "verdict": "supported", "source": "§4.1.1 Evaluation Configurations and Table 3 'AIME 2025 (Avg@64)'"},
+      {"line": 773, "claim": "τ² micro Pass@1 66.1 vs DeepSeek-V3-0324 48.8 / Qwen3 37.3; Telecom 65.8 > Opus 4 57.0; Retail 70.6 vs 81.8, Airline 56.5 vs 60.0; ACEBench 76.5 vs GPT-4.1 80.1; ACEBench 4.5K APIs over 8 domains", "verdict": "supported", "source": "§4.1.2 text and Table 3 rows Tau2 retail/airline/telecom and AceBench (Claude Opus 4 is the 5th column, GPT-4.1 the 6th); Appendix 'ACEBench ... 4.5K APIs across 8 domains'"},
+      {"line": 785, "claim": "HHEM 98.9 = 1.1% hallucination (HHEM-2.1-Open), FaithJudge 92.6 = 7.4% (o3-mini judge), FACTS 88.5 > Gemini 2.5 Flash 86.6, FaithJudge Gemini 93.2", "verdict": "supported", "source": "§4.1.2 'hallucination rate of 1.1% ... 98.9 ... 7.4% ... 92.6'; Table 3 FACTS Grounding 88.5 ... 86.6, FaithJudge 92.6 ... 93.2"},
+      {"line": 793, "claim": "Chinese in-house win rates 65.4% vs ChatGPT-4o-latest, 64.6% vs Claude Sonnet 4, 59.6% vs DeepSeek-V3-0324; loss around 17%", "verdict": "supported", "source": "§4.1.2 Open-Ended Evaluation 'outperforms ChatGPT-4o-latest with a 65.4% win rate, Claude Sonnet 4 with 64.6%, and DeepSeek-V3-0324 with 59.6%. In all cases, the loss rate stays low (around 17%)'"},
+      {"line": 838, "claim": "K2's pass rate is lower than other models in some Criminal/Privacy/Security prompt-injection and iterative-jailbreak combinations; lowest K2 cell is Security-Iterative Jailbreak 43.90, same as DeepSeek-R1", "verdict": "unsupported", "source": "Table 6: 43.90 lowest K2 cell and R1 43.90 are correct, but Criminal-Iterative Jailbreak K2 57.57 is the best of four and Security-Prompt Injection K2 87.80 beats R1 65.85 and Qwen3 84.13; the paper says Harmful-Iterative Jailbreak was relatively higher than other models. The weakness is overgeneralised (repeated in the closing L852)."}
+    ],
+    "numbers_checked": 14,
+    "extra_spot_checks": [
+      "L150 MLA clipping only on unshared components (q^C,k^C by sqrt(γ), q^R by γ, k^R untouched): supported by §2.1.",
+      "L104 QK-Norm not applicable to MLA because keys are not fully materialised at inference: supported.",
+      "L211 16B Moonlight shows higher singular-value entropy with Muon; higher-order muP shares the low-rank Adam assumption: supported (appendix).",
+      "L811 base-model numbers (CRUXEval-I 74.00, -O 83.50, LCB v6 26.29, EvalPlus 80.33, CMATH 90.26 vs 90.53, C-Eval 92.50, CMMLU 90.90, CSimpleQA 77.57): match Table 4.",
+      "L846-852 H800 cluster, MRCR 55.0 behind proprietary models (74.4/66.9/81.7), LMSYS 3,000+ votes: supported."
+    ]
+  },
+  "checklist": {
+    "repeated": 1,
+    "avoided": 16,
+    "na": 0,
+    "repeated_ids": ["rl-subheading-levels"],
+    "details": {
+      "rl-section-duplicated": {"result": "avoided", "evidence": "Each RL topic heading appears once: L472 검증 가능한 보상 Gym, L600 RL 알고리즘, L650 RL 인프라, L652 공동 배치 아키텍처."},
+      "rl-subheading-levels": {"result": "repeated", "evidence": "L472 '## 검증 가능한 보상 Gym', L519 '## 검증을 넘어서: 자기 비평 루브릭 보상', L600 '## RL 알고리즘' are sibling H2s; no single RL heading above them."},
+      "ppo-claim": {"result": "avoided", "evidence": "L602 'K2는 Kimi K1.5의 정책 최적화 알고리즘을 그대로 가져와 기반으로 삼습니다. 이 목적함수는 PPO의 클리핑 목적함수와 달리 제곱 오차 꼴'."},
+      "invented-budget-formula": {"result": "avoided", "evidence": "L638 describes per-sample max token budget by task type, truncation and penalty; no formula."},
+      "invented-ptx-formula": {"result": "avoided", "evidence": "L644 'K2는 사전학습 데이터 대신 직접 엄선한 고품질 샘플로 데이터셋을 만들고 ... 보조 PTX 손실'; the only formula (L642) is InstructGPT's, attributed to InstructGPT."},
+      "invented-temperature-formula": {"result": "avoided", "evidence": "L648 'temperature decay schedule' described in words; no T(t)."},
+      "invented-env-code": {"result": "avoided", "evidence": "Only code blocks are L438-465, the paper's own TypeScript tool declaration and tool-call token template; no AgenticEnvironment class."},
+      "invented-math-verifier": {"result": "avoided", "evidence": "L478-482 coverage via tagging and SFT pass@k moderate-difficulty selection."},
+      "invented-logic-verifier": {"result": "avoided", "evidence": "No formal-logic chain verifier; L480 lists logic puzzle task types only."},
+      "invented-code-quality-eval": {"result": "avoided", "evidence": "L507 rewards from unit tests in a Kubernetes sandbox; no code-quality/security grading."},
+      "invented-safety-monitoring": {"result": "avoided", "evidence": "L509-517 attack/target/judge pipeline with task-specific binary rubric; no real-time monitoring."},
+      "invented-self-refine-loop": {"result": "avoided", "evidence": "L545-547 actor generates, critic compares pairwise against rubrics, ranking is the preference signal."},
+      "invented-human-rubric-content": {"result": "avoided", "evidence": "L555 '데이터팀이 특정 지시 맥락에 맞춰 직접 작성한 루브릭'."},
+      "rubric-limitation-garbled": {"result": "avoided", "evidence": "L595-597 prescriptive rules ban self-qualification, disclaimers and hedging -> overconfidence in ambiguous contexts."},
+      "invented-infra-mechanisms": {"result": "avoided", "evidence": "L666-724 checkpoint engine, full broadcast, H2D/IPC buffers, two-stage pipeline, selective reads at startup; no progressive loading/hierarchical broadcast/real-time debugging."},
+      "missing-description": {"result": "avoided", "evidence": "L8 description starts 'Kimi K2는 ...', numbers 65.8 and 66.1 are in TL;DR L28."},
+      "arxiv-https": {"result": "avoided", "evidence": "No 'http://' link in the post; L855 'https://arxiv.org/pdf/2507.20534v2'."}
+    }
+  },
+  "extras": {},
+  "top_issues": [
+    "Red-team weakness overgeneralised (L838, L852): K2 is best on Criminal-Iterative Jailbreak and beats two models on Security-Prompt Injection, contrary to 'PI and IJ combos are lower than other models'.",
+    "Review shape: intro section right after TL;DR (L34) repeating headline scores (L50) and a '결론부의 요약' (L840) restating the paper's conclusion.",
+    "RL split into three sibling H2s (L472, L519, L600) with no single RL parent heading (checklist rl-subheading-levels repeated); formulaic '보면 됩니다' figure lead-ins (L175, L189, L297)."
+  ]
+}
