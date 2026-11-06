@@ -13,9 +13,10 @@ and scripts can parse the outcome directly::
     scholar-lens costs --since 2026-11-01 --by stage --billed
 
 Exit codes: 0 succeeded (or submitted), 1 failed, 2 rejected input,
-3 still running (``status``), 4 the command itself failed (``"status":
-"error"``: AWS credentials, config, Batch/S3 API errors), so the job's state
-is unknown. The Batch ``worker`` exits 10 (failed) or 11 (rejected) once it
+3 still running (``status``), 4 a remote command itself failed (``--remote``
+or ``status``: ``"status": "error"`` for AWS credentials, config, Batch/S3 API
+errors), so the job's state is unknown. A local run that cannot start (a
+broken config) reports ``failed`` and exits 1. The Batch ``worker`` exits 10 (failed) or 11 (rejected) once it
 has sent its own notification, 4 when that notification could not be sent,
 and 143 (128 + SIGTERM) when Batch stopped it (timeout, cancel, host
 termination) after printing the interrupted run's result.

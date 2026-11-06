@@ -466,6 +466,8 @@ def run_job(request: JobRequest, *, job_id: str | None = None) -> JobResult:
     (a ``SystemExit``/``KeyboardInterrupt`` still propagates after cleanup)."""
     result = JobResult(kind=request.kind, input=request.describe(), job_id=job_id)
     try:
+        # Resolved before the run: an except clause that imports could raise.
+        rejected_errors = _rejected_input_errors()
         context = build_context(Config.load())
     except Exception as e:  # noqa: BLE001 - reported, the job cannot start
         result.error = f"{type(e).__name__}: {e}"
@@ -491,7 +493,7 @@ def run_job(request: JobRequest, *, job_id: str | None = None) -> JobResult:
         result.s3_uri = outcome.s3_uri
         result.pr_url = outcome.pr_url
         result.warnings = outcome.warnings
-    except _rejected_input_errors() as e:
+    except rejected_errors as e:
         if _is_fetch_outage(e):  # the source exists but could not be reached
             result.error = f"{type(e).__name__}: {e}"
             logger.error("Run failed: %s", e)

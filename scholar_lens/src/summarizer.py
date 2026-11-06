@@ -14,6 +14,7 @@ from typing import Any
 import boto3
 from langchain_core.runnables import Runnable
 
+from ..adapters.retry import is_access_error
 from ..application.usage import staged
 from ..domain.markdown.math import DISPLAY_MATH, HANGUL, image_sources
 from ..domain.quality_gate import publish_blockers
@@ -214,6 +215,8 @@ class PaperSummarizer(RetryableBase, TokenBudgetGuard):
         except TokenBudgetExceeded:
             raise  # an exhausted budget fails fast
         except Exception as e:  # noqa: BLE001 - the long summary is still usable
+            if is_access_error(e):
+                raise
             logger.warning("Summary shortening failed: %s", e)
             shorter = ""
         if (
@@ -253,6 +256,8 @@ class PaperSummarizer(RetryableBase, TokenBudgetGuard):
         except TokenBudgetExceeded:
             raise  # an exhausted budget fails fast
         except Exception as e:  # noqa: BLE001 - the summary is still usable
+            if is_access_error(e):
+                raise
             logger.warning("Summary targeted fix failed: %s", e)
             return summary
         if not fixed or fixed == summary:

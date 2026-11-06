@@ -32,6 +32,7 @@ from langchain_core.runnables import Runnable
 from nltk.tokenize.punkt import PunktTokenizer
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator
 
+from ..adapters.retry import is_access_error
 from ..application.usage import staged
 from ..domain.markdown.lint import arxiv_link_key, unlink_unknown_arxiv, writing_issues
 from ..domain.quality_gate import publish_blockers
@@ -433,6 +434,8 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
                     if (key := arxiv_link_key(url))
                 )
             except Exception as e:  # noqa: BLE001 - supplementary input
+                if is_access_error(e):
+                    raise
                 logger.warning(
                     "Citation summaries failed for '%s': %s", section.title, e
                 )
@@ -442,6 +445,8 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
                     source, k=self.max_code_results
                 )
             except Exception as e:  # noqa: BLE001 - supplementary input
+                if is_access_error(e):
+                    raise
                 logger.warning("Code search failed for '%s': %s", section.title, e)
         return enrichment
 

@@ -174,3 +174,19 @@ def test_a_certificate_failure_is_not_transient() -> None:
     except requests.exceptions.SSLError as wrapped:
         assert not is_transient_error(wrapped)
     assert is_transient_error(requests.ConnectionError("reset"))
+
+
+def test_access_errors_are_told_apart_from_throttling() -> None:
+    from botocore.exceptions import ClientError
+
+    from scholar_lens.adapters.retry import is_access_error
+
+    def error(code: str, status: int) -> ClientError:
+        return ClientError(
+            {"Error": {"Code": code}, "ResponseMetadata": {"HTTPStatusCode": status}},
+            "Converse",
+        )
+
+    assert is_access_error(error("AccessDeniedException", 403))
+    assert not is_access_error(error("ThrottlingException", 429))
+    assert not is_access_error(ValueError("bad JSON"))

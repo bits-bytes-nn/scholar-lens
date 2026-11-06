@@ -144,6 +144,16 @@ def is_transient_error(exc: BaseException) -> bool:
     return True in verdicts
 
 
+def is_access_error(exc: BaseException) -> bool:
+    """Whether ``exc`` is an AWS service refusal no retry or degraded result
+    can fix (credentials, permissions, a rejected request): a step that
+    tolerates failures of optional work still raises it."""
+    return any(
+        isinstance(link, ClientError) and _classify(link) is False
+        for link in _cause_chain(exc)
+    )
+
+
 def _should_stop(retry_state: tenacity.RetryCallState) -> bool:
     if retry_state.attempt_number >= MAX_RETRIES:
         return True
