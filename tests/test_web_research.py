@@ -1505,3 +1505,33 @@ def test_fallback_search_uses_the_second_backend_after_a_failure() -> None:
     assert [r.title for r in search.search("a")] == ["a"]
     assert [r.title for r in search.search("b")] == ["b"]
     assert primary.calls == 1 and search.failed_searches == 0
+
+
+def test_llms_txt_pages_in_scope_come_first_architecture_ahead() -> None:
+    index = (
+        "# Docs\n\n- [Getting started](https://d.dev/serve/start.html): first app\n"
+        "- [Configure](https://d.dev/serve/config.html): settings\n"
+        "- [Architecture](https://d.dev/serve/architecture.html): how Serve works\n"
+        "- [Data](https://d.dev/data/index.html): another library\n"
+    )
+    seed = (
+        "<html><body><main><h1>Serve</h1><p>Start here.</p>"
+        '<a href="https://d.dev/serve/nav-only.html">x</a></main></body></html>'
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/llms.txt":
+            return httpx.Response(200, text=index)
+        return httpx.Response(200, headers={"Content-Type": "text/html"}, text=seed)
+
+    researcher = WebResearcher(
+        client=httpx.Client(transport=httpx.MockTransport(handler))
+    )
+    page = researcher._fetch_page("https://d.dev/serve/index.html")
+    assert page is not None
+    assert researcher._select_subpages(page, "https://d.dev/serve/index.html") == [
+        "https://d.dev/serve/architecture.html",
+        "https://d.dev/serve/config.html",
+        "https://d.dev/serve/start.html",
+        "https://d.dev/serve/nav-only.html",
+    ]

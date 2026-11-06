@@ -673,6 +673,34 @@ PAGE_RATE_LIMIT_RETRIES = 3
 PAGE_RETRY_BASE_SECONDS = 5.0
 
 
+# A page entry of an llms.txt index: "- [Title](url): description".
+_LLMS_LINK = re.compile(
+    r"^\s*[-*]\s*\[([^\]]+)\]\((https?://[^)\s]+)\)(?::\s*(.*))?$", re.M
+)
+# llms.txt entries a guide needs first: how the tool works, then how to run it.
+_INDEX_TIERS = (
+    re.compile(r"architect|design|internal|how .{0,20}works|concept|overview", re.I),
+    re.compile(
+        r"production|deploy|scal|performance|monitor|observab|config|troubleshoot|best practice",
+        re.I,
+    ),
+)
+
+
+def _page_url(url: str) -> str:
+    """The HTML page an llms.txt entry stands for: some sites list the
+    Markdown source (``…/agent-loop/index.md``) of the page at ``…/agent-loop/``."""
+    if url.endswith("/index.md"):
+        return url[: -len("index.md")]
+    if url.endswith(".md"):
+        return url[: -len(".md")] + "/"
+    return url
+
+
+def _index_rank(label: str) -> int:
+    return next((n for n, tier in enumerate(_INDEX_TIERS) if tier.search(label)), 2)
+
+
 class WebResearcher:
     """Fetches pages, discovers in-scope sub-URLs, and extracts text + images."""
 
@@ -689,6 +717,8 @@ class WebResearcher:
         self.search_provider = search_provider or NullSearchProvider()
         # Injected so tests do not wait out a rate limit.
         self._sleep = sleep
+        # Host -> its llms.txt entries (empty when it has none).
+        self._llms_cache: dict[str, list[tuple[str, str]]] = {}
         self.timeout = timeout
         self.max_subpages = max_subpages
         self.max_images_per_page = max_images_per_page
@@ -1194,14 +1224,71 @@ class WebResearcher:
         """In-scope sub-URLs: same host and under the seed's path, deduped. A
         leaf page without an extension (``/docs/peft/guides/lora``) has no
         children, so its siblings are in scope instead — only when they share
-        a topic directory (``/en/latest/`` alone is the whole docs version)."""
+        a topic directory (``/en/latest/`` alone is the whole docs version).
+        When the site publishes an ``llms.txt`` index, its in-scope pages come
+        first, the architecture and concept pages ahead of the rest (a page's
+        navigation order buries them); the page's own links fill up."""
         base = urlparse(base_url)
         scope = _scope_prefix(base.path)
-        selected = self._links_under(page, base_url, scope)
+        indexed = self._llms_index(base_url)
+        selected = self._indexed_under(indexed, base_url, scope)
+        selected += [
+            u for u in self._links_under(page, base_url, scope) if u not in selected
+        ]
         parent = scope.rstrip("/").rsplit("/", 1)[0] + "/"
         if not selected and _is_topic_directory(parent):
-            selected = self._links_under(page, base_url, parent)
-        return selected
+            selected = self._indexed_under(indexed, base_url, parent)
+            selected += [
+                u
+                for u in self._links_under(page, base_url, parent)
+                if u not in selected
+            ]
+        return selected[: self.max_subpages]
+
+    def _llms_index(self, base_url: str) -> list[tuple[str, str]]:
+        """(url, title and description) of each page the site's ``/llms.txt``
+        lists, in its order; empty when the site has none. Fetched once per
+        host."""
+        host = urlparse(base_url).netloc
+        if host in self._llms_cache:
+            return self._llms_cache[host]
+        entries: list[tuple[str, str]] = []
+        index_url = f"{urlparse(base_url).scheme}://{host}/llms.txt"
+        try:
+            response = self.client.get(index_url)
+            if response.status_code == 200 and response.text.lstrip().startswith("#"):
+                entries = [
+                    (_page_url(m.group(2)), f"{m.group(1)} {m.group(3) or ''}".strip())
+                    for m in _LLMS_LINK.finditer(response.text)
+                ]
+        except httpx.HTTPError as e:
+            logger.info("No llms.txt at %s: %s", index_url, e)
+        if entries:
+            logger.info("Using %d pages listed in %s.", len(entries), index_url)
+        self._llms_cache[host] = entries
+        return entries
+
+    def _indexed_under(
+        self, indexed: list[tuple[str, str]], base_url: str, scope: str
+    ) -> list[str]:
+        base = urlparse(base_url)
+        found: list[tuple[int, int, str]] = []
+        seen = {normalize_url(base_url)}
+        for order, (url, label) in enumerate(indexed):
+            parsed = urlparse(url)
+            norm = normalize_url(url)
+            if (
+                parsed.netloc != base.netloc
+                or not (parsed.path.rstrip("/") + "/").startswith(scope)
+                or norm in seen
+            ):
+                continue
+            seen.add(norm)
+            depth = parsed.path[len(scope) :].strip("/").count("/")
+            # Pages right under the scope first (the tool's own architecture
+            # page before a sub-product's), by tier, then the rest.
+            found.append((min(depth, 1), _index_rank(label), depth, order, url))
+        return [entry[-1] for entry in sorted(found)]
 
     def _links_under(self, page: PageContent, base_url: str, scope: str) -> list[str]:
         base = urlparse(base_url)
