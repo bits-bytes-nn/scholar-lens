@@ -169,6 +169,7 @@ def draft_problems(
     papers: Iterable[str] = (),
     target_chars: int = 0,
     own_view_limit: int = 1,
+    passages: Mapping[tuple[str, str], str] | None = None,
 ) -> list[str]:
     """Deterministic problems of a section draft (each quotes its sentence):
     a missing heading, unknown or foreign evidence ids, a number without
@@ -236,11 +237,7 @@ def draft_problems(
         if numbers and not ids and not example:
             problems.append(f"numbers {numbers} without evidence: {quoted}")
         elif numbers and not example:
-            support = " ".join(
-                f"{e.quote} {e.scope} {e.claim} {e.cell}"
-                for i in ids
-                if (e := ledger.get(i))
-            )
+            support = _support(ids, ledger, passages)
             if missing := unsourced_numbers(
                 _plain(sentence), f"{support} {free_numbers}"
             ):
@@ -309,8 +306,28 @@ def section_heading(markdown: str) -> str:
     return m.group(1) if m else ""
 
 
+def _support(
+    ids: Iterable[str],
+    ledger: EvidenceLedger,
+    passages: Mapping[tuple[str, str], str] | None,
+) -> str:
+    """What the cited evidence states: its quote, scope, claim and cell and,
+    with ``passages``, the whole source section each item is quoted from (a
+    table's other values, a number in the next sentence)."""
+    parts = []
+    for i in ids:
+        if (e := ledger.get(i)) is not None:
+            parts.append(f"{e.quote} {e.scope} {e.claim} {e.cell}")
+            if passages:
+                parts.append(passages.get((e.paper_id, e.anchor), ""))
+    return " ".join(parts)
+
+
 def unsourced_number_sentences(
-    markdown: str, ledger: EvidenceLedger, free_numbers: str
+    markdown: str,
+    ledger: EvidenceLedger,
+    free_numbers: str,
+    passages: Mapping[tuple[str, str], str] | None = None,
 ) -> list[str]:
     """Sentences stating numbers their cited evidence does not (or citing
     none); a sentence marked as the writer's own example is left alone."""
@@ -319,11 +336,7 @@ def unsourced_number_sentences(
         numbers = stated_numbers(sentence, free_numbers)
         if not numbers or _EXAMPLE.search(sentence):
             continue
-        support = " ".join(
-            f"{e.quote} {e.scope} {e.claim} {e.cell}"
-            for i in cited_ids(sentence)
-            if (e := ledger.get(i))
-        )
+        support = _support(cited_ids(sentence), ledger, passages)
         if unsourced_numbers(_plain(sentence), f"{support} {free_numbers}"):
             found.append(sentence)
     return found

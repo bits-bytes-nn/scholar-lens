@@ -200,6 +200,10 @@ class EvidenceWriter:
         # Source passages the current section's evidence comes from (guides):
         # the claim check and the fix read them besides the evidence.
         self.reference = ""
+        # (source id, anchor) -> section text: numbers a sentence states are
+        # checked against the whole sections its evidence is quoted from
+        # (guides and papers; a survey checks against the evidence alone).
+        self.passages: dict[tuple[str, str], str] = {}
 
     # ---- read -------------------------------------------------------------------
 
@@ -570,7 +574,7 @@ class EvidenceWriter:
         known = {s for s, _ in found}
         found += [
             (s, "numbers not in its evidence")
-            for s in unsourced_number_sentences(draft, ledger, free)
+            for s in unsourced_number_sentences(draft, ledger, free, self.passages)
             if s not in known
         ]
         return found

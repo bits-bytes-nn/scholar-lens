@@ -335,3 +335,21 @@ def test_a_scripted_summary_run() -> None:
         "## 실험 결과",
         "## 의의와 한계",
     ]
+
+
+def test_numbers_may_come_from_the_section_the_evidence_is_quoted_from() -> None:
+    from scholar_lens.domain.evidence_draft import draft_problems
+
+    md = "## 결과\n\nGPT-4 판정에서 DPO는 61%, 다른 설정에서는 58%였습니다 [[E3]].\n"
+    kwargs: dict[str, Any] = {
+        "title": "결과",
+        "own": ["E3"],
+        "earlier": (),
+        "ledger": _ledger(),
+        "earlier_numbers": {},
+        "figure_urls": (),
+        "free_numbers": "",
+    }
+    assert any("58" in p for p in draft_problems(md, **kwargs))
+    passages = {("2305.18290", "S4"): "61% ... a 58% win rate in the other setting"}
+    assert not any("58" in p for p in draft_problems(md, passages=passages, **kwargs))

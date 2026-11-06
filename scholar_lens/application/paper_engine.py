@@ -316,6 +316,9 @@ class EvidencePaperEngine(EvidenceWriter):
         guideline: str = "",
     ) -> EvidencePaper:
         self._documents = {d.paper_id: d for d in (paper, *extra)}
+        self.passages = {
+            (d.paper_id, s.anchor): s.text for d in (paper, *extra) for s in d.sections
+        }
         self._names = {d.paper_id: d.title for d in (paper, *extra)}
         ledger = await self.read(title, paper, extra)
         if not len(ledger):
@@ -449,6 +452,7 @@ class EvidencePaperEngine(EvidenceWriter):
                 earlier_numbers=numbers,
                 figure_urls=figures,
                 free_numbers=_FREE_NUMBERS,
+                passages=self.passages,
                 exhausted=exhausted,
                 target_chars=target,
                 depth=section.depth if section.kind == "method" else "",
@@ -531,6 +535,7 @@ class EvidencePaperEngine(EvidenceWriter):
                 earlier_numbers={},
                 figure_urls=(),
                 free_numbers=_FREE_NUMBERS,
+                passages=self.passages,
                 own_view_limit=0,
             ) + tldr_problems(md, self.settings.post, self.settings.language)
 

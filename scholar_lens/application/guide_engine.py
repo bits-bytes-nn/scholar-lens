@@ -486,6 +486,9 @@ class EvidenceGuideEngine(EvidenceWriter):
         documents = self.selected(documents)
         by_id = {d.paper_id: d for d in documents}
         self._documents = by_id
+        self.passages = {
+            (d.paper_id, s.anchor): s.text for d in documents for s in d.sections
+        }
         self._aliases = source_aliases(documents, self.products)
         # The claim check sees which kind of source a fact comes from.
         self._names = {
@@ -624,6 +627,7 @@ class EvidenceGuideEngine(EvidenceWriter):
                 earlier_numbers=numbers,
                 figure_urls=figures,
                 free_numbers=_FREE_NUMBERS,
+                passages=self.passages,
                 exhausted=exhausted,
                 target_chars=target,
                 depth=(
@@ -846,6 +850,7 @@ class EvidenceGuideEngine(EvidenceWriter):
                     earlier_numbers={},
                     figure_urls=(),
                     free_numbers=_FREE_NUMBERS,
+                passages=self.passages,
                     target_chars=target,
                     own_view_limit=0,
                 )
