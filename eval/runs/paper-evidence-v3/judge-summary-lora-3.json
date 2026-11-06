@@ -1,0 +1,91 @@
+{
+  "item": "summary-lora",
+  "post": "/tmp/eval-paper/summary-lora-v3.md",
+  "judge_run": 3,
+  "source_checked": "https://arxiv.org/pdf/2106.09685v2 (full text)",
+  "sampling": "prose paragraphs numbered 1-25 after front matter (headings, images, tables, display equations not counted); took paragraphs 3,6,9,12,15,18,21,24, then wrapped to 2,5,8,10,11 plus the two tables they introduce",
+  "scores": {"A": 9.0, "B": 7.5, "C": 6.5, "D": 7.5, "E": 7.5, "F": 9.0},
+  "type_scores": {"U1": 7.5, "U2": 7.5},
+  "deductions": {
+    "A": ["Headings are topic names (L18 '## 연구 배경', L28 '## 제안 방법', L46 '## 구현 방식'); acceptable for the fixed five-section summary outline. Front matter, math delimiters and tables render correctly; description 127 chars."],
+    "B": [
+      "L42 'Adam을 쓸 때 ... 그래서 $$\\alpha$$가 학습률과 같은 역할을 합니다. 그래서 저자들은 처음 시도한 $$r$$ 값을 ...' -- two consecutive '그래서' plus English default verb '역할을 합니다'; rewrite: '$$\\alpha$$를 바꾸는 것은 학습률을 바꾸는 것과 거의 같으므로, 저자들은 처음 시도한 $$r$$ 값을 $$\\alpha$$로 두고 튜닝하지 않았습니다.'",
+      "L89 '그보다 큰 rank로', L93 '더 큰 rank로 학습한 행렬' -- English 'rank' mixed with '랭크' used everywhere else.",
+      "L20 '전체 파인튜닝(fine-tuning)' re-glosses a term already glossed at L16; L40 '어댑터(adapter)' re-glosses L22.",
+      "L64 '... 낫다는 해석입니다' noun frame; rewrite: '... 낫다고 해석합니다.'"
+    ],
+    "C": [
+      "L40 repeats L22-26 almost verbatim (adapter definition, GPT-2 medium on Quadro RTX8000, 'over 30%' slow-down in the online setting) inside the LoRA architecture paragraph -- reads as a stitched fragment.",
+      "L78 '저자들은 연구 배경에서 소개한 MNLI 저데이터 과제를 썼습니다' -- the 연구 배경 section (L18-26) never mentions MNLI or a low-data task; false cross-reference.",
+      "L70 '앞서 든 예처럼 GPT-3를 WikiSQL에 맞춘다면' -- no earlier GPT-3/WikiSQL example exists; the running example is introduced as if already set up."
+    ],
+    "D": [
+      "L44 '규모를 가늠하기 위해 가상의 계산을 해 보겠습니다' promises a sizing example but stays symbolic (d x k vs d+k); plugging d=k=12,288 would give the concrete ratio the reader needs.",
+      "Subspace-similarity formula (L91-93) is well explained with every symbol defined -- good timing."
+    ],
+    "E": [
+      "The headline GPT-3 175B result (paper Table 4: LoRA 4.7M 73.4 / 91.7 / 53.8/29.8/45.9 vs FT 73.8 / 89.5 / 52.0/28.0/44.5) has no table or numbers; L70 says only '같거나 더 높았습니다'. The two tables present (weight-type ablation, low-data MNLI) are secondary results.",
+      "Tables at L54-62 and L80-85 match the paper cell for cell; figures are referred to descriptively."
+    ],
+    "F": [
+      "No wrong or unsupported number found in the sample.",
+      "L97 '이 행렬은 모델이 원래 가진 표현 가운데 SQL 생성에 필요한 방향을 증폭할 뿐입니다' states as fact an extrapolation to WikiSQL of the paper's general Table 7 / H.3 finding (measured on layer 48 Wq, not per task); minor overreach.",
+      "L16/L70 '세 데이터셋 모두 ... 같거나 더 높은' follows the paper's own wording ('matches or exceeds'), although LoRA 4.7M WikiSQL 73.4 is below FT 73.8 (within the stated +/-0.5%); not deducted beyond this note."
+    ],
+    "U1": ["All five questions covered, but results omit the main GPT-3 numbers, the 10,000x trainable-parameter reduction, and any RoBERTa/DeBERTa/GPT-2 results; a reader cannot quote what LoRA scored."],
+    "U2": ["TL;DR is plain prose without math (4 sentences, slightly long). One grounded limitation (L99, L101). Filler: duplicated latency paragraph L40; distilled results table is the low-data one, not the headline."]
+  },
+  "principles": {
+    "claim_headings": {"status": "partly met", "evidence": "Fixed five-section summary outline uses topic headings (L18, L28, L46, L68, L95); summary type allows the fixed 5절 outline per redesign 5.2."},
+    "running_example": {"status": "partly met", "evidence": "GPT-3 on WikiSQL appears at L70, L97, L101 but is referenced as '앞서 든 예' before it was ever set up."},
+    "mechanism_order": {"status": "partly met", "evidence": "L30 problem/hypothesis -> L34 formula -> L42 design choices with reasons -> L44 'worked example' that has no numbers."},
+    "facts_once": {"status": "not met", "evidence": "Adapter latency facts at L22-26 and again L40; 'up to 3x' at L16 and L50; d=12,288 with r=1-2 at L16 and L44; adapter defined at L22 and L40."},
+    "numbers_with_scope": {"status": "partly met", "evidence": "Most numbers carry model and setting (L80 header names GPT-3 175B, MNLI-matched, %), but L52 drops the 18M budget, L76 says '일정 개수' for the 256/32 token thresholds, L89 says '그보다 큰 rank' for r=64."},
+    "nothing_invented": {"status": "met", "evidence": "Hypothetical examples are labeled (L44 '가상의 계산', L48 '가상의 과제 X'); no formula or result outside the paper."},
+    "writer_assessment": {"status": "met", "evidence": "L101 '이 글의 관점에서는 ... 일반화하려면 검증이 더 필요합니다 ... LoRA가 거의 기본 선택지입니다'."},
+    "length_fit": {"status": "met", "evidence": "About 6,000 non-space characters; hard part (subspace analysis) gets the most space."},
+    "type_shape": {"status": "partly met", "evidence": "Opens with ## TL;DR, five-question arc; missing the headline results table."},
+    "korean_style": {"status": "partly met", "evidence": "'입니다' register kept throughout; repeated '그래서' (L42), mixed 'rank'/'랭크' (L89, L93), repeated glosses (L20, L40)."}
+  },
+  "claims": {
+    "checked": 15,
+    "numbers": 9,
+    "supported": 15,
+    "unsupported": 0,
+    "wrong": 0,
+    "unverifiable": 0,
+    "examples": [
+      {"line": 22, "claim": "GPT-2 medium latency measured on NVIDIA Quadro RTX8000, single forward pass averaged over 100 trials", "verdict": "supported", "source": "App. B: 'We measure the latency of a single forward pass on an NVIDIA Quadro RTX8000 by averaging over 100 trials.'"},
+      {"line": 22, "claim": "AdapterH = Houlsby et al. original design; AdapterL = Lin et al. more efficient variant; batch size, sequence length, bottleneck r varied", "verdict": "supported", "source": "App. B: 'the original one by Houlsby et al. (2019), which we call AdapterH, and a recent, more efficient variant by Lin et al. (2020), which we call AdapterL'"},
+      {"line": 40, "claim": "slow-down over 30% with small batch, short sequence (online)", "verdict": "supported", "source": "Fig. 5 caption: 'the slow-down can be as high as over 30% in an online, short-sequence-length scenario'; Table 1 AdapterH +30.3%"},
+      {"line": 42, "claim": "A random Gaussian, B zero, so BA is zero at start", "verdict": "supported", "source": "Sec. 4.1: 'random Gaussian initialization for A and zero for B, so ΔW = BA is zero at the beginning of training'"},
+      {"line": 42, "claim": "alpha set to the first r tried and not tuned; tuning alpha ~ tuning LR with Adam", "verdict": "supported", "source": "Sec. 4.1: 'we simply set α to the first r we try and do not tune it'"},
+      {"line": 44, "claim": "GPT-3 175B: r of 1 or 2 suffices though full rank d is 12,288", "verdict": "supported", "source": "Sec. 1: 'a very low rank (i.e., r in Figure 1 can be one or two) suffices even when the full rank (i.e., d) is as high as 12,288'"},
+      {"line": 50, "claim": "hardware barrier to entry lowered up to 3x with adaptive optimizers", "verdict": "supported", "source": "Sec. 1: 'lowers the hardware barrier to entry by up to 3 times when using adaptive optimizers'"},
+      {"line": "54-62", "claim": "Weight-type ablation table (Wq 8 70.4/91.0 ... all four r=2 73.7/91.7)", "verdict": "supported", "source": "Table 5, all 14 cells match"},
+      {"line": 66, "claim": "GPT-2 Medium E2E NLG optimal rank 4-16 depending on metric", "verdict": "supported", "source": "H.2: 'The optimal rank for GPT-2 Medium is between 4 and 16 depending on the metric used'"},
+      {"line": 76, "claim": "prefix tuning drops sharply with more special tokens; authors suspect input distribution shift", "verdict": "supported", "source": "Sec. 5.5: 'more than 256 special tokens for prefix-embedding tuning or more than 32 ... we suspect that having more special tokens causes the input distribution to shift'"},
+      {"line": "80-87", "claim": "Low-data MNLI table (FT 60.2/85.8/88.9/89.5 ... LoRA 63.8/85.6/89.2/91.7) and ±0.3 seed variance", "verdict": "supported", "source": "Table 16 cells match; F.3: 'comparable results on MNLI-1k and MNLI-10K considering the (±0.3) variance'"},
+      {"line": 89, "claim": "SVD of A learned with r=8 and a larger rank from the same pre-trained model; right-singular vectors", "verdict": "supported", "source": "Sec. 7.2: 'Given Ar=8 and Ar=64 ... using the same pre-trained model, we perform singular value decomposition and obtain the right-singular unitary matrices'"},
+      {"line": 93, "claim": "analysis on the 48th of 96 layers", "verdict": "supported", "source": "Sec. 7.2: 'We only look at the 48th layer (out of 96)'"},
+      {"line": 93, "claim": "ΔWq and ΔWv share a 1-dimensional subspace with high normalized similarity; other directions likely noise", "verdict": "supported", "source": "Sec. 7.2: 'share a subspace of dimension 1 with normalized similarity > 0.5 ... other directions potentially contain mostly random noises'"},
+      {"line": 99, "claim": "open problems: heuristic choice of matrices, combining with other methods, rank-deficiency of ΔW implying W; small r may fail for a different language", "verdict": "supported", "source": "Sec. 8 future works 1), 3), 4); footnote 6 (different-language thought experiment)"}
+    ],
+    "extra_checked_outside_sample": [
+      {"line": 97, "claim": "similarity between top-4 directions of ΔW and top-10% of W barely exceeds 0.2", "verdict": "supported", "source": "H.3"}
+    ]
+  },
+  "checklist": {
+    "repeated": 0,
+    "avoided": 0,
+    "na": 0,
+    "repeated_ids": [],
+    "note": "human_fixes.yaml summary-lora has fixes: [] (no published post). Generic defects from its notes: no HTML entity leak in the body, title is the paper title, not 'Pdf'."
+  },
+  "extras": {},
+  "top_issues": [
+    "Headline GPT-3 175B results (paper Table 4) have no numbers or table; L70 says only '같거나 더 높았습니다', and the 10,000x parameter reduction is never stated.",
+    "Facts repeated: adapter latency setup and '30% 넘게' at L22-26 and again L40; 'up to 3x' at L16/L50; d=12,288 at L16/L44.",
+    "False cross-references: L78 '연구 배경에서 소개한 MNLI 저데이터 과제' and L70 '앞서 든 예처럼 GPT-3를 WikiSQL에' point to content that does not exist."
+  ]
+}

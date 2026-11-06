@@ -1,0 +1,151 @@
+{
+  "kind": "review",
+  "status": "failed",
+  "input": "2501.13956",
+  "title": null,
+  "markdown_path": null,
+  "plan_path": null,
+  "s3_uri": null,
+  "pr_url": null,
+  "warnings": [
+    "Tag 'Agentic-AI' (or its acronym) does not appear in the paper; check it fits.",
+    "Evidence that misstates its quote was left out: E4 (The claim adds that this was not tested in the experiments and is future work; the quote says nothing like that.)",
+    "Section '정적 RAG로는 계속 바뀌는 사용자 사실을 따라갈 수 없다는 문제': check 6 sentence(s) the evidence may not support: Zep은 첫 메시지가 들어온 시각을 기준으로 '지난달'을 12월로 해석하고, 이 날짜를 '사용자-거주-서울' 엣지의 유효 시작 시점으로 기록합니다. (unsupported: The given sections do not describe resolving relative dates or recording an edge's valid-from time.) | 3월 메시지가 들어오면 새 사실이 기존 사실과 모순된다고 판단하고, 서울 엣지의 유효 종료 시점을 부산 엣지의 시작 시점으로 맞춰 닫습니다. (unsupported: The given sections do not describe detecting contradictions or closing an edge's validity period.) | 이후 \"사용자는 어디 사나요?\"라는 질문이 오면 두 엣지가 유효기간과 함께 컨텍스트로 넘어갑니다. (unsupported: The given sections do not say edges are passed to the answer model as context together with their validity periods.) | 답변 모델은 이를 근거로 지금은 부산에 살고 예전에는 서울에 살았다고 답할 수 있습니다. (unsupported: Nothing in the given sections supports this account of how the answer model responds.) | Zep이 새로 더한 요소는 이 계층 위에 얹은 시간 축입니다. (unsupported: The given sections do not claim the time axis is Zep's new contribution layered on top of this hierarchy.)",
+    "Section '정적 RAG로는 계속 바뀌는 사용자 사실을 따라갈 수 없다는 문제' still has: numbers ['12'] without evidence: Zep은 첫 메시지가 들어온 시각을 기준으로 '지난달'을 12월로 해석하고, 이 날짜를 '사용자-거주-서울' 엣지의 유효 시작 시점으로 기록합니다. | describes the post's inputs instead of the papers; state what the paper does or leave it out: 원문을 보존하는 에피소드(episode) 서브그래프와 추출한 지식을 담는 의미 서브그래프를 구분하는 설계는 AriGraph에서 가져왔습니다 .",
+    "Section '에피소드·의미 엔티티·커뮤니티의 3계층 그래프 구조': check 1 sentence(s) the evidence may not support: 여기서 $$\\phi^{*}$$는 결합 함수 $$\\phi$$의 역상, 곧 주어진 노드 쌍에 대응하는 엣지들의 집합입니다 [[E10]]. (unsupported: The paper never defines φ* as an inverse image; that reading is the post's own interpretation.)",
+    "Section '직전 메시지 문맥과 제한된 하이브리드 검색으로 엔티티와 사실을 중복 없이 쌓는 수집 파이프라인': check 1 sentence(s) the evidence may not support: 두 검색을 함께 쓰는 하이브리드 검색(hybrid search)은 서로의 약점을 메웁니다. (unsupported: The paper does not claim that the two searches make up for each other's weaknesses.)",
+    "Section '이중 시간 모델과 모순 기반 엣지 무효화' still has: points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 메시지의 $$t_{\\text{ref}}$$가 1월이므로 '지난달'은 앞서 본 이사 시점으로 해석되고, '사용자-거주-서울' 엣지의 $$t_{\\text{valid}}$$에 그 시점이 기록됩니다. | points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 답변 모델은 이 정보를 보고 \"현재는 부산에 살고, 앞서 본 이사 시점부터 3월까지는 서울에 살았다\"고 답할 수 있습니다.",
+    "Section '검색·재순위·구성 3단계로 이루어진 메모리 검색 함수' still has: points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 엣지는 fact 필드, 엔티티는 이름, 커뮤니티는 앞서 설명한 키워드 기반 커뮤니티 이름을 검색합니다.",
+    "Section 'DMR에서의 근소한 우위와 그 우위가 말해주지 않는 것' still has: points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 앞서 소개한 대로, 여러 세션으로 이루어진 다중 세션 대화로 구성됩니다. | points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 앞서 본 세션 구성을 모두 합쳐도 대화 하나가 메시지 60개뿐이어서, 현재 LLM의 컨텍스트 창에 쉽게 들어갑니다 . | evidence ['E5'] was already referred back to once; do not restate it again: Zep은 서울 엣지의 $$t_{\\text{invalid}}$$를 부산 엣지의 $$t_{\\text{valid}}$$, 즉 3월 언급을 기준으로 한 부산 거주 시작 시점으로 설정해 서울 엣지의 유효 기간을 닫습니다 .",
+    "Section 'LongMemEval에서 확인된 정확도 상승과 약 90%의 지연 감소': check 5 sentence(s) the evidence may not support: 전체 컨텍스트 기준선은 이 대화를 통째로 프롬프트에 넣습니다. (unsupported: Full-context method not described in provided evidence beyond 115k tokens) | 앞서 든 서울·부산 예시로 보면 이유를 짐작할 수 있습니다. (unsupported: Seoul/Busan example not in evidence) | Zep에서는 앞서 설명한 엣지 무효화로 서울 엣지가 이미 닫혀 있습니다 [[E5]]. (unsupported: Illustrative example not in paper) | 그래서 검색 단계는 두 사실을 유효기간과 함께 몇 줄의 텍스트로 넘깁니다 [[E16]]. (unsupported: Example-specific claim not in paper) | 논문은 이 지연이 어떤 구간을 포함하는지, 예컨대 대화를 그래프로 수집하는 비용이 들어가는지 밝히지 않습니다. (unsupported: Not verifiable from provided sections)",
+    "Section 'LongMemEval에서 확인된 정확도 상승과 약 90%의 지연 감소' still has: heading is a sentence: write the claim as a noun phrase ('정책보다 먼저 무너지는 보상 모델'): MemGPT와의 비교는 빠졌습니다 | evidence ['E19'] was already referred back to once; do not restate it again: Zep은 같은 대화를 그래프에 넣은 뒤 관련도 상위 20개 엣지와 엔티티 노드만 컨텍스트로 넘깁니다 . | ['20'] already stated in '대화 이력을 그래프에 넣고 상위 20개 노드·엣지를 쓰는 평가 설정': refer back without repeating: Zep은 같은 대화를 그래프에 넣은 뒤 관련도 상위 20개 엣지와 엔티티 노드만 컨텍스트로 넘깁니다 . | evidence ['E5'] was already referred back to once; do not restate it again: Zep에서는 앞서 설명한 엣지 무효화로 서울 엣지가 이미 닫혀 있습니다 . | evidence ['E16'] was already referred back to once; do not restate it again: 그래서 검색 단계는 두 사실을 유효기간과 함께 몇 줄의 텍스트로 넘깁니다 .",
+    "Section '질문 유형별로 엇갈리는 효과: 선호 질문은 크게 향상, 어시스턴트 발화 질문은 하락' still has: evidence ['E5', 'E16'] was already referred back to once; do not restate it again: 예를 들어 사용자가 서울에서 부산으로 이사한 가상의 상황이라면, 앞서 본 엣지 무효화가 서울 엣지의 $$t_{\\text{invalid}}$$를 부산 엣지의 $$t_{\\text{valid}}$$로 설정해 닫고 , 구성 단계가 두 사실을 유효기간과 함께 넘깁니다 . | evidence ['E19'] was already referred back to once; do not restate it again: 반면 Zep은 앞서 본 평가 설정대로 가장 관련 높은 엣지와 엔티티 노드 상위 20개만 넘기므로 , 추출 단계에서 사실 형태로 남지 않은 어시스턴트 발화의 세부 내용은 컨텍스트에 들어가지 못했을 가능성이 있습니다. | ['20'] already stated in '대화 이력을 그래프에 넣고 상위 20개 노드·엣지를 쓰는 평가 설정': refer back without repeating: 반면 Zep은 앞서 본 평가 설정대로 가장 관련 높은 엣지와 엔티티 노드 상위 20개만 넘기므로 , 추출 단계에서 사실 형태로 남지 않은 어시스턴트 발화의 세부 내용은 컨텍스트에 들어가지 못했을 가능성이 있습니다.",
+    "Section '한계와 시사점': check 1 sentence(s) the evidence may not support: 더구나 앞서 본 평가 설정은 엣지와 엔티티 노드만 검색하고 커뮤니티를 검색 대상에 넣지 않았으므로 [[E19]], 커뮤니티 요약이 성능에 얼마나 기여하는지도 확인되지 않은 상태입니다. (unsupported: The evidence says only edges and entity nodes were retrieved. It does not say communities were excluded, and the post's conclusion about how much community summaries contribute goes beyond what the paper states.)",
+    "Section '한계와 시사점' still has: evidence ['E5'] was already referred back to once; do not restate it again: 3월에 \"이제 부산에 살아요\"가 들어오면 앞서 본 무효화 규칙이 서울 엣지를 닫습니다 . | evidence ['E19'] was already referred back to once; do not restate it again: 더구나 앞서 본 평가 설정은 엣지와 엔티티 노드만 검색하고 커뮤니티를 검색 대상에 넣지 않았으므로 , 커뮤니티 요약이 성능에 얼마나 기여하는지도 확인되지 않은 상태입니다.",
+    "Section '직전 메시지 문맥과 제한된 하이브리드 검색으로 엔티티와 사실을 중복 없이 쌓는 수집 파이프라인': whole-post review problems left as they were: 그래프 정의 G=(N,E,φ)와 세 계층 설명을 앞 섹션에 이어 다시 하고 있습니다. 게다가 'φ가 무엇을 나타내는지는 여기서 인용한 근거에 정의되어 있지 않습니다'라는 문장은 글의 자료를 두고 하는 말이고, 앞 섹션에서 이미 정의한 φ와도 어긋납니다. Fix: 수식과 계층 설명을 지우",
+    "Section 'DMR에서의 근소한 우위와 그 우위가 말해주지 않는 것': whole-post review problems left as they were: '앞서 소개한 대로, 여러 세션으로 이루어진'과 '앞서 본 세션 구성'이 가리키는 DMR 구성 설명이 이전 섹션 어디에도 없습니다. 또 '앞서 본 평가 설정보다 적은 개수'라고 하면서 E19를 근거로 단 것은 평가 설정 섹션의 '두 실험 모두 20개'라는 설명과 모순됩니다. Fix: D | 이사 예시와 무효화 메커니즘을 또 처음부터 설명합니다. Fix: '사실의 유효기간과 기록 시점을 분리하는 이중 시간 모델' 섹션을 가리키는 한 문장으로 줄이세요.",
+    "Section '질문 유형별로 엇갈리는 효과: 선호 질문은 크게 향상, 어시스턴트 발화 질문은 하락': whole-post review problems left as they were: '하락의 원인은 따로 분석하지 않았습니다'는 논문에 대한 부재 주장입니다. 이사 예시와 무효화 설명도 다시 반복합니다. Fix: 부재 주장을 지우세요. 예시는 이중 시간 모델 섹션을 가리키는 한 줄로 줄이세요."
+  ],
+  "error": "S3OperationError: Failed to upload '/Users/youngmki/Projects/scholar-lens/papers/2501_13956/2026-06-07-zep-a-temporal-knowledge-graph-architecture-for-agent-memory.md'",
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 1311.2,
+  "input_tokens": 885682,
+  "output_tokens": 150754,
+  "estimated_cost_usd": 5.6953,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 107,
+      "failed_calls": 0,
+      "input_tokens": 345412,
+      "output_tokens": 150754,
+      "cache_read_tokens": 277378,
+      "cache_write_tokens": 262892,
+      "cost_usd": 5.695344
+    },
+    "by_stage": {
+      "extract_attributes": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 17716,
+        "output_tokens": 235,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.001889
+      },
+      "extract_citations": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 19192,
+        "output_tokens": 1475,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.053134
+      },
+      "outline": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 4962,
+        "cache_read_tokens": 1327,
+        "cache_write_tokens": 3697,
+        "cost_usd": 0.118272
+      },
+      "verify": {
+        "calls": 45,
+        "failed_calls": 0,
+        "input_tokens": 214602,
+        "output_tokens": 26517,
+        "cache_read_tokens": 141423,
+        "cache_write_tokens": 54842,
+        "cost_usd": 1.719526
+      },
+      "draft": {
+        "calls": 12,
+        "failed_calls": 0,
+        "input_tokens": 48,
+        "output_tokens": 24988,
+        "cache_read_tokens": 36708,
+        "cache_write_tokens": 97802,
+        "cost_usd": 1.00365
+      },
+      "review": {
+        "calls": 13,
+        "failed_calls": 0,
+        "input_tokens": 52,
+        "output_tokens": 7870,
+        "cache_read_tokens": 16644,
+        "cache_write_tokens": 50264,
+        "cost_usd": 0.415588
+      },
+      "fix": {
+        "calls": 33,
+        "failed_calls": 0,
+        "input_tokens": 93794,
+        "output_tokens": 84484,
+        "cache_read_tokens": 81276,
+        "cache_write_tokens": 53700,
+        "cost_usd": 2.365874
+      },
+      "finalize": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 223,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 2587,
+        "cost_usd": 0.017411
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-haiku-5-5": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 17716,
+        "output_tokens": 235,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.001889
+      },
+      "global.anthropic.claude-sonnet-5-5": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 19192,
+        "output_tokens": 1475,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.053134
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 105,
+        "failed_calls": 0,
+        "input_tokens": 308504,
+        "output_tokens": 149044,
+        "cache_read_tokens": 277378,
+        "cache_write_tokens": 262892,
+        "cost_usd": 5.640321
+      }
+    }
+  }
+}

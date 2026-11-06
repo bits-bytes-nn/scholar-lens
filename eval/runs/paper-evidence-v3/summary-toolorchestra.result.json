@@ -1,0 +1,150 @@
+{
+  "kind": "summarize",
+  "status": "succeeded",
+  "input": "2511.21689",
+  "title": "ToolOrchestra: Elevating Intelligence via Efficient Model and Tool Orchestration",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/2511_21689/2026-10-16-toolorchestra-elevating-intelligence-via-efficient-model-and-tool-orchestration-summary.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-10-16-toolorchestra-elevating-intelligence-via-efficient-model-and-tool-orchestration-summary.md",
+  "pr_url": null,
+  "warnings": [
+    "Tag 'Multi-Objective-Reward' (or its acronym) does not appear in the paper; check it fits.",
+    "Tag 'Cost-Efficient-Tool-Use' (or its acronym) does not appear in the paper; check it fits.",
+    "Tag 'Synthetic-Tool-Use-Environments' (or its acronym) does not appear in the paper; check it fits.",
+    "Evidence that misstates its quote was left out: E11 (GPT-5 preferring its own GPT-5/GPT-5-mini variants is a self-enhancement bias, but the claim calls it an other-enhanceme); E14 (Qwen3-8B handing tasks to the stronger GPT-5 is an other-enhancement bias, but the claim calls it a self-enhancement bia)",
+    "Section '제안 방법' still has: points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 학습 중에 싼 궤적이 더 높은 점수를 받는 이유는 앞서 본 배치 최솟값·최댓값 정규화가 음수 비용 항에 적용되기 때문입니다 .",
+    "Section '의의와 한계': check 3 sentence(s) the evidence may not support: 다만 같은 평가에서 τ²-Bench 점수는 기본 도구 구성에서 낸 점수보다 크게 낮습니다 [[E15, E20]]. (unsupported: The numbers line up (48.8 vs 80.2), but the 80.2 comes from the full configuration (basic tools + specialized and generalist LLMs), not from the 'basic tools' setting the sentence names.) | HLE와 Frames에서는 이런 비교를 할 근거가 없습니다. (unsupported: Nothing in the evidence says the paper lacks HLE/Frames scores to compare against; the main table appears to report Orchestrator-8B's HLE and Frames scores, though those rows are not in the evidence given.) | 특히 τ²-Bench처럼 도구를 정확히 호출해야 하는 과제에서 미학습 도구에 대한 일반화는 아직 불완전해 보입니다. (unsupported: Adds a limitation the paper does not state; the paper presents the unseen-tool results as consistently best and as confirming generalization.)",
+    "Section '의의와 한계' still has: points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 앞서 본 가상의 HLE 질문으로 말하면, 이 모델은 GPT-5를 기본값으로 두지 않습니다. | ['4.1'] already stated in '실험 결과': refer back without repeating: Claude Opus 4.1, o3-mini, Gemma-3-27b-it 같은 모델로 도구를 구성했을 때 Orchestrator-8B는 HLE 22.0, Frames 73.8, τ²-Bench 48.8로 가장 높았고, 비용 34.8과 지연 8.2는 가장 낮았습니다 . | 859 characters of prose for a target of 500: cut background, repetition and minor detail"
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 739.8,
+  "input_tokens": 614990,
+  "output_tokens": 89160,
+  "estimated_cost_usd": 2.939,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 69,
+      "failed_calls": 0,
+      "input_tokens": 128389,
+      "output_tokens": 89160,
+      "cache_read_tokens": 270478,
+      "cache_write_tokens": 216123,
+      "cost_usd": 2.93905
+    },
+    "by_stage": {
+      "figures": {
+        "calls": 7,
+        "failed_calls": 0,
+        "input_tokens": 16240,
+        "output_tokens": 6091,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.004671
+      },
+      "extract_attributes": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 37570,
+        "output_tokens": 363,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.003939
+      },
+      "read": {
+        "calls": 12,
+        "failed_calls": 0,
+        "input_tokens": 28,
+        "output_tokens": 10900,
+        "cache_read_tokens": 118094,
+        "cache_write_tokens": 31254,
+        "cost_usd": 0.210811
+      },
+      "outline": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 3267,
+        "cache_read_tokens": 1174,
+        "cache_write_tokens": 3479,
+        "cost_usd": 0.083221
+      },
+      "verify": {
+        "calls": 22,
+        "failed_calls": 0,
+        "input_tokens": 55759,
+        "output_tokens": 29519,
+        "cache_read_tokens": 94570,
+        "cache_write_tokens": 59057,
+        "cost_usd": 1.146528
+      },
+      "draft": {
+        "calls": 6,
+        "failed_calls": 0,
+        "input_tokens": 24,
+        "output_tokens": 8676,
+        "cache_read_tokens": 18354,
+        "cache_write_tokens": 52119,
+        "cost_usd": 0.441555
+      },
+      "review": {
+        "calls": 7,
+        "failed_calls": 0,
+        "input_tokens": 28,
+        "output_tokens": 7776,
+        "cache_read_tokens": 7872,
+        "cache_write_tokens": 14447,
+        "cost_usd": 0.231017
+      },
+      "fix": {
+        "calls": 12,
+        "failed_calls": 0,
+        "input_tokens": 18732,
+        "output_tokens": 21665,
+        "cache_read_tokens": 30414,
+        "cache_write_tokens": 54128,
+        "cost_usd": 0.791037
+      },
+      "finalize": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 903,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 1639,
+        "cost_usd": 0.026271
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-haiku-5-5": {
+        "calls": 8,
+        "failed_calls": 0,
+        "input_tokens": 53810,
+        "output_tokens": 6454,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.00861
+      },
+      "global.anthropic.claude-sonnet-5-5": {
+        "calls": 12,
+        "failed_calls": 0,
+        "input_tokens": 28,
+        "output_tokens": 10900,
+        "cache_read_tokens": 118094,
+        "cache_write_tokens": 31254,
+        "cost_usd": 0.210811
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 49,
+        "failed_calls": 0,
+        "input_tokens": 74551,
+        "output_tokens": 71806,
+        "cache_read_tokens": 152384,
+        "cache_write_tokens": 184869,
+        "cost_usd": 2.719629
+      }
+    }
+  }
+}

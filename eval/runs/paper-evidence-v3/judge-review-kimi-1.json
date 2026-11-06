@@ -1,0 +1,87 @@
+{
+  "item": "review-kimi",
+  "post": "/tmp/eval-paper/review-kimi-v3.md",
+  "source": "https://arxiv.org/html/2507.20534 (v2, full text + Figure 1 image)",
+  "scores": {"A": 8.5, "B": 8.0, "C": 7.5, "D": 8.5, "E": 8.0, "F": 6.5},
+  "type_scores": {"R1": 7.0, "R2": 8.5, "R3": 8.0, "G": 9.0, "X1": 7.5},
+  "score_evidence": {
+    "A": "Clean claim-headed H2 arc, TL;DR four questions, $$-only math, valid front matter (subtitle, paper_author, paper_doi, use_math). Deductions: L300 denominator '{% raw %}{{\\pi}_{\\mathrm{old}}{% endraw %}(y_{i}|x)' mixes Liquid raw into math and uses '|' as a conditional bar; L488 '### References' sits as an H3 under '## 한계와 시사점'; no SFT section and no verifiable-rewards subsection under the RL H2 (L292-331).",
+    "B": "Natural 입니다 register overall. L217 '희소도 48만으로도' reads as 480,000 (rewrite: '희소도 48만 되어도 이미'); L478 '자기 단서 달기' is a calque of self-qualification (rewrite: '스스로 확신을 낮추는 단서'); L153 '두 번째 요소는 다이어그램 하나로 정리됩니다.' formulaic figure lead-in; L150 '...피할 수 있습니다' for what simply happens; '앞서 본' used as a connector many times (L187, L250, L290, L329, L375, L402, L417, L451, L471, L480).",
+    "C": "Good concept-before-use and cross-links. Repetition: QK-Clip logits capped at tau then decaying stated at L125 and again at L250; rubric filtering stated at L284 and restated at L290 in back-to-back paragraphs; H2D-bound limitation at L363 repeated at L480; L260 '구체적인 방식은 뒤의 궤적 생성 부분에서 다룹니다' is a forward-pointer meta sentence.",
+    "D": "Hard parts get help at the right moment: the S_max=200 head example (L54, L98, L108), the per-component sqrt(gamma) reasoning (L108), the K=4 reward toy table (L306-313), the airline rubric example (L286). Mild padding on easy points (L157 diagram walkthrough, L231 'speedup 수치는 담고 있지 않습니다').",
+    "E": "Figures described by content; tables copy cells verbatim (rephrasing, architecture, safety 25 cells all match). Deductions: L392 table cell '72.5 (그림 1 표시값)' and L396 '그림 1에 표시된 값' use the paper's figure numbering; L390-394 SWE table puts different comparison models in one column.",
+    "F": "15 sampled claims all supported. Outside the sample: L31 and L379 'temperature 0.0' is not in the paper (only 'unified temperature and top-p settings'); L375 '여러 패널에서 K2가 가장 높지만 SWE-bench Verified 패널에서는 ... 낮습니다' implies that is the only exception, but Figure 1 also has Claude 4 Opus 67.6 > 66.1 on Tau2-bench, GPT-4.1 80.1 > 76.5 on AceBench and Claude 4 Sonnet 51.0 > 47.3 on SWE-bench Multilingual; L300 '(y_{i}|x)' instead of \\mid; L125 claims the 30%-of-training stabilisation 'roughly overlaps' the 70000-step clipping window, an inference the paper does not state."
+  },
+  "principles": {
+    "claim_headings": {"status": "met", "evidence": "L35, L62, L137, L181, L221, L252, L292, L333, L369, L449 are claim noun phrases; only L177 '저자들이 남긴 단서' and L482 '언제 쓸 것인가' are topic headings."},
+    "running_example": {"status": "partly met", "evidence": "L54 sets up one head with S_max=200 ('이후 내용도 이 헤드 하나를 따라갑니다') and L98/L108 reuse it, but it ends with the MuonClip section; RL uses an unrelated toy (L306)."},
+    "mechanism_order": {"status": "met", "evidence": "QK-Clip: problem L43-50 -> design vs soft-cap/QK-Norm L52 -> formulas L80-106 -> worked numbers L54/L108; RL loss L300 -> toy table L308."},
+    "facts_once": {"status": "partly met", "evidence": "tau=100 logit behaviour L125 and L250; rubric filter L284 and L290; H2D bound L363 and L480."},
+    "numbers_scoped": {"status": "partly met", "evidence": "Most numbers carry model/setting (L31 non-thinking, Avg@4; L392 single vs multi attempt). L379 adds an unsourced 'temperature 0.0'."},
+    "nothing_invented": {"status": "partly met", "evidence": "Hypothetical examples are labelled '가상' (L54, L286, L306, L327) and writer views marked '필자의 해석' (L329, L463); but 'temperature 0.0' (L31, L379) is not in the paper."},
+    "writer_assessment_at_end": {"status": "met", "evidence": "L469-484 gives transferable parts, author-stated limitations and when to use it, with the writer's own deployment advice marked (L477 '이 글의 판단으로는')."},
+    "length_fitted": {"status": "partly met", "evidence": "489 lines; infra and tool-synthesis are detailed while SFT data, RLVR domains (math/code/IF/faithfulness/safety), PTX loss, critic refinement and long-context/factuality results are absent."},
+    "type_shape": {"status": "met", "evidence": "TL;DR with four questions (L14-31), method -> experiments -> 한계와 시사점 (L465)."},
+    "korean_style": {"status": "partly met", "evidence": "L217 '희소도 48만으로도', L478 '자기 단서 달기', frequent '앞서 본' connectors."}
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 15,
+    "unsupported": 0,
+    "wrong": 0,
+    "unverifiable": 0,
+    "sampling": "body paragraphs after the TL;DR, excluding headings/images/display math; paragraph 1 then every third (1,4,7,...)",
+    "examples": [
+      {"line": 54, "claim": "q^C, k^C scaled by sqrt(gamma_h), q^R by gamma_h, shared k^R untouched", "type": "method", "verdict": "supported", "source": "Sec 2.1: 'qC and kC (head-specific components): each scaled by sqrt(gamma_h); qR (head-specific rotary): scaled by gamma_h; kR (shared rotary): left untouched'"},
+      {"line": 129, "claim": "0.5B active / 3B total MoE, tau=30, negligible loss impact, no significant downstream degradation", "type": "number", "verdict": "supported", "source": "App. D: 'two small-scale 0.5B activated and 3B total parameters MoE models ... (tau=30) ... negligible effects on the loss curve ... no statistically significant d[egradation]'"},
+      {"line": 149, "claim": "style/perspective-diverse prompts inspired by WRAP", "type": "attribution", "verdict": "supported", "source": "Sec 2.2: 'Inspired by WRAP [50], we apply a range of carefully engineered prompts'"},
+      {"line": 161, "claim": "math rewritten as learning notes following SwallowMath; translation into English", "type": "attribution", "verdict": "supported", "source": "Sec 2.2: 'learning-note style, following the methodology introduced in SwallowMath [16] ... translating ... into English'"},
+      {"line": 169, "claim": "SimpleQA 23.76 / 27.39 / 28.94 for 0x10, 1x10, 10x1; each corpus rephrased at most twice", "type": "number", "verdict": "supported", "source": "Table 1 cells; 'each corpora is rephrased at most twice'"},
+      {"line": 201, "claim": "experts +50%, heads -50%, total params +54%, active -13%", "type": "number", "verdict": "supported", "source": "Table 2 delta column (54%, 13%, 50%, 50%); note 32.6/37 is -11.9% arithmetically, the post follows the paper"},
+      {"line": 217, "claim": "doubling heads improves validation loss 0.5-1.2% at iso-token; sparsity 48 suffices; 64 heads chosen", "type": "number", "verdict": "supported", "source": "Sec 2.3: 'modest improvements in validation loss (ranging from 0.5% to 1.2%) ... Given that sparsity 48 already offers strong performance ... 64 attention heads'"},
+      {"line": 235, "claim": "MoE up-proj and SwiGLU inputs stored as FP8-E4M3 in 1x128 tiles with FP32 scales; no FP8 compute", "type": "number", "verdict": "supported", "source": "Sec 2.4.3: 'compressed to FP8-E4M3 in 1x128 tiles with FP32 scales ... we do not apply FP8 in computation'"},
+      {"line": 248, "claim": "weight decay 0.1 throughout, global batch 67M tokens, YaRN to 128k, 32k only for the last 60B tokens", "type": "number", "verdict": "supported", "source": "Sec 2.5: 'Weight decay was set to 0.1 throughout ... 67M tokens ... additional 60 billion tokens with a 32k sequence length ... YaRN'"},
+      {"line": 276, "claim": "thousands of agents from synthesized system prompts and tool combinations; rubric holds success criteria, expected tool-use patterns, checkpoints", "type": "method", "verdict": "supported", "source": "Sec 3.1.1: 'We generate thousands of distinct agents ... explicit rubric that specifies success criteria, expected tool-use patterns, and evaluation checkpoints'"},
+      {"line": 341, "claim": "each checkpoint-engine worker gets a local copy and broadcasts the full set; inference engine takes only its shard", "type": "method", "verdict": "supported", "source": "Sec 3.3.2: 'each checkpoint engine worker obtains a local copy ... broadcasts the full parameter set ... the inference engine retrieves only the parameter shard it requires'"},
+      {"line": 363, "claim": "two-stage scheme bound by synchronous H2D copies; overhead disappears when the full set fits the H2D buffer at large scale", "type": "method", "verdict": "supported", "source": "App. G: 'bound by multiple synchronous H2D copy operations ... the entire parameter set fits into the H2D buffer in one transfer, the overhead will disappear'"},
+      {"line": 375, "claim": "Claude 4 Opus 72.5 on SWE-bench Verified; Multilingual evaluated only with Claude 4 Sonnet due to cost", "type": "number", "verdict": "supported", "source": "Figure 1 bar (72.5) and footnote 'we evaluated only Claude 4 Sonnet because the cost of Claude 4 Opus was prohibitive' (the surrounding 'K2 highest in several panels' framing omits other panels K2 does not lead; see F)"},
+      {"line": 417, "claim": "LiveCodeBench/OJBench span LeetCode/AtCoder to NOI/ICPC; K2 beats leading open and proprietary models on both", "type": "comparison", "verdict": "supported", "source": "App. C: 'medium-level coding challenges, such as LeetCode and AtCoder, and hard-level contests like NOI and ICPC, outperforming leading open-source and proprietary models'; Table 3 53.7/27.1 top"},
+      {"line": 455, "claim": "safety table: 25 cells (Kimi Basic/IJ/Crescendo, DeepSeek-V3-0324 and Qwen3 Crescendo across 5 plugins)", "type": "number/table", "verdict": "supported", "source": "Table 6: all 25 cells match (e.g. Criminal 100/57.57/56.06/31.81/59.09; Security 77.84/43.90/68.29/87.80/87.80)"}
+    ],
+    "outside_sample_findings": [
+      {"line": "31, 379", "claim": "evaluation at temperature 0.0", "verdict": "unsupported", "source": "Paper only says 'unified temperature and top-p settings'"},
+      {"line": 375, "claim": "K2 highest in several panels, SWE-bench Verified the exception", "verdict": "misleading scope", "source": "Figure 1: Tau2 Claude 4 Opus 67.6 > 66.1; AceBench GPT-4.1 80.1 > 76.5; SWE-bench Multilingual Claude 4 Sonnet 51.0 > 47.3"}
+    ]
+  },
+  "checklist": {
+    "repeated": 0,
+    "avoided": 14,
+    "na": 3,
+    "repeated_ids": [],
+    "items": {
+      "rl-section-duplicated": {"status": "avoided", "evidence": "One RL H2 (L292) and one RL infra H2 (L333); no duplicate headings."},
+      "rl-subheading-levels": {"status": "avoided", "evidence": "RL algorithm (L296) and self-critique (L317) are H3 under the RL H2."},
+      "ppo-claim": {"status": "avoided", "evidence": "L294 'Kimi k1.5에서 도입한 정책 최적화 알고리즘을 바탕으로'; no PPO."},
+      "invented-budget-formula": {"status": "avoided", "evidence": "L327 describes per-task max token budget, truncation and penalty in prose; no formula."},
+      "invented-ptx-formula": {"status": "n/a", "evidence": "PTX loss not mentioned."},
+      "invented-temperature-formula": {"status": "avoided", "evidence": "L329 describes decay in prose only."},
+      "invented-env-code": {"status": "avoided", "evidence": "No code block; L367 'OpenAI Gym에서 영감을 받은 통합 인터페이스'."},
+      "invented-math-verifier": {"status": "n/a", "evidence": "Math/STEM verifiable rewards are not described."},
+      "invented-logic-verifier": {"status": "avoided", "evidence": "No formal-logic verifier claim."},
+      "invented-code-quality-eval": {"status": "avoided", "evidence": "L479 cites real execution sandboxes and test pass rates; no quality/efficiency/security grading."},
+      "invented-safety-monitoring": {"status": "avoided", "evidence": "Safety section (L449-463) is the Promptfoo red-team evaluation; no real-time monitoring claim (the attack/target/judge RL safety pipeline itself is not described)."},
+      "invented-self-refine-loop": {"status": "avoided", "evidence": "L319 '모델이 자기 출력들을 쌍으로 비교해 판정'; no generate-critique-revise loop."},
+      "invented-human-rubric-content": {"status": "n/a", "evidence": "Human-annotated rubrics are not mentioned (L319's helpfulness/creativity list matches the paper's general preference targets)."},
+      "rubric-limitation-garbled": {"status": "avoided", "evidence": "L478 '자기 단서 달기와 얼버무리는 표현을 감점 ... 모호한 영역에서도 확신을 과장' matches App. F."},
+      "invented-infra-mechanisms": {"status": "avoided", "evidence": "L337-367 has no progressive loading, hierarchical broadcast or real-time debugging."},
+      "missing-description": {"status": "avoided", "evidence": "L8 description starts 'Kimi K2는', 143 chars, numbers 15.5T/1.04T/66.1/65.8 all in TL;DR."},
+      "arxiv-https": {"status": "avoided", "evidence": "L489 https://arxiv.org/pdf/2507.20534v2."}
+    }
+  },
+  "extras": {},
+  "top_issues": [
+    "Unsupported setting: 'temperature 0.0' (L31 TL;DR, L379) is not in the paper.",
+    "Coverage gaps: no SFT data beyond tool use, no RLVR domains (math/code/instruction following/faithfulness/safety), no PTX loss or critic refinement; L375 frames SWE-bench Verified as K2's only shortfall though Figure 1 shows it trailing on Tau2-bench, AceBench and SWE-bench Multilingual too.",
+    "Repetition and markup: tau=100 logit story at L125 and L250, rubric filtering at L284/L290, H2D limit at L363/L480; L300 uses '|' and Liquid raw inside math; '희소도 48만으로도' (L217) reads as 480,000; '그림 1' numbering at L392/L396."
+  ]
+}

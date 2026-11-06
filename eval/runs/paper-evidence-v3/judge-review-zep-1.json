@@ -1,0 +1,259 @@
+{
+  "item": "review-zep",
+  "post": "/tmp/eval-paper/review-zep-v3.md",
+  "source": "https://arxiv.org/html/2501.13956v1",
+  "sampling": "94 body paragraphs (blank-line blocks, headings/rules/display math excluded); paragraphs 1,4,7,...,94 read; claims drawn from them",
+  "scores": {
+    "A": 7,
+    "B": 7.5,
+    "C": 6.5,
+    "D": 7.5,
+    "E": 8,
+    "F": 6
+  },
+  "type_scores": {
+    "R1": 8.5,
+    "R2": 7.5,
+    "R3": 7.5
+  },
+  "deductions": {
+    "A": [
+      "L305 orphan sentence '이 지연 수치에서 무엇이 측정되었는지는 구분해서 읽어야 합니다.' followed directly by a heading, no content",
+      "L78-80 repeats the graph definition already given at L46",
+      "L29 TL;DR carries an evidence-ledger meta sentence '기준값과 결과값은 이 근거에 제시되어 있지 않습니다.'"
+    ],
+    "B": [
+      "L29/L82 '이 근거에', '여기서 인용한 근거에' pipeline meta language in reader-facing prose",
+      "L146 'Graphiti는 Zep의 지식 그래프 엔진입니다.' dropped mid-paragraph between two invalidation sentences",
+      "L299 '11.5만 토큰에서 1.6k 토큰으로' mixes unit styles (table uses 115k, L255 uses 115,000토큰)",
+      "L303 '예측 가능해진다는 점에서' noun frame; 8 uses of '할 수 있습니다' for what simply happens (e.g. L167 '답할 수 있습니다')"
+    ],
+    "C": [
+      "L263 '앞서 소개한 대로, 여러 세션으로 이루어진 다중 세션 대화로 구성됩니다' - DMR's structure is never introduced earlier",
+      "L278 '앞서 본 세션 구성을 모두 합쳐도' - 5 sessions x up to 12 messages never stated",
+      "L82 says phi is undefined right after L48 defined it",
+      "L364 '몇 가지를 덧붙입니다 ... 마지막으로' with only two items, second repeating L309"
+    ],
+    "D": [
+      "Seoul/Busan example retold at L38, L52, L56, L113, L115, L156-167, L235-247, L253, L280, L299, L336; L280 (DMR) and L336 are forced re-tellings that add nothing",
+      "Label propagation worked example L183-193 and context string L237-245 are well placed"
+    ],
+    "E": [
+      "Tables copy Table 1-3 cells verbatim, one header row",
+      "Duplicate display formula L46 and L78-80",
+      "L187 hypothetical neighbour table adds little over the sentence at L183"
+    ],
+    "F": [
+      "L82 '$$\\phi$$가 무엇을 나타내는지는 여기서 인용한 근거에 정의되어 있지 않습니다' - wrong: Sec 2 defines phi as 'a formal incidence function' (and the post itself says so at L48)",
+      "L29 '이 수치가 상대 하락인지 %p 하락인지, 기준값과 결과값은 이 근거에 제시되어 있지 않습니다' - wrong: Table 3 gives 94.6->80.4 and 81.8->75.0, and the post's own table at L320/L326 shows them"
+    ]
+  },
+  "principles": {
+    "claim_headings": {
+      "status": "met",
+      "evidence": "H2s are claim noun phrases, e.g. L259 'DMR에서의 근소한 우위와 그 우위가 말해주지 않는 것', L313 '질문 유형별로 엇갈리는 효과: ...'; a few topic H3s (L121 '두 개의 타임라인 T와 T'', L199 '요약과 검색용 이름')"
+    },
+    "running_example": {
+      "status": "met",
+      "evidence": "Seoul->Busan move from L38 through ingestion, invalidation (L156-165), retrieval (L235-245) and results (L299); overused"
+    },
+    "mechanism_choice_formula_example": {
+      "status": "met",
+      "evidence": "Label propagation: choice vs Leiden L173, mechanism L181, worked example L183-193, trade-off L195; retrieval f=chi(rho(phi)) L207 then example L235"
+    },
+    "facts_once": {
+      "status": "not met",
+      "evidence": "single-session-assistant 17.7%/9.06% at L29, L326/L320, L362; 115k tokens at L17, L255, L284; MemGPT omission L309 and L364; community approximation L195 and L358; graph formula L46 and L78"
+    },
+    "numbers_with_scope": {
+      "status": "partly met",
+      "evidence": "Most numbers carry model and baseline (L28, L295); but L293 heading '15.2%와 18.5%' never ties 15.2% to gpt-4o-mini in the body, and L29 hedges a figure the paper defines"
+    },
+    "nothing_invented": {
+      "status": "partly met",
+      "evidence": "Hypotheticals are labelled (L185, L235); but L82 and L29 make false statements about what the source contains"
+    },
+    "writer_assessment_end": {
+      "status": "met",
+      "evidence": "L348-364: when to choose it (long sessions, changing state), what is unproven (communities not retrieved in eval L358, no business-data benchmark L360), LLM contradiction judgement L364"
+    },
+    "length_fit": {
+      "status": "partly met",
+      "evidence": "About 23.5k characters for a systems paper with three tables; repetition of the running example and repeated facts inflate it"
+    },
+    "type_shape": {
+      "status": "met",
+      "evidence": "TL;DR with four questions L14-30; no abstract/intro restatement section; closing is judgement, not conclusion restatement"
+    },
+    "korean_style": {
+      "status": "partly met",
+      "evidence": "Mostly natural 입니다 register; meta 'evidence' phrasing L29/L82, '할 수 있습니다' x8, mixed unit style L299; '이러한' 0, '즉' 1, '결국' 1"
+    }
+  },
+  "claims": {
+    "checked": 15,
+    "numbers": 8,
+    "supported": 15,
+    "unsupported": 0,
+    "wrong": 0,
+    "unverifiable": 0,
+    "examples": [
+      {
+        "line": 46,
+        "type": "method",
+        "claim": "G=(N,E,phi), phi an incidence function, three tiers episode/semantic entity/community",
+        "verdict": "supported",
+        "source": "Sec 2: 'G=(N,E,phi) ... phi: E->NxN represents a formal incidence function. This graph comprises three hierarchical tiers'"
+      },
+      {
+        "line": 60,
+        "type": "method",
+        "claim": "Community subgraph is the highest tier; community edges connect communities to member entities",
+        "verdict": "supported",
+        "source": "Sec 2: 'The community subgraph forms the highest level ... Community edges ... connect communities to their entity members.'"
+      },
+      {
+        "line": 72,
+        "type": "attribution",
+        "claim": "Dual episodic/semantic storage mirrors psychological models of human memory",
+        "verdict": "supported",
+        "source": "Sec 2: 'mirrors psychological models of human memory ... episodic memory ... semantic memory [8]'"
+      },
+      {
+        "line": 86,
+        "type": "number",
+        "claim": "n=4 previous messages, two complete conversation turns; speaker auto-extracted",
+        "verdict": "supported",
+        "source": "Sec 2.2.1: 'For this paper and in Zep's general implementation, n=4, providing two complete conversation turns'"
+      },
+      {
+        "line": 94,
+        "type": "number",
+        "claim": "Entity names embedded in 1024 dims; cosine plus full-text search on names and summaries; LLM resolution",
+        "verdict": "supported",
+        "source": "Sec 2.2.1: 'embeds each entity name into a 1024-dimensional vector space ... separate full-text search on existing entity names and summaries'"
+      },
+      {
+        "line": 111,
+        "type": "method",
+        "claim": "Edge dedup search restricted to edges between the same entity pair; prevents wrong merges and reduces computation",
+        "verdict": "supported",
+        "source": "Sec 2.2.2: 'constrained to edges existing between the same entity pairs ... not only prevents erroneous combinations ... but also significantly reduces the computational complexity'"
+      },
+      {
+        "line": 129,
+        "type": "number",
+        "claim": "Absolute date example 'Alan Turing was born on June 23, 1912' and relative 'two weeks ago' converted to datetime using t_ref",
+        "verdict": "supported",
+        "source": "Sec 2.2.3: 'absolute timestamps (e.g., \"Alan Turing was born on June 23, 1912\") and relative timestamps'"
+      },
+      {
+        "line": 177,
+        "type": "comparison",
+        "claim": "Community detection builds on GraphRAG but uses label propagation instead of Leiden for easy dynamic extension",
+        "verdict": "supported",
+        "source": "Sec 2.3: 'we employ a label propagation algorithm [13] rather than the Leiden algorithm [14] ... straightforward dynamic extension'"
+      },
+      {
+        "line": 195,
+        "type": "method",
+        "claim": "Incremental communities diverge from a full run; periodic refresh needed; practical heuristic cutting latency and LLM inference cost",
+        "verdict": "supported",
+        "source": "Sec 2.3: 'gradually diverge ... periodic community refreshes remain necessary ... significantly reduces latency and LLM inference costs'"
+      },
+      {
+        "line": 255,
+        "type": "number",
+        "claim": "LongMemEval_s conversations average about 115,000 tokens; six non-uniform question types",
+        "verdict": "supported",
+        "source": "Sec 4.3: 'conversations averaging approximately 115,000 tokens ... six distinct question types ... not uniformly distributed'"
+      },
+      {
+        "line": 263,
+        "type": "number",
+        "claim": "In DMR Zep retrieves the top 10 nodes and edges; an LLM judge compares to golden answers",
+        "verdict": "supported",
+        "source": "Sec 4.2: 'retrieve the top 10 most relevant nodes and edges. An LLM judge compared the agent's responses'"
+      },
+      {
+        "line": 278,
+        "type": "number",
+        "claim": "Each DMR conversation has only 60 messages",
+        "verdict": "supported",
+        "source": "Sec 4.2: 'each conversation contains only 60 messages'"
+      },
+      {
+        "line": 288,
+        "type": "number",
+        "claim": "LongMemEval table cells (55.4/63.8/60.2/71.2%, 31.3/3.20/28.9/2.58 s, IQR 8.76/1.31/6.01/0.684 s, 115k/1.6k)",
+        "verdict": "supported",
+        "source": "Table 2 LongMemEvals, cell for cell"
+      },
+      {
+        "line": 319,
+        "type": "number",
+        "claim": "Question-type breakdown, 12 rows x 3 values (e.g. preference gpt-4o 20.0->56.7, 184% up; assistant gpt-4o 94.6->80.4, 17.7% down)",
+        "verdict": "supported",
+        "source": "Table 3 LongMemEvals Question Type Breakdown, cell for cell; Delta equals relative change (53.3/30.0=1.777)"
+      },
+      {
+        "line": 309,
+        "type": "method",
+        "claim": "MemGPT cannot ingest existing histories; archival-history workaround did not yield answers",
+        "verdict": "supported",
+        "source": "Sec 4.3.1: 'does not support direct ingestion of existing message histories ... adding conversation messages to the archival history. However, we were unable to achieve successful question responses'"
+      }
+    ],
+    "outside_sample": [
+      "L82 wrong (phi is defined in Sec 2)",
+      "L29 wrong (Table 3 gives base and result values)"
+    ]
+  },
+  "checklist": {
+    "repeated": 0,
+    "avoided": 6,
+    "na": 0,
+    "repeated_ids": [],
+    "items": [
+      {
+        "id": "inline-math-delimiters",
+        "result": "avoided",
+        "evidence": "No \\( \\) or \\[ \\] in the post; inline math is $$...$$ (e.g. L48)"
+      },
+      {
+        "id": "longmemeval-tldr-relative",
+        "result": "avoided",
+        "evidence": "L28 gives absolute accuracies '60.2%보다 ... 55.4%에서 63.8%로'; no %포인트 (relative 15.2%/18.5% not stated in TL;DR)"
+      },
+      {
+        "id": "longmemeval-results-relative",
+        "result": "avoided",
+        "evidence": "L288-291 absolute accuracies, L293 '상대 향상 15.2%와 18.5%', L295 '퍼센트포인트 차이가 아니라 기준선 대비 상대 향상률'"
+      },
+      {
+        "id": "longmemeval-baseline-misattributed",
+        "result": "avoided",
+        "evidence": "L28 'gpt-4o 기준 Zep의 정확도는 71.2%로, 전체 컨텍스트 방식의 60.2%보다 높습니다'"
+      },
+      {
+        "id": "longmemeval-185-arithmetic",
+        "result": "avoided",
+        "evidence": "L295 '11.0%p이고, 이를 60.2%로 나누면 약 18.3% ... 초록의 \"최대 18.5% 향상\"은 저자들이 보고한 값입니다'"
+      },
+      {
+        "id": "missing-description",
+        "result": "avoided",
+        "evidence": "L8 description starts 'Zep은', 125 chars, numbers 60.2/71.2/28.9/2.58 all in TL;DR L28"
+      }
+    ]
+  },
+  "extras": {
+    "front_matter": "subtitle, paper_author 'Zep AI', paper_doi, two-level categories, use_math true, no author key",
+    "tags_note": "7 tags; 'Agentic-AI' and 'Knowledge-Graph' generic alongside specific ones"
+  },
+  "top_issues": [
+    "Pipeline meta sentences that are also false: L82 says phi is undefined (paper and L48 define it); L29 TL;DR says base/result values are not given (Table 3 and the post's own table give them)",
+    "Broken cross-references and structure: L263/L278 refer back to a DMR session structure never described; L305 orphan sentence; graph formula duplicated L46/L78",
+    "Repetition: the Seoul/Busan example is retold about ten times (forced at L280, L336) and several facts (17.7%/9.06%, 115k, missing MemGPT comparison) appear two or three times"
+  ]
+}

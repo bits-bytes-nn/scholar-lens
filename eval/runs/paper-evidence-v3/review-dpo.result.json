@@ -1,0 +1,169 @@
+{
+  "kind": "review",
+  "status": "succeeded",
+  "input": "2305.18290",
+  "title": "Direct Preference Optimization: Your Language Model is Secretly a Reward Model",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/2305_18290/2025-10-19-direct-preference-optimization--your-language-model-is-secretly-a-reward-model.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2025-10-19-direct-preference-optimization--your-language-model-is-secretly-a-reward-model.md",
+  "pr_url": null,
+  "warnings": [
+    "Tag 'RL-Free-Preference-Learning' (or its acronym) does not appear in the paper; check it fits.",
+    "Section '보상 모델 학습과 온라인 RL이 얽힌 RLHF 파이프라인의 복잡성' still has: images not given to this section: ['https://arxiv.org/html/2305.18290v3/figures/diagrams/teaser.png']",
+    "Section '보상의 재매개화와 Z(x)가 상쇄되는 DPO 손실': check 4 sentence(s) the evidence may not support: $$\\beta=0.1$$이라 하고, 학습이 진행되어 $$\\log\\frac{\\pi_\\theta(y_w\\mid x)}{\\pi_{\\text{ref}}(y_w\\mid x)}=2$$, $$\\log\\frac{\\pi_\\theta (numbers not in its evidence) | 이때 \"…끝까지 눈을 뗄 수 없었다\"의 암묵적 보상은 $$0.2$$, \"…지루해서 꺼버렸다\"는 $$-0.3$$이고, 시그모이드 입력은 $$0.5$$입니다. (numbers not in its evidence) | 모델이 매기는 선호 확률은 $$\\sigma(0.5)\\approx 0.62$$이고, 이 쌍의 손실은 $$-\\log 0.62\\approx 0.47$$입니다. (numbers not in its evidence) | 학습 초기에는 $$\\pi_\\theta=\\pi_{\\text{ref}}$$이므로 두 로그 확률비가 모두 0이고, 선호 확률은 $$0.5$$, 손실은 $$\\log 2\\approx 0.69$$에서 출발합니다. (numbers not in its evidence)",
+    "Section '보상의 재매개화와 Z(x)가 상쇄되는 DPO 손실' still has: points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 앞서 본 닫힌 형태의 최적 정책 식 양변에 로그를 취하고 정리하면, 보상을 그 보상이 유도하는 최적 정책 $$\\pi_r$$, 참조 정책, 분배 함수로 표현할 수 있습니다 . | numbers ['0.1'] without evidence: $$\\beta=0.1$$이라 하고, 학습이 진행되어 $$\\log\\frac{\\pi_\\theta(y_w\\mid x)}{\\pi_{\\text{ref}}(y_w\\mid x)}=2$$, $$\\log\\frac{\\pi_\\theta(y_l\\mid x)}{\\pi_{\\text{ref}}(y_l\\mid x) | numbers ['0.2', '0.3', '0.5'] without evidence: 이때 \"…끝까지 눈을 뗄 수 없었다\"의 암묵적 보상은 $$0.2$$, \"…지루해서 꺼버렸다\"는 $$-0.3$$이고, 시그모이드 입력은 $$0.5$$입니다. | numbers ['0.5', '0.62', '0.47'] without evidence: 모델이 매기는 선호 확률은 $$\\sigma(0.5)\\approx 0.62$$이고, 이 쌍의 손실은 $$-\\log 0.62\\approx 0.47$$입니다. | numbers ['0.5', '0.69'] without evidence: 학습 초기에는 $$\\pi_\\theta=\\pi_{\\text{ref}}$$이므로 두 로그 확률비가 모두 0이고, 선호 확률은 $$0.5$$, 손실은 $$\\log 2\\approx 0.69$$에서 출발합니다.",
+    "Section '보상 동치류 이론과 플래킷-루스로의 일반화' still has: heading is a sentence: write the claim as a noun phrase ('정책보다 먼저 무너지는 보상 모델'): 프롬프트 함수만큼 다른 보상은 구별되지 않습니다 | points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 두 사실은 앞서 본 식들로 바로 확인됩니다.",
+    "Section 'baseline이 필요 없는 재매개화와 actor-critic 불안정성의 차이': check 11 sentence(s) the evidence may not support: PPO가 불안정한 이유는 보상에 붙은 프롬프트별 정규화항을 따로 추정해야 하기 때문이고, DPO는 재매개화 단계에서 이 항을 처음부터 지워 버립니다 [[E26]]. (unsupported: The paper says that without the normalization term the gradient variance is high. It says DPO's reward needs no baseline, not that DPO 'erases' the term or that estimating it is the cause.) | 정규화항이 없으면 기울기는 \"이 이어쓰기가 같은 프롬프트의 다른 이어쓰기보다 나은가\"보다 \"이 프롬프트의 보상 수준이 높은가\"에 휘둘립니다. (unsupported: This explanation of how the gradient behaves is the post's own elaboration. The paper does not state it.) | 하나는 value function을 학습해 정규화항을 근사하는 방식으로, PPO 같은 actor-critic의 critic이 이 역할을 맡습니다. (unsupported: The paper does not say that PPO's critic plays this role. It only says a learned value function can be used.) | 샘플 하나짜리 추정이니 분산 문제를 근본적으로 없애지는 못합니다. (unsupported: The paper does not discuss how good the single-sample estimate is.) | 앞서 본 대로 DPO의 암묵적 보상 $$\\beta\\log(\\pi/\\pi_{\\text{ref}})$$는 분배 함수가 1이 되도록 프롬프트별 수준이 고정된 동치류 대표입니다 [[E43]]. (unsupported: E43 states uniqueness only. The claim that the partition function equals 1 is not in the evidence.)",
+    "Section 'baseline이 필요 없는 재매개화와 actor-critic 불안정성의 차이' still has: points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 이 차이는 앞서 본 사영 $$f$$의 틀을 그대로 PPO의 RL 미세조정 단계에 적용하면 드러납니다. | evidence ['E10'] was already referred back to once; do not restate it again: 게다가 DPO 손실은 $$y_w$$와 $$y_l$$의 암묵적 보상 차이만 쓰므로, 같은 프롬프트에 공통된 상수는 손실에 들어올 여지가 없습니다 .",
+    "Section 'SFT 참조 정책과 작은 하이퍼파라미터 집합의 학습 설정': check 1 sentence(s) the evidence may not support: 감성 실험의 PPO 계열은 보상을 정규화하고 하이퍼파라미터를 더 조정한 자체 구현과 TRL 라이브러리 설정 두 가지로 돌립니다. (unsupported: Paper says two implementations were used for PPO-GT only; normal PPO uses only the modified version.)",
+    "Section 'IMDb 감성 제어에서 PPO를 엄격히 지배하는 보상-KL 프런티어': check 5 sentence(s) the evidence may not support: PPO의 열세를 보상 모델의 부정확성만으로는 설명할 수 없으며, 최적화 과정 자체의 차이가 크게 작용한다고 해석할 수 있습니다. (unsupported: The paper does not attribute PPO's weaker results to the optimization process itself; that interpretation is the post's own.) | 앞서 본 actor-critic의 분산 문제를 DPO 재매개화가 처음부터 피한다는 이론적 논의와도 맞는 결과입니다 [[E26]]. (unsupported: The paper does not tie the frontier result to the actor-critic variance argument; the post adds that link.) | PPO는 목표 KL을 $$\\{3,6,9,12\\}$$, DPO는 $$\\beta$$를 $$\\{0.05,0.1,1,5\\}$$, Unlikelihood는 $$\\alpha$$를 $$\\{0.05,0.1,0.5,1\\}$$로 두었 (numbers not in its evidence) | 모두 합쳐 22회 실행입니다. (numbers not in its evidence) | 학습 중에는 수렴할 때까지 100스텝마다 테스트 프롬프트에서 두 값을 측정했습니다. (numbers not in its evidence)",
+    "Section 'IMDb 감성 제어에서 PPO를 엄격히 지배하는 보상-KL 프런티어' still has: numbers ['12', '0.05', '0.1', '0.5'] without evidence: PPO는 목표 KL을 $$\\{3,6,9,12\\}$$, DPO는 $$\\beta$$를 $$\\{0.05,0.1,1,5\\}$$, Unlikelihood는 $$\\alpha$$를 $$\\{0.05,0.1,0.5,1\\}$$로 두었고, Preferred-FT는 랜덤 시드만 바꿨습니다. | ['0.05', '0.1', '0.5'] already stated in '암묵적 보상 오차로 가중되는 DPO 기울기': refer back without repeating: PPO는 목표 KL을 $$\\{3,6,9,12\\}$$, DPO는 $$\\beta$$를 $$\\{0.05,0.1,1,5\\}$$, Unlikelihood는 $$\\alpha$$를 $$\\{0.05,0.1,0.5,1\\}$$로 두었고, Preferred-FT는 랜덤 시드만 바꿨습니다. | numbers ['22'] without evidence: 모두 합쳐 22회 실행입니다. | numbers ['100'] without evidence: 학습 중에는 수렴할 때까지 100스텝마다 테스트 프롬프트에서 두 값을 측정했습니다.",
+    "Section 'Anthropic HH 단일턴 대화에서 Best of 128에 필적하는 성능': check 3 sentence(s) the evidence may not support: 셋째로 저자들은 공개된 출처에서 Anthropic HH로 PPO 학습한 RLHF 모델도 평가했습니다. (unsupported: The post leaves out the key result: the paper says this PPO model could not beat the base Pythia-2.8B model.) | 그 대가로 응답 하나를 낼 때마다 여러 번 샘플링하고 그 결과를 순위화해야 합니다. (unsupported: The paper says Best of N requires sampling many times; it does not specify a per-response ranking procedure.) | DPO는 학습이 끝나면 응답 하나를 한 번만 샘플링합니다. (unsupported: Single sampling at inference is not stated in the sources.)",
+    "Section 'Anthropic HH 단일턴 대화에서 Best of 128에 필적하는 성능' still has: points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 앞서 본 IMDb 예시에 빗대면, 미리 준비된 요약 모델이 없을 때 \"끝까지 눈을 뗄 수 없었다\" 같은 선호 이어쓰기로 먼저 참조 정책을 만들고, 그다음 선호쌍으로 DPO를 돌리는 순서입니다. | images not given to this section: ['https://arxiv.org/html/2305.18290v3/dialogue_winrate_vs_temp_rerank.svg'] | an evidence marker stands for a word; state the fact and put the marker at the end of the sentence: 앞서 본 PPO 대비 우위 [[E29]]와 함께 보면, 대화와 요약 두 과제 모두에서 DPO는 계산 비용이 큰 재순위화 방식과 대등하거나 그보다 앞섰습니다 [[E5]].",
+    "Section '한계와 시사점': check 1 sentence(s) the evidence may not support: 앞서 본 IMDb 예시로 돌아가면, \"이 영화는 처음엔\" 뒤에 붙은 긍정 이어쓰기와 부정 이어쓰기 한 쌍만 있으면 됩니다. (unsupported: IMDb uses ground-truth-reward-labeled pairs from sampled completions; specific example not in evidence)",
+    "Section '한계와 시사점' still has: points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 앞서 본 IMDb 예시로 돌아가면, \"이 영화는 처음엔\" 뒤에 붙은 긍정 이어쓰기와 부정 이어쓰기 한 쌍만 있으면 됩니다. | evidence ['E5'] was already referred back to once; do not restate it again: 하이퍼파라미터도 거의 튜닝하지 않았는데 PPO와 비슷하거나 더 나은 결과가 나왔습니다 . | points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 앞서 본 제2차 세계대전 예시에서 DPO 응답은 장황하고 그럴듯했지만 사실과 달랐습니다 .",
+    "Section 'KL 제약 보상 최대화의 닫힌 형태 최적 정책': whole-post review problems left as they were: 마지막 한 줄(\"예시에서 두 응답의 비율이 Z(x) 없이 나왔던 것도 같은 이유입니다.\")은 바로 앞의 예시 문단과 핵심 박스가 이미 한 말을 되풀이할 뿐입니다. Fix: 이 문장을 삭제합니다.",
+    "Section '보상의 재매개화와 Z(x)가 상쇄되는 DPO 손실': whole-post review problems left as they were: 첫 섹션에 나온 teaser 도식과 그 설명(RLHF 루프 대 DPO 최대우도)을 다시 실었습니다. Fix: 그림과 설명 문단은 첫 섹션에만 남기고, 여기서는 앞의 도식을 가리키는 한 문장으로 바꿉니다.",
+    "Table values not found in the paper (check each is copied or derived correctly): 학습 시작 ( ): 0 / 0 / 0.5 / 0.05, 앞서 계산한 중간 상태: 0.2 / -0.3 / 0.38 / 0.038, 순서를 틀린 가상 상태: -0.2 / 0.3 / 0.62 / 0.062, 이미 크게 구분한 가상 상태: 0.2 / -2.8 / 0.047 / 0.005"
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 1500.3,
+  "input_tokens": 1956441,
+  "output_tokens": 188730,
+  "estimated_cost_usd": 8.4822,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 146,
+      "failed_calls": 0,
+      "input_tokens": 405838,
+      "output_tokens": 188730,
+      "cache_read_tokens": 818476,
+      "cache_write_tokens": 732127,
+      "cost_usd": 8.48224
+    },
+    "by_stage": {
+      "figures": {
+        "calls": 8,
+        "failed_calls": 0,
+        "input_tokens": 29097,
+        "output_tokens": 7933,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.006875
+      },
+      "extract_attributes": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 48799,
+        "output_tokens": 234,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.004997
+      },
+      "extract_citations": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 50275,
+        "output_tokens": 2859,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.12914
+      },
+      "read": {
+        "calls": 25,
+        "failed_calls": 0,
+        "input_tokens": 60,
+        "output_tokens": 16169,
+        "cache_read_tokens": 167426,
+        "cache_write_tokens": 46505,
+        "cost_usd": 0.311558
+      },
+      "outline": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 4744,
+        "cache_read_tokens": 848,
+        "cache_write_tokens": 6518,
+        "cost_usd": 0.127825
+      },
+      "verify": {
+        "calls": 47,
+        "failed_calls": 0,
+        "input_tokens": 186919,
+        "output_tokens": 28714,
+        "cache_read_tokens": 398426,
+        "cache_write_tokens": 195025,
+        "cost_usd": 2.456446
+      },
+      "draft": {
+        "calls": 14,
+        "failed_calls": 0,
+        "input_tokens": 56,
+        "output_tokens": 33645,
+        "cache_read_tokens": 42826,
+        "cache_write_tokens": 230640,
+        "cost_usd": 1.84346
+      },
+      "review": {
+        "calls": 14,
+        "failed_calls": 0,
+        "input_tokens": 56,
+        "output_tokens": 8565,
+        "cache_read_tokens": 17056,
+        "cache_write_tokens": 60924,
+        "cost_usd": 0.482969
+      },
+      "fix": {
+        "calls": 33,
+        "failed_calls": 0,
+        "input_tokens": 90564,
+        "output_tokens": 85288,
+        "cache_read_tokens": 190616,
+        "cache_write_tokens": 188854,
+        "cost_usd": 3.088541
+      },
+      "finalize": {
+        "calls": 2,
+        "failed_calls": 0,
+        "input_tokens": 8,
+        "output_tokens": 579,
+        "cache_read_tokens": 1278,
+        "cache_write_tokens": 3661,
+        "cost_usd": 0.030429
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-haiku-5-5": {
+        "calls": 9,
+        "failed_calls": 0,
+        "input_tokens": 77896,
+        "output_tokens": 8167,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.011872
+      },
+      "global.anthropic.claude-sonnet-5-5": {
+        "calls": 26,
+        "failed_calls": 0,
+        "input_tokens": 50335,
+        "output_tokens": 19028,
+        "cache_read_tokens": 167426,
+        "cache_write_tokens": 46505,
+        "cost_usd": 0.440698
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 111,
+        "failed_calls": 0,
+        "input_tokens": 277607,
+        "output_tokens": 161535,
+        "cache_read_tokens": 651050,
+        "cache_write_tokens": 685622,
+        "cost_usd": 8.02967
+      }
+    }
+  }
+}
