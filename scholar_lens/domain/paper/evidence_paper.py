@@ -18,7 +18,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..evidence import EvidenceLedger
-from ..lengths import DEPTH_CHARS, NON_KOREAN_CHAR_FACTOR
+from ..lengths import DEPTH_CHARS, scaled_targets
 
 PaperKind = Literal[
     "tldr", "problem", "method", "implementation", "experiments", "analysis", "closing"
@@ -71,8 +71,23 @@ _RANK = {
 }
 
 
-def _lang(language: str) -> str:
-    return "Korean" if language == "Korean" else ""
+def _lang(language: str) -> str | None:
+    """The key of the blog's fixed wording in ``language``: "Korean",
+    "" (English), or None when the blog has none (the outline's titles stand
+    and the TL;DR questions are written in the post's language)."""
+    name = language.strip().lower()
+    if name == "korean":
+        return "Korean"
+    if name in ("", "english"):
+        return ""
+    return None
+
+
+def tldr_questions(language: str) -> tuple[tuple[str, ...], bool]:
+    """The review's four TL;DR questions and whether they are the blog's
+    exact wording (False: English, for the writer to translate)."""
+    lang = _lang(language)
+    return REVIEW_TLDR_QUESTIONS[lang or ""], lang is not None
 
 
 class _Strict(BaseModel):
@@ -107,10 +122,13 @@ def fixed_title(kind: str, post: PostKind, language: str) -> str | None:
     every summary section; None when the outline's title stands."""
     if kind == "tldr":
         return TLDR_TITLE
+    lang = _lang(language)
+    if lang is None:
+        return None
     if post == "summary":
-        return dict(SUMMARY_SECTIONS[_lang(language)]).get(kind)
+        return dict(SUMMARY_SECTIONS[lang]).get(kind)
     if kind == "closing":
-        return CLOSING_TITLES[_lang(language)]
+        return CLOSING_TITLES[lang]
     return None
 
 
@@ -213,19 +231,16 @@ def paper_outline_problems(
 
 
 def paper_section_targets(
-    outline: PaperOutline,
-    *,
-    min_total: int,
-    max_total: int,
-    korean: bool,
+    outline: PaperOutline, *, min_total: int, max_total: int, language: str
 ) -> list[int]:
     """Prose characters per section by depth, the total scaled into
     ``[min_total, max_total]`` (Korean characters)."""
-    raw = [DEPTH_CHARS[s.depth] for s in outline.sections]
-    total = sum(raw)
-    scale = min(max(total, min_total), max_total) / total
-    factor = 1.0 if korean else NON_KOREAN_CHAR_FACTOR
-    return [round(r * scale * factor) for r in raw]
+    return scaled_targets(
+        [DEPTH_CHARS[s.depth] for s in outline.sections],
+        min_total=min_total,
+        max_total=max_total,
+        language=language,
+    )
 
 
 _H3 = re.compile(r"^### (.+?)\s*$", re.M)
@@ -239,12 +254,15 @@ def tldr_problems(markdown: str, post: PostKind, language: str) -> list[str]:
     if not body:
         return ["the TL;DR is empty"]
     if post == "review":
-        questions = REVIEW_TLDR_QUESTIONS[_lang(language)]
-        headings = _H3.findall(body)
-        if tuple(h.strip() for h in headings) != questions:
+        questions, exact = tldr_questions(language)
+        headings = tuple(h.strip() for h in _H3.findall(body))
+        if headings != questions if exact else len(headings) != len(questions):
             return [
                 "the TL;DR must be exactly these four ### headings, in order, "
-                "each followed by its answer: " + " | ".join(questions)
+                "each followed by its answer"
+                + ("" if exact else f" (in {language})")
+                + ": "
+                + " | ".join(questions)
             ]
         parts = re.split(r"^### .+$", body, flags=re.M)[1:]
         if any(not p.strip() for p in parts):

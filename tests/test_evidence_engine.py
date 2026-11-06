@@ -575,7 +575,7 @@ def test_cut_off_drafts_targets_and_coverage() -> None:
         per_supporting=800,
         min_total=5000,
         max_total=70000,
-        korean=True,
+        language="Korean",
     )
     assert targets == [2500, 3000, 2500, 2500]  # within the range: unscaled
     issues = draft_problems(
@@ -734,3 +734,36 @@ def test_claims_with_different_numbers_are_not_duplicates() -> None:
     )
     assert not near_duplicate("Llama-2 7B에서 승률 61%", ["Llama-2 13B에서 승률 64%"])
     assert near_duplicate("DPO의 승률은 61%입니다", ["DPO의 승률은 61%"])
+
+
+def test_dense_scripts_need_korean_lengths_alphabets_more() -> None:
+    from scholar_lens.domain.lengths import char_factor, scaled_targets
+
+    assert char_factor("Korean") == char_factor("Japanese") == 1.0
+    assert char_factor("English") > 2
+    assert scaled_targets(
+        [1_000, 3_000], min_total=8_000, max_total=9_000, language="Korean"
+    ) == [2_000, 6_000]
+    assert scaled_targets([], min_total=1, max_total=2, language="Korean") == []
+
+
+def test_one_failing_reader_cancels_the_others() -> None:
+    from scholar_lens.application.evidence_writer import all_or_none
+
+    started: list[str] = []
+
+    async def fail() -> str:
+        raise RuntimeError("boom")
+
+    async def slow() -> str:
+        started.append("slow")
+        await asyncio.sleep(10)
+        started.append("finished")
+        return "x"
+
+    async def run() -> None:
+        with pytest.raises(RuntimeError, match="boom"):
+            await all_or_none([slow(), fail()])
+
+    asyncio.run(run())
+    assert started == ["slow"]

@@ -14,7 +14,6 @@ import asyncio
 import hashlib
 import json
 import logging
-import re
 from dataclasses import dataclass, field
 
 from ..domain.evidence import (
@@ -25,6 +24,7 @@ from ..domain.evidence import (
 from ..domain.evidence_draft import (
     cited_ids,
     draft_problems,
+    free_numbers,
     prose_sentences,
     section_heading,
     section_numbers,
@@ -46,9 +46,11 @@ from ..prompts import survey_evidence as prompts
 from .evidence_writer import (
     EvidenceWriter,
     WriterPrompts,
+    all_or_none,
     block,
     cached_evidence,
     evidence_lines,
+    safe_key,
 )
 from .ports import AgentLimits, DocumentSource, LanguageModel, TextStore
 from .usage import usage_stage
@@ -64,7 +66,6 @@ logger = logging.getLogger(__name__)
 # Bump when the reader's prompt or the evidence schema changes meaning; the
 # prompt's wording alone does not invalidate cached evidence.
 READER_VERSION = 6
-_SAFE_KEY = re.compile(r"[^A-Za-z0-9._-]+")
 
 SURVEY_PROMPTS = WriterPrompts(
     reader=prompts.READER_SYSTEM,
@@ -136,11 +137,11 @@ class EvidenceSurveyEngine(EvidenceWriter):
     # ---- read -------------------------------------------------------------------
 
     def _cache_key(self, paper: PlanPaper, document: SourceDocument) -> str:
-        pid = _SAFE_KEY.sub("_", paper.id)
+        pid = safe_key(paper.id)
         text = hashlib.sha256(document.text.encode()).hexdigest()[:12]
         return (
             f"evidence/{pid}/{text}-v{READER_VERSION}-{self.settings.reader_tag}-"
-            f"{_SAFE_KEY.sub('_', self.settings.language)}-{paper.role}-"
+            f"{safe_key(self.settings.language)}-{paper.role}-"
             f"{document.kind}.json"
         )
 
@@ -171,7 +172,7 @@ class EvidenceSurveyEngine(EvidenceWriter):
                 return items, document.kind
 
         with usage_stage("read"):
-            results = await asyncio.gather(*(one(p) for p in plan.papers))
+            results = await all_or_none(one(p) for p in plan.papers)
         ledger = EvidenceLedger()
         kinds: dict[str, str] = {}
         for paper, (items, kind) in zip(plan.papers, results, strict=True):
@@ -303,10 +304,7 @@ class EvidenceSurveyEngine(EvidenceWriter):
         outline = await self._check_evidence(outline, ledger)
         self._names = dict(outline.short_names)
         glossary = {t.english: t.rendering for t in outline.glossary}
-        free = (
-            " ".join({str(p.year) for p in plan.papers if p.year})
-            + " 0 1 2 3 4 5 6 7 8 9 10"
-        )
+        free = free_numbers(sorted({p.year for p in plan.papers if p.year}))
         written: list[tuple[OutlineSection, str]] = []
         numbers: dict[str, str] = {}
         targets = section_targets(
@@ -316,7 +314,7 @@ class EvidenceSurveyEngine(EvidenceWriter):
             per_supporting=self.settings.chars_per_supporting,
             min_total=self.settings.min_total_chars,
             max_total=self.settings.max_total_chars,
-            korean=self.settings.korean,
+            language=self.settings.language,
         )
         for section, target in zip(outline.sections, targets, strict=True):
             markdown = await self._section(

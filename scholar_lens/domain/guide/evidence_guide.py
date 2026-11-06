@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from ..evidence import EvidenceLedger, SourceDocument
 from ..evidence_draft import MARKER, drop_empty_headings, prose_sentences
-from ..lengths import DEPTH_CHARS, NON_KOREAN_CHAR_FACTOR
+from ..lengths import DEPTH_CHARS, scaled_targets
 
 GuideKind = Literal[
     "tldr", "overview", "concepts", "architecture", "usage", "operations", "choosing"
@@ -179,15 +179,16 @@ def guide_outline_problems(
 
 
 def guide_section_targets(
-    outline: GuideOutline, *, min_total: int, max_total: int, korean: bool
+    outline: GuideOutline, *, min_total: int, max_total: int, language: str
 ) -> list[int]:
     """Prose characters per section by depth, the total scaled into
     ``[min_total, max_total]`` (Korean characters)."""
-    raw = [DEPTH_CHARS[s.depth] for s in outline.sections]
-    total = sum(raw)
-    scale = min(max(total, min_total), max_total) / total
-    factor = 1.0 if korean else NON_KOREAN_CHAR_FACTOR
-    return [round(r * scale * factor) for r in raw]
+    return scaled_targets(
+        [DEPTH_CHARS[s.depth] for s in outline.sections],
+        min_total=min_total,
+        max_total=max_total,
+        language=language,
+    )
 
 
 def guide_draft_problems(markdown: str, *, code_language: str = "") -> list[str]:

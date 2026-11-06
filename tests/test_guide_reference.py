@@ -391,3 +391,16 @@ async def test_the_identifier_lookup_stays_within_its_share() -> None:
     # A later lookup may use the rest of the per-guide caps.
     await gen._add_reference(corpus, ["--gpu-memory-utilization"])
     assert len(gen._reference_pages) == MAX_REFERENCE_PAGES
+
+
+def test_arguments_the_guides_own_code_defines_are_not_unverified() -> None:
+    from scholar_lens.src.guide_authority import unverified_identifiers
+
+    body = (
+        "```python\nfrom vllm import LLM\n\n"
+        "def book(user_id: str, room_size: int = 2) -> str:\n    return user_id\n\n"
+        "llm = LLM(model='m', gpu_memory_utilization=0.9)\n"
+        "book(user_id='u', room_size=3)\nLLM(made_up_flag=1)\n```\n"
+    )
+    official = "LLM(model, gpu_memory_utilization)"
+    assert unverified_identifiers(body, official, ["vllm"]) == ["made_up_flag"]

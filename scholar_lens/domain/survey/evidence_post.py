@@ -13,7 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from ..evidence import Evidence, EvidenceLedger
 from ..evidence_draft import MARKER, cited_ids
-from ..lengths import DEPTH_CHARS, NON_KOREAN_CHAR_FACTOR
+from ..lengths import DEPTH_CHARS, scaled_targets
 from ..markdown.tables import escape_cell_pipes
 from .plan import SurveyPlan
 
@@ -254,13 +254,8 @@ def _result_cell(item: Evidence) -> str:
     """The evidence's noun-phrase cell as written (it names its model and
     benchmark), else its claim with the scope."""
     if item.cell:
-        return _korean_units(item.cell)
-    text = f"{item.claim} ({item.scope})" if item.scope else item.claim
-    return _korean_units(text)
-
-
-def _korean_units(text: str) -> str:
-    return re.sub(r"\s+vs\.?\s+", " 대비 ", text)
+        return item.cell
+    return f"{item.claim} ({item.scope})" if item.scope else item.claim
 
 
 def _table(head: Sequence[str], rows: Sequence[Sequence[str]]) -> str:
@@ -379,12 +374,12 @@ def section_targets(
     per_supporting: int,
     min_total: int,
     max_total: int,
-    korean: bool,
+    language: str,
 ) -> list[int]:
     """Prose characters per section: a lineage section its papers' shares,
     any other section its depth's size; the total scaled into
-    ``[min_total, max_total]`` (Korean characters; other languages need
-    :data:`NON_KOREAN_CHAR_FACTOR` times as many)."""
+    ``[min_total, max_total]`` (Korean characters, converted by
+    :func:`~scholar_lens.domain.lengths.char_factor`)."""
     role = {p.id: p.role for p in plan.papers}
     share = {"core": per_core, "supporting": per_supporting}
     raw = [
@@ -395,7 +390,6 @@ def section_targets(
         )
         for s in outline.sections
     ]
-    total = sum(raw)
-    scale = min(max(total, min_total), max_total) / total
-    factor = 1.0 if korean else NON_KOREAN_CHAR_FACTOR
-    return [round(r * scale * factor) for r in raw]
+    return scaled_targets(
+        raw, min_total=min_total, max_total=max_total, language=language
+    )

@@ -1554,3 +1554,52 @@ def test_pypi_extras_come_from_the_json_api() -> None:
     )
     assert package_extras("no-such-package", client=client) is None
     assert package_extras("bad name;rm", client=client) is None
+
+
+def test_fallback_search_paths() -> None:
+    from scholar_lens.src.web_research import (
+        FallbackSearchProvider,
+        SearchResult,
+        WebSearchProvider,
+    )
+
+    class Scripted(WebSearchProvider):
+        def __init__(self, answers: list[str]) -> None:
+            self.answers = answers
+            self.calls = 0
+
+        def search(self, query, *, count=5, domains=()):  # type: ignore[no-untyped-def]
+            self.calls += 1
+            answer = self.answers.pop(0)
+            if answer == "fail":
+                self.failed_searches += 1
+                return []
+            if answer == "empty":
+                return []
+            return [SearchResult(title=answer, url="https://x.dev", description="")]
+
+    # A transient primary failure falls back once, then the primary answers.
+    primary, secondary = Scripted(["fail", "p"]), Scripted(["s"])
+    search = FallbackSearchProvider(primary, secondary)
+    assert [r.title for r in search.search("a")] == ["s"]
+    assert [r.title for r in search.search("b")] == ["p"]
+    # A legitimately empty answer is not a failure: no fallback.
+    primary, secondary = Scripted(["empty"]), Scripted(["s"])
+    assert FallbackSearchProvider(primary, secondary).search("c") == []
+    assert secondary.calls == 0
+    # Both failing counts one failed search.
+    search = FallbackSearchProvider(Scripted(["fail"]), Scripted(["fail"]))
+    assert search.search("d") == [] and search.failed_searches == 1
+
+
+@pytest.mark.parametrize("status", [401, 403])
+def test_a_rejected_brave_key_marks_the_provider_exhausted(monkeypatch, status) -> None:
+    from scholar_lens.src import web_research
+    from scholar_lens.src.web_research import BraveSearchProvider
+
+    def reject(url, **_kwargs):  # type: ignore[no-untyped-def]
+        return httpx.Response(status, request=httpx.Request("GET", url))
+
+    monkeypatch.setattr(web_research.httpx, "get", reject)
+    provider = BraveSearchProvider(api_key="k")
+    assert provider.search("q") == [] and provider.exhausted

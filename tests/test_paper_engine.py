@@ -384,3 +384,13 @@ def test_blank_table_cells_are_problems() -> None:
         free_numbers="",
     )
     assert any("blank" in p for p in problems)
+
+
+def test_a_language_without_fixed_wording_keeps_the_outlines_titles() -> None:
+    from scholar_lens.domain.paper.evidence_paper import fixed_title
+
+    assert fixed_title("closing", "review", "Japanese") is None
+    assert fixed_title("closing", "review", "English") == "Limitations and Takeaways"
+    four = "## TL;DR\n\n" + "".join(f"### 質問{i}\n\n答え。\n\n" for i in range(4))
+    assert tldr_problems(four, "review", "Japanese") == []
+    assert tldr_problems("## TL;DR\n\n### 質問\n\n答え。\n", "review", "Japanese")

@@ -6,6 +6,7 @@ No LLM or network calls: everything here reads text the pipeline already has.
 
 from __future__ import annotations
 
+import ast
 import re
 from collections.abc import Sequence
 
@@ -88,6 +89,34 @@ def mentions_any(
     )
 
 
+def own_names(body: str) -> set[str]:
+    """Names the guide's own Python code defines: its functions' and
+    classes' parameters and fields (``def book(user_id, room_size=2)``), which
+    later calls pass as keywords. A block that does not parse adds none."""
+    names: set[str] = set()
+    for seg in segments(body):
+        if seg.kind != "fence":
+            continue
+        code = body[seg.start : seg.end].partition("\n")[2].rsplit("\n", 1)[0]
+        try:
+            tree = ast.parse(code)
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                a = node.args
+                names |= {
+                    x.arg for x in (*a.posonlyargs, *a.args, *a.kwonlyargs)
+                }
+            elif isinstance(node, ast.ClassDef):
+                names |= {
+                    t.target.id
+                    for t in node.body
+                    if isinstance(t, ast.AnnAssign) and isinstance(t.target, ast.Name)
+                }
+    return names
+
+
 def unverified_identifiers(
     body: str, official_text: str, products: Sequence[str]
 ) -> list[str]:
@@ -97,8 +126,9 @@ def unverified_identifiers(
     paste it). Flags count only after a product's name on a command line (or
     alone in inline code), so ``docker``/``curl`` options are not checked;
     arguments only in a code block that names the product (``from vllm import
-    LLM``) or alone in inline code. Note-only: an empty ``official_text``
-    checks nothing.
+    LLM``) or alone in inline code, never one the guide's own code defines
+    (:func:`own_names`). Note-only: an empty ``official_text`` checks
+    nothing.
     """
     if not official_text.strip():
         return []
@@ -107,9 +137,10 @@ def unverified_identifiers(
     known = official_text.lower()
     both_styles = _both_styles(known)
     found: list[str] = []
+    own = own_names(body)
 
     def check(token: str) -> None:
-        if token not in found and not any(
+        if token not in found and token not in own and not any(
             _mentions(known, v) for v in _spellings(token, both_styles)
         ):
             found.append(token)

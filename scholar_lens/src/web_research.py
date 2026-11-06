@@ -123,7 +123,10 @@ _BARE_VERSION_SEGMENTS = 2  # "v2" only right after the root or a language
 _BRAVE_WEB_SEARCH_URL = "https://api.search.brave.com/res/v1/web/search"
 _TAVILY_SEARCH_URL = "https://api.tavily.com/search"
 # Tavily's answers for a spent plan quota or key: no later query succeeds.
-_TAVILY_EXHAUSTED_STATUSES = frozenset({401, 403, 432, 433})
+# A rejected key; Tavily also answers a spent plan or credit quota with
+# 432 or 433.
+_AUTH_FAILED_STATUSES = frozenset({401, 403})
+_TAVILY_EXHAUSTED_STATUSES = _AUTH_FAILED_STATUSES | {432, 433}
 
 
 def docs_version(url: str) -> str | None:
@@ -561,8 +564,13 @@ class BraveSearchProvider(WebSearchProvider):
             # ValueError covers JSONDecodeError on a malformed/truncated response.
             logger.warning("Brave search failed for '%s': %s", query, e)
             self.failed_searches += 1
+            status = getattr(getattr(e, "response", None), "status_code", None)
+            if status in _AUTH_FAILED_STATUSES:
+                # A rejected key fails every later query the same way.
+                self.exhausted = True
             return []
-        results = data.get("web", {}).get("results") or []
+        web = data.get("web") if isinstance(data, dict) else None
+        results = web.get("results") if isinstance(web, dict) else None
         if not isinstance(results, list):
             return []
         return [
@@ -572,7 +580,7 @@ class BraveSearchProvider(WebSearchProvider):
                 description=r.get("description", ""),
             )
             for r in results
-            if r.get("url")
+            if isinstance(r, dict) and r.get("url")
         ]
 
 
@@ -622,7 +630,7 @@ class TavilySearchProvider(WebSearchProvider):
                 # The plan's quota or key is spent: later queries fail too.
                 self.exhausted = True
             return []
-        results = data.get("results") or []
+        results = data.get("results") if isinstance(data, dict) else None
         if not isinstance(results, list):
             return []
         return [
@@ -636,7 +644,7 @@ class TavilySearchProvider(WebSearchProvider):
                 ),
             )
             for r in results
-            if r.get("url")
+            if isinstance(r, dict) and r.get("url")
         ]
 
 

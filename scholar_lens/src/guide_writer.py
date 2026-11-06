@@ -13,6 +13,7 @@ import json
 import re
 from collections.abc import Sequence
 from typing import Any
+from urllib.parse import urlsplit
 
 from ..adapters.packages.pypi import package_extras
 from ..domain.evidence import Authority, SourceDocument
@@ -56,10 +57,33 @@ _PREFIX: dict[str, str] = {
 # A page shorter than this has nothing to record (a redirect stub, a menu).
 _MIN_PAGE_CHARS = 300
 # Images that never explain anything: logos, icons, badges, avatars.
-_DECORATIVE = re.compile(
-    r"logo|icon|favicon|badge|avatar|shields\.io|emoji|sprite|banner|button",
-    re.IGNORECASE,
+_DECORATIVE_WORDS = frozenset(
+    {
+        "logo",
+        "icon",
+        "favicon",
+        "badge",
+        "avatar",
+        "emoji",
+        "sprite",
+        "banner",
+        "button",
+    }
 )
+_BADGE_HOSTS = ("shields.io", "badgen.net")
+
+
+def _decorative(url: str) -> bool:
+    """Whether an image URL names a decoration: a word of its path (split at
+    non-letters, plurals folded) such as ``logo`` or ``icons``, or a badge
+    service host. "silicon" and "lexicon" are not icons."""
+    parts = urlsplit(url)
+    if parts.hostname and parts.hostname.endswith(_BADGE_HOSTS):
+        return True
+    words = re.split(r"[^a-z]+", parts.path.lower())
+    return any(
+        w in _DECORATIVE_WORDS or w.rstrip("s") in _DECORATIVE_WORDS for w in words
+    )
 
 
 _GITHUB_REPO = re.compile(
@@ -136,7 +160,7 @@ def guide_documents(
                 figures=[
                     (u, page.image_captions.get(u, ""))
                     for u in page.image_urls
-                    if not _DECORATIVE.search(u)
+                    if not _decorative(u)
                 ],
                 url=page.final_url or page.url,
                 authority=authority,

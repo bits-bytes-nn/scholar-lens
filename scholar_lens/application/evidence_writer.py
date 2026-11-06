@@ -10,11 +10,13 @@ loop. Ports only: the model is injected.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
+import threading
 from collections import Counter
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Literal, TypeVar
 
@@ -160,6 +162,28 @@ def prose_length(markdown: str) -> int:
     return len(" ".join(prose_sentences(markdown)))
 
 
+async def all_or_none[T](aws: Iterable[Awaitable[T]]) -> list[T]:
+    """Every awaitable's result, in order; on the first failure the others
+    are cancelled (no new model calls start) and the failure is raised as
+    is."""
+    tasks = [asyncio.ensure_future(a) for a in aws]
+    try:
+        return list(await asyncio.gather(*tasks))
+    except BaseException:
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        raise
+
+
+_UNSAFE_KEY = re.compile(r"[^A-Za-z0-9._-]+")
+
+
+def safe_key(text: str) -> str:
+    """``text`` as one segment of a cache key."""
+    return _UNSAFE_KEY.sub("_", text)
+
+
 _EVIDENCE_BLOCK = re.compile(r"<evidence>\n.*?\n</evidence>", re.S)
 
 
@@ -289,6 +313,8 @@ class EvidenceWriter:
             hits = document.search(query)
             return "\n\n".join(f"[{a}] {s}" for a, s in hits) or "No passage matches."
 
+        recording = threading.Lock()
+
         def record_evidence(
             kind: str,
             claim: str,
@@ -337,31 +363,36 @@ class EvidenceWriter:
                 problems.insert(0, f"unknown kind {kind!r}")
             if rule is not None:
                 problems += rule(document, kind, fields)
-            if (
-                not problems
-                and kind not in ("figure", "code")
-                and near_duplicate(claim, [e.claim for e in ledger if e.kind == kind])
-            ):
-                problems.append(
-                    "this repeats evidence already recorded; record a different "
-                    "fact or move on"
+            # The agent may run one turn's tool calls in parallel threads: the
+            # duplicate check and the id the ledger hands out see one state.
+            with recording:
+                if (
+                    not problems
+                    and kind not in ("figure", "code")
+                    and near_duplicate(
+                        claim, [e.claim for e in ledger if e.kind == kind]
+                    )
+                ):
+                    problems.append(
+                        "this repeats evidence already recorded; record a "
+                        "different fact or move on"
+                    )
+                if problems:
+                    rejected += 1
+                    reasons.update(f"{kind}: {p.split(':')[0][:60]}" for p in problems)
+                    return "REJECTED: " + "; ".join(problems)
+                item = ledger.add(
+                    document,
+                    kind=kind,
+                    claim=claim.strip(),
+                    quote=quote.strip(),
+                    anchor=anchor.strip(),
+                    scope=scope.strip(),
+                    cell=cell.strip(),
+                    figure_id=figure_id.strip() or None,
+                    latex=latex.strip() or None,
+                    code=code.strip("\n") or None,
                 )
-            if problems:
-                rejected += 1
-                reasons.update(f"{kind}: {p.split(':')[0][:60]}" for p in problems)
-                return "REJECTED: " + "; ".join(problems)
-            item = ledger.add(
-                document,
-                kind=kind,
-                claim=claim.strip(),
-                quote=quote.strip(),
-                anchor=anchor.strip(),
-                scope=scope.strip(),
-                cell=cell.strip(),
-                figure_id=figure_id.strip() or None,
-                latex=latex.strip() or None,
-                code=code.strip("\n") or None,
-            )
             return f"recorded {item.id}"
 
         def finish(summary: str) -> str:

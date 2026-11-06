@@ -141,6 +141,12 @@ def _example(sentence: str) -> bool:
     return bool(_EXAMPLE_MARK.search(sentence))
 
 
+def free_numbers(extra: Iterable[object] = ()) -> str:
+    """Numbers a sentence may state without evidence: small counts (0-10)
+    and ``extra`` (a survey's publication years)."""
+    return " ".join([*(str(n) for n in range(11)), *(str(x) for x in extra)])
+
+
 def stated_numbers(sentence: str, free: str) -> list[str]:
     """The numbers a sentence states beyond ``free`` (years, small counts)."""
     return unsourced_numbers(_plain(sentence), free)

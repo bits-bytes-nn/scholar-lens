@@ -25,6 +25,7 @@ from ..domain.evidence import Evidence, EvidenceLedger, SourceDocument
 from ..domain.evidence_draft import (
     cited_ids,
     draft_problems,
+    free_numbers,
     prose_sentences,
     section_heading,
     section_numbers,
@@ -32,7 +33,6 @@ from ..domain.evidence_draft import (
 from ..domain.glossary import glossary_view
 from ..domain.guide.evidence_guide import strip_markers
 from ..domain.paper.evidence_paper import (
-    REVIEW_TLDR_QUESTIONS,
     TLDR_TITLE,
     PaperOutline,
     PaperSection,
@@ -41,6 +41,7 @@ from ..domain.paper.evidence_paper import (
     paper_section_targets,
     repair_paper_outline,
     tldr_problems,
+    tldr_questions,
 )
 from ..domain.validation import description_problems, fit_description
 from ..prompts import paper_evidence as prompts
@@ -48,11 +49,13 @@ from .evidence_writer import (
     EvidenceWriter,
     PostReview,
     WriterPrompts,
+    all_or_none,
     block,
     brief_lines,
     cached_evidence,
     evidence_lines,
     quote_for_prompt_code,
+    safe_key,
 )
 from .ports import AgentLimits, LanguageModel, TextStore
 from .usage import usage_stage
@@ -61,8 +64,7 @@ logger = logging.getLogger(__name__)
 
 # Bump when the reader's prompt or the evidence schema changes meaning.
 PAPER_READER_VERSION = 1
-_SAFE_KEY = re.compile(r"[^A-Za-z0-9._-]+")
-_FREE_NUMBERS = " ".join(str(n) for n in range(11))
+_FREE_NUMBERS = free_numbers()
 
 PAPER_PROMPTS = WriterPrompts(
     reader=prompts.READER_SYSTEM,
@@ -161,11 +163,11 @@ class EvidencePaperEngine(EvidenceWriter):
     # ---- read -------------------------------------------------------------------
 
     def _cache_key(self, document: SourceDocument, part: int) -> str:
-        pid = _SAFE_KEY.sub("_", document.paper_id)
+        pid = safe_key(document.paper_id)
         text = hashlib.sha256(document.text.encode()).hexdigest()[:12]
         return (
             f"evidence/{pid}/{text}-p{part}-v{PAPER_READER_VERSION}-"
-            f"{self.settings.reader_tag}-{_SAFE_KEY.sub('_', self.settings.language)}-"
+            f"{self.settings.reader_tag}-{safe_key(self.settings.language)}-"
             f"{self.settings.post}.json"
         )
 
@@ -221,7 +223,7 @@ class EvidencePaperEngine(EvidenceWriter):
                 return items
 
         with usage_stage("read"):
-            results = await asyncio.gather(*(one(w, p, n) for w, p, n in jobs))
+            results = await all_or_none((one(w, p, n) for w, p, n in jobs))
         ledger = EvidenceLedger()
         for items in results:
             ledger.extend(items)
@@ -327,7 +329,7 @@ class EvidencePaperEngine(EvidenceWriter):
             outline,
             min_total=self.settings.min_total_chars,
             max_total=self.settings.max_total_chars,
-            korean=self.settings.korean,
+            language=self.settings.language,
         )
         written: list[tuple[PaperSection, str]] = []
         numbers: dict[str, str] = {}
@@ -537,10 +539,11 @@ class EvidencePaperEngine(EvidenceWriter):
             + " ".join(prose_sentences(md)[:2])[:400]
             for s, md in written
         )
-        lang = "Korean" if self.settings.korean else ""
+        questions, exact = tldr_questions(self.settings.language)
         instructions = (
             prompts.TLDR_REVIEW.format(
-                questions=" | ".join(REVIEW_TLDR_QUESTIONS[lang])
+                questions=" | ".join(questions)
+                + ("" if exact else f" (translated into {self.settings.language})")
             )
             if self.settings.post == "review"
             else prompts.TLDR_SUMMARY

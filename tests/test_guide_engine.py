@@ -763,3 +763,13 @@ def test_install_commands_are_checked_against_the_package_extras() -> None:
     ]
     provided = {"strands-agents": frozenset({"cedar"}), "ray": frozenset({"serve"})}
     assert unknown_extras(md, provided) == ["strands-agents[otel]"]
+
+
+def test_decorative_images_are_matched_by_word_not_substring() -> None:
+    from scholar_lens.src.guide_writer import _decorative
+
+    assert _decorative("https://d.dev/static/logo.svg")
+    assert _decorative("https://d.dev/img/icons/gpu.png")
+    assert _decorative("https://img.shields.io/badge/x")
+    assert not _decorative("https://d.dev/img/silicon-layout.png")
+    assert not _decorative("https://d.dev/img/lexicon-table.png")

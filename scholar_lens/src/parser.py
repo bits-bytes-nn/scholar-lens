@@ -680,7 +680,7 @@ class PDFParser(RichParser):
         tasks = [
             Figure.from_llm(
                 figure_analyser=self.figure_analyser,
-                figure_id=str(fd["figure_id"]) or str(i),
+                figure_id=str(fd["figure_id"] or i),
                 path=str(path),
                 caption=fd["caption"] or None,
             )

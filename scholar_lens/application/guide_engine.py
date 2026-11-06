@@ -28,6 +28,7 @@ from ..domain.evidence import (
 from ..domain.evidence_draft import (
     cited_ids,
     draft_problems,
+    free_numbers,
     prose_sentences,
     section_heading,
     section_numbers,
@@ -50,11 +51,13 @@ from .evidence_writer import (
     EvidenceWriter,
     PostReview,
     WriterPrompts,
+    all_or_none,
     block,
     brief_lines,
     cached_evidence,
     evidence_lines,
     quote_for_prompt_code,
+    safe_key,
 )
 from .ports import AgentLimits, LanguageModel, TextStore
 from .usage import usage_stage
@@ -63,9 +66,8 @@ logger = logging.getLogger(__name__)
 
 # Bump when the reader's prompt or the evidence schema changes meaning.
 GUIDE_READER_VERSION = 7
-_SAFE_KEY = re.compile(r"[^A-Za-z0-9._-]+")
 # Small counts and ordinals a guide states without evidence.
-_FREE_NUMBERS = " ".join(str(n) for n in range(11))
+_FREE_NUMBERS = free_numbers()
 
 GUIDE_PROMPTS = WriterPrompts(
     reader=prompts.READER_SYSTEM,
@@ -274,7 +276,7 @@ class EvidenceGuideEngine(EvidenceWriter):
         text = hashlib.sha256(document.text.encode()).hexdigest()[:12]
         return (
             f"evidence/{page}-{text}/v{GUIDE_READER_VERSION}-{self.settings.reader_tag}-"
-            f"{_SAFE_KEY.sub('_', self.settings.language)}-{document.authority}.json"
+            f"{safe_key(self.settings.language)}-{document.authority}.json"
         )
 
     def selected(self, documents: Sequence[SourceDocument]) -> list[SourceDocument]:
@@ -351,7 +353,7 @@ class EvidenceGuideEngine(EvidenceWriter):
                 return items
 
         with usage_stage("read"):
-            results = await asyncio.gather(*(one(d) for d in documents))
+            results = await all_or_none(one(d) for d in documents)
         ledger = EvidenceLedger()
         for items in results:
             ledger.extend(items)
@@ -492,7 +494,7 @@ class EvidenceGuideEngine(EvidenceWriter):
             outline,
             min_total=self.settings.min_total_chars,
             max_total=self.settings.max_total_chars,
-            korean=self.settings.korean,
+            language=self.settings.language,
         )
         written: list[tuple[GuideSection, str]] = []
         numbers: dict[str, str] = {}
