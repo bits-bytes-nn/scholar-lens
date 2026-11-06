@@ -157,3 +157,20 @@ class TestRetryBudget:
         from scholar_lens.adapters.retry import MAX_RETRIES
 
         assert self._call_failing_with(ConnectionError("reset")) == MAX_RETRIES
+
+
+def test_a_certificate_failure_is_not_transient() -> None:
+    import ssl
+
+    import requests
+
+    from scholar_lens.adapters.retry import is_transient_error
+
+    try:
+        try:
+            raise ssl.SSLCertVerificationError("certificate verify failed")
+        except ssl.SSLCertVerificationError as e:
+            raise requests.exceptions.SSLError("handshake") from e
+    except requests.exceptions.SSLError as wrapped:
+        assert not is_transient_error(wrapped)
+    assert is_transient_error(requests.ConnectionError("reset"))

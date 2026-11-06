@@ -76,7 +76,9 @@ async def run_paper_pipeline(
             request.repo_urls,
             parse_pdf,
             tracker,
-            needs_citations=request.kind == "review",
+            # Prerequisite summaries feed the sections engine's review only.
+            needs_citations=request.kind == "review"
+            and context.config.explanation.engine == "sections",
         )
         branch_id = paper_branch_id(paper, request.kind)
         github = context.config.resources.github

@@ -76,6 +76,8 @@ _NON_RETRYABLE_NAMES: frozenset[str] = frozenset(
         "ArxivPaperError",
         "PaperSourceError",
         "OutputTruncatedError",
+        # A certificate that fails verification fails the same way again.
+        "SSLCertVerificationError",
     }
 )
 

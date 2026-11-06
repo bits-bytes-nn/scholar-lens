@@ -150,3 +150,16 @@ def test_scholar_lens_config_names_another_config_file(tmp_path, monkeypatch) ->
     monkeypatch.setattr("scholar_lens.configs.config.load_dotenv", lambda: None)
     monkeypatch.setenv(CONFIG_PATH_ENV, str(path))
     assert Config.load().survey.engine == "evidence"
+
+
+def test_a_github_config_that_cannot_open_a_pr_fails_at_load() -> None:
+    import pytest
+    from pydantic import ValidationError
+
+    from scholar_lens.configs.config import Github
+
+    with pytest.raises(ValidationError, match="owner/name"):
+        Github(enabled=True)
+    with pytest.raises(ValidationError, match="branch_prefix"):
+        Github(branch_prefix="/")
+    assert Github(enabled=True, repo_name="owner/owner.github.io").enabled

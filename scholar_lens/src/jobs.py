@@ -40,6 +40,13 @@ JobStatus = Literal["succeeded", "failed", "rejected"]
 TERMINAL_BATCH_STATES = frozenset({"SUCCEEDED", "FAILED"})
 
 
+def _check_urls(what: str, urls: list[str]) -> None:
+    for url in urls:
+        parsed = urlparse(url)
+        if parsed.scheme not in ("http", "https") or not parsed.hostname:
+            raise ValueError(f"{what} must be an http(s) URL: {url!r}")
+
+
 class JobRequest(BaseModel):
     """One artifact run: what to read and whether to open a blog PR."""
 
@@ -120,10 +127,7 @@ class JobRequest(BaseModel):
                 )
             for paper_id in self.paper_ids:
                 parse_paper_id(paper_id)  # SurveyInputError (a ValueError)
-            for url in self.reference_urls:
-                parsed = urlparse(url)
-                if parsed.scheme not in ("http", "https") or not parsed.hostname:
-                    raise ValueError(f"A reference must be an http(s) URL: {url!r}")
+            _check_urls("A reference", self.reference_urls)
             if (
                 self.since_year
                 and self.until_year
@@ -141,11 +145,15 @@ class JobRequest(BaseModel):
                 )
             if self.source or self.repo_urls:
                 raise ValueError("A guide request takes 'urls', not 'source'.")
+            _check_urls("A documentation page", self.urls)
+            _check_urls("A reference", self.reference_urls)
         else:
             if not (self.source and self.source.strip()):
                 raise ValueError(f"A {self.kind} request needs a 'source'.")
             if self.urls or self.reference_urls or self.search_queries:
                 raise ValueError(f"A {self.kind} request takes 'source', not 'urls'.")
+            # Checked before any paid stage: the paper record needs URLs.
+            _check_urls("A repository", self.repo_urls)
         return self
 
     def describe(self) -> str:

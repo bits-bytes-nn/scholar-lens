@@ -1,5 +1,6 @@
-"""The Strands adapter: usage per cycle, and content-filtered text calls
-repeated (no Bedrock: Agent is replaced)."""
+"""The Strands adapter: usage per cycle, content-filtered text calls
+repeated, and an answer cut at the output limit returned with its usage (no
+Bedrock: Agent is replaced)."""
 
 from __future__ import annotations
 
@@ -7,6 +8,7 @@ import asyncio
 from types import SimpleNamespace
 
 import pytest
+from strands.types.exceptions import MaxTokensReachedException
 
 from scholar_lens.adapters.bedrock import strands_models
 from scholar_lens.adapters.bedrock.strands_models import RoleModel, StrandsLanguageModel
@@ -14,6 +16,7 @@ from scholar_lens.adapters.bedrock.strands_models import RoleModel, StrandsLangu
 
 class FakeResult:
     def __init__(self, stop_reason: str, text: str) -> None:
+        # "max_tokens": the agent raises, as Strands does.
         self.stop_reason = stop_reason
         self._text = text
         usage = {"inputTokens": 10, "outputTokens": 5}
@@ -32,11 +35,20 @@ def _model(
     seen: list = []
 
     class FakeAgent:
-        def __init__(self, *, model, **_) -> None:
+        def __init__(self, *, model, **kwargs) -> None:
+            assert kwargs["retry_strategy"] is None
             seen.append(model)
+            self.messages: list = []
 
         async def invoke_async(self, prompt, **_):
-            return results.pop(0)
+            result = results.pop(0)
+            self.event_loop_metrics = result.metrics
+            if result.stop_reason == "max_tokens":
+                self.messages.append(
+                    {"role": "assistant", "content": [{"text": str(result)}]}
+                )
+                raise MaxTokensReachedException("cut")
+            return result
 
     monkeypatch.setattr(strands_models, "Agent", FakeAgent)
     monkeypatch.setattr(strands_models, "BedrockModel", lambda **kw: kw)
@@ -89,7 +101,9 @@ def test_a_filtered_call_ends_on_the_fallback_model(monkeypatch) -> None:
             seen.append(model["model_id"])
 
         async def invoke_async(self, prompt, **_):
-            return results.pop(0)
+            result = results.pop(0)
+            self.event_loop_metrics = result.metrics
+            return result
 
     monkeypatch.setattr(strands_models, "Agent", FakeAgent)
     monkeypatch.setattr(strands_models, "BedrockModel", lambda **kw: kw)
@@ -121,3 +135,45 @@ def test_shared_context_goes_before_a_cache_point() -> None:
         {"cachePoint": {"type": "default"}},
         {"text": "check these"},
     ]
+
+
+def test_an_answer_cut_at_the_output_limit_is_returned_with_its_usage(
+    monkeypatch,
+) -> None:
+    model, _ = _model(monkeypatch, [FakeResult("max_tokens", "잘린 절")])
+    text = asyncio.run(model.text(role="write", system="s", prompt="p"))
+    assert text == "잘린 절"
+    assert [e.output_tokens for e in model._events] == [5]  # type: ignore[attr-defined]
+
+
+def test_an_agent_cut_at_the_output_limit_keeps_its_outcome(monkeypatch) -> None:
+    from scholar_lens.application.ports import AgentLimits
+
+    model, _ = _model(monkeypatch, [FakeResult("max_tokens", "")])
+    outcome = asyncio.run(
+        model.run_agent(
+            role="write", system="s", prompt="p", tools=[], limits=AgentLimits(turns=3)
+        )
+    )
+    assert outcome.stop_reason == "max_tokens"
+    assert len(model._events) == 1  # type: ignore[attr-defined]
+
+
+def test_an_evidence_run_stops_at_its_cost_ceiling() -> None:
+    from scholar_lens.domain.usage import UsageEvent
+    from scholar_lens.src.evidence_models import budgeted
+    from scholar_lens.src.metrics import TokenBudgetExceeded, TokenUsageTracker
+
+    tracker = TokenUsageTracker()
+    record = budgeted(tracker, 0.01)
+    event = UsageEvent(
+        stage="write",
+        model_id="global.anthropic.claude-opus-5-5",
+        input_tokens=1_000,
+        output_tokens=100,
+    )
+    record(event)
+    with pytest.raises(TokenBudgetExceeded):
+        record(event.model_copy(update={"input_tokens": 100_000}))
+    assert tracker.call_count == 2
+    budgeted(tracker, None)(event)

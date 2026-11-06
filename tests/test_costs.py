@@ -96,6 +96,11 @@ def test_s3_ledger_reads_manifests_in_the_period() -> None:
         Bucket="results-bucket", Key="sl/results/broken.json", Body=b"{not json"
     )
     s3.put_object(Bucket="results-bucket", Key="sl/posts/other.md", Body=b"x")
+    # Not manifests: a list at the top level, and anything in a sub-folder.
+    s3.put_object(Bucket="results-bucket", Key="sl/results/list.json", Body=b"[1]")
+    s3.put_object(
+        Bucket="results-bucket", Key="sl/results/evidence/x.json", Body=b"[]"
+    )
     now = datetime.now(UTC)
     ledger = S3RunLedger(s3, "results-bucket", "sl/results")
     (record,) = list(

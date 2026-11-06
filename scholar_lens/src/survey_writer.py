@@ -1230,7 +1230,7 @@ async def write_survey_with_evidence(
     an evidence-assigning outline, verified sections (docs/redesign.md)."""
     from ..adapters.bedrock.strands_models import RoleModel, StrandsLanguageModel
     from ..application.survey_engine import EngineSettings, EvidenceSurveyEngine
-    from .evidence_models import role_model, unservable
+    from .evidence_models import budgeted, role_model, unservable
     from .survey_documents import EvidenceTextStore, PaperDocuments
 
     cfg = context.config.survey
@@ -1251,7 +1251,7 @@ async def write_survey_with_evidence(
             ),
             "evaluate": role(cfg.evaluation_model_id, cfg.thinking_effort, True),
         },
-        tracker.record,
+        budgeted(tracker, cfg.write_max_cost_usd),
     )
     records = await asyncio.to_thread(index.records, [p.id for p in plan.papers])
     documents = PaperDocuments(

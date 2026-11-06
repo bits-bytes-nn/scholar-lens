@@ -56,7 +56,7 @@ testpaths = ["tests"]
 pythonpath = ["."]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
-addopts = "-ra -q --strict-markers"
+addopts = "-ra --strict-markers"
 
 [tool.coverage.run]
 source = ["scholar_lens"]

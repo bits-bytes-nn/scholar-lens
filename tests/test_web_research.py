@@ -930,7 +930,9 @@ class TestFetchFailures:
         from scholar_lens.src.web_research import SourceFetchError
 
         url = "https://docs.x.dev/guide"
-        researcher = _researcher({url: (429, "text/html", "challenge")})
+        researcher = _researcher(
+            {url: (429, "text/html", "challenge")}, sleep=lambda _s: None
+        )
         with pytest.raises(SourceFetchError):
             researcher.research([url], discover_subpages=False)
 

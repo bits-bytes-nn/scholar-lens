@@ -113,8 +113,10 @@ class PinnedRequestsAdapter(HTTPAdapter):
         pinned_ip = resolve_validated_ip(url)  # raises UnsafeUrlError if not public
         if pinned_ip is None:
             return super().send(request, **kwargs)  # IP literal — connect as-is
-        # Preserve the Host header so the server routes/certifies by hostname.
-        request.headers.setdefault("Host", parts.netloc)
+        # The Host header routes by hostname. Set for this hop and removed
+        # after it: a redirect copies the request, and a stale Host would
+        # reach the next host's pinned IP.
+        request.headers["Host"] = parts.netloc
         # Rewrite the connection target to the validated IP (bracket IPv6).
         connect_host = f"[{pinned_ip}]" if ":" in pinned_ip else pinned_ip
         netloc = connect_host + (f":{parts.port}" if parts.port else "")
@@ -129,6 +131,7 @@ class PinnedRequestsAdapter(HTTPAdapter):
         finally:
             self._local.server_hostname = None
             request.url = url
+            request.headers.pop("Host", None)
         response.url = url
         return response
 

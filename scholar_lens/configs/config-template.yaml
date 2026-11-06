@@ -83,6 +83,7 @@ explanation:
   # Hard total-token ceiling for one run (null = no limit); a LoRA-length
   # paper uses ~1.4M.
   max_total_tokens: 8000000
+  max_cost_usd: 40               # evidence engine: hard ceiling (USD, null = none)
 
 summary:
   summary_model_id: anthropic.claude-opus-5-5
@@ -93,6 +94,7 @@ summary:
   summarizer_enable_thinking: false
   thinking_effort: medium
   max_total_tokens: 1000000        # hard ceiling (null = no limit)
+  max_cost_usd: 12                 # evidence engine: hard ceiling (USD)
 
 tech_guide:
   relevance_model_id: anthropic.claude-haiku-5-5
@@ -120,6 +122,8 @@ tech_guide:
   # Soft limit: past it, remaining sections skip evaluate/revise/grounding;
   # past 1.5x the run aborts.
   max_total_tokens: 3000000
+  # Evidence engine: hard ceiling on one run's estimated cost (USD).
+  max_cost_usd: 60
   # Writing engine: sections (synopsis, then score-revised sections) or
   # evidence (reading agents record checked evidence per page; the outline
   # gives it to sections in the guide's order; docs/redesign.md).
@@ -169,6 +173,8 @@ survey:
   # Soft limit on one write run: past it sections skip evaluation, revision
   # and grounding; past 1.5x the run aborts.
   write_max_total_tokens: 4500000
+  # Evidence engine: hard ceiling on one write run's estimated cost (USD).
+  write_max_cost_usd: 60
 
 # Language of every generated artifact (e.g. Korean, English).
 output_language: Korean

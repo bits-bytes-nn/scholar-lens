@@ -2,9 +2,12 @@
 
 Each role (read, outline, write, evaluate) has its model, effort and output
 limit. Every model call is recorded as a :class:`UsageEvent` under the current
-stage (one per agent cycle). botocore owns retries of throttling and
-transient errors here (standard mode); Strands retries a structured answer
-that fails its schema.
+stage (one per agent cycle), also when the call fails. botocore owns retries
+of throttling and transient errors (standard mode, jittered backoff); the
+agents' own model retries are off so attempts do not multiply. Strands
+retries a structured answer that fails its schema. An answer cut at the
+output limit is returned as such (``stop_reason="max_tokens"``), not raised:
+an agent's tool calls up to then stand.
 """
 
 from __future__ import annotations
@@ -19,6 +22,8 @@ from botocore.config import Config
 from strands import Agent, tool
 from strands.models import BedrockModel
 from strands.models.model import CacheConfig
+from strands.telemetry.metrics import EventLoopMetrics
+from strands.types.exceptions import MaxTokensReachedException
 
 from ...application.ports import AgentLimits, AgentOutcome, ModelRole, SchemaT
 from ...application.usage import current_stage
@@ -96,12 +101,23 @@ class StrandsLanguageModel:
             ),
         )
 
-    def _usage(self, role: ModelRole, result: Any, label: str | None = None) -> None:
+    def _agent(self, model: BedrockModel, system: str, **kwargs: Any) -> Agent:
+        return Agent(
+            model=model,
+            system_prompt=system,
+            callback_handler=None,
+            retry_strategy=None,
+            **kwargs,
+        )
+
+    def _usage(
+        self, role: ModelRole, metrics: EventLoopMetrics, label: str | None = None
+    ) -> None:
         label = label or self._roles[role].model_label
         stage = current_stage()
-        invocations = getattr(result.metrics, "agent_invocations", None) or []
+        invocations = metrics.agent_invocations
         cycles = invocations[-1].cycles if invocations else []
-        usages = [c.usage for c in cycles] or [result.metrics.accumulated_usage]
+        usages = [c.usage for c in cycles] or [metrics.accumulated_usage]
         for usage in usages:
             self._record(
                 UsageEvent(
@@ -114,6 +130,20 @@ class StrandsLanguageModel:
                 )
             )
 
+    async def _invoke(
+        self, agent: Agent, role: ModelRole, label: str, content: Any, **kwargs: Any
+    ) -> tuple[Any, str, str]:
+        """(result or None, text, stop reason) of one invocation, its usage
+        recorded whatever happens. An answer cut at the output limit comes
+        back with its partial text and ``"max_tokens"``."""
+        try:
+            result = await agent.invoke_async(content, **kwargs)
+        except MaxTokensReachedException:
+            return None, _last_text(agent), "max_tokens"
+        finally:
+            self._usage(role, agent.event_loop_metrics, label)
+        return result, str(result), str(result.stop_reason)
+
     async def structured(
         self,
         *,
@@ -123,19 +153,20 @@ class StrandsLanguageModel:
         schema: type[SchemaT],
         context: str = "",
     ) -> SchemaT:
-        agent = Agent(
-            model=self._model(role), system_prompt=system, callback_handler=None
-        )
-        result = await agent.invoke_async(
-            _content(context, prompt),  # type: ignore[arg-type]
+        agent = self._agent(self._model(role), system)
+        result, _, stop = await self._invoke(
+            agent,
+            role,
+            self._roles[role].model_label,
+            _content(context, prompt),
             structured_output_model=schema,
             limits={"structured_output_attempts": _STRUCTURED_ATTEMPTS},
         )
-        self._usage(role, result)
-        output = result.structured_output
+        output = result.structured_output if result is not None else None
         if not isinstance(output, schema):
             raise ValueError(
                 f"No valid {schema.__name__} after {_STRUCTURED_ATTEMPTS} attempts"
+                f" (stop reason {stop})"
             )
         return output
 
@@ -152,29 +183,28 @@ class StrandsLanguageModel:
         ) + [(spec, False)]
         if spec.fallback is not None:
             tries.append((spec.fallback, None))
+        text, stop = "", ""
         for n, (model, thinking) in enumerate(tries):
-            agent = Agent(
-                model=self._model(role, thinking=thinking, spec=model),
-                system_prompt=system,
-                callback_handler=None,
+            agent = self._agent(
+                self._model(role, thinking=thinking, spec=model), system
             )
-            result = await agent.invoke_async(_content(context, prompt))  # type: ignore[arg-type]
-            self._usage(role, result, model.model_label)
-            if result.stop_reason != "content_filtered" or n == len(tries) - 1:
+            _, text, stop = await self._invoke(
+                agent, role, model.model_label, _content(context, prompt)
+            )
+            if stop != "content_filtered" or n == len(tries) - 1:
                 break
             logger.warning(
                 "%s call content-filtered after %d characters (%s); attempt %d.",
                 role,
-                len(str(result)),
+                len(text),
                 model.model_label,
                 n + 2,
             )
-        text = str(result)
-        if result.stop_reason != "end_turn" or len(text.strip()) < 200:
+        if stop != "end_turn" or len(text.strip()) < 200:
             logger.warning(
                 "%s call ended with %s and %d characters of text.",
                 role,
-                result.stop_reason,
+                stop,
                 len(text.strip()),
             )
         return text
@@ -188,15 +218,27 @@ class StrandsLanguageModel:
         tools: list[Callable[..., str]],
         limits: AgentLimits,
     ) -> AgentOutcome:
-        agent = Agent(
-            model=self._model(role),
-            system_prompt=system,
-            tools=[tool(fn) for fn in tools],
-            callback_handler=None,
-        )
+        agent = self._agent(self._model(role), system, tools=[tool(fn) for fn in tools])
         request_limits: dict[str, int] = {"turns": limits.turns}
         if limits.total_tokens:
             request_limits["total_tokens"] = limits.total_tokens
-        result = await agent.invoke_async(prompt, limits=request_limits)  # type: ignore[arg-type]
-        self._usage(role, result)
-        return AgentOutcome(text=str(result), stop_reason=str(result.stop_reason))
+        _, text, stop = await self._invoke(
+            agent,
+            role,
+            self._roles[role].model_label,
+            prompt,
+            limits=request_limits,
+        )
+        return AgentOutcome(text=text, stop_reason=stop)
+
+
+def _last_text(agent: Agent) -> str:
+    """The text of the agent's last (partial) assistant message."""
+    for message in reversed(agent.messages):
+        if message.get("role") == "assistant":
+            return "".join(
+                str(block["text"])
+                for block in message.get("content", [])
+                if isinstance(block, dict) and "text" in block
+            )
+    return ""

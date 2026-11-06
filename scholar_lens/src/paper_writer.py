@@ -62,7 +62,7 @@ async def write_paper_with_evidence(
 ) -> tuple[ReviewText | dict[str, str], list[str]]:
     from ..adapters.bedrock.strands_models import StrandsLanguageModel
     from ..application.paper_engine import EvidencePaperEngine, PaperSettings
-    from .evidence_models import role_model, unservable
+    from .evidence_models import budgeted, role_model, unservable
     from .survey_documents import EvidenceTextStore
 
     if post == "review":
@@ -75,12 +75,14 @@ async def write_paper_with_evidence(
         reader_id = cfg.reader_model_id
         lengths = (cfg.min_total_chars, cfg.max_total_chars)
         max_sections, chars_per_reader = cfg.max_sections, 15_000
+        max_cost = cfg.max_cost_usd
     else:
         scfg = context.config.summary
         writer_id = outline_id = judge_id = scfg.summary_model_id
         reader_id = scfg.reader_model_id
         lengths = (scfg.min_total_chars, scfg.max_total_chars)
         max_sections, chars_per_reader = 6, 40_000
+        max_cost = scfg.max_cost_usd
     effort = (
         context.config.explanation.thinking_effort
         if post == "review"
@@ -97,7 +99,7 @@ async def write_paper_with_evidence(
             ),
             "evaluate": role_model(context, judge_id, effort, True),
         },
-        tracker.record,
+        budgeted(tracker, max_cost),
     )
     document, extra = paper_documents(paper)
     engine = EvidencePaperEngine(
@@ -115,7 +117,7 @@ async def write_paper_with_evidence(
             ROOT_DIR / LocalPaths.PAPERS_DIR.value / "paper-evidence",
             context.s3_handler,
             context.config.resources.s3_prefix,
-            S3Paths.RESULTS,
+            S3Paths.PAPERS,
         ),
     )
     result = await engine.write(

@@ -267,6 +267,7 @@ class TestMetricsEmitter:
             duration_seconds=1.0,
             tracker=tracker,
         )  # no raise
+        client.put_metric_data.assert_called()
 
 
 class TestRateAndExtractUsageEdges:

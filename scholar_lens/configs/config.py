@@ -52,6 +52,15 @@ class Github(_Section):
     # Access). Set True only if you intentionally serve assets straight from S3.
     public_assets: bool = Field(default=False)
 
+    @model_validator(mode="after")
+    def _check_repo(self) -> "Github":
+        # Fail at load, not after a run's paid stages reach the PR step.
+        if self.enabled and not (self.repo_name and "/" in self.repo_name):
+            raise ValueError("github.enabled needs repo_name as 'owner/name'.")
+        if not self.branch_prefix.strip("/"):
+            raise ValueError("github.branch_prefix must not be empty.")
+        return self
+
 
 class Resources(_Section):
     project_name: str = Field(min_length=1)
@@ -168,6 +177,9 @@ class Explanation(_Section):
     # leaves ~6x headroom over a LoRA-length paper (~1.4M tokens, ~$6 on Opus
     # 5.5) and stops a runaway run near $40.
     max_total_tokens: int | None = Field(default=8_000_000, gt=0)
+    # Evidence engine: hard ceiling on one run's estimated cost (list prices,
+    # USD; None = no limit). A review costs about $5-11.
+    max_cost_usd: float | None = Field(default=40.0, gt=0)
 
 
 class Summary(_Section):
@@ -189,6 +201,9 @@ class Summary(_Section):
     # Hard total-token ceiling for one summary run (None = no limit); a typical
     # summary uses ~0.13M tokens.
     max_total_tokens: int | None = Field(default=1_000_000, gt=0)
+    # Evidence engine: hard ceiling on one run's estimated cost (list prices,
+    # USD; None = no limit). A summary costs about $3.
+    max_cost_usd: float | None = Field(default=12.0, gt=0)
 
 
 class TechGuide(_Section):
@@ -232,6 +247,9 @@ class TechGuide(_Section):
     # $15 on Opus 5.5. Past it the remaining sections skip evaluate/revise/
     # grounding; past 1.5x the run aborts.
     max_total_tokens: int | None = Field(default=3_000_000, gt=0)
+    # Evidence engine: hard ceiling on one run's estimated cost (list prices,
+    # USD; None = no limit). A guide costs about $15-23.
+    max_cost_usd: float | None = Field(default=60.0, gt=0)
     # The writing engine: "sections" (a synopsis, then sections revised by
     # score) or "evidence" (reading agents record checked evidence per page
     # that the outline gives to sections; docs/redesign.md). The evidence
@@ -299,6 +317,9 @@ class Survey(_Section):
     # Soft limit on one write run: past it sections are written without
     # evaluation, revision or grounding; past 1.5x the run aborts.
     write_max_total_tokens: int | None = Field(default=4_500_000, gt=0)
+    # Evidence engine: hard ceiling on one run's estimated cost (list prices,
+    # USD; None = no limit). A survey costs about $15-18.
+    write_max_cost_usd: float | None = Field(default=60.0, gt=0)
 
     @model_validator(mode="after")
     def _check_bounds(self) -> "Survey":

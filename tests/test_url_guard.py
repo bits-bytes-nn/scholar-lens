@@ -213,6 +213,12 @@ def test_pinned_requests_adapter_sni_and_url(monkeypatch: pytest.MonkeyPatch) ->
     assert response.url == "https://papers.example.com/a.pdf"
     assert prepared.url == "https://papers.example.com/a.pdf"
     assert adapter._local.server_hostname is None
+    # A redirect re-sends a copy of the request: it carries no stale Host.
+    assert "Host" not in prepared.headers
+    redirected = prepared.copy()
+    redirected.url = "https://cdn.example.org/a.pdf"
+    adapter.send(redirected)
+    assert captured["host"] == "cdn.example.org"
 
 
 @pytest.mark.parametrize(

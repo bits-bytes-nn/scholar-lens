@@ -9,10 +9,13 @@ allocation), its effort and thinking switch and the model's output limit.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 
 from ..adapters.bedrock.strands_models import RoleModel
+from ..domain.usage import UsageEvent
 from .constants import LanguageModelId
 from .logger import logger
+from .metrics import TokenBudgetExceeded, TokenUsageTracker
 from .runtime import RunContext
 from .utils import BedrockCrossRegionModelHelper
 from .utils.factories import _allocated_profile
@@ -35,6 +38,24 @@ def role_model(
         thinking=thinking,
         max_tokens=min(64_000, info.max_output_tokens if info else 32_000),
     )
+
+
+def budgeted(
+    tracker: TokenUsageTracker, max_cost_usd: float | None
+) -> Callable[[UsageEvent], None]:
+    """The model port's usage recorder: each call recorded, the run stopped
+    (:class:`TokenBudgetExceeded`) once its estimated cost passes
+    ``max_cost_usd``."""
+
+    def record(event: UsageEvent) -> None:
+        tracker.record(event)
+        if max_cost_usd and tracker.cost_usd > max_cost_usd:
+            raise TokenBudgetExceeded(
+                f"Cost ceiling passed: ${tracker.cost_usd:.2f} > ${max_cost_usd:.2f} "
+                f"(across {tracker.call_count} calls)."
+            )
+
+    return record
 
 
 def _downloadable(url: str) -> bool:

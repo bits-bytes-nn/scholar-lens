@@ -26,8 +26,9 @@ class S3RunLedger:
         self._prefix = results_prefix.rstrip("/") + "/"
 
     def runs(self, since: datetime, until: datetime) -> Iterator[RunRecord]:
+        # Manifests sit directly under the prefix (``results/<job id>.json``).
         pages = self._s3.get_paginator("list_objects_v2").paginate(
-            Bucket=self._bucket, Prefix=self._prefix
+            Bucket=self._bucket, Prefix=self._prefix, Delimiter="/"
         )
         for page in pages:
             for obj in page.get("Contents", []):
@@ -41,7 +42,7 @@ class S3RunLedger:
         body = self._s3.get_object(Bucket=self._bucket, Key=key)["Body"].read()
         try:
             return _to_record(body, finished)
-        except (ValidationError, ValueError, KeyError) as e:
+        except (ValidationError, ValueError, KeyError, AttributeError, TypeError) as e:
             logger.warning("Skipping unreadable result manifest %s: %s", key, e)
             return None
 
