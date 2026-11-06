@@ -394,7 +394,8 @@ class ScriptedModel:
             )
         return AgentOutcome(text="done", stop_reason="end_turn")
 
-    async def structured(self, *, role, system, prompt, schema):
+    async def structured(self, *, role, system, prompt, schema, context=""):
+        prompt = f"{context}\n\n{prompt}"
         self.calls.append(schema.__name__)
         if schema is GuideOutline:
             sections = [s.model_dump() for s in _outline().sections]
@@ -426,7 +427,8 @@ class ScriptedModel:
             )
         raise AssertionError(schema)
 
-    async def text(self, *, role, system, prompt) -> str:
+    async def text(self, *, role, system, prompt, context="") -> str:
+        prompt = f"{context}\n\n{prompt}"
         self.calls.append(f"text:{role}")
         if "serve is not imported" in prompt:
             self.calls.append("code-fix")

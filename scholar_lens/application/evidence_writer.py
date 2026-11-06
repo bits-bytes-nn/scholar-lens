@@ -518,15 +518,21 @@ class EvidenceWriter:
                 await self.model.text(
                     role="write",
                     system=self.prompts.fix,
-                    prompt="\n\n".join(
+                    # The evidence and passages repeat across a section's
+                    # fixes; only the draft and its problems change.
+                    context="\n\n".join(
                         [
-                            block("section", draft),
                             block("evidence", evidence_lines(evidence)),
                             *(
                                 [block("source_sections", self.reference)]
                                 if self.reference
                                 else []
                             ),
+                        ]
+                    ),
+                    prompt="\n\n".join(
+                        [
+                            block("section", draft),
                             block("problems", "\n".join(f"- {i}" for i in issues)),
                         ]
                     ),
@@ -580,14 +586,14 @@ class EvidenceWriter:
             check = await self.model.structured(
                 role="evaluate",
                 system=self.prompts.claim_check,
-                prompt=block("section_evidence", evidence_lines(list(context)))
+                # Shared by every claim check of the section (each round).
+                context=block("section_evidence", evidence_lines(list(context)))
                 + (
                     "\n\n" + block("source_sections", self.reference)
                     if self.reference
                     else ""
-                )
-                + "\n\n"
-                + block("sentences", "\n".join(lines)),
+                ),
+                prompt=block("sentences", "\n".join(lines)),
                 schema=ClaimCheck,
             )
         bad = []

@@ -110,3 +110,14 @@ def test_a_filtered_call_ends_on_the_fallback_model(monkeypatch) -> None:
     )
     assert seen == ["opus-arn"] * 4 + ["sonnet-arn"]
     assert events[-1].model_id == "global.anthropic.claude-sonnet-5-5"
+
+
+def test_shared_context_goes_before_a_cache_point() -> None:
+    from scholar_lens.adapters.bedrock.strands_models import _content
+
+    assert _content("", "check these") == "check these"
+    assert _content("evidence E1", "check these") == [
+        {"text": "evidence E1"},
+        {"cachePoint": {"type": "default"}},
+        {"text": "check these"},
+    ]

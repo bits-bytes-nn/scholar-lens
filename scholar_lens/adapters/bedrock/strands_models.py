@@ -51,6 +51,15 @@ class RoleModel:
     fallback: RoleModel | None = None
 
 
+def _content(context: str, prompt: str) -> str | list[dict[str, object]]:
+    """The user turn: ``context`` (what repeated calls share: evidence, source
+    passages) before a cache point, then ``prompt``. Calls that differ only
+    after the cache point read the shared part at the cache-read rate."""
+    if not context.strip():
+        return prompt
+    return [{"text": context}, {"cachePoint": {"type": "default"}}, {"text": prompt}]
+
+
 class StrandsLanguageModel:
     def __init__(
         self,
@@ -106,13 +115,19 @@ class StrandsLanguageModel:
             )
 
     async def structured(
-        self, *, role: ModelRole, system: str, prompt: str, schema: type[SchemaT]
+        self,
+        *,
+        role: ModelRole,
+        system: str,
+        prompt: str,
+        schema: type[SchemaT],
+        context: str = "",
     ) -> SchemaT:
         agent = Agent(
             model=self._model(role), system_prompt=system, callback_handler=None
         )
         result = await agent.invoke_async(
-            prompt,
+            _content(context, prompt),  # type: ignore[arg-type]
             structured_output_model=schema,
             limits={"structured_output_attempts": _STRUCTURED_ATTEMPTS},
         )
@@ -124,7 +139,9 @@ class StrandsLanguageModel:
             )
         return output
 
-    async def text(self, *, role: ModelRole, system: str, prompt: str) -> str:
+    async def text(
+        self, *, role: ModelRole, system: str, prompt: str, context: str = ""
+    ) -> str:
         # Bedrock's content filter can stop a long answer about attacks
         # (jailbreaks, injections) mid-sentence, and not on every attempt:
         # the call is repeated, the last time without thinking, then made
@@ -141,7 +158,7 @@ class StrandsLanguageModel:
                 system_prompt=system,
                 callback_handler=None,
             )
-            result = await agent.invoke_async(prompt)
+            result = await agent.invoke_async(_content(context, prompt))  # type: ignore[arg-type]
             self._usage(role, result, model.model_label)
             if result.stop_reason != "content_filtered" or n == len(tries) - 1:
                 break

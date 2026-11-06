@@ -48,10 +48,18 @@ class LanguageModel(Protocol):
     """Model calls by role (the adapter maps a role to a model and effort)."""
 
     async def structured(
-        self, *, role: ModelRole, system: str, prompt: str, schema: type[SchemaT]
+        self,
+        *,
+        role: ModelRole,
+        system: str,
+        prompt: str,
+        schema: type[SchemaT],
+        context: str = "",
     ) -> SchemaT: ...
 
-    async def text(self, *, role: ModelRole, system: str, prompt: str) -> str: ...
+    async def text(
+        self, *, role: ModelRole, system: str, prompt: str, context: str = ""
+    ) -> str: ...
 
     async def run_agent(
         self,

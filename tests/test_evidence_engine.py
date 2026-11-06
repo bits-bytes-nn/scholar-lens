@@ -326,7 +326,8 @@ class ScriptedModel:
         record("figure", "DPO와 RLHF 비교", "", "S1", "", "", "F1")
         return AgentOutcome(text="done", stop_reason="end_turn")
 
-    async def structured(self, *, role, system, prompt, schema):
+    async def structured(self, *, role, system, prompt, schema, context=""):
+        prompt = f"{context}\n\n{prompt}"
         self.calls.append(schema.__name__)
         if schema is EvidenceOutline:
             return _outline()
@@ -343,7 +344,8 @@ class ScriptedModel:
             return EvidenceCheck()
         raise AssertionError(schema)
 
-    async def text(self, *, role, system, prompt) -> str:
+    async def text(self, *, role, system, prompt, context="") -> str:
+        prompt = f"{context}\n\n{prompt}"
         self.calls.append(f"text:{role}")
         if "<problems>" in prompt:  # the fix: the wrong number corrected
             title = prompt.split("## ", 1)[1].split("\n", 1)[0]
