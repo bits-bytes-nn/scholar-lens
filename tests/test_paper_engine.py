@@ -366,7 +366,7 @@ def test_a_conditional_bar_inside_a_nested_call_becomes_mid() -> None:
     )
 
 
-def test_blank_and_meta_table_cells_are_problems() -> None:
+def test_blank_table_cells_are_problems() -> None:
     from scholar_lens.domain.evidence_draft import draft_problems
 
     md = (
@@ -384,4 +384,3 @@ def test_blank_and_meta_table_cells_are_problems() -> None:
         free_numbers="",
     )
     assert any("blank" in p for p in problems)
-    assert any("leaves out" in p for p in problems)

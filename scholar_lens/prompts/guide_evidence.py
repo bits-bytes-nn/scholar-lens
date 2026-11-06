@@ -9,8 +9,11 @@ inside, how to use and run it, and when to choose it. Deterministic checks in
 from __future__ import annotations
 
 from .rules import (
+    CLAIM_SCOPE,
+    ILLUSTRATION_MARK,
     MATH_RULES,
     READER_PROFILE,
+    SELF_REFERENCE_CHECKS,
     STYLE_RULES,
     TABLE_RULES,
     VISUAL_RULES,
@@ -59,7 +62,7 @@ How a good guide on this blog is written:
   most 40); it is copied from the code evidence, trimmed or with the running
   example's names, never with an API, flag or argument the evidence lacks.
 - State each fact once, where it matters; later refer back to it by content
-  ("앞서 설정한 `num_replicas`") without repeating it.
+  ("앞서 설정한 `max_connections`") without repeating it.
 - State facts plainly; never say which page or document a fact came from
   ("공식 문서에 따르면"). Name a source only for a benchmark, an opinion or the
   paper or design doc a mechanism comes from, once.
@@ -123,7 +126,7 @@ language:
   exactly as the page does). Only an official page gives settings.
 - Keep every qualifier the page gives in `claim` or `scope`: the SDK
   language (Python only, TypeScript only), the version, the provider or
-  backend, a condition ("when OpenTelemetry is configured"). A claim true
+  backend, a condition ("when tracing is enabled"). A claim true
   for one of them never reads as true for all.
 - measured results with their setup (number: `scope` names the hardware,
   model, workload and metric);
@@ -221,6 +224,7 @@ Evidence:
   `text` block with boxes and arrows, labelled as an illustration.
 - Use an assigned equation as given, symbols defined right after it.
 """
+    + ILLUSTRATION_MARK
     + VISUAL_RULES
     + TABLE_RULES
     + MATH_RULES
@@ -246,8 +250,8 @@ its authority in brackets: a mechanism or default only a [reference],
 version's behaviour), stated as what the tool does today, is unsupported
 unless an [official] item confirms it; stated as that paper's or version's
 design, it is supported.
-A sentence that credits a source (by its name, author or site: "Suhas
-Bhairav의 글은 …", "agents-lib에 따르면") is supported only by what that
+A sentence that credits a source (by its name, author or site: "Jane
+Doe의 글은 …", "example-blog에 따르면") is supported only by what that
 source's cited evidence says; anything it adds, or credits to a source whose
 evidence does not say it, is wrong. A claim about what the tool does in a
 case the evidence does not cover (an error, a rejection, a refusal, a default
@@ -271,6 +275,7 @@ only a non-official source gives, stated as current behaviour, is
 unsupported. Give a short reason for anything not supported.
 """
     + SOURCE_AUTHORITY
+    + CLAIM_SCOPE
     + SECURITY
 )
 
@@ -310,6 +315,7 @@ change:
 Do not report matters of taste. Return no issues when there are none.
 """
     + GUIDE_PRINCIPLES
+    + SELF_REFERENCE_CHECKS
     + SECURITY
 )
 
@@ -355,7 +361,7 @@ says:
   extras each package provides are listed under packages; report it on the
   first usage section);
 - a config file or command that, where it appears, needs code shown only
-  later (a config setting `user_config` before the `reconfigure` that reads
+  later (a config setting `cache_dir` before the `load` call that reads
   it), or a "changed lines only" fragment the reader cannot assemble;
 - a sentence that points back to something earlier sections never show
   ("앞서 계산한 대로", "앞서 보낸 요청", a recap of code the earlier blocks

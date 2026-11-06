@@ -19,7 +19,7 @@ import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
 
 from ..domain.evidence import Evidence, EvidenceLedger, SourceDocument
 from ..domain.evidence_draft import (
@@ -30,7 +30,7 @@ from ..domain.evidence_draft import (
     section_numbers,
 )
 from ..domain.glossary import glossary_view
-from ..domain.guide.evidence_guide import guide_draft_problems, strip_markers
+from ..domain.guide.evidence_guide import strip_markers
 from ..domain.paper.evidence_paper import (
     REVIEW_TLDR_QUESTIONS,
     TLDR_TITLE,
@@ -50,9 +50,9 @@ from .evidence_writer import (
     WriterPrompts,
     block,
     brief_lines,
+    cached_evidence,
     evidence_lines,
     quote_for_prompt_code,
-    recheck,
 )
 from .ports import AgentLimits, LanguageModel, TextStore
 from .usage import usage_stage
@@ -186,13 +186,9 @@ class EvidencePaperEngine(EvidenceWriter):
             async with gate:
                 key = self._cache_key(part, n)
                 if self.store is not None and (cached := self.store.get(key)):
-                    try:
-                        items = [Evidence.model_validate(e) for e in json.loads(cached)]
-                        return [e for e in items if not recheck(part, e)]
-                    except (ValueError, ValidationError):
-                        logger.warning(
-                            "Unreadable cached evidence %s; reading again.", key
-                        )
+                    kept = cached_evidence(cached, part, key=key)
+                    if kept is not None:
+                        return kept
                 anchors = ", ".join(s.anchor for s in part.sections)
                 prompt = "\n\n".join(
                     [
@@ -458,8 +454,7 @@ class EvidencePaperEngine(EvidenceWriter):
                 exhausted=exhausted,
                 target_chars=target,
                 depth=section.depth if section.kind == "method" else "",
-                own_view_limit=1 if section.kind == "closing" else 0,
-            ) + guide_draft_problems(markdown)
+            )
 
         self.reference = reference
         markdown = await self.verify_and_fix(
@@ -559,7 +554,11 @@ class EvidencePaperEngine(EvidenceWriter):
             ]
         )
         draft = await self.draft(
-            prompt, context, target, retry_hint="This is the TL;DR of a paper post."
+            prompt,
+            context,
+            target,
+            retry_hint="This is the TL;DR of a paper post.",
+            evidence=context[:80],
         )
 
         def checks(md: str) -> list[str]:
@@ -573,7 +572,6 @@ class EvidencePaperEngine(EvidenceWriter):
                 figure_urls=(),
                 free_numbers=_FREE_NUMBERS,
                 passages=self.passages,
-                own_view_limit=0,
             ) + tldr_problems(md, self.settings.post, self.settings.language)
 
         markdown = await self.verify_and_fix(

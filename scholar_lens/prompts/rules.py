@@ -250,3 +250,35 @@ def blocking_issues_block(issues: list[str], sources: str) -> str:
         f"\n\nThe reviewer left these blocking issues in the section. Correct or remove exactly these claims using only "
         f"{sources}; change nothing else for them:\n{listed}"
     )
+
+
+ILLUSTRATION_MARK: str = """
+An illustration of your own (a toy input, hypothetical numbers) says so in
+words and ends its sentence with [[EX]] instead of evidence ids; its numbers
+are not checked against the evidence. Never put a result, default or
+measurement of the subject in an [[EX]] sentence.
+"""
+
+
+CLAIM_SCOPE: str = """
+- A sentence saying a source does not state, show, report, define or give
+  something is unsupported unless a cited item quotes the source saying so:
+  the writer saw only parts of the sources.
+- A sentence ending with [[EX]] is the writer's illustration: supported
+  unless it states a result, default or behaviour of the subject the
+  evidence does not give.
+"""
+
+
+SELF_REFERENCE_CHECKS: str = """
+Also report, as "sources", sentences about the post's own inputs or making
+instead of its subject: the evidence, the provided material, a summary or
+abstract it was given, where a table's values were taken from, which page a
+fact came from ("according to the docs" instead of the fact), and hedges
+that send the reader to check what the evidence answers. As "style": a
+heading written as a sentence instead of a claim in a noun phrase, the same
+sentence frame used again and again, the post's own view marked outside its
+closing section, notes about the writing itself (what was revised, words
+addressed to whoever asked for the section). As "flow": a sentence pointing
+back to something the earlier sections never showed.
+"""

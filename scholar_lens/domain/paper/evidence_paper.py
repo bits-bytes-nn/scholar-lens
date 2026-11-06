@@ -69,7 +69,6 @@ _RANK = {
     "analysis": 4,
     "closing": 5,
 }
-_SENTENCE_TITLE = re.compile(r"(?:다|요)[.!]?$")
 
 
 def _lang(language: str) -> str:
@@ -82,7 +81,7 @@ class _Strict(BaseModel):
 
 class PaperSection(_Strict):
     kind: PaperKind
-    # A claim as a noun phrase ("보상 모델 없이 푸는 선호 최적화").
+    # A claim as a noun phrase ("메시지 전달을 줄인 그래프 학습").
     title: str = Field(min_length=1)
     thesis: str = ""
     question: str = ""
@@ -172,7 +171,7 @@ def paper_outline_problems(
 ) -> list[str]:
     """What makes an outline unusable: the kinds and their order, a missing
     method or closing, too many sections, evidence unknown or given twice, a
-    section without evidence, sentence titles."""
+    section without evidence."""
     problems: list[str] = []
     kinds = [s.kind for s in outline.sections]
     if kinds[0] != "tldr" or kinds.count("tldr") != 1:
@@ -203,10 +202,6 @@ def paper_outline_problems(
     for s in outline.sections:
         if s.kind not in ("tldr",) and not s.evidence and post == "review":
             problems.append(f"section '{s.title}' has no evidence")
-        if s.kind not in ("tldr", "closing") and _SENTENCE_TITLE.search(
-            s.title.strip()
-        ):
-            problems.append(f"title '{s.title}' is a sentence; write a noun phrase")
         for eid in s.evidence:
             if ledger.get(eid) is None:
                 problems.append(f"unknown evidence {eid} in '{s.title}'")

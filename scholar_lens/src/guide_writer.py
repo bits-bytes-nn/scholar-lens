@@ -18,6 +18,7 @@ from typing import Any
 from ..adapters.packages.pypi import package_extras
 from ..domain.evidence import Authority, SourceDocument
 from ..domain.guide.evidence_guide import (
+    SOURCE_ID_PREFIX,
     install_requirements,
     unknown_extras,
     unverified_imports,
@@ -48,10 +49,10 @@ _AUTHORITY: dict[str, Authority] = {
     REFERENCE_LABEL: "reference",
 }
 _PREFIX: dict[str, str] = {
-    "official": "D",
-    "reference": "R",
-    "older_docs": "O",
-    "third_party": "W",
+    "official": f"{SOURCE_ID_PREFIX}D",
+    "reference": f"{SOURCE_ID_PREFIX}R",
+    "older_docs": f"{SOURCE_ID_PREFIX}O",
+    "third_party": f"{SOURCE_ID_PREFIX}W",
 }
 # A page shorter than this has nothing to record (a redirect stub, a menu).
 _MIN_PAGE_CHARS = 300
@@ -120,7 +121,10 @@ def guide_documents(
         if len(page.text.strip()) < _MIN_PAGE_CHARS:
             continue
         authority = _AUTHORITY.get(source_label(page, official), "third_party")
-        if authority == "third_party" and _repository(page.final_url or page.url) in repos:
+        if (
+            authority == "third_party"
+            and _repository(page.final_url or page.url) in repos
+        ):
             # The project's own repository (its design docs, source, README).
             authority = "official"
         counts[authority] = counts.get(authority, 0) + 1
@@ -172,7 +176,7 @@ async def write_guide_with_evidence(
 ) -> TechGuide:
     from ..adapters.bedrock.strands_models import StrandsLanguageModel
     from ..application.guide_engine import EvidenceGuideEngine, GuideSettings
-    from .evidence_models import role_model, unservable
+    from .evidence_models import budgeted, role_model, unservable
     from .survey_documents import EvidenceTextStore
 
     cfg = context.config.tech_guide
@@ -200,7 +204,7 @@ async def write_guide_with_evidence(
             ),
             "evaluate": role_model(context, cfg.evaluation_model_id, effort, True),
         },
-        tracker.record,
+        budgeted(tracker, cfg.max_cost_usd),
     )
     official_text = official_reference(generator.official, corpus)
     products = generator.products

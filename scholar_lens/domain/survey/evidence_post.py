@@ -39,7 +39,7 @@ class _Strict(BaseModel):
 
 class OutlineSection(_Strict):
     kind: SectionKind
-    # A claim, not a topic label ("보상 모델은 정책보다 먼저 무너집니다").
+    # A claim, not a topic label ("깊어질수록 흐려지는 노드 표현").
     title: str = Field(min_length=1)
     # The one sentence the section argues.
     thesis: str = Field(min_length=1)
@@ -67,7 +67,7 @@ class EvidenceOutline(_Strict):
     glossary: list[GlossaryTerm] = Field(default_factory=list, max_length=20)
     # One concrete case threaded through the post, when the topic has one.
     running_example: str = ""
-    # Paper id -> its short name in tables ("DPO", "InstructGPT").
+    # Paper id -> its short name in tables ("GraphSAGE", "GCN").
     short_names: dict[str, str] = Field(default_factory=dict)
     # Lineage id -> a short name for the tables.
     lineage_names: dict[str, str] = Field(default_factory=dict)

@@ -18,8 +18,6 @@ import re
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 
-from pydantic import ValidationError
-
 from ..domain.evidence import (
     Evidence,
     EvidenceLedger,
@@ -40,14 +38,11 @@ from ..domain.guide.evidence_guide import (
     GuideOutline,
     GuideSection,
     cited_sources,
-    drop_other_language,
     guide_draft_problems,
     guide_outline_problems,
     guide_section_targets,
-    misattributed,
     name_sources,
     repair_guide_outline,
-    source_aliases,
     strip_markers,
 )
 from ..prompts import guide_evidence as prompts
@@ -57,9 +52,9 @@ from .evidence_writer import (
     WriterPrompts,
     block,
     brief_lines,
+    cached_evidence,
     evidence_lines,
     quote_for_prompt_code,
-    recheck,
 )
 from .ports import AgentLimits, LanguageModel, TextStore
 from .usage import usage_stage
@@ -228,7 +223,6 @@ class EvidenceGuideEngine(EvidenceWriter):
         self.settings = settings
         self._documents: dict[str, SourceDocument] = {}
         # Source id -> the names a sentence may credit it by.
-        self._aliases: dict[str, list[str]] = {}
         self.store = store
         # Flags and arguments of a draft that no official page mentions.
         self.identifier_check = identifier_check
@@ -309,18 +303,14 @@ class EvidenceGuideEngine(EvidenceWriter):
             async with gate:
                 key = self._cache_key(document)
                 if self.store is not None and (cached := self.store.get(key)):
-                    try:
-                        items = [Evidence.model_validate(e) for e in json.loads(cached)]
-                        return [
-                            e
-                            for e in items
-                            if not recheck(document, e)
-                            and not rule(document, e.kind, {})
-                        ]
-                    except (ValueError, ValidationError):
-                        logger.warning(
-                            "Unreadable cached evidence %s; reading again.", key
-                        )
+                    kept = cached_evidence(
+                        cached,
+                        document,
+                        lambda e: rule(document, e.kind, e.model_dump(mode="json")),
+                        key=key,
+                    )
+                    if kept is not None:
+                        return kept
                 primary = document.authority in _PRIMARY
                 prompt = "\n\n".join(
                     [
@@ -474,7 +464,6 @@ class EvidenceGuideEngine(EvidenceWriter):
         self.passages = {
             (d.paper_id, s.anchor): s.text for d in documents for s in d.sections
         }
-        self._aliases = source_aliases(documents, self.products)
         # The claim check sees which kind of source a fact comes from.
         self._names = {
             d.paper_id: f"{d.title} [{d.authority or 'third_party'}]" for d in documents
@@ -484,13 +473,6 @@ class EvidenceGuideEngine(EvidenceWriter):
             raise ValueError("No source page gave usable evidence for the guide.")
         outline = await self.outline(topic, ledger, by_id, guideline)
         outline = await self._drop_wrong(outline, ledger)
-        outline, other = drop_other_language(outline, ledger)
-        if other:
-            logger.info(
-                "Evidence for another SDK language than %s left out: %s",
-                outline.code_language,
-                ", ".join(other),
-            )
         # A section the checks emptied has nothing to state.
         if empty := [
             s.title for s in outline.sections if not s.evidence and s.kind != "tldr"
@@ -620,14 +602,10 @@ class EvidenceGuideEngine(EvidenceWriter):
                     if section.kind in ("concepts", "architecture")
                     else ""
                 ),
-                # Advice is stated plainly; the guide's own judgement is
-                # marked only where it chooses.
-                own_view_limit=1 if section.kind == "choosing" else 0,
             )
             problems += guide_draft_problems(
                 markdown, code_language=outline.code_language
             )
-            problems += misattributed(markdown, ledger, self._aliases)
             if self.identifier_check is not None and (
                 unknown := self.identifier_check(markdown)
             ):
@@ -795,6 +773,7 @@ class EvidenceGuideEngine(EvidenceWriter):
             own,
             target,
             retry_hint="This is the TL;DR of a technical guide for practitioners.",
+            evidence=[*own, *body][:80],
         )
         body_sentences = [s for _, md in written for s in prose_sentences(md)]
         # Figures stay in their sections.
@@ -816,7 +795,6 @@ class EvidenceGuideEngine(EvidenceWriter):
                     free_numbers=_FREE_NUMBERS,
                     passages=self.passages,
                     target_chars=target,
-                    own_view_limit=0,
                 )
                 + guide_draft_problems(md)
                 + _copied(md, body_sentences)

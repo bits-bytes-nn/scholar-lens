@@ -13,19 +13,73 @@ from collections.abc import Iterable, Mapping, Sequence
 
 from .evidence import Evidence, EvidenceLedger
 from .markdown.lint import drop_empty_headings
+from .markdown.math import fence_roles
 from .quality_gate import rule_issues
 from .validation import unsourced_numbers
 
-MARKER = re.compile(r"\[\[\s*(E\d+(?:\s*,\s*E\d+)*)\s*\]\]")
+# An evidence marker ("[[E12]]", "[[E12, E15]]") or the illustration mark
+# below; code removes both before publishing.
+MARKER = re.compile(r"\[\[\s*(E\d+(?:\s*,\s*E\d+)*|EX)\s*\]\]")
+
+
+# The writer's mark on a sentence that is its own illustration ("가상의 배치
+# 32라면 …"): its numbers need no evidence; code removes the mark with the
+# evidence markers.
+EXAMPLE_MARK = "[[EX]]"
+_EXAMPLE_MARK = re.compile(r"[ \t]*\[\[\s*EX\s*\]\]")
 
 
 _ID = re.compile(r"E\d+")
 
 
-_FENCE = re.compile(r"^(`{3,}|~{3,}).*?^\1[ \t]*$", re.M | re.S)
+# A display-math line: ``$$…$$`` alone on its line, or a ``$$`` that opens or
+# closes a multi-line display (a list or quote prefix allowed).
+_MATH_PREFIX = re.compile(r"^[ \t]*(?:>[ \t]?)*(?:(?:[-*+]|\d+[.)])[ \t]+)?")
+_ONE_LINE_MATH = re.compile(r"^\$\$(?:(?!\$\$).)+\$\$$")
 
 
-_DISPLAY_MATH = re.compile(r"^\s*\$\$.*?\$\$\s*$", re.M | re.S)
+def block_lines(markdown: str) -> list[str]:
+    """Each line's role: ``"code"`` (a fenced block, fences included, at any
+    indentation), ``"math"`` (a display equation) or ``"prose"``."""
+    lines = markdown.split("\n")
+    roles: list[str] = []
+    in_math = False
+    for line, fence in zip(lines, fence_roles(lines), strict=True):
+        if fence != "prose":
+            roles.append("code")
+            continue
+        bare = line[_MATH_PREFIX.match(line).end() :].strip()  # type: ignore[union-attr]
+        if in_math:
+            roles.append("math")
+            in_math = not bare.endswith("$$")
+        elif _ONE_LINE_MATH.match(bare):
+            roles.append("math")
+        elif bare.startswith("$$") and bare.count("$$") == 1:
+            # "$$" opening a multi-line display ("$$a$$ 는 …" is inline).
+            roles.append("math")
+            in_math = True
+        else:
+            roles.append("prose")
+    return roles
+
+
+def _blanked(markdown: str, roles: Iterable[str]) -> str:
+    """``markdown`` with the lines of the given roles emptied (line count
+    kept)."""
+    drop = set(roles)
+    return "\n".join(
+        "" if role in drop else line
+        for line, role in zip(markdown.split("\n"), block_lines(markdown), strict=True)
+    )
+
+
+def without_code(markdown: str) -> str:
+    return _blanked(markdown, ("code",))
+
+
+def without_blocks(markdown: str) -> str:
+    """``markdown`` without code and display math (empty lines instead)."""
+    return _blanked(markdown, ("code", "math"))
 
 
 _IMAGE = re.compile(r"!\[[^\]]*\]\(([^)\s]+)[^)]*\)")
@@ -44,26 +98,10 @@ _CITATION_KEY = re.compile(r"\[@[^\]]+\]")
 _PAPER_ID = re.compile(r"(?<![\d./])(?:\d{4}\.\d{4,5}|10\.\d{4,9}/[^\s,;)]+)(?![\d])")
 
 
-# How a post describes its own making: the input it was given (the abstract,
-# a card, a summary) instead of the papers. Closed list from past posts.
-META_SENTENCE = re.compile(
-    r"초록(?:에서|만|에 따르면|에 기대|과 공개|수준|에는|으로는)|공개 요약|카드(?:에|가|만|로|의)|"
-    r"입력 자료|제공된 (?:자료|문서|출처|근거)|원래 예시|원문(?:의)? 예시|"
-    r"근거 자료(?:에|가|로)|"
-    r"(?:다루는|주어진|받은) (?:자료|근거)|자료에(?:는)? (?:없|나오지)|근거에(?:는)? 없|"
-    r"근거(?:에서|에는|에 따르면|로는|만으로)|(?:에서|로부터) 가져왔습니다|가져온 (?:값|수치)|"
-    r"(?:이|본) 글(?:에서)?(?:는|은) .{0,20}(?:살펴봅니다|다룹니다|정리합니다)|이 절에서는|"
-    r"\b(?:the|this) (?:abstract|card|summary) (?:says|states|reports)|based on the abstract",
-    re.IGNORECASE,
-)
-
-
 def prose_sentences(markdown: str) -> list[str]:
     """The prose sentences of a draft: code, display math, tables, headings
     and images left out."""
-    text = _FENCE.sub("\n", markdown)
-    text = _DISPLAY_MATH.sub("\n", text)
-    text = _TABLE_LINE.sub("\n", text)
+    text = _TABLE_LINE.sub("\n", without_blocks(markdown))
     text = _IMAGE.sub(" ", text)
     out = []
     for line in text.split("\n"):
@@ -79,7 +117,7 @@ def table_rows(markdown: str) -> list[str]:
     """The data rows of the draft's tables (header and rule rows left out),
     as written: what a claim check reads besides the prose."""
     rows = []
-    for block in re.split(r"\n(?!\s*\|)", _FENCE.sub("\n", markdown)):
+    for block in re.split(r"\n(?!\s*\|)", without_code(markdown)):
         lines = [ln.strip() for ln in block.split("\n") if _TABLE_LINE.match(ln)]
         if len(lines) >= 3 and re.match(r"^\|?\s*:?-{3,}", lines[1]):
             rows += lines[2:]
@@ -96,7 +134,11 @@ def cited_ids(sentence: str) -> list[str]:
 
 
 def _plain(sentence: str) -> str:
-    return _CITATION_KEY.sub("", MARKER.sub("", sentence))
+    return _CITATION_KEY.sub("", MARKER.sub("", _EXAMPLE_MARK.sub("", sentence)))
+
+
+def _example(sentence: str) -> bool:
+    return bool(_EXAMPLE_MARK.search(sentence))
 
 
 def stated_numbers(sentence: str, free: str) -> list[str]:
@@ -109,44 +151,14 @@ def stated_numbers(sentence: str, free: str) -> list[str]:
 MIN_VISUALS = {"deep": 2, "standard": 1, "brief": 0}
 
 
-# A sentence the writer marks as its own illustration: its numbers need no
-# evidence (the claim check still reads it).
-_EXAMPLE = re.compile(
-    r"예를 들어|가령|가상의|예시로|(?:이)?라고 (?:해 ?보면|하면|가정)|가정해|"
-    r"for example|e\.g\.|suppose",
-    re.IGNORECASE,
-)
-
-
-# A Korean heading in the plain register ("…했다"), not the post's "…입니다".
-_SENTENCE_HEADING = re.compile(r"(?:다|요)[.!]?$")
-
-
-# Formulas a writer falls into, with how often one section may use them.
-_FORMULAS = ((re.compile(r"보면 됩니다"), 1), (re.compile(r"다는 점"), 2))
-
-
-_OWN_VIEW = re.compile(
-    r"이 (?:글|가이드)의 (?:관점|판단|해석|견해)|(?:이 )?가이드의 (?:관점|판단|해석|견해)|"
-    r"이 (?:글|가이드)는 .{0,12}(?:본다|봅니다|판단합니다)"
-)
-
-
-# A sentence about what a paper leaves out ("저자들은 … 적지 않습니다").
-_ABSENCE_CLAIM = re.compile(
-    r"(?:적지|밝히지|제시하지|명시하지|보고하지|구분하지|언급하지|다루지|측정하지|"
-    r"정량화하지|수치화하지|보여 ?주지|설명하지|나와 ?있지|공개하지)\s*(?:는\s*)?"
-    r"않(?:습니다|았습니다|으며|고|아)"
-)
 # A table cell a writer left blank: fill it from the evidence or drop the
 # row or column.
 _BLANK_CELL = re.compile(r"\|\s*(?:—|–|-|N/A|n/a)\s*(?=\|)")
 
 
-# A sentence pointing back at what the post said before.
-_BACK_REFERENCE = re.compile(
-    r"앞서 (?:본|봤던|언급한|소개한|다룬|설명한|살펴본|정리한|나온)|앞에서 (?:본|다룬|설명한)"
-)
+# A marker written as a word of its sentence ("근거는 [[E3]]입니다"): removing it
+# breaks the sentence.
+_MARKER_AS_WORD = re.compile(MARKER.pattern + r"(?=[^\W\d_])")
 
 
 # A number with a size unit names a model ("Llama 2 7B"), not a result.
@@ -154,9 +166,15 @@ _MODEL_SIZE = re.compile(r"^\d+(?:\.\d+)?[BMK]$", re.IGNORECASE)
 
 
 def visual_count(markdown: str) -> int:
-    body = _FENCE.sub("\n", markdown)
+    body = without_code(markdown)
     tables = len(re.findall(r"^\s*\|?\s*:?-{3,}", body, re.M))
-    return len(_IMAGE.findall(body)) + len(_DISPLAY_MATH.findall(body)) + tables
+    roles = block_lines(body)
+    equations = sum(
+        1
+        for i, role in enumerate(roles)
+        if role == "math" and (i == 0 or roles[i - 1] != "math")
+    )
+    return len(_IMAGE.findall(body)) + equations + tables
 
 
 def draft_problems(
@@ -173,39 +191,16 @@ def draft_problems(
     exhausted: Iterable[str] = (),
     papers: Iterable[str] = (),
     target_chars: int = 0,
-    own_view_limit: int = 1,
     passages: Mapping[tuple[str, str], str] | None = None,
 ) -> list[str]:
     """Deterministic problems of a section draft (each quotes its sentence):
     a missing heading, unknown or foreign evidence ids, a number without
     evidence or not in the cited evidence, a number an earlier section
     already stated, a sentence about the post's own inputs, an unassigned or
-    missing figure."""
+    missing figure. What a sentence means (talk about the post's sources, a
+    claim that a source leaves something out, style) is the claim check's
+    and the review's, in any language."""
     problems: list[str] = []
-    for heading in re.findall(r"^#{2,4} (.+?)\s*$", markdown, re.M):
-        if _SENTENCE_HEADING.search(heading):
-            problems.append(
-                "heading is a sentence: write the claim as a noun phrase "
-                f"('정책보다 먼저 무너지는 보상 모델'): {heading}"
-            )
-    plain = _FENCE.sub("", markdown)
-    for formula, limit in _FORMULAS:
-        if (count := len(formula.findall(plain))) > limit:
-            problems.append(
-                f"'{formula.pattern}' {count} times in one section; vary the "
-                "sentence or drop the frame"
-            )
-    if (views := len(_OWN_VIEW.findall(_FENCE.sub("", markdown)))) > own_view_limit:
-        problems.append(
-            f"marks the post's own view {views} times (at most {own_view_limit} "
-            "here); state the advice plainly or leave the marker out"
-        )
-    for line in _FENCE.sub("", markdown).split("\n"):
-        if _REVISION_PHRASE.search(line):
-            problems.append(
-                "a note about the writing itself, not content for the reader; "
-                f"delete it: {line.strip()[:160]}"
-            )
     if drop_empty_headings(markdown) != markdown:
         problems.append("a heading with nothing under it; delete it or fill it")
     if not markdown.lstrip().startswith("## "):
@@ -217,16 +212,10 @@ def draft_problems(
         if unknown := [i for i in ids if ledger.get(i) is None]:
             problems.append(f"unknown evidence {unknown} in: {quoted}")
             continue
-        if _ABSENCE_CLAIM.search(_plain(sentence)):
+        if _MARKER_AS_WORD.search(sentence):
             problems.append(
-                "says what a paper does not state or report; that is rarely "
-                "evidence (the reader saw only part of it): leave it out or "
-                f"state what the paper does say: {quoted}"
-            )
-        if _BACK_REFERENCE.search(sentence) and not set(ids) & set(earlier):
-            problems.append(
-                "points back to something earlier without citing the earlier "
-                f"evidence; cite it or drop the back-reference: {quoted}"
+                "an evidence marker stands for a word; state the fact and put "
+                f"the marker at the end of the sentence: {sentence[:160]}"
             )
         if spent := [i for i in ids if i in set(exhausted)]:
             problems.append(
@@ -238,9 +227,12 @@ def draft_problems(
                 f"evidence {foreign} belongs to another section; leave it out: {quoted}"
             )
         numbers = stated_numbers(sentence, free_numbers)
-        example = bool(_EXAMPLE.search(sentence))
+        example = _example(sentence)
         if numbers and not ids and not example:
-            problems.append(f"numbers {numbers} without evidence: {quoted}")
+            problems.append(
+                f"numbers {numbers} without evidence (cite it; an illustration "
+                f"of your own ends with {EXAMPLE_MARK}): {quoted}"
+            )
         elif numbers and not example:
             support = _support(ids, ledger, passages)
             if missing := unsourced_numbers(
@@ -262,11 +254,6 @@ def draft_problems(
             problems.append(
                 f"names a paper by its id; use its name or its authors: {quoted}"
             )
-        if META_SENTENCE.search(_plain(sentence)):
-            problems.append(
-                "describes the post's inputs instead of the papers; state what "
-                f"the paper does or leave it out: {quoted}"
-            )
     for row in table_rows(markdown):
         plain_row = _plain(row)
         if _BLANK_CELL.search(plain_row):
@@ -274,11 +261,6 @@ def draft_problems(
                 "a table cell is blank ('—'): give the value the evidence or the "
                 "passages state, or drop the row or column it belongs to: "
                 f"{plain_row[:160]}"
-            )
-        if META_SENTENCE.search(plain_row) or _ABSENCE_CLAIM.search(plain_row):
-            problems.append(
-                "a table cell talks about the post's sources or what the paper "
-                f"leaves out; give the value or leave the cell out: {plain_row[:160]}"
             )
     cited_papers = {
         e.paper_id
@@ -352,7 +334,7 @@ def unsourced_number_sentences(
     found = []
     for sentence in prose_sentences(markdown):
         numbers = stated_numbers(sentence, free_numbers)
-        if not numbers or _EXAMPLE.search(sentence):
+        if not numbers or _example(sentence):
             continue
         support = _support(cited_ids(sentence), ledger, passages)
         if unsourced_numbers(_plain(sentence), f"{support} {free_numbers}"):
@@ -380,53 +362,39 @@ def section_numbers(markdown: str, free_numbers: str) -> set[str]:
     }
 
 
-_FRAGMENT = re.compile(r"^(?:[-*+]|\d+[.)])?\s*[^\s#|>!$`].{0,24}$")
-
-
-_SENTENCE_CLOSE = re.compile(r"[.!?。:)\]]\s*$")
+# What is left of a line once its only sentence is removed: a list marker,
+# a quote mark, punctuation.
+_LEFTOVER = re.compile(r"^[\s>*+\-\d.)]*[.,;:!?。]?\s*$")
 
 
 def drop_sentences(markdown: str, sentences: Iterable[str]) -> str:
     """``markdown`` without the given sentences (as :func:`prose_sentences`
-    returns them), each removed once, and without the fragments a removal
-    leaves (a short line that ends no sentence, such as "첫째")."""
+    and :func:`table_rows` return them), each removed once from the first
+    prose line (or table row) that holds it; a line it leaves empty goes
+    with it. Code and display math are never touched."""
+    lines = markdown.split("\n")
+    roles = block_lines(markdown)
     for sentence in sentences:
-        if sentence.startswith("|"):
-            # A table row goes with its line, or the table splits in two.
-            markdown = re.sub(
-                r"^[ \t]*" + re.escape(sentence) + r"[ \t]*\n?",
-                "",
-                markdown,
-                count=1,
-                flags=re.M,
-            )
-        else:
-            markdown = markdown.replace(sentence, "", 1)
-    # Code, display math and tables are never cleaned: a YAML key or an
-    # indented line is not a fragment of a removed sentence.
-    parts = re.split(
-        r"(^(`{3,}|~{3,}).*?^\2[ \t]*$|^\s*\$\$.*?\$\$\s*$)",
-        markdown,
-        flags=re.M | re.S,
-    )
-    out_parts = []
-    for i in range(0, len(parts), 3):
-        prose = parts[i]
-        lines = []
-        for line in prose.split("\n"):
-            bare = line.strip()
-            if _TABLE_LINE.match(line):
-                lines.append(line.rstrip())
+        row = sentence.startswith("|")
+        for i, (line, role) in enumerate(zip(lines, roles, strict=True)):
+            if role != "prose" or sentence not in line:
                 continue
-            if bare and _FRAGMENT.match(bare) and not _SENTENCE_CLOSE.search(bare):
+            if row:
+                if line.strip() == sentence:
+                    lines[i] = None  # type: ignore[call-overload]
+                    break
                 continue
-            # Spaces a removal left between words, never the indentation.
-            lead = line[: len(line) - len(line.lstrip())]
-            lines.append(lead + re.sub(r"[ \t]{2,}", " ", line.strip()))
-        out_parts.append("\n".join(lines))
-        if i + 1 < len(parts):
-            out_parts.append(parts[i + 1])
-    return re.sub(r"\n{3,}", "\n\n", "".join(out_parts))
+            rest = line.replace(sentence, "", 1)
+            if _LEFTOVER.match(rest):
+                lines[i] = None  # type: ignore[call-overload]
+            else:
+                lead = line[: len(line) - len(line.lstrip())]
+                lines[i] = lead + re.sub(r"[ \t]{2,}", " ", rest.strip())
+            break
+        kept = [(ln, r) for ln, r in zip(lines, roles, strict=True) if ln is not None]
+        lines = [ln for ln, _ in kept]
+        roles = [r for _, r in kept]
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(lines))
 
 
 _HEADINGS = re.compile(r"^#{2,4} .+$", re.M)
@@ -450,62 +418,70 @@ def structure_lost(before: str, after: str) -> str:
 
 
 # The end of a complete paragraph line: a sentence end, a closing mark, a
-# citation or an evidence marker.
-_COMPLETE_END = re.compile(r"(?:[.!?。:)\]」』\"'*]|\]\])\s*$")
+# citation or evidence marker, inline code or math, or a Korean sentence
+# ending written without its period.
+_COMPLETE_END = re.compile(r"(?:[.!?。:)\]」』\"'*`$]|\]\]|(?:다|요|죠|까))\s*$")
+_LIST_ITEM = re.compile(r"^(?:[-*+]|\d+[.)])\s")
 
 
 def ends_mid_sentence(markdown: str) -> bool:
-    """Whether the draft's last prose line stops mid-sentence (a cut-off
-    answer)."""
-    text = _FENCE.sub("\n", markdown)
-    text = _DISPLAY_MATH.sub("\n", text)
-    for line in reversed(text.strip().split("\n")):
+    """Whether the draft's last prose paragraph line stops mid-sentence (a
+    cut-off answer); a list item, heading, table, image or block counts as
+    complete."""
+    for line in reversed(without_blocks(markdown).strip().split("\n")):
         bare = line.strip()
-        if not bare or bare.startswith(("#", "|", "!", "$$", "<", "- - -")):
+        if not bare:
             continue
+        if bare.startswith(("#", "|", "!", "<", "- - -")) or _LIST_ITEM.match(bare):
+            return False
         return not _COMPLETE_END.search(bare)
     return False
+
+
+_INLINE_CODE = re.compile(r"(`+)(?:(?!\1).)+?\1")
 
 
 def balance_math(markdown: str) -> tuple[str, bool]:
     """An odd ``$$`` count outside code makes every later equation of the
     post flip into prose: the last lone ``$$`` is removed. Returns the text
     and whether it changed."""
-    code = [(m.start(), m.end()) for m in _FENCE.finditer(markdown)]
-    marks = [
-        m.start()
-        for m in re.finditer(r"\$\$", markdown)
-        if not any(s <= m.start() < e for s, e in code)
-    ]
+    lines = markdown.split("\n")
+    marks: list[tuple[int, int]] = []
+    for i, (line, role) in enumerate(zip(lines, block_lines(markdown), strict=True)):
+        if role == "code":
+            continue
+        code = [(m.start(), m.end()) for m in _INLINE_CODE.finditer(line)]
+        marks += [
+            (i, m.start())
+            for m in re.finditer(r"\$\$", line)
+            if not any(s <= m.start() < e for s, e in code)
+        ]
     if len(marks) % 2 == 0:
         return markdown, False
-    last = marks[-1]
-    return markdown[:last] + markdown[last + 2 :], True
+    i, at = marks[-1]
+    lines[i] = lines[i][:at] + lines[i][at + 2 :]
+    return "\n".join(lines), True
 
 
-# Where a writer starts describing its own edits instead of the section.
+# A block of notes a writer appends about its own edits: a heading, bold
+# label or rule-led line naming them, after which nothing is the section's.
 _REVISION_NOTE = re.compile(
-    r"^(?:#+\s*|\*\*|-{3,}\s*$)?\s*(?:수정 ?(?:내역|사항|요약)|변경 ?(?:내역|사항)|"
-    r"고친 (?:부분|내용)|revision notes?|changes made|summary of changes)",
-    re.IGNORECASE | re.M,
-)
-
-
-_REVISION_PHRASE = re.compile(
-    r"(?:제시하신|요청하신|지적하신|말씀하신)|\bE\d+ (?:반복 )?(?:제거|삭제|수정)|"
-    r"\bnotes? on (?:the )?fix|\bI (?:could not|couldn't|have|did not|didn't|kept|removed|added)\b|"
-    r"\bas requested\b",
+    r"^(?:#{1,6}[ \t]+|\*\*)[ \t]*(?:수정 ?(?:내역|사항|요약)|"
+    r"변경 ?(?:내역|사항)|고친 (?:부분|내용)|revision notes?|changes made|"
+    r"summary of changes)\b.*$",
     re.IGNORECASE,
 )
 
 
 def strip_revision_notes(markdown: str) -> str:
-    """The section without a writer's notes about its own edits: everything
-    from a "수정 내역"-style heading or line on, and any line that addresses
-    the requester or names evidence ids it removed."""
-    if m := _REVISION_NOTE.search(markdown):
-        markdown = markdown[: m.start()]
-    lines = [line for line in markdown.split("\n") if not _REVISION_PHRASE.search(line)]
+    """The section without a block of notes a writer appended about its own
+    edits: from a "## 수정 내역"/"**Changes made**"-style label line (outside
+    code) to the end."""
+    lines = markdown.split("\n")
+    for i, (line, role) in enumerate(zip(lines, block_lines(markdown), strict=True)):
+        if role == "prose" and i > 0 and _REVISION_NOTE.match(line.strip()):
+            lines = lines[:i]
+            break
     out = "\n".join(lines).rstrip()
     # A rule left in front of the cut notes.
     return re.sub(r"(?:\n\s*(?:-{3,}|\*{3,}|_{3,})\s*)+$", "", out) + "\n"

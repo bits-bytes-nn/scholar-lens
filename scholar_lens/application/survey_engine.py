@@ -11,12 +11,11 @@ injected.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import re
 from dataclasses import dataclass, field
-
-from pydantic import ValidationError
 
 from ..domain.evidence import (
     Evidence,
@@ -52,8 +51,8 @@ from .evidence_writer import (
     SentenceVerdict,
     WriterPrompts,
     block,
+    cached_evidence,
     evidence_lines,
-    recheck,
 )
 from .ports import AgentLimits, DocumentSource, LanguageModel, TextStore
 from .usage import usage_stage
@@ -129,10 +128,6 @@ class EvidenceSurvey:
     notes: list[str] = field(default_factory=list)
 
 
-def _recheck(document: SourceDocument, item: Evidence) -> list[str]:
-    return recheck(document, item)
-
-
 class EvidenceSurveyEngine(EvidenceWriter):
     def __init__(
         self,
@@ -148,11 +143,13 @@ class EvidenceSurveyEngine(EvidenceWriter):
 
     # ---- read -------------------------------------------------------------------
 
-    def _cache_key(self, paper: PlanPaper, kind: str) -> str:
+    def _cache_key(self, paper: PlanPaper, document: SourceDocument) -> str:
         pid = _SAFE_KEY.sub("_", paper.id)
+        text = hashlib.sha256(document.text.encode()).hexdigest()[:12]
         return (
-            f"evidence/{pid}/v{READER_VERSION}-{self.settings.reader_tag}-"
-            f"{_SAFE_KEY.sub('_', self.settings.language)}-{paper.role}-{kind}.json"
+            f"evidence/{pid}/{text}-v{READER_VERSION}-{self.settings.reader_tag}-"
+            f"{_SAFE_KEY.sub('_', self.settings.language)}-{paper.role}-"
+            f"{document.kind}.json"
         )
 
     async def read(self, plan: SurveyPlan) -> tuple[EvidenceLedger, dict[str, str]]:
@@ -168,18 +165,11 @@ class EvidenceSurveyEngine(EvidenceWriter):
                         f"No text for {paper.id}; left out of the survey."
                     )
                     return [], "none"
-                key = self._cache_key(paper, document.kind)
+                key = self._cache_key(paper, document)
                 if self.store is not None and (cached := self.store.get(key)):
-                    try:
-                        items = [Evidence.model_validate(e) for e in json.loads(cached)]
-                        # Cached under older rules: keep what today's checks pass.
-                        return [
-                            e for e in items if not _recheck(document, e)
-                        ], document.kind
-                    except (ValueError, ValidationError):
-                        logger.warning(
-                            "Unreadable cached evidence %s; reading again.", key
-                        )
+                    kept = cached_evidence(cached, document, key=key)
+                    if kept is not None:
+                        return kept, document.kind
                 items = await self._read_paper(paper, document, plan)
                 if self.store is not None and items:
                     self.store.put(

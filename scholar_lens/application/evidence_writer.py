@@ -10,13 +10,15 @@ loop. Ports only: the model is injected.
 
 from __future__ import annotations
 
+import json
 import logging
+import re
 from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Literal, TypeVar
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from ..domain.evidence import (
     Evidence,
@@ -76,7 +78,7 @@ class EvidenceCheck(BaseModel):
 
 class ReviewIssue(BaseModel):
     sentence: str
-    category: Literal["depth", "flow", "kindness", "style", "code"]
+    category: Literal["depth", "flow", "kindness", "style", "code", "sources"]
     fix: str
 
 
@@ -131,8 +133,34 @@ def recheck(document: SourceDocument, item: Evidence) -> list[str]:
     )
 
 
+def cached_evidence(
+    raw: str,
+    document: SourceDocument,
+    rejected: Callable[[Evidence], object] = lambda _e: False,
+    *,
+    key: str = "",
+) -> list[Evidence] | None:
+    """A document's stored evidence still usable today, bound to the
+    document's current source id (ids are numbered per run), or None when it
+    must be read again: unreadable, or nothing passes today's checks."""
+    try:
+        items = [Evidence.model_validate(e) for e in json.loads(raw)]
+    except (ValueError, ValidationError):
+        logger.warning("Unreadable cached evidence %s; reading again.", key)
+        return None
+    items = [e.model_copy(update={"paper_id": document.paper_id}) for e in items]
+    kept = [e for e in items if not recheck(document, e) and not rejected(e)]
+    if items and not kept:
+        logger.warning("No cached evidence of %s passes today; reading again.", key)
+        return None
+    return kept
+
+
 def prose_length(markdown: str) -> int:
     return len(" ".join(prose_sentences(markdown)))
+
+
+_EVIDENCE_BLOCK = re.compile(r"<evidence>\n.*?\n</evidence>", re.S)
 
 
 def block(tag: str, text: str) -> str:
@@ -171,7 +199,9 @@ def evidence_lines(items: Sequence[Evidence]) -> str:
         if e.latex:
             extra.append(f"latex: $${e.latex}$$")
         if e.figure_url:
-            extra.append(f"figure: {e.figure_url} ({(e.caption or '')[:200]})")
+            extra.append(
+                f"figure: {e.figure_url} ({quote_for_prompt(e.caption or '')[:200]})"
+            )
         line = f"[{e.id}] ({e.paper_id}, {e.kind}) {e.claim}" + (
             f" | {'; '.join(extra)}" if extra else ""
         )
@@ -192,7 +222,7 @@ def brief_lines(items: Sequence[Evidence]) -> str:
         if e.scope:
             line += f" | scope: {e.scope}"
         if e.figure_url:
-            line += f" | figure: {(e.caption or '')[:160]}"
+            line += f" | figure: {quote_for_prompt(e.caption or '')[:160]}"
         if e.code:
             head = " ⏎ ".join(e.code.strip().split("\n")[:3])
             line += f" | code: {head[:200]}"
@@ -408,8 +438,8 @@ class EvidenceWriter:
             return {}
         lines = "\n".join(
             f"[{e.id}] ({e.kind}) claim: {e.claim} | cell: {e.cell} | scope: "
-            f'{e.scope}\n    quote: "{e.quote}"'
-            + (f'\n    caption: "{e.caption}"' if e.caption else "")
+            f'{e.scope}\n    quote: "{quote_for_prompt(e.quote)}"'
+            + (f'\n    caption: "{quote_for_prompt(e.caption)}"' if e.caption else "")
             for e in items
         )
         with usage_stage("verify"):
@@ -430,10 +460,18 @@ class EvidenceWriter:
     # ---- sections ---------------------------------------------------------------
 
     async def draft(
-        self, prompt: str, own: Sequence[Evidence], target: int, *, retry_hint: str
+        self,
+        prompt: str,
+        own: Sequence[Evidence],
+        target: int,
+        *,
+        retry_hint: str,
+        evidence: Sequence[Evidence] | None = None,
     ) -> str:
         """A section draft; a short or cut-off answer is asked again, then
-        written from the claims alone (quoted text can derail the model)."""
+        written from the claims alone (quoted text can derail the model):
+        the prompt's ``<evidence>`` block, holding ``evidence`` (``own``
+        unless given), is swapped for their claims."""
         with usage_stage("draft"):
             text = (
                 await self.model.text(
@@ -463,9 +501,10 @@ class EvidenceWriter:
                     await self.model.text(
                         role="write",
                         system=self.prompts.writer,
-                        prompt=prompt.replace(
-                            block("evidence", evidence_lines(own)),
-                            block("evidence", claim_lines(own)),
+                        prompt=_EVIDENCE_BLOCK.sub(
+                            lambda _m: block("evidence", claim_lines(evidence or own)),
+                            prompt,
+                            count=1,
                         ),
                     )
                 ).strip()
@@ -657,7 +696,7 @@ class EvidenceWriter:
                 + (
                     " || ".join(
                         f"[{e.id}, from {self._names.get(e.paper_id, e.paper_id)}] "
-                        f'{e.claim} — "{e.quote[:300]}" {e.scope}'
+                        f'{e.claim} — "{quote_for_prompt(e.quote)[:300]}" {e.scope}'
                         + (f" code: {e.code[:300]}" if e.code else "")
                         for e in cited
                     )

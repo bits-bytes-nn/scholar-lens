@@ -305,9 +305,11 @@ def evidence_problems(
         problems.append("the equation is not the paper's LaTeX: copy it exactly")
     if len(cell) > MAX_CELL_CHARS:
         problems.append(f"the cell is longer than {MAX_CELL_CHARS} characters")
-    if cell and re.search(r"(?:다|니다)[.]?\s*$", cell.strip()):
+    # A sentence ends in a period or a formal verb ending; a noun phrase
+    # ("AWS 람다", "61% 승률") does not.
+    if cell and re.search(r"(?:\.|니다)\s*$", cell.strip()):
         problems.append("the cell is a sentence: write it as a noun phrase")
-    if "?" in f"{claim} {scope} {cell}":
+    if "?" in _CODE_OR_URL.sub("", f"{claim} {scope} {cell}"):
         problems.append("a guess ('?') is not evidence: state only what the quote says")
     if _NUMBERED_REFERENCE.search(f"{claim} {scope} {cell}"):
         problems.append(
@@ -317,15 +319,29 @@ def evidence_problems(
     return problems
 
 
+_CODE_OR_URL = re.compile(r"`[^`]*`|https?://\S+")
+_FACT_TOKEN = re.compile(r"`[^`]+`|\d+(?:[.,]\d+)*")
+
+
+def _facts(text: str) -> set[str]:
+    """The numbers and code spans a text states: two texts that differ in
+    them state different facts however alike their words are."""
+    return set(_FACT_TOKEN.findall(text))
+
+
+def _same_fact(a: str, b: str, threshold: float) -> bool:
+    if _facts(a) != _facts(b):
+        return False
+    matcher = SequenceMatcher(None, _squash(a), _squash(b))
+    return matcher.quick_ratio() >= threshold and matcher.ratio() >= threshold
+
+
 def near_duplicate(claim: str, others: Iterable[str], threshold: float = 0.85) -> bool:
-    """Whether ``claim`` says nearly what one of ``others`` says (character
-    similarity, which Korean particles do not break as they break word
-    overlap): two records of one fact make the post repeat it."""
-    mine = _squash(claim)
-    return any(
-        SequenceMatcher(None, mine, _squash(other)).ratio() >= threshold
-        for other in others
-    )
+    """Whether ``claim`` says nearly what one of ``others`` says: the same
+    numbers and code spans, and similar characters (which Korean particles
+    do not break as they break word overlap). Two records of one fact make
+    the post repeat it; "DPO 61%" and "PPO 57%" are two facts."""
+    return any(_same_fact(claim, other, threshold) for other in others)
 
 
 def duplicate_evidence(
@@ -345,12 +361,12 @@ def duplicate_evidence(
     for _, item in order:
         if item.kind in ("figure", "code"):
             continue
-        mine = _squash(item.claim)
         for other in kept.get(item.kind, []):
             if other.paper_id == item.paper_id:
                 continue
-            matcher = SequenceMatcher(None, mine, _squash(other.claim))
-            if matcher.quick_ratio() >= 0.85 and matcher.ratio() >= 0.85:
+            if _same_fact(item.claim, other.claim, 0.85) and _facts(
+                item.cell
+            ) == _facts(other.cell):
                 duplicates[item.id] = other.id
                 break
         else:

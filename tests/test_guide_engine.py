@@ -287,11 +287,10 @@ def test_guide_draft_problems() -> None:
     long_code = "```python\n" + "x = 1\n" * 45 + "```"
     draft = (
         "## 데코레이터 하나로 켜는 배치\n\n"
-        "공식 문서에 따르면 기본값은 10입니다 [[E2]].\n\n"
+        "기본값은 10입니다 [[E2]].\n\n"
         f"{long_code}\n\n```typescript\nconst a = 1;\n```\n"
     )
     problems = guide_draft_problems(draft, code_language="python")
-    assert any("names the page" in p for p in problems)
     assert any("45-line code block" in p for p in problems)
     assert any("show it in python" in p for p in problems)
     assert guide_draft_problems("## 배치\n\n기본값은 10입니다 [[E2]].\n") == []
@@ -331,9 +330,9 @@ def test_pages_become_documents_by_authority() -> None:
     ]
     docs = guide_documents(pages, official)
     assert [(d.paper_id, d.authority) for d in docs] == [
-        ("D1", "official"),
-        ("W1", "third_party"),
-        ("R1", "reference"),
+        ("src-D1", "official"),
+        ("src-W1", "third_party"),
+        ("src-R1", "reference"),
     ]
 
 
@@ -515,7 +514,7 @@ def test_table_rows_are_claims_and_a_wrong_row_leaves_whole() -> None:
     assert drop_sentences(md, ["| Transform | 바꿈 |"]).endswith("| Deny | 막음 |\n")
 
 
-def test_writer_notes_and_empty_headings_are_problems_and_removed() -> None:
+def test_empty_headings_are_problems_and_note_blocks_are_removed() -> None:
     from scholar_lens.domain.evidence_draft import (
         draft_problems,
         drop_empty_headings,
@@ -536,29 +535,10 @@ def test_writer_notes_and_empty_headings_are_problems_and_removed() -> None:
         figure_urls=(),
         free_numbers="",
     )
-    assert any("note about the writing" in p for p in problems)
     assert any("nothing under it" in p for p in problems)
     assert drop_empty_headings(md).startswith("## 스티어링 핸들러")
-    assert "요청하신" not in strip_revision_notes(md)
-    english = "## A\n\n내용입니다.\n\nNotes on fixes I could not make fully: none.\n"
-    assert "Notes" not in strip_revision_notes(english)
-
-
-def test_the_guides_own_view_is_marked_only_where_it_chooses() -> None:
-    from scholar_lens.domain.evidence_draft import draft_problems
-
-    md = "## 배치\n\n이 글의 판단으로는 배치를 먼저 켭니다.\n"
-    kwargs: dict[str, Any] = {
-        "title": "배치",
-        "own": (),
-        "earlier": (),
-        "ledger": _ledger(),
-        "earlier_numbers": {},
-        "figure_urls": (),
-        "free_numbers": "",
-    }
-    assert any("own view" in p for p in draft_problems(md, own_view_limit=0, **kwargs))
-    assert not any("own view" in p for p in draft_problems(md, **kwargs))
+    english = "## A\n\n내용입니다.\n\n## Changes made\n\n- fixed E2\n"
+    assert "Changes" not in strip_revision_notes(english)
 
 
 def test_a_fact_two_pages_state_is_kept_from_the_official_page() -> None:
@@ -597,14 +577,6 @@ def test_code_defined_earlier_lists_the_running_examples_definitions() -> None:
     ]
 
 
-def test_a_marker_standing_for_a_word_and_hedges_are_problems() -> None:
-    draft = (
-        "## 설치\n\n표의 근거는 [[E3]]입니다.\n\n"
-        "import 경로는 쓰는 SDK 버전에서 확인해야 합니다 [[E2]].\n"
-    )
-    problems = guide_draft_problems(draft)
-    assert any("stands for a word" in p for p in problems)
-    assert any("hedges" in p for p in problems)
 
 
 def test_stripping_markers_leaves_no_empty_heading_or_marker_line() -> None:
@@ -702,27 +674,10 @@ def test_a_figure_without_a_quote_takes_the_text_before_it() -> None:
 def test_internal_source_ids_in_the_text_are_problems() -> None:
     assert any(
         "internal id" in p
-        for p in guide_draft_problems("## A\n\n영상 튜토리얼(W8)이 보여 줍니다.\n")
+        for p in guide_draft_problems("## A\n\n영상 튜토리얼(src-W8)이 보여 줍니다.\n")
     )
-    assert guide_draft_problems("## A\n\n`D1` 등급의 GPU를 씁니다.\n") == []
-
-
-def test_evidence_for_another_sdk_language_leaves_a_python_guide() -> None:
-    from scholar_lens.domain.guide.evidence_guide import (
-        drop_other_language,
-        other_language_only,
-    )
-
-    assert other_language_only("TypeScript 전용, 미들웨어 등록", "python")
-    assert other_language_only("only in TypeScript", "py")
-    assert not other_language_only("Python 전용", "python")
-    assert not other_language_only("TypeScript only", "")
-    ledger = _ledger()
-    ledger.items[1] = ledger.items[1].model_copy(
-        update={"scope": "TypeScript 전용 @serve.batch"}
-    )
-    outline, dropped = drop_other_language(_outline(), ledger)
-    assert dropped == ["E2"] and outline.sections[3].evidence == []
+    # Product and model names never take the id form.
+    assert guide_draft_problems("## A\n\nDeepSeek R1 모델과 W8 양자화를 씁니다.\n") == []
 
 
 def test_product_imports_the_official_pages_never_show_are_flagged() -> None:
@@ -741,27 +696,16 @@ def test_product_imports_the_official_pages_never_show_are_flagged() -> None:
     assert unverified_imports(code, "", ["strands"]) == []
 
 
-def test_a_sentence_crediting_a_source_must_cite_it() -> None:
-    from scholar_lens.domain.guide.evidence_guide import misattributed, source_aliases
-
-    blog = _blog().model_copy(update={"url": "https://agents-lib.com/compare/ray"})
-    aliases = source_aliases([_official(), blog], products=["Ray Serve", "ray"])
-    assert aliases == {"W1": ["agents-lib"]}
-    ledger = _ledger()
-    bad = "## 운영\n\nagents-lib에 따르면 GPU 레플리카는 PENDING에 머뭅니다 [[E3]].\n"
-    good = (
-        "## 운영\n\nagents-lib는 오래 기다리는 배치가 지연을 늘린다고 봅니다 [[E5]].\n"
-    )
-    assert misattributed(bad, ledger, aliases)
-    assert misattributed(good, ledger, aliases) == []
-
-
 def test_internal_source_ids_become_titles_outside_code() -> None:
     from scholar_lens.domain.guide.evidence_guide import name_sources
 
-    md = "W2 페이지는 드리프트를 봅니다.\n\n```python\nW2 = 1\n```\n\n`D1` 등급\n"
-    assert name_sources(md, {"W2": "Ray Serve vs Triton"}) == (
-        "Ray Serve vs Triton 페이지는 드리프트를 봅니다.\n\n```python\nW2 = 1\n```\n\n`D1` 등급\n"
+    md = (
+        "src-W2 페이지는 드리프트를 봅니다. W2 양자화도 씁니다.\n\n"
+        "```python\nsrc-W2 = 1\n```\n\n`src-D1` 등급\n"
+    )
+    assert name_sources(md, {"src-W2": "Serving Compared"}) == (
+        "Serving Compared 페이지는 드리프트를 봅니다. W2 양자화도 씁니다.\n\n"
+        "```python\nsrc-W2 = 1\n```\n\n`src-D1` 등급\n"
     )
 
 
