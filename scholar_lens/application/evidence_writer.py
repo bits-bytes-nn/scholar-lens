@@ -44,7 +44,7 @@ from ..domain.evidence_draft import (
     structure_lost,
     unsourced_number_sentences,
 )
-from .ports import AgentLimits, LanguageModel
+from .ports import AgentLimits, LanguageModel, ModelText, was_cut
 from .usage import usage_stage
 
 logger = logging.getLogger(__name__)
@@ -174,6 +174,17 @@ async def all_or_none[T](aws: Iterable[Awaitable[T]]) -> list[T]:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
         raise
+
+
+def _kept(answer: str) -> str:
+    """A model answer stripped of surrounding whitespace, its cut flag kept."""
+    return ModelText(answer.strip(), cut=was_cut(answer))
+
+
+def _incomplete(text: str) -> bool:
+    """Whether an answer is unfinished: stopped at the output limit, or its
+    last paragraph stops mid-sentence."""
+    return was_cut(text) or ends_mid_sentence(text)
 
 
 _UNSAFE_KEY = re.compile(r"[^A-Za-z0-9._-]+")
@@ -504,18 +515,18 @@ class EvidenceWriter:
         the prompt's ``<evidence>`` block, holding ``evidence`` (``own``
         unless given), is swapped for their claims."""
         with usage_stage("draft"):
-            text = (
+            text = _kept(
                 await self.model.text(
                     role="write", system=self.prompts.writer, prompt=prompt
                 )
-            ).strip()
-            if own and (prose_length(text) < 0.3 * target or ends_mid_sentence(text)):
+            )
+            if own and (prose_length(text) < 0.3 * target or _incomplete(text)):
                 logger.warning(
                     "Section came back short (%d chars): %r",
                     prose_length(text),
                     text[:300],
                 )
-                text = (
+                text = _kept(
                     await self.model.text(
                         role="write",
                         system=self.prompts.writer,
@@ -525,10 +536,10 @@ class EvidenceWriter:
                         + f" Write the whole section (about {int(target):,} "
                         "characters of prose) from its evidence.",
                     )
-                ).strip()
-            if own and (prose_length(text) < 0.3 * target or ends_mid_sentence(text)):
+                )
+            if own and (prose_length(text) < 0.3 * target or _incomplete(text)):
                 logger.warning("Section still short; writing it from the claims alone.")
-                text = (
+                text = _kept(
                     await self.model.text(
                         role="write",
                         system=self.prompts.writer,
@@ -538,7 +549,7 @@ class EvidenceWriter:
                             count=1,
                         ),
                     )
-                ).strip()
+                )
         return text
 
     async def verify_and_fix(
@@ -567,7 +578,7 @@ class EvidenceWriter:
                 break
             fixed = await self._fix(draft, [*own, *earlier[-30:]], issues)
             if reason := structure_lost(draft, fixed) or (
-                "it stops mid-sentence" if ends_mid_sentence(fixed) else ""
+                "it stops mid-sentence" if _incomplete(fixed) else ""
             ):
                 logger.info("Fix of %r rejected: %s", title, reason)
                 break
@@ -597,11 +608,20 @@ class EvidenceWriter:
         wrong = [(s, v) for s, v in claims if v.startswith("wrong")]
         if wrong:
             draft = drop_sentences(draft, [s for s, _ in wrong])
-            self.notes.append(
-                f"Section '{title}': {len(wrong)} sentence(s) contradicting "
-                "their evidence removed: "
-                + " | ".join(f"{s[:120]} ({v})" for s, v in wrong[:5])
-            )
+            left = set(claim_units(draft))
+            removed = [(s, v) for s, v in wrong if s not in left]
+            if removed:
+                self.notes.append(
+                    f"Section '{title}': {len(removed)} sentence(s) contradicting "
+                    "their evidence removed: "
+                    + " | ".join(f"{s[:120]} ({v})" for s, v in removed[:5])
+                )
+            if kept := [(s, v) for s, v in wrong if s in left]:
+                self.notes.append(
+                    f"Section '{title}': fix by hand, {len(kept)} sentence(s) "
+                    "contradict their evidence: "
+                    + " | ".join(f"{s[:120]} ({v})" for s, v in kept[:5])
+                )
         if unsupported := [(s, v) for s, v in claims if not v.startswith("wrong")]:
             self.notes.append(
                 f"Section '{title}': check {len(unsupported)} sentence(s) "
@@ -646,7 +666,7 @@ class EvidenceWriter:
             own = own_of(section)
             self.reference = reference_of(own)
             fixed = await self._fix(md, own, issues)
-            if structure_lost(md, fixed) or ends_mid_sentence(fixed):
+            if structure_lost(md, fixed) or _incomplete(fixed):
                 self.notes.append(
                     f"Section '{title_of(section)}': whole-post review problems "
                     "left as they were: " + " | ".join(i[:160] for i in issues[:3])
@@ -666,31 +686,29 @@ class EvidenceWriter:
         self, draft: str, evidence: Sequence[Evidence], issues: Sequence[str]
     ) -> str:
         with usage_stage("fix"):
-            fixed = (
-                await self.model.text(
-                    role="write",
-                    system=self.prompts.fix,
-                    # The evidence and passages repeat across a section's
-                    # fixes; only the draft and its problems change.
-                    context="\n\n".join(
-                        [
-                            block("evidence", evidence_lines(evidence)),
-                            *(
-                                [block("source_sections", self.reference)]
-                                if self.reference
-                                else []
-                            ),
-                        ]
-                    ),
-                    prompt="\n\n".join(
-                        [
-                            block("section", draft),
-                            block("problems", "\n".join(f"- {i}" for i in issues)),
-                        ]
-                    ),
-                )
-            ).strip()
-        return strip_revision_notes(fixed)
+            raw = await self.model.text(
+                role="write",
+                system=self.prompts.fix,
+                # The evidence and passages repeat across a section's
+                # fixes; only the draft and its problems change.
+                context="\n\n".join(
+                    [
+                        block("evidence", evidence_lines(evidence)),
+                        *(
+                            [block("source_sections", self.reference)]
+                            if self.reference
+                            else []
+                        ),
+                    ]
+                ),
+                prompt="\n\n".join(
+                    [
+                        block("section", draft),
+                        block("problems", "\n".join(f"- {i}" for i in issues)),
+                    ]
+                ),
+            )
+        return ModelText(strip_revision_notes(raw.strip()), cut=was_cut(raw))
 
     async def unsupported(
         self,

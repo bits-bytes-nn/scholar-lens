@@ -32,6 +32,22 @@ ModelRole = Literal["read", "outline", "write", "evaluate"]
 SchemaT = TypeVar("SchemaT", bound=BaseModel)
 
 
+class ModelText(str):
+    """A text answer that knows whether the model stopped at its output
+    limit (``cut``): a cut answer is incomplete however it ends."""
+
+    cut: bool
+
+    def __new__(cls, text: str, *, cut: bool = False) -> ModelText:
+        obj = super().__new__(cls, text)
+        obj.cut = cut
+        return obj
+
+
+def was_cut(text: str) -> bool:
+    return bool(getattr(text, "cut", False))
+
+
 @dataclass(frozen=True)
 class AgentLimits:
     turns: int

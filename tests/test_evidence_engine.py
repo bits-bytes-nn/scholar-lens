@@ -767,3 +767,46 @@ def test_one_failing_reader_cancels_the_others() -> None:
 
     asyncio.run(run())
     assert started == ["slow"]
+
+
+def test_a_display_closed_with_trailing_text_does_not_swallow_prose() -> None:
+    from scholar_lens.domain.evidence_draft import prose_sentences
+
+    md = "## A\n\n$$\nL = 1\n$$.\n\n정확도는 91.2%입니다 [[E3]].\n"
+    assert prose_sentences(md) == ["정확도는 91.2%입니다 [[E3]]."]
+    md = "- 항목: $$\nx\n$$\n\n끝 문장입니다.\n"
+    assert prose_sentences(md) == ["끝 문장입니다."]
+
+
+def test_combined_and_lowercase_markers_are_markers() -> None:
+    from scholar_lens.domain.evidence_draft import MARKER, cited_ids
+    from scholar_lens.domain.guide.evidence_guide import strip_markers
+
+    assert cited_ids("값입니다 [[E3, EX]]. 또 [[e4]].") == ["E3", "E4"]
+    assert "[[" not in strip_markers("## A\n\n값입니다 [[EX, E3]].\n")
+    assert MARKER.search("[[ex]]")
+    assert cite_papers("예시입니다 [[EX]].", _ledger()) == "예시입니다."
+
+
+def test_a_plain_note_label_starts_the_notes() -> None:
+    from scholar_lens.domain.evidence_draft import strip_revision_notes
+
+    assert strip_revision_notes("## A\n\n본문입니다.\n\n수정 내역:\n- E3 제거\n") == (
+        "## A\n\n본문입니다.\n"
+    )
+
+
+def test_a_sentence_around_an_inline_image_can_be_dropped() -> None:
+    from scholar_lens.domain.evidence_draft import prose_sentences
+
+    md = "## A\n\nSee ![x](u.png) below for 32 nodes.\n"
+    assert drop_sentences(md, prose_sentences(md)) == "## A\n\n![x](u.png)\n"
+
+
+def test_an_answer_cut_at_the_output_limit_is_incomplete_however_it_ends() -> None:
+    from scholar_lens.application.evidence_writer import _incomplete, _kept
+    from scholar_lens.application.ports import ModelText
+
+    cut = _kept(ModelText("## A\n\n- 첫 항목\n- 둘째 항\n ", cut=True))
+    assert _incomplete(cut) and cut == "## A\n\n- 첫 항목\n- 둘째 항"
+    assert not _incomplete(_kept(ModelText("## A\n\n끝났습니다.\n")))

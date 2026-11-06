@@ -280,9 +280,11 @@ def cite_papers(markdown: str, ledger: EvidenceLedger) -> str:
             item = ledger.get(eid)
             if item is not None and item.paper_id not in pids:
                 pids.append(item.paper_id)
-        return "".join(f"[@{p}]" for p in pids)
+        keys = "".join(f"[@{p}]" for p in pids)
+        # A marker that cites nothing ([[EX]]) goes with the space before it.
+        return f"{m.group('space')}{keys}" if keys else ""
 
-    out = MARKER.sub(repl, markdown)
+    out = re.sub(r"(?P<space>[ \t]*)" + MARKER.pattern, repl, markdown, flags=re.I)
     # The same paper cited twice in a row reads as a slip.
     return re.sub(r"(\[@[^\]]+\])(\s*\1)+", r"\1", out)
 

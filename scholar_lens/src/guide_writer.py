@@ -135,8 +135,9 @@ def docs_packages(official_text: str) -> dict[str, tuple[str, frozenset[str]]]:
 def guide_documents(
     pages: Sequence[PageContent], official: OfficialDocs
 ) -> list[SourceDocument]:
-    """Each readable page as a source document, numbered per authority (D1
-    official, R1 reference material, W1 third-party, O1 older docs)."""
+    """Each readable page as a source document, numbered per authority
+    (src-D1 official, src-R1 reference material, src-W1 third-party, src-O1
+    older docs)."""
     counts: dict[str, int] = {}
     documents = []
     repos = official_repositories(pages, official)

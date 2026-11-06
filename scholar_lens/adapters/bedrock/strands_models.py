@@ -2,10 +2,12 @@
 
 Each role (read, outline, write, evaluate) has its model, effort and output
 limit. Every model call is recorded as a :class:`UsageEvent` under the current
-stage (one per agent cycle), also when the call fails. botocore owns retries
-of throttling and transient errors (standard mode, jittered backoff); the
-agents' own model retries are off so attempts do not multiply. Strands
-retries a structured answer that fails its schema. An answer cut at the
+stage (one per agent cycle), also when the call fails. Retries are bounded
+in two places with separate scopes: botocore retries the request itself
+(connection errors and a throttled start, standard mode with jitter), and
+Strands retries a throttle that arrives inside the response stream, which
+botocore never sees; three attempts each. Strands also retries a structured
+answer that fails its schema. An answer cut at the
 output limit is returned as such (``stop_reason="max_tokens"``), not raised:
 an agent's tool calls up to then stand.
 """
@@ -19,20 +21,27 @@ from typing import Any
 
 import boto3
 from botocore.config import Config
-from strands import Agent, tool
+from strands import Agent, ModelRetryStrategy, tool
 from strands.models import BedrockModel
 from strands.models.model import CacheConfig
 from strands.telemetry.metrics import EventLoopMetrics
 from strands.types.exceptions import MaxTokensReachedException
 
-from ...application.ports import AgentLimits, AgentOutcome, ModelRole, SchemaT
+from ...application.ports import (
+    AgentLimits,
+    AgentOutcome,
+    ModelRole,
+    ModelText,
+    SchemaT,
+)
 from ...application.usage import current_stage
 from ...domain.usage import UsageEvent
 
 logger = logging.getLogger(__name__)
 
+_ATTEMPTS = 3
 _CLIENT_CONFIG = Config(
-    retries={"max_attempts": 6, "mode": "standard"},
+    retries={"max_attempts": _ATTEMPTS, "mode": "standard"},
     read_timeout=600,
     connect_timeout=20,
 )
@@ -106,7 +115,9 @@ class StrandsLanguageModel:
             model=model,
             system_prompt=system,
             callback_handler=None,
-            retry_strategy=None,
+            retry_strategy=ModelRetryStrategy(
+                max_attempts=_ATTEMPTS, initial_delay=4, max_delay=60
+            ),
             **kwargs,
         )
 
@@ -207,7 +218,7 @@ class StrandsLanguageModel:
                 stop,
                 len(text.strip()),
             )
-        return text
+        return ModelText(text, cut=stop == "max_tokens")
 
     async def run_agent(
         self,

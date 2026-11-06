@@ -36,7 +36,7 @@ def _model(
 
     class FakeAgent:
         def __init__(self, *, model, **kwargs) -> None:
-            assert kwargs["retry_strategy"] is None
+            assert kwargs["retry_strategy"] is not None
             seen.append(model)
             self.messages: list = []
 

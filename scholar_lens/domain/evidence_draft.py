@@ -19,21 +19,24 @@ from .validation import unsourced_numbers
 
 # An evidence marker ("[[E12]]", "[[E12, E15]]") or the illustration mark
 # below; code removes both before publishing.
-MARKER = re.compile(r"\[\[\s*(E\d+(?:\s*,\s*E\d+)*|EX)\s*\]\]")
+MARKER = re.compile(
+    r"\[\[\s*((?:E\d+|EX)(?:\s*,\s*(?:E\d+|EX))*)\s*\]\]", re.IGNORECASE
+)
 
 
 # The writer's mark on a sentence that is its own illustration ("가상의 배치
 # 32라면 …"): its numbers need no evidence; code removes the mark with the
 # evidence markers.
 EXAMPLE_MARK = "[[EX]]"
-_EXAMPLE_MARK = re.compile(r"[ \t]*\[\[\s*EX\s*\]\]")
+_EXAMPLE_MARK = re.compile(r"\[\[[^\]]*\bEX\b[^\]]*\]\]", re.IGNORECASE)
 
 
-_ID = re.compile(r"E\d+")
+_ID = re.compile(r"E\d+", re.IGNORECASE)
 
 
 # A display-math line: ``$$…$$`` alone on its line, or a ``$$`` that opens or
 # closes a multi-line display (a list or quote prefix allowed).
+_INLINE_CODE = re.compile(r"(`+)(?:(?!\1).)+?\1")
 _MATH_PREFIX = re.compile(r"^[ \t]*(?:>[ \t]?)*(?:(?:[-*+]|\d+[.)])[ \t]+)?")
 _ONE_LINE_MATH = re.compile(r"^\$\$(?:(?!\$\$).)+\$\$$")
 
@@ -49,13 +52,15 @@ def block_lines(markdown: str) -> list[str]:
             roles.append("code")
             continue
         bare = line[_MATH_PREFIX.match(line).end() :].strip()  # type: ignore[union-attr]
+        marks = _INLINE_CODE.sub("", bare).count("$$")
         if in_math:
+            # Any "$$" closes the display ("$$." and "$$ 여기서 …" too).
             roles.append("math")
-            in_math = not bare.endswith("$$")
+            in_math = marks % 2 == 0
         elif _ONE_LINE_MATH.match(bare):
             roles.append("math")
-        elif bare.startswith("$$") and bare.count("$$") == 1:
-            # "$$" opening a multi-line display ("$$a$$ 는 …" is inline).
+        elif marks % 2 == 1:
+            # An odd "$$" opens a display ("$$a$$ 는 …" is inline).
             roles.append("math")
             in_math = True
         else:
@@ -130,7 +135,9 @@ def claim_units(markdown: str) -> list[str]:
 
 
 def cited_ids(sentence: str) -> list[str]:
-    return [i for m in MARKER.finditer(sentence) for i in _ID.findall(m.group(1))]
+    return [
+        i.upper() for m in MARKER.finditer(sentence) for i in _ID.findall(m.group(1))
+    ]
 
 
 def _plain(sentence: str) -> str:
@@ -383,7 +390,17 @@ def drop_sentences(markdown: str, sentences: Iterable[str]) -> str:
     for sentence in sentences:
         row = sentence.startswith("|")
         for i, (line, role) in enumerate(zip(lines, roles, strict=True)):
-            if role != "prose" or sentence not in line:
+            if role != "prose":
+                continue
+            if sentence not in line:
+                # A sentence around an inline image reads with the image
+                # blanked (as prose_sentences gives it): the line's text goes,
+                # its images stay.
+                if not row and sentence in _IMAGE.sub(" ", line):
+                    rest = _IMAGE.sub(" ", line).replace(sentence, "", 1)
+                    if _LEFTOVER.match(rest):
+                        lines[i] = " ".join(m.group(0) for m in _IMAGE.finditer(line))
+                        break
                 continue
             if row:
                 if line.strip() == sentence:
@@ -444,9 +461,6 @@ def ends_mid_sentence(markdown: str) -> bool:
     return False
 
 
-_INLINE_CODE = re.compile(r"(`+)(?:(?!\1).)+?\1")
-
-
 def balance_math(markdown: str) -> tuple[str, bool]:
     """An odd ``$$`` count outside code makes every later equation of the
     post flip into prose: the last lone ``$$`` is removed. Returns the text
@@ -471,10 +485,13 @@ def balance_math(markdown: str) -> tuple[str, bool]:
 
 # A block of notes a writer appends about its own edits: a heading, bold
 # label or rule-led line naming them, after which nothing is the section's.
+_NOTE_LABEL = (
+    r"(?:수정 ?(?:내역|사항|요약)|변경 ?(?:내역|사항)|고친 (?:부분|내용)|"
+    r"revision notes?|changes made|summary of changes)"
+)
+# A heading or bold label naming the notes, or a line that is only the label.
 _REVISION_NOTE = re.compile(
-    r"^(?:#{1,6}[ \t]+|\*\*)[ \t]*(?:수정 ?(?:내역|사항|요약)|"
-    r"변경 ?(?:내역|사항)|고친 (?:부분|내용)|revision notes?|changes made|"
-    r"summary of changes)\b.*$",
+    rf"^(?:(?:#{{1,6}}[ \t]+|\*\*)[ \t]*{_NOTE_LABEL}\b.*|{_NOTE_LABEL}[ \t]*:?[ \t]*\**)$",
     re.IGNORECASE,
 )
 
