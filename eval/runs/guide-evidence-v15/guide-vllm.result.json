@@ -1,0 +1,173 @@
+{
+  "kind": "guide",
+  "status": "succeeded",
+  "input": "https://docs.vllm.ai/en/latest/getting_started/quickstart.html, https://arxiv.org/abs/2309.06180, https://blog.vllm.ai/2023/06/20/vllm.html",
+  "title": "vLLM Internals: PagedAttention, Scheduling, and Production Serving",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/guide-vllm-internals-pagedattention-scheduling-and-production-serving/2026-11-07-vllm-internals-pagedattention-scheduling-and-production-serving.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-11-07-vllm-internals-pagedattention-scheduling-and-production-serving.md",
+  "pr_url": null,
+  "warnings": [
+    "Section '고정 크기 KV 블록과 블록 단위 어텐션 커널': the writer could not fix: - 제3자 글의 작성 날짜나 측정한 vLLM 버전은 근거(E116)에 없어서 적지 못했습니다. '비슷한'은 고쳐서, 이제 이 글을 논문과 다른 관점의 보고로 소개합니다. - `--block-size`의 현재 기본값은 근거에 없습니다(E84는 None을 받는다는 사실만 보여 줍니다). 그래서 '기본값'이라는 말을 뺐습니다. `vllm serve`에 `--block-size`를 붙이는 한 줄 예시도 넣지 못했습니다. `vllm serve` 명령이 근거에 없고, 앞 섹션에서 정한 실행 예제의 모델 이름도 확인할 수 없기 때문입니다. - ",
+    "Section '고정 크기 KV 블록과 블록 단위 어텐션 커널': check 4 sentence(s) the evidence may not support: 앞서 본 60–80% 낭비는 바로 이런 예약에서 나옵니다. (unsupported: Source attributes the 60–80% waste to both fragmentation and over-reservation; the sentence credits it solely to reservation.) | 예를 들어 $$B=16$$에서 50토큰짜리 시퀀스는 블록 4개를 쓰고, 마지막 블록의 16칸 중 2칸만 차서 14칸이 빕니다. (numbers not in its evidence) | 저자들의 측정에서 ShareGPT 트레이스는 블록 크기 16에서 128 사이가 가장 좋았습니다. (numbers not in its evidence) | 실행 예제의 Qwen2.5-1.5B 서버에 요청이 한 번에 하나씩만 들어온다면 블록 단위 어텐션은 이득보다 비용이 먼저 드러납니다. (numbers not in its evidence)",
+    "Section '고정 크기 KV 블록과 블록 단위 어텐션 커널' still has: numbers ['16', '50', '14'] without evidence (cite it; an illustration of your own ends with [[EX]]): 예를 들어 $$B=16$$에서 50토큰짜리 시퀀스는 블록 4개를 쓰고, 마지막 블록의 16칸 중 2칸만 차서 14칸이 빕니다. | ['50', '14'] already stated in '단편화와 과예약으로 메모리 60–80%를 버리던 기존 LLM 서빙의 한계': refer back without repeating: 예를 들어 $$B=16$$에서 50토큰짜리 시퀀스는 블록 4개를 쓰고, 마지막 블록의 16칸 중 2칸만 차서 14칸이 빕니다. | numbers ['60', '80'] without evidence (cite it; an illustration of your own ends with [[EX]]): 앞서 본 60–80% 낭비는 바로 이런 예약에서 나옵니다. | ['60', '80'] already stated in '단편화와 과예약으로 메모리 60–80%를 버리던 기존 LLM 서빙의 한계': refer back without repeating: 앞서 본 60–80% 낭비는 바로 이런 예약에서 나옵니다. | numbers ['16', '128'] without evidence (cite it; an illustration of your own ends with [[EX]]): 저자들의 측정에서 ShareGPT 트레이스는 블록 크기 16에서 128 사이가 가장 좋았습니다.",
+    "Section '논리 블록과 물리 블록을 잇는 KV 캐시 매니저와 블록 테이블' still has: ['15'] already stated in '단편화와 과예약으로 메모리 60–80%를 버리던 기존 LLM 서빙의 한계': refer back without repeating: 앞서 인용한 제3자 글은 이를 시퀀스당 낭비가 최대 15칸, 즉 부분적으로 찬 마지막 블록으로 줄어든다고 표현합니다 .",
+    "Section '참조 카운트와 쓰기 시 복사로 구현한 요청 내·요청 간 블록 공유': the writer could not fix: Depth problem (hash cache mechanism) was only partly fixed. The evidence does not say what the hash key is built from: whether it covers only full blocks, or whether it includes the block's tokens or the preceding prefix. It also does not say which blocks a repeated request would hit. So I did not a",
+    "Section '참조 카운트와 쓰기 시 복사로 구현한 요청 내·요청 간 블록 공유': check 2 sentence(s) the evidence may not support: 블로그의 애니메이션에서 두 출력 시퀀스의 프롬프트 부분이 같은 물리 블록을 가리키는 모습을 확인할 수 있습니다 [[E66]]. (unsupported: The animation caption only says 'Example of parallel sampling' and the blog speaks of multiple output sequences; it does not say the animation shows two sequences.) | 블로그는 이러한 메모리 공유로 병렬 샘플링과 빔 서치의 메모리 사용량이 최대 55% 줄고, 앞서 소개한 처리량 향상으로 이어진다고 밝힙니다 [[E58]]. (unsupported: The blog ties the memory saving to up to 2.2x throughput improvement, not to the throughput gains introduced earlier.)",
+    "Section '반복마다 토큰 예산을 다시 나누는 통합 스케줄러와 선점': the writer could not fix: - 'vLLM Explained' (E118): 작성 날짜나 대상 버전을 넣지 못했습니다. 근거 자료에 이 페이지의 날짜도 버전도 없기 때문입니다. 대신 서드파티 글이 보고한 내용으로 표시했습니다. - AsyncLLM 문단: 격리된 루프가 별도 프로세스에서 돈다는 내용은 넣었지만 'EngineCore'라는 이름은 쓰지 않았습니다. 근거 자료에 그 이름이 없습니다. - multi-step scheduling 정의(\"V0에서 여러 디코딩 스텝을 한 번에 스케줄링해 CPU 오버헤드를 줄이던 옵션\"): 검토 의견에 따라 추가했지만 근거 자",
+    "Section '토큰 예산 기반 통합 스케줄러와 선점, V1 엔진 루프': check 2 sentence(s) the evidence may not support: 스왑 비용은 V0와 논문 방식에만 해당하고, 스와핑을 없앤 V1에서는 재계산 쪽 비용만 남습니다. (unsupported: V1 swapping removal comes only from v0.8.1 older_docs; stated as current behaviour without the version qualifier.) | | 스와핑 | 축출한 블록을 CPU 메모리로 복사, 스왑 공간은 KV 캐시용 GPU 메모리 크기로 제한 | 복귀에 수백 ms가 걸릴 수 있음 | 논문·V0 (V1에서 폐기) | (unsupported: 'V1에서 폐기' rests only on v0.8.1 older_docs with no version qualifier, and no evidence shows V0 used swapping.)",
+    "Section '새 uv 가상환경 하나와 `LLM` 클래스로 끝나는 첫 실행': the writer could not fix: Apple Silicon 행에는 요청대로 [[E13]]을 달지 않았습니다. E13은 TPU 패키지만 다루고, Apple Silicon 지원(vLLM-Metal 경유)을 뒷받침하는 근거는 E19라서 그 행에는 [[E19]]를 달았습니다. 다만 같은 칸의 MLX 백엔드 내용은 출처 페이지 본문에만 나오고, 이를 직접 뒷받침하는 근거 항목은 없습니다.",
+    "Section '인스턴스 메모리 비율과 배치 상한으로 정하는 처리량과 OOM의 경계': the writer could not fix: depth (KV 블록 수 계산): 근거에 블록 수 계산식이 없습니다. GPU 메모리에 비율을 곱하고 가중치·활성화 메모리를 뺀 뒤 블록 크기로 나누는 식도, 숫자 예에 쓸 값도 없습니다. 근거가 말하는 것은 서드파티 nm-vllm 0.5.0 문서의 \"블록 수가 이 값의 영향을 받는다\"뿐입니다. 그래서 그 문장을 이 출처의 보고로 좁혔고, 단계별 설명과 숫자 예는 넣지 않았습니다. flow (청크 프리필): 앞 섹션이 통합 스케줄러를 실제로 설명했는지 이 섹션만으로는 확인할 수 없습니다. 인용된 E89도 받은 근거에 없습니다. 그래",
+    "Section '인스턴스 메모리 비율과 배치 상한으로 정하는 처리량과 OOM의 경계': the writer could not fix: The rewritten `--block-size` sentence has no evidence marker. Its source is the CPU tuning section of src-D4, which says to use multiples of 32 and gives a default of 128. No evidence entry covers that passage, and E34 is about `--max-num-seqs`, so citing E34 would be wrong.",
+    "Section '인스턴스 메모리 비율과 배치 상한으로 정하는 처리량과 OOM의 경계': the writer could not fix: The block-size sentence now says only what the CPU tuning text says: use multiples of 32 for `--block-size`, and the default is 128. I removed the claim that these match values given earlier, and removed the [[E34]] marker. That marker covers `--max-num-seqs`, and no evidence item quotes the block-s",
+    "Section 'GPU 메모리 비율·배치 상한·KV 캐시 크기를 중심으로 한 엔진 튜닝': check 1 sentence(s) the evidence may not support: CPU 백엔드에서 `--block-size`로 정하는 KV 캐시 블록 크기는 앞서 고정 크기 KV 블록을 다룰 때 적은 권장 배수와 기본값을 따릅니다 [[E34]]. (unsupported: Cited E34 covers --max-num-seqs, not block size. The CPU docs give multiples of 32 and a default of 128, which is not the paper's block size of 16. The claim that these match values 'given earlier' can't be confirmed.)",
+    "Section '공식 이미지로 띄우고 대기 요청 수로 늘리며 사전 할당 KV 캐시 기준으로 읽는 운영': the writer could not fix: 고치지 못한 문제: - API 키 헤더: 근거에는 서버가 \"the header\"에서 키를 검사한다는 말만 있고, 헤더 이름(`Authorization: Bearer`)이나 `openai` 클라이언트가 `api_key`를 그 헤더에 자동으로 넣는다는 내용은 없습니다. 그래서 두 가지 모두 넣지 않았습니다. - `vllm launch render`: 렌더링 서버 구성 요소가 무슨 일을 하는지 근거에 없어서 명령을 지웠습니다. 남은 preload 내용은 별도 소절로 옮겼습니다. - preload로 아끼는 재시작 시간: 근거에 수치가 없어",
+    "Section 'Docker·Kubernetes 배포와 KV 캐시·큐 메트릭 기반 관측과 오토스케일링': check 1 sentence(s) the evidence may not support: `--ipc=host`는 생략하면 안 됩니다. (unsupported: Source says either --ipc=host or --shm-size may be used; --ipc=host is not mandatory.)",
+    "Section 'Docker·Kubernetes 배포와 KV 캐시·큐 메트릭 기반 관측과 오토스케일링' still has: flags or arguments no official page mentions; use the documented ones or leave them out: vllm:num_preemptions_total",
+    "Section '동시 요청이 많은 GPU 서빙에서 커지는 이점과 도입 전에 따져볼 경계': the writer could not fix: Introl 블로그를 처음 언급하는 곳에 날짜를 넣지 못했습니다. 근거 자료(E103, E104, E105)에 이 블로그의 날짜나 버전이 나와 있지 않기 때문입니다. 대신 출처 이름은 한 번만 쓰고, 그 뒤 문장에서는 '같은 블로그'로 받았습니다.",
+    "Section '높은 동시성 처리량에는 강하지만 단일 요청·특수 기능에는 따져봐야 할 선택지': check 1 sentence(s) the evidence may not support: 2025년 1월 vLLM 블로그는 알파 단계의 V1이 log probs, 파이프라인 병렬, structured decoding, 추측 디코딩, Prometheus 메트릭, LoRA를 지원하지 않는다고 적었습니다. (numbers not in its evidence)",
+    "Section '높은 동시성 처리량에는 강하지만 단일 요청·특수 기능에는 따져봐야 할 선택지' still has: ['80'] already stated in '단편화와 과예약으로 메모리 60–80%를 버리던 기존 LLM 서빙의 한계': refer back without repeating: Introl 블로그는 같은 구성에서 vLLM이 초당 793토큰, Ollama가 초당 41토큰을 냈고, P99 지연은 80ms 대 673ms였다는 벤치마크를 인용합니다 . | numbers ['2025'] without evidence (cite it; an illustration of your own ends with [[EX]]): 2025년 1월 vLLM 블로그는 알파 단계의 V1이 log probs, 파이프라인 병렬, structured decoding, 추측 디코딩, Prometheus 메트릭, LoRA를 지원하지 않는다고 적었습니다.",
+    "Whole-post review problems naming no section of the post, not applied: 반복해서 나타나는 실패 모드: GPU 메모리 비율이 인스턴스 단위 상한이라는 것(E85), CPU TP 워커의 `exitcode 9`(E38), FP8 스케일 계수 1.0 경고(E108)를 같은 출처로 다시 설명합니다. 세 가지 모두 '인스턴스 메모리 비율과 배치 상한으로 정하는 처리량",
+    "Section '인스턴스 메모리 비율과 배치 상한으로 정하는 처리량과 OOM의 경계': the writer could not fix: Problem 1 (adding `uv pip install \"vllm[bench]\"`) is not fixed. Nothing in the evidence or the source sections mentions a `bench` extra or any install command for the benchmark. Adding it would put in a command the evidence doesn't support, so the benchmark block is unchanged.",
+    "Section 'TL;DR': the writer could not fix: 60%–80% 문장은 수치의 범위(KV 캐시 메모리)를 밝히도록 고쳤지만, 출처는 \"vLLM 개발진의 분석\"이라고만 적었습니다. 제안된 \"원 논문의 분석\"은 쓰지 않았습니다. 이 수치는 원 논문(src-R1)이 아니라 vLLM 블로그(src-R2)에서 나온 것이기 때문입니다.",
+    "Flags/metrics the official pages fetched for this guide never mention; verify them against the current reference: vllm:num_preemptions_total",
+    "Guide description still breaks the rules after a repair: description has 79 characters; write 120-160",
+    "[description] line 1: description has 79 characters; the blog's descriptions run 120-160",
+    "[image] line 29: remote image not localized (linked to its source): https://vllm.ai/blog-assets/figures/perf_a100_n3_light.png",
+    "[image] line 43: remote image not localized (linked to its source): https://vllm.ai/blog-assets/figures/annimation0.gif",
+    "[image] line 109: remote image not localized (linked to its source): https://vllm.ai/blog-assets/figures/annimation1.gif",
+    "[image] line 138: remote image not localized (linked to its source): https://vllm.ai/blog-assets/figures/annimation2.gif",
+    "[image] line 150: remote image not localized (linked to its source): https://vllm.ai/blog-assets/figures/annimation3.gif"
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 2711.7,
+  "input_tokens": 2383850,
+  "output_tokens": 377711,
+  "estimated_cost_usd": 12.2113,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 176,
+      "failed_calls": 0,
+      "input_tokens": 367599,
+      "output_tokens": 377711,
+      "cache_read_tokens": 1173240,
+      "cache_write_tokens": 843011,
+      "cost_usd": 12.211273
+    },
+    "by_stage": {
+      "relevance": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 1610,
+        "output_tokens": 554,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.000438
+      },
+      "research_plan": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 2439,
+        "output_tokens": 784,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.000636
+      },
+      "read": {
+        "calls": 88,
+        "failed_calls": 0,
+        "input_tokens": 212,
+        "output_tokens": 79377,
+        "cache_read_tokens": 617645,
+        "cache_write_tokens": 165496,
+        "cost_usd": 1.33147
+      },
+      "outline": {
+        "calls": 2,
+        "failed_calls": 0,
+        "input_tokens": 8,
+        "output_tokens": 13220,
+        "cache_read_tokens": 3932,
+        "cache_write_tokens": 31426,
+        "cost_usd": 0.423134
+      },
+      "verify": {
+        "calls": 31,
+        "failed_calls": 0,
+        "input_tokens": 225038,
+        "output_tokens": 73375,
+        "cache_read_tokens": 277953,
+        "cache_write_tokens": 212308,
+        "cost_usd": 3.540375
+      },
+      "draft": {
+        "calls": 11,
+        "failed_calls": 0,
+        "input_tokens": 44,
+        "output_tokens": 47158,
+        "cache_read_tokens": 41990,
+        "cache_write_tokens": 206705,
+        "cost_usd": 1.993661
+      },
+      "review": {
+        "calls": 12,
+        "failed_calls": 0,
+        "input_tokens": 48,
+        "output_tokens": 30399,
+        "cache_read_tokens": 24404,
+        "cache_write_tokens": 75690,
+        "cost_usd": 0.996388
+      },
+      "fix": {
+        "calls": 28,
+        "failed_calls": 0,
+        "input_tokens": 119350,
+        "output_tokens": 130236,
+        "cache_read_tokens": 207316,
+        "cache_write_tokens": 151386,
+        "cost_usd": 3.921982
+      },
+      "finalize": {
+        "calls": 2,
+        "failed_calls": 0,
+        "input_tokens": 18850,
+        "output_tokens": 2608,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.003189
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-haiku-5-5": {
+        "calls": 4,
+        "failed_calls": 0,
+        "input_tokens": 22899,
+        "output_tokens": 3946,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.004263
+      },
+      "global.anthropic.claude-sonnet-5-5": {
+        "calls": 88,
+        "failed_calls": 0,
+        "input_tokens": 212,
+        "output_tokens": 79377,
+        "cache_read_tokens": 617645,
+        "cache_write_tokens": 165496,
+        "cost_usd": 1.33147
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 84,
+        "failed_calls": 0,
+        "input_tokens": 344488,
+        "output_tokens": 294388,
+        "cache_read_tokens": 555595,
+        "cache_write_tokens": 677515,
+        "cost_usd": 10.87554
+      }
+    }
+  }
+}

@@ -1,0 +1,158 @@
+{
+  "kind": "guide",
+  "status": "succeeded",
+  "input": "https://strandsagents.com/docs/user-guide/sdk/agents/agent-loop/, https://strandsagents.com/docs/user-guide/sdk/agents/hooks/",
+  "title": "Strands Agents in Production: Loop, Controls, Approval, Persistence",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/guide-strands-agents-in-production-loop-controls-approval-persistence/2026-11-07-strands-agents-in-production-loop-controls-approval-persistence.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-11-07-strands-agents-in-production-loop-controls-approval-persistence.md",
+  "pr_url": null,
+  "warnings": [
+    "Reading src-W5 stopped at its limit (limit_turns).",
+    "Section '위험 분류기와 Cedar 정책 순서로 짜는 도구 호출 전 사람 승인': the writer could not fix: Depth problem (interrupt response shape and resume call): not fixed. The evidence and SDK source only say that a paused agent needs interrupt responses rather than a plain string. Neither shows what an interrupt response looks like or how the resume call is written, so an example would mean inventin",
+    "Section '반복 경계에서 검사되는 턴·토큰 한도, 협력적 취소, 호출 동시성 가드': the writer could not fix: 두 지적이 서로 충돌해서 한쪽만 따랐습니다. 숫자 검사 지적은 근거 없는 숫자가 든 직접 만든 예시 문장을 [[EX]]로 끝내라고 하고, 다른 지적은 [[EX]]가 실제 근거를 가리키지 않으니 지우라고 합니다. - **바꾼 점:** 다른 섹션에 이미 나온 20,000을 다시 쓰지 않도록, 이 섹션 첫 코드의 `total_tokens` 값(10000, [[E1]])을 기준으로 예시를 다시 짰습니다. 새 숫자는 9,000, 2,500, 11,500입니다. - **그대로 둔 점:** 이 숫자가 든 두 문장에는 [[EX]]를 남겼습니다. ",
+    "Section '스로틀링 전용 지수 백오프 기본값과 훅 기반 사용자 정의 재시도': the writer could not fix: I left out the suggested \"2+4=6초\" wait total. The SDK 1.64.0 docstring says `initial_delay` is \"used for first two retries, then doubles\", so with `initial_delay=2` the first two waits could be 2s and 2s. The docs say each retry doubles the delay, which gives 2s and 4s. Since the total depends on wh",
+    "Section '스로틀링 전용 지수 백오프 기본값과 훅 기반 사용자 정의 재시도': check 1 sentence(s) the evidence may not support: strands-agents 1.64.0 패키지의 생성자는 위 표처럼 `max_delay` 기본값을 `240`으로 둡니다. (numbers not in its evidence)",
+    "Section '스로틀링 전용 지수 백오프 기본값과 훅 기반 사용자 정의 재시도' still has: numbers ['1.64', '240'] without evidence (cite it; an illustration of your own ends with [[EX]]): strands-agents 1.64.0 패키지의 생성자는 위 표처럼 `max_delay` 기본값을 `240`으로 둡니다.",
+    "Section '에이전트 상태·호출 상태와 단일 writer를 가정한 세션 영속화': the writer could not fix: `request_state` 문제는 일부만 고쳤습니다. 이제 문장에서 `request_state`가 호출 상태 안의 항목이라고 밝히지만, 그 항목을 누가 채우는지는 근거에 없어 쓰지 않았습니다. 수명주기 이벤트 문장은 SDK 소스(`save_latest_on`, 기본값 `\"invocation\"`)를 근거로 다시 썼습니다. 그래서 주제가 다른 근거(보안 관련)를 가리키던 [[E81]] 표시는 뺐습니다. 표의 \"모델 컨텍스트 포함\" 열은 지웠습니다. 에이전트 상태 칸을 뒷받침할 근거가 없고, 호출 상태가 모델에 보이지 않는다는 사실은 ",
+    "Section '세션별 microVM 격리 런타임과 스팬 계층으로 보는 에이전트 루프': the writer could not fix: - 텔레메트리 설정 코드 블록(kindness): 근거 자료에는 텔레메트리 설정 코드나 exporter endpoint API가 하나도 없습니다(E162는 설명만 있음). 그래서 블록은 넣지 않았고, 등록을 `build_support_agent(conversation_id)`보다 먼저 실행해야 한다는 문장만 추가했습니다. - `refund_order` 금액을 붙이는 훅 블록(kindness): 근거에 활성 스팬에 속성을 다는 코드가 없습니다(OTel span API 미포함). 그래서 블록은 넣지 않았습니다. 이벤트(`AfterToo",
+    "Section '모델 주도 루프와 워크플로 그래프 사이의 제어·내구성 트레이드오프': the writer could not fix: 동시 호출 행: 기본값(한 번에 한 호출만 처리하고 중복 호출은 거부)은 E84를 근거로 적었습니다. 동시 호출을 켜는 설정이나 옵션의 정확한 이름은 제공된 근거에 없습니다. E9가 이 근거 묶음에 없고 SDK 소스 발췌도 해당 부분을 다루지 않습니다. 그래서 행 이름을 \"한 에이전트 인스턴스에 동시 호출을 허용한 구성\"으로 설명하는 데 그쳤습니다.",
+    "Whole-post review problems naming no section of the post, not applied: 반환되는 중단 사유와 던져지는 예외의 분리: This section reprints the stop-reason table from '중단 사유로 분기하며 대화 기록에 쌓이는 모델–도구 반복 구조'. It explains again that `limit_*` means a budget ",
+    "Section '이벤트 구독형 훅과 타입 있는 결정을 반환하는 개입 계층': the writer could not fix: The fix for the first problem is only partly done. Both handlers in this section now check for `refund_order`, and so does the prose before the hook example. The other half was adding the `reason: str` parameter and its docstring line to the `refund_order(order_id, amount)` definition. I couldn't ma",
+    "Section '이벤트 구독형 훅과 타입 있는 결정을 반환하는 개입 계층': 3 sentence(s) from a whole-post fix removed (they contradict their evidence or talk about the post's sources): 훅은 `event.cancel_tool = \"reason\"`처럼 이벤트 속성을 직접 바꾸기 때문에, 프레임워크는 그 취소가 권한 거부였는지, 다르게 다시 시도하라는 가벼운 안내였는지 구분하지 못합니다 [[E44]]. | Before 이벤트에서 `Confirm`은 인터럽트(interrupt)·재개 방식으로 에이전트를 멈추고, 승인이 거절되면 `event.cancel_tool`을 설정합니다 [[E41]]. | 훅으로 같은 구성을 짜면 플러그인마다 작업 전에 `event.cancel_tool`을 따로 확인해야 합니다 [[E44]].",
+    "Section '세션별 microVM 격리 런타임과 스팬 계층으로 보는 에이전트 루프': the writer could not fix: Not fixed: the assembled handler. The evidence has no code or signatures for `HumanInTheLoop(...)`, `ModelRetryStrategy(...)`, the `cedar` intervention, the session manager, `limits`, `cancel_signal`, `structured_output_model` or `result.structured_output`, and no code_defined_earlier list was provi",
+    "Section 'TL;DR': the writer could not fix: 해결하지 못한 부분이 하나 있습니다. 위험 분류기를 켜는 방법은 쓰지 않았습니다. 근거 자료는 분류기가 하는 일(도구 이름과 입력을 모델에 보내 승인이 필요한지 묻는 것), 기본 분류기, 분류기가 없을 때의 동작만 보여 줍니다. 분류기를 켜는 매개변수나 설정은 근거에 없습니다. 그래서 분류기가 무엇인지만 설명하고 켜는 방법은 뺐습니다. `HumanInTheLoop`을 처음 소개하는 자리에서는 '기본 제공'이라는 말 대신 '개입 핸들러 가운데 하나'라고 썼습니다. 근거는 이 핸들러를 개입 핸들러라고만 부르기 때문입니다. 같은 이유로 ",
+    "self-reference '첫 섹션': 첫 섹션에서 본 가드레일·스티어링 구분으로 보면, `Refun"
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 2876.5,
+  "input_tokens": 2602485,
+  "output_tokens": 344135,
+  "estimated_cost_usd": 14.0772,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 132,
+      "failed_calls": 0,
+      "input_tokens": 461023,
+      "output_tokens": 344135,
+      "cache_read_tokens": 1045664,
+      "cache_write_tokens": 1095798,
+      "cost_usd": 14.077251
+    },
+    "by_stage": {
+      "relevance": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 2616,
+        "output_tokens": 193,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.000358
+      },
+      "research_plan": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 2785,
+        "output_tokens": 670,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.000614
+      },
+      "read": {
+        "calls": 40,
+        "failed_calls": 0,
+        "input_tokens": 92,
+        "output_tokens": 19430,
+        "cache_read_tokens": 253538,
+        "cache_write_tokens": 47247,
+        "cost_usd": 0.363311
+      },
+      "outline": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 8736,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 23494,
+        "cost_usd": 0.292206
+      },
+      "verify": {
+        "calls": 36,
+        "failed_calls": 0,
+        "input_tokens": 304096,
+        "output_tokens": 83350,
+        "cache_read_tokens": 521574,
+        "cache_write_tokens": 352328,
+        "cost_usd": 4.853655
+      },
+      "draft": {
+        "calls": 11,
+        "failed_calls": 0,
+        "input_tokens": 44,
+        "output_tokens": 54586,
+        "cache_read_tokens": 41990,
+        "cache_write_tokens": 256260,
+        "cost_usd": 2.389996
+      },
+      "review": {
+        "calls": 12,
+        "failed_calls": 0,
+        "input_tokens": 48,
+        "output_tokens": 32702,
+        "cache_read_tokens": 22990,
+        "cache_write_tokens": 105125,
+        "cost_usd": 1.189057
+      },
+      "fix": {
+        "calls": 28,
+        "failed_calls": 0,
+        "input_tokens": 122546,
+        "output_tokens": 142759,
+        "cache_read_tokens": 205572,
+        "cache_write_tokens": 311344,
+        "cost_usd": 4.98432
+      },
+      "finalize": {
+        "calls": 2,
+        "failed_calls": 0,
+        "input_tokens": 28792,
+        "output_tokens": 1709,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.003734
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-haiku-5-5": {
+        "calls": 4,
+        "failed_calls": 0,
+        "input_tokens": 34193,
+        "output_tokens": 2572,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.004706
+      },
+      "global.anthropic.claude-sonnet-5-5": {
+        "calls": 40,
+        "failed_calls": 0,
+        "input_tokens": 92,
+        "output_tokens": 19430,
+        "cache_read_tokens": 253538,
+        "cache_write_tokens": 47247,
+        "cost_usd": 0.363311
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 88,
+        "failed_calls": 0,
+        "input_tokens": 426738,
+        "output_tokens": 322133,
+        "cache_read_tokens": 792126,
+        "cache_write_tokens": 1048551,
+        "cost_usd": 13.709234
+      }
+    }
+  }
+}

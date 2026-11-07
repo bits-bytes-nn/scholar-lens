@@ -1,0 +1,156 @@
+{
+  "kind": "summarize",
+  "status": "succeeded",
+  "input": "2106.09685",
+  "title": "LoRA: Low-Rank Adaptation of Large Language Models",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/2106_09685/2026-11-07-lora-low-rank-adaptation-of-large-language-models-summary.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-11-07-lora-low-rank-adaptation-of-large-language-models-summary.md",
+  "pr_url": null,
+  "warnings": [
+    "Tag 'Frozen-Pretrained-Weights' (or its acronym) does not appear in the paper; check it fits.",
+    "Tag 'Inference-Latency-Elimination' (or its acronym) does not appear in the paper; check it fits.",
+    "Tag 'Adaptation-Update-Subspace-Analysis' (or its acronym) does not appear in the paper; check it fits.",
+    "Section '영행렬 초기화와 여러 어텐션 행렬에 나눠 거는 LoRA': the writer could not fix: I fixed the one listed problem. In the flagged sentence, I deleted \"96개 층 전체\" and \"FP16 기준 약 35MB\" because the evidence's scope gives only GPT-3 175B and 18M parameters. The sentence now states just the 1,800만-parameter budget on GPT-3 175B. I made no other changes.",
+    "Section '구현 방식': check 1 sentence(s) the evidence may not support: 저자들은 GPT-3 175B에 학습 파라미터 1,800만 개라는 예산을 걸고 비교했습니다. (numbers not in its evidence)",
+    "Section '구현 방식' still has: numbers ['175B', '1,800만'] without evidence (cite it; an illustration of your own ends with [[EX]]): 저자들은 GPT-3 175B에 학습 파라미터 1,800만 개라는 예산을 걸고 비교했습니다. | 916 characters of prose for a target of 500: cut background, repetition and minor detail",
+    "Section '파인튜닝과 같은 품질을 더 적은 메모리와 더 빠른 학습으로': the writer could not fix: Besides the sentence with the 100-model storage numbers, I also deleted the sentence before it (\"앞의 WikiSQL 예처럼 …\"). That sentence only introduced the deleted comparison and would have been left dangling. It also bent the section toward the running example.",
+    "Section '실험 결과': check 5 sentence(s) the evidence may not support: 고정된 파라미터의 옵티마이저 상태를 저장하지 않아도 되므로, 학습 중 VRAM 사용량은 1.2TB에서 350GB로 내려갑니다 [[E3]]. (numbers not in its evidence) | $$r=4$$로 쿼리·밸류 투영 행렬에만 LoRA를 걸면 체크포인트도 350GB에서 35MB로 작아집니다 [[E3]]. (numbers not in its evidence) | 적응 모델 100개를 저장할 때 전체 파인튜닝은 약 35TB가 필요하지만, LoRA는 본체 350GB에 35MB짜리 모듈 100개를 더한 약 354GB면 충분합니다 [[E3]]. (numbers not in its evidence) | 모델 병렬화에 같은 수의 가중치 샤드를 쓸 때, V100 GPU당 처리량(throughput)은 전체 파인튜닝이 32.5 tokens/s, LoRA가 43.1 tokens/s입니다. (numbers not in its evidence) | 저자들은 MNLI 학습 세트에서 100개, 1,000개, 10,000개를 무작위로 뽑아 MNLI-$$n$$ 과제를 만들고, 평가는 전체 검증 세트로 했습니다 [[E20]]. (numbers not in its evidence)",
+    "Section '실험 결과' still has: numbers ['1.2', '350'] are not in the cited evidence: 고정된 파라미터의 옵티마이저 상태를 저장하지 않아도 되므로, 학습 중 VRAM 사용량은 1.2TB에서 350GB로 내려갑니다 . | numbers ['350', '35'] are not in the cited evidence: $$r=4$$로 쿼리·밸류 투영 행렬에만 LoRA를 걸면 체크포인트도 350GB에서 35MB로 작아집니다 . | numbers ['100', '35', '350', '354'] are not in the cited evidence: 적응 모델 100개를 저장할 때 전체 파인튜닝은 약 35TB가 필요하지만, LoRA는 본체 350GB에 35MB짜리 모듈 100개를 더한 약 354GB면 충분합니다 . | ['100'] already stated in '연구 배경': refer back without repeating: 적응 모델 100개를 저장할 때 전체 파인튜닝은 약 35TB가 필요하지만, LoRA는 본체 350GB에 35MB짜리 모듈 100개를 더한 약 354GB면 충분합니다 . | numbers ['32.5', '43.1'] without evidence (cite it; an illustration of your own ends with [[EX]]): 모델 병렬화에 같은 수의 가중치 샤드를 쓸 때, V100 GPU당 처리량(throughput)은 전체 파인튜닝이 32.5 tokens/s, LoRA가 43.1 tokens/s입니다.",
+    "Section '값싼 태스크 교체와 남은 설계 과제': the writer could not fix: Both sentences are now tied to evidence that already existed. The small-r limitation is stated as the authors' expectation and cited to E11. The Wq/Wv scope (GPT-3 175B, WikiSQL and MultiNLI) is cited to E14.",
+    "Section '의의와 한계' still has: 794 characters of prose for a target of 500: cut background, repetition and minor detail",
+    "Section '제안 방법': whole-post review problems left as they were: The paragraph about the diagram says again what the paragraph before it already said: the input x goes into both paths at the same time and the two outputs are ",
+    "Section 'TL;DR': the writer could not fix: 품질 주장의 비교 대상(전체 파인튜닝)과 GPT-3 175B 효율 수치를 서로 다른 문장으로 나눴습니다. 다만 품질 주장이 RoBERTa·DeBERTa·GPT-2에도 해당한다는 내용은 넣지 않았습니다. 주어진 근거 [E3]는 범위가 GPT-3 175B뿐이고, 이 모델들의 결과를 다루는 근거가 없습니다."
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 530.4,
+  "input_tokens": 554998,
+  "output_tokens": 66366,
+  "estimated_cost_usd": 2.0892,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 65,
+      "failed_calls": 0,
+      "input_tokens": 120650,
+      "output_tokens": 66366,
+      "cache_read_tokens": 259936,
+      "cache_write_tokens": 174412,
+      "cost_usd": 2.089238
+    },
+    "by_stage": {
+      "figures": {
+        "calls": 8,
+        "failed_calls": 0,
+        "input_tokens": 16800,
+        "output_tokens": 6619,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.004989
+      },
+      "extract_attributes": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 53622,
+        "output_tokens": 267,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.005496
+      },
+      "read": {
+        "calls": 18,
+        "failed_calls": 0,
+        "input_tokens": 42,
+        "output_tokens": 14076,
+        "cache_read_tokens": 156307,
+        "cache_write_tokens": 46274,
+        "cost_usd": 0.28779
+      },
+      "outline": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 2310,
+        "cache_read_tokens": 848,
+        "cache_write_tokens": 3779,
+        "cost_usd": 0.06545
+      },
+      "verify": {
+        "calls": 11,
+        "failed_calls": 0,
+        "input_tokens": 28037,
+        "output_tokens": 14269,
+        "cache_read_tokens": 30057,
+        "cache_write_tokens": 28342,
+        "cost_usd": 0.551261
+      },
+      "draft": {
+        "calls": 6,
+        "failed_calls": 0,
+        "input_tokens": 24,
+        "output_tokens": 8770,
+        "cache_read_tokens": 20742,
+        "cache_write_tokens": 51477,
+        "cost_usd": 0.441179
+      },
+      "review": {
+        "calls": 7,
+        "failed_calls": 0,
+        "input_tokens": 28,
+        "output_tokens": 7407,
+        "cache_read_tokens": 9576,
+        "cache_write_tokens": 15055,
+        "cost_usd": 0.227355
+      },
+      "fix": {
+        "calls": 12,
+        "failed_calls": 0,
+        "input_tokens": 22089,
+        "output_tokens": 11805,
+        "cache_read_tokens": 42406,
+        "cache_write_tokens": 27940,
+        "cost_usd": 0.481117
+      },
+      "finalize": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 843,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 1545,
+        "cost_usd": 0.024601
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-haiku-5-5": {
+        "calls": 9,
+        "failed_calls": 0,
+        "input_tokens": 70422,
+        "output_tokens": 6886,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.010485
+      },
+      "global.anthropic.claude-sonnet-5-5": {
+        "calls": 18,
+        "failed_calls": 0,
+        "input_tokens": 42,
+        "output_tokens": 14076,
+        "cache_read_tokens": 156307,
+        "cache_write_tokens": 46274,
+        "cost_usd": 0.28779
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 38,
+        "failed_calls": 0,
+        "input_tokens": 50186,
+        "output_tokens": 45404,
+        "cache_read_tokens": 103629,
+        "cache_write_tokens": 128138,
+        "cost_usd": 1.790963
+      }
+    }
+  }
+}

@@ -1,0 +1,240 @@
+{
+  "item": "summary-lora",
+  "post": "/tmp/eval-paper/summary-lora-v6.md",
+  "judge_run": 1,
+  "source": "https://arxiv.org/html/2106.09685 (v2) incl. figure1.svg and latency.png",
+  "sampling": "24 body blocks (prose, tables, image lines; headings, display math, rule and references excluded) numbered from L16; started at block 1, every third (L16, L24, L36, L42, L50, L66, L72, L85), then wrapped to blocks 2,5,8,... (L20, L26, L38, L44, L54, L70, L74, L87); 11 of 15 claims are numbers; whole post read for wrong claims outside the sample",
+  "scores": {
+    "A": 8,
+    "B": 7.5,
+    "C": 8,
+    "D": 8,
+    "E": 7.5,
+    "F": 8
+  },
+  "type_scores": {
+    "U1": 7.5,
+    "U2": 7.5
+  },
+  "deductions": {
+    "A": [
+      "Headings are topic names (fixed summary sections): L18 '## 연구 배경', L28 '## 제안 방법', L46 '## 구현 방식', L64 '## 실험 결과', L83 '## 의의와 한계'",
+      "Tags: 'Adaptation-Update-Subspace-Analysis' (L10) names Sec 7.2-7.3 analysis the body never covers; 'Inference-Latency-Elimination', 'Rank-Decomposition-Matrices', 'Frozen-Pretrained-Weights' restate the abstract rather than short reusable tags",
+      "Front matter otherwise complete (subtitle, paper_author, paper_doi, two-level categories, use_math); $$ blocks have blank lines; tables have one header row and equal cells"
+    ],
+    "B": [
+      "'그래서' as connector four times: L16 '그래서 어댑터와 달리', L20 '그래서 본체 연산이', L48 '그래서 학습 첫 단계에서', L48 '그래서 저자들은'; vary ('... 더해 두므로 어댑터와 달리')",
+      "Terminology: L26 '미세조정 대신 입력 임베딩을 최적화' vs '파인튜닝' elsewhere (16x); 'MultiNLI' (L52, L62, L89) vs 'MNLI' (L44, L72-81)",
+      "L42 '가상의 숫자로 계산해 보면 감이 옵니다. 예를 들어 가상의 ...' doubled marker; rewrite: '$$d=k=1{,}000$$인 정방 행렬을 통째로 학습하면 ...'",
+      "L70 '이 산점도에서 볼 부분은 ... 어떻게 움직이는가입니다' formulaic; rewrite: '학습 파라미터를 늘릴 때 LoRA는 두 과제 모두에서 꾸준히 좋아지지만 프리픽스 계열은 그렇지 않습니다'",
+      "Description L8 ends '더 낫다.' while the body is '입니다' register"
+    ],
+    "C": [
+      "Flow problem -> method -> deployment -> settings -> results -> limits is clean; L66 '앞의 WikiSQL 예처럼' and L89 '앞서 본' point back correctly",
+      "L66 opens the results by restating TL;DR L16 (10,000x, 3x, on par or better) instead of pointing to it"
+    ],
+    "D": [
+      "L42 parameter count and L48 init/scale reasoning help where needed; L36 explains coordinate-wise sum",
+      "L81 explains 33.3% random chance; the main GPT-3 comparison gets no help because it is absent"
+    ],
+    "E": [
+      "Two tables copied verbatim (weight types L52-60 = Table 5; low data L74-79 = Table 16); three figures described by content, not number",
+      "No distilled main-results table (Table 4 GPT-3 WikiSQL/MNLI/SAMSum, or Table 2/3 RoBERTa/DeBERTa/GPT-2) although the post's headline claim is a comparison"
+    ],
+    "F": [
+      "L62 'W_q와 W_v에 함께 걸면 두 과제를 통틀어 가장 좋은 결과가 나옵니다' disagrees with the post's own table L59-60: all four types reach 73.7 (tie) and 91.7 > 91.3 on MultiNLI (the paper's caption says 'best performance overall', the table does not)",
+      "L26 '성능을 키우려면 특수 토큰을 더 넣어야 하고' is not the paper's claim (Sec 3: performance 'changes non-monotonically'; Sec 5.5: drops past 256/32 tokens) and conflicts with L70",
+      "L66 pairs '25% 속도 향상' with 32.5 -> 43.1 tokens/s (computed 33%); it is the paper's own pairing but is not marked as the stated figure",
+      "L8 description 'GPT-3 175B 대비' drops 'Adam으로 전체 파인튜닝한'; the body L16/L66 keep it",
+      "All other numbers match: Table 1 setup, 18M budget, VRAM, checkpoint, 35TB/354GB, Tables 5 and 16 cell for cell"
+    ]
+  },
+  "type_deductions": {
+    "U1": [
+      "Motivation, solution, implementation and significance covered; results cover efficiency (L66), weight-type choice (L52-62) and low data (L74-81), but not the main GPT-3 quality numbers (Table 4: LoRA 73.4/91.7/53.8 vs FT 73.8/89.5/52.0) nor RoBERTa/DeBERTa/GPT-2; the rank analysis (Sec 7.2: r=1 already competitive on Wq,Wv) is absent"
+    ],
+    "U2": [
+      "About 5.1k body characters, five-minute read; TL;DR L16 is plain prose without math (four sentences); grounded limitations L87; but the one distilled results table is the secondary low-data table, not the main comparison"
+    ]
+  },
+  "principles": {
+    "claim_headings": {
+      "status": "not met",
+      "evidence": "L18, L28, L46, L64, L83 are topic names"
+    },
+    "running_example": {
+      "status": "met",
+      "evidence": "WikiSQL -> MNLI task swap L44, reused at L66 ('앞의 WikiSQL 예처럼'); Wq/Wv choice L59-62 reused at L89"
+    },
+    "mechanism_choice_formula_example": {
+      "status": "met",
+      "evidence": "Problem L20-26 -> hypothesis L30 -> formula L33 -> shapes L36 -> numeric example L42 -> deployment L44 -> init/scale with reason L48"
+    },
+    "facts_once": {
+      "status": "partly met",
+      "evidence": "10,000x/3x/on par at L8, L16, L66; no added latency L16, L44, L87, L89; task swap L16, L44, L66, L85"
+    },
+    "numbers_with_scope": {
+      "status": "met",
+      "evidence": "L16/L66 'Adam으로 파인튜닝한 GPT-3 175B'; L66 'r=4로 쿼리·밸류'; L81 '검증 정확도(%)', ±0.3; description drops the Adam scope"
+    },
+    "nothing_invented": {
+      "status": "partly met",
+      "evidence": "L42 example marked hypothetical; L62 'best across both tasks' contradicts own table; L26 more-tokens claim not in paper"
+    },
+    "writer_assessment_end": {
+      "status": "met",
+      "evidence": "L89 '이 글의 판단으로는 ... 출발점으로만 삼는 편이 안전합니다'"
+    },
+    "length_fit": {
+      "status": "met",
+      "evidence": "about 5.1k characters for a short method paper"
+    },
+    "type_shape": {
+      "status": "partly met",
+      "evidence": "TL;DR plain prose; five fixed sections; no main results table"
+    },
+    "korean_style": {
+      "status": "partly met",
+      "evidence": "'그래서' x4, 미세조정/파인튜닝 and MNLI/MultiNLI mixing, L42 doubled marker"
+    }
+  },
+  "claims": {
+    "checked": 15,
+    "numbers": 11,
+    "supported": 15,
+    "unsupported": 0,
+    "wrong": 0,
+    "unverifiable": 0,
+    "examples": [
+      {
+        "line": 16,
+        "type": "number",
+        "claim": "vs GPT-3 175B fine-tuned with Adam: 10,000x fewer trainable parameters",
+        "verdict": "supported",
+        "source": "Abstract: 'LoRA can reduce the number of trainable parameters by 10,000 times'"
+      },
+      {
+        "line": 16,
+        "type": "number",
+        "claim": "GPU memory requirement 3x lower",
+        "verdict": "supported",
+        "source": "Abstract: 'and the GPU memory requirement by 3 times'"
+      },
+      {
+        "line": 16,
+        "type": "comparison",
+        "claim": "Merged weights add no inference latency, unlike adapters",
+        "verdict": "supported",
+        "source": "Abstract: 'no additional inference latency'; Sec 4.1 'by construction'"
+      },
+      {
+        "line": 24,
+        "type": "method",
+        "claim": "Heatmap: larger batch and sequence length darken cells, i.e. the slow-down shrinks",
+        "verdict": "supported",
+        "source": "Figure 5 (latency.png) and caption: 'Larger batch size and sequence length help to mitigate the latency'"
+      },
+      {
+        "line": 24,
+        "type": "number",
+        "claim": "Slow-down above 30% in online short-sequence settings",
+        "verdict": "supported",
+        "source": "Fig. 5 caption: 'can be as high as over 30% in an online, short-sequence-length scenario'"
+      },
+      {
+        "line": 36,
+        "type": "method",
+        "claim": "W0 frozen, r << min(d,k), outputs summed coordinate-wise",
+        "verdict": "supported",
+        "source": "Sec 4.1: 'rank r ≪ min(d,k)'; 'summed coordinate-wise'"
+      },
+      {
+        "line": 42,
+        "type": "number",
+        "claim": "Hypothetical d=k=1,000: 1,000,000 vs r=4: 8,000 parameters",
+        "verdict": "supported",
+        "source": "Writer's arithmetic, marked hypothetical; 4x(1,000+1,000)=8,000 is correct"
+      },
+      {
+        "line": 50,
+        "type": "number",
+        "claim": "18M budget on GPT-3 175B: r=8 for one type, r=4 for two, r=2 for four",
+        "verdict": "supported",
+        "source": "Sec 7.1 and Table 5 rank row 8/8/8/8/4/4/2"
+      },
+      {
+        "line": 66,
+        "type": "number",
+        "claim": "Training VRAM 1.2TB -> 350GB",
+        "verdict": "supported",
+        "source": "Sec 4.2: 'from 1.2TB to 350GB'"
+      },
+      {
+        "line": 66,
+        "type": "number",
+        "claim": "Checkpoint 350GB -> 35MB with r=4 on query and value",
+        "verdict": "supported",
+        "source": "Sec 4.2: 'With r=4 and only the query and value projection matrices ... from 350GB to 35MB'"
+      },
+      {
+        "line": 66,
+        "type": "number",
+        "claim": "100 adapted models: about 35TB vs about 354GB",
+        "verdict": "supported",
+        "source": "Sec 4.2 footnote: '350GB + 35MB * 100 ≈ 354GB as opposed to 100 * 350GB ≈ 35TB'"
+      },
+      {
+        "line": 66,
+        "type": "number",
+        "claim": "32.5 vs 43.1 tokens/s per V100; 25% speedup",
+        "verdict": "supported",
+        "source": "Sec 4.2 and footnote (paper's own pairing; 43.1/32.5 = 1.33)"
+      },
+      {
+        "line": 72,
+        "type": "number",
+        "claim": "MNLI-n from 100, 1,000, 10,000 random training examples; evaluated on the full validation set",
+        "verdict": "supported",
+        "source": "App. F.3: 'randomly sample 100, 1k and 10k'; Table 16 caption 'We evaluate with the full validation set'"
+      },
+      {
+        "line": 20,
+        "type": "number",
+        "claim": "Adapter latency measured on GPT-2 medium, Quadro RTX8000, averaged over 100 trials",
+        "verdict": "supported",
+        "source": "Sec 3: 'single forward pass on an NVIDIA Quadro RTX8000 by averaging over 100 trials'"
+      },
+      {
+        "line": 87,
+        "type": "method",
+        "claim": "Merging A,B into W makes batching different tasks in one pass hard; unmerged per-sample choice possible when latency is not critical",
+        "verdict": "supported",
+        "source": "Sec 4.2: 'not straightforward to batch inputs ... Though it is possible to not merge the weights and dynamically choose the LoRA modules'"
+      }
+    ],
+    "outside_sample": "Whole-post read: no wrong numbers. Unsupported outside the sample: L62 'Wq+Wv best across both tasks' contradicts the post's own table; L26 more-special-tokens claim. Note: L66 25% paired with 32.5->43.1 (33% computed) is the paper's own pairing."
+  },
+  "checklist": {
+    "repeated": 0,
+    "avoided": 0,
+    "na": 0,
+    "repeated_ids": [],
+    "note": "human_fixes.yaml has fixes: [] for summary-lora. The notes' generic defects do not occur: no HTML entity leak ('&amp;'), title is the paper title."
+  },
+  "extras": {
+    "description_chars": 126,
+    "main_gpt3_results_present": false,
+    "main_results_note": "Only MNLI full-data row (LoRA 91.7 vs FT 89.5) appears, inside the low-data table; Table 4 and RoBERTa/DeBERTa/GPT-2 results absent",
+    "facts_repeat": true,
+    "edit_notes_leaked": false,
+    "edit_residue": "L42 doubled hypothetical marker and trailing space; no duplicated or dangling paragraphs; no empty cells",
+    "figures_checked": "L24 heatmap reading (darker = smaller slow-down at larger batch/sequence) matches latency.png; L40 blue frozen / orange A,B matches figure1.svg fills #5b9bd5 / #ed7d31",
+    "taxonomy_X1": "'Adaptation-Update-Subspace-Analysis' names an analysis absent from the body; 'Inference-Latency-Elimination', 'Rank-Decomposition-Matrices', 'Frozen-Pretrained-Weights' restate the abstract"
+  },
+  "top_issues": [
+    "Main results still missing: no GPT-3 Table 4 numbers (WikiSQL/MNLI/SAMSum vs FT and adapters) and no RoBERTa/DeBERTa/GPT-2 results; the quality claim 'on par or better' carries no numbers except the MNLI full-data row",
+    "L62 'Wq+Wv best across both tasks' contradicts the post's own table (all four types 73.7/91.7); L26 'more special tokens to raise performance' is not the paper's claim and conflicts with L70",
+    "Facts restated (10,000x/3x/on par at L8, L16, L66; no-latency four times), topic-name headings, and a tag naming the subspace analysis the body omits"
+  ]
+}

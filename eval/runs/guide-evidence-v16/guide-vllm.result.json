@@ -1,0 +1,167 @@
+{
+  "kind": "guide",
+  "status": "succeeded",
+  "input": "https://docs.vllm.ai/en/latest/getting_started/quickstart.html, https://arxiv.org/abs/2309.06180, https://blog.vllm.ai/2023/06/20/vllm.html",
+  "title": "vLLM and PagedAttention: Internals, Configuration, and Deployment",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/guide-vllm-and-pagedattention-internals-configuration-and-deployment/2026-11-07-vllm-and-pagedattention-internals-configuration-and-deployment.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-11-07-vllm-and-pagedattention-internals-configuration-and-deployment.md",
+  "pr_url": null,
+  "warnings": [
+    "Section '논리 블록과 물리 블록을 분리하는 PagedAttention 메커니즘': the writer could not fix: 토큰당 KV 크기 계산은 Llama 3.1 8B 값으로 남겼습니다. 근거 자료에 러닝 예제 Qwen2.5-1.5B의 구성값(레이어 수, KV 헤드 수, 헤드 차원)이 없기 때문입니다.",
+    "Section '논리 블록과 물리 블록을 분리하는 PagedAttention 메커니즘': 1 edit(s) not applied: would add a writing-rule slip (self-reference '이 절'): '블록 테이블을 거치는 메모리 접근은 기존 커널이 효율적으로 처리하지 못하는 패턴입니다.'",
+    "Section '선점·스왑·재계산을 갖춘 스케줄러와 V1 엔진 구조': the writer could not fix: 비동기 스케줄링이 정확히 무엇을 비동기로 처리하는지(다음 스텝 스케줄링과 현재 GPU 실행을 겹치는지)는 덧붙이지 않았습니다. 근거(E89)에는 GPU 사용률 공백을 줄인다는 내용만 있습니다.",
+    "Section 'GPU 메모리 비율·컨텍스트 길이·배치 크기를 중심으로 한 메모리 튜닝': the writer could not fix: Forum report (E127): there is no date or vLLM version for the post in the evidence, so I labelled it only as a third-party report from one forum answer. Extensible KV cache: the evidence never says how to turn this mode on, so I didn't name it. The text now says the default is 1.0 or 0.92 depending ",
+    "Section 'GPU 메모리 비율·컨텍스트 길이·배치 크기를 중심으로 한 메모리 튜닝': 1 edit(s) not applied: would change a heading: '## GPU 메모리 비율·컨텍스트 길이·배치 크기를 중심으로 한 메모리 튜닝'",
+    "Section 'CPU·ROCm·TPU 백엔드와 하드웨어 플러그인별 설정 차이' still has: ['128', '32'] already stated in '논리 블록과 물리 블록을 분리하는 PagedAttention 메커니즘': refer back without repeating: `--max-num-seqs`는 오프라인 `256 * world_size`, 온라인 `128 * world_size`이고, `--block-size`는 기본 128이며 32의 배수를 권장합니다 . | 1,527 characters of prose for a target of 1,000: cut background, repetition and minor detail",
+    "Section 'Docker와 Kubernetes 배포, 큐 기반 오토스케일링, KV 캐시 메트릭 관측': the writer could not fix: HPA 메트릭 이름·목표값과 `behavior` 블록: 근거에 메트릭 이름, 목표값, HPA 필드 이름이 없어서 0초/10분은 본문 설명으로만 남겼습니다. KV 캐시 사용률, 실행 중·대기 중 요청, 프리픽스 캐시 적중률의 메트릭 이름: 근거에 이름이 없고, 선점 카운터 이름은 문서화되지 않은 이름으로 지적되어 뺐습니다. `--max-num-batched-tokens`: 근거에 없는 플래그라서 토큰 예산 쪽 인자는 밝히지 못했습니다.",
+    "Section 'Docker와 Kubernetes 배포, 큐 기반 오토스케일링, KV 캐시 메트릭 관측': 1 edit(s) not applied: would change a heading: '## Docker와 Kubernetes 배포, 큐 기반 오토스케일링, KV 캐시 메트릭 관측'",
+    "Section 'Docker와 Kubernetes 배포, 큐 기반 오토스케일링, KV 캐시 메트릭 관측' still has: ['64'] already stated in 'GPU 메모리 비율·컨텍스트 길이·배치 크기를 중심으로 한 메모리 튜닝': refer back without repeating: 태그는 `latest`나 `v‹version>`을 쓰고, 아키텍처를 고정하려면 `latest-x86_64`, `latest-aarch64` 같은 태그를 씁니다 . | flags or arguments no official page mentions; use the documented ones or leave them out: vllm:num_preemptions_total",
+    "Section '처리량 우위와 그 한계: TGI·TensorRT-LLM·SGLang·Ray Serve와의 비교': the writer could not fix: packet.ai 블로그 게시 날짜·대상 버전과 Unsloth 보고의 날짜는 근거에 없어서 넣지 못했습니다. 대신 각 근거가 밝힌 범위만 적었습니다. packet.ai 블로그는 '표준 어텐션 모델 기준', Unsloth 보고는 'vLLM 0.11.0 미만, A100'입니다. arXiv 연구는 논문 제목이나 저자가 근거에 없어서 번호를 지우고 'A100에서 vLLM과 TGI를 비교한 제3자 연구'라고 바꿔 썼습니다.",
+    "Section '처리량 우위와 그 한계: TGI·TensorRT-LLM·SGLang·Ray Serve와의 비교': 1 edit(s) not applied: would change a heading: '## 처리량 우위와 그 한계: TGI·TensorRT-LLM·SGLang·Ray Serve와의 비교'",
+    "Section '처리량 우위와 그 한계: TGI·TensorRT-LLM·SGLang·Ray Serve와의 비교': 1 sentence(s) removed that contradict their evidence or talk about the post's sources: 아래 표는 공개된 비교 결과를 측정 조건과 함께 모은 것입니다. (about_sources: Describes how the post's table was compiled.)",
+    "Section '처리량 우위와 그 한계: TGI·TensorRT-LLM·SGLang·Ray Serve와의 비교': check 2 sentence(s) the evidence may not support: vLLM은 LRU로 축출하면서 긴 프리픽스의 끝쪽 블록을 먼저 내보냅니다. (unsupported: Eviction mechanism is given only by a third-party blog and is stated here as current vLLM behaviour without attribution; no official confirmation. (not supported: vLLM은 LRU로 축출하면서 긴 프리픽스의 끝쪽 블록을 먼저 내보냅니다)) | 그 결과 널리 공유되는 짧은 프리픽스가 오래 남아, 트리 없이 RadixAttention의 동작을 근사합니다 [[E97]]. (unsupported: Internal behaviour taken from a third-party blog only, stated as fact about vLLM today. (not supported: 트리 없이 RadixAttention의 동작을 근사합니다))",
+    "Section '처리량 우위와 그 한계: TGI·TensorRT-LLM·SGLang·Ray Serve와의 비교' still has: ['50'] already stated in 'GPU 메모리 비율·컨텍스트 길이·배치 크기를 중심으로 한 메모리 튜닝': refer back without repeating: 운영 사례로는 LMSYS가 Chatbot Arena에서 FastChat-vLLM 연동으로 서빙 GPU 수를 50% 줄였습니다 .",
+    "Section 'uv 설치부터 오프라인 LLM 클래스 첫 생성까지의 최소 경로': the writer could not fix: The section's own text gives no `max_tokens` argument or default value. I added `max_tokens=512` because the fix asked for it, but the prose still doesn't say what the default is.",
+    "Section 'Docker와 Kubernetes 배포, 큐 기반 오토스케일링, KV 캐시 메트릭 관측': the writer could not fix: 1. `vllm download-kernels` in the custom Dockerfile: not fixed. The Dockerfile has to stay as the official page shows it (E26: FROM, a comment, and `uv pip install --system vllm[audio]==0.11.0`). None of the evidence for this section mentions `vllm download-kernels`, so I can't add a `RUN` line for ",
+    "Section 'Docker와 Kubernetes 배포, 큐 기반 오토스케일링, KV 캐시 메트릭 관측': the writer could not fix: Problem 2 (Kubernetes manifests) is not fixed. The evidence has no Deployment or HPA manifest fields (`volumes`/`volumeMounts`, `autoscaling/v2`, `stabilizationWindowSeconds`, a `Pods` metric target). It also does not give the waiting-requests metric's name: E104 lists the gauge but quotes only `vll",
+    "Section 'TL;DR' still has: copies a sentence of the body; sum it up in new words: vLLM 블로그는 기존 시스템이 단편화와 과예약 때문에 메모리의 60%–80%를 낭비한다고 보고합니다 [[E70]].",
+    "Flags/metrics the official pages fetched for this guide never mention; verify them against the current reference: vllm:num_preemptions_total, `LLM` is not in `vllm` (vllm vllm 0.33.0, uv 0.13.7), `SamplingParams` is not in `vllm` (vllm vllm 0.33.0, uv 0.13.7)",
+    "[image] line 74: remote image not localized (linked to its source): https://vllm.ai/blog-assets/figures/annimation0.gif",
+    "[image] line 100: remote image not localized (linked to its source): https://vllm.ai/blog-assets/figures/annimation1.gif",
+    "[image] line 138: remote image not localized (linked to its source): https://vllm.ai/blog-assets/figures/annimation2.gif",
+    "[image] line 148: remote image not localized (linked to its source): https://vllm.ai/blog-assets/figures/annimation3.gif",
+    "[image] line 616: remote image not localized (linked to its source): https://vllm.ai/blog-assets/figures/perf_a100_n3_light.png"
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 2179.0,
+  "input_tokens": 2311738,
+  "output_tokens": 252181,
+  "estimated_cost_usd": 11.1697,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 140,
+      "failed_calls": 0,
+      "input_tokens": 393738,
+      "output_tokens": 252181,
+      "cache_read_tokens": 952890,
+      "cache_write_tokens": 965110,
+      "cost_usd": 11.169711
+    },
+    "by_stage": {
+      "relevance": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 1610,
+        "output_tokens": 199,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.00026
+      },
+      "research_plan": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 2439,
+        "output_tokens": 667,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.000577
+      },
+      "read": {
+        "calls": 49,
+        "failed_calls": 0,
+        "input_tokens": 118,
+        "output_tokens": 30977,
+        "cache_read_tokens": 282731,
+        "cache_write_tokens": 66743,
+        "cost_usd": 0.533413
+      },
+      "outline": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 6025,
+        "cache_read_tokens": 1966,
+        "cache_write_tokens": 17029,
+        "cost_usd": 0.206447
+      },
+      "verify": {
+        "calls": 35,
+        "failed_calls": 0,
+        "input_tokens": 255643,
+        "output_tokens": 81535,
+        "cache_read_tokens": 372794,
+        "cache_write_tokens": 242672,
+        "cost_usd": 4.015741
+      },
+      "draft": {
+        "calls": 11,
+        "failed_calls": 0,
+        "input_tokens": 44,
+        "output_tokens": 46274,
+        "cache_read_tokens": 47487,
+        "cache_write_tokens": 379536,
+        "cost_usd": 2.842333
+      },
+      "review": {
+        "calls": 12,
+        "failed_calls": 0,
+        "input_tokens": 48,
+        "output_tokens": 30202,
+        "cache_read_tokens": 26703,
+        "cache_write_tokens": 79435,
+        "cost_usd": 1.012093
+      },
+      "fix": {
+        "calls": 29,
+        "failed_calls": 0,
+        "input_tokens": 123587,
+        "output_tokens": 53762,
+        "cache_read_tokens": 221209,
+        "cache_write_tokens": 179695,
+        "cost_usd": 2.556552
+      },
+      "finalize": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 10245,
+        "output_tokens": 2540,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.002295
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-haiku-5-5": {
+        "calls": 3,
+        "failed_calls": 0,
+        "input_tokens": 14294,
+        "output_tokens": 3406,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.003132
+      },
+      "global.anthropic.claude-sonnet-5-5": {
+        "calls": 49,
+        "failed_calls": 0,
+        "input_tokens": 118,
+        "output_tokens": 30977,
+        "cache_read_tokens": 282731,
+        "cache_write_tokens": 66743,
+        "cost_usd": 0.533413
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 88,
+        "failed_calls": 0,
+        "input_tokens": 379326,
+        "output_tokens": 217798,
+        "cache_read_tokens": 670159,
+        "cache_write_tokens": 898367,
+        "cost_usd": 10.633166
+      }
+    }
+  }
+}

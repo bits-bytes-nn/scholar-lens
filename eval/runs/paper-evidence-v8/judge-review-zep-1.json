@@ -1,0 +1,282 @@
+{
+  "item": "review-zep",
+  "run": 1,
+  "post": "/tmp/eval-paper/review-zep-v8.md",
+  "source": "https://arxiv.org/html/2501.13956 (v1); Sec 2.2.2 opening sentence is truncated in the HTML",
+  "sampling": "96 body paragraphs (blank-line blocks incl. tables, lists, callouts; headings, rules, display math, references excluded); paragraphs 1,4,...,94 read (32 blocks: L17, L29, L41, L55, L71, L83, L97, L107, L118, L126, L136, L146, L154, L162, L168, L181, L189, L203, L217, L223, L236, L248, L256, L271, L279, L292, L300, L310, L331, L339, L353, L361); claims drawn from them; whole post read for wrong claims outside the sample",
+  "scores": {
+    "A": 8,
+    "B": 7.5,
+    "C": 7.5,
+    "D": 8,
+    "E": 8,
+    "F": 7.5
+  },
+  "type_scores": {
+    "R1": 8,
+    "R2": 7.5,
+    "R3": 8.5
+  },
+  "deductions": {
+    "A": [
+      "L136-140 repeats the graph definition $$\\mathcal{G}=(\\mathcal{N},\\mathcal{E},\\phi)$$ given at L45-51 ('이 단계들이 채우는 대상은 논문이 다음과 같이 정의하는 ...') and adds an off-topic '예를 들어 $$n_{i}\\in\\mathcal{N}_{c}$$는 ... 커뮤니티 노드입니다' inside the entity-extraction section",
+      "Topic headings remain: H2 '한계와 시사점' (L341), H3 '두 개의 타임라인' (L99); the rest are claim noun phrases",
+      "H2 L246 '두 벤치마크에 공통으로 쓴 20개 항목 검색 설정' while L258 says DMR used '상위 10개 노드와 엣지'; the paper's own inconsistency (Sec 4 vs 4.2) is reproduced without a note",
+      "Front matter complete: subtitle, paper_author 'Zep AI', paper_doi, two-level categories, use_math true, no author key; description 125 chars opening with 'Zep은'; no body H1, no skipped levels, math only $$...$$; the v7 bare '논문 [3]' citations are gone"
+    ],
+    "B": [
+      "'예를 들어 가상' ten times as a fixed lead-in (L71, L103, L124, L146, L154, L164, L187, L238, L275, L359); L238 '가상의 상황으로, ... 예를 들어 가상으로 ...' doubles it; rewrite L238: '서울 거주 엣지의 $$t_{\\text{invalid}}$$가 채워졌다면 \"어디 사세요?\"의 <FACTS> 블록에는 ...'",
+      "'저자들은' 28 times; L101 two consecutive sentences open with '저자들은'; vary with the subject or drop where attribution is obvious",
+      "L89 '엔티티 계층이 축 역할을 하고' (역할을 하다); rewrite: '엔티티 계층이 축이 되고'",
+      "L304 '입력을 줄였는데 정확도가 오르는 결과는 직관과 어긋나 보일 수 있습니다' formulaic opener; rewrite: '입력을 줄였는데 정확도가 오른 까닭은 두 방식이 넘기는 내용을 비교하면 보입니다'",
+      "Register holds ('입니다' throughout, table cells are noun phrases); no '~다:' before lists"
+    ],
+    "C": [
+      "L136-140 interrupts the entity-extraction section with a second graph definition the reader already has",
+      "Running example re-set as new: L359 '예를 들어 가상의 사용자가 서울에 살다가 지난달 부산으로 이사했다고 말했다고 합시다' after it ran through L37-L304; L71 and L124 also re-mark it as '예를 들어 가상으로'",
+      "L339 and L306 are section-end recaps of the preceding paragraphs",
+      "Heading L246 (20 items) vs L258 (top 10) leaves the reader unsure which setting DMR used"
+    ],
+    "D": [
+      "Hard parts get worked examples at the right place: timestamps L124, label propagation L187-193, dedup scope L164, BFS L223, constructor L238",
+      "L213 re-glosses $$\\mathcal{E}_{s}$$, $$\\mathcal{N}_{s}$$, $$\\mathcal{N}_{c}$$ already defined at L61-L75; L185 re-glosses $$\\mathcal{N}_{s}$$ again; L118 and L126 restate the table L111-116"
+    ],
+    "E": [
+      "Tables 1-3 copied cell for cell (L260-269, L285-290, L312-325); comparison tables for edge types (L83) and dedup stages (L168) help",
+      "L240-244 constructor table repeats L236 prose field by field",
+      "L193 hypothetical table puts text 'grade' in a count column ('배정 결과 | 거주·생활 (최다)')",
+      "Callouts L126, L173, L203 restate the paragraphs just above"
+    ],
+    "F": [
+      "L227 '지원하는 방식은 다섯 가지입니다' closes an open list (Sec 3.2: 'supports existing reranking approaches such as RRF and MMR')",
+      "L300 '평균 응답이 빨라졌을 뿐 아니라' treats Table 2 Latency as a mean; the paper does not say which statistic it is",
+      "L357 names '커뮤니티 요약' as a candidate source of the LongMemEval gain, but Sec 4 retrieves only 'the 20 most relevant edges (facts) and entity nodes (entity summaries)'",
+      "L61 defines $$\\phi^{*}(\\cdot)$$ as fact; the paper never defines it",
+      "L37 static-RAG argument ('지난달이 언제를 가리키는지 ... 알려 주지 않습니다') stated as fact without source; L304 accuracy mechanism is the writer's explanation, not marked as such",
+      "No wrong numbers found; relative vs absolute gains handled correctly (L292, L327)"
+    ]
+  },
+  "type_deductions": {
+    "R1": [
+      "Method depth is good (Sec 2-3 covered almost line by line). Setup gaps: BGE-m3 reranker/embedder and gpt-4o-mini graph-construction model (Sec 4.1) absent; DMR scale '5 chat sessions with up to 12 messages' absent; gpt-4-turbo used 'to ensure direct comparability' only implicit in the table"
+    ],
+    "R2": [
+      "Layering intuition -> formalism -> example -> table works (L95-126, L175-203), but about 22k characters for a moderate systems paper; restatement (115k->1.6k four times, assistant drop six times in prose) inflates length"
+    ],
+    "R3": [
+      "TL;DR answers four questions with model, setting and numbers (L29-30). Closing L355-367 names concrete open questions (no ablation, no invalidation accuracy, ingestion cost) and when to use it. Limitations L347-351 are paper statements; L347 is a design statement (periodic refresh) rather than an author-stated limitation"
+    ]
+  },
+  "principles": {
+    "claim_headings": {
+      "status": "partly met",
+      "evidence": "Claim noun phrases at L35, L43, L95, L132, L175, L205, L254, L277, L308; topic H2 '한계와 시사점' (L341), H3 '두 개의 타임라인' (L99)"
+    },
+    "running_example": {
+      "status": "met",
+      "evidence": "Seoul -> Busan move set at L37 and carried through L41, L71, L124, L223, L238, L275, L304, L359; re-marked as a new hypothetical at L71, L124, L238, L359"
+    },
+    "mechanism_choice_formula_example": {
+      "status": "met",
+      "evidence": "Invalidation: problem L97, rule L122, timestamp table L111, example L124; label propagation: choice L177-181, rule L185, example L187-193, trade-off L197; retrieval: f L209, searchers L217, example L223"
+    },
+    "facts_once": {
+      "status": "not met",
+      "evidence": "115k->1.6k at L29, L298, L306 (+tables); ~90% at L298, L306; single-session-assistant drop in prose at L30, L310, L337, L339, L348, L363; DMR shortness L17, L273, L275, L349; community drift L197, L203, L347; graph definition L45-51 and L136-140"
+    },
+    "numbers_with_scope": {
+      "status": "met",
+      "evidence": "Every LongMemEval number carries model and baseline (L283, L292); 'up to 18.5%' explained as gpt-4o relative gain (L292); Table 3 change column labelled relative (L327); exception L300 '평균'"
+    },
+    "nothing_invented": {
+      "status": "partly met",
+      "evidence": "Hypothetical examples labelled; unsupported closures L227 'five', L300 'mean', L357 community summaries, L61 phi* gloss"
+    },
+    "writer_assessment_end": {
+      "status": "met",
+      "evidence": "L343 '이 글의 판단으로는 ... 범위가 결론의 표현보다 좁습니다'; L357-367 open questions and when-to-use, L363 guess marked '추측합니다'"
+    },
+    "length_fit": {
+      "status": "partly met",
+      "evidence": "about 22k characters; hard parts earn space but restatement and the duplicate L136-140 add length"
+    },
+    "type_shape": {
+      "status": "met",
+      "evidence": "TL;DR with four questions (L14-31), method sections, results, 한계와 시사점 with author limits / open questions / when to use, References"
+    },
+    "korean_style": {
+      "status": "partly met",
+      "evidence": "'예를 들어 가상' x10, '저자들은' x28, L89 '역할을 하고'; register consistent"
+    }
+  },
+  "claims": {
+    "checked": 15,
+    "numbers": 10,
+    "supported": 14,
+    "unsupported": 1,
+    "wrong": 0,
+    "unverifiable": 0,
+    "examples": [
+      {
+        "line": 17,
+        "type": "number",
+        "claim": "DMR has only 60 messages per conversation and only single-turn fact-retrieval questions",
+        "verdict": "supported",
+        "source": "Sec 4.2: 'each conversation contains only 60 messages'; 'relies exclusively on single-turn, fact-retrieval questions'"
+      },
+      {
+        "line": 29,
+        "type": "number",
+        "claim": "LongMemEval gpt-4o: full context 60.2% -> Zep 71.2%",
+        "verdict": "supported",
+        "source": "Table 2: Full-context gpt-4o 60.2%, Zep gpt-4o 71.2%"
+      },
+      {
+        "line": 29,
+        "type": "number",
+        "claim": "Latency 28.9 s -> 2.58 s (gpt-4o)",
+        "verdict": "supported",
+        "source": "Table 2: 28.9 s / 2.58 s"
+      },
+      {
+        "line": 29,
+        "type": "number",
+        "claim": "Context 115k -> 1.6k tokens",
+        "verdict": "supported",
+        "source": "Table 2 Avg Context Tokens: 115k / 1.6k"
+      },
+      {
+        "line": 41,
+        "type": "comparison",
+        "claim": "The main difference is a graph updated per conversation with validity periods per fact",
+        "verdict": "supported",
+        "source": "Sec 2.2.3: 'A key differentiating feature of Graphiti compared to other knowledge graph engines is ... temporal extraction and edge invalidation' (post shifts the comparison to hierarchical RAG)"
+      },
+      {
+        "line": 107,
+        "type": "number",
+        "claim": "Absolute example 'Alan Turing was born on June 23, 1912' and relative 'two weeks ago'",
+        "verdict": "supported",
+        "source": "Sec 2.2.3 examples verbatim"
+      },
+      {
+        "line": 126,
+        "type": "method",
+        "claim": "Contradiction judged by LLM, priority by T', closing value taken from T",
+        "verdict": "supported",
+        "source": "Sec 2.2.3: 'employs an LLM to compare'; 'setting their t_invalid to the t_valid of the invalidating edge'; 'Following the transactional timeline T', Graphiti consistently prioritizes new information'"
+      },
+      {
+        "line": 162,
+        "type": "method",
+        "claim": "Edge dedup search limited to edges between the same entity pair; prevents wrong merges and cuts computation",
+        "verdict": "supported",
+        "source": "Sec 2.2.2: 'constrained to edges existing between the same entity pairs ... prevents erroneous combinations ... significantly reduces the computational complexity'"
+      },
+      {
+        "line": 168,
+        "type": "number",
+        "claim": "Entity resolution candidates via 1024-dim name embedding plus full-text on names and summaries",
+        "verdict": "supported",
+        "source": "Sec 2.2.1: 'embeds each entity name into a 1024-dimensional vector space'; 'full-text search on existing entity names and summaries'"
+      },
+      {
+        "line": 181,
+        "type": "method",
+        "claim": "Label propagation chosen over Leiden for its straightforward dynamic extension, delaying full refreshes",
+        "verdict": "supported",
+        "source": "Sec 2.3 verbatim reasoning"
+      },
+      {
+        "line": 271,
+        "type": "number",
+        "claim": "gpt-4-turbo: Zep 94.8% vs full conversation 94.4%, a 0.4-point gap",
+        "verdict": "supported",
+        "source": "Table 1: 94.8% / 94.4%"
+      },
+      {
+        "line": 292,
+        "type": "number",
+        "claim": "18.5% (gpt-4o) and 15.2% (gpt-4o-mini) are relative gains as the authors report them",
+        "verdict": "supported",
+        "source": "Sec 4.3.2: 'gpt-4o-mini ... 15.2% accuracy improvement ... gpt-4o showed an 18.5% improvement'; 63.8/55.4 = 1.152"
+      },
+      {
+        "line": 300,
+        "type": "number",
+        "claim": "Latency IQR 6.01 -> 0.684 s (gpt-4o), 8.76 -> 1.31 s (gpt-4o-mini)",
+        "verdict": "supported",
+        "source": "Table 2 Latency IQR column"
+      },
+      {
+        "line": 300,
+        "type": "attribution",
+        "claim": "'평균 응답이 빨라졌을' - the Latency column is a mean",
+        "verdict": "unsupported",
+        "source": "Table 2 headers 'Latency' and 'Latency IQR' only; the statistic is not stated"
+      },
+      {
+        "line": 331,
+        "type": "number",
+        "claim": "gpt-4o-mini improved four of six question types, most in preference, multi-session, temporal reasoning",
+        "verdict": "supported",
+        "source": "Sec 4.3.2: 'improvements in four of the six categories, with the most substantial gains in ... single-session-preference, multi-session, and temporal-reasoning'"
+      }
+    ],
+    "outside_sample": "Whole-post read: no wrong claims. Unsupported outside the sample: L227 'five' rerankers; L357 community summaries as a gain source; L61 phi* gloss; L37 static-RAG argument; L304 accuracy mechanism as the writer's unmarked explanation"
+  },
+  "checklist": {
+    "repeated": 0,
+    "avoided": 6,
+    "na": 0,
+    "repeated_ids": [],
+    "items": [
+      {
+        "id": "inline-math-delimiters",
+        "result": "avoided",
+        "evidence": "No \\( \\) or \\[ \\] in the post; inline math is $$...$$ (L51, L101)"
+      },
+      {
+        "id": "longmemeval-tldr-relative",
+        "result": "avoided",
+        "evidence": "TL;DR L29 gives absolute 60.2%->71.2% (gpt-4o); no '%포인트'; 15.2%/18.5% not in TL;DR"
+      },
+      {
+        "id": "longmemeval-results-relative",
+        "result": "avoided",
+        "evidence": "L292 '60.2%에서 71.2%로 ... 상대 기준 18.5% 향상 ... 55.4%에서 63.8%로 ... 15.2% 향상 ... 18.5%p 오른 것으로 읽으면 안 됩니다'"
+      },
+      {
+        "id": "longmemeval-baseline-misattributed",
+        "result": "avoided",
+        "evidence": "L283 '비교 대상은 같은 모델에 대화 전체를 컨텍스트로 넣는 기준선입니다'; table L285-290 pairs each model with its own full-context row"
+      },
+      {
+        "id": "longmemeval-185-arithmetic",
+        "result": "avoided",
+        "evidence": "L292 '저자들은 이 결과를 상대 기준 18.5% 향상으로 보고합니다' marks 18.5% as the paper's stated figure (computed ratio 18.3% not given)"
+      },
+      {
+        "id": "missing-description",
+        "result": "avoided",
+        "evidence": "L8 description starts 'Zep은', 125 chars, numbers 60.2/71.2/28.9/2.58 all in TL;DR L29"
+      }
+    ]
+  },
+  "extras": {
+    "absence_claims_and_source_sentences": "Correct: L130 bidirectional indices not examined, future work (Sec 2.1); L271 MemGPT not reproducible with gpt-4o-mini (Sec 4.2); L350 MemGPT absent from LongMemEval (Sec 4.3.1); L351 no benchmark for conversation plus business data (Sec 5); L357 'no ablation' true. L363 guess marked '추측합니다'.",
+    "edit_leaks": "No evidence markers ('[[', 'E\\d', '근거 항목') or meta language. Residue: L136-140 orphan second graph definition with an off-topic community-node example; L238 doubled hypothetical marker; trailing spaces L213, L327, L333, L357; '예를 들어 가상' x10 reads as converted [[EX]] markers. No empty table cells.",
+    "unsupported_causal": "L304 explains the accuracy gain by the move example (date ranges vs scattered messages) as if it were the mechanism; the paper gives only 'reduced prompt size' for latency and no mechanism for accuracy. L333 is attributed to the authors correctly.",
+    "repetition": "115k->1.6k x3 prose + 2 tables; ~90% x2; single-session-assistant drop x6 prose; preference 20.0->56.7 x3 prose (L30, L310, L327) + table; DMR shortness x4; community drift x3; graph definition x2; symbol glosses re-done at L61, L185, L213.",
+    "table_cells": "Tables 1-3 match the paper cell for cell (checked every cell); L193 text in a count column; no '-' or empty cells.",
+    "front_matter": "description 125 chars, starts with 'Zep은', TL;DR numbers only; categories ['Paper Reviews','Retrieval-Augmented-Generation']; use_math true; paper_doi present.",
+    "tags_note": "'Hybrid-Graph-Search' and 'Agentic-AI' are not paper terms (writer warnings agree); 'Temporal-Knowledge-Graph', 'Bi-Temporal-Model', 'Edge-Invalidation' are the paper's own.",
+    "setup_gaps": "BGE-m3 (reranking and embedding), gpt-4o-mini-2024-07-18 for graph construction, DMR scale (500 x 5 sessions x up to 12 messages), test period Dec 2024-Jan 2025 absent.",
+    "main_results_covered": true
+  },
+  "top_issues": [
+    "Unsupported or widened claims: L227 'five' rerankers (paper: 'such as RRF and MMR', third version in a row); L300 latency read as a mean; L357 community summaries offered as a possible gain source though the eval retrieved only edges and entity nodes; L61 phi* gloss stated as definition; L304 accuracy mechanism unmarked as the writer's",
+    "Edit residue and restatement: L136-140 duplicate graph definition with an off-topic example; running example re-set as new at L71, L124, L238, L359 and '예를 들어 가상' x10; 115k->1.6k, ~90% and the assistant drop restated three to six times; L306/L339 recaps",
+    "Setup gaps and an unreconciled conflict: heading L246 '20개 공통' vs L258 DMR top 10; BGE-m3 and the graph-construction model missing; DMR scale missing"
+  ]
+}
