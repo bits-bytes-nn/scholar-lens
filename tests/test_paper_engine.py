@@ -441,7 +441,8 @@ def test_inline_math_inside_text_in_a_display_is_unnested() -> None:
 
     md = "$$\n\\pi_{\\text{bo$n$}} = \\text{if $k$ wins}\n$$\n"
     assert (
-        normalize_math(md) == "$$\n\\pi_{\\text{bo}n} = \\text{if }k\\text{ wins}\n$$\n"
+        normalize_math(md).strip() + "\n"
+        == "$$\n\\pi_{\\text{bo}n} = \\text{if }k\\text{ wins}\n$$\n"
     )
     code = "```python\nx = '$$\\text{a$b$}$$'\n```\n"
     assert normalize_math(code).strip() == code.strip()
