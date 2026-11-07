@@ -1065,12 +1065,39 @@ def _fold_glued_runs(markdown: str) -> str:
     return "\n".join(out)
 
 
+_DISPLAY_SPAN = re.compile(r"\$\$(.+?)\$\$", re.S)
+# Inline math nested in \text{} inside a display ("\text{bo$n$}"): the lone
+# "$" ends the display for the blog's renderer.
+_TEXT_WITH_MATH = re.compile(r"\\text\{([^{}$]*)\$([^$]+)\$([^{}$]*)\}")
+
+
+def _unnest_text_math(markdown: str) -> str:
+    """``\\text{bo$n$}`` inside display math as ``\\text{bo}n``, outside code."""
+    code = fence_spans(markdown)
+
+    def display(m: re.Match[str]) -> str:
+        if any(start <= m.start() < end for start, end in code):
+            return m.group(0)
+        body = m.group(1)
+        while _TEXT_WITH_MATH.search(body):
+            body = _TEXT_WITH_MATH.sub(
+                lambda t: (f"\\text{{{t.group(1)}}}" if t.group(1) else "")
+                + t.group(2)
+                + (f"\\text{{{t.group(3)}}}" if t.group(3) else ""),
+                body,
+            )
+        return f"$${body}$$"
+
+    return _DISPLAY_SPAN.sub(display, markdown)
+
+
 def normalize_math(markdown: str) -> str:
     """Rewrite math delimiters and escaping to the blog's ``$$`` convention."""
     text = _rewrite_spans(_fold_glued_runs(markdown))
     text = _isolate_display_blocks(text)
     text = _isolate_nested_displays(text)
     text = _vert_inline_bars(text)
+    text = _unnest_text_math(text)
     return _collapse_blank_runs(text)
 
 
