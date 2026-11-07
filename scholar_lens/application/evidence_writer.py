@@ -248,6 +248,8 @@ def evidence_lines(items: Sequence[Evidence]) -> str:
         extra = []
         if e.scope:
             extra.append(f"scope: {e.scope}")
+        if e.sdk:
+            extra.append(f"holds for the {e.sdk} SDK only")
         if e.latex:
             extra.append(f"latex: $${e.latex}$$")
         if e.figure_url:

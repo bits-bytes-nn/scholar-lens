@@ -842,3 +842,15 @@ def test_evidence_for_another_sdk_is_recognised_by_its_field() -> None:
     assert other_sdk("ts", "py")
     assert not other_sdk("python", "python")
     assert not other_sdk("", "python") and not other_sdk("typescript", "")
+
+
+def test_a_topic_is_owned_by_its_first_section() -> None:
+    from scholar_lens.domain.guide.evidence_guide import repair_guide_outline
+
+    sections = [s.model_dump() for s in _outline().sections]
+    sections[1]["topics"] = ["Structured output"]
+    sections[2]["topics"] = ["structured  output", "Hooks"]
+    outline, notes = repair_guide_outline(_outline(sections=sections), _ledger())
+    taught = [s.topics for s in outline.sections]
+    assert ["Structured output"] in taught and ["Hooks"] in taught
+    assert any("kept in its first section" in n for n in notes)

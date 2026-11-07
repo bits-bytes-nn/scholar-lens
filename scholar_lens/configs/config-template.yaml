@@ -115,13 +115,13 @@ tech_guide:
   max_research_queries: 6
   fetch_top_results: 12
   # At most this many sections (3-30); the outline plans within it.
-  max_sections: 14
+  max_sections: 11
   # Hard ceiling on one run's estimated cost (USD).
   max_cost_usd: 60
   # Pages read and the guide's prose characters (Korean).
   max_sources_read: 40
-  min_total_chars: 30000
-  max_total_chars: 55000
+  min_total_chars: 25000
+  max_total_chars: 45000
 
 survey:
   # Plan stage (`survey plan`): scope call, then the selection call.

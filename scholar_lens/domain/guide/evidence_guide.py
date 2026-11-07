@@ -72,6 +72,9 @@ class GuideSection(_Strict):
     question: str = ""
     depth: Depth = "standard"
     evidence: list[str] = Field(default_factory=list)
+    # The features or concepts this section teaches ("structured output",
+    # "interventions"); each is taught in one section, others refer back.
+    topics: list[str] = Field(default_factory=list, max_length=8)
 
 
 class GlossaryTerm(_Strict):
@@ -98,6 +101,7 @@ def repair_guide_outline(
     of its own (it is written last, from what the sections cite)."""
     notes: list[str] = []
     seen: set[str] = set()
+    owned: set[str] = set()
     sections = []
     for s in outline.sections:
         if s.kind == "tldr":
@@ -116,7 +120,15 @@ def repair_guide_outline(
             else:
                 seen.add(eid)
                 kept.append(eid)
-        sections.append(s.model_copy(update={"evidence": kept}))
+        topics = []
+        for topic in s.topics:
+            key = " ".join(topic.lower().split())
+            if key and key not in owned:
+                owned.add(key)
+                topics.append(topic)
+            elif key:
+                notes.append(f"topic {topic!r} kept in its first section")
+        sections.append(s.model_copy(update={"evidence": kept, "topics": topics}))
     ordered = sorted(sections, key=lambda s: _RANK[s.kind])
     if [s.kind for s in ordered] != [s.kind for s in sections]:
         notes.append("sections sorted into the guide's order")

@@ -589,6 +589,7 @@ class EvidenceGuideEngine(EvidenceWriter):
     ) -> str:
         sections_map = "\n".join(
             f"- {'(this) ' if s is section else ''}{s.kind}: {s.title} — {s.thesis}"
+            + (f" [teaches: {', '.join(s.topics)}]" if s.topics else "")
             for s in outline.sections
         )
         return "\n\n".join(

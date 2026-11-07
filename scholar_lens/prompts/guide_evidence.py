@@ -191,7 +191,9 @@ brief for routine material. `running_example` is one application or workload
 the code builds on end to end (run or deploy it, send a request, read the
 answer); `code_language` the one SDK language the code uses. The
 glossary has the topic's key terms (English | rendering in the guide's
-language, no parentheses). The title is in English.
+language, no parentheses). The title is in English. `topics` names the
+features or concepts each section teaches; a feature is taught in one
+section only, and evidence about it goes there.
 """ + SOURCE_AUTHORITY + SECURITY
 
 WRITER_SYSTEM = (
@@ -211,6 +213,9 @@ Evidence:
   markers and lists the sources; do not write links to the sources yourself.
 - You may refer back to earlier sections' evidence (listed as already
   written) by content, citing its id, but never repeat it.
+- A feature another section teaches (the outline lists each section's
+  `teaches`) gets one sentence pointing to that section, never a second
+  explanation, even when source_sections describe it again.
 - Every number, command, flag, API name and default must come from the cited
   evidence. Code blocks come from the code evidence (trimmed, or with the
   running example's names); a block of your own is labelled as an

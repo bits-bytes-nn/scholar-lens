@@ -239,15 +239,17 @@ class TechGuide(_Section):
     fetch_top_results: int = Field(default=12, ge=0)
     # Upper bound on guide sections, told to the outline planner so it plans a
     # self-contained guide (usage, internals and integration) within it.
-    max_sections: int = Field(default=14, ge=3, le=30)
+    # Fewer, deeper sections: each teaches its features once (the guide's
+    # facts and code are checked; more sections, more places to slip).
+    max_sections: int = Field(default=11, ge=3, le=30)
     # Hard ceiling on one run's estimated cost (list prices, USD; None = no
     # limit). A guide costs about $15-23.
     max_cost_usd: float | None = Field(default=60.0, gt=0)
     # Pages read (the docs and reference material first) and the guide's
     # prose characters (Korean).
     max_sources_read: int = Field(default=40, ge=1, le=120)
-    min_total_chars: int = Field(default=30_000, ge=5_000, le=200_000)
-    max_total_chars: int = Field(default=55_000, ge=5_000, le=200_000)
+    min_total_chars: int = Field(default=25_000, ge=5_000, le=200_000)
+    max_total_chars: int = Field(default=45_000, ge=5_000, le=200_000)
 
     @model_validator(mode="after")
     def _length_range(self) -> "TechGuide":

@@ -253,6 +253,10 @@ CLAIM_SCOPE: str = """
   subject ("이 근거에서 따로 설명되지 않습니다", "the provided material does
   not cover", where a table's values were taken from), whether or not it is
   true of those inputs.
+- A fact its evidence gives for one SDK language, version, provider or
+  condition ("holds for the python SDK only", a scope naming them) is
+  unsupported when the sentence states it without that qualifier or for
+  another one; so is a reason given for one component stated for the whole.
 - A sentence ending with [[EX]] is the writer's illustration: supported
   unless it states a result, default or behaviour of the subject the
   evidence does not give.
