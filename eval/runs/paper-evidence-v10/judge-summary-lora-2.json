@@ -1,0 +1,236 @@
+{
+  "item": "summary-lora",
+  "post": "/tmp/eval-paper/summary-lora-v8.md",
+  "judge_run": 2,
+  "source": "https://arxiv.org/html/2106.09685v2 (Sections 1, 4.1-4.2, 5.5, 7.1-7.2, 8, Appendix F.3, H.2; Tables 4, 5, 16, 18) incl. Figure 1 image used by the post",
+  "sampling": "27 body blocks numbered from L16; started at block 2 and took every second block (L20→L22, L24, L30→L34, L36→L38, L40, L46, L50, L69 x4 claims, L73, L80, L84), 15 claims, 8 of them numbers. The whole post was read for wrong claims outside the sample.",
+  "scores": {
+    "A": 9,
+    "B": 7.5,
+    "C": 9,
+    "D": 7,
+    "E": 9.0,
+    "F": 9
+  },
+  "type_scores": {
+    "U1": 7.5,
+    "U2": 7.5
+  },
+  "deductions": {
+    "A": [
+      "L56 '... 한 표에 정리했습니다' is a sentence about the post's own assembly. No body H1, no skipped levels, $$-only math, use_math set, subtitle/paper_author/paper_doi present."
+    ],
+    "B": [
+      "L34 '결국 갱신 크기를 조절하는 학습률과 비슷한 역할을 합니다' → '갱신 크기를 바꾸므로 학습률과 비슷하게 작용합니다'.",
+      "L22 '결국 효율과 품질 가운데 하나를 골라야 했습니다' → '효율과 품질 가운데 하나를 포기해야 했습니다' (formulaic 결국).",
+      "L22 '... 못 미치는 경우가 많다는 데 있습니다' (noun frame) → '... 못 미칠 때가 많았습니다'.",
+      "L54 '앞서 소개한 전체 파라미터를 모두 학습하는 전체 미세조정과' → '전체 미세조정과' (tautology).",
+      "L16 '파라미터 175,255.8M개' mixes the M unit with 개 → '약 1,752억 개'."
+    ],
+    "C": [
+      "Back-references are accurate (L40 '앞서 연구 배경에서 다룬', L69 '앞서 구현 방식에서 본 대로'), but L69's one is off-topic for the main-results paragraph. Otherwise sections chain well: hypothesis (L24) → method (L28-42) → rank evidence (L46) → results (L54-80) → analysis (L84)."
+    ],
+    "D": [
+      "The four baselines (L56) and three benchmarks (L58) get no one-line gloss, which is the hardest part for a non-expert reading the main table.",
+      "L84 gives the subspace-similarity conclusion without saying what is measured or that r=1 already works on GPT-3, the most surprising finding.",
+      "The easy parts are explained well: the hypothetical parameter count (L38) and random chance 33.3% (L80)."
+    ],
+    "E": [
+      "Figure 1 (L36) is described, not numbered, and discussed at L38. Both tables are verbatim with equal cell counts. No deduction beyond a missing view of the Table 5 allocation (prose only at L46)."
+    ],
+    "F": [
+      "Outside the sample: L34's causal α/r explanation is the writer's own addition, unlabelled, and not in the paper. Sampled claims were all supported. Table 4 and Table 16 are cell-exact."
+    ]
+  },
+  "type_deductions": {
+    "U1": [
+      "Coverage (U1): the post reports only GPT-3 175B. RoBERTa/DeBERTa on GLUE and GPT-2 on E2E are never mentioned, and neither is the memory/storage saving the paper calls 'the most significant benefit' (Sec 4.2: training VRAM 1.2TB → 350GB, checkpoint 350GB → 35MB at r=4 on W_q,W_v). Nothing in L44-50 or L84 covers it.",
+      "BitFit/어댑터/프리픽스 baselines are never described, so 'what LoRA was compared with' is only names (L56)."
+    ],
+    "U2": [
+      "L16 TL;DR runs five sentences with throughput detail that L50 repeats. The two-to-three-line rule is not met.",
+      "The headline number (L8, L16: 18M → 73.7) is from the Table 5 ablation, not the distilled main-results table (L58-67), so the TL;DR emphasis doesn't match the paper's main claim that LoRA matches or beats FT across tasks."
+    ]
+  },
+  "principles": {
+    "claim_headings": {
+      "status": "partly met",
+      "evidence": "Fixed summary headings are topic names (L18 '## 연구 배경', L26 '## 제안 방법', L44 '## 구현 방식', L52 '## 실험 결과', L82 '## 의의와 한계'), but each section opens with a one-line thesis (L20, L28, L46, L54)."
+    },
+    "running_example": {
+      "status": "partly met",
+      "evidence": "GPT-3 175B and WikiSQL thread through TL;DR (L16), rank allocation (L46) and main table (L58-69); the only worked numeric example is a hypothetical 12,288-dim matrix (L38) that is not tied back to the 18M budget."
+    },
+    "mechanism_choice_formula_example": {
+      "status": "met",
+      "evidence": "Problem (L22) → design choice vs adapters/prefix (L40-42) → formula h=W0x+BAx (L32) → numeric example 98,304 vs ~1억 5,100만 (L38)."
+    },
+    "facts_once": {
+      "status": "partly met",
+      "evidence": "18M/73.7 appears in description (L8), TL;DR (L16) and L46; 32.5/43.1/25% in L16 and L50; the W_q vs W_q+W_v finding is restated at L69 ('앞서 구현 방식에서 본 대로 ... W_q와 W_v를 함께 적응하는 쪽이 WikiSQL에서 더 높았습니다'); latency/sequence-length limits of adapters/prefix at L16, L22, L40."
+    },
+    "numbers_with_scope": {
+      "status": "partly met",
+      "evidence": "Most numbers carry model, metric and setting (L46 '96개 층', L69 '4.7M 파라미터를 쓴 LoRA'); but M counts are not converted in prose (L16 '파라미터 175,255.8M개', L69 '4.7M', '37.7M'), and L16 pairs a throughput rise 32.5→43.1 (+33%) with '약 25% 빨랐습니다' without saying 25% is the paper's speedup figure."
+    },
+    "nothing_invented": {
+      "status": "partly met",
+      "evidence": "No invented numbers or tables; Table 4 and Table 16 match cell for cell. One unlabelled causal explanation at L34 ('α/r은 ΔWx 전체의 크기를 바꾸므로, 결국 ... 학습률과 비슷한 역할을 합니다') goes beyond the paper; L38 example is labelled '가상의 예'."
+    },
+    "writer_assessment_end": {
+      "status": "met",
+      "evidence": "L92 '이 글의 판단으로는 ...' gives a deployment decision (merge vs not, check r and target matrices for far domains), though it leans on the paper's own batching limitation."
+    },
+    "length_fit": {
+      "status": "met",
+      "evidence": "About 6,100 body characters, five sections, two tables; fits a short method paper summary."
+    },
+    "type_shape": {
+      "status": "partly met",
+      "evidence": "Five fixed summary sections and one distilled main-results table (L58-67), but the TL;DR (L16) is a five-sentence paragraph rather than two to three lines."
+    },
+    "korean_style": {
+      "status": "partly met",
+      "evidence": "Consistent 입니다 register; residual patterns: '결국' (L22, L34), '역할을 합니다' (L34), noun frame '못 미치는 경우가 많다는 데 있습니다' (L22), meta sentence '한 표에 정리했습니다' (L56), redundant '앞서 소개한 전체 파라미터를 모두 학습하는 전체 미세조정' (L54)."
+    }
+  },
+  "claims": {
+    "checked": 15,
+    "numbers": 8,
+    "supported": 15,
+    "unsupported": 0,
+    "wrong": 0,
+    "unverifiable": 0,
+    "examples": [
+      {
+        "line": 22,
+        "type": "number",
+        "claim": "GPT-3 has 175 billion (1,750억) trainable parameters",
+        "verdict": "supported",
+        "source": "Sec 1: 'GPT-3 ... with 175 billion trainable parameters'"
+      },
+      {
+        "line": 24,
+        "type": "method",
+        "claim": "Prior work shows over-parametrized models reside on a low intrinsic dimension; authors hypothesize weight change has low intrinsic rank",
+        "verdict": "supported",
+        "source": "Sec 1 / 4.1: Li et al. 2018a, Aghajanyan et al. 2020; 'we hypothesize the updates to the weights also have a low intrinsic rank'"
+      },
+      {
+        "line": 34,
+        "type": "method",
+        "claim": "Delta W x is scaled by alpha/r, alpha a constant in r; with Adam tuning alpha is roughly tuning the learning rate; alpha set to the first r tried and not tuned",
+        "verdict": "supported",
+        "source": "Sec 4.1: 'We then scale ΔWx by α/r ... set α to the first r we try and do not tune it'"
+      },
+      {
+        "line": 38,
+        "type": "method",
+        "claim": "A Gaussian init, B zero, so BA = 0 at the start of training",
+        "verdict": "supported",
+        "source": "Sec 4.1: 'random Gaussian initialization for A and zero for B, so ΔW = BA is zero at the beginning'; Figure 1 shows A = N(0, σ²), B = 0"
+      },
+      {
+        "line": 46,
+        "type": "number",
+        "claim": "18M budget corresponds to r=8 for one attention weight type, r=4 for two, across all 96 layers",
+        "verdict": "supported",
+        "source": "Sec 7.1: 'parameter budget of 18M ... r=8 if we adapt one type ... r=4 if we adapt two types, for all 96 layers'"
+      },
+      {
+        "line": 46,
+        "type": "number",
+        "claim": "WikiSQL: W_q only 70.4, W_q+W_v 73.7",
+        "verdict": "supported",
+        "source": "Table 5: W_q 70.4; W_q,W_v 73.7"
+      },
+      {
+        "line": 50,
+        "type": "number",
+        "claim": "Training throughput per V100: full FT 32.5, LoRA 43.1 tokens/s, about 25% faster",
+        "verdict": "supported",
+        "source": "Sec 4.2 + footnote 5: 25% speedup; 32.5 vs 43.1 tokens/s per V100 with the same number of weight shards (43.1/32.5 = +33% throughput; the 25% is the paper's own figure)"
+      },
+      {
+        "line": 69,
+        "type": "comparison",
+        "claim": "LoRA 4.7M beats full FT on MNLI-m and on all three SAMSum metrics",
+        "verdict": "supported",
+        "source": "Table 4: 91.7 > 89.5; 53.8/29.8/45.9 > 52.0/28.0/44.5"
+      },
+      {
+        "line": 69,
+        "type": "number",
+        "claim": "WikiSQL results fluctuate by about ±0.5",
+        "verdict": "supported",
+        "source": "Table 4 caption: 'The results on WikiSQL have a fluctuation around ±0.5%'"
+      },
+      {
+        "line": 69,
+        "type": "number",
+        "claim": "LoRA 37.7M reaches WikiSQL 74.0, above the 73.8 baseline",
+        "verdict": "supported",
+        "source": "Table 4"
+      },
+      {
+        "line": 69,
+        "type": "comparison",
+        "claim": "PrefixLayer uses more parameters than LoRA (4.7M) and is lower on all three tasks",
+        "verdict": "supported",
+        "source": "Table 4: PrefixLayer 20.2M, 70.1 | 89.5 | 50.8/27.3/43.5 vs LoRA 4.7M 73.4 | 91.7 | 53.8/29.8/45.9"
+      },
+      {
+        "line": 75,
+        "type": "number",
+        "claim": "MNLI-n table: FT 60.2/85.8/88.9/89.5; PrefixEmbed 37.6/75.2/79.5/88.6; PrefixLayer 48.3/82.5/85.9/89.6; LoRA 63.8/85.6/89.2/91.7",
+        "verdict": "supported",
+        "source": "Table 16: all cells match"
+      },
+      {
+        "line": 80,
+        "type": "number",
+        "claim": "PrefixEmbed 37.6% on MNLI-100 vs 33.3% random chance",
+        "verdict": "supported",
+        "source": "F.3: 'only slightly better than random chance (37.6% vs. 33.3%)'"
+      },
+      {
+        "line": 84,
+        "type": "method",
+        "claim": "Adaptation matrices learned with different ranks overlap strongly in top singular-vector directions; other directions may be noise accumulated during training",
+        "verdict": "supported",
+        "source": "Sec 7.2: 'top singular-vector directions of A_{r=8} and A_{r=64} are the most useful, while other directions potentially contain mostly random noises accumulated during training'"
+      },
+      {
+        "line": 40,
+        "type": "comparison",
+        "claim": "Increasing trainable params: LoRA converges to training the original model, adapters to an MLP, prefix methods to a model that cannot take long inputs",
+        "verdict": "supported",
+        "source": "Sec 4.1 'A Generalization of Full Fine-tuning'"
+      }
+    ],
+    "outside_sample": "Whole post read against the paper for wrong claims outside the sample: no wrong numbers found; Table 4 and Table 16 match cell for cell; the only unsupported sentence found anywhere is L34's α/r mechanism explanation."
+  },
+  "checklist": {
+    "repeated": 0,
+    "avoided": 0,
+    "na": 0,
+    "repeated_ids": [],
+    "note": "human_fixes.yaml has fixes: [] for summary-lora. The notes' generic defects do not occur: no HTML entity leak ('&amp;'), title is the paper title (L3)."
+  },
+  "extras": {
+    "description_chars": 127,
+    "main_results_covered": true,
+    "main_results_note": "Table 4 (GPT-3 175B main results) is reproduced at L58-67 with all 8 rows and every cell matching the paper (params, WikiSQL, MNLI-m, SAMSum R1/R2/RL), and L69 interprets it correctly (4.7M LoRA above FT on MNLI-m and SAMSum, WikiSQL 73.4 vs 73.8 within ±0.5, 37.7M at 74.0). Gap: the TL;DR (L16) and description (L8) headline the 18M ablation number 73.7 from Table 5 instead of a Table 4 row, and never say LoRA beats FT on MNLI-m/SAMSum. RoBERTa/DeBERTa GLUE (Table 2) and GPT-2 E2E (Table 3) results are not mentioned anywhere.",
+    "unsupported_causes_scope": "One unsupported sentence: L34 writer-added mechanism for why α behaves like the learning rate (unlabelled own reasoning). Interpretive bridges at L40 ('두 방식의 한계는 ... 그대로 이어진 결과입니다') and L69 ('차이가 변동 범위 안에 들어갑니다') are consistent with the paper's numbers.",
+    "repetition_counts": "73.7: L8, L16, L46 (3); 1,800만/18M: L8, L16, L46 (3); 32.5/43.1 tokens/s: L16, L50 (2); 25%: L16, L50 (2); W_q vs W_q+W_v WikiSQL finding: L46, L69 (2); adapter latency / prefix sequence length: L16, L22, L40 (3).",
+    "reintroduced_definitions_examples": "L54 re-defines full fine-tuning ('앞서 소개한 전체 파라미터를 모두 학습하는 전체 미세조정') after L22; L40 re-explains the adapter/prefix limits from L22; L69 restates the L46 rank-allocation result.",
+    "edit_residue": "L56 '전체 미세조정 기준선과 이 방법들을 한 표에 정리했습니다' (meta, about the post); L69 the off-topic back-reference to 구현 방식. Both were flagged by the run's own whole-post review ('problems left as they were') and remain. L56 first sentence is the one-sentence replacement of the removed baseline definitions, so BitFit/PrefixEmbed/PrefixLayer/어댑터 H are never explained.",
+    "figures_checked": "L36 image is the paper's Figure 1 (W frozen, A = N(0,σ²), B = 0, rank r); alt text and L38 '구조도에서 주목할 부분은 초기화입니다' match the figure.",
+    "taxonomy_X1": "Category 'Finetuning' fits; controlled tag 'Parameter-Efficient-Fine-Tuning' fits; 'Low-Rank-Adaptation' and 'Rank-Decomposition-Matrices' are the paper's terms; 'Frozen-Pre-trained-Weights', 'Adapter-Inference-Latency', 'Subspace-Similarity-Analysis' are not paper terms (run warnings) and read as restatements of the content rather than reusable tags. Partly met."
+  },
+  "top_issues": [
+    "L8/L16: the headline result is the 18M Table 5 ablation (73.7 vs 73.8), not Table 4. The TL;DR is five sentences, skips LoRA's wins on MNLI-m/SAMSum, and writes '175,255.8M개'.",
+    "Coverage (U1): the post reports only GPT-3 175B. RoBERTa/DeBERTa on GLUE and GPT-2 on E2E are never mentioned, and neither is the memory/storage saving the paper calls 'the most significant benefit' (Sec 4.2: training VRAM 1.2TB → 350GB, checkpoint 350GB → 35MB at r=4 on W_q,W_v). Nothing in L44-50 or L84 covers it.",
+    "L56/L58: the baselines and benchmarks are never defined (the run's writer removed the definitions and left the meta sentence '한 표에 정리했습니다'). L34: the writer's α/r mechanism is presented as the paper's."
+  ]
+}

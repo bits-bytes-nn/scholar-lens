@@ -1,0 +1,153 @@
+{
+  "kind": "summarize",
+  "status": "succeeded",
+  "input": "2106.09685",
+  "title": "LoRA: Low-Rank Adaptation of Large Language Models",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/2106_09685/2026-11-07-lora-low-rank-adaptation-of-large-language-models-summary.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-11-07-lora-low-rank-adaptation-of-large-language-models-summary.md",
+  "pr_url": null,
+  "warnings": [
+    "Tag 'Frozen-Pre-trained-Weights' (or its acronym) does not appear in the paper; check it fits.",
+    "Tag 'Adapter-Inference-Latency' (or its acronym) does not appear in the paper; check it fits.",
+    "Tag 'Subspace-Similarity-Analysis' (or its acronym) does not appear in the paper; check it fits.",
+    "Evidence that misstates its quote was left out: E8 (The caption does not say prefix methods degrade sharply as special tokens increase; that goes beyond what the figure cap)",
+    "Section '제안 방법': check 2 sentence(s) the evidence may not support: $$\\frac{\\alpha}{r}$$은 $$\\Delta Wx$$ 전체의 크기를 바꾸므로, 결국 갱신 크기를 조절하는 학습률과 비슷한 역할을 합니다. (unsupported: The paper only says that tuning α is roughly the same as tuning the learning rate. This sentence adds its own explanation of why (scaling the whole of ΔWx) without citing anything. (not supported: α/r은 ΔWx 전체의 크기를 바꾸므로 학습률과 비슷한 역할)) | 어댑터는 모델 깊이를 늘리는 모듈을 덧붙이는 구조라서 파라미터를 늘려도 결국 덧붙인 MLP를 키우게 됩니다. (unsupported: The paper says adapter-based methods converge to an MLP and extend model depth. The causal explanation that adding parameters ends up enlarging the attached MLP is the post's own addition and is not backed by the evidence. (not supported: 파라미터를 늘려도 결국 덧붙인 MLP를 키우게 됩니다))",
+    "Section '실험 결과': the writer could not fix: The claim that prefix methods get worse as they scale cannot be backed with evidence (no data on prefix token count vs. accuracy), so this section no longer makes it. The thesis/TL;DR is outside this section and still needs the same claim removed. The BitFit and 어댑터 H descriptions are general backgr",
+    "Section '실험 결과': 1 edit(s) not applied: would change a heading: '## 실험 결과'",
+    "Section '실험 결과': the writer could not fix: 1. The BitFit, Adapter-H, PrefixEmbed and PrefixLayer definitions had no support in the evidence or source text. I replaced them with one sentence that only names the four baselines, which the table supports. That also keeps the \"이 방법들\" reference in the next sentence pointing at something. 2. The se",
+    "Section '의의와 한계': check 1 sentence(s) the evidence may not support: 저자들이 밝힌 한계는 세 가지입니다. (unsupported: The paper does not say there are exactly three limitations; that count is the post's own grouping of limitations mentioned in different places. (not supported: 한계는 세 가지))",
+    "Section '실험 결과': whole-post review problems left as they were: The sentence \"앞서 구현 방식에서 본 대로 … W_q와 W_v를 함께 적응하는 쪽이 WikiSQL에서 더 높았습니다\" repeats the 구현 방식 finding (70.4 vs 73.7). It has nothing to do with the main-results tab | \"전체 미세조정 기준선과 이 방법들을 한 표에 정리했습니다\" talks about how the post was put together instead of about the paper. Fix: Rephrase in terms of the paper, e.g. that the paper"
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 563.1,
+  "input_tokens": 655949,
+  "output_tokens": 75937,
+  "estimated_cost_usd": 2.4649,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 70,
+      "failed_calls": 0,
+      "input_tokens": 141662,
+      "output_tokens": 75937,
+      "cache_read_tokens": 307023,
+      "cache_write_tokens": 207264,
+      "cost_usd": 2.464858
+    },
+    "by_stage": {
+      "figures": {
+        "calls": 8,
+        "failed_calls": 0,
+        "input_tokens": 16800,
+        "output_tokens": 6909,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.005135
+      },
+      "extract_attributes": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 53659,
+        "output_tokens": 265,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.005498
+      },
+      "read": {
+        "calls": 19,
+        "failed_calls": 0,
+        "input_tokens": 44,
+        "output_tokens": 19018,
+        "cache_read_tokens": 195432,
+        "cache_write_tokens": 54249,
+        "cost_usd": 0.364979
+      },
+      "outline": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 3065,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 5047,
+        "cost_usd": 0.086551
+      },
+      "verify": {
+        "calls": 14,
+        "failed_calls": 0,
+        "input_tokens": 47126,
+        "output_tokens": 17293,
+        "cache_read_tokens": 41777,
+        "cache_write_tokens": 36588,
+        "cost_usd": 0.734017
+      },
+      "draft": {
+        "calls": 6,
+        "failed_calls": 0,
+        "input_tokens": 24,
+        "output_tokens": 10019,
+        "cache_read_tokens": 17285,
+        "cache_write_tokens": 56989,
+        "cost_usd": 0.492336
+      },
+      "review": {
+        "calls": 7,
+        "failed_calls": 0,
+        "input_tokens": 28,
+        "output_tokens": 8284,
+        "cache_read_tokens": 7980,
+        "cache_write_tokens": 15947,
+        "cost_usd": 0.248717
+      },
+      "fix": {
+        "calls": 13,
+        "failed_calls": 0,
+        "input_tokens": 23973,
+        "output_tokens": 10233,
+        "cache_read_tokens": 44549,
+        "cache_write_tokens": 36761,
+        "cost_usd": 0.502174
+      },
+      "finalize": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 851,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 1683,
+        "cost_usd": 0.025451
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-haiku-5-5": {
+        "calls": 9,
+        "failed_calls": 0,
+        "input_tokens": 70459,
+        "output_tokens": 7174,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.010633
+      },
+      "global.anthropic.claude-sonnet-5-5": {
+        "calls": 19,
+        "failed_calls": 0,
+        "input_tokens": 44,
+        "output_tokens": 19018,
+        "cache_read_tokens": 195432,
+        "cache_write_tokens": 54249,
+        "cost_usd": 0.364979
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 42,
+        "failed_calls": 0,
+        "input_tokens": 71159,
+        "output_tokens": 49745,
+        "cache_read_tokens": 111591,
+        "cache_write_tokens": 153015,
+        "cost_usd": 2.089246
+      }
+    }
+  }
+}
