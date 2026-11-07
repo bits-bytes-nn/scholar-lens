@@ -668,8 +668,9 @@ def test_fold_keeps_an_attribute_line_on_its_display() -> None:
 def test_fold_stays_fast_on_long_items() -> None:
     import time
 
-    # Linear, not quadratic: doubling the input must not quadruple the time.
-    # The fastest of three runs filters out scheduler noise.
+    # Linear, not quadratic: 8x the input takes about 8x the time linearly
+    # and 64x quadratically; the bound sits between with room for a loaded
+    # machine. The fastest of five runs filters out scheduler noise.
     def took(n: int, quoted: bool) -> float:
         lead, gap = (
             ("> 1. 항목\n", ">    $$x_{k}$$\n>\n")
@@ -678,15 +679,15 @@ def test_fold_stays_fast_on_long_items() -> None:
         )
         text = lead + "".join(gap.format(k=k) for k in range(n))
         runs = []
-        for _ in range(3):
+        for _ in range(5):
             started = time.monotonic()
             norm(text)
             runs.append(time.monotonic() - started)
         return min(runs)
 
     for quoted in (False, True):
-        small, large = took(500, quoted), took(2000, quoted)
-        assert large < 8 * max(small, 0.02)
+        small, large = took(250, quoted), took(2000, quoted)
+        assert large < 24 * max(small, 0.01)
 
 
 def test_hangul_matches_the_blog_lint() -> None:
