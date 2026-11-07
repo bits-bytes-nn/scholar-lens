@@ -23,10 +23,7 @@ class _FakeClock:
 
 
 def _limiter_with_clock(clock: _FakeClock, **kwargs: Any) -> RateLimiter:
-    limiter = RateLimiter(**kwargs)
-    limiter._monotonic = clock.monotonic  # type: ignore[assignment]
-    limiter._last_refill = clock.monotonic()
-    return limiter
+    return RateLimiter(**kwargs, monotonic=clock.monotonic, sleep=clock.sleep)
 
 
 def test_rate_limiter_rejects_nonpositive_args() -> None:
@@ -36,9 +33,8 @@ def test_rate_limiter_rejects_nonpositive_args() -> None:
         RateLimiter(rate=1.0, per=0)
 
 
-def test_rate_limiter_allows_burst_then_paces(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_rate_limiter_allows_burst_then_paces() -> None:
     clock = _FakeClock()
-    monkeypatch.setattr("scholar_lens.adapters.http.rate_limit.time.sleep", clock.sleep)
     # 1 token per 2s, capacity 1 → first acquire is free, second must wait ~2s.
     limiter = _limiter_with_clock(clock, rate=1.0, per=2.0, name="t")
 
@@ -49,11 +45,8 @@ def test_rate_limiter_allows_burst_then_paces(monkeypatch: pytest.MonkeyPatch) -
     assert clock.now - start == pytest.approx(2.0, abs=1e-6)
 
 
-def test_rate_limiter_penalize_blocks_until_retry_after(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_rate_limiter_penalize_blocks_until_retry_after() -> None:
     clock = _FakeClock()
-    monkeypatch.setattr("scholar_lens.adapters.http.rate_limit.time.sleep", clock.sleep)
     limiter = _limiter_with_clock(clock, rate=10.0, per=1.0, name="t")
 
     start = clock.now
@@ -69,14 +62,11 @@ def test_rate_limiter_penalize_ignores_nonpositive() -> None:
     assert limiter._blocked_until == 0.0
 
 
-def test_rate_limiter_no_unbounded_burst_after_penalty(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_rate_limiter_no_unbounded_burst_after_penalty() -> None:
     # Regression: a long penalty must never be credited as accrued tokens beyond
     # the bucket capacity when it clears. Drive the refill clock across a 30s
     # penalty and assert tokens are capped at capacity (== rate), not 30*rate.
     clock = _FakeClock()
-    monkeypatch.setattr("scholar_lens.adapters.http.rate_limit.time.sleep", clock.sleep)
     limiter = _limiter_with_clock(clock, rate=5.0, per=1.0, name="t")
 
     limiter.penalize(30.0)
@@ -112,7 +102,6 @@ def _fake_clock_arxiv_limiter(
     monkeypatch: pytest.MonkeyPatch, module: Any, name: str
 ) -> tuple[_FakeClock, RateLimiter]:
     clock = _FakeClock()
-    monkeypatch.setattr("scholar_lens.adapters.http.rate_limit.time.sleep", clock.sleep)
     limiter = _limiter_with_clock(clock, rate=1.0, per=3.0, name="arxiv")
     monkeypatch.setattr(module, name, limiter)
     return clock, limiter
@@ -145,18 +134,17 @@ async def test_arxiv_html_fetch_is_paced_and_penalty_capped(
     assert limiter._blocked_until - clock.now == pytest.approx(60.0)
 
 
-def test_arxiv_pdf_download_is_paced_and_penalty_capped(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Any
-) -> None:
+def test_arxiv_pdf_download_is_paced_and_penalty_capped(tmp_path: Any) -> None:
+    from unittest.mock import MagicMock
+
     import requests
     import responses
 
-    from scholar_lens.adapters.scholarly import arxiv as arxiv_handler
     from scholar_lens.adapters.scholarly.arxiv import ArxivHandler
 
-    clock, limiter = _fake_clock_arxiv_limiter(
-        monkeypatch, arxiv_handler, "_ARXIV_RATE_LIMITER"
-    )
+    clock = _FakeClock()
+    limiter = _limiter_with_clock(clock, rate=1.0, per=3.0, name="arxiv")
+    handler = ArxivHandler(client=MagicMock(), rate_limiter=limiter)
     with responses.RequestsMock() as mock:
         mock.add(
             responses.GET,
@@ -173,7 +161,7 @@ def test_arxiv_pdf_download_is_paced_and_penalty_capped(
         start = clock.now
         for name in ("1", "2"):
             with pytest.raises(requests.HTTPError):
-                ArxivHandler._download(
+                handler._download(
                     f"https://arxiv.org/pdf/{name}", tmp_path / f"{name}.pdf"
                 )
     # The second download waited out the capped penalty, then set a new one.

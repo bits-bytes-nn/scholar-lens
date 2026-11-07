@@ -502,19 +502,15 @@ class TestAdapters:
 
 
 class TestArxivSearch:
-    def _handler(self, monkeypatch: pytest.MonkeyPatch, results: Any) -> Any:
+    def _handler(self, results: Any) -> Any:
         from scholar_lens.adapters.scholarly import arxiv as arxiv_handler
 
         limiter = MagicMock()
-        monkeypatch.setattr(arxiv_handler, "_ARXIV_RATE_LIMITER", limiter)
-        handler = arxiv_handler.ArxivHandler()
-        handler.client = MagicMock()
+        handler = arxiv_handler.ArxivHandler(client=MagicMock(), rate_limiter=limiter)
         handler.client.results.side_effect = results
         return handler, limiter
 
-    def test_search_returns_metadata_at_the_shared_pace(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_search_returns_metadata_at_the_shared_pace(self) -> None:
         paper = MagicMock(
             title=PPO,
             authors=[MagicMock(name="author")],
@@ -529,18 +525,16 @@ class TestArxivSearch:
         )
         paper.authors[0].name = "John Schulman"
         paper.get_short_id.return_value = "1707.06347v2"
-        handler, limiter = self._handler(monkeypatch, lambda search: iter([paper]))
+        handler, limiter = self._handler(lambda search: iter([paper]))
         [found] = handler.search('ti:"PPO"', 5)
         assert found.arxiv_id == "1707.06347v2" and found.abstract == "We propose PPO."
         search = handler.client.results.call_args.args[0]
         assert (search.query, search.max_results) == ('ti:"PPO"', 5)
         limiter.acquire.assert_called_once()
 
-    def test_a_failed_search_raises_and_slows_down(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_a_failed_search_raises_and_slows_down(self) -> None:
         handler, limiter = self._handler(
-            monkeypatch, arxiv.HTTPError("https://export.arxiv.org/api/query", 0, 429)
+            arxiv.HTTPError("https://export.arxiv.org/api/query", 0, 429)
         )
         with pytest.raises(ArxivPaperError, match="429"):
             handler.search("all:dpo", 5)
