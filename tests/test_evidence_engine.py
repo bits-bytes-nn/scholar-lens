@@ -810,3 +810,39 @@ def test_an_answer_cut_at_the_output_limit_is_incomplete_however_it_ends() -> No
     cut = _kept(ModelText("## A\n\n- 첫 항목\n- 둘째 항\n ", cut=True))
     assert _incomplete(cut) and cut == "## A\n\n- 첫 항목\n- 둘째 항"
     assert not _incomplete(_kept(ModelText("## A\n\n끝났습니다.\n")))
+
+
+def test_comment_lines_in_code_are_not_section_headings() -> None:
+    md = (
+        "## Install\n\nRun this:\n\n```bash\n# Install the package\npip install x\n"
+        "# Serve a model\nx serve m\n```\n\n## Next\n\nDone.\n"
+    )
+    doc = SourceDocument.from_markdown("D", "t", "full_text", md)
+    assert [s.heading for s in doc.sections] == ["Install", "Next"]
+    assert "# Serve a model" in doc.sections[0].text
+
+
+def test_marker_stripping_leaves_code_alone() -> None:
+    from scholar_lens.domain.guide.evidence_guide import strip_markers
+
+    md = (
+        "## A\n\n트리는 이렇습니다 [[E1]].\n\n```text\n.\n├── a\n\n\n└── b\n```\n\n"
+        "[[E2]].\n\n끝입니다 [[E3]].\n"
+    )
+    out = strip_markers(md)
+    assert "```text\n.\n├── a\n\n\n└── b\n```" in out
+    assert "[[" not in out and "\n\n\n끝" not in out
+
+
+def test_a_fix_that_drops_a_code_block_or_table_loses_structure() -> None:
+    before = "## A\n\n설명입니다.\n\n```python\nx = 1\n```\n\n| a | b |\n| --- | --- |\n| 1 | 2 |\n"
+    assert (
+        structure_lost(
+            before, "## A\n\n설명입니다.\n\n| a | b |\n| --- | --- |\n| 1 | 2 |\n"
+        )
+        == "a code block was lost"
+    )
+    assert (
+        structure_lost(before, "## A\n\n설명입니다.\n\n```python\nx = 1\n```\n")
+        == "a table was lost"
+    )

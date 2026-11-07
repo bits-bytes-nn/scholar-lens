@@ -44,6 +44,7 @@ from .runtime import (
     ROOT_DIR,
     PipelineOutcome,
     RunContext,
+    check_post_type,
     find_published_post,
     load_translation_guideline,
     publish_artifact,
@@ -64,7 +65,22 @@ async def run_paper_pipeline(
     source = resolve_paper_source(request.source)
     code_retriever: CodeRetriever | None = None
     try:
-        # Loaded first: an S3 failure here must not follow the paid stages.
+        # Checked first: a config or S3 failure must not follow the paid stages.
+        github = context.config.resources.github
+        if request.kind == "summarize":
+            check_post_type(
+                context.require_conventions(),
+                github.summary_category,
+                "summary_category",
+                artifact="summarize",
+            )
+        else:
+            check_post_type(
+                context.require_conventions(),
+                github.review_category,
+                "review_category",
+                artifact="review",
+            )
         translation_guideline = await load_translation_guideline(context)
         paper_dir = ROOT_DIR / LocalPaths.PAPERS_DIR.value / source.source_id
         # Arbitrary PDF-URL sources have no arXiv HTML rendering.

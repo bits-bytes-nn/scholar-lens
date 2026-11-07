@@ -646,7 +646,9 @@ class EvidenceGuideEngine(EvidenceWriter):
             for s, md in written
             for eid in {i for snt in prose_sentences(md) for i in cited_ids(snt)}
             if eid not in s.evidence
-        }
+        } - set(
+            section.evidence
+        )  # a section may always state its own
         reference = self.source_sections(own)
         prompt = self._prompt(
             topic, outline, section, own, earlier, written, glossary, target, reference

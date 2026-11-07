@@ -405,7 +405,9 @@ class EvidencePaperEngine(EvidenceWriter):
             for s, md in written
             for eid in {i for snt in prose_sentences(md) for i in cited_ids(snt)}
             if eid not in s.evidence
-        }
+        } - set(
+            section.evidence
+        )  # a section may always state its own
         figures = [e.figure_url for e in own if e.kind == "figure" and e.figure_url]
         reference = self.source_sections(own)
         sections_map = "\n".join(
@@ -476,8 +478,14 @@ class EvidencePaperEngine(EvidenceWriter):
             markdown = f"## {heading}\n\n{markdown.lstrip()}"
         elif self.settings.post == "summary" or section.kind == "closing":
             # The fixed headings of the blog's convention.
+            # A function replacement: the title is text, not a template
+            # ("$\\mathcal{O}(n)$" holds escapes).
             markdown = re.sub(
-                r"^## .*$", f"## {heading}", markdown.lstrip(), count=1, flags=re.M
+                r"^## .*$",
+                lambda _m: f"## {heading}",
+                markdown.lstrip(),
+                count=1,
+                flags=re.M,
             )
         return markdown
 

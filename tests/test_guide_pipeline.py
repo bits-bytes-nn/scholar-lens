@@ -256,6 +256,7 @@ async def test_the_evidence_engine_gets_the_request_and_failures_keep_the_notes(
     monkeypatch.setattr(guide_pipeline, "load_translation_guideline", no_guideline)
     context = MagicMock()
     context.config = Config()
+    context.require_conventions.return_value.type_problem.return_value = ""
     request = MagicMock(
         urls=[DOCS],
         reference_urls=["https://blog.x.io/a"],
@@ -276,3 +277,39 @@ async def test_the_evidence_engine_gets_the_request_and_failures_keep_the_notes(
         "Search fell back to Brave",
     ]
     researcher.close.assert_called_once()
+
+
+async def test_search_queries_without_a_provider_fail_before_any_model_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from unittest.mock import MagicMock
+
+    async def no_guideline(context):  # type: ignore[no-untyped-def]
+        return None
+
+    researcher = MagicMock()
+    researcher.search_provider.supports_search = False
+    built = MagicMock()
+    monkeypatch.setattr(guide_pipeline, "load_translation_guideline", no_guideline)
+    monkeypatch.setattr(guide_pipeline, "WebResearcher", lambda **_: researcher)
+    monkeypatch.setattr(guide_pipeline, "TechGuideGenerator", built)
+    context = MagicMock()
+    context.config = Config()
+    context.require_conventions.return_value.type_problem.return_value = ""
+    request = MagicMock(urls=[DOCS], reference_urls=[], search_queries=["q"])
+    with pytest.raises(ValueError, match="TAVILY_API_KEY"):
+        await guide_pipeline.run_guide_pipeline(context, request, MagicMock())
+    built.assert_not_called()
+
+
+def test_a_category_that_cannot_label_the_post_fails_at_run_start() -> None:
+    from scholar_lens.domain.conventions import load_local_conventions
+    from scholar_lens.src.runtime import check_post_type
+
+    spec = load_local_conventions()
+    paper_type = next(t for t in spec.types if spec.is_paper_type(t))
+    with pytest.raises(ValueError, match="does not fit a guide"):
+        check_post_type(spec, paper_type, "tech_guide_category", artifact="guide")
+    with pytest.raises(ValueError, match="unknown type"):
+        check_post_type(spec, "Nope", "review_category", artifact="review")
+    check_post_type(spec, paper_type, "review_category", artifact="review")

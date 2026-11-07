@@ -16,6 +16,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .markdown.math import fence_roles
 from .survey.post import equation_in_source
 from .validation import unsourced_numbers
 
@@ -50,6 +51,18 @@ _NUMBERED_REFERENCE = re.compile(
     r"\b(?:fig(?:ure)?s?|tab(?:le)?s?|eq(?:uation)?s?|sec(?:tion)?s?|appendix|§)\.?\s*[A-Z]?\d",
     re.IGNORECASE,
 )
+
+
+def _headings(markdown: str) -> list[re.Match[str]]:
+    """The Markdown headings outside fenced code (a ``# comment`` line in a
+    shell or Python block is code, not a heading)."""
+    lines = markdown.split("\n")
+    starts, pos = [], 0
+    for line in lines:
+        starts.append(pos)
+        pos += len(line) + 1
+    code = {starts[i] for i, role in enumerate(fence_roles(lines)) if role != "prose"}
+    return [m for m in _HEADING.finditer(markdown) if m.start() not in code]
 
 
 class _Strict(BaseModel):
@@ -100,7 +113,7 @@ class SourceDocument(_Strict):
         before the first heading is ``S0``). ``figures`` are (url, caption)
         pairs, numbered ``F1``, ``F2``, …"""
         sections: list[SourceSection] = []
-        matches = list(_HEADING.finditer(markdown))
+        matches = _headings(markdown)
         if not matches or matches[0].start() > 0:
             head = markdown[: matches[0].start() if matches else len(markdown)]
             if head.strip():

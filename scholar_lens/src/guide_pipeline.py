@@ -25,6 +25,7 @@ from .runtime import (
     ROOT_DIR,
     PipelineOutcome,
     RunContext,
+    check_post_type,
     find_published_post,
     load_translation_guideline,
     publish_artifact,
@@ -51,6 +52,19 @@ async def run_guide_pipeline(
     translation_guideline = await load_translation_guideline(context)
     researcher = WebResearcher(search_provider=build_search_provider())
     spec = context.require_conventions()
+    # Both fail before any model call.
+    check_post_type(
+        spec,
+        context.config.resources.github.tech_guide_category,
+        "tech_guide_category",
+        artifact="guide",
+    )
+    if request.search_queries and not researcher.search_provider.supports_search:
+        raise ValueError(
+            "--search-query needs a web search provider: set TAVILY_API_KEY or "
+            "BRAVE_API_KEY (in Batch, the SSM parameters tavily-api-key or "
+            "brave-api-key)."
+        )
     generator = TechGuideGenerator(
         relevance_model_id=LanguageModelId(cfg.relevance_model_id),
         boto_session=context.bedrock_boto_session,

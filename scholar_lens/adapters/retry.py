@@ -1,8 +1,9 @@
 """The project's single retry policy for model and external-API calls.
 
-botocore clients are configured with one attempt (see ``factories``), so this
-decorator is the only layer that retries (arXiv API calls are retried inside
-``ArxivHandler`` and are denied here). Only known-transient failures are
+The langchain-side botocore clients are configured with one attempt (see
+``factories``), so for them this decorator is the only layer that retries
+(arXiv API calls are retried inside ``ArxivHandler`` and are denied here;
+the Strands adapter bounds its own retries, see ``bedrock.strands_models``). Only known-transient failures are
 retried — throttling, 5xx, timeouts, dropped connections — found anywhere in an
 exception's cause chain; everything else fails fast, since it would fail the
 same way again (bad request, missing permission, budget breach, invalid or

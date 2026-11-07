@@ -886,7 +886,7 @@ class TestStage:
         stage["context"].conventions = load_local_conventions().model_copy(
             update={"types": {"Paper Reviews": TypeSpec(paper=True)}}
         )
-        with pytest.raises(ValueError, match=f"no '{SURVEY_TYPE}' type"):
+        with pytest.raises(ValueError, match=f"unknown type '{SURVEY_TYPE}'"):
             run_stage(stage)
         assert stage["engine"].calls == []
 

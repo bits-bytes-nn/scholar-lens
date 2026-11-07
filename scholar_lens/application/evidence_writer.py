@@ -586,7 +586,9 @@ class EvidenceWriter:
                 logger.info("Fix of %r rejected: adds rule problems", title)
                 break
             draft = fixed
-        claims = await self.unsupported(draft, ledger, free, context)
+        # The loop ends on the draft its last claim check read: reused, not
+        # paid for again.
+        claims = await self.unsupported(draft, ledger, free, context, checked=claims)
         if claims:
             # Let the writer narrow or delete them in context first; only what
             # is still unsupported after that is cut.
@@ -653,6 +655,21 @@ class EvidenceWriter:
         and source passages; a fix that loses structure is not taken, and
         sentences it makes that contradict the evidence are removed."""
         out: list[tuple[SectionT, str]] = []
+        names_seen = {
+            n
+            for section, md in written
+            for n in (title_of(section), section_heading(md))
+        }
+        if unmatched := [
+            f
+            for f in findings
+            if f.section.strip().lstrip("#").strip() not in names_seen
+        ]:
+            self.notes.append(
+                "Whole-post review problems naming no section of the post, not "
+                "applied: "
+                + " | ".join(f"{f.section}: {f.problem}"[:160] for f in unmatched[:3])
+            )
         for section, md in written:
             names = {title_of(section), section_heading(md)}
             issues = [
@@ -716,10 +733,17 @@ class EvidenceWriter:
         ledger: EvidenceLedger,
         free: str,
         context: Sequence[Evidence] = (),
+        *,
+        checked: list[tuple[str, str]] | None = None,
     ) -> list[tuple[str, str]]:
-        """The claim check's unsupported sentences and the sentences whose
+        """The claim check's unsupported sentences (``checked``: the result
+        of one already run on this very draft) and the sentences whose
         numbers their evidence does not state."""
-        found = await self.check_claims(draft, ledger, context)
+        found = (
+            list(checked)
+            if checked is not None
+            else await self.check_claims(draft, ledger, context)
+        )
         known = {s for s, _ in found}
         found += [
             (s, "numbers not in its evidence")

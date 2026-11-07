@@ -119,6 +119,25 @@ _DOTTED_DOCS_VERSION = re.compile(
     r"v?\d+(?:\.\d+)+(?:[.-]?(?:post|dev|rc|a|b)\d*)*", re.I
 )
 _BARE_DOCS_VERSION = re.compile(r"v\d+", re.I)
+_ARXIV_ID_SEGMENT = re.compile(r"\d{4}\.\d{4,5}(?:v\d+)?")
+# Hosts many projects and authors share: what is official there is the
+# requested project's own space (its first two path segments: owner/repo,
+# docs/<library>), not the whole host.
+SHARED_HOSTS = frozenset(
+    {"github.com", "gitlab.com", "bitbucket.org", "huggingface.co", "medium.com"}
+)
+
+
+def _space(url: str) -> tuple[str, str]:
+    """(host, the project's space on a shared host or "")."""
+    parts = urlparse(url)
+    host = (parts.hostname or "").lower()
+    if host not in SHARED_HOSTS:
+        return host, ""
+    segments = [s.lower() for s in parts.path.split("/") if s]
+    return host, "/".join(segments[:2])
+
+
 _BARE_VERSION_SEGMENTS = 2  # "v2" only right after the root or a language
 _BRAVE_WEB_SEARCH_URL = "https://api.search.brave.com/res/v1/web/search"
 _TAVILY_SEARCH_URL = "https://api.tavily.com/search"
@@ -135,6 +154,8 @@ def docs_version(url: str) -> str | None:
     segments = [s for s in urlparse(url).path.split("/") if s]
     for index, segment in enumerate(segments):
         lowered = segment.lower()
+        if _ARXIV_ID_SEGMENT.fullmatch(lowered):
+            continue  # a paper id ("/papers/2106.09685"), not a release
         if lowered in _ROLLING_DOCS_VERSIONS or _DOTTED_DOCS_VERSION.fullmatch(lowered):
             return lowered
         if index < _BARE_VERSION_SEGMENTS and _BARE_DOCS_VERSION.fullmatch(lowered):
@@ -172,12 +193,15 @@ class OfficialDocs:
 
     hosts: frozenset[str]
     versions: frozenset[str | None]
+    # On a shared host (:data:`SHARED_HOSTS`), the requested projects' spaces.
+    spaces: frozenset[tuple[str, str]] = frozenset()
 
     @classmethod
     def from_urls(cls, urls: Collection[str]) -> OfficialDocs:
         return cls(
             hosts=frozenset(h for u in urls if (h := urlparse(u).hostname)),
             versions=frozenset(docs_version(u) for u in urls),
+            spaces=frozenset(_space(u) for u in urls if _space(u)[1]),
         )
 
     @classmethod
@@ -191,18 +215,35 @@ class OfficialDocs:
         base = cls.from_urls(urls)
         requested = {normalize_url(u) for u in urls}
         hosts, versions = set(base.hosts), set(base.versions)
+        spaces = set(base.spaces)
         for page in pages:
             if not page.final_url or normalize_url(page.url) not in requested:
                 continue
             if host := urlparse(page.final_url).hostname:
                 hosts.add(host)
+                if (space := _space(page.final_url))[1]:
+                    spaces.add(space)
             landed = docs_version(page.final_url)
             if _is_current(docs_version(page.url)) or landed in base.versions:
                 versions.add(landed)
-        return cls(hosts=frozenset(hosts), versions=frozenset(versions))
+        return cls(
+            hosts=frozenset(hosts),
+            versions=frozenset(versions),
+            spaces=frozenset(spaces),
+        )
 
     def on_host(self, url: str) -> bool:
-        return (urlparse(url).hostname or "") in self.hosts
+        """On a requested docs host, inside the requested project's space
+        when the host is shared (a community post or a fork is not)."""
+        host, space = _space(url)
+        if host not in self.hosts:
+            return False
+        if host not in SHARED_HOSTS:
+            return True
+        return any(
+            h == host and (space == s or space.startswith(s + "/"))
+            for h, s in self.spaces
+        )
 
     def covers(self, url: str) -> bool:
         if not self.on_host(url):

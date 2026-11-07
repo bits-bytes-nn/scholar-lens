@@ -1606,3 +1606,17 @@ def test_a_rejected_brave_key_marks_the_provider_exhausted(monkeypatch, status) 
     monkeypatch.setattr(web_research.httpx, "get", reject)
     provider = BraveSearchProvider(api_key="k")
     assert provider.search("q") == [] and provider.exhausted
+
+
+def test_official_docs_on_a_shared_host_cover_only_the_projects_space() -> None:
+    from scholar_lens.src.web_research import OfficialDocs, docs_version
+
+    hf = OfficialDocs.from_urls(["https://huggingface.co/docs/peft/index"])
+    assert hf.covers("https://huggingface.co/docs/peft/quicktour")
+    assert not hf.on_host("https://huggingface.co/blog/someuser/peft-tricks")
+    gh = OfficialDocs.from_urls(["https://github.com/vllm-project/vllm"])
+    assert gh.covers("https://github.com/vllm-project/vllm/blob/main/README.md")
+    assert not gh.on_host("https://github.com/someone/vllm")
+    docs = OfficialDocs.from_urls(["https://docs.x.dev/en/latest/start.html"])
+    assert docs.covers("https://docs.x.dev/en/latest/serving/api.html")
+    assert docs_version("https://papers.x.org/papers/2106.09685") is None

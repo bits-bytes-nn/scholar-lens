@@ -69,7 +69,8 @@ class Resources(_Section):
     default_region_name: str = Field(default="ap-northeast-2")
     bedrock_region_name: str = Field(default="us-west-2")
     s3_bucket_name: str | None = Field(default=None)
-    s3_prefix: str = Field(default="scholar-lens")
+    # Keys are built as "<prefix>/…"; the job role's IAM scope is the same.
+    s3_prefix: str = Field(default="scholar-lens", pattern=r"^[^/](?:.*[^/])?$")
     vpc_id: str | None = Field(default=None)
     subnet_ids: list[str] | None = Field(default=None)
     email_address: EmailStr | None = Field(default=None)

@@ -31,7 +31,7 @@ from ..application.usage import cost_allocation
 from ..configs import Config
 from ..domain.conventions import BlogPost, PostConventions, tag_counts
 from ..domain.tags import format_tag
-from ..domain.validation import PostValidationError
+from ..domain.validation import PAPER_KINDS, PostValidationError
 from .constants import RUN_SECRETS, EnvVars, LocalPaths, S3Paths, SSMParams
 from .formatting import with_spec_cover
 from .jobs import JobRequest, JobResult, ssm_base, write_result_manifest
@@ -377,6 +377,11 @@ async def publish_artifact(
         # and the job result for runs without a PR.
         warnings=list(request.validation_warnings),
     )
+    if create_pr and not context.config.resources.github.enabled:
+        outcome.warnings.append(
+            "No blog PR: resources.github.enabled is false (pass --no-pr to "
+            "skip this note)."
+        )
     if create_pr and context.config.resources.github.enabled:
         try:
             outcome.pr_url = await publisher.create_pull_request(request, markdown_path)
@@ -459,6 +464,19 @@ async def _run_pipeline(
     from .paper_pipeline import run_paper_pipeline
 
     return await run_paper_pipeline(context, request, tracker)
+
+
+def check_post_type(
+    spec: PostConventions, category: str, setting: str, *, artifact: str
+) -> None:
+    """Fail before any model call when ``resources.github.<setting>`` cannot
+    label the post (publishing would reject it after the paid work)."""
+    paper = artifact in PAPER_KINDS
+    if problem := spec.type_problem(category, paper=paper, artifact=artifact):
+        raise ValueError(
+            f"resources.github.{setting}: {problem}. Set it to one of the blog's "
+            "types or add the type to the blog's _data/post_conventions.yml."
+        )
 
 
 def run_job(request: JobRequest, *, job_id: str | None = None) -> JobResult:

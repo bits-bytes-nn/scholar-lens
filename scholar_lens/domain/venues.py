@@ -55,6 +55,29 @@ _CANONICAL = [
 _CANONICAL_RES = [(re.compile(p, re.IGNORECASE), name) for p, name in _CANONICAL]
 
 
+# Words a proceedings title wraps a venue's name in ("Proceedings of the 41st
+# International Conference on Machine Learning, Volume 1: Long Papers").
+_FILLER = frozenset(
+    "proceedings of the annual meeting conference international joint ieee acm "
+    "cvf usenix aaai on in and volume long short papers main track advances "
+    "symposium sp".split()
+)
+_WORDS = re.compile(r"[^\W\d_]+")
+
+
+def _qualified(text: str, pattern: re.Pattern[str]) -> bool:
+    """Whether the name says more than the matched venue: another event
+    built on it ("Workshop", "Transactions of", "Pacific-Asia", "European",
+    "and Applications", "Symposium Series"). Such a name is shown as it is,
+    not as the main venue."""
+    rest = pattern.sub(" ", text)
+    words = [w for w in _WORDS.findall(rest.casefold()) if not _ORDINAL.fullmatch(w)]
+    return any(w not in _FILLER for w in words)
+
+
+_ORDINAL = re.compile(r"st|nd|rd|th")
+
+
 _FINDINGS_OF = re.compile(r"\b(NAACL|EMNLP|EACL|AACL|ACL)\b")
 
 
@@ -70,7 +93,7 @@ def venue_name(name: str | None) -> str | None:
         conf = _FINDINGS_OF.search(after)
         return f"Findings of {conf.group(1) if conf else 'ACL'}"
     for pattern, canonical in _CANONICAL_RES:
-        if pattern.search(text):
+        if pattern.search(text) and not _qualified(text, pattern):
             return canonical
     if _NOT_A_VENUE.search(text):
         return None

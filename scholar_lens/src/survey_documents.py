@@ -15,7 +15,8 @@ from pathlib import Path
 
 import pymupdf
 
-from ..adapters.aws.storage import S3Handler
+from ..adapters.aws.storage import S3Handler, S3OperationError
+from ..adapters.retry import is_access_error
 from ..adapters.scholarly.index import OpenAlexIndex
 from ..domain.evidence import SourceDocument
 from ..domain.survey.plan import PlanPaper, unversioned_arxiv_id
@@ -96,8 +97,11 @@ class PaperDocuments:
         return None
 
     def _pdf(self, paper: PlanPaper, url: str) -> SourceDocument | None:
-        source = PdfUrlSource(url)
+        source = None
         try:
+            # A malformed or non-public URL (an index's pdf_url) is one
+            # paper's missing PDF, not the survey's failure.
+            source = PdfUrlSource(url)
             with tempfile.TemporaryDirectory() as tmp:
                 path = source.download_pdf(Path(tmp))
                 with pymupdf.open(path) as pdf:
@@ -110,7 +114,8 @@ class PaperDocuments:
             logger.warning("Could not read the PDF of %s (%s): %s", paper.id, url, e)
             return None
         finally:
-            source.close()
+            if source is not None:
+                source.close()
         text = "\n\n".join(pages)
         if len(text) < 2_000:  # a scanned or empty PDF
             return None
@@ -145,4 +150,11 @@ class EvidenceTextStore:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8")
         if self.s3_handler is not None:
-            self.s3_handler.put_text(f"{self.s3_prefix}/{key}", text)
+            try:
+                self.s3_handler.put_text(f"{self.s3_prefix}/{key}", text)
+            except S3OperationError as e:
+                # A cache write is not the run's work: the evidence is in hand
+                # (and on disk); a refused permission is still raised.
+                if is_access_error(e):
+                    raise
+                logger.warning("Could not cache evidence %s in S3: %s", key, e)

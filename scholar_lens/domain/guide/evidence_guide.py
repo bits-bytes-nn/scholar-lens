@@ -13,7 +13,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..evidence import EvidenceLedger, SourceDocument
-from ..evidence_draft import MARKER, drop_empty_headings, prose_sentences
+from ..evidence_draft import MARKER, block_lines, drop_empty_headings, prose_sentences
 from ..lengths import DEPTH_CHARS, scaled_targets
 
 GuideKind = Literal[
@@ -318,10 +318,23 @@ def name_sources(markdown: str, titles: Mapping[str, str]) -> str:
     )
 
 
+_MARKER_RUN = re.compile(r"[ \t]*" + MARKER.pattern, MARKER.flags)
+_ONLY_PUNCTUATION = re.compile(r"^[ \t]*[.,]?[ \t]*$")
+
+
 def strip_markers(markdown: str) -> str:
     """The body without evidence markers (a guide lists its sources at the
     end instead of citing each sentence), and without the lines and headings
     that only held markers."""
-    out = re.sub(r"[ \t]*" + MARKER.pattern, "", markdown)
-    out = re.sub(r"^[ \t]*[.,]?[ \t]*$\n?", "\n", out, flags=re.M)
-    return drop_empty_headings(re.sub(r"\n{3,}", "\n\n", out)).rstrip() + "\n"
+    out: list[str] = []
+    for line, role in zip(markdown.split("\n"), block_lines(markdown), strict=True):
+        if role == "code":  # a "." tree root or double blank lines stay
+            out.append(line)
+            continue
+        bare = _MARKER_RUN.sub("", line)
+        if bare != line and _ONLY_PUNCTUATION.match(bare):
+            bare = ""
+        if not bare.strip() and out and not out[-1].strip():
+            continue  # one blank line between prose blocks
+        out.append(bare)
+    return drop_empty_headings("\n".join(out)).rstrip() + "\n"

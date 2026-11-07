@@ -83,6 +83,11 @@ async def write_paper_with_evidence(
         lengths = (scfg.min_total_chars, scfg.max_total_chars)
         max_sections, chars_per_reader = 6, 40_000
         max_cost = scfg.max_cost_usd
+    # The review plans at the configured planning effort; a summary's short
+    # outline at high.
+    planning_effort = (
+        context.config.explanation.planning_effort if post == "review" else "high"
+    )
     effort = (
         context.config.explanation.thinking_effort
         if post == "review"
@@ -92,7 +97,7 @@ async def write_paper_with_evidence(
         context.bedrock_boto_session,
         {
             "read": role_model(context, reader_id, effort, False),
-            "outline": role_model(context, outline_id, "high", True),
+            "outline": role_model(context, outline_id, planning_effort, True),
             "write": dataclasses.replace(
                 role_model(context, writer_id, effort, True),
                 fallback=role_model(context, reader_id, effort, True),

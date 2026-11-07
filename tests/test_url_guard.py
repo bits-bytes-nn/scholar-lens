@@ -285,3 +285,20 @@ def test_pinned_requests_adapter_upgrades_http_to_https(
     response = pt.PinnedRequestsAdapter().send(prepared)
     assert captured["url"] == "https://93.184.216.34/a.pdf"
     assert response.url == "https://papers.example.com/a.pdf"
+
+
+def test_hosts_sharing_a_pinned_ip_never_share_a_connection_pool() -> None:
+    import requests
+
+    import scholar_lens.adapters.http.pinned_transport as pt
+
+    transport = pt.PinnedHTTPTransport()
+    assert transport._pool("flask.example.com") is not transport._pool(
+        "click.example.com"
+    )
+    assert transport._pool("flask.example.com") is transport._pool("flask.example.com")
+    adapter = pt.PinnedRequestsAdapter()
+    adapter._local.server_hostname = "click.example.com"
+    request = requests.Request("GET", "https://93.184.216.34/a").prepare()
+    _, pool_kwargs = adapter.build_connection_pool_key_attributes(request, True)
+    assert pool_kwargs["server_hostname"] == "click.example.com"

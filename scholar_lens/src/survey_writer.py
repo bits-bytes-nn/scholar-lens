@@ -75,6 +75,7 @@ from .runtime import (
     ROOT_DIR,
     PipelineOutcome,
     RunContext,
+    check_post_type,
     find_published_post,
     load_translation_guideline,
     publish_artifact,
@@ -457,12 +458,7 @@ async def run_survey_write_pipeline(
     cfg = context.config.survey
     github = context.config.resources.github
     spec = context.require_conventions()
-    if github.survey_category not in spec.types:
-        raise ValueError(
-            f"The blog's post conventions have no '{github.survey_category}' type "
-            f"(types: {', '.join(spec.types)}): add it to the blog's "
-            "_data/post_conventions.yml or set resources.github.survey_category."
-        )
+    check_post_type(spec, github.survey_category, "survey_category", artifact="survey")
     text = await asyncio.to_thread(
         read_plan_text, request.plan or "", context.s3_handler
     )

@@ -42,7 +42,7 @@ DATACITE_MAX_IDS = 50
 _TIMEOUT = 30.0
 _OPENALEX_FIELDS = (
     "id,doi,title,authorships,publication_date,primary_location,locations,"
-    "cited_by_count,abstract_inverted_index,referenced_works"
+    "cited_by_count,abstract_inverted_index,referenced_works,best_oa_location"
 )
 # DOIs looked up per OpenAlex request (an OR filter, one page).
 OPENALEX_MAX_DOIS = 50

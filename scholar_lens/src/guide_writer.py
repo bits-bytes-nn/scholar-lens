@@ -111,9 +111,12 @@ def official_repositories(
     if not counts:
         return set()
     top = max(counts.values())
-    # Linked from at least half as many pages as the most linked one, and
-    # from more than one page when several docs pages were read.
-    floor = max(2 if len(pages) > 2 else 1, (top + 1) // 2)
+    # Linked from at least half as many official pages as the most linked
+    # one, and from more than one when several official pages were read.
+    official_pages = sum(
+        _AUTHORITY.get(source_label(p, official)) == "official" for p in pages
+    )
+    floor = max(2 if official_pages > 2 else 1, (top + 1) // 2)
     return {repo for repo, n in counts.items() if n >= floor}
 
 

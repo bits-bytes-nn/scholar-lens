@@ -745,8 +745,11 @@ def main() -> None:
         )
         account_id = get_account_id(deploy_session(config))
         env_vars = {
-            EnvVars.LANGCHAIN_TRACING_V2.value: os.getenv(
-                EnvVars.LANGCHAIN_TRACING_V2.value, "false"
+            # Tracing sends prompts (paper and blog text) to LangSmith: Batch
+            # traces only when the deployer opts in for the stack explicitly,
+            # never because tracing is on in the deploying shell.
+            EnvVars.LANGCHAIN_TRACING_V2.value: (
+                "true" if os.getenv("SCHOLAR_LENS_BATCH_TRACING") == "true" else "false"
             ),
             EnvVars.LANGCHAIN_ENDPOINT.value: os.getenv(
                 EnvVars.LANGCHAIN_ENDPOINT.value, ""
