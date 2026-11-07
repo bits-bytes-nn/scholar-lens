@@ -108,7 +108,7 @@ poetry run python -m scholar_lens costs --since 2026-11-01 --by stage --billed  
 | `--no-pr` | review, summarize, guide, survey write | Save (and upload) the post but open no PR |
 | `--remote` | review, summarize, guide, survey plan, survey write | Submit to AWS Batch and return the job id |
 | `--wait`, `--timeout S` | status | Poll until the job finishes or `S` seconds pass (default 14400, four hours) |
-| `--since D`, `--until D`, `--by kind\|stage\|model\|day`, `--billed` | costs | Group the Batch runs that finished in `[since, until)` (UTC days) by kind, stage, model or day from their result manifests, with what failed runs spent; `--billed` adds Cost Explorer's cost of resources tagged `ProjectName=scholar-lens` (the stack and the per-kind Bedrock inference profiles); activate `ProjectName` (and `Kind`) as cost allocation tags in Billing first |
+| `--since D`, `--until D`, `--by kind\|stage\|model\|day`, `--billed` | costs | Group the Batch runs that finished in `[since, until)` (UTC days) by kind, stage, model or day from their result manifests, with what failed runs spent; `--billed` adds Cost Explorer's cost of resources tagged `ProjectName=<resources.project_name>` (the stack and the per-kind Bedrock inference profiles); activate `ProjectName` (and `Kind`) as cost allocation tags in Billing first |
 
 `survey plan` writes no post: its `JobResult` carries `plan_path` (local `papers/survey-<slug>/plan.json`; empty for a `--remote` run, whose container is gone) and `s3_uri` (its S3 copy, the one to pass to `survey write --plan` after a remote run). Edit the plan (drop, add or move papers, change roles, rename lineages) and pass it to `survey write --plan`; a rerun of the plan stage keeps a plan that differs as `plan.<UTC time>.json`. A paper added by hand needs only `id` (arXiv id or URL, or DOI), `lineage` and `role`; the write stage fills in its title, authors, year and URL. A reference added by hand needs only `url` (its `kind`, `paper` for an arXiv or doi.org link and `article` otherwise, follows from it); only articles are read by the write stage. A plan needs at least one `core` paper. Each paper's evidence is cached (local `papers/survey-evidence/`, S3 `<s3_prefix>/surveys/evidence/`) by paper, text hash, reader version, model, language, role and source kind, so a rerun or another survey of the same papers reuses it. The plan's fields and the write stage are described in the [design reference](./docs/design.md#43-논문-서베이).
 
@@ -134,6 +134,8 @@ poetry run python scripts/put_secrets.py github-token   # after rotating one sec
 ```
 
 Batch jobs use the `config.yaml` baked into the image at the last deploy, so re-run `cdk deploy` after editing it ([stack details](./docs/design.md#10-인프라)).
+
+Batch jobs never trace to LangSmith because tracing is on in the deploying shell: set `SCHOLAR_LENS_BATCH_TRACING=true` when running `cdk deploy` to turn on `LANGCHAIN_TRACING_V2` for the jobs (prompts then carry paper and blog text to LangSmith).
 
 The stack's hourly cost alarm covers Batch runs only: local runs send no CloudWatch metrics, so check their `estimated_cost_usd` in the printed result ([alarms](./docs/design.md#11-관측성)).
 

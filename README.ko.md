@@ -108,7 +108,7 @@ poetry run python -m scholar_lens costs --since 2026-11-01 --by stage --billed  
 | `--no-pr` | review, summarize, guide, survey write | 글은 저장(·업로드)하되 PR은 열지 않습니다 |
 | `--remote` | review, summarize, guide, survey plan, survey write | AWS Batch에 제출하고 작업 ID를 돌려줍니다 |
 | `--wait`, `--timeout S` | status | 작업이 끝나거나 `S`초가 지날 때까지 조회합니다(기본값 14400초, 4시간) |
-| `--since D`, `--until D`, `--by kind\|stage\|model\|day`, `--billed` | costs | `[since, until)`(UTC 날짜)에 끝난 Batch 실행을 결과 매니페스트로 종류·단계·모델·날짜별로 묶고 실패한 실행의 비용도 보여 줍니다. `--billed`는 `ProjectName=scholar-lens` 태그가 붙은 리소스(스택과 종류별 Bedrock 추론 프로필)의 Cost Explorer 청구액을 더합니다. 먼저 Billing 콘솔에서 `ProjectName`(과 `Kind`)을 비용 할당 태그로 활성화해야 합니다 |
+| `--since D`, `--until D`, `--by kind\|stage\|model\|day`, `--billed` | costs | `[since, until)`(UTC 날짜)에 끝난 Batch 실행을 결과 매니페스트로 종류·단계·모델·날짜별로 묶고 실패한 실행의 비용도 보여 줍니다. `--billed`는 `ProjectName=<resources.project_name>` 태그가 붙은 리소스(스택과 종류별 Bedrock 추론 프로필)의 Cost Explorer 청구액을 더합니다. 먼저 Billing 콘솔에서 `ProjectName`(과 `Kind`)을 비용 할당 태그로 활성화해야 합니다 |
 
 `survey plan`은 글을 쓰지 않습니다. `JobResult`의 `plan_path`(로컬 `papers/survey-<slug>/plan.json`. `--remote` 실행은 컨테이너가 사라지므로 비어 있음)와 `s3_uri`(S3 사본. 원격 실행 뒤에는 이 값을 `survey write --plan`에 넘김)가 계획 파일입니다. 계획을 고친 뒤(논문 빼기·더하기·옮기기, 역할 바꾸기, 계보 이름 바꾸기) `survey write --plan`에 넘깁니다. 계획 단계를 다시 실행하면 내용이 다른 기존 계획은 `plan.<UTC 시각>.json`으로 남습니다. 손으로 더하는 논문은 `id`(arXiv ID나 URL, 또는 DOI), `lineage`, `role`만 있으면 되고, 제목·저자·연도·URL은 쓰기 단계가 채웁니다. 손으로 더하는 참고 자료는 `url`만 있으면 되고 `kind`는 URL로 정합니다(arXiv·doi.org 링크는 `paper`, 나머지는 `article`). 쓰기 단계는 `article`만 읽습니다. 계획에는 `core` 논문이 하나 이상 있어야 합니다. 논문마다 기록한 근거는 논문, 원문 해시, 읽기 버전, 모델, 언어, 역할, 원문 종류별로 캐시하므로(로컬 `papers/survey-evidence/`, S3 `<s3_prefix>/surveys/evidence/`) 다시 실행하거나 같은 논문을 다루는 다른 서베이가 재사용합니다. 계획 필드와 쓰기 단계는 [설계 문서](./docs/design.md#43-논문-서베이)에 있습니다.
 
@@ -134,6 +134,8 @@ poetry run python scripts/put_secrets.py github-token   # 비밀값 하나를 �
 ```
 
 Batch 작업은 마지막 배포 때 이미지에 넣은 `config.yaml`을 쓰므로, 설정을 고치면 `cdk deploy`를 다시 실행합니다([스택 상세](./docs/design.md#10-인프라)).
+
+Batch 작업은 배포하는 셸에서 추적이 켜져 있다는 이유만으로 LangSmith에 추적을 보내지 않습니다. 작업에서 `LANGCHAIN_TRACING_V2`를 켜려면 `cdk deploy` 때 `SCHOLAR_LENS_BATCH_TRACING=true`를 설정합니다(이 경우 프롬프트에 담긴 논문·블로그 본문이 LangSmith로 갑니다).
 
 스택의 1시간 비용 경보는 Batch 실행만 다룹니다. 로컬 실행은 CloudWatch 지표를 보내지 않으므로 출력된 결과의 `estimated_cost_usd`로 비용을 확인합니다([경보](./docs/design.md#11-관측성)).
 
