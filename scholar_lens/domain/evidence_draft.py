@@ -541,44 +541,31 @@ def quote_for_prompt(quote: str) -> str:
     return re.sub(r"<(/?)([A-Za-z_][\w-]*)", r"‹\1\2", " ".join(quote.split()))
 
 
-def _loose(text: str) -> str:
-    return " ".join(text.split())
+_BARE_ITEM = re.compile(r"^[ \t]*(?:[-*+]|\d+[.)])[ \t]*$")
+MAX_EDITS = 30
 
 
 def apply_edits(
     markdown: str, edits: Sequence[tuple[str, str]]
-) -> tuple[str, list[str]]:
-    """``markdown`` with each (find, replace) edit applied where ``find``
-    occurs exactly once (verbatim, else with whitespace collapsed on one
-    line); an empty ``replace`` deletes. Returns the text and the ``find``
-    texts that matched nowhere or more than once (not applied). A minimal
-    edit leaves every other sentence, table and code block as it was."""
-    failed: list[str] = []
-    for find, replace in edits:
-        if not find.strip():
-            continue
-        if markdown.count(find) == 1:
-            markdown = markdown.replace(find, replace, 1)
-            continue
-        lines = markdown.split("\n")
-        hits = [
-            i
-            for i, line in enumerate(lines)
-            if _loose(find) and _loose(find) in _loose(line)
-        ]
-        if len(hits) == 1 and markdown.count(find) == 0:
-            i = hits[0]
-            line = _loose(lines[i])
-            lines[i] = (
-                line.replace(_loose(find), _loose(replace), 1)
-                if replace.strip()
-                else line.replace(_loose(find), "", 1)
-            )
-            if not lines[i].strip():
-                del lines[i]
-            markdown = "\n".join(lines)
-            continue
-        failed.append(find)
-    markdown = "\n".join(line.rstrip() for line in markdown.split("\n"))
-    markdown = re.sub(r"\n{3,}", "\n\n", markdown)
-    return drop_empty_headings(markdown), failed
+) -> tuple[str, int, list[str]]:
+    """``markdown`` with the (find, replace) edits whose ``find`` occurs
+    exactly once applied in order (an empty ``replace`` deletes), with the
+    guards of the review editor: no edit may unbalance a code fence, change
+    a ``## `` heading, remove the only copy of a figure, equation or table,
+    or add a writing-rule slip. Returns the text, the number applied and why
+    the others were skipped. A list item an edit emptied goes with its
+    marker; nothing else is touched."""
+    from .review_plan import Edit
+    from .review_plan import apply_edits as guarded
+
+    text, applied, skipped = guarded(
+        markdown, [Edit(find=f, replace=r) for f, r in edits], max_edits=MAX_EDITS
+    )
+    lines = text.split("\n")
+    roles = block_lines(text)
+    kept = [
+        line
+        for line, role in zip(lines, roles, strict=True)
+        if not (role == "prose" and _BARE_ITEM.match(line))
+    ]
+    return "\n".join(kept), applied, skipped

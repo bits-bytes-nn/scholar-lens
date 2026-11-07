@@ -251,6 +251,8 @@ CLAIM_SCOPE: str = """
   cause or reason, a comparison, a scope or frequency word such as "always",
   "every", "only", "most", "both SDKs"). The item is supported only when
   every atomic claim is; list the ones that are not in `unsupported_parts`.
+  Never list background a competent reader knows, the post's judgement
+  marked as its own, or an [[EX]] illustration as a part.
 - A sentence saying a source does not state, show, report, define or give
   something is unsupported unless a cited item quotes the source saying so:
   the writer saw only parts of the sources.

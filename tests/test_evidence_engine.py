@@ -919,6 +919,8 @@ def test_a_fixs_notes_never_reach_the_section() -> None:
     )
     fixed = asyncio.run(writer._fix("## A\n\n본문입니다.\n", [], ["x"]))
     assert fixed == "## A\n\n고친 본문입니다.\n" and "반영하지" not in fixed
+    # The edit that matched nothing is on the PR checklist; the rewrite stood in.
+    assert any("not applied" in n for n in writer.notes)
     writer.model = Model(ValueError("no valid FixedSection"))  # type: ignore[assignment]
     assert asyncio.run(writer._fix("## A\n\n본문입니다.\n", [], ["x"])) == (
         "## A\n\n본문입니다.\n"
@@ -1065,16 +1067,27 @@ def test_edits_change_only_the_named_passages() -> None:
     from scholar_lens.domain.evidence_draft import apply_edits
 
     md = (
-        "## A\n\n첫 문장입니다 [[E1]]. 둘째 문장입니다.\n\n| a | b |\n| --- | --- |\n"
-        "| 1 | 2 |\n\n```python\nx = 1\n```\n"
+        "## A\n\n첫 문장입니다 [[E1]]. 둘째 문장입니다.\n\n- 지울 항목\n- 남는 항목\n\n"
+        "| a | b |\n| --- | --- |\n| 1 | 2 |\n\n```python\nclass C:\n    x = 1\n\n\n"
+        "y = 2\n```\n"
     )
-    fixed, failed = apply_edits(
+    fixed, applied, skipped = apply_edits(
         md,
-        [("둘째 문장입니다.", ""), ("x = 1", "x = 2"), ("없는 문장", "y"), ("|", "!")],
+        [
+            (" 둘째 문장입니다.", ""),
+            ("    x = 1", "    x = 3"),
+            ("지울 항목", ""),
+            ("없는 문장", "y"),
+            ("|", "!"),
+            ("y = 2\n```", "y = 2"),
+        ],
     )
-    assert "둘째" not in fixed and "x = 2" in fixed and "| 1 | 2 |" in fixed
-    assert "첫 문장입니다 [[E1]].\n" in fixed  # no trailing space left
-    assert failed == ["없는 문장", "|"]  # absent, and not unique
+    assert applied == 3
+    assert "첫 문장입니다 [[E1]].\n" in fixed and "    x = 3\n\n\ny = 2" in fixed
+    assert "- 남는 항목" in fixed and "\n-\n" not in fixed and "| 1 | 2 |" in fixed
+    # Absent, not unique, and a fence the edit would leave open: skipped.
+    assert len(skipped) == 3 and any("fence" in r for r in skipped)
+    assert fixed.count("```") == 2
 
 
 def test_an_unsupported_atomic_part_makes_the_item_unsupported() -> None:

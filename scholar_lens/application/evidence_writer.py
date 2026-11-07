@@ -231,14 +231,12 @@ POST_SO_FAR_CHARS = 60_000
 
 def post_so_far(sections: Sequence[str], limit: int = POST_SO_FAR_CHARS) -> str:
     """The sections already written, in order, as the next section's writer
-    reads them (evidence markers kept: what is cited is visible), the most
-    recent kept whole when the post outgrows ``limit``."""
-    text = "\n\n".join(md.strip() for md in sections if md.strip())
-    if not text:
-        return ""
-    if len(text) > limit:
-        text = "[…]\n" + text[-limit:]
-    return block("post_so_far", text)
+    reads them (evidence markers kept: what is cited is visible); when the
+    post outgrows ``limit`` its earliest sections are left out whole."""
+    kept = [md.strip() for md in sections if md.strip()]
+    while kept and sum(map(len, kept)) > limit:
+        kept.pop(0)
+    return block("post_so_far", "\n\n".join(kept)) if kept else ""
 
 
 def _kept(answer: str) -> str:
@@ -586,14 +584,16 @@ class EvidenceWriter:
         written from the claims alone (quoted text can derail the model):
         the prompt's ``<evidence>`` block, holding ``evidence`` (``own``
         unless given), is swapped for their claims. ``context`` (the post
-        so far) goes before the cache point."""
+        so far) leads the prompt: it changes every section, so a cache
+        write would cost more than it saves."""
+        if context:
+            prompt = f"{context}\n\n{prompt}"
         with usage_stage("draft"):
             text = _kept(
                 await self.model.text(
                     role="write",
                     system=self.prompts.writer,
                     prompt=prompt,
-                    context=context,
                 )
             )
             if (own or evidence) and (
@@ -608,7 +608,6 @@ class EvidenceWriter:
                     await self.model.text(
                         role="write",
                         system=self.prompts.writer,
-                        context=context,
                         prompt=prompt
                         + "\n\nYour previous answer was too short or empty. "
                         + retry_hint
@@ -624,7 +623,6 @@ class EvidenceWriter:
                     await self.model.text(
                         role="write",
                         system=self.prompts.writer,
-                        context=context,
                         prompt=_EVIDENCE_BLOCK.sub(
                             lambda _m: block("evidence", claim_lines(evidence or own)),
                             prompt,
@@ -830,37 +828,40 @@ class EvidenceWriter:
             try:
                 edits = await self.model.structured(
                     role="write",
-                    system=self.prompts.fix + EDIT_ANSWER,
+                    system=self.prompts.fix,
                     schema=SectionEdits,
                     # The evidence and passages repeat across a section's
-                    # fixes; only the draft and its problems change.
+                    # fixes (and its fallback): only what follows changes.
                     context=context,
-                    prompt=prompt,
+                    prompt=prompt + "\n\n" + EDIT_ANSWER,
                 )
             except ValueError as e:
                 logger.warning("Edit answer unusable (%s); asking for the section.", e)
                 edits = None
             if edits is not None:
-                fixed, failed = apply_edits(
+                fixed, applied, skipped = apply_edits(
                     draft, [(e.find, e.replace) for e in edits.edits]
                 )
                 self._writer_notes(heading, edits.notes)
-                if not edits.edits or len(failed) < len(edits.edits):
-                    if failed:
-                        logger.info(
-                            "%d of %d edits of %r matched nothing.",
-                            len(failed),
-                            len(edits.edits),
-                            heading,
-                        )
+                if skipped:
+                    self.notes.append(
+                        f"Section '{heading}': {len(skipped)} edit(s) not applied: "
+                        + " | ".join(skipped[:3])
+                    )
+                if applied:
                     return strip_revision_notes(fixed, draft)
+                logger.info(
+                    "No edit of %r applied (%d proposed); asking for the section.",
+                    heading,
+                    len(edits.edits),
+                )
             try:
                 answer = await self.model.structured(
                     role="write",
-                    system=self.prompts.fix + FIX_ANSWER,
+                    system=self.prompts.fix,
                     schema=FixedSection,
                     context=context,
-                    prompt=prompt,
+                    prompt=prompt + "\n\n" + FIX_ANSWER,
                 )
             except ValueError as e:
                 logger.warning("Fix answer unusable (%s); the draft stands.", e)
