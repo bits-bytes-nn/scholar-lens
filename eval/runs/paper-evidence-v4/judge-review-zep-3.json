@@ -1,0 +1,265 @@
+{
+  "item": "review-zep",
+  "post": "/tmp/eval-paper/review-zep-v4.md",
+  "source": "https://arxiv.org/html/2501.13956v1",
+  "sampling": "100 body paragraphs (same segmentation); paragraphs 3,6,9,...,99 read; claims drawn from them",
+  "scores": {
+    "A": 7.5,
+    "B": 7.5,
+    "C": 7,
+    "D": 7.5,
+    "E": 8,
+    "F": 7
+  },
+  "type_scores": {
+    "R1": 8.5,
+    "R2": 7.5,
+    "R3": 8
+  },
+  "deductions": {
+    "A": [
+      "L96-102 restarts the graph definition right after L56-62: 'G=(N,E,phi)' is displayed twice (L58 and L98-100) and the node tiers are re-listed at L102",
+      "L48 '여기에 더해진 핵심이 시간 축입니다. 민지 예시라면 두 메시지는 각각 원문 그대로 에피소드로 보존됩니다.' is a dangling bridge: the second sentence says nothing about time",
+      "Front matter complete (subtitle, paper_author 'Zep AI', paper_doi, two-level categories, use_math true, no author key); no body H1, no skipped levels"
+    ],
+    "B": [
+      "L102 '세 번째 요소 $$\\phi$$의 역할은 이 근거에서 따로 설명되지 않습니다' pipeline meta language ('이 근거') in reader-facing prose",
+      "L126 '임베딩 검색은 이름 벡터의 코사인 유사도로, 전문 검색은 이름과 요약의 텍스트로 후보를 찾습니다. 전문 검색은 그 반대입니다.' incoherent; rewrite: '임베딩 검색은 표기가 달라도 뜻이 같은 이름을, 전문 검색은 이름이나 요약에 같은 단어가 있는 후보를 찾습니다.' (and this rationale is the writer's, not the paper's)",
+      "7 x '할 수 있습니다', some for what simply happens (L134 '여러 번 추출할 수도 있습니다', L187 'LLM이 ... 모순을 감지할 수 있습니다')",
+      "L110 '엔티티 단계의 구체적 설정값을 모으면 다음과 같습니다.' formulaic table lead-in; L60 '결합 함수(incidence function)' is an unusual rendering (접속 함수)"
+    ],
+    "C": [
+      "L96-102 '두 단계가 채워 넣는 대상은 논문이 형식화한 ... 그래프입니다' re-introduces the graph as if new, and L102 contradicts L60 (phi defined there)",
+      "L120 the running example changes: '3월에 \"서울에 살아\"라고 말했고' vs L44/L152/L272 '3월 10일 ... \"지난달에 서울로 이사했어\"'",
+      "L80 '앞서 본 결합 함수 정의 덕분에 두 사실이 하나로 덮어쓰이지 않고' - the Seoul and Busan edges join different node pairs, so the multi-edge property L60 describes is not what keeps them apart",
+      "Cross-references are accurate (L187 points to the dedup section, L305 to the retrieval walk-through, L84 to L46)"
+    ],
+    "D": [
+      "Well placed: four-timestamp before/after table L189-198 (labelled hypothetical), label-propagation neighbour vote L212-220, retrieval walk-through L272",
+      "Running example over-used: '민지' 47 times; L305 and L350 retell it without adding anything; L74 and L80 add little over L44",
+      "L264 brief RRF/MMR definitions help a non-expert at the point of use"
+    ],
+    "E": [
+      "Tables copy Table 1-3 cells verbatim, one header row, equal cell counts; Table 3 shortened by whole rows (7 of 12)",
+      "Duplicate display formula L58 and L98-100",
+      "Hypothetical tables L191-196 and L214-218 are labelled as hypothetical; no paper figure numbering used"
+    ],
+    "F": [
+      "L102 '세 번째 요소 $$\\phi$$의 역할은 이 근거에서 따로 설명되지 않습니다' - wrong absence claim: Sec 2 defines phi: E->NxN as 'a formal incidence function' (the post itself says so at L60)",
+      "L297 heading '100분의 1 수준의 컨텍스트' - 1.6k/115k is about 1/72, not 1/100 (imprecise)",
+      "L126 states a reason for the two-way entity search ('서로 놓치는 경우가 다르기 때문') that the paper does not give",
+      "L254 '지원하는 재순위기는 다섯 가지입니다' - paper lists five but says 'supports existing reranking approaches such as RRF and MMR' (count is a mild overreach)"
+    ]
+  },
+  "principles": {
+    "claim_headings": {
+      "status": "met",
+      "evidence": "H2s are claim noun phrases (L36, L92, L144, L274 'DMR에서 MemGPT와 전체 대화 기준선을 근소하게 넘는 정확도', L297); a few topic H3s (L54 '그래프의 형식 정의', L154) and L346 '한계와 시사점'"
+    },
+    "running_example": {
+      "status": "met",
+      "evidence": "Minji's Seoul->Busan move L44 through extraction L120, dedup L142, timestamps L171/L189-198, retrieval L272, results L305/L344; overused and inconsistent at L120"
+    },
+    "mechanism_choice_formula_example": {
+      "status": "met",
+      "evidence": "Invalidation: problem L150, choice L158, rule L177-179, worked table L191-196; label propagation: choice L206, rule L210, example L212-220, trade-off L228"
+    },
+    "facts_once": {
+      "status": "not met",
+      "evidence": "graph definition L20/L58/L98; single-session-assistant drop L30, L326, L344, L357; 115k L17, L303, L318, L320, L360; 184% L30, L330, L335; community refresh trade-off L228 and L354"
+    },
+    "numbers_with_scope": {
+      "status": "partly met",
+      "evidence": "Numbers carry model and baseline (L29, L316, tables) and L342 says Delta is relative; but 15.2% (gpt-4o-mini) is never given and L297 '100분의 1' rounds 1/72"
+    },
+    "nothing_invented": {
+      "status": "partly met",
+      "evidence": "Hypotheticals labelled (L134, L189, L212); but L102 falsely says phi is undefined and L126 invents a rationale"
+    },
+    "writer_assessment_end": {
+      "status": "met",
+      "evidence": "L348 own verdict; L360 gaps (single LongMemEval baseline, ingestion cost unreported, LLM contradiction judgement); L362 when to use and when not"
+    },
+    "length_fit": {
+      "status": "partly met",
+      "evidence": "About 23k characters for a systems paper with three tables; repeated example and facts inflate it"
+    },
+    "type_shape": {
+      "status": "met",
+      "evidence": "TL;DR with four questions L14-32; no abstract/intro section; closing is judgement, future work only from the Conclusion"
+    },
+    "korean_style": {
+      "status": "partly met",
+      "evidence": "Natural 입니다 register; '이러한' 0, '즉' 0, '결국' 0; but meta '이 근거' L102, incoherent L126, '할 수 있습니다' x7"
+    }
+  },
+  "claims": {
+    "checked": 15,
+    "numbers": 9,
+    "supported": 15,
+    "unsupported": 0,
+    "wrong": 0,
+    "unverifiable": 0,
+    "examples": [
+      {
+        "line": 23,
+        "type": "number",
+        "claim": "Entity extraction uses the current message plus the previous 4 messages, with a reflection step",
+        "verdict": "supported",
+        "source": "Sec 2.2.1: 'n=4 ... reflection technique inspired by reflexion'"
+      },
+      {
+        "line": 46,
+        "type": "attribution",
+        "claim": "Separate episodic/semantic subgraphs from AriGraph; community nodes from GraphRAG; extends hierarchical RAG",
+        "verdict": "supported",
+        "source": "Sec 2: 'draws from similar approaches in AriGraph ... builds upon work from GraphRAG ... extends existing hierarchical RAG strategies'"
+      },
+      {
+        "line": 108,
+        "type": "attribution",
+        "claim": "Reflection inspired by reflexion to reduce hallucinations and improve coverage; entity summary for resolution and retrieval",
+        "verdict": "supported",
+        "source": "Sec 2.2.1"
+      },
+      {
+        "line": 136,
+        "type": "method",
+        "claim": "Edge dedup hybrid search limited to edges between the same entity pair",
+        "verdict": "supported",
+        "source": "Sec 2.2.2: 'constrained to edges existing between the same entity pairs as the proposed new edge'"
+      },
+      {
+        "line": 162,
+        "type": "number",
+        "claim": "Four timestamps stored on the edge with other fact information",
+        "verdict": "supported",
+        "source": "Sec 2.2.3: 'four timestamps ... stored on edges alongside other fact information'"
+      },
+      {
+        "line": 175,
+        "type": "method",
+        "claim": "LLM compares new edge with semantically related edges; temporally overlapping contradiction sets t_invalid(old) = t_valid(new)",
+        "verdict": "supported",
+        "source": "Sec 2.2.3"
+      },
+      {
+        "line": 228,
+        "type": "method",
+        "claim": "Incremental communities diverge from a full LP run; periodic refresh needed; heuristic cuts latency and LLM cost",
+        "verdict": "supported",
+        "source": "Sec 2.3"
+      },
+      {
+        "line": 240,
+        "type": "number",
+        "claim": "Search returns a 3-tuple of semantic edges, entity nodes, community nodes",
+        "verdict": "supported",
+        "source": "Sec 3: 'phi transforms a query into a 3-tuple containing lists of semantic edges, entity nodes, and community nodes'"
+      },
+      {
+        "line": 318,
+        "type": "number",
+        "claim": "Context 115k -> 1.6k tokens",
+        "verdict": "supported",
+        "source": "Table 2"
+      },
+      {
+        "line": 318,
+        "type": "number",
+        "claim": "Latency gpt-4o-mini 31.3 -> 3.20 s, gpt-4o 28.9 -> 2.58 s",
+        "verdict": "supported",
+        "source": "Table 2"
+      },
+      {
+        "line": 318,
+        "type": "number",
+        "claim": "Authors summarise as about 90% latency reduction; IQR gpt-4o 6.01 -> 0.684 s",
+        "verdict": "supported",
+        "source": "Sec 4.3.2; Table 2"
+      },
+      {
+        "line": 326,
+        "type": "number",
+        "claim": "gpt-4o-mini improved in four of six question types",
+        "verdict": "supported",
+        "source": "Sec 4.3.2: 'improvements in four of the six categories'"
+      },
+      {
+        "line": 342,
+        "type": "number",
+        "claim": "Preference gpt-4o 20.0->56.7 is +36.7 points; knowledge-update improved only with gpt-4o",
+        "verdict": "supported",
+        "source": "Table 3 (56.7-20.0=36.7); Sec 4.3.2"
+      },
+      {
+        "line": 350,
+        "type": "attribution",
+        "claim": "Conclusion claims SOTA on memory benchmarks, lower token cost and latency",
+        "verdict": "supported",
+        "source": "Sec 5: 'state-of-the-art performance on existing memory benchmarks while reducing token costs and operating at significantly lower latencies'"
+      },
+      {
+        "line": 360,
+        "type": "method",
+        "claim": "Absence claim: reported latency covers retrieval only; ingestion-stage cost not reported; authors call for traditional RAG benchmarks",
+        "verdict": "supported",
+        "source": "Sec 5: 'latency benchmarks for our retrieval mechanisms'; no ingestion cost/latency anywhere; 'traditional RAG capabilities should be evaluated against established benchmarks'"
+      }
+    ],
+    "outside_sample": [
+      "L102 wrong (phi is defined in Sec 2)",
+      "L126 unsupported rationale",
+      "L297 '100분의 1' imprecise (1.6k/115k is about 1/72)"
+    ]
+  },
+  "checklist": {
+    "repeated": 0,
+    "avoided": 6,
+    "na": 0,
+    "repeated_ids": [],
+    "items": [
+      {
+        "id": "inline-math-delimiters",
+        "result": "avoided",
+        "evidence": "No \\( \\) or \\[ \\] in the post; inline math is $$...$$ (e.g. L60)"
+      },
+      {
+        "id": "longmemeval-tldr-relative",
+        "result": "avoided",
+        "evidence": "L29 gives absolute accuracies '60.2%에서 71.2%로'; no %포인트; relative 15.2%/18.5% not stated in TL;DR"
+      },
+      {
+        "id": "longmemeval-results-relative",
+        "result": "avoided",
+        "evidence": "L316 '55.4%에서 63.8%로 ... 60.2%에서 71.2%로 ... 최대 18.5%로 보고'; no %포인트 (15.2% omitted, 'relative' not said for 18.5%)"
+      },
+      {
+        "id": "longmemeval-baseline-misattributed",
+        "result": "avoided",
+        "evidence": "L29 'gpt-4o 기준 정확도는 전체 컨텍스트 방식의 60.2%에서 71.2%로'"
+      },
+      {
+        "id": "longmemeval-185-arithmetic",
+        "result": "avoided",
+        "evidence": "L316 '논문은 기준선 대비 정확도 향상을 최대 18.5%로 보고합니다' marks 18.5% as the paper's figure"
+      },
+      {
+        "id": "missing-description",
+        "result": "avoided",
+        "evidence": "L8 starts 'Zep은', 120 chars, numbers 60.2/71.2/28.9/2.58 all in TL;DR L29"
+      }
+    ]
+  },
+  "extras": {
+    "absence_claims": "L102 says phi's role is not explained (wrong: Sec 2 defines it). L360 says ingestion-stage cost is not reported (correct: only retrieval latency is reported, Sec 5 'latency benchmarks for our retrieval mechanisms'). L360 'LongMemEval 비교 상대가 전체 컨텍스트 기준선 하나뿐' correct.",
+    "table_cells": "No blank, '-' or sentence cells; all cells short noun phrases or verbatim numbers",
+    "front_matter": "subtitle, paper_author 'Zep AI', paper_doi, two-level categories, use_math true, no author key; description 120 chars",
+    "tags_note": "7 tags; 'Agentic-AI' and 'Knowledge-Graph' generic alongside specific ones"
+  },
+  "top_issues": [
+    "Wrong absence claim and duplicate definition: L102 says phi's role 'is not explained in this evidence' (paper Sec 2 and the post's own L60 define it), after re-displaying the graph formula at L98",
+    "Incoherent and unsupported L126 ('전문 검색은 그 반대입니다') on why entity resolution uses two searches; running example altered at L120",
+    "Repetition: Minji example retold ~15 times (47 mentions), single-session-assistant drop four times, 115k five times; L297 heading rounds 1/72 to '100분의 1'"
+  ]
+}

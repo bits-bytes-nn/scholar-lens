@@ -1,0 +1,162 @@
+{
+  "kind": "guide",
+  "status": "succeeded",
+  "input": "https://strandsagents.com/docs/user-guide/sdk/agents/agent-loop/, https://strandsagents.com/docs/user-guide/sdk/agents/hooks/",
+  "title": "Strands Agents SDK: Model-Driven Agent Loop, Controls and Production",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/guide-strands-agents-sdk-model-driven-agent-loop-controls-and-production/2026-11-07-strands-agents-sdk-model-driven-agent-loop-controls-and-production.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-11-07-strands-agents-sdk-model-driven-agent-loop-controls-and-production.md",
+  "pr_url": null,
+  "warnings": [
+    "Section '스키마를 도구로 바꿔 검증 오류를 모델에게 되돌리는 구조화 출력' still has: a deep section needs at least 2 visuals (its figures, an equation, or a small table from its number evidence)",
+    "Section '훅 이벤트 위에 타입 있는 결정을 얹은 개입 계층': the writer could not fix: 러닝 예제의 Confirm 승인 흐름은 인터럽트로 멈췄다가 인터럽트 응답으로 재개하는 방식으로만 설명했습니다. 근거 자료에 `HumanInTheLoop`라는 API의 이름, 시그니처, 동작이 없고, 이 섹션의 code_defined_earlier에도 들어 있지 않아서 그 이름으로는 연결하지 못했습니다. `Agent(..., hooks=[...])` 연결 문장에는 원래 쓰던 [[E113]]을 그대로 붙였습니다. 그런데 `hooks=` 인자는 원본 소스 코드에만 나오고 E113 인용문에는 없습니다.",
+    "Section '대화 기록·에이전트 상태·호출 상태의 세 층과 그것을 이어 주는 세션 영속화': the writer could not fix: - `request_state`: 근거에는 Python이 호출 상태의 `request_state` 슬롯을 `result.state`로 돌려준다는 내용만 있습니다. 이 슬롯을 누가 어떻게 채우는지는 나와 있지 않습니다. 그래서 이 슬롯이 호출 상태 딕셔너리 안에 있다는 점과, 예제처럼 최상위 키로 넣은 `user_id`는 `result.state`로 돌아오지 않는다는 점만 적었습니다. 그 키에 값을 쓰는 코드는 근거에 없는 API가 될 수 있어서 넣지 않았습니다. - 스냅샷: 근거는 스냅샷을 \"수동으로 특정 시점을 캡처하고 복원하는 ",
+    "Section 'Pydantic 스키마로 받는 티켓 분류 결과와 스트리밍 결과 이벤트': the writer could not fix: 고치지 못한 문제가 하나 있습니다. `triage`에 정지 사유 분기를 넣어 달라는 요청(kindness)입니다. 제공된 근거에는 `structured_output_attempts` 한도를 어디에 넘기는지도, 정지 사유가 어느 속성(예: `result.stop_reason`)에 담기는지도 나오지 않습니다. E28과 E31이 인용은 되어 있지만 이번에 받은 근거 목록에는 없습니다. 근거에 없는 API나 속성으로 코드를 지어낼 수는 없어서 해당 문장은 그대로 두었습니다.",
+    "Section '턴·토큰 한도와 협력적 취소, 동시 호출 가드로 묶는 요청 단위 실행': the writer could not fix: 근거 자료에는 `max_tokens`에서 어떤 예외가 나는지 나오지 않아서 `try/except` 예시를 넣지 않았습니다. 대신 이 경우는 `Reply`로 바뀌지 않고 `handle_request` 밖으로 그대로 나간다고 적었습니다. `lookup_ticket`을 두고 지적 두 개가 엇갈렸습니다. 하나는 E54 코드에 이 도구가 없다는 지적이고, 다른 하나는 한도 예시에 `tools=[lookup_ticket]`을 넣으라는 요청입니다. 그래서 [[E54]]는 근거가 있는 문장(요청마다 새 에이전트, 한도, 데드라인)에만 붙였습니다.",
+    "Section '스로틀링만 재시도하는 기본 지수 백오프와 이를 넓히는 두 가지 방법': the writer could not fix: The evidence doesn't say how a hook-driven retry works alongside the default `ModelRetryStrategy`. So the section doesn't explain that or say whether to also pass `retry_strategy=None`. Instead, the hook is attached to the running example's agent in `build_hooked_support_agent`. The evidence also gi",
+    "Section '위험 분류기와 Cedar를 앞에 두고 환불 도구 앞에서 멈추는 사람 승인': the writer could not fix: I removed the Jev and Strands Decider names and kept the \"분류 전용 소형 모델\" wording. The evidence does not show what argument you pass to `classifier` to plug those models in, so I couldn't explain how to use them.",
+    "Section '세션마다 microVM을 받는 AgentCore Runtime과 AgentCore Memory로 이어 가는 고객 기억': the writer could not fix: - E131 문장은 삭제했습니다. 다만 `answer_ticket`을 Runtime 진입점으로 감싸 배포하는 코드는 넣지 못했습니다. 근거에 Runtime 진입점 API나 배포 명령이 없고, 언어별 배포 페이지가 있다는 사실만 나옵니다. - 서드파티 블로그(src-W6)는 날짜나 버전을 적지 못했습니다. 근거에 그 정보가 없습니다. 출처를 서드파티 블로그로 밝히고, 두 검색 방식을 글쓴이의 구현으로 적었습니다. `BeforeInvocationEvent`/`retrieve_memories`가 공식 API인지는 근거에서 확인되지 않아 ",
+    "Section '세션별 microVM에서 돌리는 AgentCore Runtime 배포와 AgentCore Memory 연결' still has: ['3.10'] already stated in 'pip 설치 한 번과 기본 Bedrock 모델로 띄우는 첫 지원 에이전트': refer back without repeating: 준비물은 적절한 권한이 있는 AWS 계정과 Python 3.10+ 또는 Node.js 22+입니다 .",
+    "Section '경로가 매번 다른 에이전트를 읽는 OpenTelemetry 트레이스와 평가': the writer could not fix: - 텔레메트리 설정 코드 블록(콘솔 익스포터 + `build_support_agent()`): 근거에 텔레메트리 설정 호출이나 익스포터 API의 코드가 없어서 블록을 넣지 않았습니다. 대신 '콘솔 익스포터'를 문장 안에서 짧게 설명하고, '같은 글은 설명합니다'는 지웠습니다. - 백엔드 교체 시 달라지는 줄(OTLP 엔드포인트·헤더 환경 변수): 근거에 OTLP 엔드포인트, 헤더, 그 밖의 익스포터 설정이 없습니다. 지어낸 설정은 넣을 수 없어서 Datadog 연결 문장을 더 자세히 쓰지 못했습니다. - 1.47.0이 무엇의 버전인",
+    "Section '모델이 계획하는 루프와 순서를 고정하는 그래프 사이의 선택': the writer could not fix: E96, E98, E53이 무엇을 말하는지는 받은 자료에 없었습니다. 그래서 아래 세 가지는 앞 섹션에서 정했다고 보고 쓴 것이며, 앞 섹션과 맞는지 확인해 주세요. - Cedar 핸들러를 `RefundAuth`에 연결했습니다. `RefundApproval`이 아닌 `RefundAuth`라고 본 것은 이름만 보고 짐작한 결과입니다. - '부정 패턴'은 분류기 판단과 상관없이 승인을 요구하는 설정이라고 설명했습니다. - 동시성 가드에 걸렸을 때 호출자에게 무슨 일이 생기는지(예외인지, 어떤 오류인지)는 자료가 다루지 않아 쓰지 않았습",
+    "Section '훅 이벤트 위에 타입 있는 결정을 얹은 개입 계층': the writer could not fix: Problem 2 is fixed, but one caveat applies. The new sentence uses the `interventions=` argument on `Agent`, which the guide's later `build_refund_agent` already uses. The interventions evidence for this section never shows how handlers are attached to an agent, so that argument has no support here. ",
+    "Section '위험 분류기와 Cedar를 앞에 두고 환불 도구 앞에서 멈추는 사람 승인': the writer could not fix: Problem 2 is only partly fixed. I added a sentence saying the deployed `answer_ticket` path has to pass `invocation_state={\"user_id\": customer_id}`. I didn't edit `answer_ticket` itself: its code isn't in this section and its signature isn't listed in code_defined_earlier. I also didn't replace `ask",
+    "Section '위험 분류기와 Cedar를 앞에 두고 환불 도구 앞에서 멈추는 사람 승인': whole-post review problems left as they were: The code imports `strands.vended_interventions.cedar.CedarAuthorization`, but the guide never installs the `cedar` extra of strands-agents. Fix: Add `pip instal | `principal_resolver` reads `state[\"user_id\"]`, and only the direct `agent(...)` call passes it. On the deployed path (`answer_ticket`), no `user_id` is supplied | The subsections '장애가 나도 열리지 않는 보안 핸들러' and '외부에서 답을 받는 직접 만든 승인 핸들러' explain `on_error` values, Confirm/`response`/`evaluate` and the stateless-handler interrup",
+    "Section '세션마다 microVM을 받는 AgentCore Runtime과 AgentCore Memory로 이어 가는 고객 기억': the writer could not fix: Problem 1 (Runtime entrypoint, deploy command, its install) is not fixed. The evidence never shows `BedrockAgentCoreApp`, `@app.entrypoint`, the payload shape or any deploy command. It only says deployment steps live on separate per-language pages (E131). Writing those APIs or commands would mean ma",
+    "Section '경로가 매번 다른 에이전트를 읽는 OpenTelemetry 트레이스와 평가': the writer could not fix: 해결하지 못한 문제 두 가지: 1. 텔레메트리 설정 코드와 `pip install 'strands-agents[otel]'`를 넣지 못했습니다. 근거 자료에는 `otel` extra, 텔레메트리 설정 클래스나 함수, OTLP 익스포터 인자가 없습니다. 근거 자료에 있는 내용은 텔레메트리를 켜고 스팬 내보내기를 설정하라는 것(E198)과, 한 번 설정하면 자동으로 계측되고 콘솔 익스포터를 바꿀 수 있다는 것(E209)뿐입니다. 근거 자료에 없는 API나 플래그로 코드를 쓸 수는 없습니다. 설치 명령과 설정 코드 블록을 넣으려면 SDK",
+    "Section 'TL;DR': the writer could not fix: 설치 문장에 'Python에서는'이라는 조건은 붙였습니다. 다만 TypeScript SDK 설치 명령은 근거에 없어서, 두 SDK의 설치 차이를 설명하는 문장은 넣지 못했습니다.",
+    "Guide description still breaks the rules after a repair: description has 118 characters; write 120-160",
+    "[description] line 1: description has 118 characters; the blog's descriptions run 120-160"
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 3053.3,
+  "input_tokens": 3373847,
+  "output_tokens": 461971,
+  "estimated_cost_usd": 16.3375,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 216,
+      "failed_calls": 0,
+      "input_tokens": 433504,
+      "output_tokens": 461971,
+      "cache_read_tokens": 1527665,
+      "cache_write_tokens": 1412678,
+      "cost_usd": 16.337501
+    },
+    "by_stage": {
+      "relevance": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 2616,
+        "output_tokens": 208,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.000366
+      },
+      "research_plan": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 2785,
+        "output_tokens": 943,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.00075
+      },
+      "read": {
+        "calls": 117,
+        "failed_calls": 0,
+        "input_tokens": 282,
+        "output_tokens": 131295,
+        "cache_read_tokens": 841269,
+        "cache_write_tokens": 251327,
+        "cost_usd": 2.110089
+      },
+      "outline": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 6257,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 27318,
+        "cost_usd": 0.261746
+      },
+      "verify": {
+        "calls": 38,
+        "failed_calls": 0,
+        "input_tokens": 281443,
+        "output_tokens": 82980,
+        "cache_read_tokens": 462706,
+        "cache_write_tokens": 414098,
+        "cost_usd": 5.040947
+      },
+      "draft": {
+        "calls": 14,
+        "failed_calls": 0,
+        "input_tokens": 56,
+        "output_tokens": 64296,
+        "cache_read_tokens": 46872,
+        "cache_write_tokens": 327166,
+        "cost_usd": 2.940718
+      },
+      "review": {
+        "calls": 15,
+        "failed_calls": 0,
+        "input_tokens": 60,
+        "output_tokens": 38669,
+        "cache_read_tokens": 28624,
+        "cache_write_tokens": 116330,
+        "cost_usd": 1.366724
+      },
+      "fix": {
+        "calls": 27,
+        "failed_calls": 0,
+        "input_tokens": 117178,
+        "output_tokens": 135098,
+        "cache_read_tokens": 148194,
+        "cache_write_tokens": 276439,
+        "cost_usd": 4.61214
+      },
+      "finalize": {
+        "calls": 2,
+        "failed_calls": 0,
+        "input_tokens": 29080,
+        "output_tokens": 2225,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.004021
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-haiku-5-5": {
+        "calls": 4,
+        "failed_calls": 0,
+        "input_tokens": 34481,
+        "output_tokens": 3376,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.005137
+      },
+      "global.anthropic.claude-sonnet-5-5": {
+        "calls": 117,
+        "failed_calls": 0,
+        "input_tokens": 282,
+        "output_tokens": 131295,
+        "cache_read_tokens": 841269,
+        "cache_write_tokens": 251327,
+        "cost_usd": 2.110089
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 95,
+        "failed_calls": 0,
+        "input_tokens": 398741,
+        "output_tokens": 327300,
+        "cache_read_tokens": 686396,
+        "cache_write_tokens": 1161351,
+        "cost_usd": 14.222275
+      }
+    }
+  }
+}

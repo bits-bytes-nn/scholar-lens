@@ -1,0 +1,290 @@
+{
+ "item": "guide-strands",
+ "post": "/tmp/eval-guide/guide-strands-v13.md",
+ "judge_run": 3,
+ "sdk_checked": "strands-agents 1.64.0 with [anthropic,ollama,otel,cedar] extras, strands-agents-tools 0.9.0 and bedrock-agentcore 1.25.4 ([strands-agents] extra) in a temp venv (Python 3.14); docs from strandsagents.com index.md pages (agent-loop, hooks, structured-output, structured-output-behavior, interventions, session-management, state, lifecycle-controls, retry-strategies, approve-before-acting, quickstart/python, deploy_to_bedrock_agentcore, integrations agentcore-memory session manager and memory store), harness-sdk README and strands-py README, and the non-official posts (strandsagents.com model-driven blog, AWS OSS intro blog, AWS ML deep dive, AWS Builder Center OTEL post, DEV Community AgentCore post, Datadog blog) fetched 2026-11-07; code blocks exercised in reading order with a scripted fake Model (no paid model calls, no AWS calls)",
+ "sampling": "256 blank-line paragraphs after front matter (fenced blocks kept whole, list runs as one paragraph); paragraphs 3,6,9,...,255; claims drawn from those paragraphs",
+ "scores": {
+  "A": 7.5,
+  "B": 7.5,
+  "C": 6.5,
+  "D": 8.0,
+  "E": 8.0,
+  "F": 6.0,
+  "T1": 7.0,
+  "T2": 8.0,
+  "T3": 8.5
+ },
+ "score_evidence": {
+  "A": "Claim headings, no skipped levels, real tables, fenced code with one-word info strings, no math and no use_math. Deductions: description 118 characters (below 120); interventions split across 'L251 훅 이벤트 위에...' and 'L858 위험 분류기와 Cedar...' so the on_error table (L364) is retold in 'L918 장애가 나도 열리지 않는 보안 핸들러'; topic headings remain (L440 '설치와 자격 증명', L1086 '...: Datadog의 경우'); the AgentCore Runtime subsection (L930) has no deployment step.",
+  "B": "Mostly natural '입니다' prose with established English terms. Deductions: L179 '교정 지시문 역할도 합니다' (rewrite '검증기의 오류 메시지가 곧 모델이 따를 교정 지시문이 됩니다'); L360 '...Deny로 올리는 방법이 예시로 제시됩니다' (rewrite '문서는 ...올리는 방법을 예로 듭니다'); L870 circular pair ('!를 붙이면 반드시 승인을 거치게 됩니다. 그래서 항상 물어야 하는 도구는 ...!를 붙여'); L1123 dangling '개입 핸들러와는 다른 이야기입니다.'; L20 repeats L12 almost word for word; 20 '할 수 있습니다'.",
+  "C": "Accurate back-references (L126, L506, L548, L769, L819, L1050). Deductions: L284 and L358 attach issue_refund and lookup_ticket before they are defined (L472, L392); Confirm/evaluate (L341-L356) re-taught at L924 and the stateless-interrupt caveat three times (L771, L924, L1123); conversation history explained in the loop section (L86-L90) and again in the state section (L386); L1123 ends with an unclear aside ('개입 핸들러와는 다른 이야기입니다').",
+  "D": "Hard parts get examples where they appear: history growth table (L76), validator with today's date (L212), attempt counting (L238, L242), Guide merge example (L337), Deny-ineffective-after-model insight (L360), 22,500 overshoot (L624), 124 s vs 20 s and the 6 s fix (L798, L819), trace tree (L1066). Over-explained: the repeated on_error, Confirm and per-request-agent passages.",
+  "E": "Tables where comparison helps: history growth (L76), stop reasons (L115), attempt outcomes (L242), lifecycle methods (L296), on_error (L366), state layers (L380), Python checkpoints (L655, now in Korean and the right SDK), retry schedule (L781), structure choice (L1109); text diagrams for the loop (L61), structured-output flow (L165) and spans (L1066). Deductions: on_error restated in prose right after a table (L920); no real figure of the loop; the L781 table is trivially derivable.",
+  "T1": "Exercised in reading order with a fake model; the v12 handle_triage_request defect is gone. Deductions: the Cedar+HITL block (L874) raises ImportError after the guide's installs ([cedar] never installed) and reads MODEL_ID from the environment unlike earlier blocks; L284/L358 reference tools defined later; no telemetry code although the section says '텔레메트리를 한 번 설정하면' (L1078); no AgentCore Runtime deployment code despite L32; Ollama mention without its extra.",
+  "T2": "Covers what the sources cover in a sensible order (layers -> loop/stop reasons -> structured output -> hooks/interventions -> state/sessions -> install -> applied structured output -> limits/cancel/concurrency -> retry -> HITL/Cedar -> AgentCore Memory -> traces/evaluation -> choice). Deductions: HITL separated from interventions causes re-teaching; AgentCore Runtime has description only.",
+  "T3": "Explains mechanisms and why: schema-as-tool reusing the loop (L151), typed decisions vs last-write-wins hooks (L288-L292), Guide position semantics (L304), after_model_call Deny is a no-op so stop guiding instead (L360), limits checked at iteration start (L624), cache tokens counted (L626), cooperative cancellation and MCP checkpoint (L655-L662), no distributed lock and check-then-write session creation (L432), flush is not persistence (L1052), trace-based evaluation (L1099). Design advice reads as recommendation ('이 글의 판단', L1128).",
+  "F": "Sample: 14 supported, 1 unsupported (L14 -0.5). Off-sample: L448 misattributed README example (-2), L238 miscount (-1), L358 handler-stack implication (-0.5) -> 6.0."
+ },
+ "principles": {
+  "claim_headings": {
+   "status": "met",
+   "evidence": "e.g. 'L49 정지 사유로 움직이는 ReAct형 에이전트 루프와 대화 히스토리라는 작업 메모리', 'L145 스키마를 도구로 바꿔 검증 오류를 모델에게 되돌리는 구조화 출력', 'L599 반복이 시작될 때만 검사되는 호출 한도', 'L777 4초에서 두 배씩 늘어나는 여섯 번의 시도'; topic headings remain at L440 '설치와 자격 증명', L466 '도구를 붙인 지원 에이전트', L1086 '같은 스팬을 받는 다른 백엔드: Datadog의 경우'."
+  },
+  "running_example": {
+   "status": "met",
+   "evidence": "Support-ticket agent (lookup_ticket, issue_refund, TicketTriage, RefundAuth/RefundReasonValidator/RefundApproval, handle_request, SupportRetryStrategy, build_refund_agent, answer_ticket) runs from L32 through loop (L74), structured output (L181, L516), interventions (L306), state/sessions (L392, L418), limits/cancel (L603, L634), retry (L802), HITL+Cedar (L874), AgentCore Memory (L978), traces (L1066) and the choice (L1103). Ticket ids drift (T-1001, T-1042, T-981 at L1067, 'ticket-1' at L1033)."
+  },
+  "mechanism_design_code_example": {
+   "status": "met",
+   "evidence": "Structured output: schema-as-tool and why (L147-L151) -> five steps (L155) -> FollowUp validator code (L183) -> date example (L212) -> attempt table (L242); limits: check-at-top rule (L624) -> 18,500 + 4,000 = 22,500 example (L624); retry: default schedule (L779-L792) -> 124 s vs 20 s (L798) -> subclass with 2+4 = 6 s (L802-L819); interventions: last-write-wins problem (L288) -> typed decisions (L292) -> code (L306) -> Proceed/Guide/Proceed example (L337)."
+  },
+  "facts_said_once": {
+   "status": "not met",
+   "evidence": "on_error policy taught twice (table and rationale L364-L374, then again L920 with the same throw/proceed/deny wording and the same RefundAuth/logging advice); Confirm response/evaluate and default evaluate True/'y'/'yes' twice (L341, L356 and L924); 'stateless handlers do not resume interrupts' three times (L771, L924, L1123); conversation history described twice (L86-L90 and L386); AgentResult + callback_handler=None twice (L109, L495); structured output limit/stop-reason fallback restated (L224/L249 and L560), agent-level vs call schema (L173 and L562), streaming one-shot object (L173 and L593); classifier is a judgment (L870 and L1124); L12 and L20 open with the same sentence."
+  },
+  "numbers_with_scope_unit": {
+   "status": "met",
+   "evidence": "Python/TypeScript scope kept throughout (L113, L153, L216, L224, L292, L410, L416, L651, L698, L794, L1019); cancellation checkpoints now the Python four (L653-L660); writer's illustrative numbers labelled ('가정해 봅니다' L624, '예를 들어' L238); Datadog price dated to the blog (L1088); 1.47.0 scoped to the Builder Center author (L1082). One miscount: L238 '네 번째 모델 호출은 일어나지 않습니다' when two lookups plus three failures already make five model calls."
+  },
+  "nothing_invented": {
+   "status": "partly met",
+   "evidence": "L448 credits the repository README with a strands-agents-tools/strands_tools example, but both the harness-sdk README and strands-py README use 'from strands.vended_tools import http_request' with only 'pip install strands-agents' (the strands_tools import is the 2025 AWS OSS intro blog's); L238 miscount; L358 says validation and approval 'follow' authorization, but with confirm > guide a refund without a reason first prompts the person and is then cancelled by the Guide (exercised); L14 'simultaneous calls ... merge' (merging is the sequential case, L432 gets it right)."
+  },
+  "writer_assessment_at_end": {
+   "status": "met",
+   "evidence": "L1128 '이 글의 판단은 이렇습니다' with when to start with a single loop, when to fix a graph section, when LangChain fits, and the residual costs (evaluation, forced-approval rules); failure modes in L1121-L1126."
+  },
+  "length_fitted": {
+   "status": "partly met",
+   "evidence": "1,153 lines, about 36.9k non-space prose characters; depth on interventions, limits, sessions and memory is warranted, but the repeated on_error/Confirm/interrupt/history passages (about 2.5k characters) add length without content."
+  },
+  "type_specific_shape": {
+   "status": "met",
+   "evidence": "TL;DR (L10-L16) and the hand-written-orchestration problem (L18-L47) open the post; layers (L34) and loop architecture (L49) come first; structured output, interventions and state/session internals precede installation (L436); closes with model-driven loop vs graph choice and failure modes (L1101-L1128). AgentCore Runtime section describes the runtime but shows no deployment step."
+  },
+  "korean_style": {
+   "status": "partly met",
+   "evidence": "Natural '입니다' prose overall; defects: L179 '교정 지시문 역할도 합니다' (rewrite '검증기의 오류 메시지가 곧 모델이 따를 교정 지시문이 됩니다'), L360 '...올리는 방법이 예시로 제시됩니다' (hidden actor; rewrite '문서는 ...올리는 방법을 예로 듭니다'), L870 circular pair '!를 붙이면 반드시 승인을 거치게 됩니다. 그래서 항상 물어야 하는 도구는 ...!를 붙여', L1123 dangling '개입 핸들러와는 다른 이야기입니다.', L430 one-sentence paragraph without content ('특정 수명주기 이벤트'), 20 '할 수 있습니다'."
+  }
+ },
+ "claims": {
+  "checked": 15,
+  "supported": 14,
+  "unsupported": 1,
+  "wrong": 0,
+  "unverifiable": 0,
+  "examples": [
+   {
+    "line": 14,
+    "claim": "Same session ID and agent ID called from several places at once overwrite each other or merge conversations, without error",
+    "verdict": "unsupported",
+    "source": "Session management: overlapping calls overwrite, sequential calls merge; the TL;DR assigns merging to simultaneous calls (L432 is correct)."
+   },
+   {
+    "line": 38,
+    "claim": "Monorepo directories harness-py, harness-ts, strands-py, strands-ts with create_harness()/createHarness()",
+    "verdict": "supported",
+    "source": "harness-sdk README directory table."
+   },
+   {
+    "line": 115,
+    "claim": "Stop reasons table, max_tokens unrecoverable and ends with an error",
+    "verdict": "supported",
+    "source": "Agent loop Stop Reasons list verbatim."
+   },
+   {
+    "line": 130,
+    "claim": "cancelled omits the incomplete assembled message from result and history; streamed deltas remain visible",
+    "verdict": "supported",
+    "source": "Lifecycle controls: 'The incomplete assembled model message is omitted from the result and history. Streamed deltas already delivered to your consumer remain visible.'"
+   },
+   {
+    "line": 224,
+    "claim": "TypeScript counts a filtered forced retry as a failed attempt; Python ends with its own stop reason such as content_filtered",
+    "verdict": "supported",
+    "source": "Structured output behavior Limit attempts, verbatim; correctly labelled per SDK."
+   },
+   {
+    "line": 257,
+    "claim": "HookOrder.SDK_FIRST -100, DEFAULT 0, SDK_LAST 100; not enforced bounds",
+    "verdict": "supported",
+    "source": "Hooks callback ordering; installed HookOrder values."
+   },
+   {
+    "line": 296,
+    "claim": "Five lifecycle methods and their allowed decisions",
+    "verdict": "supported",
+    "source": "Interventions Lifecycle Methods table, verbatim."
+   },
+   {
+    "line": 337,
+    "claim": "Precedence deny > confirm > guide > transform > proceed; registration order",
+    "verdict": "supported",
+    "source": "Interventions: 'handlers always run in registration order with well-defined precedence (deny > confirm > guide > transform > proceed)'."
+   },
+   {
+    "line": 442,
+    "claim": "Python 3.10+ and an activated virtual environment",
+    "verdict": "supported",
+    "source": "Quickstart: 'Make sure you have Python 3.10+ installed and a virtual environment activated'."
+   },
+   {
+    "line": 655,
+    "claim": "Four-row Python checkpoint table (streaming, before tool, during MCP tool, after tool)",
+    "verdict": "supported",
+    "source": "Agent loop Python tab table; the v12 TypeScript five-row table is gone."
+   },
+   {
+    "line": 790,
+    "claim": "After the sixth failed attempt the exception propagates instead of becoming a stop reason",
+    "verdict": "supported",
+    "source": "Retry strategies 'Other exceptions propagate'; exercised: ModelThrottledException after 6 attempts."
+   },
+   {
+    "line": 934,
+    "claim": "Prerequisites: Python 3.10+ or Node.js 22+; container engine only for local testing and advanced deployment",
+    "verdict": "supported",
+    "source": "Deploy to AgentCore Prerequisites verbatim."
+   },
+   {
+    "line": 1082,
+    "claim": "Builder Center author: in 1.47.0 top-level latencyMs not implemented for some providers; tokens and per-tool timings accurate",
+    "verdict": "supported",
+    "source": "Builder Center: 'in Strands 1.47.0, accumulated_metrics.latencyMs reads 0 for some LLM providers ... Token counts and per-tool timings are accurate everywhere' (attribution fixed since v12)."
+   },
+   {
+    "line": 1088,
+    "claim": "Datadog Agent Observability free up to 40,000 LLM spans per month",
+    "verdict": "supported",
+    "source": "Datadog blog: 'free for Datadog customers submitting up to 40,000 LLM spans per month'."
+   },
+   {
+    "line": 1019,
+    "claim": "Store path needs bedrock-agentcore >= 1.21.0 and strands-agents >= 1.56.0 (TS bedrock-agentcore >= 0.4.1, @strands-agents/sdk >= 1.5.0)",
+    "verdict": "supported",
+    "source": "AgentCore Memory Store page requirements list."
+   }
+  ],
+  "off_sample_findings": [
+   {
+    "line": 448,
+    "claim": "The repository README's Python example installs strands-agents-tools and imports tools from strands_tools",
+    "verdict": "wrong",
+    "source": "harness-sdk README and strands-py README: 'pip install strands-agents' and 'from strands.vended_tools import http_request'; strands_tools appears only in the 2025 AWS OSS intro blog."
+   },
+   {
+    "line": 238,
+    "claim": "Limit 3, two lookups then three failed structured-output calls: limit hit at the third failure and the fourth model call does not happen",
+    "verdict": "wrong",
+    "source": "Exercised: two lookups + three failures = five model calls before limit_structured_output_attempts; the call that does not happen is the sixth."
+   },
+   {
+    "line": 358,
+    "claim": "Handlers run in list order, so validation and approval follow authorization",
+    "verdict": "unsupported",
+    "source": "Exercised: a refund without a reason gets Guide + Confirm; confirm > guide, so the person is prompted first and, after approving, the Guide cancels the call ('GUIDANCE: [refund-reason-validator] ...')."
+   },
+   {
+    "line": 792,
+    "claim": "max_delay default 128 s",
+    "verdict": "supported",
+    "source": "Retry strategies table: 'max_delay | float | 128'. Note: installed ModelRetryStrategy.__init__ defaults max_delay=240 (docs/code drift, not the writer's error)."
+   }
+  ]
+ },
+ "checklist": {
+  "repeated": 2,
+  "avoided": 2,
+  "na": 1,
+  "repeated_ids": [
+   "shared-agent-throw-scope",
+   "result-fields-incomplete"
+  ],
+  "items": [
+   {
+    "id": "loop-diagram-remote",
+    "status": "avoided",
+    "evidence": "No image links at all; the loop is a text diagram (L61-L72)."
+   },
+   {
+    "id": "shared-agent-throw-scope",
+    "status": "repeated",
+    "evidence": "L683 '기본 설정은 이미 실행 중인 에이전트에 들어온 호출을 ConcurrencyException으로 거부합니다' and L1123 '에이전트 인스턴스 하나를 여러 요청이 동시에 호출하면, 그런 동시 호출을 막는 동시성 가드에 걸립니다'. Neither ties THROW to invoke_async nor says a sync agent(...) inside an async def handler blocks and serializes requests instead of raising."
+   },
+   {
+    "id": "shared-agent-history-leak",
+    "status": "avoided",
+    "evidence": "L558 '에이전트 하나를 재사용하면 앞 고객의 사정이 다음 티켓의 요약에 들어갈 수 있습니다', L748 'A fresh agent per request keeps concurrent calls from sharing history', L554 '비동기 서버에서는 invoke_async에 같은 인자를 넘깁니다', L1123 per-request agent as the default."
+   },
+   {
+    "id": "result-fields-incomplete",
+    "status": "repeated",
+    "evidence": "L98 prints result.stop_reason and agent.messages, but no example shows result.metrics.get_summary(); L1082 lists cycles, tokens, per-tool counts without naming the method or showing output."
+   },
+   {
+    "id": "multi-agent-subject",
+    "status": "n/a",
+    "evidence": "No sentence about the smallest execution unit of multi-agent patterns; graph/swarm/agents-as-tools appear only in the L1109 table."
+   }
+  ]
+ },
+ "extras": {
+  "architecture_first_line": 34,
+  "architecture_note": "SDK/harness layers at L34-L47, then the loop cycle, history and stop reasons (L49-L143), structured output internals (L145), hooks/interventions (L251) and state/sessions (L376) before installation (L436).",
+  "sources_total": 21,
+  "sources_non_official": 5,
+  "non_official_share": 0.24,
+  "non_official_list": [
+   "AWS Open Source Blog introduction",
+   "DEV Community AgentCore post",
+   "AWS Builder Center OTEL post",
+   "AWS ML blog technical deep dive",
+   "Datadog blog"
+  ],
+  "opens_with_problem": true,
+  "opens_note": "TL;DR (L10-L16) then '직접 짠 루프가 떠안던 일' (L18-L32): orchestration frameworks vs model-driven, and the features a hand-rolled loop grows into.",
+  "closes_with_when_to_choose_and_failure_modes": true,
+  "closes_note": "L1101-L1128: model-driven loop vs graph/swarm/agents-as-tools vs LangChain table, four failure points (state concurrency, classifier misjudgment, repeating interventions, silent failures) and the writer's choice rule."
+ },
+ "runnable_code": {
+  "verdict": "every block that needs no AWS pastes and runs against SDK 1.64.0 with a fake model (the v12 handle_triage_request defect is gone: handle_request returns COMPLETED text and BUDGET_EXCEEDED correctly), but the Cedar+HITL block fails with ImportError after the guide's own installs (the [cedar] extra is never installed), two snippets use tools defined only later, and observability and AgentCore Runtime deployment have no code",
+  "passed": [
+   "L92 Agent + stop_reason + agent.messages; Agent(messages=[...]) continues (2 seeded + 2 new messages)",
+   "L74-L80 worked run: 3 model calls (tool_use, tool_use, end_turn), 6 messages, call inputs 1/3/5 messages",
+   "L183 FollowUp: past date fed back as tool error 'Validation failed for FollowUp ... due_date must be after 2026-11-07', second call valid; structured-output tool removed afterwards",
+   "L216 forced retry adds 'You must format the previous response as structured output.' with tool_choice FollowUp, then StructuredOutputException",
+   "L226 structured_output_attempts=3 with two lookups first -> limit_structured_output_attempts after 5 model calls; with a limit a failed forced retry is retried, not raised",
+   "L261 RefundInterceptor: issue_refund call executes request_refund_review ('sent for review')",
+   "L306+L343+L358 interventions: RefundAuth on_error 'deny' -> 'DENIED: Handler threw'; Confirm -> stop_reason interrupt, resumed with 'YES' -> issue_refund runs",
+   "L392 lookup_ticket: invocation_state user_id read, agent.state lookup_count 1, result.state {} (L410); state.set(lambda) -> ValueError; record_direct_tool_call=False keeps history empty",
+   "L418 SnapshotSessionManager + S3Storage constructs without a call; LocalFileStorage session restored on a new agent; no storage -> ./.strands/ created; agent_id 'default'",
+   "L472 issue_refund; L516 triage: invalid category fed back then 'high | billing | Customer was charged twice ...'; text-only replies -> fallback category other",
+   "L568 stream_async: one 'result' event carrying ReplyDraft",
+   "L603 limits: TypeError on 0 or unknown key; 6,000+6,000+6,500 then 4,000 tokens -> 4 calls, 22,500 total, limit_total_tokens (L624)",
+   "L634 cancel_signal: an already-set event -> cancelled; idle agent.cancel() cancels the next call (L651)",
+   "L664 normalize_ticket_notes with tool_context.cancel_signal runs",
+   "L685 idempotency_token: same token returns the same result with one model call; different token -> ConcurrencyException",
+   "L704+L745 handle_request: COMPLETED with text; looping tools -> BUDGET_EXCEEDED, text None",
+   "L779-L792 default throttling retry: 6 attempts, sleeps 4, 8, 16, 32, 64; L802 SupportRetryStrategy: TimeoutError retried with sleeps 2, 4 over 3 attempts; retry_strategy=None -> 1 attempt",
+   "L825 CustomRetry hook: two TimeoutErrors retried with 2 s sleeps, then end_turn",
+   "L874 Cedar + HITL (after installing [cedar] and setting MODEL_ID): support_lead prompted once for issue_refund then refunded; bob denied by Cedar without a prompt; lookup_ticket went to the classifier",
+   "L946/L978/L1021 AgentCore Memory: signatures match (memory_id/session_id/actor_id required, batch_size 1, RetrievalConfig top_k 10/relevance 0.2, close()/pending_message_count()/context manager, create_agentcore_memory_stores namespaces writable/min_score); not called (AWS)"
+  ],
+  "failed": [
+   "L874 'from strands.vended_interventions.cedar import CedarAuthorization' raises ImportError ('requires cedarpy. Install it with: pip install strands-agents[cedar]'); the guide installs only strands-agents, [anthropic] and bedrock-agentcore[strands-agents]",
+   "L882 MODEL_ID = os.environ['MODEL_ID'] -> KeyError unless set, while L607/L712 define MODEL_ID as a constant that this block silently replaces",
+   "L284 and L358 build agents with issue_refund (defined L472) and lookup_ticket (defined L392): NameError when pasted in reading order",
+   "L1058-L1084 telemetry: no StrandsTelemetry setup or [otel] install although L1078 says '텔레메트리를 한 번 설정하면'; L32 promises AgentCore Runtime deployment but L926-L934 show no entrypoint or deploy command",
+   "L506 OllamaModel without 'pip install strands-agents[ollama]' (ImportError on a base install); L503 'export ANTHROPIC_API_KEY=' lost the docs' '<your key>' placeholder"
+  ],
+  "notes": "Fake model streams Bedrock-shaped events and answers the HITL classifier's _RiskDecision tool; BedrockModel(model_id=MODEL_ID) replaced by the fake model. No paid model or AWS call. Docs give max_delay default 128 s (L792 follows them) while the installed ModelRetryStrategy defaults to max_delay=240."
+ },
+ "other_sdk_as_python": "none found: every TypeScript difference is labelled (L113, L153, L216, L224, L292, L410, L416, L651, L698, L794, L1019) and the cancellation checkpoints are the Python four (L653-L660)",
+ "topic_taught_twice": "yes: on_error policy (L364-L374 and L920), Confirm/evaluate (L341-L356 and L924), stateless interrupt caveat (L771, L924, L1123), conversation history (L86-L90 and L386); structured output is split into mechanism (L145-L249) and application (L508-L593) with three restated facts (L560, L562, L593)",
+ "top_issues": [
+  "Topics taught twice: on_error fail policy (L364-L374, again L920), Confirm response/evaluate and default evaluate (L341-L356, again L924), the stateless-interrupt caveat three times (L771, L924, L1123), conversation history (L86-L90 and L386); the HITL section repeats the interventions section instead of pointing back.",
+  "Runnable-code gaps: the Cedar+HITL block (L874) fails with ImportError after the guide's own installs (needs 'pip install strands-agents[cedar]') and switches MODEL_ID to os.environ; L284/L358 use tools defined later; no telemetry setup or AgentCore Runtime deployment code although the post promises both (L32, L1078).",
+  "Remaining factual slips: L448 credits the README with a strands-agents-tools/strands_tools example it does not have (same defect as v12); L238 says the fourth model call does not happen when five have already run; L358's stack prompts the person before the reason Guide cancels the refund; checklist misses persist (THROW not tied to invoke_async, no metrics.get_summary())."
+ ]
+}

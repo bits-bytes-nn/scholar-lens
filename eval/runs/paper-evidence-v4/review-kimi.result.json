@@ -1,0 +1,172 @@
+{
+  "kind": "review",
+  "status": "succeeded",
+  "input": "2507.20534",
+  "title": "Kimi K2: Open Agentic Intelligence",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/2507_20534/2025-10-03-kimi-k2--open-agentic-intelligence.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2025-10-03-kimi-k2--open-agentic-intelligence.md",
+  "pr_url": null,
+  "warnings": [
+    "Tag 'Agentic-AI' (or its acronym) does not appear in the paper; check it fits.",
+    "Section 'Muon을 1조 파라미터 규모로 키울 때 생기는 어텐션 로짓 폭주': check 7 sentence(s) the evidence may not support: 출력값만 덮어둘 뿐, 커지는 가중치는 그대로 남습니다. (unsupported: The paper doesn't say that growing weights stay in place under soft-cap; this is the writer's own inference.) | K2는 MLA를 쓰므로 QK-Norm은 처음부터 선택지에서 빠지고, soft-cap은 원인을 건드리지 못합니다. (unsupported: None of the cited text says that K2 uses MLA.) | 상한을 τ=100으로 두면, QK-Clip은 이 헤드에만 축소 계수 $$\\gamma_h$$를 계산해 쿼리·키 투영 가중치를 줄이고, 상한을 넘지 않은 다른 헤드는 그대로 둡니다 [[EX]]. (unsupported: Per-head scaling factor γ_h and leaving the other heads untouched are QK-Clip mechanism details not found in the evidence.) | 1조 규모 학습에서 이런 일이 생기면 한 번의 발산이 막대한 연산 낭비로 이어집니다. (numbers not in its evidence) | 실제 K2 학습에서도 τ=100을 썼습니다. (numbers not in its evidence)",
+    "Section 'Muon을 1조 파라미터 규모로 키울 때 생기는 어텐션 로짓 폭주' still has: numbers ['1조'] without evidence (cite it; an illustration of your own ends with [[EX]]): 1조 규모 학습에서 이런 일이 생기면 한 번의 발산이 막대한 연산 낭비로 이어집니다. | numbers ['100'] without evidence (cite it; an illustration of your own ends with [[EX]]): 실제 K2 학습에서도 τ=100을 썼습니다. | numbers ['100'] without evidence (cite it; an illustration of your own ends with [[EX]]): 학습 초반에는 로짓이 상한 100에서 캡되었고, 학습이 진행되면서 τ를 따로 조정하지 않아도 최대 로짓이 일반적인 작동 범위로 서서히 내려왔습니다. | numbers ['15.5T'] without evidence (cite it; an illustration of your own ends with [[EX]]): 15.5T 토큰 전 구간에서 손실이 꾸준히 내려가며, 저자들은 학습 내내 스파이크가 없었다고 설명합니다. | images not given to this section: ['https://arxiv.org/html/2507.20534v2/loss_vs_tokens_white.svg']",
+    "Section '헤드별로 사후 재스케일하는 QK-Clip과 MuonClip 옵티마이저': check 5 sentence(s) the evidence may not support: 가중치가 여러 방향으로 고르게 커지면 쿼리와 키의 내적도 커지기 쉽고, 저자들은 이것을 로짓 폭주 경향의 설명으로 제시합니다 [[E73]]. (unsupported: The source passage gives no mechanism linking weights growing evenly in many directions to larger query-key dot products.) | $$\\tau=100$$으로 MuonClip을 건 K2에서는 곡선 모양이 정반대입니다. (unsupported: Calling the curve shape 'exactly the opposite' is an overstatement; the paper only describes the logits being capped at 100 and then decaying.) | 처음에는 클리핑이 로짓을 상한에 묶어 두고, 이후에는 가중치가 상한 아래에 머물도록 자리를 잡습니다. (unsupported: The claim that the weights settle so logits stay below the cap is an interpretation the source does not state.) | 저자들은 160억(16B) 파라미터 Moonlight 모델에서 이를 확인했습니다. (numbers not in its evidence) | **Muon 스텝**: 각 가중치 $$\\mathbf{W}\\in\\mathbb{R}^{n\\times m}$$에 대해 모멘텀 $$\\mathbf{M}_{t}=\\mu\\mathbf{M}_{t-1}+\\mathbf{G}_{t}$$ (numbers not in its evidence)",
+    "Section '헤드별로 사후 재스케일하는 QK-Clip과 MuonClip 옵티마이저' still has: numbers ['160억', '16B'] without evidence (cite it; an illustration of your own ends with [[EX]]): 저자들은 160억(16B) 파라미터 Moonlight 모델에서 이를 확인했습니다. | numbers ['0.2'] without evidence (cite it; an illustration of your own ends with [[EX]]): **Muon 스텝**: 각 가중치 $$\\mathbf{W}\\in\\mathbb{R}^{n\\times m}$$에 대해 모멘텀 $$\\mathbf{M}_{t}=\\mu\\mathbf{M}_{t-1}+\\mathbf{G}_{t}$$를 누적하고, Newton-Schulz 반복으로 직교화한 뒤 $$\\sqr | ['1000'] already stated in '대형 Muon 학습을 흔드는 어텐션 로짓 폭주': refer back without repeating: 학습 후반에 증가가 가팔라지며 1000을 넘어섭니다 . | numbers ['100'] without evidence (cite it; an illustration of your own ends with [[EX]]): $$\\tau=100$$으로 MuonClip을 건 K2에서는 곡선 모양이 정반대입니다. | ['100'] already stated in '대형 Muon 학습을 흔드는 어텐션 로짓 폭주': refer back without repeating: $$\\tau=100$$으로 MuonClip을 건 K2에서는 곡선 모양이 정반대입니다.",
+    "Section '2만 개 넘는 툴과 시뮬레이터로 만드는 에이전트 궤적 합성 파이프라인' still has: a deep section needs at least 2 visuals (its figures, an equation, or a small table from its number evidence)",
+    "Section '검증 가능 보상과 자기비평 루브릭 보상을 결합한 사후 훈련' still has: a deep section needs at least 2 visuals (its figures, an equation, or a small table from its number evidence)",
+    "Section '15.5T 토큰 사전학습의 스케줄과 메모리·통신 겹치기': check 3 sentence(s) the evidence may not support: weight decay는 앞서 MuonClip에서 본 값을 처음부터 끝까지 유지했고, 전역 배치 크기는 6,700만 토큰으로 고정했습니다 [[E35]]. (unsupported: 출처에 weight decay 0.1이라고만 나오고, 그 값이 MuonClip에서 앞서 본 값과 같다는 내용은 없음) | 작은 EP 그룹에서는 한 장치가 더 많은 전문가를 맡으므로 장치 간 부하가 평균화되기 쉽습니다. (unsupported: 출처는 균형 제약이 느슨해진다고만 할 뿐, 장치당 전문가 수가 늘어 부하가 평균화된다는 메커니즘은 제시하지 않음) | WGrad 블록이 PP 통신과 나란히 놓인 모습이 앞서 설명한 분리의 효과입니다 [[E26]]. (unsupported: 그림 설명에 WGrad 블록이 PP 통신과 나란히 배치되어 있다는 내용은 없음)",
+    "Section '15.5T 토큰 사전학습의 스케줄과 메모리·통신 겹치기' still has: ['128'] already stated in '전문가는 늘리고 헤드는 절반으로 줄인 MLA 기반 MoE 구조': refer back without repeating: **FP8 저장:** MoE up-projection과 SwiGLU의 입력은 1×128 타일 단위로 FP32 스케일을 붙여 FP8-E4M3로 압축해 저장합니다 .",
+    "Section '30초 안에 끝나는 체크포인트 엔진과 에이전트 롤아웃 인프라' still has: ['30'] already stated in '헤드별로 사후 재스케일하는 QK-Clip과 MuonClip 옵티마이저': refer back without repeating: 대신 전체 파라미터를 브로드캐스트하는 단순한 설계를 골랐고, 이 갱신을 30초 미만에 끝냅니다 . | ['30'] already stated in '헤드별로 사후 재스케일하는 QK-Clip과 MuonClip 옵티마이저': refer back without repeating: 30초 미만이라는 갱신 시간은 일반적인 RL 반복에 비하면 무시할 만한 수준입니다 . | English stem with a Korean ending 'offload된': 트 엔진은 GPU마다 크기가 같은 버퍼를 셋 둡니다. offload된 파라미터를 올리는 H2D 버퍼가 하나, GPU 간 브 | images not given to this section: ['https://arxiv.org/html/2507.20534v2/rl-ipc.drawio.svg']",
+    "Section '체인 오브 소트 없이 얻은 수학·추론·일반 능력과 사람 선호도 결과': check 4 sentence(s) the evidence may not support: Arena-Hard-Auto v2.0에서 Kimi-K2-Instruct의 승률은 hard prompts 54.5%, 창작 글쓰기 85.0%였습니다. (numbers not in its evidence) | 이 중국어 자체 벤치마크에서 Kimi-K2-Instruct의 승률은 ChatGPT-4o-latest 상대 65.4%, Claude Sonnet 4 상대 64.6%, DeepSeek-V3-0324 상대 59.6%였습니 (numbers not in its evidence) | 패배율은 세 비교 모두 약 17%였습니다. (numbers not in its evidence) | LMSYS Arena 텍스트 리더보드에서 Kimi K2는 3,000표가 넘는 사용자 투표를 바탕으로 오픈소스 1위, 전체 5위에 올랐습니다. (numbers not in its evidence)",
+    "Section '체인 오브 소트 없이 얻은 수학·추론·일반 능력과 사람 선호도 결과' still has: numbers ['54.5', '85.0'] without evidence (cite it; an illustration of your own ends with [[EX]]): Arena-Hard-Auto v2.0에서 Kimi-K2-Instruct의 승률은 hard prompts 54.5%, 창작 글쓰기 85.0%였습니다. | numbers ['65.4', '64.6', '0324', '59.6'] without evidence (cite it; an illustration of your own ends with [[EX]]): 이 중국어 자체 벤치마크에서 Kimi-K2-Instruct의 승률은 ChatGPT-4o-latest 상대 65.4%, Claude Sonnet 4 상대 64.6%, DeepSeek-V3-0324 상대 59.6%였습니다. | ['0324'] already stated in '툴 사용·소프트웨어 엔지니어링에서 오픈 모델을 크게 앞선 Kimi-K2-Instruct와 남은 격차': refer back without repeating: 이 중국어 자체 벤치마크에서 Kimi-K2-Instruct의 승률은 ChatGPT-4o-latest 상대 65.4%, Claude Sonnet 4 상대 64.6%, DeepSeek-V3-0324 상대 59.6%였습니다. | numbers ['17'] without evidence (cite it; an illustration of your own ends with [[EX]]): 패배율은 세 비교 모두 약 17%였습니다. | numbers ['3,000'] without evidence (cite it; an illustration of your own ends with [[EX]]): LMSYS Arena 텍스트 리더보드에서 Kimi K2는 3,000표가 넘는 사용자 투표를 바탕으로 오픈소스 1위, 전체 5위에 올랐습니다.",
+    "Section '초반에만 잠깐 작동하고 성능을 해치지 않는 QK-Clip': check 7 sentence(s) the evidence may not support: 곡선에는 스텝 단위의 잔진동이 남아 있지만, 저자들은 이를 스파이크로 보지 않습니다. (unsupported: The paper does not say how the authors treat the step-level oscillation; that reading comes from the figure analysis.) | K2에 쓴 100보다 훨씬 자주 개입하는 설정인데도 두 손실 곡선은 거의 겹쳤습니다 [[E71]]. (unsupported: The paper does not report that τ=30 triggers clipping more often than τ=100 in practice.) | 저자들은 K2를 $$\\tau=100$$으로 학습하면서 개입 기록을 집계했습니다. (numbers not in its evidence) | 70000 스텝 이후에는 모든 헤드가 어느 시점엔가 $$S_{\\max}$$를 100 아래로 낮췄습니다. (numbers not in its evidence) | 15.5T 토큰 전 구간에서 손실 스파이크가 나타나지 않습니다 [[E9]]. (numbers not in its evidence)",
+    "Section '초반에만 잠깐 작동하고 성능을 해치지 않는 QK-Clip' still has: numbers ['100'] without evidence (cite it; an illustration of your own ends with [[EX]]): 저자들은 K2를 $$\\tau=100$$으로 학습하면서 개입 기록을 집계했습니다. | ['100'] already stated in '대형 Muon 학습을 흔드는 어텐션 로짓 폭주': refer back without repeating: 저자들은 K2를 $$\\tau=100$$으로 학습하면서 개입 기록을 집계했습니다. | ['100'] already stated in '대형 Muon 학습을 흔드는 어텐션 로짓 폭주': refer back without repeating: 처음 70000 스텝 동안 QK-Clip이 한 번이라도 발동한 어텐션 헤드는 12.7%였고, 발동한 헤드의 $$S_{\\max}$$는 100으로 고정되었습니다 . | numbers ['70000', '100'] without evidence (cite it; an illustration of your own ends with [[EX]]): 70000 스텝 이후에는 모든 헤드가 어느 시점엔가 $$S_{\\max}$$를 100 아래로 낮췄습니다. | ['100'] already stated in '대형 Muon 학습을 흔드는 어텐션 로짓 폭주': refer back without repeating: 70000 스텝 이후에는 모든 헤드가 어느 시점엔가 $$S_{\\max}$$를 100 아래로 낮췄습니다.",
+    "Section '공격 전략에 따라 크게 달라지는 레드팀 통과율': 1 sentence(s) contradicting their evidence removed: Iterative Jailbreak에서 K2는 Security 범주 43.90, Criminal 범주 57.57로 다른 전략보다 눈에 띄게 낮습니다 [[E57]]. (wrong: Criminal Iterative Jailbreak 57.57 is not below all other strategies; Criminal Crescendo is 56.06, which is lower.)",
+    "Section '공격 전략에 따라 크게 달라지는 레드팀 통과율': check 1 sentence(s) the evidence may not support: Base64 열은 대부분 100에 가깝습니다. (numbers not in its evidence)",
+    "Section '공격 전략에 따라 크게 달라지는 레드팀 통과율' still has: numbers ['100'] without evidence (cite it; an illustration of your own ends with [[EX]]): Base64 열은 대부분 100에 가깝습니다. | ['100'] already stated in '대형 Muon 학습을 흔드는 어텐션 로짓 폭주': refer back without repeating: Base64 열은 대부분 100에 가깝습니다. | ['0324'] already stated in '툴 사용·소프트웨어 엔지니어링에서 오픈 모델을 크게 앞선 Kimi-K2-Instruct와 남은 격차': refer back without repeating: Harmful–Iterative Jailbreak에서 K2는 92.16을 기록했고, DeepSeek-V3-0324는 66.67, Qwen3-235B-A22B는 74.51이었습니다 .",
+    "Section '한계와 시사점': check 5 sentence(s) the evidence may not support: 단정적인 답에 보상을 주는 루브릭은 불확실한 상황에서도 \"끝까지 해내는\" 행동을 강화할 수 있고, 앞서 본 토큰 예산 페널티가 이를 얼마나 억제하는지는 따로 분리해 측정되지 않았습니다. (unsupported: States the token budget penalty's effect wasn't measured separately; no evidence for that, and the link to the rubric is the post's own speculation.) | 2만 개가 넘는 합성 툴 대부분은 상태를 가진 시뮬레이터 위에서만 실행됩니다. (unsupported: The evidence does not say that most of the 20,000+ tools run only on the simulator.) | 그런데 실제 API의 지연, 비정형 오류, 권한 문제를 얼마나 반영하는지 정량화한 결과가 없습니다. (unsupported: Claims the paper gives no quantification; no cited item says this.) | 앞서 정의한 헤드별 계수 $$\\gamma_h=\\min(1,\\tau/S_{\\max}^{h})$$를 쓰면 τ=100일 때 이 헤드의 $$\\gamma_h$$는 0.1이 됩니다. (numbers not in its evidence) | 공격적인 τ 실험은 활성 0.5B 규모의 소형 MoE에서만 했으므로, 1조 규모에서 τ를 얼마나 낮춰도 되는지는 따로 검증해야 합니다. (numbers not in its evidence)",
+    "Section '한계와 시사점' still has: numbers ['100', '0.1'] without evidence (cite it; an illustration of your own ends with [[EX]]): 앞서 정의한 헤드별 계수 $$\\gamma_h=\\min(1,\\tau/S_{\\max}^{h})$$를 쓰면 τ=100일 때 이 헤드의 $$\\gamma_h$$는 0.1이 됩니다. | ['100', '0.1'] already stated in '대형 Muon 학습을 흔드는 어텐션 로짓 폭주': refer back without repeating: 앞서 정의한 헤드별 계수 $$\\gamma_h=\\min(1,\\tau/S_{\\max}^{h})$$를 쓰면 τ=100일 때 이 헤드의 $$\\gamma_h$$는 0.1이 됩니다. | ['100'] already stated in '대형 Muon 학습을 흔드는 어텐션 로짓 폭주': refer back without repeating: 이 한 헤드의 query·key 가중치만 줄어 로짓이 100에 캡되고, 논문이 보여준 대로 학습이 진행되면서 τ를 조정하지 않아도 안정 범위로 내려갑니다 . | numbers ['0.5B', '1조'] without evidence (cite it; an illustration of your own ends with [[EX]]): 공격적인 τ 실험은 활성 0.5B 규모의 소형 MoE에서만 했으므로, 1조 규모에서 τ를 얼마나 낮춰도 되는지는 따로 검증해야 합니다. | ['1조'] already stated in '대형 Muon 학습을 흔드는 어텐션 로짓 폭주': refer back without repeating: 공격적인 τ 실험은 활성 0.5B 규모의 소형 MoE에서만 했으므로, 1조 규모에서 τ를 얼마나 낮춰도 되는지는 따로 검증해야 합니다.",
+    "Section 'Muon을 1조 파라미터 규모로 키울 때 생기는 어텐션 로짓 폭주': whole-post review problems left as they were: 첫 섹션에 나오는 '실제 K2 학습에서도 τ=100…' 문단과 손실 곡선 그림·설명이 'QK-Clip' 섹션에 다시 나옵니다. 가상 헤드 예시도 뒤 섹션들에서 여러 번 반복됩니다. Fix: 첫 섹션에서 손실 곡선 그림과 그 설명, 실제 학습 서술을 빼고 '초반에만 잠깐 작동하고 성능을 ",
+    "Section '초반에만 잠깐 작동하고 성능을 해치지 않는 QK-Clip': whole-post review problems left as they were: 헤드 넷(40, 60, 80, 250)으로 든 가상 예시가 앞 섹션의 헤드 A 예시와 같은 계산을 다시 설명합니다. Fix: 이 예시를 지우고 '헤드별로 사후 재스케일하는 QK-Clip과 MuonClip 옵티마이저' 섹션의 헤드 A 예시를 참조합니다.",
+    "Section '한계와 시사점': whole-post review problems left as they were: 64개 헤드 중 하나만 폭주하는 가상 예시가 앞에서 한 γ_h 계산을 또 반복합니다. Fix: 예시를 지우고 앞 섹션을 참조한다는 한 문장으로 바꿉니다. | '토큰 예산 페널티 효과는 따로 측정되지 않았다', '시뮬레이터 충실도를 정량화한 결과가 없다'처럼 논문이 보고하지 않았다고 단정합니다. Fix: 이 단정을 빼거나 논문이 실제로 말하는 내용으로 바꿉니다.",
+    "Section 'TL;DR': check 1 sentence(s) the evidence may not support: 전체 1.04조 파라미터 중 32B만 활성화되는 MLA 기반 MoE입니다. (numbers not in its evidence)",
+    "Section 'TL;DR' still has: numbers ['1.04조', '32B'] without evidence (cite it; an illustration of your own ends with [[EX]]): 전체 1.04조 파라미터 중 32B만 활성화되는 MLA 기반 MoE입니다.",
+    "Table values not found in the paper (check each is copied or derived correctly): τ²-Bench micro Pass@1: 66.1 / 37.3",
+    "numbered reference 'Figure 6' (refer descriptively): 4개를 택한 이유는 추론 시 연산 부담입니다. 논문의 Figure 6은 헤드 수가 층 수와 같은 모델과 헤드를 두 배로 늘",
+    "numbered reference 'Figure 1' (refer descriptively): 절대 점수로 크게 높습니다. 폐쇄형 모델과의 비교는 Figure 1에서만 확인할 수 있습니다. 그림에는 Claude 4",
+    "English stem with a Korean ending 'offload된': 트 엔진은 GPU마다 크기가 같은 버퍼를 셋 둡니다. offload된 파라미터를 올리는 H2D 버퍼가 하나, GPU 간 브",
+    "self-reference '앞 절': . 저자들은 이 결과로 모든 오픈소스 모델을 앞서고, 앞 절의 툴 사용 비교에 등장한 GPT 모델과 Claude"
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 1853.8,
+  "input_tokens": 2536077,
+  "output_tokens": 241724,
+  "estimated_cost_usd": 10.1357,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 189,
+      "failed_calls": 0,
+      "input_tokens": 509138,
+      "output_tokens": 241724,
+      "cache_read_tokens": 1165191,
+      "cache_write_tokens": 861748,
+      "cost_usd": 10.135704
+    },
+    "by_stage": {
+      "figures": {
+        "calls": 19,
+        "failed_calls": 0,
+        "input_tokens": 69842,
+        "output_tokens": 13695,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.013831
+      },
+      "extract_attributes": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 73425,
+        "output_tokens": 188,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.007437
+      },
+      "read": {
+        "calls": 41,
+        "failed_calls": 0,
+        "input_tokens": 98,
+        "output_tokens": 32176,
+        "cache_read_tokens": 417530,
+        "cache_write_tokens": 110093,
+        "cost_usd": 0.680698
+      },
+      "outline": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 5259,
+        "cache_read_tokens": 1327,
+        "cache_write_tokens": 8940,
+        "cost_usd": 0.150427
+      },
+      "verify": {
+        "calls": 52,
+        "failed_calls": 0,
+        "input_tokens": 248148,
+        "output_tokens": 34734,
+        "cache_read_tokens": 439293,
+        "cache_write_tokens": 225938,
+        "cost_usd": 2.99268
+      },
+      "draft": {
+        "calls": 15,
+        "failed_calls": 0,
+        "input_tokens": 60,
+        "output_tokens": 34362,
+        "cache_read_tokens": 47400,
+        "cache_write_tokens": 259960,
+        "cost_usd": 2.00624
+      },
+      "review": {
+        "calls": 16,
+        "failed_calls": 0,
+        "input_tokens": 64,
+        "output_tokens": 11342,
+        "cache_read_tokens": 23010,
+        "cache_write_tokens": 65569,
+        "cost_usd": 0.564151
+      },
+      "fix": {
+        "calls": 42,
+        "failed_calls": 0,
+        "input_tokens": 117489,
+        "output_tokens": 109183,
+        "cache_read_tokens": 235992,
+        "cache_write_tokens": 186912,
+        "cost_usd": 3.682572
+      },
+      "finalize": {
+        "calls": 2,
+        "failed_calls": 0,
+        "input_tokens": 8,
+        "output_tokens": 785,
+        "cache_read_tokens": 639,
+        "cache_write_tokens": 4336,
+        "cost_usd": 0.037668
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-haiku-5-5": {
+        "calls": 20,
+        "failed_calls": 0,
+        "input_tokens": 143267,
+        "output_tokens": 13883,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.021268
+      },
+      "global.anthropic.claude-sonnet-5-5": {
+        "calls": 41,
+        "failed_calls": 0,
+        "input_tokens": 98,
+        "output_tokens": 32176,
+        "cache_read_tokens": 417530,
+        "cache_write_tokens": 110093,
+        "cost_usd": 0.680698
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 128,
+        "failed_calls": 0,
+        "input_tokens": 365773,
+        "output_tokens": 195665,
+        "cache_read_tokens": 747661,
+        "cache_write_tokens": 751655,
+        "cost_usd": 9.433738
+      }
+    }
+  }
+}

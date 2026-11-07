@@ -1,0 +1,152 @@
+{
+  "kind": "summarize",
+  "status": "succeeded",
+  "input": "2106.09685",
+  "title": "LoRA: Low-Rank Adaptation of Large Language Models",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/2106_09685/2026-11-07-lora-low-rank-adaptation-of-large-language-models-summary.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-11-07-lora-low-rank-adaptation-of-large-language-models-summary.md",
+  "pr_url": null,
+  "warnings": [
+    "Tag 'Adapter-Inference-Latency' (or its acronym) does not appear in the paper; check it fits.",
+    "Tag 'Weight-Update-Subspace-Analysis' (or its acronym) does not appear in the paper; check it fits.",
+    "Evidence that misstates its quote was left out: E6 (Caption only states LoRA's better scalability/performance; it does not show prefix methods degrading with more special t)",
+    "Section '제안 방법': check 3 sentence(s) the evidence may not support: 1,750억 개 가중치는 그대로 두고, 각 어텐션(attention) 층의 $$W_q$$와 $$W_v$$ 옆에 작은 $$A$$, $$B$$만 붙여 학습합니다. (unsupported: Neither the evidence nor the source passages say that LoRA is applied only to W_q and W_v in each attention layer.) | $$d=k=1000$$이고 $$r=4$$라면 $$\\Delta W$$를 직접 학습할 때는 100만 개의 값이 필요합니다. (numbers not in its evidence) | GPT-3 175B를 WikiSQL에 적응시키는 경우에 대입해 보겠습니다. (numbers not in its evidence)",
+    "Section '제안 방법' still has: numbers ['1000', '100만'] without evidence (cite it; an illustration of your own ends with [[EX]]): $$d=k=1000$$이고 $$r=4$$라면 $$\\Delta W$$를 직접 학습할 때는 100만 개의 값이 필요합니다. | numbers ['175B'] without evidence (cite it; an illustration of your own ends with [[EX]]): GPT-3 175B를 WikiSQL에 적응시키는 경우에 대입해 보겠습니다. | numbers ['1,750억'] without evidence (cite it; an illustration of your own ends with [[EX]]): 1,750억 개 가중치는 그대로 두고, 각 어텐션(attention) 층의 $$W_q$$와 $$W_v$$ 옆에 작은 $$A$$, $$B$$만 붙여 학습합니다.",
+    "Section '구현 방식': check 1 sentence(s) the evidence may not support: GPT-3 175B에서는 사전학습 가중치를 고정하면 학습 속도도 빨라집니다. (numbers not in its evidence)",
+    "Section '구현 방식' still has: numbers ['175B'] without evidence (cite it; an illustration of your own ends with [[EX]]): GPT-3 175B에서는 사전학습 가중치를 고정하면 학습 속도도 빨라집니다.",
+    "Section '의의와 한계' still has: 950 characters of prose for a target of 500: cut background, repetition and minor detail",
+    "Section '의의와 한계': whole-post review problems left as they were: 배포 시 W=W0+BA로 병합하고 작업을 바꿀 때 BA를 빼고 B'A'를 더한다는 설명을 다시 합니다. 이 내용은 제안 방법에서 이미 자세히 설명했습니다. Fix: 이 문장을 지우거나 제안 방법을 가리키는 짧은 언급으로 줄이세요. 설명은 제안 방법에 남겨 두세요."
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 773.6,
+  "input_tokens": 701540,
+  "output_tokens": 99689,
+  "estimated_cost_usd": 2.9392,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 77,
+      "failed_calls": 0,
+      "input_tokens": 152681,
+      "output_tokens": 99689,
+      "cache_read_tokens": 357314,
+      "cache_write_tokens": 191545,
+      "cost_usd": 2.939229
+    },
+    "by_stage": {
+      "figures": {
+        "calls": 8,
+        "failed_calls": 0,
+        "input_tokens": 16800,
+        "output_tokens": 7219,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.005292
+      },
+      "extract_attributes": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 54019,
+        "output_tokens": 265,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.005534
+      },
+      "read": {
+        "calls": 20,
+        "failed_calls": 0,
+        "input_tokens": 46,
+        "output_tokens": 17593,
+        "cache_read_tokens": 205099,
+        "cache_write_tokens": 50702,
+        "cost_usd": 0.343794
+      },
+      "outline": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 3136,
+        "cache_read_tokens": 1174,
+        "cache_write_tokens": 3608,
+        "cost_usd": 0.081246
+      },
+      "verify": {
+        "calls": 20,
+        "failed_calls": 0,
+        "input_tokens": 60275,
+        "output_tokens": 25930,
+        "cache_read_tokens": 82170,
+        "cache_write_tokens": 39411,
+        "cost_usd": 0.989624
+      },
+      "draft": {
+        "calls": 6,
+        "failed_calls": 0,
+        "input_tokens": 24,
+        "output_tokens": 11392,
+        "cache_read_tokens": 18960,
+        "cache_write_tokens": 45488,
+        "cost_usd": 0.46296
+      },
+      "review": {
+        "calls": 7,
+        "failed_calls": 0,
+        "input_tokens": 28,
+        "output_tokens": 9187,
+        "cache_read_tokens": 10104,
+        "cache_write_tokens": 14205,
+        "cost_usd": 0.258921
+      },
+      "fix": {
+        "calls": 13,
+        "failed_calls": 0,
+        "input_tokens": 21481,
+        "output_tokens": 23804,
+        "cache_read_tokens": 39168,
+        "cache_write_tokens": 37214,
+        "cost_usd": 0.763741
+      },
+      "finalize": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 1163,
+        "cache_read_tokens": 639,
+        "cache_write_tokens": 917,
+        "cost_usd": 0.028117
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-haiku-5-5": {
+        "calls": 9,
+        "failed_calls": 0,
+        "input_tokens": 70819,
+        "output_tokens": 7484,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.010826
+      },
+      "global.anthropic.claude-sonnet-5-5": {
+        "calls": 20,
+        "failed_calls": 0,
+        "input_tokens": 46,
+        "output_tokens": 17593,
+        "cache_read_tokens": 205099,
+        "cache_write_tokens": 50702,
+        "cost_usd": 0.343794
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 48,
+        "failed_calls": 0,
+        "input_tokens": 81816,
+        "output_tokens": 74612,
+        "cache_read_tokens": 152215,
+        "cache_write_tokens": 140843,
+        "cost_usd": 2.584609
+      }
+    }
+  }
+}

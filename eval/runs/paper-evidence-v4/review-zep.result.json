@@ -1,0 +1,130 @@
+{
+  "kind": "review",
+  "status": "succeeded",
+  "input": "2501.13956",
+  "title": "Zep: A Temporal Knowledge Graph Architecture for Agent Memory",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/2501_13956/2026-06-07-zep-a-temporal-knowledge-graph-architecture-for-agent-memory.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-06-07-zep-a-temporal-knowledge-graph-architecture-for-agent-memory.md",
+  "pr_url": null,
+  "warnings": [
+    "Tag 'Hybrid-Graph-Search' (or its acronym) does not appear in the paper; check it fits.",
+    "Tag 'Agentic-AI' (or its acronym) does not appear in the paper; check it fits.",
+    "Evidence that misstates its quote was left out: E4 (Claim adds 'untested in experiments, future work' which the quote does not state.)",
+    "Section '세 계층 서브그래프로 이루어진 시간 인식 동적 지식 그래프': check 12 sentence(s) the evidence may not support: 이렇게 나누면 원문을 잃지 않으면서도 검색할 때는 정리된 사실이나 요약만 꺼낼 수 있습니다. (unsupported: The retrieval benefit is not stated in the source section.) | 노드와 엣지를 따로 두고 연결 관계를 함수로 분리했기 때문에, 같은 두 노드 사이에도 엣지를 여러 개 둘 수 있습니다. (unsupported: The multigraph implication is not stated in the source.) | 한 사람과 한 장소 사이에 시점이 다른 사실이 여러 개 쌓이는 경우가 그렇습니다. (unsupported: Not stated in the source.) | 여기서 $$\\phi^{*}$$는 주어진 노드 쌍 집합에 대응하는 엣지들을 되돌려 주는 역방향 관계로 읽으면 됩니다. (unsupported: The paper does not define φ*.) | 그래서 어떤 엔티티에서 출발해 그 엔티티를 언급한 원문 메시지로 거슬러 올라갈 수 있고, 반대로 한 메시지가 그래프의 어떤 엔티티를 만들었는지도 확인할 수 있습니다. (unsupported: The bidirectional traceability claim is not stated.)",
+    "Section '환각을 억제하는 엔티티 추출과 엔티티 쌍 단위의 사실 중복 제거': check 5 sentence(s) the evidence may not support: 여기서 $$\\mathcal{N}$$은 노드 집합, $$\\mathcal{E}$$는 엣지 집합이고, 세 번째 요소 $$\\phi$$의 역할은 이 근거에서 따로 설명되지 않습니다 [[E2]]. (unsupported: This is a claim that the source does not explain phi, and none of the cited items quotes the source saying so.) | 추출된 엔티티를 그대로 새 노드로 만들면 '민지'라는 노드가 대화마다 하나씩 생깁니다. (unsupported: The paper does not state this motivation for entity resolution.) | 검색을 두 갈래로 나눈 이유는 서로 놓치는 경우가 다르기 때문입니다. (unsupported: The paper gives no rationale for running two separate searches.) | 전문 검색은 그 반대입니다. (unsupported: This compares the failure cases of the two searches, and the source does not make that comparison.) | Graphiti는 이 방식으로 하이퍼엣지(hyper-edge)를 구현해, 셋 이상의 엔티티가 얽힌 복잡한 사실을 표현합니다 [[E8]]. (unsupported: The source says 'complex multi-entity facts'; the 'three or more entities' detail is an embellishment.)",
+    "Section 'LongMemEval에서 100분의 1 수준의 컨텍스트로 더 높은 정확도와 10분의 1 지연': check 2 sentence(s) the evidence may not support: 115k 토큰에 흩어진 정보를 모델이 직접 찾게 하는 것보다, 검색 단계에서 미리 골라 구조화해 주는 편이 긴 대화에서는 유리했습니다 [[E29, E27]]. (unsupported: The paper does not give this causal explanation; it's the writer's interpretation stated as fact.) | 다만 표의 지연 값은 이 환경에 묶인 측정치이므로, 배포 위치가 달라지면 절대 수치도 달라집니다. (unsupported: The paper doesn't say how absolute numbers would change with a different deployment location.)",
+    "Section '선호도 질문에서 두드러지는 질문 유형별 개선': check 5 sentence(s) the evidence may not support: 선호 정보는 보통 여러 발화에 걸쳐 단편적으로 드러납니다. (unsupported: The paper does not make this claim about how preference information appears in conversations.) | 엔티티 요약과 사실 엣지는 이런 단편을 한 엔티티 주변에 모아 두는 구조라서, 선호도 질문에서 이득이 큰 결과와 잘 맞습니다. (unsupported: This is a causal explanation the paper does not give.) | 예를 들어 가상의 사용자 민지가 이사 이야기 사이사이에 \"바다 가까운 곳이 좋아\", \"소음은 싫어\"라고 흘렸다면, 질의 시점에는 이 말들이 민지 엔티티 요약에 함께 정리되어 넘어갑니다 [[EX]]. (unsupported: The example states a specific system behaviour, namely that preferences are consolidated into an entity summary at query time, which the evidence does not show.) | 원문 대신 추출된 사실만 전달하면 이런 질문에는 손해일 수 있습니다. (unsupported: The paper only says more research is needed; it does not give this cause.) | gpt-4o의 선호도 질문을 퍼센트포인트로 환산하면 36.7%p 상승입니다 [[E28]]. (numbers not in its evidence)",
+    "Section '선호도 질문에서 두드러지는 질문 유형별 개선' still has: numbers ['36.7'] are not in the cited evidence: gpt-4o의 선호도 질문을 퍼센트포인트로 환산하면 36.7%p 상승입니다 .",
+    "Section '한계와 시사점': check 3 sentence(s) the evidence may not support: 첫째, 비교 상대가 거의 전체 컨텍스트 기준선 하나뿐입니다. (unsupported: LongMemEval에서는 전체 컨텍스트 기준선만 있지만 DMR에서는 MemGPT와 세션 요약도 비교됨. 따라서 '하나뿐'이라는 말은 지나치게 넓음.) | 둘째, 엔티티 중복 판별 [[E9]]과 앞서 본 엣지 무효화 단계는 모두 LLM 호출을 거칩니다. (unsupported: 인용된 근거 가운데 엣지 무효화가 LLM을 쓴다는 내용은 E5에만 있는데, 이 문장은 E5를 인용하지 않음. 그래도 E9과 E5를 합치면 내용은 대체로 맞음.) | 셋째, 모순 판단은 항상 새 정보를 우선하는 LLM 판정에 의존합니다. (unsupported: 인용된 근거가 없음. 이 주장은 인용되지 않은 E5에서 나옴.)",
+    "Section '한계와 시사점' still has: an evidence marker stands for a word; state the fact and put the marker at the end of the sentence: 둘째, 엔티티 중복 판별 [[E9]]과 앞서 본 엣지 무효화 단계는 모두 LLM 호출을 거칩니다.",
+    "Section '환각을 억제하는 엔티티 추출과 엔티티 쌍 단위의 사실 중복 제거': whole-post review problems left as they were: 이전 섹션에서 정의한 그래프 G=(N,E,φ)와 세 계층을 다시 설명합니다. 게다가 φ의 역할이 \"이 근거에서 따로 설명되지 않는다\"고 썼는데, φ는 앞 섹션에서 이미 결합 함수로 설명되었고 원고 출처를 가리키는 표현이기도 합니다. Fix: 수식과 계층 설명을 지우고 '원문·사실·요약을 | 민지 예시를 새로 소개하듯 다시 꺼냅니다(\"가상의 사용자 민지가 3월에 '서울에 살아'라고 말했고\"). 첫 섹션의 문장 \"지난달에 서울로 이사했어\"와 내용도 다릅니다. Fix: 첫 섹션에서 소개한 예시를 그대로 가리키도록 고치세요. | \"전문 검색은 그 반대입니다\"는 바로 앞 문장이 놓치는 경우를 설명하지 않아서 가리키는 대상이 없습니다. Fix: 각 검색이 놓치는 경우를 구체적으로 적거나 이 문장을 삭제하세요.",
+    "Section '검색·재순위·구성의 세 단계로 이루어진 메모리 검색 파이프라인': whole-post review problems left as they were: 민지 예시의 두 메시지와 무효화 결과를 처음부터 다시 서술합니다. Fix: 앞 섹션에서 만든 그래프 상태를 가리키는 문장으로 줄이세요.",
+    "Section 'TL;DR': 1 sentence(s) contradicting their evidence removed: 이때 컨텍스트는 115k 토큰에서 1.6k 토큰으로 줄었습니다 [[E29]]. (wrong: E29는 gpt-4o-mini 행이다. 이 문장은 바로 앞 문장의 gpt-4o 설정에 이어 붙여 놓았다)",
+    "Section 'TL;DR': check 1 sentence(s) the evidence may not support: 전체 대화를 컨텍스트에 넣는 방식은 대화가 평균 약 115,000 토큰에 이르면 비용과 지연이 크게 늘어납니다 [[E22]]. (unsupported: E22는 평균 토큰 수만 말할 뿐, 비용과 지연이 늘어난다는 내용은 담고 있지 않다)"
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 1363.5,
+  "input_tokens": 872920,
+  "output_tokens": 149313,
+  "estimated_cost_usd": 5.6731,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 102,
+      "failed_calls": 0,
+      "input_tokens": 322365,
+      "output_tokens": 149313,
+      "cache_read_tokens": 278618,
+      "cache_write_tokens": 271937,
+      "cost_usd": 5.673125
+    },
+    "by_stage": {
+      "extract_attributes": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 17716,
+        "output_tokens": 238,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.001891
+      },
+      "outline": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 4664,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 5024,
+        "cost_usd": 0.118416
+      },
+      "verify": {
+        "calls": 44,
+        "failed_calls": 0,
+        "input_tokens": 212982,
+        "output_tokens": 24395,
+        "cache_read_tokens": 145383,
+        "cache_write_tokens": 60448,
+        "cost_usd": 1.700223
+      },
+      "draft": {
+        "calls": 11,
+        "failed_calls": 0,
+        "input_tokens": 44,
+        "output_tokens": 24165,
+        "cache_read_tokens": 31600,
+        "cache_write_tokens": 94512,
+        "cost_usd": 0.968676
+      },
+      "review": {
+        "calls": 12,
+        "failed_calls": 0,
+        "input_tokens": 48,
+        "output_tokens": 9638,
+        "cache_read_tokens": 16240,
+        "cache_write_tokens": 49503,
+        "cost_usd": 0.446967
+      },
+      "fix": {
+        "calls": 31,
+        "failed_calls": 0,
+        "input_tokens": 91563,
+        "output_tokens": 85780,
+        "cache_read_tokens": 84756,
+        "cache_write_tokens": 58154,
+        "cost_usd": 2.406524
+      },
+      "finalize": {
+        "calls": 2,
+        "failed_calls": 0,
+        "input_tokens": 8,
+        "output_tokens": 433,
+        "cache_read_tokens": 639,
+        "cache_write_tokens": 4296,
+        "cost_usd": 0.030428
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-haiku-5-5": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 17716,
+        "output_tokens": 238,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.001891
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 101,
+        "failed_calls": 0,
+        "input_tokens": 304649,
+        "output_tokens": 149075,
+        "cache_read_tokens": 278618,
+        "cache_write_tokens": 271937,
+        "cost_usd": 5.671234
+      }
+    }
+  }
+}

@@ -1,0 +1,274 @@
+{
+  "item": "survey-rlhf",
+  "post": "/tmp/eval-evidence/survey-rlhf-v12.md",
+  "judge_run": 3,
+  "sampling": "paragraphs numbered from the first body paragraph (prose blocks and table rows; headings, images, captions and display-only math skipped; 234 total); run 3 samples paragraphs 3, 6, 9, ...; sources checked against arXiv PDF full text",
+  "scores": {
+    "A": 6.5,
+    "B": 7.0,
+    "C": 7.5,
+    "D": 8.0,
+    "E": 6.5,
+    "F": 6.0
+  },
+  "type_scores": {
+    "S1": 6.0
+  },
+  "score_evidence": {
+    "A": [
+      "L712-721: a horizontal rule followed by '**반영하지 못한 요청과 그 밖의 변경**' and six bullets of generator revision notes ('근거에는 ... 수치는 없습니다', '실험 소절로 옮겼습니다') published inside the GRPO section; internal process text in the post body.",
+      "L424 '여기서 인용한 범위에는 DPO 값이 없어 그 차이가 신뢰구간을 넘는지는 확인할 수 없습니다': evidence-scope language leaked into prose.",
+      "L204 `\\beta_{\\text{bo$n$}}`: single $ inside a $$ block (same defect as v11).",
+      "Conditionals and lengths with bare |: L100 `\\rho(y|x)`, L360 `\\mu(.|x)` and KL as `||`, L400-401 `y_{\\text{desirable}}|x`, L478/L482 `odds(y|x)`, L516/L520 `|y|` (L518 uses \\lvert\\rvert), L644 `|o_i|`, L671 `|o|`.",
+      "Thin subsections: L528 '### 참조 정책 대신 들어선 정규화 장치' (one paragraph), L745 '### 길이 정규화로도 막히지 않는 단순 특성 외삽' (one paragraph), L434 (one card paragraph + assessment)."
+    ],
+    "B": [
+      "Register break in table cells (caps B at 7): L794 '... 7B 초과 규모와 다양한 도메인은 검증되지 않았다.', L798 '... 안전성·정직성을 명시적으로 고려하지 않는다.' -> '...검증하지 않음' / '...고려하지 않음' or 입니다체.",
+      "Assessment openers repeat: '이 글은 ... 봅니다' L306, L710, L755, L817; '이 글이 보기에' L530, L625, L835; '이 글의 관점' L438, L775; '필자의 판단으로는' L250 (two different self-references).",
+      "Figure-intro frames repeat: '눈여겨볼 대목은' L276, L470; '눈여겨볼 곳은' L144; '읽을 것은' L344; '확인할 것은' L432; noun frame L276 '크게 뛴다는 점입니다' -> 'CoT를 붙이면 정확도가 크게 뜁니다'.",
+      "'셈입니다' six times (L190, L326, L470, L508, L595, L821); 'critic' kept in English at L17, L35, L763 but translated '비평가' in the L631 heading.",
+      "L783 cell 'base 74% / RS 70% / online 67%' and L779 'vs' keep English unit/label words in a Korean table."
+    ],
+    "C": [
+      "Running Reddit TL;DR pair threads the post (L15, L124, L324, L378, L460, L534, L564, L595, L623, L729, L763, L807, L831); lineage hand-offs are explicit (L250, L442, L534, L629).",
+      "The leaked revision block (L712-721) breaks the transition from GRPO to the overoptimization section.",
+      "Facts re-told instead of pointed to: DAA overoptimization L436, L530, L737, L815, L833; SimPO margin/GSM8k limits L526 and L765; NLHF fairness disclaimer L560, L773, L821; Pass@K L690, L710, L769, L825; SPPO length L753, L767, L813; GRPO > Online RFT and first-iteration gain L680 and L809."
+    ],
+    "D": [
+      "Worked examples are correct and sit at the hard steps: label noise 0.9x0.69+0.05≈0.67 (L64), pairwise loss σ(0.8)≈0.69, −log≈0.37 and KL penalty 0.2 (L124), BoN peak d=2, R=1 (L210), DPO loss 0.693→0.644 (L324), IPO target τ⁻¹/2=5 (L378), odds 4 vs prob ratio 1.6 (L496), SimPO 2×0.3−0.5=0.1 (L522), SPPO targets ±0.3 (L595), GRPO +1.73/−0.58 (L662), DAA peak d=e, 1.36 (L735).",
+      "49 figures, most followed by a sentence restating the caption (L72, L84, L98, L182, L298, L334, L452): padding on easy material."
+    ],
+    "E": [
+      "Timeline table (L19-42) and one comparison table (L777-799); 68 display-math blocks placed where discussed; no source figure numbering.",
+      "49 source figures; several are illustrative only and narrated near-verbatim (L68-84 MuJoCo/Atari/ablation, L178-182 HH workflow).",
+      "Comparison-table cells that are setup, not results: L779 'MuJoCo 700 라벨 합성 피드백 vs 진짜 보상 RL' (outcome 'nearly match RL' missing), L784 '합성 비교쌍 100,000개', L785 PM data counts 135,296 / 182,831, L790 '장난감 실험 18000 스텝', L792 'Llama-7B 바람직 데이터 90% 제거' (no result).",
+      "L799 '스케일링 법칙 적합 RMSE 절반' drops the comparator (vs a quadratic fit in KL); the table sits at the end after two subsections that already discuss it ('뒤에 붙인 표', L773)."
+    ],
+    "F": [
+      "L629 wrong: GRPO reward described as answer correctness; DeepSeekMath §4.2 trains and uses a reward model (−2; also L15).",
+      "L753 unsupported as placed: the Mistral-7B decline of DPO/IPO/SPPO is on the Open LLM Leaderboard, while the paragraph is about AlpacaEval where SPPO rises (−1).",
+      "Outside the sample: L424 claims the KTO table has no DPO value (0.600 ± 0.037 is there) (−2)."
+    ],
+    "S1": [
+      "Limitations are the papers' own (L792 'KTO 과소적합 위험' = 2402.01306; L799 '해결책 미제시' = 2406.02900 App. A); no input-based false limitation.",
+      "Cells: setup phrases instead of results (L779, L784, L785, L790), 한다체 sentences (L794, L798), English label words (L783 'base/RS/online').",
+      "Synthesis sections re-explain cards (L763-769 restate L633, L526, L753; L807-815 restate L564-566, L599, L680)."
+    ]
+  },
+  "principles": {
+    "claim_headings": {
+      "status": "met",
+      "evidence": "Noun-phrase claim headings throughout (L48 '### 짧은 클립 비교로 배우는 보상 예측기', L434 '### 보상 모델이 사라져도 남는 과최적화'); no heading ends in 다."
+    },
+    "running_example": {
+      "status": "met",
+      "evidence": "Reddit TL;DR pair introduced at L15 and reused in every lineage (L124, L324, L378, L460, L564, L595, L623, L729, L807, L831); GRPO moves it to a math problem explicitly (L629)."
+    },
+    "mechanism_choice_formula_example": {
+      "status": "partly met",
+      "evidence": "Full chain for Stiennon (L110-124), DPO (L314-324), IPO (L356-378), SimPO (L508-522), SPPO (L576-597), GRPO (L633-662); KTO (L396-406) and RLHF Workflow (L617-623) stop before a numbered example."
+    },
+    "facts_said_once": {
+      "status": "not met",
+      "evidence": "DAA overoptimization L436, L530, L737, L815, L833; NLHF disclaimer L560, L773, L821; Pass@K L690, L710, L769, L825; SPPO length L753, L767, L813; SimPO limits L526, L765; the generator's own warnings list five restatements in the synthesis section."
+    },
+    "numbers_with_scope": {
+      "status": "partly met",
+      "evidence": "Body numbers mostly carry model and setting (L524 'Mistral-Base 7B ... 21.5%'); L753 'DPO, IPO, SPPO 모두 이후 반복에서 성능이 떨어졌습니다' drops the benchmark (Open LLM Leaderboard) in an AlpacaEval paragraph; L799 drops the RMSE comparator."
+    },
+    "nothing_invented": {
+      "status": "partly met",
+      "evidence": "Hypothetical numbers are labelled ('가상의', L64, L124, L210, L324, L496, L522, L595, L662, L735); GRPO's reward is described as answer correctness (L15, L629) though DeepSeekMath used a learned reward model (L769 says so); L424 claims the KTO table lacks a DPO value."
+    },
+    "own_assessment_at_end": {
+      "status": "met",
+      "evidence": "L817 and L833-835: choose regularization by compatibility with on-policy feedback; the next step is the fidelity of a comparison and the yardstick, not another approximation."
+    },
+    "length_fitted": {
+      "status": "partly met",
+      "evidence": "≈77k non-space characters and 49 figures; hard steps get worked examples, but caption narration and repeated limitations pad it."
+    },
+    "type_specific_shape": {
+      "status": "partly met",
+      "evidence": "One comparison table (L777) exists, but headline numbers also live only in the body (SPPO 8.81/3.42/3.62 L605, SimPO ablations L524, d-RLAIF 74%/66% L304, ORPO 6.35%/0.78% L504, Llama 2 0.15/0.89/0.55 L244); synthesis sections L757-775 and L801-825 re-tell cards."
+    },
+    "korean_style": {
+      "status": "partly met",
+      "evidence": "입니다 register in prose; table cells L794/L798 break into 한다체; assessment openers ×10 and repeated figure-intro frames (L144, L276, L344, L432, L470)."
+    }
+  },
+  "claims": {
+    "checked": 15,
+    "numbers": 12,
+    "supported": 13,
+    "unsupported": 1,
+    "wrong": 1,
+    "unverifiable": 0,
+    "examples": [
+      {
+        "line": 64,
+        "claim": "Predictor ensemble; 1/e of data held out to tune ℓ2 strength; 10% chance the human answers at random",
+        "verdict": "supported",
+        "source": "1706.03741 'A fraction of 1/e of the data is held out ... adjust the regularization coefficient'; '10% chance that the human responds uniformly at random'"
+      },
+      {
+        "line": 104,
+        "claim": "RM trained before the first PPO episode and retrained 19 more times; online beats offline by ~3 R-AVG on CNN/DM at 60k labels, possibly noise",
+        "verdict": "supported",
+        "source": "1909.08593 'train the reward model before the first PPO episode, and then retrain it 19 more times at evenly spaced values'; 'a 3 point R-AVG gain on CNN/DM at 60k labels' with footnote 'possible that this gap is largely noise'"
+      },
+      {
+        "line": 144,
+        "claim": "Shortening edits: humans prefer 76.4%, 6.7B RM 62.6%; 6.7B RL fine-tuning ~320 GPU-days",
+        "verdict": "supported",
+        "source": "2009.01325 'our 6.7B RM prefers improving edits that make the summary shorter only 62.6% of the time (vs. 76.4% for humans)'; 'required approximately 320 GPU-days'"
+      },
+      {
+        "line": 184,
+        "claim": "Controlled 52B experiment, ~44k PM comparisons, helpfulness only: base+RS+online mixture preferred over base-only",
+        "verdict": "supported",
+        "source": "2204.05862 'one trained with our base dataset (about 44k PM comparisons), and another trained on an even mixture of base, RS, and online data ... only trained on helpfulness'; Figure 16 'two 52B RLHF training runs'"
+      },
+      {
+        "line": 224,
+        "claim": "With 1.2B policy and 1.2B RM, the KL penalty does not move the gold-KL frontier, acts like early stopping, possibly hyperparameter-sensitive",
+        "verdict": "supported",
+        "source": "2210.10760 Figure 9 'Policy size (1.2B) and RM size (1.2B)'; 'does not affect the KLRL-gold reward frontier ... akin to early stopping ... particularly sensitive to hyperparameters'"
+      },
+      {
+        "line": 270,
+        "claim": "438 HHH binary comparisons; CoT pretrained LMs approach the human-feedback PM; models larger than 52B expected to be competitive",
+        "verdict": "supported",
+        "source": "2212.08073 Figure 4 'performance on 438 binary comparison questions ... models larger than 52B will be competitive with human feedback-trained preference models'"
+      },
+      {
+        "line": 344,
+        "claim": "IMDb: DPO's reward/KL frontier strictly dominates PPO and beats PPO-GT",
+        "verdict": "supported",
+        "source": "2305.18290 'DPO's reward/KL tradeoff strictly dominates PPO. Second, DPO achieves a better frontier than PPO, even when PPO can access ground truth rewards (PPO-GT)'"
+      },
+      {
+        "line": 412,
+        "claim": "HALO vs non-HALO gap statistically significant only at 13B+ (Llama)",
+        "verdict": "supported",
+        "source": "2402.01306 Figure 2 'The difference between methods is only significant (p < 0.05) at 13B+ parameters'"
+      },
+      {
+        "line": 504,
+        "claim": "AlpacaEval 2.0: Phi-2 ORPO 6.35% vs SFT+DPO 0.78%; Llama-2 7B ORPO 9.44%",
+        "verdict": "supported",
+        "source": "2403.07691 'Phi-2 + SFT + DPO 2.7B ... 0.78%', 'Phi-2 + ORPO 2.7B ... 6.35%'; '81.26% and 9.44% in both AlpacaEvals' (Llama-2)"
+      },
+      {
+        "line": 605,
+        "claim": "Llama-3-8B SPPO LC gains +8.81, +3.42, +3.62 (15.85 total); Arena-Hard 23.3 for Mistral-7B-SPPO Iter3; Open LLM avg 66.75 (Mistral-7B) and 70.29 (Llama-3-8B)",
+        "verdict": "supported",
+        "source": "2405.00675 table 'Llama-3-8B-SPPO Iter1 31.73(+8.81) ... Iter2 35.15(+3.42) ... Iter3 38.77(+3.62)' from 22.92; Figure 2 'Mistral-7B-SPPO Iter3 23.3'; 'average score of 66.75 for Mistral-7B and 70.29 for Llama-3-8B'",
+        "note": "66.75 is the Iter2 row; the iteration is not named"
+      },
+      {
+        "line": 629,
+        "claim": "In GRPO the reward becomes answer correctness instead of a human choice",
+        "verdict": "wrong",
+        "source": "2402.03300 §4.2 trains a reward model ('We train our initial reward model based on the DeepSeekMath-Base 7B') and scores outputs with it; the binary verifiable reward is the 2503.06639 analysis assumption",
+        "note": "the post's own L769 says the reward comes from a learned reward model"
+      },
+      {
+        "line": 753,
+        "claim": "Mistral-7B: DPO, IPO and SPPO all decline in later iterations (in an AlpacaEval 2.0 length paragraph)",
+        "verdict": "unsupported",
+        "source": "2405.00675 'For Mistral-7B, subsequent iterations of DPO, IPO, and SPPO see a decline in performance' refers to the Open LLM Leaderboard; on AlpacaEval 2.0 SPPO rises every iteration (24.79 → 26.89 → 28.53)",
+        "note": "benchmark dropped; as placed it contradicts the AlpacaEval table"
+      },
+      {
+        "line": 785,
+        "claim": "RL-CAI PM data: 135,296 human helpfulness and 182,831 AI harmlessness comparisons",
+        "verdict": "supported",
+        "source": "2212.08073 'we used 135,296 HF helpfulness comparisons, and 182,831 constitutionally-generated harmlessness comparisons'",
+        "table": true,
+        "note": "data counts, not a result"
+      },
+      {
+        "line": 791,
+        "claim": "T5X-XL preference model test accuracy 0.78 vs reward model 0.76; Nash-MD-PG best for β 0.125-0.375",
+        "verdict": "supported",
+        "source": "2312.00886 'peak accuracy for the preference model is around 0.78 vs 0.76 for the reward model'; 'Nash-MD-PG models (specially for β ∈ [0.125, 0.375])' outperform",
+        "table": true
+      },
+      {
+        "line": 797,
+        "claim": "RLHF Workflow iterative DPO 8B AlpacaEval-2 LC 31.3 vs vanilla DPO 22.5",
+        "verdict": "supported",
+        "source": "2405.07863 table 'Ours (DPO baseline) 8B Vanilla DPO 22.5', 'Ours (Iterative RLHF) 8B Iterative DPO 31.3'",
+        "table": true
+      }
+    ]
+  },
+  "checklist": {
+    "repeated": 0,
+    "avoided": 5,
+    "na": 1,
+    "repeated_ids": [],
+    "items": [
+      {
+        "id": "grpo-card-unverified-figure",
+        "result": "avoided",
+        "evidence": "L700-710 state the 2503.06639 results in words (fixed point above p_ref, 0 and 1 absorbing, β condition for stability), all in the paper (L365-367, L1013); no number or equation absent from it. The leaked note L719 says the weight formula was left out."
+      },
+      {
+        "id": "copy-explains-preference",
+        "result": "avoided",
+        "evidence": "L106 '저자들은 이 선호가 라벨러의 휴리스틱을 악용한 결과일 수 있다고 봅니다' carries no 96%/84% figure and matches the abstract ('may be exploiting the fact that labelers rely on simple heuristics')."
+      },
+      {
+        "id": "daa-no-quantification",
+        "result": "avoided",
+        "evidence": "L436 '이 분석은 문제와 이론적 근거를 제시하는 데서 멈추고, 해결책은 내놓지 않습니다' matches 2406.02900 Appendix A ('does not provide a way to resolve these issues'); the table cites its RMSE result (L799)."
+      },
+      {
+        "id": "grpo-row-reward",
+        "result": "n/a",
+        "evidence": "The comparison table (L777) has no reward column; GRPO row is 'DeepSeekMath-RL 7B GSM8K 88.2%, MATH 51.7% | 기하·정리 증명 약세'. The same misattribution appears in prose instead (L15, L629 '정답 여부 보상')."
+      },
+      {
+        "id": "heading-da-form-offline",
+        "result": "avoided",
+        "evidence": "No heading ends in 다; the DAA heading is L434 '### 보상 모델이 사라져도 남는 과최적화'."
+      },
+      {
+        "id": "heading-da-form-judge",
+        "result": "avoided",
+        "evidence": "No 다-form heading anywhere (all ##/### lines checked)."
+      }
+    ]
+  },
+  "extras": {
+    "plan_papers_never_cited": [],
+    "thin_sections": [
+      "L434 '### 보상 모델이 사라져도 남는 과최적화': one card paragraph + one assessment paragraph",
+      "L528 '### 참조 정책 대신 들어선 정규화 장치': one paragraph that restates L436",
+      "L745 '### 길이 정규화로도 막히지 않는 단순 특성 외삽': one paragraph"
+    ],
+    "venue_issues": [
+      "L851 IPO venue spelled out as 'International Conference on Artificial Intelligence and Statistics' while other entries are abbreviated (NeurIPS, ICML, EMNLP, ICLR, TMLR); not wrong"
+    ],
+    "table_cells_prose_empty_or_dash": [
+      "L779 'MuJoCo 700 라벨 합성 피드백 vs 진짜 보상 RL' (setup; outcome missing)",
+      "L784 '합성 비교쌍 100,000개' (dataset size, not a result)",
+      "L785 'RL-CAI PM 데이터 인간 helpfulness 135,296 / AI 무해성 182,831' (data counts)",
+      "L790 '장난감 실험 18000 스텝' (step count)",
+      "L792 'Llama-7B 바람직 데이터 90% 제거' (setup without the result)",
+      "L794, L798 limitation cells are full 한다체 sentences",
+      "L799 'RMSE 절반' (comparator missing)"
+    ],
+    "leaked_process_text": [
+      "L712-721 '반영하지 못한 요청과 그 밖의 변경' block",
+      "L424 '여기서 인용한 범위에는 DPO 값이 없어'"
+    ]
+  },
+  "top_issues": [
+    "Generator notes leaked into the post: L712-721 '반영하지 못한 요청과 그 밖의 변경' block, and L424 claims the KTO table has no DPO value although it lists Mistral-7B + DPO 0.600 ± 0.037 (so the 0.631 ± 0.036 gap is within the intervals).",
+    "Comparison table: setup counts instead of results (L779, L784, L785, L790, L792), 한다체 sentence cells (L794, L798), comparator-less 'RMSE 절반' (L799); body numbers outside the table.",
+    "Attribution and markup: GRPO's reward described as answer correctness (L15, L629) though DeepSeekMath trained a reward model (L769 says so); L753 Open LLM decline stated without its benchmark; `\\text{bo$n$}` at L204 and bare | for conditionals/KL (L100, L360, L400, L478)."
+  ]
+}

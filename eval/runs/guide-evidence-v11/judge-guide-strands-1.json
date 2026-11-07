@@ -1,0 +1,282 @@
+{
+ "item": "guide-strands",
+ "post": "/tmp/eval-guide/guide-strands-v11.md",
+ "judge_run": 1,
+ "sdk_checked": "strands-agents 1.64.0 (+[cedar] extra) and strands-agents-tools 0.9.0 in a temp venv (Python 3.14); docs from strandsagents.com index.md pages and llms.txt (2026-11-07); code blocks exercised with a scripted fake Model (no paid model calls, no AWS)",
+ "sampling": "273 blank-line paragraphs after front matter (fenced blocks kept whole, list runs as one paragraph); paragraphs 1,4,7,...,271 (every third from 1); claims drawn from those paragraphs",
+ "scores": {
+  "A": 7.5,
+  "B": 8.0,
+  "C": 7.5,
+  "D": 8.5,
+  "E": 8.0,
+  "F": 7.5,
+  "T1": 7.0,
+  "T2": 8.5,
+  "T3": 8.5
+ },
+ "score_evidence": {
+  "A": "Claim-style headings, no skipped levels, real tables and fenced code, no math so no use_math; description 123 characters. Deductions: TL;DR is two dense paragraphs, L14 alone about 1,400 characters covering structured-output limits, hooks, interventions, HITL, Cedar and the Langfuse verdict; the quickstart section 'L656 설치부터 TicketTriage 객체를 돌려받는 첫 호출까지' comes after the structured-output section that already used TicketTriage, and install is given twice (L133, L665); a few topic headings (L47, L660, L1088).",
+  "B": "Mostly natural Korean engineer prose. Deductions: L492 '인가 서비스가 예외를 던져도 환불이 막히는 핸들러입니다.' (orphan sentence; rewrite '반대로 deny를 쓰면 인가 서비스가 예외를 던져도 환불은 막힙니다.'); L1025 '서브클래싱하면 재시도 여부와 지연을 직접 정하고, 훅을 등록하는 코드는 기본 구현을 그대로 씁니다' (meaning lost; rewrite '서브클래스는 재시도 여부만 정하고 대기는 기본 구현이 넣습니다.'); L1172 '이 글의 판단으로는 다음처럼 고르면 무난합니다'; '이렇습니다' x3, 14 '할 수 있습니다'.",
+  "C": "Reads as one document with accurate title cross-references (L1080, L1164, L1166, L1168). Deductions: L18 and L37 restate L12; L405 says '인가 훅이 취소한 호출을 톤 교정 훅이 덮어쓸 수 있습니다' though the auth check is before_tool_call and tone correction after_model_call, so they never touch the same event; L919 tells the reader to reuse the 'cedar' object from triage_with_approval although it is a local variable there; build_ticket_agent and handle_ticket are redefined with new signatures (L1067, L1075) and L1106 then calls the old zero-argument form.",
+  "D": "Hard parts get worked examples where they appear: message growth 3 -> 5 -> 6 (L69), Before/After order table (L212), four-handler decision merge (L469-L476), Guide convergence vs after_model_call's missing Deny (L482-L484), 20,000-token overshoot (L826), 124 s retry vs 20 s deadline and the 14 s fix (L994, L1000), two pods writing one session (L1086). Over-dense TL;DR front-loads mechanisms before they are explained.",
+  "E": "Tables where comparison helps: stop reasons (L92), state lifetimes (L116), hook events (L197), callback order (L212), allowed decisions (L413), decision merge (L469), schema mapping (L555), limit outcomes (L646), checkpoints (L838), stop reason -> handling (L871), retry schedule (L985), session events (L1039), choice table (L1174); two text flow diagrams (L53, L573) labelled as illustrations. No remote images; no actual figure of the loop or span tree.",
+  "T2": "Covers what the sources cover in a sensible order (loop -> state -> hooks -> interventions -> structured output -> quickstart -> HITL/Cedar -> limits/cancel -> concurrency -> retry -> sessions -> metrics/traces/evals -> choice). The quickstart sits mid-post after structured output; middleware (in the hooks sources) is absent.",
+  "T3": "Explains mechanisms and why: After callbacks reversed within an order group for cleanup symmetry (L210), interventions vs hook last-write-wins (L403), decision precedence vs registration order (L427), structured output as a per-call tool with validation errors fed back (L528, L595), limit checks at iteration start (L824), cooperative cancellation (L845), no distributed lock in sessions and the two failure modes (L1084-L1086), symlink risk (L1090). Design advice is phrased as advice; failure modes at the end mostly point back.",
+  "F": "All 15 sampled claims are supported. Off-sample: L963 '분류 객체는 정상 완료일 때만 내보냅니다' is wrong for the code it describes (successful structured output ends with stop_reason 'tool_use', classify() returns STOPPED, triage None; exercised) (-2); L919 says the cedar object gets a TicketTriage rule added, but L781 already has it and cedar is local to another function (-0.5). L836 '네 곳' is the Python count without saying so.",
+  "T1": "Most blocks execute against SDK 1.64.0 with a scripted fake model (hooks, interventions, structured output with validation feedback and limits, HITL classifier, Cedar alice/bob, retry schedules, sessions). Deductions: the final service handle_ticket (L921) raises NameError for cedar and ask, and once patched never returns its TicketTriage; L1063 TicketRetryStrategy(...) TypeError; L1104 calls build_ticket_agent() without the ticket_id the L1067 redefinition requires; L681 needs the [anthropic] extra and Cedar the [cedar] extra, neither mentioned."
+ },
+ "principles": {
+  "claim_headings": {
+   "status": "met",
+   "evidence": "e.g. L112 '대화 기록만 모델에 보이는 세 갈래의 상태', L526 '스키마를 도구로 바꿔 검증 오류를 루프로 되돌리는 구조화 출력', L1029 '분산 락 없는 세션 매니저로 하는 대화·상태 영속화'; topic headings remain at L47 '한 바퀴의 구성', L660 '설치와 기본 모델', L1088 '운영 측에서 지켜야 할 규칙'."
+  },
+  "running_example": {
+   "status": "met",
+   "evidence": "Customer-support ticket triage agent (lookup_ticket, process_refund, TicketTriage) runs from L22 through hooks (L244), interventions (L429), structured output (L532), Cedar/HITL (L772), limits (L921), retry (L1002), sessions (L1047), metrics (L1104) and the choice table (L1176). Ticket ids drift (4821 at L69, T-1042, T-1234 at L972, T42 at L1086)."
+  },
+  "mechanism_design_code_example": {
+   "status": "met",
+   "evidence": "Hook order: rule (L208-L210) -> order table (L212-L216) -> code (L220); limits: check-at-top rule (L824) -> 20,000-token 4,000/7,000/11,000 example (L826); retry: default schedule table (L985-L992) -> 124 s vs 20 s deadline (L994) -> subclass with 2+4+8 = 14 s (L1000-L1017); decision precedence: rule (L427) -> four-handler table (L469-L476)."
+  },
+  "facts_said_once": {
+   "status": "partly met",
+   "evidence": "L18 restates L12 almost verbatim ('직접 작성하던 에이전트 루프(agent loop)를 대신하는 Python·TypeScript용 오픈소스 SDK ... 호스팅 컨트롤 플레인 없이'), L37 says it a third time; the TL;DR (L12-L14) pre-explains structured-output limits, interventions and Cedar/HITL in full; pip install appears twice (L133, L665); tool failures returned as results at L12, L45, L82, L86, L979."
+  },
+  "numbers_with_scope_unit": {
+   "status": "partly met",
+   "evidence": "Python/TypeScript scope is kept for limits (L822), token counting (L828), retry backoff (L1021) and trace units (L1128); illustrative figures are labelled '가상의 예' (L69, L210, L467, L826). But the cancellation checkpoint count 'L836 네 곳' is the Python table only (TypeScript has five) and is not labelled as Python."
+  },
+  "nothing_invented": {
+   "status": "partly met",
+   "evidence": "Writer's examples are labelled; but L963 says handle_ticket '분류 객체는 정상 완료일 때만 내보냅니다' while its classify() maps the successful structured-output stop reason ('tool_use') to STOPPED, so it never returns the object; L919 says the cedar object gets a TicketTriage rule 'added' though L781 already has it."
+  },
+  "writer_assessment_at_end": {
+   "status": "met",
+   "evidence": "L1172-L1181 '이 글의 판단으로는 다음처럼 고르면 무난합니다' with a four-row choice table and a verdict for the ticket service."
+  },
+  "length_fitted": {
+   "status": "partly met",
+   "evidence": "1,207 lines, about 37k non-space prose characters; depth on interventions, structured output and sessions is warranted, but the TL;DR is about 1,690 characters (L12-L14, one 1,400-character paragraph at L14; the generator's own warning gives a 1,000 target) and the positioning is said three times."
+  },
+  "type_specific_shape": {
+   "status": "met",
+   "evidence": "TL;DR (L10) and the hand-written-loop problem (L16-L41) open the post; loop architecture at L43 and internals (state, hooks, interventions, structured output) before installation (L656); closes with model-driven vs graph choice and failure modes (L1144-L1181), though the failure-mode subsection (L1162-L1170) mostly points back."
+  },
+  "korean_style": {
+   "status": "partly met",
+   "evidence": "Natural '입니다' prose overall. Defects: L492 dangling '인가 서비스가 예외를 던져도 환불이 막히는 핸들러입니다.'; L1025 garbled '서브클래싱하면 재시도 여부와 지연을 직접 정하고, 훅을 등록하는 코드는 기본 구현을 그대로 씁니다'; formulaic '이렇습니다' x3 (L69, L1027), '다음과 같습니다' x3; 14 '할 수 있습니다'."
+  }
+ },
+ "claims": {
+  "checked": 15,
+  "supported": 15,
+  "unsupported": 0,
+  "wrong": 0,
+  "unverifiable": 0,
+  "examples": [
+   {
+    "line": 71,
+    "claim": "Four countermeasures for context overflow: shorter tool output, simpler schemas, conversation manager strategy, sub-tasks with fresh context",
+    "verdict": "supported",
+    "source": "Agent Loop: 'Reduce tool output verbosity ... Simplify tool schemas ... Configure a conversation manager ... Decompose large tasks into subtasks, each handled with a fresh context.'"
+   },
+   {
+    "line": 92,
+    "claim": "Eleven stop reasons incl. limit_* and max_tokens; max_tokens is unrecoverable within the loop and ends with an error",
+    "verdict": "supported",
+    "source": "Agent Loop Stop Reasons list: 'Max tokens ... unrecoverable within the current loop ... terminates with an error'."
+   },
+   {
+    "line": 332,
+    "claim": "RetryOnServiceUnavailable retries on 'ServiceUnavailable', max_retries=3, sleeps 2 ** retry_count",
+    "verdict": "supported",
+    "source": "Hooks 'Model call retry' example: asyncio.sleep(2 ** self.retry_count), RetryOnServiceUnavailable(max_retries=3); exercised (one retry, sleep 2)."
+   },
+   {
+    "line": 413,
+    "claim": "Allowed decisions: before_invocation P/D/G/T, before_tool_call adds Confirm, after_tool_call P/T, before_model_call P/D/G/T, after_model_call P/G/T",
+    "verdict": "supported",
+    "source": "Interventions 'Lifecycle Methods' table, verbatim."
+   },
+   {
+    "line": 555,
+    "claim": "Python tool name is the class name; TypeScript tool is strands_structured_output with .describe() as descriptions",
+    "verdict": "supported",
+    "source": "Structured output behavior: 'The tool is named after the class ... The tool is named strands_structured_output'."
+   },
+   {
+    "line": 565,
+    "claim": "A structured-output call goes through five steps; the tool is removed when the call ends",
+    "verdict": "supported",
+    "source": "Structured output behavior steps 1-5."
+   },
+   {
+    "line": 601,
+    "claim": "Python adds 'You must format the previous response as structured output.' before the forced retry; structured_output_prompt on agent or call, call wins",
+    "verdict": "supported",
+    "source": "Structured output behavior 'Forced tool call'; exercised (message seen by the fake model)."
+   },
+   {
+    "line": 689,
+    "claim": "Ollama runs only in the Python SDK; LiteLLM and bidirectional (voice) streaming are Python-only",
+    "verdict": "supported",
+    "source": "Get started: 'Ollama runs in the Python SDK only'; feature table Ollama/LiteLLM/Bidirectional streaming Python only."
+   },
+   {
+    "line": 810,
+    "claim": "With user_id='bob' the refund is denied without a prompt; Cedar must come first in interventions",
+    "verdict": "supported",
+    "source": "Approve before acting: 'add Cedar Authorization before HumanInTheLoop ... the classifier and the person never see it'; exercised (bob: no prompt, alice: prompt)."
+   },
+   {
+    "line": 822,
+    "claim": "Python caps must be positive integers; TypeScript camelCase keys, positive finite numbers",
+    "verdict": "supported",
+    "source": "Agent Loop: 'Each cap must be a positive int' / 'Each cap must be a positive finite number.'"
+   },
+   {
+    "line": 828,
+    "claim": "Python token limits count only the agent's own calls; on Bedrock, Anthropic, OpenAI and Gemini cache reads and writes count in full",
+    "verdict": "supported",
+    "source": "Agent Loop 'Invocation Limits' Python and TypeScript passages; 'that total counts prompt-cache reads and writes in full'."
+   },
+   {
+    "line": 985,
+    "claim": "Default retry waits 4, 8, 16, 32, 64 s and raises after the 6th attempt",
+    "verdict": "supported",
+    "source": "Retry Strategies: 6 attempts, initial 4 s doubling; exercised (sleeps 4, 8, 16, 32, 64; ModelThrottledException after 6 calls)."
+   },
+   {
+    "line": 998,
+    "claim": "ModelRetryStrategy max_attempts 6 (1 disables), initial_delay 4, max_delay 128; retry_strategy=None disables",
+    "verdict": "supported",
+    "source": "Retry Strategies parameter table and 'retry_strategy=None'."
+   },
+   {
+    "line": 1092,
+    "claim": "Agents with a session manager in Graph/Swarm raise ValueError; multi_agent_save_latest_on default 'node', 'invocation' saves only at the end",
+    "verdict": "supported",
+    "source": "Session management caution and 'The default \"node\" strategy saves after every node and when the invocation ends'."
+   },
+   {
+    "line": 1128,
+    "claim": "Local timing tree is always collected; durations in seconds (Python) and milliseconds (TypeScript); included in get_summary()",
+    "verdict": "supported",
+    "source": "Metrics 'Local Execution Traces': 'duration: Execution time in seconds' (Python) / 'in milliseconds' (TypeScript); get_summary() exercised with a 'traces' key."
+   }
+  ],
+  "off_sample_findings": [
+   {
+    "line": 963,
+    "claim": "handle_ticket returns the triage object only on normal completion",
+    "verdict": "wrong",
+    "source": "Exercised: a successful structured-output call ends with stop_reason 'tool_use'; classify() (L900) maps it to Outcome.STOPPED, so Reply.triage is always None on success."
+   },
+   {
+    "line": 919,
+    "claim": "handle_ticket uses the cedar object from triage_with_approval with a TicketTriage permit added",
+    "verdict": "unsupported",
+    "source": "L781 already permits TicketTriage and cedar is a local variable of triage_with_approval (NameError when pasted)."
+   },
+   {
+    "line": 836,
+    "claim": "The agent checks cancellation at four points",
+    "verdict": "supported",
+    "source": "Agent Loop: four checkpoints in Python; TypeScript lists five. The post does not label the table as Python."
+   }
+  ]
+ },
+ "checklist": {
+  "repeated": 1,
+  "avoided": 3,
+  "na": 1,
+  "repeated_ids": [
+   "shared-agent-throw-scope"
+  ],
+  "items": [
+   {
+    "id": "loop-diagram-remote",
+    "status": "avoided",
+    "evidence": "No image links at all; the loop is a text diagram (L53-L65) and the structured-output flow another (L573-L587)."
+   },
+   {
+    "id": "shared-agent-throw-scope",
+    "status": "repeated",
+    "evidence": "L967 'Python의 기본 THROW 모드에서는 이미 실행 중인 에이전트를 다시 호출하면 ConcurrencyException이 발생합니다.' Not tied to invoke_async; nothing says a sync agent(...) inside an async handler blocks and serializes requests instead of raising."
+   },
+   {
+    "id": "shared-agent-history-leak",
+    "status": "avoided",
+    "evidence": "L611 '# A fresh agent per message keeps tickets from sharing conversation history', L693 '메시지마다 새 Agent를 만들어 티켓끼리 대화 기록을 공유하지 않게', L967 per-request agents in handle_ticket; L708 '비동기 서버에서는 invoke_async가 같은 인자를 받습니다'. Stated in the structured-output and limits sections rather than a deployment section."
+   },
+   {
+    "id": "result-fields-incomplete",
+    "status": "avoided",
+    "evidence": "result.stop_reason is used (L635, L958) and L1100-L1120 prints agent_invocations, tool_metrics, cache usage and metrics.get_summary()."
+   },
+   {
+    "id": "multi-agent-subject",
+    "status": "n/a",
+    "evidence": "No multi-agent pattern sentence; Graph/Swarm appear only for session managers (L1092)."
+   }
+  ]
+ },
+ "extras": {
+  "architecture_first_line": 43,
+  "architecture_note": "Loop cycle, tool execution path and stop reasons at L43-L110, then state (L112), hooks (L191), interventions (L397) and structured output internals (L526), all before installation (L656).",
+  "sources_total": 22,
+  "sources_non_official": 9,
+  "non_official_share": 0.41,
+  "non_official_list": [
+   "Langfuse framework comparison",
+   "AWS Open Source Blog introduction",
+   "AWS Builder Center OpenTelemetry observability",
+   "AWS ML blog AgentCore Observability with Langfuse",
+   "AWS ML blog evaluation blueprint",
+   "cowork.ink framework comparison",
+   "CodeCut PydanticAI",
+   "LangChain Forum answer",
+   "AWS ML blog technical deep dive"
+  ],
+  "opens_with_problem": true,
+  "opens_note": "TL;DR (L10-L14) then '직접 짠 에이전트 루프를 대체하는 인프로세스 SDK' (L16-L41) states what a hand-written loop must absorb (cost caps, approvals, schema retries, history).",
+  "closes_with_when_to_choose_and_failure_modes": true,
+  "closes_note": "L1144-L1181: model-driven vs workflow-driven (Langfuse, cowork.ink), PydanticAI for one-shot parsing, convergence/session/language caveats (L1162-L1170, mostly pointers back), and a choice table with the writer's verdict."
+ },
+ "runnable_code": {
+  "verdict": "mostly runs against SDK 1.64.0 with a scripted fake model, but the culminating service function fails as pasted and, once patched, never returns its triage object; two later blocks break on redefined signatures",
+  "passed": [
+   "L136 lookup_ticket with agent state and invocation_state (state lookup_count=1, user_id read)",
+   "L169 log_with_context hook (logs user and session from invocation_state)",
+   "L220 HookOrder SDK_FIRST/SDK_LAST order",
+   "L246 ToolInterceptor (process_refund rerouted, result 'Refund request drafted')",
+   "L291 RetryOnToolError (flaky tool retried once, success)",
+   "L332 RetryOnServiceUnavailable (one retry, sleep 2 s)",
+   "L376 resume once (2 model calls, summary returned)",
+   "L431+L494+L515 interventions: RefundRateLimiter(max_calls=1) denies the 2nd refund; ToneSteering stops after 2 guides (3 model calls); RefundAuth with a throwing check is denied (class-attribute on_error='deny')",
+   "L534+L605 TicketTriage: invalid enum fed back then valid object; text-only twice -> forced retry with 'You must format...' then StructuredOutputException fallback to 'other'",
+   "L626 structured_output_attempts=3 -> limit_structured_output_attempts, no object",
+   "L672, L695, L714 sync and streaming structured output",
+   "L745 HumanInTheLoop classifier: lookup runs, refund prompts",
+   "L772 Cedar + HITL: alice is prompted for process_refund, bob is denied without a prompt",
+   "L847 normalize_ticket_notes, L883 classify/Outcome, L971 idempotency_token",
+   "L1002 TicketRetryStrategy: TimeoutError retried with sleeps 2, 4, 8; default strategy throttling sleeps 4, 8, 16, 32, 64 over 6 attempts",
+   "L1049 SnapshotSessionManager with LocalFileStorage",
+   "L1104 metrics (agent_invocations, tool_metrics, get_summary incl. traces) when build_ticket_agent is the zero-argument L1010 version"
+  ],
+  "failed": [
+   "L921 handle_ticket: NameError 'cedar' (local to triage_with_approval at L778) and 'ask' (never defined; L796 used ask='stdio')",
+   "L921 handle_ticket (after defining cedar and ask): a successful structured-output call ends with stop_reason 'tool_use', classify() maps it to Outcome.STOPPED and triage=None, so the service never returns a TicketTriage; L963 claims it returns the object on normal completion",
+   "L1063 TicketRetryStrategy(...) passes Ellipsis positionally -> TypeError: ModelRetryStrategy.__init__() takes 1 positional argument",
+   "L1104 calls build_ticket_agent() with no argument after L1067 redefined it to require ticket_id -> TypeError when pasted in reading order",
+   "L681 AnthropicModel needs pip install 'strands-agents[anthropic]' (ModuleNotFoundError: anthropic), not mentioned; api_key is an empty string"
+  ],
+  "notes": "Fake model streams Bedrock-shaped events and answers the HITL classifier's _RiskDecision tool; no paid model or AWS call. strands-agents 1.64.0, strands-agents-tools 0.9.0, [cedar] extra installed (the guide never mentions the [cedar] extra either; CedarAuthorization imports only with it). The L1063 handle_ticket(ticket_id, message) replaces the limits/cancel/interventions version without saying so."
+ },
+ "top_issues": [
+  "The culminating handle_ticket (L921) does not run as pasted (cedar is local to triage_with_approval, ask is undefined) and, once patched, returns Outcome.STOPPED with triage=None for every successful classification because structured output ends with stop_reason 'tool_use'; L963 claims the opposite.",
+  "Later blocks break in reading order: L1063 TicketRetryStrategy(...) raises TypeError, L1104 calls build_ticket_agent() without the ticket_id its L1067 redefinition requires; L681 needs the [anthropic] extra and Cedar needs [cedar], neither mentioned.",
+  "Shared-agent THROW warning (L967) still not tied to invoke_async/sync blocking; TL;DR is about 1,690 characters and the positioning sentence is repeated at L12, L18 and L37."
+ ]
+}

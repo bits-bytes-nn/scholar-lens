@@ -1,0 +1,126 @@
+{
+  "kind": "review",
+  "status": "succeeded",
+  "input": "2501.13956",
+  "title": "Zep: A Temporal Knowledge Graph Architecture for Agent Memory",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/2501_13956/2026-06-07-zep-a-temporal-knowledge-graph-architecture-for-agent-memory.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-06-07-zep-a-temporal-knowledge-graph-architecture-for-agent-memory.md",
+  "pr_url": null,
+  "warnings": [
+    "Tag 'Hybrid-Graph-Search' (or its acronym) does not appear in the paper; check it fits.",
+    "Tag 'Agentic-AI' (or its acronym) does not appear in the paper; check it fits.",
+    "Evidence that misstates its quote was left out: E4 (Claim adds an unstated limitation (not validated in experiments / future work) absent from the quote.)",
+    "Section '검색·재순위·구성 세 단계로 합성한 메모리 검색 함수': check 1 sentence(s) the evidence may not support: 유효기간을 컨텍스트에 함께 적는 설계 덕분에, 앞서 본 엣지 무효화의 결과가 LLM에 그대로 전달됩니다 [[E5]]. (unsupported: The paper doesn't say that putting the validity periods into the context passes the invalidation results through to the LLM. That link is the post's own inference.)",
+    "Section 'LongMemEval에서 확인된 정확도 향상과 약 90% 지연 감소': check 3 sentence(s) the evidence may not support: 논문은 기준선 대비 \"최대 18.5% 향상\"을 내세우지만, 이 수치를 어떻게 계산했는지는 밝히지 않습니다 [[E3]]. (unsupported: Claim that the paper does not explain the computation is not backed by a quote; the paper attributes the 18.5% to gpt-4o.) | 다만 논문은 정확도 향상이 이 차이에서 나왔다고 분석하지는 않습니다. (unsupported: Negative claim about what the paper does not analyse; no quote backs it.) | 전체 컨텍스트 방식에서는 모델이 11만여 토큰 속에서 관련 대목을 직접 찾아야 합니다 [[E22]]. (numbers not in its evidence)",
+    "Section 'LongMemEval에서 확인된 정확도 향상과 약 90% 지연 감소' still has: numbers ['11만'] are not in the cited evidence: 전체 컨텍스트 방식에서는 모델이 11만여 토큰 속에서 관련 대목을 직접 찾아야 합니다 .",
+    "Section '선호·시간 추론 유형에 몰린 질문 유형별 개선 폭': check 12 sentence(s) the evidence may not support: Zep의 이득은 흩어진 단서를 모아야 하는 유형, 특히 single-session-preference와 temporal-reasoning에 몰려 있고, 일부 유형에서는 오히려 전체 컨텍스트 기준선보다 낮습니다. (unsupported: '흩어진 단서를 모아야 하는 유형'이라는 특징 규정은 논문에 없음(논문은 '복잡한 유형'이라고만 함)) | 선호 질문은 사용자가 대화 곳곳에 흘린 취향을 모아야 답할 수 있습니다. (unsupported: 질문 유형의 성격 설명이 근거에 없음) | 전체 컨텍스트 방식에서는 그 단서를 11만여 토큰 속에서 직접 찾아야 하고, Zep은 이를 엔티티 요약과 사실 몇 줄로 미리 정리해 넘깁니다 [[E16]]. (unsupported: 선호 질문 이득의 원인에 대한 메커니즘은 논문에 없는 추가 설명) | 앞서 본 이중 시간 모델과 엣지마다 붙는 유효기간이 노리는 바로 그 유형입니다 [[E5]][[E6]]. (unsupported: 시간 모델과 temporal-reasoning 이득을 연결하는 인과는 논문에 없음) | 러닝화를 트레킹화로 바꾼 예시처럼 무효화된 사실과 현재 사실이 유효기간과 함께 나란히 들어가도, 그 날짜 필드를 읽어 최신 사실을 고르는 일은 결국 응답 모델의 몫입니다 [[E16]]. (unsupported: 러닝화 예시, 날짜 해석을 응답 모델이 맡는다는 설명은 근거에 없음)",
+    "Section '선호·시간 추론 유형에 몰린 질문 유형별 개선 폭' still has: numbers ['184', '20.0'] without evidence (cite it; an illustration of your own ends with [[EX]]): 다만 184%라는 숫자는 기준선이 20.0%로 매우 낮아서 커진 면이 있습니다. | numbers ['36.7'] without evidence (cite it; an illustration of your own ends with [[EX]]): 절대 차이로 보아도 36.7%p로 표 전체에서 가장 크므로 순위는 같지만, 다른 유형의 상대 변화와 크기를 그대로 견주면 과장됩니다. | evidence ['E16'] was already referred back to once; do not restate it again: 전체 컨텍스트 방식에서는 그 단서를 11만여 토큰 속에서 직접 찾아야 하고, Zep은 이를 엔티티 요약과 사실 몇 줄로 미리 정리해 넘깁니다 . | numbers ['11만'] are not in the cited evidence: 전체 컨텍스트 방식에서는 그 단서를 11만여 토큰 속에서 직접 찾아야 하고, Zep은 이를 엔티티 요약과 사실 몇 줄로 미리 정리해 넘깁니다 . | ['11만'] already stated in 'LongMemEval에서 확인된 정확도 향상과 약 90% 지연 감소': refer back without repeating: 전체 컨텍스트 방식에서는 그 단서를 11만여 토큰 속에서 직접 찾아야 하고, Zep은 이를 엔티티 요약과 사실 몇 줄로 미리 정리해 넘깁니다 .",
+    "Section '한계와 시사점': check 1 sentence(s) the evidence may not support: 첫째, 비교군이 전체 컨텍스트 기준선 하나뿐입니다. (unsupported: DMR에는 MemGPT, 세션 요약 기준선도 있었으므로 비교군이 하나뿐이라는 말은 LongMemEval에만 해당합니다. 문장에는 이 범위가 명시되어 있지 않습니다.)",
+    "Table values not found in the paper (check each is copied or derived correctly): single-session-preference: 20.0 / 56.7 / +184 / +36.7, single-session-preference: 30.0 / 53.3 / +77.7 / +23.3, temporal-reasoning: 45.1 / 62.4 / +38.4 / +17.3, temporal-reasoning: 36.5 / 54.1 / +48.2 / +17.6, multi-session: 44.3 / 57.9 / +30.7 / +13.6, multi-session: 40.6 / 47.4 / +16.7 / +6.8, single-session-user: 81.4 / 92.9 / +14.1 / +11.5, single-session-user: 81.4 / 92.9 / +14.1 / +11.5"
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 1075.9,
+  "input_tokens": 664786,
+  "output_tokens": 118251,
+  "estimated_cost_usd": 4.4723,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 78,
+      "failed_calls": 0,
+      "input_tokens": 201091,
+      "output_tokens": 118251,
+      "cache_read_tokens": 204734,
+      "cache_write_tokens": 258961,
+      "cost_usd": 4.472355
+    },
+    "by_stage": {
+      "extract_attributes": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 17716,
+        "output_tokens": 238,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.001891
+      },
+      "outline": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 3779,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 5024,
+        "cost_usd": 0.100716
+      },
+      "verify": {
+        "calls": 29,
+        "failed_calls": 0,
+        "input_tokens": 119180,
+        "output_tokens": 24845,
+        "cache_read_tokens": 81801,
+        "cache_write_tokens": 58855,
+        "cost_usd": 1.30062
+      },
+      "draft": {
+        "calls": 10,
+        "failed_calls": 0,
+        "input_tokens": 40,
+        "output_tokens": 21518,
+        "cache_read_tokens": 28998,
+        "cache_write_tokens": 83747,
+        "cost_usd": 0.860856
+      },
+      "review": {
+        "calls": 11,
+        "failed_calls": 0,
+        "input_tokens": 44,
+        "output_tokens": 7981,
+        "cache_read_tokens": 15264,
+        "cache_write_tokens": 43375,
+        "cost_usd": 0.382773
+      },
+      "fix": {
+        "calls": 24,
+        "failed_calls": 0,
+        "input_tokens": 64099,
+        "output_tokens": 59274,
+        "cache_read_tokens": 78032,
+        "cache_write_tokens": 63780,
+        "cost_usd": 1.791991
+      },
+      "finalize": {
+        "calls": 2,
+        "failed_calls": 0,
+        "input_tokens": 8,
+        "output_tokens": 616,
+        "cache_read_tokens": 639,
+        "cache_write_tokens": 4180,
+        "cost_usd": 0.033508
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-haiku-5-5": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 17716,
+        "output_tokens": 238,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.001891
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 77,
+        "failed_calls": 0,
+        "input_tokens": 183375,
+        "output_tokens": 118013,
+        "cache_read_tokens": 204734,
+        "cache_write_tokens": 258961,
+        "cost_usd": 4.470464
+      }
+    }
+  }
+}

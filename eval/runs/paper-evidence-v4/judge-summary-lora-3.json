@@ -1,0 +1,86 @@
+{
+  "item": "summary-lora",
+  "post": "/tmp/eval-paper/summary-lora-v4.md",
+  "judge_run": 3,
+  "sampling": "Body blocks (prose paragraphs, list items, tables, display equations; headings and images excluded) numbered 1-26 from L16; took blocks 3,6,9,12,15,18,21,24, then wrapped to 1,4,10. Claims drawn from L24, L32, L38, L44, L54, L62-67, L80, L16, L26, L40.",
+  "scores": {"A": 8.5, "B": 7.5, "C": 7.0, "D": 8.0, "E": 7.0, "F": 8.5},
+  "type_scores": {"U1": 7.0, "U2": 7.5},
+  "deductions": {
+    "A": ["Topic-name headings (L18, L28, L46, L52, L73). Markup is clean: no body H1, display math at L32/L36 with blank lines, '$$' inline only."],
+    "B": [
+      "L16 '학습 처리량은 ... 약 25% 빨랐습니다' (throughput is not fast) -> '학습 속도는 ... 약 25% 빨랐습니다'.",
+      "L38 '그래서' twice in one paragraph; L26 '결국 ...'.",
+      "L54 '데이터가 적을 때도 잘 버티며' vague colloquial -> '학습 예제가 적을 때도 성능이 크게 떨어지지 않으며'.",
+      "Term mixing: '편향' (L42) vs '바이어스' (L80); 'MultiNLI-matched' (L26) vs 'MNLI-matched' (L58)."
+    ],
+    "C": [
+      "L60 '앞서 소개한 MNLI 무작위 부분집합' has no antecedent.",
+      "L75 restates L44's subtract-BA/add-B'A' example, so the closing section repeats the method section instead of building on it."
+    ],
+    "D": [
+      "Good: L24 explains how to read the heatmap (rows, cells); L38 justifies the alpha/r scaling; L40 gives a numeric count.",
+      "L42's convergence argument (adapters -> MLP, prefix -> short-input model) is stated without a sentence of intuition for why."
+    ],
+    "E": [
+      "Only one table (low-data MNLI); the paper's main comparison table (GPT-3 175B, Table 4) and the rank sweep would each be clearer as a table than the prose at L48 and L58.",
+      "The heatmap (L22) and scatter plot (L56) are placed where discussed and explained descriptively."
+    ],
+    "F": [
+      "No wrong claims in the sample. Minor: L16's '약 25%' is the paper's 'speedup' figure but is attached to '처리량'; the paper's own throughput numbers give +32.6%."
+    ],
+    "U1": ["Motivation, method and deployment are sufficient; results lack the paper's main benchmark numbers (GPT-3 WikiSQL/MNLI/SAMSum vs FT, RoBERTa/DeBERTa GLUE, GPT-2 E2E) and the headline 10,000x / 3x reductions, so a reader cannot say how LoRA compares with full fine-tuning in numbers."],
+    "U2": ["TL;DR is plain prose, no math; at least one grounded limitation (L79-81). No-latency/merge point appears four times (L16, L44, L71, L75)."]
+  },
+  "principles": {
+    "claim_headings": {"status": "not met", "evidence": "Topic-name headings L18-L73."},
+    "running_example": {"status": "partly met", "evidence": "WikiSQL->MNLI hypothetical swap L44, L71, L75."},
+    "mechanism_order": {"status": "met", "evidence": "Assumption L30 -> formulas L32/L36 -> design reason L38 -> example L40."},
+    "facts_once": {"status": "not met", "evidence": "Merge/no-latency at L16, L44, L71, L75; Adapter-L L24 and L71."},
+    "numbers_with_scope": {"status": "met", "evidence": "Table header 'GPT-3 175B', L60 'MNLI-matched 검증 정확도(%)', L48 'GPT-3 175B의 WikiSQL 검증 정확도'."},
+    "nothing_invented": {"status": "met", "evidence": "Examples labelled as hypothetical (L40, L44, L71)."},
+    "own_assessment": {"status": "met", "evidence": "L83."},
+    "length_fit": {"status": "met", "evidence": "Five-minute read."},
+    "type_shape": {"status": "partly met", "evidence": "TL;DR + five sections; no main-results table."},
+    "korean_style": {"status": "partly met", "evidence": "L16, L38, L54 wording; term mixing."}
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 15,
+    "unsupported": 0,
+    "wrong": 0,
+    "unverifiable": 0,
+    "examples": [
+      {"line": 24, "claim": "GPT-2 medium, Quadro RTX8000, 100-trial average", "verdict": "supported", "source": "Appendix B"},
+      {"line": 24, "claim": "top row AdapterH (Houlsby), bottom row AdapterL (Lin, more efficient)", "verdict": "supported", "source": "Appendix B and Figure 5 caption"},
+      {"line": 24, "claim": "slow-down over 30% in online short-sequence setting", "verdict": "supported", "source": "Figure 5 caption"},
+      {"line": 32, "claim": "B ∈ R^{d×r}, A ∈ R^{r×k}, r ≪ min(d,k)", "verdict": "supported", "source": "Sec 4.1"},
+      {"line": 38, "claim": "A Gaussian, B zero; ΔWx scaled by α/r; α set to the first r tried, not tuned", "verdict": "supported", "source": "Sec 4.1"},
+      {"line": 38, "claim": "scaling reduces need to retune hyperparameters when r varies", "verdict": "supported", "source": "Sec 4.1 (Yang & Hu, 2021)"},
+      {"line": 44, "claim": "store W=W0+BA; swap by subtracting BA and adding B'A'; no added latency by construction", "verdict": "supported", "source": "Sec 4.1 No Additional Inference Latency"},
+      {"line": 54, "claim": "LoRA accuracy on GPT-3 175B stable as trainable parameters grow", "verdict": "supported", "source": "Table 15 caption: 'LoRA's performance stabilizes'"},
+      {"line": 65, "claim": "PrefixEmbed row 37.6 / 75.2 / 79.5 / 88.6", "verdict": "supported", "source": "Table 16"},
+      {"line": 66, "claim": "PrefixLayer row 48.3 / 82.5 / 85.9 / 89.6", "verdict": "supported", "source": "Table 16"},
+      {"line": 62, "claim": "full MNLI = 392K examples", "verdict": "supported", "source": "Table 16 header MNLI(m)-392K"},
+      {"line": 80, "claim": "MLP, LayerNorm and bias adaptation left to future work", "verdict": "supported", "source": "Sec 4.2: 'We leave the empirical investigation of adapting the MLP layers, LayerNorm layers, and biases to a future work'"},
+      {"line": 16, "claim": "about 25% faster training than full fine-tuning on GPT-3 175B", "verdict": "supported", "source": "Sec 4.2 '25% speedup' (wording attaches it to throughput)"},
+      {"line": 26, "claim": "drop beyond 256 (PrefixEmbed) / 32 (PrefixLayer) special tokens", "verdict": "supported", "source": "Sec 5.5"},
+      {"line": 40, "claim": "1,048,576 vs 8,192 parameters (1/128) for d=k=1,024, r=4", "verdict": "supported", "source": "Arithmetic on Sec 4.1 shapes, labelled hypothetical"}
+    ]
+  },
+  "checklist": {
+    "repeated": 0,
+    "avoided": 0,
+    "na": 0,
+    "repeated_ids": [],
+    "note": "human_fixes.yaml has fixes: [] for summary-lora; no '&amp;' leak."
+  },
+  "extras": {
+    "description_chars": 123,
+    "taxonomy_X1": "Tags restate the abstract ('Frozen-Pre-trained-Weights', 'Adapter-Inference-Latency')."
+  },
+  "top_issues": [
+    "No main-results numbers or table (GPT-3 Table 4, RoBERTa/DeBERTa/GPT-2), and the 10,000x / 3x reductions are missing.",
+    "Repetition: merge/no-latency at L16/L44/L71/L75 and the swap example at L44/L75; Adapter-L defined twice.",
+    "Dangling L60 '앞서 소개한 MNLI 무작위 부분집합'; Korean wording at L16 ('처리량 ... 빨랐습니다'), L38 (double '그래서')."
+  ]
+}

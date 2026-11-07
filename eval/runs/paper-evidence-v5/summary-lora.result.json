@@ -1,0 +1,152 @@
+{
+  "kind": "summarize",
+  "status": "succeeded",
+  "input": "2106.09685",
+  "title": "LoRA: Low-Rank Adaptation of Large Language Models",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/2106_09685/2026-11-07-lora-low-rank-adaptation-of-large-language-models-summary.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-11-07-lora-low-rank-adaptation-of-large-language-models-summary.md",
+  "pr_url": null,
+  "warnings": [
+    "Tag 'Frozen-Pretrained-Weights' (or its acronym) does not appear in the paper; check it fits.",
+    "Tag 'Adapter-Inference-Latency' (or its acronym) does not appear in the paper; check it fits.",
+    "Tag 'Subspace-Similarity-Analysis' (or its acronym) does not appear in the paper; check it fits.",
+    "Section '제안 방법': check 1 sentence(s) the evidence may not support: GPT-3 175B를 WikiSQL에 적응시키는 상황을 예로 들면, 셀프 어텐션(self-attention)의 쿼리 사영 행렬 $$W_q$$와 값(value) 사영 행렬 $$W_v$$에만 이런 $$BA$$ 쌍을 붙여 (unsupported: Describes a specific application setup (GPT-3 175B on WikiSQL, LoRA only on W_q and W_v) that neither the evidence nor section 4.1 gives.)",
+    "Section '구현 방식': check 3 sentence(s) the evidence may not support: 앞서 WikiSQL 예에서 $$W_q$$와 $$W_v$$에 작은 랭크의 쌍을 붙인 구성이 바로 이 결과에 따른 선택입니다. (unsupported: 앞선 WikiSQL 예시의 구성이 이 결과에 따라 선택되었다는 인과 관계는 제시된 근거에 없음) | 어느 행렬에 적용할지는 GPT-3 175B에서 학습 가능한 파라미터 1,800만 개(18M) 예산으로 비교했습니다. (numbers not in its evidence) | $$W_q$$ 하나에 $$r=8$$을 주면 WikiSQL 검증 정확도가 70.4%였습니다. (numbers not in its evidence)",
+    "Section '구현 방식' still has: numbers ['175B', '1,800만', '18M'] without evidence (cite it; an illustration of your own ends with [[EX]]): 어느 행렬에 적용할지는 GPT-3 175B에서 학습 가능한 파라미터 1,800만 개(18M) 예산으로 비교했습니다. | numbers ['70.4'] without evidence (cite it; an illustration of your own ends with [[EX]]): $$W_q$$ 하나에 $$r=8$$을 주면 WikiSQL 검증 정확도가 70.4%였습니다. | 959 characters of prose for a target of 500: cut background, repetition and minor detail",
+    "Section '실험 결과': check 6 sentence(s) the evidence may not support: 앞서 따라온 WikiSQL 적응처럼 $$W_q$$와 $$W_v$$에 작은 랭크의 쌍만 붙여도 품질 손실 없이 이 정도로 비용을 줄일 수 있습니다. (unsupported: 1만 배, 3배 감소가 W_q·W_v 저랭크 구성에서 나왔다는 근거가 없습니다. 이 구성과 비용 감소를 잇는 내용은 인용 근거와 원문 구간에 없습니다.) | GPT-3 175B에서 LoRA는 학습 파라미터를 크게 줄이고도 전체 파인튜닝보다 정확도가 떨어지지 않았습니다. (numbers not in its evidence) | 175B 규모는 학습 비용이 커서, 저자들은 항목마다 표준편차를 내지 않고 작업별로 시드에 따른 대표 표준편차만 보고했습니다. (numbers not in its evidence) | 데이터가 적은 상황은 MNLI 학습 세트에서 100개, 1천 개, 1만 개를 무작위로 뽑은 MNLI-$$n$$ 작업으로 확인했습니다. (numbers not in its evidence) | MNLI-100에서 LoRA는 파인튜닝보다 3.6%p 높았고, 전체 데이터에서도 앞섰습니다 [[E17]]. (numbers not in its evidence)",
+    "Section '실험 결과' still has: numbers ['175B'] without evidence (cite it; an illustration of your own ends with [[EX]]): GPT-3 175B에서 LoRA는 학습 파라미터를 크게 줄이고도 전체 파인튜닝보다 정확도가 떨어지지 않았습니다. | numbers ['175B'] without evidence (cite it; an illustration of your own ends with [[EX]]): 175B 규모는 학습 비용이 커서, 저자들은 항목마다 표준편차를 내지 않고 작업별로 시드에 따른 대표 표준편차만 보고했습니다. | numbers ['100', '1천'] without evidence (cite it; an illustration of your own ends with [[EX]]): 데이터가 적은 상황은 MNLI 학습 세트에서 100개, 1천 개, 1만 개를 무작위로 뽑은 MNLI-$$n$$ 작업으로 확인했습니다. | ['100'] already stated in '연구 배경': refer back without repeating: 데이터가 적은 상황은 MNLI 학습 세트에서 100개, 1천 개, 1만 개를 무작위로 뽑은 MNLI-$$n$$ 작업으로 확인했습니다. | numbers ['3.6'] are not in the cited evidence: MNLI-100에서 LoRA는 파인튜닝보다 3.6%p 높았고, 전체 데이터에서도 앞섰습니다 .",
+    "Section '의의와 한계': whole-post review problems left as they were: Swapping the WikiSQL BA pair for the MNLI pair, and saying the swap is fast with little memory cost, is explained again here. 제안 방법 already gives this example a"
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 592.6,
+  "input_tokens": 479279,
+  "output_tokens": 78746,
+  "estimated_cost_usd": 2.1685,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 63,
+      "failed_calls": 0,
+      "input_tokens": 114825,
+      "output_tokens": 78746,
+      "cache_read_tokens": 213169,
+      "cache_write_tokens": 151285,
+      "cost_usd": 2.16853
+    },
+    "by_stage": {
+      "figures": {
+        "calls": 8,
+        "failed_calls": 0,
+        "input_tokens": 16800,
+        "output_tokens": 7775,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.005568
+      },
+      "extract_attributes": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 53956,
+        "output_tokens": 264,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.005528
+      },
+      "read": {
+        "calls": 16,
+        "failed_calls": 0,
+        "input_tokens": 38,
+        "output_tokens": 13884,
+        "cache_read_tokens": 131499,
+        "cache_write_tokens": 43784,
+        "cost_usd": 0.274674
+      },
+      "outline": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 2690,
+        "cache_read_tokens": 848,
+        "cache_write_tokens": 3705,
+        "cost_usd": 0.07268
+      },
+      "verify": {
+        "calls": 11,
+        "failed_calls": 0,
+        "input_tokens": 23298,
+        "output_tokens": 11913,
+        "cache_read_tokens": 19655,
+        "cache_write_tokens": 26197,
+        "cost_usd": 0.470302
+      },
+      "draft": {
+        "calls": 6,
+        "failed_calls": 0,
+        "input_tokens": 24,
+        "output_tokens": 8783,
+        "cache_read_tokens": 19332,
+        "cache_write_tokens": 35581,
+        "cost_usd": 0.361395
+      },
+      "review": {
+        "calls": 7,
+        "failed_calls": 0,
+        "input_tokens": 28,
+        "output_tokens": 8127,
+        "cache_read_tokens": 9576,
+        "cache_write_tokens": 13905,
+        "cost_usd": 0.236005
+      },
+      "fix": {
+        "calls": 12,
+        "failed_calls": 0,
+        "input_tokens": 20673,
+        "output_tokens": 24265,
+        "cache_read_tokens": 32259,
+        "cache_write_tokens": 26532,
+        "cost_usd": 0.713557
+      },
+      "finalize": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 1045,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 1581,
+        "cost_usd": 0.028821
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-haiku-5-5": {
+        "calls": 9,
+        "failed_calls": 0,
+        "input_tokens": 70756,
+        "output_tokens": 8039,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.011096
+      },
+      "global.anthropic.claude-sonnet-5-5": {
+        "calls": 16,
+        "failed_calls": 0,
+        "input_tokens": 38,
+        "output_tokens": 13884,
+        "cache_read_tokens": 131499,
+        "cache_write_tokens": 43784,
+        "cost_usd": 0.274674
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 38,
+        "failed_calls": 0,
+        "input_tokens": 44031,
+        "output_tokens": 56823,
+        "cache_read_tokens": 81670,
+        "cache_write_tokens": 107501,
+        "cost_usd": 1.88276
+      }
+    }
+  }
+}
