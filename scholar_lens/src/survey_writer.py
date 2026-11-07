@@ -355,7 +355,10 @@ async def write_survey_with_evidence(
                 role(cfg.writing_model_id, cfg.thinking_effort, True),
                 fallback=role(cfg.card_model_id, cfg.thinking_effort, True),
             ),
-            "evaluate": role(cfg.evaluation_model_id, cfg.thinking_effort, True),
+            "evaluate": dataclasses.replace(
+                role(cfg.evaluation_model_id, cfg.thinking_effort, True),
+                fallback=role(cfg.card_model_id, cfg.thinking_effort, True),
+            ),
         },
         budgeted(tracker, cfg.write_max_cost_usd),
     )

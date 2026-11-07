@@ -229,7 +229,10 @@ async def write_guide_with_evidence(
                 role_model(context, cfg.writing_model_id, effort, True),
                 fallback=role_model(context, cfg.synopsis_model_id, effort, True),
             ),
-            "evaluate": role_model(context, cfg.evaluation_model_id, effort, True),
+            "evaluate": dataclasses.replace(
+                role_model(context, cfg.evaluation_model_id, effort, True),
+                fallback=role_model(context, cfg.synopsis_model_id, effort, True),
+            ),
         },
         budgeted(tracker, cfg.max_cost_usd),
     )

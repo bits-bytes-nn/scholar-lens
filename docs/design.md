@@ -113,7 +113,7 @@ stdout에는 JSON 객체 하나만 출력하고 로그는 stderr로 보냅니다
 
 서베이 두 종류는 자기 행의 필드와 `create_pr`만 받습니다. 다른 행의 필드에 기본값이 아닌 값(`parse_pdf: true`, `discover_subpages: false` 포함)을 주면 거부합니다.
 
-로컬 CLI와 Batch worker는 같은 객체를 씁니다. `--remote`는 `JobRequest.model_dump_json(exclude_defaults=True)`를 Batch 파라미터 `request` 하나로 넘기고, 작업 정의의 명령은 `["python3", "-m", "scholar_lens", "worker", "--request", "Ref::request"]`입니다(`scripts/deploy_infra.py::JOB_COMMAND`). 두 경로가 같은 파서를 쓰므로 인자 계약이 어긋나지 않습니다. 기본값인 필드는 보내지 않으므로, 새 필드를 쓰지 않는 요청은 그 필드가 생기기 전에 배포한 worker 이미지(`extra="forbid"`)도 받습니다. 새 필드(예: `reference_urls`)를 쓰는 요청은 `cdk deploy`로 이미지를 갱신한 뒤에만 원격 실행됩니다(`tests/test_jobs.py`가 `reference_urls` 이전 worker의 필드 집합 사본으로 검증).
+로컬 CLI와 Batch worker는 같은 객체를 씁니다. `--remote`는 `JobRequest.model_dump_json(exclude_defaults=True)`를 Batch 파라미터 `request` 하나로 넘기고, 작업 정의의 명령은 `["python3", "-m", "scholar_lens", "worker", "--request", "Ref::request"]`입니다(`scripts/deploy_infra.py::JOB_COMMAND`). 두 경로가 같은 파서를 쓰므로 인자 계약이 어긋나지 않습니다. 기본값인 필드는 보내지 않으므로, 새 필드를 쓰지 않는 요청은 그 필드가 생기기 전에 배포한 worker 이미지(`extra="forbid"`)도 받습니다. 새 필드(예: `reference_urls`)를 쓰는 요청은 `cdk deploy --all`로 이미지를 갱신한 뒤에만 원격 실행됩니다(`tests/test_jobs.py`가 `reference_urls` 이전 worker의 필드 집합 사본으로 검증).
 
 `jobs.py::JobResult`에는 `status`, `title`, `markdown_path`, `plan_path`(로컬 survey_plan 실행의 계획 파일, 이때 `s3_uri`는 그 S3 사본. Batch 실행은 컨테이너와 함께 사라지는 경로라 비우고 `s3_uri`만 남김), `s3_uri`, `pr_url`, `warnings`, `violations`, `error`, `job_id`, `duration_seconds`, 토큰 수, `estimated_cost_usd`, `usage`(단계·모델별 사용량, 11장)가 들어갑니다. Batch 실행은 이 결과를 `s3://<bucket>/<s3_prefix>/results/<job_id>.json`에 저장하고(`jobs.py::write_result_manifest`), `status`가 이를 읽어 붙입니다.
 
@@ -271,7 +271,7 @@ OpenAlex는 arXiv 시대 ML 논문의 인용 수를 크게 적게 세고(실측:
 
 비용 상한은 `survey.write_max_cost_usd`(기본 $60)입니다. 호출마다 추정 비용을 검사해 넘으면 `TokenBudgetExceeded`로 중단합니다(`evidence_models.py::budgeted`, 8.3절).
 
-모델 호출은 `adapters/bedrock/strands_models.py::StrandsLanguageModel`(Strands `BedrockModel`, 종류별 응용 추론 프로필, botocore 재시도 1회와 응답 스트림 안의 스로틀까지 다루는 Strands 재시도 최대 3회(호출당 요청 최대 6번), 시스템 프롬프트·도구·대화 캐시)이 하고, 호출마다 단계(`read`, `outline`, `draft`, `verify`, `review`, `fix`) 사용량을 `TokenUsageTracker.record`로 남깁니다. 평가 실행은 `SCHOLAR_LENS_CONFIG`로 다른 설정 파일을 지정합니다.
+모델 호출은 `adapters/bedrock/strands_models.py::StrandsLanguageModel`(Strands `BedrockModel`, 종류별 응용 추론 프로필, botocore 재시도 1회와 응답 스트림 안의 스로틀까지 다루는 Strands 재시도 최대 3회(시도당 요청 최대 6번), 콘텐츠 필터에 막힌 답은 같은 모델로 두 번 더, 사고 없이 한 번, 역할의 대체 모델로 한 번 더 시도, 시스템 프롬프트·도구·대화 캐시)이 하고, 호출마다 단계(`read`, `outline`, `draft`, `verify`, `review`, `fix`) 사용량을 `TokenUsageTracker.record`로 남깁니다. 평가 실행은 `SCHOLAR_LENS_CONFIG`로 다른 설정 파일을 지정합니다.
 
 ### 4.4 리뷰·요약의 근거 장부 엔진
 
@@ -308,7 +308,7 @@ OpenAlex는 arXiv 시대 ML 논문의 인용 수를 크게 적게 세고(실측:
 
 원문이 바뀌거나 읽기 버전·모델·언어가 바뀌면 키가 달라져 다시 읽습니다. 캐시를 쓸 때도 각 근거를 오늘의 검사로 다시 확인해(`application/evidence_writer.py::cached_evidence`) 통과하지 못한 근거는 버리고, 읽을 수 없는 캐시이거나 하나도 통과하지 못하면 그 문서를 다시 읽습니다. 프롬프트 문구만 바꿔서는 캐시가 무효화되지 않습니다. 다시 읽게 하려면 해당 캐시 파일을 로컬과 S3 양쪽에서 지웁니다(CLI 옵션은 없음. 로컬만 지우면 S3 사본을 읽음). 로컬 경로는 저장소 루트 기준이고, AWS 안에서는 `/tmp/papers/…`(`runtime.py::ROOT_DIR`)라 Batch 실행마다 비어 있으므로 Batch에서는 S3 사본만 지우면 됩니다.
 
-**문장 검사와 수정.** 사실 확인은 문장마다 `supported`·`unsupported`·`wrong`·`about_sources` 중 하나로 판정합니다. `about_sources`는 주제 대신 작성자가 받은 자료를 말하는 문장("이 근거에서 따로 설명되지 않습니다")이고, `wrong`처럼 먼저 고치게 한 뒤 남으면 코드가 지웁니다(`application/evidence_writer.py::_removable`). 수정 단계는 구조화 응답(`FixedSection`: `section`, `notes`)으로 받아 `section`만 쓰므로 작성자의 수정 메모가 본문에 섞이지 않습니다. 여러 읽기 에이전트가 같은 논문의 같은 수치·코드를 같은 범위로 기록했거나 같은 그림을 두 번 기록하면 개요에는 한 번만 보입니다(`domain/evidence.py::duplicate_evidence`). 가이드는 Python 코드 블록을 읽는 순서대로 표준 라이브러리 `ast`·`symtable`로 검사해, 파싱되지 않는 블록과 앞선 블록·import 어디에도 정의되지 않은 이름을 글 전체 검토의 수정 항목으로 넘깁니다(`domain/guide/evidence_guide.py::python_code_problems`).
+**문장 검사와 수정.** 사실 확인은 문장마다 `supported`·`unsupported`·`wrong`·`about_sources` 중 하나로 판정합니다. `about_sources`는 주제 대신 작성자가 받은 자료를 말하는 문장("이 근거에서 따로 설명되지 않습니다")이고, `wrong`처럼 먼저 고치게 한 뒤 남으면 코드가 지웁니다(`application/evidence_writer.py::_removable`). 수정 단계는 구조화 응답(`FixedSection`: `section`, `notes`)으로 받아 `section`만 쓰므로 작성자의 수정 메모가 본문에 섞이지 않습니다. 여러 읽기 에이전트가 같은 논문의 같은 수치·코드를 같은 범위로 기록했거나 같은 그림을 두 번 기록하면 개요에는 한 번만 보입니다(`domain/evidence.py::duplicate_evidence`). 가이드는 Python 코드 블록을 읽는 순서대로 표준 라이브러리 `ast`·`symtable`로 검사합니다(`domain/guide/evidence_guide.py::python_code_problems`). 모든 블록(목록 안 블록, REPL·노트북 블록, 파싱되지 않는 블록 포함)의 정의를 앞에서부터 쌓고, 독자가 실행하는 사용·운영 절에서만 파싱되지 않는 블록과 어디에도 정의되지 않은 이름을 글 전체 검토의 수정 항목으로 넘깁니다. `import *` 뒤에는 정의되지 않은 이름을 판단하지 않습니다. 수정 뒤 다시 검사해 남은 문제는 PR 체크리스트에 올립니다. 사실 확인이나 검토 호출이 대체 모델로도 답하지 못하면 그 절 초안을 그대로 두고 어떤 검사가 실행되지 않았는지 실행 메모에 남깁니다.
 
 **실행 전 확인.** 모델을 부르기 전에 확인하고 실패합니다. 블로그 규칙에 없는 카테고리 유형이나 글 종류에 맞지 않는 유형(`runtime.py::check_post_type`), PR을 열 실행인데 `GITHUB_TOKEN`이 없는 경우(`check_pr_ready`), 검색 제공자 없이 `--search-query`를 준 가이드가 대상입니다. 서베이에서 근거를 하나도 남기지 못한 경우나 핵심 논문이 모두 근거를 남기지 못한 경우는 계획 거부가 아니라 실패(`EvidenceUnavailable`)로 보고합니다.
 
@@ -510,7 +510,7 @@ PR 본문(`build_pr_body`)에는 논문 ID, PDF URL, 파싱 방식, 글자 수, 
 `scripts/deploy_infra.py`의 CDK(Python) 스택 두 개입니다. `cdk.json`은 `poetry run python scripts/deploy_infra.py`를 실행하고, 배포는 `cdk deploy --all`입니다. `PaperReviewStack`(기본 리전)이 아래 리소스를, `BedrockProfilesStack`(Bedrock 리전, `bedrock_region_name`이 있을 때)이 비용 할당용 응용 추론 프로필을 만듭니다.
 
 - **네트워크**: 기존 VPC를 쓰거나 NAT 게이트웨이 1개인 VPC를 만듭니다. 새로 만들면 S3 게이트웨이 엔드포인트를 붙입니다. 보안 그룹은 443 아웃바운드만 엽니다.
-- **Batch**: 작업 정의 하나(`<project>-<stage>-worker`). 명령은 `JOB_COMMAND`이고 메모리는 8 GiB, 시간 제한은 3시간입니다. 시도는 최대 3회(재시도 2회)지만 재시도는 호스트가 사라진 경우(`Host EC2*` 사유)에만 하며, 나머지는 바로 종료합니다. 컴퓨팅 환경은 온디맨드 하나이고, `update_to_latest_image_version`이 켜져 있어 인프라를 갱신할 때(`cdk deploy`) 최신 ECS 최적화 AMI로 바꿉니다. 스팟 회수는 작업 전체를 다시 실행해 Bedrock 비용을 반복하므로, 아끼는 EC2 비용보다 손해가 큽니다. 실행 템플릿은 IMDSv2(hop limit 1)를 강제하고, 루트 볼륨(`/dev/xvda`, 30 GiB gp3)을 AWS 관리형 EBS 키로 암호화합니다. 컴퓨팅 환경은 실행 템플릿의 최신 버전 번호를 지정하므로, 템플릿이 바뀌면 `cdk deploy`가 컴퓨팅 환경을 교체 없이 인프라 갱신합니다.
+- **Batch**: 작업 정의 하나(`<project>-<stage>-worker`). 명령은 `JOB_COMMAND`이고 메모리는 8 GiB, 시간 제한은 3시간입니다. 시도는 최대 3회(재시도 2회)지만 재시도는 호스트가 사라진 경우(`Host EC2*` 사유)에만 하며, 나머지는 바로 종료합니다. 컴퓨팅 환경은 온디맨드 하나이고, `update_to_latest_image_version`이 켜져 있어 인프라를 갱신할 때(`cdk deploy --all`) 최신 ECS 최적화 AMI로 바꿉니다. 스팟 회수는 작업 전체를 다시 실행해 Bedrock 비용을 반복하므로, 아끼는 EC2 비용보다 손해가 큽니다. 실행 템플릿은 IMDSv2(hop limit 1)를 강제하고, 루트 볼륨(`/dev/xvda`, 30 GiB gp3)을 AWS 관리형 EBS 키로 암호화합니다. 컴퓨팅 환경은 실행 템플릿의 최신 버전 번호를 지정하므로, 템플릿이 바뀌면 `cdk deploy --all`가 컴퓨팅 환경을 교체 없이 인프라 갱신합니다.
 - **IAM**: 작업 역할, 실행 역할, 인스턴스 역할을 분리합니다. 실행 역할에는 관리형 정책 없이 이미지 자산의 ECR 저장소 pull과 작업 로그 그룹 쓰기만 붙습니다(CDK가 생성). 작업 역할 권한은 다음과 같습니다.
   - Bedrock 호출과 CountTokens. 대상은 모델 레지스트리에 있는 공급자(`anthropic`, `amazon`, `cohere`)의 foundation model과 계정의 inference profile
   - inference profile 조회(`ListInferenceProfiles`, `GetInferenceProfile`). 리소스 수준 ARN이 없어 `Resource: *`이고 `aws:RequestedRegion`을 기본·Bedrock 리전으로 제한
@@ -520,7 +520,7 @@ PR 본문(`build_pr_body`)에는 논문 ID, PDF URL, 파싱 방식, 글자 수, 
   - SSM 비밀값 8개 읽기(`RUN_SECRETS`)
 - **SSM**: 스택은 `batch-job-queue`, `batch-job-definition`(String)을 씁니다. 비밀값(SecureString)은 CloudFormation이 만들 수 없으므로 `scripts/put_secrets.py`로 따로 기록합니다(이름을 주면 그 비밀값만). `cdk synth`/`diff`는 비밀값을 건드리지 않습니다. 실행 시 기록되지 않은 비밀값(`ParameterNotFound`)은 조용히 건너뛰고, 권한 오류 등은 warning으로 남깁니다.
 - **비용 할당**: 모든 리소스에 `ProjectName`, `Stage`, `CostCenter`, `ManagedBy` 태그를 붙이고 Batch 인스턴스·볼륨에도 실행 템플릿으로 전파합니다. `BedrockProfilesStack`은 산출물 종류(`domain/cost_allocation.py::ARTIFACT_KINDS`)와 설정이 쓰는 모델(global 교차 리전 프로필)의 조합마다 응용 추론 프로필(`<project>-<stage>-<kind>-<model>`, `application_profile_name`)을 만들고 `Kind` 태그를 더합니다. `runtime.run_job`이 실행의 종류를 `cost_allocation`으로 정하고, 모델 팩토리가 그 이름의 프로필 ARN으로 호출합니다(`factories.py::_allocated_profile`, 목록 조회는 프로세스마다 한 번). 프로필이 없거나 조회가 실패하면 시스템 프로필로 호출하므로 실행은 막히지 않고 태그만 빠집니다. 사용량 기록과 가격은 ARN이 아니라 원래 모델로 남깁니다(`utils/models.py::profile_source`). 작업 역할은 계정의 `application-inference-profile/*` 호출도 허용합니다.
-- **설정 파일**: 이미지에는 배포하는 체크아웃의 `scholar_lens/configs/config.yaml`이 들어갑니다. 설정을 고치면 `cdk deploy`를 다시 해야 Batch에 반영됩니다. `deploy_infra.py::check_deployable`은 이 파일이나 `s3_bucket_name`이 없으면 배포를 멈춥니다. `cdk` 명령에는 `resources.profile_name`과 같은 `--profile`을 넘깁니다.
+- **설정 파일**: 이미지에는 배포하는 체크아웃의 `scholar_lens/configs/config.yaml`이 들어갑니다. 설정을 고치면 `cdk deploy --all`를 다시 해야 Batch에 반영됩니다. `deploy_infra.py::check_deployable`은 이 파일이나 `s3_bucket_name`이 없으면 배포를 멈춥니다. `cdk` 명령에는 `resources.profile_name`과 같은 `--profile`을 넘깁니다.
 - **알림**: KMS 암호화 SNS 토픽(SSL 강제)에 이메일을 구독합니다. 토픽 정책은 이 계정의 CloudWatch 경보(`aws:SourceAccount`·`aws:SourceArn` 조건)와 실패 규칙 하나의 EventBridge 게시만 허용합니다. EventBridge 대상이 자동으로 만드는 허용은 조건이 없으므로, 그 규칙이 아닌 게시를 막는 Deny 문을 따로 둡니다. 토픽 KMS 키의 EventBridge 허용은 CDK가 만든 그대로입니다.
 
 ## 11. 관측성

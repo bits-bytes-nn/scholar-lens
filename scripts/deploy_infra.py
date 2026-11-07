@@ -64,6 +64,8 @@ from aws_cdk.aws_ecr_assets import DockerImageAsset, Platform
 from constructs import Construct
 
 sys.path.append(str(Path(__file__).parent.parent))
+from dotenv import load_dotenv
+
 from scholar_lens.adapters.aws.storage import get_account_id
 from scholar_lens.cli import APP_REPORTED_EXIT_CODES
 from scholar_lens.configs import Config
@@ -735,7 +737,10 @@ def check_deployable(config_path: Path, config: Config) -> None:
 
 def main() -> None:
     try:
-        config = Config.load()
+        # The file the image bakes, never an evaluation run's override
+        # (SCHOLAR_LENS_CONFIG): the stack's IAM scope must match the jobs'.
+        load_dotenv()
+        config = Config.from_yaml(CONFIG_PATH) if CONFIG_PATH.exists() else Config()
         check_deployable(CONFIG_PATH, config)
         resources = config.resources
         logger.info(

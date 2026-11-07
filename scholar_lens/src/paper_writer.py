@@ -102,7 +102,10 @@ async def write_paper_with_evidence(
                 role_model(context, writer_id, effort, True),
                 fallback=role_model(context, reader_id, effort, True),
             ),
-            "evaluate": role_model(context, judge_id, effort, True),
+            "evaluate": dataclasses.replace(
+                role_model(context, judge_id, effort, True),
+                fallback=role_model(context, reader_id, effort, True),
+            ),
         },
         budgeted(tracker, max_cost),
     )

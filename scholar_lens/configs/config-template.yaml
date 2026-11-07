@@ -2,7 +2,7 @@
 # below shows the code default; omit a key to keep it, except
 # `resources.project_name`, which is required once `resources` is present.
 # Unknown keys are errors.
-# `cdk deploy` bakes this file into the Batch image: re-run `cdk deploy` after
+# `cdk deploy --all` bakes this file into the Batch image: re-run `cdk deploy --all` after
 # editing it, or Batch jobs keep the old values.
 
 resources:
@@ -11,7 +11,7 @@ resources:
   profile_name:                    # local AWS profile (Batch uses its job role)
   default_region_name: ap-northeast-2
   bedrock_region_name: us-west-2
-  s3_bucket_name:                  # existing bucket; required for `cdk deploy` and Batch runs
+  s3_bucket_name:                  # existing bucket; required for `cdk deploy --all` and Batch runs
   s3_prefix: scholar-lens
   vpc_id:
   subnet_ids:

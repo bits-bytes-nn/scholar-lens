@@ -5,8 +5,9 @@ limit. Every model call is recorded as a :class:`UsageEvent` under the current
 stage (one per agent cycle), also when the call fails. Retries are bounded:
 botocore retries a request once (a dropped connection, a throttled start),
 and Strands retries a throttle up to three attempts with backoff, also one
-that arrives inside the response stream, which botocore never sees; one call
-makes at most six requests. Strands also retries a structured
+that arrives inside the response stream, which botocore never sees: at most
+six requests per attempt. A content-filtered answer adds attempts (the same
+model twice more, once without thinking, then the role's fallback model). Strands also retries a structured
 answer that fails its schema. An answer cut at the
 output limit is returned as such (``stop_reason="max_tokens"``), not raised:
 an agent's tool calls up to then stand.
@@ -201,8 +202,8 @@ class StrandsLanguageModel:
                 n + 2,
             )
         raise ValueError(
-            f"No valid {schema.__name__} after {_STRUCTURED_ATTEMPTS} attempts"
-            f" (stop reason {stop})"
+            f"No valid {schema.__name__} (stop reason {stop}; "
+            f"{_STRUCTURED_ATTEMPTS} schema attempts per model tried)"
         )
 
     async def text(

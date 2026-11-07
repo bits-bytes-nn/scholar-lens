@@ -18,7 +18,7 @@ import threading
 from collections import Counter
 from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Literal, TypeVar
+from typing import Any, Literal, TypeVar
 
 from pydantic import BaseModel, Field, ValidationError
 
@@ -627,7 +627,8 @@ class EvidenceWriter:
                 ],
             )
             if (
-                not structure_lost(draft, fixed)
+                fixed.strip() != draft.strip()
+                and not structure_lost(draft, fixed)
                 and not _incomplete(fixed)
                 and len(checks(fixed)) <= len(checks(draft))
             ):
@@ -840,7 +841,8 @@ class EvidenceWriter:
                 )
             )
         with usage_stage("verify"):
-            check = await self.model.structured(
+            check = await self._evaluated(
+                f"the claim check of '{section_heading(draft) or 'a section'}'",
                 role="evaluate",
                 system=self.prompts.claim_check,
                 # Shared by every claim check of the section (each round).
@@ -853,20 +855,37 @@ class EvidenceWriter:
                 prompt=block("sentences", "\n".join(lines)),
                 schema=ClaimCheck,
             )
+        if check is None:
+            return []
         bad = []
         for v in check.verdicts:
             if v.verdict != "supported" and 1 <= v.n <= len(sentences):
                 bad.append((sentences[v.n - 1], f"{v.verdict}: {v.reason}"))
         return bad
 
+    async def _evaluated(self, what: str, **call: Any) -> Any:
+        """A structured check's answer, or None when the model gave no valid
+        answer even on the fallback model (a content filter, a cut answer):
+        the run goes on with the draft as it is, and the run notes say which
+        check did not run, so the PR checklist shows it."""
+        try:
+            return await self.model.structured(**call)
+        except ValueError as e:
+            logger.warning("%s did not run: %s", what, e)
+            self.notes.append(f"Check by hand: {what} could not run ({e}).")
+            return None
+
     async def review(self, draft: str, context: str) -> list[str]:
         with usage_stage("review"):
-            review = await self.model.structured(
+            review = await self._evaluated(
+                f"the review of '{section_heading(draft) or 'a section'}'",
                 role="evaluate",
                 system=self.prompts.review,
                 prompt="\n\n".join([context, block("section", draft)]),
                 schema=SectionReview,
             )
+        if review is None:
+            return []
         return [
             f"{i.category}: {i.fix} — in: {i.sentence[:200]}" for i in review.issues
         ]
