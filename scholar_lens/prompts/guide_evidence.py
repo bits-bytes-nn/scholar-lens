@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from .rules import (
     CLAIM_SCOPE,
+    FIX_ANSWER,
     ILLUSTRATION_MARK,
     MATH_RULES,
     READER_PROFILE,
@@ -304,7 +305,7 @@ nothing else. Rewrite or delete exactly the sentences or code blocks named;
 keep every other sentence, heading, figure, equation, table, code block and
 evidence marker as it is. A claim the evidence does not support is narrowed
 to what the evidence says or deleted. Return the whole revised section.
-""" + GUIDE_PRINCIPLES + MATH_RULES + SECURITY
+""" + FIX_ANSWER + GUIDE_PRINCIPLES + MATH_RULES + SECURITY
 
 GUIDE_REVIEW_SYSTEM = """
 You review a whole technical guide, in the order a reader meets it, as an

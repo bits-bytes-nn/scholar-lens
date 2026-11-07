@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from .rules import (
     CLAIM_SCOPE,
+    FIX_ANSWER,
     ILLUSTRATION_MARK,
     MATH_RULES,
     READER_PROFILE,
@@ -204,4 +205,4 @@ Rewrite or delete exactly the sentences named; keep every other sentence,
 heading, figure, equation and evidence marker as it is. A claim the evidence
 does not support is narrowed to what the evidence says or deleted. Return the
 whole revised section.
-""" + WRITING_PRINCIPLES + MATH_RULES + SECURITY
+""" + FIX_ANSWER + WRITING_PRINCIPLES + MATH_RULES + SECURITY

@@ -10,6 +10,7 @@ from typing import Any
 from scholar_lens.application.evidence_writer import (
     ClaimCheck,
     EvidenceCheck,
+    FixedSection,
     PostFinding,
     PostReview,
     SectionReview,
@@ -394,6 +395,11 @@ class ScriptedModel:
         return AgentOutcome(text="done", stop_reason="end_turn")
 
     async def structured(self, *, role, system, prompt, schema, context=""):
+        if schema is FixedSection:  # a fix answers like a text call, structured
+            section = await self.text(
+                role=role, system=system, prompt=prompt, context=context
+            )
+            return FixedSection(section=section, notes="고친 내용: 수치를 바로잡음")
         prompt = f"{context}\n\n{prompt}"
         self.calls.append(schema.__name__)
         if schema is GuideOutline:

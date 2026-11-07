@@ -266,3 +266,12 @@ closing section, notes about the writing itself (what was revised, words
 addressed to whoever asked for the section). As "flow": a sentence pointing
 back to something the earlier sections never showed.
 """
+
+
+FIX_ANSWER: str = """
+Answer with `section`: the whole revised section as Markdown, starting with
+its `## ` heading and holding nothing but the section; and `notes`: anything
+you want to say about your edits (what you changed, what you could not fix
+and why). Never put a note, a summary of changes or a word to the requester
+in `section`.
+"""

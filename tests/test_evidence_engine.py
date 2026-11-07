@@ -14,6 +14,7 @@ import pytest
 from scholar_lens.application.evidence_writer import (
     ClaimCheck,
     EvidenceCheck,
+    FixedSection,
     SectionReview,
     SentenceVerdict,
 )
@@ -330,6 +331,11 @@ class ScriptedModel:
         return AgentOutcome(text="done", stop_reason="end_turn")
 
     async def structured(self, *, role, system, prompt, schema, context=""):
+        if schema is FixedSection:  # a fix answers like a text call, structured
+            section = await self.text(
+                role=role, system=system, prompt=prompt, context=context
+            )
+            return FixedSection(section=section, notes="고친 내용: 수치를 바로잡음")
         prompt = f"{context}\n\n{prompt}"
         self.calls.append(schema.__name__)
         if schema is EvidenceOutline:
@@ -880,3 +886,30 @@ def test_one_papers_repeated_fact_and_figure_are_duplicates_within_it() -> None:
     assert duplicate_evidence(items, within_source=True) == {"E3": "E1", "E4": "E2"}
     # Across sources only (the guide's use), one source's repeats stay.
     assert duplicate_evidence(items) == {"E4": "E2"}
+
+
+def test_a_fixs_notes_never_reach_the_section() -> None:
+    from scholar_lens.application.evidence_writer import EvidenceWriter
+    from scholar_lens.application.survey_engine import SURVEY_PROMPTS
+
+    class Model:
+        def __init__(self, answer: object) -> None:
+            self.answer = answer
+
+        async def structured(self, **_kwargs):  # type: ignore[no-untyped-def]
+            if isinstance(self.answer, Exception):
+                raise self.answer
+            return self.answer
+
+    note = "## 반영하지 못한 요청과 그 밖의 변경\n\n- E3 제거"
+    writer = EvidenceWriter(
+        Model(FixedSection(section="## A\n\n고친 본문입니다.\n", notes=note)),  # type: ignore[arg-type]
+        SURVEY_PROMPTS,
+        max_fix_rounds=1,
+    )
+    fixed = asyncio.run(writer._fix("## A\n\n본문입니다.\n", [], ["x"]))
+    assert fixed == "## A\n\n고친 본문입니다.\n" and "반영하지" not in fixed
+    writer.model = Model(ValueError("no valid FixedSection"))  # type: ignore[assignment]
+    assert asyncio.run(writer._fix("## A\n\n본문입니다.\n", [], ["x"])) == (
+        "## A\n\n본문입니다.\n"
+    )

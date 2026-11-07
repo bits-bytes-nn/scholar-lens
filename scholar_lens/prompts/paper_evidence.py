@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from .rules import (
     CLAIM_SCOPE,
+    FIX_ANSWER,
     ILLUSTRATION_MARK,
     MATH_RULES,
     NUMBER_RULES,
@@ -224,7 +225,7 @@ problems and nothing else. Rewrite or delete exactly the sentences named;
 keep every other sentence, heading, figure, equation, table and evidence
 marker as it is. A claim the evidence does not support is narrowed to what
 the evidence says or deleted. Return the whole revised section.
-""" + PRINCIPLES + MATH_RULES + SECURITY
+""" + FIX_ANSWER + PRINCIPLES + MATH_RULES + SECURITY
 
 FINAL_SYSTEM = """
 You write the framing of a finished post about a research paper, from its

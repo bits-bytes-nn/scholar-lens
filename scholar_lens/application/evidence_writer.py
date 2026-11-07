@@ -91,6 +91,14 @@ class SectionReview(BaseModel):
     issues: list[ReviewIssue] = Field(default_factory=list, max_length=10)
 
 
+class FixedSection(BaseModel):
+    """A fix's answer: the whole revised section (Markdown, nothing else)
+    and, apart, the writer's notes on what it changed or could not fix."""
+
+    section: str
+    notes: str = ""
+
+
 class PostFinding(BaseModel):
     """A problem the whole-post review found, by the section it is in."""
 
@@ -711,30 +719,41 @@ class EvidenceWriter:
     async def _fix(
         self, draft: str, evidence: Sequence[Evidence], issues: Sequence[str]
     ) -> str:
+        """The section revised for ``issues``. The answer is structured: the
+        revised section and, apart, whatever the writer says about its edits,
+        so no note ever reaches the post (whatever its wording or language).
+        An answer that does not parse leaves the draft as it was."""
         with usage_stage("fix"):
-            raw = await self.model.text(
-                role="write",
-                system=self.prompts.fix,
-                # The evidence and passages repeat across a section's
-                # fixes; only the draft and its problems change.
-                context="\n\n".join(
-                    [
-                        block("evidence", evidence_lines(evidence)),
-                        *(
-                            [block("source_sections", self.reference)]
-                            if self.reference
-                            else []
-                        ),
-                    ]
-                ),
-                prompt="\n\n".join(
-                    [
-                        block("section", draft),
-                        block("problems", "\n".join(f"- {i}" for i in issues)),
-                    ]
-                ),
-            )
-        return ModelText(strip_revision_notes(raw.strip()), cut=was_cut(raw))
+            try:
+                answer = await self.model.structured(
+                    role="write",
+                    system=self.prompts.fix,
+                    schema=FixedSection,
+                    # The evidence and passages repeat across a section's
+                    # fixes; only the draft and its problems change.
+                    context="\n\n".join(
+                        [
+                            block("evidence", evidence_lines(evidence)),
+                            *(
+                                [block("source_sections", self.reference)]
+                                if self.reference
+                                else []
+                            ),
+                        ]
+                    ),
+                    prompt="\n\n".join(
+                        [
+                            block("section", draft),
+                            block("problems", "\n".join(f"- {i}" for i in issues)),
+                        ]
+                    ),
+                )
+            except ValueError as e:
+                logger.warning("Fix answer unusable (%s); the draft stands.", e)
+                return draft
+        if answer.notes.strip():
+            logger.info("Writer's notes on a fix: %s", answer.notes[:400])
+        return strip_revision_notes(answer.section.strip())
 
     async def unsupported(
         self,
