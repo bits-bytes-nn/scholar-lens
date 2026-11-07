@@ -98,33 +98,22 @@ def test_arxiv_retry_after_is_capped(header: str, expected: float) -> None:
     assert arxiv_retry_after_seconds(error) == expected
 
 
-def _fake_clock_arxiv_limiter(
-    monkeypatch: pytest.MonkeyPatch, module: Any, name: str
-) -> tuple[_FakeClock, RateLimiter]:
-    clock = _FakeClock()
-    limiter = _limiter_with_clock(clock, rate=1.0, per=3.0, name="arxiv")
-    monkeypatch.setattr(module, name, limiter)
-    return clock, limiter
-
-
-async def test_arxiv_html_fetch_is_paced_and_penalty_capped(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_arxiv_html_fetch_is_paced_and_penalty_capped() -> None:
     import httpx
 
-    from scholar_lens.src import parser
     from scholar_lens.src.parser import ContentParseError, HTMLParser
 
-    clock, limiter = _fake_clock_arxiv_limiter(
-        monkeypatch, parser, "ARXIV_RATE_LIMITER"
-    )
+    clock = _FakeClock()
+    limiter = _limiter_with_clock(clock, rate=1.0, per=3.0, name="arxiv")
     statuses = iter([200, 429])
 
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(next(statuses), headers={"Retry-After": "86400"})
 
-    html = HTMLParser()
-    html._async_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    html = HTMLParser(
+        http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+        rate_limiter=limiter,
+    )
     start = clock.now
     await html._fetch_html_from_url("https://arxiv.org/html/1")
     with pytest.raises(ContentParseError):

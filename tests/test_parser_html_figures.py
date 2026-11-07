@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import asyncio
 import re
+from unittest.mock import MagicMock
 
+import boto3
 import pytest
 from bs4 import BeautifulSoup
 
 from scholar_lens.src import parser as parser_module
+from scholar_lens.src.constants import LanguageModelId
 from scholar_lens.src.parser import Figure, HTMLRichParser, attach_figure_context
 from scholar_lens.src.utils import extract_text_from_html
 
@@ -60,8 +63,11 @@ def figures(monkeypatch: pytest.MonkeyPatch) -> list[Figure]:
         return cls(figure_id=figure_id, path=path, caption=caption)
 
     monkeypatch.setattr(parser_module.Figure, "from_llm", classmethod(fake_from_llm))
-    parser = HTMLRichParser.__new__(HTMLRichParser)
-    parser.figure_analyser = None  # type: ignore[assignment]
+    parser = HTMLRichParser(
+        LanguageModelId.CLAUDE_V4_5_HAIKU,
+        boto3.Session(region_name="us-east-1"),
+        figure_analyser=MagicMock(),
+    )
     parser.url = BASE
     return asyncio.run(parser._extract_figures(BeautifulSoup(PAGE, "html.parser")))
 
@@ -126,11 +132,12 @@ def test_listing_indentation_survives_the_html_parser_path(monkeypatch) -> None:
         "</div></div>"
     )
 
-    async def fetch(self, arxiv_id):  # type: ignore[no-untyped-def]
+    async def fetch(arxiv_id):  # type: ignore[no-untyped-def]
         return listing, BASE
 
-    monkeypatch.setattr(HTMLParser, "_fetch_html", fetch)
-    result = asyncio.run(HTMLParser().parse("2501.12948v2"))
+    html = HTMLParser()
+    monkeypatch.setattr(html, "_fetch_html", fetch)
+    result = asyncio.run(html.parse("2501.12948v2"))
     assert "def f(x):\n    if x:\n        return 1" in result.content.text
 
 

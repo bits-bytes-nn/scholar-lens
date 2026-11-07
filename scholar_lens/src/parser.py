@@ -20,7 +20,11 @@ from PIL import Image
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from ..adapters.http.pinned_transport import PinnedAsyncHTTPTransport
-from ..adapters.http.rate_limit import ARXIV_RATE_LIMITER, arxiv_retry_after_seconds
+from ..adapters.http.rate_limit import (
+    ARXIV_RATE_LIMITER,
+    RateLimiter,
+    arxiv_retry_after_seconds,
+)
 from ..adapters.http.url_guard import UnsafeUrlError, assert_url_is_public
 from ..adapters.retry import is_transient_error
 from ..application.usage import staged
@@ -294,9 +298,21 @@ class Region(BaseModel):
 
 
 class BaseParser:
-    def __init__(self, timeout: int = DEFAULT_TIMEOUT) -> None:
+    def __init__(
+        self,
+        timeout: int = DEFAULT_TIMEOUT,
+        *,
+        http_client: httpx.AsyncClient | None = None,
+    ) -> None:
+        """No request is made until the parser is used.
+
+        Args:
+            timeout: Seconds per HTTP request of the default client.
+            http_client: The HTTP client (default: one made on first use, without
+                redirects); the parser closes it on exit.
+        """
         self.timeout = timeout
-        self._async_client: httpx.AsyncClient | None = None
+        self._async_client: httpx.AsyncClient | None = http_client
 
     @property
     def async_client(self) -> httpx.AsyncClient:
@@ -321,11 +337,35 @@ class RichParser(BaseParser):
         boto_session: boto3.Session,
         timeout: int = DEFAULT_TIMEOUT,
         callbacks: list[Any] | None = None,
+        *,
+        figure_analyser: Runnable | None = None,
+        **kwargs: Any,
     ) -> None:
-        super().__init__(timeout=timeout)
-        self.figure_analyser = self._initialize_chain(
-            figure_analysis_model_id, boto_session, callbacks
-        )
+        """No request is made until the parser is used.
+
+        Args:
+            figure_analysis_model_id: The model that describes figures.
+            boto_session: The Bedrock session for that model.
+            timeout: Seconds per HTTP request of the default client.
+            callbacks: LangChain callbacks of the figure analysis (token usage).
+            figure_analyser: The figure-analysis chain (default: built from the
+                model on first use, so constructing a parser calls no service).
+            **kwargs: Passed on to the base parser (``http_client``, and
+                ``rate_limiter`` for the HTML parser).
+        """
+        super().__init__(timeout=timeout, **kwargs)
+        self._figure_analysis_model_id = figure_analysis_model_id
+        self._boto_session = boto_session
+        self._callbacks = callbacks
+        self._figure_analyser = figure_analyser
+
+    @property
+    def figure_analyser(self) -> Runnable:
+        if self._figure_analyser is None:
+            self._figure_analyser = self._initialize_chain(
+                self._figure_analysis_model_id, self._boto_session, self._callbacks
+            )
+        return self._figure_analyser
 
     @staticmethod
     def _initialize_chain(
@@ -344,9 +384,24 @@ class RichParser(BaseParser):
 
 
 class HTMLParser(BaseParser):
-    def __init__(self, timeout: int = DEFAULT_TIMEOUT):
-        super().__init__(timeout)
+    def __init__(
+        self,
+        timeout: int = DEFAULT_TIMEOUT,
+        *,
+        http_client: httpx.AsyncClient | None = None,
+        rate_limiter: RateLimiter | None = None,
+    ) -> None:
+        """No request is made until the parser is used.
+
+        Args:
+            timeout: Seconds per HTTP request of the default client.
+            http_client: The HTTP client (see :class:`BaseParser`).
+            rate_limiter: Paces the arXiv HTML requests (default: the
+                process-wide arXiv limiter).
+        """
+        super().__init__(timeout, http_client=http_client)
         self.url: str | None = None
+        self._limiter = ARXIV_RATE_LIMITER if rate_limiter is None else rate_limiter
 
     async def parse(self, arxiv_id: str, extract_text: bool = True) -> HTMLParseResult:
         html_content, _ = await self._fetch_html(arxiv_id)
@@ -379,14 +434,14 @@ class HTMLParser(BaseParser):
     async def _fetch_html_from_url(self, url: str) -> str:
         """Fetch an arXiv HTML page, paced by the process-wide arXiv rate
         limiter; an error's Retry-After (capped) holds later arXiv requests."""
-        await asyncio.to_thread(ARXIV_RATE_LIMITER.acquire)
+        await asyncio.to_thread(self._limiter.acquire)
         try:
             response = await self.async_client.get(url)
             response.raise_for_status()
             return response.text
         except httpx.HTTPError as e:
             if isinstance(e, httpx.HTTPStatusError):
-                ARXIV_RATE_LIMITER.penalize(arxiv_retry_after_seconds(e))
+                self._limiter.penalize(arxiv_retry_after_seconds(e))
             raise ContentParseError(f"Failed to fetch HTML from '{url}': {e}") from e
 
 
@@ -532,8 +587,18 @@ class PDFParser(RichParser):
         timeout: int = DEFAULT_TIMEOUT,
         api_key: str | None = None,
         callbacks: list[Any] | None = None,
+        *,
+        figure_analyser: Runnable | None = None,
+        http_client: httpx.AsyncClient | None = None,
     ):
-        super().__init__(figure_analysis_model_id, boto_session, timeout, callbacks)
+        super().__init__(
+            figure_analysis_model_id,
+            boto_session,
+            timeout,
+            callbacks,
+            figure_analyser=figure_analyser,
+            http_client=http_client,
+        )
         self.api_key = api_key or os.environ.get(EnvVars.UPSTAGE_API_KEY.value)
         if not self.api_key:
             raise ValueError(
