@@ -532,7 +532,20 @@ class NullSearchProvider(WebSearchProvider):
 class BraveSearchProvider(WebSearchProvider):
     """Brave Search API provider (https://api.search.brave.com)."""
 
-    def __init__(self, api_key: str | None = None, timeout: int = DEFAULT_TIMEOUT):
+    def __init__(
+        self,
+        api_key: str | None = None,
+        timeout: int = DEFAULT_TIMEOUT,
+        *,
+        client: httpx.Client | None = None,
+    ):
+        """No request is made until :meth:`search` is called.
+
+        Args:
+            api_key: The Brave key (default: from the environment).
+            timeout: Seconds per search request.
+            client: The HTTP client (default: a one-off request per search).
+        """
         resolved = api_key or os.environ.get(EnvVars.BRAVE_API_KEY.value)
         if not resolved:
             raise ValueError(
@@ -540,6 +553,7 @@ class BraveSearchProvider(WebSearchProvider):
             )
         self.api_key: str = resolved
         self.timeout = timeout
+        self._client = client
 
     def search(
         self, query: str, *, count: int = 5, domains: Collection[str] = ()
@@ -552,7 +566,8 @@ class BraveSearchProvider(WebSearchProvider):
             query = " OR ".join(f"site:{d}" for d in domains) + f" {query}"
         params: dict[str, str | int] = {"q": query, "count": count}
         try:
-            response = httpx.get(
+            get = httpx.get if self._client is None else self._client.get
+            response = get(
                 _BRAVE_WEB_SEARCH_URL,
                 headers=headers,
                 params=params,
@@ -592,7 +607,20 @@ class TavilySearchProvider(WebSearchProvider):
     the URL (no extra SSRF surface) and with better signal than raw snippets.
     """
 
-    def __init__(self, api_key: str | None = None, timeout: int = DEFAULT_TIMEOUT):
+    def __init__(
+        self,
+        api_key: str | None = None,
+        timeout: int = DEFAULT_TIMEOUT,
+        *,
+        client: httpx.Client | None = None,
+    ):
+        """No request is made until :meth:`search` is called.
+
+        Args:
+            api_key: The Tavily key (default: from the environment).
+            timeout: Seconds per search request.
+            client: The HTTP client (default: a one-off request per search).
+        """
         resolved = api_key or os.environ.get(EnvVars.TAVILY_API_KEY.value)
         if not resolved:
             raise ValueError(
@@ -600,6 +628,7 @@ class TavilySearchProvider(WebSearchProvider):
             )
         self.api_key: str = resolved
         self.timeout = timeout
+        self._client = client
 
     def search(
         self, query: str, *, count: int = 5, domains: Collection[str] = ()
@@ -613,7 +642,8 @@ class TavilySearchProvider(WebSearchProvider):
         if domains:
             payload["include_domains"] = list(domains)
         try:
-            response = httpx.post(
+            post = httpx.post if self._client is None else self._client.post
+            response = post(
                 _TAVILY_SEARCH_URL,
                 headers={"Authorization": f"Bearer {self.api_key}"},
                 json=payload,

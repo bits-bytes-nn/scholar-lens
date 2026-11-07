@@ -150,6 +150,7 @@ class TechGuideGenerator(RetryableBase):
         self.fetch_top_results = fetch_top_results
         self.callbacks = callbacks or []
         self.notes: list[str] = []
+        self._reference_pages, self._reference_ids = [], []
         self.researcher = researcher or WebResearcher()
         self.llm_factory = llm_factory or BedrockLanguageModelFactory(
             boto_session=boto_session
