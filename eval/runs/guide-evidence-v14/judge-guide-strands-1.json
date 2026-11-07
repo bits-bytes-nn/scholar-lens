@@ -1,0 +1,266 @@
+{
+ "item": "guide-strands",
+ "post": "/tmp/eval-guide/guide-strands-v14.md",
+ "judge_run": 1,
+ "sdk_checked": "strands-agents 1.64.0 with the [a2a] extra, strands-agents-tools 0.9.0 and strands-harness 0.3.4 in a temp venv (python3 -m venv, Python 3.14); docs fetched 2026-11-07 as strandsagents.com index.md pages (agent-loop, lifecycle-controls, structured-output-behavior, structured-output, hooks, hooks-events, interventions, state, session-management, snapshots, retry-strategies, approve-before-acting, model-providers, amazon-bedrock, deploy_to_bedrock_agentcore, api/python strands.agent.agent, changelog python-v1.25.0), harness-sdk and strands-py READMEs, SDK source (hooks/registry.py, event_loop/event_loop.py, models/model.py, vended_interventions/hitl), and the four non-official posts (InfoQ, The Sequence preview, AWS Builder Center 2026, Cipher Projects). Code blocks exercised in reading order with a scripted fake Model (no paid model calls); A2AAgent exercised against a local A2AServer on 127.0.0.1:9000.",
+ "sampling": "226 blank-line paragraphs after front matter (fenced blocks whole, list runs as one paragraph, headings count); paragraphs 1,4,7,...,226; claims drawn from those paragraphs",
+ "scores": {
+  "A": 7.5,
+  "B": 7.5,
+  "C": 7.0,
+  "D": 8.0,
+  "E": 8.0,
+  "F": 6.0,
+  "T1": 6.5,
+  "T2": 7.5,
+  "T3": 8.5
+ },
+ "score_evidence": {
+  "A": "Claim headings, one H2 arc, real tables, fenced code with one-word info strings, $$ math with blank lines and use_math true, description 126 characters. Deductions: structured output spread over three H2 sections ('L165 JSON 대신 도구 호출로 받는 구조화 출력', 'L393 Pydantic 스키마 하나로 받는 첫 티켓 분류 객체', 'L460 강제 재시도 문구와 요청 단위 시도 한도...'); topic headings 'L397 설치', 'L407 스키마와 분류 함수', 'L454 호출 스키마와 에이전트 스키마'; English table header 'L986 | 프로바이더 | Python Supported | TypeScript Supported |'; tag 'Agentic-AI' repeats the category.",
+  "B": "Mostly natural '입니다' prose. Deductions: L181 '...사실상 분류 기준을 전달하는 프롬프트 역할을 합니다' (rewrite: '...docstring과 description이 곧 분류 기준을 알려 주는 프롬프트가 됩니다'); L546 doc-page meta talk '에이전트 루프 페이지는 턴, 총 토큰, 출력 토큰 순서만 적고 있습니다. 프로덕션 수명주기 페이지는...' (rewrite: '여러 한도가 함께 걸리면 턴, 총 토큰, 출력 토큰, 구조화 출력 시도 순으로 중단 사유를 보고합니다'); L1025 '두 평가 모두 OpenAI Agents SDK에 대한 보고이며 Strands의 동작은 아닙니다' (rewrite: '두 평가는 OpenAI Agents SDK 이야기이고 Strands와는 무관합니다'); L185 '여기서는 FollowUp이 TicketTriage의 대역입니다'; formulaic L237 '두 경로를 나란히 놓고 보겠습니다', L113 '표에서 갈래 넷을 구분해 두면 좋습니다'; 12 '할 수 있습니다'.",
+  "C": "Accurate back-references at L139, L244, L377, L628, L771. Deductions: L304-L374 attach issue_refund/send_email handlers to tools never defined there (issue_refund first appears at L940, send_email never); FollowUp stands in for TicketTriage (L185) before TicketTriage is defined (L419); L1036 '기본 재시도 전략을 그대로 믿으면 안 되는 이유는 앞서 TriageRetryStrategy로 재시도 대상을 넓힐 때 다뤘습니다' points at the wrong place (the reason, 124 s vs the 20 s deadline, is at L771); L1023 says route_stop_reason, triage_with_deadline and RefundApproval are enough, but route_stop_reason returns 'unexpected' for a successful structured call (stop_reason tool_use).",
+  "D": "Hard parts get help where they appear: token growth formula with numbers (L145-L154), validation round-trip table (L226), 10,000-token overshoot walk-through (L542), 124 s backoff sum against the deadline (L771), three-handler scenario table (L379). Deductions: L260 drops HookOrder.MODEL_ROUTING(50) with no meaning; L546 explains documentation discrepancies instead of the behaviour; L83 restates message roles at length; the idempotency registry (L707) gives no help on the window where the original finishes before the borrowed retry calls.",
+  "E": "Tables for stop reasons, decisions, lifecycle methods, on_error, checkpoints, retry schedule, memory kinds and providers; two text diagrams; one display formula; code placed with its prose. Deductions: provider table header in English (L986); no picture or table of where AgentCore, A2A and sessions sit around the service although L980-L1019 describe that integration.",
+  "F": "L544 states Python's 'own model calls only' token rule for both SDKs (TypeScript shares limits with agents passed as tools); L672 '분류 객체는 결과가 COMPLETED일 때만 내보냅니다' never yields an object because a successful structured call ends with tool_use; L1036 '운영 중에 생기는 실패는 대부분 기본값을 지나치게 믿은 데서 나옵니다' has no source. Off-sample: L248 custom-provider inference, L913 preset fields, L1025 Cipher primitives.",
+  "T1": "Most blocks run with a fake model (structured output, limits, cancellation, idempotency, retry, sessions, HITL, A2A). Deductions: the guide's service handlers misclassify every successful structured call (L674, L709); L779 re-binds MODEL_ID from the environment; L306/L352 rely on undefined tools; AgentCore deployment has no code.",
+  "T2": "Covers the loop, stop reasons, structured output, hooks, interventions, limits, cancellation, concurrency and idempotency, retry, state and sessions, HITL, providers and A2A in a sensible order. Deductions: L54 promises 'Amazon Bedrock AgentCore Runtime에 배포합니다' but L999-L1001 give only a description and prerequisites; tracing and metrics (TL;DR L13 lists 트레이싱) never get a section or a result.metrics example; L546 and L1025-L1027 spend space on page discrepancies and OpenAI Agents SDK.",
+  "T3": "Internals and design reasons: schema-as-tool and why (L167), tool lifetime per call (L179), limit check at iteration start (L540), four cancellation checkpoints (L585), deny > confirm > guide > transform > proceed (L336), hooks' last-write-wins vs typed decisions (L389), session single-writer failure modes (L909), when to pick Strands vs graphs (L1021-L1038). Deductions: deployment and observability (where the agent sits, traces, scaling) stay at description level; L248's design inference about custom providers is wrong."
+ },
+ "principles": {
+  "claim_headings": {
+   "status": "partly met",
+   "evidence": "Claim headings such as 'L56 중단 사유로 다음 동작이 정해지는 에이전트 루프', 'L532 반복 경계에서만 검사하는 턴·토큰 예산과 협력적 취소', 'L758 4초에서 두 배씩 늘어나는 여섯 번의 시도'; topic headings remain at L397 '설치', L407 '스키마와 분류 함수', L454 '호출 스키마와 에이전트 스키마'."
+  },
+  "running_example": {
+   "status": "met",
+   "evidence": "Ticket-triage agent from L54 through TicketTriage (L419), triage_bounded (L483), triage_with_deadline (L561), handle_request/handle_ticket (L675, L716), TriageRetryStrategy (L788), new_ticket_agent (L893), HITL refund (L927) and A2A (L1014). Gaps: issue_refund/send_email used by handlers at L316/L325 are not defined until L940 (send_email never)."
+  },
+  "mechanism_design_code_example": {
+   "status": "met",
+   "evidence": "Structured output: problem (L167) -> five steps (L171) -> FollowUp code (L187) -> date round-trip table (L226); limits: check-at-top rule (L540) -> 7,500 + 4,000 = 11,500 example (L542); retry: default schedule (L762) -> 124 s vs deadline (L771) -> subclass (L779)."
+  },
+  "facts_said_once": {
+   "status": "not met",
+   "evidence": "Validation errors not raising: L13, L167, L185, L231, L237, L452; forced-retry exception: L235, L242, L452, L502; Strands-managed history verbatim at L95 and L854; stateless pattern does not resume interrupts: L701, L907, L978, L1027; nested-graph interrupts L978 and L1027; checkpointing L913 and L1027; Deny short-circuit L287, L336, L377, L972."
+  },
+  "numbers_with_scope": {
+   "status": "partly met",
+   "evidence": "Most numbers carry their setting (L542 total_tokens 10,000; L760-L773 retry defaults; L1001 Node.js 22+). Scope slips: L544 'Token limits count only this agent's own model calls' stated for both SDKs though TypeScript shares limits with agents passed as tools; L585 four checkpoints are Python's (TypeScript has five); L997 '...만 프롬프트 캐싱을 지원합니다' turns the docs' marking rule into a support claim."
+  },
+  "nothing_invented": {
+   "status": "partly met",
+   "evidence": "Hypothetical numbers are labelled (L145 '가상의 숫자로'). Invented or beyond-source: L248 'Python에서는 커스텀 프로바이더가 구조화 출력을 직접 구현해야 쓸 수 있고' (a fake provider whose structured_output raises still returns structured output through the tool path); L1036 '운영 중에 생기는 실패는 대부분 기본값을 지나치게 믿은 데서 나옵니다' (no source); handle_request/handle_ticket adapt the docs' handler to structured output but keep COMPLETED = end_turn/stop_sequence, which never holds for a successful structured call."
+  },
+  "writer_assessment_at_end": {
+   "status": "met",
+   "evidence": "L1038 '이 글의 판단은 다음과 같습니다...' with conditions for Strands, graph-first frameworks and distributed writes; L1029-L1034 failure conditions."
+  },
+  "length_fitted": {
+   "status": "partly met",
+   "evidence": "1,030 body lines; hard parts get space, but repeated facts (see facts_said_once), doc-page meta talk (L546) and the OpenAI Agents SDK paragraph (L1025) pad it."
+  },
+  "type_specific_shape": {
+   "status": "met",
+   "evidence": "TL;DR (L11) then the problem (L17-L25), architecture layers (L27-L52) and the loop (L56) before installation (L397); closes with when to choose and failure modes (L1021-L1038). Deployment promised (L54) but not shown."
+  },
+  "korean_style": {
+   "status": "partly met",
+   "evidence": "Natural register overall; '역할을 합니다' (L181), formulaic transitions (L113, L237), doc meta sentences (L546), English table header (L986)."
+  }
+ },
+ "claims": {
+  "checked": 15,
+  "supported": 12,
+  "unsupported": 1,
+  "wrong": 2,
+  "unverifiable": 0,
+  "examples": [
+   {
+    "line": 13,
+    "claim": "Loop checks the stop reason after each model call; tool_use runs tools and re-calls, end_turn returns, max_tokens unrecoverable in the current loop",
+    "verdict": "supported",
+    "source": "Agent loop Stop Reasons: 'Tool use ... executes the requested tools ... invokes the model again'; 'Max tokens ... unrecoverable within the current loop'."
+   },
+   {
+    "line": 113,
+    "claim": "On cancelled, the incomplete assembled message is omitted from result and history; streamed deltas already delivered remain",
+    "verdict": "supported",
+    "source": "Lifecycle controls: 'The incomplete assembled model message is omitted from the result and history. Streamed deltas already delivered to your consumer remain visible.'"
+   },
+   {
+    "line": 145,
+    "claim": "Hypothetical history growth: 3,500 + 4,200n gives 45,500 tokens at n=10; with 400-token summaries 3,500 + 600n gives 9,500",
+    "verdict": "supported",
+    "source": "Writer's labelled example ('가상의 숫자로'); arithmetic checked."
+   },
+   {
+    "line": 284,
+    "claim": "Five typed decisions: Proceed, Deny(reason), Guide(feedback), Confirm(prompt), Transform(apply)",
+    "verdict": "supported",
+    "source": "Interventions Action Types (Python) table, verbatim."
+   },
+   {
+    "line": 302,
+    "claim": "Guide from after_model_call retries with no framework cap; Deny on After events has no effect and warns",
+    "verdict": "supported",
+    "source": "Interventions: 'The framework imposes no retry cap on guide-triggered retries'; 'Deny ... After events: No effect (warns at runtime)'."
+   },
+   {
+    "line": 342,
+    "claim": "on_error has three values; 'throw' is the default, 'proceed' fail-open, 'deny' fail-closed",
+    "verdict": "supported",
+    "source": "Interventions Error Handling table; exercised: throwing StrictAuth -> 'DENIED: Handler threw: auth down'."
+   },
+   {
+    "line": 470,
+    "claim": "Each failed model response counts as one structured-output attempt; tool calls before the forced retry do not count; with a limit, a failed forced retry is retried",
+    "verdict": "supported",
+    "source": "Structured output Limit attempts; exercised: 3 attempts -> limit_structured_output_attempts."
+   },
+   {
+    "line": 544,
+    "claim": "Token limits count only this agent's own model calls; agents called as tools and summarization calls run outside the limits",
+    "verdict": "wrong",
+    "source": "Agent loop: this is the Python tab only. TypeScript tab: 'Limits cover the whole request. Agents passed as tools share the request's limits and usage.' The post states it for both SDKs."
+   },
+   {
+    "line": 585,
+    "claim": "The agent loop checks cancellation at four checkpoints",
+    "verdict": "supported",
+    "source": "Agent loop Cancellation, Python tab: 'The agent checks for cancellation at four checkpoints' (TypeScript has five; scope note in other_sdk_as_python)."
+   },
+   {
+    "line": 672,
+    "claim": "handle_request returns the TicketTriage only when the outcome is COMPLETED (end_turn or stop_sequence)",
+    "verdict": "wrong",
+    "source": "SDK 1.64.0: a successful structured call ends with stop_reason 'tool_use' (event_loop.py stop_loop path); exercised: valid TicketTriage -> Outcome.STOPPED, triage None. The docs' handler returns text, not structured output."
+   },
+   {
+    "line": 760,
+    "claim": "Default: up to 5 retries on throttling, 6 attempts total, backoff starting at 4 s",
+    "verdict": "supported",
+    "source": "Retry strategies Default Behavior; exercised: sleeps 4, 8, 16, 32, 64, exception after 6 calls."
+   },
+   {
+    "line": 773,
+    "claim": "max_attempts default 6 (1 disables), initial_delay 4 s doubling, max_delay 128 s; TypeScript delegates delay to BackoffStrategy",
+    "verdict": "supported",
+    "source": "Retry strategies Parameters tables and Backoff Strategies."
+   },
+   {
+    "line": 840,
+    "claim": "TypeScript AfterModelCallEvent exposes a 1-indexed attemptCount",
+    "verdict": "supported",
+    "source": "Retry strategies Using a Hook (TypeScript): 'exposes attemptCount (1-indexed)'."
+   },
+   {
+    "line": 1001,
+    "claim": "Deployment needs an AWS account with permissions and Python 3.10+ or Node.js 22+; a container engine only for local testing and advanced scenarios",
+    "verdict": "supported",
+    "source": "Deploy to AgentCore Runtime Prerequisites."
+   },
+   {
+    "line": 1036,
+    "claim": "Most operational failures come from trusting defaults too much",
+    "verdict": "unsupported",
+    "source": "No source states a cause for operational failures; writer's generalization stated as fact."
+   }
+  ],
+  "off_sample_findings": [
+   "L248 'Python에서는 커스텀 프로바이더가 구조화 출력을 직접 구현해야 쓸 수 있고' — wrong: a fake provider whose structured_output raises NotImplementedError still returns structured output through the schema-as-tool path.",
+   "L913 lists messages, state, conversation_manager_state, interrupt_state for the 'session' preset; the snapshots page also lists model_state.",
+   "L1025 'OpenAI Agents SDK가 에이전트와 핸드오프라는 최소한의 프리미티브만 쓴다' — Cipher lists five primitives (Agents, Handoffs, Guardrails, Sessions, Tracing).",
+   "L401 'SDK와 기본 도구 모음을 함께 설치합니다' — the README installs only strands-agents and ships vended tools in strands.vended_tools; strands-agents-tools is never used."
+  ]
+ },
+ "checklist": {
+  "repeated": 2,
+  "avoided": 2,
+  "na": 1,
+  "repeated_ids": [
+   "shared-agent-throw-scope",
+   "result-fields-incomplete"
+  ],
+  "items": [
+   {
+    "id": "loop-diagram-remote",
+    "status": "avoided",
+    "evidence": "No image links at all; the loop is a text diagram (L64-L79)."
+   },
+   {
+    "id": "shared-agent-throw-scope",
+    "status": "repeated",
+    "evidence": "L622 'Python에서는 이미 실행 중인 에이전트를 다시 호출하면 ConcurrencyException이 발생합니다' never ties THROW to invoke_async or says a sync agent(...) inside an async def handler blocks and serializes instead of raising."
+   },
+   {
+    "id": "shared-agent-history-leak",
+    "status": "avoided",
+    "evidence": "L452 '서로 다른 티켓이 대화 기록을 공유하지 않게 하기 위해서입니다', L452 '비동기 서버에서는 invoke_async에 같은 인자를 넘기면 됩니다', L618/L677 per-request agent."
+   },
+   {
+    "id": "result-fields-incomplete",
+    "status": "repeated",
+    "evidence": "No example shows result.metrics.get_summary(); results are read only via stop_reason, structured_output, message (L136, L213, L1016)."
+   },
+   {
+    "id": "multi-agent-subject",
+    "status": "n/a",
+    "evidence": "No sentence about the smallest execution unit of multi-agent patterns; Graph appears only at L1019 and L1027."
+   }
+  ]
+ },
+ "extras": {
+  "architecture_first_line": 27,
+  "architecture_note": "Harness/SDK/provider layers at L27-L52, then the loop cycle and stop reasons (L56-L163), structured-output internals (L165), hooks/interventions (L252) before installation (L397).",
+  "sources_total": 20,
+  "sources_non_official": 4,
+  "non_official_share": 0.2,
+  "non_official_list": [
+   "InfoQ news on the release",
+   "The Sequence Engineering #681 (paywalled; only the preview is readable)",
+   "AWS Builder Center 'Picking an AI Agent Framework in 2026'",
+   "Cipher Projects 'OpenAI Agents SDK vs LangGraph (2026)'"
+  ],
+  "opens_with_problem": true,
+  "opens_note": "TL;DR (L11-L15), then 'L17 직접 짠 에이전트 루프가 프로덕션에서 커지는 지점과 Strands의 자리' with the hand-rolled loop's growth (L23).",
+  "closes_with_when_to_choose_and_failure_modes": true,
+  "closes_note": "L1021-L1038: model-driven loop vs explicit graphs, four conditions to supplement or switch (multi-day approvals, multi-writer sessions, TypeScript-first teams, ecosystem maturity) and the writer's rule."
+ },
+ "runnable_code": {
+  "verdict": "Most blocks paste and run against strands-agents 1.64.0 with a fake model, but the guide's own service handlers are wrong: a successful structured call ends with stop_reason 'tool_use', so handle_request (L674) and handle_ticket (L709) return Outcome.STOPPED with triage=None for every ticket they classify, and route_stop_reason (L117) returns 'unexpected' for it. L779 re-binds MODEL_ID from os.environ (KeyError if unset). AgentCore deployment has no code.",
+  "passed": [
+   "L48 strands-harness installs; strands_harness.create_harness imports",
+   "L87 Agent + agent.messages (2 messages after one call); L117 route_stop_reason maps end_turn/limit_*/cancelled/guardrail/interrupt as described",
+   "L187 FollowUp: past date returned as tool error 'Validation failed for FollowUp ... due_date must be after 2026-11-07', second call valid; FollowUp tool removed afterwards; 8 invalid attempts then valid still succeeds (no default cap)",
+   "Forced retry adds 'You must format the previous response as structured output.' with tool_choice FollowUp, then StructuredOutputException",
+   "L262 add_hook SDK_FIRST/SDK_LAST order prints 'I run first' then 'I run last'",
+   "L306+L352 (with tools I added): issue_refund -> Confirm -> stop_reason interrupt, resumed with 'yes' -> refund runs; StrictAuth throwing -> 'DENIED: Handler threw: auth down'; SSN body -> '[REDACTED]'",
+   "L411 triage returns TicketTriage; StructuredOutputException fallback to 'other'",
+   "L476 triage_bounded: 3 failed attempts -> limit_structured_output_attempts -> fallback; custom structured_output_prompt sent on forced retries",
+   "L508 stream_async: text chunks then object from the 'result' event",
+   "L552 triage_with_deadline: turn limit and a 0.5 s deadline both fall back; L542 example reproduced (3,750 + 3,750 + 4,000 = 11,500 -> limit_total_tokens after 3 model calls)",
+   "L596 normalize_records runs; Python agent.cancel() while idle cancels the next call (L612)",
+   "L709 idempotency: two threads, same ticket -> one model call, both get the same result; registry emptied",
+   "L779 TriageRetryStrategy retries TimeoutError (sleeps 2, 4); default strategy sleeps 4/8/16/32/64 then raises after 6 calls; retry_strategy=None -> 1 call",
+   "L807 CustomRetry hook retries RuntimeError twice with 2 s waits",
+   "L860 current_ticket reads ticket_id from invocation_state; result.state is {} (request_state slot)",
+   "L886 SnapshotSessionManager API valid (S3Storage replaced by InMemoryStorage): second agent restores 2 messages",
+   "L927 HumanInTheLoop: lookup_order classified safe, negated issue_refund prompts without the classifier, 'n' -> 'DENIED ... the human rejected the call', TicketTriage returned",
+   "L1007+L1011 A2AAgent call returns the remote agent's message against a local A2AServer on :9000"
+  ],
+  "failed": [
+   "L674 handle_request and L709 handle_ticket: successful TicketTriage -> stop_reason 'tool_use' -> classify -> Outcome.STOPPED, triage None (confirmed in event_loop.py: EventLoopStopEvent carries the model's stop_reason when the structured output tool ends the loop)",
+   "L779 MODEL_ID = os.environ['MODEL_ID'] raises KeyError when the variable is unset and silently replaces the L638 constant",
+   "L306/L352 snippets reference issue_refund and send_email tools the guide never defines at that point (send_email never)"
+  ],
+  "notes": "No AWS or paid model calls by design. One unintended S3 GetObject attempt happened while exercising L886 with the inherited profile against the placeholder bucket 'my-agent-sessions' (failed with StorageError, nothing written); the block was then rerun with AWS variables cleared and InMemoryStorage."
+ },
+ "other_sdk_as_python": "None found: TypeScript differences are labelled (L99, L181, L222, L235, L338, L385, L472, L612, L624, L699, L773, L801, L840, L856, L878, L882). The reverse happens: Python-only behaviour is stated for both SDKs at L544 (token limits count only this agent's calls; TypeScript shares limits with agents passed as tools) and L585 (four checkpoints; TypeScript has five).",
+ "topic_taught_twice": "Yes: structured output is taught across three H2 sections with restated facts (validation errors not raising at L13, L167, L185, L231, L237, L452; forced-retry exception at L235, L242, L452, L502); Strands-managed history nearly verbatim at L95 and L854; the stateless-interrupt caveat four times (L701, L907, L978, L1027); nested-graph interrupts and checkpointing again at L1027 after L913/L978.",
+ "causes_or_scope_beyond_sources": "Yes: L248 infers that a Python custom provider must implement structured output itself (contradicted by running a provider whose structured_output raises); L1036 asserts that most operational failures come from trusting defaults (no source); L544 and L585 extend Python-only scope to both SDKs; L997 turns the docs' marking rule into 'only these providers support prompt caching'; L1025 narrows Cipher's five OpenAI Agents SDK primitives to agents and handoffs.",
+ "top_issues": [
+  "Runnable-code defect in the core service pattern: a successful structured call ends with stop_reason 'tool_use', so handle_request (L674) and handle_ticket (L709) report every classified ticket as Outcome.STOPPED with triage=None, route_stop_reason (L117) returns 'unexpected', and L672/L1023 claim otherwise. COMPLETED must also accept a set result.structured_output.",
+  "Claims beyond the sources: L248 says a Python custom provider must implement structured output (false for the tool path), L1036 gives an unsourced cause for most failures, L544/L585 state Python-only limit and checkpoint behaviour for both SDKs, L913 lists four of the five 'session' preset fields (model_state missing), L1025 narrows Cipher's five primitives to two, L401 presents strands-agents-tools as the default install although the README installs only strands-agents.",
+  "Topics taught more than once: structured output spread over three sections with the same facts restated (L13/L167/L185/L231/L452/L502), history management repeated (L95, L854), the stateless-interrupt caveat four times (L701, L907, L978, L1027); deployment promised (L54) without steps and no metrics.get_summary() example (checklist misses shared-agent-throw-scope and result-fields-incomplete persist)."
+ ]
+}
