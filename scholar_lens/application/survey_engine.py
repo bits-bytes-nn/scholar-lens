@@ -14,6 +14,7 @@ import asyncio
 import hashlib
 import json
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 
 from ..domain.evidence import (
@@ -65,7 +66,7 @@ logger = logging.getLogger(__name__)
 
 # Bump when the reader's prompt or the evidence schema changes meaning; the
 # prompt's wording alone does not invalidate cached evidence.
-READER_VERSION = 6
+READER_VERSION = 7
 
 SURVEY_PROMPTS = WriterPrompts(
     reader=prompts.READER_SYSTEM,
@@ -82,6 +83,15 @@ def _no_code(document: SourceDocument, kind: str, fields: object) -> list[str]:
     guide's evidence."""
     if kind in ("code", "setting"):
         return [f"kind {kind!r} is not used in a survey; record a method instead"]
+    # Results and limitations fill the comparison table: each needs its
+    # short noun-phrase cell (a claim is a sentence, not a cell).
+    cell = fields.get("cell", "") if isinstance(fields, Mapping) else ""
+    if kind in ("number", "limitation") and not str(cell).strip():
+        return [
+            f"a {kind} needs `cell`: a short noun phrase for the comparison table "
+            "(a result with its benchmark and metric, or the limitation), in the "
+            "post's language and register"
+        ]
     return []
 
 

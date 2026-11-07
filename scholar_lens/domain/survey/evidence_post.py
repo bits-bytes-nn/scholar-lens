@@ -11,7 +11,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..evidence import Evidence, EvidenceLedger
+from ..evidence import EvidenceLedger
 from ..evidence_draft import MARKER, cited_ids
 from ..lengths import DEPTH_CHARS, scaled_targets
 from ..markdown.tables import escape_cell_pipes
@@ -222,10 +222,11 @@ def timeline_table(plan: SurveyPlan, outline: EvidenceOutline, korean: bool) -> 
 def comparison_table(
     plan: SurveyPlan, outline: EvidenceOutline, ledger: EvidenceLedger, korean: bool
 ) -> str:
-    """Core papers: lineage, key results (evidence cells with their scope),
-    limitation; an empty cell says so instead of a dash."""
+    """Core papers: lineage, key results and limitation, from the evidence's
+    noun-phrase cells only (a claim is a sentence in another register); an
+    empty cell says so instead of a dash."""
     none_result = "정량 수치 없음" if korean else "No quantitative result"
-    none_limit = "-"
+    none_limit = "명시 없음" if korean else "Not stated"
     head = (
         ["논문", "계보", "주요 결과", "한계"]
         if korean
@@ -243,19 +244,11 @@ def comparison_table(
             [
                 outline.short_names.get(paper.id, paper.title),
                 outline.lineage_names.get(paper.lineage, paper.lineage),
-                "; ".join(_result_cell(e) for e in results) or none_result,
-                (limit.cell or limit.claim) if limit else none_limit,
+                "; ".join(e.cell for e in results if e.cell) or none_result,
+                limit.cell if limit and limit.cell else none_limit,
             ]
         )
     return _table(head, rows)
-
-
-def _result_cell(item: Evidence) -> str:
-    """The evidence's noun-phrase cell as written (it names its model and
-    benchmark), else its claim with the scope."""
-    if item.cell:
-        return item.cell
-    return f"{item.claim} ({item.scope})" if item.scope else item.claim
 
 
 def _table(head: Sequence[str], rows: Sequence[Sequence[str]]) -> str:

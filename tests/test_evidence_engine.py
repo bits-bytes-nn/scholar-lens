@@ -1024,3 +1024,13 @@ def test_a_claim_check_the_models_cannot_answer_leaves_a_note() -> None:
     )
     assert found == []
     assert any("Check by hand" in n and "공격" in n for n in writer.notes)
+
+
+def test_survey_results_and_limitations_need_table_cells() -> None:
+    from scholar_lens.application.survey_engine import _no_code
+
+    doc = _doc()
+    assert _no_code(doc, "limitation", {"cell": ""})
+    assert _no_code(doc, "number", {"cell": " "})
+    assert not _no_code(doc, "limitation", {"cell": "작은 beta에서 불안정"})
+    assert not _no_code(doc, "finding", {"cell": ""})
