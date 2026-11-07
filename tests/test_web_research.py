@@ -1543,7 +1543,10 @@ def test_pypi_extras_come_from_the_json_api() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/pypi/strands-agents/json":
             return httpx.Response(
-                200, json={"info": {"version": "1.64.0", "provides_extra": ["Cedar", "otel"]}}
+                200,
+                json={
+                    "info": {"version": "1.64.0", "provides_extra": ["Cedar", "otel"]}
+                },
             )
         return httpx.Response(404)
 

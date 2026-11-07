@@ -141,7 +141,9 @@ async def write_paper_with_evidence(
         and any(e.figure_url in md for _, md in result.sections)
     ]
     if broken := await unservable(remote):
-        notes.append("Figures that cannot be downloaded were left out: " + ", ".join(broken))
+        notes.append(
+            "Figures that cannot be downloaded were left out: " + ", ".join(broken)
+        )
         sections = [
             (kind, _drop_images(md, set(broken))) for kind, md in result.sections
         ]

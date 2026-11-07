@@ -101,8 +101,7 @@ How a good guide on this blog is written:
   formula twice ("다음과 같습니다"), and avoid noun frames such as "~다는 점".
 """
 
-READER_SYSTEM = (
-    """
+READER_SYSTEM = """
 You read one source page for a technical guide and record the evidence the
 guide may use. You see the page's outline; open sections with read_section,
 find passages with search_source, and record each piece of evidence with
@@ -146,13 +145,9 @@ is the official docs' to state: from a third-party page (a forum thread, a
 vendor comparison, an old post) record it only as that page's report, with
 its date or version when the page gives one.
 Stop with finish when the evidence covers the page as the guide needs it.
-"""
-    + SOURCE_AUTHORITY
-    + SECURITY
-)
+""" + SOURCE_AUTHORITY + SECURITY
 
-OUTLINE_SYSTEM = (
-    """
+OUTLINE_SYSTEM = """
 You plan a technical guide from the evidence of its sources. Give each piece
 of evidence to at most one section: that section states it; later sections
 refer back to it without repeating it.
@@ -186,10 +181,7 @@ the code builds on end to end (run or deploy it, send a request, read the
 answer); `code_language` the one SDK language the code uses. The
 glossary has the topic's key terms (English | rendering in the guide's
 language, no parentheses). The title is in English.
-"""
-    + SOURCE_AUTHORITY
-    + SECURITY
-)
+""" + SOURCE_AUTHORITY + SECURITY
 
 WRITER_SYSTEM = (
     """
@@ -232,8 +224,7 @@ Evidence:
     + SECURITY
 )
 
-CLAIM_CHECK_SYSTEM = (
-    """
+CLAIM_CHECK_SYSTEM = """
 You check a technical guide section against its evidence. For each numbered
 sentence, decide whether the cited evidence supports everything the sentence
 states about the tool:
@@ -273,14 +264,9 @@ opposite of any listed evidence, gives a setting's wrong default or scope,
 or attributes one component's behaviour to another is wrong. A setting
 only a non-official source gives, stated as current behaviour, is
 unsupported. Give a short reason for anything not supported.
-"""
-    + SOURCE_AUTHORITY
-    + CLAIM_SCOPE
-    + SECURITY
-)
+""" + SOURCE_AUTHORITY + CLAIM_SCOPE + SECURITY
 
-EVIDENCE_CHECK_SYSTEM = (
-    """
+EVIDENCE_CHECK_SYSTEM = """
 You check recorded evidence against the source passage it quotes. For each
 item, the claim, cell and scope must say what the quote says: the same
 setting with the same default and scope, the same number for the same setup
@@ -289,12 +275,9 @@ them misstates the quote; otherwise consistent. A figure's claim says only
 what its caption, its file name or the text before it shows (the setting,
 the variant, how many outputs, which hardware): a claim that names another
 setting than the figure shows is wrong.
-"""
-    + SECURITY
-)
+""" + SECURITY
 
-REVIEW_SYSTEM = (
-    """
+REVIEW_SYSTEM = """
 You review one section of a technical guide for a reader who knows deep
 learning and software engineering but not this tool. Report only problems a
 reader would trip over, each with the exact sentence (verbatim) and what to
@@ -313,27 +296,17 @@ change:
   that does not match its definition, a client and server that disagree on
   the request's shape.
 Do not report matters of taste. Return no issues when there are none.
-"""
-    + GUIDE_PRINCIPLES
-    + SELF_REFERENCE_CHECKS
-    + SECURITY
-)
+""" + GUIDE_PRINCIPLES + SELF_REFERENCE_CHECKS + SECURITY
 
-FIX_SYSTEM = (
-    """
+FIX_SYSTEM = """
 You revise one technical guide section to fix the listed problems and
 nothing else. Rewrite or delete exactly the sentences or code blocks named;
 keep every other sentence, heading, figure, equation, table, code block and
 evidence marker as it is. A claim the evidence does not support is narrowed
 to what the evidence says or deleted. Return the whole revised section.
-"""
-    + GUIDE_PRINCIPLES
-    + MATH_RULES
-    + SECURITY
-)
+""" + GUIDE_PRINCIPLES + MATH_RULES + SECURITY
 
-GUIDE_REVIEW_SYSTEM = (
-    """
+GUIDE_REVIEW_SYSTEM = """
 You review a whole technical guide, in the order a reader meets it, as an
 engineer who pastes each block and runs the running example end to end.
 
@@ -373,6 +346,4 @@ For each problem give the section title exactly as it appears in the guide's
 `## ` heading, the problem, and the fix (the corrected lines, using names and
 import paths from the guide or the source code listed). Return no issues
 when there are none.
-"""
-    + SECURITY
-)
+""" + SECURITY

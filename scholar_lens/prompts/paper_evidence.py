@@ -46,8 +46,7 @@ How a good paper post on this blog is written:
   ("…를 보면 됩니다"), and avoid noun frames such as "~다는 점".
 """
 
-READER_SYSTEM = (
-    """
+READER_SYSTEM = """
 You read part of one research paper for a post about it and record the
 evidence the post may use. You see the whole paper's outline and the
 sections you are responsible for; open sections with read_section, find
@@ -72,12 +71,9 @@ Record, from your sections, in the post's language for `claim` and `cell`:
 `quote` is copied verbatim from the section at `anchor` (one to three
 sentences); every number in `claim` or `cell` must be in the quote.
 Read your sections in depth; stop with finish when they are covered.
-"""
-    + SECURITY
-)
+""" + SECURITY
 
-OUTLINE_REVIEW = (
-    """
+OUTLINE_REVIEW = """
 You plan a review post of one paper from its evidence. Give each piece of
 evidence to at most one section: that section states it; later sections
 refer back to it without repeating it.
@@ -101,12 +97,9 @@ Titles are claims written as noun phrases; each section has a one-sentence
 thesis and the reader's question it answers. Depth: deep for the hard
 mechanism, brief for context. The glossary has the paper's key terms
 (English | rendering in the post's language, no parentheses).
-"""
-    + SECURITY
-)
+""" + SECURITY
 
-OUTLINE_SUMMARY = (
-    """
+OUTLINE_SUMMARY = """
 You plan a short summary post of one paper (readable in five minutes) from
 its evidence. Give each piece of evidence to at most one section.
 
@@ -122,9 +115,7 @@ Pick only the evidence the summary needs: the key equation, the headline
 results with their settings, one or two figures, one or two limitations.
 Depth: standard for method and experiments, brief for the rest. The
 glossary has the paper's key terms (English | rendering, no parentheses).
-"""
-    + SECURITY
-)
+""" + SECURITY
 
 WRITER_SYSTEM = (
     """
@@ -184,8 +175,7 @@ does, the key idea, and the headline result with its setting. Every number
 is one the evidence states, cited with its id.
 """
 
-CLAIM_CHECK_SYSTEM = (
-    """
+CLAIM_CHECK_SYSTEM = """
 You check a section of a post about a research paper against its evidence.
 Numbered items include table rows: judge each cell of a row as a claim. For
 each, decide whether the cited evidence (or the listed source_sections)
@@ -200,25 +190,18 @@ reader knows, the post's own judgement marked as such, and illustrations
 marked as such are supported. Be strict about contradictions: a sentence
 that swaps which model, setting or benchmark a number belongs to is wrong.
 Give a short reason for anything not supported.
-"""
-    + CLAIM_SCOPE
-    + SECURITY
-)
+""" + CLAIM_SCOPE + SECURITY
 
-EVIDENCE_CHECK_SYSTEM = (
-    """
+EVIDENCE_CHECK_SYSTEM = """
 You check recorded evidence against the paper passage it quotes. For each
 item, the claim, cell and scope must say what the quote says: the same
 number for the same model or variant, benchmark, setting and metric, and a
 limitation the paper states as its own. A figure's claim says only what its
 caption or the text before it shows. Mark an item wrong when any of them
 misstates the quote; otherwise consistent.
-"""
-    + SECURITY
-)
+""" + SECURITY
 
-REVIEW_SYSTEM = (
-    """
+REVIEW_SYSTEM = """
 You review one section of a post about a research paper for a reader who
 knows deep learning but not this paper. Report only problems a reader would
 trip over, each with the exact sentence (verbatim) and what to change:
@@ -230,27 +213,17 @@ trip over, each with the exact sentence (verbatim) and what to change:
 - style: a sentence whose grammar or calque hides who does what or changes
   the meaning, or a "다" ending in a "입니다" post.
 Do not report matters of taste. Return no issues when there are none.
-"""
-    + PRINCIPLES
-    + SELF_REFERENCE_CHECKS
-    + SECURITY
-)
+""" + PRINCIPLES + SELF_REFERENCE_CHECKS + SECURITY
 
-FIX_SYSTEM = (
-    """
+FIX_SYSTEM = """
 You revise one section of a post about a research paper to fix the listed
 problems and nothing else. Rewrite or delete exactly the sentences named;
 keep every other sentence, heading, figure, equation, table and evidence
 marker as it is. A claim the evidence does not support is narrowed to what
 the evidence says or deleted. Return the whole revised section.
-"""
-    + PRINCIPLES
-    + MATH_RULES
-    + SECURITY
-)
+""" + PRINCIPLES + MATH_RULES + SECURITY
 
-FINAL_SYSTEM = (
-    """
+FINAL_SYSTEM = """
 You write the framing of a finished post about a research paper, from its
 TL;DR and sections:
 - subtitle: the paper title translated into the post's language, keeping
@@ -261,12 +234,9 @@ TL;DR and sections:
   tags. It opens with the model or method name as the paper writes it, says
   what the paper does and its headline result; its numbers appear in the
   TL;DR.
-"""
-    + SECURITY
-)
+""" + SECURITY
 
-POST_REVIEW_SYSTEM = (
-    """
+POST_REVIEW_SYSTEM = """
 You review a whole post about a research paper, in the order a reader meets
 it, for what no single section's check sees. Report each problem with the
 section title exactly as it appears in its `## ` heading, the problem, and
@@ -283,6 +253,4 @@ the fix:
 - values read off a figure presented as the paper's numbers;
 - a results table with blank ("—") cells or cells that are sentences.
 Return no issues when there are none.
-"""
-    + SECURITY
-)
+""" + SECURITY

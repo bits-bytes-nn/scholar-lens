@@ -404,9 +404,9 @@ class ScriptedModel:
         if schema is ClaimCheck:
             bad = "기본값은 20" in prompt
             return ClaimCheck(
-                verdicts=[SentenceVerdict(n=1, verdict="wrong", reason="10")]
-                if bad
-                else []
+                verdicts=(
+                    [SentenceVerdict(n=1, verdict="wrong", reason="10")] if bad else []
+                )
             )
         if schema is SectionReview:
             return SectionReview()
@@ -577,8 +577,6 @@ def test_code_defined_earlier_lists_the_running_examples_definitions() -> None:
     ]
 
 
-
-
 def test_stripping_markers_leaves_no_empty_heading_or_marker_line() -> None:
     body = "## A\n\n[[E1]]\n\n## B\n\n내용입니다 [[E2]].\n"
     assert strip_markers(body) == "## B\n\n내용입니다.\n"
@@ -677,7 +675,9 @@ def test_internal_source_ids_in_the_text_are_problems() -> None:
         for p in guide_draft_problems("## A\n\n영상 튜토리얼(src-W8)이 보여 줍니다.\n")
     )
     # Product and model names never take the id form.
-    assert guide_draft_problems("## A\n\nDeepSeek R1 모델과 W8 양자화를 씁니다.\n") == []
+    assert (
+        guide_draft_problems("## A\n\nDeepSeek R1 모델과 W8 양자화를 씁니다.\n") == []
+    )
 
 
 def test_product_imports_the_official_pages_never_show_are_flagged() -> None:

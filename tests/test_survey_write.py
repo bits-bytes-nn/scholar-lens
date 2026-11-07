@@ -384,8 +384,6 @@ SOURCE = (
 FIGURE = "https://arxiv.org/html/2305.18290v3/x1.png"
 
 
-
-
 class TestCitations:
     PAPERS = {p.id: p for p in plan().papers}
 
@@ -719,7 +717,9 @@ class FakeEngine:
     async def write(
         self, plan: SurveyPlan, *, references: str = "", guideline: str = ""
     ) -> EvidenceSurvey:
-        self.calls.append({"plan": plan, "references": references, "guideline": guideline})
+        self.calls.append(
+            {"plan": plan, "references": references, "guideline": guideline}
+        )
         if self.error is not None:
             raise self.error
         return EvidenceSurvey(

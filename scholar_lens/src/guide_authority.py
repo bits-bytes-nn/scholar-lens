@@ -105,9 +105,7 @@ def own_names(body: str) -> set[str]:
         for node in ast.walk(tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 a = node.args
-                names |= {
-                    x.arg for x in (*a.posonlyargs, *a.args, *a.kwonlyargs)
-                }
+                names |= {x.arg for x in (*a.posonlyargs, *a.args, *a.kwonlyargs)}
             elif isinstance(node, ast.ClassDef):
                 names |= {
                     t.target.id
@@ -140,8 +138,10 @@ def unverified_identifiers(
     own = own_names(body)
 
     def check(token: str) -> None:
-        if token not in found and token not in own and not any(
-            _mentions(known, v) for v in _spellings(token, both_styles)
+        if (
+            token not in found
+            and token not in own
+            and not any(_mentions(known, v) for v in _spellings(token, both_styles))
         ):
             found.append(token)
 

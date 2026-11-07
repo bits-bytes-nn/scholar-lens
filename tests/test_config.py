@@ -48,7 +48,11 @@ class TestConfigValidation:
 
     @pytest.mark.parametrize(
         ("section", "key"),
-        [("tech_guide", "engine"), ("survey", "engine"), ("survey", "verify_grounding")],
+        [
+            ("tech_guide", "engine"),
+            ("survey", "engine"),
+            ("survey", "verify_grounding"),
+        ],
     )
     def test_a_key_of_a_removed_engine_fails_at_load(
         self, tmp_path: Path, section: str, key: str

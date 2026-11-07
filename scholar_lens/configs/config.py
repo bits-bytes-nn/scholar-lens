@@ -158,6 +158,7 @@ class Explanation(_Section):
         if self.min_total_chars > self.max_total_chars:
             raise ValueError("explanation.min_total_chars exceeds max_total_chars")
         return self
+
     evaluator_enable_thinking: bool = Field(default=False)
     synthesizer_enable_thinking: bool = Field(default=False)
     thinking_effort: ThinkingEffort = Field(default="medium")
@@ -196,6 +197,7 @@ class Summary(_Section):
         if self.min_total_chars > self.max_total_chars:
             raise ValueError("summary.min_total_chars exceeds max_total_chars")
         return self
+
     summarizer_enable_thinking: bool = Field(default=False)
     thinking_effort: ThinkingEffort = Field(default="medium")
     # Hard total-token ceiling for one summary run (None = no limit); a typical

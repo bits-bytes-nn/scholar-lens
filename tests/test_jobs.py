@@ -438,7 +438,11 @@ def test_submitted_request_is_accepted_by_an_older_worker(
         {"kind": "review", "source": "2305.18290", "repo_urls": ["github.com/a/b"]},
         {"kind": "review", "source": "2305.18290", "repo_urls": ["git@github.com:a/b"]},
         {"kind": "guide", "urls": ["docs.example.com/x"]},
-        {"kind": "guide", "urls": ["https://docs.example.com"], "reference_urls": ["x"]},
+        {
+            "kind": "guide",
+            "urls": ["https://docs.example.com"],
+            "reference_urls": ["x"],
+        },
     ],
 )
 def test_urls_that_are_not_http_are_rejected_before_any_paid_stage(kwargs) -> None:
