@@ -34,6 +34,9 @@ How a good paper post on this blog is written:
   one sentence; the hard step gets the words.
 - State each fact once, in full, where it matters; later refer back to it by
   content ("앞서 본 이웃 샘플링") without repeating its numbers.
+- The running example, when the outline gives one, is set up once and then
+  used only where it makes a step concrete; never retell it, and never bend
+  a section toward it when the section's evidence is about something else.
 - Every number carries its model or variant, benchmark, setting and metric,
   and says whether a gain is relative or absolute (% vs %p). Results with
   many numbers go in one table; the prose interprets it.
