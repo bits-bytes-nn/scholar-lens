@@ -60,7 +60,10 @@ _CANONICAL_RES = [(re.compile(p, re.IGNORECASE), name) for p, name in _CANONICAL
 _FILLER = frozenset(
     "proceedings of the annual meeting conference international joint ieee acm "
     "cvf usenix aaai on in and volume long short papers main track advances "
-    "symposium sp".split()
+    "symposium sp proc sigkdd sigsac sigir hlt human language technologies "
+    "poster oral spotlight computer vision first second third fourth fifth "
+    "sixth seventh eighth ninth tenth eleventh twelfth thirteenth fourteenth "
+    "fifteenth twenty thirty forty fiftieth".split()
 )
 _WORDS = re.compile(r"[^\W\d_]+")
 

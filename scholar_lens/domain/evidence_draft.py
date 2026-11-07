@@ -428,7 +428,8 @@ def _code_blocks(markdown: str) -> int:
 
 
 def _tables(markdown: str) -> int:
-    return len(re.findall(r"^\s*\|?\s*:?-{3,}", markdown, re.M))
+    # A delimiter row has a pipe; a bare "---" is a rule, not a table.
+    return len(re.findall(r"^\s*\|?\s*:?-{3,}.*\|", markdown, re.M))
 
 
 def structure_lost(before: str, after: str) -> str:
@@ -510,13 +511,20 @@ _REVISION_NOTE = re.compile(
 )
 
 
-def strip_revision_notes(markdown: str) -> str:
+def strip_revision_notes(markdown: str, before: str = "") -> str:
     """The section without a block of notes a writer appended about its own
     edits: from a "## 수정 내역"/"**Changes made**"-style label line (outside
-    code) to the end."""
+    code) to the end. A label line the section had ``before`` the edit is its
+    content ("### 변경 사항" in a migration guide) and stays."""
+    kept = {line.strip() for line in before.split("\n")}
     lines = markdown.split("\n")
     for i, (line, role) in enumerate(zip(lines, block_lines(markdown), strict=True)):
-        if role == "prose" and i > 0 and _REVISION_NOTE.match(line.strip()):
+        if (
+            role == "prose"
+            and i > 0
+            and line.strip() not in kept
+            and _REVISION_NOTE.match(line.strip())
+        ):
             lines = lines[:i]
             break
     out = "\n".join(lines).rstrip()

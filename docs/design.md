@@ -271,7 +271,7 @@ OpenAlex는 arXiv 시대 ML 논문의 인용 수를 크게 적게 세고(실측:
 
 비용 상한은 `survey.write_max_cost_usd`(기본 $60)입니다. 호출마다 추정 비용을 검사해 넘으면 `TokenBudgetExceeded`로 중단합니다(`evidence_models.py::budgeted`, 8.3절).
 
-모델 호출은 `adapters/bedrock/strands_models.py::StrandsLanguageModel`(Strands `BedrockModel`, 종류별 응용 추론 프로필, botocore 표준 재시도 6회, 시스템 프롬프트·도구·대화 캐시)이 하고, 호출마다 단계(`read`, `outline`, `draft`, `verify`, `review`, `fix`) 사용량을 `TokenUsageTracker.record`로 남깁니다. 평가 실행은 `SCHOLAR_LENS_CONFIG`로 다른 설정 파일을 지정합니다.
+모델 호출은 `adapters/bedrock/strands_models.py::StrandsLanguageModel`(Strands `BedrockModel`, 종류별 응용 추론 프로필, botocore 재시도 1회와 응답 스트림 안의 스로틀까지 다루는 Strands 재시도 최대 3회(호출당 요청 최대 6번), 시스템 프롬프트·도구·대화 캐시)이 하고, 호출마다 단계(`read`, `outline`, `draft`, `verify`, `review`, `fix`) 사용량을 `TokenUsageTracker.record`로 남깁니다. 평가 실행은 `SCHOLAR_LENS_CONFIG`로 다른 설정 파일을 지정합니다.
 
 ### 4.4 리뷰·요약의 근거 장부 엔진
 
@@ -307,6 +307,10 @@ OpenAlex는 arXiv 시대 ML 논문의 인용 수를 크게 적게 세고(실측:
 | 서베이 | `papers/survey-evidence/evidence/<논문 ID>/…` | `<prefix>/surveys/evidence/<논문 ID>/…` | 원문 텍스트의 SHA-256 앞 12자, `READER_VERSION`, 읽기 모델, 언어, 역할(`core`·`supporting`), 원문 종류 |
 
 원문이 바뀌거나 읽기 버전·모델·언어가 바뀌면 키가 달라져 다시 읽습니다. 캐시를 쓸 때도 각 근거를 오늘의 검사로 다시 확인해(`application/evidence_writer.py::cached_evidence`) 통과하지 못한 근거는 버리고, 읽을 수 없는 캐시이거나 하나도 통과하지 못하면 그 문서를 다시 읽습니다. 프롬프트 문구만 바꿔서는 캐시가 무효화되지 않습니다. 다시 읽게 하려면 해당 캐시 파일을 로컬과 S3 양쪽에서 지웁니다(CLI 옵션은 없음. 로컬만 지우면 S3 사본을 읽음). 로컬 경로는 저장소 루트 기준이고, AWS 안에서는 `/tmp/papers/…`(`runtime.py::ROOT_DIR`)라 Batch 실행마다 비어 있으므로 Batch에서는 S3 사본만 지우면 됩니다.
+
+**문장 검사와 수정.** 사실 확인은 문장마다 `supported`·`unsupported`·`wrong`·`about_sources` 중 하나로 판정합니다. `about_sources`는 주제 대신 작성자가 받은 자료를 말하는 문장("이 근거에서 따로 설명되지 않습니다")이고, `wrong`처럼 먼저 고치게 한 뒤 남으면 코드가 지웁니다(`application/evidence_writer.py::_removable`). 수정 단계는 구조화 응답(`FixedSection`: `section`, `notes`)으로 받아 `section`만 쓰므로 작성자의 수정 메모가 본문에 섞이지 않습니다. 여러 읽기 에이전트가 같은 논문의 같은 수치·코드를 같은 범위로 기록했거나 같은 그림을 두 번 기록하면 개요에는 한 번만 보입니다(`domain/evidence.py::duplicate_evidence`). 가이드는 Python 코드 블록을 읽는 순서대로 표준 라이브러리 `ast`·`symtable`로 검사해, 파싱되지 않는 블록과 앞선 블록·import 어디에도 정의되지 않은 이름을 글 전체 검토의 수정 항목으로 넘깁니다(`domain/guide/evidence_guide.py::python_code_problems`).
+
+**실행 전 확인.** 모델을 부르기 전에 확인하고 실패합니다. 블로그 규칙에 없는 카테고리 유형이나 글 종류에 맞지 않는 유형(`runtime.py::check_post_type`), PR을 열 실행인데 `GITHUB_TOKEN`이 없는 경우(`check_pr_ready`), 검색 제공자 없이 `--search-query`를 준 가이드가 대상입니다. 서베이에서 근거를 하나도 남기지 못한 경우나 핵심 논문이 모두 근거를 남기지 못한 경우는 계획 거부가 아니라 실패(`EvidenceUnavailable`)로 보고합니다.
 
 **비용 상한.** 근거 장부 엔진은 토큰 예산 대신 실행의 누적 추정 비용(목록가)을 호출마다 확인해, 상한을 넘으면 `TokenBudgetExceeded`로 중단합니다(`evidence_models.py::budgeted`). 상한은 `tech_guide.max_cost_usd`(기본 $60), `survey.write_max_cost_usd`(기본 $60), `explanation.max_cost_usd`(기본 $40), `summary.max_cost_usd`(기본 $12)이고, `null`이면 상한이 없습니다(`configs/config.py`).
 
@@ -466,12 +470,12 @@ PR 본문(`build_pr_body`)에는 논문 ID, PDF URL, 파싱 방식, 글자 수, 
 
 ### 8.1 모델과 호출
 
-`utils/factories.py::BedrockLanguageModelFactory.get_model`이 모든 채팅 모델을 `ChatBedrockConverse`로 만들고, 리전별 inference profile을 찾아 캐시합니다. 프로필 조회 자체가 실패하면 기본 ID로 대체하지 않고 오류를 냅니다. 모델 특성은 `utils/models.py`의 레지스트리에 있습니다.
+`sections` 엔진과 보조 단계(그림 분석, 속성·인용 추출, 코드 분석, 가이드 관련성·분류, 서베이 계획·마무리)는 `utils/factories.py::BedrockLanguageModelFactory.get_model`이 만드는 `ChatBedrockConverse`로 호출하고, 근거 장부 엔진은 `adapters/bedrock/strands_models.py`의 Strands 모델로 호출합니다(4.4·4.5절). 팩토리는 리전별 inference profile을 찾아 캐시합니다. 프로필 조회 자체가 실패하면 기본 ID로 대체하지 않고 오류를 냅니다. 모델 특성은 `utils/models.py`의 레지스트리에 있습니다.
 
 | 모델 | 단계 기본값 |
 | --- | --- |
-| Claude Opus 5.5 | 리뷰 계획·집필·검수·편집·마무리, 요약, 가이드 작성·평가 |
-| Claude Sonnet 5.5 | 인용 추출, 가이드 개요 |
+| Claude Opus 5.5 | 리뷰 계획·집필·검수·편집·마무리, 요약, 가이드 개요·작성·평가, 서베이 개요·작성·평가 |
+| Claude Sonnet 5.5 | 인용 추출, 근거 장부 엔진의 읽기(리뷰·요약 `reader_model_id`, 가이드 `synopsis_model_id`, 서베이 `card_model_id`) |
 | Claude Haiku 5.5 | 그림 분석, 속성 추출, 인용 요약, 코드 분석, 가이드 관련성·분류 |
 | Claude Fable 5.1 | 선택 사항 |
 

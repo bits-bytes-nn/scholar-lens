@@ -55,7 +55,8 @@ class Github(_Section):
     @model_validator(mode="after")
     def _check_repo(self) -> "Github":
         # Fail at load, not after a run's paid stages reach the PR step.
-        if self.enabled and not (self.repo_name and "/" in self.repo_name):
+        owner, _, name = (self.repo_name or "").partition("/")
+        if self.enabled and not (owner and name and "/" not in name):
             raise ValueError("github.enabled needs repo_name as 'owner/name'.")
         if not self.branch_prefix.strip("/"):
             raise ValueError("github.branch_prefix must not be empty.")
@@ -70,7 +71,9 @@ class Resources(_Section):
     bedrock_region_name: str = Field(default="us-west-2")
     s3_bucket_name: str | None = Field(default=None)
     # Keys are built as "<prefix>/…"; the job role's IAM scope is the same.
-    s3_prefix: str = Field(default="scholar-lens", pattern=r"^[^/](?:.*[^/])?$")
+    s3_prefix: str = Field(
+        default="scholar-lens", pattern=r"^[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*$"
+    )
     vpc_id: str | None = Field(default=None)
     subnet_ids: list[str] | None = Field(default=None)
     email_address: EmailStr | None = Field(default=None)

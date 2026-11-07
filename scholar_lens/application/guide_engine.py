@@ -44,12 +44,14 @@ from ..domain.guide.evidence_guide import (
     guide_outline_problems,
     guide_section_targets,
     name_sources,
+    python_code_problems,
     repair_guide_outline,
     strip_markers,
 )
 from ..prompts import guide_evidence as prompts
 from .evidence_writer import (
     EvidenceWriter,
+    PostFinding,
     PostReview,
     WriterPrompts,
     all_or_none,
@@ -719,12 +721,29 @@ class EvidenceGuideEngine(EvidenceWriter):
             )
         if review.trace:
             logger.info("Guide review trace: %s", review.trace[:600])
-        if not review.issues:
+        # What the standard library's parser sees in the code a reader pastes
+        # in order: a block that does not parse, a name nothing defines.
+        code_findings = [
+            PostFinding(
+                section=title,
+                problem=problem,
+                fix="Make the code run as pasted after the earlier blocks.",
+            )
+            for title, problem in python_code_problems(
+                [(section_heading(md) or s.title, md) for s, md in written]
+            )
+        ]
+        issues = [*review.issues, *code_findings]
+        if not issues:
             return written
-        logger.info("Guide review: %d issue(s).", len(review.issues))
+        logger.info(
+            "Guide review: %d issue(s), %d from the code check.",
+            len(issues),
+            len(code_findings),
+        )
         return await self.apply_findings(
             written,
-            review.issues,
+            issues,
             ledger,
             title_of=lambda s: s.title,
             own_of=lambda s: [e for eid in s.evidence if (e := ledger.get(eid))],

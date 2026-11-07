@@ -192,3 +192,23 @@ def test_a_length_range_upside_down_fails_at_load(section: str) -> None:
         Config.model_validate(
             {section: {"min_total_chars": 60_000, "max_total_chars": 30_000}}
         )
+
+
+@pytest.mark.parametrize("prefix", ["*", "a b", "a//b", "/x", "x/", ""])
+def test_an_s3_prefix_outside_the_key_grammar_fails(prefix: str) -> None:
+    from pydantic import ValidationError
+
+    from scholar_lens.configs.config import Resources
+
+    with pytest.raises(ValidationError):
+        Resources(project_name="p", s3_prefix=prefix)
+
+
+def test_a_repo_name_needs_an_owner_and_a_name() -> None:
+    from pydantic import ValidationError
+
+    from scholar_lens.configs.config import Github
+
+    for name in ("owner/", "/repo", "a/b/c"):
+        with pytest.raises(ValidationError):
+            Github(enabled=True, repo_name=name)

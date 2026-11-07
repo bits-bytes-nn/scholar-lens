@@ -913,3 +913,28 @@ def test_a_fixs_notes_never_reach_the_section() -> None:
     assert asyncio.run(writer._fix("## A\n\n본문입니다.\n", [], ["x"])) == (
         "## A\n\n본문입니다.\n"
     )
+
+
+def test_a_label_the_section_already_had_is_content_not_notes() -> None:
+    from scholar_lens.domain.evidence_draft import strip_revision_notes
+
+    draft = "## 업그레이드\n\n개요입니다.\n\n### 변경 사항\n\n키가 바뀌었습니다.\n"
+    fixed = draft.replace("개요입니다.", "고친 개요입니다.")
+    assert strip_revision_notes(fixed, draft) == fixed
+    assert strip_revision_notes(fixed + "\n## 수정 내역\n\n- E3 제거\n", draft) == fixed
+
+
+def test_a_survey_whose_papers_give_no_evidence_fails_naming_them() -> None:
+    from scholar_lens.application.survey_engine import EvidenceUnavailable
+
+    class NoText:
+        async def document(self, paper):  # type: ignore[no-untyped-def]
+            return None
+
+    engine = EvidenceSurveyEngine(
+        ScriptedModel(),
+        NoText(),
+        EngineSettings(language="Korean", title_max_length=70, reader_tag="sonnet"),
+    )
+    with pytest.raises(EvidenceUnavailable, match="2305.18290"):
+        asyncio.run(engine.write(_plan()))

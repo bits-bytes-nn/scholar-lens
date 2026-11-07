@@ -6,8 +6,11 @@ draft."""
 
 from __future__ import annotations
 
+import ast
+import builtins
 import re
-from collections.abc import Iterable, Mapping
+import symtable
+from collections.abc import Iterable, Mapping, Sequence
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -259,6 +262,72 @@ def unverified_imports(
 # "pip install pkg[extra,extra2] other" (uv pip install too), outside prose.
 _PIP_INSTALL = re.compile(r"(?:uv\s+)?pip3?\s+install\s+([^\n#;&|]+)")
 _REQUIREMENT = re.compile(r"""^['"]?([A-Za-z0-9][A-Za-z0-9._-]*)(?:\[([^\]]*)\])?""")
+
+
+_PYTHON_INFO = ("python", "py", "python3")
+
+
+def _bound_names(table: symtable.SymbolTable) -> set[str]:
+    return {
+        sym.get_name()
+        for sym in table.get_symbols()
+        if sym.is_assigned() or sym.is_imported() or sym.is_namespace()
+    }
+
+
+def _free_globals(table: symtable.SymbolTable) -> set[str]:
+    """Names a block's code reads from module scope (directly, or in a
+    function or class body) without binding them there."""
+    names: set[str] = set()
+    for sym in table.get_symbols():
+        name = sym.get_name()
+        if table.get_type() == "module":
+            if sym.is_referenced() and not (
+                sym.is_assigned() or sym.is_imported() or sym.is_namespace()
+            ):
+                names.add(name)
+        elif sym.is_global() and sym.is_referenced():
+            names.add(name)
+    for child in table.get_children():
+        names |= _free_globals(child)
+    return names
+
+
+def python_code_problems(sections: Sequence[tuple[str, str]]) -> list[tuple[str, str]]:
+    """(section title, problem) for the guide's Python code read in order,
+    as a reader pastes it: a block that does not parse, and a name a block
+    uses that no block so far (nor Python itself) defines. Parsing and
+    scopes come from the standard library (``ast``, ``symtable``)."""
+    known = set(dir(builtins)) | {"__name__", "__file__"}
+    problems: list[tuple[str, str]] = []
+    for title, markdown in sections:
+        for m in _FENCE_OPEN.finditer(markdown):
+            if m.group(2).lower() not in _PYTHON_INFO:
+                continue
+            code = m.group(3)
+            try:
+                ast.parse(code)
+                table = symtable.symtable(code, "<guide>", "exec")
+            except (SyntaxError, ValueError) as e:
+                problems.append(
+                    (
+                        title,
+                        f"a python block does not parse ({e.msg if isinstance(e, SyntaxError) else e}): {code.strip()[:120]}",
+                    )
+                )
+                continue
+            bound = _bound_names(table)
+            if missing := sorted(_free_globals(table) - bound - known):
+                problems.append(
+                    (
+                        title,
+                        "a python block uses names no earlier block or import "
+                        f"defines: {', '.join(missing)}; define or import them "
+                        "where a reader pasting the blocks in order has them",
+                    )
+                )
+            known |= bound
+    return problems
 
 
 def install_requirements(text: str) -> list[tuple[str, frozenset[str]]]:

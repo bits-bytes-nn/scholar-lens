@@ -452,6 +452,9 @@ def _costs(args: argparse.Namespace) -> int:
     until = args.until or datetime.now(UTC).replace(
         hour=0, minute=0, second=0, microsecond=0
     ) + timedelta(days=1)
+    if until <= args.since:
+        _emit({"status": "rejected", "error": "--until must be after --since."})
+        return EXIT_REJECTED
     billing = (
         CostExplorerBilling(
             # Cost Explorer's API endpoint is in us-east-1.

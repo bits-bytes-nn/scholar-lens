@@ -27,6 +27,8 @@ from requests.adapters import HTTPAdapter
 
 from .url_guard import resolve_validated_ip, upgrade_to_https
 
+_PER_HOST_LIMITS = httpx.Limits(max_connections=10, max_keepalive_connections=2)
+
 
 def _pin(request: httpx.Request) -> httpx.URL:
     """Upgrade the request URL to https, validate it and pin its host to the
@@ -59,6 +61,8 @@ class PinnedHTTPTransport(httpx.BaseTransport):
     checked)."""
 
     def __init__(self, **kwargs: Any) -> None:
+        # A crawl touches many hosts once: few idle sockets kept per host.
+        kwargs.setdefault("limits", _PER_HOST_LIMITS)
         self._kwargs = kwargs
         self._pools: dict[str, httpx.HTTPTransport] = {}
         self._lock = threading.Lock()
@@ -88,6 +92,7 @@ class PinnedAsyncHTTPTransport(httpx.AsyncBaseTransport):
     connections pooled per hostname (see :class:`PinnedHTTPTransport`)."""
 
     def __init__(self, **kwargs: Any) -> None:
+        kwargs.setdefault("limits", _PER_HOST_LIMITS)
         self._kwargs = kwargs
         self._pools: dict[str, httpx.AsyncHTTPTransport] = {}
 

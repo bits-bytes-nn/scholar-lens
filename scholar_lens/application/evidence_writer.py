@@ -753,7 +753,7 @@ class EvidenceWriter:
                 return draft
         if answer.notes.strip():
             logger.info("Writer's notes on a fix: %s", answer.notes[:400])
-        return strip_revision_notes(answer.section.strip())
+        return strip_revision_notes(answer.section.strip(), draft)
 
     async def unsupported(
         self,

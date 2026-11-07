@@ -104,7 +104,7 @@ poetry run python -m scholar_lens costs --since 2026-11-01 --by stage --billed  
 | `--paper ID_OR_URL` | survey plan | 서베이에 꼭 넣을 논문입니다. arXiv ID나 URL, 또는 DOI(반복 가능) |
 | `--reference URL` | survey plan | 참고할 자료입니다(반복 가능). 블로그 글, 서베이·리뷰 글, 논문 페이지를 HTML 페이지나 arXiv 링크로 줍니다. 한 번 읽어 발췌로 범위를 잡고, 자료 자신이거나 자료가 링크한 논문(arXiv abs·pdf·html, doi.org 링크, 본문의 `arXiv:<id>`)을 후보에 더합니다. 이 후보는 `[REFERENCED by N]`으로 표시하고, 그 논문을 가리킨 자료 수는 주제 근거(풀 안의 피인용 수와 검색어 적중)가 같은 후보 사이의 순서를 정하며, 필수 논문은 아닙니다. 읽지 못한 자료는 실패가 아니라 계획 메모로 남습니다. 계획은 자료를 `references[]`로 저장하고, `survey write`가 그중 글(article)을 다시 읽어 개요와 도입·가로지르는 절·통찰 절에 설명 자료로 주고 `### 참고 자료`(영어 출력은 `### Further reading`)로 나열합니다 |
 | `--since YEAR`, `--until YEAR` | survey plan | 이 연도의 논문만 다룹니다(필수 논문은 예외) |
-| `--plan PATH_OR_S3_URI` | survey write | 계획 파일입니다. 로컬 경로 또는 설정한 버킷의 `s3://<bucket>/<key>`이며, `--remote`이면 로컬 계획을 먼저 `<s3_prefix>/surveys/<slug>/plan-<sha256>.json`에 올립니다 |
+| `--plan PATH_OR_S3_URI` | survey write | 계획 파일입니다. 로컬 경로 또는 설정한 버킷의 `s3://<bucket>/<key>`이며, `--remote`이면 로컬 계획을 먼저 `<s3_prefix>/surveys/<slug>/plan-<sha256 앞 16자리>.json`에 올립니다 |
 | `--no-pr` | review, summarize, guide, survey write | 글은 저장(·업로드)하되 PR은 열지 않습니다 |
 | `--remote` | review, summarize, guide, survey plan, survey write | AWS Batch에 제출하고 작업 ID를 돌려줍니다 |
 | `--wait`, `--timeout S` | status | 작업이 끝나거나 `S`초가 지날 때까지 조회합니다(기본값 14400초, 4시간) |
@@ -112,7 +112,7 @@ poetry run python -m scholar_lens costs --since 2026-11-01 --by stage --billed  
 
 `survey plan`은 글을 쓰지 않습니다. `JobResult`의 `plan_path`(로컬 `papers/survey-<slug>/plan.json`. `--remote` 실행은 컨테이너가 사라지므로 비어 있음)와 `s3_uri`(S3 사본. 원격 실행 뒤에는 이 값을 `survey write --plan`에 넘김)가 계획 파일입니다. 계획을 고친 뒤(논문 빼기·더하기·옮기기, 역할 바꾸기, 계보 이름 바꾸기) `survey write --plan`에 넘깁니다. 계획 단계를 다시 실행하면 내용이 다른 기존 계획은 `plan.<UTC 시각>.json`으로 남습니다. 손으로 더하는 논문은 `id`(arXiv ID나 URL, 또는 DOI), `lineage`, `role`만 있으면 되고, 제목·저자·연도·URL은 쓰기 단계가 채웁니다. 손으로 더하는 참고 자료는 `url`만 있으면 되고 `kind`는 URL로 정합니다(arXiv·doi.org 링크는 `paper`, 나머지는 `article`). 쓰기 단계는 `article`만 읽습니다. 계획에는 `core` 논문이 하나 이상 있어야 합니다. 논문마다 기록한 근거는 논문, 원문 해시, 읽기 버전, 모델, 언어, 역할, 원문 종류별로 캐시하므로(로컬 `papers/survey-evidence/`, S3 `<s3_prefix>/surveys/evidence/`) 다시 실행하거나 같은 논문을 다루는 다른 서베이가 재사용합니다. 계획 필드와 쓰기 단계는 [설계 문서](./docs/design.md#43-논문-서베이)에 있습니다.
 
-모든 명령은 stdout에 JSON 객체 하나(실행은 `JobResult`, `--remote`는 `job_id`, `status`는 Batch 상태와 저장된 결과)를 출력하고, 로그는 stderr로 보냅니다. 종료 코드는 `0` 성공 또는 제출, `1` 실패, `2` 입력 거부, `3` 진행 중, `4` 명령 자체의 실패입니다. Batch `worker`는 자체 알림을 보낸 뒤 `10`(실패)이나 `11`(거부)로, Batch가 작업을 멈추면 `143`으로 끝납니다([상세](./docs/design.md#21-명령)). URL은 따옴표로 감쌉니다. zsh에서는 따옴표 없는 URL의 `?`가 glob으로 해석되어 명령이 실패합니다.
+모든 명령은 stdout에 JSON 객체 하나(실행은 `JobResult`, `--remote`는 `job_id`, `status`는 Batch 상태와 저장된 결과)를 출력하고, 로그는 stderr로 보냅니다. 종료 코드는 `0` 성공 또는 제출, `1` 실패, `2` 입력 거부, `3` 진행 중, `4` 명령 자체의 실패입니다. Batch `worker`는 자체 알림을 보낸 뒤 `10`(실패)이나 `11`(거부)로, 그 알림을 보내지 못하면 `4`로, Batch가 작업을 멈추면 `143`으로 끝납니다([상세](./docs/design.md#21-명령)). URL은 따옴표로 감쌉니다. zsh에서는 따옴표 없는 URL의 `?`가 glob으로 해석되어 명령이 실패합니다.
 
 ## 에이전트에서 쓰기(OpenClaw, Claude Code, Codex)
 
@@ -152,6 +152,7 @@ actionlint                                       # GitHub 워크플로 검사
 
 ## 변경 이력
 
+- 2026-11-07: 모델을 부르기 전에 카테고리 유형이 블로그 규칙에 맞는지, PR을 열 실행에 `GITHUB_TOKEN`이 있는지, `--search-query`에 검색 제공자가 있는지 확인합니다. 사실 확인이 글의 출처를 말하는 문장도 지우고, 수정 메모는 본문에 섞이지 않으며, 논문에서 반복된 사실과 그림은 한 절에만 배정합니다. 가이드의 Python 코드 블록은 읽는 순서대로 파싱 실패와 정의되지 않은 이름을 검사합니다. 데이터 소스는 호스트별 HTTP 연결, 공유 호스트(GitHub, Hugging Face)에서 프로젝트 범위로 한정한 공식 문서, "…Is Not…"이나 "…: A Survey"를 거부하고 약칭이 빠진 제목은 받아들이는 제목 비교, 워크숍·지역 지부의 학회명을 그대로 두는 처리로 바뀌었습니다. `costs --billed`는 `resources.project_name`으로 거르고, Batch는 `SCHOLAR_LENS_BATCH_TRACING=true`일 때만 LangSmith에 추적을 보냅니다.
 - 2026-11-06: 가이드와 서베이는 근거 장부 엔진만 씁니다. 가이드 `sections` 엔진과 서베이 `cards` 엔진이 없어졌고, 그 설정 키 `tech_guide.engine`, `writer_enable_thinking`, `evaluator_enable_thinking`, `verify_grounding`, `min_quality_score`, `max_revision_attempts`, `max_total_tokens`와 `survey.engine`, `card_source_chars`, `min_quality_score`, `max_revision_attempts`, `verify_grounding`, `write_max_total_tokens`도 없어졌습니다. `config.yaml`에서 지우지 않으면 `extra_forbidden`으로 로드에 실패합니다. 실행 비용은 `tech_guide.max_cost_usd`와 `survey.write_max_cost_usd`가 막습니다. 리뷰와 요약은 두 엔진(`explanation.engine`, `summary.engine`)을 그대로 둡니다.
 - 서베이는 근거 장부 엔진이 씁니다. 읽기 에이전트가 사실마다 논문 원문 인용을 기록하고 코드가 검사합니다. 개요가 사실 하나를 한 절에 주고 비교표가 수치를 가지며, 절은 수치·주장 단위로 검사하고 근거와 모순되는 문장만 지웁니다. 평가셋(판정 3회)에서 두 서베이 모두 모든 항목이 이전 엔진의 중앙값 이상이고, 수치 반복은 크게 줄고 그림은 두 배 가까이 늘었습니다([결과](./docs/redesign.md)). 공격 기법 절의 생성을 중간에 멈추던 Bedrock 콘텐츠 필터는 재시도한 뒤 읽기 모델로 넘깁니다.
 - 수식: 확률·정책 호출 안의 맨 `|`(`p(y|x)`, `\pi_\theta(a|s)`)는 `\mid`로 바꿉니다(전에는 인라인 수식에서 `\vert`, 디스플레이 수식에서는 그대로). MathJax에 없는 `\minimize`, `\maximize`, `\argmin`, `\argmax`는 `\operatorname*{…}`로 바꿉니다. 고쳐 달라고 다시 요청한 뒤에도 160자를 넘는 서베이 설명은 120–160자 안의 마지막 문장 끝에서 자릅니다.

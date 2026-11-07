@@ -80,7 +80,7 @@ explanation:
   max_synthesis_attempts: 3
   max_sections: 20
   max_edit_rounds: 2              # 2nd round for coverage gaps or skipped edits
-  # Hard total-token ceiling for one run (null = no limit); a LoRA-length
+  # sections engine: hard total-token ceiling for one run (null = no limit); a LoRA-length
   # paper uses ~1.4M.
   max_total_tokens: 8000000
   max_cost_usd: 40               # evidence engine: hard ceiling (USD, null = none)
@@ -93,7 +93,7 @@ summary:
   max_total_chars: 4500
   summarizer_enable_thinking: false
   thinking_effort: medium
-  max_total_tokens: 1000000        # hard ceiling (null = no limit)
+  max_total_tokens: 1000000        # sections engine: hard ceiling (null = no limit)
   max_cost_usd: 12                 # evidence engine: hard ceiling (USD)
 
 tech_guide:

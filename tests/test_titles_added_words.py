@@ -35,3 +35,25 @@ def test_an_added_word_is_another_work(a: str, b: str) -> None:
 )
 def test_spelling_variants_still_match(a: str, b: str) -> None:
     assert titles_match(a, b)
+
+
+@pytest.mark.parametrize(
+    ("a", "b"),
+    [
+        (
+            "LoRA: Low-Rank Adaptation of Large Language Models",
+            "Low-Rank Adaptation of Large Language Models",
+        ),
+        (
+            "Efficient Serving with PagedAttention (vLLM)",
+            "Efficient Serving with PagedAttention",
+        ),
+        ("Cats vs. Dogs Classification", "Cats versus Dogs Classification"),
+        ("GPT-4 Technical Report", "GPT4 Technical Report"),
+        ("Llama 2: Open Foundation Models", "Llama2: Open Foundation Models"),
+    ],
+)
+def test_a_short_name_spelling_or_version_spacing_is_the_same_paper(
+    a: str, b: str
+) -> None:
+    assert titles_match(a, b) and titles_match(b, a)

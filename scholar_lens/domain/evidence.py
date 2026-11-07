@@ -16,7 +16,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .markdown.math import fence_roles
+from .markdown.math import fence_roles, open_fence_line
 from .survey.post import equation_in_source
 from .validation import unsourced_numbers
 
@@ -37,7 +37,7 @@ EvidenceKind = Literal[
     "setting",  # a flag, parameter, config key, env variable or default
 ]
 
-_HEADING = re.compile(r"^(#{1,6})\s+(.+?)\s*$", re.M)
+_HEADING = re.compile(r"^(#{1,6})[ \t]+(.+?)[ \t]*$", re.M)
 _SPACE = re.compile(r"\s+")
 # Quotes shorter than this rarely pin a claim; longer ones are excerpts.
 MIN_QUOTE_CHARS = 12
@@ -61,7 +61,12 @@ def _headings(markdown: str) -> list[re.Match[str]]:
     for line in lines:
         starts.append(pos)
         pos += len(line) + 1
-    code = {starts[i] for i, role in enumerate(fence_roles(lines)) if role != "prose"}
+    roles = fence_roles(lines)
+    # A fence that never closes (a stray "~~~~" in PDF text, a listing cut
+    # by a page break) is not code to the end: its lines stay prose here.
+    if (opened := open_fence_line(lines)) is not None:
+        roles[opened:] = ["prose"] * (len(roles) - opened)
+    code = {starts[i] for i, role in enumerate(roles) if role != "prose"}
     return [m for m in _HEADING.finditer(markdown) if m.start() not in code]
 
 
@@ -389,6 +394,12 @@ def duplicate_evidence(
             continue
         for other in kept.get(item.kind, []):
             if other.paper_id == item.paper_id and not within_source:
+                continue
+            if other.paper_id == item.paper_id and not (
+                _facts(item.claim) and item.scope.strip() == other.scope.strip()
+            ):
+                # Within one source only a repeated number or code span in the
+                # same scope is a repeat ("긴/짧은 문맥에서" differ by a word).
                 continue
             if _same_fact(item.claim, other.claim, 0.85) and _facts(
                 item.cell

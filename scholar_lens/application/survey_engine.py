@@ -121,6 +121,11 @@ class EvidenceSurvey:
     notes: list[str] = field(default_factory=list)
 
 
+class EvidenceUnavailable(RuntimeError):
+    """The papers a survey needs gave no usable evidence: a failed run (the
+    sources or the reader), never a rejected plan."""
+
+
 class EvidenceSurveyEngine(EvidenceWriter):
     def __init__(
         self,
@@ -295,6 +300,18 @@ class EvidenceSurveyEngine(EvidenceWriter):
     ) -> EvidenceSurvey:
         ledger, kinds = await self.read(plan)
         missing = [p.id for p in plan.papers if not ledger.of_paper(p.id)]
+        # Not the plan's fault: the papers' text could not be read or gave no
+        # usable evidence. A failure (not a rejection) that names them.
+        if len(missing) == len(plan.papers):
+            raise EvidenceUnavailable(
+                "No paper of the plan gave usable evidence (text unreachable or "
+                "every record rejected): " + ", ".join(missing)
+            )
+        if not any(p.role == "core" and p.id not in missing for p in plan.papers):
+            raise EvidenceUnavailable(
+                "No core paper gave usable evidence: "
+                + ", ".join(p.id for p in plan.papers if p.role == "core")
+            )
         if missing:
             self.notes.append(
                 "Papers without evidence (left out): " + ", ".join(missing)

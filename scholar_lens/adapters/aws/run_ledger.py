@@ -7,6 +7,7 @@ from collections.abc import Iterator
 from datetime import datetime
 from typing import Any
 
+from botocore.exceptions import ClientError
 from pydantic import ValidationError
 
 from ...domain.costs import RunRecord
@@ -39,7 +40,13 @@ class S3RunLedger:
                         yield record
 
     def _record(self, key: str, finished: datetime) -> RunRecord | None:
-        body = self._s3.get_object(Bucket=self._bucket, Key=key)["Body"].read()
+        try:
+            body = self._s3.get_object(Bucket=self._bucket, Key=key)["Body"].read()
+        except ClientError as e:
+            # Gone between list and get, or unreadable: one run missing from
+            # the report, not the report missing.
+            logger.warning("Skipping result manifest %s: %s", key, e)
+            return None
         try:
             return _to_record(body, finished)
         except (ValidationError, ValueError, KeyError, AttributeError, TypeError) as e:

@@ -779,3 +779,22 @@ def test_decorative_images_are_matched_by_word_not_substring() -> None:
     assert _decorative("https://img.shields.io/badge/x")
     assert not _decorative("https://d.dev/img/silicon-layout.png")
     assert not _decorative("https://d.dev/img/lexicon-table.png")
+
+
+def test_guide_python_is_checked_as_pasted_in_order() -> None:
+    from scholar_lens.domain.guide.evidence_guide import python_code_problems
+
+    sections = [
+        (
+            "기본",
+            "## 기본\n\n```python\nfrom strands import Agent\n\ndef build(t):\n    return Agent(t)\n\ncedar = 1\n```\n",
+        ),
+        (
+            "서비스",
+            "## 서비스\n\n```python\ndef handle(x):\n    return build(x), cedar, ask(x)\n```\n\n```python\nkey = <your key>\n```\n\n```bash\necho $UNDEFINED\n```\n",
+        ),
+    ]
+    problems = python_code_problems(sections)
+    assert [t for t, _ in problems] == ["서비스", "서비스"]
+    assert "ask" in problems[0][1] and "build" not in problems[0][1]
+    assert "does not parse" in problems[1][1]

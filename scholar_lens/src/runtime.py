@@ -480,6 +480,23 @@ async def _run_pipeline(
     return await run_paper_pipeline(context, request, tracker)
 
 
+def check_pr_ready(context: RunContext, request: JobRequest) -> None:
+    """Fail before any model call when the run is to open a blog PR it
+    cannot open (no token: the post would be paid for twice to get one)."""
+    github = context.config.resources.github
+    if (
+        request.create_pr
+        and github.enabled
+        and request.kind != "survey_plan"
+        and not os.getenv(EnvVars.GITHUB_TOKEN.value)
+    ):
+        raise ValueError(
+            f"{EnvVars.GITHUB_TOKEN.value} is not set, so the blog PR cannot be "
+            "opened: set it (in Batch, the SSM parameter github-token) or pass "
+            "--no-pr."
+        )
+
+
 def check_post_type(
     spec: PostConventions, category: str, setting: str, *, artifact: str
 ) -> None:
@@ -511,6 +528,7 @@ def run_job(request: JobRequest, *, job_id: str | None = None) -> JobResult:
     started = time.monotonic()
     try:
         resources = context.config.resources
+        check_pr_ready(context, request)
         with cost_allocation(resources.project_name, resources.stage, request.kind):
             outcome = run_coroutine(_run_pipeline(context, request, tracker))
         result.status = "succeeded"

@@ -482,7 +482,10 @@ async def run_survey_write_pipeline(
             index=index,
             researcher=researcher,
             papers_dir=papers_dir,
-            translation_guideline=str(guideline or ""),
+            # The same JSON the review and guide writers get, not a repr.
+            translation_guideline=(
+                json.dumps(guideline, ensure_ascii=False) if guideline else ""
+            ),
             tracker=tracker,
             title_max_length=spec.seo_title_max_length,
         )

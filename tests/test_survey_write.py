@@ -844,7 +844,8 @@ class TestStage:
         engine = stage["engine"]
         [call] = engine.calls
         assert [p.id for p in call["plan"].papers] == [p.id for p in plan().papers]
-        assert call["guideline"] == str(GUIDELINE) and call["references"] == ""
+        assert call["guideline"] == json.dumps(GUIDELINE, ensure_ascii=False)
+        assert call["references"] == ""
         settings = engine.created[0]["settings"]
         assert (settings.chars_per_core, settings.chars_per_supporting) == (3_000, 800)
         assert settings.title_max_length == survey_spec().seo_title_max_length

@@ -12,8 +12,11 @@ from difflib import SequenceMatcher
 TITLE_MATCH_THRESHOLD: float = 0.9
 
 
+_SPELLED = ((re.compile(r"\s&\s"), " and "), (re.compile(r"\bvs\.?(?=\s)"), "versus"))
+
+
 def _norm_title(value: str) -> str:
-    return " ".join(re.sub(r"[^\w ]+", " ", value.casefold()).split())
+    return " ".join(re.sub(r"[^\w ]+", " ", _spelled(value)).split())
 
 
 def title_similarity(queried: str, resolved: str) -> float:
@@ -44,9 +47,28 @@ def titles_match(queried: str | None, resolved: str | None) -> bool:
         return True
     q_only = _title_words(queried) - _title_words(resolved)
     r_only = _title_words(resolved) - _title_words(queried)
+    # The paper's own short name, given or left out: "LoRA: Low-Rank ..." vs
+    # "Low-Rank ...", or "... Reward Model (DPO)".
+    q_only -= _short_name(queried)
+    r_only -= _short_name(resolved)
     unpaired_q = [a for a in q_only if not any(_spelling_variant(a, b) for b in r_only)]
     unpaired_r = [b for b in r_only if not any(_spelling_variant(a, b) for a in q_only)]
     return not unpaired_q and not unpaired_r
+
+
+_LEADING_NAME = re.compile(r"^\s*([^\s:]+)\s*:")
+_TRAILING_NAME = re.compile(r"\(([^\s()]+)\)\s*$")
+
+
+def _short_name(title: str) -> set[str]:
+    """The words of a one-token name a title leads with ("LoRA:") or ends
+    with in brackets ("(vLLM)")."""
+    names = [
+        m.group(1)
+        for m in (_LEADING_NAME.match(title), _TRAILING_NAME.search(title))
+        if m
+    ]
+    return {w for n in names for w in _title_words(n)}
 
 
 def _similar(q: str, r: str) -> bool:
@@ -76,15 +98,31 @@ def _squash(title: str) -> str:
     return re.sub(r"[\W_]+", "", title)
 
 
+def _spelled(title: str) -> str:
+    text = title.casefold()
+    for pattern, word in _SPELLED:
+        text = pattern.sub(word, text)
+    return text
+
+
 def _title_words(title: str) -> set[str]:
-    return {w.removesuffix("s") for w in _content_words(_DASHES.sub("", title))}
+    return {
+        w.removesuffix("s") for w in _content_words(_DASHES.sub("", _spelled(title)))
+    }
 
 
 _TOKEN = re.compile(r"[\w.+]+")
 
 
+# "GPT-4", "GPT 4" and "GPT4" are one version token.
+_NAME_VERSION_GAP = re.compile(r"(?<=[A-Za-z])[- ](?=\d)")
+
+
 def _distinguishing_tokens(title: str) -> set[str]:
-    tokens = {t.strip(".").casefold() for t in _TOKEN.findall(title)}
+    tokens = {
+        t.strip(".").casefold()
+        for t in _TOKEN.findall(_NAME_VERSION_GAP.sub("", title))
+    }
     return {t for t in tokens if any(ch.isdigit() for ch in t) or "+" in t}
 
 

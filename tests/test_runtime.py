@@ -12,6 +12,12 @@ from scholar_lens.src import runtime
 from scholar_lens.src.constants import EnvVars, SSMParams
 
 
+@pytest.fixture(autouse=True)
+def _github_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A run that would open a PR needs a token before it starts.
+    monkeypatch.setenv("GITHUB_TOKEN", "test-token")
+
+
 class TestLoadSecretsFromSsm:
     def test_noop_outside_aws(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(runtime, "is_running_in_aws", lambda: False)
@@ -819,3 +825,23 @@ def test_with_spec_cover_leaves_an_unknown_type_to_the_validator() -> None:
     )
     assert with_spec_cover(markdown, spec) == (markdown, None)
     assert with_spec_cover("No front matter.", spec) == ("No front matter.", None)
+
+
+def test_a_pr_run_without_a_token_fails_before_any_model_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from unittest.mock import MagicMock
+
+    from scholar_lens.src.jobs import JobRequest
+    from scholar_lens.src.runtime import check_pr_ready
+
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    context = MagicMock()
+    context.config.resources.github.enabled = True
+    with pytest.raises(ValueError, match="GITHUB_TOKEN"):
+        check_pr_ready(context, JobRequest(kind="summarize", source="2106.09685"))
+    check_pr_ready(
+        context, JobRequest(kind="summarize", source="2106.09685", create_pr=False)
+    )
+    context.config.resources.github.enabled = False
+    check_pr_ready(context, JobRequest(kind="summarize", source="2106.09685"))
