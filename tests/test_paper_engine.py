@@ -400,3 +400,37 @@ def test_a_language_without_fixed_wording_keeps_the_outlines_titles() -> None:
     four = "## TL;DR\n\n" + "".join(f"### 質問{i}\n\n答え。\n\n" for i in range(4))
     assert tldr_problems(four, "review", "Japanese") == []
     assert tldr_problems("## TL;DR\n\n### 質問\n\n答え。\n", "review", "Japanese")
+
+
+def test_a_cell_holding_only_markers_is_blank_once_they_go() -> None:
+    from scholar_lens.domain.evidence_draft import draft_problems
+
+    md = (
+        "## 결과\n\n결과는 아래와 같습니다 [[E3]].\n\n| 모델 | 점수 | 근거 |\n"
+        "| --- | --- | --- |\n| DPO | 61% | [[E3]] |\n"
+    )
+    problems = draft_problems(
+        md,
+        title="결과",
+        own=["E3"],
+        earlier=(),
+        ledger=_ledger(),
+        earlier_numbers={},
+        figure_urls=(),
+        free_numbers="",
+    )
+    assert any("only evidence markers" in p for p in problems)
+    ok = md.replace("| DPO | 61% | [[E3]] |", "| DPO | 61% [[E3]] | 승률 |")
+    assert not any(
+        "blank" in p
+        for p in draft_problems(
+            ok,
+            title="결과",
+            own=["E3"],
+            earlier=(),
+            ledger=_ledger(),
+            earlier_numbers={},
+            figure_urls=(),
+            free_numbers="",
+        )
+    )

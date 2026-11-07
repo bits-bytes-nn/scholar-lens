@@ -166,7 +166,7 @@ MIN_VISUALS = {"deep": 2, "standard": 1, "brief": 0}
 
 # A table cell a writer left blank: fill it from the evidence or drop the
 # row or column.
-_BLANK_CELL = re.compile(r"\|\s*(?:—|–|-|N/A|n/a)\s*(?=\|)")
+_BLANK_CELL = re.compile(r"\|\s*(?:—|–|-|N/A|n/a)?\s*(?=\|)")
 
 
 # A marker written as a word of its sentence ("근거는 [[E3]]입니다"): removing it
@@ -271,8 +271,10 @@ def draft_problems(
         plain_row = _plain(row)
         if _BLANK_CELL.search(plain_row):
             problems.append(
-                "a table cell is blank ('—'): give the value the evidence or the "
-                "passages state, or drop the row or column it belongs to: "
+                "a table cell is blank ('—', or only evidence markers, which code "
+                "removes): give the value the evidence or the passages state, or "
+                "drop the row or column it belongs to; markers go after a cell's "
+                "content: "
                 f"{plain_row[:160]}"
             )
     cited_papers = {
