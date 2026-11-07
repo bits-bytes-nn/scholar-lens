@@ -97,7 +97,6 @@ async def run_paper_pipeline(
                 context, paper, translation_guideline, tracker, published
             )
         else:
-            assert citation_summarizer is not None
             document, degraded = await _generate_review(
                 context,
                 paper,
@@ -147,7 +146,7 @@ async def run_paper_pipeline(
 async def _generate_review(
     context: RunContext,
     paper: Paper,
-    citation_summarizer: CitationSummarizer,
+    citation_summarizer: CitationSummarizer | None,
     code_retriever: CodeRetriever | None,
     translation_guideline: list[dict[str, Any]] | None,
     tracker: TokenUsageTracker,
@@ -172,6 +171,10 @@ async def _generate_review(
             published=published,
         )
         return format_review(github, paper, written, meta=meta), notes
+    # The sections engine's prerequisite summaries (_prepare_paper_data builds
+    # the summarizer for that engine only).
+    if citation_summarizer is None:
+        raise RuntimeError("The sections review needs the citation summarizer.")
     reviewer = PaperReviewer(
         paper,
         planning_model_id=LanguageModelId(cfg.paper_planning_model_id),
