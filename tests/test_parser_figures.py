@@ -44,6 +44,7 @@ class _NoWaitLimiter:
 
     def penalize(self, seconds: float) -> None: ...
 
+
 # A simple rectangle covering most of the page (normalised corner coords).
 SQUARE_COORDS: list[dict[str, float]] = [
     {"x": 0.1, "y": 0.1},
