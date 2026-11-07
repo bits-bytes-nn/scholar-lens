@@ -13,8 +13,10 @@ import pytest
 
 from scholar_lens.application.evidence_writer import (
     ClaimCheck,
+    Edit,
     EvidenceCheck,
     FixedSection,
+    SectionEdits,
     SectionReview,
     SentenceVerdict,
 )
@@ -331,6 +333,12 @@ class ScriptedModel:
         return AgentOutcome(text="done", stop_reason="end_turn")
 
     async def structured(self, *, role, system, prompt, schema, context=""):
+        if schema is SectionEdits:  # a fix as one edit: the old section for the new
+            old = prompt.split("<section>\n", 1)[1].split("\n</section>", 1)[0]
+            new = await self.text(
+                role=role, system=system, prompt=prompt, context=context
+            )
+            return SectionEdits(edits=[Edit(find=old.strip(), replace=new.strip())])
         if schema is FixedSection:  # a fix answers like a text call, structured
             section = await self.text(
                 role=role, system=system, prompt=prompt, context=context
@@ -896,9 +904,11 @@ def test_a_fixs_notes_never_reach_the_section() -> None:
         def __init__(self, answer: object) -> None:
             self.answer = answer
 
-        async def structured(self, **_kwargs):  # type: ignore[no-untyped-def]
+        async def structured(self, *, schema, **_kwargs):  # type: ignore[no-untyped-def]
             if isinstance(self.answer, Exception):
                 raise self.answer
+            if schema is SectionEdits:  # no edit applies: the whole section asked
+                return SectionEdits(edits=[Edit(find="not in the draft", replace="x")])
             return self.answer
 
     note = "## 반영하지 못한 요청과 그 밖의 변경\n\n- E3 제거"
@@ -981,7 +991,7 @@ def test_a_fix_that_changes_nothing_ends_the_fix_loop() -> None:
         )
     )
     # One fix in the loop, one for the unsupported sentences; never three.
-    assert calls.count("FixedSection") == 2
+    assert calls.count("SectionEdits") == 2
 
 
 def test_one_number_in_two_benchmarks_is_two_facts() -> None:
@@ -1049,3 +1059,44 @@ def test_a_token_count_is_a_fact_not_a_model_size() -> None:
         free_numbers="",
     )
     assert any("already stated" in p for p in problems)
+
+
+def test_edits_change_only_the_named_passages() -> None:
+    from scholar_lens.domain.evidence_draft import apply_edits
+
+    md = (
+        "## A\n\n첫 문장입니다 [[E1]]. 둘째 문장입니다.\n\n| a | b |\n| --- | --- |\n"
+        "| 1 | 2 |\n\n```python\nx = 1\n```\n"
+    )
+    fixed, failed = apply_edits(
+        md,
+        [("둘째 문장입니다.", ""), ("x = 1", "x = 2"), ("없는 문장", "y"), ("|", "!")],
+    )
+    assert "둘째" not in fixed and "x = 2" in fixed and "| 1 | 2 |" in fixed
+    assert "첫 문장입니다 [[E1]].\n" in fixed  # no trailing space left
+    assert failed == ["없는 문장", "|"]  # absent, and not unique
+
+
+def test_an_unsupported_atomic_part_makes_the_item_unsupported() -> None:
+    from scholar_lens.application.evidence_writer import EvidenceWriter
+    from scholar_lens.application.survey_engine import SURVEY_PROMPTS
+
+    class Model:
+        async def structured(self, **_kwargs):  # type: ignore[no-untyped-def]
+            return ClaimCheck(
+                verdicts=[
+                    SentenceVerdict(
+                        n=1,
+                        verdict="supported",
+                        unsupported_parts=["원인: 보상 모델이 없어서"],
+                    )
+                ]
+            )
+
+    writer = EvidenceWriter(Model(), SURVEY_PROMPTS, max_fix_rounds=1)  # type: ignore[arg-type]
+    found = asyncio.run(
+        writer.check_claims(
+            "## A\n\nDPO는 보상 모델이 없어서 항상 빠릅니다 [[E2]].\n", _ledger()
+        )
+    )
+    assert found and found[0][1].startswith("unsupported") and "원인" in found[0][1]

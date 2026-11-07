@@ -61,6 +61,7 @@ from .evidence_writer import (
     brief_lines,
     cached_evidence,
     evidence_lines,
+    post_so_far,
     quote_for_prompt_code,
     safe_key,
 )
@@ -706,6 +707,7 @@ class EvidenceGuideEngine(EvidenceWriter):
             own,
             target,
             retry_hint="This is a technical guide to a software tool for practitioners.",
+            context=post_so_far([md for _, md in written]),
         )
         self.reference = reference + self._sdk_source(draft)
         markdown = await self.verify_and_fix(

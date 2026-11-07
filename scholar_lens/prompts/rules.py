@@ -246,6 +246,11 @@ post's reading in the closing section. Never widen a fact beyond its scope
 
 
 CLAIM_SCOPE: str = """
+- Judge each item by its atomic claims: split it into the separate facts it
+  states or implies (each number with its setting, each attribution, a
+  cause or reason, a comparison, a scope or frequency word such as "always",
+  "every", "only", "most", "both SDKs"). The item is supported only when
+  every atomic claim is; list the ones that are not in `unsupported_parts`.
 - A sentence saying a source does not state, show, report, define or give
   something is unsupported unless a cited item quotes the source saying so:
   the writer saw only parts of the sources.
@@ -283,4 +288,13 @@ its `## ` heading and holding nothing but the section; and `notes`: only
 the listed problems you could not fix, each with why (empty when you fixed
 them all). Never put a note, a summary of changes or a word to the requester
 in `section`.
+"""
+
+
+POST_SO_FAR: str = """
+`post_so_far` holds the sections the reader has already read, as written.
+Never explain, define, introduce or show again anything in it: no second
+definition of a term or symbol, no restart of the running example, no fact
+or number restated, no figure shown twice. Point back to it by content in a
+short clause ("앞서 본 에지 무효화") and spend the section on what is new.
 """

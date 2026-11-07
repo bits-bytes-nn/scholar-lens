@@ -51,6 +51,7 @@ from .evidence_writer import (
     block,
     cached_evidence,
     evidence_lines,
+    post_so_far,
     safe_key,
 )
 from .ports import AgentLimits, DocumentSource, LanguageModel, TextStore
@@ -462,6 +463,7 @@ class EvidenceSurveyEngine(EvidenceWriter):
             target,
             retry_hint="This is a survey of published research papers for "
             "practitioners.",
+            context=post_so_far([md for _, md in written]),
         )
 
         def checks(markdown: str) -> list[str]:

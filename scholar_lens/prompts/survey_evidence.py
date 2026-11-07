@@ -9,9 +9,9 @@ from __future__ import annotations
 
 from .rules import (
     CLAIM_SCOPE,
-    FIX_ANSWER,
     ILLUSTRATION_MARK,
     MATH_RULES,
+    POST_SO_FAR,
     READER_PROFILE,
     SELF_REFERENCE_CHECKS,
     STYLE_RULES,
@@ -150,6 +150,7 @@ Evidence:
     + VISUAL_RULES
     + MATH_RULES
     + STYLE_RULES
+    + POST_SO_FAR
     + SECURITY
 )
 
@@ -203,6 +204,5 @@ FIX_SYSTEM = """
 You revise one survey section to fix the listed problems and nothing else.
 Rewrite or delete exactly the sentences named; keep every other sentence,
 heading, figure, equation and evidence marker as it is. A claim the evidence
-does not support is narrowed to what the evidence says or deleted. Return the
-whole revised section.
-""" + FIX_ANSWER + WRITING_PRINCIPLES + MATH_RULES + SECURITY
+does not support is narrowed to what the evidence says or deleted.
+""" + WRITING_PRINCIPLES + MATH_RULES + SECURITY

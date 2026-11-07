@@ -10,9 +10,9 @@ from __future__ import annotations
 
 from .rules import (
     CLAIM_SCOPE,
-    FIX_ANSWER,
     ILLUSTRATION_MARK,
     MATH_RULES,
+    POST_SO_FAR,
     READER_PROFILE,
     SELF_REFERENCE_CHECKS,
     STYLE_RULES,
@@ -238,6 +238,7 @@ Evidence:
     + MATH_RULES
     + STYLE_RULES
     + SDK_SOURCE
+    + POST_SO_FAR
     + SECURITY
 )
 
@@ -320,8 +321,8 @@ You revise one technical guide section to fix the listed problems and
 nothing else. Rewrite or delete exactly the sentences or code blocks named;
 keep every other sentence, heading, figure, equation, table, code block and
 evidence marker as it is. A claim the evidence does not support is narrowed
-to what the evidence says or deleted. Return the whole revised section.
-""" + FIX_ANSWER + GUIDE_PRINCIPLES + MATH_RULES + SDK_SOURCE + SECURITY
+to what the evidence says or deleted.
+""" + GUIDE_PRINCIPLES + MATH_RULES + SDK_SOURCE + SECURITY
 
 GUIDE_REVIEW_SYSTEM = """
 You review a whole technical guide, in the order a reader meets it, as an

@@ -539,3 +539,46 @@ def quote_for_prompt(quote: str) -> str:
     """A paper's words as inert data in a prompt: tag-like markup defanged,
     so an injection example quoted from a security paper reads as text."""
     return re.sub(r"<(/?)([A-Za-z_][\w-]*)", r"‹\1\2", " ".join(quote.split()))
+
+
+def _loose(text: str) -> str:
+    return " ".join(text.split())
+
+
+def apply_edits(
+    markdown: str, edits: Sequence[tuple[str, str]]
+) -> tuple[str, list[str]]:
+    """``markdown`` with each (find, replace) edit applied where ``find``
+    occurs exactly once (verbatim, else with whitespace collapsed on one
+    line); an empty ``replace`` deletes. Returns the text and the ``find``
+    texts that matched nowhere or more than once (not applied). A minimal
+    edit leaves every other sentence, table and code block as it was."""
+    failed: list[str] = []
+    for find, replace in edits:
+        if not find.strip():
+            continue
+        if markdown.count(find) == 1:
+            markdown = markdown.replace(find, replace, 1)
+            continue
+        lines = markdown.split("\n")
+        hits = [
+            i
+            for i, line in enumerate(lines)
+            if _loose(find) and _loose(find) in _loose(line)
+        ]
+        if len(hits) == 1 and markdown.count(find) == 0:
+            i = hits[0]
+            line = _loose(lines[i])
+            lines[i] = (
+                line.replace(_loose(find), _loose(replace), 1)
+                if replace.strip()
+                else line.replace(_loose(find), "", 1)
+            )
+            if not lines[i].strip():
+                del lines[i]
+            markdown = "\n".join(lines)
+            continue
+        failed.append(find)
+    markdown = "\n".join(line.rstrip() for line in markdown.split("\n"))
+    markdown = re.sub(r"\n{3,}", "\n\n", markdown)
+    return drop_empty_headings(markdown), failed

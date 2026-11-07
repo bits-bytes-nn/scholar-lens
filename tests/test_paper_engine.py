@@ -9,9 +9,11 @@ from typing import Any
 
 from scholar_lens.application.evidence_writer import (
     ClaimCheck,
+    Edit,
     EvidenceCheck,
     FixedSection,
     PostReview,
+    SectionEdits,
     SectionReview,
 )
 from scholar_lens.application.paper_engine import (
@@ -245,6 +247,12 @@ class ScriptedModel:
         return AgentOutcome(text="done", stop_reason="end_turn")
 
     async def structured(self, *, role, system, prompt, schema, context=""):
+        if schema is SectionEdits:  # a fix as one edit: the old section for the new
+            old = prompt.split("<section>\n", 1)[1].split("\n</section>", 1)[0]
+            new = await self.text(
+                role=role, system=system, prompt=prompt, context=context
+            )
+            return SectionEdits(edits=[Edit(find=old.strip(), replace=new.strip())])
         if schema is FixedSection:  # a fix answers like a text call, structured
             section = await self.text(
                 role=role, system=system, prompt=prompt, context=context

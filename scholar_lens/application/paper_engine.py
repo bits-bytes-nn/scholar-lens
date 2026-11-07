@@ -60,6 +60,7 @@ from .evidence_writer import (
     brief_lines,
     cached_evidence,
     evidence_lines,
+    post_so_far,
     quote_for_prompt_code,
     safe_key,
 )
@@ -468,6 +469,7 @@ class EvidencePaperEngine(EvidenceWriter):
             own,
             target,
             retry_hint="This is a post explaining a published research paper.",
+            context=post_so_far([md for _, md in written]),
         )
 
         def checks(markdown: str) -> list[str]:

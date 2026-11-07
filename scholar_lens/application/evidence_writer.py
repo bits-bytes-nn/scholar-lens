@@ -31,6 +31,7 @@ from ..domain.evidence import (
 )
 from ..domain.evidence_draft import (
     add_missing_figures,
+    apply_edits,
     balance_math,
     cited_ids,
     claim_units,
@@ -44,6 +45,7 @@ from ..domain.evidence_draft import (
     structure_lost,
     unsourced_number_sentences,
 )
+from ..prompts.rules import FIX_ANSWER
 from .ports import AgentLimits, LanguageModel, ModelText, was_cut
 from .usage import usage_stage
 
@@ -65,6 +67,9 @@ class SentenceVerdict(BaseModel):
     # reader and is removed like a contradiction.
     verdict: Literal["supported", "unsupported", "wrong", "about_sources"]
     reason: str = ""
+    # The item's atomic claims the evidence does not support, each on its
+    # own (an implied cause, scope or frequency counts as a claim).
+    unsupported_parts: list[str] = Field(default_factory=list, max_length=8)
 
 
 class ClaimCheck(BaseModel):
@@ -89,6 +94,22 @@ class ReviewIssue(BaseModel):
 
 class SectionReview(BaseModel):
     issues: list[ReviewIssue] = Field(default_factory=list, max_length=10)
+
+
+class Edit(BaseModel):
+    # A passage copied verbatim from the section (a sentence, a table row, a
+    # whole code block), long enough to occur once.
+    find: str
+    # What replaces it; empty deletes it.
+    replace: str = ""
+
+
+class SectionEdits(BaseModel):
+    """A fix as minimal edits, applied by code: every passage not named
+    stays as it was (no rewrite drifts the rest of the section)."""
+
+    edits: list[Edit] = Field(default_factory=list, max_length=30)
+    notes: str = ""
 
 
 class FixedSection(BaseModel):
@@ -187,10 +208,37 @@ async def all_or_none[T](aws: Iterable[Awaitable[T]]) -> list[T]:
         raise
 
 
+# Appended to an artifact's fix prompt when the fix is asked as edits.
+EDIT_ANSWER = """
+Answer with `edits`, not the whole section: each edit replaces one passage
+of the section with `replace` (empty to delete it). `find` is copied
+verbatim from the section and long enough to occur once: a whole sentence,
+a table row, or a whole code block. Change only what the problems need;
+every passage you do not name stays exactly as it is. `notes`: only the
+listed problems you could not fix, each with why (empty when you fixed
+them all).
+"""
+
+
 def _removable(verdict: str) -> bool:
     """A sentence code removes when the writer could not fix it: one that
     contradicts its evidence or talks about the post's sources."""
     return verdict.startswith(("wrong", "about_sources"))
+
+
+POST_SO_FAR_CHARS = 60_000
+
+
+def post_so_far(sections: Sequence[str], limit: int = POST_SO_FAR_CHARS) -> str:
+    """The sections already written, in order, as the next section's writer
+    reads them (evidence markers kept: what is cited is visible), the most
+    recent kept whole when the post outgrows ``limit``."""
+    text = "\n\n".join(md.strip() for md in sections if md.strip())
+    if not text:
+        return ""
+    if len(text) > limit:
+        text = "[…]\n" + text[-limit:]
+    return block("post_so_far", text)
 
 
 def _kept(answer: str) -> str:
@@ -532,15 +580,20 @@ class EvidenceWriter:
         *,
         retry_hint: str,
         evidence: Sequence[Evidence] | None = None,
+        context: str = "",
     ) -> str:
         """A section draft; a short or cut-off answer is asked again, then
         written from the claims alone (quoted text can derail the model):
         the prompt's ``<evidence>`` block, holding ``evidence`` (``own``
-        unless given), is swapped for their claims."""
+        unless given), is swapped for their claims. ``context`` (the post
+        so far) goes before the cache point."""
         with usage_stage("draft"):
             text = _kept(
                 await self.model.text(
-                    role="write", system=self.prompts.writer, prompt=prompt
+                    role="write",
+                    system=self.prompts.writer,
+                    prompt=prompt,
+                    context=context,
                 )
             )
             if (own or evidence) and (
@@ -555,6 +608,7 @@ class EvidenceWriter:
                     await self.model.text(
                         role="write",
                         system=self.prompts.writer,
+                        context=context,
                         prompt=prompt
                         + "\n\nYour previous answer was too short or empty. "
                         + retry_hint
@@ -570,6 +624,7 @@ class EvidenceWriter:
                     await self.model.text(
                         role="write",
                         system=self.prompts.writer,
+                        context=context,
                         prompt=_EVIDENCE_BLOCK.sub(
                             lambda _m: block("evidence", claim_lines(evidence or own)),
                             prompt,
@@ -753,49 +808,76 @@ class EvidenceWriter:
     async def _fix(
         self, draft: str, evidence: Sequence[Evidence], issues: Sequence[str]
     ) -> str:
-        """The section revised for ``issues``. The answer is structured: the
-        revised section and, apart, whatever the writer says about its edits,
-        so no note ever reaches the post (whatever its wording or language).
-        An answer that does not parse leaves the draft as it was."""
+        """The section revised for ``issues`` by minimal edits (each an
+        exact passage replaced or deleted, applied by code); when none of
+        the edits applies, the whole revised section instead. The answers
+        are structured, so no note reaches the post. An answer that does not
+        parse leaves the draft as it was."""
+        heading = section_heading(draft) or "a section"
+        context = "\n\n".join(
+            [
+                block("evidence", evidence_lines(evidence)),
+                *([block("source_sections", self.reference)] if self.reference else []),
+            ]
+        )
+        prompt = "\n\n".join(
+            [
+                block("section", draft),
+                block("problems", "\n".join(f"- {i}" for i in issues)),
+            ]
+        )
         with usage_stage("fix"):
+            try:
+                edits = await self.model.structured(
+                    role="write",
+                    system=self.prompts.fix + EDIT_ANSWER,
+                    schema=SectionEdits,
+                    # The evidence and passages repeat across a section's
+                    # fixes; only the draft and its problems change.
+                    context=context,
+                    prompt=prompt,
+                )
+            except ValueError as e:
+                logger.warning("Edit answer unusable (%s); asking for the section.", e)
+                edits = None
+            if edits is not None:
+                fixed, failed = apply_edits(
+                    draft, [(e.find, e.replace) for e in edits.edits]
+                )
+                self._writer_notes(heading, edits.notes)
+                if not edits.edits or len(failed) < len(edits.edits):
+                    if failed:
+                        logger.info(
+                            "%d of %d edits of %r matched nothing.",
+                            len(failed),
+                            len(edits.edits),
+                            heading,
+                        )
+                    return strip_revision_notes(fixed, draft)
             try:
                 answer = await self.model.structured(
                     role="write",
-                    system=self.prompts.fix,
+                    system=self.prompts.fix + FIX_ANSWER,
                     schema=FixedSection,
-                    # The evidence and passages repeat across a section's
-                    # fixes; only the draft and its problems change.
-                    context="\n\n".join(
-                        [
-                            block("evidence", evidence_lines(evidence)),
-                            *(
-                                [block("source_sections", self.reference)]
-                                if self.reference
-                                else []
-                            ),
-                        ]
-                    ),
-                    prompt="\n\n".join(
-                        [
-                            block("section", draft),
-                            block("problems", "\n".join(f"- {i}" for i in issues)),
-                        ]
-                    ),
+                    context=context,
+                    prompt=prompt,
                 )
             except ValueError as e:
                 logger.warning("Fix answer unusable (%s); the draft stands.", e)
                 self.notes.append(
-                    f"Section '{section_heading(draft) or 'a section'}': a fix "
-                    f"could not be made ({e}); the draft stands."
+                    f"Section '{heading}': a fix could not be made ({e}); "
+                    "the draft stands."
                 )
                 return draft
-        if notes := " ".join(answer.notes.split()):
-            # What the writer could not fix belongs on the PR checklist.
-            heading = section_heading(draft) or "a section"
-            note = f"Section '{heading}': the writer could not fix: {notes[:300]}"
+        self._writer_notes(heading, answer.notes)
+        return strip_revision_notes(answer.section.strip(), draft)
+
+    def _writer_notes(self, heading: str, notes: str) -> None:
+        """What the writer could not fix, on the PR checklist, once."""
+        if text := " ".join(notes.split()):
+            note = f"Section '{heading}': the writer could not fix: {text[:300]}"
             if note not in self.notes:
                 self.notes.append(note)
-        return strip_revision_notes(answer.section.strip(), draft)
 
     async def unsupported(
         self,
@@ -865,8 +947,17 @@ class EvidenceWriter:
             return []
         bad = []
         for v in check.verdicts:
-            if v.verdict != "supported" and 1 <= v.n <= len(sentences):
-                bad.append((sentences[v.n - 1], f"{v.verdict}: {v.reason}"))
+            if not 1 <= v.n <= len(sentences):
+                continue
+            parts = [p for p in v.unsupported_parts if p.strip()]
+            # A part not supported makes the item unsupported, whatever the
+            # item's own label says.
+            verdict = "unsupported" if v.verdict == "supported" and parts else v.verdict
+            if verdict != "supported":
+                reason = v.reason + (
+                    " (not supported: " + "; ".join(parts) + ")" if parts else ""
+                )
+                bad.append((sentences[v.n - 1], f"{verdict}: {reason.strip()}"))
         return bad
 
     async def _evaluated(self, what: str, **call: Any) -> Any:

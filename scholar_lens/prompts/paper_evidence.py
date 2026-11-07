@@ -6,10 +6,10 @@ from __future__ import annotations
 
 from .rules import (
     CLAIM_SCOPE,
-    FIX_ANSWER,
     ILLUSTRATION_MARK,
     MATH_RULES,
     NUMBER_RULES,
+    POST_SO_FAR,
     READER_PROFILE,
     SELF_REFERENCE_CHECKS,
     STYLE_RULES,
@@ -160,6 +160,7 @@ Evidence:
     + NUMBER_RULES
     + MATH_RULES
     + STYLE_RULES
+    + POST_SO_FAR
     + SECURITY
 )
 
@@ -224,8 +225,8 @@ You revise one section of a post about a research paper to fix the listed
 problems and nothing else. Rewrite or delete exactly the sentences named;
 keep every other sentence, heading, figure, equation, table and evidence
 marker as it is. A claim the evidence does not support is narrowed to what
-the evidence says or deleted. Return the whole revised section.
-""" + FIX_ANSWER + PRINCIPLES + MATH_RULES + SECURITY
+the evidence says or deleted.
+""" + PRINCIPLES + MATH_RULES + SECURITY
 
 FINAL_SYSTEM = """
 You write the framing of a finished post about a research paper, from its
