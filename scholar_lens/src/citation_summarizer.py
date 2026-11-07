@@ -45,9 +45,13 @@ class CitationSummarizer(RetryableBase):
         metadata_resolver: ChainedMetadataResolver | None = None,
         callbacks: list[Any] | None = None,
         prefer_full_text: bool = False,
+        arxiv_handler: ArxivHandler | None = None,
+        llm_factory: BedrockLanguageModelFactory | None = None,
     ) -> None:
         self.boto_session = boto_session or boto3.Session()
-        self.llm_factory = BedrockLanguageModelFactory(boto_session=self.boto_session)
+        self.llm_factory = llm_factory or BedrockLanguageModelFactory(
+            boto_session=self.boto_session
+        )
         self.references_dir = (
             paper_dir or Path.cwd()
         ) / LocalPaths.REFERENCES_DIR.value
@@ -72,7 +76,7 @@ class CitationSummarizer(RetryableBase):
         self.citation_summarizer = (
             CitationSummaryPrompt.get_prompt() | summarizing_llm | StrOutputParser()
         )
-        self.arxiv_handler = ArxivHandler()
+        self.arxiv_handler = arxiv_handler or ArxivHandler()
         # Timeout for per-call HTMLParser instances. A parser is NOT shared across
         # tasks: its __aexit__ closes its httpx client, which would abort a
         # concurrent task's in-flight GET.

@@ -113,7 +113,8 @@ _TAG_EXPLANATION = "explanation"
 
 def _ensure_nltk_data() -> None:
     """Use the installed ``punkt_tab`` (e.g. baked into the image via
-    ``NLTK_DATA``); download it only when it is missing."""
+    ``NLTK_DATA``); download it only when it is missing. Checked when a review
+    splits the paper into sentences, not when the reviewer is built."""
     try:
         nltk.data.find("tokenizers/punkt_tab")
         return
@@ -242,8 +243,8 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
         max_code_results: int = 8,
         callbacks: list[Any] | None = None,
         max_total_tokens: int | None = None,
+        llm_factory: BedrockLanguageModelFactory | None = None,
     ) -> None:
-        _ensure_nltk_data()
         self.paper = paper
         self.language = language
         self.callbacks = callbacks or []
@@ -263,7 +264,9 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
         self.open_defects: list[str] = []
         self.open_gaps: list[str] = []
         self.linkable_arxiv: set[str] = set()
-        self.llm_factory = BedrockLanguageModelFactory(boto_session=boto_session)
+        self.llm_factory = llm_factory or BedrockLanguageModelFactory(
+            boto_session=boto_session
+        )
 
         self.planner = self._chain(
             PaperPlanningPrompt,
@@ -334,6 +337,7 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
         tables, code and display math kept whole). Prompt-fence tags are
         defanged once here: every downstream fence quotes this text."""
         text = neutralize_prompt_tags(self.paper.content.text)
+        _ensure_nltk_data()
         tokenizer = PunktTokenizer("english")
         return SourceText.from_text(
             text, lambda chunk: list(tokenizer.span_tokenize(chunk))

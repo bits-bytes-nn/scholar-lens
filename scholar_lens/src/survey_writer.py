@@ -238,11 +238,13 @@ class SurveyWriter(RetryableBase):
         language: str,
         thinking_effort: str,
         callbacks: list[Any] | None = None,
+        llm_factory: BedrockLanguageModelFactory | None = None,
     ) -> None:
         self.callbacks = callbacks or []
         self.language = language
         self.notes: list[str] = []
-        model = BedrockLanguageModelFactory(boto_session=boto_session).get_model(
+        factory = llm_factory or BedrockLanguageModelFactory(boto_session=boto_session)
+        model = factory.get_model(
             finalization_model_id,
             temperature=0.0,
             callbacks=self.callbacks or None,

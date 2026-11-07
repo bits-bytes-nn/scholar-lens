@@ -625,10 +625,11 @@ class SurveyPlanner(SurveyCalls):
         thinking_effort: str,
         max_total_tokens: int | None,
         callbacks: list[Any] | None = None,
+        llm_factory: BedrockLanguageModelFactory | None = None,
     ) -> None:
         self.callbacks = callbacks or []
         self._init_token_budget(self.callbacks, max_total_tokens)
-        factory = BedrockLanguageModelFactory(boto_session=boto_session)
+        factory = llm_factory or BedrockLanguageModelFactory(boto_session=boto_session)
 
         def chain(
             prompt: type[BasePrompt], model_id: LanguageModelId, *, thinking: bool

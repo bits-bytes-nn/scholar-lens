@@ -116,6 +116,8 @@ class CodeRetriever(RetryableBase):
         profile_name: str | None = None,
         boto_session: boto3.Session | None = None,
         callbacks: Sequence[BaseCallbackHandler] | None = None,
+        llm_factory: BedrockLanguageModelFactory | None = None,
+        embedding_factory: BedrockEmbeddingModelFactory | None = None,
     ) -> None:
         self.boto_session = boto_session or boto3.Session(
             region_name=region_name, profile_name=profile_name
@@ -123,8 +125,10 @@ class CodeRetriever(RetryableBase):
         # Route the run's TokenUsageTracker into the code-analysis and codebase-
         # summary calls so they count toward the token budget and cost metric.
         self._callbacks = list(callbacks) if callbacks else None
-        self.llm_factory = BedrockLanguageModelFactory(boto_session=self.boto_session)
-        self.embedding_factory = BedrockEmbeddingModelFactory(
+        self.llm_factory = llm_factory or BedrockLanguageModelFactory(
+            boto_session=self.boto_session
+        )
+        self.embedding_factory = embedding_factory or BedrockEmbeddingModelFactory(
             boto_session=self.boto_session
         )
         self._initialize_directories(paper_dir or Path.cwd())
