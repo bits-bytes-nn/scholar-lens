@@ -846,3 +846,12 @@ def test_a_fix_that_drops_a_code_block_or_table_loses_structure() -> None:
         structure_lost(before, "## A\n\n설명입니다.\n\n```python\nx = 1\n```\n")
         == "a table was lost"
     )
+
+
+def test_a_sentence_about_the_posts_sources_is_removable() -> None:
+    from scholar_lens.application.evidence_writer import SentenceVerdict, _removable
+
+    assert SentenceVerdict(n=1, verdict="about_sources").verdict == "about_sources"
+    assert _removable("about_sources: talks about the evidence")
+    assert _removable("wrong: swaps the setting")
+    assert not _removable("unsupported: broadens the scope")

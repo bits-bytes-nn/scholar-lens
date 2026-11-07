@@ -244,6 +244,10 @@ CLAIM_SCOPE: str = """
 - A sentence saying a source does not state, show, report, define or give
   something is unsupported unless a cited item quotes the source saying so:
   the writer saw only parts of the sources.
+- about_sources: a sentence about the post's own inputs instead of its
+  subject ("이 근거에서 따로 설명되지 않습니다", "the provided material does
+  not cover", where a table's values were taken from), whether or not it is
+  true of those inputs.
 - A sentence ending with [[EX]] is the writer's illustration: supported
   unless it states a result, default or behaviour of the subject the
   evidence does not give.

@@ -60,7 +60,10 @@ FOLLOW_UP_TURNS = 8
 
 class SentenceVerdict(BaseModel):
     n: int
-    verdict: Literal["supported", "unsupported", "wrong"]
+    # about_sources: the sentence is about the post's inputs (its evidence,
+    # the material it was given), not the subject; it says nothing to a
+    # reader and is removed like a contradiction.
+    verdict: Literal["supported", "unsupported", "wrong", "about_sources"]
     reason: str = ""
 
 
@@ -174,6 +177,12 @@ async def all_or_none[T](aws: Iterable[Awaitable[T]]) -> list[T]:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
         raise
+
+
+def _removable(verdict: str) -> bool:
+    """A sentence code removes when the writer could not fix it: one that
+    contradicts its evidence or talks about the post's sources."""
+    return verdict.startswith(("wrong", "about_sources"))
 
 
 def _kept(answer: str) -> str:
@@ -607,15 +616,15 @@ class EvidenceWriter:
             ):
                 draft = fixed
                 claims = await self.unsupported(draft, ledger, free, context)
-        wrong = [(s, v) for s, v in claims if v.startswith("wrong")]
+        wrong = [(s, v) for s, v in claims if _removable(v)]
         if wrong:
             draft = drop_sentences(draft, [s for s, _ in wrong])
             left = set(claim_units(draft))
             removed = [(s, v) for s, v in wrong if s not in left]
             if removed:
                 self.notes.append(
-                    f"Section '{title}': {len(removed)} sentence(s) contradicting "
-                    "their evidence removed: "
+                    f"Section '{title}': {len(removed)} sentence(s) removed that "
+                    "contradict their evidence or talk about the post's sources: "
                     + " | ".join(f"{s[:120]} ({v})" for s, v in removed[:5])
                 )
             if kept := [(s, v) for s, v in wrong if s in left]:
@@ -624,7 +633,7 @@ class EvidenceWriter:
                     "contradict their evidence: "
                     + " | ".join(f"{s[:120]} ({v})" for s, v in kept[:5])
                 )
-        if unsupported := [(s, v) for s, v in claims if not v.startswith("wrong")]:
+        if unsupported := [(s, v) for s, v in claims if not _removable(v)]:
             self.notes.append(
                 f"Section '{title}': check {len(unsupported)} sentence(s) "
                 "the evidence may not support: "
@@ -692,7 +701,7 @@ class EvidenceWriter:
                 wrong = [
                     s
                     for s, v in await self.check_claims(fixed, ledger, own)
-                    if v.startswith("wrong")
+                    if _removable(v)
                 ]
                 md = drop_sentences(fixed, wrong) if wrong else fixed
             self.reference = ""
