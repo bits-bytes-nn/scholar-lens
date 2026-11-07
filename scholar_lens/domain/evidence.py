@@ -10,7 +10,7 @@ sources show, and the outline can give each piece of evidence to one section.
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from difflib import SequenceMatcher
 from typing import Literal
 
@@ -420,6 +420,31 @@ def duplicate_evidence(
                 break
         else:
             kept.setdefault(item.kind, []).append(item)
+    return duplicates
+
+
+def same_fact_duplicates(
+    groups: Iterable[Sequence[str]],
+    ledger: EvidenceLedger,
+    rank: Mapping[str, int] | None = None,
+) -> dict[str, str]:
+    """Duplicate id -> the id kept, from the outline's groups of evidence
+    that state one fact in different words (a judgement only a model can
+    make). Code keeps the group's most authoritative, earliest item, and
+    refuses a group that cannot be one fact: unknown ids, figures or code,
+    or items whose numbers or code spans differ."""
+    order = {e.id: n for n, e in enumerate(ledger)}
+    duplicates: dict[str, str] = {}
+    for group in groups:
+        items = [e for i in dict.fromkeys(group) if (e := ledger.get(i))]
+        if len(items) < 2 or any(e.kind in ("figure", "code") for e in items):
+            continue
+        if len({frozenset(_facts(f"{e.claim} {e.cell}")) for e in items}) != 1:
+            continue
+        keep = min(items, key=lambda e: ((rank or {}).get(e.paper_id, 0), order[e.id]))
+        for e in items:
+            if e.id != keep.id and e.id not in duplicates:
+                duplicates[e.id] = keep.id
     return duplicates
 
 

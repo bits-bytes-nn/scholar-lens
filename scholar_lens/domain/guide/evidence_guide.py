@@ -90,6 +90,9 @@ class GuideOutline(_Strict):
     # The SDK language the code uses ("python"); others get a sentence.
     code_language: str = ""
     sections: list[GuideSection] = Field(min_length=4)
+    # Groups of evidence ids that state one fact in different words; code
+    # keeps one of each, so the post states the fact once.
+    same_facts: list[list[str]] = Field(default_factory=list, max_length=60)
 
 
 def repair_guide_outline(

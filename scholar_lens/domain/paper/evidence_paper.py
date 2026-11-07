@@ -115,6 +115,9 @@ class PaperOutline(_Strict):
     # has one.
     running_example: str = ""
     sections: list[PaperSection] = Field(min_length=3)
+    # Groups of evidence ids that state one fact in different words; code
+    # keeps one of each, so the post states the fact once.
+    same_facts: list[list[str]] = Field(default_factory=list, max_length=60)
 
 
 def fixed_title(kind: str, post: PostKind, language: str) -> str | None:

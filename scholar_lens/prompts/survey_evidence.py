@@ -13,6 +13,7 @@ from .rules import (
     MATH_RULES,
     POST_SO_FAR,
     READER_PROFILE,
+    SAME_FACTS,
     SELF_REFERENCE_CHECKS,
     STYLE_RULES,
     VISUAL_RULES,
@@ -120,7 +121,7 @@ queries or a setting. `ideas` gives every paper a noun
 phrase; `short_names` every paper a short name; `lineage_names` every lineage
 a short name. The glossary has the topic's key terms (English | rendering in
 the survey's language, no parentheses).
-""" + SECURITY
+""" + SAME_FACTS + SECURITY
 
 WRITER_SYSTEM = (
     """

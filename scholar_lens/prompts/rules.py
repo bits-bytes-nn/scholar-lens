@@ -300,3 +300,12 @@ definition of a term or symbol, no restart of the running example, no fact
 or number restated, no figure shown twice. Point back to it by content in a
 short clause ("앞서 본 에지 무효화") and spend the section on what is new.
 """
+
+
+SAME_FACTS: str = """
+`same_facts`: list each group of evidence ids that state one fact in
+different words (the same result for the same setting, the same behaviour,
+the same definition, recorded from different pages or parts of the source).
+Code keeps one item of each group, so the post states the fact once; never
+group items that differ in a number, a setting or a scope.
+"""

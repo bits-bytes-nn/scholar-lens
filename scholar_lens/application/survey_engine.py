@@ -21,6 +21,7 @@ from ..domain.evidence import (
     Evidence,
     EvidenceLedger,
     SourceDocument,
+    same_fact_duplicates,
 )
 from ..domain.evidence_draft import (
     cited_ids,
@@ -53,6 +54,7 @@ from .evidence_writer import (
     evidence_lines,
     post_so_far,
     safe_key,
+    with_canonical_evidence,
 )
 from .ports import AgentLimits, DocumentSource, LanguageModel, TextStore
 from .usage import usage_stage
@@ -274,6 +276,9 @@ class EvidenceSurveyEngine(EvidenceWriter):
                     system=prompts.OUTLINE_SYSTEM,
                     prompt=prompt,
                     schema=EvidenceOutline,
+                )
+                outline = with_canonical_evidence(
+                    outline, same_fact_duplicates(outline.same_facts, ledger)
                 )
                 outline, repaired = repair_outline(outline, plan, ledger)
                 if repaired:

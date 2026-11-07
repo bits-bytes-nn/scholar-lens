@@ -11,6 +11,7 @@ from .rules import (
     NUMBER_RULES,
     POST_SO_FAR,
     READER_PROFILE,
+    SAME_FACTS,
     SELF_REFERENCE_CHECKS,
     STYLE_RULES,
     TABLE_RULES,
@@ -101,7 +102,7 @@ Titles are claims written as noun phrases; each section has a one-sentence
 thesis and the reader's question it answers. Depth: deep for the hard
 mechanism, brief for context. The glossary has the paper's key terms
 (English | rendering in the post's language, no parentheses).
-""" + SECURITY
+""" + SAME_FACTS + SECURITY
 
 OUTLINE_SUMMARY = """
 You plan a short summary post of one paper (readable in five minutes) from
@@ -119,7 +120,7 @@ Pick only the evidence the summary needs: the key equation, the headline
 results with their settings, one or two figures, one or two limitations.
 Depth: standard for method and experiments, brief for the rest. The
 glossary has the paper's key terms (English | rendering, no parentheses).
-""" + SECURITY
+""" + SAME_FACTS + SECURITY
 
 WRITER_SYSTEM = (
     """

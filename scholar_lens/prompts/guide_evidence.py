@@ -14,6 +14,7 @@ from .rules import (
     MATH_RULES,
     POST_SO_FAR,
     READER_PROFILE,
+    SAME_FACTS,
     SELF_REFERENCE_CHECKS,
     STYLE_RULES,
     TABLE_RULES,
@@ -194,7 +195,7 @@ glossary has the topic's key terms (English | rendering in the guide's
 language, no parentheses). The title is in English. `topics` names the
 features or concepts each section teaches; a feature is taught in one
 section only, and evidence about it goes there.
-""" + SOURCE_AUTHORITY + SECURITY
+""" + SAME_FACTS + SOURCE_AUTHORITY + SECURITY
 
 WRITER_SYSTEM = (
     """

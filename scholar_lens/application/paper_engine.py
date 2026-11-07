@@ -25,8 +25,8 @@ from ..domain.evidence import (
     Evidence,
     EvidenceLedger,
     SourceDocument,
-    canonical_ids,
     duplicate_evidence,
+    same_fact_duplicates,
 )
 from ..domain.evidence_draft import (
     cited_ids,
@@ -63,6 +63,7 @@ from .evidence_writer import (
     post_so_far,
     quote_for_prompt_code,
     safe_key,
+    with_canonical_evidence,
 )
 from .ports import AgentLimits, LanguageModel, TextStore
 from .usage import usage_stage
@@ -269,17 +270,9 @@ class EvidencePaperEngine(EvidenceWriter):
                 outline = await self.model.structured(
                     role="outline", system=system, prompt=prompt, schema=PaperOutline
                 )
-                outline = outline.model_copy(
-                    update={
-                        "sections": [
-                            sec.model_copy(
-                                update={
-                                    "evidence": canonical_ids(sec.evidence, duplicates)
-                                }
-                            )
-                            for sec in outline.sections
-                        ]
-                    }
+                outline = with_canonical_evidence(
+                    outline,
+                    duplicates | same_fact_duplicates(outline.same_facts, ledger),
                 )
                 outline, repaired = repair_paper_outline(
                     outline, ledger, self.settings.post, self.settings.language

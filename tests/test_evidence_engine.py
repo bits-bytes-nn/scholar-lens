@@ -1113,3 +1113,45 @@ def test_an_unsupported_atomic_part_makes_the_item_unsupported() -> None:
         )
     )
     assert found and found[0][1].startswith("unsupported") and "원인" in found[0][1]
+
+
+def test_same_fact_groups_keep_one_item_and_refuse_differing_numbers() -> None:
+    from scholar_lens.domain.evidence import Evidence, same_fact_duplicates
+
+    def e(eid: str, claim: str, kind: str = "number", pid: str = "P") -> Evidence:
+        return Evidence(
+            id=eid,
+            paper_id=pid,
+            kind=kind,
+            claim=claim,
+            quote="q",
+            anchor="S1",
+            figure_url="https://x/f.png" if kind == "figure" else None,
+        )
+
+    ledger = EvidenceLedger(
+        items=[
+            e("E1", "검색 지연이 90% 줄었습니다"),
+            e("E2", "응답 시간이 약 90% 단축됩니다", pid="W"),
+            e("E3", "응답 시간이 80% 단축됩니다"),
+            e("E4", "그림", kind="figure"),
+            e("E5", "그림 다시", kind="figure"),
+        ]
+    )
+    rank = {"P": 1, "W": 0}
+    assert same_fact_duplicates([["E1", "E2"]], ledger, rank) == {"E1": "E2"}
+    assert (
+        same_fact_duplicates([["E1", "E3"], ["E4", "E5"], ["E9", "E1"]], ledger) == {}
+    )
+
+
+def test_a_survey_outline_states_each_marked_fact_once() -> None:
+    from scholar_lens.application.evidence_writer import with_canonical_evidence
+
+    sections = [s.model_dump() for s in _outline().sections]
+    sections[0]["evidence"] = ["E1", "E2"]
+    outline = EvidenceOutline.model_validate(
+        {**_outline().model_dump(), "sections": sections}
+    )
+    merged = with_canonical_evidence(outline, {"E2": "E1"})
+    assert merged.sections[0].evidence == ["E1"]

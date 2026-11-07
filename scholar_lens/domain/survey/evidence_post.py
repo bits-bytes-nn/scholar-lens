@@ -77,6 +77,9 @@ class EvidenceOutline(_Strict):
     # (evidence ids).
     table: list[TableRow] = Field(default_factory=list)
     sections: list[OutlineSection] = Field(min_length=3)
+    # Groups of evidence ids that state one fact in different words; code
+    # keeps one of each, so the post states the fact once.
+    same_facts: list[list[str]] = Field(default_factory=list, max_length=60)
 
 
 def outline_problems(

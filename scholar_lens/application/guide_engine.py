@@ -22,9 +22,9 @@ from ..domain.evidence import (
     Evidence,
     EvidenceLedger,
     SourceDocument,
-    canonical_ids,
     duplicate_evidence,
     near_duplicate,
+    same_fact_duplicates,
 )
 from ..domain.evidence_draft import (
     cited_ids,
@@ -64,6 +64,7 @@ from .evidence_writer import (
     post_so_far,
     quote_for_prompt_code,
     safe_key,
+    with_canonical_evidence,
 )
 from .ports import AgentLimits, LanguageModel, TextStore
 from .usage import usage_stage
@@ -112,20 +113,6 @@ def defined_in_code(markdowns: Sequence[str], limit: int = 60) -> str:
                 if line not in lines:
                     lines.append(line)
     return "\n".join(lines[-limit:])
-
-
-def _canonical(outline: GuideOutline, duplicates: Mapping[str, str]) -> GuideOutline:
-    """Each duplicate evidence id replaced by the id that keeps its fact."""
-    if not duplicates:
-        return outline
-    return outline.model_copy(
-        update={
-            "sections": [
-                s.model_copy(update={"evidence": canonical_ids(s.evidence, duplicates)})
-                for s in outline.sections
-            ]
-        }
-    )
 
 
 def _copied(markdown: str, body: Sequence[str]) -> list[str]:
@@ -427,8 +414,15 @@ class EvidenceGuideEngine(EvidenceWriter):
                     prompt=prompt,
                     schema=GuideOutline,
                 )
+                rank = {
+                    sid: _AUTHORITY_RANK.get(d.authority or "third_party", 2)
+                    for sid, d in documents.items()
+                }
+                same = duplicates | same_fact_duplicates(
+                    outline.same_facts, ledger, rank
+                )
                 outline, repaired = repair_guide_outline(
-                    _canonical(outline, duplicates), ledger
+                    with_canonical_evidence(outline, same), ledger
                 )
                 if repaired:
                     logger.info(

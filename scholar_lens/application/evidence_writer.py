@@ -26,6 +26,7 @@ from ..domain.evidence import (
     Evidence,
     EvidenceLedger,
     SourceDocument,
+    canonical_ids,
     evidence_problems,
     near_duplicate,
 )
@@ -227,6 +228,41 @@ def _removable(verdict: str) -> bool:
 
 
 POST_SO_FAR_CHARS = 60_000
+
+
+def with_canonical_evidence[OutlineT](
+    outline: OutlineT, duplicates: Mapping[str, str]
+) -> OutlineT:
+    """``outline`` with every duplicate evidence id (in its sections and, for
+    a survey, its comparison table) replaced by the id that keeps the fact;
+    a section then lists each fact once."""
+    if not duplicates:
+        return outline
+
+    def ids(values: Sequence[str]) -> list[str]:
+        return canonical_ids(values, duplicates)
+
+    update: dict[str, object] = {
+        "sections": [
+            s.model_copy(update={"evidence": ids(s.evidence)})
+            for s in outline.sections  # type: ignore[attr-defined]
+        ]
+    }
+    if table := getattr(outline, "table", None):
+        update["table"] = [
+            r.model_copy(
+                update={
+                    "results": ids(r.results),
+                    "limitation": (
+                        duplicates.get(r.limitation, r.limitation)
+                        if r.limitation
+                        else r.limitation
+                    ),
+                }
+            )
+            for r in table
+        ]
+    return outline.model_copy(update=update)  # type: ignore[attr-defined,no-any-return]
 
 
 def post_so_far(sections: Sequence[str], limit: int = POST_SO_FAR_CHARS) -> str:
