@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock
 
 import boto3
@@ -99,17 +99,16 @@ def test_s3_ledger_reads_manifests_in_the_period() -> None:
     # Not manifests: a list at the top level, and anything in a sub-folder.
     s3.put_object(Bucket="results-bucket", Key="sl/results/list.json", Body=b"[1]")
     s3.put_object(Bucket="results-bucket", Key="sl/results/evidence/x.json", Body=b"[]")
-    now = datetime.now(UTC)
+    # moto stamps objects with the current time; any later bound will do.
+    later = datetime.now(UTC) + timedelta(days=366)
     ledger = S3RunLedger(s3, "results-bucket", "sl/results")
-    (record,) = list(
-        ledger.runs(datetime(2000, 1, 1, tzinfo=UTC), now.replace(year=now.year + 1))
-    )
+    (record,) = list(ledger.runs(datetime(2000, 1, 1, tzinfo=UTC), later))
     assert (record.job_id, record.kind, record.cost_usd) == ("j1", "summarize", 0.5)
     assert record.usage == usage
     report = report_costs(
         ledger,
         since=datetime(2000, 1, 1, tzinfo=UTC),
-        until=now.replace(year=now.year + 1),
+        until=later,
         by="model",
     )
     assert [(r.key, r.cost_usd) for r in report.rows] == [("opus", 0.5)]

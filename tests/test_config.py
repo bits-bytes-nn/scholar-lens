@@ -180,3 +180,15 @@ def test_a_github_config_that_cannot_open_a_pr_fails_at_load() -> None:
     with pytest.raises(ValidationError, match="branch_prefix"):
         Github(branch_prefix="/")
     assert Github(enabled=True, repo_name="owner/owner.github.io").enabled
+
+
+@pytest.mark.parametrize("section", ["explanation", "summary", "tech_guide"])
+def test_a_length_range_upside_down_fails_at_load(section: str) -> None:
+    from pydantic import ValidationError
+
+    from scholar_lens.configs.config import Config
+
+    with pytest.raises(ValidationError, match="min_total_chars"):
+        Config.model_validate(
+            {section: {"min_total_chars": 60_000, "max_total_chars": 30_000}}
+        )
