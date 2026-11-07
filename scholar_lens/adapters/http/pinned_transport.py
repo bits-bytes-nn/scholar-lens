@@ -50,26 +50,64 @@ def _pin(request: httpx.Request) -> httpx.URL:
     return original
 
 
-class PinnedHTTPTransport(httpx.HTTPTransport):
-    """Sync transport that pins each request to an SSRF-validated IP."""
+class PinnedHTTPTransport(httpx.BaseTransport):
+    """Sync transport that pins each request to an SSRF-validated IP.
+
+    Connections are pooled per hostname, not per pinned IP: two sites behind
+    one CDN address must never share a TLS connection opened with the other
+    one's SNI (the second site answers 403, and its certificate is never
+    checked)."""
+
+    def __init__(self, **kwargs: Any) -> None:
+        self._kwargs = kwargs
+        self._pools: dict[str, httpx.HTTPTransport] = {}
+        self._lock = threading.Lock()
+
+    def _pool(self, host: str) -> httpx.HTTPTransport:
+        with self._lock:
+            if host not in self._pools:
+                self._pools[host] = httpx.HTTPTransport(**self._kwargs)
+            return self._pools[host]
 
     def handle_request(self, request: httpx.Request) -> httpx.Response:
         original = _pin(request)
         try:
-            return super().handle_request(request)
+            return self._pool(original.host).handle_request(request)
         finally:
             request.url = original
 
+    def close(self) -> None:
+        with self._lock:
+            pools, self._pools = list(self._pools.values()), {}
+        for pool in pools:
+            pool.close()
 
-class PinnedAsyncHTTPTransport(httpx.AsyncHTTPTransport):
-    """Async transport that pins each request to an SSRF-validated IP."""
+
+class PinnedAsyncHTTPTransport(httpx.AsyncBaseTransport):
+    """Async transport that pins each request to an SSRF-validated IP, with
+    connections pooled per hostname (see :class:`PinnedHTTPTransport`)."""
+
+    def __init__(self, **kwargs: Any) -> None:
+        self._kwargs = kwargs
+        self._pools: dict[str, httpx.AsyncHTTPTransport] = {}
+
+    def _pool(self, host: str) -> httpx.AsyncHTTPTransport:
+        # One event loop: no await between the check and the insert.
+        if host not in self._pools:
+            self._pools[host] = httpx.AsyncHTTPTransport(**self._kwargs)
+        return self._pools[host]
 
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
         original = _pin(request)
         try:
-            return await super().handle_async_request(request)
+            return await self._pool(original.host).handle_async_request(request)
         finally:
             request.url = original
+
+    async def aclose(self) -> None:
+        pools, self._pools = list(self._pools.values()), {}
+        for pool in pools:
+            await pool.aclose()
 
 
 class PinnedRequestsAdapter(HTTPAdapter):
@@ -135,22 +173,16 @@ class PinnedRequestsAdapter(HTTPAdapter):
         response.url = url
         return response
 
-    def get_connection_with_tls_context(
-        self,
-        request: requests.PreparedRequest,
-        verify: Any,
-        proxies: Any = None,
-        cert: Any = None,
-    ) -> Any:
-        conn = super().get_connection_with_tls_context(
-            request, verify, proxies=proxies, cert=cert
+    def build_connection_pool_key_attributes(
+        self, request: requests.PreparedRequest, verify: Any, cert: Any = None
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        host_params, pool_kwargs = super().build_connection_pool_key_attributes(
+            request, verify, cert
         )
         host = getattr(self._local, "server_hostname", None)
-        if host and hasattr(conn, "conn_kw"):
-            # Send the real hostname as TLS SNI so certificate verification and
-            # virtual-hosting succeed even though we connect to the pinned IP.
-            # urllib3 verifies the cert against server_hostname, so setting it
-            # alone is sufficient (do NOT also pass assert_hostname — the pool
-            # supplies its own and a duplicate kwarg raises TypeError).
-            conn.conn_kw["server_hostname"] = host
-        return conn
+        if host:
+            # The real hostname as TLS SNI (certificate verification and
+            # virtual hosting) and as part of the pool key: hosts sharing a
+            # pinned IP never reuse each other's connections.
+            pool_kwargs["server_hostname"] = host
+        return host_params, pool_kwargs

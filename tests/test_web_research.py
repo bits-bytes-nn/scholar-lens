@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+from typing import Any
+
 import httpx
 import pytest
 
@@ -60,6 +63,18 @@ def _transport(routes: dict[str, tuple[int, str, str]]) -> httpx.MockTransport:
         return httpx.Response(404, text="not found")
 
     return httpx.MockTransport(handler)
+
+
+def _api(answer: Any) -> httpx.Client:
+    """A client whose every request ``answer`` handles: a callable taking the
+    request, or a canned JSON body (HTTP 200)."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if callable(answer):
+            return answer(request)
+        return httpx.Response(200, json=answer)
+
+    return httpx.Client(transport=httpx.MockTransport(handler))
 
 
 def _researcher(routes: dict[str, tuple[int, str, str]], **kwargs) -> WebResearcher:
@@ -266,29 +281,24 @@ class TestTavilySearchProvider:
         with pytest.raises(ValueError):
             TavilySearchProvider(api_key=None)
 
-    def test_search_payload_and_auth(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_search_payload_and_auth(self) -> None:
         captured: dict = {}
 
-        def fake_post(url, **kwargs):  # type: ignore[no-untyped-def]
-            captured["url"] = url
-            captured["json"] = kwargs.get("json")
-            captured["headers"] = kwargs.get("headers")
-            return httpx.Response(
-                200,
-                json={"results": []},
-                request=httpx.Request("POST", url),
-            )
+        def fake_post(request: httpx.Request) -> httpx.Response:
+            captured["method"] = request.method
+            captured["json"] = json.loads(request.content)
+            captured["headers"] = request.headers
+            return httpx.Response(200, json={"results": []})
 
-        monkeypatch.setattr(httpx, "post", fake_post)
-        TavilySearchProvider(api_key="tvly-key").search("argo cd", count=3)
+        provider = TavilySearchProvider(api_key="tvly-key", client=_api(fake_post))
+        provider.search("argo cd", count=3)
+        assert captured["method"] == "POST"
         assert captured["json"]["include_raw_content"] is True
         assert captured["json"]["search_depth"] == "advanced"
         assert captured["json"]["max_results"] == 3
         assert captured["headers"]["Authorization"] == "Bearer tvly-key"
 
-    def test_raw_content_used_then_snippet_fallback(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_raw_content_used_then_snippet_fallback(self) -> None:
         payload = {
             "results": [
                 {
@@ -306,33 +316,17 @@ class TestTavilySearchProvider:
                 {"title": "NoUrl", "content": "skipped"},
             ]
         }
-        monkeypatch.setattr(
-            httpx,
-            "post",
-            lambda url, **kw: httpx.Response(
-                200, json=payload, request=httpx.Request("POST", url)
-            ),
-        )
-        results = TavilySearchProvider(api_key="k").search("q")
+        results = TavilySearchProvider(api_key="k", client=_api(payload)).search("q")
         assert [r.url for r in results] == ["https://a", "https://b"]
         assert results[0].content == "FULL"  # raw_content preferred
         assert results[1].content == "snip2"  # falls back to snippet
         assert results[0].description == "snip"
 
-    def test_raw_content_links_resolve_against_the_page(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_raw_content_links_resolve_against_the_page(self) -> None:
         page = "https://docs.ray.io/en/latest/serve/architecture.html"
         raw = "[![](../_images/a.svg)](../_images/a.svg) [b](#x) [c](https://c.dev)"
         payload = {"results": [{"title": "A", "url": page, "raw_content": raw}]}
-        monkeypatch.setattr(
-            httpx,
-            "post",
-            lambda url, **kw: httpx.Response(
-                200, json=payload, request=httpx.Request("POST", url)
-            ),
-        )
-        (result,) = TavilySearchProvider(api_key="k").search("q")
+        (result,) = TavilySearchProvider(api_key="k", client=_api(payload)).search("q")
         img = "https://docs.ray.io/en/latest/_images/a.svg"
         assert result.content == f"[![]({img})]({img}) [b](#x) [c](https://c.dev)"
 
@@ -349,25 +343,15 @@ def test_absolute_markdown_links(target: str, resolved: str) -> None:
     out = absolute_markdown_links(f"[t]({target})", "https://d.dev/en/page.html")
     assert out == f"[t]({resolved})"
 
-    def test_http_error_returns_empty(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(
-            httpx,
-            "post",
-            lambda url, **kw: (_ for _ in ()).throw(httpx.ConnectError("x")),
-        )
-        assert TavilySearchProvider(api_key="k").search("q") == []
+    def test_http_error_returns_empty(self) -> None:
+        def down(request: httpx.Request) -> httpx.Response:
+            raise httpx.ConnectError("x")
 
-    def test_non_list_results_returns_empty(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setattr(
-            httpx,
-            "post",
-            lambda url, **kw: httpx.Response(
-                200, json={"results": None}, request=httpx.Request("POST", url)
-            ),
-        )
-        assert TavilySearchProvider(api_key="k").search("q") == []
+        assert TavilySearchProvider(api_key="k", client=_api(down)).search("q") == []
+
+    def test_non_list_results_returns_empty(self) -> None:
+        provider = TavilySearchProvider(api_key="k", client=_api({"results": None}))
+        assert provider.search("q") == []
 
 
 class TestNeutralizePromptTags:
@@ -388,7 +372,7 @@ class TestBraveSearchProvider:
         with pytest.raises(ValueError):
             BraveSearchProvider(api_key=None)
 
-    def test_parses_results(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_parses_results(self) -> None:
         payload = {
             "web": {
                 "results": [
@@ -398,44 +382,33 @@ class TestBraveSearchProvider:
                 ]
             }
         }
-        provider = BraveSearchProvider(api_key="key")
-
-        def fake_get(url, **kwargs):  # type: ignore[no-untyped-def]
-            return httpx.Response(200, json=payload, request=httpx.Request("GET", url))
-
-        monkeypatch.setattr(httpx, "get", fake_get)
+        provider = BraveSearchProvider(api_key="key", client=_api(payload))
         results = provider.search("query")
         assert [r.url for r in results] == ["https://a.com", "https://b.com"]
         assert isinstance(results[0], SearchResult)
 
-    def test_http_error_returns_empty(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        provider = BraveSearchProvider(api_key="key")
-
-        def boom(url, **kwargs):  # type: ignore[no-untyped-def]
+    def test_http_error_returns_empty(self) -> None:
+        def boom(request: httpx.Request) -> httpx.Response:
             raise httpx.ConnectError("down")
 
-        monkeypatch.setattr(httpx, "get", boom)
+        provider = BraveSearchProvider(api_key="key", client=_api(boom))
         assert provider.search("q") == []
 
 
 class TestFailedSearchesAreCounted:
     @pytest.mark.parametrize("status", [429, 500, 503])
-    def test_failed_searches_become_a_run_note(
-        self, monkeypatch: pytest.MonkeyPatch, status: int
-    ) -> None:
+    def test_failed_searches_become_a_run_note(self, status: int) -> None:
         from scholar_lens.src.web_research import WebResearcher
 
         calls: list[str] = []
 
-        def answer(url, **kwargs):  # type: ignore[no-untyped-def]
-            calls.append(url)
-            return httpx.Response(status, request=httpx.Request("GET", url))
+        def answer(request: httpx.Request) -> httpx.Response:
+            calls.append(str(request.url))
+            return httpx.Response(status)
 
-        monkeypatch.setattr(httpx, "get", answer)
-        monkeypatch.setattr(httpx, "post", answer)
         for provider in (
-            BraveSearchProvider(api_key="k"),
-            TavilySearchProvider(api_key="k"),
+            BraveSearchProvider(api_key="k", client=_api(answer)),
+            TavilySearchProvider(api_key="k", client=_api(answer)),
         ):
             researcher = WebResearcher(search_provider=provider)
             assert researcher.search_notes() == []
@@ -1596,13 +1569,23 @@ def test_fallback_search_paths() -> None:
 
 
 @pytest.mark.parametrize("status", [401, 403])
-def test_a_rejected_brave_key_marks_the_provider_exhausted(monkeypatch, status) -> None:
-    from scholar_lens.src import web_research
-    from scholar_lens.src.web_research import BraveSearchProvider
+def test_a_rejected_brave_key_marks_the_provider_exhausted(status: int) -> None:
+    def reject(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(status)
 
-    def reject(url, **_kwargs):  # type: ignore[no-untyped-def]
-        return httpx.Response(status, request=httpx.Request("GET", url))
-
-    monkeypatch.setattr(web_research.httpx, "get", reject)
-    provider = BraveSearchProvider(api_key="k")
+    provider = BraveSearchProvider(api_key="k", client=_api(reject))
     assert provider.search("q") == [] and provider.exhausted
+
+
+def test_official_docs_on_a_shared_host_cover_only_the_projects_space() -> None:
+    from scholar_lens.src.web_research import OfficialDocs, docs_version
+
+    hf = OfficialDocs.from_urls(["https://huggingface.co/docs/peft/index"])
+    assert hf.covers("https://huggingface.co/docs/peft/quicktour")
+    assert not hf.on_host("https://huggingface.co/blog/someuser/peft-tricks")
+    gh = OfficialDocs.from_urls(["https://github.com/vllm-project/vllm"])
+    assert gh.covers("https://github.com/vllm-project/vllm/blob/main/README.md")
+    assert not gh.on_host("https://github.com/someone/vllm")
+    docs = OfficialDocs.from_urls(["https://docs.x.dev/en/latest/start.html"])
+    assert docs.covers("https://docs.x.dev/en/latest/serving/api.html")
+    assert docs_version("https://papers.x.org/papers/2106.09685") is None

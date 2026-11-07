@@ -84,6 +84,16 @@ class PostConventions(BaseModel):
         spec = self.types.get(category_type)
         return bool(spec and spec.paper)
 
+    def type_problem(self, category_type: str, *, paper: bool, artifact: str) -> str:
+        """Why ``category_type`` cannot label an artifact ("" when it can):
+        not one of the blog's types, or a paper type for a guide (or the
+        reverse). The publish check rejects the same."""
+        if category_type not in self.types:
+            return f"unknown type '{category_type}' (types: {', '.join(self.types)})"
+        if self.is_paper_type(category_type) != paper:
+            return f"type '{category_type}' does not fit a {artifact}"
+        return ""
+
     def cover_for(self, category_type: str, topic: str) -> str:
         """The type's own cover, else the topic's, else the site default."""
         type_spec = self.types.get(category_type)

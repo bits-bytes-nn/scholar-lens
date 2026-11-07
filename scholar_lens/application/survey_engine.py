@@ -369,13 +369,13 @@ class EvidenceSurveyEngine(EvidenceWriter):
             )
         )
         earlier = [e for eid in earlier_ids if (e := ledger.get(eid))]
-        # Evidence that later sections already cited (referred back to) twice.
+        # Evidence a later section already referred back to once.
         cites: dict[str, int] = {}
         for s, md in written:
             for eid in {i for snt in prose_sentences(md) for i in cited_ids(snt)}:
                 if eid not in s.evidence:
                     cites[eid] = cites.get(eid, 0) + 1
-        exhausted = {eid for eid, n in cites.items() if n >= 1}
+        exhausted = set(cites) - set(section.evidence)
         figures = [e.figure_url for e in own if e.kind == "figure" and e.figure_url]
         sections_map = "\n".join(
             f"- {'(this) ' if s is section else ''}{s.kind}: {s.title} — {s.thesis}"

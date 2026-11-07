@@ -2,11 +2,11 @@
 
 Each role (read, outline, write, evaluate) has its model, effort and output
 limit. Every model call is recorded as a :class:`UsageEvent` under the current
-stage (one per agent cycle), also when the call fails. Retries are bounded
-in two places with separate scopes: botocore retries the request itself
-(connection errors and a throttled start, standard mode with jitter), and
-Strands retries a throttle that arrives inside the response stream, which
-botocore never sees; three attempts each. Strands also retries a structured
+stage (one per agent cycle), also when the call fails. Retries are bounded:
+botocore retries a request once (a dropped connection, a throttled start),
+and Strands retries a throttle up to three attempts with backoff, also one
+that arrives inside the response stream, which botocore never sees; one call
+makes at most six requests. Strands also retries a structured
 answer that fails its schema. An answer cut at the
 output limit is returned as such (``stop_reason="max_tokens"``), not raised:
 an agent's tool calls up to then stand.
@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 
 _ATTEMPTS = 3
 _CLIENT_CONFIG = Config(
-    retries={"max_attempts": _ATTEMPTS, "mode": "standard"},
+    retries={"max_attempts": 2, "mode": "standard"},
     read_timeout=600,
     connect_timeout=20,
 )

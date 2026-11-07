@@ -21,7 +21,13 @@ from dataclasses import dataclass, field
 
 from pydantic import BaseModel
 
-from ..domain.evidence import Evidence, EvidenceLedger, SourceDocument
+from ..domain.evidence import (
+    Evidence,
+    EvidenceLedger,
+    SourceDocument,
+    canonical_ids,
+    duplicate_evidence,
+)
 from ..domain.evidence_draft import (
     cited_ids,
     draft_problems,
@@ -239,11 +245,19 @@ class EvidencePaperEngine(EvidenceWriter):
             if self.settings.post == "review"
             else prompts.OUTLINE_SUMMARY
         )
+        # A fact the paper states in several places (abstract, introduction,
+        # results) and a figure two readers both recorded are offered once.
+        duplicates = duplicate_evidence(ledger, within_source=True)
+        if duplicates:
+            logger.info("%d evidence items repeat another.", len(duplicates))
         base = "\n\n".join(
             [
                 f"Paper: {title}\nLanguage: {self.settings.language}\n"
                 f"At most {self.settings.max_sections} sections.",
-                block("evidence", brief_lines(list(ledger))),
+                block(
+                    "evidence",
+                    brief_lines([e for e in ledger if e.id not in duplicates]),
+                ),
                 block("translation_guideline", guideline),
             ]
         )
@@ -253,6 +267,18 @@ class EvidencePaperEngine(EvidenceWriter):
             for attempt in range(self.settings.outline_repairs + 1):
                 outline = await self.model.structured(
                     role="outline", system=system, prompt=prompt, schema=PaperOutline
+                )
+                outline = outline.model_copy(
+                    update={
+                        "sections": [
+                            sec.model_copy(
+                                update={
+                                    "evidence": canonical_ids(sec.evidence, duplicates)
+                                }
+                            )
+                            for sec in outline.sections
+                        ]
+                    }
                 )
                 outline, repaired = repair_paper_outline(
                     outline, ledger, self.settings.post, self.settings.language
@@ -405,7 +431,9 @@ class EvidencePaperEngine(EvidenceWriter):
             for s, md in written
             for eid in {i for snt in prose_sentences(md) for i in cited_ids(snt)}
             if eid not in s.evidence
-        }
+        } - set(
+            section.evidence
+        )  # a section may always state its own
         figures = [e.figure_url for e in own if e.kind == "figure" and e.figure_url]
         reference = self.source_sections(own)
         sections_map = "\n".join(
@@ -476,8 +504,14 @@ class EvidencePaperEngine(EvidenceWriter):
             markdown = f"## {heading}\n\n{markdown.lstrip()}"
         elif self.settings.post == "summary" or section.kind == "closing":
             # The fixed headings of the blog's convention.
+            # A function replacement: the title is text, not a template
+            # ("$\\mathcal{O}(n)$" holds escapes).
             markdown = re.sub(
-                r"^## .*$", f"## {heading}", markdown.lstrip(), count=1, flags=re.M
+                r"^## .*$",
+                lambda _m: f"## {heading}",
+                markdown.lstrip(),
+                count=1,
+                flags=re.M,
             )
         return markdown
 

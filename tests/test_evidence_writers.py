@@ -38,6 +38,7 @@ class Seen:
     ceilings: list[float | None] = field(default_factory=list)
     settings: list[Any] = field(default_factory=list)
     stores: list[Any] = field(default_factory=list)
+    root: Path = Path()
 
 
 @pytest.fixture
@@ -64,14 +65,14 @@ def seen(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Seen:
     monkeypatch.setattr(evidence_models, "role_model", role_model)
     monkeypatch.setattr(evidence_models, "budgeted", budgeted)
     monkeypatch.setattr(evidence_models, "unservable", unservable)
-    monkeypatch.setattr(guide_writer, "ROOT_DIR", tmp_path)
-    monkeypatch.setattr(paper_writer, "ROOT_DIR", tmp_path)
+    seen.root = tmp_path
     return seen
 
 
-def _context() -> runtime.RunContext:
+def _context(root: Path) -> runtime.RunContext:
     return runtime.RunContext(
         config=Config(),
+        root_dir=root,
         default_boto_session=boto3.Session(region_name="us-west-2"),
         bedrock_boto_session=boto3.Session(region_name="us-west-2"),
     )
@@ -131,7 +132,7 @@ def test_a_guide_run_wires_roles_ceiling_cache_and_sources(
 
     monkeypatch.setattr(guide_engine, "EvidenceGuideEngine", FakeGuideEngine)
     monkeypatch.setattr(guide_writer, "docs_packages", lambda _text: {})
-    context = _context()
+    context = _context(seen.root)
     guide = asyncio.run(
         guide_writer.write_guide_with_evidence(
             context,
@@ -153,6 +154,7 @@ def test_a_guide_run_wires_roles_ceiling_cache_and_sources(
     assert seen.roles["evaluate"].invoke_id == cfg.evaluation_model_id
     assert seen.ceilings == [cfg.max_cost_usd]
     assert seen.stores[0].local_dir.name == "guide-evidence"
+    assert seen.stores[0].local_dir.is_relative_to(seen.root)
     assert seen.settings[0].max_sources == cfg.max_sources_read
     # Served address, unescaped title, notes, the broken figure left out.
     assert guide.source_urls == ["https://docs.x.dev/guide/start/"]
@@ -220,7 +222,7 @@ def test_a_paper_run_wires_roles_ceiling_and_shape(
             )
 
     monkeypatch.setattr(paper_engine, "EvidencePaperEngine", FakePaperEngine)
-    context = _context()
+    context = _context(seen.root)
     written, notes = asyncio.run(
         paper_writer.write_paper_with_evidence(
             context,
@@ -249,4 +251,5 @@ def test_a_paper_run_wires_roles_ceiling_and_shape(
         else context.config.summary.reader_model_id
     )
     assert seen.stores[0].local_dir.name == "paper-evidence"
+    assert seen.stores[0].local_dir.is_relative_to(seen.root)
     assert "engine note" in notes and any(BROKEN in n for n in notes)

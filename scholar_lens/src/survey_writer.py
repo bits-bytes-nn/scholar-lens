@@ -62,7 +62,7 @@ from ..domain.validation import (
     description_problems,
     fit_description,
 )
-from .constants import LanguageModelId, LocalPaths, S3Paths
+from .constants import LanguageModelId, S3Paths
 from .formatting import build_post_meta, render_front_matter
 from .jobs import JobRequest
 from .logger import logger
@@ -72,9 +72,9 @@ from .prompts import SurveyFinalizationPrompt
 from .publish_types import title_slug
 from .publisher import PublishRequest, build_pr_body
 from .runtime import (
-    ROOT_DIR,
     PipelineOutcome,
     RunContext,
+    check_post_type,
     find_published_post,
     load_translation_guideline,
     publish_artifact,
@@ -239,11 +239,13 @@ class SurveyWriter(RetryableBase):
         language: str,
         thinking_effort: str,
         callbacks: list[Any] | None = None,
+        llm_factory: BedrockLanguageModelFactory | None = None,
     ) -> None:
         self.callbacks = callbacks or []
         self.language = language
         self.notes: list[str] = []
-        model = BedrockLanguageModelFactory(boto_session=boto_session).get_model(
+        factory = llm_factory or BedrockLanguageModelFactory(boto_session=boto_session)
+        model = factory.get_model(
             finalization_model_id,
             temperature=0.0,
             callbacks=self.callbacks or None,
@@ -457,12 +459,7 @@ async def run_survey_write_pipeline(
     cfg = context.config.survey
     github = context.config.resources.github
     spec = context.require_conventions()
-    if github.survey_category not in spec.types:
-        raise ValueError(
-            f"The blog's post conventions have no '{github.survey_category}' type "
-            f"(types: {', '.join(spec.types)}): add it to the blog's "
-            "_data/post_conventions.yml or set resources.github.survey_category."
-        )
+    check_post_type(spec, github.survey_category, "survey_category", artifact="survey")
     text = await asyncio.to_thread(
         read_plan_text, request.plan or "", context.s3_handler
     )
@@ -477,7 +474,7 @@ async def run_survey_write_pipeline(
         callbacks=[tracker],
     )
     researcher = WebResearcher(max_images_per_page=MAX_PAPER_IMAGES)
-    papers_dir = ROOT_DIR / LocalPaths.PAPERS_DIR.value
+    papers_dir = context.papers_dir
     try:
         survey = await write_survey_with_evidence(
             context,

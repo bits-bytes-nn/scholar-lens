@@ -10,12 +10,13 @@ sources show, and the outline can give each piece of evidence to one section.
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Mapping
 from difflib import SequenceMatcher
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .markdown.math import fence_roles
 from .survey.post import equation_in_source
 from .validation import unsourced_numbers
 
@@ -50,6 +51,18 @@ _NUMBERED_REFERENCE = re.compile(
     r"\b(?:fig(?:ure)?s?|tab(?:le)?s?|eq(?:uation)?s?|sec(?:tion)?s?|appendix|§)\.?\s*[A-Z]?\d",
     re.IGNORECASE,
 )
+
+
+def _headings(markdown: str) -> list[re.Match[str]]:
+    """The Markdown headings outside fenced code (a ``# comment`` line in a
+    shell or Python block is code, not a heading)."""
+    lines = markdown.split("\n")
+    starts, pos = [], 0
+    for line in lines:
+        starts.append(pos)
+        pos += len(line) + 1
+    code = {starts[i] for i, role in enumerate(fence_roles(lines)) if role != "prose"}
+    return [m for m in _HEADING.finditer(markdown) if m.start() not in code]
 
 
 class _Strict(BaseModel):
@@ -100,7 +113,7 @@ class SourceDocument(_Strict):
         before the first heading is ``S0``). ``figures`` are (url, caption)
         pairs, numbered ``F1``, ``F2``, …"""
         sections: list[SourceSection] = []
-        matches = list(_HEADING.finditer(markdown))
+        matches = _headings(markdown)
         if not matches or matches[0].start() > 0:
             head = markdown[: matches[0].start() if matches else len(markdown)]
             if head.strip():
@@ -345,24 +358,37 @@ def near_duplicate(claim: str, others: Iterable[str], threshold: float = 0.85) -
 
 
 def duplicate_evidence(
-    items: Iterable[Evidence], rank: dict[str, int] | None = None
+    items: Iterable[Evidence],
+    rank: dict[str, int] | None = None,
+    *,
+    within_source: bool = False,
 ) -> dict[str, str]:
     """Evidence that states what an earlier item of the same kind states
     (two pages documenting one flag): duplicate id -> the id kept. With
     ``rank`` (source id -> lower is more authoritative) the most
-    authoritative source keeps the fact. Figures and code are never
-    duplicates of each other by their claims."""
+    authoritative source keeps the fact. With ``within_source`` two items of
+    one source count too (a paper states its main result in the abstract,
+    the introduction and the experiments; parallel readers record each). A
+    figure recorded twice (the same image) is a duplicate; otherwise figures
+    and code are never duplicates of each other by their claims."""
     order = sorted(
         enumerate(items),
         key=lambda pair: ((rank or {}).get(pair[1].paper_id, 0), pair[0]),
     )
     kept: dict[str, list[Evidence]] = {}
     duplicates: dict[str, str] = {}
+    shown: dict[str, str] = {}
     for _, item in order:
+        if item.kind == "figure" and item.figure_url:
+            if item.figure_url in shown:
+                duplicates[item.id] = shown[item.figure_url]
+            else:
+                shown[item.figure_url] = item.id
+            continue
         if item.kind in ("figure", "code"):
             continue
         for other in kept.get(item.kind, []):
-            if other.paper_id == item.paper_id:
+            if other.paper_id == item.paper_id and not within_source:
                 continue
             if _same_fact(item.claim, other.claim, 0.85) and _facts(
                 item.cell
@@ -372,6 +398,12 @@ def duplicate_evidence(
         else:
             kept.setdefault(item.kind, []).append(item)
     return duplicates
+
+
+def canonical_ids(ids: Iterable[str], duplicates: Mapping[str, str]) -> list[str]:
+    """``ids`` with each duplicate replaced by the id that keeps its fact,
+    each once, in order."""
+    return list(dict.fromkeys(duplicates.get(i, i) for i in ids))
 
 
 class EvidenceLedger(BaseModel):

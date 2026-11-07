@@ -96,13 +96,18 @@ def test_remote_submits_and_prints_the_job(capsys: pytest.CaptureFixture) -> Non
 
 @pytest.mark.parametrize(
     ("plan", "submitted"),
-    [("s3://other-bucket/p.json", False), ("s3://blog-bucket/p.json", True)],
+    [
+        ("s3://other-bucket/sl/p.json", False),
+        ("s3://blog-bucket/elsewhere/p.json", False),
+        ("s3://blog-bucket/sl/surveys/x/plan.json", True),
+    ],
 )
 def test_remote_survey_write_checks_the_plan_bucket(
     plan: str, submitted: bool, capsys: pytest.CaptureFixture
 ) -> None:
     context = mock.MagicMock()
     context.s3_handler.bucket_name = "blog-bucket"
+    context.config.resources.s3_prefix = "sl"
     job = SubmittedJob(job_id="j-1", job_name="n", kind="survey_write", input=plan)
     with (
         mock.patch.object(cli, "_aws_context", return_value=context),
@@ -115,7 +120,7 @@ def test_remote_survey_write_checks_the_plan_bucket(
     if submitted:
         assert out["job_id"] == "j-1"
     else:
-        assert out["status"] == "rejected" and "other-bucket" in out["error"]
+        assert out["status"] == "rejected" and "s3://blog-bucket/sl/" in out["error"]
 
 
 @pytest.mark.parametrize(

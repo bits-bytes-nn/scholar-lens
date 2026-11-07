@@ -14,7 +14,7 @@ import contextlib
 import json
 import os
 import time
-from collections.abc import Coroutine
+from collections.abc import Callable, Coroutine
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -31,7 +31,7 @@ from ..application.usage import cost_allocation
 from ..configs import Config
 from ..domain.conventions import BlogPost, PostConventions, tag_counts
 from ..domain.tags import format_tag
-from ..domain.validation import PostValidationError
+from ..domain.validation import PAPER_KINDS, PostValidationError
 from .constants import RUN_SECRETS, EnvVars, LocalPaths, S3Paths, SSMParams
 from .formatting import with_spec_cover
 from .jobs import JobRequest, JobResult, ssm_base, write_result_manifest
@@ -55,6 +55,10 @@ class RunContext(BaseModel):
     default_boto_session: boto3.Session
     bedrock_boto_session: boto3.Session
     s3_handler: S3Handler | None = None
+    # The run's working directory (papers, figures, generated posts).
+    root_dir: Path = ROOT_DIR
+    # Builds the run's Publisher (default: build_publisher).
+    publisher_factory: Callable[[RunContext], Publisher] | None = None
     # The blog's post conventions, loaded once per run (see load_run_conventions).
     conventions: PostConventions | None = None
 
@@ -65,6 +69,11 @@ class RunContext(BaseModel):
     blog_tags: dict[str, int] | None = None
     # Why the blog's posts could not be listed (they are then none).
     blog_listing_error: str | None = None
+
+    @property
+    def papers_dir(self) -> Path:
+        """Where the run keeps each paper's and guide's working files."""
+        return self.root_dir / LocalPaths.PAPERS_DIR.value
 
     def require_conventions(self) -> PostConventions:
         if self.conventions is None:
@@ -295,13 +304,18 @@ def build_publisher(context: RunContext) -> Publisher:
     """Construct the artifact Publisher from the run context."""
     return Publisher(
         context.config.resources.github,
-        root_dir=ROOT_DIR,
+        root_dir=context.root_dir,
         s3_handler=context.s3_handler,
         s3_bucket_name=context.config.resources.s3_bucket_name,
         s3_prefix=context.config.resources.s3_prefix,
         conventions=context.require_conventions(),
         site_posts=context.require_blog_posts(),
     )
+
+
+def make_publisher(context: RunContext) -> Publisher:
+    """The run's Publisher, from its context's factory when it has one."""
+    return (context.publisher_factory or build_publisher)(context)
 
 
 async def find_published_post(
@@ -311,7 +325,7 @@ async def find_published_post(
     (:meth:`Publisher.find_published`) and review notes: when the blog's
     posts or pull requests cannot be read, the post is published as new, and
     the note asks to check it duplicates none."""
-    publisher = build_publisher(context)
+    publisher = make_publisher(context)
     notes: list[str] = []
     if context.blog_listing_error:
         notes.append(
@@ -361,7 +375,7 @@ async def publish_artifact(
     in S3); it is reported as a warning on the result instead.
     """
     await asyncio.to_thread(refresh_conventions, context, request)
-    publisher = build_publisher(context)
+    publisher = make_publisher(context)
     try:
         s3_uri, markdown_path = await publisher.publish(request)
     except Exception as e:
@@ -377,6 +391,11 @@ async def publish_artifact(
         # and the job result for runs without a PR.
         warnings=list(request.validation_warnings),
     )
+    if create_pr and not context.config.resources.github.enabled:
+        outcome.warnings.append(
+            "No blog PR: resources.github.enabled is false (pass --no-pr to "
+            "skip this note)."
+        )
     if create_pr and context.config.resources.github.enabled:
         try:
             outcome.pr_url = await publisher.create_pull_request(request, markdown_path)
@@ -394,7 +413,7 @@ async def load_translation_guideline(
     the S3 copy. It is optional, so a missing object yields ``None``; any
     other S3 error still raises (before any paid stage runs)."""
     guideline_path = (
-        ROOT_DIR
+        context.root_dir
         / LocalPaths.ASSETS_DIR.value
         / LocalPaths.TRANSLATION_GUIDELINE_FILE.value
     )
@@ -459,6 +478,19 @@ async def _run_pipeline(
     from .paper_pipeline import run_paper_pipeline
 
     return await run_paper_pipeline(context, request, tracker)
+
+
+def check_post_type(
+    spec: PostConventions, category: str, setting: str, *, artifact: str
+) -> None:
+    """Fail before any model call when ``resources.github.<setting>`` cannot
+    label the post (publishing would reject it after the paid work)."""
+    paper = artifact in PAPER_KINDS
+    if problem := spec.type_problem(category, paper=paper, artifact=artifact):
+        raise ValueError(
+            f"resources.github.{setting}: {problem}. Set it to one of the blog's "
+            "types or add the type to the blog's _data/post_conventions.yml."
+        )
 
 
 def run_job(request: JobRequest, *, job_id: str | None = None) -> JobResult:

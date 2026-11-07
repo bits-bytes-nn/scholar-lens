@@ -16,10 +16,10 @@ from ..domain.evidence import SourceDocument
 from ..domain.markdown.lint import FIGURE_MARKER
 from ..domain.paper.evidence_paper import assemble_review, assemble_summary
 from ..domain.post_names import slugify
-from .constants import LanguageModelId, LocalPaths, S3Paths
+from .constants import LanguageModelId, S3Paths
 from .explainer import Paper, ReviewText
 from .metrics import TokenUsageTracker
-from .runtime import ROOT_DIR, RunContext
+from .runtime import RunContext
 
 
 def paper_documents(paper: Paper) -> tuple[SourceDocument, list[SourceDocument]]:
@@ -83,6 +83,11 @@ async def write_paper_with_evidence(
         lengths = (scfg.min_total_chars, scfg.max_total_chars)
         max_sections, chars_per_reader = 6, 40_000
         max_cost = scfg.max_cost_usd
+    # The review plans at the configured planning effort; a summary's short
+    # outline at high.
+    planning_effort = (
+        context.config.explanation.planning_effort if post == "review" else "high"
+    )
     effort = (
         context.config.explanation.thinking_effort
         if post == "review"
@@ -92,7 +97,7 @@ async def write_paper_with_evidence(
         context.bedrock_boto_session,
         {
             "read": role_model(context, reader_id, effort, False),
-            "outline": role_model(context, outline_id, "high", True),
+            "outline": role_model(context, outline_id, planning_effort, True),
             "write": dataclasses.replace(
                 role_model(context, writer_id, effort, True),
                 fallback=role_model(context, reader_id, effort, True),
@@ -114,7 +119,7 @@ async def write_paper_with_evidence(
             max_total_chars=lengths[1],
         ),
         store=EvidenceTextStore(
-            ROOT_DIR / LocalPaths.PAPERS_DIR.value / "paper-evidence",
+            context.papers_dir / "paper-evidence",
             context.s3_handler,
             context.config.resources.s3_prefix,
             S3Paths.PAPERS,

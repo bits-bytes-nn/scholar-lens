@@ -192,15 +192,10 @@ class TestUploadDirectoryPartialFailure:
 def test_s3_network_errors_become_s3_operation_errors() -> None:
     from botocore.exceptions import EndpointConnectionError
 
-    handler = S3Handler.__new__(S3Handler)
-    handler.bucket_name = "b"
-    handler._s3_client = mock.MagicMock()
-    handler._s3_client.get_object.side_effect = EndpointConnectionError(
-        endpoint_url="https://s3"
-    )
-    handler._s3_client.put_object.side_effect = EndpointConnectionError(
-        endpoint_url="https://s3"
-    )
+    client = mock.MagicMock()
+    handler = S3Handler(boto3.Session(region_name="us-east-1"), "b", client=client)
+    client.get_object.side_effect = EndpointConnectionError(endpoint_url="https://s3")
+    client.put_object.side_effect = EndpointConnectionError(endpoint_url="https://s3")
     with pytest.raises(S3OperationError):
         handler.get_text("k")
     with pytest.raises(S3OperationError):

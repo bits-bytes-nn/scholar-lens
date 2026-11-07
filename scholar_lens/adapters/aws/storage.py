@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from pathlib import Path
+from typing import Any
 
 import boto3
 from boto3.exceptions import S3UploadFailedError
@@ -28,12 +29,21 @@ _UPLOAD_ERRORS = (ClientError, S3UploadFailedError, BotoCoreError)
 
 
 class S3Handler:
-    def __init__(self, boto_session: boto3.Session, bucket_name: str):
+    def __init__(
+        self, boto_session: boto3.Session, bucket_name: str, *, client: Any = None
+    ) -> None:
+        """Wrap one bucket; nothing is sent until a method is called.
+
+        Args:
+            boto_session: The session the default S3 client is made from.
+            bucket_name: The bucket every key refers to.
+            client: The S3 client (default: the session's).
+        """
         if not bucket_name:
             raise ValueError("S3 bucket name is required.")
         self.boto_session = boto_session
         self.bucket_name = bucket_name
-        self._s3_client = self.boto_session.client("s3")
+        self._s3_client = client or self.boto_session.client("s3")
 
     def put_text(self, s3_key: str, text: str) -> None:
         try:

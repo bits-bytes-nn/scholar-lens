@@ -22,6 +22,7 @@ from ..domain.evidence import (
     Evidence,
     EvidenceLedger,
     SourceDocument,
+    canonical_ids,
     duplicate_evidence,
     near_duplicate,
 )
@@ -110,9 +111,7 @@ def _canonical(outline: GuideOutline, duplicates: Mapping[str, str]) -> GuideOut
     return outline.model_copy(
         update={
             "sections": [
-                s.model_copy(
-                    update={"evidence": [duplicates.get(e, e) for e in s.evidence]}
-                )
+                s.model_copy(update={"evidence": canonical_ids(s.evidence, duplicates)})
                 for s in outline.sections
             ]
         }
@@ -646,7 +645,9 @@ class EvidenceGuideEngine(EvidenceWriter):
             for s, md in written
             for eid in {i for snt in prose_sentences(md) for i in cited_ids(snt)}
             if eid not in s.evidence
-        }
+        } - set(
+            section.evidence
+        )  # a section may always state its own
         reference = self.source_sections(own)
         prompt = self._prompt(
             topic, outline, section, own, earlier, written, glossary, target, reference

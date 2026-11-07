@@ -34,19 +34,19 @@ def titles_match(queried: str | None, resolved: str | None) -> bool:
     # title is identical (GPT-4 vs GPT-4o, Qwen2 vs Qwen2.5, LoRA vs LoRA+).
     if _distinguishing_tokens(queried) != _distinguishing_tokens(resolved):
         return False
-    # A swapped word names another paper even at high similarity ("...Large
-    # Language Models" vs "...Protein Language Models"); an added or dropped
-    # word alone is left to the similarity ratio.
-    # Spelling variants are not swaps: hyphenation ("Few-Shot" / "Few Shot"),
-    # British spelling ("Visualising") or a plural.
+    # A content word only one title has names another work even at high
+    # similarity: swapped ("...Large Language Models" vs "...Protein Language
+    # Models"), added ("Attention Is Not All You Need", "...: A Survey",
+    # "...Revisited") or dropped. Spelling variants are not differences:
+    # hyphenation ("Few-Shot" / "Few Shot"), British spelling ("Visualising")
+    # or a plural.
     if _squash(q) == _squash(r):
         return True
     q_only = _title_words(queried) - _title_words(resolved)
     r_only = _title_words(resolved) - _title_words(queried)
-    swapped = bool(r_only) and any(
-        not any(_spelling_variant(a, b) for b in r_only) for a in q_only
-    )
-    return not swapped
+    unpaired_q = [a for a in q_only if not any(_spelling_variant(a, b) for b in r_only)]
+    unpaired_r = [b for b in r_only if not any(_spelling_variant(a, b) for a in q_only)]
+    return not unpaired_q and not unpaired_r
 
 
 def _similar(q: str, r: str) -> bool:

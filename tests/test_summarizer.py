@@ -6,6 +6,7 @@ import re
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock
 
+import boto3
 import pytest
 
 from scholar_lens.configs import Github
@@ -17,6 +18,7 @@ from scholar_lens.src.formatting import format_summary, paper_post_meta
 from scholar_lens.src.parser import Content
 from scholar_lens.src.prompts import PaperSummaryPrompt
 from scholar_lens.src.summarizer import PaperSummarizer
+from tests.fakes import FakeLLMFactory
 
 
 @pytest.fixture
@@ -38,19 +40,12 @@ def sample_paper() -> Paper:
 
 def _make_summarizer_with_stub_chain(chain_result: dict[str, str]) -> PaperSummarizer:
     """Build a PaperSummarizer without touching Bedrock, stubbing the chain."""
-    summarizer = PaperSummarizer.__new__(PaperSummarizer)
-    summarizer.language = "Korean"
-    summarizer.translation_guideline = []
-    summarizer.summary_model_id = LanguageModelId.CLAUDE_V4_5_HAIKU
-    # __new__ bypasses __init__, so set the TokenBudgetGuard attrs directly
-    # (no budget wired for these chain-stub tests).
-    summarizer._token_tracker = None
-    summarizer.max_total_tokens = None
-    summarizer.notes = []
-    # fit_text would call Bedrock CountTokens; stub it to a pass-through.
-    factory = MagicMock()
-    factory.fit_text = MagicMock(side_effect=lambda model_id, text, **kw: text)
-    summarizer.llm_factory = factory
+    summarizer = PaperSummarizer(
+        LanguageModelId.CLAUDE_V4_5_HAIKU,
+        boto3.Session(region_name="us-east-1"),
+        language="Korean",
+        llm_factory=FakeLLMFactory(),  # type: ignore[arg-type]
+    )
     chain = MagicMock()
     chain.ainvoke = AsyncMock(return_value=chain_result)
     summarizer.summary_chain = chain

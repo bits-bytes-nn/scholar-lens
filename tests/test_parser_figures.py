@@ -10,18 +10,40 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import boto3
+import httpx
 import pymupdf
 import pytest
 import tenacity
 
 from scholar_lens.adapters.retry import MAX_RETRIES
+from scholar_lens.src.constants import LanguageModelId
 from scholar_lens.src.parser import (
     Content,
     Figure,
+    HTMLRichParser,
+    PDFParser,
     Region,
     _is_valid_region,
     extract_figures_from_pdf,
 )
+
+
+def _pdf_parser() -> PDFParser:
+    """A PDF parser that is never used for Bedrock (its figure analyser is
+    built on first use) or Upstage."""
+    return PDFParser(
+        LanguageModelId.CLAUDE_V4_5_HAIKU,
+        boto3.Session(region_name="us-east-1"),
+        api_key="test-key",
+    )
+
+
+class _NoWaitLimiter:
+    def acquire(self) -> None: ...
+
+    def penalize(self, seconds: float) -> None: ...
+
 
 # A simple rectangle covering most of the page (normalised corner coords).
 SQUARE_COORDS: list[dict[str, float]] = [
@@ -154,15 +176,11 @@ class TestFitzTextFallback:
     """The PyMuPDF fallback used when the primary PDF parser fails."""
 
     def test_extracts_text_layer(self, one_page_pdf: Path) -> None:
-        from scholar_lens.src.parser import PDFParser
-
         text = PDFParser._extract_text_with_fitz(one_page_pdf)
         assert "Hello figure" in text
 
     async def test_fallback_returns_text_no_figures(self, one_page_pdf: Path) -> None:
-        from scholar_lens.src.parser import PDFParser
-
-        parser = PDFParser.__new__(PDFParser)  # no Bedrock/Upstage init
+        parser = _pdf_parser()
         figures, content = await parser._parse_with_fallback(one_page_pdf)
         assert figures == []  # fallback is text-only
         assert content.text_only
@@ -171,7 +189,7 @@ class TestFitzTextFallback:
     async def test_fallback_raises_on_empty_text(self, tmp_path: Path) -> None:
         # A PDF with no text layer (blank page) must raise, not return "" — an
         # empty body would otherwise produce an empty summary downstream.
-        from scholar_lens.src.parser import ParserError, PDFParser
+        from scholar_lens.src.parser import ParserError
 
         blank = tmp_path / "blank.pdf"
         doc = pymupdf.open()
@@ -179,7 +197,7 @@ class TestFitzTextFallback:
         doc.save(str(blank))
         doc.close()
 
-        parser = PDFParser.__new__(PDFParser)
+        parser = _pdf_parser()
         with pytest.raises(ParserError, match="no text"):
             await parser._parse_with_fallback(blank)
 
@@ -192,9 +210,9 @@ class TestConstructFigureUrl:
 
     @staticmethod
     def _parser(base_url: str):
-        from scholar_lens.src.parser import HTMLRichParser
-
-        parser = HTMLRichParser.__new__(HTMLRichParser)
+        parser = HTMLRichParser(
+            LanguageModelId.CLAUDE_V4_5_HAIKU, boto3.Session(region_name="us-east-1")
+        )
         parser.url = base_url
         return parser
 
@@ -368,9 +386,7 @@ class TestEmptyDocumentParse:
     async def test_empty_parse_falls_back_to_pymupdf(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        from scholar_lens.src.parser import Content, PDFParser
-
-        parser = PDFParser.__new__(PDFParser)
+        parser = _pdf_parser()
 
         async def empty(*_a, **_k):  # type: ignore[no-untyped-def]
             return {"elements": [{"id": 1}], "content": {"html": "<p>tiny</p>"}}
@@ -389,9 +405,8 @@ class TestEmptyDocumentParse:
 
     async def test_empty_response_not_cached(self, tmp_path: Path) -> None:
         from scholar_lens.src.constants import LocalPaths
-        from scholar_lens.src.parser import PDFParser
 
-        parser = PDFParser.__new__(PDFParser)
+        parser = _pdf_parser()
 
         async def request(_path):  # type: ignore[no-untyped-def]
             return {"elements": [], "content": {"html": ""}}
@@ -407,9 +422,7 @@ class TestParseCache:
 
     @staticmethod
     def _parser(calls: list[str]):  # type: ignore[no-untyped-def]
-        from scholar_lens.src.parser import PDFParser
-
-        parser = PDFParser.__new__(PDFParser)
+        parser = _pdf_parser()
 
         async def request(_path):  # type: ignore[no-untyped-def]
             calls.append("parse")
@@ -655,19 +668,23 @@ class TestFigureMarkerMatching:
 
 
 class TestArxivHtmlOnly:
-    async def test_conversion_stub_is_a_parse_error(self, monkeypatch) -> None:
+    async def test_conversion_stub_is_a_parse_error(self) -> None:
         # arXiv answers 200 with "See pages 1-last of main.pdf" when its
         # conversion failed; the pipeline then reads the PDF.
         from scholar_lens.src.parser import ContentParseError, HTMLParser
 
         urls: list[str] = []
 
-        async def fake_fetch(self, url: str) -> str:  # type: ignore[no-untyped-def]
-            urls.append(url)
-            return "<div class='ltx_page_main'>See pages 1-last of main.pdf</div>"
+        def handler(request: httpx.Request) -> httpx.Response:
+            urls.append(str(request.url))
+            return httpx.Response(
+                200,
+                text="<div class='ltx_page_main'>See pages 1-last of main.pdf</div>",
+            )
 
-        monkeypatch.setattr(HTMLParser, "_fetch_html_from_url", fake_fetch)
+        client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        parser = HTMLParser(http_client=client, rate_limiter=_NoWaitLimiter())  # type: ignore[arg-type]
         with pytest.raises(ContentParseError, match="almost no text"):
-            await HTMLParser()._fetch_html("1412.6980")
+            await parser._fetch_html("1412.6980")
         # ar5iv serves placeholder images for figures it lost: never asked.
         assert urls == ["https://arxiv.org/html/1412.6980"]

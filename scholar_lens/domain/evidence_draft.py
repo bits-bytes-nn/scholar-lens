@@ -423,11 +423,25 @@ def drop_sentences(markdown: str, sentences: Iterable[str]) -> str:
 _HEADINGS = re.compile(r"^#{2,4} .+$", re.M)
 
 
+def _code_blocks(markdown: str) -> int:
+    return fence_roles(markdown.split("\n")).count("open")
+
+
+def _tables(markdown: str) -> int:
+    return len(re.findall(r"^\s*\|?\s*:?-{3,}", markdown, re.M))
+
+
 def structure_lost(before: str, after: str) -> str:
     """Why a revision lost the draft's structure ("" when it did not): a
-    heading, an image or display math gone, or more than a quarter of the
-    prose."""
-    if set(_HEADINGS.findall(before)) - set(_HEADINGS.findall(after)):
+    heading, an image, a code block, a table or display math gone, or more
+    than a quarter of the prose."""
+    if _code_blocks(after) < _code_blocks(before):
+        return "a code block was lost"
+    if _tables(without_code(after)) < _tables(without_code(before)):
+        return "a table was lost"
+    if set(_HEADINGS.findall(without_code(before))) - set(
+        _HEADINGS.findall(without_code(after))
+    ):
         return "a heading was lost"
     if set(_IMAGE.findall(before)) - set(_IMAGE.findall(after)):
         return "a figure was lost"

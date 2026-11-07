@@ -58,7 +58,8 @@ _WORKER_EXIT_BY_STATUS = {
 }
 
 # The cost allocation tag on every stack resource (scripts/deploy_infra.py).
-COST_TAG_KEY, COST_TAG_VALUE = "ProjectName", "scholar-lens"
+# The stack tags its resources ProjectName=<resources.project_name>.
+COST_TAG_KEY = "ProjectName"
 
 # How long `status --wait` polls before returning the current state: one
 # 3-hour Batch attempt plus queueing time.
@@ -376,7 +377,7 @@ def _submit(request: JobRequest) -> int:
     if request.kind == "survey_write":
         from scholar_lens.src.survey_writer import stage_plan_for_batch
 
-        _check_plan_bucket(request.plan or "", context.s3_handler)
+        _check_plan_bucket(request.plan or "", context.s3_handler, resources.s3_prefix)
         request = stage_plan_for_batch(request, context.s3_handler, resources.s3_prefix)
     submitted = submit_job(
         context.default_boto_session,
@@ -388,18 +389,20 @@ def _submit(request: JobRequest) -> int:
     return EXIT_OK
 
 
-def _check_plan_bucket(plan: str, s3_handler: Any) -> None:
-    """An ``s3://`` plan must be in the configured bucket, the only one the
-    job can read: ``SurveyInputError`` (rejected) before anything is
-    submitted, instead of a job that is rejected later."""
+def _check_plan_bucket(plan: str, s3_handler: Any, prefix: str) -> None:
+    """An ``s3://`` plan must be under ``<bucket>/<prefix>/`` of the configured
+    bucket, the only place the job role can read: ``SurveyInputError``
+    (rejected) before anything is submitted, instead of a job that is
+    denied later."""
     if not plan.startswith("s3://"):
         return
-    bucket = plan.removeprefix("s3://").partition("/")[0]
+    bucket, _, key = plan.removeprefix("s3://").partition("/")
     configured = getattr(s3_handler, "bucket_name", None)
-    if bucket != configured:
+    scope = f"{prefix.strip('/')}/" if prefix.strip("/") else ""
+    if bucket != configured or not key.startswith(scope):
         raise SurveyInputError(
-            f"The plan {plan!r} is not in the configured S3 bucket "
-            f"({configured or 'none configured'})."
+            f"The plan {plan!r} is not under s3://{configured or '<no bucket>'}/"
+            f"{scope}, where the job can read it."
         )
 
 
@@ -454,7 +457,7 @@ def _costs(args: argparse.Namespace) -> int:
             # Cost Explorer's API endpoint is in us-east-1.
             session.client("ce", region_name="us-east-1"),
             COST_TAG_KEY,
-            COST_TAG_VALUE,
+            resources.project_name,
         )
         if args.billed
         else None

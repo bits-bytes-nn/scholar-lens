@@ -41,9 +41,9 @@ from .parser import (
 from .publish_types import title_slug
 from .publisher import PublishRequest, build_pr_body
 from .runtime import (
-    ROOT_DIR,
     PipelineOutcome,
     RunContext,
+    check_post_type,
     find_published_post,
     load_translation_guideline,
     publish_artifact,
@@ -64,9 +64,24 @@ async def run_paper_pipeline(
     source = resolve_paper_source(request.source)
     code_retriever: CodeRetriever | None = None
     try:
-        # Loaded first: an S3 failure here must not follow the paid stages.
+        # Checked first: a config or S3 failure must not follow the paid stages.
+        github = context.config.resources.github
+        if request.kind == "summarize":
+            check_post_type(
+                context.require_conventions(),
+                github.summary_category,
+                "summary_category",
+                artifact="summarize",
+            )
+        else:
+            check_post_type(
+                context.require_conventions(),
+                github.review_category,
+                "review_category",
+                artifact="review",
+            )
         translation_guideline = await load_translation_guideline(context)
-        paper_dir = ROOT_DIR / LocalPaths.PAPERS_DIR.value / source.source_id
+        paper_dir = context.papers_dir / source.source_id
         # Arbitrary PDF-URL sources have no arXiv HTML rendering.
         parse_pdf = request.parse_pdf or source.arxiv_html_id is None
         paper, code_retriever, citation_summarizer = await _prepare_paper_data(
@@ -357,7 +372,7 @@ async def _parse_paper_content(
     }
     arxiv_html_id = source.arxiv_html_id
     if parse_pdf or arxiv_html_id is None:
-        figures, content = await _parse_pdf(source, parser_kwargs)
+        figures, content = await _parse_pdf(source, context.papers_dir, parser_kwargs)
         return figures, content, True
     try:
         async with HTMLRichParser(**parser_kwargs) as parser:
@@ -369,14 +384,13 @@ async def _parse_paper_content(
             source.source_id,
             e,
         )
-        figures, content = await _parse_pdf(source, parser_kwargs)
+        figures, content = await _parse_pdf(source, context.papers_dir, parser_kwargs)
         return figures, content, True
 
 
 async def _parse_pdf(
-    source: PaperSource, parser_kwargs: dict[str, Any]
+    source: PaperSource, papers_dir: Path, parser_kwargs: dict[str, Any]
 ) -> tuple[list[Figure], Content]:
-    papers_dir = ROOT_DIR / LocalPaths.PAPERS_DIR.value
     pdf_path = source.download_pdf(papers_dir)
     async with PDFParser(**parser_kwargs) as parser:
         return await parser.parse(

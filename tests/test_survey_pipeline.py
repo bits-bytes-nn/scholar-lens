@@ -13,6 +13,7 @@ from unittest import mock
 from unittest.mock import AsyncMock, MagicMock
 
 import arxiv
+import boto3
 import httpx
 import pytest
 from pydantic import ValidationError
@@ -41,6 +42,7 @@ from scholar_lens.domain.survey.plan import (
     TimeRange,
     survey_slug,
 )
+from scholar_lens.src.constants import LanguageModelId
 from scholar_lens.src.jobs import JobRequest, JobResult
 from scholar_lens.src.metrics import TokenBudgetExceeded, TokenUsageTracker
 from scholar_lens.src.survey_pipeline import (
@@ -52,6 +54,7 @@ from scholar_lens.src.survey_pipeline import (
     save_plan,
 )
 from scholar_lens.src.web_research import PageContent, ResearchCorpus, SourceFetchError
+from tests.fakes import FakeLLMFactory
 
 TODAY = date(2026, 10, 14)
 DPO = "Direct Preference Optimization: Your Language Model is Secretly a Reward Model"
@@ -502,19 +505,15 @@ class TestAdapters:
 
 
 class TestArxivSearch:
-    def _handler(self, monkeypatch: pytest.MonkeyPatch, results: Any) -> Any:
+    def _handler(self, results: Any) -> Any:
         from scholar_lens.adapters.scholarly import arxiv as arxiv_handler
 
         limiter = MagicMock()
-        monkeypatch.setattr(arxiv_handler, "_ARXIV_RATE_LIMITER", limiter)
-        handler = arxiv_handler.ArxivHandler()
-        handler.client = MagicMock()
+        handler = arxiv_handler.ArxivHandler(client=MagicMock(), rate_limiter=limiter)
         handler.client.results.side_effect = results
         return handler, limiter
 
-    def test_search_returns_metadata_at_the_shared_pace(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_search_returns_metadata_at_the_shared_pace(self) -> None:
         paper = MagicMock(
             title=PPO,
             authors=[MagicMock(name="author")],
@@ -529,18 +528,16 @@ class TestArxivSearch:
         )
         paper.authors[0].name = "John Schulman"
         paper.get_short_id.return_value = "1707.06347v2"
-        handler, limiter = self._handler(monkeypatch, lambda search: iter([paper]))
+        handler, limiter = self._handler(lambda search: iter([paper]))
         [found] = handler.search('ti:"PPO"', 5)
         assert found.arxiv_id == "1707.06347v2" and found.abstract == "We propose PPO."
         search = handler.client.results.call_args.args[0]
         assert (search.query, search.max_results) == ('ti:"PPO"', 5)
         limiter.acquire.assert_called_once()
 
-    def test_a_failed_search_raises_and_slows_down(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_a_failed_search_raises_and_slows_down(self) -> None:
         handler, limiter = self._handler(
-            monkeypatch, arxiv.HTTPError("https://export.arxiv.org/api/query", 0, 429)
+            arxiv.HTTPError("https://export.arxiv.org/api/query", 0, 429)
         )
         with pytest.raises(ArxivPaperError, match="429"):
             handler.search("all:dpo", 5)
@@ -1075,9 +1072,15 @@ def selection_json(ids: list[str], lineage: str = "dpo") -> str:
 
 
 def planner(answers: dict[str, list[str]], **kwargs: Any) -> SurveyPlanner:
-    p = SurveyPlanner.__new__(SurveyPlanner)
-    p.callbacks = []
-    p._init_token_budget(kwargs.get("callbacks"), kwargs.get("max_total_tokens"))
+    p = SurveyPlanner(
+        scope_model_id=LanguageModelId.CLAUDE_V4_5_HAIKU,
+        selection_model_id=LanguageModelId.CLAUDE_V4_5_HAIKU,
+        boto_session=boto3.Session(region_name="us-east-1"),
+        thinking_effort="medium",
+        max_total_tokens=kwargs.get("max_total_tokens"),
+        callbacks=kwargs.get("callbacks"),
+        llm_factory=FakeLLMFactory(),  # type: ignore[arg-type]
+    )
     p.scope_chain = MagicMock()
     p.scope_chain.ainvoke = AsyncMock(side_effect=answers["scope"])
     p.selection_chain = MagicMock()
@@ -1306,13 +1309,13 @@ class TestPlanFile:
         from scholar_lens.src import survey_pipeline
 
         plan = self._plan()
-        monkeypatch.setattr(survey_pipeline, "ROOT_DIR", tmp_path)
         monkeypatch.setattr(survey_pipeline, "SurveyPlanner", MagicMock())
         monkeypatch.setattr(
             survey_pipeline, "plan_survey", AsyncMock(return_value=plan)
         )
         context = MagicMock()
         context.s3_handler.get_text.return_value = None
+        context.papers_dir = tmp_path / "papers"
         context.config = Config()
         context.config.resources.s3_bucket_name = "bucket"
         request = JobRequest(kind="survey_plan", topic="preference optimization")

@@ -412,15 +412,10 @@ def _check_front_matter(
         category_type, topic = "", ""
     else:
         category_type, topic = str(categories[0]), str(categories[1])
-        if category_type not in spec.types:
-            add("error", "categories", 1, f"unknown type '{category_type}'")
-        elif spec.is_paper_type(category_type) != (kind in PAPER_KINDS):
-            add(
-                "error",
-                "categories",
-                1,
-                f"type '{category_type}' does not fit a {kind}",
-            )
+        if problem := spec.type_problem(
+            category_type, paper=kind in PAPER_KINDS, artifact=kind
+        ):
+            add("error", "categories", 1, problem)
         if topic not in spec.topics:
             add("error", "categories", 1, f"unknown topic '{topic}'")
         elif category_type in spec.types:

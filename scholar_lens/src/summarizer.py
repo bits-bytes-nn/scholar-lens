@@ -89,6 +89,7 @@ class PaperSummarizer(RetryableBase, TokenBudgetGuard):
         thinking_effort: str = "medium",
         max_total_tokens: int | None = None,
         callbacks: list[Any] | None = None,
+        llm_factory: BedrockLanguageModelFactory | None = None,
     ) -> None:
         self.language = language
         self.translation_guideline = translation_guideline or []
@@ -98,7 +99,9 @@ class PaperSummarizer(RetryableBase, TokenBudgetGuard):
         # call so an already-exhausted budget (from data prep) aborts rather than
         # spending more — parity with the review/guide token guards.
         self._init_token_budget(callbacks, max_total_tokens)
-        self.llm_factory = BedrockLanguageModelFactory(boto_session=boto_session)
+        self.llm_factory = llm_factory or BedrockLanguageModelFactory(
+            boto_session=boto_session
+        )
         self.summary_chain: Runnable = self._build_chain(
             summary_model_id,
             enable_thinking=enable_thinking,

@@ -3,6 +3,7 @@ exclusion (chains, resolvers and arXiv are faked; Bedrock is untouched)."""
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import boto3
@@ -12,6 +13,7 @@ from scholar_lens.adapters.scholarly.arxiv import ArxivMetadata
 from scholar_lens.adapters.scholarly.metadata import ReferenceMetadata
 from scholar_lens.src.citation_summarizer import CitationSummarizer
 from scholar_lens.src.constants import LanguageModelId
+from tests.fakes import FakeLLMFactory
 
 
 class _FakeChain:
@@ -37,28 +39,17 @@ class _FakeResolver:
 
 
 @pytest.fixture
-def summarizer(monkeypatch: pytest.MonkeyPatch) -> CitationSummarizer:
-    from scholar_lens.src.utils import factories
-
-    # Inference-profile lookup would call Bedrock; use the base model id.
-    monkeypatch.setattr(
-        factories,
-        "_resolve_inference_profile",
-        lambda session, model_id, region: model_id.value,
-    )
-    session = boto3.Session(region_name="us-east-1")
-    summ = CitationSummarizer(
+def summarizer(tmp_path: Path) -> CitationSummarizer:
+    # The fake factory makes no inference-profile lookup and fits texts
+    # unchanged (Bedrock CountTokens is never called).
+    return CitationSummarizer(
         citation_summarizing_model_id=LanguageModelId.CLAUDE_V4_5_HAIKU,
-        boto_session=session,
+        boto_session=boto3.Session(region_name="us-east-1"),
+        paper_dir=tmp_path,
+        llm_factory=FakeLLMFactory(),  # type: ignore[arg-type]
     )
-    # fit_text would call Bedrock CountTokens over the network; pass text through.
-    summ.llm_factory.fit_text = (  # type: ignore[method-assign]
-        lambda model_id, text, **kw: text
-    )
-    return summ
 
 
-@pytest.mark.asyncio
 async def test_summarize_resolves_from_metadata_abstract(
     summarizer: CitationSummarizer,
 ) -> None:
@@ -76,7 +67,6 @@ async def test_summarize_resolves_from_metadata_abstract(
     assert "Authors: A B" in out[0]
 
 
-@pytest.mark.asyncio
 async def test_summarize_caches_and_dedups_identifiers(
     summarizer: CitationSummarizer,
 ) -> None:
@@ -93,7 +83,6 @@ async def test_summarize_caches_and_dedups_identifiers(
     assert chain.calls == 1
 
 
-@pytest.mark.asyncio
 async def test_summarize_single_flight_across_concurrent_calls(
     summarizer: CitationSummarizer,
 ) -> None:
@@ -104,34 +93,42 @@ async def test_summarize_single_flight_across_concurrent_calls(
     md = ReferenceMetadata(title="dup", authors=["A"], abstract="abs", url=None)
 
     class _SlowResolver:
-        def __init__(self) -> None:
+        def __init__(self, loop: _asyncio.AbstractEventLoop) -> None:
             self.calls = 0
+            self.entered = _asyncio.Event()
             self._gate = _asyncio.Event()
+            self._loop = loop
 
         def resolve(self, title: str) -> ReferenceMetadata | None:
-            # Runs in a worker thread (asyncio.to_thread); block briefly so the
-            # second concurrent caller has to coalesce onto the in-flight task.
+            # Runs in a worker thread (asyncio.to_thread): signal entry, then
+            # hold the lookup open until the test opens the gate, so the second
+            # caller can only coalesce onto the in-flight task.
             self.calls += 1
-            import time as _time
-
-            _time.sleep(0.05)
+            self._loop.call_soon_threadsafe(self.entered.set)
+            _asyncio.run_coroutine_threadsafe(self._gate.wait(), self._loop).result(
+                timeout=5
+            )
             return md
 
-    resolver = _SlowResolver()
+    resolver = _SlowResolver(_asyncio.get_running_loop())
     chain = _FakeChain("summary")
     summarizer.metadata_resolver = resolver  # type: ignore[assignment]
     summarizer.citation_summarizer = chain  # type: ignore[assignment]
 
-    out_a, out_b = await _asyncio.gather(
-        summarizer.summarize(["dup"], "ctx"),
-        summarizer.summarize(["dup"], "ctx"),
-    )
+    first = _asyncio.ensure_future(summarizer.summarize(["dup"], "ctx"))
+    second = _asyncio.ensure_future(summarizer.summarize(["dup"], "ctx"))
+    async with _asyncio.timeout(5):
+        await resolver.entered.wait()
+    # The second caller started together with the first, which is already
+    # inside the lookup, so it has passed the single-flight check too.
+    await _asyncio.sleep(0)
+    resolver._gate.set()
+    out_a, out_b = await _asyncio.gather(first, second)
     assert resolver.calls == 1
     assert chain.calls == 1
     assert out_a == out_b and len(out_a) == 1
 
 
-@pytest.mark.asyncio
 async def test_summarize_excludes_failure_summaries(
     summarizer: CitationSummarizer,
     monkeypatch: pytest.MonkeyPatch,
@@ -154,7 +151,6 @@ async def test_summarize_excludes_failure_summaries(
     assert out == []
 
 
-@pytest.mark.asyncio
 async def test_arxiv_id_routes_to_arxiv_and_uses_abstract(
     summarizer: CitationSummarizer,
     monkeypatch: pytest.MonkeyPatch,
@@ -182,7 +178,6 @@ async def test_arxiv_id_routes_to_arxiv_and_uses_abstract(
     assert resolver.calls == 0
 
 
-@pytest.mark.asyncio
 async def test_resolved_arxiv_doi_fetches_the_paper_by_id(
     summarizer: CitationSummarizer, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -218,7 +213,6 @@ async def test_resolved_arxiv_doi_fetches_the_paper_by_id(
     assert fetched == ["2001.08361"] and len(out) == 1
 
 
-@pytest.mark.asyncio
 async def test_arxiv_not_found_yields_no_summary(
     summarizer: CitationSummarizer, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -233,7 +227,6 @@ async def test_arxiv_not_found_yields_no_summary(
     assert await summarizer.summarize(["2301.99999"], "ctx") == []
 
 
-@pytest.mark.asyncio
 async def test_reference_without_an_abstract_is_left_out(
     summarizer: CitationSummarizer, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -254,7 +247,6 @@ async def test_reference_without_an_abstract_is_left_out(
     assert out == [] and chain.calls == 0
 
 
-@pytest.mark.asyncio
 async def test_prefer_full_text_falls_back_to_the_abstract(
     summarizer: CitationSummarizer, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -272,7 +264,6 @@ async def test_prefer_full_text_falls_back_to_the_abstract(
     assert len(out) == 1 and "From the abstract." in out[0]
 
 
-@pytest.mark.asyncio
 @pytest.mark.parametrize("identifier", ["2106.09685", "LoRA: Low-Rank Adaptation"])
 async def test_prefer_full_text_keeps_the_arxiv_abstract_when_text_fails(
     summarizer: CitationSummarizer, monkeypatch: pytest.MonkeyPatch, identifier: str
@@ -302,7 +293,6 @@ async def test_prefer_full_text_keeps_the_arxiv_abstract_when_text_fails(
     assert len(out) == 1 and "From the abstract." in out[0] and chain.calls == 1
 
 
-@pytest.mark.asyncio
 async def test_summary_is_written_per_citing_section(
     summarizer: CitationSummarizer,
 ) -> None:
@@ -318,7 +308,6 @@ async def test_summary_is_written_per_citing_section(
     assert chain.calls == 2  # but each section gets its own summary
 
 
-@pytest.mark.asyncio
 async def test_a_throttled_model_call_does_not_refetch_the_reference(
     summarizer: CitationSummarizer, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -362,7 +351,6 @@ async def test_a_throttled_model_call_does_not_refetch_the_reference(
     assert len(out) == 1 and _Flaky.calls == 2 and fetches == ["2301.00003"]
 
 
-@pytest.mark.asyncio
 async def test_prefer_full_text_keeps_the_resolved_abstract_when_arxiv_fails(
     summarizer: CitationSummarizer, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -404,7 +392,6 @@ def test_citation_prompt_fences_are_registered() -> None:
     assert {"reference", "citing_context"} <= prompt_fence_tags()
 
 
-@pytest.mark.asyncio
 async def test_untrusted_inputs_and_header_are_defanged(
     summarizer: CitationSummarizer,
 ) -> None:
