@@ -1,0 +1,307 @@
+{
+ "item": "guide-strands",
+ "post": "/tmp/eval-guide/guide-strands-v17.md",
+ "judge_run": 2,
+ "sdk_checked": "strands-agents 1.64.0 with extras [cedar, anthropic, ollama], strands-agents-tools 0.9.0 and strands-harness 0.3.4 (pip, Python 3.14 temp venv /tmp/judge-gv17/strands/venv; these are the packages the guide installs at L478, L496, L584, L606, L636). Docs fetched 2026-11-08 as index.md pages from strandsagents.com: agent-loop, hooks, interventions, approve-before-acting, lifecycle-controls, session-management, state, structured-output, structured-output-behavior, retry-strategies, quickstart/python, harness/configure/model; SDK source read in site-packages (hooks/registry.py, models/bedrock.py, vended_interventions/hitl, interventions/actions.py, vended_tools/file_editor, agent/agent.py). Non-official sources fetched: AWS Open Source Blog (introducing Strands; model-driven approach), AWS ML blogs (adaptive agentic intelligence, AgentCore Observability, evaluation blueprint), designrevision.com framework comparison, Scalekit LangChain-vs-CrewAI, strands-agents/tools stop.py, harness-sdk README. Python blocks exercised in reading order in one namespace with a scripted fake Model (BedrockModel patched; no paid model call); every run with AWS credentials removed (env -u AWS_PROFILE/AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY/AWS_SESSION_TOKEN/AWS_BEARER_TOKEN_BEDROCK/AWS_REGION/ANTHROPIC_API_KEY, AWS_CONFIG_FILE=/dev/null, AWS_SHARED_CREDENTIALS_FILE=/dev/null); the harness block was constructed with a dummy ANTHROPIC_API_KEY and never called.",
+ "sampling": "241 blank-line paragraphs after front matter (fenced blocks kept whole, headings and list runs as one paragraph, Sources list included); paragraphs 2,5,8,...; 15 claims drawn from those paragraphs, the whole post read for off-sample errors",
+ "scores": {
+  "A": 7.5,
+  "B": 7.0,
+  "C": 7.5,
+  "D": 8.0,
+  "E": 8.0,
+  "F": 6.0,
+  "T1": 7.0,
+  "T2": 8.0,
+  "T3": 8.5
+ },
+ "score_evidence": {
+  "A": "No body H1, no skipped levels, real tables, fenced code with one-word info strings, $$ only (L821) with use_math: true, description 146 characters. Deductions: two cited sources missing from the Sources list (designrevision comparison at L1012, Scalekit at L1019/L1023); topic H3s stranded under the limits H2 ('### OpenTelemetry 트레이스와 반복 시행 평가' L817, '### 제거된 stop 도구' L823); a '-' cell in the cancellation table (L692); the TL;DR's first two sentences copy L19 verbatim (L13 vs L19); trailing space at L938.",
+  "B": "'입니다' prose that keeps English terms and mostly reads naturally. Deductions: L15 '미리 조립한 에이전트가 harness이고' (English word where the post says 하네스 everywhere else; rewrite '미리 조립한 에이전트가 하네스이고'); L138 formulaic table lead-in restating the previous sentence ('...아래 표에 정리했습니다'); L57 doubled diagram lead-in ('아래 그림이 됩니다. 문서의 루프 도식을 텍스트로 다시 그린 예시입니다.'); L209 restatement '...모델을 한 번 더 부르는 셈입니다'; L911 '정리하면,'; L825 'import하면' (English stem + Korean ending; rewrite '가져오면'); L1036 '처음부터 그래프로 설계하는 편이 덜 싸웁니다' (rewrite '...설계하는 편이 낫습니다').",
+  "C": "Back-references resolve (L93->L657, L213->L552, L522->L575, L671->L51, L813->L356). Deductions: L877 tells the reader to swap handle_ticket's Agent(...) for make_ticket_agent(), which lacks the interventions L767 just re-attached; L968 calls the session version 'final' though it drops the approval path L805-L813 built, while L966 still talks about keeping interrupt IDs; observability/evaluation (L817-L821) and the removed stop tool (L823-L825) sit inside the limits-and-cancellation H2 they do not belong to.",
+  "D": "Hard parts get numbers when they appear: message counting (L101), token arithmetic (L114), the 18,500 -> 22,500 overshoot (L665), 2 s + 4 s inside a 20 s deadline (L877), the past-date validation loop (L203). Deductions: the forced retry and attempt limit explained in the TL;DR, then again at L209-L226 and L663; the SnapshotSessionManager naming caveat (L942) is padding.",
+  "E": "Tables where comparison helps (stop reasons L79, schema->tool L140, attempt-limit outcomes L221, actions L364, methods L376, on_error L417, effort L647, cancellation points L689, retry parameters L846, framework comparison L1014), a text loop diagram (L59), runnable code. Deductions: '-' cell (L692); the L140 table restates the sentence before it; no code for the interrupt resume round trip the handler stores state for.",
+  "F": "Wrong: L493 says the repository README installs strands-agents-tools (it does not); L877 and L968/L970 move handle_ticket onto factories that drop issue_refund and all interventions. Unsupported: L471 trust confined to a request (persisted via agent.state with sessions), L360 'fail silently' gloss, L966 'volatile disk' inference, two cited sources absent from the list. Docs/code drift on max_delay (240 in code, 128 in docs) follows the code and is not deducted.",
+  "T1": "Exercised in reading order with a fake model: every block that needs no credentials runs (FollowUp, attempt limit, streaming, hook order, tool retry, PiiRedactor, HITL with stdio prompt, default agent, file_editor agent, triage, thinking BedrockModel, harness construction, Outcome/classify, handle_ticket COMPLETED and AWAITING_APPROVAL, TicketRetryStrategy, CustomRetry, invocation_state). Deductions: make_ticket_agent (L867) and the final handle_ticket (L971) drop the approval path; no resume code for the stored interrupts; result.metrics.get_summary() never shown; file_editor is deprecated in 1.64.0 (docs still use it); the S3 session agent needs AWS by design.",
+  "T2": "Covers the sources in a sensible order (why an in-process SDK -> loop and stop reasons -> structured output -> hooks/interventions/HITL -> install and first run -> model/effort -> limits, cancel, concurrency, per-request handler -> retry -> state and sessions -> when to choose). Deductions: the removed stop tool (L823-L825) is history with no use in the running example; observability and evaluation rest on two blog summaries with no setup; the README install claim pads the install section.",
+  "T3": "Explains mechanisms and why: schema as last tool reusing the loop (L124-L136), typed decisions vs last-write-wins hooks (L360), uncapped Guide retries (L384), fail-open/closed per handler (L415-L437), top-of-iteration limits and cache tokens (L665-L667), cooperative cancellation by executor (L698), per-instance concurrency and idempotency (L720-L722, L815), lockless sessions, non-atomic creation and symlink trust (L994-L1000), deployment shapes (L815), OTEL span contents (L819). Deductions: the approval/resume path is described, not shown; observability wiring absent."
+ },
+ "principles": {
+  "claim_headings": {
+   "status": "partly met",
+   "evidence": "H2s are claim noun phrases ('L51 중단 사유로 분기하는 추론-도구 호출 사이클', 'L657 턴·토큰 한도, 협력적 취소, 요청당 에이전트로 묶는 호출 경계', 'L913 ... 락 없는 세션 영속화'); topic-name H3s remain: L31 'SDK와 하네스, 두 진입점', L491 '패키지와 AWS 자격증명', L823 '제거된 `stop` 도구', L1029 '앞서 본 실패 모드 정리'."
+  },
+  "running_example": {
+   "status": "met",
+   "evidence": "Ticket triage from L23 (TicketTriage, FollowUp, lookup_refund/lookup_refunds, RetryOnToolError, PiiRedactor, StrictAuth, issue_refund + HumanInTheLoop, triage, Outcome/classify, handle_ticket, TicketRetryStrategy, make_ticket_session_agent) to the closing judgement (L1008, L1036); even the harness and provider blocks reuse the ticket prompt."
+  },
+  "mechanism_design_code_example": {
+   "status": "met",
+   "evidence": "Structured output: schema-as-last-tool and why (L128-L136) -> TicketTriage/FollowUp code (L148, L174) -> past-date walkthrough (L203); limits: top-of-iteration rule (L665) -> 18,500/22,500 example; retry: defaults (L833-L852) -> TicketRetryStrategy (L858) -> 2 s + 4 s = 6 s (L877); context: 3,000 -> 200 token example (L114)."
+  },
+  "facts_said_once": {
+   "status": "not met",
+   "evidence": "TL;DR copies L19's first two sentences; validation errors returned as tool results five times (L15, L124, L172, L203, L223); forced retry/StructuredOutputException three times (L15, L209-L213, L224-L225); structured_output_attempts behaviour four times (L15, L217, L226, L663); default retry covers only throttling four times (L829, L844, L856, L1032); per-request agent keeps histories apart four times (L553, L573, L726, L780); no distributed lock three times (L915, L994, L1034)."
+  },
+  "numbers_with_scope_unit": {
+   "status": "met",
+   "evidence": "Illustrative numbers framed as examples ('예를 들어' L114, '숫자로 예를 들어 보겠습니다' L665); SDK scope labelled (Python/TypeScript throughout: L77, L166, L211, L245, L669, L696, L722, L879, L938); units on waits and tokens; third-party numbers attributed (months->days L27, 75%/42%/4 h/2% L821)."
+  },
+  "nothing_invented": {
+   "status": "partly met",
+   "evidence": "L493 invents a README install line; L877/L968 present factories that silently drop the approval controls as drop-in replacements; L471 trust scope, L360 'fail silently' and L966 'volatile disk' go beyond the sources."
+  },
+  "writer_assessment_at_end": {
+   "status": "met",
+   "evidence": "L1036 '이 글의 판단은 이렇습니다. 경로를 미리 그릴 수 없고 모델이 도구 선택을 대체로 잘 해내는 작업이라면 Strands로 시작합니다 ... 단계 순서 자체가 요구사항이거나 단계별 재개가 핵심이라면, 처음부터 그래프로 설계하는 편이 덜 싸웁니다.'"
+  },
+  "length_fitted": {
+   "status": "partly met",
+   "evidence": "1,061 lines, about 44.6k non-space characters (v16: 41k); depth on structured output, interventions, limits and sessions is warranted, but five restatements of the validation path, the stop-tool history and two near-identical handle_ticket listings add length."
+  },
+  "type_specific_shape": {
+   "status": "met",
+   "evidence": "TL;DR (L11-L15) and the hand-rolled-loop problem (L17-L29) open; SDK/harness layering (L31) and the loop mechanism (L51) precede install (L487); closes with when to choose it versus graphs and manual loops plus failure modes (L1002-L1036)."
+  },
+  "korean_style": {
+   "status": "partly met",
+   "evidence": "Natural '입니다' prose with English terms kept; defects: L15 'harness' vs 하네스, L57 doubled diagram lead-in, L138 formulaic table lead-in, L209 '...셈입니다' restatement, L911 '정리하면', L825 'import하면', L1036 '덜 싸웁니다'."
+  }
+ },
+ "claims": {
+  "checked": 15,
+  "supported": 12,
+  "unsupported": 1,
+  "wrong": 2,
+  "unverifiable": 0,
+  "numbers_among_checked": 8,
+  "examples": [
+   {
+    "line": 360,
+    "claim": "Guardrails catch mistakes before execution, and steering handlers let the agent correct itself instead of failing silently",
+    "verdict": "unsupported",
+    "source": "Not in the interventions, hooks or agent-loop pages fetched; interventions names 'authorization, guardrails, steering, and content transformation' as concerns and says fast checks run before 'LLM-based steering', but nothing about failing silently. Reads as the writer's gloss."
+   },
+   {
+    "line": 37,
+    "claim": "The monorepo holds nine directories: harness-py, harness-ts, strands-cli, strands-py, strands-ts, strands-mcp, site (Astro/Starlight), team, test-infra (CDK stack for knowledge bases and SSH sandboxes)",
+    "verdict": "supported",
+    "source": "harness-sdk README directory table (e.g. 'test-infra/ | CDK stack provisioning the AWS resources a subset of integration tests run against (knowledge bases, SSH sandboxes)')."
+   },
+   {
+    "line": 101,
+    "claim": "One lookup then classification leaves four messages; three lookups make four iterations and eight messages",
+    "verdict": "supported",
+    "source": "Illustrative arithmetic consistent with agent-loop's message roles: user prompt + 3 x (assistant toolUse, user toolResult) + assistant final = 8."
+   },
+   {
+    "line": 203,
+    "claim": "A past due_date gets 'due_date must be after ...' back as a tool result, the model calls again, and the application sees two structured-output tool calls and no failure",
+    "verdict": "supported",
+    "source": "structured-output-behavior validation section; exercised: fake model sent 2020-01-07 then 2099-01-07, two FollowUp tool calls, result.structured_output valid, no exception."
+   },
+   {
+    "line": 245,
+    "claim": "A forced retry stopped by a content filter or guardrail counts as a failed attempt in TypeScript, but in Python ends the call with its own stop reason such as content_filtered",
+    "verdict": "supported",
+    "source": "structured-output-behavior L239 verbatim."
+   },
+   {
+    "line": 372,
+    "claim": "Deny skips remaining handlers, Guide feedback from several handlers is merged into one message, handlers run in registration order and conflicts resolve deny > confirm > guide > transform > proceed",
+    "verdict": "supported",
+    "source": "interventions L250, L327, L507, L509 ('well-defined precedence (deny > confirm > guide > transform > proceed)')."
+   },
+   {
+    "line": 473,
+    "claim": "The default classifier is an LLM-as-judge on the agent's or auxiliary model, replaceable by a System One model (Jev, Strands Decider) or a function; a negated tool always prompts and cannot be trusted",
+    "verdict": "supported",
+    "source": "approve-before-acting L84, L88; exercised: issue_refund prompted 'Approve \"issue_refund\"?' without a classifier call, lookup_refund went to the _RiskDecision classifier and ran."
+   },
+   {
+    "line": 493,
+    "claim": "The repository README installs the SDK and the tools package together (pip install strands-agents strands-agents-tools)",
+    "verdict": "wrong",
+    "source": "harness-sdk README (the cited repository) installs 'pip install strands-harness' and, for the SDK, 'pip install strands-agents'; strands-agents-tools appears nowhere in it or in strands-py/README.md. No block in the guide imports strands_tools; file_editor comes from strands.vended_tools in strands-agents."
+   },
+   {
+    "line": 501,
+    "claim": "Three ways to give credentials: AWS_BEARER_TOKEN_BEDROCK (quickest for local development), aws configure or access-key env vars (optionally AWS_SESSION_TOKEN), IAM roles on EC2/ECS/Lambda",
+    "verdict": "supported",
+    "source": "quickstart/python credential list verbatim."
+   },
+   {
+    "line": 665,
+    "claim": "With total_tokens 20,000 and 18,500 used when turn five starts, the turn passes, 4,000 more makes 22,500, and the loop stops before turn six",
+    "verdict": "supported",
+    "source": "lifecycle-controls L57 (checked at the top of each iteration, a turn can overshoot); exercised with per-turn totals 4,000/4,500/5,000/5,000/4,000: five model calls, limit_total_tokens, accumulated totalTokens 22,500."
+   },
+   {
+    "line": 821,
+    "claim": "A 75% per-trial success rate passes three consecutive trials only 42% of the time (0.75^3); shadow mode for at least 4 hours with a 2% deviation threshold are the post's example values",
+    "verdict": "supported",
+    "source": "Evaluation blueprint: 'An agent with a 75 percent per-trial success rate has only a 42 percent chance of passing three consecutive trials (0.75³)'; 'Run this for at least 4 hours with a 2 percent deviation threshold'."
+   },
+   {
+    "line": 833,
+    "claim": "Throttling is retried at most 5 times, 6 attempts in total, starting at 4 s and doubling; the last failure raises",
+    "verdict": "supported",
+    "source": "retry-strategies L5; exercised: sleeps [4, 8, 16, 32, 64], ModelThrottledException after attempt 6."
+   },
+   {
+    "line": 846,
+    "claim": "Parameter table: max_attempts 6 (1 disables retries), initial_delay 4, max_delay 240",
+    "verdict": "supported",
+    "source": "SDK 1.64.0 signature (max_attempts=6, initial_delay=4, max_delay=240); docs table says max_delay 128, the code wins; the mismatch is not mentioned."
+   },
+   {
+    "line": 885,
+    "claim": "CustomRetry(max_retries=3, delay=2.0) sleeps 2 s itself and sets event.retry on AfterModelCallEvent",
+    "verdict": "supported",
+    "source": "hooks Model Call Retry section; exercised: two ModelThrottledExceptions retried with sleeps [2.0, 2.0] then end_turn."
+   },
+   {
+    "line": 968,
+    "claim": "The final handle_ticket calls make_ticket_session_agent, so ticket ID becomes session ID and the retry strategy, deadline, structured output and stop-reason mapping sit in one handler",
+    "verdict": "wrong",
+    "source": "Exercised (local storage substituted for S3): the final agent has tools ['lookup_refunds'] only, no issue_refund and no StrictAuth/PiiRedactor/HumanInTheLoop, and the handler (L971-L989) has no interrupt branch or PENDING_APPROVALS. The handler L767 promised re-attaches the risky tool and interventions on every request; the 'final' one silently drops the approval path that L813 and L966 still describe."
+   }
+  ],
+  "off_sample_findings": [
+   {
+    "line": 877,
+    "claim": "Replacing Agent(...) in handle_ticket with make_ticket_agent()",
+    "verdict": "wrong",
+    "source": "make_ticket_agent (L867-L874) has no issue_refund and no interventions; the swap drops StrictAuth, PiiRedactor and HumanInTheLoop (exercised: tool_names ['lookup_refunds'])."
+   },
+   {
+    "line": 471,
+    "claim": "Per-request agents confine trust to the request",
+    "verdict": "unsupported",
+    "source": "hitl.py stores trust in agent.state 'for the rest of the session'; with a session manager it persists across requests."
+   },
+   {
+    "line": 966,
+    "claim": "If the fallback applies in a container, sessions pile up on a volatile disk",
+    "verdict": "unsupported",
+    "source": "session-management only says Python falls back to LocalFileStorage('./.strands/'); the container/volatile part is the writer's inference, framed as advice ('편이 안전합니다')."
+   },
+   {
+    "line": 1040,
+    "claim": "Sources list",
+    "verdict": "unsupported",
+    "source": "The CrewAI/AutoGen/LangGraph comparison (L1012-L1019, designrevision.com, src-W5) and the Scalekit post (L1019, L1023, src-W8) are cited in the body but missing from the Sources list (19 entries for 21 used sources); both pages do support the cited content."
+   }
+  ]
+ },
+ "checklist": {
+  "repeated": 2,
+  "avoided": 2,
+  "na": 1,
+  "repeated_ids": [
+   "shared-agent-throw-scope",
+   "result-fields-incomplete"
+  ],
+  "items": [
+   {
+    "id": "loop-diagram-remote",
+    "status": "avoided",
+    "evidence": "No image links; the loop is a text box diagram (L59-L71)."
+   },
+   {
+    "id": "shared-agent-throw-scope",
+    "status": "repeated",
+    "evidence": "L720 'Python에서는 이미 실행 중인 에이전트를 부르면 ConcurrencyException이 발생합니다.' Not tied to overlapping invoke_async calls, and nothing says a sync agent(...) inside an async def handler blocks the event loop and serializes requests instead of raising."
+   },
+   {
+    "id": "shared-agent-history-leak",
+    "status": "avoided",
+    "evidence": "L553 '# A fresh agent per message keeps tickets from sharing conversation history', L573 '티켓끼리 대화 기록이 섞이지 않습니다 ... 비동기 서비스라면 invoke_async에도 같은 인자를 넘깁니다', L726, L780."
+   },
+   {
+    "id": "result-fields-incomplete",
+    "status": "repeated",
+    "evidence": "L120 names stop_reason, message and metrics in AgentResult, but no example calls result.metrics.get_summary() (cycles, tokens, tool usage); only result.structured_output and result.stop_reason appear in code."
+   },
+   {
+    "id": "multi-agent-subject",
+    "status": "n/a",
+    "evidence": "No sentence about the smallest execution unit of multi-agent patterns; multi-agent appears only in the feature list (L19) and session compatibility (L942)."
+   }
+  ]
+ },
+ "extras": {
+  "architecture_first_line": 31,
+  "architecture_note": "SDK/harness layering and the monorepo map at L31-L49, then the loop cycle, stop reasons, history and context (L51-L120), structured-output internals (L122), hooks and interventions (L283) before install (L487).",
+  "sources_total": 21,
+  "sources_listed": 19,
+  "sources_non_official": 7,
+  "non_official_share": 0.33,
+  "non_official_list": [
+   "AWS Open Source Blog (introducing Strands)",
+   "AWS Open Source Blog (model-driven approach)",
+   "AWS ML blog adaptive agentic intelligence",
+   "AWS ML blog AgentCore Observability",
+   "AWS ML blog evaluation blueprint",
+   "designrevision.com framework comparison (not in Sources list)",
+   "Scalekit LangChain vs CrewAI (not in Sources list)"
+  ],
+  "opens_with_problem": true,
+  "opens_note": "TL;DR (L11-L15), then the hand-rolled loop that grows control code (L17-L29).",
+  "closes_with_when_to_choose_and_failure_modes": true,
+  "closes_note": "L1002-L1036: fit for model-routed work, graph frameworks when order or per-step resume is a requirement, manual-loop cost, routing/tool separation, failure-mode list, writer's rule."
+ },
+ "runnable_code": {
+  "verdict": "Every Python block that needs no credentials pastes and runs in reading order against strands-agents 1.64.0 with a fake model and no AWS credentials; the AnthropicModel block needs a key and the S3 session agent needs AWS, both by design. The v16 defect is fixed: handle_ticket (L778-L810) returns COMPLETED with the TicketTriage object and AWAITING_APPROVAL with stored interrupt IDs. The running example then regresses twice: L877 tells the reader to build handle_ticket's agent with make_ticket_agent() and the 'final' handle_ticket (L971) uses make_ticket_session_agent(); both factories have only lookup_refunds and no interventions, so issue_refund, StrictAuth, PiiRedactor and HumanInTheLoop disappear and the interrupt branch is gone. No resume code, no result.metrics.get_summary().",
+  "passed": [
+   "L175 FollowUp: past date rejected and fed back, second call valid; two FollowUp tool calls, no exception",
+   "L231 attempt limit 3 with a text-only model -> 'No valid triage after 3 attempts'",
+   "L254 stream_async: result event carries ReplyDraft",
+   "L294 add_hook(order=HookOrder.SDK_FIRST / SDK_LAST) accepted; HookOrder -100/-90/0/50/90/100 in registry.py",
+   "L316 RetryOnToolError with random failures: tool retried, end_turn",
+   "L389/L426 PiiRedactor and StrictAuth define; StrictAuth with no handler methods accepted by Agent",
+   "L446 HumanInTheLoop(classifier=True, ask='stdio', enable_trust=True, allowed_tools=['!issue_refund']): lookup_refund classified safe and run; issue_refund prompted 'Approve \"issue_refund\"? (y/n/t)' without a classifier call",
+   "L514 default Agent() -> BedrockModel() (patched) with global.anthropic.claude-sonnet-4-6 / us-west-2 defaults in bedrock.py",
+   "L531 Agent(tools=[lookup_refund, file_editor]) runs (file_editor deprecated in 1.64.0)",
+   "L548 triage -> 'high | billing | Customer was charged twice ...' (matches L570); text-only model -> StructuredOutputException -> 'other'",
+   "L622 BedrockModel with thinking budget constructs",
+   "L641 create_harness(model='anthropic/claude-opus-5', effort='high') constructs AnthropicModel with output_config effort high (dummy key, not called); 'ultra' -> ValueError listing auto/off/minimal/low/medium/high/xhigh/max; 'antrhopic/x' -> ValueError with providers",
+   "L663 limits {'turns':0}, {'turns':1.5}, {'foo':1} -> TypeError",
+   "L665 total_tokens 20,000 with turns 4,000/4,500/5,000/5,000/4,000 -> five calls, limit_total_tokens, 22,500",
+   "L696 cancel_signal pre-set -> cancelled; agent.cancel() while idle -> next call cancelled",
+   "L720/L722 overlapping calls -> ConcurrencyException; same idempotency_token -> both end_turn",
+   "L778 handle_ticket: billing -> COMPLETED + TicketTriage; refund request -> AWAITING_APPROVAL, PENDING_APPROVALS holds result.interrupts",
+   "L833 default retry: sleeps 4, 8, 16, 32, 64, ModelThrottledException after 6 attempts",
+   "L858 TicketRetryStrategy(3, 2, 8): two TimeoutErrors retried with sleeps 2, 4 then end_turn",
+   "L886 CustomRetry: two errors retried with 2.0 s sleeps then end_turn",
+   "L921 Agent(state={'f': lambda: 1}) -> ValueError",
+   "L926 invocation_state ticket_id reaches the tool ('Current ticket: T-1042'); result.state == {}"
+  ],
+  "failed": [
+   "L877 swapping handle_ticket's Agent(...) for make_ticket_agent(): tool_names ['lookup_refunds'], no interventions; issue_refund and approvals lost",
+   "L971 final handle_ticket (LocalFileStorage substituted): COMPLETED for a refund request because issue_refund is no longer a tool; no interrupt branch or PENDING_APPROVALS",
+   "L947 make_ticket_session_agent without AWS credentials -> StorageError 'Failed to read ... snapshot_latest.json from S3' (expected)",
+   "L591 AnthropicModel without ANTHROPIC_API_KEY -> TypeError on auth (expected)",
+   "Interrupt resume (L813 '승인자가 응답하면 ... 호출을 재개합니다') described in prose only"
+  ],
+  "notes": "Fake model streams Bedrock-shaped events, answers the HITL classifier's _RiskDecision tool, and sends a past then a future FollowUp date; BedrockModel patched to it; asyncio.sleep patched to record waits; builtins.input answers 'y'. Docs give max_delay 128 s while ModelRetryStrategy in 1.64.0 defaults to 240 s; the guide follows the code (L850) without noting the mismatch."
+ },
+ "other_sdk_as_python": "none found: TypeScript differences are labelled (L77, L166, L211, L245, L669, L696, L722, L879, L938, L942, L966, L994).",
+ "topic_taught_twice": "yes: TL;DR's first two sentences repeat L19 verbatim (2); validation errors returned as tool results, not exceptions (5: L15, L124, L172, L203, L223); forced retry with the tool required and StructuredOutputException afterwards (3: L15, L209-L213, L224-L225); structured_output_attempts semantics (4: L15, L217, L226, L663); max_tokens unrecoverable (3: L13, L88, L93); a limit stop is a result, not a failure (3: L93, L228, L675); limits checked at iteration start (2: L665, L1031); default retry covers only throttling (4: L829, L844, L856, L1032); per-request agent keeps histories apart (4: L553, L573, L726, L780); stateless handler cannot resume interrupts / keep interrupt IDs (3: L813 twice, L966); no distributed lock, overwrite/merge (3: L915, L994, L1034); Guide retries uncapped (2: L384, L1033); classifier is judgement not guarantee (2: L473, L1033); the model decides when to use tools and answer (4: L13, L27, L73, L118); two near-identical handle_ticket listings (L778, L973).",
+ "causes_scope_beyond_sources": "Mostly within the sources. Beyond them: L471 confines trust to one request for per-request agents (hitl stores it in agent.state, which sessions persist); L360 'steering handlers keep the agent from failing silently' is not in the docs; L966 adds 'container volatile disk' to the documented ./.strands/ fallback (framed as advice); L815 infers idempotency tokens are per instance (consistent with 'already in flight' on one agent, the run itself flagged it); L291 'whether an intervention runs before a user hook is decided by these values' (inference from the presets); L1027 'later only the routing side changes' is the writer's extrapolation; L996 per-ticket serialization is advice and reads as such. Third-party claims are attributed (L27, L114, L118, L819, L821, L1012, L1019, L1023).",
+ "edit_residue": [
+  "L877 and L968: the per-request handler was fixed (L778-L810 keeps issue_refund, StrictAuth, PiiRedactor, HumanInTheLoop and the interrupt branch) but the fix was not propagated to make_ticket_agent (L867) or make_ticket_session_agent (L951), which the text tells the reader to swap in",
+  "L13 vs L19: the TL;DR copies the body's opening two sentences (the run's own warning says so)",
+  "L493: 'README installs SDK and tools together' justifies a strands-agents-tools install no block uses (v16 had the install twice; now one line with a wrong reason)",
+  "L1040-L1059: Sources list lacks designrevision.com and Scalekit, both cited in the body",
+  "L692: '-' cell the run flagged and left",
+  "L825: 'import하면' English-stem slip the run flagged and left",
+  "L938: trailing space after '돌려줍니다.'",
+  "L817-L825: observability/evaluation and the removed stop tool stranded inside the limits-and-cancellation H2"
+ ],
+ "top_issues": [
+  "The running example's approval path is lost after it is built: handle_ticket (L778-L810) now works (COMPLETED with the object, AWAITING_APPROVAL with interrupt IDs, exercised), but L877 swaps its agent for make_ticket_agent() and the 'final' handle_ticket (L971) uses make_ticket_session_agent(); both have only lookup_refunds and no interventions, so issue_refund, StrictAuth, PiiRedactor and HumanInTheLoop disappear while L966 still talks about keeping interrupt IDs.",
+  "Wrong or unsupported statements outside the code: L493 says the repository README installs strands-agents-tools (it installs strands-agents only); L471 confines trust to one request although trust lives in agent.state, which sessions persist; L360 and L966 add glosses the docs do not state; two cited sources (designrevision, Scalekit) are missing from the Sources list.",
+  "Repetition and residue: the TL;DR copies L19; the validation-error path is taught five times, structured_output_attempts four times, default-retry-is-throttling-only four times; two near-identical handle_ticket listings; checklist misses remain (THROW not tied to invoke_async or sync-in-async blocking; no result.metrics.get_summary())."
+ ]
+}

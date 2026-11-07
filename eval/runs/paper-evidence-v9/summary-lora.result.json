@@ -1,0 +1,157 @@
+{
+  "kind": "summarize",
+  "status": "succeeded",
+  "input": "2106.09685",
+  "title": "LoRA: Low-Rank Adaptation of Large Language Models",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/2106_09685/2026-11-07-lora-low-rank-adaptation-of-large-language-models-summary.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-11-07-lora-low-rank-adaptation-of-large-language-models-summary.md",
+  "pr_url": null,
+  "warnings": [
+    "Tag 'Adapter-Inference-Latency' (or its acronym) does not appear in the paper; check it fits.",
+    "Tag 'Subspace-Similarity-Analysis' (or its acronym) does not appear in the paper; check it fits.",
+    "Section '과제마다 복제되는 거대 모델과 기존 경량화 방식의 대가': the writer could not fix: I deleted the sentence about optimization difficulty instead of rewriting it. The style fix it suggested (prefix tuning is unstable, and adding more training tokens doesn't keep improving performance) would add a specific claim that no evidence backs. Once the sentence is gone, the vague '이런 방식' wor",
+    "Section '제안 방법': check 2 sentence(s) the evidence may not support: 어댑터처럼 층을 하나 더 거치는 계산이 생기지 않으므로, 미세조정한 모델과 비교해도 지연이 추가되지 않습니다 [[E4]]. (unsupported: The source guarantees no extra latency compared with a fine-tuned model, but it never gives adapters' extra layer computation as the reason. (not supported: 어댑터처럼 층을 하나 더 거치는 계산이 생기지 않으므로)) | 앞서 든 GPT-3의 WikiSQL·MNLI 사례에 적용하면, 175B 가중치는 한 벌만 두고 과제마다 작은 $$A,B$$ 쌍만 따로 보관하다가 서비스할 과제의 쌍을 골라 합치는 방식이 됩니다 [[E4]]. (unsupported: The evidence does not contain the GPT-3 WikiSQL/MNLI example, the 175B figure, or the per-task storage scheme. (not supported: 앞서 든 GPT-3의 WikiSQL·MNLI 사례; 175B 가중치는 한 벌만 두고 과제마다 작은 A,B 쌍만 따로 보관))",
+    "Section '제안 방법' still has: numbers ['175B'] are not in the cited evidence: 앞서 든 GPT-3의 WikiSQL·MNLI 사례에 적용하면, 175B 가중치는 한 벌만 두고 과제마다 작은 $$A,B$$ 쌍만 따로 보관하다가 서비스할 과제의 쌍을 골라 합치는 방식이 됩니다 .",
+    "Section '구현 방식' still has: 913 characters of prose for a target of 500: cut background, repetition and minor detail",
+    "Section '1만분의 1 파라미터로 미세조정과 같거나 더 나은 GPT-3 175B 적응': the writer could not fix: flow 문제: 두 문장은 하나로 합쳤지만 세 데이터셋 이름과 지표는 넣지 않았습니다. 근거 자료에는 WikiSQL과 MNLI만 나오고 SAMSum이나 데이터셋별 지표는 없어서, 그대로 적으면 근거 없는 주장이 됩니다.",
+    "Section '실험 결과' still has: ['32'] already stated in '제안 방법': refer back without repeating: 프리픽스 임베딩 튜닝은 특수 토큰이 256개를 넘을 때, 프리픽스 층 튜닝은 특수 토큰이 32개를 넘을 때 성능이 크게 떨어졌습니다 .",
+    "Section '의의와 한계': 1 sentence(s) removed that contradict their evidence or talk about the post's sources: 여기서 본 유사도 분석은 $$W_q$$와 $$\\Delta W_q$$를 비교한 결과이므로, 다른 가중치 행렬에서도 같은 경향이 나타나는지는 이 근거만으로 판단할 수 없습니다. (about_sources: States what 'this evidence alone' cannot establish, i.e. it is about the post's inputs.)",
+    "Section '의의와 한계': check 1 sentence(s) the evidence may not support: 앞서 본 행렬 선택 실험은 GPT-3 175B의 WikiSQL과 MultiNLI에서 나온 결과이므로, $$W_q$$와 $$W_v$$에 작은 랭크를 쓰는 구성은 출발점으로 삼는 편이 맞고 정답으로 받아들이기에는 근거가 (numbers not in its evidence)",
+    "Section '의의와 한계' still has: numbers ['175B'] without evidence (cite it; an illustration of your own ends with [[EX]]): 앞서 본 행렬 선택 실험은 GPT-3 175B의 WikiSQL과 MultiNLI에서 나온 결과이므로, $$W_q$$와 $$W_v$$에 작은 랭크를 쓰는 구성은 출발점으로 삼는 편이 맞고 정답으로 받아들이기에는 근거가 좁습니다.",
+    "Section '의의와 한계': the writer could not fix: 일괄 처리(batching) 한계는 넣지 않았습니다. A, B를 W에 합치면 과제가 다른 입력을 한 번의 순전파로 묶기 어렵고, 지연이 중요하지 않으면 합치지 않고 동적으로 고를 수 있다는 내용은 이 섹션의 근거(E16, E10)와 제공된 원문 구절(H.3, 8장)에 없습니다. 근거 표시 없이 덧붙이면 근거에 없는 주장을 더하게 되므로 뺐습니다. 이 한계를 다루는 원문 구절(예: 논문 4.2절)을 근거로 추가해 주시면 반영할 수 있습니다.",
+    "Section 'TL;DR': the writer could not fix: 세 데이터셋의 이름은 넣지 못했습니다. [[E3]]에는 'all three datasets'(Table 4)라는 표현만 있고 이름이 없습니다. [[E11]]과 [[E13]]에 WikiSQL과 MultiNLI가 나오지만, 이는 다른 실험(어떤 가중치 행렬에 적용하고 랭크를 얼마로 둘지)의 범위입니다. 그리고 SAMSum은 근거 어디에도 나오지 않습니다. 이 성능 비교가 GPT-3 175B에서 나온 결과라는 점은 문장에 밝혔습니다.",
+    "Section 'TL;DR': check 1 sentence(s) the evidence may not support: 학습한 행렬은 배포 전에 원래 가중치에 합쳐 둘 수 있습니다. (unsupported: No evidence cited for merging the learned matrices into the weights before deployment (E4 would support it but is not cited here). (not supported: 학습한 행렬은 배포 전에 원래 가중치에 합쳐 둘 수 있습니다))"
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 535.2,
+  "input_tokens": 529114,
+  "output_tokens": 66024,
+  "estimated_cost_usd": 2.0315,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 68,
+      "failed_calls": 0,
+      "input_tokens": 125696,
+      "output_tokens": 66024,
+      "cache_read_tokens": 248459,
+      "cache_write_tokens": 154959,
+      "cost_usd": 2.031539
+    },
+    "by_stage": {
+      "figures": {
+        "calls": 8,
+        "failed_calls": 0,
+        "input_tokens": 16800,
+        "output_tokens": 6615,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.004987
+      },
+      "extract_attributes": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 53894,
+        "output_tokens": 264,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.005521
+      },
+      "read": {
+        "calls": 16,
+        "failed_calls": 0,
+        "input_tokens": 38,
+        "output_tokens": 12742,
+        "cache_read_tokens": 129217,
+        "cache_write_tokens": 41086,
+        "cost_usd": 0.256054
+      },
+      "outline": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 2804,
+        "cache_read_tokens": 922,
+        "cache_write_tokens": 4001,
+        "cost_usd": 0.07647
+      },
+      "verify": {
+        "calls": 14,
+        "failed_calls": 0,
+        "input_tokens": 32768,
+        "output_tokens": 15666,
+        "cache_read_tokens": 42216,
+        "cache_write_tokens": 25097,
+        "cost_usd": 0.586765
+      },
+      "draft": {
+        "calls": 6,
+        "failed_calls": 0,
+        "input_tokens": 24,
+        "output_tokens": 8339,
+        "cache_read_tokens": 20742,
+        "cache_write_tokens": 46429,
+        "cost_usd": 0.407319
+      },
+      "review": {
+        "calls": 7,
+        "failed_calls": 0,
+        "input_tokens": 28,
+        "output_tokens": 8022,
+        "cache_read_tokens": 9576,
+        "cache_write_tokens": 14432,
+        "cost_usd": 0.23654
+      },
+      "fix": {
+        "calls": 14,
+        "failed_calls": 0,
+        "input_tokens": 22136,
+        "output_tokens": 10910,
+        "cache_read_tokens": 45786,
+        "cache_write_tokens": 22343,
+        "cost_usd": 0.436772
+      },
+      "finalize": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 662,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 1571,
+        "cost_usd": 0.021111
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-haiku-5-5": {
+        "calls": 9,
+        "failed_calls": 0,
+        "input_tokens": 70694,
+        "output_tokens": 6879,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.010508
+      },
+      "global.anthropic.claude-sonnet-5-5": {
+        "calls": 16,
+        "failed_calls": 0,
+        "input_tokens": 38,
+        "output_tokens": 12742,
+        "cache_read_tokens": 129217,
+        "cache_write_tokens": 41086,
+        "cost_usd": 0.256054
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 43,
+        "failed_calls": 0,
+        "input_tokens": 54964,
+        "output_tokens": 46403,
+        "cache_read_tokens": 119242,
+        "cache_write_tokens": 113873,
+        "cost_usd": 1.764977
+      }
+    }
+  }
+}

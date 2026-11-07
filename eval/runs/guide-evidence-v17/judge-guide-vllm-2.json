@@ -1,0 +1,284 @@
+{
+ "item": "guide-vllm",
+ "post": "/tmp/eval-guide/guide-vllm-v17.md",
+ "judge_run": 2,
+ "sdk_checked": "vLLM main source (git clone --depth 1, commit 4683d46, 2026-11-07) imported from source in /tmp/judge-gv17/vllm/venv (Python 3.14, torch 2.15.0, requirements/common.txt, openai 3.46.0; VLLM_TARGET_DEVICE=cpu; PyPI 0.33.0 ships only manylinux wheels). v0.33.0 release config (vllm/config/cache.py, scheduler.py) and v0.10.0 vllm/config.py + docs/configuration/optimization.md fetched raw from GitHub tags. Every `vllm serve` flag in the post parsed with vllm.entrypoints.common.cli_args.make_arg_parser; CacheConfig/SchedulerConfig/KVEventsConfig/ObservabilityConfig defaults, LLM.chat signature, `vllm download-kernels` subcommand and the API-key middleware read in source; client blocks run against a local fake OpenAI-compatible server on 127.0.0.1:8000 (with and without keys). Official docs read from the same commit's docs/ tree (getting_started/quickstart.md, installation/README.md, gpu.md, gpu.cuda.inc.md, gpu.rocm.inc.md, cpu.md, cpu.x86.inc.md, deployment/docker.md, design/paged_attention.md); arXiv HTML 2309.06180; blog.vllm.ai 2023-06-20 and 2025-01-27 V1 alpha. Non-official fetched: DEV Community kernel walkthrough, OneSource Cloud comparison, discuss.vllm.ai thread 551, kubenatives template (public part); buildmvpfast, SitePoint and Bayseian via Tavily extract (direct fetch hit Cloudflare). All code run with AWS_PROFILE/AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY/AWS_SESSION_TOKEN unset and AWS_CONFIG_FILE=AWS_SHARED_CREDENTIALS_FILE=/dev/null; no weights downloaded, no paid model.",
+ "sampling": "208 blank-line paragraphs after front matter (fenced blocks kept whole, headings and list runs as one paragraph, Sources list included); paragraphs 2,5,8,...; 15 claims drawn from those paragraphs; the whole post read for off-sample findings",
+ "scores": {
+  "A": 8.0,
+  "B": 8.0,
+  "C": 7.5,
+  "D": 8.5,
+  "E": 8.0,
+  "F": 7.5,
+  "T1": 7.5,
+  "T2": 8.0,
+  "T3": 8.5
+ },
+ "score_evidence": {
+  "A": "No body H1, no skipped levels, 12 closed fences with one-word info strings, real tables, math only as $$ with blank lines around display blocks, use_math true, description 139 characters, two-level categories. Deductions: the paper defined twice with its full title (L46, L168); the v0.10.0 CLI page in Sources (L610) unused; the 약점 column filled with '특별한 운영 부담 없음' (L535, L537); five remote images (L37, L62, L104, L126, L137).",
+  "B": "'입니다' prose keeps English terms. Deductions (fewer than run 1 weighs as blocking): look-here lead-ins (L94 '보면 됩니다. 단계별로 정리하면 아래 표와 같습니다', L139, L188), L135 '결국 ... 공유합니다' restatement, L135 'fork할' (rewrite '프로세스를 포크할 때'), L202 '요구하는 셈입니다', L427 triple scoping 'CPU 백엔드에만 해당하며 ... CPU 백엔드 문서 기준(CPU 백엔드에 한함)으로 ... 같은 CPU 백엔드 기준으로' (rewrite 'CPU 백엔드 문서 기준으로 ...'), three '핵심:' callouts restating the paragraph above (L52, L158, L218).",
+  "C": "Back-references resolve (L56 '앞서 본 4% 미만', L232 '앞서 계산한 슬롯 6', L263, L427, L545). Deductions: L178 promises the actual max_num_seqs default later, but L427 gives CPU-only values; 'Qwen2.5 서버' used at L162 and L228 before launch at L345; L168 re-introduces '원 논문' after L46; L267 links the historical attention_kernels.cu to 'paged_attention_v1/v2' without saying so earlier. Run 2 also counts the L267 bridging inference as a flow break (7.5).",
+  "D": "Hard parts get help at the right moment: OS analogy (L60), the paper's 7-token table (L96-L100), slot arithmetic with the same table (L110), 300-token waste (L114), CoW table (L130-L133), beam steps (L145-L148), invented budget table (L182-L188), warp assignment (L247), head split across 2 GPUs (L308). Deductions: L238-L251 thread-level kernel detail for a kernel the post says is no longer used; waste/last-block repeated.",
+  "E": "Tables where comparison helps (L41 benchmarks, L96 block-table steps, L130 CoW, L182 budget, L208 swap vs recompute, L240 GPU units, L257 fusions, L298 alpha limits, L532 engines), formula (L78), two local diagrams (L84, L92), loop diagram (L283). Deductions: five remote GIF/PNG images; L41 table and L37 chart show the same numbers; the L532 table's 약점 cells are filler.",
+  "F": "See claims. Off-sample: L477 '최소 권한' (wrong, -1.5), L535/L537 weakness cells misrepresent OneSource (wrong, -1); L545 and L423 inferences (unsupported, -0.5 together). Main-branch default drift (gpu_memory_utilization None/1.0, block size 64) follows the cited stable docs and is not deducted.",
+  "T1": "All client blocks run against a fake OpenAI server (keyed and unkeyed), every CLI flag parses, LLM.chat matches the signature, docker and YAML match docs. Deductions: no CPU-build install although L437 requires one; no Kubernetes manifest beyond the securityContext fragment; no command enabling KV events or kv-cache metrics; no curl block for the /v1/completions call (L375); offline block depends on weights (expected).",
+  "T2": "Covers the sources in a sensible order: memory problem -> block table -> sharing/prefix caching -> scheduler/preemption -> kernels -> V1/TP -> install/serve -> memory tuning -> deployment/observability -> choosing. Deductions: Kubernetes rests on a paywalled third-party template described in prose (L505); thread-level historical kernel detail (L238-L251) outweighs current deployment content.",
+  "T3": "Explains mechanisms and why: block size trade-off (L70), all-or-nothing eviction and gang scheduling (L202), recompute vs swap (L208-L216), kernel cost vs batch gain (L271), V1 loop isolation and 1.7x with the same kernels (L279-L294), central KV manager with broadcast block tables (L308-L318), prefix caching default from <1% cost (L164), admission control (L196). Deductions: the observability section names flags but not how to read them, and scaling (HPA metric, multi-replica routing) is absent."
+ },
+ "principles": {
+  "claim_headings": {
+   "status": "partly met",
+   "evidence": "H2s are claims ('L54 논리 블록과 물리 블록을 잇는 블록 테이블, 요청당 한 블록으로 묶인 낭비', 'L166 토큰 예산 안에서 요청을 섞는 연속 배칭 스케줄러와 선점·복구', 'L415 gpu_memory_utilization과 KV 캐시 크기가 좌우하는 메모리·동시성 튜닝'); topic-name H3s remain: L48 '운영 환경에서 확인된 사례', L204 '재계산과 스왑, 두 가지 복구 경로', L170 '먼저 온 요청부터 처리하는 FCFS'; L524 H2 is a two-clause list title."
+  },
+  "running_example": {
+   "status": "met",
+   "evidence": "Qwen/Qwen2.5-1.5B-Instruct server threads through the budget table (L180), kernel write count (L228), V1 loop diagram (L281-L288), install/serve (L345), memory split (L423), docker (L462), API key (L481), benchmark harness (L557). Weakness: L162 and L228 use 'Qwen2.5 서버' before it is launched at L345 without the '뒤에서' marker L180 uses."
+  },
+  "mechanism_design_code_example": {
+   "status": "met",
+   "evidence": "Block table: OS analogy (L60) -> block-size trade-off and why 16 (L70) -> blockwise attention formula (L78-L82) -> paper's 7-token walkthrough table (L96-L100) -> slot arithmetic 1×4+2=6 (L110) -> 300-token waste 19 blocks/304 slots (L114). Scheduler: FCFS reason (L172) -> token-budget dictionary (L176) -> invented 2,048-budget table (L182-L188). CoW: reference counts (L128) -> two-row table (L130-L133)."
+  },
+  "facts_said_once": {
+   "status": "partly met",
+   "evidence": "60–80% waste three times (L13, L17 heading, L29); 'waste only in the last block' four times (L13, L33, L56, L114-L116); under 4% twice (L13, L33; L56 points back); 2–4x over FasterTransformer/Orca twice (L15, L46); paper-kernel latency over FasterTransformer twice (L222, L271); V1 moves CPU work out of the loop three times (L15, L275, L279); the full paper title defined as '원 논문' twice (L46, L168); vLLM as the default choice three times (L15, L526, L589)."
+  },
+  "numbers_with_scope_unit": {
+   "status": "met",
+   "evidence": "Benchmarks carry setting (L39 'LLaMA-7B/A10G와 LLaMA-13B/A100 40GB', L294 models and datasets, L541 'vLLM v0.6.1과 TGI v2.3.0 ... LLaMA-2-7B, 동시 요청 100개'); version-scoped defaults (L72 v0.10.0 block-size cap, L216 v0.10.0 recompute default, L427 'CPU 백엔드에 한함'); invented numbers labelled (L180 '가상의 숫자', L188 '지어낸 숫자', L110 '설명용 값'). Weak: L228 '요청 48개' and L198 10,000-block example unlabeled."
+  },
+  "nothing_invented": {
+   "status": "partly met",
+   "evidence": "L477 '최소 권한으로 이 최적화를 살리려면 --cap-add SYS_NICE --security-opt seccomp=unconfined' calls the docs' broad option least privilege (docs: seccomp=unconfined bypasses seccomp; a custom profile is the narrower route); L535/L537 OneSource table puts '특별한 운영 부담 없음' in the 약점 column for SGLang and TGI, dropping the source's 'Narrower hardware scope and community than vLLM' and 'Throughput generally trails ...; development pace has lagged'; L522 residency-metric diagnosis and L545 last sentence are the writer's inference (hedged)."
+  },
+  "writer_assessment_at_end": {
+   "status": "met",
+   "evidence": "L589 '이 글의 판단은 이렇습니다. 처음 서빙을 구축하거나 하드웨어가 섞여 있다면 vLLM으로 시작하는 편이 위험이 가장 적습니다. 다만 모델이 소수 GPU의 VRAM을 거의 채우는 경우, TTFT가 핵심 지표인 대화형 서비스, NVIDIA 단일 플릿 ... 같은 매니페스트로 함께 측정한 뒤에 결정해야 합니다.'"
+  },
+  "length_fitted": {
+   "status": "met",
+   "evidence": "610 lines, about 31k non-space characters; internals (L17-L318, about half) get the depth; install/serve (L320-L413) stays short. Padding: three '핵심:' callouts restating the paragraph above (L52, L158, L218) and the repeated waste/last-block statements."
+  },
+  "type_specific_shape": {
+   "status": "met",
+   "evidence": "TL;DR (L11-L15) opens with the memory problem; architecture and mechanisms (L17-L318) precede installation (L320); closes with when to choose vs SGLang/TensorRT-LLM/TGI, where the advantage shrinks (L543-L545) and a measure-it harness (L557). Failure modes are spread (preemption L200, OOM L429, exitcode 9 L433, NUMA seccomp L477) rather than gathered at the end."
+  },
+  "korean_style": {
+   "status": "partly met",
+   "evidence": "Natural '입니다' prose with English terms kept. Defects: repeated look-here lead-ins (L94 '...부분을 보면 됩니다. 단계별로 정리하면 아래 표와 같습니다', L139 '...순간을 보면 됩니다. ' with a trailing space, L188 '...모습을 보면 됩니다', L128 '아래 표는 그다음 과정을 순서대로 적은 것입니다', L296 '표로 정리했습니다'); L135 '결국 ...' restatement; L202 '그룹 단위 선점을 요구하는 셈입니다'; L135 'fork할' (rewrite '프로세스를 포크할 때' or 'fork 시'); L427 triple scoping 'CPU 백엔드에만 해당하며 GPU 기본값이 아닙니다. CPU 백엔드 문서 기준(CPU 백엔드에 한함)으로 ... 같은 CPU 백엔드 기준으로' (rewrite 'CPU 백엔드 문서 기준으로 ...')."
+  }
+ },
+ "claims": {
+  "checked": 15,
+  "numeric": 11,
+  "supported": 15,
+  "unsupported": 0,
+  "wrong": 0,
+  "unverifiable": 0,
+  "examples": [
+   {
+    "line": 13,
+    "claim": "PagedAttention limits waste to the last block, under 4%; under the paper's design the latest-arrived request is preempted when blocks run out",
+    "verdict": "supported",
+    "source": "blog: 'a mere waste of under 4%'; arXiv §4.5: 'the latest requests are preempted first'."
+   },
+   {
+    "line": 46,
+    "claim": "The paper reports 2–4x throughput over FasterTransformer and Orca at the same latency; the gain grows with longer sequences, larger models and more complex decoding",
+    "verdict": "supported",
+    "source": "arXiv abstract: 'improves the throughput of popular LLMs by 2-4× with the same level of latency compared to ... FasterTransformer and Orca. The improvement is more pronounced with longer sequences, larger models, and more complex decoding algorithms.'"
+   },
+   {
+    "line": 64,
+    "claim": "The block engine allocates a contiguous chunk of GPU DRAM and divides it into physical KV blocks; each block-table entry records the physical block and the number of filled positions",
+    "verdict": "supported",
+    "source": "arXiv §4.2: 'a block engine allocates a contiguous chunk of GPU DRAM and divides it into physical KV blocks'; 'Each block table entry records the corresponding physical blocks of a logical block and the number of filled positions.'"
+   },
+   {
+    "line": 70,
+    "claim": "Block sizes 16–128 were best on ShareGPT; on Alpaca 16 and 32 worked and larger sizes degraded; hence vLLM's default of 16 at the paper's time",
+    "verdict": "supported",
+    "source": "arXiv §7.2: 'In the ShareGPT trace, block sizes from 16 to 128 lead to the best performance. In the Alpaca trace, while the block size 16 and 32 work well, larger block sizes significantly degrade ... Accordingly, vLLM sets its default block size as 16.' (The run's warnings wrongly said this had no evidence.)"
+   },
+   {
+    "line": 130,
+    "claim": "CoW: A1 writes to logical block 1, refcount of physical block 1 > 1, so new physical block 3 is allocated, contents copied and the refcount drops to 1; A2 then writes to physical block 1 directly",
+    "verdict": "supported",
+    "source": "arXiv §4.4 parallel-sampling walkthrough (Fig. 8)."
+   },
+   {
+    "line": 145,
+    "claim": "Beam k=4: before the iteration each candidate has 4 full logical blocks; candidate 3 diverges from the second block, 0–2 share the first 3; physical blocks 2, 4, 5, 8 are freed; afterwards 0, 1, 3 shared by all, 6 by candidates 0/1, 7 by 2/3",
+    "verdict": "supported",
+    "source": "arXiv §4.4 Fig. 9 text: 'vLLM frees all physical blocks whose reference counts reach 0 (blocks 2, 4, 5, 8) ... all candidates share blocks 0, 1, 3; candidates 0 and 1 share block 6, and candidates 2 and 3 further share block 7.'"
+   },
+   {
+    "line": 172,
+    "claim": "FCFS for all requests, earliest served first and latest preempted first; SchedulerConfig.policy default 'fcfs'",
+    "verdict": "supported",
+    "source": "arXiv §4.5 verbatim; vllm/config/scheduler.py L171 policy: SchedulerPolicy = 'fcfs'."
+   },
+   {
+    "line": 178,
+    "claim": "SchedulerConfig's DEFAULT_MAX_NUM_BATCHED_TOKENS/DEFAULT_MAX_NUM_SEQS are mainly for testing; real values come from EngineArgs.create_engine_config; v0.10.0 said the token limit has no static default",
+    "verdict": "supported",
+    "source": "scheduler.py L49-L52, L63-L66 docstrings; v0.10.0 config.py L2236-L2239 'This config has no static default.'"
+   },
+   {
+    "line": 216,
+    "claim": "v0.10.0 used recomputation by default (lower overhead than swapping) and swapping when a sequence group has several sequences such as beam search",
+    "verdict": "supported",
+    "source": "v0.10.0 config.py L2308-L2313 preemption_mode docstring verbatim."
+   },
+   {
+    "line": 234,
+    "claim": "If head_stride == head_size and kv_scale_stride == 0 the kernel copies all heads of a token as one span; otherwise work is split by head with a warp per head",
+    "verdict": "supported",
+    "source": "DEV Community: 'When head_stride == head_size and kv_scale_stride == 0, it can copy a token's heads as one span. Otherwise, it assigns work by head, with a warp cooperating on that head's copy.'"
+   },
+   {
+    "line": 240,
+    "claim": "Grid shape (num_heads, num_seqs, max_num_partitions); a warp is 32 threads; each thread block handles one head, one sequence, one partition",
+    "verdict": "supported",
+    "source": "design/paged_attention.md Concepts: Grid '(num_heads, num_seqs, max_num_partitions)' and 'each thread block only handles the calculation for one head, one sequence, and one partition'; Warp '32 threads(WARP_SIZE)'."
+   },
+   {
+    "line": 296,
+    "claim": "At the 2025-01-27 alpha V1 lacked log probs, prompt log probs, pipeline parallelism, structured decoding, speculative decoding, prometheus metrics and LoRA, and supported only Ampere or later NVIDIA GPUs",
+    "verdict": "supported",
+    "source": "V1 blog Limitations: 'V1 currently lacks support for log probs, prompt log probs sampling parameters, pipeline parallelism, structured decoding, speculative decoding, prometheus metrics, and LoRA'; 'supports only Ampere or later NVIDIA GPUs'."
+   },
+   {
+    "line": 339,
+    "claim": "ROCm quickstart path supports Python 3.12, ROCm 7.0 and glibc >= 2.35; GPU page requires ROCm 6.3+, MI350 ROCm 7.0+; TPU uses vllm-tpu",
+    "verdict": "supported",
+    "source": "quickstart.md L63 note; gpu.rocm.inc.md L19-L20; quickstart.md L85 'uv pip install vllm-tpu'."
+   },
+   {
+    "line": 423,
+    "claim": "Default 0.92 means one instance takes up to 92% of GPU memory; two Qwen2.5 servers at 0.5 each split the GPU",
+    "verdict": "supported",
+    "source": "Stable docs / v0.33.0 cache.py: 'If unspecified, will use the default value of 0.92 ... if you have two vLLM instances running on the same GPU, you can set the GPU memory utilization to 0.5 for each instance.' (Main now resolves None to 1.0 with the extensible KV cache, else 0.92; post cites the stable page.)"
+   },
+   {
+    "line": 541,
+    "claim": "buildmvpfast (April 2026): HF marks TGI as maintenance mode; vLLM v0.6.1 vs TGI v2.3.0 on LLaMA-2-7B at 100 concurrent requests: 15,243 vs 4,156 tokens/sec, 3.67x",
+    "verdict": "supported",
+    "source": "buildmvpfast: 'Hugging Face now labels Text Generation Inference as maintenance mode'; 'They used vLLM v0.6.1 and TGI v2.3.0'; 'On LLaMA-2-7B, vLLM hit 15,243 tokens/sec at 100 concurrent requests. TGI managed 4,156. That's a 3.67x gap.'"
+   }
+  ],
+  "off_sample_findings": [
+   {
+    "line": 477,
+    "claim": "'최소 권한으로 이 최적화를 살리려면 --cap-add SYS_NICE --security-opt seccomp=unconfined'",
+    "verdict": "wrong",
+    "source": "cpu.md L329-L336: unconfined 'bypasses the seccomp for container'; the custom default.json profile adding migrate_pages is the narrower route."
+   },
+   {
+    "line": 535,
+    "claim": "SGLang and TGI rows say '특별한 운영 부담 없음' under 약점·운영 부담",
+    "verdict": "wrong",
+    "source": "OneSource 'Watch out for': SGLang 'Narrower hardware scope and community than vLLM'; TGI 'Throughput generally trails ...; development pace has lagged'."
+   },
+   {
+    "line": 545,
+    "claim": "Low-concurrency single-request latency could expose the kernel cost directly",
+    "verdict": "unsupported",
+    "source": "Writer's inference (hedged '여지가 있습니다'); the cited buildmvpfast post's own low-concurrency data (TGI TTFT p50 0.18 s vs vLLM 0.24 s at 25 users) is not mentioned."
+   }
+  ]
+ },
+ "checklist": {
+  "repeated": 0,
+  "avoided": 5,
+  "na": 0,
+  "repeated_ids": [],
+  "note": "guide-vllm has no human-fix list (never published); the generic defects in human_fixes.yaml notes are used as checks, as in v15/v16.",
+  "items": [
+   {
+    "id": "cross-ref-nonexistent-section",
+    "status": "avoided",
+    "evidence": "No numbered chapter references; descriptive references resolve ('페이징 어텐션 커널을 다루는 설명에서 이어집니다' L86 -> L247; '참조 카운트와 쓰기 시 복사를 다루는 설명' L116 -> L118). One promise resolves only in form: L178 '`max_num_seqs`의 실제 기본값은 메모리·동시성 튜닝을 다루는 설명에서 이어집니다' -> L427 gives CPU-backend defaults and says 'GPU 기본값이 아닙니다'."
+   },
+   {
+    "id": "tag-remnant-entity-leak",
+    "status": "avoided",
+    "evidence": "No '‹version>' or stray tags (v16's L564 remnant is gone); '&#124;' in Sources titles (L601-L609) renders as '|'."
+   },
+   {
+    "id": "unclosed-code-fence",
+    "status": "avoided",
+    "evidence": "12 fenced blocks (24 fence lines), all closed; every block extracted by fence pairs."
+   },
+   {
+    "id": "stale-cli-flags",
+    "status": "avoided",
+    "evidence": "Every flag parses against current main: '--torch-backend' (uv), '--host/--port', '--generation-config vllm', '--attention-backend FLASH_ATTN/FLASHINFER', '--max-num-seqs 64', '--model' after the image, '--api-key k1 k2', '--disable-log-stats', '--kv-cache-memory-bytes', '--block-size'; `vllm download-kernels` exists (vllm/entrypoints/cli/download_kernels.py). The v0.10.0 CLI page in Sources (L610) is never used in the body."
+   },
+   {
+    "id": "install-centric-coverage",
+    "status": "avoided",
+    "evidence": "Internals occupy L17-L318 (about half of the body) before installation at L320; installation is L320-L339."
+   }
+  ]
+ },
+ "extras": {
+  "architecture_first_line": 13,
+  "architecture_note": "TL;DR (L13) states block table, on-demand allocation, CoW and the token-budget scheduler; PagedAttention mechanism L54, sharing/prefix caching L118, scheduler/preemption L166, kernels L220, V1 loop and tensor parallel L273, all before installation (L320).",
+  "sources_total": 17,
+  "sources_non_official": 7,
+  "non_official_share": 0.41,
+  "non_official_list": [
+   "DEV Community kernel walkthrough",
+   "Bayseian blog",
+   "SitePoint 2026 deployment guide",
+   "vLLM Forums thread 551 (RunLLM bot answer)",
+   "kubenatives Kubernetes template (paywalled)",
+   "OneSource Cloud engine comparison",
+   "buildmvpfast vLLM vs TGI (2026)"
+  ],
+  "opens_with_problem": true,
+  "opens_note": "TL;DR, then 'L17 KV 캐시 메모리의 60–80%를 버리던 기존 서빙과 vLLM의 위치': 1.7GB per LLaMA-13B sequence, the 2,048-vs-300-token over-reservation example, fragmentation, the 60–80% measurement.",
+  "closes_with_when_to_choose_and_failure_modes": true,
+  "closes_note": "L524-L589: engine map, TGI maintenance mode and the 3.67x number, shrinking advantage at 70B/4-GPU TP, measure-yourself procedure and harness, writer's choice. When-to-choose is clear; failure modes are spread through the body."
+ },
+ "runnable_code": {
+  "verdict": "Every client block runs in reading order against a local OpenAI-compatible fake server with no AWS credentials, and every CLI flag parses on current main; the offline LLM.chat block matches the current signature but was not executed (no weights). Gaps: no CPU-build install command although L437 says one is needed; no Kubernetes Deployment/Service/shm manifest (only the CPU securityContext fragment); no command that turns on KV events or kv-cache metrics, no /metrics example; no curl block for the /v1/completions call L375 describes.",
+  "passed": [
+   "L328 install: '--torch-backend=auto' and 'vllm download-kernels' match quickstart.md L25-L28; download-kernels subcommand present in vllm/entrypoints/cli/main.py",
+   "L345/L349/L377/L409/L439 vllm serve forms: model_tag parsed; --host/--port, --generation-config vllm, --attention-backend FLASH_ATTN|FLASHINFER, --max-num-seqs 64 all accepted by make_arg_parser",
+   "L353 OpenAI client with api_key 'EMPTY' -> ChatCompletion printed; model name checked by the fake server",
+   "curl POST /v1/completions with prompt/max_tokens/temperature -> text_completion (the call L375 describes in prose)",
+   "L383 `from vllm.entrypoints.llm import LLM` imports (and is the same object as vllm.LLM); LLM.chat accepts a list of conversations; EngineArgs.generation_config default 'auto', 'vllm' accepted",
+   "L455 docker args after the image ('--model Qwen/...') parse; L465 'engine args after the image tag' matches gpu.cuda.inc.md",
+   "L483 keyed client: VLLM_API_KEY=secret2 against a server with keys secret1 secret2 -> 200; wrong key -> 401 (vLLM middleware compares 'Bearer <key>' against any of --api-key's values)",
+   "L557 harness: 256 requests over 32 threads -> p50/p95 printed; works with and without VLLM_API_KEY",
+   "L509 securityContext YAML identical to cpu.md L345-L352"
+  ],
+  "failed": [
+   "L483 run without VLLM_API_KEY set -> KeyError: 'VLLM_API_KEY' (by design; L481 says to set it, but the env var is never exported in any block)",
+   "L353 against a keyed server -> 401 (expected once the L481 key is enabled)",
+   "L439 needs a CPU build that the post never shows how to install (L437)",
+   "L383 not executed: no model weights downloaded (by instruction)"
+  ],
+  "notes": "Current main's CacheConfig.gpu_memory_utilization defaults to None (1.0 with the extensible KV cache, else 0.92) and DEFAULT_BLOCK_SIZE is 64; the post follows the stable docs/v0.33.0 (0.92 default, block size 16), which it cites, so this is not deducted."
+ },
+ "topic_taught_twice": "yes: 60–80% waste three times (L13, L17 heading, L29); 'waste only in the last block' four times (L13, L33, L56, L114/L116) and under 4% twice (L13, L33); 2–4x over FasterTransformer/Orca twice (L15, L46); paper-kernel latency over FasterTransformer twice (L222, L271 with 20–26%); V1 CPU work outside the loop three times (L15, L275, L279); full paper title as '원 논문' twice (L46, L168); supported hardware list twice (L15, L339; L539 points back); vLLM as the safe default three times (L15, L526, L589); generation_config default twice (L377 server, L403 LLM, acceptable); '핵심:' callouts restating the paragraph above three times (L52, L158, L218).",
+ "causes_scope_beyond_sources": "Mostly within the sources. Beyond them: L477 '최소 권한으로' for --cap-add SYS_NICE + seccomp=unconfined (the docs call unconfined a bypass); L535/L537 '특별한 운영 부담 없음' in the 약점 column replaces OneSource's listed weaknesses for SGLang and TGI; L545 last sentence (low concurrency exposes the kernel cost) is the writer's inference, and the same buildmvpfast post's result that TGI has lower TTFT at 25 users (p50 0.18 s vs 0.24 s) and its TGI v3 long-prompt section are not mentioned; L522 'reuse gap long and lifetime short = evicted before reuse' diagnosis and 'adjust memory ratio first' are the writer's advice (hedged with '볼 수 있습니다'); L423 'lowering the ratio mainly shrinks the KV cache' is an inference the run's own verifier flagged; L429 OOM/concurrency tuning order is advice stated as '안전합니다'. Third-party claims are attributed (L110, L154, L162, L423, L445, L505, L530, L541).",
+ "edit_residue": [
+  "L46 and L168 both define the paper with its full title and '(이하 원 논문)' (the run warns it could not remove the second)",
+  "L178 promises the actual max_num_seqs default 'in the memory/concurrency tuning part', but L427 gives CPU-only defaults and says they are not GPU defaults; L427 then scopes 'CPU 백엔드' three times in two sentences (patch residue)",
+  "Run warnings say the ShareGPT 16–128 sentence and the 300-token/19-block example were deleted, yet both remain (L70, L114); both are in fact correct (paper Fig. 18(b) text; ceil(300/16)=19, 304 slots)",
+  "L610 Sources lists the v0.10.0 CLI Reference, which the body never uses",
+  "L139 sentence ends with a trailing space ('...순간을 보면 됩니다. ')",
+  "L162 and L228 use 'Qwen2.5 서버' before it is launched (L345) without the '뒤에서' marker L180 uses (run warning acknowledges)",
+  "L535/L537 '특별한 운영 부담 없음(일반적인 배포 방식)' filler cells in a 약점 column (the writer's table edit was rejected by the rule check, per warnings)",
+  "Five remote vllm.ai images not localized (L37, L62, L104, L126, L137)"
+ ],
+ "changes_vs_v16": "Fixed since v16: '--ipc=host는 빼면 안 됩니다' now 'or --shm-size' (L465); 'v‹version>' remnant gone; keyed client added (L483) and the harness reads VLLM_API_KEY (L565); closing judgement now under the choosing heading (L589); no orphan CLI subsection. Still present: '최소 권한' for seccomp=unconfined (v16 L540 -> v17 L477); five remote images; no Kubernetes manifest or metrics example. New: OneSource table weakness cells, duplicate '원 논문' definition, L178 dangling default promise.",
+ "top_issues": [
+  "Two claims misstate their sources: L477 calls --cap-add SYS_NICE --security-opt seccomp=unconfined the least-privilege option (cpu.md: unconfined 'bypasses the seccomp for container'; a custom default.json profile allowing migrate_pages is the narrow route), and the OneSource table (L532-L537) puts '특별한 운영 부담 없음' in the 약점·운영 부담 column for SGLang and TGI, dropping the source's listed weaknesses (narrower hardware and community; throughput trails, development lagging).",
+  "Runnable coverage stops at single-node serving: no CPU-build install although L437 requires it, no Kubernetes Deployment/Service/shm manifest (only a description of a paywalled template, L505), no command that enables KV events or kv-cache metrics (L520) and no /metrics example, no curl block for the /v1/completions call L375 describes.",
+  "Repetition and edit residue: 60–80% waste three times, last-block waste four times, V1 CPU-loop point three times, paper title defined twice (L46, L168), kernel latency twice (L222, L271), three restating '핵심:' callouts; L178's promised GPU default never arrives; unused v0.10.0 CLI source; five remote images."
+ ]
+}
