@@ -1008,3 +1008,19 @@ def test_one_number_in_two_benchmarks_is_two_facts() -> None:
     assert duplicate_evidence(
         [n("E1", "제로샷, HellaSwag"), n("E2", "제로샷, HellaSwag")], within_source=True
     ) == {"E2": "E1"}
+
+
+def test_a_claim_check_the_models_cannot_answer_leaves_a_note() -> None:
+    from scholar_lens.application.evidence_writer import EvidenceWriter
+    from scholar_lens.application.survey_engine import SURVEY_PROMPTS
+
+    class Model:
+        async def structured(self, **_kwargs):  # type: ignore[no-untyped-def]
+            raise ValueError("No valid ClaimCheck (stop reason content_filtered)")
+
+    writer = EvidenceWriter(Model(), SURVEY_PROMPTS, max_fix_rounds=1)  # type: ignore[arg-type]
+    found = asyncio.run(
+        writer.check_claims("## 공격\n\n공격은 성공했습니다 [[E2]].\n", _ledger())
+    )
+    assert found == []
+    assert any("Check by hand" in n and "공격" in n for n in writer.notes)
