@@ -1306,13 +1306,13 @@ class TestPlanFile:
         from scholar_lens.src import survey_pipeline
 
         plan = self._plan()
-        monkeypatch.setattr(survey_pipeline, "ROOT_DIR", tmp_path)
         monkeypatch.setattr(survey_pipeline, "SurveyPlanner", MagicMock())
         monkeypatch.setattr(
             survey_pipeline, "plan_survey", AsyncMock(return_value=plan)
         )
         context = MagicMock()
         context.s3_handler.get_text.return_value = None
+        context.papers_dir = tmp_path / "papers"
         context.config = Config()
         context.config.resources.s3_bucket_name = "bucket"
         request = JobRequest(kind="survey_plan", topic="preference optimization")

@@ -24,7 +24,7 @@ from ..domain.guide.evidence_guide import (
     unverified_imports,
 )
 from ..domain.post_names import slugify
-from .constants import LanguageModelId, LocalPaths, S3Paths
+from .constants import LanguageModelId, S3Paths
 from .guide_authority import official_reference, unverified_identifiers
 from .logger import logger
 from .metrics import TokenUsageTracker
@@ -33,7 +33,7 @@ from .prompts.tech_guide import (
     OLDER_DOCS_LABEL,
     REFERENCE_LABEL,
 )
-from .runtime import ROOT_DIR, RunContext
+from .runtime import RunContext
 from .tech_guide import TechGuide, TechGuideGenerator
 from .web_research import (
     OfficialDocs,
@@ -261,7 +261,7 @@ async def write_guide_with_evidence(
             max_total_chars=cfg.max_total_chars,
         ),
         store=EvidenceTextStore(
-            ROOT_DIR / LocalPaths.PAPERS_DIR.value / "guide-evidence",
+            context.papers_dir / "guide-evidence",
             context.s3_handler,
             context.config.resources.s3_prefix,
             S3Paths.GUIDES,

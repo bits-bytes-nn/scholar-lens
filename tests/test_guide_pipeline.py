@@ -129,7 +129,7 @@ async def _run_guide(
     async def no_guideline(_: RunContext) -> None:
         return None
 
-    monkeypatch.setattr(guide_pipeline, "ROOT_DIR", tmp_path)
+    context.root_dir = tmp_path
 
     async def evidence(
         _context: RunContext, gen: FakeGuideGenerator, *, urls: list[str], **_: Any

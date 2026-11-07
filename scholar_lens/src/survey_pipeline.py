@@ -71,13 +71,13 @@ from ..domain.survey.plan import (
     survey_slug,
     unversioned_arxiv_id,
 )
-from .constants import LanguageModelId, LocalPaths, S3Paths
+from .constants import LanguageModelId, S3Paths
 from .jobs import JobRequest
 from .logger import logger
 from .metrics import TokenBudgetGuard, TokenUsageTracker
 from .prompt_safety import neutralize_prompt_tags
 from .prompts import BasePrompt, SurveyScopePrompt, SurveySelectionPrompt
-from .runtime import ROOT_DIR, PipelineOutcome, RunContext
+from .runtime import PipelineOutcome, RunContext
 from .utils import BedrockLanguageModelFactory, RetryableBase
 from .web_research import (
     OfficialDocs,
@@ -837,7 +837,7 @@ async def run_survey_plan_pipeline(
     finally:
         researcher.close()
     slug = survey_slug(plan.topic)
-    path = ROOT_DIR / LocalPaths.PAPERS_DIR.value / slug / "plan.json"
+    path = context.papers_dir / slug / "plan.json"
     await asyncio.to_thread(save_plan, plan, path)
     s3_uri = None
     if context.s3_handler is not None:

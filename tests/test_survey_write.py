@@ -745,7 +745,6 @@ def stage(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     broken: set[str] = set()
     plan_path = tmp_path / "plan.json"
     plan_path.write_text(json.dumps(plan_dict()))
-    monkeypatch.setattr(survey_writer, "ROOT_DIR", tmp_path)
     monkeypatch.setattr(survey_writer, "SurveyWriter", lambda **_: writer)
     monkeypatch.setattr(survey_writer, "WebResearcher", lambda **_: researcher)
     monkeypatch.setattr(survey_writer, "PaperIndex", lambda *_: index)
@@ -785,6 +784,7 @@ def stage(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         config=Config(),
         default_boto_session=session,
         bedrock_boto_session=session,
+        root_dir=tmp_path,
         conventions=spec,
         blog_posts=[],
         blog_tags={},

@@ -84,9 +84,6 @@ def _paper(**attribute_overrides: object) -> Paper:
 @pytest.fixture
 def pipeline_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):  # type: ignore[no-untyped-def]
     """A RunContext with local conventions, no S3/GitHub, faked image fetch."""
-    monkeypatch.setattr(paper_pipeline, "ROOT_DIR", tmp_path)
-    monkeypatch.setattr(guide_pipeline, "ROOT_DIR", tmp_path)
-    monkeypatch.setattr(runtime, "ROOT_DIR", tmp_path)
     fetched: list[str] = []
 
     def build_publisher(context):  # type: ignore[no-untyped-def]
@@ -106,6 +103,7 @@ def pipeline_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):  # type: igno
         config=Config(),
         default_boto_session=boto3.Session(region_name="us-west-2"),
         bedrock_boto_session=boto3.Session(region_name="us-west-2"),
+        root_dir=tmp_path,
         conventions=load_local_conventions(),
     )
     return context, fetched
@@ -196,7 +194,7 @@ class TestSummaryEndToEnd:
             )
         rules = {v.rule for v in info.value.violations}
         assert {"tags", "categories"} <= rules
-        work_dir = Path(paper_pipeline.ROOT_DIR) / "papers" / "2106_09685"
+        work_dir = context.papers_dir / "2106_09685"
         assert not list(work_dir.glob("20*.md"))  # no post written
         assert list(work_dir.glob("*.rejected.md"))
 
@@ -400,10 +398,11 @@ class _FakeS3:
         return self.result  # type: ignore[return-value]
 
 
-def _guideline_context(s3: _FakeS3):  # type: ignore[no-untyped-def]
+def _guideline_context(s3: _FakeS3, root_dir: Path):  # type: ignore[no-untyped-def]
     from types import SimpleNamespace
 
     return SimpleNamespace(
+        root_dir=root_dir,
         s3_handler=s3,
         config=SimpleNamespace(resources=SimpleNamespace(s3_prefix="sl")),
     )
@@ -415,17 +414,16 @@ async def test_translation_guideline_is_optional(
     from scholar_lens.adapters.aws.storage import S3OperationError
     from scholar_lens.src import runtime
 
-    monkeypatch.setattr(runtime, "ROOT_DIR", tmp_path)
     load = runtime.load_translation_guideline
     missing = _FakeS3(None)
-    assert await load(_guideline_context(missing)) is None  # type: ignore[arg-type]
+    assert await load(_guideline_context(missing, tmp_path)) is None  # type: ignore[arg-type]
     assert missing.keys and missing.keys[0].startswith("sl/")
     found = _FakeS3('[{"term": "rank", "rendering": "랭크"}]')
-    assert await load(_guideline_context(found)) == [  # type: ignore[arg-type]
+    assert await load(_guideline_context(found, tmp_path)) == [  # type: ignore[arg-type]
         {"term": "rank", "rendering": "랭크"}
     ]
     with pytest.raises(S3OperationError):
-        await load(_guideline_context(_FakeS3(S3OperationError("denied"))))  # type: ignore[arg-type]
+        await load(_guideline_context(_FakeS3(S3OperationError("denied")), tmp_path))  # type: ignore[arg-type]
 
 
 async def test_guideline_failure_stops_before_paid_stages(

@@ -55,6 +55,8 @@ class RunContext(BaseModel):
     default_boto_session: boto3.Session
     bedrock_boto_session: boto3.Session
     s3_handler: S3Handler | None = None
+    # The run's working directory (papers, figures, generated posts).
+    root_dir: Path = ROOT_DIR
     # The blog's post conventions, loaded once per run (see load_run_conventions).
     conventions: PostConventions | None = None
 
@@ -65,6 +67,11 @@ class RunContext(BaseModel):
     blog_tags: dict[str, int] | None = None
     # Why the blog's posts could not be listed (they are then none).
     blog_listing_error: str | None = None
+
+    @property
+    def papers_dir(self) -> Path:
+        """Where the run keeps each paper's and guide's working files."""
+        return self.root_dir / LocalPaths.PAPERS_DIR.value
 
     def require_conventions(self) -> PostConventions:
         if self.conventions is None:
@@ -295,7 +302,7 @@ def build_publisher(context: RunContext) -> Publisher:
     """Construct the artifact Publisher from the run context."""
     return Publisher(
         context.config.resources.github,
-        root_dir=ROOT_DIR,
+        root_dir=context.root_dir,
         s3_handler=context.s3_handler,
         s3_bucket_name=context.config.resources.s3_bucket_name,
         s3_prefix=context.config.resources.s3_prefix,
@@ -394,7 +401,7 @@ async def load_translation_guideline(
     the S3 copy. It is optional, so a missing object yields ``None``; any
     other S3 error still raises (before any paid stage runs)."""
     guideline_path = (
-        ROOT_DIR
+        context.root_dir
         / LocalPaths.ASSETS_DIR.value
         / LocalPaths.TRANSLATION_GUIDELINE_FILE.value
     )

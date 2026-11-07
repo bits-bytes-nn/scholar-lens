@@ -62,7 +62,7 @@ from ..domain.validation import (
     description_problems,
     fit_description,
 )
-from .constants import LanguageModelId, LocalPaths, S3Paths
+from .constants import LanguageModelId, S3Paths
 from .formatting import build_post_meta, render_front_matter
 from .jobs import JobRequest
 from .logger import logger
@@ -72,7 +72,6 @@ from .prompts import SurveyFinalizationPrompt
 from .publish_types import title_slug
 from .publisher import PublishRequest, build_pr_body
 from .runtime import (
-    ROOT_DIR,
     PipelineOutcome,
     RunContext,
     find_published_post,
@@ -477,7 +476,7 @@ async def run_survey_write_pipeline(
         callbacks=[tracker],
     )
     researcher = WebResearcher(max_images_per_page=MAX_PAPER_IMAGES)
-    papers_dir = ROOT_DIR / LocalPaths.PAPERS_DIR.value
+    papers_dir = context.papers_dir
     try:
         survey = await write_survey_with_evidence(
             context,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 
 from scholar_lens.src.paper_pipeline import _figure_captions, _unanalysed_figure_notes
@@ -84,7 +85,9 @@ def _context() -> SimpleNamespace:
         max_chunks=1,
     )
     return SimpleNamespace(
-        config=SimpleNamespace(paper=paper, code=code), bedrock_boto_session=None
+        config=SimpleNamespace(paper=paper, code=code),
+        bedrock_boto_session=None,
+        papers_dir=Path("papers"),
     )
 
 
@@ -103,7 +106,9 @@ async def test_html_parse_failure_falls_back_to_the_pdf(monkeypatch) -> None:  #
         async def parse(self, _arxiv_id: str) -> None:
             raise ParserError("no HTML rendering")
 
-    async def fake_pdf(source: object, kwargs: dict) -> tuple[list, str]:
+    async def fake_pdf(
+        source: object, papers_dir: Path, kwargs: dict
+    ) -> tuple[list, str]:
         return [], "pdf content"
 
     monkeypatch.setattr(paper_pipeline, "LanguageModelId", lambda value: value)
