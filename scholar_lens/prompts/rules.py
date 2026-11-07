@@ -237,6 +237,11 @@ An illustration of your own (a toy input, hypothetical numbers) says so in
 words and ends its sentence with [[EX]] instead of evidence ids; its numbers
 are not checked against the evidence. Never put a result, default or
 measurement of the subject in an [[EX]] sentence.
+A cause, reason or design motive ("because", "so that", "~하기 때문에",
+"~하려고") is stated only when the cited evidence gives it; otherwise state
+what was observed and, if the post offers an explanation, mark it as the
+post's reading in the closing section. Never widen a fact beyond its scope
+(one component's design reason is not the whole system's).
 """
 
 

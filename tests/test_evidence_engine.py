@@ -1034,3 +1034,18 @@ def test_survey_results_and_limitations_need_table_cells() -> None:
     assert _no_code(doc, "number", {"cell": " "})
     assert not _no_code(doc, "limitation", {"cell": "작은 beta에서 불안정"})
     assert not _no_code(doc, "finding", {"cell": ""})
+
+
+def test_a_token_count_is_a_fact_not_a_model_size() -> None:
+    md = "## 제목\n\n평균 대화는 115k 토큰입니다 [[E2]].\n"
+    problems = draft_problems(
+        md,
+        title="t",
+        own=["E2"],
+        earlier=[],
+        ledger=_ledger(),
+        earlier_numbers={"115k": "앞 절"},
+        figure_urls=[],
+        free_numbers="",
+    )
+    assert any("already stated" in p for p in problems)

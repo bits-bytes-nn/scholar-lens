@@ -174,8 +174,9 @@ _BLANK_CELL = re.compile(r"\|\s*(?:—|–|-|N/A|n/a)?\s*(?=\|)")
 _MARKER_AS_WORD = re.compile(MARKER.pattern + r"(?=[^\W\d_])")
 
 
-# A number with a size unit names a model ("Llama 2 7B"), not a result.
-_MODEL_SIZE = re.compile(r"^\d+(?:\.\d+)?[BMK]$", re.IGNORECASE)
+# A parameter count names a model ("Llama 2 7B", "350M"), not a result; a
+# token count ("115k") is a fact like any other and is not repeated.
+_MODEL_SIZE = re.compile(r"^\d+(?:\.\d+)?[BM]$")
 
 
 def visual_count(markdown: str) -> int:
