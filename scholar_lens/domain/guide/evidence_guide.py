@@ -10,6 +10,7 @@ import ast
 import builtins
 import re
 import symtable
+import textwrap
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Literal
 
@@ -199,6 +200,12 @@ def guide_draft_problems(markdown: str, *, code_language: str = "") -> list[str]
     text, the same code in two SDK languages, and code blocks longer than
     the paragraph around them can explain."""
     problems: list[str] = []
+    for line, role in zip(markdown.split("\n"), block_lines(markdown), strict=True):
+        if role == "code" and MARKER.search(line):
+            problems.append(
+                "an evidence marker inside code; markers go at the end of prose "
+                f"sentences only: {line.strip()[:120]}"
+            )
     for sentence in prose_sentences(markdown):
         plain = MARKER.sub("", sentence)
         if _SOURCE_ID.search(plain):
@@ -293,14 +300,52 @@ def _free_globals(table: symtable.SymbolTable) -> set[str]:
     return names
 
 
-def _session_block(code: str) -> bool:
-    """A REPL transcript or notebook cell (``>>>``, ``%pip``, ``!ls``) or an
-    indented fragment: shown, not pasted as a script."""
-    lines = [ln for ln in code.split("\n") if ln.strip()]
-    return bool(lines) and (
-        lines[0][:1] in (" ", "\t")
-        or any(ln.lstrip().startswith((">>>", "%", "!")) for ln in lines)
+# A fenced block at any indentation (a list item's code too).
+_ANY_FENCE = re.compile(
+    r"^([ \t]*)(`{3,}|~{3,})[ \t]*([\w+#-]*)[^\n]*\n(.*?)^\1\2[ \t]*$", re.M | re.S
+)
+_PROMPT = re.compile(r"^(?:>>> |\.\.\. )")
+# Module-level definitions of a block that does not parse (best effort).
+_DEFINED_LINE = re.compile(
+    r"^(?:async\s+)?(?:def|class)\s+(\w+)|^(\w+)\s*(?::[^=]+)?=(?!=)|"
+    r"^(?:from\s+\S+\s+)?import\s+(.+)$",
+    re.M,
+)
+
+
+def _python_blocks(markdown: str) -> list[str]:
+    return [
+        textwrap.dedent(m.group(4))
+        for m in _ANY_FENCE.finditer(markdown)
+        if m.group(3).lower() in _PYTHON_INFO
+    ]
+
+
+def _session_code(code: str) -> str | None:
+    """A REPL transcript or notebook cell as the code it runs (prompts and
+    ``%``/``!`` lines left out); None for a plain script."""
+    lines = code.split("\n")
+    if not any(ln.lstrip().startswith((">>>", "%", "!")) for ln in lines):
+        return None
+    return "\n".join(
+        _PROMPT.sub("", ln)
+        for ln in lines
+        if not ln.lstrip().startswith(("%", "!"))
+        and (_PROMPT.match(ln) or not ln.strip())
     )
+
+
+def _recovered_names(code: str) -> set[str]:
+    names: set[str] = set()
+    for m in _DEFINED_LINE.finditer(code):
+        if m.group(1) or m.group(2):
+            names.add(m.group(1) or m.group(2))
+        elif m.group(3):
+            for part in m.group(3).split(","):
+                words = part.split()
+                if words:
+                    names.add(words[-1].split(".")[0].strip("()"))
+    return names
 
 
 def python_code_problems(
@@ -309,26 +354,26 @@ def python_code_problems(
     """(section title, problem) for the guide's Python code read in order,
     as a reader pastes it: a block that does not parse, and a name a block
     uses that no block so far (nor Python itself) defines. ``sections`` are
-    (title, markdown, checked): every block's definitions count, problems are
-    reported for ``checked`` sections only (the running example's usage, not
-    an internals excerpt quoted to explain a mechanism). A star import or a
-    block that does not parse makes later names unknowable: no undefined
-    names are reported after it. Parsing and scopes come from the standard
-    library (``ast``, ``symtable``)."""
+    (title, markdown, checked): every block's definitions count (a REPL or
+    notebook block's too, and a best-effort reading of a block that does not
+    parse), problems are reported for ``checked`` sections only (the running
+    example's usage, not an internals excerpt). After a star import later
+    names are unknowable and are not reported. Parsing and scopes come from
+    the standard library (``ast``, ``symtable``)."""
     known = set(dir(builtins)) | {"__name__", "__file__"}
     reliable = True
     problems: list[tuple[str, str]] = []
     for title, markdown, checked in sections:
-        for m in _FENCE_OPEN.finditer(markdown):
-            if m.group(2).lower() not in _PYTHON_INFO or _session_block(m.group(3)):
-                continue
-            code = m.group(3)
+        for block in _python_blocks(markdown):
+            session = _session_code(block)
+            code = block if session is None else session
+            report = checked and session is None
             try:
                 tree = ast.parse(code)
                 table = symtable.symtable(code, "<guide>", "exec")
             except (SyntaxError, ValueError) as e:
-                reliable = False
-                if checked:
+                known |= _recovered_names(code)
+                if report:
                     reason = e.msg if isinstance(e, SyntaxError) else str(e)
                     problems.append(
                         (
@@ -346,7 +391,7 @@ def python_code_problems(
                 reliable = False
             bound = _bound_names(table)
             missing = sorted(_free_globals(table) - bound - known)
-            if checked and reliable and missing:
+            if report and reliable and missing:
                 problems.append(
                     (
                         title,

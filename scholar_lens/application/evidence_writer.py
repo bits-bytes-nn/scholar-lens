@@ -537,7 +537,9 @@ class EvidenceWriter:
                     role="write", system=self.prompts.writer, prompt=prompt
                 )
             )
-            if own and (prose_length(text) < 0.3 * target or _incomplete(text)):
+            if (own or evidence) and (
+                prose_length(text) < 0.3 * target or _incomplete(text)
+            ):
                 logger.warning(
                     "Section came back short (%d chars): %r",
                     prose_length(text),
@@ -554,7 +556,9 @@ class EvidenceWriter:
                         "characters of prose) from its evidence.",
                     )
                 )
-            if own and (prose_length(text) < 0.3 * target or _incomplete(text)):
+            if (own or evidence) and (
+                prose_length(text) < 0.3 * target or _incomplete(text)
+            ):
                 logger.warning("Section still short; writing it from the claims alone.")
                 text = _kept(
                     await self.model.text(
@@ -622,8 +626,10 @@ class EvidenceWriter:
                     + "\n".join(f"- {v}: {s}" for s, v in claims)
                 ],
             )
-            if not structure_lost(draft, fixed) and len(checks(fixed)) <= len(
-                checks(draft)
+            if (
+                not structure_lost(draft, fixed)
+                and not _incomplete(fixed)
+                and len(checks(fixed)) <= len(checks(draft))
             ):
                 draft = fixed
                 claims = await self.unsupported(draft, ledger, free, context)
@@ -719,12 +725,19 @@ class EvidenceWriter:
                     if _removable(v)
                 ]
                 md = drop_sentences(fixed, wrong) if wrong else fixed
-                if wrong:
+                left = set(claim_units(md))
+                if removed := [w for w in wrong if w not in left]:
                     self.notes.append(
-                        f"Section '{title_of(section)}': {len(wrong)} sentence(s) "
+                        f"Section '{title_of(section)}': {len(removed)} sentence(s) "
                         "from a whole-post fix removed (they contradict their "
                         "evidence or talk about the post's sources): "
-                        + " | ".join(w[:120] for w in wrong[:3])
+                        + " | ".join(w[:120] for w in removed[:3])
+                    )
+                if kept := [w for w in wrong if w in left]:
+                    self.notes.append(
+                        f"Section '{title_of(section)}': fix by hand, "
+                        f"{len(kept)} sentence(s) contradict their evidence: "
+                        + " | ".join(w[:120] for w in kept[:3])
                     )
             self.reference = ""
             out.append((section, md))
@@ -764,11 +777,17 @@ class EvidenceWriter:
                 )
             except ValueError as e:
                 logger.warning("Fix answer unusable (%s); the draft stands.", e)
-                self.notes.append(f"A fix could not be made ({e}); the draft stands.")
+                self.notes.append(
+                    f"Section '{section_heading(draft) or 'a section'}': a fix "
+                    f"could not be made ({e}); the draft stands."
+                )
                 return draft
         if notes := " ".join(answer.notes.split()):
             # What the writer could not fix belongs on the PR checklist.
-            self.notes.append(f"Writer's note on a fix: {notes[:300]}")
+            heading = section_heading(draft) or "a section"
+            note = f"Section '{heading}': the writer could not fix: {notes[:300]}"
+            if note not in self.notes:
+                self.notes.append(note)
         return strip_revision_notes(answer.section.strip(), draft)
 
     async def unsupported(

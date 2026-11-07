@@ -811,3 +811,25 @@ def test_internals_excerpts_sessions_and_star_imports_are_not_paste_problems() -
     assert python_code_problems([("구조", excerpt, False)]) == []
     assert python_code_problems([("사용", repl, True)]) == []
     assert python_code_problems([("사용", star, True)]) == []
+
+
+def test_definitions_in_list_items_sessions_and_bad_blocks_still_count() -> None:
+    from scholar_lens.domain.guide.evidence_guide import (
+        guide_draft_problems,
+        python_code_problems,
+    )
+
+    setup = (
+        "## 준비\n\n1. 에이전트를 만듭니다.\n\n   ```python\n   agent = Agent()\n   ```\n\n"
+        "```python\n>>> helper = make()\n```\n\n"
+        "```python\ndef invoke_async(prompt, *, ...) -> Result: ...\nretry = 3\n```\n"
+    )
+    use = "## 사용\n\n```python\nfrom strands import Agent\nprint(agent('hi'), helper, retry)\n```\n"
+    assert python_code_problems([("준비", setup, False), ("사용", use, True)]) == []
+    later = "## 나중\n\n```python\nprint(missing_name)\n```\n"
+    problems = python_code_problems(
+        [("준비", setup, False), ("사용", use, True), ("나중", later, True)]
+    )
+    assert problems and "missing_name" in problems[0][1]
+    code_marker = "## A\n\n설명입니다 [[E1]].\n\n```python\nx = 1  # [[E2]]\n```\n"
+    assert any("inside code" in p for p in guide_draft_problems(code_marker))

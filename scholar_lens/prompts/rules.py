@@ -270,8 +270,8 @@ back to something the earlier sections never showed.
 
 FIX_ANSWER: str = """
 Answer with `section`: the whole revised section as Markdown, starting with
-its `## ` heading and holding nothing but the section; and `notes`: anything
-you want to say about your edits (what you changed, what you could not fix
-and why). Never put a note, a summary of changes or a word to the requester
+its `## ` heading and holding nothing but the section; and `notes`: only
+the listed problems you could not fix, each with why (empty when you fixed
+them all). Never put a note, a summary of changes or a word to the requester
 in `section`.
 """

@@ -400,7 +400,11 @@ def duplicate_evidence(
             if other.paper_id == item.paper_id and not within_source:
                 continue
             if other.paper_id == item.paper_id and not (
-                _facts(item.claim) and _facts(item.scope) == _facts(other.scope)
+                _facts(item.claim)
+                and (
+                    item.scope.strip() == other.scope.strip()
+                    or _same_fact(item.scope, other.scope, 0.85)
+                )
             ):
                 # Within one source only a repeated number or code span, for
                 # the same numbered setting (model size, k), is a repeat

@@ -982,3 +982,29 @@ def test_a_fix_that_changes_nothing_ends_the_fix_loop() -> None:
     )
     # One fix in the loop, one for the unsupported sentences; never three.
     assert calls.count("FixedSection") == 2
+
+
+def test_one_number_in_two_benchmarks_is_two_facts() -> None:
+    from scholar_lens.domain.evidence import Evidence, duplicate_evidence
+
+    def n(eid: str, scope: str) -> Evidence:
+        return Evidence(
+            id=eid,
+            paper_id="P",
+            kind="number",
+            claim="정확도 76.2%",
+            quote="q",
+            anchor="S1",
+            scope=scope,
+        )
+
+    assert (
+        duplicate_evidence(
+            [n("E1", "제로샷, HellaSwag"), n("E2", "제로샷, WinoGrande")],
+            within_source=True,
+        )
+        == {}
+    )
+    assert duplicate_evidence(
+        [n("E1", "제로샷, HellaSwag"), n("E2", "제로샷, HellaSwag")], within_source=True
+    ) == {"E2": "E1"}
