@@ -11,18 +11,20 @@ import dataclasses
 import html
 import json
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any
 from urllib.parse import urlsplit
 
-from ..adapters.packages.pypi import package_extras
+from ..adapters.packages.pypi import package_extras, package_source
 from ..domain.evidence import Authority, SourceDocument
 from ..domain.guide.evidence_guide import (
     SOURCE_ID_PREFIX,
     install_requirements,
+    python_blocks,
     unknown_extras,
     unverified_imports,
 )
+from ..domain.guide.sdk_index import SdkIndex, api_problems
 from ..domain.post_names import slugify
 from .constants import LanguageModelId, S3Paths
 from .guide_authority import official_reference, unverified_identifiers
@@ -122,6 +124,33 @@ def official_repositories(
 
 # Packages looked up per guide (the docs' install commands name a few).
 _MAX_PACKAGES = 6
+
+
+# Packages whose code a guide is checked against (the product's own).
+_MAX_SDK_PACKAGES = 2
+
+
+def product_sdk(
+    provided: Mapping[str, tuple[str, frozenset[str]]], products: Sequence[str]
+) -> SdkIndex | None:
+    """The index of the product's own packages among those the official
+    pages install (``strands-agents`` for "strands"), from their PyPI source;
+    None when none matches or none can be read."""
+    keys = [re.sub(r"[^a-z0-9]", "", p.lower()) for p in products if p]
+    names = [
+        n
+        for n in provided
+        if any(re.sub(r"[^a-z0-9]", "", n.lower()).startswith(k) for k in keys if k)
+    ][:_MAX_SDK_PACKAGES]
+    files: dict[str, str] = {}
+    versions: list[str] = []
+    for name in names:
+        if (found := package_source(name)) is not None:
+            versions.append(f"{name} {found[0]}")
+            files.update(found[1])
+    if not files:
+        return None
+    return SdkIndex.from_sources(files, ", ".join(versions))
 
 
 def docs_packages(official_text: str) -> dict[str, tuple[str, frozenset[str]]]:
@@ -245,12 +274,34 @@ async def write_guide_with_evidence(
         for name, (version, extras) in provided.items()
     )
 
+    # The product's own code (read from PyPI, never run): what it defines
+    # decides import paths, keyword arguments and defaults over the pages.
+    sdk = await asyncio.to_thread(product_sdk, provided, products)
+    if sdk is not None:
+        logger.info(
+            "Guide code checked against %s %s (%d modules).",
+            "/".join(sorted(sdk.packages)),
+            sdk.version,
+            len(sdk.modules),
+        )
+    sdk_params = {p for c in sdk.callables.values() for p in c.params} if sdk else set()
+
     def identifier_check(markdown: str) -> list[str]:
-        # Flags and arguments, product import paths and install extras no
-        # official page or the package index shows (they fail as pasted).
+        # Flags and arguments, product import paths and install extras that
+        # neither the official pages, the package's code nor the package
+        # index shows (they fail as pasted).
+        blocks = python_blocks(markdown)
         return [
-            *unverified_identifiers(markdown, official_text, products),
-            *unverified_imports(markdown, official_text, products),
+            *(
+                i
+                for i in unverified_identifiers(markdown, official_text, products)
+                if i not in sdk_params
+            ),
+            *(
+                api_problems(blocks, sdk)
+                if sdk is not None
+                else unverified_imports(markdown, official_text, products)
+            ),
             *unknown_extras(markdown, {n: e for n, (_, e) in provided.items()}),
         ]
 
@@ -275,6 +326,7 @@ async def write_guide_with_evidence(
         identifier_check=identifier_check,
         products=products,
         package_facts=package_facts,
+        sdk=sdk,
     )
     result = await engine.write(
         material.topic,

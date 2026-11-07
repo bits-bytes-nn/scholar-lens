@@ -109,6 +109,7 @@ def test_a_guide_run_wires_roles_ceiling_cache_and_sources(
             identifier_check,
             products,  # type: ignore[no-untyped-def]
             package_facts,
+            sdk=None,
         ) -> None:
             seen.settings.append(settings)
             seen.stores.append(store)

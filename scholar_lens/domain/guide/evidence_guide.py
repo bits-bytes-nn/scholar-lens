@@ -321,7 +321,8 @@ _DEFINED_LINE = re.compile(
 )
 
 
-def _python_blocks(markdown: str) -> list[str]:
+def python_blocks(markdown: str) -> list[str]:
+    """The draft's Python code blocks (at any indentation), dedented."""
     return [
         textwrap.dedent(m.group(4))
         for m in _ANY_FENCE.finditer(markdown)
@@ -372,7 +373,7 @@ def python_code_problems(
     reliable = True
     problems: list[tuple[str, str]] = []
     for title, markdown, checked in sections:
-        for block in _python_blocks(markdown):
+        for block in python_blocks(markdown):
             session = _session_code(block)
             code = block if session is None else session
             report = checked and session is None

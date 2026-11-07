@@ -49,6 +49,7 @@ from ..domain.guide.evidence_guide import (
     repair_guide_outline,
     strip_markers,
 )
+from ..domain.guide.sdk_index import SdkIndex, definitions_for
 from ..prompts import guide_evidence as prompts
 from .evidence_writer import (
     EvidenceWriter,
@@ -84,6 +85,8 @@ GUIDE_PROMPTS = WriterPrompts(
 _PRIMARY = ("official", "reference")
 _CODE_SPAN = re.compile(r"`[^`\n]+`")
 _AUTHORITY_RANK = {"official": 0, "reference": 1, "third_party": 2, "older_docs": 3}
+# The product's own definitions shown to a section's checks and fixes.
+_SDK_SOURCE_CHARS = 12_000
 # Sections whose code a reader runs (the running example); concepts and
 # architecture may quote internals to explain them.
 _RUNNABLE_KINDS = frozenset({"usage", "operations"})
@@ -225,6 +228,7 @@ class EvidenceGuideEngine(EvidenceWriter):
         identifier_check: Callable[[str], list[str]] | None = None,
         products: Sequence[str] = (),
         package_facts: str = "",
+        sdk: SdkIndex | None = None,
     ) -> None:
         super().__init__(model, GUIDE_PROMPTS, max_fix_rounds=settings.max_fix_rounds)
         self.settings = settings
@@ -237,8 +241,19 @@ class EvidenceGuideEngine(EvidenceWriter):
         self.products: tuple[str, ...] = tuple(products)
         # The packages the docs install, their versions and extras (PyPI).
         self.package_facts = package_facts
+        # The product's own code: what its definitions say decides defaults,
+        # signatures and return values over a page.
+        self.sdk = sdk
 
     # ---- source passages ------------------------------------------------------
+
+    def _sdk_source(self, markdown: str) -> str:
+        """The product's own definitions of what ``markdown`` uses, as a
+        block for the checks (empty without the package's code)."""
+        if self.sdk is None:
+            return ""
+        found = definitions_for(markdown, self.sdk, _SDK_SOURCE_CHARS)
+        return f"\n\n[sdk_source: {self.sdk.version}]\n{found}" if found else ""
 
     def source_sections(self, own: Sequence[Evidence]) -> str:
         """The full source sections the evidence comes from, official pages
@@ -691,7 +706,7 @@ class EvidenceGuideEngine(EvidenceWriter):
             target,
             retry_hint="This is a technical guide to a software tool for practitioners.",
         )
-        self.reference = reference
+        self.reference = reference + self._sdk_source(draft)
         markdown = await self.verify_and_fix(
             draft,
             title=section.title,
@@ -745,6 +760,7 @@ class EvidenceGuideEngine(EvidenceWriter):
                         f"{outline.code_language or 'any'}.",
                         block("guide", guide),
                         block("source_code", source_code),
+                        block("sdk_source", self._sdk_source(guide)),
                         block("packages", self.package_facts),
                     ]
                 ),
