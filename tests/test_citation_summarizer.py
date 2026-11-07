@@ -3,6 +3,7 @@ exclusion (chains, resolvers and arXiv are faked; Bedrock is untouched)."""
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import boto3
@@ -12,6 +13,7 @@ from scholar_lens.adapters.scholarly.arxiv import ArxivMetadata
 from scholar_lens.adapters.scholarly.metadata import ReferenceMetadata
 from scholar_lens.src.citation_summarizer import CitationSummarizer
 from scholar_lens.src.constants import LanguageModelId
+from tests.fakes import FakeLLMFactory
 
 
 class _FakeChain:
@@ -37,25 +39,15 @@ class _FakeResolver:
 
 
 @pytest.fixture
-def summarizer(monkeypatch: pytest.MonkeyPatch) -> CitationSummarizer:
-    from scholar_lens.src.utils import factories
-
-    # Inference-profile lookup would call Bedrock; use the base model id.
-    monkeypatch.setattr(
-        factories,
-        "_resolve_inference_profile",
-        lambda session, model_id, region: model_id.value,
-    )
-    session = boto3.Session(region_name="us-east-1")
-    summ = CitationSummarizer(
+def summarizer(tmp_path: Path) -> CitationSummarizer:
+    # The fake factory makes no inference-profile lookup and fits texts
+    # unchanged (Bedrock CountTokens is never called).
+    return CitationSummarizer(
         citation_summarizing_model_id=LanguageModelId.CLAUDE_V4_5_HAIKU,
-        boto_session=session,
+        boto_session=boto3.Session(region_name="us-east-1"),
+        paper_dir=tmp_path,
+        llm_factory=FakeLLMFactory(),  # type: ignore[arg-type]
     )
-    # fit_text would call Bedrock CountTokens over the network; pass text through.
-    summ.llm_factory.fit_text = (  # type: ignore[method-assign]
-        lambda model_id, text, **kw: text
-    )
-    return summ
 
 
 async def test_summarize_resolves_from_metadata_abstract(

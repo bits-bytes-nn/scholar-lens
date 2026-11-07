@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import boto3
 import pytest
 
 from scholar_lens.adapters.http.url_guard import UnsafeUrlError
 from scholar_lens.src.code_retriever import CodeRetriever
+from scholar_lens.src.constants import EmbeddingModelId, LanguageModelId
+from tests.fakes import FakeEmbeddingFactory, FakeLLMFactory
 
 
 class TestAssertClonable:
@@ -91,9 +94,20 @@ class TestPythonFiles:
         (repo / "pkg").mkdir(parents=True)
         for i in range(5):
             (repo / "pkg" / f"m{i}.py").write_text("def f():\n    return 1\n\n" * 200)
-        retriever = CodeRetriever.__new__(CodeRetriever)
-        retriever.max_files, retriever.max_chunks = 10, 7
-        retriever._initialize_text_splitter(200, 20)
+        model = LanguageModelId.CLAUDE_V4_5_HAIKU
+        retriever = CodeRetriever(
+            model,
+            model,
+            EmbeddingModelId.TITAN_EMBED_V2,
+            paper_dir=tmp_path / "paper",
+            chunk_size=200,
+            chunk_overlap=20,
+            max_files=10,
+            max_chunks=7,
+            boto_session=boto3.Session(region_name="us-east-1"),
+            llm_factory=FakeLLMFactory(),  # type: ignore[arg-type]
+            embedding_factory=FakeEmbeddingFactory(),  # type: ignore[arg-type]
+        )
         chunks = await retriever._create_documents([repo])
         assert len(chunks) == 7
         assert chunks[0].metadata["source"] == "pkg/m0.py"

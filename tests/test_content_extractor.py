@@ -5,9 +5,24 @@ from __future__ import annotations
 import re
 from typing import Any
 
+import boto3
 import pytest
 
 from scholar_lens.src.constants import LanguageModelId
+from tests.fakes import FakeLLMFactory
+
+
+def _extractor(**kwargs: Any) -> Any:
+    """A ContentExtractor on fake models (no Bedrock or arXiv call)."""
+    from scholar_lens.src.content_extractor import ContentExtractor
+
+    return ContentExtractor(
+        LanguageModelId.CLAUDE_V5_5_HAIKU,
+        LanguageModelId.CLAUDE_V5_5_HAIKU,
+        boto3.Session(region_name="us-east-1"),
+        llm_factory=FakeLLMFactory(),  # type: ignore[arg-type]
+        **kwargs,
+    )
 
 
 class TestCitationFieldCoercion:
@@ -77,14 +92,7 @@ class TestCitationDedupKey:
 
 class TestContentExtractorSurface:
     async def test_attributes_are_parsed_from_the_extractor_output(self) -> None:
-        from scholar_lens.src.content_extractor import ContentExtractor
-
-        extractor = ContentExtractor.__new__(ContentExtractor)
-        extractor.existing_keywords = set()
-        extractor._attributes_model_id = LanguageModelId.CLAUDE_V5_5_HAIKU
-        extractor.llm_factory = type(
-            "F", (), {"fit_text": staticmethod(lambda m, t, **k: t)}
-        )()
+        extractor = _extractor(controlled_tags=["Fine-Tuning", "Efficient-Training"])
 
         seen: dict[str, Any] = {}
 
@@ -100,7 +108,6 @@ class TestContentExtractorSurface:
                 }
 
         extractor.attributes_extractor = _Chain()
-        extractor._taxonomy = {"controlled_tags": "Fine-Tuning, Efficient-Training"}
         attrs = await extractor.extract_attributes("paper text")
         assert attrs.keywords == ["LoRA", "PEFT"]
         assert attrs.controlled_tags == ["Fine-Tuning", "Efficient-Training"]
@@ -282,8 +289,6 @@ class TestVerifyArxivIds:
     async def test_extraction_verifies_before_dedup(self) -> None:
         # Deduplication keys on the id: a wrong id shared by two references
         # must be dropped before it merges them into one.
-        from scholar_lens.src.content_extractor import ContentExtractor
-
         page = "\n".join(
             [
                 "('Gemini Team', 2024, 'Gemini 1.5: Unlocking multimodal "
@@ -298,13 +303,8 @@ class TestVerifyArxivIds:
             async def ainvoke(self, _: dict[str, Any]) -> dict[str, str]:
                 return {"citations": page, "has_more": "n"}
 
-        extractor = ContentExtractor.__new__(ContentExtractor)
-        extractor._citation_model_id = LanguageModelId.CLAUDE_V5_5_HAIKU
-        extractor.llm_factory = type(
-            "F", (), {"fit_text": staticmethod(lambda m, t, **k: t)}
-        )()
+        extractor = _extractor(arxiv_handler=FakeArxiv(ARXIV_RECORDS))
         extractor.citation_extractor = _Chain()
-        extractor.arxiv_handler = FakeArxiv(ARXIV_RECORDS)  # type: ignore[assignment]
         citations = await extractor.extract_citations("paper text")
         assert [(c.title[:9], c.arxiv_id) for c in citations] == [
             ("Gemini 1.", "2403.05530"),

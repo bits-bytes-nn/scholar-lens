@@ -46,6 +46,7 @@ from scholar_lens.domain.survey.post import (
 )
 from scholar_lens.domain.validation import validate_post
 from scholar_lens.src import evidence_models, runtime, survey_writer
+from scholar_lens.src.constants import LanguageModelId
 from scholar_lens.src.jobs import JobRequest
 from scholar_lens.src.metrics import TokenUsageTracker
 from scholar_lens.src.publisher import Publisher
@@ -59,6 +60,7 @@ from scholar_lens.src.survey_writer import (
     survey_body,
 )
 from scholar_lens.src.web_research import PageContent, ResearchCorpus
+from tests.fakes import FakeLLMFactory
 
 # The blog checkout next to this repository, when there is one.
 BLOG = Path(__file__).resolve().parents[2] / "tech-blog"
@@ -586,10 +588,13 @@ DESCRIPTION = (
 
 
 def fake_writer() -> SurveyWriter:
-    writer = SurveyWriter.__new__(SurveyWriter)
-    writer.callbacks = []
-    writer.language = "Korean"
-    writer.notes = []
+    writer = SurveyWriter(
+        finalization_model_id=LanguageModelId.CLAUDE_V4_5_HAIKU,
+        boto_session=boto3.Session(region_name="us-east-1"),
+        language="Korean",
+        thinking_effort="medium",
+        llm_factory=FakeLLMFactory(),  # type: ignore[arg-type]
+    )
     writer.finalization_chain = FakeChain(
         {
             "category": "Language-Models",

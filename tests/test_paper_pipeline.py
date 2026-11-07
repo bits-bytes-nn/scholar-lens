@@ -4,9 +4,14 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
+import boto3
+
+from scholar_lens.src.constants import LanguageModelId
 from scholar_lens.src.paper_pipeline import _figure_captions, _unanalysed_figure_notes
 from scholar_lens.src.parser import Figure
+from tests.fakes import FakeLLMFactory
 
 
 def test_arxiv_placeholder_caption_falls_back_to_the_analysis() -> None:
@@ -45,7 +50,12 @@ def test_unsourced_citations_reach_the_review_notes() -> None:
     from scholar_lens.src.citation_summarizer import CitationSummarizer
     from scholar_lens.src.paper_pipeline import _citation_notes
 
-    summarizer = CitationSummarizer.__new__(CitationSummarizer)
+    summarizer = CitationSummarizer(
+        LanguageModelId.CLAUDE_V4_5_HAIKU,
+        boto3.Session(region_name="us-east-1"),
+        arxiv_handler=MagicMock(),
+        llm_factory=FakeLLMFactory(),  # type: ignore[arg-type]
+    )
     summarizer._source_cache = {"found": object(), "a": None, "b": None}  # type: ignore[dict-item]
     notes = _citation_notes(summarizer)
     assert len(notes) == 1 and notes[0].startswith("2 cited reference(s)")

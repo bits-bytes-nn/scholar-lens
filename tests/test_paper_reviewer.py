@@ -1,8 +1,8 @@
 """Orchestration of the review workflow with fake LLM chains (no AWS/network).
 
-``PaperReviewer.__init__`` builds Bedrock chains and loads NLTK data, so tests
-construct it with ``__new__`` and set the attributes the workflow reads. The
-fakes record every payload so the tests can check what each stage was given.
+The reviewer is built on a fake model factory (no Bedrock), and the tests swap
+in fake chains whose payloads they record, so each test can check what each
+stage was given.
 """
 
 from __future__ import annotations
@@ -12,16 +12,19 @@ from datetime import datetime
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
+import boto3
 import pytest
 
 from scholar_lens.domain.quality_gate import publish_blockers, rule_issues
 from scholar_lens.domain.review_plan import PlanError, SourceText, draft_rank
 from scholar_lens.domain.validation import body_errors
 from scholar_lens.src.citation_summarizer import CitationSummarizer
+from scholar_lens.src.constants import LanguageModelId
 from scholar_lens.src.content_extractor import Attributes, Citation
 from scholar_lens.src.explainer import Paper, PaperReviewer, ReviewText
 from scholar_lens.src.metrics import TokenBudgetExceeded, TokenUsageTracker
 from scholar_lens.src.parser import Content
+from tests.fakes import FakeLLMFactory
 
 MARKER = '[Image: alt="arch", src="/p/figures/0.png", caption="The architecture."]'
 SENTENCES = [
@@ -51,11 +54,6 @@ class FakeChain:
         self.calls.append(payload)
         item = self.responses.pop(0) if len(self.responses) > 1 else self.responses[0]
         return item(payload) if callable(item) else item
-
-
-class FakeFactory:
-    def fit_text(self, model_id: Any, text: str, **_: Any) -> str:
-        return text
 
 
 def _plan(**overrides: Any) -> str:
@@ -139,35 +137,37 @@ def _reviewer(
     max_edit_rounds: int = 2,
     max_synthesis_attempts: int = 3,
 ) -> PaperReviewer:
-    r = PaperReviewer.__new__(PaperReviewer)
-    r.paper = Paper(
-        arxiv_id="2106.09685",
-        title="LoRA: Low-Rank Adaptation of Large Language Models",
-        published=datetime(2021, 6, 17),
-        pdf_url="https://arxiv.org/pdf/2106.09685",
-        content=Content(text=" ".join(SENTENCES)),
-        attributes=Attributes(affiliation="Microsoft", category="Finetuning"),
-        citations=citations
-        or [Citation(authors="Eckart", title="Matrix approximation", arxiv_id=None)],
+    citation_summarizer = AsyncMock(spec=CitationSummarizer)
+    citation_summarizer.summarize.return_value = ["[R] Rank summary."]
+    model = LanguageModelId.CLAUDE_V4_5_HAIKU
+    r = PaperReviewer(
+        Paper(
+            arxiv_id="2106.09685",
+            title="LoRA: Low-Rank Adaptation of Large Language Models",
+            published=datetime(2021, 6, 17),
+            pdf_url="https://arxiv.org/pdf/2106.09685",
+            content=Content(text=" ".join(SENTENCES)),
+            attributes=Attributes(affiliation="Microsoft", category="Finetuning"),
+            citations=citations
+            or [
+                Citation(authors="Eckart", title="Matrix approximation", arxiv_id=None)
+            ],
+        ),
+        planning_model_id=model,
+        synthesis_model_id=model,
+        evaluation_model_id=model,
+        finalization_model_id=model,
+        boto_session=boto3.Session(region_name="us-east-1"),
+        citation_summarizer=citation_summarizer,
+        code_retriever=code_retriever,
+        language="Korean",
+        min_quality_score=70,
+        max_synthesis_attempts=max_synthesis_attempts,
+        max_sections=20,
+        max_edit_rounds=max_edit_rounds,
+        max_code_results=4,
+        llm_factory=FakeLLMFactory(),  # type: ignore[arg-type]
     )
-    r.language = "Korean"
-    r.callbacks = []
-    r._token_tracker = None
-    r.max_total_tokens = None
-    r.notes = []
-    r.open_defects = []
-    r.open_gaps = []
-    r.citation_summarizer = AsyncMock(spec=CitationSummarizer)
-    r.citation_summarizer.summarize.return_value = ["[R] Rank summary."]
-    r.code_retriever = code_retriever
-    r.translation_guideline = []
-    r.min_quality_score = 70
-    r.max_synthesis_attempts = max_synthesis_attempts
-    r.max_sections = 20
-    r.max_edit_rounds = max_edit_rounds
-    r.max_code_results = 4
-    r.planning_model_id = "planner"  # type: ignore[assignment]
-    r.llm_factory = FakeFactory()  # type: ignore[assignment]
     r.planner = planner or FakeChain(_plan())  # type: ignore[assignment]
     r.writer = writer or FakeChain(_writer)  # type: ignore[assignment]
     r.checker = checker or FakeChain(_pass)  # type: ignore[assignment]

@@ -13,6 +13,7 @@ from unittest import mock
 from unittest.mock import AsyncMock, MagicMock
 
 import arxiv
+import boto3
 import httpx
 import pytest
 from pydantic import ValidationError
@@ -41,6 +42,7 @@ from scholar_lens.domain.survey.plan import (
     TimeRange,
     survey_slug,
 )
+from scholar_lens.src.constants import LanguageModelId
 from scholar_lens.src.jobs import JobRequest, JobResult
 from scholar_lens.src.metrics import TokenBudgetExceeded, TokenUsageTracker
 from scholar_lens.src.survey_pipeline import (
@@ -52,6 +54,7 @@ from scholar_lens.src.survey_pipeline import (
     save_plan,
 )
 from scholar_lens.src.web_research import PageContent, ResearchCorpus, SourceFetchError
+from tests.fakes import FakeLLMFactory
 
 TODAY = date(2026, 10, 14)
 DPO = "Direct Preference Optimization: Your Language Model is Secretly a Reward Model"
@@ -1069,9 +1072,15 @@ def selection_json(ids: list[str], lineage: str = "dpo") -> str:
 
 
 def planner(answers: dict[str, list[str]], **kwargs: Any) -> SurveyPlanner:
-    p = SurveyPlanner.__new__(SurveyPlanner)
-    p.callbacks = []
-    p._init_token_budget(kwargs.get("callbacks"), kwargs.get("max_total_tokens"))
+    p = SurveyPlanner(
+        scope_model_id=LanguageModelId.CLAUDE_V4_5_HAIKU,
+        selection_model_id=LanguageModelId.CLAUDE_V4_5_HAIKU,
+        boto_session=boto3.Session(region_name="us-east-1"),
+        thinking_effort="medium",
+        max_total_tokens=kwargs.get("max_total_tokens"),
+        callbacks=kwargs.get("callbacks"),
+        llm_factory=FakeLLMFactory(),  # type: ignore[arg-type]
+    )
     p.scope_chain = MagicMock()
     p.scope_chain.ainvoke = AsyncMock(side_effect=answers["scope"])
     p.selection_chain = MagicMock()
