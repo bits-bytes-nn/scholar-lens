@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -493,9 +494,7 @@ class TestRecordUnstartedRun:
 
 
 class TestPublishArtifact:
-    def test_pr_failure_becomes_a_warning(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path
-    ) -> None:  # type: ignore[no-untyped-def]
+    def test_pr_failure_becomes_a_warning(self, tmp_path: Path) -> None:
         import asyncio
 
         from scholar_lens.src.publisher import PublishError
@@ -510,8 +509,7 @@ class TestPublishArtifact:
 
         publisher.publish = publish
         publisher.create_pull_request = create_pull_request
-        monkeypatch.setattr(runtime, "build_publisher", lambda context: publisher)
-        context = MagicMock()
+        context = MagicMock(publisher_factory=lambda ctx: publisher)
         context.config.resources.github.enabled = True
         request = MagicMock()
         request.title = "LoRA"
@@ -522,19 +520,16 @@ class TestPublishArtifact:
         assert outcome.warnings == ["Blog PR not created: 403 from GitHub"]
 
 
-def test_an_unreadable_branch_history_becomes_a_review_note(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_an_unreadable_branch_history_becomes_a_review_note() -> None:
     import asyncio
 
     from scholar_lens.src.publisher import PublishError
 
     publisher = MagicMock()
     publisher.find_published.side_effect = PublishError("502 from GitHub")
-    monkeypatch.setattr(runtime, "build_publisher", lambda context: publisher)
     published, notes = asyncio.run(
         runtime.find_published_post(
-            MagicMock(blog_listing_error=None),
+            MagicMock(blog_listing_error=None, publisher_factory=lambda c: publisher),
             slug="x",
             branch_id="guide-abc",
             category="Tech Guides",
@@ -557,10 +552,10 @@ def test_a_failed_blog_listing_becomes_a_review_note(
     config = MagicMock()
     config.resources.github.enabled = True
     context = runtime.RunContext.model_construct(
-        config=config, blog_posts=None, blog_listing_error=None
-    )
-    monkeypatch.setattr(
-        runtime, "build_publisher", lambda ctx: _publisher(ctx.require_blog_posts())
+        config=config,
+        blog_posts=None,
+        blog_listing_error=None,
+        publisher_factory=lambda ctx: _publisher(ctx.require_blog_posts()),
     )
     published, notes = asyncio.run(
         runtime.find_published_post(
@@ -577,13 +572,15 @@ def _publisher(site_posts: list[object]) -> MagicMock:
     return publisher
 
 
-def test_a_listed_blog_adds_no_lookup_note(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_listed_blog_adds_no_lookup_note() -> None:
     import asyncio
 
-    monkeypatch.setattr(runtime, "build_publisher", lambda ctx: _publisher([]))
+    context = MagicMock(
+        blog_listing_error=None, publisher_factory=lambda c: _publisher([])
+    )
     _, notes = asyncio.run(
         runtime.find_published_post(
-            MagicMock(blog_listing_error=None),
+            context,
             slug="x",
             branch_id="b",
             category="Tech Guides",
@@ -592,9 +589,7 @@ def test_a_listed_blog_adds_no_lookup_note(monkeypatch: pytest.MonkeyPatch) -> N
     assert notes == []
 
 
-def test_no_pr_run_reports_the_post_checklist(
-    monkeypatch: pytest.MonkeyPatch, tmp_path
-) -> None:  # type: ignore[no-untyped-def]
+def test_no_pr_run_reports_the_post_checklist(tmp_path: Path) -> None:
     import asyncio
 
     publisher = MagicMock()
@@ -604,11 +599,9 @@ def test_no_pr_run_reports_the_post_checklist(
         return "s3://b/post.md", tmp_path / "post.md"
 
     publisher.publish = publish
-    monkeypatch.setattr(runtime, "build_publisher", lambda context: publisher)
     request = MagicMock()
-    outcome = asyncio.run(
-        runtime.publish_artifact(MagicMock(), request, create_pr=False)
-    )
+    context = MagicMock(publisher_factory=lambda ctx: publisher)
+    outcome = asyncio.run(runtime.publish_artifact(context, request, create_pr=False))
     assert outcome.warnings == ["Summary is still long", "numbered reference"]
 
 
@@ -633,9 +626,9 @@ def test_generator_notes_survive_a_failed_publish(
         raise error
 
     publisher.publish = publish
-    monkeypatch.setattr(runtime, "build_publisher", lambda context: publisher)
 
     async def pipeline(context, request, tracker):  # type: ignore[no-untyped-def]
+        context.publisher_factory = lambda ctx: publisher
         publish_request = MagicMock()
         publish_request.review_notes = ["Review section 'Method' produced no text"]
         return await runtime.publish_artifact(context, publish_request, create_pr=False)
@@ -756,9 +749,8 @@ class TestConventionsChangedDuringTheRun:
             validated_with.append(context.require_conventions())
             return publisher
 
-        monkeypatch.setattr(runtime, "build_publisher", build)
         context = runtime.RunContext.model_construct(
-            config=MagicMock(), conventions=started
+            config=MagicMock(), conventions=started, publisher_factory=build
         )
         request = PublishRequest(
             title="LoRA",

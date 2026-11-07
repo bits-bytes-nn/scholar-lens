@@ -98,12 +98,12 @@ def pipeline_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):  # type: igno
             fetch_image=fetch,
         )
 
-    monkeypatch.setattr(runtime, "build_publisher", build_publisher)
     context = runtime.RunContext(
         config=Config(),
         default_boto_session=boto3.Session(region_name="us-west-2"),
         bedrock_boto_session=boto3.Session(region_name="us-west-2"),
         root_dir=tmp_path,
+        publisher_factory=build_publisher,
         conventions=load_local_conventions(),
     )
     return context, fetched
@@ -408,9 +408,7 @@ def _guideline_context(s3: _FakeS3, root_dir: Path):  # type: ignore[no-untyped-
     )
 
 
-async def test_translation_guideline_is_optional(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+async def test_translation_guideline_is_optional(tmp_path: Path) -> None:
     from scholar_lens.adapters.aws.storage import S3OperationError
     from scholar_lens.src import runtime
 

@@ -14,7 +14,7 @@ import contextlib
 import json
 import os
 import time
-from collections.abc import Coroutine
+from collections.abc import Callable, Coroutine
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -57,6 +57,8 @@ class RunContext(BaseModel):
     s3_handler: S3Handler | None = None
     # The run's working directory (papers, figures, generated posts).
     root_dir: Path = ROOT_DIR
+    # Builds the run's Publisher (default: build_publisher).
+    publisher_factory: Callable[[RunContext], Publisher] | None = None
     # The blog's post conventions, loaded once per run (see load_run_conventions).
     conventions: PostConventions | None = None
 
@@ -311,6 +313,11 @@ def build_publisher(context: RunContext) -> Publisher:
     )
 
 
+def make_publisher(context: RunContext) -> Publisher:
+    """The run's Publisher, from its context's factory when it has one."""
+    return (context.publisher_factory or build_publisher)(context)
+
+
 async def find_published_post(
     context: RunContext, *, slug: str, branch_id: str, category: str
 ) -> tuple[BlogPost | None, list[str]]:
@@ -318,7 +325,7 @@ async def find_published_post(
     (:meth:`Publisher.find_published`) and review notes: when the blog's
     posts or pull requests cannot be read, the post is published as new, and
     the note asks to check it duplicates none."""
-    publisher = build_publisher(context)
+    publisher = make_publisher(context)
     notes: list[str] = []
     if context.blog_listing_error:
         notes.append(
@@ -368,7 +375,7 @@ async def publish_artifact(
     in S3); it is reported as a warning on the result instead.
     """
     await asyncio.to_thread(refresh_conventions, context, request)
-    publisher = build_publisher(context)
+    publisher = make_publisher(context)
     try:
         s3_uri, markdown_path = await publisher.publish(request)
     except Exception as e:

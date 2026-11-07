@@ -45,7 +45,7 @@ from scholar_lens.domain.survey.post import (
     unlink_foreign_papers,
 )
 from scholar_lens.domain.validation import validate_post
-from scholar_lens.src import evidence_models, runtime, survey_writer
+from scholar_lens.src import evidence_models, survey_writer
 from scholar_lens.src.constants import LanguageModelId
 from scholar_lens.src.jobs import JobRequest
 from scholar_lens.src.metrics import TokenUsageTracker
@@ -783,13 +783,13 @@ def stage(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
             fetch_image=lambda url: png(),
         )
 
-    monkeypatch.setattr(runtime, "build_publisher", publisher)
     session = boto3.Session(region_name="us-east-1")
     context = RunContext(
         config=Config(),
         default_boto_session=session,
         bedrock_boto_session=session,
         root_dir=tmp_path,
+        publisher_factory=publisher,
         conventions=spec,
         blog_posts=[],
         blog_tags={},
@@ -1097,16 +1097,12 @@ def test_a_rerun_replaces_the_post_its_plan_published(
         author_name="Bot",
         author_email="bot@example.com",
     )
-    monkeypatch.setattr(
-        runtime,
-        "build_publisher",
-        lambda ctx: Publisher(
-            github,
-            root_dir=stage["tmp"],
-            conventions=survey_spec(),
-            site_posts=ctx.blog_posts,
-            fetch_image=lambda url: png(),
-        ),
+    context.publisher_factory = lambda ctx: Publisher(
+        github,
+        root_dir=stage["tmp"],
+        conventions=survey_spec(),
+        site_posts=ctx.blog_posts,
+        fetch_image=lambda url: png(),
     )
     outcome = run_stage(stage)
     post = outcome.markdown_path.read_text()
