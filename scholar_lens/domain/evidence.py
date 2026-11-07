@@ -219,6 +219,9 @@ class Evidence(_Strict):
     caption: str | None = None
     latex: str | None = None
     code: str | None = None
+    # The one SDK language a fact holds for, when the source says so
+    # ("python", "typescript"); empty when it holds for every SDK.
+    sdk: str = ""
 
 
 # Alt text that says nothing about the figure: a file path or name, a

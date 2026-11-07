@@ -353,6 +353,7 @@ class EvidenceWriter:
             figure_id: str = "",
             latex: str = "",
             code: str = "",
+            sdk: str = "",
         ) -> str:
             """Record one piece of evidence. kind: finding, number, method,
             definition, limitation, relation, equation, figure, code or
@@ -362,7 +363,9 @@ class EvidenceWriter:
             setting, metric; API, CLI, config file, version). cell: short noun
             phrase for a table. figure_id: F-id for a figure. latex: the
             equation as in the source. code: a code block or command copied
-            exactly from the section at anchor."""
+            exactly from the section at anchor. sdk: the one SDK language the
+            fact holds for when the source says it holds for that language
+            only (python, typescript, java, go, rust); empty otherwise."""
             nonlocal rejected
             fields = {
                 "kind": kind,
@@ -420,6 +423,7 @@ class EvidenceWriter:
                     figure_id=figure_id.strip() or None,
                     latex=latex.strip() or None,
                     code=code.strip("\n") or None,
+                    sdk=sdk.strip().lower(),
                 )
             return f"recorded {item.id}"
 

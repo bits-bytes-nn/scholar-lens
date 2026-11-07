@@ -44,6 +44,7 @@ from ..domain.guide.evidence_guide import (
     guide_outline_problems,
     guide_section_targets,
     name_sources,
+    other_sdk,
     python_code_problems,
     repair_guide_outline,
     strip_markers,
@@ -68,7 +69,7 @@ from .usage import usage_stage
 logger = logging.getLogger(__name__)
 
 # Bump when the reader's prompt or the evidence schema changes meaning.
-GUIDE_READER_VERSION = 7
+GUIDE_READER_VERSION = 8
 # Small counts and ordinals a guide states without evidence.
 _FREE_NUMBERS = free_numbers()
 
@@ -479,6 +480,33 @@ class EvidenceGuideEngine(EvidenceWriter):
             raise ValueError("No source page gave usable evidence for the guide.")
         outline = await self.outline(topic, ledger, by_id, guideline)
         outline = await self._drop_wrong(outline, ledger)
+        # Evidence the reader recorded as one other SDK language's (a
+        # TypeScript-only behaviour in a Python guide) leaves the outline:
+        # stated there it reads as true for the guide's language.
+        other = [
+            eid
+            for sec in outline.sections
+            for eid in sec.evidence
+            if (e := ledger.get(eid)) and other_sdk(e.sdk, outline.code_language)
+        ]
+        if other:
+            logger.info(
+                "Evidence for another SDK than %s left out: %s",
+                outline.code_language,
+                ", ".join(other),
+            )
+            outline = outline.model_copy(
+                update={
+                    "sections": [
+                        sec.model_copy(
+                            update={
+                                "evidence": [i for i in sec.evidence if i not in other]
+                            }
+                        )
+                        for sec in outline.sections
+                    ]
+                }
+            )
         # A section the checks emptied has nothing to state.
         if empty := [
             s.title for s in outline.sections if not s.evidence and s.kind != "tldr"

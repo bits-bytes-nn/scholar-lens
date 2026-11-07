@@ -195,6 +195,14 @@ def guide_section_targets(
     )
 
 
+def other_sdk(evidence_sdk: str, code_language: str) -> bool:
+    """Whether evidence recorded as holding for one SDK language holds for
+    another one than the guide's code language (its reader's)."""
+    mine = _SDK_LANGUAGES.get(code_language.strip().lower(), "")
+    theirs = _SDK_LANGUAGES.get(evidence_sdk.strip().lower(), "")
+    return bool(mine and theirs and mine != theirs)
+
+
 def guide_draft_problems(markdown: str, *, code_language: str = "") -> list[str]:
     """Guide-only problems of a section draft: an internal source id in the
     text, the same code in two SDK languages, and code blocks longer than

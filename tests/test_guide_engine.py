@@ -833,3 +833,12 @@ def test_definitions_in_list_items_sessions_and_bad_blocks_still_count() -> None
     assert problems and "missing_name" in problems[0][1]
     code_marker = "## A\n\n설명입니다 [[E1]].\n\n```python\nx = 1  # [[E2]]\n```\n"
     assert any("inside code" in p for p in guide_draft_problems(code_marker))
+
+
+def test_evidence_for_another_sdk_is_recognised_by_its_field() -> None:
+    from scholar_lens.domain.guide.evidence_guide import other_sdk
+
+    assert other_sdk("typescript", "python")
+    assert other_sdk("ts", "py")
+    assert not other_sdk("python", "python")
+    assert not other_sdk("", "python") and not other_sdk("typescript", "")

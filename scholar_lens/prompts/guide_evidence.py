@@ -127,7 +127,9 @@ language:
 - Keep every qualifier the page gives in `claim` or `scope`: the SDK
   language (Python only, TypeScript only), the version, the provider or
   backend, a condition ("when tracing is enabled"). A claim true
-  for one of them never reads as true for all.
+  for one of them never reads as true for all. When a fact, setting, list
+  or code holds for one SDK language only (the page is that SDK's, or says
+  so), also set `sdk` to it (python, typescript, java, go, rust).
 - measured results with their setup (number: `scope` names the hardware,
   model, workload and metric);
 - limitations, pitfalls and failure modes the page states (limitation);
