@@ -293,31 +293,60 @@ def _free_globals(table: symtable.SymbolTable) -> set[str]:
     return names
 
 
-def python_code_problems(sections: Sequence[tuple[str, str]]) -> list[tuple[str, str]]:
+def _session_block(code: str) -> bool:
+    """A REPL transcript or notebook cell (``>>>``, ``%pip``, ``!ls``) or an
+    indented fragment: shown, not pasted as a script."""
+    lines = [ln for ln in code.split("\n") if ln.strip()]
+    return bool(lines) and (
+        lines[0][:1] in (" ", "\t")
+        or any(ln.lstrip().startswith((">>>", "%", "!")) for ln in lines)
+    )
+
+
+def python_code_problems(
+    sections: Sequence[tuple[str, str, bool]],
+) -> list[tuple[str, str]]:
     """(section title, problem) for the guide's Python code read in order,
     as a reader pastes it: a block that does not parse, and a name a block
-    uses that no block so far (nor Python itself) defines. Parsing and
-    scopes come from the standard library (``ast``, ``symtable``)."""
+    uses that no block so far (nor Python itself) defines. ``sections`` are
+    (title, markdown, checked): every block's definitions count, problems are
+    reported for ``checked`` sections only (the running example's usage, not
+    an internals excerpt quoted to explain a mechanism). A star import or a
+    block that does not parse makes later names unknowable: no undefined
+    names are reported after it. Parsing and scopes come from the standard
+    library (``ast``, ``symtable``)."""
     known = set(dir(builtins)) | {"__name__", "__file__"}
+    reliable = True
     problems: list[tuple[str, str]] = []
-    for title, markdown in sections:
+    for title, markdown, checked in sections:
         for m in _FENCE_OPEN.finditer(markdown):
-            if m.group(2).lower() not in _PYTHON_INFO:
+            if m.group(2).lower() not in _PYTHON_INFO or _session_block(m.group(3)):
                 continue
             code = m.group(3)
             try:
-                ast.parse(code)
+                tree = ast.parse(code)
                 table = symtable.symtable(code, "<guide>", "exec")
             except (SyntaxError, ValueError) as e:
-                problems.append(
-                    (
-                        title,
-                        f"a python block does not parse ({e.msg if isinstance(e, SyntaxError) else e}): {code.strip()[:120]}",
+                reliable = False
+                if checked:
+                    reason = e.msg if isinstance(e, SyntaxError) else str(e)
+                    problems.append(
+                        (
+                            title,
+                            f"a python block does not parse ({reason}): "
+                            f"{code.strip()[:120]}",
+                        )
                     )
-                )
                 continue
+            if any(
+                isinstance(node, ast.ImportFrom)
+                and any(alias.name == "*" for alias in node.names)
+                for node in ast.walk(tree)
+            ):
+                reliable = False
             bound = _bound_names(table)
-            if missing := sorted(_free_globals(table) - bound - known):
+            missing = sorted(_free_globals(table) - bound - known)
+            if checked and reliable and missing:
                 problems.append(
                     (
                         title,

@@ -155,6 +155,18 @@ class StrandsLanguageModel:
             self._usage(role, agent.event_loop_metrics, label)
         return result, str(result), str(result.stop_reason)
 
+    def _tries(self, role: ModelRole) -> list[tuple[RoleModel, bool | None]]:
+        """The attempts of a call Bedrock's content filter may stop (a long
+        answer about attacks, not on every attempt): the role's model again,
+        the last time without thinking, then the role's fallback model."""
+        spec = self._roles[role]
+        tries: list[tuple[RoleModel, bool | None]] = [(spec, None)] * (
+            1 + _FILTERED_RETRIES
+        ) + [(spec, False)]
+        if spec.fallback is not None:
+            tries.append((spec.fallback, None))
+        return tries
+
     async def structured(
         self,
         *,
@@ -164,22 +176,34 @@ class StrandsLanguageModel:
         schema: type[SchemaT],
         context: str = "",
     ) -> SchemaT:
-        agent = self._agent(self._model(role), system)
-        result, _, stop = await self._invoke(
-            agent,
-            role,
-            self._roles[role].model_label,
-            _content(context, prompt),
-            structured_output_model=schema,
-            limits={"structured_output_attempts": _STRUCTURED_ATTEMPTS},
-        )
-        output = result.structured_output if result is not None else None
-        if not isinstance(output, schema):
-            raise ValueError(
-                f"No valid {schema.__name__} after {_STRUCTURED_ATTEMPTS} attempts"
-                f" (stop reason {stop})"
+        stop = ""
+        for n, (model, thinking) in enumerate(self._tries(role)):
+            agent = self._agent(
+                self._model(role, thinking=thinking, spec=model), system
             )
-        return output
+            result, _, stop = await self._invoke(
+                agent,
+                role,
+                model.model_label,
+                _content(context, prompt),
+                structured_output_model=schema,
+                limits={"structured_output_attempts": _STRUCTURED_ATTEMPTS},
+            )
+            output = result.structured_output if result is not None else None
+            if isinstance(output, schema):
+                return output
+            if stop != "content_filtered":
+                break
+            logger.warning(
+                "%s structured call content-filtered (%s); attempt %d.",
+                role,
+                model.model_label,
+                n + 2,
+            )
+        raise ValueError(
+            f"No valid {schema.__name__} after {_STRUCTURED_ATTEMPTS} attempts"
+            f" (stop reason {stop})"
+        )
 
     async def text(
         self, *, role: ModelRole, system: str, prompt: str, context: str = ""
@@ -188,12 +212,7 @@ class StrandsLanguageModel:
         # (jailbreaks, injections) mid-sentence, and not on every attempt:
         # the call is repeated, the last time without thinking, then made
         # with the role's fallback model.
-        spec = self._roles[role]
-        tries: list[tuple[RoleModel, bool | None]] = [(spec, None)] * (
-            1 + _FILTERED_RETRIES
-        ) + [(spec, False)]
-        if spec.fallback is not None:
-            tries.append((spec.fallback, None))
+        tries = self._tries(role)
         text, stop = "", ""
         for n, (model, thinking) in enumerate(tries):
             agent = self._agent(

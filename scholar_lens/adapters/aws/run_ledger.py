@@ -14,6 +14,7 @@ from ...domain.costs import RunRecord
 from ...domain.usage import RunUsage
 
 logger = logging.getLogger(__name__)
+_DENIED = frozenset({"AccessDenied", "AccessDeniedException", "403"})
 
 
 class S3RunLedger:
@@ -43,8 +44,10 @@ class S3RunLedger:
         try:
             body = self._s3.get_object(Bucket=self._bucket, Key=key)["Body"].read()
         except ClientError as e:
-            # Gone between list and get, or unreadable: one run missing from
-            # the report, not the report missing.
+            # Gone between list and get: one run missing from the report. A
+            # refused read would make the report silently empty: raised.
+            if e.response.get("Error", {}).get("Code") in _DENIED:
+                raise
             logger.warning("Skipping result manifest %s: %s", key, e)
             return None
         try:

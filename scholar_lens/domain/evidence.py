@@ -64,8 +64,12 @@ def _headings(markdown: str) -> list[re.Match[str]]:
     roles = fence_roles(lines)
     # A fence that never closes (a stray "~~~~" in PDF text, a listing cut
     # by a page break) is not code to the end: its lines stay prose here.
-    if (opened := open_fence_line(lines)) is not None:
-        roles[opened:] = ["prose"] * (len(roles) - opened)
+    # The stray opener's own line is prose; the fences after it pair as usual.
+    start = 0
+    while (opened := open_fence_line(lines[start:])) is not None:
+        at = start + opened
+        roles[at:] = ["prose", *fence_roles(lines[at + 1 :])]
+        start = at + 1
     code = {starts[i] for i, role in enumerate(roles) if role != "prose"}
     return [m for m in _HEADING.finditer(markdown) if m.start() not in code]
 
@@ -396,10 +400,11 @@ def duplicate_evidence(
             if other.paper_id == item.paper_id and not within_source:
                 continue
             if other.paper_id == item.paper_id and not (
-                _facts(item.claim) and item.scope.strip() == other.scope.strip()
+                _facts(item.claim) and _facts(item.scope) == _facts(other.scope)
             ):
-                # Within one source only a repeated number or code span in the
-                # same scope is a repeat ("긴/짧은 문맥에서" differ by a word).
+                # Within one source only a repeated number or code span, for
+                # the same numbered setting (model size, k), is a repeat
+                # ("긴/짧은 문맥에서" differ by a word, not by a number).
                 continue
             if _same_fact(item.claim, other.claim, 0.85) and _facts(
                 item.cell

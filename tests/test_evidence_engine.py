@@ -938,3 +938,47 @@ def test_a_survey_whose_papers_give_no_evidence_fails_naming_them() -> None:
     )
     with pytest.raises(EvidenceUnavailable, match="2305.18290"):
         asyncio.run(engine.write(_plan()))
+
+
+def test_a_stray_fence_does_not_turn_later_code_comments_into_headings() -> None:
+    md = (
+        "## Page 1\n\ntext\n~~~~\nmore\n\n## Page 2\n\n```bash\n# install deps\n"
+        "pip install x\n```\n\n## Page 3\n\nc\n"
+    )
+    doc = SourceDocument.from_markdown("P", "t", "pdf_text", md)
+    assert [s.heading for s in doc.sections] == ["Page 1", "Page 2", "Page 3"]
+
+
+def test_a_fix_that_changes_nothing_ends_the_fix_loop() -> None:
+    from scholar_lens.application.evidence_writer import EvidenceWriter
+    from scholar_lens.application.survey_engine import SURVEY_PROMPTS
+
+    draft = "## A\n\n논문은 61%를 보고합니다 [[E2]].\n"
+    calls: list[str] = []
+
+    class Model:
+        async def structured(self, *, schema, **_kwargs):  # type: ignore[no-untyped-def]
+            calls.append(schema.__name__)
+            if schema is FixedSection:
+                return FixedSection(section=draft, notes="")
+            if schema is ClaimCheck:
+                return ClaimCheck(
+                    verdicts=[SentenceVerdict(n=1, verdict="unsupported", reason="r")]
+                )
+            return schema()
+
+    writer = EvidenceWriter(Model(), SURVEY_PROMPTS, max_fix_rounds=3)  # type: ignore[arg-type]
+    asyncio.run(
+        writer.verify_and_fix(
+            draft,
+            title="A",
+            review_context="",
+            checks=lambda _md: [],
+            ledger=_ledger(),
+            own=[],
+            earlier=[],
+            free="",
+        )
+    )
+    # One fix in the loop, one for the unsupported sentences; never three.
+    assert calls.count("FixedSection") == 2

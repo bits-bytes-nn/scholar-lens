@@ -437,3 +437,12 @@ def test_usage_errors_print_one_json_object(
     assert exit_info.value.code == cli.EXIT_REJECTED
     out = _output(capsys)
     assert out["status"] == "rejected" and "scholar-lens" in out["error"]
+
+
+def test_costs_with_until_before_since_is_rejected_without_credentials(
+    capsys: pytest.CaptureFixture,
+) -> None:
+    with mock.patch.object(cli, "_aws_context") as context:
+        code = cli.main(["costs", "--since", "2026-11-05", "--until", "2026-11-01"])
+    assert code == cli.EXIT_REJECTED and not context.called
+    assert "--until" in _output(capsys)["error"]

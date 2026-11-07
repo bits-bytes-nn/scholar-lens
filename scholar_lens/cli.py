@@ -438,6 +438,12 @@ def _costs(args: argparse.Namespace) -> int:
     from scholar_lens.application.costs import report_costs
     from scholar_lens.src.constants import S3Paths
 
+    until = args.until or datetime.now(UTC).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    ) + timedelta(days=1)
+    if until <= args.since:  # a usage error needs no credentials
+        _emit({"status": "rejected", "error": "--until must be after --since."})
+        return EXIT_REJECTED
     context = _aws_context()
     resources = context.config.resources
     if not resources.s3_bucket_name:
@@ -449,12 +455,6 @@ def _costs(args: argparse.Namespace) -> int:
         resources.s3_bucket_name,
         f"{resources.s3_prefix}/{S3Paths.RESULTS.value}".lstrip("/"),
     )
-    until = args.until or datetime.now(UTC).replace(
-        hour=0, minute=0, second=0, microsecond=0
-    ) + timedelta(days=1)
-    if until <= args.since:
-        _emit({"status": "rejected", "error": "--until must be after --since."})
-        return EXIT_REJECTED
     billing = (
         CostExplorerBilling(
             # Cost Explorer's API endpoint is in us-east-1.

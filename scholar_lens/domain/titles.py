@@ -49,8 +49,10 @@ def titles_match(queried: str | None, resolved: str | None) -> bool:
     r_only = _title_words(resolved) - _title_words(queried)
     # The paper's own short name, given or left out: "LoRA: Low-Rank ..." vs
     # "Low-Rank ...", or "... Reward Model (DPO)".
-    q_only -= _short_name(queried)
-    r_only -= _short_name(resolved)
+    q_name, r_name = _short_name(queried), _short_name(resolved)
+    if not (q_name and r_name):  # given in one, left out of the other
+        q_only -= q_name
+        r_only -= r_name
     unpaired_q = [a for a in q_only if not any(_spelling_variant(a, b) for b in r_only)]
     unpaired_r = [b for b in r_only if not any(_spelling_variant(a, b) for a in q_only)]
     return not unpaired_q and not unpaired_r

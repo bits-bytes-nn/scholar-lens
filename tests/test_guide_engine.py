@@ -788,13 +788,26 @@ def test_guide_python_is_checked_as_pasted_in_order() -> None:
         (
             "기본",
             "## 기본\n\n```python\nfrom strands import Agent\n\ndef build(t):\n    return Agent(t)\n\ncedar = 1\n```\n",
+            True,
         ),
         (
             "서비스",
             "## 서비스\n\n```python\ndef handle(x):\n    return build(x), cedar, ask(x)\n```\n\n```python\nkey = <your key>\n```\n\n```bash\necho $UNDEFINED\n```\n",
+            True,
         ),
     ]
     problems = python_code_problems(sections)
     assert [t for t, _ in problems] == ["서비스", "서비스"]
     assert "ask" in problems[0][1] and "build" not in problems[0][1]
     assert "does not parse" in problems[1][1]
+
+
+def test_internals_excerpts_sessions_and_star_imports_are_not_paste_problems() -> None:
+    from scholar_lens.domain.guide.evidence_guide import python_code_problems
+
+    excerpt = "## 구조\n\n```python\nasync def cycle(agent):\n    return _handle(agent)\n```\n"
+    repl = "## 사용\n\n```python\n>>> agent(prompt)\n```\n\n```python\n%pip install x\n```\n"
+    star = "## 사용\n\n```python\nfrom x import *\nrun(Agent())\n```\n"
+    assert python_code_problems([("구조", excerpt, False)]) == []
+    assert python_code_problems([("사용", repl, True)]) == []
+    assert python_code_problems([("사용", star, True)]) == []

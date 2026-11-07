@@ -177,3 +177,52 @@ def test_an_evidence_run_stops_at_its_cost_ceiling() -> None:
         record(event.model_copy(update={"input_tokens": 100_000}))
     assert tracker.call_count == 2
     budgeted(tracker, None)(event)
+
+
+def test_a_content_filtered_structured_call_moves_to_the_fallback_model(
+    monkeypatch,
+) -> None:
+    from pydantic import BaseModel
+
+    class Answer(BaseModel):
+        section: str
+
+    class Result:
+        def __init__(self, stop: str, output: object) -> None:
+            self.stop_reason = stop
+            self.structured_output = output
+            usage = {"inputTokens": 1, "outputTokens": 1}
+            self.metrics = SimpleNamespace(
+                agent_invocations=[
+                    SimpleNamespace(cycles=[SimpleNamespace(usage=usage)])
+                ],
+                accumulated_usage=usage,
+            )
+
+    answers = [Result("content_filtered", None)] * 4 + [
+        Result("end_turn", Answer(section="ok"))
+    ]
+    seen: list = []
+
+    class FakeAgent:
+        def __init__(self, *, model, **_) -> None:
+            seen.append(model["model_id"])
+            self.messages: list = []
+
+        async def invoke_async(self, prompt, **_):
+            result = answers.pop(0)
+            self.event_loop_metrics = result.metrics
+            return result
+
+    monkeypatch.setattr(strands_models, "Agent", FakeAgent)
+    monkeypatch.setattr(strands_models, "BedrockModel", lambda **kw: kw)
+    fallback = RoleModel("sonnet-arn", "global.anthropic.claude-sonnet-5-5")
+    model = StrandsLanguageModel(
+        None,  # type: ignore[arg-type]
+        {"write": RoleModel("opus-arn", "opus", fallback=fallback)},
+        lambda _e: None,
+    )
+    out = asyncio.run(
+        model.structured(role="write", system="s", prompt="p", schema=Answer)
+    )
+    assert out.section == "ok" and seen[-1] == "sonnet-arn"

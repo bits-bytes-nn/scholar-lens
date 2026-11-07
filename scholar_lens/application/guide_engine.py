@@ -83,6 +83,9 @@ GUIDE_PROMPTS = WriterPrompts(
 _PRIMARY = ("official", "reference")
 _CODE_SPAN = re.compile(r"`[^`\n]+`")
 _AUTHORITY_RANK = {"official": 0, "reference": 1, "third_party": 2, "older_docs": 3}
+# Sections whose code a reader runs (the running example); concepts and
+# architecture may quote internals to explain them.
+_RUNNABLE_KINDS = frozenset({"usage", "operations"})
 # Definitions in a code block: what later code of the running example calls.
 _DEFINITION = re.compile(
     r"^\s*(?:(?:async\s+)?def \w+\(.*|class \w+.*|(?:export\s+)?(?:async\s+)?function \w+\(.*"
@@ -730,7 +733,10 @@ class EvidenceGuideEngine(EvidenceWriter):
                 fix="Make the code run as pasted after the earlier blocks.",
             )
             for title, problem in python_code_problems(
-                [(section_heading(md) or s.title, md) for s, md in written]
+                [
+                    (section_heading(md) or s.title, md, s.kind in _RUNNABLE_KINDS)
+                    for s, md in written
+                ]
             )
         ]
         issues = [*review.issues, *code_findings]
@@ -741,7 +747,7 @@ class EvidenceGuideEngine(EvidenceWriter):
             len(issues),
             len(code_findings),
         )
-        return await self.apply_findings(
+        fixed = await self.apply_findings(
             written,
             issues,
             ledger,
@@ -749,6 +755,19 @@ class EvidenceGuideEngine(EvidenceWriter):
             own_of=lambda s: [e for eid in s.evidence if (e := ledger.get(eid))],
             reference_of=self.source_sections,
         )
+        # The fix is checked again, not trusted: what is left goes on the PR
+        # checklist.
+        if left := python_code_problems(
+            [
+                (section_heading(md) or s.title, md, s.kind in _RUNNABLE_KINDS)
+                for s, md in fixed
+            ]
+        ):
+            self.notes.append(
+                "Guide code that may not run as pasted: "
+                + " | ".join(f"{t}: {p}"[:200] for t, p in left[:5])
+            )
+        return fixed
 
     async def _tldr(
         self,

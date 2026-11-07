@@ -57,3 +57,11 @@ def test_a_short_name_spelling_or_version_spacing_is_the_same_paper(
     a: str, b: str
 ) -> None:
     assert titles_match(a, b) and titles_match(b, a)
+
+
+def test_two_different_short_names_are_two_papers() -> None:
+    assert not titles_match(
+        "Alpaca: A Strong, Replicable Instruction-Following Model",
+        "Vicuna: A Strong, Replicable Instruction-Following Model",
+    )
+    assert not titles_match("Fast Serving (vLLM)", "Fast Serving (SGLang)")

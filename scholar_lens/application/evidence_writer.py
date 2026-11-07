@@ -602,6 +602,9 @@ class EvidenceWriter:
             if len(checks(fixed)) > len(code):
                 logger.info("Fix of %r rejected: adds rule problems", title)
                 break
+            if fixed.strip() == draft.strip():
+                logger.info("Fix of %r changed nothing; stopping.", title)
+                break
             draft = fixed
         # The loop ends on the draft its last claim check read: reused, not
         # paid for again.
@@ -700,7 +703,11 @@ class EvidenceWriter:
             own = own_of(section)
             self.reference = reference_of(own)
             fixed = await self._fix(md, own, issues)
-            if structure_lost(md, fixed) or _incomplete(fixed):
+            if (
+                structure_lost(md, fixed)
+                or _incomplete(fixed)
+                or fixed.strip() == md.strip()
+            ):
                 self.notes.append(
                     f"Section '{title_of(section)}': whole-post review problems "
                     "left as they were: " + " | ".join(i[:160] for i in issues[:3])
@@ -712,6 +719,13 @@ class EvidenceWriter:
                     if _removable(v)
                 ]
                 md = drop_sentences(fixed, wrong) if wrong else fixed
+                if wrong:
+                    self.notes.append(
+                        f"Section '{title_of(section)}': {len(wrong)} sentence(s) "
+                        "from a whole-post fix removed (they contradict their "
+                        "evidence or talk about the post's sources): "
+                        + " | ".join(w[:120] for w in wrong[:3])
+                    )
             self.reference = ""
             out.append((section, md))
         return out
@@ -750,9 +764,11 @@ class EvidenceWriter:
                 )
             except ValueError as e:
                 logger.warning("Fix answer unusable (%s); the draft stands.", e)
+                self.notes.append(f"A fix could not be made ({e}); the draft stands.")
                 return draft
-        if answer.notes.strip():
-            logger.info("Writer's notes on a fix: %s", answer.notes[:400])
+        if notes := " ".join(answer.notes.split()):
+            # What the writer could not fix belongs on the PR checklist.
+            self.notes.append(f"Writer's note on a fix: {notes[:300]}")
         return strip_revision_notes(answer.section.strip(), draft)
 
     async def unsupported(

@@ -284,7 +284,7 @@ OpenAlex는 arXiv 시대 ML 논문의 인용 수를 크게 적게 세고(실측:
 5. **집필, 검증, 수정**(역할 `write` = 리뷰 `paper_synthesis_model_id`·요약 `summary_model_id`, 콘텐츠 필터에 막히면 `reader_model_id`. 검증은 역할 `evaluate` = 리뷰 `paper_evaluation_model_id`·요약 `summary_model_id`): 서베이·가이드와 같은 반복입니다(4.3.1절 7–8단계, 4.5절). 절은 자기 근거와 그 근거가 나온 원문 절(최대 40,000자)을 받습니다. 절을 다 쓰면 글 전체를 한 번 검토하고(`_review_post`), TL;DR은 마지막에 절의 근거와 첫머리로 씁니다(리뷰는 고정 질문 네 개를 `###`로, `tldr_problems`).
 6. **마무리**(`_final`, 역할 `evaluate`): 부제와 검색 설명을 만들고, 설명은 `description_problems`로 확인해 한 번 다시 묻습니다. 그래도 어기면 비우고 PR 메모를 남깁니다. 내려받을 수 없는 원격 그림은 빼고 메모로 남기며(`evidence_models.py::unservable`), 결과는 `sections` 엔진과 같은 형태(`ReviewText`, 요약 결과 dict)로 `formatting.py`가 조립합니다.
 
-`max_total_tokens`와 `min_quality_score`, `max_synthesis_attempts`, `max_edit_rounds`는 `sections` 엔진만 씁니다. 이 엔진의 실행 상한은 추정 비용 `explanation.max_cost_usd`(기본 $40)·`summary.max_cost_usd`(기본 $12)입니다(4.5절).
+`max_total_tokens`와 `min_quality_score`, `max_synthesis_attempts`, `max_edit_rounds`는 `sections` 엔진만 씁니다. 근거 장부 엔진의 실행 상한은 추정 비용 `explanation.max_cost_usd`(기본 $40)·`summary.max_cost_usd`(기본 $12)입니다(4.5절).
 
 ### 4.5 근거 장부 엔진 공통
 
