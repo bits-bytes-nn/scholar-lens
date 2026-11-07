@@ -10,7 +10,7 @@ sources show, and the outline can give each piece of evidence to one section.
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Mapping
 from difflib import SequenceMatcher
 from typing import Literal
 
@@ -358,24 +358,37 @@ def near_duplicate(claim: str, others: Iterable[str], threshold: float = 0.85) -
 
 
 def duplicate_evidence(
-    items: Iterable[Evidence], rank: dict[str, int] | None = None
+    items: Iterable[Evidence],
+    rank: dict[str, int] | None = None,
+    *,
+    within_source: bool = False,
 ) -> dict[str, str]:
     """Evidence that states what an earlier item of the same kind states
     (two pages documenting one flag): duplicate id -> the id kept. With
     ``rank`` (source id -> lower is more authoritative) the most
-    authoritative source keeps the fact. Figures and code are never
-    duplicates of each other by their claims."""
+    authoritative source keeps the fact. With ``within_source`` two items of
+    one source count too (a paper states its main result in the abstract,
+    the introduction and the experiments; parallel readers record each). A
+    figure recorded twice (the same image) is a duplicate; otherwise figures
+    and code are never duplicates of each other by their claims."""
     order = sorted(
         enumerate(items),
         key=lambda pair: ((rank or {}).get(pair[1].paper_id, 0), pair[0]),
     )
     kept: dict[str, list[Evidence]] = {}
     duplicates: dict[str, str] = {}
+    shown: dict[str, str] = {}
     for _, item in order:
+        if item.kind == "figure" and item.figure_url:
+            if item.figure_url in shown:
+                duplicates[item.id] = shown[item.figure_url]
+            else:
+                shown[item.figure_url] = item.id
+            continue
         if item.kind in ("figure", "code"):
             continue
         for other in kept.get(item.kind, []):
-            if other.paper_id == item.paper_id:
+            if other.paper_id == item.paper_id and not within_source:
                 continue
             if _same_fact(item.claim, other.claim, 0.85) and _facts(
                 item.cell
@@ -385,6 +398,12 @@ def duplicate_evidence(
         else:
             kept.setdefault(item.kind, []).append(item)
     return duplicates
+
+
+def canonical_ids(ids: Iterable[str], duplicates: Mapping[str, str]) -> list[str]:
+    """``ids`` with each duplicate replaced by the id that keeps its fact,
+    each once, in order."""
+    return list(dict.fromkeys(duplicates.get(i, i) for i in ids))
 
 
 class EvidenceLedger(BaseModel):

@@ -855,3 +855,28 @@ def test_a_sentence_about_the_posts_sources_is_removable() -> None:
     assert _removable("about_sources: talks about the evidence")
     assert _removable("wrong: swaps the setting")
     assert not _removable("unsupported: broadens the scope")
+
+
+def test_one_papers_repeated_fact_and_figure_are_duplicates_within_it() -> None:
+    from scholar_lens.domain.evidence import Evidence, duplicate_evidence
+
+    def item(eid: str, kind: str, claim: str, url: str | None = None) -> Evidence:
+        return Evidence(
+            id=eid,
+            paper_id="P",
+            kind=kind,
+            claim=claim,
+            quote="q",
+            anchor="S1",
+            figure_url=url,
+        )
+
+    items = [
+        item("E1", "number", "QK-Clip은 로짓을 100으로 제한합니다"),
+        item("E2", "figure", "손실 곡선", "https://x/loss.png"),
+        item("E3", "number", "QK-Clip은 로짓을 100으로 제한합니다."),
+        item("E4", "figure", "손실 곡선 다시", "https://x/loss.png"),
+    ]
+    assert duplicate_evidence(items, within_source=True) == {"E3": "E1", "E4": "E2"}
+    # Across sources only (the guide's use), one source's repeats stay.
+    assert duplicate_evidence(items) == {"E4": "E2"}
