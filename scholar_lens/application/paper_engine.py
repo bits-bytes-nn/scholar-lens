@@ -71,7 +71,7 @@ from .usage import usage_stage
 logger = logging.getLogger(__name__)
 
 # Bump when the reader's prompt or the evidence schema changes meaning.
-PAPER_READER_VERSION = 1
+PAPER_READER_VERSION = 2
 _FREE_NUMBERS = free_numbers()
 
 PAPER_PROMPTS = WriterPrompts(

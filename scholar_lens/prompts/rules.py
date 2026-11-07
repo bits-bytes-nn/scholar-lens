@@ -309,3 +309,18 @@ the same definition, recorded from different pages or parts of the source).
 Code keeps one item of each group, so the post states the fact once; never
 group items that differ in a number, a setting or a scope.
 """
+
+
+REPETITION_CHECKS: str = """
+Repetition, in the order a reader meets the post (the TL;DR may repeat):
+- a fact, behaviour, example or derivation taught again, within a section
+  or in a later one, in other words: keep it where it is taught in full
+  and name that section; the other places refer back to it by content
+  ("앞서 본 검증 오류 재시도") or lose the sentence;
+- a paragraph, callout ("핵심:", "정리하면") or closing line that only
+  restates what the reader just read;
+- prose that retells every cell of the table or code next to it: keep the
+  table or code, cut the prose to what it adds (why, when, the exception).
+Never cut a code block, figure, equation, table or the only statement of a
+number or condition; repetition is cut from prose only.
+"""

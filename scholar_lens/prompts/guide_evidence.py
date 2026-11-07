@@ -14,6 +14,7 @@ from .rules import (
     MATH_RULES,
     POST_SO_FAR,
     READER_PROFILE,
+    REPETITION_CHECKS,
     SAME_FACTS,
     SELF_REFERENCE_CHECKS,
     STYLE_RULES,
@@ -359,10 +360,18 @@ says:
   ("앞서 계산한 대로", "앞서 보낸 요청", a recap of code the earlier blocks
   do not contain), or that uses the running example before it is
   introduced;
-- a fact explained again in a later section instead of referred back to
-  (name the section that should keep it; the TL;DR may repeat).
 For each problem give the section title exactly as it appears in the guide's
 `## ` heading, the problem, and the fix (the corrected lines, using names and
 import paths from the guide or the source code listed). Return no issues
 when there are none.
 """ + SDK_SOURCE + SECURITY
+
+GUIDE_REPETITION_SYSTEM = """
+You review a whole technical guide for repetition only: what it teaches
+more than once. Report each place with the section title exactly as it
+appears in its `## ` heading, the repeated passage quoted as it stands, the
+problem (what it repeats and the section that keeps it in full) and the
+fix (delete the passage, or the short back-reference that replaces it).
+A restatement that adds a new condition, number or exception is not
+repetition: keep the new part. Return no issues when there are none.
+""" + REPETITION_CHECKS + SECURITY

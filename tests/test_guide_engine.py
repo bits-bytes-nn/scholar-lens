@@ -426,6 +426,18 @@ class ScriptedModel:
             return SectionReview()
         if schema is EvidenceCheck:
             return EvidenceCheck()
+        if schema is PostReview and "repetition only" in system:
+            # A read of its own, its findings fixed with the code review's.
+            self.calls.append("repetition-review")
+            return PostReview(
+                issues=[
+                    PostFinding(
+                        section="처리량을 묶어 올리는 배치",
+                        problem="It repeats what the TL;DR teaches.",
+                        fix="Refer back to it.",
+                    )
+                ]
+            )
         if schema is PostReview:
             assert "<guide>" in prompt and "@serve.batch" in prompt
             return PostReview(
@@ -450,6 +462,8 @@ class ScriptedModel:
         if "title: 데코레이터" in prompt:
             # The writer sees the docs section its evidence comes from.
             assert "[D1 S2: Ray Serve batching | Configuration | official]" in prompt
+        if "It repeats what the TL;DR teaches" in prompt:
+            self.calls.append("repetition-fix")
         if "<problems>" in prompt:
             title = prompt.split("## ", 1)[1].split("\n", 1)[0]
             return f"## {title}\n\n`max_batch_size` 기본값은 10입니다 [[E2]].\n\n```python\n@serve.batch(max_batch_size=8)\n```\n"
@@ -496,6 +510,7 @@ def test_a_scripted_guide_run() -> None:
     assert [c for c in model.calls if c.startswith("text")][-1] == "text:write"
     assert model.calls.count("read") == 2
     assert "code-fix" in model.calls and "from ray import serve" in body
+    assert "repetition-review" in model.calls and "repetition-fix" in model.calls
 
 
 def test_a_figure_without_a_caption_is_placed_with_the_text_before_it() -> None:

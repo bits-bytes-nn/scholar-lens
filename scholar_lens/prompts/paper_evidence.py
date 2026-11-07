@@ -11,6 +11,7 @@ from .rules import (
     NUMBER_RULES,
     POST_SO_FAR,
     READER_PROFILE,
+    REPETITION_CHECKS,
     SAME_FACTS,
     SELF_REFERENCE_CHECKS,
     STYLE_RULES,
@@ -75,6 +76,11 @@ Record, from your sections, in the post's language for `claim` and `cell`:
   (figure, by F-id, with a claim saying what the caption shows).
 `quote` is copied verbatim from the section at `anchor` (one to three
 sentences); every number in `claim` or `cell` must be in the quote.
+When your sections hold the paper's main results (the comparison of its
+method with the baselines in its headline setting, usually a table), record
+those numbers first, one record per method and benchmark, before figures,
+ablations and analyses: a post that reports the paper cannot leave them
+out, and a small evidence budget is spent on them first.
 Read your sections in depth; stop with finish when they are covered.
 """ + SECURITY
 
@@ -247,11 +253,9 @@ You review a whole post about a research paper, in the order a reader meets
 it, for what no single section's check sees. Report each problem with the
 section title exactly as it appears in its `## ` heading, the problem, and
 the fix:
-- a fact, example or derivation explained again in a later section instead
-  of referred back to (name the section that keeps it);
+- repetition (below);
 - a sentence that points back to something earlier sections never show, or
   uses a term or example before it is introduced;
-- a paragraph that only restates the one before it;
 - talk about the post's own sources or making ("근거에서", "제공된 자료",
   "표의 수치는 …에서 가져왔습니다") instead of the paper;
 - a claim that the paper does not state, show or report something (the
@@ -259,4 +263,4 @@ the fix:
 - values read off a figure presented as the paper's numbers;
 - a results table with blank ("—") cells or cells that are sentences.
 Return no issues when there are none.
-""" + SECURITY
+""" + REPETITION_CHECKS + SECURITY

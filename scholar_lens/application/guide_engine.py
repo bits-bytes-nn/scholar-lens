@@ -747,21 +747,31 @@ class EvidenceGuideEngine(EvidenceWriter):
             and d.authority == "official"
         )[: self.settings.source_chars]
         with usage_stage("review"):
-            review = await self.model.structured(
-                role="evaluate",
-                system=prompts.GUIDE_REVIEW_SYSTEM,
-                prompt="\n\n".join(
-                    [
-                        f"Topic: {topic}. Running example: "
-                        f"{outline.running_example or 'none'}. Code language: "
-                        f"{outline.code_language or 'any'}.",
-                        block("guide", guide),
-                        block("source_code", source_code),
-                        block("sdk_source", self._sdk_source(guide)),
-                        block("packages", self.package_facts),
-                    ]
+            # The code trace and the repetition read are separate reads of
+            # the guide: one reviewer asked for both reports the code.
+            review, repetition = await asyncio.gather(
+                self.model.structured(
+                    role="evaluate",
+                    system=prompts.GUIDE_REVIEW_SYSTEM,
+                    prompt="\n\n".join(
+                        [
+                            f"Topic: {topic}. Running example: "
+                            f"{outline.running_example or 'none'}. Code language: "
+                            f"{outline.code_language or 'any'}.",
+                            block("guide", guide),
+                            block("source_code", source_code),
+                            block("sdk_source", self._sdk_source(guide)),
+                            block("packages", self.package_facts),
+                        ]
+                    ),
+                    schema=PostReview,
                 ),
-                schema=PostReview,
+                self.model.structured(
+                    role="evaluate",
+                    system=prompts.GUIDE_REPETITION_SYSTEM,
+                    prompt="\n\n".join([f"Topic: {topic}.", block("guide", guide)]),
+                    schema=PostReview,
+                ),
             )
         if review.trace:
             logger.info("Guide review trace: %s", review.trace[:600])
@@ -780,12 +790,13 @@ class EvidenceGuideEngine(EvidenceWriter):
                 ]
             )
         ]
-        issues = [*review.issues, *code_findings]
+        issues = [*review.issues, *repetition.issues, *code_findings]
         if not issues:
             return written
         logger.info(
-            "Guide review: %d issue(s), %d from the code check.",
+            "Guide review: %d issue(s), %d repetition, %d from the code check.",
             len(issues),
+            len(repetition.issues),
             len(code_findings),
         )
         fixed = await self.apply_findings(
