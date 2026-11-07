@@ -238,6 +238,11 @@ def with_canonical_evidence[OutlineT](
     a section then lists each fact once."""
     if not duplicates:
         return outline
+    logger.info(
+        "Evidence stating one fact merged: %d item(s) (%s).",
+        len(duplicates),
+        ", ".join(f"{d}->{k}" for d, k in list(duplicates.items())[:20]),
+    )
 
     def ids(values: Sequence[str]) -> list[str]:
         return canonical_ids(values, duplicates)
