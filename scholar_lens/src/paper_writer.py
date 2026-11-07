@@ -16,10 +16,10 @@ from ..domain.evidence import SourceDocument
 from ..domain.markdown.lint import FIGURE_MARKER
 from ..domain.paper.evidence_paper import assemble_review, assemble_summary
 from ..domain.post_names import slugify
-from .constants import LanguageModelId, LocalPaths, S3Paths
+from .constants import LanguageModelId, S3Paths
 from .explainer import Paper, ReviewText
 from .metrics import TokenUsageTracker
-from .runtime import ROOT_DIR, RunContext
+from .runtime import RunContext
 
 
 def paper_documents(paper: Paper) -> tuple[SourceDocument, list[SourceDocument]]:
@@ -119,7 +119,7 @@ async def write_paper_with_evidence(
             max_total_chars=lengths[1],
         ),
         store=EvidenceTextStore(
-            ROOT_DIR / LocalPaths.PAPERS_DIR.value / "paper-evidence",
+            context.papers_dir / "paper-evidence",
             context.s3_handler,
             context.config.resources.s3_prefix,
             S3Paths.PAPERS,

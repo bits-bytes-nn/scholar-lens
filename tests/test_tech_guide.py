@@ -5,8 +5,10 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock
 
+import boto3
 import pytest
 
+from scholar_lens.src.constants import LanguageModelId
 from scholar_lens.src.prompts import (
     TechGuideRelevancePrompt,
     TechGuideResearchPlanPrompt,
@@ -24,6 +26,7 @@ from scholar_lens.src.tech_guide import (
     TechGuideGenerator,
 )
 from scholar_lens.src.web_research import PageContent, ResearchCorpus, source_label
+from tests.fakes import FakeLLMFactory
 
 
 class TestPromptsBuild:
@@ -46,17 +49,19 @@ def _make_generator(*, auto_research: bool = False) -> TechGuideGenerator:
 
     Auto-research defaults OFF so a test exercises only what it opts into.
     """
-    gen = TechGuideGenerator.__new__(TechGuideGenerator)
-    gen.language = "English"
-    gen.title_max_length = 70
-    gen.auto_research = auto_research
-    gen.max_research_queries = 6
-    gen.fetch_top_results = 4
-    gen.callbacks = []
-    gen.notes = []
-    gen.researcher = MagicMock()
-    gen.researcher.add_official_reference = MagicMock(return_value=[])
-    gen._reference_pages, gen._reference_ids = [], []
+    researcher = MagicMock()
+    researcher.add_official_reference = MagicMock(return_value=[])
+    gen = TechGuideGenerator(
+        LanguageModelId.CLAUDE_V4_5_HAIKU,
+        boto3.Session(region_name="us-east-1"),
+        researcher=researcher,
+        language="English",
+        title_max_length=70,
+        auto_research=auto_research,
+        max_research_queries=6,
+        fetch_top_results=4,
+        llm_factory=FakeLLMFactory(),  # type: ignore[arg-type]
+    )
     gen.relevance_chain = MagicMock()
     gen.research_plan_chain = MagicMock()
     gen.taxonomy_chain = MagicMock()

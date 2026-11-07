@@ -8,6 +8,8 @@ which is mocked with ``responses`` (or proven not to fire at all).
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -23,10 +25,10 @@ class _NoWaitLimiter:
         pass
 
 
-@pytest.fixture(autouse=True)
-def _no_arxiv_pacing(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The process-wide limiter allows one request per 3 s; tests never wait."""
-    monkeypatch.setattr(arxiv_handler, "_ARXIV_RATE_LIMITER", _NoWaitLimiter())
+def _handler_with(client: object, **kwargs: Any) -> ArxivHandler:
+    """A handler on a fake client that never waits (the process-wide limiter
+    allows one request per 3 s)."""
+    return ArxivHandler(client=client, rate_limiter=_NoWaitLimiter(), **kwargs)  # type: ignore[arg-type]
 
 
 PUBLISHED = datetime(2024, 1, 1, 12, 0, 0)
@@ -116,12 +118,9 @@ class _FakePaper:
 
 class TestSearchByTitleSimilarity:
     def _handler(self, returned: list[_FakePaper]):
-        from unittest.mock import MagicMock
-
-        handler = ArxivHandler.__new__(ArxivHandler)
-        handler.client = MagicMock()
-        handler.client.results = MagicMock(return_value=iter(returned))
-        return handler
+        client = MagicMock()
+        client.results = MagicMock(return_value=iter(returned))
+        return _handler_with(client)
 
     def test_exact_match_accepted(self) -> None:
         handler = self._handler([_FakePaper("Attention Is All You Need", "1706.03762")])
@@ -159,10 +158,7 @@ class TestSearchByTitleSimilarity:
         assert handler.search_by_title("Qwen2 Technical Report") is None
 
     def test_hyphen_retry_accepts_the_spaced_title(self) -> None:
-        from unittest.mock import MagicMock
-
-        handler = ArxivHandler.__new__(ArxivHandler)
-        handler.client = MagicMock()
+        handler = _handler_with(MagicMock())
         handler.client.results = MagicMock(
             side_effect=[
                 iter([]),
@@ -187,14 +183,12 @@ class TestDownloadFolder:
 
         from scholar_lens.src.paper_source import ArxivSource
 
-        handler = ArxivHandler()
+        handler = _handler_with(MagicMock())
         paper = SimpleNamespace(
             get_short_id=lambda: "2106.09685v2", pdf_url="https://arxiv.org/pdf/x"
         )
-        monkeypatch.setattr(handler, "_fetch_single_paper", lambda _id: paper)
-        monkeypatch.setattr(
-            ArxivHandler, "_download", staticmethod(lambda url, path: path.touch())
-        )
+        handler.client.results = MagicMock(return_value=iter([paper]))
+        monkeypatch.setattr(handler, "_download", lambda url, path: path.touch())
         path = ArxivSource("2106.09685", handler=handler).download_pdf(tmp_path)
         assert path == tmp_path / "2106_09685" / "2106_09685.pdf"
 
@@ -218,11 +212,8 @@ class TestFetchMetadataBatch:
             pdf_url=None,
         )
 
-    def test_one_request_per_page_keyed_by_unversioned_id(self, monkeypatch) -> None:
-        from unittest.mock import MagicMock
-
-        handler = ArxivHandler.__new__(ArxivHandler)
-        handler.client = MagicMock()
+    def test_one_request_per_page_keyed_by_unversioned_id(self) -> None:
+        handler = _handler_with(MagicMock(), page_size=2)
         handler.client.results = MagicMock(
             side_effect=[
                 iter(
@@ -235,7 +226,6 @@ class TestFetchMetadataBatch:
                 iter([self._paper("2305.18290v3", "DPO", ["R. Rafailov"])]),
             ]
         )
-        monkeypatch.setattr(ArxivHandler, "DEFAULT_PAGE_SIZE", 2)
         found = handler.fetch_metadata_batch(
             ["1706.03762v5", "2106.09685", "1706.03762", "2305.18290"]
         )
@@ -247,15 +237,11 @@ class TestFetchMetadataBatch:
             ["2305.18290"],
         ]
 
-    def test_a_failing_request_raises_after_the_retries(self, monkeypatch) -> None:
-        from unittest.mock import MagicMock
-
-        monkeypatch.setattr(arxiv_handler, "_ARXIV_FETCH_MAX_ATTEMPTS", 2)
-        monkeypatch.setattr(arxiv_handler, "_ARXIV_FETCH_INITIAL_WAIT", 0)
-        monkeypatch.setattr(arxiv_handler, "_ARXIV_FETCH_MAX_WAIT", 0)
-        handler = ArxivHandler.__new__(ArxivHandler)
-        handler.client = MagicMock()
+    def test_a_failing_request_raises_after_the_retries(self) -> None:
+        waits: list[float] = []
+        handler = _handler_with(MagicMock(), max_attempts=2, sleep=waits.append)
         handler.client.results = MagicMock(side_effect=OSError("connection reset"))
         with pytest.raises(arxiv_handler.ArxivPaperError):
             handler.fetch_metadata_batch(["1706.03762"])
         assert handler.client.results.call_count == 2
+        assert len(waits) == 1

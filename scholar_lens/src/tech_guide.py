@@ -137,6 +137,7 @@ class TechGuideGenerator(RetryableBase):
         max_research_queries: int,
         fetch_top_results: int,
         callbacks: list[Any] | None = None,
+        llm_factory: BedrockLanguageModelFactory | None = None,
     ) -> None:
         self.language = language
         # The blog's title limit (the conventions' ``seo_title_max_length``).
@@ -149,8 +150,11 @@ class TechGuideGenerator(RetryableBase):
         self.fetch_top_results = fetch_top_results
         self.callbacks = callbacks or []
         self.notes: list[str] = []
+        self._reference_pages, self._reference_ids = [], []
         self.researcher = researcher or WebResearcher()
-        self.llm_factory = BedrockLanguageModelFactory(boto_session=boto_session)
+        self.llm_factory = llm_factory or BedrockLanguageModelFactory(
+            boto_session=boto_session
+        )
 
         # The relevance gate, research planner and taxonomy are cheap and use
         # the relevance model tier (no thinking).

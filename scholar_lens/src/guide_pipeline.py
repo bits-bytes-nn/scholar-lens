@@ -13,7 +13,7 @@ from ..domain.markdown.lint import (
     figure_markers_to_images,
     fill_image_alts,
 )
-from .constants import EnvVars, LanguageModelId, LocalPaths
+from .constants import EnvVars, LanguageModelId
 from .formatting import build_post_meta, cut_title, format_guide
 from .guide_writer import write_guide_with_evidence
 from .jobs import JobRequest
@@ -22,7 +22,6 @@ from .metrics import TokenUsageTracker
 from .publish_types import slugify, title_slug
 from .publisher import PublishRequest, build_pr_body
 from .runtime import (
-    ROOT_DIR,
     PipelineOutcome,
     RunContext,
     check_post_type,
@@ -127,7 +126,7 @@ async def run_guide_pipeline(
         published=published,
     )
     slug = slugify(guide.topic, max_length=80)
-    work_dir = ROOT_DIR / LocalPaths.PAPERS_DIR.value / f"guide-{slug}"
+    work_dir = context.papers_dir / f"guide-{slug}"
     work_dir.mkdir(parents=True, exist_ok=True)
     document = guide_document(
         format_guide(github, guide, meta=meta),

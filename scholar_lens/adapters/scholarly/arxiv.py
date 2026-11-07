@@ -1,5 +1,7 @@
 import logging
 import re
+import time
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 
@@ -16,7 +18,11 @@ from pydantic import (
 )
 
 from ...domain.ids import normalize_arxiv_id
-from ..http.rate_limit import ARXIV_RATE_LIMITER, arxiv_retry_after_seconds
+from ..http.rate_limit import (
+    ARXIV_RATE_LIMITER,
+    RateLimiter,
+    arxiv_retry_after_seconds,
+)
 from .metadata import title_similarity, titles_match
 from .pdf import CHUNK_BYTES, save_pdf
 
@@ -119,17 +125,43 @@ class ArxivMetadata(BaseModel):
 class ArxivHandler:
     DEFAULT_PAGE_SIZE: int = 100
 
-    def __init__(self) -> None:
-        # Pacing is the process-wide _ARXIV_RATE_LIMITER's job; the client's
-        # own per-instance delay would only add to it.
-        self.client = arxiv.Client(
-            page_size=self.DEFAULT_PAGE_SIZE, delay_seconds=0, num_retries=0
-        )
-        session = getattr(self.client, "_session", None)
+    def __init__(
+        self,
+        *,
+        client: arxiv.Client | None = None,
+        rate_limiter: RateLimiter | None = None,
+        page_size: int = DEFAULT_PAGE_SIZE,
+        max_attempts: int = _ARXIV_FETCH_MAX_ATTEMPTS,
+        sleep: Callable[[float], None] = time.sleep,
+    ) -> None:
+        """No request is made until a method is called.
+
+        Args:
+            client: The arXiv API client (default: one with timeouts and no
+                pacing or retries of its own).
+            rate_limiter: Paces every arXiv request (default: the process-wide
+                arXiv limiter).
+            page_size: Ids per metadata request.
+            max_attempts: Attempts per API call before its error is raised.
+            sleep: Waits between those attempts.
+        """
+        self.page_size = page_size
+        self._limiter = _ARXIV_RATE_LIMITER if rate_limiter is None else rate_limiter
+        self._max_attempts = max_attempts
+        self._sleep = sleep
+        self.client = self._default_client(page_size) if client is None else client
+
+    @staticmethod
+    def _default_client(page_size: int) -> arxiv.Client:
+        # Pacing is the rate limiter's job; the client's own per-instance delay
+        # would only add to it.
+        client = arxiv.Client(page_size=page_size, delay_seconds=0, num_retries=0)
+        session = getattr(client, "_session", None)
         if isinstance(session, requests.Session):
             adapter = _TimeoutAdapter()
             session.mount("https://", adapter)
             session.mount("http://", adapter)
+        return client
 
     def download_paper(
         self, arxiv_id: str, papers_dir: Path, *, folder: str | None = None
@@ -152,17 +184,16 @@ class ArxivHandler:
                 f"Failed to download paper '{arxiv_id}': {str(e)}"
             ) from e
 
-    @staticmethod
-    def _download(url: str, pdf_path: Path) -> None:
+    def _download(self, url: str, pdf_path: Path) -> None:
         """Stream the PDF with timeouts and a size cap (``urlretrieve``, used
         by the arxiv library, has neither), paced by the arXiv rate limiter;
         an error's Retry-After (capped) holds later arXiv requests."""
-        _ARXIV_RATE_LIMITER.acquire()
+        self._limiter.acquire()
         with requests.get(url, stream=True, timeout=_ARXIV_TIMEOUT) as response:
             try:
                 response.raise_for_status()
             except requests.HTTPError as e:
-                _ARXIV_RATE_LIMITER.penalize(arxiv_retry_after_seconds(e))
+                self._limiter.penalize(arxiv_retry_after_seconds(e))
                 raise
             save_pdf(
                 response.iter_content(chunk_size=CHUNK_BYTES),
@@ -192,8 +223,8 @@ class ArxivHandler:
         retries raises ``ArxivPaperError``."""
         unique = list(dict.fromkeys(re.sub(r"v\d+$", "", i) for i in arxiv_ids))
         found: dict[str, ArxivMetadata] = {}
-        for start in range(0, len(unique), self.DEFAULT_PAGE_SIZE):
-            chunk = unique[start : start + self.DEFAULT_PAGE_SIZE]
+        for start in range(0, len(unique), self.page_size):
+            chunk = unique[start : start + self.page_size]
             search = arxiv.Search(id_list=chunk, max_results=len(chunk))
             label = f"metadata of {len(chunk)} id(s)"
             for paper in self._retrying(label)(self._results_once, search, label):
@@ -206,25 +237,24 @@ class ArxivHandler:
         return found
 
     def _results_once(self, search: arxiv.Search, label: str) -> list[arxiv.Result]:
-        _ARXIV_RATE_LIMITER.acquire()
+        self._limiter.acquire()
         try:
             return list(self.client.results(search))
         except Exception as e:
-            _ARXIV_RATE_LIMITER.penalize(arxiv_retry_after_seconds(e))
+            self._limiter.penalize(arxiv_retry_after_seconds(e))
             raise ArxivPaperError(f"arXiv {label} failed: {e}") from e
 
     def _fetch_single_paper(self, arxiv_id: str) -> arxiv.Result:
         return self._retrying(f"'{arxiv_id}'")(self._fetch_single_paper_once, arxiv_id)
 
-    @staticmethod
-    def _retrying(label: str) -> tenacity.Retrying:
+    def _retrying(self, label: str) -> tenacity.Retrying:
         # Retry transient API errors (HTTP 429 etc.) with jittered backoff, but
         # never retry a genuine "not found" — that is terminal.
         return tenacity.Retrying(
             wait=tenacity.wait_exponential_jitter(
                 initial=_ARXIV_FETCH_INITIAL_WAIT, max=_ARXIV_FETCH_MAX_WAIT
             ),
-            stop=tenacity.stop_after_attempt(_ARXIV_FETCH_MAX_ATTEMPTS),
+            stop=tenacity.stop_after_attempt(self._max_attempts),
             # Retry transient API errors but NOT a genuine "not found"
             # (ArxivNotFoundError subclasses ArxivPaperError, so exclude it).
             retry=tenacity.retry_if_exception(
@@ -236,11 +266,12 @@ class ArxivHandler:
                 label,
                 s.attempt_number,
             ),
+            sleep=self._sleep,
             reraise=True,
         )
 
     def _fetch_single_paper_once(self, arxiv_id: str) -> arxiv.Result:
-        _ARXIV_RATE_LIMITER.acquire()
+        self._limiter.acquire()
         try:
             search = arxiv.Search(id_list=[arxiv_id])
             return next(self.client.results(search))
@@ -249,7 +280,7 @@ class ArxivHandler:
                 f"Paper not found for arXiv ID: '{arxiv_id}'"
             ) from e
         except Exception as e:
-            _ARXIV_RATE_LIMITER.penalize(arxiv_retry_after_seconds(e))
+            self._limiter.penalize(arxiv_retry_after_seconds(e))
             raise ArxivPaperError(
                 f"An unexpected error occurred while fetching '{arxiv_id}': {e}"
             ) from e
@@ -279,7 +310,7 @@ class ArxivHandler:
 
         for query in queries_to_try:
             try:
-                _ARXIV_RATE_LIMITER.acquire()
+                self._limiter.acquire()
                 search = arxiv.Search(query=query, max_results=max_results)
                 # The closest matching title, not the first: a survey or a
                 # "Revisited" follow-up may be listed before the paper itself.
@@ -294,7 +325,7 @@ class ArxivHandler:
                 if best is not None:
                     return best[1]
             except Exception as e:
-                _ARXIV_RATE_LIMITER.penalize(arxiv_retry_after_seconds(e))
+                self._limiter.penalize(arxiv_retry_after_seconds(e))
                 logger.warning("Search query '%s' failed: %s", query, e)
                 continue
 
@@ -313,9 +344,9 @@ class ArxivHandler:
         return self._collect(search, label=f"search '{query}'")
 
     def _collect(self, search: arxiv.Search, *, label: str) -> list[ArxivMetadata]:
-        _ARXIV_RATE_LIMITER.acquire()
+        self._limiter.acquire()
         try:
             return [self._paper_to_metadata(p) for p in self.client.results(search)]
         except Exception as e:
-            _ARXIV_RATE_LIMITER.penalize(arxiv_retry_after_seconds(e))
+            self._limiter.penalize(arxiv_retry_after_seconds(e))
             raise ArxivPaperError(f"arXiv {label} failed: {e}") from e

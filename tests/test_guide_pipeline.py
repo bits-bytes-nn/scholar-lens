@@ -13,7 +13,7 @@ import pytest
 from scholar_lens.configs import Github
 from scholar_lens.configs.config import Config
 from scholar_lens.domain.conventions import BlogPost, load_local_conventions
-from scholar_lens.src import guide_pipeline, runtime
+from scholar_lens.src import guide_pipeline
 from scholar_lens.src.guide_pipeline import guide_branch_id, guide_title
 from scholar_lens.src.jobs import JobRequest
 from scholar_lens.src.metrics import TokenUsageTracker
@@ -129,7 +129,7 @@ async def _run_guide(
     async def no_guideline(_: RunContext) -> None:
         return None
 
-    monkeypatch.setattr(guide_pipeline, "ROOT_DIR", tmp_path)
+    context.root_dir = tmp_path
 
     async def evidence(
         _context: RunContext, gen: FakeGuideGenerator, *, urls: list[str], **_: Any
@@ -170,17 +170,6 @@ async def test_a_retitled_rerun_updates_the_published_guide(
     monkeypatch.setenv("GITHUB_TOKEN", "ghp_x")
     monkeypatch.setattr(FakeGithub, "repo", repo)
     monkeypatch.setattr("scholar_lens.src.publisher.Github", FakeGithub)
-    monkeypatch.setattr(
-        runtime,
-        "build_publisher",
-        lambda ctx: Publisher(
-            _GITHUB,
-            root_dir=tmp_path,
-            conventions=spec,
-            site_posts=ctx.blog_posts,
-            fetch_image=lambda url: PNG,
-        ),
-    )
     session = boto3.Session(region_name="us-east-1")
 
     config = Config()
@@ -193,6 +182,13 @@ async def test_a_retitled_rerun_updates_the_published_guide(
             conventions=spec,
             blog_posts=posts,
             blog_tags={},
+            publisher_factory=lambda ctx: Publisher(
+                _GITHUB,
+                root_dir=tmp_path,
+                conventions=spec,
+                site_posts=ctx.blog_posts,
+                fetch_image=lambda url: PNG,
+            ),
         )
 
     first = await _run_guide(

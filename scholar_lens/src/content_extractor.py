@@ -147,6 +147,7 @@ class ContentExtractor(RetryableBase):
         controlled_tags: list[str] | None = None,
         existing_keywords: list[str] | None = None,
         arxiv_handler: ArxivHandler | None = None,
+        llm_factory: BedrockLanguageModelFactory | None = None,
     ) -> None:
         # Checks the arXiv ids the citation model writes (verify_arxiv_ids).
         self.arxiv_handler = arxiv_handler or ArxivHandler()
@@ -164,7 +165,9 @@ class ContentExtractor(RetryableBase):
         self._callbacks = list(callbacks) if callbacks else None
         # Reuse candidates for keywords: the tags the blog's posts already use.
         self.existing_keywords: list[str] = list(existing_keywords or [])
-        self.llm_factory = BedrockLanguageModelFactory(boto_session=self.boto_session)
+        self.llm_factory = llm_factory or BedrockLanguageModelFactory(
+            boto_session=self.boto_session
+        )
         self._initialize_chains(
             citation_extraction_model_id, attributes_extraction_model_id
         )

@@ -16,6 +16,7 @@ import logging
 import math
 import threading
 import time
+from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +25,13 @@ class RateLimiter:
     """Token-bucket limiter: at most ``rate`` requests per ``per`` seconds."""
 
     def __init__(
-        self, rate: float = 1.0, per: float = 3.0, *, name: str = "api"
+        self,
+        rate: float = 1.0,
+        per: float = 3.0,
+        *,
+        name: str = "api",
+        monotonic: Callable[[], float] = time.monotonic,
+        sleep: Callable[[float], None] = time.sleep,
     ) -> None:
         if rate <= 0 or per <= 0:
             raise ValueError("rate and per must be positive")
@@ -34,7 +41,8 @@ class RateLimiter:
         self._capacity = rate
         self._tokens = rate
         self._lock = threading.Lock()
-        self._monotonic = time.monotonic
+        self._monotonic = monotonic
+        self._sleep = sleep
         self._last_refill = self._monotonic()
         # Absolute monotonic time before which no request may proceed (set by a
         # server Retry-After). 0 means "no penalty in effect".
@@ -50,7 +58,7 @@ class RateLimiter:
                     self._tokens -= 1
                     return
             # Sleep outside the lock so other threads can refill/observe.
-            time.sleep(min(wait, self.per))
+            self._sleep(min(wait, self.per))
 
     def penalize(self, retry_after_seconds: float) -> None:
         """Honour a server ``Retry-After``: block all callers until it elapses."""
