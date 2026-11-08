@@ -187,6 +187,43 @@ def test_an_evidence_run_stops_at_its_cost_ceiling() -> None:
     budgeted(tracker, None)(event)
 
 
+@pytest.mark.parametrize(
+    ("cost", "stops"),
+    [(9.99, False), (10.0, False), (10.01, True)],
+    ids=["below", "at", "above"],
+)
+def test_the_cost_ceiling_stops_a_run_only_once_passed(
+    cost: float, stops: bool
+) -> None:
+    """The ceiling is spend allowed: a run at it goes on, the call that takes
+    it past the ceiling stops it (``budgeted``: "once its estimated cost
+    passes")."""
+    from scholar_lens.adapters.bedrock.role_models import budgeted
+    from scholar_lens.domain.usage import TokenBudgetExceeded, UsageEvent
+
+    class Tracker:
+        """Charges each call its input tokens in cents."""
+
+        def __init__(self) -> None:
+            self.cost_usd, self.call_count = 0.0, 0
+
+        def record(self, event: UsageEvent) -> None:
+            self.call_count += 1
+            self.cost_usd = round(self.cost_usd + event.input_tokens / 100, 2)
+
+    tracker = Tracker()
+    record = budgeted(tracker, 10.0)  # type: ignore[arg-type]
+    event = UsageEvent(stage="write", model_id="m", input_tokens=500, output_tokens=0)
+    record(event)  # $5.00
+    last = event.model_copy(update={"input_tokens": round((cost - 5) * 100)})
+    if stops:
+        with pytest.raises(TokenBudgetExceeded, match=r"\$10\.01 > \$10\.00"):
+            record(last)
+    else:
+        record(last)
+    assert tracker.cost_usd == cost and tracker.call_count == 2
+
+
 def test_a_content_filtered_structured_call_moves_to_the_fallback_model(
     monkeypatch,
 ) -> None:
