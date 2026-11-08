@@ -183,6 +183,13 @@ BLOG_NEEDS_ATTRIBUTES = frozenset("a audio iframe img script source video".split
 # not a real HTML tag, so <br>, <sup>, </table> stay intact but <none>,
 # <your-namespace>, <server-host> get escaped.
 _ANGLE_TOKEN = re.compile(r"<(/?)([A-Za-z][A-Za-z0-9._-]*)[^<>\n]*?/?>")
+# Markup that runs code in the reader's browser: a script element, an event
+# handler attribute or a script URL. A post never needs it (an attack quoted
+# from a security paper is text), so it is shown as text, whoever wrote it.
+_ACTIVE_HTML = re.compile(
+    r"^<\s*/?\s*script\b|\son[a-z]+\s*=|(?:java|vb)script\s*:|data\s*:\s*text/html",
+    re.IGNORECASE,
+)
 # GFM autolinks — ``<https://…>`` / ``<mailto:…>`` / ``<user@host>`` — are valid
 # Markdown that kramdown renders as links; escaping them produces dead literal
 # text. Recognise and leave them alone (distinct from ``<placeholder>`` tokens).
@@ -319,7 +326,11 @@ def _escape_placeholder_tags(markdown: str, regions: list[tuple[int, int, str]])
     def repl(m: re.Match[str]) -> str:
         name = m.group(2).lower()
         bare = not m.group(1) and not m.group(0)[len(m.group(2)) + 1 : -1].strip(" /")
-        if name in BLOG_HTML_ELEMENTS and not (bare and name in BLOG_NEEDS_ATTRIBUTES):
+        if (
+            name in BLOG_HTML_ELEMENTS
+            and not (bare and name in BLOG_NEEDS_ATTRIBUTES)
+            and not _ACTIVE_HTML.search(m.group(0))
+        ):
             return m.group(0)
         return m.group(0).replace("<", "&lt;").replace(">", "&gt;")
 

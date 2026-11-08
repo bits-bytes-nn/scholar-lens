@@ -533,3 +533,33 @@ def test_quoted_fences_close_where_their_blockquote_ends(
     fixed = close_quoted_fences(src)
     assert fixed == expected
     assert blog_unclosed_fence_lines(fixed.split("\n")) == []
+
+
+@pytest.mark.parametrize(
+    "html",
+    [
+        '<img src=x onerror="fetch(1)">',
+        "<script src=https://evil.example/x.js></script>",
+        '<a href="javascript:alert(1)">x</a>',
+        '<iframe src="data:text/html,<b>x</b>"></iframe>',
+        "<IMG SRC=x ONLOAD=alert(1)>",
+    ],
+)
+def test_active_html_in_prose_is_published_as_text(html: str) -> None:
+    # An attack a security paper quotes is text on the blog, whoever wrote it.
+    from scholar_lens.domain.evidence_draft import quote_for_prompt
+    from scholar_lens.domain.markdown.lint import publish_body
+    from scholar_lens.domain.prompt_safety import strip_defanging
+
+    for body in (f"## A\n\n공격은 {html} 입니다.\n", quote_for_prompt(html)):
+        out = publish_body(strip_defanging(f"## A\n\n{body}\n"), warn=False)
+        assert "<img" not in out.lower() and "<script" not in out.lower()
+        assert "javascript:" not in out.lower() or "&lt;" in out
+
+
+def test_plain_html_the_blog_allows_stays_markup() -> None:
+    from scholar_lens.domain.markdown.lint import publish_body
+
+    body = '## A\n\n<img src="/assets/a.png" alt="그림"> 와 <sup>2</sup>\n'
+    out = publish_body(body, warn=False)
+    assert '<img src="/assets/a.png" alt="그림">' in out and "<sup>2</sup>" in out

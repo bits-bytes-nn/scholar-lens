@@ -80,6 +80,7 @@ from scholar_lens.domain.text import (
     parse_quality_score,
     tag_body,
 )
+from scholar_lens.domain.usage import TokenBudgetExceeded
 from scholar_lens.domain.usage_context import staged
 from scholar_lens.domain.validation import (
     description_markup,
@@ -401,7 +402,8 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
                     key for url in urls if (key := arxiv_link_key(url))
                 )
             except Exception as e:  # noqa: BLE001 - supplementary input
-                if is_access_error(e):
+                # A refused permission or a spent budget is the run's.
+                if is_access_error(e) or isinstance(e, TokenBudgetExceeded):
                     raise
                 logger.warning(
                     "Citation summaries failed for '%s': %s", section.title, e
@@ -412,7 +414,8 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
                     source, k=self.max_code_results
                 )
             except Exception as e:  # noqa: BLE001 - supplementary input
-                if is_access_error(e):
+                # A refused permission or a spent budget is the run's.
+                if is_access_error(e) or isinstance(e, TokenBudgetExceeded):
                     raise
                 logger.warning("Code search failed for '%s': %s", section.title, e)
         return enrichment
