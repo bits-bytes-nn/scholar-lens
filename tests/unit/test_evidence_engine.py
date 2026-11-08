@@ -45,7 +45,7 @@ from scholar_lens.domain.survey.evidence_post import (
 )
 from scholar_lens.domain.survey.plan import SurveyPlan
 from scholar_lens.domain.verifiers import no_checks
-from tests.fakes import with_context
+from tests.fakes import claim_check, with_context
 
 PAPER_TEXT = """## Abstract
 
@@ -363,10 +363,8 @@ class ScriptedModel:
             return _outline()
         if schema is ClaimCheck:
             bad = "71%" in prompt
-            return ClaimCheck(
-                verdicts=(
-                    [SentenceVerdict(n=1, verdict="wrong", reason="61%")] if bad else []
-                )
+            return claim_check(
+                prompt, lambda n, _s: ("wrong", "61%") if bad and n == 1 else None
             )
         if schema is SectionReview:
             return SectionReview()
@@ -1003,13 +1001,13 @@ def test_a_fix_that_changes_nothing_ends_the_fix_loop() -> None:
     calls: list[str] = []
 
     class Model:
-        async def structured(self, *, schema, **_kwargs):  # type: ignore[no-untyped-def]
+        async def structured(self, *, schema, prompt, **_kwargs):  # type: ignore[no-untyped-def]
             calls.append(schema.__name__)
             if schema is FixedSection:
                 return FixedSection(section=draft, notes="")
             if schema is ClaimCheck:
-                return ClaimCheck(
-                    verdicts=[SentenceVerdict(n=1, verdict="unsupported", reason="r")]
+                return claim_check(
+                    prompt, lambda n, _s: ("unsupported", "r") if n == 1 else None
                 )
             return schema()
 

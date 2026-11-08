@@ -66,7 +66,7 @@ _EVIDENCE_KINDS: tuple[str, ...] = Evidence.model_fields["kind"].annotation.__ar
 
 
 class SentenceVerdict(BaseModel):
-    n: int
+    n: int = Field(description="The numbered item this verdict is for.")
     # about_sources: the sentence is about the post's inputs (its evidence,
     # the material it was given), not the subject; it says nothing to a
     # reader and is removed like a contradiction.
@@ -78,7 +78,13 @@ class SentenceVerdict(BaseModel):
 
 
 class ClaimCheck(BaseModel):
-    verdicts: list[SentenceVerdict] = Field(default_factory=list)
+    verdicts: list[SentenceVerdict] = Field(
+        default_factory=list,
+        description=(
+            "Exactly one verdict for every numbered item, supported items "
+            "included: an item without a verdict is unchecked."
+        ),
+    )
 
 
 class EvidenceVerdict(BaseModel):
@@ -1296,72 +1302,101 @@ class EvidenceWriter:
             if key not in self.verdicts and key not in queued:
                 queued.add(key)
                 sent.append(n)
-        if sent:
-            lines = []
-            for number, n in enumerate(sent, 1):
-                sentence = sentences[n]
-                cited = [e for i in cited_ids(sentence) if (e := ledger.get(i))]
-                lines.append(
-                    f"{number}. {sentence}\n"
-                    + (f"   follows: {sentences[n - 1]}\n" if n else "")
-                    + "   evidence: "
-                    + (
-                        " || ".join(
-                            f"[{e.id}, from {self._names.get(e.paper_id, e.paper_id)}] "
-                            f'{e.claim} — "{quote_for_prompt(e.quote)[:300]}" {e.scope}'
-                            + (f" code: {e.code[:300]}" if e.code else "")
-                            for e in cited
-                        )
-                        or "(none)"
-                    )
+        heading = section_heading(draft) or "a section"
+        context = (
+            block("earlier_evidence", earlier_text) if earlier else "",
+            block("section_evidence", own_text)
+            + ("\n\n" + block("source_sections", reference) if reference else ""),
+        )
+        # An item the answer leaves out is unchecked, not supported: it is
+        # asked again once on its own, and never cached.
+        for attempt in range(2):
+            if not sent:
+                break
+            answered = await self._claim_verdicts(
+                heading, sent, sentences, ledger, context, attempt
+            )
+            if answered is None:
+                break
+            for n, verdict in answered.items():
+                self.verdicts.put(keys[n], verdict)
+            sent = [n for n in sent if n not in answered]
+        else:
+            if sent:
+                self._block(
+                    f"The claim check of '{heading}' gave no verdict for "
+                    f"{len(sent)} of its items, even when asked again: they "
+                    "are unchecked ("
+                    + "; ".join(sentences[n][:80] for n in sent)
+                    + ")."
                 )
-            with usage_stage("verify"):
-                check = await self._evaluated(
-                    f"the claim check of '{section_heading(draft) or 'a section'}'",
-                    blocking=True,
-                    role="evaluate",
-                    system=self.prompts.claim_check,
-                    # Shared by every claim check of the section (each round);
-                    # the earlier part by the later sections' checks too.
-                    context=(
-                        block("earlier_evidence", earlier_text) if earlier else "",
-                        block("section_evidence", own_text)
-                        + (
-                            "\n\n" + block("source_sections", reference)
-                            if reference
-                            else ""
-                        ),
-                    ),
-                    prompt=block("sentences", "\n".join(lines)),
-                    schema=ClaimCheck,
-                )
-            if check is not None:
-                answered: dict[int, str] = {}
-                for v in check.verdicts:
-                    if not 1 <= v.n <= len(sent):
-                        continue
-                    parts = [p for p in v.unsupported_parts if p.strip()]
-                    # A part not supported makes the item unsupported,
-                    # whatever the item's own label says.
-                    verdict = (
-                        "unsupported"
-                        if v.verdict == "supported" and parts
-                        else v.verdict
-                    )
-                    if verdict != "supported":
-                        reason = v.reason + (
-                            " (not supported: " + "; ".join(parts) + ")"
-                            if parts
-                            else ""
-                        )
-                        answered[sent[v.n - 1]] = f"{verdict}: {reason.strip()}"
-                for n in sent:
-                    self.verdicts.put(keys[n], answered.get(n, ""))
         return [
             (sentence, verdict)
             for sentence, key in zip(sentences, keys, strict=True)
             if (verdict := self.verdicts.get(key))
         ]
+
+    async def _claim_verdicts(
+        self,
+        heading: str,
+        sent: list[int],
+        sentences: list[str],
+        ledger: EvidenceLedger,
+        context: tuple[str, str],
+        attempt: int,
+    ) -> dict[int, str] | None:
+        """One claim-check call for the units ``sent``: each answered unit's
+        verdict ("" when supported), keyed by its index in ``sentences``;
+        None when the check gave no valid answer."""
+        lines = []
+        for number, n in enumerate(sent, 1):
+            sentence = sentences[n]
+            cited = [e for i in cited_ids(sentence) if (e := ledger.get(i))]
+            lines.append(
+                f"{number}. {sentence}\n"
+                + (f"   follows: {sentences[n - 1]}\n" if n else "")
+                + "   evidence: "
+                + (
+                    " || ".join(
+                        f"[{e.id}, from {self._names.get(e.paper_id, e.paper_id)}] "
+                        f'{e.claim} — "{quote_for_prompt(e.quote)[:300]}" {e.scope}'
+                        + (f" code: {e.code[:300]}" if e.code else "")
+                        for e in cited
+                    )
+                    or "(none)"
+                )
+            )
+        what = f"the claim check of '{heading}'"
+        with usage_stage("verify"):
+            check = await self._evaluated(
+                what if not attempt else f"{what} (items it left out)",
+                blocking=True,
+                role="evaluate",
+                system=self.prompts.claim_check,
+                # Shared by every claim check of the section (each round);
+                # the earlier part by the later sections' checks too.
+                context=context,
+                prompt=block("sentences", "\n".join(lines)),
+                schema=ClaimCheck,
+            )
+        if check is None:
+            return None
+        answered: dict[int, str] = {}
+        for v in check.verdicts:
+            if not 1 <= v.n <= len(sent):
+                continue
+            parts = [p for p in v.unsupported_parts if p.strip()]
+            # A part not supported makes the item unsupported, whatever the
+            # item's own label says.
+            verdict = "unsupported" if v.verdict == "supported" and parts else v.verdict
+            if verdict == "supported":
+                answered.setdefault(sent[v.n - 1], "")
+                continue
+            reason = v.reason + (
+                " (not supported: " + "; ".join(parts) + ")" if parts else ""
+            )
+            answered[sent[v.n - 1]] = f"{verdict}: {reason.strip()}"
+        return answered
 
     async def _evaluated(
         self,

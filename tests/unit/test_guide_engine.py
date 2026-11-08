@@ -18,7 +18,6 @@ from scholar_lens.application.evidence_writer import (
     PostReview,
     SectionEdits,
     SectionReview,
-    SentenceVerdict,
 )
 from scholar_lens.application.guide_engine import (
     EvidenceGuideEngine,
@@ -51,7 +50,7 @@ from scholar_lens.domain.post_spec import evidence_policy
 from scholar_lens.domain.research import PageContent
 from scholar_lens.domain.sources import SourceSet
 from scholar_lens.domain.specs import GUIDE_SPEC
-from tests.fakes import with_context
+from tests.fakes import claim_check, with_context
 
 DOC_TEXT = """## Overview
 
@@ -452,10 +451,8 @@ class ScriptedModel:
             return _outline(sections=sections, coverage={"T1": ["E2"]})
         if schema is ClaimCheck:
             bad = "기본값은 20" in prompt
-            return ClaimCheck(
-                verdicts=(
-                    [SentenceVerdict(n=1, verdict="wrong", reason="10")] if bad else []
-                )
+            return claim_check(
+                prompt, lambda n, _s: ("wrong", "10") if bad and n == 1 else None
             )
         if schema is SectionReview:
             return SectionReview()

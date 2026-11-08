@@ -25,9 +25,9 @@ from scholar_lens.application.evidence_writer import (
     ClaimCheck,
     PostFinding,
     PostReview,
-    SentenceVerdict,
 )
 from scholar_lens.application.paper_engine import EvidencePaperEngine, PaperSettings
+from tests.fakes import claim_check
 from tests.unit.test_paper_engine import ScriptedModel, _paper
 
 METHOD_TITLE = "보상 모델 없이 푸는 선호 최적화"
@@ -52,12 +52,9 @@ class StatefulModel(ScriptedModel):
         if schema is ClaimCheck:
             self.calls.append("ClaimCheck")
             self.claim_prompts.append(prompt)
-            return ClaimCheck(
-                verdicts=[
-                    SentenceVerdict(n=int(n), verdict="unsupported", reason="넓음")
-                    for n, sentence in re.findall(r"^(\d+)\. (.*)$", prompt, re.M)
-                    if "RLHF는" in sentence
-                ]
+            return claim_check(
+                prompt,
+                lambda _n, s: ("unsupported", "넓음") if "RLHF는" in s else None,
             )
         if schema is PostReview:
             self.calls.append("PostReview")

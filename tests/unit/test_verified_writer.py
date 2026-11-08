@@ -20,12 +20,12 @@ from scholar_lens.application.evidence_writer import (
     ReviewIssue,
     SectionEdits,
     SectionReview,
-    SentenceVerdict,
 )
 from scholar_lens.application.survey_engine import SURVEY_PROMPTS
 from scholar_lens.domain.evidence import Evidence, EvidenceLedger
 from scholar_lens.domain.post_spec import Limits
 from scholar_lens.domain.verifiers import Problem, VerifierSet, no_checks
+from tests.fakes import claim_check
 
 _ITEM = re.compile(r"^(\d+)\. (.*)$", re.M)
 
@@ -59,6 +59,10 @@ class Model:
         self.bad = bad
         self.edits = edits or []
         self.fail_claims = fail_claims
+        # The claim checks (the first ``omit_calls``) leave out the items
+        # ``omit`` accepts.
+        self.omit: Callable[[str], bool] = lambda _s: False
+        self.omit_calls = 0
         self.sent: list[list[str]] = []
         self.prompts: list[str] = []
 
@@ -69,13 +73,14 @@ class Model:
             self.prompts.append(prompt)
             items = _ITEM.findall(prompt)
             self.sent.append([s for _, s in items])
-            return ClaimCheck(
-                verdicts=[
-                    SentenceVerdict(n=int(n), verdict="unsupported", reason="r")
-                    for n, s in items
-                    if self.bad(s)
-                ]
+            check = claim_check(
+                prompt, lambda _n, s: ("unsupported", "r") if self.bad(s) else None
             )
+            if len(self.sent) <= self.omit_calls:
+                # An answer that leaves items out.
+                left_out = {int(n) for n, s in items if self.omit(s)}
+                check.verdicts = [v for v in check.verdicts if v.n not in left_out]
+            return check
         if schema is SectionEdits:
             return SectionEdits(edits=self.edits)
         if schema is FixedSection:
@@ -170,6 +175,43 @@ def test_a_failed_claim_check_blocks_the_post_and_is_not_cached() -> None:
     model.fail_claims = False
     asyncio.run(writer.check_claims(draft, _ledger()))
     assert len(model.sent) == 1
+
+
+@pytest.mark.parametrize("bad", [False, True])
+def test_items_an_answer_leaves_out_are_asked_again_alone(bad: bool) -> None:
+    """An omitted item is unchecked, not supported: it is not cached from
+    the first answer, it is asked again on its own, and its verdict then
+    counts."""
+    sentences = _sentences(4)
+    model = Model(bad=lambda s: bad and s == sentences[2])
+    model.omit, model.omit_calls = (lambda s: s == sentences[2]), 1
+    writer = _writer(model)
+    found = asyncio.run(writer.check_claims(_section(sentences), _ledger()))
+    assert model.sent == [sentences, [sentences[2]]]
+    assert [s for s, _ in found] == ([sentences[2]] if bad else [])
+    assert not writer.blocking
+    # Both answers are cached now.
+    asyncio.run(writer.check_claims(_section(sentences), _ledger()))
+    assert len(model.sent) == 2
+
+
+def test_items_still_left_out_block_the_post_and_are_not_cached() -> None:
+    sentences = _sentences(3)
+    model = Model()
+    model.omit, model.omit_calls = (lambda s: s == sentences[0]), 2
+    writer = _writer(model)
+    asyncio.run(writer.check_claims(_section(sentences), _ledger()))
+    assert model.sent == [sentences, [sentences[0]]]
+    assert len(writer.blocking) == 1
+    assert "no verdict for 1" in writer.blocking[0]
+    # The others were cached; the omitted one is asked on the next check.
+    asyncio.run(writer.check_claims(_section(sentences), _ledger()))
+    assert model.sent[2] == [sentences[0]]
+
+
+def test_the_claim_check_schema_asks_for_a_verdict_per_item() -> None:
+    described = ClaimCheck.model_json_schema()["properties"]["verdicts"]
+    assert "every numbered item" in described["description"]
 
 
 # ---- unsupported sentences -------------------------------------------------------------
