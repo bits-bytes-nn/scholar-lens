@@ -144,8 +144,8 @@ def test_a_batch_that_adds_a_new_kind_of_problem_is_rejected() -> None:
     assert [p.kind for p in revision.added] == ["subheading"]
 
 
-@pytest.mark.parametrize("count", [1, 2])
-def test_a_problem_of_a_known_kind_at_another_place_is_judged_by_set(
+@pytest.mark.parametrize("count", [1, 2, 3])
+def test_a_problem_moved_is_kept_and_one_more_of_a_form_is_added(
     count: int,
 ) -> None:
     text = _section("모델은 3개 층을 씁니다.", "끝입니다.")
@@ -156,9 +156,28 @@ def test_a_problem_of_a_known_kind_at_another_place_is_judged_by_set(
         verifiers=VERIFIERS,
         max_prose_cut=CUT,
     )
-    # The set of normalised problems is unchanged, whatever the count.
-    assert revision.taken and not revision.added
-    assert "설정은 4개 값을 받습니다." in revision.changed
+    # Normalised problems are compared as a multiset: the one problem
+    # moved (and reworded) is the same problem; each one more is new.
+    assert revision.taken is (count == 1)
+    assert len(revision.added) == count - 1
+    assert all(p.kind == "numbers" for p in revision.added)
+    if count == 1:
+        assert "설정은 4개 값을 받습니다." in revision.changed
+
+
+@pytest.mark.parametrize("before_count", [0, 1, 2])
+@pytest.mark.parametrize("after_count", [0, 1, 2, 3])
+def test_added_counts_the_growth_of_each_normalised_form(
+    before_count: int, after_count: int
+) -> None:
+    def problems(n: int, place: str) -> list[Problem]:
+        return [
+            Problem("foreign", f"foreign evidence [E{k}] in: {place}{k}", f"{place}{k}")
+            for k in range(n)
+        ]
+
+    added = VERIFIERS.added(problems(before_count, "앞 "), problems(after_count, "뒤 "))
+    assert len(added) == max(0, after_count - before_count)
 
 
 def test_changed_units_are_the_new_and_changed_sentences_only() -> None:

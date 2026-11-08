@@ -272,6 +272,56 @@ def test_a_whole_post_fix_settles_only_the_sentences_it_adds() -> None:
     assert model.sent[calls] == [added, sentences[1]]
 
 
+def _foreign(markdown: str) -> list[Problem]:
+    """A stand-in verifier: each line citing [[E9]] cites foreign evidence."""
+    return [
+        Problem("foreign_evidence", f"foreign evidence [E9] in: {line}", line)
+        for line in markdown.split("\n")
+        if "[[E9]]" in line
+    ]
+
+
+def _whole_post_fix(writer: EvidenceWriter, md: str) -> list[tuple[str, str]]:
+    return asyncio.run(
+        writer.apply_findings(
+            [(SECTION, md)],
+            [PostFinding(section="캐시", problem="p", fix="f")],
+            _ledger(),
+            title_of=lambda s: s,
+            own_of=lambda _s: list(_ledger()),
+            reference_of=lambda _e: "",
+        )
+    )
+
+
+@pytest.mark.parametrize("more", [0, 1, 2])
+def test_a_whole_post_fix_that_adds_a_problem_of_a_kind_the_section_has_is_not_taken(
+    more: int,
+) -> None:
+    sentences = _sentences(5)
+    foreign = "다른 절의 사실입니다 [[E9]]."
+    verifiers = VerifierSet("캐시", (_foreign,))
+    model = Model()
+    writer = _writer(model)
+    md = _verify(writer, _section(sentences, foreign), verifiers=verifiers)
+    extra = " ".join(
+        f"또 다른 사실 {chr(0xB098 + k)}입니다 [[E9]]." for k in range(more)
+    )
+    replace = (
+        f"{sentences[0]}\n\n{extra}" if more else "고친 문장은 캐시를 씁니다 [[E1]]."
+    )
+    model.edits = [Edit(find=sentences[0], replace=replace)]
+    writer.notes.clear()
+    out = _whole_post_fix(writer, md)
+    assert (out == [(SECTION, md)]) is (more > 0)
+    if more:
+        # The problem named is the one the fix brought, not the old one.
+        assert any("adds problems" in n and "또 다른" in n for n in writer.notes)
+    else:
+        # The problem the fixed section still has reaches the PR notes.
+        assert any("still has" in n and foreign in n for n in writer.notes)
+
+
 # ---- a failed review, and the claim check's cache parts (4.10) -------------------
 
 

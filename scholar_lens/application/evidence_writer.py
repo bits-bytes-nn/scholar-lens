@@ -843,12 +843,18 @@ class EvidenceWriter:
         draft, unbalanced = balance_math(draft)
         if unbalanced:
             self.notes.append(f"Section '{title}': a lone $$ was removed.")
+        self._note_leftovers(draft, title=title, verifiers=verifiers)
+        return draft
+
+    def _note_leftovers(
+        self, draft: str, *, title: str, verifiers: VerifierSet
+    ) -> None:
+        """A PR note of the problems the section's verifier set still finds."""
         if leftover := verifiers.run(draft):
             self.notes.append(
                 f"Section '{title}' still has: "
                 + " | ".join(p.text for p in leftover[:5])
             )
-        return draft
 
     async def _settle(
         self,
@@ -982,7 +988,8 @@ class EvidenceWriter:
         and source passages as an edit transaction that runs the section's
         registered verifier set (a fix that adds a problem, or loses
         structure, is not taken); the sentences the fix adds are settled
-        like a section's (narrowed, checked, deleted)."""
+        like a section's (narrowed, checked, deleted), and what the
+        section's verifier set still finds is noted."""
         out: list[tuple[SectionT, str]] = []
         names_seen = {
             n
@@ -1044,6 +1051,7 @@ class EvidenceWriter:
                     rest=rest,
                     baseline=md,
                 )
+                self._note_leftovers(md, title=title, verifiers=checks.verifiers)
             self.reference = ""
             out.append((section, md))
         return out

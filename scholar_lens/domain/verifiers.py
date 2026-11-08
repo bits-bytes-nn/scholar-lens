@@ -3,14 +3,16 @@
 A verifier reads a section's Markdown and reports :class:`Problem` s. The
 engine builds one :class:`VerifierSet` per section and runs the same set at
 every point that changes the section: the draft, each fix, the whole-post
-fixes. Two runs are compared as sets of normalised problems (the sentence a
-problem quotes and every digit left out), so a batch of edits is judged by
-the kinds of problem it adds, not by how many it leaves.
+fixes. Two runs are compared as multisets of normalised problems (the
+sentence a problem quotes and every digit left out): a problem that moved
+or whose passage was rephrased is the same problem, while one more problem
+of a normalised form than before is a new one.
 """
 
 from __future__ import annotations
 
 import re
+from collections import Counter
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 
@@ -67,23 +69,40 @@ class VerifierSet:
     def added(
         self, before: str | Sequence[Problem], after: str | Sequence[Problem]
     ) -> list[Problem]:
-        """The problems of ``after`` whose normalised form ``before`` does
-        not have (either side: a text to check or its problems).
+        """The problems of ``after`` beyond those of ``before``, compared as
+        multisets of normalised forms (either side: a text to check or its
+        problems): ``after`` adds a problem for each time it has a
+        normalised form more often than ``before``.
 
         Args:
             before: The text before an edit, or its problems.
             after: The text after it, or its problems.
 
         Returns:
-            The new problems, once per normalised form, in order.
+            The new problems, in order: of a form that grew, those whose
+            passage ``before`` does not have come first.
         """
         old = before if not isinstance(before, str) else self.run(before)
         new = after if not isinstance(after, str) else self.run(after)
-        seen = {p.key for p in old}
-        out = []
+        # A problem at the same passage is the same one; the rest of a form
+        # are matched by count (moved or reworded passages).
+        exact = Counter((p.key, p.where) for p in old)
+        same = []
         for p in new:
-            if p.key not in seen:
-                seen.add(p.key)
+            same.append(exact[(p.key, p.where)] > 0)
+            if same[-1]:
+                exact[(p.key, p.where)] -= 1
+        left = Counter(p.key for p in old)
+        for p, kept in zip(new, same, strict=True):
+            if kept:
+                left[p.key] -= 1
+        out = []
+        for p, kept in zip(new, same, strict=True):
+            if kept:
+                continue
+            if left[p.key] > 0:
+                left[p.key] -= 1
+            else:
                 out.append(p)
         return out
 
