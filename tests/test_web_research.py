@@ -1256,10 +1256,14 @@ class TestArxivFetching:
     def test_a_rate_limit_server_error_or_timeout_is_a_recorded_failure(
         self, failure: httpx.Response | Exception, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        from scholar_lens.adapters.http.rate_limit import ARXIV_RETRIES
+
         researcher, requested = _arxiv_researcher({self.HTML: failure}, monkeypatch)
         failures: list[BaseException] = []
         assert researcher._fetch_page(self.ABS, failures=failures) is None
-        assert requested == [self.HTML]  # no fallback, no retry here
+        # A 429 or 5xx is asked again through the limiter; a timeout is not.
+        tries = ARXIV_RETRIES + 1 if isinstance(failure, httpx.Response) else 1
+        assert requested == [self.HTML] * tries  # no fallback to the abstract
         assert len(failures) == 1
 
     def test_a_reference_paper_behind_a_429_is_an_outage(
@@ -1293,7 +1297,7 @@ class TestArxivFetching:
             monkeypatch,
         )
         researcher._fetch_page(self.ABS, failures=[])
-        assert penalties == [7.0]
+        assert penalties == [7.0] * 3  # each attempt holds arXiv back
 
     def test_every_arxiv_request_waits_for_the_shared_limiter(
         self, monkeypatch: pytest.MonkeyPatch

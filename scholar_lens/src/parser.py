@@ -22,8 +22,11 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 from ..adapters.http.pinned_transport import PinnedAsyncHTTPTransport
 from ..adapters.http.rate_limit import (
     ARXIV_RATE_LIMITER,
+    ARXIV_RETRIES,
     RateLimiter,
     arxiv_retry_after_seconds,
+    arxiv_retry_hold,
+    is_retryable_status,
 )
 from ..adapters.http.url_guard import UnsafeUrlError, assert_url_is_public
 from ..adapters.retry import is_transient_error
@@ -66,12 +69,29 @@ class FigureParseError(ParserError):
     pass
 
 
+def failure_reason(error: BaseException) -> str:
+    """The innermost message of ``error``'s cause chain: why a parser
+    failed ("Failed to fetch HTML from '…': HTTP 429"), for a run note."""
+    reason = str(error)
+    seen: BaseException | None = error
+    while seen is not None:
+        if str(seen):
+            reason = str(seen)
+        seen = seen.__cause__
+        if isinstance(seen, httpx.HTTPError):
+            break
+    return reason
+
+
 class Content(BaseModel):
     model_config = ConfigDict(frozen=False)
     text: str = Field(default="")
     # The layout parser failed and only the PDF's text layer was read, so the
     # paper's figures and tables are unavailable.
     text_only: bool = Field(default=False)
+    # Source downgrades (the HTML rendering failed and the PDF was read …),
+    # each a run note for the PR's review notes.
+    notes: list[str] = Field(default_factory=list)
 
     def __str__(self) -> str:
         return f"Content(text='{self.text[:50]}...')"
@@ -433,16 +453,30 @@ class HTMLParser(BaseParser):
 
     async def _fetch_html_from_url(self, url: str) -> str:
         """Fetch an arXiv HTML page, paced by the process-wide arXiv rate
-        limiter; an error's Retry-After (capped) holds later arXiv requests."""
-        await asyncio.to_thread(self._limiter.acquire)
-        try:
-            response = await self.async_client.get(url)
-            response.raise_for_status()
-            return response.text
-        except httpx.HTTPError as e:
-            if isinstance(e, httpx.HTTPStatusError):
+        limiter; an error's Retry-After (capped) holds later arXiv requests,
+        and a 429 or 5xx is asked again :data:`ARXIV_RETRIES` times through
+        the limiter before the caller falls back to the PDF."""
+        for attempt in range(ARXIV_RETRIES + 1):
+            await asyncio.to_thread(self._limiter.acquire)
+            try:
+                response = await self.async_client.get(url)
+                response.raise_for_status()
+                return response.text
+            except httpx.HTTPStatusError as e:
+                status = e.response.status_code
+                if is_retryable_status(status) and attempt < ARXIV_RETRIES:
+                    self._limiter.penalize(arxiv_retry_hold(e, attempt))
+                    logger.info("'%s' answered %d; asking arXiv again.", url, status)
+                    continue
                 self._limiter.penalize(arxiv_retry_after_seconds(e))
-            raise ContentParseError(f"Failed to fetch HTML from '{url}': {e}") from e
+                raise ContentParseError(
+                    f"Failed to fetch HTML from '{url}': HTTP {status}"
+                ) from e
+            except httpx.HTTPError as e:
+                raise ContentParseError(
+                    f"Failed to fetch HTML from '{url}': {e}"
+                ) from e
+        raise AssertionError("unreachable")
 
 
 class HTMLRichParser(RichParser, HTMLParser):

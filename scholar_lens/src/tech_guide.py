@@ -28,6 +28,7 @@ import re
 from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass, field
 from typing import Any
+from urllib.parse import urlparse
 
 import boto3
 from langchain_core.runnables import Runnable
@@ -80,6 +81,7 @@ from .web_research import (
     ResearchCorpus,
     SourceFetchError,
     WebResearcher,
+    arxiv_paper_urls,
     page_key,
     product_names,
     source_label,
@@ -337,6 +339,23 @@ class TechGuideGenerator(RetryableBase):
             "max_subpages": self._max_subpages(),
         }
 
+    def _note_abstract_pages(self, corpus: ResearchCorpus) -> None:
+        """A run note for the arXiv papers read from their abstract page
+        because their HTML rendering could not be used (with the reason)."""
+        fallbacks = getattr(self.researcher, "arxiv_fallbacks", None)
+        reasons = fallbacks if isinstance(fallbacks, dict) else {}
+        found = []
+        for page in corpus.pages:
+            url = page.final_url or page.url
+            paper = arxiv_paper_urls(url)
+            if paper and "/abs/" in urlparse(url).path:
+                found.append(f"{url} ({reasons.get(paper[0], 'no HTML rendering')})")
+        if found:
+            self.notes.append(
+                "arXiv papers read from their abstract only (no usable HTML "
+                "rendering): " + ", ".join(found)
+            )
+
     def _max_subpages(self) -> int | None:
         found = getattr(self.researcher, "max_subpages", None)
         return found if isinstance(found, int) else None
@@ -450,6 +469,7 @@ class TechGuideGenerator(RetryableBase):
             max_searches=_IDENTIFIER_REFERENCE_SEARCHES,
         )
 
+        self._note_abstract_pages(corpus)
         topic = (
             planned_topic
             if planned_topic and not is_placeholder(planned_topic)

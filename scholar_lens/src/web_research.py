@@ -29,7 +29,14 @@ import httpx
 from bs4 import BeautifulSoup, Tag, UnicodeDammit
 
 from ..adapters.http.pinned_transport import PinnedHTTPTransport
-from ..adapters.http.rate_limit import ARXIV_RATE_LIMITER, arxiv_retry_after_seconds
+from ..adapters.http.rate_limit import (
+    ARXIV_RATE_LIMITER,
+    ARXIV_RETRIES,
+    RateLimiter,
+    arxiv_retry_after_seconds,
+    arxiv_retry_hold,
+    is_retryable_status,
+)
 from ..adapters.http.url_guard import (
     UnsafeUrlError,
     assert_url_is_public,
@@ -745,8 +752,14 @@ class WebResearcher:
         max_images_per_page: int = DEFAULT_MAX_IMAGES_PER_PAGE,
         client: httpx.Client | None = None,
         sleep: Callable[[float], None] = time.sleep,
+        arxiv_limiter: RateLimiter | None = None,
     ) -> None:
         self.search_provider = search_provider or NullSearchProvider()
+        # Paces every arXiv request (default: the process-wide limiter).
+        self._arxiv_limiter = arxiv_limiter or ARXIV_RATE_LIMITER
+        # arXiv HTML renderings that could not be used: html URL -> why
+        # (the abstract page was read instead). Callers turn them into notes.
+        self.arxiv_fallbacks: dict[str, str] = {}
         # Injected so tests do not wait out a rate limit.
         self._sleep = sleep
         # Host -> its llms.txt entries (empty when it has none).
@@ -1212,28 +1225,34 @@ class WebResearcher:
             if e.response.status_code != 404:
                 raise
             logger.info("No HTML rendering at '%s'; reading '%s'.", html_url, abs_url)
+            self.arxiv_fallbacks[html_url] = "no HTML rendering (HTTP 404)"
             return self._get_page(abs_url)
         if fetched is not None and _readable_chars(fetched[0]) >= MIN_PARSED_TEXT_CHARS:
             return fetched
         logger.info("'%s' has almost no text; reading '%s'.", html_url, abs_url)
+        self.arxiv_fallbacks[html_url] = "the HTML rendering has almost no text"
         return self._get_page(abs_url)
 
     def _get_page(self, url: str) -> tuple[str, str] | None:
         """:meth:`_get_page_once`, with a site that answers 429 or 503 (a
         docs site behind a bot shield) asked again up to
         :data:`PAGE_RATE_LIMIT_RETRIES` times after its Retry-After (capped)
-        or a growing wait. arXiv is not retried here: its limiter holds every
-        later request back and the job fails retryably."""
+        or a growing wait. An arXiv 429 or 5xx is asked again
+        :data:`ARXIV_RETRIES` times through the shared arXiv limiter, which
+        holds every arXiv request back meanwhile."""
         for attempt in range(PAGE_RATE_LIMIT_RETRIES + 1):
             try:
                 return self._get_page_once(url)
             except httpx.HTTPStatusError as e:
                 status = e.response.status_code
-                if (
-                    status not in (429, 503)
-                    or is_arxiv_host(url)
-                    or attempt == PAGE_RATE_LIMIT_RETRIES
-                ):
+                if is_arxiv_host(url):
+                    if not is_retryable_status(status) or attempt >= ARXIV_RETRIES:
+                        raise
+                    if status != 429:  # _get_page_once held a 429 back already
+                        self._arxiv_limiter.penalize(arxiv_retry_hold(e, attempt))
+                    logger.info("'%s' answered %d; asking arXiv again.", url, status)
+                    continue
+                if status not in (429, 503) or attempt == PAGE_RATE_LIMIT_RETRIES:
                     raise
                 hinted = "retry-after" in e.response.headers
                 wait = (
@@ -1255,13 +1274,13 @@ class WebResearcher:
         holds every later arXiv request back."""
         on_arxiv = is_arxiv_host(url)
         if on_arxiv:
-            ARXIV_RATE_LIMITER.acquire()
+            self._arxiv_limiter.acquire()
         with self.client.stream("GET", url) as response:
             try:
                 response.raise_for_status()
             except httpx.HTTPStatusError as e:
                 if on_arxiv and response.status_code == 429:
-                    ARXIV_RATE_LIMITER.penalize(arxiv_retry_after_seconds(e))
+                    self._arxiv_limiter.penalize(arxiv_retry_after_seconds(e))
                 raise
             content_type = response.headers.get("Content-Type", "").lower()
             if "html" not in content_type and "xml" not in content_type:

@@ -126,3 +126,25 @@ def arxiv_retry_after_seconds(error: Exception) -> float:
     if status == 429:
         return _ARXIV_429_FALLBACK_RETRY_SECONDS
     return 0.0
+
+
+# An arXiv 429 or 5xx is asked again this many times through the limiter
+# before the caller falls back (HTML -> PDF -> abstract) or fails.
+ARXIV_RETRIES: int = 2
+# The hold after an arXiv 5xx without Retry-After, doubled per attempt.
+ARXIV_SERVER_ERROR_SECONDS: float = 10.0
+
+
+def is_retryable_status(status: int | None) -> bool:
+    """A rate limit or server error: worth asking again later."""
+    return status is not None and (status == 429 or status >= 500)
+
+
+def arxiv_retry_hold(error: Exception, attempt: int) -> float:
+    """How long the shared arXiv limiter holds every arXiv request after
+    ``error`` on ``attempt`` (0-based): its Retry-After (capped), the 429
+    default, or a growing wait for a server error."""
+    hinted = arxiv_retry_after_seconds(error)
+    if hinted:
+        return hinted
+    return min(ARXIV_SERVER_ERROR_SECONDS * 2**attempt, MAX_RETRY_AFTER_SECONDS)

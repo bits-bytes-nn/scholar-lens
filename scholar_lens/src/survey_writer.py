@@ -396,7 +396,7 @@ async def write_survey_with_evidence(
     pages = [r.page for r in read if r.page]
     titles = {r.url: r.title for r in articles}
     reading = [(titles.get(r.url) or r.page.title, r.url) for r in read if r.page]
-    notes = []
+    notes: list[str] = []
     if unread := [r.url for r in read if r.page is None]:
         notes.append(
             "Reference articles that could not be read (left out): " + ", ".join(unread)
@@ -406,6 +406,8 @@ async def write_survey_with_evidence(
         references=reference_excerpts(pages, plan.topic, 8_000) if pages else "",
         guideline=translation_guideline,
     )
+    # Papers read from less than their full text (known once they are read).
+    notes = [*documents.notes(), *notes]
     figures = {
         e.figure_url: (e.paper_id, e.caption or "")
         for e in result.ledger
