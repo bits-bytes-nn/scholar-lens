@@ -9,7 +9,7 @@ from typing import Any, NamedTuple
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator
 
-from scholar_lens.domain.ids import arxiv_id_from_reference
+from scholar_lens.domain.ids import arxiv_id_from_reference, normalize_arxiv_id
 from scholar_lens.domain.text import is_placeholder
 
 
@@ -110,6 +110,19 @@ class Paper(BaseModel):
     repo_urls: list[HttpUrl] = Field(default_factory=list)
     codebase_summary: str | None = None
     is_pdf_parsed: bool = Field(default=False)
+
+    def linkable_arxiv(self) -> set[str]:
+        """The unversioned arXiv ids a post about the paper may link: the
+        paper itself and its citations' ids (checked against arXiv when they
+        were extracted). A writer links other ids from memory."""
+        return {
+            re.sub(r"v\d+$", "", arxiv_id)
+            for arxiv_id in (
+                normalize_arxiv_id(self.arxiv_id),
+                *(c.arxiv_id for c in self.citations),
+            )
+            if arxiv_id
+        }
 
     @field_validator("repo_urls", mode="before")
     @classmethod

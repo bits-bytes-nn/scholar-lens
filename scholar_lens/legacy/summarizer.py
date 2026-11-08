@@ -21,6 +21,7 @@ from scholar_lens.adapters.bedrock.prompts.base import BasePrompt
 from scholar_lens.adapters.bedrock.usage import TokenBudgetGuard
 from scholar_lens.adapters.retry import RetryableBase, is_access_error
 from scholar_lens.domain.constants import LanguageModelId
+from scholar_lens.domain.markdown.lint import unlink_unknown_arxiv, unsourced_links
 from scholar_lens.domain.markdown.math import DISPLAY_MATH, HANGUL, image_sources
 from scholar_lens.domain.paper.models import Paper
 from scholar_lens.domain.post_format import (
@@ -199,11 +200,32 @@ class PaperSummarizer(RetryableBase, TokenBudgetGuard):
                 "so the blog derives one."
             )
             description = ""
+        # The writer links arXiv ids and fills the link list from memory
+        # too: only what the paper states is published (as in a review).
+        known = paper.linkable_arxiv()
+        summary, unlinked = unlink_unknown_arxiv(summary, known)
+        urls, dropped = unsourced_links(
+            result.get("urls", ""),
+            known_arxiv=known,
+            source_text=paper.content.text,
+            sources=[str(u) for u in paper.repo_urls],
+        )
+        if unlinked:
+            self.notes.append(
+                f"Unlinked {len(unlinked)} arXiv link(s) the summary added to papers "
+                "that are not among the verified references: "
+                + ", ".join(unlinked[:10])
+            )
+        if dropped:
+            self.notes.append(
+                f"Dropped {len(dropped)} link(s) from the summary's links that the "
+                "paper does not state: " + ", ".join(dropped[:10])
+            )
         return {
             "subtitle": subtitle,
             "description": description,
             "summary": summary,
-            "urls": result.get("urls", "").strip(),
+            "urls": urls,
         }
 
     async def _shorten_if_long(self, summary: str) -> str:

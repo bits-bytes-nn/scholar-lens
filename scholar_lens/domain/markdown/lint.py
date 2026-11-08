@@ -42,7 +42,7 @@ from __future__ import annotations
 
 import logging
 import re
-from collections.abc import Collection
+from collections.abc import Collection, Iterable
 from dataclasses import dataclass
 from typing import Literal
 
@@ -453,6 +453,36 @@ def unlink_unknown_arxiv(markdown: str, known: set[str]) -> tuple[str, list[str]
         return m.group(1)
 
     return _MD_LINK.sub(repl, markdown), removed
+
+
+def unsourced_links(
+    links: str, *, known_arxiv: set[str], source_text: str, sources: Iterable[str]
+) -> tuple[str, list[str]]:
+    """The Markdown links of ``links`` (a list a writer copied "from the
+    paper") whose target the paper states: in ``source_text``, among
+    ``sources`` (its repositories) or a known arXiv id; the others are
+    dropped and returned. A writer model fills such a list from memory too
+    (a guessed repository, an unrelated arXiv id)."""
+
+    def plain(url: str) -> str:
+        return url.strip().rstrip("/").lower()
+
+    stated = plain(source_text)
+    allowed = {plain(u) for u in sources}
+    kept: list[str] = []
+    removed: list[str] = []
+    for m in _MD_LINK.finditer(links):
+        target = m.group(2).strip()
+        key = arxiv_link_key(target)
+        if (
+            (key is not None and key in known_arxiv)
+            or plain(target) in allowed
+            or (key is None and plain(target) in stated)
+        ):
+            kept.append(m.group(0))
+        else:
+            removed.append(target)
+    return ", ".join(kept), removed
 
 
 _LINKED_IMAGE = re.compile(r"\[(!\[[^\]]*\]\([^)]*\))\]\(([^)]*)\)")

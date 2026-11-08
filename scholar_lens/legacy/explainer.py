@@ -38,7 +38,6 @@ from scholar_lens.adapters.bedrock.prompts.base import BasePrompt
 from scholar_lens.adapters.bedrock.usage import TokenBudgetGuard
 from scholar_lens.adapters.retry import RetryableBase, is_access_error
 from scholar_lens.domain.constants import LanguageModelId
-from scholar_lens.domain.ids import normalize_arxiv_id
 from scholar_lens.domain.markdown.lint import (
     arxiv_link_key,
     unlink_unknown_arxiv,
@@ -788,14 +787,7 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
         # The arXiv papers the review may link: the paper itself and its
         # citations' ids (checked against arXiv at extraction); _enrich adds
         # the references the citation summaries resolved by title.
-        self.linkable_arxiv = {
-            re.sub(r"v\d+$", "", arxiv_id)
-            for arxiv_id in (
-                normalize_arxiv_id(self.paper.arxiv_id),
-                *(c.arxiv_id for c in self.paper.citations),
-            )
-            if arxiv_id
-        }
+        self.linkable_arxiv = self.paper.linkable_arxiv()
 
         written: list[str] = []
         for index, section in enumerate(plan.sections):

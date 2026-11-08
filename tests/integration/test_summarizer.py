@@ -107,12 +107,37 @@ class TestPaperSummarizer:
                 "urls": "[Repo](https://github.com/x/y)",
             }
         )
-        result = await summarizer.summarize(sample_paper)
+        # The paper states its repository: the link stands.
+        paper = sample_paper.model_copy(
+            update={"repo_urls": ["https://github.com/x/y"]}
+        )
+        result = await summarizer.summarize(paper)
         assert result["summary"].startswith("> ")
         assert result["subtitle"] == "부제"
         assert result["description"] == DESCRIPTION
         assert result["urls"] == "[Repo](https://github.com/x/y)"
         assert summarizer.notes == []
+
+    async def test_links_the_paper_does_not_state_are_not_published(
+        self, sample_paper: Paper
+    ) -> None:
+        # A writer links arXiv ids and fills the link list from memory.
+        summarizer = _make_summarizer_with_stub_chain(
+            {
+                "subtitle": "부제",
+                "description": DESCRIPTION,
+                "summary": "> **요약:** x\n\n## 연구 배경\n\n"
+                "[이전 방법](https://arxiv.org/abs/2401.99999)과 비교합니다.",
+                "urls": "[Code](https://github.com/made-up/repo)",
+            }
+        )
+        result = await summarizer.summarize(sample_paper)
+        assert (
+            "2401.99999" not in result["summary"] and "이전 방법" in result["summary"]
+        )
+        assert result["urls"] == ""
+        assert any("Unlinked 1 arXiv" in n for n in summarizer.notes)
+        assert any("does not state" in n and "made-up" in n for n in summarizer.notes)
 
     async def test_unsourced_tldr_numbers_and_description_slips_are_noted(
         self, sample_paper: Paper
