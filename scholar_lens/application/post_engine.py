@@ -102,6 +102,7 @@ from scholar_lens.domain.evidence_draft import (
     section_problems,
 )
 from scholar_lens.domain.glossary import glossary_view
+from scholar_lens.domain.lengths import char_factor
 from scholar_lens.domain.post_context import (
     WrittenSection,
     previous_sections,
@@ -797,7 +798,24 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
             if tldr is not None
             else None
         )
+        self.note_total_length([md for _, md in written], opening)
         return await self.assemble(outline, ledger, written, opening)
+
+    def note_total_length(self, sections: Sequence[str], tldr: str | None) -> None:
+        """A PR note when the post's prose (its sections and the TL;DR) is
+        below the configured minimum total (``run.min_total_chars``, in
+        the post's language's characters), naming the shortfall."""
+        minimum = round(self.run.min_total_chars * char_factor(self.run.language))
+        total = sum(
+            len(" ".join(prose_sentences(md)))
+            for md in [*sections, *([tldr] if tldr else [])]
+        )
+        if total < minimum:
+            self.notes.append(
+                f"The post has {total:,} characters of prose, {minimum - total:,} "
+                f"short of the configured minimum of {minimum:,}: develop its "
+                "thinnest sections from their evidence before publishing."
+            )
 
     async def planned(self, ledger: EvidenceLedger) -> OutlineT:
         """The outline as the sections are written from it: planned, without
@@ -1282,6 +1300,7 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
                 passages=self.passages,
                 target_chars=target if tldr.checks_length else 0,
                 limits=self.limits,
+                minimum_length=False,
             )
 
         def kind(md: str) -> list[Problem]:

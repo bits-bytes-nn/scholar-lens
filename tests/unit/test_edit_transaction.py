@@ -447,3 +447,62 @@ def test_one_more_undefined_name_is_a_new_program_problem() -> None:
     # The later block already lacking a name: one more is still new.
     fewer = _section("```python\nclient = 1\n```")
     assert _program_set(later).added(fewer, _section("```python\nx = 1\n```"))
+
+
+# ---- the minimum length ---------------------------------------------------------
+
+SENTENCE = "가나다라마바사아자차 카타파하입니다."
+
+
+def _length_problems(
+    markdown: str, target: int, *, minimum: bool = True
+) -> list[Problem]:
+    return section_problems(
+        markdown,
+        title="사용법",
+        own=[],
+        earlier=[],
+        ledger=EvidenceLedger(),
+        earlier_numbers={},
+        free_numbers=free_numbers(),
+        figure_urls=[],
+        target_chars=target,
+        limits=Limits(),
+        minimum_length=minimum,
+    )
+
+
+def _short(problems: list[Problem]) -> bool:
+    return any(p.kind == "too_short" for p in problems)
+
+
+@pytest.mark.parametrize("sentences", [1, 5, 10, 20, 40])
+@pytest.mark.parametrize("target", [400, 799, 800, 1_000, 2_500])
+def test_a_section_below_its_share_of_the_target_is_too_short(
+    sentences: int, target: int
+) -> None:
+    limits = Limits()
+    text = _section(" ".join([SENTENCE] * sentences))
+    length = len(" ".join(prose_sentences(text)))
+    expected = (
+        target >= limits.min_length_floor and length < limits.min_length_share * target
+    )
+    assert _short(_length_problems(text, target)) == expected
+    # The TL;DR has no minimum.
+    assert not _short(_length_problems(text, target, minimum=False))
+
+
+def test_a_cutting_fix_that_leaves_the_section_short_is_not_taken() -> None:
+    target = 1_000
+    sentences = [f"{SENTENCE[:-1]} {k}번입니다." for k in range(30)]
+    text = _section(" ".join(sentences))
+    verifiers = VerifierSet("사용법", (lambda md: _length_problems(md, target),))
+    assert not _short(verifiers.run(text))
+    cut = [(" ".join(sentences[3:]), "")]
+    revision = transact(text, cut, verifiers=verifiers, max_prose_cut=1.0)
+    assert not revision.taken and "too_short" in {p.kind for p in revision.added}
+    # A deletion of unsupported content tolerates it (the caller notes it).
+    tolerated = transact(
+        text, cut, verifiers=verifiers, max_prose_cut=1.0, tolerated=("too_short",)
+    )
+    assert tolerated.taken

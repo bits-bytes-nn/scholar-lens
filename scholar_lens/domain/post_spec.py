@@ -354,6 +354,14 @@ class Limits:
     # long: half again leaves room for a dense section without letting one
     # take a neighbour's share of the post.
     max_length_share: float = 1.5
+    # A section whose prose falls below this share of its target is too
+    # short (a fix may not cut it there; the writer is asked to develop
+    # it): at 0.6 a section may run well short of its target, as a dense
+    # one may, but not lose most of it to a cutting fix. A target below
+    # ``min_length_floor`` characters (a brief section of a short post) is
+    # a rough size, not a minimum, and the TL;DR has no minimum.
+    min_length_share: float = 0.6
+    min_length_floor: int = 800
     # Visuals (images, display equations, tables) a section of the spec's
     # ``depth_kinds`` needs, by depth: a deep section shows its mechanism
     # and a result, a standard one one of them.

@@ -485,3 +485,30 @@ def test_inline_math_inside_text_in_a_display_is_unnested() -> None:
     )
     code = "```python\nx = '$$\\text{a$b$}$$'\n```\n"
     assert normalize_math(code).strip() == code.strip()
+
+
+def test_a_scripted_post_below_its_minimum_total_names_the_shortfall() -> None:
+    _, result = _run("review")
+    (note,) = [n for n in result.notes if "short of the configured minimum" in n]
+    assert "of 1,000" in note
+
+
+@pytest.mark.parametrize(
+    ("language", "chars", "short"),
+    [("Korean", 999, True), ("Korean", 1_000, False), ("English", 2_000, True)],
+)
+def test_the_minimum_total_is_in_the_posts_language(
+    language: str, chars: int, short: bool
+) -> None:
+    engine = EvidencePaperEngine(
+        ScriptedModel("review"),
+        PaperSettings(
+            language=language,
+            post="review",
+            reader_tag="sonnet",
+            min_total_chars=1_000,
+            max_total_chars=2_000,
+        ),
+    )
+    engine.note_total_length(["## 절\n\n" + "가" * (chars - 1) + "."], None)
+    assert bool(engine.notes) is short

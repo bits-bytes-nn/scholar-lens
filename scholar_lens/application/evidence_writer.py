@@ -18,7 +18,14 @@ import logging
 import re
 import threading
 from collections import Counter
-from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
+from collections.abc import (
+    Awaitable,
+    Callable,
+    Collection,
+    Iterable,
+    Mapping,
+    Sequence,
+)
 from dataclasses import dataclass
 from typing import Any, Literal, TypeVar
 
@@ -41,6 +48,7 @@ from scholar_lens.domain.evidence import (
     near_duplicate,
 )
 from scholar_lens.domain.evidence_draft import (
+    TOO_SHORT_PROBLEM,
     add_missing_figures,
     balance_math,
     cited_ids,
@@ -1069,6 +1077,7 @@ class EvidenceWriter:
             fresh = set(rejudged_units(baseline, text))
             return [(s, v) for s, v in claims if s in fresh]
 
+        start = draft
         claims = await found(draft)
         if claims:
             revision = await self._fix(
@@ -1083,6 +1092,9 @@ class EvidenceWriter:
                 verifiers=checks.verifiers,
                 rest=rest,
                 later=later,
+                # Narrowing removes unsupported content: a section it leaves
+                # short is noted, not kept unsupported.
+                tolerated=(TOO_SHORT_PROBLEM,),
             )
             if revision.taken and revision.text.strip() != draft.strip():
                 draft = revision.text
@@ -1091,7 +1103,16 @@ class EvidenceWriter:
                 claims = await found(draft)
             elif revision.rejected:
                 logger.info("Narrowing of %r rejected: %s", title, revision.rejected)
-        return self._drop_unsupported(draft, claims, title=title, checks=checks)
+        settled = self._drop_unsupported(draft, claims, title=title, checks=checks)
+        if settled != start and checks.verifiers.added(
+            [p for p in checks.verifiers.run(start) if p.kind == TOO_SHORT_PROBLEM],
+            [p for p in checks.verifiers.run(settled) if p.kind == TOO_SHORT_PROBLEM],
+        ):
+            self.notes.append(
+                f"Section '{title}': removing its unsupported sentences left it "
+                "below its minimum length; develop it from its evidence by hand."
+            )
+        return settled
 
     def _drop_unsupported(
         self,
@@ -1279,6 +1300,7 @@ class EvidenceWriter:
         verifiers: VerifierSet,
         rest: str = "",
         later: str = "",
+        tolerated: Collection[str] = (),
     ) -> Revision:
         """The section revised for ``issues`` by minimal edits (each an
         exact passage replaced or deleted), applied as one edit transaction;
@@ -1307,6 +1329,7 @@ class EvidenceWriter:
                 max_prose_cut=self.limits.max_prose_cut,
                 rest=rest,
                 later=later,
+                tolerated=tolerated,
             )
 
         with usage_stage("fix"):

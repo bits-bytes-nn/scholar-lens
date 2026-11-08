@@ -668,3 +668,38 @@ def test_complete_answers_never_passes_an_item_it_did_not_answer(seed: int) -> N
     # Each call after the first sends only what is still unanswered.
     for before, after in itertools.pairwise(calls):
         assert set(after) <= set(before)
+
+
+# ---- a minimum length never keeps unsupported content -----------------------------
+
+
+def _min_prose(chars: int) -> VerifierSet:
+    from scholar_lens.domain.evidence_draft import TOO_SHORT_PROBLEM, prose_sentences
+
+    def short(markdown: str) -> list[Problem]:
+        length = len(" ".join(prose_sentences(markdown)))
+        return [Problem(TOO_SHORT_PROBLEM, "too short")] if length < chars else []
+
+    return VerifierSet("캐시", (short,))
+
+
+@pytest.mark.parametrize("narrowed", [True, False])
+def test_unsupported_sentences_go_even_when_the_section_becomes_short(
+    narrowed: bool,
+) -> None:
+    """The fix loop may not cut the section under its minimum, but the
+    settling of unsupported sentences (narrowed in a transaction, or deleted
+    in code) is not refused by it: the section ends short, with a note."""
+    sentences = _sentences(3)
+    bad = sentences[1]
+    draft = _section(sentences)
+    model = Model(
+        bad=lambda s: s == bad,
+        edits=[Edit(find=f"{bad}\n\n", replace="")] if narrowed else [],
+    )
+    writer = _writer(model)
+    verifiers = _min_prose(len(" ".join(sentences)) - 1)
+    out = _verify(writer, draft, verifiers=verifiers)
+    assert bad not in out and sentences[0] in out and sentences[2] in out
+    assert not writer.blocking
+    assert any("below its minimum length" in n for n in writer.notes)

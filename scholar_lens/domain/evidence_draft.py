@@ -193,6 +193,8 @@ def visual_count(markdown: str) -> int:
 
 # The problem kind of a section below its depth's visuals minimum.
 VISUALS_PROBLEM = "visuals"
+# The problem kind of a section whose prose is below its minimum length.
+TOO_SHORT_PROBLEM = "too_short"
 # The asset kinds (:func:`assets`) that count as a section's visuals.
 _VISUAL_ASSETS = ("table", "figure", "equation")
 
@@ -213,6 +215,7 @@ def section_problems(
     target_chars: int = 0,
     passages: Mapping[tuple[str, str], str] | None = None,
     limits: Limits | None = None,
+    minimum_length: bool = True,
 ) -> list[Problem]:
     """Deterministic problems of a section draft (each quotes its sentence):
     a missing heading, unknown or foreign evidence ids, a number without
@@ -220,8 +223,9 @@ def section_problems(
     already stated, a sentence about the post's own inputs, an unassigned or
     missing figure. What a sentence means (talk about the post's sources, a
     claim that a source leaves something out, style) is the claim check's
-    and the review's, in any language. ``limits`` gives the length share
-    and the visuals by depth (the spec's)."""
+    and the review's, in any language. ``limits`` gives the length shares
+    and the visuals by depth (the spec's); ``minimum_length``: whether the
+    section has a minimum length (the TL;DR has none)."""
     limits = limits or Limits()
     problems: list[Problem] = []
 
@@ -320,15 +324,24 @@ def section_problems(
             f"papers {uncovered} belong to this section but no sentence cites "
             "their evidence: cover each",
         )
-    if (
-        target_chars
-        and (length := len(" ".join(prose_sentences(markdown))))
-        > limits.max_length_share * target_chars
-    ):
+    length = len(" ".join(prose_sentences(markdown)))
+    if target_chars and length > limits.max_length_share * target_chars:
         add(
             "too_long",
             f"{length:,} characters of prose for a target of {target_chars:,}: "
             "cut background, repetition and minor detail",
+        )
+    if (
+        minimum_length
+        and target_chars >= limits.min_length_floor
+        and length < limits.min_length_share * target_chars
+    ):
+        add(
+            TOO_SHORT_PROBLEM,
+            f"{length:,} characters of prose for a target of {target_chars:,} "
+            f"(below {limits.min_length_share:.0%}): develop the section from "
+            "its evidence (the mechanism, an example, what it means for the "
+            "reader)",
         )
     if ends_mid_sentence(markdown):
         add("mid_sentence", "the section stops mid-sentence: finish it")

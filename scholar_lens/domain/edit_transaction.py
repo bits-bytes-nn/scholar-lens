@@ -13,7 +13,7 @@ transaction created or changed is returned for the claim check.
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 
 from scholar_lens.domain.evidence_draft import (
@@ -114,6 +114,7 @@ def transact(
     max_prose_cut: float,
     rest: str = "",
     later: str = "",
+    tolerated: Collection[str] = (),
 ) -> Revision:
     """``before`` revised by ``edits``, or as it was when they may not stand.
 
@@ -127,6 +128,9 @@ def transact(
             one stays in a section before this one.
         later: The part of ``rest`` after this section ("": all of it
             comes before).
+        tolerated: Problem kinds a new problem of which does not refuse
+            the batch (a deletion of unsupported content may leave the
+            section short; the caller notes it).
 
     Returns:
         The revision (``taken`` when the section changed).
@@ -154,6 +158,7 @@ def transact(
         # it: the visuals minimum asks the writer for visuals of the
         # section's own, it does not keep a copy another section owns.
         added = [p for p in added if p.kind != VISUALS_PROBLEM]
+    added = [p for p in added if p.kind not in tolerated]
     if added:
         return Revision(
             before,

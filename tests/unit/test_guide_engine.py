@@ -5,6 +5,7 @@ scripted run from reading to the assembled body."""
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 from typing import Any, get_args
 
 import pytest
@@ -526,6 +527,9 @@ def test_a_scripted_guide_run() -> None:
         ),
         identifier_check=lambda md: ["--made-up"] if "--made-up" in md else [],
     )
+    # The scripted drafts are a sentence each: no minimum length (its fixes
+    # are scripted for other problems).
+    engine.limits = dataclasses.replace(engine.limits, min_length_share=0.0)
     guide = asyncio.run(engine.write("Ray Serve batching", [_blog(), _official()]))
     # Each page's reader recorded fewer than the low end of its count
     # (the spec's main or minor range) and was continued once.
