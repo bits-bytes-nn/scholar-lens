@@ -15,6 +15,7 @@ from scholar_lens.adapters.bedrock.chat_models import (
 )
 from scholar_lens.domain.constants import LanguageModelId
 from scholar_lens.domain.model_registry import _LANGUAGE_MODEL_INFO
+from scholar_lens.legacy import embeddings as embeddings_module
 
 
 @pytest.fixture(autouse=True)
@@ -423,7 +424,7 @@ class TestEmbeddingErrors:
     @staticmethod
     def _embeddings(
         code: str, status: int
-    ) -> tuple[fac.BedrockEmbeddingsWrapper, MagicMock]:
+    ) -> tuple[embeddings_module.BedrockEmbeddingsWrapper, MagicMock]:
         client = MagicMock()
         client.invoke_model.side_effect = ClientError(
             {
@@ -432,7 +433,7 @@ class TestEmbeddingErrors:
             },
             "InvokeModel",
         )
-        embeddings = fac.BedrockEmbeddingsWrapper.model_construct(
+        embeddings = embeddings_module.BedrockEmbeddingsWrapper.model_construct(
             client=client,
             model_id="amazon.titan-embed-text-v2:0",
             model_kwargs=None,
@@ -441,7 +442,9 @@ class TestEmbeddingErrors:
         return embeddings, client
 
     @staticmethod
-    def _embed_with_retry(embeddings: fac.BedrockEmbeddingsWrapper) -> None:
+    def _embed_with_retry(
+        embeddings: embeddings_module.BedrockEmbeddingsWrapper,
+    ) -> None:
         from scholar_lens.adapters.retry import RetryableBase
 
         RetryableBase._retry("test")(embeddings.embed_documents)(["text"])

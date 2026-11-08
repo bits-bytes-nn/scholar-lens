@@ -18,12 +18,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.vectorstores import VectorStore
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-from scholar_lens.adapters.bedrock.batch import BatchProcessor
-from scholar_lens.adapters.bedrock.chat_models import (
-    BedrockEmbeddingModelFactory,
-    BedrockLanguageModelFactory,
-)
-from scholar_lens.adapters.bedrock.prompts.extraction import CodeAnalysisPrompt
+from scholar_lens.adapters.bedrock.chat_models import BedrockLanguageModelFactory
 from scholar_lens.adapters.code.retriever import (
     DEFAULT_MAX_FILES,
     CodeRetriever,
@@ -33,6 +28,9 @@ from scholar_lens.adapters.code.retriever import (
 from scholar_lens.adapters.retry import RetryableBase
 from scholar_lens.domain.constants import EmbeddingModelId, LanguageModelId
 from scholar_lens.domain.usage_context import staged
+from scholar_lens.legacy.batch import BatchProcessor
+from scholar_lens.legacy.embeddings import BedrockEmbeddingModelFactory
+from scholar_lens.legacy.prompts.extraction import CodeAnalysisPrompt
 
 logger = logging.getLogger(__name__)
 

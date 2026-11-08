@@ -17,6 +17,7 @@ from typing import Any, Literal, cast
 # Every prompt template registers its fences before a run reads untrusted
 # text (domain.prompt_safety); the sections engine's templates included.
 import scholar_lens.adapters.bedrock.prompts  # noqa: F401
+import scholar_lens.legacy.prompts.extraction  # noqa: F401
 import scholar_lens.legacy.prompts.review  # noqa: F401
 import scholar_lens.legacy.prompts.summary  # noqa: F401
 from scholar_lens.adapters.aws.batch import BatchJobs

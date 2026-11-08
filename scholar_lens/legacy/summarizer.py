@@ -19,7 +19,6 @@ from scholar_lens.adapters.bedrock.chat_models import BedrockLanguageModelFactor
 from scholar_lens.adapters.bedrock.output_parsers import HTMLTagOutputParser
 from scholar_lens.adapters.bedrock.prompts.base import BasePrompt
 from scholar_lens.adapters.bedrock.usage import TokenBudgetGuard
-from scholar_lens.adapters.documents.html import measure_execution_time
 from scholar_lens.adapters.retry import RetryableBase, is_access_error
 from scholar_lens.domain.constants import LanguageModelId
 from scholar_lens.domain.markdown.math import DISPLAY_MATH, HANGUL, image_sources
@@ -46,6 +45,7 @@ from scholar_lens.legacy.prompts.summary import (
     PaperSummaryShortenPrompt,
 )
 from scholar_lens.legacy.section_loop import TARGETED_FIX, lost_structure
+from scholar_lens.legacy.timing import measure_execution_time
 
 logger = logging.getLogger(__name__)
 

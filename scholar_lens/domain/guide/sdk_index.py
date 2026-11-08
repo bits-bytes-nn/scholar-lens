@@ -340,13 +340,6 @@ def _segment(text: str, node: ast.AST) -> str:
     return segment[:MAX_DEFINITION_CHARS]
 
 
-@dataclass(frozen=True)
-class ApiUse:
-    module: str
-    name: str
-    keywords: tuple[str, ...] = ()
-
-
 def api_problems(code_blocks: Iterable[str], index: SdkIndex) -> list[str]:
     """What the package does not have that the code uses: a module of the
     package that does not exist, a name a module does not bind, a keyword a
