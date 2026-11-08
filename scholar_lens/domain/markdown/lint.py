@@ -44,6 +44,7 @@ import logging
 import re
 from collections.abc import Callable, Collection
 from dataclasses import dataclass
+from html.parser import HTMLParser
 from typing import Literal
 
 from scholar_lens.domain.markdown.math import (
@@ -183,13 +184,6 @@ BLOG_NEEDS_ATTRIBUTES = frozenset("a audio iframe img script source video".split
 # not a real HTML tag, so <br>, <sup>, </table> stay intact but <none>,
 # <your-namespace>, <server-host> get escaped.
 _ANGLE_TOKEN = re.compile(r"<(/?)([A-Za-z][A-Za-z0-9._-]*)[^<>\n]*?/?>")
-# Markup that runs code in the reader's browser: a script element, an event
-# handler attribute or a script URL. A post never needs it (an attack quoted
-# from a security paper is text), so it is shown as text, whoever wrote it.
-_ACTIVE_HTML = re.compile(
-    r"^<\s*/?\s*script\b|\son[a-z]+\s*=|(?:java|vb)script\s*:|data\s*:\s*text/html",
-    re.IGNORECASE,
-)
 # GFM autolinks — ``<https://…>`` / ``<mailto:…>`` / ``<user@host>`` — are valid
 # Markdown that kramdown renders as links; escaping them produces dead literal
 # text. Recognise and leave them alone (distinct from ``<placeholder>`` tokens).
@@ -326,11 +320,7 @@ def _escape_placeholder_tags(markdown: str, regions: list[tuple[int, int, str]])
     def repl(m: re.Match[str]) -> str:
         name = m.group(2).lower()
         bare = not m.group(1) and not m.group(0)[len(m.group(2)) + 1 : -1].strip(" /")
-        if (
-            name in BLOG_HTML_ELEMENTS
-            and not (bare and name in BLOG_NEEDS_ATTRIBUTES)
-            and not _ACTIVE_HTML.search(m.group(0))
-        ):
+        if name in BLOG_HTML_ELEMENTS and not (bare and name in BLOG_NEEDS_ATTRIBUTES):
             return m.group(0)
         return m.group(0).replace("<", "&lt;").replace(">", "&gt;")
 
@@ -355,6 +345,107 @@ def _escape_placeholder_tags(markdown: str, regions: list[tuple[int, int, str]])
         pos = m.end()
     out.append(markdown[pos:])
     return "".join(out)
+
+
+# Active HTML: what makes the reader's browser run code or load another
+# document in the blog's origin. A post never needs it (an attack a security
+# paper quotes is text), so a tag that has any is shown as text, whoever
+# wrote it. Decided on what a browser reads (html.parser: names lower-cased,
+# entities decoded, "/" and line breaks between attributes), not on spelling.
+_ACTIVE_ELEMENTS = frozenset(
+    "script style object embed applet base link meta form frame frameset".split()
+)
+_ACTIVE_ATTRIBUTES = frozenset({"srcdoc", "formaction"})
+_URL_ATTRIBUTES = frozenset(
+    "href src action data poster background cite xlink:href srcset".split()
+)
+_SAFE_SCHEMES = frozenset({"http", "https", "mailto"})
+# A tag a browser reads, line breaks between attributes included.
+_HTML_TAG = re.compile(r"</?[A-Za-z][^<>]*>")
+
+
+class _TagReader(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.tags: list[tuple[str, list[tuple[str, str | None]]]] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        self.tags.append((tag, attrs))
+
+    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        self.tags.append((tag, attrs))
+
+    def handle_endtag(self, tag: str) -> None:
+        self.tags.append((tag, []))
+
+
+def safe_url(value: str) -> bool:
+    """Whether a link target is one a post may carry: relative, an anchor,
+    or http(s)/mailto. Control characters and spaces a browser ignores are
+    ignored here too (``java\\tscript:``)."""
+    url = "".join(ch for ch in value if ch > " " and ch != "\x7f").lower()
+    scheme, colon, _ = url.partition(":")
+    if not colon or any(ch in scheme for ch in "/?#"):
+        return True  # relative or an anchor
+    return scheme in _SAFE_SCHEMES
+
+
+def active_html(tag: str) -> bool:
+    """Whether the HTML ``tag`` runs code or loads a document: an active
+    element, an event handler or srcdoc attribute, or a URL attribute whose
+    value is no safe URL (:func:`safe_url`)."""
+    reader = _TagReader()
+    try:
+        reader.feed(tag)
+        reader.close()
+    except Exception:  # noqa: BLE001 - what a parser cannot read is no tag
+        return False
+    for name, attrs in reader.tags:
+        if name in _ACTIVE_ELEMENTS:
+            return True
+        for attr, value in attrs:
+            if attr.startswith("on") or attr in _ACTIVE_ATTRIBUTES:
+                return True
+            if attr in _URL_ATTRIBUTES and value is not None:
+                urls = (
+                    [u.strip().split(" ")[0] for u in value.split(",")]
+                    if attr == "srcset"
+                    else [value]
+                )
+                if not all(safe_url(u) for u in urls):
+                    return True
+    return False
+
+
+# A reference-style link definition ("[label]: target").
+_DEFINITION_LINE = re.compile(r"^([ ]{0,3}\[[^\]\n]+\]:[ \t]*)(<[^>\n]*>|\S+)", re.M)
+
+
+def escape_active_html(markdown: str) -> str:
+    """``markdown`` with every active HTML tag outside code and math shown
+    as text (``&lt;``) and every link definition with an unsafe target
+    pointed at nothing (``#``)."""
+    regions = _classify_regions(markdown)
+    protected = [(s, e) for s, e, k in regions if k in ("fence", "icode", *_MATH_KINDS)]
+    in_code = indented_code_test(markdown)
+
+    def outside(start: int, end: int) -> bool:
+        return not any(s < end and start < e for s, e in protected) and not any(
+            in_code(i) for i in (start, end - 1)
+        )
+
+    def tag(m: re.Match[str]) -> str:
+        if outside(m.start(), m.end()) and active_html(m.group(0)):
+            return m.group(0).replace("<", "&lt;").replace(">", "&gt;")
+        return m.group(0)
+
+    def definition(m: re.Match[str]) -> str:
+        target = m.group(2).strip("<>")
+        if outside(m.start(), m.end()) and not safe_url(target):
+            return f"{m.group(1)}#"
+        return m.group(0)
+
+    return _DEFINITION_LINE.sub(definition, _HTML_TAG.sub(tag, markdown))
 
 
 def _fills_its_lines(markdown: str, start: int, end: int) -> bool:
@@ -1018,6 +1109,7 @@ def lint_markdown(
     # Escape bare <placeholder> tokens before warnings run so region offsets are
     # computed against the final text. Re-classify since escaping shifts offsets.
     fixed = _escape_placeholder_tags(fixed, _classify_regions(fixed))
+    fixed = escape_active_html(fixed)
 
     if not warn:
         return fixed

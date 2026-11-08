@@ -563,3 +563,61 @@ def test_plain_html_the_blog_allows_stays_markup() -> None:
     body = '## A\n\n<img src="/assets/a.png" alt="그림"> 와 <sup>2</sup>\n'
     out = publish_body(body, warn=False)
     assert '<img src="/assets/a.png" alt="그림">' in out and "<sup>2</sup>" in out
+
+
+@pytest.mark.parametrize(
+    "html",
+    [
+        "<img src=x\nonerror=alert(1)>",
+        '<a\nhref="javascript:alert(1)">x</a>',
+        "<svg/onload=alert(1)>",
+        '<img src="x"/onerror=alert(1)>',
+        '<a href="java&#x73;cript:alert(1)">x</a>',
+        '<a href="javascript&colon;alert(1)">x</a>',
+        '<a href="java&#9;script:alert(1)">x</a>',
+        '<iframe srcdoc="&lt;script&gt;alert(1)&lt;/script&gt;"></iframe>',
+        "<object data=x.swf></object>",
+        "<form action=javascript:alert(1)><button>b</button></form>",
+        '<meta http-equiv="refresh" content="0;url=https://evil.example">',
+    ],
+)
+def test_active_html_bypasses_are_published_as_text(html: str) -> None:
+    from scholar_lens.domain.markdown.lint import active_html, publish_body
+
+    out = publish_body(f"## A\n\n공격 예: {html} 끝.\n", warn=False)
+    # Every tag left in the output is inert.
+    import re
+
+    assert not any(active_html(t) for t in re.findall(r"</?[A-Za-z][^<>]*>", out))
+
+
+def test_a_reference_link_with_a_script_target_points_nowhere() -> None:
+    from scholar_lens.domain.markdown.lint import publish_body
+
+    out = publish_body("## A\n\n[x][1] 참고.\n\n[1]: javascript:alert(1)\n", warn=False)
+    assert "javascript:" not in out
+
+
+@pytest.mark.parametrize(
+    "markup",
+    [
+        '<img src="https://example.org/a.png" alt="그림">',
+        '<a href="https://example.org/onboarding">안내</a>',
+        '<iframe src="https://www.youtube.com/embed/x" allowfullscreen></iframe>',
+        '<span title="based on=y">t</span>',
+    ],
+)
+def test_inert_html_the_blog_allows_stays(markup: str) -> None:
+    from scholar_lens.domain.markdown.lint import publish_body
+
+    assert markup in publish_body(f"## A\n\n{markup}\n", warn=False)
+
+
+def test_code_keeps_active_html_as_written() -> None:
+    from scholar_lens.domain.markdown.lint import publish_body
+
+    body = "## A\n\n`<img src=x onerror=alert(1)>`\n\n```html\n<script>alert(1)</script>\n```\n"
+    out = publish_body(body, warn=False)
+    assert (
+        "`<img src=x onerror=alert(1)>`" in out and "<script>alert(1)</script>" in out
+    )
