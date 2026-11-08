@@ -351,6 +351,88 @@ def python_code_problems(
     return problems
 
 
+# A top-level value shown with its definition is cut at this length.
+MAX_DEFINITION_VALUE_CHARS = 80
+_TOP_LEVEL_BLOCKS = (ast.If, ast.Try, ast.TryStar, ast.With)
+
+
+def code_definitions(markdowns: Sequence[str], limit: int = 60) -> list[str]:
+    """What the Python code of ``markdowns`` defines, read in order with
+    ``ast``: the signature of each function and class (with its decorators;
+    a class's methods as ``Class.method``) and each top-level name with its
+    value, one line each. A name defined again keeps its last definition, in
+    the place of that definition; the last ``limit`` lines are returned. A
+    REPL or notebook block counts as the code it runs; a block that does not
+    parse defines nothing here (the code check reports it)."""
+    found: dict[str, str] = {}
+    for markdown in markdowns:
+        for block in python_blocks(markdown):
+            session = _session_code(block)
+            try:
+                tree = ast.parse(block if session is None else session)
+            except (SyntaxError, ValueError):
+                continue
+            for key, line in _definitions(tree.body, ""):
+                found.pop(key, None)
+                found[key] = line
+    return list(found.values())[-limit:] if limit > 0 else []
+
+
+def _definitions(body: Sequence[ast.stmt], owner: str) -> list[tuple[str, str]]:
+    out: list[tuple[str, str]] = []
+    for node in body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            name = f"{owner}{node.name}"
+            prefix = "async def" if isinstance(node, ast.AsyncFunctionDef) else "def"
+            returns = f" -> {ast.unparse(node.returns)}" if node.returns else ""
+            signature = f"{prefix} {name}({ast.unparse(node.args)}){returns}"
+            out.append((name, _decorated(node, signature)))
+        elif isinstance(node, ast.ClassDef):
+            name = f"{owner}{node.name}"
+            bases = [ast.unparse(b) for b in (*node.bases, *node.keywords)]
+            signature = f"class {name}" + (f"({', '.join(bases)})" if bases else "")
+            out.append((name, _decorated(node, signature)))
+            out += _definitions(node.body, f"{name}.")
+        elif owner:
+            continue
+        elif isinstance(node, (ast.Assign, ast.AnnAssign)) and node.value is not None:
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            value = _shortened(ast.unparse(node.value))
+            for target in targets:
+                if isinstance(target, ast.Name):
+                    annotation = (
+                        f": {ast.unparse(node.annotation)}"
+                        if isinstance(node, ast.AnnAssign)
+                        else ""
+                    )
+                    out.append((target.id, f"{target.id}{annotation} = {value}"))
+        elif isinstance(node, _TOP_LEVEL_BLOCKS):
+            # Code under ``if __name__ == "__main__":`` or ``with`` runs too.
+            parts = [node.body]
+            if isinstance(node, ast.If):
+                parts.append(node.orelse)
+            elif isinstance(node, (ast.Try, ast.TryStar)):
+                parts += [*(h.body for h in node.handlers), node.orelse]
+                parts.append(node.finalbody)
+            for part in parts:
+                out += _definitions(part, owner)
+    return out
+
+
+def _decorated(
+    node: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef, signature: str
+) -> str:
+    decorators = " ".join(f"@{ast.unparse(d)}" for d in node.decorator_list)
+    return f"{decorators} {signature}" if decorators else signature
+
+
+def _shortened(text: str) -> str:
+    text = " ".join(text.split())
+    if len(text) <= MAX_DEFINITION_VALUE_CHARS:
+        return text
+    return text[: MAX_DEFINITION_VALUE_CHARS - 1].rstrip() + "…"
+
+
 def install_requirements(text: str) -> list[tuple[str, frozenset[str]]]:
     """(package, extras) of every ``pip install`` the text shows, options
     and URLs left out."""

@@ -222,6 +222,10 @@ class Evidence(_Strict):
     # The one SDK language a fact holds for, when the source says so
     # ("python", "typescript"); empty when it holds for every SDK.
     sdk: str = ""
+    # When the quote is a row of a Markdown table: the table's header row,
+    # copied from the source by code at record time, so the column (metric,
+    # setting) a number stands in is known. Empty for other quotes.
+    table_header: str = ""
 
 
 # Alt text that says nothing about the figure: a file path or name, a
@@ -246,6 +250,36 @@ def _figure_place(sections: list[SourceSection], url: str) -> tuple[str, str]:
 
 def _squash(text: str) -> str:
     return _SPACE.sub(" ", text).strip().casefold()
+
+
+# A Markdown table's delimiter row: "| --- | :---: |" or "--- | ---".
+_TABLE_DELIMITER = re.compile(r"^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)*\|?\s*$")
+
+
+def _table_line(line: str) -> bool:
+    return "|" in line and bool(line.strip())
+
+
+def table_header(text: str, quote: str) -> str:
+    """The header row of the Markdown table of ``text`` whose body row the
+    quote copies (its first line, wholly or in part); "" when the quote is
+    not a table body row (prose, the header itself, no table)."""
+    first = next((ln for ln in quote.split("\n") if ln.strip()), "")
+    row = _squash(first)
+    if "|" not in row or not row.strip("| "):
+        return ""
+    lines = text.split("\n")
+    for at, line in enumerate(lines):
+        if not _table_line(line) or row not in _squash(line):
+            continue
+        start = at
+        while start > 0 and _table_line(lines[start - 1]):
+            start -= 1
+        for n in range(start + 1, at):
+            # The delimiter follows the header; the quoted row is below it.
+            if _TABLE_DELIMITER.match(lines[n]):
+                return lines[n - 1].strip()
+    return ""
 
 
 def evidence_problems(
@@ -304,10 +338,19 @@ def evidence_problems(
         problems.append(
             f"the quote is not verbatim in {anchor}: copy the paper's words exactly"
         )
-    support = f"{quote} {scope} {code or ''} {latex or ''}"
-    if missing := unsourced_numbers(f"{claim} {cell}", support):
+    # The source's own text grounds numbers and names: the quote, its code
+    # and LaTeX, and a quoted table row's header. ``scope`` and ``cell`` are
+    # the reader's words, so a number found only there is not sourced, and
+    # a cell's numbers must be the quote's.
+    header = table_header(section.text, quote)
+    support = f"{quote} {code or ''} {latex or ''} {header}"
+    if missing := unsourced_numbers(claim, support):
         problems.append(
-            "the claim or cell states numbers the quote does not: " + ", ".join(missing)
+            "the claim states numbers the quote does not: " + ", ".join(missing)
+        )
+    if missing := unsourced_numbers(cell, quote):
+        problems.append(
+            "the cell states numbers the quote does not: " + ", ".join(missing)
         )
     if names := [
         n
@@ -463,7 +506,7 @@ class EvidenceLedger(BaseModel):
     def add(self, document: SourceDocument, **fields: object) -> Evidence:
         """Record evidence the caller has already checked
         (:func:`evidence_problems`); a figure gets its URL, caption and the
-        section it sits in."""
+        section it sits in, a quoted table row its table's header row."""
         figure = None
         if fields.get("kind") == "figure" and fields.get("figure_id"):
             figure = document.figure(str(fields["figure_id"]))
@@ -473,6 +516,12 @@ class EvidenceLedger(BaseModel):
                 # What the figure shows, as far as the text says: the check
                 # of its claim reads it.
                 fields["quote"] = figure.context
+        if not fields.get("table_header") and (
+            section := document.section(str(fields.get("anchor") or ""))
+        ):
+            fields["table_header"] = table_header(
+                section.text, str(fields.get("quote") or "")
+            )
         evidence = Evidence(
             id=f"E{len(self.items) + 1}",
             paper_id=document.paper_id,
