@@ -21,3 +21,9 @@
 
 - 두 엔진을 함께 유지하는 비용(설정, 테스트, 문서)이 남습니다.
 - 삭제 기준이 평가 결과로 정해져 있어, 엔진 교체가 품질 후퇴로 이어지지 않습니다.
+
+## 의존성
+
+- `langchain-community`는 유지 관리가 끝나 가고 있어 이전 엔진에서 쓰지 않습니다. 임베딩은 `langchain_aws.BedrockEmbeddings`를 씁니다. 이 클래스는 엔드포인트의 botocore 오류를 그대로 다시 던지므로 공통 재시도 정책(`adapters/retry.py`)이 다른 Bedrock 호출과 같은 기준으로 분류합니다.
+- 코드 색인은 FAISS 대신 `langchain_core`의 `InMemoryVectorStore`(코사인 유사도, 메모리 안 전수 비교)를 씁니다. 색인은 실행마다 메모리에서만 만들고 저장하지 않으며, 저장소 파일·청크 수 상한 안에서는 FAISS의 평면 색인과 같은 전수 비교라 성능 차이가 작습니다. 결과의 `similarity`는 이제 L2 거리가 아니라 코사인 유사도(클수록 가까움)입니다.
+- `pyproject.toml`과 잠금 파일에는 `langchain-community`와 `faiss-cpu`가 아직 남아 있습니다. 코드에서 가져오지 않으며, 잠금 파일을 다시 만드는 별도 변경에서 지웁니다.

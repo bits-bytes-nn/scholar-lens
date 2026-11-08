@@ -1,6 +1,7 @@
 """The sections engine's searchable code index: the paper's repositories
-chunked, described by a model and embedded into an in-memory FAISS index
-the review sections search for the code they explain."""
+chunked, described by a model and embedded into an in-memory vector store
+(``langchain_core``'s, ranked by cosine similarity) the review sections
+search for the code they explain."""
 
 from __future__ import annotations
 
@@ -11,11 +12,10 @@ from collections.abc import Sequence
 from pathlib import Path
 
 import boto3
-from langchain_community.vectorstores.faiss import FAISS
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.documents import Document
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.vectorstores import VectorStore
+from langchain_core.vectorstores import InMemoryVectorStore, VectorStore
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from scholar_lens.adapters.bedrock.chat_models import BedrockLanguageModelFactory
@@ -192,7 +192,7 @@ class CodeIndex(CodeRetriever):
             return
 
         logger.info(
-            "Creating FAISS index for %d documents in batches of %d.",
+            "Creating the code index for %d documents in batches of %d.",
             len(documents),
             EMBEDDING_BATCH_SIZE,
         )
@@ -216,8 +216,10 @@ class CodeIndex(CodeRetriever):
         logger.info("Indexed %d code chunks.", len(documents))
 
     @RetryableBase._retry("documents_embedding")
-    async def _afrom_documents_with_retry(self, documents: list[Document]) -> FAISS:
-        return await FAISS.afrom_documents(documents, self.embeddings)
+    async def _afrom_documents_with_retry(
+        self, documents: list[Document]
+    ) -> InMemoryVectorStore:
+        return await InMemoryVectorStore.afrom_documents(documents, self.embeddings)
 
     @RetryableBase._retry("documents_embedding")
     async def _aadd_documents_with_retry(self, documents: list[Document]) -> None:
