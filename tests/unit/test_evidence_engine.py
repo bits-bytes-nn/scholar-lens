@@ -45,7 +45,7 @@ from scholar_lens.domain.survey.evidence_post import (
 )
 from scholar_lens.domain.survey.plan import SurveyPlan
 from scholar_lens.domain.verifiers import no_checks
-from tests.fakes import claim_check, with_context
+from tests.fakes import claim_check, evidence_check, with_context
 
 PAPER_TEXT = """## Abstract
 
@@ -369,7 +369,7 @@ class ScriptedModel:
         if schema is SectionReview:
             return SectionReview()
         if schema is EvidenceCheck:
-            return EvidenceCheck()
+            return evidence_check(prompt)
         if schema is PostReview:
             # A survey has whole-post reads since E3: consistency and
             # repetition.

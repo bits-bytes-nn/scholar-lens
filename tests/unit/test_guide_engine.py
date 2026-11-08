@@ -50,7 +50,7 @@ from scholar_lens.domain.post_spec import evidence_policy
 from scholar_lens.domain.research import PageContent
 from scholar_lens.domain.sources import SourceSet
 from scholar_lens.domain.specs import GUIDE_SPEC
-from tests.fakes import claim_check, with_context
+from tests.fakes import claim_check, evidence_check, with_context
 
 DOC_TEXT = """## Overview
 
@@ -457,7 +457,7 @@ class ScriptedModel:
         if schema is SectionReview:
             return SectionReview()
         if schema is EvidenceCheck:
-            return EvidenceCheck()
+            return evidence_check(prompt)
         if schema is PostReview and "repetition only" in system:
             # A read of its own, its findings fixed with the code review's.
             self.calls.append("repetition-review")

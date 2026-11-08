@@ -36,7 +36,7 @@ from scholar_lens.domain.paper.evidence_paper import (
     tldr_problems,
 )
 from scholar_lens.domain.specs.paper import paper_spec
-from tests.fakes import claim_check, with_context
+from tests.fakes import claim_check, evidence_check, with_context
 
 PAPER = """## Abstract
 
@@ -292,7 +292,7 @@ class ScriptedModel:
         if schema is SectionReview:
             return SectionReview()
         if schema is EvidenceCheck:
-            return EvidenceCheck()
+            return evidence_check(prompt)
         if schema is PostReview:
             # A paper post now has a consistency and a repetition read (one
             # combined review before E3).

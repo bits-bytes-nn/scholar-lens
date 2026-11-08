@@ -335,6 +335,10 @@ class Limits:
     fix_earlier_evidence: int = 30
     # A draft shorter than this share of its target prose is asked again.
     short_draft_share: float = 0.3
+    # Calls of a structured per-item check (claims, evidence): the first,
+    # then one for the items its answer left out; an item still without a
+    # verdict blocks the post.
+    answer_asks: int = 2
     # The reader: turns of the follow-up that asks for a required kind it
     # skipped, how often ``finish`` refuses while one is missing, and the
     # characters ``read_section`` returns of one section.

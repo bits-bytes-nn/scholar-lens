@@ -4,6 +4,7 @@ sentence handling (docs/engine.md, 4.2, 4.5 and 4.10)."""
 from __future__ import annotations
 
 import asyncio
+import itertools
 import re
 from collections.abc import Callable
 from typing import Any
@@ -580,3 +581,90 @@ def test_an_evidence_check_without_a_valid_answer_blocks_and_drops_nothing() -> 
     assert asyncio.run(writer.wrong_evidence(list(_ledger()))) == {}
     assert len(writer.blocking) == 1
     assert "evidence check could not run" in writer.blocking[0]
+
+
+# ---- answer completeness of the evidence check ------------------------------------
+
+
+def _items(n: int) -> list[Evidence]:
+    return [
+        Evidence(
+            id=f"E{k}",
+            paper_id="P",
+            kind="method",
+            claim=f"주장 {k}",
+            quote=f"quote {k}",
+            anchor="S1",
+        )
+        for k in range(1, n + 1)
+    ]
+
+
+class _PartialEvidenceCheck(Model):
+    """Answers the evidence check for the ids ``answer(call, ids)`` keeps;
+    ``wrong`` ids are wrong."""
+
+    def __init__(
+        self, answer: Callable[[int, list[str]], list[str]], wrong: set[str]
+    ) -> None:
+        super().__init__()
+        self.answer = answer
+        self.wrong = wrong
+        self.asked: list[list[str]] = []
+
+    async def structured(self, *, schema: Any, prompt: str, **kwargs: Any) -> Any:
+        if schema is EvidenceCheck:
+            from tests.fakes import evidence_check
+
+            ids = re.findall(r"^\[(E\d+)\]", prompt, re.M)
+            self.asked.append(ids)
+            kept = set(self.answer(len(self.asked) - 1, ids))
+            full = evidence_check(prompt, lambda i: "틀림" if i in self.wrong else None)
+            return EvidenceCheck(verdicts=[v for v in full.verdicts if v.id in kept])
+        return await super().structured(schema=schema, prompt=prompt, **kwargs)
+
+
+def test_evidence_the_check_leaves_out_is_asked_again_then_blocks() -> None:
+    model = _PartialEvidenceCheck(lambda call, ids: ids[:1], wrong={"E3"})
+    writer = _writer(model)
+    wrong = asyncio.run(writer.wrong_evidence(_items(3)))
+    # Asked once for all, again only for those it left out.
+    assert model.asked == [["E1", "E2", "E3"], ["E2", "E3"]]
+    assert wrong == {}
+    (blocking,) = writer.blocking
+    assert "no verdict for 1 of its items" in blocking and "E3" in blocking
+
+
+def test_evidence_answered_when_asked_again_passes_and_is_judged() -> None:
+    model = _PartialEvidenceCheck(
+        lambda call, ids: ids if call else ids[:1], wrong={"E3"}
+    )
+    writer = _writer(model)
+    assert asyncio.run(writer.wrong_evidence(_items(3))) == {"E3": "틀림"}
+    assert not writer.blocking and len(model.asked) == 2
+
+
+@pytest.mark.parametrize("seed", range(20))
+def test_complete_answers_never_passes_an_item_it_did_not_answer(seed: int) -> None:
+    import random
+
+    from scholar_lens.application.evidence_writer import complete_answers
+
+    rng = random.Random(seed)
+    items = list(range(rng.randint(0, 12)))
+    asks = rng.randint(1, 3)
+    calls: list[list[int]] = []
+
+    async def ask(pending: list[int], attempt: int) -> dict[int, str]:
+        calls.append(pending)
+        # Answers a random subset, plus an item it was not sent.
+        return {k: f"v{k}" for k in pending if rng.random() < 0.5} | {99: "x"}
+
+    result = asyncio.run(complete_answers(items, ask, asks=asks))
+    assert result.ran and len(calls) <= asks
+    assert set(result.answers) | set(result.missing) == set(items)
+    assert not set(result.answers) & set(result.missing)
+    assert 99 not in result.answers
+    # Each call after the first sends only what is still unanswered.
+    for before, after in itertools.pairwise(calls):
+        assert set(after) <= set(before)

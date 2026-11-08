@@ -7,7 +7,12 @@ from __future__ import annotations
 import re
 from collections.abc import Callable
 
-from scholar_lens.application.evidence_writer import ClaimCheck, SentenceVerdict
+from scholar_lens.application.evidence_writer import (
+    ClaimCheck,
+    EvidenceCheck,
+    EvidenceVerdict,
+    SentenceVerdict,
+)
 
 
 def with_context(context: str | tuple[str, ...], prompt: str) -> str:
@@ -34,3 +39,23 @@ def claim_check(prompt: str, judge: Judge | None = None) -> ClaimCheck:
             SentenceVerdict(n=int(number), verdict=verdict, reason=reason)  # type: ignore[arg-type]
         )
     return ClaimCheck(verdicts=verdicts)
+
+
+_EVIDENCE_ITEM = re.compile(r"^\[([^\]]+)\] \(", re.M)
+
+
+def evidence_check(
+    prompt: str, wrong: Callable[[str], str | None] | None = None
+) -> EvidenceCheck:
+    """An evidence check that answers every item of ``prompt``, as the
+    contract asks: ``wrong(id)`` gives a wrong item's reason, None (and no
+    ``wrong``) for consistent."""
+    verdicts = []
+    for eid in _EVIDENCE_ITEM.findall(prompt):
+        reason = wrong(eid) if wrong else None
+        verdicts.append(
+            EvidenceVerdict(id=eid, verdict="wrong", reason=reason)
+            if reason is not None
+            else EvidenceVerdict(id=eid, verdict="consistent")
+        )
+    return EvidenceCheck(verdicts=verdicts)

@@ -335,6 +335,52 @@ async def all_or_none[T](aws: Iterable[Awaitable[T]]) -> list[T]:
         raise
 
 
+@dataclass(frozen=True)
+class ItemAnswers[K, V]:
+    """What a structured per-item check answered: the answer of each item
+    it named, the items it never answered, and whether every call gave a
+    valid answer (a call that did not has blocked the post already)."""
+
+    answers: dict[K, V]
+    missing: list[K]
+    ran: bool
+
+
+async def complete_answers[K, V](
+    items: Sequence[K],
+    ask: Callable[[list[K], int], Awaitable[Mapping[K, V] | None]],
+    *,
+    asks: int,
+) -> ItemAnswers[K, V]:
+    """The answers of a structured check that judges each item it is sent
+    (docs/engine.md, 4.10): the answered items are compared with the sent
+    ones, the items left out are sent again on their own, up to ``asks``
+    calls in all. An item never answered is unchecked, never passed: the
+    caller blocks the post on ``missing``.
+
+    Args:
+        items: The items to judge, in order.
+        ask: One call for the pending items (and the attempt, from 0): the
+            answer per item it named (items it was not sent are ignored),
+            or None when it gave no valid answer.
+        asks: The calls at most.
+
+    Returns:
+        The answers, the items still unanswered, and whether every call ran.
+    """
+    answers: dict[K, V] = {}
+    pending = list(dict.fromkeys(items))
+    for attempt in range(asks):
+        if not pending:
+            break
+        got = await ask(pending, attempt)
+        if got is None:
+            return ItemAnswers(answers, pending, False)
+        answers.update((k, v) for k, v in got.items() if k in pending)
+        pending = [k for k in pending if k not in got]
+    return ItemAnswers(answers, pending, True)
+
+
 # Appended to an artifact's fix prompt when the fix is asked as edits.
 EDIT_ANSWER = """
 Answer with `edits`, not the whole section: each edit replaces one passage
@@ -757,25 +803,46 @@ class EvidenceWriter:
         items = [e for e in items if e.kind != "figure" or e.caption or e.quote]
         if not items:
             return {}
-        lines = "\n".join(
-            f"[{e.id}] ({e.kind}) claim: {e.claim} | cell: {e.cell} | scope: "
-            f'{e.scope}\n    quote: "{quote_for_prompt(e.quote)}"'
-            + (f'\n    caption: "{quote_for_prompt(e.caption)}"' if e.caption else "")
-            for e in items
-        )
-        with usage_stage("verify"):
-            check = await self._evaluated(
-                "the evidence check",
-                blocking=True,
-                unchecked="no evidence was left out, and the post uses it unchecked",
-                role="evaluate",
-                system=self.prompts.evidence_check,
-                prompt=block("evidence", lines),
-                schema=EvidenceCheck,
+        by_id = {e.id: e for e in items}
+
+        async def ask(
+            ids: list[str], attempt: int
+        ) -> dict[str, EvidenceVerdict] | None:
+            lines = "\n".join(
+                f"[{e.id}] ({e.kind}) claim: {e.claim} | cell: {e.cell} | scope: "
+                f'{e.scope}\n    quote: "{quote_for_prompt(e.quote)}"'
+                + (
+                    f'\n    caption: "{quote_for_prompt(e.caption)}"'
+                    if e.caption
+                    else ""
+                )
+                for e in (by_id[i] for i in ids)
             )
-        if check is None:
-            return {}
-        wrong = {v.id: v.reason for v in check.verdicts if v.verdict == "wrong"}
+            what = "the evidence check"
+            with usage_stage("verify"):
+                check = await self._evaluated(
+                    what if not attempt else f"{what} (items it left out)",
+                    blocking=True,
+                    unchecked=(
+                        "no evidence was left out, and the post uses it unchecked"
+                    ),
+                    role="evaluate",
+                    system=self.prompts.evidence_check,
+                    prompt=block("evidence", lines),
+                    schema=EvidenceCheck,
+                )
+            if check is None:
+                return None
+            return {v.id: v for v in check.verdicts}
+
+        result = await complete_answers(list(by_id), ask, asks=self.limits.answer_asks)
+        if result.ran and result.missing:
+            self._block(
+                f"The evidence check gave no verdict for {len(result.missing)} of "
+                f"its items, even when asked again: they are unchecked, and the "
+                "post uses them (" + ", ".join(result.missing) + ")."
+            )
+        wrong = {i: v.reason for i, v in result.answers.items() if v.verdict == "wrong"}
         if wrong:
             self.notes.append(
                 "Evidence that misstates its quote was left out: "
@@ -1385,27 +1452,24 @@ class EvidenceWriter:
             + ("\n\n" + block("source_sections", reference) if reference else ""),
         )
         # An item the answer leaves out is unchecked, not supported: it is
-        # asked again once on its own, and never cached.
-        for attempt in range(2):
-            if not sent:
-                break
-            answered = await self._claim_verdicts(
-                heading, sent, sentences, ledger, context, attempt
+        # asked again on its own, and never cached.
+
+        async def ask(pending: list[int], attempt: int) -> dict[int, str] | None:
+            return await self._claim_verdicts(
+                heading, pending, sentences, ledger, context, attempt
             )
-            if answered is None:
-                break
-            for n, verdict in answered.items():
-                self.verdicts.put(keys[n], verdict)
-            sent = [n for n in sent if n not in answered]
-        else:
-            if sent:
-                self._block(
-                    f"The claim check of '{heading}' gave no verdict for "
-                    f"{len(sent)} of its items, even when asked again: they "
-                    "are unchecked ("
-                    + "; ".join(sentences[n][:80] for n in sent)
-                    + ")."
-                )
+
+        result = await complete_answers(sent, ask, asks=self.limits.answer_asks)
+        for n, verdict in result.answers.items():
+            self.verdicts.put(keys[n], verdict)
+        if result.ran and result.missing:
+            self._block(
+                f"The claim check of '{heading}' gave no verdict for "
+                f"{len(result.missing)} of its items, even when asked again: they "
+                "are unchecked ("
+                + "; ".join(sentences[n][:80] for n in result.missing)
+                + ")."
+            )
         return [
             (sentence, verdict)
             for sentence, key in zip(sentences, keys, strict=True)
