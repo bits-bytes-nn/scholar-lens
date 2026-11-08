@@ -15,7 +15,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 from urllib.parse import urlsplit
 
-from ..adapters.packages.pypi import package_extras, package_source
+from ..adapters.packages.pypi import PackageSource, package_extras, package_source
 from ..domain.evidence import Authority, SourceDocument
 from ..domain.guide.evidence_guide import (
     SOURCE_ID_PREFIX,
@@ -130,27 +130,42 @@ _MAX_PACKAGES = 6
 _MAX_SDK_PACKAGES = 2
 
 
+def _normalized(name: str) -> str:
+    """A distribution or import name as PEP 503 compares them."""
+    return re.sub(r"[-_.]+", "-", name).lower()
+
+
 def product_sdk(
     provided: Mapping[str, tuple[str, frozenset[str]]], products: Sequence[str]
 ) -> SdkIndex | None:
     """The index of the product's own packages among those the official
-    pages install (``strands-agents`` for "strands"), from their PyPI source;
-    None when none matches or none can be read."""
-    keys = [re.sub(r"[^a-z0-9]", "", p.lower()) for p in products if p]
-    names = [
-        n
-        for n in provided
-        if any(re.sub(r"[^a-z0-9]", "", n.lower()).startswith(k) for k in keys if k)
-    ][:_MAX_SDK_PACKAGES]
-    files: dict[str, str] = {}
-    versions: list[str] = []
-    for name in names:
-        if (found := package_source(name)) is not None:
-            versions.append(f"{name} {found[0]}")
-            files.update(found[1])
+    pages install, from their PyPI source: the distributions whose name is a
+    product name (PEP 503 normalised), else those that install a top-level
+    package of that name. None when none matches or none can be read."""
+    wanted = {_normalized(p) for p in products if p.strip()}
+    if not wanted:
+        return None
+    exact = [n for n in provided if _normalized(n) in wanted]
+    read: list[tuple[str, PackageSource]] = []
+    for name in exact or list(provided):
+        if len(read) >= _MAX_SDK_PACKAGES:
+            break
+        if (found := package_source(name)) is None:
+            continue
+        if not exact:
+            own = SdkIndex.from_sources(found.files, top_levels=found.top_levels)
+            if not {_normalized(p) for p in own.packages} & wanted:
+                continue
+        read.append((name, found))
+    files = {path: text for _, found in read for path, text in found.files.items()}
     if not files:
         return None
-    return SdkIndex.from_sources(files, ", ".join(versions))
+    return SdkIndex.from_sources(
+        files,
+        ", ".join(f"{name} {found.version}" for name, found in read),
+        partial=any(not found.complete for _, found in read),
+        top_levels={t for _, found in read for t in found.top_levels},
+    )
 
 
 def docs_packages(official_text: str) -> dict[str, tuple[str, frozenset[str]]]:
@@ -279,10 +294,11 @@ async def write_guide_with_evidence(
     sdk = await asyncio.to_thread(product_sdk, provided, products)
     if sdk is not None:
         logger.info(
-            "Guide code checked against %s %s (%d modules).",
+            "Guide code checked against %s %s (%d modules%s).",
             "/".join(sorted(sdk.packages)),
             sdk.version,
             len(sdk.modules),
+            ", partial" if sdk.partial else "",
         )
     sdk_params = {p for c in sdk.callables.values() for p in c.params} if sdk else set()
 
