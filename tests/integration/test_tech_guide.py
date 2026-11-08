@@ -868,6 +868,33 @@ def _bootstrapped_guide(
     return gen
 
 
+@pytest.mark.parametrize("reserve, cap", [(3, 4), (3, 2), (1, 4)])
+async def test_the_secondary_reserve_admits_non_official_pages_end_to_end(
+    reserve: int, cap: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With more official results than ``fetch_top_results`` ranking first,
+    at least min(min_secondary_pages, cap) non-official pages still get in."""
+    from scholar_lens.configs import Config
+    from tests.integration.test_source_ranking import _result, _Search
+
+    config = Config()
+    config.tech_guide.fetch_top_results = 4
+    config.tech_guide.max_third_party_pages = cap
+    config.tech_guide.min_secondary_pages = reserve
+    official = [_result(f"https://docs.x.com/guide/p{i}") for i in range(8)]
+    others = [_result(f"https://blog{i}.example.org/post") for i in range(4)]
+    gen = _bootstrapped_guide(
+        config, monkeypatch, _Search({"q": official + others}), _corpus()
+    )
+    material = await gen.gather(
+        ["https://docs.x.com"], discover_subpages=False, search_queries=["q"]
+    )
+    searched = material.corpus.pages[1:]
+    assert len(searched) == 4
+    non_official = [p for p in searched if p.authority not in ("official",)]
+    assert len(non_official) >= min(reserve, cap)
+
+
 async def test_the_configured_link_share_scopes_the_requested_docs(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
