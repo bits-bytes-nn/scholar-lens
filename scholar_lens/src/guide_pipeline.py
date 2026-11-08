@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 from urllib.parse import urlparse
 
+from ..adapters.packages.pypi import package_extras
 from ..domain.evidence_draft import drop_empty_headings
 from ..domain.markdown.lint import (
     drop_unknown_images,
@@ -74,6 +75,8 @@ async def run_guide_pipeline(
         max_research_queries=cfg.max_research_queries,
         fetch_top_results=cfg.fetch_top_results,
         callbacks=[tracker],
+        release_lookup=package_release,
+        repo_tags=researcher.repo_tags,
     )
     github = context.config.resources.github
     try:
@@ -176,6 +179,12 @@ def guide_document(document: str, guide: TechGuide, *, korean: bool) -> str:
 
 def _split_list(value: str) -> list[str]:
     return [item.strip() for item in value.split(",") if item.strip()]
+
+
+def package_release(name: str) -> str | None:
+    """``name``'s latest release on PyPI (None when unknown or unreachable)."""
+    found = package_extras(name)
+    return (found[0] or None) if found else None
 
 
 def build_search_provider() -> WebSearchProvider:

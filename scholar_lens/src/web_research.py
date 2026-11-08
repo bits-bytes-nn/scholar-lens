@@ -123,6 +123,7 @@ def _reference_words(identifiers: list[str]) -> set[str]:
 
 
 _BRAVE_WEB_SEARCH_URL = "https://api.search.brave.com/res/v1/web/search"
+_GITHUB_TAGS_URL = "https://api.github.com/repos/{repo}/tags?per_page=100"
 _TAVILY_SEARCH_URL = "https://api.tavily.com/search"
 # Tavily's answers for a spent plan quota or key: no later query succeeds.
 # A rejected key; Tavily also answers a spent plan or credit quota with
@@ -713,6 +714,28 @@ class WebResearcher:
                 transport=PinnedHTTPTransport(),
             )
         return self._client
+
+    def repo_tags(self, repo: str) -> frozenset[str] | None:
+        """The tags of a GitHub repository (``github.com/<owner>/<name>``)
+        from the GitHub API (its first page, newest first); an empty set when
+        it has none, None for another host or when the API cannot answer
+        (then the release decides alone)."""
+        host, _, path = repo.partition("/")
+        if host != "github.com" or path.count("/") != 1:
+            return None
+        url = _GITHUB_TAGS_URL.format(repo=path)
+        try:
+            response = self.client.get(url, headers={"Accept": "application/json"})
+            response.raise_for_status()
+            data = response.json()
+        except (httpx.HTTPError, UnsafeUrlError, ValueError) as e:
+            logger.info("Could not list the tags of %s: %s", repo, e)
+            return None
+        if not isinstance(data, list):
+            return None
+        return frozenset(
+            str(t["name"]) for t in data if isinstance(t, dict) and t.get("name")
+        )
 
     def search_notes(self) -> list[str]:
         """A run note when web searches failed (their results are missing

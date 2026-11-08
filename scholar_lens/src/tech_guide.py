@@ -25,6 +25,7 @@ from __future__ import annotations
 import asyncio
 import functools
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -32,6 +33,7 @@ import boto3
 from langchain_core.runnables import Runnable
 
 from ..application.usage import staged
+from ..domain.guide.evidence_guide import install_requirements
 from ..domain.review_plan import digest_sections
 from ..domain.tags import controlled_tag_problems
 from ..domain.validation import description_markup, description_problems
@@ -49,7 +51,7 @@ from .prompts import (
     TechGuideResearchPlanPrompt,
 )
 from .prompts.tech_guide import REFERENCE_LABEL, TechGuideTaxonomyPrompt
-from .source_set import SourceSet
+from .source_set import OFFICIAL_AUTHORITIES, SourceSet, TagLookup
 from .utils import (
     BedrockLanguageModelFactory,
     HTMLTagOutputParser,
@@ -75,6 +77,11 @@ DEFAULT_LANGUAGE: str = "Korean"
 # per-guide reference caps.
 _IDENTIFIER_REFERENCE_PAGES: int = MAX_REFERENCE_PAGES * 2 // 3 // 2
 _IDENTIFIER_REFERENCE_SEARCHES: int = MAX_REFERENCE_SEARCHES * 2 // 3 // 2
+
+
+def _normalized(name: str) -> str:
+    """A distribution or command name as PEP 503 compares them."""
+    return re.sub(r"[-_.]+", "-", name).lower()
 
 
 class NotTechnicalContentError(Exception):
@@ -143,7 +150,18 @@ class TechGuideGenerator(RetryableBase):
         fetch_top_results: int,
         callbacks: list[Any] | None = None,
         llm_factory: BedrockLanguageModelFactory | None = None,
+        release_lookup: Callable[[str], str | None] | None = None,
+        repo_tags: TagLookup | None = None,
     ) -> None:
+        """Args beyond the obvious:
+        release_lookup: A package's latest release on its index (the
+            run's target version when the docs URL pins none); None
+            looks nothing up.
+        repo_tags: A repository's tags (``host/owner/name``); None
+            looks nothing up.
+        """
+        self.release_lookup = release_lookup
+        self.repo_tags = repo_tags
         self.language = language
         # The blog's title limit (the conventions' ``seo_title_max_length``).
         self.title_max_length = title_max_length
@@ -492,8 +510,43 @@ class TechGuideGenerator(RetryableBase):
 
     def _source_set(self, urls: list[str], docs: list[PageContent]) -> SourceSet:
         """The run's source set from the requested URLs and the docs pages
-        they returned."""
-        return SourceSet.from_urls(urls, docs).with_repositories(docs)
+        they returned. Its target version is the release the requested docs
+        URL pins, else the latest release of the product's package (one the
+        docs install under a product name), else the release a rolling docs
+        link landed on."""
+        draft = SourceSet.from_urls(urls, docs)
+        release, package = None, ""
+        if self.release_lookup is not None and not draft.target.pinned:
+            official_text = "\n".join(
+                p.text
+                for p in docs
+                if draft.classify(p.final_url or p.url).authority
+                in OFFICIAL_AUTHORITIES
+            )
+            products = {_normalized(p) for p in self._products}
+            for name, _ in install_requirements(official_text):
+                if _normalized(name) in products and (
+                    release := self.release_lookup(name)
+                ):
+                    package = name
+                    break
+        sources = SourceSet.from_urls(
+            urls, docs, package_release=release, repo_tags=self.repo_tags
+        ).with_repositories(docs)
+        target = sources.target
+        if target.release:
+            origin = (
+                "the requested docs URL"
+                if target.pinned
+                else f"the latest {package} release" if package else "the docs"
+            )
+            logger.info("Target version %s (%s).", target.release, origin)
+            self.notes.append(
+                f"Target version {target.release} ({origin}): docs and "
+                "repository pages at other versions are marked as another "
+                "version."
+            )
+        return sources
 
     def _record(self, pages: list[PageContent], kind: str) -> None:
         """Record ``pages`` (:meth:`SourceSet.record`) and log them."""
