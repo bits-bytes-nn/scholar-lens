@@ -216,3 +216,49 @@ def test_only_a_sections_own_figure_is_protected(
     )
     assert revision.taken is taken
     assert ("https://x/f.png" in revision.text) is not taken
+
+
+# ---- a section that ends mid-sentence ------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "cut",
+    [
+        "끝은 다음과 같",  # a Korean sentence cut off
+        "The batch is then sent to the",  # an English one
+        "그래서 이 설정은",
+    ],
+)
+@pytest.mark.parametrize("where", ["replace", "append"])
+def test_an_edit_that_leaves_the_section_mid_sentence_is_not_taken(
+    cut: str, where: str
+) -> None:
+    text = _section("첫 문장입니다.", "끝입니다.")
+    edit = (
+        ("끝입니다.", cut) if where == "replace" else ("끝입니다.", f"끝입니다. {cut}")
+    )
+    revision = transact(text, [edit], verifiers=no_checks(), max_prose_cut=CUT)
+    assert not revision.taken and revision.text == text
+    assert revision.rejected == "it stops mid-sentence"
+
+
+@pytest.mark.parametrize(
+    "ending",
+    [
+        "끝은 이렇습니다.",
+        "The batch is sent.",
+        "무엇일까요?",
+        "- 목록 항목",
+        TABLE,
+        CODE,
+    ],
+)
+def test_an_edit_that_leaves_a_complete_ending_is_taken(ending: str) -> None:
+    text = _section("첫 문장입니다.", "끝입니다.")
+    revision = transact(
+        text,
+        [("끝입니다.", "끝입니다.\n\n" + ending)],
+        verifiers=no_checks(),
+        max_prose_cut=CUT,
+    )
+    assert revision.taken and revision.text.rstrip().endswith(ending.rstrip())
