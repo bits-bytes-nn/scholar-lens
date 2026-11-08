@@ -621,3 +621,46 @@ def test_code_keeps_active_html_as_written() -> None:
     assert (
         "`<img src=x onerror=alert(1)>`" in out and "<script>alert(1)</script>" in out
     )
+
+
+@pytest.mark.parametrize(
+    "markdown, gone",
+    [
+        # A quoted ">" does not end the tag a browser reads.
+        ('<a href="x>" onmouseover="alert(1)">hi</a>', 'onmouseover="alert(1)">'),
+        ("<a href='x>' onmouseover='alert(1)'>hi</a>", "onmouseover='alert(1)'>"),
+        # kramdown attribute lists that set attributes.
+        ('[x](https://a.com){: onclick="alert(1)"}', '{: onclick="alert(1)"}'),
+        ('para\n{: onmouseover="alert(1)"}', "\n{: onmouseover"),
+        # Brackets in the link text, definitions in a quote or a list.
+        ("[a [b] c](javascript:alert(1))", "(javascript:"),
+        ("> [r]: javascript:alert(1)\n\n[x][r]", "]: javascript:"),
+        ("- [r]: javascript:alert(1)\n\n[x][r]", "]: javascript:"),
+        ("![x](javascript:alert(1))", "(javascript:"),
+    ],
+)
+def test_kramdown_bypasses_are_inert(markdown: str, gone: str) -> None:
+    import re
+
+    from scholar_lens.domain.markdown.lint import publish_body
+
+    out = publish_body(f"## A\n\n{markdown}\n", warn=False)
+    if gone.lstrip("\n").startswith("{:"):
+        # An attribute list that sets attributes is escaped: kramdown shows it.
+        assert not re.search(r"(?<!\\)\{:[^}\n]*=", out)
+    else:
+        assert gone not in out
+
+
+@pytest.mark.parametrize(
+    "markup",
+    [
+        '<img src="data:image/png;base64,iVBORw0KGgo=" alt="점">',
+        '<a href="tel:+82-2-0000-0000">전화</a>',
+        "표\n{: .wide #t1}",
+    ],
+)
+def test_safe_schemes_and_class_lists_stay(markup: str) -> None:
+    from scholar_lens.domain.markdown.lint import publish_body
+
+    assert markup in publish_body(f"## A\n\n{markup}\n", warn=False)

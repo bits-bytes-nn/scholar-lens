@@ -359,93 +359,129 @@ _ACTIVE_ATTRIBUTES = frozenset({"srcdoc", "formaction"})
 _URL_ATTRIBUTES = frozenset(
     "href src action data poster background cite xlink:href srcset".split()
 )
-_SAFE_SCHEMES = frozenset({"http", "https", "mailto"})
-# A tag a browser reads, line breaks between attributes included.
-_HTML_TAG = re.compile(r"</?[A-Za-z][^<>]*>")
+_SAFE_SCHEMES = frozenset({"http", "https", "mailto", "tel"})
 
 
 class _TagReader(HTMLParser):
+    """The start tags of a text as a browser reads them (quoted values may
+    hold ">"), with where each starts."""
+
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
-        self.tags: list[tuple[str, list[tuple[str, str | None]]]] = []
+        self.tags: list[
+            tuple[str, list[tuple[str, str | None]], tuple[int, int], str]
+        ] = []
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        self.tags.append((tag, attrs))
+        self.tags.append((tag, attrs, self.getpos(), self.get_starttag_text() or ""))
 
     def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        self.tags.append((tag, attrs))
-
-    def handle_endtag(self, tag: str) -> None:
-        self.tags.append((tag, []))
+        self.handle_starttag(tag, attrs)
 
 
 def safe_url(value: str) -> bool:
     """Whether a link target is one a post may carry: relative, an anchor,
-    or http(s)/mailto. Control characters and spaces a browser ignores are
-    ignored here too (``java\\tscript:``)."""
+    http(s), mailto, tel or an inline image (``data:image/``). Control
+    characters and spaces a browser ignores are ignored here too
+    (``java\\tscript:``)."""
     url = "".join(ch for ch in value if ch > " " and ch != "\x7f").lower()
-    scheme, colon, _ = url.partition(":")
+    scheme, colon, rest = url.partition(":")
     if not colon or any(ch in scheme for ch in "/?#"):
         return True  # relative or an anchor
-    return scheme in _SAFE_SCHEMES
+    return scheme in _SAFE_SCHEMES or (scheme == "data" and rest.startswith("image/"))
+
+
+def _active(name: str, attrs: list[tuple[str, str | None]]) -> bool:
+    if name in _ACTIVE_ELEMENTS:
+        return True
+    for attr, value in attrs:
+        if attr.startswith("on") or attr in _ACTIVE_ATTRIBUTES:
+            return True
+        if attr in _URL_ATTRIBUTES and value is not None:
+            urls = (
+                [u.strip().split(" ")[0] for u in value.split(",")]
+                if attr == "srcset"
+                else [value]
+            )
+            if not all(safe_url(u) for u in urls):
+                return True
+    return False
 
 
 def active_html(tag: str) -> bool:
     """Whether the HTML ``tag`` runs code or loads a document: an active
     element, an event handler or srcdoc attribute, or a URL attribute whose
     value is no safe URL (:func:`safe_url`)."""
+    return any(_active(name, attrs) for name, attrs, _, _ in _read_tags(tag))
+
+
+def _read_tags(
+    text: str,
+) -> list[tuple[str, list[tuple[str, str | None]], tuple[int, int], str]]:
     reader = _TagReader()
     try:
-        reader.feed(tag)
+        reader.feed(text)
         reader.close()
     except Exception:  # noqa: BLE001 - what a parser cannot read is no tag
-        return False
-    for name, attrs in reader.tags:
-        if name in _ACTIVE_ELEMENTS:
-            return True
-        for attr, value in attrs:
-            if attr.startswith("on") or attr in _ACTIVE_ATTRIBUTES:
-                return True
-            if attr in _URL_ATTRIBUTES and value is not None:
-                urls = (
-                    [u.strip().split(" ")[0] for u in value.split(",")]
-                    if attr == "srcset"
-                    else [value]
-                )
-                if not all(safe_url(u) for u in urls):
-                    return True
-    return False
+        return []
+    return reader.tags
 
 
-# A reference-style link definition ("[label]: target").
-_DEFINITION_LINE = re.compile(r"^([ ]{0,3}\[[^\]\n]+\]:[ \t]*)(<[^>\n]*>|\S+)", re.M)
+# A link or image destination ("](dest") and a link definition's target
+# ("]: dest"), wherever they sit: in a blockquote or list item too, and
+# after link text with brackets in it.
+_DESTINATION = re.compile(
+    r"\]\([ \t]*(?P<inline><[^>\n]*>|[^)\s]+)|\]:[ \t]*(?P<defined><[^>\n]*>|\S+)"
+)
+# A kramdown attribute list ("{: .class #id key=value}").
+_ATTRIBUTE_LIST = re.compile(r"\{:[^}\n]*\}")
 
 
 def escape_active_html(markdown: str) -> str:
-    """``markdown`` with every active HTML tag outside code and math shown
-    as text (``&lt;``) and every link definition with an unsafe target
-    pointed at nothing (``#``)."""
+    """``markdown`` without what would run code in a reader's browser,
+    outside code and math: an active HTML tag (read by a parser, as a
+    browser reads it) is shown as text, an unsafe link or image target
+    points nowhere (``#``), and a kramdown attribute list that sets an
+    attribute (``{: onclick=...}``) is shown as text; a list of classes and
+    ids stays."""
     regions = _classify_regions(markdown)
     protected = [(s, e) for s, e, k in regions if k in ("fence", "icode", *_MATH_KINDS)]
     in_code = indented_code_test(markdown)
 
-    def outside(start: int, end: int) -> bool:
-        return not any(s < end and start < e for s, e in protected) and not any(
-            in_code(i) for i in (start, end - 1)
+    def inside(start: int, end: int) -> bool:
+        return any(s < end and start < e for s, e in protected) or any(
+            in_code(i) for i in (start, max(start, end - 1))
         )
 
-    def tag(m: re.Match[str]) -> str:
-        if outside(m.start(), m.end()) and active_html(m.group(0)):
-            return m.group(0).replace("<", "&lt;").replace(">", "&gt;")
-        return m.group(0)
-
-    def definition(m: re.Match[str]) -> str:
-        target = m.group(2).strip("<>")
-        if outside(m.start(), m.end()) and not safe_url(target):
-            return f"{m.group(1)}#"
-        return m.group(0)
-
-    return _DEFINITION_LINE.sub(definition, _HTML_TAG.sub(tag, markdown))
+    edits: list[tuple[int, int, str]] = []
+    # Tags, read on the text with code and math blanked (positions kept).
+    blank = list(markdown)
+    for s, e in protected:
+        for i in range(s, e):
+            if blank[i] != "\n":
+                blank[i] = " "
+    line_starts = [0, *(i + 1 for i, ch in enumerate(markdown) if ch == "\n")]
+    for name, attrs, (line, col), text in _read_tags("".join(blank)):
+        start = line_starts[line - 1] + col
+        end = start + len(text)
+        if text and not inside(start, end) and _active(name, attrs):
+            edits.append((start, end, text.replace("<", "&lt;").replace(">", "&gt;")))
+    for m in _DESTINATION.finditer(markdown):
+        group = "inline" if m.group("inline") is not None else "defined"
+        target = m.group(group)
+        if not inside(m.start(), m.end()) and not safe_url(target.strip("<>")):
+            edits.append((m.start(group), m.end(group), "#"))
+    for m in _ATTRIBUTE_LIST.finditer(markdown):
+        if "=" in m.group(0) and not inside(m.start(), m.end()):
+            edits.append((m.start(), m.start() + 1, "\\{"))
+    out, pos = [], 0
+    for start, end, text in sorted(edits):
+        if start < pos:
+            continue  # inside an earlier edit
+        out += [markdown[pos:start], text]
+        pos = end
+    out.append(markdown[pos:])
+    return "".join(out)
 
 
 def _fills_its_lines(markdown: str, start: int, end: int) -> bool:
