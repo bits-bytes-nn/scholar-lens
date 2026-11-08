@@ -1193,3 +1193,141 @@ def test_a_survey_outline_states_each_marked_fact_once() -> None:
     )
     merged = with_canonical_evidence(outline, {"E2": "E1"})
     assert merged.sections[0].evidence == ["E1"]
+
+
+SECOND = "2310.12036"
+
+
+def _two_paper_plan(role: str = "supporting", first: str = "core") -> SurveyPlan:
+    """The survey with a second paper of the same lineage (``role``), the
+    first one's role ``first``."""
+    data = _plan().model_dump(mode="json")
+    data["papers"][0]["role"] = first
+    data["papers"].append(
+        {
+            **data["papers"][0],
+            "id": SECOND,
+            "title": "IPO",
+            "url": f"https://arxiv.org/abs/{SECOND}",
+            "role": role,
+        }
+    )
+    return SurveyPlan.model_validate(data)
+
+
+def _problems(outline: EvidenceOutline, plan: SurveyPlan | None = None, ledger=None):
+    return outline_problems(
+        outline, plan or _plan(), ledger or _ledger(), title_max_length=70
+    )
+
+
+def _sections(**lineage: Any) -> list[dict[str, Any]]:
+    """The valid outline's sections with the lineage section changed."""
+    sections = _outline().model_dump()["sections"]
+    sections[1].update(lineage)
+    return sections
+
+
+class TestOutlineRejections:
+    """One outline per problem branch of :func:`outline_problems`."""
+
+    def test_a_lineage_without_its_section_is_a_problem(self) -> None:
+        sections = _outline().model_dump()["sections"]
+        del sections[1]
+        problems = _problems(_outline(sections=sections))
+        assert any("needs exactly one lineage section" in p for p in problems)
+
+    def test_a_lineage_with_two_sections_is_a_problem(self) -> None:
+        sections = _outline().model_dump()["sections"]
+        twin = {**sections[1], "title": "DPO 다시 보기", "evidence": []}
+        sections.insert(2, twin)
+        problems = _problems(_outline(sections=sections))
+        assert any("needs exactly one lineage section" in p for p in problems)
+
+    def test_a_lineage_section_that_leaves_out_its_papers_is_a_problem(self) -> None:
+        problems = _problems(_outline(), _two_paper_plan())
+        assert any(f"leaves out ['{SECOND}']" in p for p in problems), problems
+
+    def test_a_core_paper_needs_two_pieces_of_evidence(self) -> None:
+        sections = _sections(evidence=["E4"])
+        sections[0]["evidence"] = []
+        problems = _problems(_outline(sections=sections))
+        assert any("needs at least 2 pieces" in p for p in problems), problems
+
+    def test_a_supporting_paper_needs_one_piece_of_evidence(self) -> None:
+        # The first paper is supporting here (the second, without evidence,
+        # is the survey's core paper).
+        plan = _two_paper_plan(role="core", first="supporting")
+        sections = _sections(evidence=["E4"], papers=["2305.18290", SECOND])
+        sections[0]["evidence"] = []
+        problems = _problems(_outline(sections=sections), plan)
+        assert not any("needs at least" in p for p in problems), problems
+        sections = _sections(evidence=[], papers=["2305.18290", SECOND])
+        sections[0]["evidence"] = []
+        problems = _problems(_outline(sections=sections), plan)
+        assert any("needs at least 1 pieces" in p for p in problems), problems
+
+    def test_a_table_row_citing_a_non_number_is_a_problem(self) -> None:
+        outline = _outline(
+            table=[{"paper": "2305.18290", "results": ["E1"], "limitation": "E3"}]
+        )
+        problems = _problems(outline)
+        assert any("E1 is not a number" in p for p in problems), problems
+
+    @pytest.mark.parametrize(
+        ("role", "flagged"), [("core", True), ("supporting", False)]
+    )
+    def test_a_core_papers_figure_must_be_given_to_a_section(
+        self, role: str, flagged: bool
+    ) -> None:
+        # The second paper, without evidence, keeps a core paper in the plan.
+        plan = _two_paper_plan(role="core", first=role)
+        sections = _sections(evidence=["E2"], papers=["2305.18290", SECOND])
+        problems = _problems(_outline(sections=sections), plan)
+        assert any("figure E4 is given to no section" in p for p in problems) is (
+            flagged
+        ), problems
+
+    def test_a_supporting_paper_with_numbers_needs_a_table_row(self) -> None:
+        ledger = _ledger()
+        ledger.add(
+            _doc(SECOND),
+            kind="number",
+            claim="PPO 대비 승률 61%",
+            quote="DPO reaches a 61% win rate against PPO",
+            anchor="S3",
+            scope="TL;DR, GPT-4 judge",
+            cell="승률 61%",
+        )
+        problems = _problems(_outline(), _two_paper_plan(), ledger)
+        assert any(f"the table misses ['{SECOND}']" in p for p in problems), problems
+
+    def test_a_core_paper_without_numbers_still_needs_a_table_row(self) -> None:
+        problems = _problems(_outline(), _two_paper_plan(role="core"))
+        assert any(f"the table misses ['{SECOND}']" in p for p in problems), problems
+
+
+class TestTableEvidenceRewrites:
+    def test_duplicates_are_replaced_by_the_id_that_keeps_the_fact(self) -> None:
+        from scholar_lens.domain.survey.evidence_post import with_canonical_table
+
+        outline = _outline(
+            table=[{"paper": "2305.18290", "results": ["E7", "E2"], "limitation": "E8"}]
+        )
+        fixed = with_canonical_table(outline, {"E7": "E2", "E8": "E3"})
+        assert fixed.table[0].results == ["E2"]
+        assert fixed.table[0].limitation == "E3"
+        assert outline.table[0].results == ["E7", "E2"]  # the input is kept
+
+    def test_wrong_evidence_is_removed_from_the_table(self) -> None:
+        from scholar_lens.domain.survey.evidence_post import without_table_evidence
+
+        outline = _outline(
+            table=[{"paper": "2305.18290", "results": ["E2", "E5"], "limitation": "E3"}]
+        )
+        fixed = without_table_evidence(outline, {"E5", "E3"})
+        assert fixed.table[0].results == ["E2"]
+        assert fixed.table[0].limitation is None
+        kept = without_table_evidence(outline, {"E9"})
+        assert kept.table[0].results == ["E2", "E5"]
+        assert kept.table[0].limitation == "E3"
