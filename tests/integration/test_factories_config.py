@@ -15,7 +15,7 @@ from scholar_lens.adapters.bedrock.chat_models import (
 )
 from scholar_lens.domain.constants import LanguageModelId
 from scholar_lens.domain.model_registry import _LANGUAGE_MODEL_INFO
-from scholar_lens.legacy import embeddings as embeddings_module
+from scholar_lens.sections_engine import embeddings as embeddings_module
 
 
 @pytest.fixture(autouse=True)
@@ -504,7 +504,7 @@ async def test_the_code_index_ranks_the_closest_chunk_first() -> None:
     from langchain_core.documents import Document
     from langchain_core.embeddings import Embeddings
 
-    from scholar_lens.legacy.code_index import CodeIndex
+    from scholar_lens.sections_engine.code_index import CodeIndex
 
     words = ("cache", "queue", "token")
 

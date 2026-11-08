@@ -20,7 +20,7 @@ from scholar_lens.domain.paper.models import Content
 from scholar_lens.domain.prompt_safety import neutralize_prompt_tags
 from scholar_lens.domain.usage import TokenBudgetExceeded
 from scholar_lens.domain.usage_context import staged
-from scholar_lens.legacy.prompts.extraction import CitationSummaryPrompt
+from scholar_lens.sections_engine.prompts.extraction import CitationSummaryPrompt
 
 logger = logging.getLogger(__name__)
 

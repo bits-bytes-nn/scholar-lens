@@ -88,16 +88,16 @@ from scholar_lens.domain.validation import (
     paper_page_title,
     unsourced_numbers,
 )
-from scholar_lens.legacy.citation_summarizer import CitationSummarizer
-from scholar_lens.legacy.code_index import CodeIndex
-from scholar_lens.legacy.prompts.review import (
+from scholar_lens.sections_engine.citation_summarizer import CitationSummarizer
+from scholar_lens.sections_engine.code_index import CodeIndex
+from scholar_lens.sections_engine.prompts.review import (
     PaperEditPrompt,
     PaperFinalizationPrompt,
     PaperPlanningPrompt,
     PaperSectionCheckPrompt,
     PaperSectionPrompt,
 )
-from scholar_lens.legacy.timing import measure_execution_time
+from scholar_lens.sections_engine.timing import measure_execution_time
 
 logger = logging.getLogger(__name__)
 

@@ -108,9 +108,9 @@ disable_error_code = ["call-overload", "misc"]
 
 # Dependency rules of the layers (docs/engine.md, 5.1): the domain is pure,
 # the application depends on the domain, the adapters on the domain and the
-# application's ports, the legacy sections engine is wired by the composition
+# application's ports, the sections engine is wired by the composition
 # root only, and only the entrypoints and the composition root read the
-# configuration. Third-party SDKs are imported by the adapters and the legacy
+# configuration. Third-party SDKs are imported by the adapters and the sections
 # engine only.
 [tool.importlinter]
 root_package = "scholar_lens"
@@ -123,7 +123,7 @@ source_modules = ["scholar_lens.domain"]
 forbidden_modules = [
     "scholar_lens.application",
     "scholar_lens.adapters",
-    "scholar_lens.legacy",
+    "scholar_lens.sections_engine",
     "scholar_lens.configs",
     "scholar_lens.bootstrap",
     "scholar_lens.entrypoints",
@@ -142,7 +142,7 @@ type = "forbidden"
 source_modules = ["scholar_lens.application"]
 forbidden_modules = [
     "scholar_lens.adapters",
-    "scholar_lens.legacy",
+    "scholar_lens.sections_engine",
     "scholar_lens.configs",
     "scholar_lens.bootstrap",
     "scholar_lens.entrypoints",
@@ -168,7 +168,7 @@ forbidden_modules = [
     "scholar_lens.application.run",
     "scholar_lens.application.survey_engine",
     "scholar_lens.application.use_cases",
-    "scholar_lens.legacy",
+    "scholar_lens.sections_engine",
     "scholar_lens.configs",
     "scholar_lens.bootstrap",
     "scholar_lens.entrypoints",
@@ -176,9 +176,9 @@ forbidden_modules = [
 ]
 
 [[tool.importlinter.contracts]]
-name = "The legacy engine imports the domain, the ports and the adapters only"
+name = "The sections engine imports the domain, the ports and the adapters only"
 type = "forbidden"
-source_modules = ["scholar_lens.legacy"]
+source_modules = ["scholar_lens.sections_engine"]
 forbidden_modules = [
     "scholar_lens.application.checkpoints",
     "scholar_lens.application.evidence_writer",
@@ -195,7 +195,7 @@ forbidden_modules = [
 ]
 
 [[tool.importlinter.contracts]]
-name = "Only the composition root imports the legacy engine"
+name = "Only the composition root imports the sections engine"
 type = "forbidden"
 source_modules = [
     "scholar_lens.domain",
@@ -205,8 +205,8 @@ source_modules = [
     "scholar_lens.entrypoints",
     "scholar_lens.cli",
 ]
-forbidden_modules = ["scholar_lens.legacy"]
-# The entrypoints reach the legacy engine through the composition root.
+forbidden_modules = ["scholar_lens.sections_engine"]
+# The entrypoints reach the sections engine through the composition root.
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
@@ -216,12 +216,12 @@ source_modules = [
     "scholar_lens.domain",
     "scholar_lens.application",
     "scholar_lens.adapters",
-    "scholar_lens.legacy",
+    "scholar_lens.sections_engine",
 ]
 forbidden_modules = ["scholar_lens.configs"]
 
 [[tool.importlinter.contracts]]
-name = "Only the adapters and the legacy engine import the SDKs"
+name = "Only the adapters and the sections engine import the SDKs"
 type = "forbidden"
 source_modules = [
     "scholar_lens.domain",
@@ -255,10 +255,10 @@ forbidden_modules = ["scholar_lens.domain.review_plan"]
 [[tool.importlinter.contracts]]
 name = "The draft checks are independent of every writer"
 type = "forbidden"
-source_modules = ["scholar_lens.legacy.section_loop"]
+source_modules = ["scholar_lens.sections_engine.section_loop"]
 forbidden_modules = [
-    "scholar_lens.legacy.explainer",
-    "scholar_lens.legacy.summarizer",
+    "scholar_lens.sections_engine.explainer",
+    "scholar_lens.sections_engine.summarizer",
     "scholar_lens.adapters.web.guide_research",
     "scholar_lens.application.use_cases",
 ]
@@ -277,6 +277,6 @@ forbidden_modules = [
     "scholar_lens.application.use_cases.guide",
     "scholar_lens.application.use_cases.paper",
     "scholar_lens.adapters.web.guide_research",
-    "scholar_lens.legacy",
+    "scholar_lens.sections_engine",
 ]
 allow_indirect_imports = true

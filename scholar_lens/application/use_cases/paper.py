@@ -2,7 +2,7 @@
 publish.
 
 The writer is the evidence engine (``explanation.engine: evidence``,
-``summary.engine: evidence``) or the legacy sections engine, behind the same
+``summary.engine: evidence``) or the sections engine, behind the same
 ports: the parsed paper (text with figure markers) and its official code
 summary become source documents; the engine reads, plans and writes; the
 result takes the shapes the formatter publishes (``ReviewText``, the

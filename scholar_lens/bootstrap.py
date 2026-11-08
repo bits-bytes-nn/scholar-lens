@@ -17,9 +17,9 @@ from typing import Any, Literal, cast
 # Every prompt template registers its fences before a run reads untrusted
 # text (domain.prompt_safety); the sections engine's templates included.
 import scholar_lens.adapters.bedrock.prompts  # noqa: F401
-import scholar_lens.legacy.prompts.extraction  # noqa: F401
-import scholar_lens.legacy.prompts.review  # noqa: F401
-import scholar_lens.legacy.prompts.summary  # noqa: F401
+import scholar_lens.sections_engine.prompts.extraction  # noqa: F401
+import scholar_lens.sections_engine.prompts.review  # noqa: F401
+import scholar_lens.sections_engine.prompts.summary  # noqa: F401
 from scholar_lens.adapters.aws.batch import BatchJobs
 from scholar_lens.adapters.aws.billing import CostExplorerBilling
 from scholar_lens.adapters.aws.environment import is_running_in_aws
@@ -86,7 +86,7 @@ from scholar_lens.domain.jobs import JobRequest
 from scholar_lens.domain.paper.models import Paper
 from scholar_lens.domain.post_names import slugify
 from scholar_lens.domain.specs.paper import SUMMARY_MAX_SECTIONS
-from scholar_lens.legacy import writers as legacy_writers
+from scholar_lens.sections_engine import writers as sections_writers
 
 logger = logging.getLogger(__name__)
 
@@ -363,7 +363,7 @@ class GuideToolkit:
 class PaperToolkit:
     """The paper use case's :class:`~scholar_lens.application.ports.PaperTools`:
     the paper's sources and parsers, the evidence engine on Bedrock and the
-    legacy sections engine."""
+    sections engine."""
 
     def __init__(self, context: AwsRunContext) -> None:
         self.context = context
@@ -410,10 +410,10 @@ class PaperToolkit:
             tracker,
             inputs=inputs,
             index_factory=functools.partial(
-                legacy_writers.code_index, self.config.code, session
+                sections_writers.code_index, self.config.code, session
             ),
             citations_factory=functools.partial(
-                legacy_writers.citation_summarizer, self.config.citations, session
+                sections_writers.citation_summarizer, self.config.citations, session
             ),
         )
 
@@ -467,8 +467,8 @@ class PaperToolkit:
             fresh=fresh,
         )
 
-    def sections(self) -> legacy_writers.SectionsPaperWriter:
-        return legacy_writers.SectionsPaperWriter(
+    def sections(self) -> sections_writers.SectionsPaperWriter:
+        return sections_writers.SectionsPaperWriter(
             explanation=self.config.explanation,
             summary=self.config.summary,
             language=self.config.output_language,

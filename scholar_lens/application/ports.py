@@ -482,7 +482,7 @@ class PaperWriting:
 
 
 class SectionsWriter(Protocol):
-    """The legacy sections engine's review and summary writers. ``material``
+    """The sections engine's review and summary writers. ``material``
     is what :meth:`PaperTools.read` returned besides the paper (the
     citation summarizer and code index)."""
 

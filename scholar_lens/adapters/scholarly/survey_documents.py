@@ -1,4 +1,4 @@
-"""The evidence engine's paper texts and cache, on the legacy fetchers.
+"""The evidence engine's paper texts and cache, on the paper fetchers.
 
 A paper is read as completely as it can be had: its arXiv HTML rendering
 (sections, LaTeX, figures), else its PDF (arXiv, or the open-access copy

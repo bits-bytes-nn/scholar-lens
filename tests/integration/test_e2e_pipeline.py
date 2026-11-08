@@ -31,7 +31,7 @@ from scholar_lens.domain.guide.models import TechGuide
 from scholar_lens.domain.jobs import JobRequest
 from scholar_lens.domain.paper.models import Attributes, Content, Figure, Paper
 from scholar_lens.domain.validation import PostValidationError, validate_post
-from scholar_lens.legacy import writers as legacy_writers
+from scholar_lens.sections_engine import writers as sections_writers
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 64
 ARXIV_FIGURE = "https://arxiv.org/html/2106.09685v2/x1.png"
@@ -148,7 +148,7 @@ class TestSummaryEndToEnd:
             paper_reader, "prepare_paper_data", _fake_paper_data(_paper())
         )
         monkeypatch.setattr(
-            legacy_writers, "PaperSummarizer", _fake_summarizer(SUMMARY_FROM_MODEL)
+            sections_writers, "PaperSummarizer", _fake_summarizer(SUMMARY_FROM_MODEL)
         )
 
         outcome = await bootstrap.run_use_case(
@@ -187,7 +187,7 @@ class TestSummaryEndToEnd:
         )
         monkeypatch.setattr(paper_reader, "prepare_paper_data", _fake_paper_data(paper))
         monkeypatch.setattr(
-            legacy_writers, "PaperSummarizer", _fake_summarizer(SUMMARY_FROM_MODEL)
+            sections_writers, "PaperSummarizer", _fake_summarizer(SUMMARY_FROM_MODEL)
         )
 
         with pytest.raises(PostValidationError) as info:
@@ -308,7 +308,7 @@ class TestReviewEndToEnd:
             return _paper(), None, MagicMock()
 
         monkeypatch.setattr(paper_reader, "prepare_paper_data", prepare)
-        monkeypatch.setattr(legacy_writers, "PaperReviewer", FakeReviewer)
+        monkeypatch.setattr(sections_writers, "PaperReviewer", FakeReviewer)
 
         outcome = await bootstrap.run_use_case(
             context, JobRequest(kind="review", source="2106.09685"), TokenUsageTracker()
@@ -379,7 +379,7 @@ async def test_tags_the_paper_never_mentions_become_pr_notes(
     paper = _paper(keywords=["Low-Rank Adaptation", "Direct Preference Optimization"])
     monkeypatch.setattr(paper_reader, "prepare_paper_data", _fake_paper_data(paper))
     monkeypatch.setattr(
-        legacy_writers, "PaperSummarizer", _fake_summarizer(SUMMARY_FROM_MODEL)
+        sections_writers, "PaperSummarizer", _fake_summarizer(SUMMARY_FROM_MODEL)
     )
     captured: list = []
     real = runtime.publish_artifact
@@ -410,7 +410,7 @@ async def test_degraded_output_reaches_pr_notes_and_job_warnings(
             super().__init__(*args, **kwargs)
             self.notes = ["Summary is still long (4,000 Hangul characters)."]
 
-    monkeypatch.setattr(legacy_writers, "PaperSummarizer", NotingSummarizer)
+    monkeypatch.setattr(sections_writers, "PaperSummarizer", NotingSummarizer)
     captured: list = []
     real = runtime.publish_artifact
 
@@ -439,7 +439,7 @@ async def test_only_the_papers_own_figures_reach_the_publisher(
     )
     assert invented in output and local in output
     monkeypatch.setattr(paper_reader, "prepare_paper_data", _fake_paper_data(_paper()))
-    monkeypatch.setattr(legacy_writers, "PaperSummarizer", _fake_summarizer(output))
+    monkeypatch.setattr(sections_writers, "PaperSummarizer", _fake_summarizer(output))
     captured: list = []
     real = runtime.publish_artifact
 
@@ -471,7 +471,7 @@ async def test_only_links_to_the_papers_sources_reach_the_post(
         "[블로그](https://blog.example.org/lora)를 참고합니다.\n\n아래 그림은",
     )
     monkeypatch.setattr(paper_reader, "prepare_paper_data", _fake_paper_data(_paper()))
-    monkeypatch.setattr(legacy_writers, "PaperSummarizer", _fake_summarizer(output))
+    monkeypatch.setattr(sections_writers, "PaperSummarizer", _fake_summarizer(output))
     outcome = await bootstrap.run_use_case(
         context, JobRequest(kind="summarize", source="2106.09685"), TokenUsageTracker()
     )

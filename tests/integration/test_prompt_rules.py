@@ -25,14 +25,14 @@ from scholar_lens.domain.prompts.rules import (
     TABLE_SIZE_RULE,
     TERMINOLOGY_RULES,
 )
-from scholar_lens.legacy.prompts.review import (
+from scholar_lens.sections_engine.prompts.review import (
     PaperEditPrompt,
     PaperFinalizationPrompt,
     PaperPlanningPrompt,
     PaperSectionCheckPrompt,
     PaperSectionPrompt,
 )
-from scholar_lens.legacy.prompts.summary import (
+from scholar_lens.sections_engine.prompts.summary import (
     PaperSummaryPrompt,
     PaperSummaryShortenPrompt,
 )
@@ -279,7 +279,7 @@ def test_guide_taxonomy_returns_a_description() -> None:
 _ROOT = Path(__file__).resolve().parents[2]
 _PROMPT_DIRS = (
     "scholar_lens/domain/prompts",
-    "scholar_lens/legacy/prompts",
+    "scholar_lens/sections_engine/prompts",
     "scholar_lens/adapters/bedrock/prompts",
 )
 

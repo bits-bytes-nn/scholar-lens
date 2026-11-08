@@ -189,15 +189,16 @@ PostSpec ──┐            SourceSet ──┐
 | domain | `scholar_lens/domain` | 근거·개요·명세, 검증기 중 코드 판정, 편집 트랜잭션, Markdown, 블로그 규칙 | 표준 라이브러리, pydantic |
 | application | `scholar_lens/application` | `PostEngine`, 유스케이스(생성, 발행, 재개, 상태, 비용), 포트 | domain |
 | adapters | `scholar_lens/adapters` | Bedrock·Strands, 웹 수집·검색, 학술 색인·문서, 패키지 색인, S3, GitHub, Batch | domain, application의 포트 |
+| sections_engine | `scholar_lens/sections_engine` | 리뷰·요약의 sections 엔진(계획, 절 집필·검수, 편집, 마무리), `SectionsWriter` 포트 구현 | domain, application의 포트, adapters |
 | entrypoints | `scholar_lens/cli.py`, worker, `bootstrap` | 인자 해석, 설정 로드, 의존성 조립 | 모두 |
 
 - **포트**(`scholar_lens/application/ports.py`):
   - 공통: `LanguageModel`, `EvidenceModels`, `UsageTracker`, `TextStore`, `CheckpointStore`, `ObjectStore`, `Files`(로컬 경로와 `s3://` 위치의 파일. 유스케이스는 파일을 이 포트로만 읽고 씁니다), `BlogSource`, `PostPublisher`, `FigureCheck`, `RunLedger`, `JobQueue`, `BilledCosts`
   - 설정: `RunSettings`, `ResourceSettings`, `GithubSettings`
   - 가이드: `WebResearch`(수집·검색), `GuideResearch`, `PackageIndex`, `GuideTools`
-  - 리뷰·요약: `PaperOrigin`(arXiv ID·PDF URL), `SectionsWriter`(이전 엔진), `PaperTools`
+  - 리뷰·요약: `PaperOrigin`(arXiv ID·PDF URL), `SectionsWriter`(sections 엔진), `PaperTools`
   - 서베이: `DocumentSource`, `SurveyDocuments`, `SurveyPlanning`, `CandidateSearch`, `PlanIndex`, `ReferenceReader`, `SurveyFinalizer`, `SurveyPlanTools`, `SurveyWriteTools`
-- **이전 엔진**: `scholar_lens/legacy`에 모여 있고, 8장 E9의 삭제 기준을 기다립니다. `scholar_lens/src`는 해체했습니다(8장 E8).
+- **sections 엔진**: 리뷰·요약의 두 엔진 중 하나로 `scholar_lens/sections_engine`에 있습니다(ADR 0004). 설정의 `engine` 값으로 근거 장부 엔진과 고릅니다. `scholar_lens/src`는 해체했습니다(8장 E8).
 - **계층 계약**: import-linter로 고정합니다. 엔트리포인트 외에는 설정 모듈(`configs`)을 읽지 않고, 설정은 생성자 인자로 받습니다.
 
 ### 5.2 AWS Well-Architected
@@ -224,7 +225,7 @@ PostSpec ──┐            SourceSet ──┐
 - **문서**:
   - `docs/design.md`: 현재 구조로 다시 씀
   - 이 문서: 엔진과 아키텍처 정본
-  - `docs/adr/`: 결정 이력(엔진 통합, 평가 절차, 이전 엔진 삭제)
+  - `docs/adr/`: 결정 이력(엔진 통합, 평가 절차, 리뷰·요약의 두 엔진)
   - README: 사용법과 운영 절차
 
 ## 7. 과적합 방지와 평가
@@ -245,4 +246,4 @@ E1–E8은 끝났고, 단계마다 전체 테스트가 통과한 상태로 커�
 - **E6 완료**(cc5e971): Checkpoint 저장소, 재개, `publish` 명령
 - **E7 완료**(e217c65, a00f258): SourceSet(신뢰도·버전·날짜 한곳에서), 검색 순위·상한, 수집 자료 저장본
 - **E8 완료**: `src` 해체(4628866, 6ec2b4e, 3e28643, 8d9a7ed), 계층 계약 강화(64ea1dc), 테스트 디렉터리 분리(474fcc9), CI 보강(3abb160), 문서(4fb9609)
-- **E9 평가 완료, 삭제 보류**(0757957): 7장 절차의 평가에서 리뷰·요약의 근거 장부 엔진이 기준선에 미치지 못해, `legacy/`와 전용 설정을 유지합니다(ADR 0003, `docs/redesign.md` 7.8절). 삭제 기준은 그대로입니다. 리뷰·요약에서 근거 장부 엔진이 기준선 이상이면 `legacy/`와 전용 설정을 지웁니다.
+- **E9 평가 완료, 두 엔진 유지**(0757957): 7장 절차의 평가에서 리뷰·요약의 근거 장부 엔진이 기준선에 미치지 못해 기본값은 `sections`로 둡니다(ADR 0003, `docs/redesign.md` 7.8절). 두 엔진은 지우지 않고 대등한 선택지로 둡니다(ADR 0004). 기본값은 같은 평가 절차의 결과로만 바꿉니다.

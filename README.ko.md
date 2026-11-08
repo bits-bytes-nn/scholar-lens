@@ -167,6 +167,7 @@ actionlint                                       # GitHub 워크플로 검사
 
 ## 변경 이력
 
+- 2026-11-09: 리뷰·요약은 대등한 두 엔진을 씁니다(ADR 0004). `explanation.engine`, `summary.engine`이 `sections`(기본값)와 `evidence` 중 하나를 고르며, 어느 쪽도 지울 예정이 없습니다. sections 엔진은 `scholar_lens/legacy`에서 `scholar_lens/sections_engine`으로 옮겼습니다. 명령, 설정, 출력은 그대로입니다.
 - 2026-11-08: 코드를 계층으로 나눴습니다(docs/engine.md 5.1). `domain`(순수 코드), `application`(엔진, 명령마다 하나인 유스케이스, 포트), `adapters`(AWS, Bedrock, 웹, 학술 색인, 문서, GitHub, PyPI), `legacy`(sections 엔진), 엔트리포인트(`cli.py`, `entrypoints/`, 조립 지점 `bootstrap.py`)입니다. `scholar_lens/src`는 없어졌고 import-linter가 계층을 확인합니다. 테스트는 `tests/unit`과 `tests/integration`으로 나눴습니다. 명령, 작업 JSON, 출력은 그대로입니다.
 - 2026-11-08: 근거 장부 엔진이 모든 단계(핵심 대상, 개요, 절, 글 전체 검토 결과, TL;DR, 마무리 문구)를 입력 해시로 저장하고, 같은 입력의 재실행은 Batch 재시도를 포함해 저장한 단계부터 이어 갑니다. `--fresh`는 모두 새로 계산합니다. `publish <markdown_path|s3_uri>`는 저장했거나 거절된(고친) 글을 다시 검사해 실행의 브랜치에서 PR을 엽니다. 이를 위해 모든 실행이 글 옆에 게시 요청을 저장합니다.
 - 2026-11-08: 가이드를 제품 자체 코드와 대조합니다. 공식 문서가 설치하는 패키지를 PyPI에서 받아 실행하지 않고 읽어 색인하고, 가이드 코드의 import 경로·이름·키워드 인자가 그 안에 있어야 하며, 절이 쓰는 정의가 사실 확인에서 기본값·시그니처·반환값을 정합니다. 가이드의 절은 가르칠 기능(`topics`)을 하나씩 맡고, 다른 SDK 언어의 근거는 개요에서 빠지며, 범위·SDK 한정자는 사실과 함께 써야 합니다. 가이드 기본값은 최대 11절, 25,000–45,000자입니다.

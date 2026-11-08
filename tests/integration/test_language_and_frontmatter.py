@@ -19,7 +19,7 @@ from scholar_lens.domain.post_format import (
     paper_post_meta,
 )
 from scholar_lens.domain.validation import validate_post
-from scholar_lens.legacy.prompts.review import (
+from scholar_lens.sections_engine.prompts.review import (
     PaperEditPrompt,
     PaperFinalizationPrompt,
     PaperPlanningPrompt,

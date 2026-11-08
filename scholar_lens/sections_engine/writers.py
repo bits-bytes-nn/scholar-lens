@@ -18,10 +18,10 @@ import boto3
 from scholar_lens.application.ports import UsageTracker
 from scholar_lens.domain.constants import EmbeddingModelId, LanguageModelId
 from scholar_lens.domain.paper.models import Paper, ReviewText
-from scholar_lens.legacy.citation_summarizer import CitationSummarizer
-from scholar_lens.legacy.code_index import CodeIndex
-from scholar_lens.legacy.explainer import PaperReviewer
-from scholar_lens.legacy.summarizer import PaperSummarizer
+from scholar_lens.sections_engine.citation_summarizer import CitationSummarizer
+from scholar_lens.sections_engine.code_index import CodeIndex
+from scholar_lens.sections_engine.explainer import PaperReviewer
+from scholar_lens.sections_engine.summarizer import PaperSummarizer
 
 logger = logging.getLogger(__name__)
 

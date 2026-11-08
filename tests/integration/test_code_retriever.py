@@ -88,7 +88,7 @@ class TestPythonFiles:
         assert len(python_files(repo, max_files=2)) == 2
 
     async def test_chunks_are_capped(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
-        from scholar_lens.legacy.code_index import CodeIndex
+        from scholar_lens.sections_engine.code_index import CodeIndex
 
         repo = tmp_path / "r"
         (repo / "pkg").mkdir(parents=True)
@@ -240,7 +240,7 @@ class TestOwnPackageIsIndexed:
         assert any(p.name == "lora.py" for p in python_files(repo))
 
 
-# ---- the legacy embeddings and in-memory code index ------------------------------
+# ---- the sections engine's embeddings and in-memory code index ---------------
 
 
 class _EmbeddingClient:
@@ -279,7 +279,7 @@ class _WrapperFactory:
         self.max_sequence_length = max_sequence_length
 
     def get_model(self, model_id: object, **_: object) -> object:
-        from scholar_lens.legacy.embeddings import BedrockEmbeddingsWrapper
+        from scholar_lens.sections_engine.embeddings import BedrockEmbeddingsWrapper
 
         return BedrockEmbeddingsWrapper(
             client=self.client,
@@ -292,7 +292,7 @@ class _WrapperFactory:
 
 
 def _index(tmp_path, client: _EmbeddingClient, max_sequence_length: int = 8192):  # type: ignore[no-untyped-def]
-    from scholar_lens.legacy.code_index import CodeIndex
+    from scholar_lens.sections_engine.code_index import CodeIndex
 
     model = LanguageModelId.CLAUDE_V4_5_HAIKU
     return CodeIndex(
@@ -322,7 +322,7 @@ class TestCodeIndex:
     async def test_a_throttled_embedding_call_is_retried(
         self, tmp_path, monkeypatch: pytest.MonkeyPatch
     ) -> None:  # type: ignore[no-untyped-def]
-        from scholar_lens.legacy.code_index import CodeIndex
+        from scholar_lens.sections_engine.code_index import CodeIndex
 
         waits: list[float] = []
 
@@ -344,7 +344,7 @@ class TestCodeIndex:
     async def test_more_chunks_than_a_batch_are_all_indexed_and_findable(
         self, tmp_path
     ) -> None:  # type: ignore[no-untyped-def]
-        from scholar_lens.legacy.code_index import EMBEDDING_BATCH_SIZE
+        from scholar_lens.sections_engine.code_index import EMBEDDING_BATCH_SIZE
 
         count = 2 * EMBEDDING_BATCH_SIZE + 37
         client = _EmbeddingClient()

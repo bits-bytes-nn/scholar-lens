@@ -29,9 +29,9 @@ from scholar_lens.adapters.retry import RetryableBase
 from scholar_lens.domain.constants import EmbeddingModelId, LanguageModelId
 from scholar_lens.domain.prompt_safety import neutralize_prompt_tags
 from scholar_lens.domain.usage_context import staged
-from scholar_lens.legacy.batch import BatchProcessor
-from scholar_lens.legacy.embeddings import BedrockEmbeddingModelFactory
-from scholar_lens.legacy.prompts.extraction import CodeAnalysisPrompt
+from scholar_lens.sections_engine.batch import BatchProcessor
+from scholar_lens.sections_engine.embeddings import BedrockEmbeddingModelFactory
+from scholar_lens.sections_engine.prompts.extraction import CodeAnalysisPrompt
 
 logger = logging.getLogger(__name__)
 

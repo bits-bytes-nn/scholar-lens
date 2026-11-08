@@ -23,7 +23,7 @@ from scholar_lens.domain.research import (
     ResearchCorpus,
     source_label,
 )
-from scholar_lens.legacy.section_loop import lost_structure
+from scholar_lens.sections_engine.section_loop import lost_structure
 from tests.integration.fakes import FakeLLMFactory
 
 
@@ -352,7 +352,7 @@ class TestResearchPlanning:
 
 class TestProseChars:
     def test_tables_and_images_are_not_prose(self) -> None:
-        from scholar_lens.legacy.section_loop import prose_chars
+        from scholar_lens.sections_engine.section_loop import prose_chars
 
         md = (
             "## 제목\n\n"
@@ -379,7 +379,7 @@ class TestProseChars:
     def test_quoted_tables_linked_images_and_text_beside_images(
         self, markdown: str, prose: str
     ) -> None:
-        from scholar_lens.legacy.section_loop import prose_chars
+        from scholar_lens.sections_engine.section_loop import prose_chars
 
         assert prose_chars("본문 " + "\n" + markdown) == len(f"본문 {prose}".strip())
 
@@ -783,7 +783,7 @@ def test_a_fix_may_correct_structure_in_place() -> None:
 
 
 def test_a_targeted_fix_may_not_drop_a_code_block() -> None:
-    from scholar_lens.legacy.section_loop import lost_structure
+    from scholar_lens.sections_engine.section_loop import lost_structure
 
     draft = "## S\n\nText.\n\n```bash\nvllm serve m --bad-flag\n```\n\nMore text."
     assert lost_structure(draft, "## S\n\nText.\n\nMore text.") == "loses a code block"

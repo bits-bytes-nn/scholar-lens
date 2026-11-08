@@ -39,14 +39,14 @@ from scholar_lens.domain.validation import (
     paper_page_title,
     unsourced_numbers,
 )
-from scholar_lens.legacy.explainer import NO_CODEBASE
-from scholar_lens.legacy.prompts.summary import (
+from scholar_lens.sections_engine.explainer import NO_CODEBASE
+from scholar_lens.sections_engine.prompts.summary import (
     PaperSummaryFixPrompt,
     PaperSummaryPrompt,
     PaperSummaryShortenPrompt,
 )
-from scholar_lens.legacy.section_loop import TARGETED_FIX, lost_structure
-from scholar_lens.legacy.timing import measure_execution_time
+from scholar_lens.sections_engine.section_loop import TARGETED_FIX, lost_structure
+from scholar_lens.sections_engine.timing import measure_execution_time
 
 logger = logging.getLogger(__name__)
 

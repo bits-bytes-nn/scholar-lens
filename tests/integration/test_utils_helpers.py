@@ -8,7 +8,7 @@ import pytest
 
 from scholar_lens.adapters.bedrock.output_parsers import HTMLTagOutputParser
 from scholar_lens.adapters.documents.html import extract_text_from_html
-from scholar_lens.legacy.timing import measure_execution_time
+from scholar_lens.sections_engine.timing import measure_execution_time
 
 
 class TestExtractTextFromHtml:

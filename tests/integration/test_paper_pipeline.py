@@ -51,8 +51,8 @@ def test_unanalysed_figures_are_noted() -> None:
 
 
 def test_unsourced_citations_reach_the_review_notes() -> None:
-    from scholar_lens.legacy.citation_summarizer import CitationSummarizer
-    from scholar_lens.legacy.writers import _citation_notes
+    from scholar_lens.sections_engine.citation_summarizer import CitationSummarizer
+    from scholar_lens.sections_engine.writers import _citation_notes
 
     summarizer = CitationSummarizer(
         LanguageModelId.CLAUDE_V4_5_HAIKU,
@@ -280,7 +280,7 @@ async def test_the_sections_writers_get_the_configured_caps(  # type: ignore[no-
     from scholar_lens.adapters.bedrock.usage import TokenUsageTracker
     from scholar_lens.configs import Config
     from scholar_lens.domain.paper.models import ReviewText
-    from scholar_lens.legacy import writers
+    from scholar_lens.sections_engine import writers
 
     given: dict[str, dict] = {}
 

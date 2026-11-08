@@ -1,5 +1,5 @@
 """The unit tests run on the domain, the application and fake ports only
-(docs/engine.md, 6): no unit test module imports an adapter, the legacy
+(docs/engine.md, 6): no unit test module imports an adapter, the sections
 engine, the configuration or an entrypoint, directly or through a shared
 test module (``tests.fakes``, another test file)."""
 
@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 UNIT = ROOT / "tests" / "unit"
 FORBIDDEN = (
     "scholar_lens.adapters",
-    "scholar_lens.legacy",
+    "scholar_lens.sections_engine",
     "scholar_lens.configs",
     "scholar_lens.bootstrap",
     "scholar_lens.entrypoints",

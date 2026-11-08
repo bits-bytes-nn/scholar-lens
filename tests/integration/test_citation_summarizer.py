@@ -12,7 +12,7 @@ import pytest
 from scholar_lens.adapters.scholarly.arxiv import ArxivMetadata
 from scholar_lens.adapters.scholarly.metadata import ReferenceMetadata
 from scholar_lens.domain.constants import LanguageModelId
-from scholar_lens.legacy.citation_summarizer import CitationSummarizer
+from scholar_lens.sections_engine.citation_summarizer import CitationSummarizer
 from tests.integration.fakes import FakeLLMFactory
 
 
@@ -428,7 +428,7 @@ async def test_a_failed_reference_is_noted_and_a_run_error_stops_the_run(
     summarizer: CitationSummarizer,
 ) -> None:
     from scholar_lens.domain.usage import TokenBudgetExceeded
-    from scholar_lens.legacy.writers import _citation_notes
+    from scholar_lens.sections_engine.writers import _citation_notes
 
     summarizer.metadata_resolver = _RaisingResolver(RuntimeError("index down"))  # type: ignore[assignment]
     assert await summarizer.summarize(["Some Paper"], "ctx") == []

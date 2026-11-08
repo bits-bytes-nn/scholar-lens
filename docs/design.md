@@ -24,8 +24,8 @@ Scholar-Lens는 네 종류의 글(리뷰, 요약, 기술 가이드, 논문 서�
 
 | 종류 | `kind` | 입력 | 파이프라인 |
 | --- | --- | --- | --- |
-| 논문 리뷰 | `review` | arXiv ID 또는 PDF URL, 선택적 코드 저장소 | `application/use_cases/paper.py::run_paper` → `legacy/explainer.py::PaperReviewer`(기본 `explanation.engine: sections`, 3장) 또는 `application/use_cases/paper.py::write_paper_with_evidence`(`evidence`, 4.4절) |
-| 논문 요약 | `summarize` | arXiv ID 또는 PDF URL | `application/use_cases/paper.py::run_paper` → `legacy/summarizer.py::PaperSummarizer`(기본 `summary.engine: sections`, 4.1절) 또는 `application/use_cases/paper.py::write_paper_with_evidence`(`evidence`, 4.4절) |
+| 논문 리뷰 | `review` | arXiv ID 또는 PDF URL, 선택적 코드 저장소 | `application/use_cases/paper.py::run_paper` → `sections_engine/explainer.py::PaperReviewer`(기본 `explanation.engine: sections`, 3장) 또는 `application/use_cases/paper.py::write_paper_with_evidence`(`evidence`, 4.4절) |
+| 논문 요약 | `summarize` | arXiv ID 또는 PDF URL | `application/use_cases/paper.py::run_paper` → `sections_engine/summarizer.py::PaperSummarizer`(기본 `summary.engine: sections`, 4.1절) 또는 `application/use_cases/paper.py::write_paper_with_evidence`(`evidence`, 4.4절) |
 | 기술 가이드 | `guide` | 문서 URL 목록, 참고 자료 URL(`--reference`), 선택적 검색어 | `application/use_cases/guide.py::run_guide` → `application/use_cases/guide.py::write_guide_with_evidence` |
 | 논문 서베이 계획 | `survey_plan` | 주제, 필수 논문(`--paper`), 연도 범위 | `application/use_cases/survey_plan.py::run_survey_plan` → 계획 파일(JSON, 글 아님) |
 | 논문 서베이 | `survey_write` | 계획 파일(로컬 경로 또는 `s3://`) | `application/use_cases/survey_write.py::run_survey_write` → `write_survey_with_evidence` |
@@ -52,7 +52,7 @@ Batch worker ┘        │
 entrypoints (cli.py, entrypoints/, bootstrap.py)   인자 해석, Batch 워커, 실행 수명주기, 설정 로드, 의존성 조립
       │                    └──────────────┐
       ▼                                   ▼
-application (use_cases/, run.py, 엔진, ports.py)   legacy/ (이전 sections 엔진, bootstrap만 import)
+application (use_cases/, run.py, 엔진, ports.py)   sections_engine/ (sections 엔진, bootstrap만 import)
       │                                   │
       ▼                                   ▼
 adapters (aws, bedrock, code, documents, github, http, packages, scholarly, web)
@@ -63,10 +63,10 @@ domain (순수 코드: 모델, 규칙, 검증, Markdown, 프롬프트 본문)
 
 - `domain`은 다른 계층과 SDK를 import하지 않습니다.
 - `application`은 `domain`만 import합니다. 유스케이스는 어댑터를 인자(`*Tools` 포트)로 받습니다.
-- `adapters`와 `legacy`는 `domain`과 `application.ports`(legacy는 어댑터도)만 import합니다.
-- `legacy`는 `bootstrap.py`만 import합니다. 삭제(engine.md E9)는 디렉터리 하나와 설정 필드만 지우면 됩니다.
+- `adapters`와 `sections_engine`은 `domain`과 `application.ports`(`sections_engine`은 어댑터도)만 import합니다.
+- `sections_engine`은 `bootstrap.py`만 import합니다. 유스케이스는 이 엔진을 `SectionsWriter` 포트로만 부릅니다.
 - `scholar_lens.configs`는 엔트리포인트와 `bootstrap.py`만 읽습니다. 다른 계층은 설정 값을 생성자 인자나 `application.ports.RunSettings`(구조적 타입)로 받습니다.
-- 외부 SDK(boto3, botocore, httpx, requests, strands, LangChain, PyGithub)는 `adapters`와 `legacy`만 직접 import합니다.
+- 외부 SDK(boto3, botocore, httpx, requests, strands, LangChain, PyGithub)는 `adapters`와 `sections_engine`만 직접 import합니다.
 
 ### 1.2 모듈
 
@@ -89,7 +89,7 @@ domain (순수 코드: 모델, 규칙, 검증, Markdown, 프롬프트 본문)
 | `adapters/web/` | 웹 조사(`research.py`), 수집 자료 저장본(`snapshot.py`), 가이드 자료 수집·분류(`guide_research.py`) |
 | `adapters/github/` | 발행기(`publisher.py`), 블로그 브랜치·PR 동기화(`blog_sync.py`), 블로그 규칙·글 조회(`conventions.py`) |
 | `adapters/code/`, `adapters/packages/`, `adapters/http/`, `adapters/retry.py` | 저장소 복제와 코드 요약, PyPI, SSRF 방지·IP 고정 전송·속도 제한, 재시도 정책 |
-| `legacy/` | 이전 sections 엔진: 리뷰(`explainer.py`), 요약(`summarizer.py`), 표적 수정 검사(`section_loop.py`), 인용 요약, 메모리 안 코드 색인(`code_index.py`, `InMemoryVectorStore`), 임베딩, 배치 처리, 프롬프트, 포트 구현(`writers.py`) |
+| `sections_engine/` | sections 엔진(리뷰·요약의 두 엔진 중 하나, 4.4절의 근거 장부 엔진과 같은 포트 뒤): 리뷰(`explainer.py`), 요약(`summarizer.py`), 표적 수정 검사(`section_loop.py`), 인용 요약, 메모리 안 코드 색인(`code_index.py`, `InMemoryVectorStore`), 임베딩, 배치 처리, 프롬프트, 포트 구현(`writers.py`) |
 | `scripts/` | CDK 스택, CI synth 검사, 비밀값 기록, 블로그 규칙 불일치 검사 |
 
 ## 2. CLI와 작업 계약
@@ -162,7 +162,7 @@ worker는 SIGTERM을 `SystemExit`로 바꿔(`cli.py::_raise_on_sigterm`) Batch �
 
 ## 3. 리뷰 워크플로
 
-이 장은 리뷰의 기본 엔진(`explanation.engine: sections`)입니다. `evidence` 엔진은 4.4절에 있습니다. `legacy/explainer.py::PaperReviewer.run`은 계획 → 보강 → 집필·검수 → 편집 → 마무리 다섯 단계입니다. 독자는 일반 DS/MLE로 고정하며(`adapters/bedrock/prompts/base.py`의 `READER_PROFILE`), 모든 단계가 같은 독자 정의를 공유합니다.
+이 장은 리뷰의 기본 엔진(`explanation.engine: sections`)입니다. `evidence` 엔진은 4.4절에 있습니다. `sections_engine/explainer.py::PaperReviewer.run`은 계획 → 보강 → 집필·검수 → 편집 → 마무리 다섯 단계입니다. 독자는 일반 DS/MLE로 고정하며(`adapters/bedrock/prompts/base.py`의 `READER_PROFILE`), 모든 단계가 같은 독자 정의를 공유합니다.
 
 ### 3.1 계획
 
@@ -232,7 +232,7 @@ LLM 라우팅 호출 없이 계획을 따릅니다(`PaperReviewer._enrich`). 참
 
 ### 4.1 요약
 
-요약의 기본 엔진(`summary.engine: sections`)입니다(`evidence` 엔진은 4.4절). `legacy/summarizer.py::PaperSummarizer.summarize`는 파싱한 논문 전체(컨텍스트에 맞게 자름)와 코드베이스 요약으로 한 번 호출하고, 한국어 요약이 너무 길면 줄이는 호출을 한 번 더 합니다(`_shorten_if_long`, 구조가 깨지면 원문 유지). 그 뒤에도 게시를 막는 문제(`domain/quality_gate.py::publish_blockers`)가 남으면 그 문제만 고치는 표적 수정 호출을 한 번 합니다(`_fix_blockers`, `PaperSummaryFixPrompt`, 지시는 `legacy/section_loop.py::TARGETED_FIX`). 고친 글은 문제가 줄고 새 종류가 생기지 않으며 구조를 잃지 않을 때만(`legacy/section_loop.py::lost_structure`) 쓰고, 아니면 원문을 두어 발행 검증이 문제를 알립니다. 출력 태그는 `subtitle`, `description`, `summary`, `urls`입니다. 다시 요청하는 단계가 없으므로 TL;DR(앞 인용문)의 수치가 논문에 없거나 설명이 규칙(3.5)을 어기면 PR 메모로 남기고, 마크업이 있거나 페이지 `<title>`보다 길지 않은 설명은 버립니다. 요약은 `> **요약:**` 인용문과 `##` 절 다섯 개(연구 배경, 제안 방법, 구현 방식, 실험 결과, 의의와 한계)로 이루어지고, 실증 논문이면 결과 절에 무게를 둡니다. `domain/post_format.py::summary_with_tldr`가 앞의 인용문을 `## TL;DR` 절로 바꿔 블로그 규칙에 맞춥니다.
+요약의 기본 엔진(`summary.engine: sections`)입니다(`evidence` 엔진은 4.4절). `sections_engine/summarizer.py::PaperSummarizer.summarize`는 파싱한 논문 전체(컨텍스트에 맞게 자름)와 코드베이스 요약으로 한 번 호출하고, 한국어 요약이 너무 길면 줄이는 호출을 한 번 더 합니다(`_shorten_if_long`, 구조가 깨지면 원문 유지). 그 뒤에도 게시를 막는 문제(`domain/quality_gate.py::publish_blockers`)가 남으면 그 문제만 고치는 표적 수정 호출을 한 번 합니다(`_fix_blockers`, `PaperSummaryFixPrompt`, 지시는 `sections_engine/section_loop.py::TARGETED_FIX`). 고친 글은 문제가 줄고 새 종류가 생기지 않으며 구조를 잃지 않을 때만(`sections_engine/section_loop.py::lost_structure`) 쓰고, 아니면 원문을 두어 발행 검증이 문제를 알립니다. 출력 태그는 `subtitle`, `description`, `summary`, `urls`입니다. 다시 요청하는 단계가 없으므로 TL;DR(앞 인용문)의 수치가 논문에 없거나 설명이 규칙(3.5)을 어기면 PR 메모로 남기고, 마크업이 있거나 페이지 `<title>`보다 길지 않은 설명은 버립니다. 요약은 `> **요약:**` 인용문과 `##` 절 다섯 개(연구 배경, 제안 방법, 구현 방식, 실험 결과, 의의와 한계)로 이루어지고, 실증 논문이면 결과 절에 무게를 둡니다. `domain/post_format.py::summary_with_tldr`가 앞의 인용문을 `## TL;DR` 절로 바꿔 블로그 규칙에 맞춥니다.
 
 ### 4.2 기술 가이드
 
@@ -374,7 +374,7 @@ OpenAlex는 arXiv 시대 ML 논문의 인용 수를 크게 적게 세고(실측:
 - 속성(`extract_attributes`): 제목, 저자, 발행 조직(`affiliation`), 규칙 파일의 주제 중 하나(`category`), 통제 태그(기본 하나로 논문 자신의 주제, 방법이나 실험이 다루는 주제일 때만 둘째), 세부 키워드, `seo_title`. 키워드 재사용 후보로 블로그 글에 이미 쓰인 태그를 넘기되, 기존 표기는 그 태그가 이 논문 자신의 기여를 가리킬 때만 쓰고 아니면 논문의 용어를 씁니다(`application/run.py::RunContext.require_blog_tags`).
 - 인용(`extract_citations`, 리뷰만): 참고문헌을 페이지 단위로 추출하며 최대 `MAX_CITATION_PAGES`(20)회입니다. 모델이 적은 arXiv ID는 중복 제거 전에 페이지마다 arXiv 메타데이터 한 번의 일괄 조회로 확인합니다(`adapters/documents/content_extractor.py::verify_arxiv_ids`). 제목이 일치하고(`titles_match`), 인용의 제1저자 이름이 레코드 저자에 있고, 인용 연도가 arXiv 첫 버전보다 1년 넘게 이르지 않을 때만 ID를 남깁니다. 다른 논문의 ID, arXiv에 없는 ID, 형식이 틀린 ID(`2024.01234`처럼 YYMM의 월이 없는 것)는 버리고 인용은 ID 없이 남으며, arXiv에 닿지 못하면 그 페이지의 ID를 모두 버립니다. 이런 인용은 요약 단계가 제목으로 찾습니다. 레거시 리뷰는 인용 요약에 실린 링크(제목으로 찾은 논문)를 `ReviewText.link_sources`로 넘기고, 발행 단계가 논문의 출처와 함께 링크를 확인합니다(7장).
 
-인용 요약(`legacy/citation_summarizer.py::CitationSummarizer`)은 초록을 우선합니다. Crossref, OpenAlex(선택 API 키 `OPENALEX_API_KEY`를 `Authorization: Bearer`로 보냄. 키가 없으면 IP당 하루 약 100회 검색), Semantic Scholar(API 키가 있을 때만), arXiv 순서로 메타데이터를 찾고(`adapters/scholarly/metadata.py`, 속도 제한 포함, `Retry-After`가 60초를 넘으면 그 실행 동안 해당 제공자를 건너뜀), 제목 유사도 0.9 이상이고 버전 표기와 단어가 바뀌지 않은 경우(하이픈·영국식 철자 차이는 같은 단어)만 같은 논문으로 인정합니다(Crossref는 상위 5건 중 제목이 일치하는 레코드 가운데 제목 유사도가 가장 높은 것, OpenAlex는 상위 5건 중 첫 일치 결과). 제목의 내용어를 하나도 담지 않은 초록은 다른 논문의 것으로 보고 버리며, OpenAlex의 arXiv 레코드 초록은 믿지 않고 DOI의 arXiv ID로 arXiv에서 받습니다. 맞지 않는 초록은 요약하지 않으며, 초록도 본문도 찾지 못한 인용은 리뷰 노트(PR 체크리스트)에 올립니다. `prefer_full_text: true`면 arXiv 전문을 받습니다.
+인용 요약(`sections_engine/citation_summarizer.py::CitationSummarizer`)은 초록을 우선합니다. Crossref, OpenAlex(선택 API 키 `OPENALEX_API_KEY`를 `Authorization: Bearer`로 보냄. 키가 없으면 IP당 하루 약 100회 검색), Semantic Scholar(API 키가 있을 때만), arXiv 순서로 메타데이터를 찾고(`adapters/scholarly/metadata.py`, 속도 제한 포함, `Retry-After`가 60초를 넘으면 그 실행 동안 해당 제공자를 건너뜀), 제목 유사도 0.9 이상이고 버전 표기와 단어가 바뀌지 않은 경우(하이픈·영국식 철자 차이는 같은 단어)만 같은 논문으로 인정합니다(Crossref는 상위 5건 중 제목이 일치하는 레코드 가운데 제목 유사도가 가장 높은 것, OpenAlex는 상위 5건 중 첫 일치 결과). 제목의 내용어를 하나도 담지 않은 초록은 다른 논문의 것으로 보고 버리며, OpenAlex의 arXiv 레코드 초록은 믿지 않고 DOI의 arXiv ID로 arXiv에서 받습니다. 맞지 않는 초록은 요약하지 않으며, 초록도 본문도 찾지 못한 인용은 리뷰 노트(PR 체크리스트)에 올립니다. `prefer_full_text: true`면 arXiv 전문을 받습니다.
 
 ### 5.5 코드 저장소
 
@@ -516,7 +516,7 @@ PR 본문(`build_pr_body`)에는 논문 ID, PDF URL, 파싱 방식, 글자 수, 
 
 ### 8.2 재시도와 제한 시간
 
-재시도는 한 계층만 소유합니다. botocore는 standard 모드에서 1회만 시도하고(연결 30초, 읽기 3600초: 비스트리밍 호출이 출력 128k 토큰을 끝까지 생성하는 시간), `adapters/retry.py::RetryableBase._retry`가 tenacity로 요청 제한, 5xx, 연결·읽기 시간 초과만 지수 백오프와 지터로 재시도합니다. 읽기 시간 초과는 긴 생성 전체를 다시 과금하므로 한 번만 재시도합니다. AccessDenied, ValidationException, ResourceNotFound, 예산 초과, 입력 검증 오류는 바로 실패합니다. `legacy/batch.py::BatchProcessor`(코드 분석 일괄 처리)는 실패한 항목만 다시 처리합니다.
+재시도는 한 계층만 소유합니다. botocore는 standard 모드에서 1회만 시도하고(연결 30초, 읽기 3600초: 비스트리밍 호출이 출력 128k 토큰을 끝까지 생성하는 시간), `adapters/retry.py::RetryableBase._retry`가 tenacity로 요청 제한, 5xx, 연결·읽기 시간 초과만 지수 백오프와 지터로 재시도합니다. 읽기 시간 초과는 긴 생성 전체를 다시 과금하므로 한 번만 재시도합니다. AccessDenied, ValidationException, ResourceNotFound, 예산 초과, 입력 검증 오류는 바로 실패합니다. `sections_engine/batch.py::BatchProcessor`(코드 분석 일괄 처리)는 실패한 항목만 다시 처리합니다.
 
 ### 8.3 예산과 비용
 
