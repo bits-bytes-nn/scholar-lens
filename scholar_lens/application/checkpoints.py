@@ -12,7 +12,7 @@ hashes, so resuming is never unsafe: a key either names this exact work or
 is never looked up.
 
 What a stage changed in the writer's shared state (its PR notes, blocking
-problems and claim-check verdicts) is saved with its output and replayed on
+problems, claim-check verdicts and unchecked claim units) is saved with its output and replayed on
 load (:class:`WriterState`), so a resumed run's notes, blocking list and
 verdict cache match an uninterrupted run's.
 """
@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 # Bump when what a stage saves, or how the engine replays it, changes
 # meaning (a prompt change needs no bump: the prompts are hashed).
-CHECKPOINT_VERSION = 1
+CHECKPOINT_VERSION = 2
 # The store's area the checkpoints live in.
 CHECKPOINT_AREA = "checkpoints"
 
@@ -75,8 +75,10 @@ def input_hash(*parts: object) -> str:
 
 class WriterState(BaseModel):
     """What one stage added to the writer's shared state, in order: PR
-    notes, blocking problems, and claim-check verdicts (each the five parts
-    of its :class:`~.evidence_writer.VerdictCache` key, then the verdict)."""
+    notes, blocking problems, claim-check verdicts (each the five parts of
+    its :class:`~.evidence_writer.VerdictCache` key, then the verdict), the
+    keys of claim units a check gave no verdict for, and the changes of the
+    sections' unchecked blocks (section id, problem; "" lifts it)."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -85,6 +87,8 @@ class WriterState(BaseModel):
     verdicts: list[tuple[str, str, list[str], str, str, str]] = Field(
         default_factory=list
     )
+    unanswered: list[tuple[str, str, list[str], str, str]] = Field(default_factory=list)
+    unchecked: list[tuple[str, str]] = Field(default_factory=list)
 
 
 class Checkpoint(BaseModel):

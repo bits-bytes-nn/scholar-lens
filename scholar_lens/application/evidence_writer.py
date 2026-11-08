@@ -543,8 +543,16 @@ class EvidenceWriter:
         self.notes: list[str] = []
         # Problems the post may not be published with as is (a check that
         # did not run, a claim check that objects to most of a section).
-        self.blocking: list[str] = []
+        self._blocking: list[str] = []
         self.verdicts = VerdictCache()
+        # Claim-check keys a check that ran gave no verdict for, in order
+        # (the claim unit is the key's first part).
+        self._unanswered: dict[VerdictKey, None] = {}
+        # Section id -> the block for the claim units of its final text
+        # still without a verdict ("" when none), and the log of its changes
+        # (a checkpoint replays them in order).
+        self._unchecked: dict[str, str] = {}
+        self._unchecked_log: list[tuple[str, str]] = []
         # Section title -> the checks every change of the section runs.
         # By section object (two sections may share a title).
         self.checked: dict[int, SectionChecks] = {}
@@ -559,32 +567,60 @@ class EvidenceWriter:
 
     # ---- shared state ----------------------------------------------------------
 
-    def state_mark(self) -> tuple[int, int, int]:
-        """Where the shared state stands (notes, blocking, verdicts)."""
-        return len(self.notes), len(self.blocking), len(self.verdicts)
+    @property
+    def blocking(self) -> list[str]:
+        """The problems the post may not be published with as is: the
+        blocked ones in order, then each section's unchecked claim units."""
+        return [*self._blocking, *(p for p in self._unchecked.values() if p)]
 
-    def state_since(self, mark: tuple[int, int, int]) -> WriterState:
+    @blocking.setter
+    def blocking(self, problems: Sequence[str]) -> None:
+        self._blocking = list(problems)
+        self._unchecked.clear()
+
+    def state_mark(self) -> tuple[int, int, int, int, int]:
+        """Where the shared state stands (notes, blocking, verdicts, the
+        unanswered claim units and the sections' unchecked blocks)."""
+        return (
+            len(self.notes),
+            len(self._blocking),
+            len(self.verdicts),
+            len(self._unanswered),
+            len(self._unchecked_log),
+        )
+
+    def state_since(self, mark: tuple[int, int, int, int, int]) -> WriterState:
         """What was added to the shared state since ``mark``, in order."""
-        notes, blocking, verdicts = mark
+        notes, blocking, verdicts, unanswered, unchecked = mark
         return WriterState(
             notes=self.notes[notes:],
-            blocking=self.blocking[blocking:],
+            blocking=self._blocking[blocking:],
             verdicts=[
                 (s, p, list(c), e, r, v)
                 for (s, p, c, e, r), v in self.verdicts.entries(verdicts)
             ],
+            unanswered=[
+                (s, p, list(c), e, r)
+                for s, p, c, e, r in list(self._unanswered)[unanswered:]
+            ],
+            unchecked=self._unchecked_log[unchecked:],
         )
 
     def replay_state(self, state: WriterState) -> None:
         """Add a saved stage's state changes as the stage made them: its
         notes and blocking problems after the ones already there, its
         verdicts to the cache (later checks of the same sentences in the
-        same context then send nothing, as in an uninterrupted run)."""
+        same context then send nothing, as in an uninterrupted run), its
+        unanswered claim units and its sections' unchecked blocks."""
         self.notes.extend(state.notes)
         for problem in state.blocking:
             self._block(problem)
         for s, p, c, e, r, v in state.verdicts:
             self.verdicts.put((s, p, tuple(c), e, r), v)
+        for s, p, c, e, r in state.unanswered:
+            self._unanswered[(s, p, tuple(c), e, r)] = None
+        for section, problem in state.unchecked:
+            self._set_unchecked(section, problem)
 
     # ---- read -------------------------------------------------------------------
 
@@ -1012,6 +1048,7 @@ class EvidenceWriter:
         if unbalanced:
             self.notes.append(f"Section '{title}': a lone $$ was removed.")
         self._note_leftovers(draft, title=title, verifiers=verifiers)
+        self._block_unchecked(draft, title=title, checks=checks)
         return draft
 
     def fix_evidence(
@@ -1114,6 +1151,7 @@ class EvidenceWriter:
                 f"Section '{title}': removing its unsupported sentences left it "
                 "below its minimum length; develop it from its evidence by hand."
             )
+        self._block_unchecked(settled, title=title, checks=checks)
         return settled
 
     def _drop_unsupported(
@@ -1175,9 +1213,51 @@ class EvidenceWriter:
 
     def _block(self, problem: str) -> None:
         """A problem the post may not be published with as is (once)."""
-        if problem not in self.blocking:
+        if problem not in self._blocking:
             logger.warning("Blocking: %s", problem)
-            self.blocking.append(problem)
+            self._blocking.append(problem)
+
+    def _set_unchecked(self, section: str, problem: str) -> None:
+        """The section's unchecked block, replacing its earlier one."""
+        if self._unchecked.get(section, "") == problem:
+            return
+        if problem:
+            logger.warning("Blocking: %s", problem)
+        self._unchecked[section] = problem
+        self._unchecked_log.append((section, problem))
+
+    def _block_unchecked(
+        self, draft: str, *, title: str, checks: SectionChecks
+    ) -> None:
+        """Block the post on the claim units of ``draft``, the section's
+        final text, that a claim check asked without getting a verdict and
+        that have none yet; this replaces the section's earlier block, so a
+        unit judged later, rewritten or deleted no longer blocks."""
+        _, keys = self._claim_keys(draft, checks.own, checks.earlier, checks.reference)
+        left = list(
+            dict.fromkeys(
+                key[0]
+                for key in keys
+                if key in self._unanswered and key not in self.verdicts
+            )
+        )
+        # The section by its title and what its checks read (two sections
+        # may share a title; an object id does not survive a checkpoint).
+        context = evidence_lines([*checks.earlier, *checks.own]) + checks.reference
+        section = f"{title}\n{_fingerprint(context)}"
+        self._set_unchecked(
+            section,
+            (
+                (
+                    f"The claim check of '{title}' gave no verdict for {len(left)} "
+                    "of its items, even when asked again: they are unchecked ("
+                    + "; ".join(s[:80] for s in left)
+                    + ")."
+                )
+                if left
+                else ""
+            ),
+        )
 
     async def apply_findings(
         self,
@@ -1429,6 +1509,9 @@ class EvidenceWriter:
         (each with the sentence before it, so a pronoun reads in context);
         the cached verdicts are merged in. When the model gives no valid
         answer, the unsent units stay unchecked and the post is blocked.
+        Units an answer still leaves out after ``limits.answer_asks`` calls
+        are recorded, not cached: the post is blocked on those left in the
+        section's final text (:meth:`_block_unchecked`).
 
         The shared context is two cached parts (docs/engine.md, 4.10): the
         evidence earlier sections cite first (it only grows, so it is the
@@ -1447,24 +1530,11 @@ class EvidenceWriter:
             The units not supported, in the section's order.
         """
         reference = self.reference if reference is None else reference
-        # Table rows are claims too (a wrong cell is as wrong as a sentence).
-        sentences = claim_units(draft)
+        sentences, keys = self._claim_keys(draft, own, earlier, reference)
         if not sentences:
             return []
         earlier_text = evidence_lines(list(earlier))
         own_text = evidence_lines(list(own))
-        # What the verdicts depend on: both parts of the context.
-        evidence_context = f"{earlier_text}\n\n{own_text}"
-        keys = [
-            self.verdicts.key(
-                sentence,
-                sentences[n - 1] if n else "",
-                cited_ids(sentence),
-                evidence_context,
-                reference,
-            )
-            for n, sentence in enumerate(sentences)
-        ]
         sent: list[int] = []
         queued = set()
         for n, key in enumerate(keys):
@@ -1488,19 +1558,44 @@ class EvidenceWriter:
         result = await complete_answers(sent, ask, asks=self.limits.answer_asks)
         for n, verdict in result.answers.items():
             self.verdicts.put(keys[n], verdict)
-        if result.ran and result.missing:
-            self._block(
-                f"The claim check of '{heading}' gave no verdict for "
-                f"{len(result.missing)} of its items, even when asked again: they "
-                "are unchecked ("
-                + "; ".join(sentences[n][:80] for n in result.missing)
-                + ")."
-            )
+        if result.ran:
+            # Blocked by the section's final text (:meth:`_block_unchecked`):
+            # a later check may judge them, a fix rewrite or delete them.
+            # (A check that did not run has blocked the post already.)
+            for n in result.missing:
+                self._unanswered[keys[n]] = None
         return [
             (sentence, verdict)
             for sentence, key in zip(sentences, keys, strict=True)
             if (verdict := self.verdicts.get(key))
         ]
+
+    def _claim_keys(
+        self,
+        draft: str,
+        own: Sequence[Evidence],
+        earlier: Sequence[Evidence],
+        reference: str,
+    ) -> tuple[list[str], list[VerdictKey]]:
+        """The claim units of ``draft`` and their verdict-cache keys in the
+        section's context (each unit with the one before it)."""
+        # Table rows are claims too (a wrong cell is as wrong as a sentence).
+        sentences = claim_units(draft)
+        # What the verdicts depend on: both parts of the context.
+        evidence_context = (
+            f"{evidence_lines(list(earlier))}\n\n{evidence_lines(list(own))}"
+        )
+        keys = [
+            self.verdicts.key(
+                sentence,
+                sentences[n - 1] if n else "",
+                cited_ids(sentence),
+                evidence_context,
+                reference,
+            )
+            for n, sentence in enumerate(sentences)
+        ]
+        return sentences, keys
 
     async def _claim_verdicts(
         self,

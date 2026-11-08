@@ -197,18 +197,88 @@ def test_items_an_answer_leaves_out_are_asked_again_alone(bad: bool) -> None:
     assert len(model.sent) == 2
 
 
-def test_items_still_left_out_block_the_post_and_are_not_cached() -> None:
+def test_items_still_left_out_are_not_cached() -> None:
     sentences = _sentences(3)
     model = Model()
     model.omit, model.omit_calls = (lambda s: s == sentences[0]), 2
     writer = _writer(model)
     asyncio.run(writer.check_claims(_section(sentences), _ledger()))
     assert model.sent == [sentences, [sentences[0]]]
-    assert len(writer.blocking) == 1
-    assert "no verdict for 1" in writer.blocking[0]
     # The others were cached; the omitted one is asked on the next check.
     asyncio.run(writer.check_claims(_section(sentences), _ledger()))
     assert model.sent[2] == [sentences[0]]
+
+
+def _skipped_then_fixed(skips: int) -> tuple[Model, list[str]]:
+    """A section whose first unit the claim check leaves out of its first
+    ``skips`` calls, and whose last unit is unsupported until a fix
+    rewrites it (so the fix loop runs a second round)."""
+    sentences = _sentences(6)
+    bad = sentences[-1]
+    model = Model(bad=lambda s: s == bad)
+    model.omit, model.omit_calls = (lambda s: s == sentences[0]), skips
+    model.edits = [Edit(find=bad, replace="고친 문장은 캐시를 씁니다 [[E1]].")]
+    return model, sentences
+
+
+def test_an_item_left_out_in_one_round_and_judged_in_the_next_does_not_block() -> None:
+    # Left out of both asks of round 0, judged in round 1.
+    model, sentences = _skipped_then_fixed(skips=2)
+    writer = _writer(model)
+    out = _verify(writer, _section(sentences))
+    assert model.sent[1] == [sentences[0]] and sentences[0] in model.sent[2]
+    assert sentences[0] in out
+    assert not writer.blocking
+
+
+def test_an_item_never_judged_blocks_the_post() -> None:
+    model, sentences = _skipped_then_fixed(skips=99)
+    writer = _writer(model)
+    out = _verify(writer, _section(sentences))
+    assert sentences[0] in out
+    (blocking,) = writer.blocking
+    assert "no verdict for 1 of its items" in blocking
+    assert sentences[0][:20] in blocking
+
+
+@pytest.mark.parametrize("replace", ["", "다시 쓴 문장은 캐시를 씁니다 [[E1]]."])
+def test_an_unjudged_item_a_fix_rewrites_or_deletes_does_not_block(
+    replace: str,
+) -> None:
+    model, sentences = _skipped_then_fixed(skips=99)
+    model.edits = [Edit(find=sentences[0], replace=replace)]
+    writer = _writer(model)
+    out = _verify(writer, _section(sentences))
+    assert sentences[0] not in out
+    assert not writer.blocking
+
+
+def test_a_replayed_run_blocks_on_unchecked_items_as_an_uninterrupted_one() -> None:
+    """Stage 1 leaves an item unjudged; stage 2 checks the section again
+    with a claim check that cannot run (the item stays unchecked), stage 3
+    with one that judges it (the block is lifted). A writer that replays
+    the saved stages blocks exactly as the one that ran them."""
+    sentences = _sentences(2)
+    draft = _section(sentences)
+    model = Model()
+    model.omit_calls = 99
+    whole, resumed = _writer(model), _writer(Model())
+    states = []
+    for stage in ("skip", "fail", "judge"):
+        model.fail_claims = stage == "fail"
+        model.omit = lambda s, skip=stage == "skip": skip and s == sentences[0]
+        mark = whole.state_mark()
+        _verify(whole, draft)
+        states.append(whole.state_since(mark))
+        if stage == "fail":
+            # The replayed writer runs this stage itself (its checkpoint
+            # missed): only the replayed record keeps the item unchecked.
+            resumed.model = model
+            _verify(resumed, draft)
+        else:
+            resumed.replay_state(states[-1])
+        assert resumed.blocking == whole.blocking, stage
+        assert any("no verdict" in b for b in whole.blocking) == (stage != "judge")
 
 
 def test_the_claim_check_schema_asks_for_a_verdict_per_item() -> None:
