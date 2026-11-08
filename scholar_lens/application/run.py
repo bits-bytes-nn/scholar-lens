@@ -262,7 +262,7 @@ async def load_translation_guideline(
     )
     text = await asyncio.to_thread(context.files.read_text, str(guideline_path))
     if text is not None:
-        return json.loads(text)
+        return _guideline(text, str(guideline_path))
     if not context.s3_handler:
         return None
     s3_key = (
@@ -274,4 +274,18 @@ async def load_translation_guideline(
     if text is None:
         logger.info("No translation guideline at '%s'; continuing without.", s3_key)
         return None
-    return json.loads(text)
+    return _guideline(text, location)
+
+
+def _guideline(text: str, where: str) -> list[dict[str, Any]]:
+    """The guideline's entries.
+
+    Raises:
+        ValueError: The text is not a JSON list of objects.
+    """
+    data = json.loads(text)
+    if not isinstance(data, list) or not all(isinstance(e, dict) for e in data):
+        raise ValueError(
+            f"The translation guideline at '{where}' is not a JSON list of objects."
+        )
+    return data

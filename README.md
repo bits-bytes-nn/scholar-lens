@@ -153,10 +153,12 @@ The stack's hourly cost alarm covers Batch runs only: local runs send no CloudWa
 ## Development
 
 ```bash
-poetry run pytest tests/ -W ignore::DeprecationWarning --cov=scholar_lens --cov=scripts --cov-fail-under=85   # as in CI; no AWS or network
+poetry run pytest tests/ -W ignore::DeprecationWarning --cov=scholar_lens --cov=scripts --cov-fail-under=93   # as in CI; no AWS or network
 poetry run ruff check scholar_lens scripts tests
 poetry run black --check scholar_lens scripts tests
 poetry run mypy scholar_lens scripts
+poetry run mypy --strict scholar_lens/domain scholar_lens/application   # domain and application, strict
+poetry run pip-audit --skip-editable          # known vulnerabilities (needs network)
 poetry run lint-imports                          # layer contracts (docs/design.md 1.1)
 poetry run pytest tests/unit                     # domain and application on fakes only
 poetry run python scripts/ci_synth_check.py      # CDK synth with a fake account

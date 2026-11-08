@@ -41,7 +41,6 @@ from scholar_lens.domain.evidence import (
     SourceDocument,
     authority_rank,
 )
-from scholar_lens.domain.evidence_draft import drop_empty_headings
 from scholar_lens.domain.guide.authority import (
     official_reference,
     unverified_identifiers,
@@ -57,6 +56,7 @@ from scholar_lens.domain.guide.models import TechGuide
 from scholar_lens.domain.guide.sdk_index import PackageSource, SdkIndex, api_problems
 from scholar_lens.domain.jobs import JobRequest
 from scholar_lens.domain.markdown.lint import (
+    drop_empty_headings,
     drop_unknown_images,
     figure_markers_to_images,
     fill_image_alts,

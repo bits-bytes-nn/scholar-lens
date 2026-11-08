@@ -44,7 +44,6 @@ from scholar_lens.domain.evidence_draft import (
     balance_math,
     cited_ids,
     claim_units,
-    drop_empty_headings,
     drop_sentences,
     ends_mid_sentence,
     is_illustration,
@@ -53,6 +52,7 @@ from scholar_lens.domain.evidence_draft import (
     section_heading,
     unsourced_number_sentences,
 )
+from scholar_lens.domain.markdown.lint import drop_empty_headings
 from scholar_lens.domain.post_spec import Limits
 from scholar_lens.domain.prompts.rules import FIX_ANSWER
 from scholar_lens.domain.usage_context import usage_stage

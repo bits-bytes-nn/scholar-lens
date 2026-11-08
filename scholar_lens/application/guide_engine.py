@@ -47,7 +47,6 @@ from scholar_lens.domain.evidence import (
 )
 from scholar_lens.domain.evidence_draft import free_numbers
 from scholar_lens.domain.guide.evidence_guide import (
-    TLDR_TITLE,
     GuideOutline,
     GuideSection,
     cited_sources,
@@ -60,7 +59,7 @@ from scholar_lens.domain.guide.evidence_guide import (
 )
 from scholar_lens.domain.guide.sdk_index import SdkIndex, definitions_for
 from scholar_lens.domain.prompts import guide_evidence as prompts
-from scholar_lens.domain.specs.guide import GUIDE_SPEC
+from scholar_lens.domain.specs.guide import GUIDE_SPEC, TLDR_TITLE
 
 logger = logging.getLogger(__name__)
 

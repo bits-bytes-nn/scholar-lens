@@ -467,6 +467,18 @@ async def test_translation_guideline_is_optional(tmp_path: Path) -> None:
         await load(_guideline_context(_FakeS3(S3OperationError("denied")), tmp_path))  # type: ignore[arg-type]
 
 
+@pytest.mark.parametrize("text", ['{"term": "rank"}', '["rank"]', '"rank"', "3"])
+async def test_a_guideline_that_is_not_a_list_of_objects_fails(
+    text: str, tmp_path: Path
+) -> None:
+    from scholar_lens.application import run as runtime
+
+    with pytest.raises(ValueError, match="not a JSON list of objects"):
+        await runtime.load_translation_guideline(
+            _guideline_context(_FakeS3(text), tmp_path)  # type: ignore[arg-type]
+        )
+
+
 async def test_guideline_failure_stops_before_paid_stages(
     pipeline_env,
     monkeypatch: pytest.MonkeyPatch,  # type: ignore[no-untyped-def]

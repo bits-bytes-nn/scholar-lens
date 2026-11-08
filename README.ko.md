@@ -153,10 +153,12 @@ Batch 작업은 배포하는 셸에서 추적이 켜져 있다는 이유만으�
 ## 개발
 
 ```bash
-poetry run pytest tests/ -W ignore::DeprecationWarning --cov=scholar_lens --cov=scripts --cov-fail-under=85   # CI와 같은 명령, AWS·네트워크 없음
+poetry run pytest tests/ -W ignore::DeprecationWarning --cov=scholar_lens --cov=scripts --cov-fail-under=93   # CI와 같은 명령, AWS·네트워크 없음
 poetry run ruff check scholar_lens scripts tests
 poetry run black --check scholar_lens scripts tests
 poetry run mypy scholar_lens scripts
+poetry run mypy --strict scholar_lens/domain scholar_lens/application   # domain과 application은 strict
+poetry run pip-audit --skip-editable          # 알려진 취약점(네트워크 필요)
 poetry run lint-imports                          # 계층 계약(docs/design.md 1.1)
 poetry run pytest tests/unit                     # domain과 application만, 가짜 포트로
 poetry run python scripts/ci_synth_check.py      # 가짜 계정으로 CDK synth

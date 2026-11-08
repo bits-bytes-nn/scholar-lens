@@ -25,7 +25,7 @@ import fnmatch
 import re
 from collections.abc import Callable, Collection, Iterable, Mapping
 from dataclasses import dataclass, field
-from typing import Literal, Protocol
+from typing import Literal, Protocol, cast
 from urllib.parse import urlparse
 
 from scholar_lens.domain.evidence import Authority, SourceAuthority, authority_rank
@@ -665,7 +665,8 @@ def is_official(page: RecordedPage) -> bool:
 def engine_authority(authority: str) -> Authority:
     """The evidence engine's authority for a record authority ("" and
     unknown values are third-party)."""
-    return ENGINE_AUTHORITY.get(authority, "third_party")  # type: ignore[call-overload]
+    found = ENGINE_AUTHORITY.get(cast(SourceAuthority, authority))
+    return found if found is not None else "third_party"
 
 
 _DATE = re.compile(r"(\d{4})-(\d{2})-(\d{2})")

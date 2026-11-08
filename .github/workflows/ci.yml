@@ -46,6 +46,8 @@ jobs:
         run: poetry run black --check scholar_lens scripts tests
       - name: Mypy (type check)
         run: poetry run mypy scholar_lens scripts
+      - name: Mypy strict (domain and application)
+        run: poetry run mypy --strict scholar_lens/domain scholar_lens/application
       - name: Layer import contracts (import-linter)
         run: poetry run lint-imports
 
@@ -85,7 +87,7 @@ jobs:
           --cov=scripts
           --cov-report=term-missing
           --cov-report=xml
-          --cov-fail-under=85
+          --cov-fail-under=93
       - name: Upload coverage artifact
         if: matrix.python-version == '3.12'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -93,6 +95,33 @@ jobs:
           name: coverage-xml
           path: coverage.xml
           if-no-files-found: ignore
+
+  audit:
+    name: Dependency audit (pip-audit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: setup-python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Install Poetry
+        run: pipx install "poetry==${{ env.POETRY_VERSION }}"
+      - name: Configure Poetry
+        run: poetry config virtualenvs.in-project true
+      - name: Cache virtualenv
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-py${{ steps.setup-python.outputs.python-version }}-poetry${{ env.POETRY_VERSION }}-${{ hashFiles('poetry.lock') }}
+      - name: Install dependencies (locked, with dev group)
+        run: poetry install --no-interaction --with dev
+      - name: Audit the installed dependencies for known vulnerabilities
+        # The project itself is installed editable and is not on PyPI.
+        run: poetry run pip-audit --skip-editable --progress-spinner off
 
   docker-build:
     name: Docker image build

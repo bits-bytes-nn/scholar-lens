@@ -425,12 +425,13 @@ def drop_sentences(markdown: str, sentences: Iterable[str]) -> str:
     and :func:`table_rows` return them), each removed once from the first
     prose line (or table row) that holds it; a line it leaves empty goes
     with it. Code and display math are never touched."""
-    lines = markdown.split("\n")
+    # A line a removal empties is None until the sentence's pass ends.
+    lines: list[str | None] = list(markdown.split("\n"))
     roles = block_lines(markdown)
     for sentence in sentences:
         row = sentence.startswith("|")
         for i, (line, role) in enumerate(zip(lines, roles, strict=True)):
-            if role != "prose":
+            if role != "prose" or line is None:
                 continue
             if sentence not in line:
                 # A sentence around an inline image reads with the image
@@ -444,12 +445,12 @@ def drop_sentences(markdown: str, sentences: Iterable[str]) -> str:
                 continue
             if row:
                 if line.strip() == sentence:
-                    lines[i] = None  # type: ignore[call-overload]
+                    lines[i] = None
                     break
                 continue
             rest = line.replace(sentence, "", 1)
             if _LEFTOVER.match(rest):
-                lines[i] = None  # type: ignore[call-overload]
+                lines[i] = None
             else:
                 lead = line[: len(line) - len(line.lstrip())]
                 lines[i] = lead + re.sub(r"[ \t]{2,}", " ", rest.strip())
@@ -457,7 +458,7 @@ def drop_sentences(markdown: str, sentences: Iterable[str]) -> str:
         kept = [(ln, r) for ln, r in zip(lines, roles, strict=True) if ln is not None]
         lines = [ln for ln, _ in kept]
         roles = [r for _, r in kept]
-    return re.sub(r"\n{3,}", "\n\n", "\n".join(lines))
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(ln for ln in lines if ln is not None))
 
 
 _HEADINGS = re.compile(r"^#{2,4} .+$", re.M)

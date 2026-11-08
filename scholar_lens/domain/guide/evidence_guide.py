@@ -16,10 +16,10 @@ from scholar_lens.domain.evidence import EvidenceLedger, SourceDocument
 from scholar_lens.domain.evidence_draft import (
     MARKER,
     block_lines,
-    drop_empty_headings,
     prose_sentences,
 )
 from scholar_lens.domain.glossary import GlossaryTerm
+from scholar_lens.domain.markdown.lint import drop_empty_headings
 from scholar_lens.domain.post_spec import (
     SDK_LANGUAGES,
     SectionBase,

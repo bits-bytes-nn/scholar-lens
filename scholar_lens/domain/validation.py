@@ -197,7 +197,8 @@ def unknown_html_tag(text: str) -> str | None:
     """The first ``<name>`` in prose ``text`` the browser would drop, as the
     blog lint finds it (code spans and ``$$`` spans removed), or None."""
     text = re.sub(r"\$\$.*?\$\$", "", BLOG_CODE_SPAN.sub("", blog_unquote(text)))
-    for close, name, attrs in _LINT_TAG.findall(text):
+    for found in _LINT_TAG.finditer(text):
+        close, name, attrs = (str(g or "") for g in found.groups())
         lowered = name.lower()
         if lowered not in BLOG_HTML_ELEMENTS or (
             not close and not attrs.strip() and lowered in BLOG_NEEDS_ATTRIBUTES
