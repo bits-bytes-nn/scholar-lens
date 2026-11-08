@@ -67,13 +67,20 @@ _RELEASE_NUMBER = re.compile(
 )
 _PRE_RELEASE = re.compile(r"(?:dev|rc|a|b)\d*$", re.I)
 
-# What is official on a requested docs host is the requested pages' path
-# scope, on every host (one host may serve many products or authors): the
-# path through the first folder after a docs version ("/en/<any
-# version>/serve/"), or, without a version, the first segments of the page's
-# folder ("owner/repo", "docs/<library>"); the host root is the whole host.
-# Request the docs root to make a whole docs site official.
-OFFICIAL_SCOPE_SEGMENTS = 2
+# What is official on a requested docs host is the requested docs site:
+# with a docs version in the path, everything up to and including it, at
+# any version ("/en/<any version>/": one product's docs on a host that
+# serves many, "/<product>/<version>/", stays that product's); without one,
+# the whole host, except on hosts whose first path segments name a tenant
+# (a repository, an author), where it is that tenant's space.
+TENANT_SEGMENTS: Mapping[str, int] = {
+    "github.com": 2,
+    "raw.githubusercontent.com": 2,
+    "gitlab.com": 2,
+    "bitbucket.org": 2,
+    "huggingface.co": 2,
+    "medium.com": 1,
+}
 # A scope segment that matches any docs version.
 ANY_VERSION = "*"
 # Code hosts whose URL layout names a repository and a ref: host ->
@@ -205,30 +212,23 @@ def _is_version(segment: str) -> bool:
     )
 
 
-def official_scope(
-    url: str, *, segments: int = OFFICIAL_SCOPE_SEGMENTS
-) -> tuple[str, str]:
-    """(host, the path scope a requested page makes official). A docs
-    version in the folder scopes to the path through the segment after it,
-    the version itself matching any version (other versions of the same
-    docs are another version, not another product); without one, the first
-    ``segments`` folder segments. "" is the whole host."""
+def official_scope(url: str) -> tuple[str, str]:
+    """(host, the path scope a requested page makes official): through the
+    tenant's space on a tenant host; else through the docs version when
+    the path names one (the version matching any version: other versions
+    of the same docs are another version, not another product); else the
+    whole host (""). See :data:`TENANT_SEGMENTS`."""
     parts = urlparse(url)
     host = (parts.hostname or "").lower()
+    if tenant := TENANT_SEGMENTS.get(host, 0):
+        # A repository's refs (branches, tags) are judged by its own rules.
+        segments = [s.lower() for s in parts.path.split("/") if s]
+        return host, "/".join(segments[:tenant])
     folder = _folder(parts.path)
     found = url_version("/" + "/".join(folder) + "/") if folder else None
-    version = folder.index(found.value) if found else None
-    if version is not None:
-        # The segment after the version scopes when it is a folder (more
-        # path follows, or a trailing slash), not when it is the page.
-        after = folder[version + 1 : version + 2]
-        whole = [seg for seg in parts.path.split("/") if seg]
-        if after and len(whole) == version + 2 and not parts.path.endswith("/"):
-            after = []
-        kept = [*folder[:version], ANY_VERSION, *after]
-    else:
-        kept = folder[:segments]
-    return host, "/".join(kept)
+    if found is not None:
+        return host, "/".join([*folder[: folder.index(found.value)], ANY_VERSION])
+    return host, ""
 
 
 def in_scope(url: str, scope: str) -> bool:

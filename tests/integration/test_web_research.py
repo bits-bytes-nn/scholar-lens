@@ -823,8 +823,8 @@ class TestOfficialDocsAfterRedirects:
         assert official.covers("https://docs.pytorch.org/docs/2.14/notes/amp.html")
         assert not official.covers("https://docs.pytorch.org/docs/2.0/notes/amp.html")
         assert official.covers("https://pytorch.org/docs/stable/notes/x.html")
-        # Outside the requested pages' path scope (docs/<version>/notes).
-        assert not official.covers("https://pytorch.org/docs/stable/x.html")
+        # The same docs site, another section.
+        assert official.covers("https://pytorch.org/docs/stable/x.html")
 
     def test_unversioned_link_to_a_pinned_release(self) -> None:
         from scholar_lens.domain.sources import OfficialDocs

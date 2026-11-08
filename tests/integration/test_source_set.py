@@ -152,38 +152,34 @@ def test_a_source_label_names_its_record() -> None:
 @pytest.mark.parametrize(
     "requested, same, other",
     [
-        # A multi-product docs host: one product's docs, not the others'.
+        # A versioned docs site: every section at any version is the same
+        # docs (another version is labelled by its version, not here).
         (
             "https://docs.multi.dev/en/latest/serve/index.html",
-            "https://docs.multi.dev/en/2.9.0/serve/batching.html",
             "https://docs.multi.dev/en/latest/data/overview.html",
+            "https://other.multi.dev/en/latest/serve/index.html",
         ),
-        # A host many libraries share, with no list of such hosts.
+        # A host serving several products' docs, each under its own path
+        # before the version: only the requested product's.
         (
-            "https://hub.example.org/docs/alpha/index",
-            "https://hub.example.org/docs/alpha/quicktour",
-            "https://hub.example.org/docs/beta/quicktour",
+            "https://docs.cloud.dev/alpha/latest/guide/start.html",
+            "https://docs.cloud.dev/alpha/latest/api/ref.html",
+            "https://docs.cloud.dev/beta/latest/guide/start.html",
         ),
-        # A code host: the project, not its owner's other projects.
+        # A tenant host: the repository, not its owner's other projects.
         (
-            "https://code.example.org/owner/proj",
-            "https://code.example.org/owner/proj/wiki/Home",
-            "https://code.example.org/owner/other",
-        ),
-        # Unversioned docs: the requested section.
-        (
-            "https://docs.single.dev/serve/batching.html",
-            "https://docs.single.dev/serve/scaling.html",
-            "https://docs.single.dev/train/intro.html",
+            "https://github.com/owner/proj",
+            "https://github.com/owner/proj/blob/main/docs/x.md",
+            "https://github.com/owner/other",
         ),
     ],
 )
-def test_only_the_requested_path_scope_is_official(
+def test_only_the_requested_docs_site_is_official(
     requested: str, same: str, other: str
 ) -> None:
     sources = SourceSet.from_urls([requested])
     assert sources.official.on_host(same)
-    assert sources.classify(other).authority == "third_party"
+    assert not sources.official.on_host(other)
 
 
 @pytest.mark.parametrize(
@@ -207,29 +203,26 @@ def test_where_a_requested_page_landed_is_in_scope_too() -> None:
         final_url="https://docs.example.dev/en/latest/serve/index.html",
     )
     sources = SourceSet.from_urls([seed.url], [seed])
-    assert (
-        sources.classify("https://docs.example.dev/en/latest/serve/x.html").authority
-        == "official"
-    )
-    assert (
-        sources.classify("https://docs.example.dev/en/latest/data/x.html").authority
-        == "third_party"
-    )
+    for url in (
+        "https://docs.example.dev/en/latest/serve/x.html",
+        "https://docs.example.dev/en/latest/data/x.html",
+    ):
+        assert sources.classify(url).authority == "official"
 
 
 @pytest.mark.parametrize(
-    "url, scope",
+    "url, host, scope",
     [
-        ("https://d.dev/en/latest/serve/index.html", "en/*/serve"),
-        ("https://d.dev/en/latest/quickstart.html", "en/*"),
-        ("https://d.dev/en/latest/quickstart/", "en/*/quickstart"),
-        ("https://d.dev/docs/lib/index", "docs/lib"),
-        ("https://d.dev/a.html", ""),
-        ("https://d.dev/", ""),
+        ("https://d.dev/en/latest/serve/index.html", "d.dev", "en/*"),
+        ("https://d.dev/alpha/v2.1/guide/", "d.dev", "alpha/*"),
+        ("https://d.dev/docs/lib/index", "d.dev", ""),
+        ("https://d.dev/", "d.dev", ""),
+        ("https://github.com/Owner/Proj/tree/main/docs", "github.com", "owner/proj"),
+        ("https://medium.com/@author/post-1", "medium.com", "@author"),
     ],
 )
-def test_a_requested_page_scopes_to_its_folder_below_the_version(
-    url: str, scope: str
+def test_the_official_scope_is_the_docs_site_or_the_tenant(
+    url: str, host: str, scope: str
 ) -> None:
-    assert official_scope(url) == ("d.dev", scope)
+    assert official_scope(url) == (host, scope)
     assert in_scope(url, scope)
