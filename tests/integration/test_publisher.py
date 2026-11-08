@@ -28,7 +28,12 @@ from scholar_lens.adapters.github.publisher import (
 from scholar_lens.configs import Github
 from scholar_lens.domain.conventions import BlogPost
 from scholar_lens.domain.post_names import slugify
-from scholar_lens.domain.publishing import PublishError, PublishRequest, build_pr_body
+from scholar_lens.domain.publishing import (
+    VIOLATIONS_OPENING,
+    PublishError,
+    PublishRequest,
+    build_pr_body,
+)
 from scholar_lens.domain.validation import PostValidationError
 
 
@@ -1581,6 +1586,31 @@ class TestValidationGate:
         assert not list(tmp_path.glob("20*.md"))  # nothing saved as a post
         rejected = list(tmp_path.glob("*.rejected.md"))
         assert rejected and "forbidden-key" in rejected[0].read_text(encoding="utf-8")
+
+    async def test_the_rejected_copy_lists_the_blocking_problems_and_notes(
+        self, tmp_path: Path
+    ) -> None:
+        """The rejected draft's report says what blocked the post and what
+        the generators noted, ahead of the violations, so a reader of the
+        copy alone knows why it was held back."""
+        from scholar_lens.domain.validation import PostValidationError
+
+        broken = VALID_POST.replace('paper_author: "Microsoft"', 'author: "Edward Hu"')
+        request = _request(tmp_path, markdown=broken)
+        request.blocking = ["the claim check of 'A' could not run", "second block"]
+        request.review_notes = ["a reader note"]
+        with pytest.raises(PostValidationError) as info:
+            await Publisher(Github(), root_dir=tmp_path).publish(request)
+        assert info.value.rejected_path is not None
+        text = Path(info.value.rejected_path).read_text(encoding="utf-8")
+        report = text.split(VIOLATIONS_OPENING, 1)[1]
+        lines = [ln for ln in report.splitlines() if ln.startswith("- ")]
+        assert lines[:2] == [
+            "- blocking: the claim check of 'A' could not run",
+            "- blocking: second block",
+        ]
+        assert "forbidden-key" in report
+        assert lines[-1] == "- note: a reader note"
 
     async def test_warnings_become_pr_checklist(self, tmp_path: Path) -> None:
         post = VALID_POST.replace("설명입니다.", "Table 3에서 보듯 설명입니다.")
