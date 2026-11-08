@@ -261,3 +261,29 @@ def test_the_coverage_reading_rule_keeps_the_full_reading() -> None:
     assert "before anything else" not in rule.lower()
     for prompts in (GUIDE_PROMPTS, PAPER_PROMPTS, SURVEY_PROMPTS):
         assert COVERAGE_READING in prompts.reader
+
+
+@pytest.mark.parametrize("stop", ["end_turn", "limit:turns"])
+def test_a_follow_up_read_that_stops_at_its_limit_is_noted(stop: str) -> None:
+    class _FollowUpStops(_StopsEarly):
+        async def run_agent(self, **call: Any) -> AgentOutcome:
+            outcome = await super().run_agent(**call)
+            return (
+                AgentOutcome(text="", stop_reason=stop)
+                if len(self.prompts) == 2
+                else outcome
+            )
+
+    writer = EvidenceWriter(_FollowUpStops(0), SURVEY_PROMPTS, max_fix_rounds=1)  # type: ignore[arg-type]
+    notes: list[str] = []
+    asyncio.run(
+        writer.read_document(
+            _document(),
+            prompt="read",
+            limits=AgentLimits(turns=20),
+            minimum=3,
+            notes=notes,
+        )
+    )
+    noted = [n for n in writer.notes if "follow-up read" in n]
+    assert bool(noted) is (stop != "end_turn") and notes == noted

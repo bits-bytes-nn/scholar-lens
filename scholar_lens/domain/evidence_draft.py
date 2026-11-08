@@ -180,8 +180,10 @@ _MODEL_SIZE = re.compile(r"^\d+(?:\.\d+)?[BM]$")
 
 
 def visual_count(markdown: str) -> int:
+    """The section's images, display equations and tables (a header row
+    over a delimiter row: a ``---`` rule is not a table)."""
     body = without_code(markdown)
-    tables = len(re.findall(r"^\s*\|?\s*:?-{3,}", body, re.M))
+    tables = len(assets(markdown)["table"])
     roles = block_lines(body)
     equations = sum(
         1
@@ -728,7 +730,6 @@ def quote_for_prompt(quote: str) -> str:
 
 
 _BARE_ITEM = re.compile(r"^[ \t]*(?:[-*+]|\d+[.)])[ \t]*$")
-MAX_EDITS = 30
 
 
 def apply_edits(
@@ -738,9 +739,11 @@ def apply_edits(
     rest: str = "",
     owned_figures: Collection[str] | None = None,
     later: str = "",
+    max_edits: int = Limits().max_edits,
 ) -> tuple[str, int, list[str]]:
     """``markdown`` with the (find, replace) edits whose ``find`` occurs
-    exactly once applied in order (an empty ``replace`` deletes), with the
+    exactly once applied in order (an empty ``replace`` deletes, at most
+    ``max_edits`` of them: ``Limits.max_edits``), with the
     guards of the review editor on the final text (edits one by one when it
     fails): no edit may unbalance a code fence, change a ``## `` heading,
     remove the only copy of a figure, equation, table or code block (a copy
@@ -755,7 +758,7 @@ def apply_edits(
     text, applied, skipped = guarded(
         markdown,
         [Edit(find=f, replace=r) for f, r in edits],
-        max_edits=MAX_EDITS,
+        max_edits=max_edits,
         rest=rest,
         owned_figures=owned_figures,
         later=later,

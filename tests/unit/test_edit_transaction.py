@@ -549,3 +549,32 @@ def test_a_cutting_fix_that_leaves_the_section_short_is_not_taken() -> None:
         text, cut, verifiers=verifiers, max_prose_cut=1.0, tolerated=("too_short",)
     )
     assert tolerated.taken
+
+
+@pytest.mark.parametrize(
+    ("blocks", "count"),
+    [
+        (["앞입니다.", "---", "뒤입니다."], 0),
+        (["앞입니다.", "***", "뒤입니다."], 0),
+        (["앞입니다.", TABLE, "---", "뒤입니다."], 1),
+        (["앞입니다.", TABLE, OTHER, FIGURE, "$$\ny = Wx\n$$"], 4),
+    ],
+)
+def test_a_rule_is_not_a_table_of_the_visuals_count(
+    blocks: list[str], count: int
+) -> None:
+    from scholar_lens.domain.evidence_draft import visual_count
+
+    assert visual_count(_section(*blocks)) == count
+
+
+@pytest.mark.parametrize("cap", [1, 2, 5])
+def test_the_edits_one_fix_may_apply_are_the_limit(cap: int) -> None:
+    sentences = [f"문장 {k}입니다." for k in range(4)]
+    text = _section(*sentences)
+    edits = [(s, s.replace("입니다", "이었습니다")) for s in sentences]
+    revision = transact(
+        text, edits, verifiers=no_checks(), max_prose_cut=CUT, max_edits=cap
+    )
+    assert revision.applied == min(cap, len(edits))
+    assert any("over the cap" in r for r in revision.skipped) is (cap < len(edits))

@@ -742,6 +742,7 @@ class EvidenceWriter:
         # its sections hold.
         missing = [k for k in required if k not in {e.kind for e in ledger}]
         short = len(ledger) < minimum
+        follow_up = None
         if missing or short:
             recorded = "\n".join(f"- ({e.kind}) {e.claim[:120]}" for e in ledger)
             asks: list[str] = []
@@ -761,7 +762,7 @@ class EvidenceWriter:
                     "right kind. If the source holds no more, say so in "
                     "finish."
                 )
-            await self.model.run_agent(
+            follow_up = await self.model.run_agent(
                 role="read",
                 system=self.prompts.reader,
                 prompt="\n\n".join(
@@ -778,11 +779,12 @@ class EvidenceWriter:
                 ),
             )
         logger.info(
-            "Read %s: %d evidence, %d rejected records (%s).",
+            "Read %s: %d evidence, %d rejected records (%s%s).",
             document.paper_id,
             len(ledger),
             rejected,
             outcome.stop_reason,
+            f"; follow-up {follow_up.stop_reason}" if follow_up is not None else "",
         )
         if reasons:
             logger.info(
@@ -790,14 +792,15 @@ class EvidenceWriter:
                 document.paper_id,
                 "; ".join(f"{r} x{n}" for r, n in reasons.most_common(6)),
             )
-        if outcome.stop_reason.startswith("limit"):
-            note = (
-                f"Reading {document.paper_id} stopped at its limit "
-                f"({outcome.stop_reason})."
-            )
-            self.notes.append(note)
-            if notes is not None:
-                notes.append(note)
+        stops = [("Reading", outcome.stop_reason)]
+        if follow_up is not None:
+            stops.append(("The follow-up read of", follow_up.stop_reason))
+        for what, reason in stops:
+            if reason.startswith("limit"):
+                note = f"{what} {document.paper_id} stopped at its limit ({reason})."
+                self.notes.append(note)
+                if notes is not None:
+                    notes.append(note)
         return list(ledger)
 
     async def wrong_evidence(self, items: Sequence[Evidence]) -> dict[str, str]:
@@ -1330,6 +1333,7 @@ class EvidenceWriter:
                 rest=rest,
                 later=later,
                 tolerated=tolerated,
+                max_edits=self.limits.max_edits,
             )
 
         with usage_stage("fix"):

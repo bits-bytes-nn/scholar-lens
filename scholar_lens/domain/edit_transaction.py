@@ -25,6 +25,7 @@ from scholar_lens.domain.evidence_draft import (
     strip_revision_notes,
     structure_lost,
 )
+from scholar_lens.domain.post_spec import Limits
 from scholar_lens.domain.verifiers import Problem, VerifierSet
 
 
@@ -115,6 +116,7 @@ def transact(
     rest: str = "",
     later: str = "",
     tolerated: Collection[str] = (),
+    max_edits: int = Limits().max_edits,
 ) -> Revision:
     """``before`` revised by ``edits``, or as it was when they may not stand.
 
@@ -128,6 +130,7 @@ def transact(
             one stays in a section before this one.
         later: The part of ``rest`` after this section ("": all of it
             comes before).
+        max_edits: The edits of the batch applied at most.
         tolerated: Problem kinds a new problem of which does not refuse
             the batch (a deletion of unsupported content may leave the
             section short; the caller notes it).
@@ -137,7 +140,12 @@ def transact(
     """
     owned = verifiers.figures
     fixed, applied, skipped = apply_edits(
-        before, edits, rest=rest, owned_figures=owned, later=later
+        before,
+        edits,
+        rest=rest,
+        owned_figures=owned,
+        later=later,
+        max_edits=max_edits,
     )
     if not applied:
         return Revision(before, skipped=tuple(skipped))

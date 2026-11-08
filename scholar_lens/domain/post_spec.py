@@ -278,6 +278,9 @@ class CoverageSpec:
     authorities: frozenset[str] = frozenset()
     sections: tuple[str, ...] = ()
     per_document: frozenset[str] = frozenset()
+    # Characters of a document's opening text shown with its headings when
+    # ``sections`` names none (enough for its first paragraph or two).
+    opening_chars: int = 800
     # The kind of a per-document target, and what it is.
     document_kind: TargetKind = TargetKind(
         "document", "a document the user chose; the post uses it"
@@ -314,6 +317,10 @@ class Limits:
     # The largest share of a section's prose one revision may cut: a fix
     # that cuts more rewrote the section instead of fixing it.
     max_prose_cut: float = 0.25
+    # Edits one fix answer may apply (the rest are skipped, with a note):
+    # a fix of more passages is a rewrite, which the prose-cut guard and
+    # the claim check would have to judge whole.
+    max_edits: int = 30
     # The largest share of a section's claim units code deletes as
     # unsupported. The guard catches a claim check that misread the section
     # (or its evidence) and flagged most of it, so nothing is deleted and the

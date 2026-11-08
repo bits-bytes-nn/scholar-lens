@@ -18,11 +18,10 @@ from scholar_lens.domain.evidence import Evidence, SourceDocument
 from scholar_lens.domain.evidence_draft import quote_for_prompt
 from scholar_lens.domain.post_spec import CoverageSpec
 
-# How many targets one extraction answer may hold (the spec's count caps it
-# again).
+# How many targets one extraction answer may hold: a bound of the answer's
+# schema against a runaway list, above every spec's count (which caps it
+# again in code).
 _MAX_EXTRACTED = 30
-# A document's opening text shown with its headings when no section is named.
-_OPENING_CHARS = 800
 
 
 class CoverageTarget(BaseModel):
@@ -106,7 +105,7 @@ def extraction_text(
             text = "\n\n".join(f"{s.heading}\n{s.text}".strip() for s in chosen)
         else:
             headings = "; ".join(s.heading for s in d.sections if s.heading)
-            opening = d.sections[0].text[:_OPENING_CHARS] if d.sections else ""
+            opening = d.sections[0].text[: spec.opening_chars] if d.sections else ""
             text = f"Headings: {headings}\n{opening}".strip()
         header = f"[{d.paper_id}] {d.title}" + (
             f" ({d.authority})" if d.authority else ""

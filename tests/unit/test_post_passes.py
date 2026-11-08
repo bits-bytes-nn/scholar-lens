@@ -152,6 +152,19 @@ def test_the_extraction_reads_the_named_sections() -> None:
     assert "without a reward model" in text and "PPO, which is unstable" not in text
 
 
+@pytest.mark.parametrize("chars", [5, 40, 10_000])
+def test_a_documents_opening_is_the_specs_share(chars: int) -> None:
+    import dataclasses
+
+    spec = dataclasses.replace(_SPEC, sections=(), opening_chars=chars)
+    paper = _paper()
+    opening = paper.sections[0].text[:chars]
+    text = extraction_text(spec, [paper], 100_000)
+    assert opening.strip()[:chars] in text
+    if chars < len(paper.sections[0].text):
+        assert paper.sections[0].text[: chars + 20] not in text
+
+
 def _targets() -> list[CoverageTarget]:
     return [
         CoverageTarget(id="T1", statement="a", source="P"),
