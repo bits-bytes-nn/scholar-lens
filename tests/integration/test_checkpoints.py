@@ -27,6 +27,7 @@ from scholar_lens.application.evidence_writer import (
     PostReview,
 )
 from scholar_lens.application.paper_engine import EvidencePaperEngine, PaperSettings
+from scholar_lens.application.ports import ModelRole, RoleSpec
 from tests.fakes import claim_check
 from tests.unit.test_paper_engine import ScriptedModel, _paper
 
@@ -84,7 +85,13 @@ class StatefulModel(ScriptedModel):
         )
 
 
-def _engine(model: Any, store: Any, **settings: Any) -> EvidencePaperEngine:
+def _engine(
+    model: Any,
+    store: Any,
+    *,
+    roles: dict[ModelRole, RoleSpec] | None = None,
+    **settings: Any,
+) -> EvidencePaperEngine:
     return EvidencePaperEngine(
         model,
         PaperSettings(
@@ -97,6 +104,7 @@ def _engine(model: Any, store: Any, **settings: Any) -> EvidencePaperEngine:
         ),
         store=store,
         checkpoints=store,
+        roles=roles,
     )
 
 
@@ -393,6 +401,66 @@ def test_a_changed_outline_prompt_recomputes_every_stage_after_it(
     assert after["section"] == 2 * before["section"]
     calls = engine.model.calls  # type: ignore[attr-defined]
     assert {"text", "PostReview", "FinalText"} <= set(calls)
+
+
+_READER = RoleSpec("reader-v1", "medium", True)
+ROLES: dict[ModelRole, RoleSpec] = {
+    "read": RoleSpec("reader-v1", "medium", False),
+    "outline": RoleSpec("planner-v1", "high", True),
+    "write": RoleSpec("writer-v1", "medium", True, _READER),
+    "evaluate": RoleSpec("judge-v1", "medium", True, _READER),
+}
+
+
+@pytest.mark.parametrize(
+    ("role", "change", "expected"),
+    [
+        ("evaluate", {"model_id": "judge-v2"}, {"targets", "outline"} | DOWNSTREAM),
+        ("outline", {"model_id": "planner-v2"}, {"outline"} | DOWNSTREAM),
+        ("outline", {"effort": "medium"}, {"outline"} | DOWNSTREAM),
+        ("write", {"model_id": "writer-v2"}, DOWNSTREAM),
+        ("write", {"effort": "high"}, DOWNSTREAM),
+        ("write", {"fallback": None}, DOWNSTREAM),
+        (
+            "evaluate",
+            {"fallback": RoleSpec("judge-v1", "low", True)},
+            {"targets", "outline"} | DOWNSTREAM,
+        ),
+    ],
+)
+def test_a_changed_role_model_recomputes_the_stages_that_role_produces(
+    store: EvidenceTextStore,
+    tmp_path: Path,
+    role: ModelRole,
+    change: dict[str, Any],
+    expected: set[str],
+) -> None:
+    import dataclasses
+
+    _write(_engine(StatefulModel(), store, roles=ROLES))
+    before = _counts(tmp_path, "review")
+    roles = {**ROLES, role: dataclasses.replace(ROLES[role], **change)}
+    model = StatefulModel()
+    _write(_engine(model, store, roles=roles))
+    assert _recomputed(before, _counts(tmp_path, "review")) == expected
+    # The evidence is the reader's: it is read from the cache.
+    assert "read" not in model.calls
+
+
+@pytest.mark.parametrize("change", [{"model_id": "reader-v2"}, {"effort": "high"}])
+def test_a_changed_reading_model_reads_again(
+    store: EvidenceTextStore, change: dict[str, Any]
+) -> None:
+    import dataclasses
+
+    _write(_engine(StatefulModel(), store, roles=ROLES))
+    same = StatefulModel()
+    _write(_engine(same, store, roles=ROLES))
+    assert "read" not in same.calls
+    model = StatefulModel()
+    roles = {**ROLES, "read": dataclasses.replace(ROLES["read"], **change)}
+    _write(_engine(model, store, roles=roles))
+    assert "read" in model.calls
 
 
 def test_a_changed_paper_recomputes_the_reading_and_every_stage(

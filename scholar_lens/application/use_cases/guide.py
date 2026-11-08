@@ -269,6 +269,7 @@ async def write_guide_with_evidence(
         ),
         store=store,
         checkpoints=store,
+        roles=writing.roles,
         identifier_check=identifier_check,
         products=products,
         package_facts=package_facts,

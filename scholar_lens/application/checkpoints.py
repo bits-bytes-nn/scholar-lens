@@ -4,7 +4,8 @@ A stage's output is saved under a hash of everything that decides it: the
 checkpoint format version, the post kind (``PostSpec.name``), the stage, the
 output of the stage before it (a chain, so a recomputed stage invalidates
 every later one and nothing earlier), and the stage's own inputs (its
-prompts, the system prompts it uses, the settings it reads). A rerun with
+prompts, the system prompts it uses, the settings it reads, and the model,
+effort and fallback of each role that produces it). A rerun with
 the same inputs loads each saved stage instead of calling the model; a
 changed input misses its stage's key and every later one. Keys are input
 hashes, so resuming is never unsafe: a key either names this exact work or

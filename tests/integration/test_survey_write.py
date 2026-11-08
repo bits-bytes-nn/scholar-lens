@@ -723,9 +723,12 @@ class FakeEngine:
         store: Any = None,
         *,
         checkpoints: Any = None,
+        roles: Any = None,
     ) -> FakeEngine:
         assert checkpoints is store
-        self.created.append({"documents": documents, "settings": settings})
+        self.created.append(
+            {"documents": documents, "settings": settings, "roles": roles}
+        )
         return self
 
     async def write(
@@ -856,6 +859,13 @@ class TestStage:
         assert (settings.chars_per_core, settings.chars_per_supporting) == (3_000, 800)
         assert settings.title_max_length == survey_spec().seo_title_max_length
         assert settings.reader_tag == "anthropic-claude-sonnet-5-5"
+        # The role map reaches the engine (its checkpoint keys hash it).
+        assert set(engine.created[0]["roles"]) == {
+            "read",
+            "outline",
+            "write",
+            "evaluate",
+        }
         # The supporting paper's abstract reaches the engine's documents.
         documents = engine.created[0]["documents"]
         assert documents.abstracts == {"2203.02155": ABSTRACT.abstract}

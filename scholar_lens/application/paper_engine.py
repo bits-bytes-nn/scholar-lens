@@ -30,6 +30,8 @@ from scholar_lens.application.ports import (
     AgentLimits,
     CheckpointStore,
     LanguageModel,
+    ModelRole,
+    RoleSpec,
     TextStore,
 )
 from scholar_lens.application.post_engine import (
@@ -162,6 +164,7 @@ class EvidencePaperEngine(PostEngine[PaperOutline, PaperSection, EvidencePaper])
         store: TextStore | None = None,
         *,
         checkpoints: CheckpointStore | None = None,
+        roles: Mapping[ModelRole, RoleSpec] | None = None,
     ) -> None:
         review = settings.post == "review"
         super().__init__(
@@ -185,6 +188,7 @@ class EvidencePaperEngine(PostEngine[PaperOutline, PaperSection, EvidencePaper])
             store=store,
             checkpoints=checkpoints,
             max_fix_rounds=settings.max_fix_rounds,
+            roles=roles,
         )
         self.settings = settings
         self.free = _FREE_NUMBERS
@@ -413,7 +417,14 @@ class EvidencePaperEngine(PostEngine[PaperOutline, PaperSection, EvidencePaper])
         dropped (the blog derives one). A checkpointed stage."""
         return await self.staged(
             "final",
-            [prompts.FINAL_SYSTEM, title, abstract, list(sections), self.settings],
+            [
+                prompts.FINAL_SYSTEM,
+                self.role_inputs("evaluate"),
+                title,
+                abstract,
+                list(sections),
+                self.settings,
+            ],
             lambda: self._final_text(title, abstract, sections),
             dump=lambda final: final.model_dump(mode="json"),
             load=FinalText.model_validate,

@@ -40,6 +40,8 @@ class Seen:
     ceilings: list[float | None] = field(default_factory=list)
     settings: list[Any] = field(default_factory=list)
     stores: list[Any] = field(default_factory=list)
+    # The role map the engine was given (its checkpoint keys hash it).
+    engine_roles: list[Any] = field(default_factory=list)
     root: Path = Path()
 
 
@@ -114,7 +116,9 @@ def test_a_guide_run_wires_roles_ceiling_cache_and_sources(
             products,  # type: ignore[no-untyped-def]
             package_facts,
             sdk=None,
+            roles=None,
         ) -> None:
+            seen.engine_roles.append(roles)
             seen.settings.append(settings)
             seen.stores.append(store)
             # The checkpoints share the reading cache's directory and S3
@@ -161,6 +165,9 @@ def test_a_guide_run_wires_roles_ceiling_cache_and_sources(
     assert seen.roles["write"].fallback is not None
     assert seen.roles["write"].fallback.invoke_id == cfg.synopsis_model_id
     assert seen.roles["evaluate"].invoke_id == cfg.evaluation_model_id
+    (engine_roles,) = seen.engine_roles
+    assert engine_roles["evaluate"].model_id == cfg.evaluation_model_id
+    assert engine_roles["write"].effort == cfg.thinking_effort
     assert seen.ceilings == [cfg.max_cost_usd]
     assert seen.stores[0].local_dir.name == "guide-evidence"
     assert seen.stores[0].local_dir.is_relative_to(seen.root)
@@ -209,7 +216,8 @@ def test_a_paper_run_wires_roles_ceiling_and_shape(
     seen: Seen, monkeypatch: pytest.MonkeyPatch, post: str
 ) -> None:
     class FakePaperEngine:
-        def __init__(self, model, settings, *, store, checkpoints) -> None:  # type: ignore[no-untyped-def]
+        def __init__(self, model, settings, *, store, checkpoints, roles) -> None:  # type: ignore[no-untyped-def]
+            seen.engine_roles.append(roles)
             seen.settings.append(settings)
             seen.stores.append(store)
             assert checkpoints is store
@@ -261,6 +269,9 @@ def test_a_paper_run_wires_roles_ceiling_and_shape(
         if post == "review"
         else context.config.summary.reader_model_id
     )
+    (engine_roles,) = seen.engine_roles
+    assert engine_roles["read"].model_id == seen.roles["read"].invoke_id
+    assert engine_roles["write"].model_id == seen.roles["write"].invoke_id
     assert seen.stores[0].local_dir.name == "paper-evidence"
     assert seen.stores[0].local_dir.is_relative_to(seen.root)
     assert "engine note" in notes and any(BROKEN in n for n in notes)

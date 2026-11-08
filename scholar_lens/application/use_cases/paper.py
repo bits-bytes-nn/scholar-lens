@@ -302,6 +302,7 @@ async def write_paper_with_evidence(
         ),
         store=store,
         checkpoints=store,
+        roles=writing.roles,
     )
     result = await engine.write(
         paper.title,

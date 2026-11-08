@@ -31,7 +31,6 @@ restored as follows:
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import json
 import logging
 import re
@@ -66,6 +65,8 @@ from scholar_lens.application.ports import (
     AgentLimits,
     CheckpointStore,
     LanguageModel,
+    ModelRole,
+    RoleSpec,
     TextStore,
 )
 from scholar_lens.domain.coverage import (
@@ -145,23 +146,21 @@ class ReadJob:
     minimum: int = 0
 
 
-def reader_key(job: ReadJob, prompt: str) -> str:
+def reader_key(job: ReadJob, prompt: str, reader: RoleSpec | None = None) -> str:
     """The cache key of a job's evidence: the job's key (the source, the
     reader version and model) with a digest of everything else the reader
     is given: its prompt (the topic, the key targets, the counts asked
-    for), its limits, the kinds it is asked again for and the count below
-    which it is continued."""
-    inputs = json.dumps(
-        [
-            prompt,
-            job.limits.turns,
-            job.limits.total_tokens,
-            list(job.required),
-            job.minimum,
-        ],
-        ensure_ascii=False,
-    )
-    digest = hashlib.sha256(inputs.encode()).hexdigest()[:12]
+    for), its limits, the kinds it is asked again for, the count below
+    which it is continued, and the reading role's model (its id, effort,
+    thinking switch and fallback)."""
+    digest = input_hash(
+        prompt,
+        job.limits.turns,
+        job.limits.total_tokens,
+        list(job.required),
+        job.minimum,
+        reader,
+    )[:12]
     stem = job.key.removesuffix(".json")
     return f"{stem}-r{digest}.json"
 
@@ -254,11 +253,15 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
         store: TextStore | None = None,
         checkpoints: CheckpointStore | None = None,
         max_fix_rounds: int,
+        roles: Mapping[ModelRole, RoleSpec] | None = None,
     ) -> None:
         super().__init__(
             model, prompts, max_fix_rounds=max_fix_rounds, limits=spec.limits
         )
         self.spec = spec
+        # The model each role runs on (id, effort, thinking, fallback): part
+        # of the key of every stage the role produces.
+        self.roles: Mapping[ModelRole, RoleSpec] = dict(roles or {})
         self.post_prompts = post_prompts
         self.run = run
         self.outline_schema = outline_schema
@@ -359,13 +362,20 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
         self._upstream = input_hash(key, json.loads(json.dumps(data)))
         return value
 
+    def role_inputs(self, *roles: ModelRole) -> list[object]:
+        """The models of ``roles`` as checkpoint inputs (a role without a
+        model stays None): a changed model, effort or fallback misses
+        the key of every stage that role produces."""
+        return [[role, self.roles.get(role)] for role in roles]
+
     def writing_inputs(self) -> list[object]:
         """What decides every section-level stage besides its prompt: the
         system prompts of drafting, checking, review and fixes (a prompt
-        change invalidates), the answer formats, the loop settings and the
-        kind's settings."""
+        change invalidates), the answer formats, the writing and checking
+        models, the loop settings and the kind's settings."""
         p = self.prompts
         return [
+            self.role_inputs("write", "evaluate"),
             input_hash(
                 p.writer, p.claim_check, p.review, p.fix, EDIT_ANSWER, FIX_ANSWER
             ),
@@ -398,6 +408,7 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
             "targets",
             [
                 TARGETS_SYSTEM,
+                self.role_inputs("evaluate"),
                 self.prompt_head(),
                 self.spec.coverage,
                 self.limits.coverage_source_chars,
@@ -502,7 +513,7 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
                 if job is None:
                     return None, []
                 prompt = "\n\n".join(p for p in (job.prompt, self.targets_block()) if p)
-                key = reader_key(job, prompt)
+                key = reader_key(job, prompt, self.roles.get("read"))
                 if self.store is not None and (cached := self.store.get(key)):
                     document = job.document
                     kept = (
@@ -755,6 +766,7 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
             "outline",
             [
                 input_hash(self.post_prompts.outline, self.prompts.evidence_check),
+                self.role_inputs("outline", "evaluate"),
                 self.outline_prompt(ledger, self.offered_duplicates(ledger)),
                 [t.model_dump(mode="json") for t in self.targets],
                 [e.model_dump(mode="json") for e in ledger],

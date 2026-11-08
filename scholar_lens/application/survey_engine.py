@@ -27,6 +27,8 @@ from scholar_lens.application.ports import (
     CheckpointStore,
     DocumentSource,
     LanguageModel,
+    ModelRole,
+    RoleSpec,
     TextStore,
 )
 from scholar_lens.application.post_engine import (
@@ -133,6 +135,7 @@ class EvidenceSurveyEngine(PostEngine[EvidenceOutline, OutlineSection, EvidenceS
         store: TextStore | None = None,
         *,
         checkpoints: CheckpointStore | None = None,
+        roles: Mapping[ModelRole, RoleSpec] | None = None,
     ) -> None:
         super().__init__(
             model,
@@ -155,6 +158,7 @@ class EvidenceSurveyEngine(PostEngine[EvidenceOutline, OutlineSection, EvidenceS
             store=store,
             checkpoints=checkpoints,
             max_fix_rounds=settings.max_fix_rounds,
+            roles=roles,
         )
         self.documents = documents
         self.settings = settings

@@ -198,6 +198,7 @@ async def write_survey_with_evidence(
         ),
         store=store,
         checkpoints=store,
+        roles=writing.roles,
     )
     articles = [r for r in plan.references if r.kind == "article"]
     read = await asyncio.to_thread(reader.read_references, [r.url for r in articles])

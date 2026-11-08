@@ -28,6 +28,8 @@ from scholar_lens.application.ports import (
     AgentLimits,
     CheckpointStore,
     LanguageModel,
+    ModelRole,
+    RoleSpec,
     TextStore,
 )
 from scholar_lens.application.post_engine import (
@@ -143,6 +145,7 @@ class EvidenceGuideEngine(PostEngine[GuideOutline, GuideSection, EvidenceGuide])
         store: TextStore | None = None,
         *,
         checkpoints: CheckpointStore | None = None,
+        roles: Mapping[ModelRole, RoleSpec] | None = None,
         identifier_check: Callable[[str], list[str]] | None = None,
         products: Sequence[str] = (),
         package_facts: str = "",
@@ -164,6 +167,7 @@ class EvidenceGuideEngine(PostEngine[GuideOutline, GuideSection, EvidenceGuide])
             store=store,
             checkpoints=checkpoints,
             max_fix_rounds=settings.max_fix_rounds,
+            roles=roles,
         )
         self.settings = settings
         self.free = _FREE_NUMBERS
