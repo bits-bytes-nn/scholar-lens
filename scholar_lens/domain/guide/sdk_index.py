@@ -89,15 +89,19 @@ class SdkIndex:
                     node.targets if isinstance(node, ast.Assign) else [node.target]
                 )
                 names |= {t.id for t in targets if isinstance(t, ast.Name)}
-            elif isinstance(node, ast.ImportFrom) and node.module:
-                base = _resolve(package, node.module, node.level)
+            elif isinstance(node, ast.ImportFrom) and (node.module or node.level):
+                base = _resolve(package, node.module or "", node.level)
                 for alias in node.names:
                     bound = alias.asname or alias.name
                     names.add(bound)
                     self.aliases[f"{module}.{bound}"] = f"{base}.{alias.name}"
             elif isinstance(node, ast.Import):
                 for alias in node.names:
-                    names.add((alias.asname or alias.name).split(".")[0])
+                    if alias.asname:
+                        names.add(alias.asname)
+                        self.aliases[f"{module}.{alias.asname}"] = alias.name
+                    else:
+                        names.add(alias.name.split(".")[0])
 
     def _callable(
         self, qualified: str, args: ast.arguments, node: ast.AST, text: str
@@ -116,6 +120,21 @@ class SdkIndex:
         return qualified
 
     def has_module(self, module: str) -> bool:
+        return module in self.modules
+
+    def attribute(self, module: str, name: str) -> str | None:
+        """What ``module.name`` is, through re-exports (a submodule or a
+        definition's qualified name); None when the module does not bind
+        it."""
+        if f"{module}.{name}" in self.modules:
+            return f"{module}.{name}"
+        if name in self.modules.get(module, set()):
+            return self.resolve(f"{module}.{name}")
+        return None
+
+    def complete(self, module: str) -> bool:
+        """Whether every name ``module`` binds is known, so a name it does
+        not list does not exist."""
         return module in self.modules
 
     def binds(self, module: str, name: str) -> bool:
@@ -160,43 +179,74 @@ class ApiUse:
 def api_problems(code_blocks: Iterable[str], index: SdkIndex) -> list[str]:
     """What the package does not have that the code uses: a module of the
     package that does not exist, a name a module does not bind, a keyword a
-    function or class of the package does not take. Only the package's own
-    names are judged; a block that does not parse is skipped (the reading
-    check reports it)."""
+    function or class of the package does not take. Calls are resolved
+    through the code's imports (``from m import n as a``, ``import m.sub as
+    x``), attribute chains to a module (``x.func(...)``, ``m.Class(...)``)
+    and decorators with arguments (``@x.func(...)``). Only the package's own
+    names are judged, and a name the code rebinds is not; a block that does
+    not parse is skipped (the reading check reports it)."""
     problems: list[str] = []
     for code in code_blocks:
         try:
             tree = ast.parse(code)
         except (SyntaxError, ValueError):
             continue
-        imported: dict[str, str] = {}
-        for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom) and node.module and not node.level:
-                top = node.module.split(".")[0]
+        problems += _block_problems(tree, index)
+    return list(dict.fromkeys(problems))
+
+
+def _block_problems(tree: ast.Module, index: SdkIndex) -> list[str]:
+    problems: list[str] = []
+    version = f" {index.version}" if index.version else ""
+    # Local name -> the package's qualified name (a module or a definition).
+    env: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module and not node.level:
+            top = node.module.split(".")[0]
+            if top not in index.packages:
+                continue
+            if not index.has_module(node.module):
+                problems.append(
+                    f"module `{node.module}` does not exist in {top}{version}"
+                )
+                continue
+            for alias in node.names:
+                if alias.name == "*":
+                    continue
+                if not index.binds(node.module, alias.name):
+                    problems.append(
+                        f"`{alias.name}` is not in `{node.module}` ({top}{version})"
+                    )
+                else:
+                    env[alias.asname or alias.name] = index.resolve(
+                        f"{node.module}.{alias.name}"
+                    )
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                top = alias.name.split(".")[0]
                 if top not in index.packages:
                     continue
-                if not index.has_module(node.module):
+                if not index.has_module(alias.name):
                     problems.append(
-                        f"module `{node.module}` does not exist in "
-                        f"{top} {index.version}".rstrip()
+                        f"module `{alias.name}` does not exist in {top}{version}"
                     )
                     continue
-                for alias in node.names:
-                    if alias.name == "*":
-                        continue
-                    if not index.binds(node.module, alias.name):
-                        problems.append(
-                            f"`{alias.name}` is not in `{node.module}` "
-                            f"({top} {index.version})".rstrip()
-                        )
-                    else:
-                        imported[alias.asname or alias.name] = index.resolve(
-                            f"{node.module}.{alias.name}"
-                        )
-        for node in ast.walk(tree):
-            if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)):
+                # ``import a.b`` binds ``a``; ``import a.b as x`` binds ``a.b``.
+                env[alias.asname or top] = alias.name if alias.asname else top
+    for name in _rebound(tree):
+        env.pop(name, None)
+    if not env:
+        return problems
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Attribute) and isinstance(node.ctx, ast.Load):
+            owner = _qualified(node.value, env, index)
+            if owner is None or not index.has_module(owner):
                 continue
-            target = imported.get(node.func.id)
+            if index.attribute(owner, node.attr) is None and index.complete(owner):
+                top = owner.split(".")[0]
+                problems.append(f"`{node.attr}` is not in `{owner}` ({top}{version})")
+        elif isinstance(node, ast.Call):
+            target = _qualified(node.func, env, index)
             surface = index.callables.get(target or "")
             if surface is None or surface.any_keyword:
                 continue
@@ -205,10 +255,38 @@ def api_problems(code_blocks: Iterable[str], index: SdkIndex) -> list[str]:
             ]
             if unknown:
                 problems.append(
-                    f"`{node.func.id}()` takes no keyword {', '.join(map(repr, unknown))}"
+                    f"`{ast.unparse(node.func)}()` takes no keyword "
+                    f"{', '.join(map(repr, unknown))}"
                     f" (it takes {', '.join(sorted(surface.params)) or 'none'})"
                 )
-    return list(dict.fromkeys(problems))
+    return problems
+
+
+def _rebound(tree: ast.Module) -> set[str]:
+    """Names the code assigns or defines itself (then an import of the same
+    name no longer says what they are)."""
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name) and isinstance(node.ctx, (ast.Store, ast.Del)):
+            names.add(node.id)
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            names.add(node.name)
+        elif isinstance(node, ast.arg):
+            names.add(node.arg)
+    return names
+
+
+def _qualified(node: ast.expr, env: Mapping[str, str], index: SdkIndex) -> str | None:
+    """The package's qualified name an expression of imported names and
+    attributes refers to (``x.sub.func`` -> ``pkg.sub.api.func``), or None
+    when it is not one the index knows."""
+    if isinstance(node, ast.Name):
+        return env.get(node.id)
+    if isinstance(node, ast.Attribute):
+        owner = _qualified(node.value, env, index)
+        if owner is not None and index.has_module(owner):
+            return index.attribute(owner, node.attr)
+    return None
 
 
 _IDENTIFIER = re.compile(r"\b[A-Za-z_][A-Za-z0-9_]{2,}\b")
