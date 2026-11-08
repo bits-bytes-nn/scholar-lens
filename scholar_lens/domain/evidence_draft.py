@@ -194,6 +194,67 @@ def visual_count(markdown: str) -> int:
     return len(_IMAGE.findall(body)) + equations + tables
 
 
+# A heading of a subsection (``###`` and deeper) outside code.
+_SUBHEADING = re.compile(r"^(#{3,6}) (.+?)\s*#*\s*$")
+_LIST_ITEM = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+\S")
+# The problem kind of a subsection too thin to stand under its own heading.
+THIN_SUBSECTION_PROBLEM = "thin_subsection"
+
+
+def thin_subsections(markdown: str) -> list[str]:
+    """The headings of subsections (``###`` and deeper) with at most one
+    prose sentence and nothing else of their own (no figure, equation,
+    table, code block or list) before the next heading: what deleting
+    sentences leaves behind, or a heading over a single remark. A
+    subsection whose content is its own child subsections is not thin."""
+    lines = markdown.split("\n")
+    roles = block_lines(markdown)
+    starts = [
+        (i, len(m.group(1)), m.group(2))
+        for i, (line, role) in enumerate(zip(lines, roles, strict=True))
+        if role == "prose" and (m := _SUBHEADING.match(line))
+    ]
+    headings = [
+        i
+        for i, (line, role) in enumerate(zip(lines, roles, strict=True))
+        if role == "prose" and line.startswith("#") and re.match(r"^#{1,6} ", line)
+    ]
+    thin = []
+    for i, level, title in starts:
+        end = next((h for h in headings if h > i), len(lines))
+        if end < len(lines):
+            child = re.match(r"^(#+) ", lines[end])
+            if child and len(child.group(1)) > level:
+                continue
+        body = "\n".join(lines[i + 1 : end])
+        own = any(r != "prose" for r in roles[i + 1 : end])
+        own = own or visual_count(body) > 0
+        own = own or any(_LIST_ITEM.match(ln) for ln in lines[i + 1 : end])
+        if not own and len(prose_sentences(body)) <= 1:
+            thin.append(title)
+    return thin
+
+
+def merge_thin_subsections(before: str, after: str) -> str:
+    """``after`` (``before`` with sentences deleted) without the headings of
+    the subsections the deletions left thin (:func:`thin_subsections`):
+    the sentence left joins the text above it. A subsection already thin
+    in ``before`` is the writer's and stays."""
+    new = set(thin_subsections(after)) - set(thin_subsections(before))
+    if not new:
+        return after
+    lines = after.split("\n")
+    roles = block_lines(after)
+    kept = [
+        line
+        for line, role in zip(lines, roles, strict=True)
+        if not (
+            role == "prose" and (m := _SUBHEADING.match(line)) and m.group(2) in new
+        )
+    ]
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(kept))
+
+
 # The problem kind of a section below its depth's visuals minimum.
 VISUALS_PROBLEM = "visuals"
 # The problem kind of a section whose prose is below its minimum length.
@@ -219,6 +280,7 @@ def section_problems(
     passages: Mapping[tuple[str, str], str] | None = None,
     limits: Limits | None = None,
     minimum_length: bool = True,
+    subsections: bool = True,
 ) -> list[Problem]:
     """Deterministic problems of a section draft (each quotes its sentence):
     a missing heading, unknown or foreign evidence ids, a number without
@@ -228,7 +290,9 @@ def section_problems(
     claim that a source leaves something out, style) is the claim check's
     and the review's, in any language. ``limits`` gives the length shares
     and the visuals by depth (the spec's); ``minimum_length``: whether the
-    section has a minimum length (the TL;DR has none)."""
+    section has a minimum length (the TL;DR has none); ``subsections``:
+    whether its subsections are the writer's (checked for thin ones), not a
+    fixed shape (the TL;DR's questions)."""
     limits = limits or Limits()
     problems: list[Problem] = []
 
@@ -369,6 +433,14 @@ def section_problems(
         )
     if ends_mid_sentence(markdown):
         add("mid_sentence", "the section stops mid-sentence: finish it")
+    each(
+        THIN_SUBSECTION_PROBLEM,
+        thin_subsections(markdown) if subsections else (),
+        "subsections with one sentence or less and no figure, table, code or "
+        "list of their own: develop each from its evidence or drop its heading "
+        "so the text joins the part above: ",
+        "",
+    )
     # The blog's Markdown and math rules (an unbalanced $$ breaks every
     # later equation of the post).
     # A rule hit is "rule 'offending text': context"; the context is its
@@ -412,6 +484,16 @@ def section_heading(markdown: str) -> str:
     """The text of the draft's first ``## `` heading ("" without one)."""
     m = re.search(r"^## (.+?)\s*$", markdown, re.M)
     return m.group(1) if m else ""
+
+
+def heading_names(markdown: str) -> set[str]:
+    """The text of every heading (``##`` and deeper) of the draft outside
+    code: a whole-post finding may name the section or any of its
+    subsections."""
+    return {
+        m.group(1)
+        for m in re.finditer(r"^#{2,6} (.+?)\s*#*\s*$", without_code(markdown), re.M)
+    }
 
 
 def _support(

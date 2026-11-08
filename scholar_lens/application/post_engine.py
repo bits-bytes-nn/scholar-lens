@@ -1304,6 +1304,7 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
                 target_chars=target if tldr.checks_length else 0,
                 limits=self.limits,
                 minimum_length=False,
+                subsections=False,
             )
 
         def kind(md: str) -> list[Problem]:
@@ -1327,6 +1328,7 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
             free=self.free,
             judgement=tldr.kind in self.spec.judgement_kinds,
             rest="\n\n".join(md for _, md in written),
+            subsections=False,
         )
         markdown = _with_title(markdown, tldr.title)
         if not markdown.startswith("## "):

@@ -1067,14 +1067,25 @@ def style_hits(body: str) -> list[StyleHit]:
     return hits
 
 
+# A heading written as a Korean sentence (HEADING_STRUCTURE_RULES: a heading
+# is a noun phrase): a declarative ending ("~다", "~니다") after a Hangul
+# syllable, or a polite "~요" after a verb ending's vowel syllable ("해요",
+# "있어요", "이에요"; nouns such as "개요", "필요" and "주요" end otherwise),
+# optional final punctuation.
+_SENTENCE_HEADING = re.compile(
+    r"^#{2,6} (.*(?:[가-힣]다|[아어여에예워와해돼봐줘까네래대]요|[가-힣]죠))[.!]?[ \t]*$",
+    re.M,
+)
+
+
 def writing_issues(markdown: str) -> list[str]:
     """Deterministic writing-rule violations in a generated post, one line
     each with the offending text, for an editor or reviser to fix.
 
     Covers references to the paper's numbering, an English stem with a Korean
     verb ending ("fine-tune합니다"), the post referring to its own parts
-    ("이 절에서"), reader-facing verification hedges ("(미검증)") and
-    single-``$`` math. Code and math are ignored; image alt text and callouts
+    ("이 절에서"), reader-facing verification hedges ("(미검증)"), a heading
+    written as a Korean sentence and single-``$`` math. Code and math are ignored; image alt text and callouts
     are fixed in post-processing instead. The blog's prose rules
     (:func:`style_hits`) are publish-blocking body errors
     (:func:`post_validator.body_errors`), so they are not repeated here.
@@ -1111,6 +1122,11 @@ def writing_issues(markdown: str) -> list[str]:
     for m in _VERIFICATION_HEDGE.finditer(prose):
         issues.append(
             "verification hedge (fix the claim from an official source or drop it): "
+            f"{_snippet(markdown, m.start(), m.end())}"
+        )
+    for m in _SENTENCE_HEADING.finditer(prose):
+        issues.append(
+            f"sentence heading '{m.group(1).strip()[:60]}' (write a noun phrase): "
             f"{_snippet(markdown, m.start(), m.end())}"
         )
     code = _masked(markdown, ("fence", "icode", "display"))

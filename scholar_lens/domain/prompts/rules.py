@@ -77,8 +77,8 @@ Context beyond the paper makes the text useful, but must be honest:
 HEADING_STRUCTURE_RULES: str = """
 - Never write an H1 (`#`) heading; the post title comes from the front matter.
   Top-level sections use `##`, then `###` and `####`; never skip a level.
-- Headings are descriptive, in the target language, and never numbered
-  ("## Proposed Method" / "## 제안 방법", not "## 3. Method").
+- Headings are descriptive noun phrases in the target language, never
+  numbered or sentences ("## 제안 방법", not "## 3. Method" or "~다"/"~요").
 """
 
 

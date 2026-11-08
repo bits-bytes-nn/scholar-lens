@@ -55,7 +55,9 @@ from scholar_lens.domain.evidence_draft import (
     claim_units,
     drop_sentences,
     ends_mid_sentence,
+    heading_names,
     is_illustration,
+    merge_thin_subsections,
     prose_sentences,
     quote_for_prompt,
     section_heading,
@@ -170,6 +172,9 @@ class SectionChecks:
     reference: str
     judgement: bool
     free: str
+    # Whether the section's subsections are the writer's (a deletion that
+    # leaves one thin merges it), not a fixed shape (the TL;DR's questions).
+    subsections: bool = True
 
 
 def _fingerprint(text: str) -> str:
@@ -977,6 +982,7 @@ class EvidenceWriter:
         judgement: bool = False,
         rest: str = "",
         section: object | None = None,
+        subsections: bool = True,
     ) -> str:
         """The section's verifier set, the claim check and (first round) the
         review, fixed up to ``max_fix_rounds`` (each fix an edit
@@ -998,12 +1004,21 @@ class EvidenceWriter:
                 (its unsupported sentences are shown, not deleted).
             rest: The rest of the post (a copy of a block there lets a fix
                 drop it here).
+            section: The outline section (its checks are registered under it).
+            subsections: Whether the section's subsections are the writer's
+                (False for a fixed shape such as the TL;DR's questions).
 
         Returns:
             The section.
         """
         checks = SectionChecks(
-            verifiers, tuple(own), tuple(earlier), self.reference, judgement, free
+            verifiers,
+            tuple(own),
+            tuple(earlier),
+            self.reference,
+            judgement,
+            free,
+            subsections,
         )
         if section is not None:
             self.checked[id(section)] = checks
@@ -1202,7 +1217,12 @@ class EvidenceWriter:
             )
             return draft
         if deleted:
+            before = draft
             draft = drop_sentences(draft, [s for s, _ in deleted])
+            if checks.subsections:
+                # A subsection the deletions leave with one sentence joins
+                # the text above it instead of standing as a stub.
+                draft = merge_thin_subsections(before, draft)
             left = set(claim_units(draft))
             if removed := [(s, v) for s, v in deleted if s not in left]:
                 self.notes.append(
@@ -1301,7 +1321,7 @@ class EvidenceWriter:
         names_seen = {
             n
             for section, md in written
-            for n in (title_of(section), section_heading(md))
+            for n in (title_of(section), *heading_names(md))
         }
         if unmatched := [
             f
@@ -1315,7 +1335,8 @@ class EvidenceWriter:
             )
         for i, (section, md) in enumerate(written):
             title = title_of(section)
-            names = {title, section_heading(md)}
+            # The section's own title and headings, its subsections' included.
+            names = {title, *heading_names(md)}
             issues = [
                 f"{f.problem} Fix: {f.fix}"
                 for f in findings

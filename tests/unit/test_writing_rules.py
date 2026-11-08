@@ -737,3 +737,20 @@ def test_closing_an_unclosed_fence_changes_nothing_else(replace: str) -> None:
         text, [Edit(find="x = 1\n\n## B", replace=replace)], max_edits=3
     )
     assert applied == 0 and out == text
+
+
+def test_a_heading_written_as_a_sentence_is_a_writing_issue() -> None:
+    from scholar_lens.domain.markdown.lint import writing_issues
+
+    md = (
+        "## 보상 모델을 없애다\n\n본문입니다.\n\n### 어텐션 로짓이 폭발합니다\n\n본문입니다.\n\n"
+        "### 왜 빠를까요\n\n본문입니다.\n\n"
+        "## 모델 아키텍처 개요\n\n본문입니다.\n\n### 주요 결과와 필요\n\n본문입니다.\n\n"
+        "```python\n## 코드의 주석입니다\n```\n"
+    )
+    hits = [i for i in writing_issues(md) if i.startswith("sentence heading")]
+    assert [h.split("'")[1] for h in hits] == [
+        "보상 모델을 없애다",
+        "어텐션 로짓이 폭발합니다",
+        "왜 빠를까요",
+    ]

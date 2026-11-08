@@ -507,7 +507,7 @@ def test_what_a_sentence_means_is_left_to_the_model_checks() -> None:
     # sources, a claim of what a paper leaves out, a back-reference: the
     # claim check and the review judge these, in any output language.
     md = (
-        "## 보상 모델은 먼저 무너진다\n\n이 글의 관점에서 보면 A입니다. "
+        "## 먼저 무너지는 보상 모델\n\n이 글의 관점에서 보면 A입니다. "
         "이 글의 판단으로는 B입니다. 근거에서 C를 가져왔습니다. "
         "저자들은 D를 밝히지 않습니다. 앞서 본 E와 같습니다.\n"
     )
@@ -862,6 +862,49 @@ def test_comment_lines_in_code_are_not_section_headings() -> None:
     doc = SourceDocument.from_markdown("D", "t", "full_text", md)
     assert [s.heading for s in doc.sections] == ["Install", "Next"]
     assert "# Serve a model" in doc.sections[0].text
+
+
+def test_a_whole_post_finding_may_name_a_subsection() -> None:
+    from scholar_lens.domain.evidence_draft import heading_names
+
+    md = (
+        "## 운영\n\n본문입니다.\n\n### 확장 설정 ###\n\n내용입니다.\n\n"
+        "```python\n### not a heading\n```\n"
+    )
+    assert heading_names(md) == {"운영", "확장 설정"}
+
+
+def test_a_subsection_with_one_sentence_and_nothing_else_is_thin() -> None:
+    from scholar_lens.domain.evidence_draft import thin_subsections
+
+    md = (
+        "## 운영\n\n도입 문장입니다. 둘째 문장입니다.\n\n"
+        "### 한 문장\n\n이것뿐입니다.\n\n"
+        "### 목록\n\n다음과 같습니다.\n\n- 하나\n- 둘\n\n"
+        "### 코드\n\n실행합니다.\n\n```bash\nx serve\n```\n\n"
+        "### 부모\n\n#### 자식\n\n첫 문장입니다. 둘째 문장입니다.\n\n"
+        "### 두 문장\n\n첫 문장입니다. 둘째 문장입니다.\n"
+    )
+    assert thin_subsections(md) == ["한 문장"]
+
+
+def test_deletions_that_leave_a_stub_merge_it_into_the_text_above() -> None:
+    from scholar_lens.domain.evidence_draft import (
+        drop_sentences,
+        merge_thin_subsections,
+    )
+
+    before = (
+        "## 운영\n\n도입 문장입니다.\n\n### 확장\n\n지원 문장입니다. "
+        "근거 없는 문장입니다.\n\n### 원래 짧음\n\n작성자가 쓴 한 문장입니다.\n"
+    )
+    after = merge_thin_subsections(
+        before, drop_sentences(before, ["근거 없는 문장입니다."])
+    )
+    # The stub the deletion made loses its heading; the writer's own short
+    # subsection stays.
+    assert "### 확장" not in after and "지원 문장입니다." in after
+    assert "### 원래 짧음" in after
 
 
 def test_marker_stripping_leaves_code_alone() -> None:
