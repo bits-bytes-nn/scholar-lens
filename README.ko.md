@@ -89,7 +89,7 @@ poetry run python -m scholar_lens survey plan "preference optimization for LLM a
   --reference "https://arxiv.org/abs/2312.14925"                # papers/survey-<slug>/plan.json 저장
 poetry run python -m scholar_lens survey write \
   --plan papers/survey-preference-optimization-for-llm-alignment/plan.json --no-pr
-poetry run python -m scholar_lens review 2106.09685 --fresh      # 모든 단계를 새로 계산
+poetry run python -m scholar_lens guide https://docs.example.dev/ --fresh  # 모든 단계를 새로 계산(근거 장부 엔진)
 poetry run python -m scholar_lens publish papers/guide-<slug>/<slug>.rejected.md  # 고친 뒤 게시
 poetry run python -m scholar_lens publish "s3://<bucket>/<s3_prefix>/posts/<date>-<slug>.md"
 poetry run python -m scholar_lens review 2106.09685 --remote     # AWS Batch에 제출
@@ -119,7 +119,7 @@ poetry run python -m scholar_lens costs --since 2026-11-01 --by stage --billed  
 
 ### 재개와 게시
 
-근거 장부 엔진은 단계마다 결과를 입력 해시로 저장합니다. 저장하는 단계는 핵심 대상, 개요, 확정된 절, 글 전체 검토 결과, TL;DR, 그리고 리뷰·요약의 부제와 설명입니다. 단계의 키는 근거 장부, 글 종류, 그 단계가 읽는 설정, 그 단계가 쓰는 시스템 프롬프트(프롬프트를 바꾸면 무효), 바로 앞 단계의 결과를 포함합니다. 그래서 입력 하나를 바꾸면 그 단계와 뒤 단계만 다시 계산합니다. 같은 입력으로 다시 실행하면 실패, 중단, 비용 상한 정지 뒤에도 저장한 단계를 모델 호출 없이 불러와 자동으로 이어 갑니다. Batch 재시도(작업 정의는 호스트가 사라졌을 때만 재시도)도 근거 캐시 옆 S3 위치(`<s3_prefix>/<papers|guides|surveys>/checkpoints/`)에서 같은 방식으로 이어 갑니다. 불러온 절은 다시 검사하지 않고, 그 절의 PR 메모, 차단 문제, 사실 확인 판정을 함께 복원합니다. 모두 새로 계산하려면 `--fresh`를 씁니다.
+근거 장부 엔진은 단계마다 결과를 입력 해시로 저장합니다. 저장하는 단계는 핵심 대상, 개요, 확정된 절, 글 전체 검토 결과, TL;DR, 그리고 리뷰·요약의 부제와 설명입니다. 단계의 키는 근거 장부, 글 종류, 그 단계가 읽는 설정, 그 단계가 쓰는 시스템 프롬프트(프롬프트를 바꾸면 무효), 바로 앞 단계의 결과를 포함합니다. 그래서 입력 하나를 바꾸면 그 단계와 뒤 단계만 다시 계산합니다. 같은 입력으로 다시 실행하면 실패, 중단, 비용 상한 정지 뒤에도 저장한 단계를 모델 호출 없이 불러와 자동으로 이어 갑니다. Batch 재시도(작업 정의는 호스트가 사라졌을 때만 재시도)도 근거 캐시 옆 S3 위치(`<s3_prefix>/<papers|guides|surveys>/checkpoints/`)에서 같은 방식으로 이어 갑니다. 불러온 절은 다시 검사하지 않고, 그 절의 PR 메모, 차단 문제, 사실 확인 판정을 함께 복원합니다. 모두 새로 계산하려면 `--fresh`를 씁니다. `--fresh`는 근거 장부 엔진(가이드, 서베이, `engine: evidence`인 리뷰·요약)에만 적용되고, 리뷰·요약의 기본 `sections` 엔진에서는 아무 효과가 없습니다.
 
 모든 실행은 게시 요청(글 본문을 뺀 제목, 브랜치 키, PR 제목과 본문, 차단 문제와 검토 메모, 글 파일 이름)을 저장한 글이나 거절된 `*.rejected.md` 옆에 `<name>.request.json`으로 남기고, S3의 `posts/`나 `rejected/` 사본 옆에도 둡니다. 거절된 글의 이미지는 `rejected/blog-images/<slug>/`에 둡니다. `publish <markdown_path|s3_uri>`는 고쳤을 수 있는 글과 그 요청을 읽어 게시 단계의 후처리와 블로그 규칙 검사를 다시 하고, 실행의 브랜치에서 PR을 열거나 갱신합니다. `--no-pr`이면 검사와 저장만 합니다. 로컬에서만 실행하며(`--remote` 없음) 종료 코드는 실행과 같습니다. `0` 성공, `1` 글이 아직 규칙을 어김(다시 `*.rejected.md`로 남김), `2` 글이 없거나 옆에 요청이 없음, `5` PR 실패입니다. 이 버전이 모르는 필드가 있는 요청은 거부합니다.
 

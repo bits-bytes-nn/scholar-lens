@@ -58,7 +58,7 @@ from scholar_lens.domain.survey.post import (
     unlink_foreign_papers,
 )
 from scholar_lens.domain.validation import validate_post
-from tests.fakes import FakeLLMFactory
+from tests.integration.fakes import FakeLLMFactory
 
 # The blog checkout next to this repository, when there is one.
 BLOG = Path(__file__).resolve().parents[3] / "tech-blog"

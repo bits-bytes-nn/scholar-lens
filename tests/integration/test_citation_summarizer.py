@@ -13,7 +13,7 @@ from scholar_lens.adapters.scholarly.arxiv import ArxivMetadata
 from scholar_lens.adapters.scholarly.metadata import ReferenceMetadata
 from scholar_lens.domain.constants import LanguageModelId
 from scholar_lens.legacy.citation_summarizer import CitationSummarizer
-from tests.fakes import FakeLLMFactory
+from tests.integration.fakes import FakeLLMFactory
 
 
 class _FakeChain:

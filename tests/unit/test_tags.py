@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import pytest
 
-from scholar_lens.adapters.conventions_file import load_local_conventions
 from scholar_lens.domain.conventions import GENERATED_SPECIFIC_TAGS
 from scholar_lens.domain.tags import (
     format_tag,
@@ -12,8 +11,9 @@ from scholar_lens.domain.tags import (
     tag_problem,
     unsupported_tags,
 )
+from tests.unit.conventions import bundled_conventions
 
-SPEC = load_local_conventions()
+SPEC = bundled_conventions()
 WORDS = SPEC.tags.lowercase_words
 
 

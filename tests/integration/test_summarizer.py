@@ -16,7 +16,7 @@ from scholar_lens.domain.paper.models import Attributes, Content, Paper
 from scholar_lens.domain.post_format import format_summary, paper_post_meta
 from scholar_lens.legacy.prompts.summary import PaperSummaryPrompt
 from scholar_lens.legacy.summarizer import PaperSummarizer
-from tests.fakes import FakeLLMFactory
+from tests.integration.fakes import FakeLLMFactory
 
 
 @pytest.fixture

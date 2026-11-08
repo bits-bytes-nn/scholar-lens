@@ -149,7 +149,8 @@ def build_parser() -> argparse.ArgumentParser:
             help=(
                 "Compute every stage again instead of resuming from the stages "
                 "a run with the same inputs saved (also reads the sources again "
-                "and, for a guide, gathers them again)."
+                "and, for a guide, gathers them again). The evidence engines "
+                "only: a review or summary on the sections engine ignores it."
             ),
         )
 

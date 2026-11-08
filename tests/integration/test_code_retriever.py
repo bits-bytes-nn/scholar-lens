@@ -8,7 +8,7 @@ import pytest
 from scholar_lens.adapters.code.retriever import CodeRetriever
 from scholar_lens.adapters.http.url_guard import UnsafeUrlError
 from scholar_lens.domain.constants import EmbeddingModelId, LanguageModelId
-from tests.fakes import FakeEmbeddingFactory, FakeLLMFactory
+from tests.integration.fakes import FakeEmbeddingFactory, FakeLLMFactory
 
 
 class TestAssertClonable:

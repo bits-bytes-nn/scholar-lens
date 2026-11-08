@@ -24,7 +24,7 @@ from scholar_lens.domain.research import (
     source_label,
 )
 from scholar_lens.legacy.section_loop import lost_structure
-from tests.fakes import FakeLLMFactory
+from tests.integration.fakes import FakeLLMFactory
 
 
 class TestPromptsBuild:

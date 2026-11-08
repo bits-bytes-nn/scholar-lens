@@ -157,7 +157,7 @@ jobs:
 
   cdk-synth:
     # Required by branch protection on main; the same synth also runs in
-    # tests/test_infra_contract.py.
+    # tests/integration/test_infra_contract.py.
     name: CDK synth (infra validation)
     runs-on: ubuntu-latest
     timeout-minutes: 20

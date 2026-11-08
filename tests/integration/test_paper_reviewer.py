@@ -30,7 +30,7 @@ from scholar_lens.domain.usage import TokenBudgetExceeded
 from scholar_lens.domain.validation import body_errors
 from scholar_lens.legacy.citation_summarizer import CitationSummarizer
 from scholar_lens.legacy.explainer import PaperReviewer
-from tests.fakes import FakeLLMFactory
+from tests.integration.fakes import FakeLLMFactory
 
 MARKER = '[Image: alt="arch", src="/p/figures/0.png", caption="The architecture."]'
 SENTENCES = [

@@ -15,7 +15,7 @@ from scholar_lens.application.use_cases.paper import (
 )
 from scholar_lens.domain.constants import LanguageModelId
 from scholar_lens.domain.paper.models import Figure
-from tests.fakes import FakeLLMFactory
+from tests.integration.fakes import FakeLLMFactory
 
 
 def test_arxiv_placeholder_caption_falls_back_to_the_analysis() -> None:

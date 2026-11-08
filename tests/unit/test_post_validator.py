@@ -11,11 +11,11 @@ from pathlib import Path
 
 import pytest
 
-from scholar_lens.adapters.conventions_file import load_local_conventions
 from scholar_lens.domain.validation import Violation, errors, validate_post
+from tests.unit.conventions import bundled_conventions
 
 FIXTURES = Path(__file__).parents[1] / "fixtures" / "blog_defects"
-SPEC = load_local_conventions()
+SPEC = bundled_conventions()
 # A description as the blog's hand-written ones read (PR #88): plain text,
 # 120-160 characters, opening with the model's name.
 DESCRIPTION = (
@@ -395,7 +395,7 @@ class TestValidatorDetails:
         md = self._post("## A\n\n본문 $$x$$입니다.\n\n```python\nx = 1\n")
         codes = [
             v
-            for v in validate_post(md, load_local_conventions(), "guide")
+            for v in validate_post(md, bundled_conventions(), "guide")
             if v.rule == "code"
         ]
         assert codes and codes[0].line == 15  # the ``` line, not the front matter
@@ -404,7 +404,7 @@ class TestValidatorDetails:
         body = "## A\n\n본문입니다.\n\n$$x = 1$$\n{: .center}\n\n끝입니다.\n"
         assert not [
             v
-            for v in validate_post(self._post(body), load_local_conventions(), "guide")
+            for v in validate_post(self._post(body), bundled_conventions(), "guide")
             if v.rule == "math"
         ]
 

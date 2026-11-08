@@ -6,7 +6,6 @@ import logging
 
 import pytest
 
-from scholar_lens.adapters.conventions_file import load_local_conventions
 from scholar_lens.domain.markdown.lint import (
     drop_unknown_images,
     lint_markdown,
@@ -15,6 +14,7 @@ from scholar_lens.domain.markdown.lint import (
     unlink_unknown_arxiv,
     upgrade_http_links,
 )
+from tests.unit.conventions import bundled_conventions
 
 
 @pytest.fixture
@@ -183,7 +183,7 @@ class TestWarnings:
 
     def test_defined_macros_come_from_the_conventions(self) -> None:
         # post_conventions.yml math.defined_macros (the blog's head.html list).
-        defined = load_local_conventions().math.defined_macros
+        defined = bundled_conventions().math.defined_macros
         assert {"llbracket", "rrbracket", "textsc"} <= set(defined)
         assert not undefined_macros(defined) & set(defined)
         assert "coloneqq" in undefined_macros(defined)

@@ -6,7 +6,6 @@ import json
 
 import pytest
 
-from scholar_lens.adapters.conventions_file import load_local_conventions
 from scholar_lens.domain.markdown.lint import (
     NUMBERED_REF,
     fill_image_alts,
@@ -29,6 +28,7 @@ from scholar_lens.domain.review_plan import (
     target_words,
 )
 from scholar_lens.domain.validation import body_errors, validate_post
+from tests.unit.conventions import bundled_conventions
 
 
 @pytest.mark.parametrize(
@@ -257,7 +257,7 @@ class TestKoreanAlts:
             '---\nlayout: post\ntitle: "T"\n---\n## TL;DR\n\n한국어 본문입니다. '
             "충분히 긴 한국어 문장입니다.\n\n![Low-rank update](/assets/images/x-1.png)\n"
         )
-        found = validate_post(post, load_local_conventions(), "review")
+        found = validate_post(post, bundled_conventions(), "review")
         assert any(v.rule == "image-alt" and v.level == "warning" for v in found)
 
     def test_validator_reads_the_language_from_lang(self) -> None:
@@ -267,7 +267,7 @@ class TestKoreanAlts:
             "## TL;DR\n\nLoRA freezes the pretrained Transformer weights and "
             "trains rank decompositions.\n\n![Low-rank update](/assets/images/x-1.png)\n"
         )
-        spec = load_local_conventions()
+        spec = bundled_conventions()
 
         def alt_warned(front: str) -> bool:
             post = f'---\nlayout: post\ntitle: "T"\n{front}---\n{body}'

@@ -9,7 +9,7 @@ import boto3
 import pytest
 
 from scholar_lens.domain.constants import LanguageModelId
-from tests.fakes import FakeLLMFactory
+from tests.integration.fakes import FakeLLMFactory
 
 
 def _extractor(**kwargs: Any) -> Any:

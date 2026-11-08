@@ -55,7 +55,7 @@ from scholar_lens.domain.survey.plan import (
     survey_slug,
 )
 from scholar_lens.domain.usage import TokenBudgetExceeded
-from tests.fakes import FakeLLMFactory
+from tests.integration.fakes import FakeLLMFactory
 
 TODAY = date(2026, 10, 14)
 DPO = "Direct Preference Optimization: Your Language Model is Secretly a Reward Model"
