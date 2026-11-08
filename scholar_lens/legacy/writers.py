@@ -105,15 +105,18 @@ class SectionsPaperWriter:
 def _citation_notes(citation_summarizer: CitationSummarizer) -> list[str]:
     """A note when some prerequisite references had no abstract or text to
     summarize (the sections citing them were written without the summary)."""
-    missing = citation_summarizer.unsourced_references()
-    if not missing:
-        return []
-    shown = ", ".join(f"'{ident[:80]}'" for ident in missing[:5])
-    more = f" and {len(missing) - 5} more" if len(missing) > 5 else ""
-    return [
-        f"{len(missing)} cited reference(s) had no abstract or text to "
-        f"summarize: {shown}{more}."
-    ]
+    notes = []
+    for idents, what in (
+        (citation_summarizer.unsourced_references(), "had no abstract or text to"),
+        (list(dict.fromkeys(citation_summarizer.failed)), "failed to"),
+    ):
+        if idents:
+            shown = ", ".join(f"'{ident[:80]}'" for ident in idents[:5])
+            more = f" and {len(idents) - 5} more" if len(idents) > 5 else ""
+            notes.append(
+                f"{len(idents)} cited reference(s) {what} summarize: {shown}{more}."
+            )
+    return notes
 
 
 def code_index(

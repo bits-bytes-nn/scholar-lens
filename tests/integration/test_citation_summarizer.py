@@ -414,3 +414,28 @@ async def test_untrusted_inputs_and_header_are_defanged(
     for text in (inputs["reference_content"], inputs["original_content"], out[0]):
         assert "</reference>" not in text
         assert "<citing_context>" not in text
+
+
+class _RaisingResolver:
+    def __init__(self, error: BaseException) -> None:
+        self.error = error
+
+    def resolve(self, *_args: object, **_kwargs: object) -> object:
+        raise self.error
+
+
+async def test_a_failed_reference_is_noted_and_a_run_error_stops_the_run(
+    summarizer: CitationSummarizer,
+) -> None:
+    from scholar_lens.domain.usage import TokenBudgetExceeded
+    from scholar_lens.legacy.writers import _citation_notes
+
+    summarizer.metadata_resolver = _RaisingResolver(RuntimeError("index down"))  # type: ignore[assignment]
+    assert await summarizer.summarize(["Some Paper"], "ctx") == []
+    assert summarizer.failed == ["Some Paper"]
+    assert any("failed to summarize" in n for n in _citation_notes(summarizer))
+    summarizer.metadata_resolver = _RaisingResolver(  # type: ignore[assignment]
+        TokenBudgetExceeded("spent")
+    )
+    with pytest.raises(TokenBudgetExceeded):
+        await summarizer.summarize(["Other Paper"], "ctx")

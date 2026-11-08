@@ -11,13 +11,14 @@ from langchain_core.output_parsers import StrOutputParser
 
 from scholar_lens.adapters.bedrock.chat_models import BedrockLanguageModelFactory
 from scholar_lens.adapters.documents.parser import ContentParseError, HTMLParser
-from scholar_lens.adapters.retry import RetryableBase
+from scholar_lens.adapters.retry import RetryableBase, is_access_error
 from scholar_lens.adapters.scholarly.arxiv import ArxivHandler, ArxivPaperError
 from scholar_lens.adapters.scholarly.metadata import ChainedMetadataResolver
 from scholar_lens.domain.constants import AppConstants, LanguageModelId, LocalPaths
 from scholar_lens.domain.ids import arxiv_id_from_doi, normalize_arxiv_id
 from scholar_lens.domain.paper.models import Content
 from scholar_lens.domain.prompt_safety import neutralize_prompt_tags
+from scholar_lens.domain.usage import TokenBudgetExceeded
 from scholar_lens.domain.usage_context import staged
 from scholar_lens.legacy.prompts.extraction import CitationSummaryPrompt
 
@@ -70,6 +71,8 @@ class CitationSummarizer(RetryableBase):
         # callers await one task); its summary is written per citing section,
         # since it says why the reference matters THERE.
         self._source_cache: dict[str, ReferenceSource | None] = {}
+        # References whose summary failed (an error, not a missing source).
+        self.failed: list[str] = []
         self._inflight: dict[str, asyncio.Future[ReferenceSource | None]] = {}
         self._summary_cache: dict[tuple[str, str], str | None] = {}
         self._cache_lock = asyncio.Lock()
@@ -146,7 +149,12 @@ class CitationSummarizer(RetryableBase):
         unsourced = 0
         for identifier, result in zip(unique_identifiers, results, strict=True):
             if isinstance(result, BaseException):
+                # A spent budget or a refused permission is the run's, not
+                # one reference's: it stops the run.
+                if isinstance(result, TokenBudgetExceeded) or is_access_error(result):
+                    raise result
                 logger.error("Citation summary failed for '%s': %s", identifier, result)
+                self.failed.append(identifier)
             elif result is None:
                 unsourced += self._source_cache.get(identifier) is None
             else:
