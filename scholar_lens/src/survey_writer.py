@@ -223,6 +223,8 @@ class Survey:
     # The reference articles that were read: (title, url) for further reading.
     reading: list[tuple[str, str]] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
+    # Problems the post may not be published with as is (listed first).
+    blocking: list[str] = field(default_factory=list)
     # Figures offered to the writers: url -> (paper id, caption).
     figures: dict[str, tuple[str, str]] = field(default_factory=dict)
 
@@ -423,6 +425,7 @@ async def write_survey_with_evidence(
         plan=result.plan,
         reading=reading,
         notes=[*notes, *result.notes],
+        blocking=list(result.blocking),
         figures=figures,
     )
 
@@ -568,6 +571,7 @@ async def run_survey_write_pipeline(
         kind="survey",
         published_path=published.path if published else None,
     )
+    publish_request.blocking += survey.blocking
     publish_request.review_notes += [
         *lookup_notes,
         *plan_notes,

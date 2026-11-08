@@ -137,6 +137,7 @@ async def run_guide_pipeline(
         guide, work_dir, document, branch_id=branch_id
     )
     publish_request.published_path = published.path if published else None
+    publish_request.blocking += guide.blocking
     publish_request.review_notes += [
         *lookup_notes,
         *guide.notes,

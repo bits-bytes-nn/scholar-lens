@@ -128,11 +128,11 @@ async def run_paper_pipeline(
             ),
         )
         if request.kind == "summarize":
-            document, degraded = await _generate_summary(
+            document, degraded, blocking = await _generate_summary(
                 context, paper, translation_guideline, tracker, published
             )
         else:
-            document, degraded = await _generate_review(
+            document, degraded, blocking = await _generate_review(
                 context,
                 paper,
                 citation_summarizer,
@@ -167,6 +167,7 @@ async def run_paper_pipeline(
             | set(context.require_conventions().tags.controlled),
             published=published,
         )
+        publish_request.blocking += blocking
         publish_request.review_notes += degraded
         outcome = await publish_artifact(
             context, publish_request, create_pr=request.create_pr
@@ -186,11 +187,11 @@ async def _generate_review(
     translation_guideline: list[dict[str, Any]] | None,
     tracker: TokenUsageTracker,
     published: BlogPost | None,
-) -> tuple[str, list[str]]:
+) -> tuple[str, list[str], list[str]]:
     cfg = context.config.explanation
     github = context.config.resources.github
     if cfg.engine == "evidence":
-        written, notes = await write_paper_with_evidence(
+        written, notes, blocking = await write_paper_with_evidence(
             context,
             paper,
             post="review",
@@ -205,7 +206,7 @@ async def _generate_review(
             known_tags=context.require_blog_tags(),
             published=published,
         )
-        return format_review(github, paper, written, meta=meta), notes
+        return format_review(github, paper, written, meta=meta), notes, blocking
     # The sections engine's prerequisite summaries (_prepare_paper_data builds
     # the summarizer for that engine only).
     if citation_summarizer is None:
@@ -241,10 +242,11 @@ async def _generate_review(
         known_tags=context.require_blog_tags(),
         published=published,
     )
-    return format_review(github, paper, review, meta=meta), [
-        *review.notes,
-        *_citation_notes(citation_summarizer),
-    ]
+    return (
+        format_review(github, paper, review, meta=meta),
+        [*review.notes, *_citation_notes(citation_summarizer)],
+        [],
+    )
 
 
 async def _generate_summary(
@@ -253,10 +255,10 @@ async def _generate_summary(
     translation_guideline: list[dict[str, Any]] | None,
     tracker: TokenUsageTracker,
     published: BlogPost | None,
-) -> tuple[str, list[str]]:
+) -> tuple[str, list[str], list[str]]:
     cfg = context.config.summary
     if cfg.engine == "evidence":
-        written, notes = await write_paper_with_evidence(
+        written, notes, blocking = await write_paper_with_evidence(
             context,
             paper,
             post="summary",
@@ -272,7 +274,7 @@ async def _generate_summary(
             known_tags=context.require_blog_tags(),
             published=published,
         )
-        return format_summary(github, paper, written, meta=meta), notes
+        return format_summary(github, paper, written, meta=meta), notes, blocking
     summarizer = PaperSummarizer(
         LanguageModelId(cfg.summary_model_id),
         context.bedrock_boto_session,
@@ -293,7 +295,7 @@ async def _generate_summary(
         known_tags=context.require_blog_tags(),
         published=published,
     )
-    return format_summary(github, paper, result, meta=meta), list(summarizer.notes)
+    return format_summary(github, paper, result, meta=meta), list(summarizer.notes), []
 
 
 async def _prepare_paper_data(

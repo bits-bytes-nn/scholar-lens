@@ -1590,6 +1590,16 @@ class TestValidationGate:
         assert any("numbered reference" in w for w in request.validation_warnings)
         assert "- [ ]" in request.pr_body_with_checklist()
 
+    async def test_blocking_problems_lead_the_pr_body(self, tmp_path: Path) -> None:
+        pub = Publisher(Github(), root_dir=tmp_path)
+        request = _request(tmp_path, markdown=VALID_POST)
+        request.blocking = ["the claim check did not run"]
+        request.review_notes = ["a note"]
+        await pub.publish(request)
+        body = request.pr_body_with_checklist()
+        assert body.index("### Blocking") < body.index("### Review checklist")
+        assert "- [ ] the claim check did not run" in body
+
 
 class TestRejectedCopy:
     """A rejected post is copied to S3 (Batch scratch is lost); a failed copy

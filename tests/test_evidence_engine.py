@@ -35,6 +35,7 @@ from scholar_lens.domain.evidence_draft import (
     drop_sentences,
     structure_lost,
 )
+from scholar_lens.domain.post_spec import Limits
 from scholar_lens.domain.survey.evidence_post import (
     EvidenceOutline,
     cite_papers,
@@ -42,6 +43,7 @@ from scholar_lens.domain.survey.evidence_post import (
     outline_problems,
 )
 from scholar_lens.domain.survey.plan import SurveyPlan
+from scholar_lens.domain.verifiers import no_checks
 
 PAPER_TEXT = """## Abstract
 
@@ -56,6 +58,9 @@ The DPO loss is $$\\mathcal{L}=-\\log\\sigma(\\beta h)$$ for a margin h.
 DPO reaches a 61% win rate against PPO on TL;DR summarization with GPT-4 as judge.
 Training is less stable when beta is small.
 """
+
+# The spec's prose-cut guard, as every engine applies it.
+CUT = Limits().max_prose_cut
 
 
 def _doc(pid: str = "2305.18290") -> SourceDocument:
@@ -283,8 +288,11 @@ class TestDraftChecks:
 
     def test_structure_loss(self) -> None:
         before = f"## A\n\n문장 하나입니다.\n\n![x]({self.URL})\n\n$$a=b$$"
-        assert structure_lost(before, "## A\n\n문장 하나입니다.") == "a figure was lost"
-        assert structure_lost(before, before) == ""
+        assert (
+            structure_lost(before, "## A\n\n문장 하나입니다.", max_prose_cut=CUT)
+            == "a figure was lost"
+        )
+        assert structure_lost(before, before, max_prose_cut=CUT) == ""
 
 
 class ScriptedModel:
@@ -852,12 +860,16 @@ def test_a_fix_that_drops_a_code_block_or_table_loses_structure() -> None:
     before = "## A\n\n설명입니다.\n\n```python\nx = 1\n```\n\n| a | b |\n| --- | --- |\n| 1 | 2 |\n"
     assert (
         structure_lost(
-            before, "## A\n\n설명입니다.\n\n| a | b |\n| --- | --- |\n| 1 | 2 |\n"
+            before,
+            "## A\n\n설명입니다.\n\n| a | b |\n| --- | --- |\n| 1 | 2 |\n",
+            max_prose_cut=CUT,
         )
         == "a code block was lost"
     )
     assert (
-        structure_lost(before, "## A\n\n설명입니다.\n\n```python\nx = 1\n```\n")
+        structure_lost(
+            before, "## A\n\n설명입니다.\n\n```python\nx = 1\n```\n", max_prose_cut=CUT
+        )
         == "a table was lost"
     )
 
@@ -917,14 +929,16 @@ def test_a_fixs_notes_never_reach_the_section() -> None:
         SURVEY_PROMPTS,
         max_fix_rounds=1,
     )
-    fixed = asyncio.run(writer._fix("## A\n\n본문입니다.\n", [], ["x"]))
+    fixed = asyncio.run(
+        writer._fix("## A\n\n본문입니다.\n", [], ["x"], verifiers=no_checks())
+    ).text
     assert fixed == "## A\n\n고친 본문입니다.\n" and "반영하지" not in fixed
     # The edit that matched nothing is on the PR checklist; the rewrite stood in.
     assert any("not applied" in n for n in writer.notes)
     writer.model = Model(ValueError("no valid FixedSection"))  # type: ignore[assignment]
-    assert asyncio.run(writer._fix("## A\n\n본문입니다.\n", [], ["x"])) == (
-        "## A\n\n본문입니다.\n"
-    )
+    assert asyncio.run(
+        writer._fix("## A\n\n본문입니다.\n", [], ["x"], verifiers=no_checks())
+    ).text == ("## A\n\n본문입니다.\n")
 
 
 def test_a_label_the_section_already_had_is_content_not_notes() -> None:
@@ -985,7 +999,7 @@ def test_a_fix_that_changes_nothing_ends_the_fix_loop() -> None:
             draft,
             title="A",
             review_context="",
-            checks=lambda _md: [],
+            verifiers=no_checks(),
             ledger=_ledger(),
             own=[],
             earlier=[],
@@ -1022,7 +1036,7 @@ def test_one_number_in_two_benchmarks_is_two_facts() -> None:
     ) == {"E2": "E1"}
 
 
-def test_a_claim_check_the_models_cannot_answer_leaves_a_note() -> None:
+def test_a_claim_check_the_models_cannot_answer_blocks_the_post() -> None:
     from scholar_lens.application.evidence_writer import EvidenceWriter
     from scholar_lens.application.survey_engine import SURVEY_PROMPTS
 
@@ -1035,7 +1049,9 @@ def test_a_claim_check_the_models_cannot_answer_leaves_a_note() -> None:
         writer.check_claims("## 공격\n\n공격은 성공했습니다 [[E2]].\n", _ledger())
     )
     assert found == []
-    assert any("Check by hand" in n and "공격" in n for n in writer.notes)
+    # Changed in E2 (docs/engine.md, 4.10): an unchecked section is not a
+    # pass; it blocks the post instead of leaving a note.
+    assert any("공격" in b and "unchecked" in b for b in writer.blocking)
 
 
 def test_survey_results_and_limitations_need_table_cells() -> None:

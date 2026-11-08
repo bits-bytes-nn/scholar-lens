@@ -246,6 +246,9 @@ post's reading in the closing section. Never widen a fact beyond its scope
 
 
 CLAIM_SCOPE: str = """
+- An item's `follows:` line is the sentence before it in the section, shown
+  only so a pronoun or a "this" reads in context: judge the numbered item
+  alone, never the follows line.
 - Judge each item by its atomic claims: split it into the separate facts it
   states or implies (each number with its setting, each attribution, a
   cause or reason, a comparison, a scope or frequency word such as "always",

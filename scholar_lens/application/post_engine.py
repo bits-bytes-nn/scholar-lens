@@ -30,11 +30,11 @@ from ..domain.evidence import (
 from ..domain.evidence_draft import (
     cited_ids,
     copied_sentences,
-    draft_problems,
     free_numbers,
     prose_sentences,
     section_heading,
     section_numbers,
+    section_problems,
 )
 from ..domain.glossary import glossary_view
 from ..domain.post_spec import (
@@ -45,6 +45,7 @@ from ..domain.post_spec import (
     evidence_policy,
     other_sdk,
 )
+from ..domain.verifiers import Problem, VerifierSet, as_problems
 from .evidence_writer import (
     EvidenceWriter,
     PostFinding,
@@ -147,7 +148,9 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
         store: TextStore | None = None,
         max_fix_rounds: int,
     ) -> None:
-        super().__init__(model, prompts, max_fix_rounds=max_fix_rounds)
+        super().__init__(
+            model, prompts, max_fix_rounds=max_fix_rounds, limits=spec.limits
+        )
         self.spec = spec
         self.post_prompts = post_prompts
         self.run = run
@@ -470,11 +473,14 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
             draft,
             title=section.title,
             review_context=self.review_context(ctx),
-            checks=self.section_checks(ctx, numbers, exhausted),
+            verifiers=self.section_verifiers(ctx, numbers, exhausted),
             ledger=ledger,
             own=own,
             earlier=earlier,
             free=self.free,
+            section=section,
+            judgement=section.kind in self.spec.judgement_kinds,
+            rest="\n\n".join(md for _, md in written),
         )
         self.reference = ""
         return self.finish_section(section, markdown)
@@ -518,36 +524,45 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
             ]
         )
 
-    def section_checks(
+    def section_verifiers(
         self,
         ctx: SectionContext[OutlineT, SectionT],
         numbers: Mapping[str, str],
         exhausted: Collection[str],
-    ) -> Callable[[str], list[str]]:
-        """The code checks of a section draft: the shared ones, then the
-        kind's."""
+    ) -> VerifierSet:
+        """The verifier set of a section, built once: the shared code checks,
+        then the kind's (``extra_problems``). What it reads of the post is
+        fixed here (the numbers earlier sections state), so a later run of
+        the set, after the whole post is written, judges the section as its
+        own fixes were judged."""
         section = ctx.section
         figures = [e.figure_url for e in ctx.own if e.kind == "figure" and e.figure_url]
         depth = section.depth if section.kind in self.spec.depth_kinds else ""
+        earlier_numbers = dict(numbers)
+        spent = frozenset(exhausted)
+        papers = tuple(self.named_papers(section))
 
-        def checks(markdown: str) -> list[str]:
-            return draft_problems(
+        def shared(markdown: str) -> list[Problem]:
+            return section_problems(
                 markdown,
                 title=section.title,
                 own=section.evidence,
                 earlier=ctx.earlier_ids,
                 ledger=ctx.ledger,
-                earlier_numbers=numbers,
+                earlier_numbers=earlier_numbers,
                 figure_urls=figures,
                 free_numbers=self.free,
                 passages=self.passages,
-                exhausted=exhausted,
-                papers=self.named_papers(section),
+                exhausted=spent,
+                papers=papers,
                 target_chars=ctx.target,
                 depth=depth,
-            ) + self.extra_problems(ctx, markdown)
+            )
 
-        return checks
+        def kind(markdown: str) -> list[Problem]:
+            return as_problems(section.kind, self.extra_problems(ctx, markdown))
+
+        return VerifierSet(section.title, (shared, kind))
 
     # ---- whole post -------------------------------------------------------------
 
@@ -633,8 +648,8 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
         )
         body = [s for _, md in written for s in prose_sentences(md)]
 
-        def checks(md: str) -> list[str]:
-            problems = draft_problems(
+        def shared(md: str) -> list[Problem]:
+            return section_problems(
                 md,
                 title=tldr.title,
                 own=[e.id for e in context],
@@ -645,20 +660,25 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
                 free_numbers=self.free,
                 passages=self.passages,
                 target_chars=target if tldr.checks_length else 0,
-            ) + self.tldr_problems(md)
+            )
+
+        def kind(md: str) -> list[Problem]:
+            problems = as_problems(tldr.kind, self.tldr_problems(md))
             if tldr.no_body_copies:
-                problems += copied_sentences(md, body)
+                problems += as_problems("body_copy", copied_sentences(md, body))
             return problems
 
         markdown = await self.verify_and_fix(
             draft,
             title=tldr.title,
             review_context=tldr.review_context,
-            checks=checks,
+            verifiers=VerifierSet(tldr.title, (shared, kind)),
             ledger=ledger,
             own=context,
             earlier=(),
             free=self.free,
+            judgement=tldr.kind in self.spec.judgement_kinds,
+            rest="\n\n".join(md for _, md in written),
         )
         markdown = _with_title(markdown, tldr.title)
         if not markdown.startswith("## "):

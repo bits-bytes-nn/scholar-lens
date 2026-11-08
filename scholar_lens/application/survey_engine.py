@@ -102,6 +102,9 @@ class EvidenceSurvey:
     plan: SurveyPlan
     documents: dict[str, str] = field(default_factory=dict)  # paper id -> kind
     notes: list[str] = field(default_factory=list)
+    # Problems the post may not be published with as is (the PR lists
+    # them first, under Blocking).
+    blocking: list[str] = field(default_factory=list)
 
 
 class EvidenceUnavailable(RuntimeError):
@@ -408,4 +411,5 @@ class EvidenceSurveyEngine(PostEngine[EvidenceOutline, OutlineSection, EvidenceS
             plan=self._plan,
             documents=self._kinds,
             notes=self.notes,
+            blocking=self.blocking,
         )

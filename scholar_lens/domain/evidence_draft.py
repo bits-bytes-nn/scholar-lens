@@ -9,13 +9,16 @@ the writer as concrete problems.
 from __future__ import annotations
 
 import re
+from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
+from typing import Any
 
 from .evidence import Evidence, EvidenceLedger, near_duplicate
 from .markdown.lint import drop_empty_headings
-from .markdown.math import fence_roles
+from .markdown.math import DISPLAY_MATH, fence_roles
 from .quality_gate import rule_issues
 from .validation import unsourced_numbers
+from .verifiers import Problem, as_problems
 
 # An evidence marker ("[[E12]]", "[[E12, E15]]") or the illustration mark
 # below; code removes both before publishing.
@@ -144,7 +147,8 @@ def _plain(sentence: str) -> str:
     return _CITATION_KEY.sub("", MARKER.sub("", _EXAMPLE_MARK.sub("", sentence)))
 
 
-def _example(sentence: str) -> bool:
+def is_illustration(sentence: str) -> bool:
+    """Whether the writer marked ``sentence`` as its own illustration."""
     return bool(_EXAMPLE_MARK.search(sentence))
 
 
@@ -191,7 +195,7 @@ def visual_count(markdown: str) -> int:
     return len(_IMAGE.findall(body)) + equations + tables
 
 
-def draft_problems(
+def section_problems(
     markdown: str,
     *,
     title: str,
@@ -206,7 +210,7 @@ def draft_problems(
     papers: Iterable[str] = (),
     target_chars: int = 0,
     passages: Mapping[tuple[str, str], str] | None = None,
-) -> list[str]:
+) -> list[Problem]:
     """Deterministic problems of a section draft (each quotes its sentence):
     a missing heading, unknown or foreign evidence ids, a number without
     evidence or not in the cited evidence, a number an earlier section
@@ -214,69 +218,90 @@ def draft_problems(
     missing figure. What a sentence means (talk about the post's sources, a
     claim that a source leaves something out, style) is the claim check's
     and the review's, in any language."""
-    problems: list[str] = []
+    problems: list[Problem] = []
+
+    def add(kind: str, text: str, where: str = "") -> None:
+        problems.append(Problem(kind, text, where))
+
     if drop_empty_headings(markdown) != markdown:
-        problems.append("a heading with nothing under it; delete it or fill it")
+        add("empty_heading", "a heading with nothing under it; delete it or fill it")
     if not markdown.lstrip().startswith("## "):
-        problems.append(f"the section must start with its '## ' heading ({title})")
+        add("no_heading", f"the section must start with its '## ' heading ({title})")
     allowed = set(own) | set(earlier)
     for sentence in prose_sentences(markdown):
         quoted = _plain(sentence)[:160]
         ids = cited_ids(sentence)
         if unknown := [i for i in ids if ledger.get(i) is None]:
-            problems.append(f"unknown evidence {unknown} in: {quoted}")
+            add("unknown_evidence", f"unknown evidence {unknown} in: {quoted}", quoted)
             continue
         if _MARKER_AS_WORD.search(sentence):
-            problems.append(
+            add(
+                "marker_as_word",
                 "an evidence marker stands for a word; state the fact and put "
-                f"the marker at the end of the sentence: {sentence[:160]}"
+                f"the marker at the end of the sentence: {sentence[:160]}",
+                sentence[:160],
             )
         if spent := [i for i in ids if i in set(exhausted)]:
-            problems.append(
+            add(
+                "exhausted_evidence",
                 f"evidence {spent} was already referred back to once; do not "
-                f"restate it again: {quoted}"
+                f"restate it again: {quoted}",
+                quoted,
             )
         if foreign := [i for i in ids if i not in allowed]:
-            problems.append(
-                f"evidence {foreign} belongs to another section; leave it out: {quoted}"
+            add(
+                "foreign_evidence",
+                f"evidence {foreign} belongs to another section; leave it out: "
+                f"{quoted}",
+                quoted,
             )
         numbers = stated_numbers(sentence, free_numbers)
-        example = _example(sentence)
+        example = is_illustration(sentence)
         if numbers and not ids and not example:
-            problems.append(
+            add(
+                "numbers_uncited",
                 f"numbers {numbers} without evidence (cite it; an illustration "
-                f"of your own ends with {EXAMPLE_MARK}): {quoted}"
+                f"of your own ends with {EXAMPLE_MARK}): {quoted}",
+                quoted,
             )
         elif numbers and not example:
             support = _support(ids, ledger, passages)
             if missing := unsourced_numbers(
                 _plain(sentence), f"{support} {free_numbers}"
             ):
-                problems.append(
-                    f"numbers {missing} are not in the cited evidence: {quoted}"
+                add(
+                    "numbers_not_in_evidence",
+                    f"numbers {missing} are not in the cited evidence: {quoted}",
+                    quoted,
                 )
         if not example and (
             repeated := [
                 n for n in numbers if n in earlier_numbers and not _MODEL_SIZE.match(n)
             ]
         ):
-            problems.append(
+            add(
+                "numbers_repeated",
                 f"{repeated} already stated in '{earlier_numbers[repeated[0]]}': "
-                f"refer back without repeating: {quoted}"
+                f"refer back without repeating: {quoted}",
+                quoted,
             )
         if _PAPER_ID.search(_plain(sentence)):
-            problems.append(
-                f"names a paper by its id; use its name or its authors: {quoted}"
+            add(
+                "paper_id",
+                f"names a paper by its id; use its name or its authors: {quoted}",
+                quoted,
             )
     for row in table_rows(markdown):
         plain_row = _plain(row)
         if _BLANK_CELL.search(plain_row):
-            problems.append(
+            add(
+                "blank_cell",
                 "a table cell is blank ('—', or only evidence markers, which code "
                 "removes): give the value the evidence or the passages state, or "
                 "drop the row or column it belongs to; markers go after a cell's "
                 "content: "
-                f"{plain_row[:160]}"
+                f"{plain_row[:160]}",
+                plain_row[:160],
             )
     cited_papers = {
         e.paper_id
@@ -285,35 +310,43 @@ def draft_problems(
         if (e := ledger.get(i))
     }
     if uncovered := [p for p in papers if p not in cited_papers]:
-        problems.append(
+        add(
+            "papers_uncovered",
             f"papers {uncovered} belong to this section but no sentence cites "
-            "their evidence: cover each"
+            "their evidence: cover each",
         )
     if (
         target_chars
         and (length := len(" ".join(prose_sentences(markdown)))) > 1.5 * target_chars
     ):
-        problems.append(
+        add(
+            "too_long",
             f"{length:,} characters of prose for a target of {target_chars:,}: "
-            "cut background, repetition and minor detail"
+            "cut background, repetition and minor detail",
         )
     if ends_mid_sentence(markdown):
-        problems.append("the section stops mid-sentence: finish it")
+        add("mid_sentence", "the section stops mid-sentence: finish it")
     # The blog's Markdown and math rules (an unbalanced $$ breaks every
     # later equation of the post).
-    problems += rule_issues(MARKER.sub("", markdown))
+    problems += as_problems("rule", rule_issues(MARKER.sub("", markdown)))
     if (need := MIN_VISUALS.get(depth, 0)) and visual_count(markdown) < need:
-        problems.append(
+        add(
+            "visuals",
             f"a {depth} section needs at least {need} visuals (its figures, an "
-            "equation, or a small table from its number evidence)"
+            "equation, or a small table from its number evidence)",
         )
     expected = set(figure_urls)
     shown = set(_IMAGE.findall(markdown))
     if extra := sorted(shown - expected):
-        problems.append(f"images not given to this section: {extra}")
+        add("extra_images", f"images not given to this section: {extra}")
     if missing := sorted(expected - shown):
-        problems.append(f"figures given to this section are missing: {missing}")
+        add("missing_figures", f"figures given to this section are missing: {missing}")
     return problems
+
+
+def draft_problems(markdown: str, **checks: Any) -> list[str]:
+    """The messages of :func:`section_problems` (same arguments)."""
+    return [p.text for p in section_problems(markdown, **checks)]
 
 
 def section_heading(markdown: str) -> str:
@@ -350,7 +383,7 @@ def unsourced_number_sentences(
     found = []
     for sentence in prose_sentences(markdown):
         numbers = stated_numbers(sentence, free_numbers)
-        if not numbers or _example(sentence):
+        if not numbers or is_illustration(sentence):
             continue
         support = _support(cited_ids(sentence), ledger, passages)
         if unsourced_numbers(_plain(sentence), f"{support} {free_numbers}"):
@@ -424,37 +457,108 @@ def drop_sentences(markdown: str, sentences: Iterable[str]) -> str:
 
 
 _HEADINGS = re.compile(r"^#{2,4} .+$", re.M)
+# A table's delimiter row ("| --- | :-: |", "|:-|-:|").
+_DELIMITER_ROW = re.compile(r"^\s*\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)*\|?\s*$")
 
 
-def _code_blocks(markdown: str) -> int:
-    return fence_roles(markdown.split("\n")).count("open")
+def _squeezed(text: str) -> str:
+    return " ".join(text.split())
 
 
-def _tables(markdown: str) -> int:
-    # A delimiter row has a pipe; a bare "---" is a rule, not a table.
-    return len(re.findall(r"^\s*\|?\s*:?-{3,}.*\|", markdown, re.M))
+def assets(markdown: str) -> dict[str, list[str]]:
+    """What a revision may not lose without a copy left, by kind, each item
+    with its whitespace collapsed: the code blocks (their body), tables
+    (their header row), figures (their address) and display equations.
+
+    Args:
+        markdown: A section or a whole post.
+
+    Returns:
+        Kind ("code block", "table", "figure", "equation") -> its items, in
+        order (an item occurs as often as the text has it).
+    """
+    lines = markdown.split("\n")
+    blocks: list[str] = []
+    body: list[str] | None = None
+    for line, role in zip(lines, fence_roles(lines), strict=True):
+        if role == "open":
+            body = []
+        elif role == "code" and body is not None:
+            body.append(line)
+        elif role == "close" and body is not None:
+            blocks.append(_squeezed("\n".join(body)))
+            body = None
+    if body is not None:
+        blocks.append(_squeezed("\n".join(body)))
+    prose = without_code(markdown)
+    rows = prose.split("\n")
+    tables = [
+        _squeezed(rows[i])
+        for i in range(len(rows) - 1)
+        if _TABLE_LINE.match(rows[i])
+        and "|" in rows[i + 1]
+        and _DELIMITER_ROW.match(rows[i + 1])
+    ]
+    return {
+        "code block": blocks,
+        "table": tables,
+        "figure": _IMAGE.findall(prose),
+        "equation": [_squeezed(m.group(0)) for m in DISPLAY_MATH.finditer(prose)],
+    }
 
 
-def structure_lost(before: str, after: str) -> str:
+def lost_assets(before: str, after: str, rest: str = "") -> str:
+    """The first kind of asset ``after`` lost with no copy left ("" when
+    none): a revision may fix an item in place (the count stays), and may
+    drop a repeated one when an equivalent copy stays in ``after`` or in
+    ``rest`` (the rest of the post).
+
+    Args:
+        before: The text before the revision.
+        after: The text after it.
+        rest: The other sections of the post.
+
+    Returns:
+        "code block", "table", "figure", "equation" or "".
+    """
+    old, new = assets(before), assets(after)
+    elsewhere = assets(rest) if rest else {}
+    for kind, items in old.items():
+        if len(new[kind]) >= len(items):
+            continue
+        kept = set(new[kind]) | set(elsewhere.get(kind, ()))
+        if any(item not in kept for item in Counter(items) - Counter(new[kind])):
+            return kind
+    return ""
+
+
+def structure_lost(
+    before: str, after: str, *, rest: str = "", max_prose_cut: float
+) -> str:
     """Why a revision lost the draft's structure ("" when it did not): a
-    heading, an image, a code block, a table or display math gone, or more
-    than a quarter of the prose."""
-    if _code_blocks(after) < _code_blocks(before):
-        return "a code block was lost"
-    if _tables(without_code(after)) < _tables(without_code(before)):
-        return "a table was lost"
+    heading gone, a code block, table, figure or display equation gone with
+    no copy left in the section or in ``rest`` (:func:`lost_assets`), or
+    more than ``max_prose_cut`` of the prose cut.
+
+    Args:
+        before: The draft.
+        after: The revision.
+        rest: The other sections of the post.
+        max_prose_cut: The largest share of the prose a revision may cut.
+
+    Returns:
+        The reason, or "".
+    """
     if set(_HEADINGS.findall(without_code(before))) - set(
         _HEADINGS.findall(without_code(after))
     ):
         return "a heading was lost"
-    if set(_IMAGE.findall(before)) - set(_IMAGE.findall(after)):
-        return "a figure was lost"
-    if before.count("$$") > after.count("$$"):
-        return "an equation was lost"
-    if len(" ".join(prose_sentences(after))) < 0.75 * len(
+    if kind := lost_assets(before, after, rest):
+        return f"{'an' if kind[0] in 'aeiou' else 'a'} {kind} was lost"
+    if len(" ".join(prose_sentences(after))) < (1 - max_prose_cut) * len(
         " ".join(prose_sentences(before))
     ):
-        return "more than a quarter of the prose was cut"
+        return f"more than {max_prose_cut:.0%} of the prose was cut"
     return ""
 
 
@@ -546,20 +650,25 @@ MAX_EDITS = 30
 
 
 def apply_edits(
-    markdown: str, edits: Sequence[tuple[str, str]]
+    markdown: str, edits: Sequence[tuple[str, str]], *, rest: str = ""
 ) -> tuple[str, int, list[str]]:
     """``markdown`` with the (find, replace) edits whose ``find`` occurs
     exactly once applied in order (an empty ``replace`` deletes), with the
-    guards of the review editor: no edit may unbalance a code fence, change
-    a ``## `` heading, remove the only copy of a figure, equation or table,
-    or add a writing-rule slip. Returns the text, the number applied and why
-    the others were skipped. A list item an edit emptied goes with its
-    marker; nothing else is touched."""
+    guards of the review editor on the final text (edits one by one when it
+    fails): no edit may unbalance a code fence, change a ``## `` heading,
+    remove the only copy of a figure, equation, table or code block (a copy
+    in ``rest``, the other sections, counts), or add a writing-rule slip.
+    Returns the text, the number applied and why the others were skipped.
+    A list item an edit emptied goes with its marker; nothing else is
+    touched."""
     from .review_plan import Edit
     from .review_plan import apply_edits as guarded
 
     text, applied, skipped = guarded(
-        markdown, [Edit(find=f, replace=r) for f, r in edits], max_edits=MAX_EDITS
+        markdown,
+        [Edit(find=f, replace=r) for f, r in edits],
+        max_edits=MAX_EDITS,
+        rest=rest,
     )
     lines = text.split("\n")
     roles = block_lines(text)

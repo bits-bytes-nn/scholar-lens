@@ -84,6 +84,8 @@ _TLDR = TldrSpec(
     review_context="Section kind: tldr.",
 )
 _RETRY_HINT = "This is a post explaining a published research paper."
+# The closing section holds the post's own assessment of the paper.
+_JUDGEMENT = frozenset({"closing"})
 
 PAPER_REVIEW_SPEC = PostSpec(
     outline_name="paper outline",
@@ -95,6 +97,7 @@ PAPER_REVIEW_SPEC = PostSpec(
     tldr=_TLDR,
     fixed_titles={"closing": CLOSING_TITLES},
     depth_kinds=frozenset({"method"}),
+    judgement_kinds=_JUDGEMENT,
     post_passes=("review",),
 )
 
@@ -121,6 +124,7 @@ PAPER_SUMMARY_SPEC = PostSpec(
         for kind, _ in SUMMARY_SECTIONS[""]
     },
     depth_kinds=frozenset({"method"}),
+    judgement_kinds=_JUDGEMENT,
     post_passes=("review",),
 )
 

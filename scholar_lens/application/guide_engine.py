@@ -144,6 +144,9 @@ class EvidenceGuide:
     # The sources the body cites, in order of first citation.
     cited: list[SourceDocument] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
+    # Problems the post may not be published with as is (the PR lists
+    # them first, under Blocking).
+    blocking: list[str] = field(default_factory=list)
 
 
 def _rank(document: SourceDocument | None) -> int:
@@ -561,4 +564,5 @@ class EvidenceGuideEngine(PostEngine[GuideOutline, GuideSection, EvidenceGuide])
             ledger=ledger,
             cited=cited,
             notes=self.notes,
+            blocking=self.blocking,
         )

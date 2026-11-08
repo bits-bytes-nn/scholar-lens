@@ -112,6 +112,7 @@ GUIDE_SPEC = PostSpec(
         no_body_copies=True,
     ),
     depth_kinds=frozenset({"concepts", "architecture"}),
+    judgement_kinds=frozenset({"choosing"}),
     # Sections whose code a reader runs (the running example); concepts and
     # architecture may quote internals to explain them.
     runnable_kinds=frozenset({"usage", "operations"}),

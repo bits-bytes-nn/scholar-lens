@@ -14,7 +14,7 @@ import contextlib
 import json
 import os
 import time
-from collections.abc import Callable, Coroutine
+from collections.abc import Callable, Coroutine, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -364,6 +364,11 @@ class PipelineOutcome:
     warnings: list[str] = field(default_factory=list)
 
 
+def blocking_notes(blocking: Sequence[str]) -> list[str]:
+    """Blocking problems as the job result lists them (first, marked)."""
+    return [f"Blocking: {b}" for b in blocking]
+
+
 async def publish_artifact(
     context: RunContext, request: PublishRequest, *, create_pr: bool
 ) -> PipelineOutcome:
@@ -383,7 +388,10 @@ async def publish_artifact(
     except Exception as e:
         # The generators' notes (skipped sections, degraded parts) still
         # belong on the failed run's result.
-        e.run_notes = list(request.review_notes)  # type: ignore[attr-defined]
+        e.run_notes = [  # type: ignore[attr-defined]
+            *blocking_notes(request.blocking),
+            *request.review_notes,
+        ]
         raise
     outcome = PipelineOutcome(
         title=request.title,
@@ -391,7 +399,10 @@ async def publish_artifact(
         s3_uri=s3_uri,
         # Review notes, rule slips and validator warnings: the PR checklist,
         # and the job result for runs without a PR.
-        warnings=list(request.validation_warnings),
+        warnings=[
+            *blocking_notes(request.blocking),
+            *request.validation_warnings,
+        ],
     )
     if create_pr and not context.config.resources.github.enabled:
         outcome.warnings.append(

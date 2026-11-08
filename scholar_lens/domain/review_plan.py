@@ -22,6 +22,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
+from .evidence_draft import lost_assets
 from .markdown.lint import FIGURE_MARKER, callout_lines, close_open_fence
 from .markdown.math import (
     DISPLAY_MATH,
@@ -818,7 +819,7 @@ def _is_subsequence(items: list[str], within: list[str]) -> bool:
 
 
 def apply_edits(
-    text: str, edits: list[Edit], *, max_edits: int
+    text: str, edits: list[Edit], *, max_edits: int, rest: str = ""
 ) -> tuple[str, int, list[str]]:
     """Apply edits whose ``find`` occurs exactly once in the current text.
 
@@ -827,55 +828,89 @@ def apply_edits(
     place. Top-level ``## `` headings cannot be added, removed, demoted or
     renamed (the edited text must keep the same list of them); a
     redundant ``###``/``####`` subsection may be (level jumps are repaired at
-    publish time). An edit may drop a repeated figure, display equation or
-    table, never its only copy, and may not add a writing-rule slip.
+    publish time). An edit may drop a repeated figure, display equation,
+    table or code block, never its only copy (``rest``: the other sections
+    of the post, where a copy may remain), and may not add a writing-rule
+    slip.
+
+    The guards judge the edits' final text: edits that only pass together
+    (a table's header and its delimiter row changed apart) are applied
+    together. When the final text fails, the edits are applied one by one
+    instead and those that pass are kept.
     """
-    applied, skipped = 0, []
-    for edit in edits[:max_edits]:
-        if not edit.find.strip():
-            skipped.append("empty find")
+    batch = edits[:max_edits]
+    over = (
+        [f"{len(edits) - max_edits} edits over the cap"]
+        if len(edits) > max_edits
+        else []
+    )
+    edited, applied, skipped = text, [], []
+    for edit in batch:
+        if reason := _anchor_problem(edited, edit):
+            skipped.append(reason)
             continue
-        count = text.count(edit.find)
-        if count != 1:
-            skipped.append(f"find occurs {count} times: {edit.find[:60]!r}")
+        edited = edited.replace(edit.find, edit.replace, 1)
+        applied.append(edit)
+    if applied and not _guard(text, applied, edited, rest):
+        return edited, len(applied), skipped + over
+    count, skipped = 0, []
+    for edit in batch:
+        if reason := _anchor_problem(text, edit):
+            skipped.append(reason)
             continue
         edited = text.replace(edit.find, edit.replace, 1)
-        # Closing the article's one unclosed fence: the edit only adds the
-        # closing fence line and changes nothing else.
-        closes_fence = (
-            bool(open_fence(text))
-            and not open_fence(edited)
-            and _without_bare_fences(edit.replace) == _without_bare_fences(edit.find)
-        )
+        if reason := _guard(text, [edit], edited, rest):
+            skipped.append(f"{reason}: {edit.find[:60]!r}")
+            continue
+        text = edited
+        count += 1
+    return text, count, skipped + over
+
+
+def _anchor_problem(text: str, edit: Edit) -> str:
+    """Why ``edit`` cannot be placed in ``text`` ("" when its find occurs
+    exactly once)."""
+    if not edit.find.strip():
+        return "empty find"
+    if (count := text.count(edit.find)) != 1:
+        return f"find occurs {count} times: {edit.find[:60]!r}"
+    return ""
+
+
+def _guard(text: str, edits: Sequence[Edit], edited: str, rest: str = "") -> str:
+    """Why ``edits``, which turned ``text`` into ``edited``, may not stand
+    ("" when they may): a fence left unbalanced, a top-level heading changed,
+    the only copy of a figure, equation, table or code block removed, or a
+    new writing-rule slip."""
+    # Closing the article's one unclosed fence: the edit only adds the
+    # closing fence line and changes nothing else.
+    closes = bool(open_fence(text)) and not open_fence(edited)
+    for edit in edits:
+        closes_fence = closes and _without_bare_fences(
+            edit.replace
+        ) == _without_bare_fences(edit.find)
         if open_fence(edit.find) != open_fence(edit.replace) and not closes_fence:
             # Adding or dropping a lone fence line opens or closes a code
             # block elsewhere (prose would turn into code, or code into
             # prose), unless it closes the article's one unclosed fence.
             # Changing an info string or moving a fence keeps the balance.
-            skipped.append(f"would unbalance a code fence: {edit.find[:60]!r}")
-            continue
-        # On the text outside code, so an edit that drops a closing fence (and
-        # turns the following sections into code) is caught too.
-        before = _TOP_HEADING.findall(without_fences(text))
-        after = _TOP_HEADING.findall(without_fences(edited))
-        # Closing the article's unclosed fence may only bring back headings
-        # the open code block had swallowed; it may not lose or rename one.
-        if after != before and not (closes_fence and _is_subsequence(before, after)):
-            skipped.append(f"would change a heading: {edit.find[:60]!r}")
-            continue
-        if lost := _lost_assets(edit.find, text, edited):
-            skipped.append(f"would remove the only {lost}: {edit.find[:60]!r}")
-            continue
-        if added := added_slips(text, edited):
-            skipped.append(
-                f"would add a writing-rule slip ({added[0]}): {edit.find[:60]!r}"
-            )
-            continue
-        text = edited
-        applied += 1
-    if len(edits) > max_edits:
-        skipped.append(f"{len(edits) - max_edits} edits over the cap")
-    return text, applied, skipped
+            return "would unbalance a code fence"
+    closes_fence = closes and all(
+        _without_bare_fences(e.replace) == _without_bare_fences(e.find) for e in edits
+    )
+    # On the text outside code, so an edit that drops a closing fence (and
+    # turns the following sections into code) is caught too.
+    before = _TOP_HEADING.findall(without_fences(text))
+    after = _TOP_HEADING.findall(without_fences(edited))
+    # Closing the article's unclosed fence may only bring back headings
+    # the open code block had swallowed; it may not lose or rename one.
+    if after != before and not (closes_fence and _is_subsequence(before, after)):
+        return "would change a heading"
+    if lost := _lost_assets(text, edited, rest):
+        return f"would remove the only {lost}"
+    if added := added_slips(text, edited):
+        return f"would add a writing-rule slip ({added[0]})"
+    return ""
 
 
 _BARE_FENCE_LINE = re.compile(r"(?m)^[ \t]*(?:`{3,}|~{3,})[ \t]*\n?")
@@ -886,19 +921,12 @@ def _without_bare_fences(text: str) -> str:
     return _BARE_FENCE_LINE.sub("", text).strip()
 
 
-def _lost_assets(find: str, text: str, edited: str) -> str:
-    """The kind of figure, display equation or table the edit removes without
-    another copy left ("" when none): fixing one in place keeps the count and
-    is fine; dropping a repeated copy leaves the other in ``edited``."""
-    for kind, items in (
-        ("figure", image_sources),
-        ("equation", DISPLAY_MATH.findall),
-        ("table", _TABLE_HEADER.findall),
-    ):
-        fewer = len(items(edited)) < len(items(text))
-        if fewer and any(item not in edited for item in items(find)):
-            return kind
-    return ""
+def _lost_assets(text: str, edited: str, rest: str = "") -> str:
+    """The kind of figure, display equation, table or code block the edits
+    removed without another copy left ("" when none): fixing one in place
+    keeps the count and is fine; dropping a repeated copy leaves the other
+    in ``edited`` or in ``rest``."""
+    return lost_assets(text, edited, rest)
 
 
 _TABLE_HEADER = re.compile(r"^(\|[^\n]*\|)[ \t]*\n\|[ \t]*:?-+", re.MULTILINE)

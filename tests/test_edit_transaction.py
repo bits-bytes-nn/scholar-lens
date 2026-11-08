@@ -1,0 +1,169 @@
+"""Properties of the verifier set and the edit transaction (docs/engine.md,
+4.1 and 4.4)."""
+
+from __future__ import annotations
+
+import pytest
+
+from scholar_lens.domain.edit_transaction import changed_units, transact
+from scholar_lens.domain.evidence_draft import (
+    apply_edits,
+    lost_assets,
+    structure_lost,
+)
+from scholar_lens.domain.post_spec import Limits
+from scholar_lens.domain.review_plan import Edit
+from scholar_lens.domain.review_plan import apply_edits as guarded
+from scholar_lens.domain.verifiers import Problem, VerifierSet, no_checks
+
+CUT = Limits().max_prose_cut
+CODE = "```python\nclient = Client(retries=3)\n```"
+TABLE = "| 방법 | 점수 |\n| --- | --- |\n| LoRA | 높음 |"
+
+
+def _section(*blocks: str) -> str:
+    return "## 사용법\n\n" + "\n\n".join(blocks) + "\n"
+
+
+# ---- the table edit split in two ----------------------------------------------
+
+
+@pytest.mark.parametrize("columns", [1, 2, 3])
+def test_a_table_edit_split_into_header_and_delimiter_edits_applies(
+    columns: int,
+) -> None:
+    text = _section("표를 봅니다.", TABLE, "끝입니다.")
+    extra_head = "".join(f" 열{k} |" for k in range(columns))
+    extra_rule = " --- |" * columns
+    extra_row = " 값 |" * columns
+    edits = [
+        ("| 방법 | 점수 |", "| 방법 | 점수 |" + extra_head),
+        ("| --- | --- |", "| --- | --- |" + extra_rule),
+        ("| LoRA | 높음 |", "| LoRA | 높음 |" + extra_row),
+    ]
+    # Alone, the header edit leaves a header wider than its delimiter row.
+    _, alone, _ = guarded(
+        text, [Edit(find=edits[0][0], replace=edits[0][1])], max_edits=5
+    )
+    assert alone == 0
+    fixed, applied, skipped = apply_edits(text, edits)
+    assert applied == len(edits) and not skipped
+    assert "| --- | --- |" + extra_rule in fixed
+
+
+def test_a_batch_that_fails_together_keeps_the_edits_that_pass_alone() -> None:
+    text = _section("첫 문장입니다.", "![구조](https://x/a.png)", "끝입니다.")
+    fixed, applied, skipped = apply_edits(
+        text,
+        [("첫 문장입니다.", "고친 문장입니다."), ("![구조](https://x/a.png)", "")],
+    )
+    assert applied == 1 and "고친 문장입니다." in fixed
+    assert "https://x/a.png" in fixed and any("only figure" in r for r in skipped)
+
+
+# ---- a copy that remains -------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "asset", [CODE, TABLE, "$$\ny = Wx\n$$", "![구조](https://x/a.png)"]
+)
+@pytest.mark.parametrize("copy", ["section", "rest", "nowhere"])
+def test_a_block_may_go_only_when_a_copy_remains(asset: str, copy: str) -> None:
+    blocks = ["설명입니다.", asset, "다음 설명입니다."]
+    if copy == "section":
+        blocks.append(asset)
+    text = _section(*blocks)
+    rest = _section("앞 절입니다.", asset) if copy == "rest" else _section("앞 절.")
+    edits = [(f"{asset}\n\n다음", "다음")]
+    fixed, applied, _ = apply_edits(text, edits, rest=rest)
+    revision = transact(
+        text, edits, verifiers=no_checks(), max_prose_cut=CUT, rest=rest
+    )
+    lost = structure_lost(text, fixed, rest=rest, max_prose_cut=CUT)
+    if copy == "nowhere":
+        assert applied == 0 and not revision.taken
+    else:
+        assert applied == 1 and revision.taken and not lost
+        assert fixed.count(asset) == (1 if copy == "section" else 0)
+
+
+def test_an_asset_fixed_in_place_is_not_lost() -> None:
+    before = _section("설명입니다.", CODE)
+    after = before.replace("retries=3", "retries=5")
+    assert lost_assets(before, after) == ""
+    assert lost_assets(before, _section("설명입니다.")) == "code block"
+
+
+def test_the_prose_cut_guard_is_the_spec_limit() -> None:
+    before = _section("가 " * 40 + "끝입니다.")
+    after = _section("가 " * 10 + "끝입니다.")
+    assert structure_lost(before, after, max_prose_cut=CUT)
+    assert not structure_lost(before, after, max_prose_cut=0.9)
+
+
+# ---- problem sets ----------------------------------------------------------------
+
+
+def _numbers(markdown: str) -> list[Problem]:
+    """A stand-in verifier: every sentence holding "N개" is a problem of
+    one kind, quoting its sentence."""
+    out = []
+    for line in markdown.split("\n"):
+        if "개" in line and any(c.isdigit() for c in line):
+            out.append(Problem("numbers", f"numbers without evidence: {line}", line))
+    return out
+
+
+def _headings(markdown: str) -> list[Problem]:
+    return [Problem("subheading", "no ### headings")] if "\n### " in markdown else []
+
+
+VERIFIERS = VerifierSet("test", (_numbers, _headings))
+
+
+def test_a_problem_key_drops_its_position_and_digits() -> None:
+    a = Problem(
+        "numbers", "numbers [12] without evidence: 첫 문장 12개", "첫 문장 12개"
+    )
+    b = Problem(
+        "numbers", "numbers [7] without evidence: 둘째 문장 7개", "둘째 문장 7개"
+    )
+    assert a.key == b.key
+    assert a.key != Problem("other", a.text, a.where).key
+
+
+def test_a_batch_that_adds_a_new_kind_of_problem_is_rejected() -> None:
+    text = _section("첫 문장입니다.", "끝입니다.")
+    revision = transact(
+        text,
+        [("첫 문장입니다.", "첫 문장입니다.\n\n### 세부\n\n세부 설명입니다.")],
+        verifiers=VERIFIERS,
+        max_prose_cut=CUT,
+    )
+    assert not revision.taken and revision.text == text
+    assert [p.kind for p in revision.added] == ["subheading"]
+
+
+@pytest.mark.parametrize("count", [1, 2])
+def test_a_problem_of_a_known_kind_at_another_place_is_judged_by_set(
+    count: int,
+) -> None:
+    text = _section("모델은 3개 층을 씁니다.", "끝입니다.")
+    moved = "\n\n".join(f"설정은 {k + 4}개 값을 받습니다." for k in range(count))
+    revision = transact(
+        text,
+        [("모델은 3개 층을 씁니다.", f"모델은 층을 씁니다.\n\n{moved}")],
+        verifiers=VERIFIERS,
+        max_prose_cut=CUT,
+    )
+    # The set of normalised problems is unchanged, whatever the count.
+    assert revision.taken and not revision.added
+    assert "설정은 4개 값을 받습니다." in revision.changed
+
+
+def test_changed_units_are_the_new_and_changed_sentences_only() -> None:
+    before = _section("가는 문장입니다. 나는 문장입니다.", TABLE)
+    after = before.replace("나는 문장입니다.", "나는 고친 문장입니다.").replace(
+        "| LoRA | 높음 |", "| LoRA | 낮음 |"
+    )
+    assert changed_units(before, after) == ["나는 고친 문장입니다.", "| LoRA | 낮음 |"]

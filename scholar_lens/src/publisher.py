@@ -561,7 +561,13 @@ class Publisher:
         """Keep a post that is not published as ``<slug>.rejected.md`` in the
         work dir, with why and the generators' notes at its end."""
         rejected = request.work_dir / f"{request.slug}.rejected.md"
-        report = "\n".join([*findings, *(f"- note: {n}" for n in request.review_notes)])
+        report = "\n".join(
+            [
+                *(f"- blocking: {b}" for b in request.blocking),
+                *findings,
+                *(f"- note: {n}" for n in request.review_notes),
+            ]
+        )
         rejected.write_text(
             f"{markdown}\n\n<!-- violations\n{report}\n-->\n", encoding="utf-8"
         )

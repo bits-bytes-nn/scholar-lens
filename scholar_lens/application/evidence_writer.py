@@ -11,6 +11,7 @@ loop. Ports only: the model is injected.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import re
@@ -22,6 +23,7 @@ from typing import Any, Literal, TypeVar
 
 from pydantic import BaseModel, Field, ValidationError
 
+from ..domain.edit_transaction import Revision, changed_units, transact
 from ..domain.evidence import (
     Evidence,
     EvidenceLedger,
@@ -32,20 +34,20 @@ from ..domain.evidence import (
 )
 from ..domain.evidence_draft import (
     add_missing_figures,
-    apply_edits,
     balance_math,
     cited_ids,
     claim_units,
     drop_empty_headings,
     drop_sentences,
     ends_mid_sentence,
+    is_illustration,
     prose_sentences,
     quote_for_prompt,
     section_heading,
-    strip_revision_notes,
-    structure_lost,
     unsourced_number_sentences,
 )
+from ..domain.post_spec import Limits
+from ..domain.verifiers import VerifierSet
 from ..prompts.rules import FIX_ANSWER
 from .ports import AgentLimits, LanguageModel, ModelText, was_cut
 from .usage import usage_stage
@@ -134,6 +136,77 @@ class PostReview(BaseModel):
     # final running example through every guard and policy).
     trace: str = ""
     issues: list[PostFinding] = Field(default_factory=list, max_length=30)
+
+
+@dataclass(frozen=True)
+class SectionChecks:
+    """What every change of one section is checked with: its verifier set,
+    the claim check's evidence and source passages, whether it is the
+    post's own assessment, and the numbers it may state freely."""
+
+    verifiers: VerifierSet
+    context: tuple[Evidence, ...]
+    reference: str
+    judgement: bool
+    free: str
+
+
+def _fingerprint(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+VerdictKey = tuple[str, str, tuple[str, ...], str, str]
+
+
+class VerdictCache:
+    """Claim-check verdicts by what decides them (docs/engine.md, 4.2): the
+    sentence, the sentence before it, the ids it cites, and fingerprints of
+    the section's evidence context and of the source passages. A verdict is
+    "" for a supported sentence."""
+
+    def __init__(self) -> None:
+        self._verdicts: dict[VerdictKey, str] = {}
+
+    @staticmethod
+    def key(
+        sentence: str,
+        previous: str,
+        cited: Sequence[str],
+        evidence: str,
+        reference: str,
+    ) -> VerdictKey:
+        """The cache key of one claim unit.
+
+        Args:
+            sentence: The claim unit.
+            previous: The unit before it ("" for the first).
+            cited: The evidence ids it cites.
+            evidence: The section's evidence context, as the check shows it.
+            reference: The source passages the check reads.
+
+        Returns:
+            The key.
+        """
+        return (
+            sentence,
+            previous,
+            tuple(cited),
+            _fingerprint(evidence),
+            _fingerprint(reference),
+        )
+
+    def __contains__(self, key: object) -> bool:
+        return key in self._verdicts
+
+    def __len__(self) -> int:
+        return len(self._verdicts)
+
+    def get(self, key: VerdictKey) -> str:
+        """The verdict stored under ``key`` ("" when supported or unknown)."""
+        return self._verdicts.get(key, "")
+
+    def put(self, key: VerdictKey, verdict: str) -> None:
+        self._verdicts[key] = verdict
 
 
 @dataclass(frozen=True)
@@ -359,12 +432,25 @@ class EvidenceWriter:
     prompts: WriterPrompts
 
     def __init__(
-        self, model: LanguageModel, prompts: WriterPrompts, *, max_fix_rounds: int
+        self,
+        model: LanguageModel,
+        prompts: WriterPrompts,
+        *,
+        max_fix_rounds: int,
+        limits: Limits | None = None,
     ) -> None:
         self.model = model
         self.prompts = prompts
         self.max_fix_rounds = max_fix_rounds
+        self.limits = limits or Limits()
         self.notes: list[str] = []
+        # Problems the post may not be published with as is (a check that
+        # did not run, a claim check that objects to most of a section).
+        self.blocking: list[str] = []
+        self.verdicts = VerdictCache()
+        # Section title -> the checks every change of the section runs.
+        # By section object (two sections may share a title).
+        self.checked: dict[int, SectionChecks] = {}
         self._names: dict[str, str] = {}
         # Source passages the current section's evidence comes from (guides):
         # the claim check and the fix read them besides the evidence.
@@ -659,94 +745,195 @@ class EvidenceWriter:
         *,
         title: str,
         review_context: str,
-        checks: Callable[[str], list[str]],
+        verifiers: VerifierSet,
         ledger: EvidenceLedger,
         own: Sequence[Evidence],
         earlier: Sequence[Evidence],
         free: str,
+        judgement: bool = False,
+        rest: str = "",
+        section: object | None = None,
     ) -> str:
-        """Code checks, the claim check and (first round) the review, fixed
-        up to ``max_fix_rounds``; then unsupported sentences narrowed in
-        context, contradicting ones removed, the rest noted; missing figures
-        appended and a lone ``$$`` removed."""
+        """The section's verifier set, the claim check and (first round) the
+        review, fixed up to ``max_fix_rounds`` (each fix an edit
+        transaction); then unsupported sentences narrowed once, checked
+        again and deleted (:meth:`_settle`); missing figures appended and a
+        lone ``$$`` removed. The section's checks are registered under
+        ``title``, so every later change of it runs the same ones.
+
+        Args:
+            draft: The section draft.
+            title: The section's title.
+            review_context: What the reviewer is told about the section.
+            verifiers: The section's verifier set.
+            ledger: The run's evidence.
+            own: The section's evidence.
+            earlier: The evidence earlier sections cite.
+            free: Numbers a sentence may state without evidence.
+            judgement: Whether the section is the post's own assessment
+                (its unsupported sentences are shown, not deleted).
+            rest: The rest of the post (a copy of a block there lets a fix
+                drop it here).
+
+        Returns:
+            The section.
+        """
         context = [*own, *earlier]
+        checks = SectionChecks(
+            verifiers, tuple(context), self.reference, judgement, free
+        )
+        if section is not None:
+            self.checked[id(section)] = checks
+        evidence = [*own, *earlier[-30:]]
         for round_ in range(self.max_fix_rounds + 1):
-            code = checks(draft)
+            code = verifiers.run(draft)
             claims = await self.check_claims(draft, ledger, context)
             review = await self.review(draft, review_context) if round_ == 0 else []
-            issues = code + [f"{v}: {s}" for s, v in claims] + review
+            issues = [p.text for p in code] + [f"{v}: {s}" for s, v in claims] + review
             if not issues or round_ == self.max_fix_rounds:
                 break
-            fixed = await self._fix(draft, [*own, *earlier[-30:]], issues)
-            if reason := structure_lost(draft, fixed) or (
-                "it stops mid-sentence" if _incomplete(fixed) else ""
-            ):
-                logger.info("Fix of %r rejected: %s", title, reason)
+            revision = await self._fix(
+                draft, evidence, issues, verifiers=verifiers, rest=rest
+            )
+            if revision.rejected:
+                logger.info("Fix of %r rejected: %s", title, revision.rejected)
                 break
-            if len(checks(fixed)) > len(code):
-                logger.info("Fix of %r rejected: adds rule problems", title)
-                break
-            if fixed.strip() == draft.strip():
+            if not revision.taken or revision.text.strip() == draft.strip():
                 logger.info("Fix of %r changed nothing; stopping.", title)
                 break
-            draft = fixed
-        # The loop ends on the draft its last claim check read: reused, not
-        # paid for again.
-        claims = await self.unsupported(draft, ledger, free, context, checked=claims)
+            draft = revision.text
+        draft = await self._settle(
+            draft,
+            title=title,
+            ledger=ledger,
+            checks=checks,
+            evidence=evidence,
+            rest=rest,
+        )
+        draft = add_missing_figures(draft, [e for e in own if e.kind == "figure"])
+        draft = drop_empty_headings(draft)
+        draft, unbalanced = balance_math(draft)
+        if unbalanced:
+            self.notes.append(f"Section '{title}': a lone $$ was removed.")
+        if leftover := verifiers.run(draft):
+            self.notes.append(
+                f"Section '{title}' still has: "
+                + " | ".join(p.text for p in leftover[:5])
+            )
+        return draft
+
+    async def _settle(
+        self,
+        draft: str,
+        *,
+        title: str,
+        ledger: EvidenceLedger,
+        checks: SectionChecks,
+        evidence: Sequence[Evidence],
+        rest: str,
+        baseline: str | None = None,
+    ) -> str:
+        """``draft`` with its unsupported sentences settled (docs/engine.md,
+        4.5): the writer narrows them once in context (an edit
+        transaction), the changed sentences are checked again, and what is
+        still unsupported is deleted (:meth:`_drop_unsupported`).
+        ``baseline``: only sentences the draft added to it are settled (a
+        whole-post fix)."""
+
+        async def found(text: str) -> list[tuple[str, str]]:
+            claims = await self.unsupported(
+                text, ledger, checks.free, checks.context, reference=checks.reference
+            )
+            if baseline is None:
+                return claims
+            fresh = set(changed_units(baseline, text))
+            return [(s, v) for s, v in claims if s in fresh]
+
+        claims = await found(draft)
         if claims:
-            # Let the writer narrow or delete them in context first; only what
-            # is still unsupported after that is cut.
-            fixed = await self._fix(
+            revision = await self._fix(
                 draft,
-                [*own, *earlier[-30:]],
+                evidence,
                 [
                     "These sentences are not supported by their evidence; narrow "
                     "each to what the evidence says or delete it, and mend the "
                     "sentences around a deletion:\n"
                     + "\n".join(f"- {v}: {s}" for s, v in claims)
                 ],
+                verifiers=checks.verifiers,
+                rest=rest,
             )
-            if (
-                fixed.strip() != draft.strip()
-                and not structure_lost(draft, fixed)
-                and not _incomplete(fixed)
-                and len(checks(fixed)) <= len(checks(draft))
-            ):
-                draft = fixed
-                claims = await self.unsupported(draft, ledger, free, context)
-        wrong = [(s, v) for s, v in claims if _removable(v)]
-        if wrong:
-            draft = drop_sentences(draft, [s for s, _ in wrong])
+            if revision.taken and revision.text.strip() != draft.strip():
+                draft = revision.text
+                # The claim check reads only what the narrowing changed (the
+                # verdicts of the rest are cached).
+                claims = await found(draft)
+            elif revision.rejected:
+                logger.info("Narrowing of %r rejected: %s", title, revision.rejected)
+        return self._drop_unsupported(draft, claims, title=title, checks=checks)
+
+    def _drop_unsupported(
+        self,
+        draft: str,
+        claims: Sequence[tuple[str, str]],
+        *,
+        title: str,
+        checks: SectionChecks,
+    ) -> str:
+        """``draft`` without the sentences the claim check still objects to,
+        their neighbours mended: contradicting ones and ones about the
+        post's sources always, unsupported ones unless they are table rows,
+        the writer's marked illustrations or the post's own assessment (a
+        judgement section), which the PR checklist lists instead. Code is
+        never a claim unit. When the deletions would exceed
+        ``limits.max_drop_share`` of the section's claim units, the check
+        misread the section: nothing is deleted and the post is blocked."""
+        doubtful = [(s, v) for s, v in claims if not _removable(v)]
+        shown = [
+            (s, v)
+            for s, v in doubtful
+            if checks.judgement or s.startswith("|") or is_illustration(s)
+        ]
+        deleted = [(s, v) for s, v in claims if (s, v) not in shown]
+        units = claim_units(draft)
+        if deleted and len(deleted) > self.limits.max_drop_share * len(units):
+            self._block(
+                f"Section '{title}': the claim check objects to {len(deleted)} of "
+                f"{len(units)} sentences (more than "
+                f"{self.limits.max_drop_share:.0%}); none was deleted. Check the "
+                "section against its evidence: "
+                + " | ".join(f"{s[:120]} ({v[:80]})" for s, v in deleted[:5])
+            )
+            return draft
+        if deleted:
+            draft = drop_sentences(draft, [s for s, _ in deleted])
             left = set(claim_units(draft))
-            removed = [(s, v) for s, v in wrong if s not in left]
-            if removed:
+            if removed := [(s, v) for s, v in deleted if s not in left]:
                 self.notes.append(
                     f"Section '{title}': {len(removed)} sentence(s) removed that "
-                    "contradict their evidence or talk about the post's sources: "
-                    + " | ".join(f"{s[:120]} ({v})" for s, v in removed[:5])
+                    "contradict their evidence, talk about the post's sources or "
+                    "that their evidence does not support: "
+                    + " | ".join(f"{s[:120]} ({v[:80]})" for s, v in removed[:5])
                 )
-            if kept := [(s, v) for s, v in wrong if s in left]:
+            if kept := [(s, v) for s, v in deleted if s in left]:
                 self.notes.append(
                     f"Section '{title}': fix by hand, {len(kept)} sentence(s) "
-                    "contradict their evidence: "
-                    + " | ".join(f"{s[:120]} ({v})" for s, v in kept[:5])
+                    "their evidence does not support could not be removed: "
+                    + " | ".join(f"{s[:120]} ({v[:80]})" for s, v in kept[:5])
                 )
-        if unsupported := [(s, v) for s, v in claims if not _removable(v)]:
+        if shown:
             self.notes.append(
-                f"Section '{title}': check {len(unsupported)} sentence(s) "
+                f"Section '{title}': check {len(shown)} sentence(s) "
                 "the evidence may not support: "
-                + " | ".join(f"{s[:120]} ({v})" for s, v in unsupported[:5])
-            )
-        draft = add_missing_figures(draft, [e for e in own if e.kind == "figure"])
-        draft = drop_empty_headings(draft)
-        draft, unbalanced = balance_math(draft)
-        if unbalanced:
-            self.notes.append(f"Section '{title}': a lone $$ was removed.")
-        if leftover := checks(draft):
-            self.notes.append(
-                f"Section '{title}' still has: " + " | ".join(leftover[:5])
+                + " | ".join(f"{s[:120]} ({v})" for s, v in shown[:5])
             )
         return draft
+
+    def _block(self, problem: str) -> None:
+        """A problem the post may not be published with as is (once)."""
+        if problem not in self.blocking:
+            logger.warning("Blocking: %s", problem)
+            self.blocking.append(problem)
 
     async def apply_findings(
         self,
@@ -759,8 +946,10 @@ class EvidenceWriter:
         reference_of: Callable[[Sequence[Evidence]], str],
     ) -> list[tuple[SectionT, str]]:
         """Each section a whole-post review names, fixed with its evidence
-        and source passages; a fix that loses structure is not taken, and
-        sentences it makes that contradict the evidence are removed."""
+        and source passages as an edit transaction that runs the section's
+        registered verifier set (a fix that adds a problem, or loses
+        structure, is not taken); the sentences the fix adds are settled
+        like a section's (narrowed, checked, deleted)."""
         out: list[tuple[SectionT, str]] = []
         names_seen = {
             n
@@ -777,8 +966,9 @@ class EvidenceWriter:
                 "applied: "
                 + " | ".join(f"{f.section}: {f.problem}"[:160] for f in unmatched[:3])
             )
-        for section, md in written:
-            names = {title_of(section), section_heading(md)}
+        for i, (section, md) in enumerate(written):
+            title = title_of(section)
+            names = {title, section_heading(md)}
             issues = [
                 f"{f.problem} Fix: {f.fix}"
                 for f in findings
@@ -787,51 +977,58 @@ class EvidenceWriter:
             if not issues:
                 out.append((section, md))
                 continue
+            checks = self.checked.get(id(section))
+            if checks is None:
+                # A fix no check would see is not taken.
+                self.notes.append(
+                    f"Section '{title}': whole-post review problems left as they "
+                    "were (the section has no registered checks): "
+                    + " | ".join(i[:160] for i in issues[:3])
+                )
+                out.append((section, md))
+                continue
             own = own_of(section)
             self.reference = reference_of(own)
-            fixed = await self._fix(md, own, issues)
-            if (
-                structure_lost(md, fixed)
-                or _incomplete(fixed)
-                or fixed.strip() == md.strip()
-            ):
+            rest = "\n\n".join([m for _, m in out] + [m for _, m in written[i + 1 :]])
+            revision = await self._fix(
+                md, own, issues, verifiers=checks.verifiers, rest=rest
+            )
+            if not revision.taken or revision.text.strip() == md.strip():
                 self.notes.append(
-                    f"Section '{title_of(section)}': whole-post review problems "
-                    "left as they were: " + " | ".join(i[:160] for i in issues[:3])
+                    f"Section '{title}': whole-post review problems left as they "
+                    "were"
+                    + (f" ({revision.rejected})" if revision.rejected else "")
+                    + ": "
+                    + " | ".join(i[:160] for i in issues[:3])
                 )
             else:
-                wrong = [
-                    s
-                    for s, v in await self.check_claims(fixed, ledger, own)
-                    if _removable(v)
-                ]
-                md = drop_sentences(fixed, wrong) if wrong else fixed
-                left = set(claim_units(md))
-                if removed := [w for w in wrong if w not in left]:
-                    self.notes.append(
-                        f"Section '{title_of(section)}': {len(removed)} sentence(s) "
-                        "from a whole-post fix removed (they contradict their "
-                        "evidence or talk about the post's sources): "
-                        + " | ".join(w[:120] for w in removed[:3])
-                    )
-                if kept := [w for w in wrong if w in left]:
-                    self.notes.append(
-                        f"Section '{title_of(section)}': fix by hand, "
-                        f"{len(kept)} sentence(s) contradict their evidence: "
-                        + " | ".join(w[:120] for w in kept[:3])
-                    )
+                md = await self._settle(
+                    revision.text,
+                    title=title,
+                    ledger=ledger,
+                    checks=checks,
+                    evidence=own,
+                    rest=rest,
+                    baseline=md,
+                )
             self.reference = ""
             out.append((section, md))
         return out
 
     async def _fix(
-        self, draft: str, evidence: Sequence[Evidence], issues: Sequence[str]
-    ) -> str:
+        self,
+        draft: str,
+        evidence: Sequence[Evidence],
+        issues: Sequence[str],
+        *,
+        verifiers: VerifierSet,
+        rest: str = "",
+    ) -> Revision:
         """The section revised for ``issues`` by minimal edits (each an
-        exact passage replaced or deleted, applied by code); when none of
-        the edits applies, the whole revised section instead. The answers
-        are structured, so no note reaches the post. An answer that does not
-        parse leaves the draft as it was."""
+        exact passage replaced or deleted), applied as one edit transaction;
+        when none of the edits applies, the whole revised section instead,
+        as one edit. The answers are structured, so no note reaches the
+        post. An answer that does not parse leaves the draft as it was."""
         heading = section_heading(draft) or "a section"
         context = "\n\n".join(
             [
@@ -845,6 +1042,16 @@ class EvidenceWriter:
                 block("problems", "\n".join(f"- {i}" for i in issues)),
             ]
         )
+
+        def transaction(edits: Sequence[tuple[str, str]]) -> Revision:
+            return transact(
+                draft,
+                edits,
+                verifiers=verifiers,
+                max_prose_cut=self.limits.max_prose_cut,
+                rest=rest,
+            )
+
         with usage_stage("fix"):
             try:
                 edits = await self.model.structured(
@@ -860,17 +1067,15 @@ class EvidenceWriter:
                 logger.warning("Edit answer unusable (%s); asking for the section.", e)
                 edits = None
             if edits is not None:
-                fixed, applied, skipped = apply_edits(
-                    draft, [(e.find, e.replace) for e in edits.edits]
-                )
+                revision = transaction([(e.find, e.replace) for e in edits.edits])
                 self._writer_notes(heading, edits.notes)
-                if skipped:
+                if revision.skipped:
                     self.notes.append(
-                        f"Section '{heading}': {len(skipped)} edit(s) not applied: "
-                        + " | ".join(skipped[:3])
+                        f"Section '{heading}': {len(revision.skipped)} edit(s) not "
+                        "applied: " + " | ".join(revision.skipped[:3])
                     )
-                if applied:
-                    return strip_revision_notes(fixed, draft)
+                if revision.applied:
+                    return revision
                 logger.info(
                     "No edit of %r applied (%d proposed); asking for the section.",
                     heading,
@@ -890,9 +1095,11 @@ class EvidenceWriter:
                     f"Section '{heading}': a fix could not be made ({e}); "
                     "the draft stands."
                 )
-                return draft
+                return Revision(draft)
         self._writer_notes(heading, answer.notes)
-        return strip_revision_notes(answer.section.strip(), draft)
+        if not answer.section.strip():
+            return Revision(draft)
+        return transaction([(draft, answer.section.strip())])
 
     def _writer_notes(self, heading: str, notes: str) -> None:
         """What the writer could not fix, on the PR checklist, once."""
@@ -908,16 +1115,12 @@ class EvidenceWriter:
         free: str,
         context: Sequence[Evidence] = (),
         *,
-        checked: list[tuple[str, str]] | None = None,
+        reference: str | None = None,
     ) -> list[tuple[str, str]]:
-        """The claim check's unsupported sentences (``checked``: the result
-        of one already run on this very draft) and the sentences whose
-        numbers their evidence does not state."""
-        found = (
-            list(checked)
-            if checked is not None
-            else await self.check_claims(draft, ledger, context)
-        )
+        """The claim check's unsupported sentences (cached verdicts: a
+        sentence already judged in the same context is not sent again) and
+        the sentences whose numbers their evidence does not state."""
+        found = await self.check_claims(draft, ledger, context, reference=reference)
         known = {s for s, _ in found}
         found += [
             (s, "numbers not in its evidence")
@@ -927,71 +1130,133 @@ class EvidenceWriter:
         return found
 
     async def check_claims(
-        self, draft: str, ledger: EvidenceLedger, context: Sequence[Evidence] = ()
+        self,
+        draft: str,
+        ledger: EvidenceLedger,
+        context: Sequence[Evidence] = (),
+        *,
+        reference: str | None = None,
     ) -> list[tuple[str, str]]:
         """(sentence, verdict with reason) of the sentences the evidence does
-        not support."""
+        not support. Only claim units without a cached verdict are sent
+        (each with the sentence before it, so a pronoun reads in context);
+        the cached verdicts are merged in. When the model gives no valid
+        answer, the unsent units stay unchecked and the post is blocked.
+
+        Args:
+            draft: The section.
+            ledger: The run's evidence.
+            context: The section's evidence context.
+            reference: The source passages the check reads (the writer's
+                current ones when None).
+
+        Returns:
+            The units not supported, in the section's order.
+        """
+        reference = self.reference if reference is None else reference
         # Table rows are claims too (a wrong cell is as wrong as a sentence).
         sentences = claim_units(draft)
         if not sentences:
             return []
-        lines = []
-        for n, sentence in enumerate(sentences, 1):
-            cited = [e for i in cited_ids(sentence) if (e := ledger.get(i))]
-            lines.append(
-                f"{n}. {sentence}\n   evidence: "
-                + (
-                    " || ".join(
-                        f"[{e.id}, from {self._names.get(e.paper_id, e.paper_id)}] "
-                        f'{e.claim} — "{quote_for_prompt(e.quote)[:300]}" {e.scope}'
-                        + (f" code: {e.code[:300]}" if e.code else "")
-                        for e in cited
+        evidence_context = evidence_lines(list(context))
+        keys = [
+            self.verdicts.key(
+                sentence,
+                sentences[n - 1] if n else "",
+                cited_ids(sentence),
+                evidence_context,
+                reference,
+            )
+            for n, sentence in enumerate(sentences)
+        ]
+        sent: list[int] = []
+        queued = set()
+        for n, key in enumerate(keys):
+            if key not in self.verdicts and key not in queued:
+                queued.add(key)
+                sent.append(n)
+        if sent:
+            lines = []
+            for number, n in enumerate(sent, 1):
+                sentence = sentences[n]
+                cited = [e for i in cited_ids(sentence) if (e := ledger.get(i))]
+                lines.append(
+                    f"{number}. {sentence}\n"
+                    + (f"   follows: {sentences[n - 1]}\n" if n else "")
+                    + "   evidence: "
+                    + (
+                        " || ".join(
+                            f"[{e.id}, from {self._names.get(e.paper_id, e.paper_id)}] "
+                            f'{e.claim} — "{quote_for_prompt(e.quote)[:300]}" {e.scope}'
+                            + (f" code: {e.code[:300]}" if e.code else "")
+                            for e in cited
+                        )
+                        or "(none)"
                     )
-                    or "(none)"
                 )
-            )
-        with usage_stage("verify"):
-            check = await self._evaluated(
-                f"the claim check of '{section_heading(draft) or 'a section'}'",
-                role="evaluate",
-                system=self.prompts.claim_check,
-                # Shared by every claim check of the section (each round).
-                context=block("section_evidence", evidence_lines(list(context)))
-                + (
-                    "\n\n" + block("source_sections", self.reference)
-                    if self.reference
-                    else ""
-                ),
-                prompt=block("sentences", "\n".join(lines)),
-                schema=ClaimCheck,
-            )
-        if check is None:
-            return []
-        bad = []
-        for v in check.verdicts:
-            if not 1 <= v.n <= len(sentences):
-                continue
-            parts = [p for p in v.unsupported_parts if p.strip()]
-            # A part not supported makes the item unsupported, whatever the
-            # item's own label says.
-            verdict = "unsupported" if v.verdict == "supported" and parts else v.verdict
-            if verdict != "supported":
-                reason = v.reason + (
-                    " (not supported: " + "; ".join(parts) + ")" if parts else ""
+            with usage_stage("verify"):
+                check = await self._evaluated(
+                    f"the claim check of '{section_heading(draft) or 'a section'}'",
+                    blocking=True,
+                    role="evaluate",
+                    system=self.prompts.claim_check,
+                    # Shared by every claim check of the section (each round).
+                    context=block("section_evidence", evidence_context)
+                    + (
+                        "\n\n" + block("source_sections", reference)
+                        if reference
+                        else ""
+                    ),
+                    prompt=block("sentences", "\n".join(lines)),
+                    schema=ClaimCheck,
                 )
-                bad.append((sentences[v.n - 1], f"{verdict}: {reason.strip()}"))
-        return bad
+            if check is not None:
+                answered: dict[int, str] = {}
+                for v in check.verdicts:
+                    if not 1 <= v.n <= len(sent):
+                        continue
+                    parts = [p for p in v.unsupported_parts if p.strip()]
+                    # A part not supported makes the item unsupported,
+                    # whatever the item's own label says.
+                    verdict = (
+                        "unsupported"
+                        if v.verdict == "supported" and parts
+                        else v.verdict
+                    )
+                    if verdict != "supported":
+                        reason = v.reason + (
+                            " (not supported: " + "; ".join(parts) + ")"
+                            if parts
+                            else ""
+                        )
+                        answered[sent[v.n - 1]] = f"{verdict}: {reason.strip()}"
+                for n in sent:
+                    self.verdicts.put(keys[n], answered.get(n, ""))
+        return [
+            (sentence, verdict)
+            for sentence, key in zip(sentences, keys, strict=True)
+            if (verdict := self.verdicts.get(key))
+        ]
 
-    async def _evaluated(self, what: str, **call: Any) -> Any:
+    async def _evaluated(
+        self, what: str, *, blocking: bool = False, **call: Any
+    ) -> Any:
         """A structured check's answer, or None when the model gave no valid
         answer even on the fallback model (a content filter, a cut answer):
-        the run goes on with the draft as it is, and the run notes say which
-        check did not run, so the PR checklist shows it."""
+        the run goes on with the draft as it is. A ``blocking`` check that
+        did not run blocks the post; another one leaves a note on the PR
+        checklist."""
         try:
             return await self.model.structured(**call)
         except ValueError as e:
             logger.warning("%s did not run: %s", what, e)
-            self.notes.append(f"Check by hand: {what} could not run ({e}).")
+            if blocking:
+                self._block(
+                    f"{what[0].upper()}{what[1:]} could not run ({e}): "
+                    "its sentences are unchecked."
+                )
+            else:
+                self.notes.append(f"Check by hand: {what} could not run ({e}).")
             return None
 
     async def review(self, draft: str, context: str) -> list[str]:

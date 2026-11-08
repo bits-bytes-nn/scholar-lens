@@ -371,5 +371,6 @@ async def write_guide_with_evidence(
             u: html.unescape(titles[u]) for u in source_urls if titles.get(u)
         },
         notes=notes,
+        blocking=list(result.blocking),
         image_urls=[u for u in figures if u not in set(broken)],
     )

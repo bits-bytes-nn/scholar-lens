@@ -224,7 +224,7 @@ def test_a_paper_run_wires_roles_ceiling_and_shape(
 
     monkeypatch.setattr(paper_engine, "EvidencePaperEngine", FakePaperEngine)
     context = _context(seen.root)
-    written, notes = asyncio.run(
+    written, notes, _blocking = asyncio.run(
         paper_writer.write_paper_with_evidence(
             context,
             _paper(),

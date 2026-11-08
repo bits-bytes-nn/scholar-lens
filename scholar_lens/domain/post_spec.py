@@ -253,6 +253,15 @@ class Limits:
 
     outline_repairs: int = 2
     fix_rounds: int = 2
+    # The largest share of a section's prose one revision may cut: a fix
+    # that cuts more rewrote the section instead of fixing it.
+    max_prose_cut: float = 0.25
+    # The largest share of a section's claim units code deletes as
+    # unsupported. The guard catches a claim check that misread the section
+    # (or its evidence) and flagged most of it, so nothing is deleted and the
+    # post is blocked for a reader; at a half, a short section losing one of
+    # three sentences is still an ordinary deletion.
+    max_drop_share: float = 0.5
 
 
 @dataclass(frozen=True)
@@ -275,6 +284,10 @@ class PostSpec:
     depth_kinds: frozenset[str] = frozenset()
     # Kinds whose code a reader runs (the running example).
     runnable_kinds: frozenset[str] = frozenset()
+    # Kinds whose sentences are the post's own assessment (a closing
+    # judgement, when to choose a tool): an unsupported one is shown to the
+    # reviewer, never deleted.
+    judgement_kinds: frozenset[str] = frozenset()
     # Sections the checks emptied: kept, or dropped with a note.
     empty_sections: Literal["keep", "drop"] = "keep"
     # The whole-post reviews, run together in this order.

@@ -59,7 +59,7 @@ async def write_paper_with_evidence(
     post: Literal["review", "summary"],
     translation_guideline: list[dict[str, Any]] | None,
     tracker: TokenUsageTracker,
-) -> tuple[ReviewText | dict[str, str], list[str]]:
+) -> tuple[ReviewText | dict[str, str], list[str], list[str]]:
     from ..adapters.bedrock.strands_models import StrandsLanguageModel
     from ..application.paper_engine import EvidencePaperEngine, PaperSettings
     from .evidence_models import budgeted, role_model, unservable
@@ -169,6 +169,7 @@ async def write_paper_with_evidence(
                 notes=tuple(notes),
             ),
             notes,
+            list(result.blocking),
         )
     return (
         {
@@ -178,6 +179,7 @@ async def write_paper_with_evidence(
             "urls": "",
         },
         notes,
+        list(result.blocking),
     )
 
 

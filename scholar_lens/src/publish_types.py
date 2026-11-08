@@ -47,6 +47,10 @@ class PublishRequest:
     # Pipeline-side findings for the reviewer (e.g. a tag the paper never
     # mentions); shown in the PR checklist with the validator's warnings.
     review_notes: list[str] = field(default_factory=list)
+    # Problems the post may not be published with as is (a check that did
+    # not run, a claim check that objects to most of a section); listed
+    # first in the PR body, under "Blocking".
+    blocking: list[str] = field(default_factory=list)
     # Filled by Publisher.publish: non-blocking post-validation findings, shown
     # as a checklist in the PR body.
     validation_warnings: list[str] = field(default_factory=list)
@@ -69,16 +73,27 @@ class PublishRequest:
 
     def pr_body_with_checklist(self, extra_notes: Sequence[str] = ()) -> str:
         return with_review_checklist(
-            self.pr_body, [*self.validation_warnings, *extra_notes]
+            self.pr_body,
+            [*self.validation_warnings, *extra_notes],
+            blocking=self.blocking,
         )
 
 
-def with_review_checklist(body: str, warnings: Sequence[str]) -> str:
-    """Append post-validation warnings to a PR body as unchecked items."""
-    if not warnings:
-        return body
-    items = "\n".join(f"- [ ] {w}" for w in warnings)
-    return f"{body}\n\n### Review checklist\n{items}"
+def with_review_checklist(
+    body: str, warnings: Sequence[str], *, blocking: Sequence[str] = ()
+) -> str:
+    """Append the blocking problems, then the post-validation warnings, to a
+    PR body as unchecked items."""
+    parts = [body]
+    if blocking:
+        items = "\n".join(f"- [ ] {b}" for b in blocking)
+        parts.append(
+            "### Blocking\nDo not merge before each of these is resolved:\n" + items
+        )
+    if warnings:
+        items = "\n".join(f"- [ ] {w}" for w in warnings)
+        parts.append(f"### Review checklist\n{items}")
+    return "\n\n".join(parts)
 
 
 def is_post_file(path: str) -> bool:

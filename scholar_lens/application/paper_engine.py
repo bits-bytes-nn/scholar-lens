@@ -107,6 +107,9 @@ class EvidencePaper:
     subtitle: str = ""
     description: str = ""
     notes: list[str] = field(default_factory=list)
+    # Problems the post may not be published with as is (the PR lists
+    # them first, under Blocking).
+    blocking: list[str] = field(default_factory=list)
 
 
 def reading_groups(document: SourceDocument, chars: int) -> list[SourceDocument]:
@@ -381,6 +384,7 @@ class EvidencePaperEngine(PostEngine[PaperOutline, PaperSection, EvidencePaper])
             subtitle=final.subtitle,
             description=final.description,
             notes=self.notes,
+            blocking=self.blocking,
         )
 
     async def _final(

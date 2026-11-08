@@ -352,6 +352,7 @@ async def test_an_evidence_review_runs_without_the_citation_summarizer(
                 description="",
             ),
             ["evidence note"],
+            ["evidence blocking"],
         )
 
     monkeypatch.setattr(paper_pipeline, "_prepare_paper_data", prepare)
@@ -363,6 +364,8 @@ async def test_an_evidence_review_runs_without_the_citation_summarizer(
         citations=False, code_index=False
     )
     assert "evidence note" in outcome.warnings
+    # A blocking problem leads the job's warnings.
+    assert outcome.warnings[0] == "Blocking: evidence blocking"
     assert "## 한계와 시사점" in Path(outcome.markdown_path).read_text(encoding="utf-8")
 
 

@@ -76,5 +76,7 @@ SURVEY_SPEC = PostSpec(
     ),
     retry_hint="This is a survey of published research papers for practitioners.",
     depth_kinds=frozenset({"lineage", "cross_cutting"}),
+    # The post's reading of the field and its closing view.
+    judgement_kinds=frozenset({"insights", "conclusion"}),
     attachments={"introduction": "timeline", "comparison": "comparison"},
 )
