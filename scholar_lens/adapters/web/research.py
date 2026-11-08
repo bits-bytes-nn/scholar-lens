@@ -1115,8 +1115,8 @@ class WebResearcher:
 
     def _llms_index(self, base_url: str) -> list[tuple[str, str]]:
         """(url, title and description) of each page the site's ``/llms.txt``
-        lists, in its order; empty when the site has none. Fetched once per
-        host."""
+        lists, in its order; empty when the site has none or it cannot be
+        read. Fetched once per host."""
         host = urlparse(base_url).netloc
         if host in self._llms_cache:
             return self._llms_cache[host]
@@ -1129,7 +1129,9 @@ class WebResearcher:
                     (_page_url(m.group(2)), f"{m.group(1)} {m.group(3) or ''}".strip())
                     for m in _LLMS_LINK.finditer(response.text)
                 ]
-        except httpx.HTTPError as e:
+        except (httpx.HTTPError, UnsafeUrlError) as e:
+            # The index is optional: an unreachable one, or one the SSRF guard
+            # refuses (it redirects to a private address), is no index.
             logger.info("No llms.txt at %s: %s", index_url, e)
         if entries:
             logger.info("Using %d pages listed in %s.", len(entries), index_url)

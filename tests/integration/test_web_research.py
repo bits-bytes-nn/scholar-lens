@@ -8,6 +8,7 @@ from typing import Any
 import httpx
 import pytest
 
+from scholar_lens.adapters.http.url_guard import UnsafeUrlError
 from scholar_lens.adapters.web.research import (
     BraveSearchProvider,
     NullSearchProvider,
@@ -1511,6 +1512,36 @@ def test_llms_txt_pages_in_scope_come_first_architecture_ahead() -> None:
         "https://d.dev/serve/config.html",
         "https://d.dev/serve/start.html",
         "https://d.dev/serve/nav-only.html",
+    ]
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        UnsafeUrlError("redirect to a private address"),
+        httpx.ConnectError("refused"),
+        httpx.ReadTimeout("slow"),
+    ],
+    ids=["unsafe", "connect", "timeout"],
+)
+def test_an_unreadable_llms_txt_is_no_index(failure: Exception) -> None:
+    seed = (
+        "<html><body><main><h1>Serve</h1><p>Start here.</p>"
+        '<a href="https://d.dev/serve/config.html">x</a></main></body></html>'
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/llms.txt":
+            raise failure
+        return httpx.Response(200, headers={"Content-Type": "text/html"}, text=seed)
+
+    researcher = WebResearcher(
+        client=httpx.Client(transport=httpx.MockTransport(handler))
+    )
+    corpus = researcher.research(["https://d.dev/serve/index.html"])
+    assert [p.url for p in corpus.pages] == [
+        "https://d.dev/serve/index.html",
+        "https://d.dev/serve/config.html",
     ]
 
 
