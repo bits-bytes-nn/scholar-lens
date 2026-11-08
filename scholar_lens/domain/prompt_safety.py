@@ -69,3 +69,13 @@ def neutralize_prompt_tags(text: str) -> str:
 def strip_defanging(text: str) -> str:
     """Undo :func:`neutralize_prompt_tags` marks a model copied into its output."""
     return text.replace(f"<{_ZERO_WIDTH_SPACE}", "<")
+
+
+def fenced(tag: str, text: str) -> str:
+    """``text`` in a ``<tag>`` fence it cannot close or reopen: its own
+    ``<tag>``/``</tag>`` (any case or spacing) and the registered fence tags
+    are defanged. Fences built in code (``<outline>``, ``<sources>``) are
+    not registered, so each is defanged here, where it is built."""
+    own = re.compile(rf"<(\s*/?\s*){re.escape(tag)}(?=[\s>/])", re.IGNORECASE)
+    body = own.sub(lambda m: f"<{_ZERO_WIDTH_SPACE}{m.group(1)}{tag}", text)
+    return f"<{tag}>\n{neutralize_prompt_tags(body).strip() or '(none)'}\n</{tag}>"

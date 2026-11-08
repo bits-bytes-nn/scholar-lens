@@ -67,6 +67,8 @@ from scholar_lens.domain.prompts.rules import FIX_ANSWER
 from scholar_lens.domain.usage_context import usage_stage
 from scholar_lens.domain.verifiers import Problem, VerifierSet, messages
 
+from ..domain.prompt_safety import fenced
+
 logger = logging.getLogger(__name__)
 
 SectionT = TypeVar("SectionT")
@@ -450,7 +452,9 @@ _EVIDENCE_BLOCK = re.compile(r"<evidence>\n.*?\n</evidence>", re.S)
 
 
 def block(tag: str, text: str) -> str:
-    return f"<{tag}>\n{text.strip() or '(none)'}\n</{tag}>"
+    """``text`` as a prompt's ``<tag>`` data block; source text in it cannot
+    close the fence (:func:`fenced`)."""
+    return fenced(tag, text)
 
 
 def claim_lines(items: Sequence[Evidence]) -> str:
