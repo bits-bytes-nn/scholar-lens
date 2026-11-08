@@ -1,7 +1,7 @@
 # 0002. 평가 절차: 가린 판정, 독립 세션, 고정 말뭉치, 생성 쌍
 
 - 상태: 채택
-- 관련: `docs/engine.md` 1.3절, 7장, `docs/redesign.md` 7장
+- 관련: `docs/engine.md` 1장(평가), 7장, `docs/redesign.md` 7장
 
 ## 배경
 

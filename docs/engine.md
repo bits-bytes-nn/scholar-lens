@@ -191,7 +191,12 @@ PostSpec ──┐            SourceSet ──┐
 | adapters | `scholar_lens/adapters` | Bedrock·Strands, 웹 수집·검색, 학술 색인·문서, 패키지 색인, S3, GitHub, Batch | domain, application의 포트 |
 | entrypoints | `scholar_lens/cli.py`, worker, `bootstrap` | 인자 해석, 설정 로드, 의존성 조립 | 모두 |
 
-- **포트**: `LanguageModel`, `SourceGateway`(수집·검색), `DocumentReader`(논문·PDF), `PackageIndex`, `CheckpointStore`, `PostPublisher`, `RunLedger`, `Files`(로컬 경로와 `s3://` 위치의 파일. 유스케이스는 파일을 이 포트로만 읽고 씁니다)
+- **포트**(`scholar_lens/application/ports.py`):
+  - 공통: `LanguageModel`, `EvidenceModels`, `UsageTracker`, `TextStore`, `CheckpointStore`, `ObjectStore`, `Files`(로컬 경로와 `s3://` 위치의 파일. 유스케이스는 파일을 이 포트로만 읽고 씁니다), `BlogSource`, `PostPublisher`, `FigureCheck`, `RunLedger`, `JobQueue`, `BilledCosts`
+  - 설정: `RunSettings`, `ResourceSettings`, `GithubSettings`
+  - 가이드: `WebResearch`(수집·검색), `GuideResearch`, `PackageIndex`, `GuideTools`
+  - 리뷰·요약: `PaperOrigin`(arXiv ID·PDF URL), `SectionsWriter`(이전 엔진), `PaperTools`
+  - 서베이: `DocumentSource`, `SurveyDocuments`, `SurveyPlanning`, `CandidateSearch`, `PlanIndex`, `ReferenceReader`, `SurveyFinalizer`, `SurveyPlanTools`, `SurveyWriteTools`
 - **이전 엔진**: `scholar_lens/legacy`에 모여 있고, 8장 E9의 삭제 기준을 기다립니다. `scholar_lens/src`는 해체했습니다(8장 E8).
 - **계층 계약**: import-linter로 고정합니다. 엔트리포인트 외에는 설정 모듈(`configs`)을 읽지 않고, 설정은 생성자 인자로 받습니다.
 

@@ -1,7 +1,7 @@
 # 0003. 리뷰·요약은 근거 장부 엔진이 가린 비교에서 이길 때까지 이전 엔진을 기본으로 둔다
 
 - 상태: 채택(현재 유지 중)
-- 관련: `docs/engine.md` 1.2절, 8장 E9, `explanation.engine`, `summary.engine`
+- 관련: `docs/engine.md` 1장(코드·아키텍처), 8장 E9, `explanation.engine`, `summary.engine`
 
 ## 배경
 
