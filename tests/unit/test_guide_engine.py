@@ -820,16 +820,6 @@ def test_install_commands_are_checked_against_the_package_extras() -> None:
     assert unknown_extras(md, provided) == ["strands-agents[otel]"]
 
 
-def test_decorative_images_are_matched_by_word_not_substring() -> None:
-    from scholar_lens.application.use_cases.guide import _decorative
-
-    assert _decorative("https://d.dev/static/logo.svg")
-    assert _decorative("https://d.dev/img/icons/gpu.png")
-    assert _decorative("https://img.shields.io/badge/x")
-    assert not _decorative("https://d.dev/img/silicon-layout.png")
-    assert not _decorative("https://d.dev/img/lexicon-table.png")
-
-
 def test_guide_python_is_checked_as_pasted_in_order() -> None:
     from scholar_lens.domain.guide.evidence_guide import python_code_problems
 

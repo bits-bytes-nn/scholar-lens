@@ -18,7 +18,7 @@ import re
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any, Literal, get_args
-from urllib.parse import urlparse, urlsplit
+from urllib.parse import urlparse
 
 from scholar_lens.application.guide_engine import EvidenceGuideEngine, GuideSettings
 from scholar_lens.application.ports import (
@@ -77,21 +77,6 @@ _PREFIX: dict[Authority, str] = {
 }
 # A page shorter than this has nothing to record (a redirect stub, a menu).
 _MIN_PAGE_CHARS = 300
-# Images that never explain anything: logos, icons, badges, avatars.
-_DECORATIVE_WORDS = frozenset(
-    {
-        "logo",
-        "icon",
-        "favicon",
-        "badge",
-        "avatar",
-        "emoji",
-        "sprite",
-        "banner",
-        "button",
-    }
-)
-_BADGE_HOSTS = ("shields.io", "badgen.net")
 # Packages looked up per guide (the docs' install commands name a few).
 _MAX_PACKAGES = 6
 # Packages whose code a guide is checked against (the product's own).
@@ -337,19 +322,6 @@ async def write_guide_with_evidence(
     )
 
 
-def _decorative(url: str) -> bool:
-    """Whether an image URL names a decoration: a word of its path (split at
-    non-letters, plurals folded) such as ``logo`` or ``icons``, or a badge
-    service host. "silicon" and "lexicon" are not icons."""
-    parts = urlsplit(url)
-    if parts.hostname and parts.hostname.endswith(_BADGE_HOSTS):
-        return True
-    words = re.split(r"[^a-z]+", parts.path.lower())
-    return any(
-        w in _DECORATIVE_WORDS or w.rstrip("s") in _DECORATIVE_WORDS for w in words
-    )
-
-
 def _normalized(name: str) -> str:
     """A distribution or import name as PEP 503 compares them."""
     return re.sub(r"[-_.]+", "-", name).lower()
@@ -422,11 +394,9 @@ def guide_documents(pages: Sequence[PageContent]) -> list[SourceDocument]:
                 html.unescape(page.title or page.url),
                 "full_text",
                 page.text,
-                figures=[
-                    (u, page.image_captions.get(u, ""))
-                    for u in page.image_urls
-                    if not _decorative(u)
-                ],
+                # The page's content images: its chrome is left out when it
+                # is read, and what is decorative is the reader's call.
+                figures=[(u, page.image_captions.get(u, "")) for u in page.image_urls],
                 url=page.final_url or page.url,
                 authority=authority,
                 source_authority=_source_authority(page.authority),

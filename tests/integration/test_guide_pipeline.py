@@ -384,3 +384,29 @@ def test_a_category_that_cannot_label_the_post_fails_at_run_start() -> None:
     with pytest.raises(ValueError, match="unknown type"):
         check_post_type(spec, "Nope", "review_category", artifact="review")
     check_post_type(spec, paper_type, "review_category", artifact="review")
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://d.dev/static/logo-architecture.svg",
+        "https://d.dev/img/icons/gpu-layout.png",
+        "https://img.shields.io/badge/x",
+        "https://d.dev/img/banner-flow.png",
+    ],
+)
+def test_guide_documents_keep_content_images_whatever_their_url_says(url: str) -> None:
+    """No word or host list decides what an image is: a content image the
+    page kept reaches the reader, which judges whether it is decorative."""
+    from scholar_lens.application.use_cases.guide import guide_documents
+    from scholar_lens.domain.research import PageContent
+
+    page = PageContent(
+        url="https://d.dev/guide",
+        title="Guide",
+        text="A page long enough to become a source document. " * 10,
+        image_urls=[url],
+        authority="official",
+    )
+    (document,) = guide_documents([page])
+    assert [f.url for f in document.figures] == [url]

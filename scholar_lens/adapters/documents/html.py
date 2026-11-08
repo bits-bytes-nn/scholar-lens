@@ -85,23 +85,32 @@ _LATEXML_SPAN = re.compile(r"^ltx_(colspan|rowspan)_(\d+)$")
 # KaTeX renders each formula twice: MathML (kept) and visual HTML (dropped
 # only when the MathML copy is there; HTML-only output is the formula).
 _KATEX_VISUAL = ".katex-html, [aria-hidden=true]"
-# Images that are page furniture, not content: tracking pixels, site logos
-# and anything in the page chrome.
+# Images that are page furniture by their markup, not by what they show:
+# anything in the page chrome, an image declared at most one pixel wide or
+# high (a tracking pixel), and an inline data URI (nothing a post could
+# link to). Whether a content image is decorative is the reader's call.
 _CHROME_TAGS = ("noscript", "header", "nav", "footer")
-_LOGO = re.compile(r"(?:^|[-_.])logo(?:$|[-_.])", re.I)
+_DECLARED_PX = re.compile(r"^\s*(\d+(?:\.\d+)?)\s*(?:px)?\s*$", re.I)
+
+
+def _declared_px(value: object) -> float | None:
+    """A declared ``width``/``height`` in pixels (None: absent or not in
+    pixels, such as a percentage)."""
+    found = _DECLARED_PX.match(str(value or ""))
+    return float(found.group(1)) if found else None
 
 
 def is_page_furniture(img: Tag) -> bool:
-    """A docs-page ``<img>`` that is chrome, a tracking pixel or a site logo."""
+    """A page ``<img>`` that is chrome by its markup: inside the header,
+    navigation, footer or ``<noscript>``, declared at most one pixel in
+    either dimension, or an inline ``data:`` image."""
     if img.find_parent(_CHROME_TAGS):
         return True
-    if {str(img.get("width", "")).strip(), str(img.get("height", "")).strip()} & {
-        "0",
-        "1",
-    }:
+    sizes = [_declared_px(img.get(side)) for side in ("width", "height")]
+    if any(size is not None and size <= 1 for size in sizes):
         return True
-    src = str(img.get("src") or img.get("data-src") or "")
-    return bool(_LOGO.search(src.rsplit("/", 1)[-1]))
+    src = str(img.get("src") or img.get("data-src") or img.get("data") or "")
+    return src.strip().lower().startswith("data:")
 
 
 # Sphinx/MkDocs anchor glyphs after headings ("## torch.compile#").

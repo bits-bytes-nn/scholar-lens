@@ -956,21 +956,31 @@ class TestPageExtraction:
         html = (
             "<html><body><header><img src='/logo.png'></header>"
             "<noscript><img src='https://t.example/px.gif' width='1'></noscript>"
-            "<main><img src='/huggingface_logo-noborder.svg'><p>Text.</p>"
-            "<img src='/fig.png'><img src='/fig.png'><img src='/catalog.png'></main>"
+            "<main><img src='/brand_logo-noborder.svg'><p>Text.</p>"
+            "<img src='/fig.png'><img src='/fig.png'><img src='/catalog.png'>"
+            "<img src='https://t.example/beacon.gif' height='1px'>"
+            "<img src='data:image/png;base64,AAAA'>"
+            "<img src='/wide.png' width='100%'></main>"
             "<footer><img src='/logo.png'></footer></body></html>"
         )
         corpus = _researcher({url: (200, "text/html", html)}).research(
             [url], discover_subpages=False
         )
+        # Chrome, a declared one-pixel image and an inline data image are
+        # furniture by their markup; a content image is kept whatever its
+        # file is called (the reader decides what is decorative).
         assert corpus.pages[0].image_urls == [
+            "https://docs.x.dev/brand_logo-noborder.svg",
             "https://docs.x.dev/fig.png",
             "https://docs.x.dev/catalog.png",
+            "https://docs.x.dev/wide.png",
         ]
         # The text's figure markers agree with the image list.
         text = corpus.pages[0].text
-        assert "logo" not in text and "px.gif" not in text
+        assert "/logo.png" not in text and "px.gif" not in text
+        assert "beacon.gif" not in text and "data:" not in text
         assert 'src="https://docs.x.dev/fig.png"' in text
+        assert 'src="https://docs.x.dev/brand_logo-noborder.svg"' in text
 
     def test_text_comes_from_the_single_article(self) -> None:
         url = "https://docs.x.dev/guide/intro.html"
