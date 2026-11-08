@@ -14,6 +14,7 @@ from typing import Any
 
 import pytest
 
+from scholar_lens.application.evidence_writer import EvidenceWriter
 from scholar_lens.application.guide_engine import EvidenceGuideEngine, GuideSettings
 from scholar_lens.application.paper_engine import EvidencePaperEngine, PaperSettings
 from scholar_lens.application.ports import AgentOutcome
@@ -140,7 +141,7 @@ def test_unreadable_cached_evidence_is_read_again(kind: Kind, broken: str) -> No
     assert [e.claim for e in again] == [e.claim for e in first]
     # And saved again in a form the next run reads.
     for text in store.blobs.values():
-        assert [Evidence.model_validate(e) for e in json.loads(text)]
+        assert [Evidence.model_validate(e) for e in json.loads(text)["evidence"]]
 
 
 def _policy_breaking(item: dict[str, Any]) -> dict[str, Any]:
@@ -161,7 +162,7 @@ def test_the_guide_rechecks_its_cache_against_todays_policy() -> None:
     reads = model.reads
     blog = _blog()
     (key,) = [k for k, v in store.blobs.items() if blog.url in v or "W1" in v]
-    items = json.loads(store.blobs[key])
+    items = json.loads(store.blobs[key])["evidence"]
     store.blobs[key] = json.dumps([*items, _policy_breaking(items[0])])
     again = _run(KINDS[1], model, store)
     # The rejected item is dropped, the rest of the cache is used as is.
@@ -185,8 +186,66 @@ def test_a_spec_that_does_not_recheck_keeps_what_its_policy_would_reject(
     first = _run(kind, model, store)
     reads = model.reads
     key = next(iter(store.blobs))
-    items = json.loads(store.blobs[key])
+    items = json.loads(store.blobs[key])["evidence"]
     store.blobs[key] = json.dumps([*items, _policy_breaking(items[0])])
     again = _run(kind, model, store)
     assert model.reads == reads
     assert len(again) == len(first) + 1
+
+
+class StoppedReader(Reader):
+    """A reader that records its finding, then stops at its turn limit."""
+
+    async def run_agent(self, *, prompt: str, tools: Any, **kw: Any) -> AgentOutcome:
+        await super().run_agent(prompt=prompt, tools=tools, **kw)
+        return AgentOutcome(text="", stop_reason="limit: turns")
+
+
+@pytest.mark.parametrize("kind", KINDS, ids=lambda k: k.name)
+def test_a_reads_notes_are_replayed_from_the_cache(
+    kind: Kind, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A read that stopped at its limit leaves its note on every run that
+    uses its cached evidence (a rerun or a resume), not only the first."""
+    engines: list[Any] = []
+    original = EvidenceWriter.__init__
+
+    def keep(self: Any, *args: Any, **kwargs: Any) -> None:
+        original(self, *args, **kwargs)
+        engines.append(self)
+
+    monkeypatch.setattr(EvidenceWriter, "__init__", keep)
+    store, model = Store(), StoppedReader()
+    _run(kind, model, store)
+    reads = model.reads
+    first = [n for n in engines[-1].notes if "stopped at its limit" in n]
+    assert first
+    _run(kind, model, store)
+    assert model.reads == reads  # cached
+    assert [n for n in engines[-1].notes if "stopped at its limit" in n] == first
+
+
+@pytest.mark.parametrize("kind", KINDS, ids=lambda k: k.name)
+def test_a_cache_entry_from_before_the_notes_still_loads(kind: Kind) -> None:
+    store, model = Store(), Reader()
+    first = _run(kind, model, store)
+    reads = model.reads
+    for key, text in store.blobs.items():
+        assert json.loads(text)["notes"] == []
+        # The older format: a bare list of records.
+        store.blobs[key] = json.dumps(json.loads(text)["evidence"])
+    again = _run(kind, model, store)
+    assert model.reads == reads
+    assert [e.claim for e in again] == [e.claim for e in first]
+
+
+@pytest.mark.parametrize("notes", ['"text"', "[1]", "{}"])
+def test_an_entry_with_unreadable_notes_is_read_again(notes: str) -> None:
+    store, model = Store(), Reader()
+    _run(KINDS[0], model, store)
+    reads = model.reads
+    for key, text in store.blobs.items():
+        entry = json.loads(text)
+        store.blobs[key] = json.dumps({**entry, "notes": json.loads(notes)})
+    _run(KINDS[0], model, store)
+    assert model.reads == 2 * reads

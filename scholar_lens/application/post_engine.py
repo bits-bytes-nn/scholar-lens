@@ -57,6 +57,8 @@ from scholar_lens.application.evidence_writer import (
     all_or_none,
     block,
     cached_evidence,
+    cached_notes,
+    dump_read,
     evidence_lines,
     with_canonical_evidence,
 )
@@ -514,7 +516,10 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
                         else cached_evidence(cached, document, key=key)
                     )
                     if kept is not None:
+                        # What the read noted holds for its evidence too.
+                        self.notes.extend(cached_notes(cached))
                         return job, kept
+                read_notes: list[str] = []
                 items = await self.read_document(
                     job.document,
                     prompt=prompt,
@@ -522,12 +527,10 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
                     required=job.required,
                     rule=rule,
                     minimum=job.minimum,
+                    notes=read_notes,
                 )
                 if self.store is not None and items:
-                    self.store.put(
-                        key,
-                        json.dumps([e.model_dump() for e in items], ensure_ascii=False),
-                    )
+                    self.store.put(key, dump_read(items, read_notes))
                 return job, items
 
         with usage_stage("read"):

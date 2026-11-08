@@ -257,6 +257,37 @@ def recheck(document: SourceDocument, item: Evidence) -> list[str]:
     )
 
 
+def dump_read(items: Sequence[Evidence], notes: Sequence[str]) -> str:
+    """A read's cache entry: its evidence and the notes the read left (a
+    reader stopped at its limit), replayed when the entry is used."""
+    return json.dumps(
+        {"evidence": [e.model_dump() for e in items], "notes": list(notes)},
+        ensure_ascii=False,
+    )
+
+
+def _read_entry(raw: str) -> tuple[object, list[str]]:
+    """(the evidence records, the notes) of a cache entry: an object as
+    :func:`dump_read` writes it, or a bare list of records (entries
+    written before the notes were kept: no notes)."""
+    data = json.loads(raw)
+    if isinstance(data, dict):
+        notes = data.get("notes", [])
+        if not isinstance(notes, list) or not all(isinstance(n, str) for n in notes):
+            raise ValueError("notes are not a list of strings")
+        return data.get("evidence"), notes
+    return data, []
+
+
+def cached_notes(raw: str) -> list[str]:
+    """The notes a cached read left ([] when it left none or the entry is
+    unreadable: :func:`cached_evidence` reads such an entry again)."""
+    try:
+        return _read_entry(raw)[1]
+    except ValueError:
+        return []
+
+
 def cached_evidence(
     raw: str,
     document: SourceDocument,
@@ -264,13 +295,13 @@ def cached_evidence(
     *,
     key: str = "",
 ) -> list[Evidence] | None:
-    """A document's stored evidence still usable today, bound to the
-    document's current source id (ids are numbered per run), or None when it
-    must be read again: unreadable (not a non-empty list of records: only
-    a read that recorded something is stored), or nothing passes today's
-    checks."""
+    """A document's stored evidence (:func:`dump_read`, or a bare list of
+    records) still usable today, bound to the document's current source id
+    (ids are numbered per run), or None when it must be read again:
+    unreadable (no non-empty list of records: only a read that recorded
+    something is stored), or nothing passes today's checks."""
     try:
-        data = json.loads(raw)
+        data, _ = _read_entry(raw)
         if not isinstance(data, list) or not data:
             raise ValueError("not a list of evidence records")
         items = [Evidence.model_validate(e) for e in data]
@@ -511,6 +542,7 @@ class EvidenceWriter:
         required: Sequence[str] = (),
         rule: RecordRule | None = None,
         minimum: int = 0,
+        notes: list[str] | None = None,
     ) -> list[Evidence]:
         """One agent reads ``document`` and records evidence; every record
         is checked against the document (and ``rule``) before it is kept.
@@ -518,7 +550,8 @@ class EvidenceWriter:
         ``required`` kind still missing. A reader that ends with a required
         kind missing or fewer than ``minimum`` records (the low end of the
         count it was asked for) is continued once, in a follow-up of
-        ``limits.follow_up_turns`` turns."""
+        ``limits.follow_up_turns`` turns. The read's notes go to ``notes``
+        too, when given (a cache keeps them with the evidence)."""
         ledger = EvidenceLedger()
         rejected = 0
         refusals = 0
@@ -703,10 +736,13 @@ class EvidenceWriter:
                 "; ".join(f"{r} x{n}" for r, n in reasons.most_common(6)),
             )
         if outcome.stop_reason.startswith("limit"):
-            self.notes.append(
+            note = (
                 f"Reading {document.paper_id} stopped at its limit "
                 f"({outcome.stop_reason})."
             )
+            self.notes.append(note)
+            if notes is not None:
+                notes.append(note)
         return list(ledger)
 
     async def wrong_evidence(self, items: Sequence[Evidence]) -> dict[str, str]:

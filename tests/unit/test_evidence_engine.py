@@ -436,7 +436,7 @@ def test_a_scripted_run_reads_outlines_writes_fixes_and_assembles() -> None:
     assert model.calls.count("consistency") == model.calls.count("repetition") == 1
     # The paper's evidence is cached: a second run does not read it again.
     (key,) = store.data
-    assert len(json.loads(store.data[key])) == 4
+    assert len(json.loads(store.data[key])["evidence"]) == 4
     again = ScriptedModel()
     asyncio.run(
         EvidenceSurveyEngine(
