@@ -42,11 +42,10 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Collection
 from dataclasses import dataclass
-from functools import cache
 from typing import Literal
 
-from scholar_lens.domain.conventions import load_local_conventions
 from scholar_lens.domain.ids import arxiv_id_from_doi, arxiv_paper_key
 from scholar_lens.domain.markdown.math import (
     BLOG_CODE_SPAN,
@@ -90,11 +89,9 @@ _EXTENSION_MACROS = frozenset(
 logger = logging.getLogger(__name__)
 
 
-@cache
-def undefined_macros() -> frozenset[str]:
+def undefined_macros(defined: Collection[str]) -> frozenset[str]:
     """The macros of :data:`_EXTENSION_MACROS` the blog's MathJax does not
-    define, by the conventions file's ``math.defined_macros``."""
-    defined = load_local_conventions().math.defined_macros
+    define, given the run's conventions' ``math.defined_macros``."""
     return _EXTENSION_MACROS - set(defined)
 
 
@@ -407,16 +404,19 @@ def _warn_single_dollar(markdown: str, regions: list[tuple[int, int, str]]) -> N
         )
 
 
-def _warn_undefined_macros(markdown: str, regions: list[tuple[int, int, str]]) -> None:
+def _warn_undefined_macros(
+    markdown: str, regions: list[tuple[int, int, str]], defined: Collection[str]
+) -> None:
     """Warn when math uses a macro from the known-problematic set (non-standard
     packages the blog doesn't load), which renders as red raw text. We check this
     small explicit set rather than allowlisting all of base MathJax."""
     seen: set[str] = set()
+    undefined = undefined_macros(defined)
     for ms, me, kind in regions:
         if kind not in _MATH_KINDS:
             continue
         for mm in _MACRO.finditer(markdown[ms:me]):
-            if mm.group(1) in undefined_macros():
+            if mm.group(1) in undefined:
                 seen.add(mm.group(1))
     if seen:
         logger.warning(
@@ -996,7 +996,9 @@ def limit_callouts(markdown: str) -> str:
     return markdown
 
 
-def lint_markdown(markdown: str, *, warn: bool = True) -> str:
+def lint_markdown(
+    markdown: str, *, warn: bool = True, defined_macros: Collection[str] = ()
+) -> str:
     """Auto-fix the safe blog-rendering issues and warn about risky ones.
 
     Auto-fixed: leftover envelope tags removed; callouts beyond
@@ -1009,8 +1011,9 @@ def lint_markdown(markdown: str, *, warn: bool = True) -> str:
     to https:// (:func:`upgrade_http_links`); links the blog cannot follow
     reduced to their text (:func:`unlink_dead_links`). Warned (left untouched,
     since a rewrite could ship a new bug): bare ``|`` in math, fragile amsmath
-    envs / ``\\bm``, single-$ inline math and known-undefined macros
-    (``warn=False`` skips them). Returns the fixed Markdown.
+    envs / ``\\bm``, single-$ inline math and known-undefined macros (those
+    of the blog's conventions' ``defined_macros`` are not; ``warn=False``
+    skips the warnings). Returns the fixed Markdown.
     """
     fixed = _remove_envelope_tags(markdown)
     fixed = limit_callouts(fixed)
@@ -1031,7 +1034,7 @@ def lint_markdown(markdown: str, *, warn: bool = True) -> str:
     _warn_pipes_in_math(fixed, regions)
     _warn_fragile_math(fixed, regions)
     _warn_single_dollar(fixed, regions)
-    _warn_undefined_macros(fixed, regions)
+    _warn_undefined_macros(fixed, regions, defined_macros)
     return fixed
 
 
@@ -1206,17 +1209,21 @@ def drop_empty_headings(markdown: str) -> str:
     return out.rstrip("\n") + "\n" if markdown.endswith("\n") else out.rstrip("\n")
 
 
-def publish_body(markdown: str, *, warn: bool = True) -> str:
+def publish_body(
+    markdown: str, *, warn: bool = True, defined_macros: Collection[str] = ()
+) -> str:
     """The publisher's body pipeline, in one place: an open fence closed
     (a quoted one where its blockquote ends),
     callouts over the cap unboxed (before the math pass, so a display left in
     an unboxed callout is isolated too), the blog math rules applied, then the
     other auto-fixes of :func:`lint_markdown`, indented code blocks fenced,
     fence info strings cut to the language and Liquid-looking text wrapped
-    in ``{% raw %}``. Idempotent."""
+    in ``{% raw %}``. Idempotent. ``defined_macros``: the math macros the
+    blog defines (the run's conventions)."""
     fenced = _fence_indented_code(close_open_fence(close_quoted_fences(markdown)))
     linted = lint_markdown(
         normalize_math(limit_callouts(_bare_fence_info(fenced))),
         warn=warn,
+        defined_macros=defined_macros,
     )
     return _wrap_liquid(drop_empty_headings(linted))

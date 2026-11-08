@@ -6,12 +6,11 @@ import pytest
 
 from scholar_lens.adapters.bedrock.prompts.base import BasePrompt
 from scholar_lens.adapters.bedrock.prompts.extraction import (
-    DEFAULT_CATEGORY_OPTIONS,
-    DEFAULT_CONTROLLED_TAGS,
     AttributesExtractionPrompt,
 )
 from scholar_lens.adapters.bedrock.prompts.survey import SurveyFinalizationPrompt
 from scholar_lens.adapters.bedrock.prompts.tech_guide import TechGuideTaxonomyPrompt
+from scholar_lens.adapters.conventions_file import load_local_conventions
 from scholar_lens.domain.markdown.lint import style_hits, writing_issues
 from scholar_lens.domain.prompts.rules import (
     KOREAN_STYLE,
@@ -124,7 +123,8 @@ def test_finalizer_outputs_tldr_closing_and_subtitle() -> None:
 
 def test_attributes_prompt_defaults_vocabularies() -> None:
     text = _render(AttributesExtractionPrompt)
-    for value in DEFAULT_CATEGORY_OPTIONS + DEFAULT_CONTROLLED_TAGS:
+    bundled = load_local_conventions()
+    for value in [*bundled.topics, *bundled.tags.controlled]:
         assert value in text
 
 

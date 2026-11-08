@@ -33,6 +33,7 @@ import httpx
 from github import Auth, Github, GithubRetry
 
 from scholar_lens.adapters.aws.storage import S3Handler, S3OperationError
+from scholar_lens.adapters.conventions_file import load_local_conventions
 from scholar_lens.adapters.documents.images import (
     is_ar5iv_placeholder,
     is_svg,
@@ -48,11 +49,7 @@ from scholar_lens.adapters.http.rate_limit import (
 )
 from scholar_lens.adapters.http.url_guard import UnsafeUrlError, assert_url_is_public
 from scholar_lens.domain.constants import AppConstants, EnvVars, LocalPaths, S3Paths
-from scholar_lens.domain.conventions import (
-    BlogPost,
-    PostConventions,
-    load_local_conventions,
-)
+from scholar_lens.domain.conventions import BlogPost, PostConventions
 from scholar_lens.domain.ids import ARXIV_ID_BODY, is_arxiv_host
 from scholar_lens.domain.markdown.front_matter import split_front_matter_text
 from scholar_lens.domain.markdown.lint import (
@@ -452,7 +449,7 @@ class Publisher:
         # one already); then the blog math rules ($$ only, no \_ in math,
         # blank lines around display blocks) and the other kramdown/MathJax
         # auto-fixes.
-        body = publish_body(body)
+        body = publish_body(body, defined_macros=self.conventions.math.defined_macros)
         markdown = front_matter + body
         localizer = ImageLocalizer(
             slug=slug,

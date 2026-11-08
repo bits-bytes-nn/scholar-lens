@@ -18,6 +18,7 @@ import pytest
 
 from scholar_lens import bootstrap
 from scholar_lens.adapters.bedrock.usage import TokenUsageTracker
+from scholar_lens.adapters.conventions_file import load_local_conventions
 from scholar_lens.adapters.documents import paper_reader
 from scholar_lens.adapters.files import LocalOrS3Files
 from scholar_lens.adapters.github import publisher
@@ -26,7 +27,6 @@ from scholar_lens.application.ports import PaperInputs
 from scholar_lens.application.use_cases import guide as guide_pipeline
 from scholar_lens.application.use_cases import paper as paper_pipeline
 from scholar_lens.configs import Config
-from scholar_lens.domain.conventions import load_local_conventions
 from scholar_lens.domain.guide.models import TechGuide
 from scholar_lens.domain.jobs import JobRequest
 from scholar_lens.domain.paper.models import Attributes, Content, Figure, Paper

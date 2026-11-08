@@ -3,8 +3,11 @@
 The canonical file is the blog's ``_data/post_conventions.yml``; the same rules
 drive the blog's own lint, so a generated post and a hand-written one answer to
 one list. ``assets/post_conventions.yml`` is a copy for tests and offline runs
-(CI fails when it drifts). At run time the blog's base-branch copy is read when
-the GitHub integration is configured.
+(CI fails when it drifts), read by an adapter
+(:mod:`scholar_lens.adapters.conventions_file`). At run time the blog's
+base-branch copy is read when the GitHub integration is configured, and the
+run's conventions are passed to whatever needs them (the domain reads no
+file).
 
 A few generator-side limits are not (yet) in the blog file; they default here
 and are read from the spec when the blog adds them.
@@ -13,7 +16,6 @@ and are read from the spec when the blog adds them.
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
-from pathlib import Path
 from typing import Any
 
 import yaml
@@ -21,9 +23,6 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from scholar_lens.domain.markdown.front_matter import split_front_matter_text
 
-LOCAL_CONVENTIONS_PATH = (
-    Path(__file__).resolve().parents[2] / "assets" / "post_conventions.yml"
-)
 CANONICAL_PATH = "_data/post_conventions.yml"
 DEFAULT_COVER = "/assets/images/default.jpg"
 # Specific (non-controlled) tags a generated post carries: short and reusable.
@@ -107,10 +106,6 @@ class PostConventions(BaseModel):
         if not isinstance(data, dict):
             raise ValueError("post conventions must be a YAML mapping")
         return cls.model_validate(data)
-
-
-def load_local_conventions(path: Path = LOCAL_CONVENTIONS_PATH) -> PostConventions:
-    return PostConventions.from_yaml(path.read_text(encoding="utf-8"))
 
 
 class BlogPost(BaseModel):

@@ -6,8 +6,9 @@ from datetime import UTC, datetime
 
 import pytest
 
+from scholar_lens.adapters.conventions_file import load_local_conventions
 from scholar_lens.configs import Github
-from scholar_lens.domain.conventions import BlogPost, load_local_conventions
+from scholar_lens.domain.conventions import BlogPost
 from scholar_lens.domain.guide.models import TechGuide
 from scholar_lens.domain.paper.models import Attributes, Content, Paper
 from scholar_lens.domain.post_format import (

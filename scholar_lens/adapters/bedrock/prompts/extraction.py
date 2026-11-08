@@ -9,14 +9,7 @@ from langchain_core.prompts import (
 from scholar_lens.adapters.bedrock.prompts.base import (
     BasePrompt,
 )
-from scholar_lens.domain.conventions import load_local_conventions
-
-# Fallback vocabularies until the caller passes the blog's post-conventions
-# spec (categories.topics and tags.controlled). Callers override them by passing
-# ``category_options`` / ``controlled_tags`` at invoke time.
-_CONVENTIONS = load_local_conventions()
-DEFAULT_CATEGORY_OPTIONS: tuple[str, ...] = tuple(_CONVENTIONS.topics)
-DEFAULT_CONTROLLED_TAGS: tuple[str, ...] = tuple(_CONVENTIONS.tags.controlled)
+from scholar_lens.adapters.conventions_file import load_local_conventions
 
 
 class AttributesExtractionPrompt(BasePrompt):
@@ -87,12 +80,16 @@ class AttributesExtractionPrompt(BasePrompt):
 
     @classmethod
     def get_prompt(cls) -> ChatPromptTemplate:
+        """The prompt, its vocabularies defaulting to the bundled conventions'
+        topics and controlled tags (callers pass the run's blog conventions
+        as ``category_options`` / ``controlled_tags`` at invoke time)."""
+        bundled = load_local_conventions()
         return (
             super()
             .get_prompt()
             .partial(
-                category_options=", ".join(DEFAULT_CATEGORY_OPTIONS),
-                controlled_tags=", ".join(DEFAULT_CONTROLLED_TAGS),
+                category_options=", ".join(bundled.topics),
+                controlled_tags=", ".join(bundled.tags.controlled),
             )
         )
 

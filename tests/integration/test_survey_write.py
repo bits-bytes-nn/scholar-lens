@@ -26,6 +26,7 @@ from scholar_lens.adapters.bedrock import role_models
 from scholar_lens.adapters.bedrock.strands_models import RoleModel
 from scholar_lens.adapters.bedrock.survey_calls import SurveyWriter
 from scholar_lens.adapters.bedrock.usage import TokenUsageTracker
+from scholar_lens.adapters.conventions_file import load_local_conventions
 from scholar_lens.adapters.files import LocalOrS3Files
 from scholar_lens.adapters.github import publisher as github_publisher
 from scholar_lens.adapters.github.publisher import Publisher
@@ -41,12 +42,7 @@ from scholar_lens.application.use_cases.survey_write import (
 )
 from scholar_lens.configs.config import Config, Survey
 from scholar_lens.domain.constants import LanguageModelId
-from scholar_lens.domain.conventions import (
-    BlogPost,
-    PostConventions,
-    TypeSpec,
-    load_local_conventions,
-)
+from scholar_lens.domain.conventions import BlogPost, PostConventions, TypeSpec
 from scholar_lens.domain.evidence import Evidence
 from scholar_lens.domain.jobs import JobRequest
 from scholar_lens.domain.research import PageContent, ResearchCorpus

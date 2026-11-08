@@ -9,10 +9,13 @@ import pytest
 import requests
 import yaml
 
+from scholar_lens.adapters.conventions_file import (
+    LOCAL_CONVENTIONS_PATH,
+    load_local_conventions,
+)
 from scholar_lens.adapters.github import conventions as post_conventions
 from scholar_lens.adapters.github.conventions import load_conventions
 from scholar_lens.domain import conventions as domain_conventions
-from scholar_lens.domain.conventions import load_local_conventions
 
 
 class _Response:
@@ -144,7 +147,7 @@ class TestLoadConventions:
     def test_blog_rules_win_when_they_differ(
         self, monkeypatch: pytest.MonkeyPatch, local: Any
     ) -> None:
-        text = domain_conventions.LOCAL_CONVENTIONS_PATH.read_text(encoding="utf-8")
+        text = LOCAL_CONVENTIONS_PATH.read_text(encoding="utf-8")
         data = yaml.safe_load(text)
         retired = data["tags"]["controlled"].pop()
         self._fetch(monkeypatch, yaml.safe_dump(data))

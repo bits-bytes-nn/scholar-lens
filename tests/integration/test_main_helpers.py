@@ -6,9 +6,9 @@ from datetime import datetime
 
 import pytest
 
+from scholar_lens.adapters.conventions_file import load_local_conventions
 from scholar_lens.adapters.documents.parser import attach_figure_context
 from scholar_lens.configs import Github
-from scholar_lens.domain.conventions import load_local_conventions
 from scholar_lens.domain.guide.models import TechGuide
 from scholar_lens.domain.markdown.links import link_list, md_link_text
 from scholar_lens.domain.paper.models import (

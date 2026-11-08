@@ -9,9 +9,9 @@ from unittest.mock import AsyncMock, MagicMock
 import boto3
 import pytest
 
+from scholar_lens.adapters.conventions_file import load_local_conventions
 from scholar_lens.configs import Github
 from scholar_lens.domain.constants import LanguageModelId
-from scholar_lens.domain.conventions import load_local_conventions
 from scholar_lens.domain.paper.models import Attributes, Content, Paper
 from scholar_lens.domain.post_format import format_summary, paper_post_meta
 from scholar_lens.legacy.prompts.summary import PaperSummaryPrompt

@@ -8,11 +8,11 @@ from urllib.parse import quote
 
 import requests
 
+from scholar_lens.adapters.conventions_file import load_local_conventions
 from scholar_lens.domain.conventions import (
     CANONICAL_PATH,
     BlogPost,
     PostConventions,
-    load_local_conventions,
     parse_blog_post,
 )
 

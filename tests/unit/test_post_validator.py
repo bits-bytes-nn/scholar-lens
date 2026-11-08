@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from scholar_lens.domain.conventions import load_local_conventions
+from scholar_lens.adapters.conventions_file import load_local_conventions
 from scholar_lens.domain.validation import Violation, errors, validate_post
 
 FIXTURES = Path(__file__).parents[1] / "fixtures" / "blog_defects"

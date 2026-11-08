@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 import scholar_lens.application as application
+import scholar_lens.domain as domain
 from scholar_lens.adapters.files import LocalOrS3Files
 from scholar_lens.application.ports import FileLocationError
 
@@ -108,7 +109,16 @@ def _direct_file_io(path: Path) -> list[str]:
     return out
 
 
-def test_the_application_reaches_files_only_through_the_port() -> None:
-    root = Path(application.__file__).parent
+@pytest.mark.parametrize("layer", [application, domain], ids=["application", "domain"])
+def test_the_inner_layers_reach_files_only_through_the_port(layer: object) -> None:
+    # The domain reads no file at all (the conventions, too, are passed in);
+    # the application only through Files.
+    root = Path(layer.__file__).parent  # type: ignore[attr-defined]
     found = [c for p in sorted(root.rglob("*.py")) for c in _direct_file_io(p)]
+    if layer is domain:
+        found += [
+            f"{p.name}: __file__"
+            for p in sorted(root.rglob("*.py"))
+            if "Path(__file__" in p.read_text(encoding="utf-8")
+        ]
     assert found == []

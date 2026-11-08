@@ -12,13 +12,14 @@ import pytest
 
 from scholar_lens import bootstrap
 from scholar_lens.adapters.bedrock.usage import TokenUsageTracker
+from scholar_lens.adapters.conventions_file import load_local_conventions
 from scholar_lens.adapters.github.publisher import Publisher
 from scholar_lens.application.run import RunContext
 from scholar_lens.application.use_cases import guide as guide_pipeline
 from scholar_lens.application.use_cases.guide import guide_branch_id, guide_title
 from scholar_lens.configs import Github
 from scholar_lens.configs.config import Config
-from scholar_lens.domain.conventions import BlogPost, load_local_conventions
+from scholar_lens.domain.conventions import BlogPost
 from scholar_lens.domain.guide.models import TechGuide
 from scholar_lens.domain.jobs import JobRequest
 from tests.integration.test_publisher import PNG, FakeGithub, FakeRepo
@@ -316,8 +317,8 @@ async def test_search_queries_without_a_provider_fail_before_any_model_call(
 
 
 def test_a_category_that_cannot_label_the_post_fails_at_run_start() -> None:
+    from scholar_lens.adapters.conventions_file import load_local_conventions
     from scholar_lens.application.run import check_post_type
-    from scholar_lens.domain.conventions import load_local_conventions
 
     spec = load_local_conventions()
     paper_type = next(t for t in spec.types if spec.is_paper_type(t))

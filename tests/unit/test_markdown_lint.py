@@ -6,7 +6,7 @@ import logging
 
 import pytest
 
-from scholar_lens.domain.conventions import load_local_conventions
+from scholar_lens.adapters.conventions_file import load_local_conventions
 from scholar_lens.domain.markdown.lint import (
     drop_unknown_images,
     lint_markdown,
@@ -164,18 +164,29 @@ class TestWarnings:
             lint_markdown(r"math $$a \coloneqq b$$")
         assert any("coloneqq" in r.message for r in caplog.records)
 
-    def test_blog_defined_macros_do_not_warn(self, caplog) -> None:
-        # \llbracket, \rrbracket and \textsc are defined in the blog's head.html.
+    @pytest.mark.parametrize(
+        "defined", [(), ("llbracket", "rrbracket", "textsc"), ("coloneqq",)]
+    )
+    def test_only_macros_the_runs_conventions_define_do_not_warn(
+        self, caplog, defined: tuple[str, ...]
+    ) -> None:
+        # The macros come from the run's conventions (the blog's, passed in),
+        # not from a file the domain reads.
+        markdown = r"math $$\llbracket x \rrbracket \textsc{a} \coloneqq$$"
         with caplog.at_level(logging.WARNING, logger="scholar_lens"):
-            lint_markdown(r"math $$\llbracket x \rrbracket \textsc{a}$$")
-        assert not any("does not define" in r.message for r in caplog.records)
+            lint_markdown(markdown, defined_macros=defined)
+        warned = " ".join(
+            r.message for r in caplog.records if "does not define" in r.message
+        )
+        for macro in ("llbracket", "rrbracket", "textsc", "coloneqq"):
+            assert (f"'{macro}'" in warned) is (macro not in defined)
 
     def test_defined_macros_come_from_the_conventions(self) -> None:
         # post_conventions.yml math.defined_macros (the blog's head.html list).
         defined = load_local_conventions().math.defined_macros
         assert {"llbracket", "rrbracket", "textsc"} <= set(defined)
-        assert not undefined_macros() & set(defined)
-        assert "coloneqq" in undefined_macros()
+        assert not undefined_macros(defined) & set(defined)
+        assert "coloneqq" in undefined_macros(defined)
 
     def test_dead_links_keep_only_their_text(self) -> None:
         src = (

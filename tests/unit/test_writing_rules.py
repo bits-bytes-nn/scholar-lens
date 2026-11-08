@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from scholar_lens.domain.conventions import load_local_conventions
+from scholar_lens.adapters.conventions_file import load_local_conventions
 from scholar_lens.domain.markdown.lint import (
     NUMBERED_REF,
     fill_image_alts,

@@ -688,7 +688,8 @@ class TestBlogTagFilter:
     def test_only_reusable_spellings_are_offered(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from scholar_lens.domain.conventions import BlogPost, load_local_conventions
+        from scholar_lens.adapters.conventions_file import load_local_conventions
+        from scholar_lens.domain.conventions import BlogPost
 
         spec = load_local_conventions()
         controlled = spec.tags.controlled[0]
@@ -766,7 +767,7 @@ class TestConventionsChangedDuringTheRun:
     ) -> tuple[object, object, object]:
         import asyncio
 
-        from scholar_lens.domain.conventions import load_local_conventions
+        from scholar_lens.adapters.conventions_file import load_local_conventions
         from scholar_lens.domain.publishing import PublishRequest
 
         started = load_local_conventions()
@@ -812,7 +813,7 @@ class TestConventionsChangedDuringTheRun:
     def test_a_changed_cover_is_recomputed_and_noted(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from scholar_lens.domain.conventions import load_local_conventions
+        from scholar_lens.adapters.conventions_file import load_local_conventions
 
         fresh = load_local_conventions()
         fresh.topics[self.TOPIC] = self.NEW_COVER
@@ -827,7 +828,7 @@ class TestConventionsChangedDuringTheRun:
     def test_a_change_elsewhere_is_noted_without_touching_the_post(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from scholar_lens.domain.conventions import load_local_conventions
+        from scholar_lens.adapters.conventions_file import load_local_conventions
 
         fresh = load_local_conventions()
         fresh.tags.controlled = fresh.tags.controlled[:-1]
@@ -844,7 +845,7 @@ class TestConventionsChangedDuringTheRun:
     def test_unchanged_or_unreadable_conventions_add_no_note(
         self, monkeypatch: pytest.MonkeyPatch, fresh: object
     ) -> None:
-        from scholar_lens.domain.conventions import load_local_conventions
+        from scholar_lens.adapters.conventions_file import load_local_conventions
 
         request, spec, outcome = self._run(monkeypatch, fresh)
         assert spec == load_local_conventions()
@@ -852,7 +853,7 @@ class TestConventionsChangedDuringTheRun:
 
 
 def test_with_spec_cover_leaves_an_unknown_type_to_the_validator() -> None:
-    from scholar_lens.domain.conventions import load_local_conventions
+    from scholar_lens.adapters.conventions_file import load_local_conventions
     from scholar_lens.domain.post_format import with_spec_cover
 
     spec = load_local_conventions()

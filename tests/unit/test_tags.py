@@ -4,10 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from scholar_lens.domain.conventions import (
-    GENERATED_SPECIFIC_TAGS,
-    load_local_conventions,
-)
+from scholar_lens.adapters.conventions_file import load_local_conventions
+from scholar_lens.domain.conventions import GENERATED_SPECIFIC_TAGS
 from scholar_lens.domain.tags import (
     format_tag,
     normalize_tags,
