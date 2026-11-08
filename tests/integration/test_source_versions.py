@@ -124,8 +124,12 @@ def _repo_set(
         (None, frozenset({"v2.0.0"}), f"{REPO}/blob/main/x", "dev_docs", "main"),
         # A repository without tags: its default branch is the release.
         ("1.4.2", frozenset(), f"{REPO}/blob/main/x", "official_repo", "main"),
-        # Nothing to compare with: official.
+        # Nothing to compare with: the default branch is official; with the
+        # tags unknown (a failed lookup), another ref may be any version.
         (None, None, f"{REPO}/blob/main/x", "official_repo", "main"),
+        (None, None, REPO, "official_repo", ""),
+        (None, None, f"{REPO}/blob/v0.3.0/x", "dev_docs", "v0.3.0"),
+        (None, None, f"{REPO}/tree/feature-x/y", "dev_docs", "feature-x"),
         # Issues and discussions are a forum, not the project's docs.
         ("1.4.2", None, f"{REPO}/issues/12", "forum", ""),
         # Another repository is third-party.
@@ -184,6 +188,8 @@ def test_the_researcher_lists_github_tags_and_tolerates_failures() -> None:
     assert tags == frozenset({"v1.0.0", "v0.9.0"})
     assert researcher.repo_tags("github.com/example/other") is None
     assert researcher.repo_tags("gitlab.com/example/proj") is None
+    # Only a lookup that failed is a failure (another host is no lookup).
+    assert researcher.tag_lookup_failures == ["github.com/example/other"]
 
 
 async def test_gather_targets_the_product_packages_latest_release() -> None:

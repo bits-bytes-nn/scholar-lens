@@ -495,6 +495,9 @@ class WebResearcher:
         self._sleep = sleep
         # Host -> its llms.txt entries (empty when it has none).
         self._llms_cache: dict[str, list[tuple[str, str]]] = {}
+        # Repositories whose tags could not be listed (rate limit, error):
+        # their pages at other refs count as development code.
+        self.tag_lookup_failures: list[str] = []
         self.timeout = timeout
         self.max_subpages = max_subpages
         self.max_images_per_page = max_images_per_page
@@ -528,6 +531,7 @@ class WebResearcher:
             data = response.json()
         except (httpx.HTTPError, UnsafeUrlError, ValueError) as e:
             logger.info("Could not list the tags of %s: %s", repo, e)
+            self.tag_lookup_failures.append(repo)
             return None
         if not isinstance(data, list):
             return None

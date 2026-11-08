@@ -574,7 +574,8 @@ class SourceSet:
 
     def _repo_authority(self, page: RepoPage) -> SourceAuthority:
         """The project's repository: official at the release tag or in a
-        repository without tags, else development code."""
+        repository without tags, else development code; with neither a
+        release nor the tags known, official on the default branch only."""
         if page.discussion:
             return "forum"
         default_branch = page.ref == "" or (
@@ -590,7 +591,10 @@ class SourceSet:
             return "official_repo"
         release = self.target.release or (newest_release(tags) if tags else None)
         if release is None:
-            return "official_repo"
+            # Nothing to compare with. Unknown tags (no lookup, or it
+            # failed): only the default branch is surely the project's
+            # current code; another ref may be any version.
+            return "official_repo" if default_branch or tags is not None else "dev_docs"
         if page.ref and same_release(page.ref, release):
             return "official_repo"
         return "dev_docs"

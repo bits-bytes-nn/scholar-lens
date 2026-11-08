@@ -304,3 +304,26 @@ async def test_a_snapshot_holds_only_while_its_target_release_is_the_latest(
     await again.gather([DOCS], discover_subpages=False, snapshots=policy)
     assert again.researcher.research.called is (latest != "2.1.0")
     assert again.sources.target.release == latest
+
+
+async def test_a_failed_tag_lookup_is_noted_and_its_corpus_not_saved(policy) -> None:  # type: ignore[no-untyped-def]
+    def generator():  # type: ignore[no-untyped-def]
+        gen = _generator()
+        gen.researcher.tag_lookup_failures = []
+        page = PageContent(url=DOCS, title="Docs", text="docs text")
+
+        def research(urls, **_):  # type: ignore[no-untyped-def]
+            gen.researcher.tag_lookup_failures.append("github.com/example/proj")
+            return ResearchCorpus(pages=[page])
+
+        gen.researcher.research = MagicMock(side_effect=research)
+        return gen
+
+    first = generator()
+    await first.gather([DOCS], discover_subpages=False, snapshots=policy)
+    assert any(
+        "github.com/example/proj" in n and "development code" in n for n in first.notes
+    )
+    again = generator()
+    await again.gather([DOCS], discover_subpages=False, snapshots=policy)
+    again.researcher.research.assert_called_once()

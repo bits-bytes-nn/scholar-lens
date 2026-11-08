@@ -419,6 +419,8 @@ class TechGuideGenerator(RetryableBase):
         self._reference_searches = 0
         self._gaps, self._package = [], ""
         failed_before = self.researcher.search_provider.failed_searches
+        failures = getattr(self.researcher, "tag_lookup_failures", None)
+        tags_before = len(failures) if isinstance(failures, list) else 0
 
         # Fetch the docs URLs (+ in-scope sub-pages) once. WebResearcher is
         # synchronous (blocking HTTP crawl); run it off the event loop.
@@ -496,6 +498,14 @@ class TechGuideGenerator(RetryableBase):
         if self.researcher.search_provider.failed_searches > failed_before:
             # The researcher's search notes say how many.
             self._gaps.append("web searches failed")
+        failures = getattr(self.researcher, "tag_lookup_failures", None)
+        if isinstance(failures, list) and (unknown := failures[tags_before:]):
+            self._gap(
+                "The tags of "
+                + ", ".join(dict.fromkeys(unknown))
+                + " could not be listed (rate limit or error): their pages at "
+                "refs other than the default branch count as development code."
+            )
         topic = (
             planned_topic
             if planned_topic and not is_placeholder(planned_topic)
