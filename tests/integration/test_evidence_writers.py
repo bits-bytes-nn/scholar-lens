@@ -366,6 +366,131 @@ def test_a_paper_run_wires_roles_ceiling_and_shape(
     assert "engine note" in notes and any(BROKEN in n for n in notes)
 
 
+@pytest.mark.parametrize("post", ["review", "summary"])
+def test_the_paper_engines_blocking_problems_reach_the_pr_body(
+    seen: Seen, monkeypatch: pytest.MonkeyPatch, post: str
+) -> None:
+    from scholar_lens.adapters.conventions_file import load_local_conventions
+    from scholar_lens.adapters.documents import paper_reader
+    from scholar_lens.application import run as runtime
+    from scholar_lens.domain.jobs import JobRequest
+
+    problem = "The claim check objects to most of section S2."
+
+    class Engine:
+        def __init__(self, *_args, **_kwargs) -> None:  # type: ignore[no-untyped-def]
+            pass
+
+        async def write(self, title, document, **_kwargs):  # type: ignore[no-untyped-def]
+            return EvidencePaper(
+                outline=None,  # type: ignore[arg-type]
+                ledger=EvidenceLedger(),
+                sections=[
+                    ("tldr", "## TL;DR\n\n### 무엇인가요?\n\n저랭크 적응입니다."),
+                    (
+                        "method",
+                        "## 방법\n\n가중치를 고정하고 저랭크 행렬을 학습합니다.",
+                    ),
+                    ("closing", "## 한계와 시사점\n\n과제를 섞기 어렵습니다."),
+                ],
+                subtitle="저랭크 적응",
+                description="LoRA는 사전 학습 가중치를 고정합니다.",
+                blocking=[problem],
+            )
+
+    monkeypatch.setattr(paper_writer, "EvidencePaperEngine", Engine)
+    context = _context(seen.root)
+    # The use case's return value, then the whole run.
+    _written, _notes, blocking = asyncio.run(
+        paper_writer.write_paper_with_evidence(
+            context,
+            bootstrap.PaperToolkit(context),
+            _paper(),
+            post=post,  # type: ignore[arg-type]
+            translation_guideline=None,
+            tracker=TokenUsageTracker(),
+        )
+    )
+    assert blocking == [problem]
+
+    context.config.explanation.engine = "evidence"
+    context.config.summary.engine = "evidence"
+    context.conventions = load_local_conventions()
+    context.publisher_factory = lambda ctx: publisher.Publisher(
+        ctx.config.resources.github,
+        root_dir=seen.root,
+        conventions=ctx.require_conventions(),
+        fetch_image=lambda _url: b"",
+    )
+    paper = _paper()
+    paper.attributes.controlled_tags = ["Quantization"]
+
+    async def prepare(*_args, **_kwargs):  # type: ignore[no-untyped-def]
+        return paper, None, None
+
+    requests: list[Any] = []
+    real = runtime.publish_artifact
+
+    async def spy(context, request, *, create_pr):  # type: ignore[no-untyped-def]
+        requests.append(request)
+        return await real(context, request, create_pr=create_pr)
+
+    monkeypatch.setattr(paper_reader, "prepare_paper_data", prepare)
+    monkeypatch.setattr(paper_writer, "publish_artifact", spy)
+    kind = "review" if post == "review" else "summarize"
+    outcome = asyncio.run(
+        bootstrap.run_use_case(
+            context,
+            JobRequest(kind=kind, source="2106.09685", create_pr=False),
+            TokenUsageTracker(),
+        )
+    )
+    assert outcome.warnings[0] == f"Blocking: {problem}"
+    (request,) = requests
+    body = request.pr_body_with_checklist()
+    assert (
+        f"### Blocking\nDo not merge before each of these is resolved:\n- [ ] {problem}"
+        in body
+    )
+
+
+# ---- survey --------------------------------------------------------------------
+
+
+def test_a_survey_write_wires_roles_and_ceiling(
+    seen: Seen, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from scholar_lens.application.use_cases import survey_write
+
+    class Built(Exception):
+        pass
+
+    class Engine:
+        def __init__(self, *_args, roles, **_kwargs) -> None:  # type: ignore[no-untyped-def]
+            seen.engine_roles.append(roles)
+            raise Built
+
+    monkeypatch.setattr(survey_write, "EvidenceSurveyEngine", Engine)
+    context = _context(seen.root)
+    with pytest.raises(Built):
+        asyncio.run(
+            survey_write.write_survey_with_evidence(
+                context,
+                bootstrap.SurveyWriteToolkit(context),
+                SimpleNamespace(papers=[]),  # type: ignore[arg-type]
+                index=SimpleNamespace(records=lambda _ids: {}, openalex=None),  # type: ignore[arg-type]
+                reader=SimpleNamespace(researcher=None),  # type: ignore[arg-type]
+                translation_guideline="",
+                tracker=TokenUsageTracker(),
+                title_max_length=60,
+            )
+        )
+    cfg = context.config.survey
+    assert seen.roles["write"].invoke_id == cfg.writing_model_id
+    assert seen.roles["read"].invoke_id == cfg.card_model_id
+    assert seen.ceilings == [cfg.write_max_cost_usd]
+
+
 # ---- the guide's identifier check -----------------------------------------------
 
 _OFFICIAL = (

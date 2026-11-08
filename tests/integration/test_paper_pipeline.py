@@ -271,3 +271,65 @@ def test_a_retitled_arxiv_version_replaces_the_published_post() -> None:
     assert request.branch_id == branch
     assert request.slug == "lora-low-rank-adaptation"
     assert request.staged_images_dir.name == "lora-low-rank-adaptation"
+
+
+async def test_the_sections_writers_get_the_configured_caps(  # type: ignore[no-untyped-def]
+    monkeypatch, tmp_path: Path
+) -> None:
+    from scholar_lens import bootstrap
+    from scholar_lens.adapters.bedrock.usage import TokenUsageTracker
+    from scholar_lens.configs import Config
+    from scholar_lens.domain.paper.models import ReviewText
+    from scholar_lens.legacy import writers
+
+    given: dict[str, dict] = {}
+
+    class Reviewer:
+        def __init__(self, paper, **kwargs) -> None:  # type: ignore[no-untyped-def]
+            given["review"] = kwargs
+
+        async def run(self) -> ReviewText:
+            return ReviewText(body="b", key_takeaways="k", closing="c", subtitle="")
+
+    class Summarizer:
+        def __init__(self, model_id, session, **kwargs) -> None:  # type: ignore[no-untyped-def]
+            given["summary"] = kwargs
+            self.notes: list[str] = []
+
+        async def summarize(self, paper) -> dict[str, str]:  # type: ignore[no-untyped-def]
+            return {"summary": "s"}
+
+    monkeypatch.setattr(writers, "PaperReviewer", Reviewer)
+    monkeypatch.setattr(writers, "PaperSummarizer", Summarizer)
+    config = Config()
+    config.explanation.max_total_tokens = 1_234_567
+    config.explanation.min_quality_score = 83
+    config.summary.max_total_tokens = 7_654_321
+    session = boto3.Session(region_name="us-east-1")
+    context = bootstrap.run_context(
+        config,
+        default_boto_session=session,
+        bedrock_boto_session=session,
+        root_dir=tmp_path,
+    )
+    sections = bootstrap.PaperToolkit(context).sections()
+    guideline = [{"term": "low-rank", "translation": "저랭크"}]
+    citations = MagicMock()
+    citations.unsourced_references.return_value = []
+    paper = MagicMock()
+    await sections.review(
+        paper,
+        citation_summarizer=citations,
+        code_retriever=None,
+        translation_guideline=guideline,
+        tracker=TokenUsageTracker(),
+    )
+    await sections.summary(
+        paper, translation_guideline=guideline, tracker=TokenUsageTracker()
+    )
+    review, summary = given["review"], given["summary"]
+    assert review["max_total_tokens"] == 1_234_567
+    assert review["min_quality_score"] == 83
+    assert review["translation_guideline"] == guideline
+    assert summary["max_total_tokens"] == 7_654_321
+    assert summary["translation_guideline"] == guideline
