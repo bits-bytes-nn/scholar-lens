@@ -26,9 +26,10 @@ from scholar_lens.application.use_cases import paper as paper_writer
 from scholar_lens.configs import Config
 from scholar_lens.domain.evidence import EvidenceLedger, SourceDocument
 from scholar_lens.domain.guide.models import GuideMaterial
+from scholar_lens.domain.guide.sdk_index import PackageSource
 from scholar_lens.domain.paper.models import Attributes, Content, Paper, ReviewText
 from scholar_lens.domain.research import PageContent, ResearchCorpus
-from scholar_lens.domain.sources import OfficialDocs
+from scholar_lens.domain.sources import OfficialDocs, ReleaseUnavailable
 
 FIGURE = "https://docs.x.dev/img/arch.png"
 BROKEN = "https://docs.x.dev/img/gone.png"
@@ -178,6 +179,93 @@ def test_a_guide_run_wires_roles_ceiling_cache_and_sources(
     assert guide.notes[:2] == ["gather note", "engine note"]
     assert any(BROKEN in n for n in guide.notes)
     assert guide.image_urls == [FIGURE]
+
+
+class _PinnedIndex:
+    """xserve on the package index at 0.9 and 1.0 (its latest)."""
+
+    releases = ("0.9", "1.0")
+
+    def _at(self, release: str | None) -> str:
+        if release is not None and release not in self.releases:
+            raise ReleaseUnavailable(f"no xserve {release}")
+        return release or "1.0"
+
+    def extras(self, name, release=None):  # type: ignore[no-untyped-def]
+        if name != "xserve":
+            return None
+        version = self._at(release)
+        return version, frozenset({f"x{version}"})
+
+    def source(self, name, release=None):  # type: ignore[no-untyped-def]
+        if name != "xserve":
+            return None
+        version = self._at(release)
+        return PackageSource(version, {"xserve/__init__.py": "def run():\n    pass\n"})
+
+
+@pytest.mark.parametrize("releases", [("0.9", "1.0"), ("1.0",)])
+def test_a_guide_run_reads_the_package_index_at_its_target_release(
+    seen: Seen, monkeypatch: pytest.MonkeyPatch, releases: tuple[str, ...]
+) -> None:
+    given: dict[str, Any] = {}
+
+    class Generator(FakeGenerator):
+        async def gather(self, urls, **_kwargs):  # type: ignore[no-untyped-def]
+            page = PageContent(
+                url="https://docs.x.dev/0.9/start",
+                title="Start",
+                text="xserve serves models.\n\n```bash\npip install xserve[gpu]\n```\n"
+                * 10,
+                authority="official",
+            )
+            return GuideMaterial(
+                topic="xserve", corpus=ResearchCorpus(pages=[page]), release="0.9"
+            )
+
+    class Engine:
+        def __init__(self, *_args, package_facts, sdk=None, **_kwargs) -> None:  # type: ignore[no-untyped-def]
+            given.update(facts=package_facts, sdk=sdk)
+
+        async def write(self, topic, documents, *, guideline):  # type: ignore[no-untyped-def]
+            return guide_engine.EvidenceGuide(
+                title="xserve",
+                body="## xserve\n\n본문입니다.\n",
+                outline=None,  # type: ignore[arg-type]
+                ledger=EvidenceLedger(),
+                cited=list(documents),
+                notes=[],
+            )
+
+    monkeypatch.setattr(guide_writer, "EvidenceGuideEngine", Engine)
+    context = _context(seen.root)
+    tools = bootstrap.GuideToolkit(context)
+    index = _PinnedIndex()
+    index.releases = releases
+    tools.packages = index  # type: ignore[assignment]
+    guide = asyncio.run(
+        guide_writer.write_guide_with_evidence(
+            context,
+            tools,
+            Generator(),  # type: ignore[arg-type]
+            urls=["https://docs.x.dev/0.9/start"],
+            reference_urls=[],
+            discover_subpages=False,
+            search_queries=None,
+            translation_guideline=None,
+            tracker=TokenUsageTracker(),
+            title_max_length=60,
+        )
+    )
+    if "0.9" in releases:
+        # The prompts and the code check name the release they read.
+        assert given["facts"] == "- xserve 0.9: extras x0.9"
+        assert given["sdk"] is not None and given["sdk"].version == "xserve 0.9"
+        assert not any("no usable" in n for n in guide.notes)
+    else:
+        # Skipped with a note, never the latest release in its place.
+        assert given["facts"] == "" and given["sdk"] is None
+        assert sum("no usable xserve 0.9" in n for n in guide.notes) == 2
 
 
 def _figure(doc: SourceDocument, url: str, eid: str = "E1"):  # type: ignore[no-untyped-def]

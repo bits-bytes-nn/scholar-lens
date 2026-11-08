@@ -38,3 +38,6 @@ class GuideMaterial:
     references: list[str] = field(default_factory=list)
     # The web-search queries run (explicit or planned).
     queries: list[str] = field(default_factory=list)
+    # The run's target release (``SourceSet.target.release``): the one the
+    # package facts and the code check read from the index (None: unknown).
+    release: str | None = None

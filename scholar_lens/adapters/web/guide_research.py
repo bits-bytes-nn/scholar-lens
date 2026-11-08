@@ -420,6 +420,7 @@ class TechGuideGenerator(RetryableBase):
             corpus=snapshot.corpus,
             references=snapshot.references,
             queries=snapshot.queries,
+            release=snapshot.sources.target.release,
         )
 
     async def _gather(
@@ -539,7 +540,11 @@ class TechGuideGenerator(RetryableBase):
             else gate_topic
         )
         return GuideMaterial(
-            topic=topic, corpus=corpus, references=references, queries=queries
+            topic=topic,
+            corpus=corpus,
+            references=references,
+            queries=queries,
+            release=self._sources.target.release,
         )
 
     async def _add_material(

@@ -327,15 +327,24 @@ class FigureCheck(Protocol):
 
 
 class PackageIndex(Protocol):
-    """A package index (PyPI): releases and their code, read and never run."""
+    """A package index (PyPI): releases and their code, read and never run.
+    ``release`` is the run's target release (the latest when None); a
+    series ("0.6") is its newest final release.
 
-    def extras(self, name: str) -> tuple[str, frozenset[str]] | None:
-        """(latest version, extras) of ``name``; None when unknown or
+    Both raise :class:`~scholar_lens.domain.sources.ReleaseUnavailable`
+    when the index knows the package but not ``release`` (or, for the
+    code, has no file of it that can be read)."""
+
+    def extras(
+        self, name: str, release: str | None = None
+    ) -> tuple[str, frozenset[str]] | None:
+        """(version, extras) of ``name`` at ``release``; None when unknown or
         unreachable."""
         ...
 
-    def source(self, name: str) -> PackageSource | None:
-        """The latest release's Python code; None when it cannot be read."""
+    def source(self, name: str, release: str | None = None) -> PackageSource | None:
+        """The Python code of ``name`` at ``release``; None when it cannot be
+        read."""
         ...
 
 

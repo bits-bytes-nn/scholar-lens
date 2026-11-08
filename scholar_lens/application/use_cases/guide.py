@@ -65,7 +65,11 @@ from scholar_lens.domain.post_format import build_post_meta, cut_title, format_g
 from scholar_lens.domain.post_names import slugify, title_slug
 from scholar_lens.domain.publishing import PublishRequest, build_pr_body
 from scholar_lens.domain.research import PageContent, ResearchCorpus, page_key
-from scholar_lens.domain.sources import engine_authority, normalize_url
+from scholar_lens.domain.sources import (
+    ReleaseUnavailable,
+    engine_authority,
+    normalize_url,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -217,7 +221,18 @@ async def write_guide_with_evidence(
     official_text = official_reference(corpus)
     products = generator.products
 
-    provided = await asyncio.to_thread(docs_packages, official_text, tools.packages)
+    # The index is read at the run's target release for the product's own
+    # distributions (the others at their latest); each answer is read once.
+    packages = ReadOnce(tools.packages)
+    release = material.release
+    index_notes: list[str] = []
+    latest = await asyncio.to_thread(docs_packages, official_text, packages)
+    provided = latest
+    if release:
+        own = await asyncio.to_thread(product_distributions, latest, products, packages)
+        provided = await asyncio.to_thread(
+            release_packages, latest, own, release, packages, index_notes
+        )
     package_facts = "\n".join(
         f"- {name} {version}: extras {', '.join(sorted(extras)) or 'none'}"
         for name, (version, extras) in provided.items()
@@ -225,7 +240,9 @@ async def write_guide_with_evidence(
 
     # The product's own code (read from PyPI, never run): what it defines
     # decides import paths, keyword arguments and defaults over the pages.
-    sdk = await asyncio.to_thread(product_sdk, provided, products, tools.packages)
+    sdk = await asyncio.to_thread(
+        product_sdk, latest, products, packages, release, index_notes
+    )
     if sdk is not None:
         logger.info(
             "Guide code checked against %s %s (%d modules%s).",
@@ -284,7 +301,7 @@ async def write_guide_with_evidence(
             else ""
         ),
     )
-    notes = [*generator.notes, *result.notes]
+    notes = [*generator.notes, *dict.fromkeys(index_notes), *result.notes]
     if unverified := identifier_check(result.body):
         notes.append(
             "Flags/metrics the official pages fetched for this guide never "
@@ -328,30 +345,125 @@ def _normalized(name: str) -> str:
     return re.sub(r"[-_.]+", "-", name).lower()
 
 
+class ReadOnce:
+    """A :class:`PackageIndex` whose answer for a (name, release) is read
+    once: the product's distributions are found from their latest code,
+    which the code check then reuses."""
+
+    def __init__(self, index: PackageIndex) -> None:
+        self._index = index
+        self._extras: dict[
+            tuple[str, str | None], tuple[str, frozenset[str]] | None | Exception
+        ] = {}
+        self._sources: dict[
+            tuple[str, str | None], PackageSource | None | Exception
+        ] = {}
+
+    def extras(
+        self, name: str, release: str | None = None
+    ) -> tuple[str, frozenset[str]] | None:
+        if (name, release) not in self._extras:
+            try:
+                self._extras[name, release] = self._index.extras(name, release)
+            except ReleaseUnavailable as e:
+                self._extras[name, release] = e
+        if isinstance(found := self._extras[name, release], Exception):
+            raise found
+        return found
+
+    def source(self, name: str, release: str | None = None) -> PackageSource | None:
+        if (name, release) not in self._sources:
+            try:
+                self._sources[name, release] = self._index.source(name, release)
+            except ReleaseUnavailable as e:
+                self._sources[name, release] = e
+        if isinstance(found := self._sources[name, release], Exception):
+            raise found
+        return found
+
+
+def _release_note(name: str, release: str, error: Exception, check: str) -> str:
+    return (
+        f"The package index has no usable {name} {release} ({error}): the "
+        f"{check} is skipped rather than run against another release."
+    )
+
+
+def product_distributions(
+    provided: Mapping[str, tuple[str, frozenset[str]]],
+    products: Sequence[str],
+    packages: PackageIndex,
+) -> list[str]:
+    """The product's own distributions among those the official pages
+    install: those whose name is a product name (PEP 503 normalised), else
+    (up to the code check's cap) those whose latest code installs a
+    top-level package of that name."""
+    wanted = {_normalized(p) for p in products if p.strip()}
+    if not wanted:
+        return []
+    if exact := [n for n in provided if _normalized(n) in wanted]:
+        return exact
+    found: list[str] = []
+    for name in provided:
+        if len(found) >= _MAX_SDK_PACKAGES:
+            break
+        if (code := packages.source(name)) is None:
+            continue
+        own = SdkIndex.from_sources(code.files, top_levels=code.top_levels)
+        if {_normalized(p) for p in own.packages} & wanted:
+            found.append(name)
+    return found
+
+
+def release_packages(
+    provided: Mapping[str, tuple[str, frozenset[str]]],
+    own: Sequence[str],
+    release: str,
+    packages: PackageIndex,
+    notes: list[str],
+) -> dict[str, tuple[str, frozenset[str]]]:
+    """``provided`` with the product's distributions (``own``) at the
+    target ``release``. One the index has no such release of is left out,
+    so its extras are not checked, with a run note."""
+    out = dict(provided)
+    for name in own:
+        try:
+            found = packages.extras(name, release)
+        except ReleaseUnavailable as e:
+            notes.append(_release_note(name, release, e, "install extras check"))
+            out.pop(name, None)
+            continue
+        if found is not None:
+            out[name] = found
+    return out
+
+
 def product_sdk(
     provided: Mapping[str, tuple[str, frozenset[str]]],
     products: Sequence[str],
     packages: PackageIndex,
+    release: str | None = None,
+    notes: list[str] | None = None,
 ) -> SdkIndex | None:
-    """The index of the product's own packages among those the official
-    pages install, from their source on the package index: the
-    distributions whose name is a product name (PEP 503 normalised), else
-    those that install a top-level package of that name. None when none
-    matches or none can be read."""
-    wanted = {_normalized(p) for p in products if p.strip()}
-    if not wanted:
-        return None
-    exact = [n for n in provided if _normalized(n) in wanted]
+    """The index of the product's own distributions
+    (:func:`product_distributions`), from their code at the target
+    ``release`` on the package index (their latest when None). None when
+    none matches or none can be read; a distribution the index has no
+    usable file of at ``release`` is left out with a run note in ``notes``
+    (its code is not checked against another release)."""
+    packages = packages if isinstance(packages, ReadOnce) else ReadOnce(packages)
     read: list[tuple[str, PackageSource]] = []
-    for name in exact or list(provided):
+    for name in product_distributions(provided, products, packages):
         if len(read) >= _MAX_SDK_PACKAGES:
             break
-        if (found := packages.source(name)) is None:
+        try:
+            found = packages.source(name, release)
+        except ReleaseUnavailable as e:
+            if notes is not None and release:
+                notes.append(_release_note(name, release, e, "code check"))
             continue
-        if not exact:
-            own = SdkIndex.from_sources(found.files, top_levels=found.top_levels)
-            if not {_normalized(p) for p in own.packages} & wanted:
-                continue
+        if found is None:
+            continue
         read.append((name, found))
     files = {path: text for _, found in read for path, text in found.files.items()}
     if not files:

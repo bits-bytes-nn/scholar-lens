@@ -500,6 +500,13 @@ class IndexUnreachable(RuntimeError):
     whose answer is "none"."""
 
 
+class ReleaseUnavailable(LookupError):
+    """A package the index knows, without the requested release or without
+    a file of it that can be read: what depends on that release (its
+    extras, its code) is unknown, and the latest release is another
+    version."""
+
+
 # A package's latest release on its index: None when the index does not
 # know the package; raises :class:`IndexUnreachable` when it cannot answer.
 ReleaseLookup = Callable[[str], "str | None"]
