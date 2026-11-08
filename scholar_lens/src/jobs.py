@@ -66,6 +66,8 @@ class JobRequest(BaseModel):
     reference_urls: list[str] = Field(default_factory=list)
     search_queries: list[str] = Field(default_factory=list)
     discover_subpages: bool = True
+    # guide: gather the sources again instead of reusing a saved corpus.
+    fresh_sources: bool = False
     # survey_plan: the topic, papers the survey must include (arXiv ids or
     # URLs, DOIs), an optional year range and ``reference_urls``.
     topic: str | None = None
@@ -88,10 +90,11 @@ class JobRequest(BaseModel):
             or self.plan
         )
         if self.kind in ("survey_plan", "survey_write") and (
-            self.parse_pdf or not self.discover_subpages
+            self.parse_pdf or not self.discover_subpages or self.fresh_sources
         ):
             raise ValueError(
-                f"A {self.kind} request takes no 'parse_pdf' or 'discover_subpages'."
+                f"A {self.kind} request takes no 'parse_pdf', 'discover_subpages' "
+                "or 'fresh_sources'."
             )
         if self.kind == "survey_write":
             if not (self.plan and self.plan.strip()):
@@ -152,6 +155,8 @@ class JobRequest(BaseModel):
                 raise ValueError(f"A {self.kind} request needs a 'source'.")
             if self.urls or self.reference_urls or self.search_queries:
                 raise ValueError(f"A {self.kind} request takes 'source', not 'urls'.")
+            if self.fresh_sources:
+                raise ValueError(f"A {self.kind} request takes no 'fresh_sources'.")
             # Checked before any paid stage: the paper record needs URLs.
             _check_urls("A repository", self.repo_urls)
         return self

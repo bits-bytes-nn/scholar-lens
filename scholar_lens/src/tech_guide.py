@@ -58,6 +58,13 @@ from .source_set import (
     TagLookup,
     search_exclusions,
 )
+from .source_snapshot import (
+    CorpusSnapshot,
+    SnapshotPolicy,
+    read_snapshot,
+    save_snapshot,
+    snapshot_key,
+)
 from .utils import (
     BedrockLanguageModelFactory,
     HTMLTagOutputParser,
@@ -126,6 +133,8 @@ class GuideMaterial:
     corpus: ResearchCorpus
     # The user's reference URLs not already among the docs URLs.
     references: list[str] = field(default_factory=list)
+    # The web-search queries run (explicit or planned).
+    queries: list[str] = field(default_factory=list)
 
 
 class TechGuideGenerator(RetryableBase):
@@ -174,6 +183,7 @@ class TechGuideGenerator(RetryableBase):
             host patterns whose pages rank last and count as third-party.
         excluded_domains: Domains the search backends leave out.
         """
+        self.relevance_model_id = relevance_model_id
         self.release_lookup = release_lookup
         self.repo_tags = repo_tags
         self.max_third_party_pages = max_third_party_pages
@@ -244,15 +254,126 @@ class TechGuideGenerator(RetryableBase):
         reference_urls: list[str] | None = None,
         discover_subpages: bool = True,
         search_queries: list[str] | None = None,
+        snapshots: SnapshotPolicy | None = None,
     ) -> GuideMaterial:
         """Everything a guide is written from: the docs (and sub-pages), the
         user's reference material, the planned searches' top pages and the
         official reference pages for third-party identifiers, after the
-        relevance gate (raises :class:`NotTechnicalContentError`)."""
+        relevance gate (raises :class:`NotTechnicalContentError`).
+
+        With ``snapshots``, a corpus gathered from the same inputs (URLs,
+        references, explicit queries and the settings that change what is
+        gathered) within the policy's TTL is reused, and a newly gathered
+        one is saved."""
+        if snapshots is None:
+            return await self._gather(
+                urls,
+                reference_urls=reference_urls or [],
+                discover_subpages=discover_subpages,
+                search_queries=search_queries or [],
+            )
+        key = snapshot_key(
+            self._gather_inputs(
+                urls, reference_urls or [], discover_subpages, search_queries or []
+            )
+        )
+        found = await asyncio.to_thread(
+            read_snapshot,
+            snapshots,
+            key,
+            demoted=self.demoted,
+            repo_tags=self.repo_tags,
+        )
+        if found is not None:
+            logger.info("Reusing the corpus snapshot %s.", key)
+            return self._restore(found)
+        start = len(self.notes)
+        material = await self._gather(
+            urls,
+            reference_urls=reference_urls or [],
+            discover_subpages=discover_subpages,
+            search_queries=search_queries or [],
+        )
+        snapshot = CorpusSnapshot(
+            topic=material.topic,
+            corpus=material.corpus,
+            references=material.references,
+            queries=material.queries,
+            products=self._products,
+            sources=self._sources,
+            notes=[*self.notes[start:], *self.researcher.search_notes()],
+            reference_ids=list(self._reference_ids),
+            reference_searches=self._reference_searches,
+            reference_urls=[p.url for p in self._reference_pages],
+        )
+        try:
+            await asyncio.to_thread(save_snapshot, snapshots, key, snapshot)
+        except OSError as e:  # the corpus is in hand; only a rerun gathers again
+            logger.warning("Could not save the corpus snapshot %s: %s", key, e)
+        return material
+
+    def _gather_inputs(
+        self,
+        urls: list[str],
+        references: list[str],
+        discover_subpages: bool,
+        queries: list[str],
+    ) -> dict[str, object]:
+        """What decides a gathered corpus: the request and every setting
+        that changes what is fetched, searched or how it is recorded."""
+        return {
+            "urls": list(urls),
+            "references": list(references),
+            "discover_subpages": discover_subpages,
+            "search_queries": list(queries),
+            "relevance_model_id": str(self.relevance_model_id),
+            "auto_research": self.auto_research,
+            "max_research_queries": self.max_research_queries,
+            "fetch_top_results": self.fetch_top_results,
+            "max_third_party_pages": self.max_third_party_pages,
+            "demoted_domains": {k: list(v) for k, v in self.demoted.classes.items()},
+            "excluded_domains": list(self.excluded_domains),
+            "search_backend": type(self.researcher.search_provider).__name__,
+            "max_subpages": self._max_subpages(),
+        }
+
+    def _max_subpages(self) -> int | None:
+        found = getattr(self.researcher, "max_subpages", None)
+        return found if isinstance(found, int) else None
+
+    def _restore(self, snapshot: CorpusSnapshot) -> GuideMaterial:
+        """The generator's state and material as a saved gather left them."""
+        self._sources = snapshot.sources
+        self._products = snapshot.products
+        self._reference_ids = list(snapshot.reference_ids)
+        self._reference_searches = snapshot.reference_searches
+        looked_up = set(snapshot.reference_urls)
+        self._reference_pages = [p for p in snapshot.corpus.pages if p.url in looked_up]
+        self.notes += [
+            *snapshot.notes,
+            f"Sources reused from the corpus gathered at {snapshot.gathered_at} "
+            f"({len(snapshot.corpus.pages)} pages); rerun with --fresh-sources "
+            "to gather them again.",
+        ]
+        return GuideMaterial(
+            topic=snapshot.topic,
+            corpus=snapshot.corpus,
+            references=snapshot.references,
+            queries=snapshot.queries,
+        )
+
+    async def _gather(
+        self,
+        urls: list[str],
+        *,
+        reference_urls: list[str],
+        discover_subpages: bool,
+        search_queries: list[str],
+    ) -> GuideMaterial:
         # One spelling per page (and per arXiv paper: abs, pdf, any version).
         held = {page_key(u) for u in urls}
         references: list[str] = []
-        for url in reference_urls or []:
+        for url in reference_urls:
             if (key := page_key(url)) not in held:
                 held.add(key)
                 references.append(url)
@@ -297,7 +418,7 @@ class TechGuideGenerator(RetryableBase):
         # the search backend can't actually return results.
         can_search = self.researcher.search_provider.supports_search
         planned_topic: str | None = None
-        queries = list(search_queries or [])
+        queries = list(search_queries)
         if not queries and self.auto_research and can_search:
             planned_topic, queries = await self._plan_research(corpus)
         if queries and can_search:
@@ -334,7 +455,9 @@ class TechGuideGenerator(RetryableBase):
             if planned_topic and not is_placeholder(planned_topic)
             else gate_topic
         )
-        return GuideMaterial(topic=topic, corpus=corpus, references=references)
+        return GuideMaterial(
+            topic=topic, corpus=corpus, references=references, queries=queries
+        )
 
     async def _add_material(
         self, corpus: ResearchCorpus, references: list[str]

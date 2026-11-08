@@ -203,6 +203,14 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_false",
         help="Do not follow in-scope sub-pages of the URLs.",
     )
+    guide.add_argument(
+        "--fresh-sources",
+        action="store_true",
+        help=(
+            "Gather the sources again instead of reusing the corpus a run with "
+            "the same inputs saved (tech_guide.source_snapshot_ttl_days)."
+        ),
+    )
     add_run_options(guide)
 
     survey = commands.add_parser(
@@ -362,6 +370,7 @@ def _request_from_args(args: argparse.Namespace) -> JobRequest:
             reference_urls=args.reference_urls,
             search_queries=args.search_queries,
             discover_subpages=args.discover_subpages,
+            fresh_sources=args.fresh_sources,
             create_pr=args.create_pr,
         )
     return JobRequest(

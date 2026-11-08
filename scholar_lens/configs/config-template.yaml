@@ -143,6 +143,12 @@ tech_guide:
   # Domains the search backends leave out entirely (Tavily exclude_domains,
   # Brave -site:), e.g. [pinterest.com].
   excluded_domains: []
+  # The gathered corpus (queries, results, pages and their source records) is
+  # saved under a hash of the inputs (local work dir and S3 guides/sources/)
+  # and reused by a rerun with the same inputs within this many days, so
+  # reruns and evaluations write from the same sources. 0 = always gather
+  # again; `guide --fresh-sources` gathers again once.
+  source_snapshot_ttl_days: 7
   # At most this many sections (3-30); the outline plans within it.
   max_sections: 11
   # Hard ceiling on one run's estimated cost (USD).

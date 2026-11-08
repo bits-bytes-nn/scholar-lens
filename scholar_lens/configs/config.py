@@ -274,6 +274,11 @@ class TechGuide(_Section):
     # Domains the search backends leave out (Tavily exclude_domains, Brave
     # -site:); "*.example.com" is sent as example.com.
     excluded_domains: list[str] = Field(default_factory=list)
+    # The gathered corpus (queries, results, pages and their records) is
+    # saved under a hash of the inputs and reused by a rerun with the same
+    # inputs within this many days (0 = always gather again; the CLI's
+    # --fresh-sources forces a fresh gather once).
+    source_snapshot_ttl_days: float = Field(default=7.0, ge=0)
     # Upper bound on guide sections, told to the outline planner so it plans a
     # self-contained guide (usage, internals and integration) within it.
     # Fewer, deeper sections: each teaches its features once (the guide's

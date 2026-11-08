@@ -32,6 +32,7 @@ from .logger import logger
 from .metrics import TokenUsageTracker
 from .runtime import RunContext
 from .source_set import engine_authority
+from .source_snapshot import SnapshotPolicy
 from .tech_guide import TechGuide, TechGuideGenerator
 from .web_research import (
     PageContent,
@@ -199,6 +200,7 @@ async def write_guide_with_evidence(
     translation_guideline: list[dict[str, Any]] | None,
     tracker: TokenUsageTracker,
     title_max_length: int,
+    fresh_sources: bool = False,
 ) -> TechGuide:
     from ..adapters.bedrock.strands_models import StrandsLanguageModel
     from ..application.guide_engine import EvidenceGuideEngine, GuideSettings
@@ -206,11 +208,24 @@ async def write_guide_with_evidence(
     from .survey_documents import EvidenceTextStore
 
     cfg = context.config.tech_guide
+    # The gathered corpus is saved and reused for the same inputs within
+    # the TTL, so reruns and evaluations write from the same sources.
+    snapshots = SnapshotPolicy(
+        EvidenceTextStore(
+            context.papers_dir / "guide-sources",
+            context.s3_handler,
+            context.config.resources.s3_prefix,
+            S3Paths.GUIDES,
+        ),
+        ttl_days=cfg.source_snapshot_ttl_days,
+        fresh=fresh_sources,
+    )
     material = await generator.gather(
         urls,
         reference_urls=reference_urls,
         discover_subpages=discover_subpages,
         search_queries=search_queries,
+        snapshots=snapshots,
     )
     corpus: ResearchCorpus = material.corpus
     documents = guide_documents(corpus.pages)
