@@ -38,6 +38,7 @@ from scholar_lens.application.run import (
 )
 from scholar_lens.application.survey_engine import EngineSettings, EvidenceSurveyEngine
 from scholar_lens.domain.constants import S3Paths
+from scholar_lens.domain.ids import paper_url
 from scholar_lens.domain.jobs import JobRequest
 from scholar_lens.domain.markdown.lint import drop_unknown_images, fill_image_alts
 from scholar_lens.domain.markdown.math import has_math, normalize_math
@@ -140,7 +141,11 @@ def check_plan_shape(data: dict[str, Any]) -> None:
     copy = json.loads(json.dumps(data))
     normalize_plan_data(copy)
     copy["papers"] = [
-        {**p, "title": p.get("title") or p["id"], "url": p.get("url") or p["id"]}
+        {
+            **p,
+            "title": p.get("title") or p["id"],
+            "url": p.get("url") or paper_url(p["id"]),
+        }
         for p in copy["papers"]
     ]
     validate_plan(copy)

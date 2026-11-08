@@ -252,6 +252,58 @@ KTO = SourceRecord(
 )
 
 
+class TestPlanPaperLinks:
+    """An edited plan's paper link must name the paper's id: a link to
+    another paper is rejected (which one the user meant is unknowable)."""
+
+    @pytest.mark.parametrize(
+        ("pid", "url"),
+        [
+            # The id's title and link swapped in from another plan paper.
+            ("1707.06347", "https://arxiv.org/abs/2305.18290"),
+            ("1707.06347", "https://doi.org/10.48550/arXiv.2305.18290"),
+            (
+                "10.18653/v1/2024.acl-long.1",
+                "https://doi.org/10.18653/v1/2024.acl-long.2",
+            ),
+            ("1707.06347", "https://openreview.net/forum?id=ppo"),
+        ],
+    )
+    def test_a_link_to_another_paper_is_rejected(self, pid: str, url: str) -> None:
+        data = plan_dict()
+        data["papers"][0].update(id=pid, url=url)
+        with pytest.raises(SurveyInputError) as rejected:
+            load_plan(json.dumps(data), FakeIndex({}))
+        message = str(rejected.value)
+        assert repr(pid) in message and repr(url) in message
+        assert data["papers"][0]["title"] in message
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "https://arxiv.org/pdf/1707.06347v2",
+            "https://www.arxiv.org/abs/1707.06347",
+            "https://doi.org/10.48550/arXiv.1707.06347",
+        ],
+    )
+    def test_the_paper_in_another_link_form_is_kept(self, url: str) -> None:
+        data = plan_dict()
+        data["papers"][0]["url"] = url
+        loaded, _ = load_plan(json.dumps(data), FakeIndex({}))
+        assert {p.id: p.url for p in loaded.papers}["1707.06347"] == url
+
+    def test_a_hand_added_doi_gets_its_own_link(self) -> None:
+        # Its record also has an arXiv id; the link still names the DOI.
+        doi = "10.18653/v1/2024.acl-long.1"
+        record = SourceRecord(
+            provider="openalex", title="A paper", arxiv_id="2402.01306", doi=doi
+        )
+        data = plan_dict()
+        data["papers"].append({"id": doi, "lineage": "dpo", "role": "supporting"})
+        loaded, _ = load_plan(json.dumps(data), FakeIndex({doi: record}))
+        assert {p.id: p.url for p in loaded.papers}[doi] == f"https://doi.org/{doi}"
+
+
 class TestPlanRevalidation:
     def test_edits_are_normalized_and_a_hand_added_paper_completed(self) -> None:
         data = plan_dict()

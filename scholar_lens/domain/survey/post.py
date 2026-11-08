@@ -107,7 +107,9 @@ def normalize_plan_data(data: dict[str, Any]) -> list[str]:
 
 def fill_metadata(paper: dict[str, Any], records: Sequence[SourceRecord]) -> None:
     """Fill a hand-added paper's missing bibliographic fields from its index
-    records (arXiv's at DataCite, or OpenAlex's); fields the user wrote stay."""
+    records (arXiv's at DataCite, or OpenAlex's); fields the user wrote stay.
+    The link is built from the paper's id (a DOI's record may carry an
+    arXiv id: its link would name the paper by another id)."""
     candidate = merge_records(list(records))[0]
     found = {
         "title": candidate.title,
@@ -115,7 +117,7 @@ def fill_metadata(paper: dict[str, Any], records: Sequence[SourceRecord]) -> Non
         "year": candidate.year,
         "date": candidate.published.isoformat() if candidate.published else None,
         "venue": candidate.venue,
-        "url": candidate.url,
+        "url": paper_url(paper["id"]),
     }
     for key, value in found.items():
         if not paper.get(key) and value:

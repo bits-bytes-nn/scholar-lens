@@ -21,7 +21,12 @@ from urllib.parse import unquote
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from scholar_lens.domain.ids import ARXIV_ID_BODY, arxiv_id_from_reference
+from scholar_lens.domain.ids import (
+    ARXIV_ID_BODY,
+    arxiv_id_from_reference,
+    paper_link_key,
+    paper_url,
+)
 from scholar_lens.domain.post_names import slugify
 from scholar_lens.domain.titles import titles_match
 
@@ -552,6 +557,22 @@ class PlanPaper(_Strict):
     lineage: str
     role: Literal["core", "supporting"]
     reason: str = ""
+
+    @model_validator(mode="after")
+    def _url_names_the_paper(self) -> PlanPaper:
+        """The link names this paper: an edited plan may pair an id with
+        another paper's title and link, and the post would cite one paper
+        under the other's name. Which one the user meant is not knowable,
+        so the plan is rejected rather than repaired."""
+        expected = paper_url(self.id)
+        if paper_link_key(self.url) != paper_link_key(expected):
+            raise ValueError(
+                f"paper {self.id!r} ({self.title!r}) has the url {self.url!r}, "
+                f"which names another paper or none; set it to {expected!r}, "
+                "or remove its title and url to have both filled from the "
+                "indexes"
+            )
+        return self
 
 
 class PlanEdge(_Strict):

@@ -9,6 +9,7 @@ from datetime import UTC, date, datetime
 import pytest
 from pydantic import ValidationError
 
+from scholar_lens.domain.ids import normalize_arxiv_id
 from scholar_lens.domain.survey.plan import (
     NO_CORE_PAPER,
     Candidate,
@@ -57,8 +58,9 @@ def cand(cid: str, **kwargs: object) -> Candidate:
         "authors": [],
         "published": date(2023, 1, 1),
         "venue": None,
-        "arxiv_id": None,
-        "doi": None,
+        # A plan id is the paper's arXiv id or DOI (the pool keeps only those).
+        "arxiv_id": cid if normalize_arxiv_id(cid) else None,
+        "doi": None if normalize_arxiv_id(cid) else normalize_doi(cid),
         "abstract": None,
         "openalex_citations": None,
         "keys": {f"openalex:{cid}"},
