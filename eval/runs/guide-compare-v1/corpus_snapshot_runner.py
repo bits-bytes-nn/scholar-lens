@@ -1,6 +1,7 @@
 """Run the scholar_lens CLI of the tree in the current directory with the
 guide's gathered material fixed: the first run saves it, later runs (either
 engine) reuse it, so both engines write from the same corpus."""
+
 import os
 import pickle
 import runpy
@@ -14,7 +15,13 @@ from scholar_lens.src import tech_guide as tg  # noqa: E402
 
 assert tg.__file__.startswith(os.getcwd()), tg.__file__
 original = tg.TechGuideGenerator.gather
-STATE = ("_official", "_products", "_reference_pages", "_reference_ids", "_reference_searches")
+STATE = (
+    "_official",
+    "_products",
+    "_reference_pages",
+    "_reference_ids",
+    "_reference_searches",
+)
 
 
 async def gather(self, urls, **kwargs):
