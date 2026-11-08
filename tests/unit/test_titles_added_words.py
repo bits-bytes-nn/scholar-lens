@@ -65,3 +65,12 @@ def test_two_different_short_names_are_two_papers() -> None:
         "Vicuna: A Strong, Replicable Instruction-Following Model",
     )
     assert not titles_match("Fast Serving (vLLM)", "Fast Serving (SGLang)")
+
+
+def test_a_title_that_differs_by_without_is_another_paper() -> None:
+    from scholar_lens.domain.titles import titles_match
+
+    assert not titles_match(
+        "Learning with Noisy Labels", "Learning without Noisy Labels"
+    )
+    assert titles_match("Learning with Noisy Labels", "Learning with noisy labels")

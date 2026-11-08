@@ -249,3 +249,11 @@ def test_links_between_single_dollars_are_verified(
     from scholar_lens.domain.markdown.links import LinkSources, verify_links
 
     assert verify_links(text, LinkSources.of([]))[1] == removed
+
+
+def test_a_doi_with_a_semicolon_is_one_citation_key() -> None:
+    from scholar_lens.domain.survey.post import citation_keys
+
+    doi = "10.1002/(sici)1097-4571(199806)49:8<693::aid-asi4>3.0.co;2-o"
+    assert citation_keys(f"@{doi}") == [doi]
+    assert citation_keys(f"@2305.18290; @{doi}") == ["2305.18290", doi]

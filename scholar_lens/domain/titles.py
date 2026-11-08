@@ -133,7 +133,7 @@ _WORD = re.compile(r"[^\W_]+")
 
 _STOPWORDS = frozenset(
     "a an and are as at be by for from how in into is it of on or our over the "
-    "to towards via what when where which why with without you your".split()
+    "to towards via what when where which why with you your".split()
 )
 
 

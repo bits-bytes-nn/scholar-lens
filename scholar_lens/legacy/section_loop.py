@@ -15,6 +15,7 @@ from scholar_lens.domain.markdown.math import (
     segments,
     without_fences,
 )
+from scholar_lens.domain.survey.post import citation_keys
 
 _QUOTE_PREFIX = re.compile(r"^[ \t]*(?:>[ \t]?)+")
 _LINKED_IMAGE = re.compile(rf"\[{IMAGE.pattern}\]\([^)\s]*\)")
@@ -63,9 +64,7 @@ _CITATION_GROUP = re.compile(r"\[(@[^\[\]\n]+)\]")
 
 def _citation_keys(text: str) -> set[str]:
     return {
-        key.strip().removeprefix("@").strip()
-        for group in _CITATION_GROUP.findall(text)
-        for key in group.split(";")
+        key for group in _CITATION_GROUP.findall(text) for key in citation_keys(group)
     }
 
 

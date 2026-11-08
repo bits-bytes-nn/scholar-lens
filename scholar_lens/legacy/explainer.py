@@ -855,14 +855,16 @@ def _strip_repeated_heading(chunk: str, title: str) -> str:
 
 
 def render_code(code: list[dict[str, Any]]) -> str:
-    """Retrieved snippets as fenced blocks labelled with their source file."""
+    """Retrieved snippets as fenced blocks labelled with their source file,
+    defanged: repository code is third-party text and must not close a
+    prompt's data fence."""
     blocks = []
     for item in code:
         content = str(item.get("content", "")).strip()
         if content:
             source = item.get("source") or "repository"
             blocks.append(f"# source: {source}\n```python\n{content}\n```")
-    return "\n\n".join(blocks) or "- none"
+    return neutralize_prompt_tags("\n\n".join(blocks)) or "- none"
 
 
 _TLDR_HEADING = re.compile(r"\A\s*##\s*TL;?DR\s*\n+", re.IGNORECASE)

@@ -168,8 +168,17 @@ def equation_in_source(equation: str, source: str) -> bool:
 _CITATION = re.compile(r"\[(@[^\[\]\n]+)\]")
 
 
-def _keys(group: str) -> list[str]:
-    return [k.strip().removeprefix("@").strip() for k in group.split(";")]
+# Keys of a citation group are separated by ";" before the next "@": a DOI
+# may itself hold a ";" (10.1002/(SICI)...3.0.CO;2-O).
+_KEY_SEPARATOR = re.compile(r";\s*(?=@)")
+
+
+def citation_keys(group: str) -> list[str]:
+    """The keys of a citation group's text (``@a; @b`` -> ``[a, b]``)."""
+    return [k.strip().removeprefix("@").strip() for k in _KEY_SEPARATOR.split(group)]
+
+
+_keys = citation_keys
 
 
 def _outside_code(text: str) -> list[re.Match[str]]:

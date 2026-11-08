@@ -27,6 +27,7 @@ from scholar_lens.adapters.code.retriever import (
 )
 from scholar_lens.adapters.retry import RetryableBase
 from scholar_lens.domain.constants import EmbeddingModelId, LanguageModelId
+from scholar_lens.domain.prompt_safety import neutralize_prompt_tags
 from scholar_lens.domain.usage_context import staged
 from scholar_lens.legacy.batch import BatchProcessor
 from scholar_lens.legacy.embeddings import BedrockEmbeddingModelFactory
@@ -163,7 +164,8 @@ class CodeIndex(CodeRetriever):
 
     @staticmethod
     def _prepare_augmentation_inputs(documents: list[Document]) -> list[dict[str, str]]:
-        return [{"code": doc.page_content} for doc in documents]
+        # Repository files are third-party text: their tags are defanged.
+        return [{"code": neutralize_prompt_tags(doc.page_content)} for doc in documents]
 
     @staged("code_analysis")
     async def _augment_documents(self, documents: list[Document]) -> list[Document]:
