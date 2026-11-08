@@ -9,10 +9,10 @@ from unittest.mock import MagicMock
 import pytest
 
 from scholar_lens.domain.markdown.lint import writing_issues
+from scholar_lens.src.source_set import SourceSet
 from scholar_lens.src.web_research import (
     MAX_REFERENCE_PAGES,
     MAX_REFERENCE_SEARCHES,
-    OfficialDocs,
     PageContent,
     ResearchCorpus,
     SearchResult,
@@ -24,7 +24,7 @@ from tests.test_tech_guide import _make_generator
 HOST = "docs.example.ai"
 QUICKSTART = f"https://{HOST}/en/latest/quickstart.html"
 ENGINE_ARGS = f"https://{HOST}/en/latest/configuration/engine_args.html"
-OFFICIAL = OfficialDocs.from_urls([QUICKSTART])
+OFFICIAL = SourceSet.from_urls([QUICKSTART])
 
 
 def _hedges(text: str) -> list[str]:
@@ -178,7 +178,8 @@ def test_third_party_flags_seed_the_reference_lookup() -> None:
             ),
         ]
     )
-    assert third_party_identifiers(corpus, OFFICIAL, ["vllm"]) == ["--max-model-len"]
+    OFFICIAL.record_all(corpus.pages)
+    assert third_party_identifiers(corpus, ["vllm"]) == ["--max-model-len"]
 
 
 def test_reference_links_that_fit_the_identifiers_come_first() -> None:
@@ -304,7 +305,7 @@ async def test_an_identifier_lookup_requires_a_settling_page() -> None:
 async def test_reference_lookups_share_the_per_guide_caps() -> None:
     gen = _make_generator()
     gen._reference_pages, gen._reference_ids = [], []
-    gen._official = OFFICIAL
+    gen._sources = OFFICIAL
     calls: list[dict] = []
 
     def add_reference(corpus, official, identifiers, **kwargs):  # type: ignore[no-untyped-def]
@@ -355,7 +356,7 @@ def _budget_generator(search: list[SearchResult] | None):  # type: ignore[no-unt
     )
     gen = _make_generator()
     gen.researcher = researcher
-    gen._official = OFFICIAL
+    gen._sources = OFFICIAL
     gen._products = ("vllm",)
     gen._reference_pages, gen._reference_ids = [], []
     gen._reference_searches = 0

@@ -92,6 +92,7 @@ class FakeGenerator:
             title="Start &amp; run",
             text="xserve runs models. " * 40,
             final_url="https://docs.x.dev/guide/start/",
+            authority="official",
         )
         return GuideMaterial(topic="xserve", corpus=ResearchCorpus(pages=[page]))
 

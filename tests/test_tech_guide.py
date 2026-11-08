@@ -199,7 +199,7 @@ class TestGather:
         assert material.topic == "Using X"
         assert [p.url for p in material.corpus.pages] == ["https://docs.x.com"]
         assert material.references == []
-        assert gen._official.hosts == frozenset({"docs.x.com"})
+        assert gen.official.hosts == frozenset({"docs.x.com"})
 
 
 class TestResearchPlanning:
@@ -388,18 +388,28 @@ class TestReferenceLookup:
     async def test_reference_lookup_logs_each_page_with_its_label(self) -> None:
         from unittest.mock import patch
 
-        from scholar_lens.src.web_research import OfficialDocs
+        from scholar_lens.src.source_set import SourceSet
 
         gen = _make_generator()
-        gen._official = OfficialDocs.from_urls(["https://docs.x.io/en/latest/"])
+        gen._sources = SourceSet.from_urls(["https://docs.x.io/en/latest/"])
+        # The lookup returns pages it recorded.
         page = PageContent(
-            url="https://docs.x.io/en/latest/cli.html", title="t", text=""
+            url="https://docs.x.io/en/latest/cli.html",
+            title="t",
+            text="",
+            authority="official",
+            published="2026-01-02",
         )
         gen.researcher.add_official_reference = MagicMock(return_value=[page])
         with patch("scholar_lens.src.tech_guide.logger") as log:
             await gen._add_reference(ResearchCorpus(), ["--flag"])
         log.info.assert_any_call(
-            "Added %s page [%s] %s", "reference-lookup", OFFICIAL_LABEL, page.url
+            "Added %s page [%s%s%s] %s",
+            "reference-lookup",
+            "official",
+            "",
+            " 2026-01-02",
+            page.url,
         )
 
 
@@ -532,7 +542,7 @@ class TestReferenceMaterial:
         second = gen.researcher.research.call_args_list[1]
         assert second.args[0] == [self.BLOG]
         assert second.kwargs["discover_subpages"] is False
-        assert gen._official.hosts == frozenset({"docs.x.com"})
+        assert gen.official.hosts == frozenset({"docs.x.com"})
         # The gate reads the docs alone.
         gate_sources = gen.relevance_chain.ainvoke.await_args.args[0]["sources"]
         assert self.BLOG not in gate_sources
@@ -612,7 +622,7 @@ def _reference_generator(pages: dict[str, PageContent]) -> TechGuideGenerator:
 
 def _labels(gen: TechGuideGenerator, material: GuideMaterial) -> dict[str, str]:
     """Each corpus page's URL -> the label prompts give it."""
-    return {p.url: source_label(p, gen.official) for p in material.corpus.pages}
+    return {p.url: source_label(p) for p in material.corpus.pages}
 
 
 def test_planner_digest_gives_docs_and_references_fair_shares() -> None:
@@ -687,7 +697,7 @@ class TestSeveralDocsAndReferences:
         gen = several_inputs
         material = await gen.gather([], reference_urls=list(REFS))
         assert gen.researcher.research.call_count == 1
-        assert not gen._official.hosts
+        assert not gen.official.hosts
         assert OFFICIAL_LABEL not in _labels(gen, material).values()
         # No docs: nothing to look up.
         gen.researcher.add_official_reference.assert_not_called()

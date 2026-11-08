@@ -49,6 +49,7 @@ from .prompts import (
     TechGuideResearchPlanPrompt,
 )
 from .prompts.tech_guide import REFERENCE_LABEL, TechGuideTaxonomyPrompt
+from .source_set import SourceSet
 from .utils import (
     BedrockLanguageModelFactory,
     HTMLTagOutputParser,
@@ -117,8 +118,10 @@ class GuideMaterial:
 class TechGuideGenerator(RetryableBase):
     """Gathers a guide's sources and files the finished guide."""
 
-    # The requested docs (hosts and versions): the authority for flags and defaults.
-    _official: OfficialDocs = OfficialDocs(frozenset(), frozenset())
+    # Decides each gathered page's source record (authority, version, date,
+    # language) once; the requested docs are the authority for flags and
+    # defaults.
+    _sources: SourceSet = SourceSet(OfficialDocs(frozenset(), frozenset()))
     # The names the docs' commands go by (set by the relevance gate).
     _products: tuple[str, ...] = ()
     # Official reference pages fetched this run, the identifiers they were
@@ -187,7 +190,12 @@ class TechGuideGenerator(RetryableBase):
     @property
     def official(self) -> OfficialDocs:
         """The requested docs (set by :meth:`gather`)."""
-        return self._official
+        return self._sources.official
+
+    @property
+    def sources(self) -> SourceSet:
+        """The run's source set (set by :meth:`gather`)."""
+        return self._sources
 
     @property
     def products(self) -> tuple[str, ...]:
@@ -216,7 +224,7 @@ class TechGuideGenerator(RetryableBase):
         if not urls and not references:
             raise ValueError("At least one source URL is required.")
         # The requested docs are the authority for flags, defaults and names.
-        self._official = OfficialDocs.from_urls(urls)
+        self._sources = SourceSet.from_urls(urls)
         self._reference_pages, self._reference_ids = [], []
         self._reference_searches = 0
 
@@ -231,9 +239,6 @@ class TechGuideGenerator(RetryableBase):
                 raise NotTechnicalContentError(
                     "None of the supplied URLs returned readable content."
                 )
-            # Where the requested pages actually landed (redirects, a pinned
-            # version behind "stable") is official too.
-            self._official = OfficialDocs.from_research(urls, corpus.pages)
         else:
             self.notes.append(_NO_DOCS_NOTE)
         docs = ResearchCorpus(pages=list(corpus.pages))
@@ -243,6 +248,12 @@ class TechGuideGenerator(RetryableBase):
         # search results never redefine what the user asked for, and a
         # rejected input spends nothing on searches.
         gate_topic = await self._assert_relevant(docs if docs.pages else corpus)
+
+        # Every page's record is decided here, once: where the requested
+        # pages landed (redirects, a pinned version behind "stable") is
+        # official too, and so are the repositories the docs link to.
+        self._sources = self._source_set(urls, docs.pages)
+        self._record(corpus.pages, "seed")
 
         # Deep-research planning: when no explicit queries are supplied, derive
         # search queries (and an early topic guess) from the seed pages so the
@@ -264,7 +275,7 @@ class TechGuideGenerator(RetryableBase):
                 queries,
                 fetch_top=self.fetch_top_results,
             )
-            self._log_added("search", corpus.pages[before:])
+            self._record(corpus.pages[before:], "search")
         elif queries:
             logger.info(
                 "Search backend has no results; skipping %d queries.", len(queries)
@@ -275,7 +286,7 @@ class TechGuideGenerator(RetryableBase):
         # official source backs.
         await self._add_reference(
             corpus,
-            third_party_identifiers(corpus, self._official, self._products),
+            third_party_identifiers(corpus, self._products),
             max_pages=_IDENTIFIER_REFERENCE_PAGES,
             max_searches=_IDENTIFIER_REFERENCE_SEARCHES,
         )
@@ -312,7 +323,6 @@ class TechGuideGenerator(RetryableBase):
                 page.user_reference = True
                 corpus.pages.append(page)
                 held |= keys
-                self._log_added("reference-material", [page])
         if not corpus.pages:
             raise NotTechnicalContentError(
                 "None of the supplied URLs returned readable content."
@@ -459,14 +469,14 @@ class TechGuideGenerator(RetryableBase):
         )
         # Only pages that settle an identifier, as the unverified check reads
         # them, are kept.
-        official_text = official_reference(self._official, corpus)
+        official_text = official_reference(corpus)
         settles = functools.partial(
             mentions_any, identifiers=identifiers, official_text=official_text
         )
         added = await asyncio.to_thread(
             self.researcher.add_official_reference,
             corpus,
-            self._official,
+            self._sources,
             identifiers,
             product=self._products[0] if self._products else "",
             max_searches=searches_left,
@@ -480,14 +490,26 @@ class TechGuideGenerator(RetryableBase):
         self._log_added("reference-lookup", added)
         return added
 
+    def _source_set(self, urls: list[str], docs: list[PageContent]) -> SourceSet:
+        """The run's source set from the requested URLs and the docs pages
+        they returned."""
+        return SourceSet.from_urls(urls, docs).with_repositories(docs)
+
+    def _record(self, pages: list[PageContent], kind: str) -> None:
+        """Record ``pages`` (:meth:`SourceSet.record`) and log them."""
+        self._sources.record_all(pages)
+        self._log_added(kind, pages)
+
     def _log_added(self, kind: str, pages: list[PageContent]) -> None:
-        """One INFO line per page added to the corpus: how it came in, the
-        label prompts give it, and its URL."""
+        """One INFO line per page added to the corpus: how it came in, its
+        record and its URL."""
         for page in pages:
             logger.info(
-                "Added %s page [%s] %s",
+                "Added %s page [%s%s%s] %s",
                 kind,
-                source_label(page, self._official),
+                page.authority or source_label(page),
+                f" {page.version}" if page.version else "",
+                f" {page.published}" if page.published else "",
                 page.final_url or page.url,
             )
 

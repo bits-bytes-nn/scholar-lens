@@ -1,7 +1,7 @@
 """The evidence engine for guides: :meth:`TechGuideGenerator.gather`
 collects the docs, the user's reference material, the planned searches and
-the official reference pages; each page becomes a source document with its
-authority label; the engine reads, plans and writes; the result is a
+the official reference pages, each with its source record; each page becomes
+a source document carrying that record; the engine reads, plans and writes; the result is a
 :class:`TechGuide` the guide pipeline classifies and publishes."""
 
 from __future__ import annotations
@@ -12,11 +12,11 @@ import html
 import json
 import re
 from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import Any, Literal, get_args
 from urllib.parse import urlsplit
 
 from ..adapters.packages.pypi import PackageSource, package_extras, package_source
-from ..domain.evidence import Authority, SourceDocument
+from ..domain.evidence import Authority, SourceAuthority, SourceDocument
 from ..domain.guide.evidence_guide import (
     SOURCE_ID_PREFIX,
     install_requirements,
@@ -30,27 +30,16 @@ from .constants import LanguageModelId, S3Paths
 from .guide_authority import official_reference, unverified_identifiers
 from .logger import logger
 from .metrics import TokenUsageTracker
-from .prompts.tech_guide import (
-    OFFICIAL_LABEL,
-    OLDER_DOCS_LABEL,
-    REFERENCE_LABEL,
-)
 from .runtime import RunContext
+from .source_set import engine_authority
 from .tech_guide import TechGuide, TechGuideGenerator
 from .web_research import (
-    OfficialDocs,
     PageContent,
     ResearchCorpus,
     page_key,
-    source_label,
 )
 
-_AUTHORITY: dict[str, Authority] = {
-    OFFICIAL_LABEL: "official",
-    OLDER_DOCS_LABEL: "older_docs",
-    REFERENCE_LABEL: "reference",
-}
-_PREFIX: dict[str, str] = {
+_PREFIX: dict[Authority, str] = {
     "official": f"{SOURCE_ID_PREFIX}D",
     "reference": f"{SOURCE_ID_PREFIX}R",
     "older_docs": f"{SOURCE_ID_PREFIX}O",
@@ -86,40 +75,6 @@ def _decorative(url: str) -> bool:
     return any(
         w in _DECORATIVE_WORDS or w.rstrip("s") in _DECORATIVE_WORDS for w in words
     )
-
-
-_GITHUB_REPO = re.compile(
-    r"^https?://(?:github\.com|raw\.githubusercontent\.com)/([\w.-]+)/([\w.-]+)", re.I
-)
-
-
-def _repository(url: str) -> str:
-    m = _GITHUB_REPO.match(url)
-    return f"{m.group(1)}/{m.group(2)}".lower().removesuffix(".git") if m else ""
-
-
-def official_repositories(
-    pages: Sequence[PageContent], official: OfficialDocs
-) -> set[str]:
-    """The GitHub repositories the official docs pages link to most (their
-    "edit on GitHub" and source links): the project's own repositories,
-    whose pages are as official as the docs."""
-    counts: dict[str, int] = {}
-    for page in pages:
-        if _AUTHORITY.get(source_label(page, official)) != "official":
-            continue
-        for repo in {r for link in page.links if (r := _repository(link))}:
-            counts[repo] = counts.get(repo, 0) + 1
-    if not counts:
-        return set()
-    top = max(counts.values())
-    # Linked from at least half as many official pages as the most linked
-    # one, and from more than one when several official pages were read.
-    official_pages = sum(
-        _AUTHORITY.get(source_label(p, official)) == "official" for p in pages
-    )
-    floor = max(2 if official_pages > 2 else 1, (top + 1) // 2)
-    return {repo for repo, n in counts.items() if n >= floor}
 
 
 # Packages looked up per guide (the docs' install commands name a few).
@@ -179,25 +134,17 @@ def docs_packages(official_text: str) -> dict[str, tuple[str, frozenset[str]]]:
     return found
 
 
-def guide_documents(
-    pages: Sequence[PageContent], official: OfficialDocs
-) -> list[SourceDocument]:
-    """Each readable page as a source document, numbered per authority
+def guide_documents(pages: Sequence[PageContent]) -> list[SourceDocument]:
+    """Each readable page as a source document carrying its source record
+    (decided at gather time, never here), numbered per engine authority
     (src-D1 official, src-R1 reference material, src-W1 third-party, src-O1
     older docs)."""
     counts: dict[str, int] = {}
     documents = []
-    repos = official_repositories(pages, official)
     for page in pages:
         if len(page.text.strip()) < _MIN_PAGE_CHARS:
             continue
-        authority = _AUTHORITY.get(source_label(page, official), "third_party")
-        if (
-            authority == "third_party"
-            and _repository(page.final_url or page.url) in repos
-        ):
-            # The project's own repository (its design docs, source, README).
-            authority = "official"
+        authority = engine_authority(page.authority)
         counts[authority] = counts.get(authority, 0) + 1
         documents.append(
             SourceDocument.from_markdown(
@@ -212,9 +159,17 @@ def guide_documents(
                 ],
                 url=page.final_url or page.url,
                 authority=authority,
+                source_authority=_source_authority(page.authority),
+                version=page.version,
+                published=page.published,
+                language=page.language,
             )
         )
     return documents
+
+
+def _source_authority(value: str) -> SourceAuthority | Literal[""]:
+    return value if value in get_args(SourceAuthority) else ""  # type: ignore[return-value]
 
 
 def _source_urls(
@@ -258,7 +213,7 @@ async def write_guide_with_evidence(
         search_queries=search_queries,
     )
     corpus: ResearchCorpus = material.corpus
-    documents = guide_documents(corpus.pages, generator.official)
+    documents = guide_documents(corpus.pages)
     logger.info(
         "Guide sources: %s",
         ", ".join(f"{d.paper_id}={d.url}" for d in documents),
@@ -280,7 +235,7 @@ async def write_guide_with_evidence(
         },
         budgeted(tracker, cfg.max_cost_usd),
     )
-    official_text = official_reference(generator.official, corpus)
+    official_text = official_reference(corpus)
     products = generator.products
 
     provided = await asyncio.to_thread(docs_packages, official_text)

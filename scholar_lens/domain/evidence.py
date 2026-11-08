@@ -24,6 +24,18 @@ DocumentKind = Literal["full_text", "pdf_text", "abstract"]
 # Who decides what a guide may state (``web_research.source_label``): official
 # pages own commands, flags and defaults; the rest explain. "" for papers.
 Authority = Literal["", "official", "reference", "third_party", "older_docs"]
+# A source's authority as its record decides it at gather time (docs/engine.md
+# 3.1): the engine's ``Authority`` split by where it comes from (the
+# project's repository, a forum, a development docs version).
+SourceAuthority = Literal[
+    "official",
+    "official_repo",
+    "reference",
+    "third_party",
+    "forum",
+    "older_docs",
+    "dev_docs",
+]
 EvidenceKind = Literal[
     "finding",  # a result, observation or conclusion the paper reports
     "number",  # a measured value, with its model, setting and metric
@@ -105,6 +117,13 @@ class SourceDocument(_Strict):
     figures: list[SourceFigure] = Field(default_factory=list)
     url: str = ""
     authority: Authority = ""
+    # The source record (guides): the finer authority ``authority`` comes
+    # from, the docs version, repository ref or package release, the
+    # publication date (``YYYY-MM-DD``) and the SDK language; "" when unknown.
+    source_authority: SourceAuthority | Literal[""] = ""
+    version: str = ""
+    published: str = ""
+    language: str = ""
 
     @classmethod
     def from_markdown(
@@ -117,6 +136,10 @@ class SourceDocument(_Strict):
         *,
         url: str = "",
         authority: Authority = "",
+        source_authority: SourceAuthority | Literal[""] = "",
+        version: str = "",
+        published: str = "",
+        language: str = "",
     ) -> SourceDocument:
         """Split Markdown at its headings (``S1``, ``S2``, … in order; text
         before the first heading is ``S0``). ``figures`` are (url, caption)
@@ -155,6 +178,10 @@ class SourceDocument(_Strict):
             figures=placed,
             url=url,
             authority=authority,
+            source_authority=source_authority,
+            version=version,
+            published=published,
+            language=language,
         )
 
     @property

@@ -6,6 +6,7 @@ from __future__ import annotations
 import pytest
 
 from scholar_lens.src.guide_authority import official_reference, unverified_identifiers
+from scholar_lens.src.source_set import SourceSet
 from scholar_lens.src.web_research import (
     OfficialDocs,
     PageContent,
@@ -44,8 +45,10 @@ class TestUnverifiedIdentifiers:
                 ("https://blog.example.com/x", "--preemption-mode swap"),
             ]
         )
-        official = OfficialDocs.from_urls(["https://docs.vllm.ai/en/latest/"])
-        text = official_reference(official, corpus)
+        SourceSet.from_urls(["https://docs.vllm.ai/en/latest/"]).record_all(
+            corpus.pages
+        )
+        text = official_reference(corpus)
         assert "--preemption-mode" not in text
         assert "--preemption-mode" in unverified_identifiers(GUIDE, text, ["vllm"])
 
@@ -60,11 +63,8 @@ def test_sources_are_labelled_by_authority() -> None:
             ("https://x.io/b", "paged attention"),
         ]
     )
-    text = corpus.relevant_text(
-        "paged attention",
-        max_chars=10_000,
-        official=OfficialDocs.from_urls(["https://docs.vllm.ai/"]),
-    )
+    SourceSet.from_urls(["https://docs.vllm.ai/"]).record_all(corpus.pages)
+    text = corpus.relevant_text("paged attention", max_chars=10_000, labelled=True)
     assert "## Source (official documentation): https://docs.vllm.ai/a" in text
     assert "## Source (third-party): https://x.io/b" in text
     assert "## Source: " in corpus.relevant_text("paged attention", max_chars=10_000)
@@ -107,11 +107,12 @@ def test_older_docs_version_is_labelled_and_not_official() -> None:
             ("https://docs.vllm.ai/en/v0.6.0/b", "prefix caching"),
         ]
     )
-    official = OfficialDocs.from_urls(["https://docs.vllm.ai/en/latest/quickstart/"])
-    text = corpus.relevant_text("prefix caching", max_chars=10_000, official=official)
+    sources = SourceSet.from_urls(["https://docs.vllm.ai/en/latest/quickstart/"])
+    sources.record_all(corpus.pages)
+    text = corpus.relevant_text("prefix caching", max_chars=10_000, labelled=True)
     assert "(official documentation): https://docs.vllm.ai/en/latest/a" in text
     assert "(older docs version): https://docs.vllm.ai/en/v0.6.0/b" in text
-    reference = official_reference(official, corpus)
+    reference = official_reference(corpus)
     assert reference.count("prefix caching") == 1
 
 
