@@ -11,6 +11,12 @@ model twice more, once without thinking, then the role's fallback model). Strand
 answer that fails its schema. An answer cut at the
 output limit is returned as such (``stop_reason="max_tokens"``), not raised:
 an agent's tool calls up to then stand.
+
+Cache policy: the system prompt and tool definitions are cached (every call
+of a role repeats them). A message is cached only where a call names a shared
+prefix: a ``context`` (before a cache point) or an agent's conversation, which
+is re-sent every cycle. A one-shot call without ``context`` writes no message
+cache entry, which nothing would read back at the cache-write price.
 """
 
 from __future__ import annotations
@@ -23,6 +29,7 @@ from typing import Any
 import boto3
 from botocore.config import Config
 from strands import Agent, ModelRetryStrategy, tool
+from strands.middleware import InvokeModelContext, InvokeModelStage
 from strands.models import BedrockModel
 from strands.models.model import CacheConfig
 from strands.telemetry.metrics import EventLoopMetrics
@@ -66,13 +73,27 @@ class RoleModel:
     fallback: RoleModel | None = None
 
 
+def _has_context(context: str) -> bool:
+    return bool(context.strip())
+
+
 def _content(context: str, prompt: str) -> str | list[dict[str, object]]:
     """The user turn: ``context`` (what repeated calls share: evidence, source
     passages) before a cache point, then ``prompt``. Calls that differ only
     after the cache point read the shared part at the cache-read rate."""
-    if not context.strip():
+    if not _has_context(context):
         return prompt
     return [{"text": context}, {"cachePoint": {"type": "default"}}, {"text": prompt}]
+
+
+def _no_message_cache_point(context: InvokeModelContext) -> InvokeModelContext:
+    """Marks every block of the last user message as rebuilt per call, so
+    Strands places no cache point in the messages (no durable prefix)."""
+    last_user = next(
+        (m for m in reversed(context.messages) if m.get("role") == "user"), None
+    )
+    blocks = len(last_user.get("content", [])) if last_user else 0
+    return context.replace(dynamic_trailing_blocks=blocks)
 
 
 class StrandsLanguageModel:
@@ -103,16 +124,26 @@ class StrandsLanguageModel:
             boto_client_config=_CLIENT_CONFIG,
             max_tokens=spec.max_tokens,
             additional_request_fields=fields,
-            # An agent re-sends its conversation every cycle: cached, it is
-            # billed at the cache-read price. "auto" does not recognize an
+            # System prompt and tools are cached; a message only where the
+            # call allows it (see _agent). "auto" does not recognize an
             # application profile ARN as Claude, so the format is named.
             cache_config=CacheConfig(
                 strategy="anthropic", system_prompt_ttl=True, tools_ttl=True
             ),
         )
 
-    def _agent(self, model: BedrockModel, system: str, **kwargs: Any) -> Agent:
-        return Agent(
+    def _agent(
+        self,
+        model: BedrockModel,
+        system: str,
+        *,
+        cache_messages: bool,
+        **kwargs: Any,
+    ) -> Agent:
+        """An agent on ``model``. ``cache_messages``: the call has a shared
+        prefix (a caller-placed cache point, or an agent conversation re-sent
+        every cycle); without one no message is written to the cache."""
+        agent = Agent(
             model=model,
             system_prompt=system,
             callback_handler=None,
@@ -121,6 +152,9 @@ class StrandsLanguageModel:
             ),
             **kwargs,
         )
+        if not cache_messages:
+            agent.add_middleware(InvokeModelStage.Input, _no_message_cache_point)
+        return agent
 
     def _usage(
         self, role: ModelRole, metrics: EventLoopMetrics, label: str | None = None
@@ -180,7 +214,9 @@ class StrandsLanguageModel:
         stop = ""
         for n, (model, thinking) in enumerate(self._tries(role)):
             agent = self._agent(
-                self._model(role, thinking=thinking, spec=model), system
+                self._model(role, thinking=thinking, spec=model),
+                system,
+                cache_messages=_has_context(context),
             )
             result, _, stop = await self._invoke(
                 agent,
@@ -217,7 +253,9 @@ class StrandsLanguageModel:
         text, stop = "", ""
         for n, (model, thinking) in enumerate(tries):
             agent = self._agent(
-                self._model(role, thinking=thinking, spec=model), system
+                self._model(role, thinking=thinking, spec=model),
+                system,
+                cache_messages=_has_context(context),
             )
             _, text, stop = await self._invoke(
                 agent, role, model.model_label, _content(context, prompt)
@@ -249,7 +287,12 @@ class StrandsLanguageModel:
         tools: list[Callable[..., str]],
         limits: AgentLimits,
     ) -> AgentOutcome:
-        agent = self._agent(self._model(role), system, tools=[tool(fn) for fn in tools])
+        agent = self._agent(
+            self._model(role),
+            system,
+            cache_messages=True,
+            tools=[tool(fn) for fn in tools],
+        )
         request_limits: dict[str, int] = {"turns": limits.turns}
         if limits.total_tokens:
             request_limits["total_tokens"] = limits.total_tokens

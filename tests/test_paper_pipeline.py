@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import boto3
+import pytest
 
 from scholar_lens.src.constants import LanguageModelId
 from scholar_lens.src.paper_pipeline import _figure_captions, _unanalysed_figure_notes
@@ -144,9 +145,64 @@ async def test_code_analysis_failure_degrades_to_no_codebase(  # type: ignore[no
     monkeypatch.setattr(paper_pipeline, "EmbeddingModelId", lambda value: value)
     monkeypatch.setattr(paper_pipeline, "CodeRetriever", BrokenRetriever)
     result = await paper_pipeline._process_code(
-        _context(), tmp_path, ["https://github.com/x/y"], []  # type: ignore[arg-type]
+        _context(), tmp_path, ["https://github.com/x/y"], [], index=True  # type: ignore[arg-type]
     )
     assert result == (None, None)
+
+
+@pytest.mark.parametrize("index", [False, True])
+async def test_the_code_index_is_built_only_when_asked(  # type: ignore[no-untyped-def]
+    monkeypatch, tmp_path, index: bool
+) -> None:
+    from scholar_lens.src import paper_pipeline
+
+    calls: list[str] = []
+
+    class Retriever:
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
+            pass
+
+        async def download_repositories(self, urls: list[str]) -> None:
+            calls.append("download")
+
+        async def build_index(self) -> None:
+            calls.append("index")
+
+        async def generate_codebase_summary(self) -> str:
+            calls.append("summary")
+            return "a LoRA trainer"
+
+    monkeypatch.setattr(paper_pipeline, "LanguageModelId", lambda value: value)
+    monkeypatch.setattr(paper_pipeline, "EmbeddingModelId", lambda value: value)
+    monkeypatch.setattr(paper_pipeline, "CodeRetriever", Retriever)
+    summary, retriever = await paper_pipeline._process_code(
+        _context(), tmp_path, ["https://github.com/x/y"], [], index=index  # type: ignore[arg-type]
+    )
+    assert summary == "a LoRA trainer"
+    assert (retriever is not None) is index
+    assert calls == ["download", *(["index"] if index else []), "summary"]
+
+
+@pytest.mark.parametrize(
+    "kind, engine, sections_review",
+    [
+        ("review", "sections", True),
+        ("review", "evidence", False),
+        ("summarize", "sections", False),
+        ("summarize", "evidence", False),
+    ],
+)
+def test_only_the_sections_review_needs_citations_and_the_code_index(
+    kind: str, engine: str, sections_review: bool
+) -> None:
+    from scholar_lens.src.paper_pipeline import PaperInputs, paper_inputs
+
+    context = SimpleNamespace(
+        config=SimpleNamespace(explanation=SimpleNamespace(engine=engine))
+    )
+    assert paper_inputs(context, kind) == PaperInputs(  # type: ignore[arg-type]
+        citations=sections_review, code_index=sections_review
+    )
 
 
 def test_number_notes_name_table_rows_the_paper_never_states() -> None:

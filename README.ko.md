@@ -112,7 +112,7 @@ poetry run python -m scholar_lens costs --since 2026-11-01 --by stage --billed  
 
 `survey plan`은 글을 쓰지 않습니다. `JobResult`의 `plan_path`(로컬 `papers/survey-<slug>/plan.json`. `--remote` 실행은 컨테이너가 사라지므로 비어 있음)와 `s3_uri`(S3 사본. 원격 실행 뒤에는 이 값을 `survey write --plan`에 넘김)가 계획 파일입니다. 계획을 고친 뒤(논문 빼기·더하기·옮기기, 역할 바꾸기, 계보 이름 바꾸기) `survey write --plan`에 넘깁니다. 계획 단계를 다시 실행하면 내용이 다른 기존 계획은 `plan.<UTC 시각>.json`으로 남습니다. 손으로 더하는 논문은 `id`(arXiv ID나 URL, 또는 DOI), `lineage`, `role`만 있으면 되고, 제목·저자·연도·URL은 쓰기 단계가 채웁니다. 손으로 더하는 참고 자료는 `url`만 있으면 되고 `kind`는 URL로 정합니다(arXiv·doi.org 링크는 `paper`, 나머지는 `article`). 쓰기 단계는 `article`만 읽습니다. 계획에는 `core` 논문이 하나 이상 있어야 합니다. 논문마다 기록한 근거는 논문, 원문 해시, 읽기 버전, 모델, 언어, 역할, 원문 종류별로 캐시하므로(로컬 `papers/survey-evidence/`, S3 `<s3_prefix>/surveys/evidence/`) 다시 실행하거나 같은 논문을 다루는 다른 서베이가 재사용합니다. 계획 필드와 쓰기 단계는 [설계 문서](./docs/design.md#43-논문-서베이)에 있습니다.
 
-모든 명령은 stdout에 JSON 객체 하나(실행은 `JobResult`, `--remote`는 `job_id`, `status`는 Batch 상태와 저장된 결과)를 출력하고, 로그는 stderr로 보냅니다. 종료 코드는 `0` 성공 또는 제출, `1` 실패, `2` 입력 거부, `3` 진행 중, `4` 명령 자체의 실패입니다. Batch `worker`는 자체 알림을 보낸 뒤 `10`(실패)이나 `11`(거부)로, 그 알림을 보내지 못하면 `4`로, Batch가 작업을 멈추면 `143`으로 끝납니다([상세](./docs/design.md#21-명령)). URL은 따옴표로 감쌉니다. zsh에서는 따옴표 없는 URL의 `?`가 glob으로 해석되어 명령이 실패합니다.
+모든 명령은 stdout에 JSON 객체 하나(실행은 `JobResult`, `--remote`는 `job_id`, `status`는 Batch 상태와 저장된 결과)를 출력하고, 로그는 stderr로 보냅니다. 종료 코드는 `0` 성공 또는 제출, `1` 실패, `2` 입력 거부, `3` 진행 중, `4` 명령 자체의 실패, `5` 산출물은 저장했지만 요청한 블로그 PR을 만들지 못함(결과는 `failed`이고 `pr_error`, `markdown_path`, `s3_uri`를 담음)입니다. Batch `worker`는 자체 알림을 보낸 뒤 `10`(실패)이나 `11`(거부)로, 그 알림을 보내지 못하면 `4`로, Batch가 작업을 멈추면 `143`으로 끝납니다([상세](./docs/design.md#21-명령)). URL은 따옴표로 감쌉니다. zsh에서는 따옴표 없는 URL의 `?`가 glob으로 해석되어 명령이 실패합니다.
 
 ## 에이전트에서 쓰기(OpenClaw, Claude Code, Codex)
 

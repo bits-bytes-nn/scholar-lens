@@ -93,6 +93,30 @@ class TestGithubConfig:
             Github(cover_images={"x": "y.jpg"})  # type: ignore[call-arg]
 
 
+class TestRetiredKeys:
+    def test_a_retired_key_is_ignored_with_a_warning(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        cfg_file = tmp_path / "config.yaml"
+        cfg_file.write_text(
+            "resources:\n  project_name: p\n  github:\n    public_assets: true\n",
+            encoding="utf-8",
+        )
+        with caplog.at_level("WARNING", logger="scholar_lens.configs.config"):
+            config = Config.from_yaml(str(cfg_file))
+        assert "public_assets" not in config.resources.github.model_dump()
+        assert "public_assets" in caplog.text and "ignored" in caplog.text
+
+    def test_an_unknown_key_still_fails(self) -> None:
+        with pytest.raises(ValidationError, match="public_asset"):
+            Github(public_asset=True)  # type: ignore[call-arg]
+
+    def test_retired_keys_are_per_section(self) -> None:
+        # Only the section that had the key accepts it.
+        with pytest.raises(ValidationError, match="public_assets"):
+            Config.model_validate({"paper": {"public_assets": True}})
+
+
 class TestConfigLoading:
     def test_from_yaml_parses_models(self, tmp_path: Path) -> None:
         cfg_text = textwrap.dedent("""

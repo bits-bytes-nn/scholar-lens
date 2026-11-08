@@ -1,6 +1,7 @@
+import logging
 import os
 from pathlib import Path
-from typing import Literal
+from typing import Any, ClassVar, Literal
 
 import yaml
 from dotenv import load_dotenv
@@ -15,6 +16,8 @@ from pydantic import (
 from scholar_lens.src.constants import EmbeddingModelId, LanguageModelId
 from scholar_lens.src.logger import is_running_in_aws
 
+logger = logging.getLogger(__name__)
+
 CONFIG_PATH = Path(__file__).parent / "config.yaml"
 CONFIG_PATH_ENV = "SCHOLAR_LENS_CONFIG"
 
@@ -28,6 +31,26 @@ class _Section(BaseModel):
     # Reject unknown keys so a YAML typo (e.g. ``max_total_token``) fails loudly
     # instead of silently falling back to the default.
     model_config = ConfigDict(extra="forbid")
+    # Keys a section no longer has but an older config.yaml may still set:
+    # each is dropped with a warning naming why, instead of failing the load.
+    retired_keys: ClassVar[dict[str, str]] = {}
+
+    @model_validator(mode="before")
+    @classmethod
+    def _drop_retired_keys(cls, data: Any) -> Any:
+        if not (isinstance(data, dict) and cls.retired_keys):
+            return data
+        kept = dict(data)
+        for key, reason in cls.retired_keys.items():
+            if key in kept:
+                del kept[key]
+                logger.warning(
+                    "Config key '%s' of %s is ignored and can be deleted: %s",
+                    key,
+                    cls.__name__,
+                    reason,
+                )
+        return kept
 
 
 class Github(_Section):
@@ -46,11 +69,12 @@ class Github(_Section):
     summary_category: str = Field(default="Paper Summaries")
     tech_guide_category: str = Field(default="Tech Guides")
     survey_category: str = Field(default="Paper Surveys")
-    # Whether figures uploaded to S3 are world-readable. Default False (private):
-    # blog images are served from the GitHub Pages repo, so public S3 ACLs are
-    # an unnecessary exposure (and are rejected by buckets with Block Public
-    # Access). Set True only if you intentionally serve assets straight from S3.
-    public_assets: bool = Field(default=False)
+    retired_keys: ClassVar[dict[str, str]] = {
+        "public_assets": (
+            "uploads to S3 are always private; posts load their images from "
+            "the blog repository."
+        ),
+    }
 
     @model_validator(mode="after")
     def _check_repo(self) -> "Github":

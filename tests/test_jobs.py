@@ -167,6 +167,21 @@ class TestSubmitAndDescribe:
             JobRequest.model_validate_json(kwargs["parameters"]["request"]) == request
         )
 
+    def test_a_pr_failure_survives_the_manifest(self, aws: boto3.Session) -> None:
+        handler = S3Handler(aws, BUCKET)
+        result = JobResult(
+            kind="review",
+            input="x",
+            status="failed",
+            job_id="job-2",
+            markdown_path="papers/post.md",
+            s3_uri="s3://b/post.md",
+            pr_error="403 from GitHub",
+        )
+        write_result_manifest(handler, "scholar-lens", result)
+        stored = read_result_manifest(handler, "scholar-lens", "job-2")
+        assert stored == result
+
     def test_describe_attaches_manifest_when_finished(self, aws: boto3.Session) -> None:
         handler = S3Handler(aws, BUCKET)
         result = JobResult(

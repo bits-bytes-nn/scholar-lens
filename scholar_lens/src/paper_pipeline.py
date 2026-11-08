@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -56,6 +57,27 @@ from .utils import is_placeholder
 MAX_TAG_HINTS = 200
 
 
+@dataclass(frozen=True)
+class PaperInputs:
+    """The paid inputs the selected generator reads beyond the paper, its
+    attributes and the codebase summary (which every paper post uses)."""
+
+    # Citations and their prerequisite summaries.
+    citations: bool
+    # The searchable code index (one model call per chunk, plus embeddings).
+    code_index: bool
+
+
+def paper_inputs(context: RunContext, kind: str) -> PaperInputs:
+    """What the generator chosen for ``kind`` consumes: only the sections
+    review engine reads citations and searches the code index; summaries and
+    evidence-engine reviews use the codebase summary alone."""
+    sections_review = (
+        kind == "review" and context.config.explanation.engine == "sections"
+    )
+    return PaperInputs(citations=sections_review, code_index=sections_review)
+
+
 async def run_paper_pipeline(
     context: RunContext, request: JobRequest, tracker: TokenUsageTracker
 ) -> PipelineOutcome:
@@ -91,9 +113,7 @@ async def run_paper_pipeline(
             request.repo_urls,
             parse_pdf,
             tracker,
-            # Prerequisite summaries feed the sections engine's review only.
-            needs_citations=request.kind == "review"
-            and context.config.explanation.engine == "sections",
+            inputs=paper_inputs(context, request.kind),
         )
         branch_id = paper_branch_id(paper, request.kind)
         github = context.config.resources.github
@@ -284,12 +304,11 @@ async def _prepare_paper_data(
     parse_pdf: bool,
     tracker: TokenUsageTracker,
     *,
-    needs_citations: bool,
+    inputs: PaperInputs,
 ) -> tuple[Paper, CodeRetriever | None, CitationSummarizer | None]:
-    """Parse the paper and extract everything the generators need.
-
-    Citations feed only the review workflow, so the summary path skips that
-    (slow, costly) extraction.
+    """Parse the paper and extract what the selected generator needs
+    (``inputs``): citations and the code index are slow and costly, so they
+    are built only for the generator that reads them.
     """
     callbacks = [tracker]
     figures, content, is_pdf_parsed = await _parse_paper_content(
@@ -312,7 +331,7 @@ async def _prepare_paper_data(
         controlled_tags=context.require_conventions().tags.controlled,
         existing_keywords=context.blog_tag_hints(MAX_TAG_HINTS),
     )
-    if needs_citations:
+    if inputs.citations:
         # The review planner reads the whole paper itself, so only citations
         # (for prerequisite summaries) are extracted beyond the attributes.
         citations, attributes = await asyncio.gather(
@@ -323,7 +342,7 @@ async def _prepare_paper_data(
         attributes = await content_extractor.extract_attributes(content.text)
         citations = []
     codebase_summary, code_retriever = await _process_code(
-        context, paper_dir, repo_urls, callbacks
+        context, paper_dir, repo_urls, callbacks, index=inputs.code_index
     )
     citation_summarizer = (
         CitationSummarizer(
@@ -333,7 +352,7 @@ async def _prepare_paper_data(
             callbacks=callbacks,
             prefer_full_text=context.config.citations.prefer_full_text,
         )
-        if needs_citations
+        if inputs.citations
         else None
     )
     meta_fields = backfill_metadata(
@@ -403,9 +422,13 @@ async def _process_code(
     paper_dir: Path,
     repo_urls: list[str],
     callbacks: list[Any],
+    *,
+    index: bool,
 ) -> tuple[str | None, CodeRetriever | None]:
-    """Index the paper's repositories. Code grounding is supplementary, so any
-    failure degrades to "no codebase" instead of failing the whole run."""
+    """The codebase summary of the paper's repositories and, with ``index``,
+    a retriever over its searchable code index (otherwise None: no chunk is
+    analysed or embedded). Code grounding is supplementary, so any failure
+    degrades to "no codebase" instead of failing the whole run."""
     if not repo_urls:
         return None, None
     code_cfg = context.config.code
@@ -423,9 +446,10 @@ async def _process_code(
             callbacks=callbacks,
         )
         await code_retriever.download_repositories(repo_urls)
-        await code_retriever.build_index()
+        if index:
+            await code_retriever.build_index()
         summary = await code_retriever.generate_codebase_summary()
-        return summary, code_retriever
+        return summary, code_retriever if index else None
     except NoPythonFilesError:
         logger.warning("No Python files in the repositories; skipping code analysis.")
     except Exception as e:  # noqa: BLE001 - supplementary input, see docstring

@@ -184,6 +184,31 @@ class TestRunJob:
         assert result.warnings == ["w"]
         assert finished == [result]
 
+    def test_a_failed_pr_fails_the_run_and_keeps_the_artifact(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        from scholar_lens.src.jobs import JobRequest
+
+        async def pipeline(context, request, tracker):  # type: ignore[no-untyped-def]
+            return runtime.PipelineOutcome(
+                title="LoRA",
+                markdown_path=tmp_path / "post.md",
+                s3_uri="s3://b/post.md",
+                pr_error="403 from GitHub",
+                warnings=["w"],
+            )
+
+        finished = self._patch(monkeypatch, pipeline)
+        result = runtime.run_job(JobRequest(kind="review", source="2106.09685"))
+        assert result.status == "failed"
+        assert result.pr_error == "403 from GitHub"
+        assert result.error and "403 from GitHub" in result.error
+        assert result.markdown_path == str(tmp_path / "post.md")
+        assert result.s3_uri == "s3://b/post.md" and result.pr_url is None
+        assert result.warnings == ["w"]
+        # A finished failure, not an interrupt: the failure is announced.
+        assert finished == [result] and self.notified == [True]
+
     def test_rejected_input(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from scholar_lens.src.jobs import JobRequest
         from scholar_lens.src.paper_source import NotAPdfError
@@ -500,7 +525,9 @@ class TestRecordUnstartedRun:
 
 
 class TestPublishArtifact:
-    def test_pr_failure_becomes_a_warning(self, tmp_path: Path) -> None:
+    def test_pr_failure_is_kept_next_to_the_saved_artifact(
+        self, tmp_path: Path
+    ) -> None:
         import asyncio
 
         from scholar_lens.src.publisher import PublishError
@@ -523,7 +550,9 @@ class TestPublishArtifact:
             runtime.publish_artifact(context, request, create_pr=True)
         )
         assert outcome.s3_uri == "s3://b/post.md" and outcome.pr_url is None
-        assert outcome.warnings == ["Blog PR not created: 403 from GitHub"]
+        assert outcome.markdown_path == tmp_path / "post.md"
+        assert outcome.pr_error == "403 from GitHub"
+        assert outcome.warnings == []
 
 
 def test_an_unreadable_branch_history_becomes_a_review_note() -> None:

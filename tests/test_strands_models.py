@@ -5,8 +5,10 @@ Bedrock: Agent is replaced)."""
 from __future__ import annotations
 
 import asyncio
+import json
 from types import SimpleNamespace
 
+import boto3
 import pytest
 from strands.types.exceptions import MaxTokensReachedException
 
@@ -39,6 +41,9 @@ def _model(
             assert kwargs["retry_strategy"] is not None
             seen.append(model)
             self.messages: list = []
+
+        def add_middleware(self, *_) -> None:
+            pass
 
         async def invoke_async(self, prompt, **_):
             result = results.pop(0)
@@ -99,6 +104,9 @@ def test_a_filtered_call_ends_on_the_fallback_model(monkeypatch) -> None:
     class FakeAgent:
         def __init__(self, *, model, **_) -> None:
             seen.append(model["model_id"])
+
+        def add_middleware(self, *_) -> None:
+            pass
 
         async def invoke_async(self, prompt, **_):
             result = results.pop(0)
@@ -209,6 +217,9 @@ def test_a_content_filtered_structured_call_moves_to_the_fallback_model(
             seen.append(model["model_id"])
             self.messages: list = []
 
+        def add_middleware(self, *_) -> None:
+            pass
+
         async def invoke_async(self, prompt, **_):
             result = answers.pop(0)
             self.event_loop_metrics = result.metrics
@@ -226,3 +237,141 @@ def test_a_content_filtered_structured_call_moves_to_the_fallback_model(
         model.structured(role="write", system="s", prompt="p", schema=Answer)
     )
     assert out.section == "ok" and seen[-1] == "sonnet-arn"
+
+
+class _StubBedrock:
+    """Answers ConverseStream with no network and records each request: text,
+    or the structured answer the request asks for (a native output schema, or
+    the tool it offers)."""
+
+    def __init__(self) -> None:
+        self.requests: list[dict] = []
+
+    def converse_stream(self, **request):
+        self.requests.append(request)
+        tools = request.get("toolConfig", {}).get("tools", [])
+        names = [t["toolSpec"]["name"] for t in tools if "toolSpec" in t]
+        answer = json.dumps({"section": "ok"})
+        if "outputConfig" in request or not names:
+            text = answer if "outputConfig" in request else "답입니다."
+            blocks: list[dict] = [
+                {
+                    "contentBlockDelta": {
+                        "contentBlockIndex": 0,
+                        "delta": {"text": text},
+                    }
+                },
+                {"contentBlockStop": {"contentBlockIndex": 0}},
+            ]
+            stop = "end_turn"
+        else:
+            start = {"toolUse": {"toolUseId": "t1", "name": names[0]}}
+            blocks = [
+                {"contentBlockStart": {"contentBlockIndex": 0, "start": start}},
+                {
+                    "contentBlockDelta": {
+                        "contentBlockIndex": 0,
+                        "delta": {"toolUse": {"input": answer}},
+                    }
+                },
+                {"contentBlockStop": {"contentBlockIndex": 0}},
+            ]
+            stop = "tool_use"
+        usage = {"inputTokens": 3, "outputTokens": 2, "totalTokens": 5}
+        return {
+            "stream": [
+                {"messageStart": {"role": "assistant"}},
+                *blocks,
+                {"messageStop": {"stopReason": stop}},
+                {"metadata": {"usage": usage, "metrics": {"latencyMs": 1}}},
+            ]
+        }
+
+
+def _stubbed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> tuple[StrandsLanguageModel, _StubBedrock]:
+    """The adapter on real Strands agents and BedrockModel, whose Bedrock
+    client is replaced by a stub (static fake credentials: no AWS call)."""
+    stub = _StubBedrock()
+    real = strands_models.BedrockModel
+
+    def model(**kwargs):
+        built = real(**kwargs)
+        built.client.converse_stream = stub.converse_stream
+        return built
+
+    monkeypatch.setattr(strands_models, "BedrockModel", model)
+    session = boto3.Session(
+        aws_access_key_id="stub",
+        aws_secret_access_key="stub",
+        region_name="us-east-1",
+    )
+    profile = "arn:aws:bedrock:us-east-1:000000000000:application-inference-profile/x"
+    adapter = StrandsLanguageModel(
+        session, {"write": RoleModel(profile, "opus")}, lambda _e: None
+    )
+    return adapter, stub
+
+
+def _message_cache_points(request: dict) -> int:
+    return sum(
+        "cachePoint" in block
+        for message in request["messages"]
+        for block in message["content"]
+    )
+
+
+def test_a_one_shot_text_call_writes_no_message_to_the_cache(monkeypatch) -> None:
+    model, stub = _stubbed(monkeypatch)
+    asyncio.run(model.text(role="write", system="s", prompt="p"))
+    (request,) = stub.requests
+    assert _message_cache_points(request) == 0
+    assert "cachePoint" in request["system"][-1]
+
+
+def test_a_text_call_with_context_caches_only_the_shared_prefix(monkeypatch) -> None:
+    model, stub = _stubbed(monkeypatch)
+    asyncio.run(model.text(role="write", system="s", prompt="p", context="evidence"))
+    (request,) = stub.requests
+    assert request["messages"][-1]["content"] == [
+        {"text": "evidence"},
+        {"cachePoint": {"type": "default"}},
+        {"text": "p"},
+    ]
+    assert "cachePoint" in request["system"][-1]
+
+
+@pytest.mark.parametrize("context, points", [("", 0), ("evidence", 1)])
+def test_a_structured_call_caches_a_message_only_with_context(
+    monkeypatch, context: str, points: int
+) -> None:
+    from pydantic import BaseModel
+
+    class Answer(BaseModel):
+        section: str
+
+    model, stub = _stubbed(monkeypatch)
+    out = asyncio.run(
+        model.structured(
+            role="write", system="s", prompt="p", schema=Answer, context=context
+        )
+    )
+    assert out.section == "ok"
+    assert stub.requests
+    assert [_message_cache_points(r) for r in stub.requests] == [points] * len(
+        stub.requests
+    )
+    assert all("cachePoint" in r["system"][-1] for r in stub.requests)
+
+
+def test_an_agent_conversation_keeps_its_message_cache_point(monkeypatch) -> None:
+    from scholar_lens.application.ports import AgentLimits
+
+    model, stub = _stubbed(monkeypatch)
+    asyncio.run(
+        model.run_agent(
+            role="write", system="s", prompt="p", tools=[], limits=AgentLimits(turns=3)
+        )
+    )
+    assert [_message_cache_points(r) for r in stub.requests] == [1]

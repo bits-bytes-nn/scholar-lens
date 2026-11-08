@@ -91,7 +91,7 @@ Batch worker ┘                                    │     (수집 → 생성 �
 
 `guide`의 문서 URL은 옵션 앞·사이·뒤 어디에 와도 됩니다(`guide DOC1 --reference R DOC2`). argparse는 옵션 뒤에 온 위치 인자를 남는 인자로 돌려주므로, `cli.py::parse_args`는 `parse_known_args`로 파싱한 뒤 명령이 `guide`이고 남은 인자가 모두 `-`로 시작하지 않으면 문서 URL(`urls`)에 덧붙입니다. 그 밖의 남은 인자는 사용법 오류(`unrecognized arguments`)입니다.
 
-stdout에는 JSON 객체 하나만 출력하고 로그는 stderr로 보냅니다. 인자 누락 같은 사용법 오류도 사용법은 stderr로, `{"status": "rejected"}`는 stdout으로 내고 2로 끝납니다. 종료 코드의 정본은 `cli.py` 모듈 docstring이고, `JobResult.status`의 `succeeded`·`failed`·`rejected`가 각각 0·1·2입니다(`_EXIT_BY_STATUS`). 로컬 실행이 설정·자격 증명 문제로 시작하지 못해도 `failed`(1)입니다.
+stdout에는 JSON 객체 하나만 출력하고 로그는 stderr로 보냅니다. 인자 누락 같은 사용법 오류도 사용법은 stderr로, `{"status": "rejected"}`는 stdout으로 내고 2로 끝납니다. 종료 코드의 정본은 `cli.py` 모듈 docstring이고, `JobResult.status`의 `succeeded`·`failed`·`rejected`가 각각 0·1·2입니다(`_EXIT_BY_STATUS`). 다만 PR을 요청했고 GitHub 연동이 켜져 있는데 PR 생성이 실패하면 산출물은 저장된 `failed` 결과에 `pr_error`가 붙고 5(`EXIT_PR_FAILED`, `cli.py::result_exit_code`)로 끝납니다. `status`도 그 결과 매니페스트에 같은 코드를 돌려줍니다. 로컬 실행이 설정·자격 증명 문제로 시작하지 못해도 `failed`(1)입니다.
 
 `--remote`는 `SubmittedJob`을 출력하고 0으로 끝납니다. `status`는 결과 매니페스트가 있으면 그 상태의 종료 코드를 돌려줍니다. 없으면 Batch가 `FAILED`일 때 1, 아직 끝나지 않았거나 `--wait`가 시간 초과되면 3, `SUCCEEDED`인데 매니페스트가 없으면 0입니다. `--wait` 중 Batch 조회나 결과 매니페스트 읽기의 요청 제한·5xx·네트워크 오류는 건너뛰고 계속 조회합니다.
 
@@ -115,7 +115,7 @@ stdout에는 JSON 객체 하나만 출력하고 로그는 stderr로 보냅니다
 
 로컬 CLI와 Batch worker는 같은 객체를 씁니다. `--remote`는 `JobRequest.model_dump_json(exclude_defaults=True)`를 Batch 파라미터 `request` 하나로 넘기고, 작업 정의의 명령은 `["python3", "-m", "scholar_lens", "worker", "--request", "Ref::request"]`입니다(`scripts/deploy_infra.py::JOB_COMMAND`). 두 경로가 같은 파서를 쓰므로 인자 계약이 어긋나지 않습니다. 기본값인 필드는 보내지 않으므로, 새 필드를 쓰지 않는 요청은 그 필드가 생기기 전에 배포한 worker 이미지(`extra="forbid"`)도 받습니다. 새 필드(예: `reference_urls`)를 쓰는 요청은 `cdk deploy --all`로 이미지를 갱신한 뒤에만 원격 실행됩니다(`tests/test_jobs.py`가 `reference_urls` 이전 worker의 필드 집합 사본으로 검증).
 
-`jobs.py::JobResult`에는 `status`, `title`, `markdown_path`, `plan_path`(로컬 survey_plan 실행의 계획 파일, 이때 `s3_uri`는 그 S3 사본. Batch 실행은 컨테이너와 함께 사라지는 경로라 비우고 `s3_uri`만 남김), `s3_uri`, `pr_url`, `warnings`, `violations`, `error`, `job_id`, `duration_seconds`, 토큰 수, `estimated_cost_usd`, `usage`(단계·모델별 사용량, 11장)가 들어갑니다. Batch 실행은 이 결과를 `s3://<bucket>/<s3_prefix>/results/<job_id>.json`에 저장하고(`jobs.py::write_result_manifest`), `status`가 이를 읽어 붙입니다.
+`jobs.py::JobResult`에는 `status`, `title`, `markdown_path`, `plan_path`(로컬 survey_plan 실행의 계획 파일, 이때 `s3_uri`는 그 S3 사본. Batch 실행은 컨테이너와 함께 사라지는 경로라 비우고 `s3_uri`만 남김), `s3_uri`, `pr_url`, `pr_error`(산출물은 저장했지만 요청한 PR을 만들지 못한 실패 실행에만), `warnings`, `violations`, `error`, `job_id`, `duration_seconds`, 토큰 수, `estimated_cost_usd`, `usage`(단계·모델별 사용량, 11장)가 들어갑니다. Batch 실행은 이 결과를 `s3://<bucket>/<s3_prefix>/results/<job_id>.json`에 저장하고(`jobs.py::write_result_manifest`), `status`가 이를 읽어 붙입니다.
 
 ### 2.3 실행 수명주기
 
@@ -123,7 +123,7 @@ stdout에는 JSON 객체 하나만 출력하고 로그는 stderr로 보냅니다
 
 1. `Config.load()`와 `build_context`로 boto 세션(기본 리전, Bedrock 리전)과 S3 핸들러를 만듭니다.
 2. AWS 안에서는 SSM SecureString에서 비밀값을 환경 변수로 읽습니다(`load_secrets_from_ssm`). 로컬은 `.env`를 씁니다.
-3. 파이프라인을 실행합니다. 입력 오류는 `rejected`, `PostValidationError`는 `failed`와 `violations`, `PostAssetError`(논문 그림을 저장하지 못함)는 `failed`, 그 밖의 예외는 `failed`로 기록합니다. 앞의 두 발행 오류는 `markdown_path`·`s3_uri`에 거부된 초안(`<slug>.rejected.md`)의 위치를 담습니다. `SystemExit`·`KeyboardInterrupt`는 정리 후 다시 던집니다. 로컬 실행의 Ctrl-C는 `cli.py::main`이 받아 `INTERRUPTED_ERROR`인 `failed` 결과를 JSON으로 출력하고 1로 끝냅니다.
+3. 파이프라인을 실행합니다. 입력 오류는 `rejected`, `PostValidationError`는 `failed`와 `violations`, `PostAssetError`(논문 그림을 저장하지 못함)는 `failed`, 그 밖의 예외는 `failed`로 기록합니다. 글을 저장한 뒤 블로그 PR 생성이 실패하면(`PublishError`, `runtime.py::publish_artifact`) 경로(`markdown_path`·`s3_uri`)는 그대로 두고 `failed`와 `pr_error`를 기록합니다. worker는 이때 실패 알림을 보내고 10으로 끝납니다. 앞의 두 발행 오류는 `markdown_path`·`s3_uri`에 거부된 초안(`<slug>.rejected.md`)의 위치를 담습니다. `SystemExit`·`KeyboardInterrupt`는 정리 후 다시 던집니다. 로컬 실행의 Ctrl-C는 `cli.py::main`이 받아 `INTERRUPTED_ERROR`인 `failed` 결과를 JSON으로 출력하고 1로 끝냅니다.
 4. `finally`에서 지표를 보내고, AWS 안에서 `TOPIC_ARN`이 있으면 성공·실패 모두 SNS로 알리며(`format_result_notification`), Batch 실행이면 결과 매니페스트를 저장합니다.
 
 worker는 SIGTERM을 `SystemExit`로 바꿔(`cli.py::_raise_on_sigterm`) Batch 시간 초과나 취소, 호스트 종료 때도 4단계가 실행되게 합니다. 파이프라인은 `asyncio.run` 대신 `runtime.py::run_coroutine`으로 돌려, 중단 시 작업자 스레드에서 진행 중인 Bedrock 호출을 기다리지 않고 바로 정리 단계로 갑니다(Batch는 SIGTERM 약 30초 뒤 SIGKILL). 이때는 매니페스트만 저장하고(`INTERRUPTED_ERROR`) SNS 실패 알림은 보내지 않습니다. 정상 종료는 인터프리터가 남은 작업자 스레드를 기다리므로, worker는 정리 뒤 중단된 실행의 `JobResult`를 stdout에 출력하고 `os._exit(143)`으로 바로 끝납니다(`cli.py::_work`). `run_job` 밖에서 받은 SIGTERM(실행 시작 전이나 결과 출력 뒤)은 더 출력하지 않습니다. 호스트가 사라졌으면 Batch가 재시도하고, 최종 실패면 EventBridge 규칙이 알립니다.
@@ -348,7 +348,7 @@ OpenAlex는 arXiv 시대 ML 논문의 인용 수를 크게 적게 세고(실측:
 
 ### 5.5 코드 저장소
 
-`code_retriever.py::CodeRetriever`는 저장소를 얕게(depth 1, 단일 브랜치, 심볼릭 링크 제외) 시간 제한을 두고 clone합니다. 가상환경·벤더 디렉터리와 저장소 밖을 가리키는 파일은 건너뛰고, Python 파일을 청크로 나눠 Titan 임베딩 FAISS 인덱스를 만듭니다. 인덱스는 저장소 집합별로 구분하고, 코드베이스 요약을 함께 만듭니다. 코드 분석 실패는 "코드 없음"으로 처리합니다.
+`code_retriever.py::CodeRetriever`는 저장소를 얕게(depth 1, 단일 브랜치, 심볼릭 링크 제외) 시간 제한을 두고 clone합니다. 가상환경·벤더 디렉터리와 저장소 밖을 가리키는 파일은 건너뛰고, 코드베이스 요약을 만들고, 그 색인을 검색하는 생성기(`sections` 리뷰 엔진)일 때만 Python 파일을 청크로 나눠(청크마다 분석 모델 호출 한 번) Titan 임베딩 FAISS 인덱스를 만듭니다(`paper_pipeline.py::paper_inputs`). 요약과 `evidence` 리뷰는 코드베이스 요약만 씁니다. 인덱스는 저장소 집합별로 구분합니다. 코드 분석 실패는 "코드 없음"으로 처리합니다.
 
 ### 5.6 웹 조사
 
@@ -442,7 +442,7 @@ OpenAlex는 arXiv 시대 ML 논문의 인용 수를 크게 적게 세고(실측:
 2. `ImageLocalizer`가 논문 자신의 그림만 블로그 규칙에 맞게 옮깁니다. 대상은 arXiv(`arxiv.org`와 하위 도메인) 이미지와 PDF에서 잘라낸 로컬 그림이며, 판정은 `publisher.py::_is_paper_figure` 한 곳에서 합니다. arXiv 링크는 버전이 바뀌면 깨지고 블로그가 크기를 넣지 못하므로 복사합니다. 그 밖의 원격 이미지(문서 사이트, 블로그, 참고 자료)는 저작권이 원작자에게 있으므로 내려받지 않고 원래 URL 그대로 두며, 검증의 `image` warning으로 PR 체크리스트에 올라갑니다(6.3). arXiv 이미지는 URL 검사와 IP 고정 전송을 거쳐 HTTPS로 내려받습니다(`http://`는 `https://`로 바꿈: Batch는 443 포트만 나갑니다. 읽기 30초, 전체 60초, 리디렉션 5회, 20MB 상한, 도구를 밝히는 `User-Agent`). 내려받거나 읽은 그림이 ar5iv의 "NO IMAGE AVAILABLE" PNG(MD5 `ded85833…`, 325×400)이면 arXiv HTML 그림 URL(`arxiv.org/html/<id>v<N>/<경로>`)의 논문 원본(`arxiv.org/e-print/<id>v<N>`, arXiv 속도 제한기 경유, 100MB·180초 상한)에서 같은 경로의 그림 파일을, 없으면 파일 이름(확장자 제외)이 같은 유일한 파일을 찾아 씁니다(`utils/images.py::source_figure`: PNG·JPEG는 그대로, PDF는 PyMuPDF로 렌더링, EPS는 렌더러가 없어 실패). PNG·JPEG·GIF(애니메이션 유지)는 매직 바이트로 확인해 그대로 저장하고, SVG는 PNG로 래스터화합니다(`utils/images.py::svg_to_png`). SVG는 그림을 만든 쪽이 정하는 외부 입력이라, 외부 참조를 지우고 캔버스 크기를 4096px 안으로 고정한 뒤 시간·메모리를 제한한 자식 프로세스에서 렌더링합니다(동시 2개). 세부 규칙은 `utils/images.py`의 함수 docstring과 상수 주석에 있습니다. WebP, AVIF(Pillow에 플러그인이 있을 때), BMP, TIFF는 PNG로 바꾸고(`utils/images.py::raster_to_png`: 5천만 픽셀 초과는 거부, 긴 변 4096px), 그 밖의 형식과 읽을 수 없는 데이터는 실패로 봅니다. 저장할 파일이 5MB를 넘으면 PNG·JPEG는 긴 변 2048px PNG로 줄이고, GIF(줄이면 애니메이션이 사라짐)나 줄여도 넘는 파일은 실패로 봅니다. 저장 이름은 첫 등장 순서대로 `<slug>-<n>.<ext>`이고, 본문 경로는 `/assets/images/<slug>-<n>.<ext>`로 바꿉니다. HTML로 쓴 그림(`<img src>`, 손으로 쓴 그림이나 lightbox)도 논문 그림이면 Markdown 이미지와 같은 방식으로 저장하고, 저장한 이미지를 가리키는 `<a href>`(lightbox 링크)도 같은 경로로 바꿔 `href`와 `src`가 같게 둡니다. 코드 안의 예시는 바꾸지 않습니다. 파일은 `<work_dir>/blog-images/<slug>/`에 모읍니다. 같은 논문의 요약과 리뷰가 작업 폴더를 같이 쓰므로, 재실행은 자기 슬러그 폴더만 비우고 S3 업로드와 PR에도 자기 이미지만 넣습니다. 그림 하나라도 저장하지 못하면 `PostAssetError`이고, 이 오류도 검증 실패처럼 글을 `<slug>.rejected.md`(S3 버킷이 있으면 `<prefix>/rejected/`에도)로 남긴 뒤 던집니다. `/assets/` 경로와 `data:` URL은 그대로 두며, `data:` 이미지는 검증에서 error입니다.
 3. 검증합니다(6.3). 파일 이름 규칙(날짜, 번역 이름)은 4의 최종 파일 이름으로 검사합니다.
 4. `<work_dir>/<YYYY-MM-DD>-<slug>.md`로 저장합니다. 파일명 날짜는 게시일(UTC)이고, front matter `date`는 논문 발행 시각입니다(가이드는 생성 시각, 서베이는 계획의 `created_at`). 블로그에 이미 있는 글을 바꾸는 실행(`PublishRequest.published_path`, 아래)은 그 글의 파일 이름을 그대로 쓰고, 슬러그(이미지 이름과 `blog-images/<slug>/`)도 그 글의 것입니다. 블로그가 UTC로 빌드하므로 두 날짜 모두 UTC로 씁니다. `slugify`는 ASCII 슬러그를 만들고(80자 안에서 단어 경계로 자름), ASCII 글자가 없는 제목은 `untitled-<8자리 해시>`로, 글자·숫자가 하나도 없는 제목은 `untitled`로 바꿉니다.
-5. S3 버킷이 있으면 글은 `<prefix>/posts/`, 이미지는 `<prefix>/assets/images/`에 올립니다. 이미지 하나라도 실패하면 오류입니다. `public_assets`가 켜져 있을 때만 public-read ACL을 씁니다.
+5. S3 버킷이 있으면 글은 `<prefix>/posts/`, 이미지는 `<prefix>/assets/images/`에 올립니다. 이미지 하나라도 실패하면 오류입니다. 업로드는 항상 비공개 객체이며(ACL 없음), 글은 이미지를 블로그 저장소에서 읽습니다.
 
 `runtime.py::publish_artifact`는 `create_pr`이고 GitHub 연동이 켜져 있으면 `create_pull_request`를 호출합니다. PR 실패(`PublishError`)는 실행을 실패시키지 않고 `warnings`에 남깁니다.
 
@@ -514,7 +514,7 @@ PR 본문(`build_pr_body`)에는 논문 ID, PDF URL, 파싱 방식, 글자 수, 
 - **IAM**: 작업 역할, 실행 역할, 인스턴스 역할을 분리합니다. 실행 역할에는 관리형 정책 없이 이미지 자산의 ECR 저장소 pull과 작업 로그 그룹 쓰기만 붙습니다(CDK가 생성). 작업 역할 권한은 다음과 같습니다.
   - Bedrock 호출과 CountTokens. 대상은 모델 레지스트리에 있는 공급자(`anthropic`, `amazon`, `cohere`)의 foundation model과 계정의 inference profile
   - inference profile 조회(`ListInferenceProfiles`, `GetInferenceProfile`). 리소스 수준 ARN이 없어 `Resource: *`이고 `aws:RequestedRegion`을 기본·Bedrock 리전으로 제한
-  - S3 접두어 Get/Put과 버킷 전체 `s3:ListBucket`(조건 없음: 선택 파일인 번역 지침이 없을 때 403이 아니라 404로 보여야 하므로). 그래서 버킷은 이 프로젝트 전용이어야 합니다. `s3:PutObjectAcl`은 `public_assets`일 때만
+  - S3 접두어 Get/Put과 버킷 전체 `s3:ListBucket`(조건 없음: 선택 파일인 번역 지침이 없을 때 403이 아니라 404로 보여야 하므로). 그래서 버킷은 이 프로젝트 전용이어야 합니다. `s3:PutObjectAcl`은 주지 않습니다(업로드는 항상 비공개)
   - SNS 게시와 토픽 KMS 키 사용
   - `cloudwatch:PutMetricData`(`ScholarLens` 네임스페이스 조건)
   - SSM 비밀값 8개 읽기(`RUN_SECRETS`)
@@ -531,7 +531,7 @@ PR 본문(`build_pr_body`)에는 논문 ID, PDF URL, 파싱 방식, 글자 수, 
 - **경보**:
   - 1시간 추정 비용 합계 50달러 초과, 경보 1개. 지표는 실행이 끝날 때 보내므로 진행 중인 실행을 멈추지 못합니다(8.3절). 지표는 AWS 안에서만 보내므로 이 경보는 Batch 실행만 다루고, 로컬 실행 비용은 `JobResult.estimated_cost_usd`와 `run_metrics` 로그로만 확인합니다
   - EventBridge의 Batch `FAILED` 이벤트를 SNS로 전달. 앱이 직접 알리고 종료 코드 10·11로 끝난 작업은 제외하고, 그 밖의 종료 코드(시간 초과·중단 143, OOM·비정상 종료, worker 실행 전 Python·인자 오류 1·2, 알림 실패 4)와 종료 코드가 없는 경우(호스트 유실)는 알림. 이 규칙의 SNS 전달이 실패하면(`FailedInvocations`) 경보 하나가 같은 토픽으로 알림
-  - 실행 결과는 앱 알림과 이 규칙이 다루므로 로그 `ERROR` 경보는 두지 않습니다. 실행을 멈추지 않는 문제는 warning 로그로 남깁니다. PR 생성 실패처럼 결과에 남는 경고는 알림에 모두 적고, 알림·매니페스트 저장 실패는 로그에만 남습니다(실패 실행의 알림 실패는 위의 종료 코드 4로 보고). 성공한 실행의 알림이 실패하면 작업은 0으로 끝나 아무도 알리지 않지만, 결과 매니페스트가 있어 `status`로 결과를 볼 수 있습니다.
+  - 실행 결과는 앱 알림과 이 규칙이 다루므로 로그 `ERROR` 경보는 두지 않습니다. 실행을 멈추지 않는 문제는 warning 로그로 남깁니다. 결과에 남는 경고는 알림에 모두 적고(PR 생성 실패는 경고가 아니라 실패로 알림), 알림·매니페스트 저장 실패는 로그에만 남습니다(실패 실행의 알림 실패는 위의 종료 코드 4로 보고). 성공한 실행의 알림이 실패하면 작업은 0으로 끝나 아무도 알리지 않지만, 결과 매니페스트가 있어 `status`로 결과를 볼 수 있습니다.
 - **결과 매니페스트**: 원격 실행의 최종 상태는 S3 매니페스트와 `status` 명령으로 확인합니다.
 
 ## 12. 테스트와 CI

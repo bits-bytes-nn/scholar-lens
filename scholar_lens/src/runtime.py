@@ -359,6 +359,8 @@ class PipelineOutcome:
     plan_path: Path | None = None
     s3_uri: str | None = None
     pr_url: str | None = None
+    # The blog PR was requested and enabled but could not be opened.
+    pr_error: str | None = None
     warnings: list[str] = field(default_factory=list)
 
 
@@ -371,8 +373,8 @@ async def publish_artifact(
     The outcome's warnings are the post's checklist (review notes, rule slips,
     validator warnings), so ``--no-pr`` runs report them too.
 
-    A PR failure does not fail the run (the artifact already exists locally and
-    in S3); it is reported as a warning on the result instead.
+    A PR failure is kept on the outcome (``pr_error``) next to the saved
+    artifact's paths; :func:`run_job` reports the run as failed.
     """
     await asyncio.to_thread(refresh_conventions, context, request)
     publisher = make_publisher(context)
@@ -400,8 +402,8 @@ async def publish_artifact(
         try:
             outcome.pr_url = await publisher.create_pull_request(request, markdown_path)
         except PublishError as e:
-            logger.warning("Blog PR failed: %s", e)
-            outcome.warnings.append(f"Blog PR not created: {e}")
+            logger.error("Blog PR failed: %s", e)
+            outcome.pr_error = str(e)
     return outcome
 
 
@@ -543,6 +545,11 @@ def run_job(request: JobRequest, *, job_id: str | None = None) -> JobResult:
         result.s3_uri = outcome.s3_uri
         result.pr_url = outcome.pr_url
         result.warnings = outcome.warnings
+        if outcome.pr_error is not None:
+            # The artifact is saved (paths above) but not published.
+            result.status = "failed"
+            result.pr_error = outcome.pr_error
+            result.error = f"Blog PR not created: {outcome.pr_error}"
     except rejected_errors as e:
         if _is_fetch_outage(e):  # the source exists but could not be reached
             result.error = f"{type(e).__name__}: {e}"
