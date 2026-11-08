@@ -6,8 +6,8 @@ import boto3
 import pytest
 
 from scholar_lens.adapters.http.url_guard import UnsafeUrlError
+from scholar_lens.domain.constants import EmbeddingModelId, LanguageModelId
 from scholar_lens.src.code_retriever import CodeRetriever
-from scholar_lens.src.constants import EmbeddingModelId, LanguageModelId
 from tests.fakes import FakeEmbeddingFactory, FakeLLMFactory
 
 

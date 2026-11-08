@@ -7,8 +7,8 @@ from __future__ import annotations
 import re
 from collections import Counter
 
-from ..domain.markdown.lint import TABLE_DELIMITER, TABLE_ROW
-from ..domain.markdown.math import (
+from scholar_lens.domain.markdown.lint import TABLE_DELIMITER, TABLE_ROW
+from scholar_lens.domain.markdown.math import (
     DISPLAY_MATH,
     IMAGE,
     image_sources,

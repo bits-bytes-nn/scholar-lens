@@ -10,9 +10,9 @@ import ast
 import re
 from collections.abc import Sequence
 
-from ..domain.markdown.math import segments
-from .source_set import is_official
-from .web_research import METRIC_SUFFIXES, ResearchCorpus
+from scholar_lens.domain.markdown.math import segments
+from scholar_lens.domain.sources import is_official
+from scholar_lens.src.web_research import METRIC_SUFFIXES, ResearchCorpus
 
 # Identifiers a reader copies verbatim: CLI flags and Prometheus-style metric
 # names ("vllm:time_to_first_token_seconds", "..._requests_total").

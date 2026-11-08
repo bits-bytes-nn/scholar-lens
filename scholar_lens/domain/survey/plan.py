@@ -21,9 +21,9 @@ from urllib.parse import unquote
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from ..ids import ARXIV_ID_BODY, arxiv_id_from_reference
-from ..post_names import slugify
-from ..titles import titles_match
+from scholar_lens.domain.ids import ARXIV_ID_BODY, arxiv_id_from_reference
+from scholar_lens.domain.post_names import slugify
+from scholar_lens.domain.titles import titles_match
 
 # Plan files carry schema_version 3 (``SurveyPlan``); bump it with the
 # generator when the fields or their meaning change. Version 2 plans have no

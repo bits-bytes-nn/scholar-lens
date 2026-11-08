@@ -11,15 +11,15 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..coverage import CoverageTarget
-from ..evidence import EvidenceLedger, canonical_ids
-from ..evidence_draft import MARKER, cited_ids
-from ..glossary import GlossaryTerm
-from ..lengths import DEPTH_CHARS, scaled_targets
-from ..markdown.tables import escape_cell_pipes
-from ..post_spec import Depth, ownership_problems, structure_problems
-from ..specs.survey import SURVEY_SPEC
-from .plan import SurveyPlan
+from scholar_lens.domain.coverage import CoverageTarget
+from scholar_lens.domain.evidence import EvidenceLedger, canonical_ids
+from scholar_lens.domain.evidence_draft import MARKER, cited_ids
+from scholar_lens.domain.glossary import GlossaryTerm
+from scholar_lens.domain.lengths import DEPTH_CHARS, scaled_targets
+from scholar_lens.domain.markdown.tables import escape_cell_pipes
+from scholar_lens.domain.post_spec import Depth, ownership_problems, structure_problems
+from scholar_lens.domain.specs.survey import SURVEY_SPEC
+from scholar_lens.domain.survey.plan import SurveyPlan
 
 SectionKind = Literal[
     "introduction", "lineage", "cross_cutting", "comparison", "insights", "conclusion"

@@ -1,5 +1,5 @@
-from .base import BasePrompt
-from .extraction import (
+from scholar_lens.src.prompts.base import BasePrompt
+from scholar_lens.src.prompts.extraction import (
     AttributesExtractionPrompt,
     CitationExtractionPrompt,
     CitationSummaryPrompt,
@@ -7,24 +7,24 @@ from .extraction import (
     CodebaseSummaryPrompt,
     FigureAnalysisPrompt,
 )
-from .review import (
+from scholar_lens.src.prompts.review import (
     PaperEditPrompt,
     PaperFinalizationPrompt,
     PaperPlanningPrompt,
     PaperSectionCheckPrompt,
     PaperSectionPrompt,
 )
-from .summary import (
+from scholar_lens.src.prompts.summary import (
     PaperSummaryFixPrompt,
     PaperSummaryPrompt,
     PaperSummaryShortenPrompt,
 )
-from .survey import (
+from scholar_lens.src.prompts.survey import (
     SurveyFinalizationPrompt,
     SurveyScopePrompt,
     SurveySelectionPrompt,
 )
-from .tech_guide import (
+from scholar_lens.src.prompts.tech_guide import (
     TechGuideRelevancePrompt,
     TechGuideResearchPlanPrompt,
 )

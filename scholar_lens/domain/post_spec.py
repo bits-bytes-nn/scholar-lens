@@ -19,8 +19,8 @@ from typing import Any, Literal, Protocol, Self
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .evidence import EvidenceLedger, SourceDocument
-from .lengths import DEPTH_CHARS, scaled_targets
+from scholar_lens.domain.evidence import EvidenceLedger, SourceDocument
+from scholar_lens.domain.lengths import DEPTH_CHARS, scaled_targets
 
 Depth = Literal["deep", "standard", "brief"]
 

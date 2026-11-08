@@ -3,68 +3,31 @@ import asyncio
 import re
 import unicodedata
 from collections.abc import Sequence
-from typing import Any
 
 import boto3
 from langchain_core.callbacks import BaseCallbackHandler
-from pydantic import BaseModel, Field, field_validator
 
-from ..adapters.scholarly.arxiv import ArxivHandler, ArxivMetadata, ArxivPaperError
-from ..adapters.scholarly.metadata import titles_match
-from ..application.usage import staged
-from .constants import LanguageModelId, arxiv_id_from_reference
-from .logger import logger
-from .prompt_safety import neutralize_prompt_tags
-from .prompts import (
+from scholar_lens.adapters.scholarly.arxiv import (
+    ArxivHandler,
+    ArxivMetadata,
+    ArxivPaperError,
+)
+from scholar_lens.application.usage import staged
+from scholar_lens.domain.constants import LanguageModelId
+from scholar_lens.domain.paper.models import Attributes, Citation
+from scholar_lens.domain.text import is_affirmative, is_placeholder
+from scholar_lens.domain.titles import titles_match
+from scholar_lens.src.logger import logger
+from scholar_lens.src.prompt_safety import neutralize_prompt_tags
+from scholar_lens.src.prompts import (
     AttributesExtractionPrompt,
     CitationExtractionPrompt,
 )
-from .utils import (
+from scholar_lens.src.utils import (
     BedrockLanguageModelFactory,
     HTMLTagOutputParser,
     RetryableBase,
-    is_affirmative,
-    is_placeholder,
 )
-
-
-class Attributes(BaseModel):
-    affiliation: str = Field(min_length=1)
-    category: str = Field(min_length=1)
-    keywords: list[str] = Field(default_factory=list)
-    # Title/authors parsed from the PDF text — used to fill metadata for sources
-    # (e.g. arbitrary PDF URLs) that don't carry it. "N/A"/empty means unknown.
-    title: str | None = Field(default=None)
-    authors: list[str] = Field(default_factory=list)
-    # Blog taxonomy picked from the closed controlled-tag list, and a shorter
-    # title for search snippets when the real one exceeds ~70 characters.
-    controlled_tags: list[str] = Field(default_factory=list)
-    seo_title: str | None = Field(default=None)
-
-
-class Citation(BaseModel):
-    authors: str = Field(min_length=1)
-    year: int | None = Field(default=None)
-    title: str = Field(min_length=1)
-    arxiv_id: str | None = Field(default=None)
-
-    @field_validator("arxiv_id", mode="before")
-    @classmethod
-    def validate_arxiv_id(cls, v: Any) -> str | None:
-        # An unusable id ("N/A", a DOI) must not drop the whole citation.
-        return arxiv_id_from_reference(str(v)) if v is not None else None
-
-    @field_validator("year", mode="before")
-    @classmethod
-    def validate_year(cls, v: Any) -> int | None:
-        # Models write "2017a", "2020, July" or "n.d."; keep the 4-digit year.
-        if v is None or isinstance(v, int):
-            return v
-        match = re.search(r"(19|20)\d{2}", str(v))
-        return int(match.group()) if match else None
-
-    def __repr__(self) -> str:
-        return f"Citation(title='{self.title}', arxiv_id='{self.arxiv_id}')"
 
 
 def _name_tokens(value: str) -> set[str]:

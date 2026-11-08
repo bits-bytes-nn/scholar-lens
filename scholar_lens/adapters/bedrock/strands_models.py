@@ -35,7 +35,7 @@ from strands.models.model import CacheConfig
 from strands.telemetry.metrics import EventLoopMetrics
 from strands.types.exceptions import MaxTokensReachedException
 
-from ...application.ports import (
+from scholar_lens.application.ports import (
     MAX_CONTEXT_PARTS,
     AgentLimits,
     AgentOutcome,
@@ -44,8 +44,8 @@ from ...application.ports import (
     ModelText,
     SchemaT,
 )
-from ...application.usage import current_stage
-from ...domain.usage import UsageEvent
+from scholar_lens.application.usage import current_stage
+from scholar_lens.domain.usage import UsageEvent
 
 logger = logging.getLogger(__name__)
 

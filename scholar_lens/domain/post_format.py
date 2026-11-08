@@ -16,24 +16,41 @@ import html
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import Protocol
 
-from ..domain.conventions import BlogPost, PostConventions
-from ..domain.markdown.front_matter import split_front_matter, split_front_matter_text
-from ..domain.markdown.links import (  # noqa: F401 - moved; re-exported
-    link_list,
-    md_link_text,
+from scholar_lens.domain.conventions import BlogPost, PostConventions
+from scholar_lens.domain.guide.models import TechGuide
+from scholar_lens.domain.ids import bare_doi, normalize_arxiv_id
+from scholar_lens.domain.markdown.front_matter import (
+    split_front_matter,
+    split_front_matter_text,
 )
-from ..domain.markdown.math import has_math, normalize_math
-from ..domain.tags import normalize_tags
-from .constants import bare_doi, normalize_arxiv_id
-from .utils import escape_yaml_double_quoted, is_placeholder
-from .utils.helpers import first_sentence
+from scholar_lens.domain.markdown.links import (
+    link_list,
+)
+from scholar_lens.domain.markdown.math import has_math, normalize_math
+from scholar_lens.domain.paper.models import Paper, ReviewText
+from scholar_lens.domain.tags import normalize_tags
+from scholar_lens.domain.text import (
+    escape_yaml_double_quoted,
+    first_sentence,
+    is_placeholder,
+)
 
-if TYPE_CHECKING:
-    from ..configs import Github as GithubConfig
-    from .explainer import Paper, ReviewText
-    from .tech_guide import TechGuide
+
+class BlogCategories(Protocol):
+    """The blog's lead category label of each artifact type (the GitHub
+    settings of the run's configuration)."""
+
+    @property
+    def review_category(self) -> str: ...
+
+    @property
+    def summary_category(self) -> str: ...
+
+    @property
+    def tech_guide_category(self) -> str: ...
+
 
 _LEADING_H1 = re.compile(r"\A\s*#[ \t]+(?P<title>[^\n]+)\n?")
 _MD_LINK = re.compile(r"\[([^\]]+)\]\((https?://[^)\s]+)\)")
@@ -370,7 +387,7 @@ def _subtitle(
 
 
 def format_review(
-    github_config: GithubConfig,
+    github_config: BlogCategories,
     paper: Paper,
     review: ReviewText,
     *,
@@ -425,7 +442,7 @@ def summary_with_tldr(body: str) -> str:
 
 
 def format_summary(
-    github_config: GithubConfig,
+    github_config: BlogCategories,
     paper: Paper,
     result: dict[str, str],
     *,
@@ -447,7 +464,7 @@ def format_summary(
 
 
 def format_guide(
-    github_config: GithubConfig,
+    github_config: BlogCategories,
     guide: TechGuide,
     *,
     meta: PostMeta,

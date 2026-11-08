@@ -27,7 +27,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from .ports import CheckpointStore, TextStore
+from scholar_lens.application.ports import CheckpointStore, TextStore
 
 logger = logging.getLogger(__name__)
 

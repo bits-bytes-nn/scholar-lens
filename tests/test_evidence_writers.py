@@ -20,11 +20,9 @@ from scholar_lens.application import guide_engine, paper_engine
 from scholar_lens.application.paper_engine import EvidencePaper
 from scholar_lens.configs import Config
 from scholar_lens.domain.evidence import EvidenceLedger, SourceDocument
+from scholar_lens.domain.paper.models import Attributes, Content, Paper, ReviewText
 from scholar_lens.src import evidence_models, guide_writer, paper_writer, runtime
-from scholar_lens.src.content_extractor import Attributes
-from scholar_lens.src.explainer import Paper, ReviewText
 from scholar_lens.src.metrics import TokenUsageTracker
-from scholar_lens.src.parser import Content
 from scholar_lens.src.tech_guide import GuideMaterial
 from scholar_lens.src.web_research import OfficialDocs, PageContent, ResearchCorpus
 

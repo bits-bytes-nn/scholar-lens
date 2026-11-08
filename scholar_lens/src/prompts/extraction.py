@@ -6,8 +6,8 @@ from langchain_core.prompts import (
     SystemMessagePromptTemplate,
 )
 
-from ...domain.conventions import load_local_conventions
-from .base import (
+from scholar_lens.domain.conventions import load_local_conventions
+from scholar_lens.src.prompts.base import (
     BasePrompt,
 )
 

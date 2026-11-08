@@ -9,8 +9,8 @@ import requests
 import responses
 
 from scholar_lens.adapters.scholarly.pdf import MAX_PDF_BYTES
-from scholar_lens.src.constants import arxiv_id_from_url as extract_arxiv_id_from_url
-from scholar_lens.src.constants import normalize_arxiv_id
+from scholar_lens.domain.ids import arxiv_id_from_url as extract_arxiv_id_from_url
+from scholar_lens.domain.ids import normalize_arxiv_id
 from scholar_lens.src.paper_source import (
     ArxivSource,
     NotAPdfError,
@@ -423,12 +423,12 @@ class TestArxivIdRules:
         ],
     )
     def test_sequence_length_follows_the_date(self, value, expected) -> None:  # type: ignore[no-untyped-def]
-        from scholar_lens.src.constants import normalize_arxiv_id
+        from scholar_lens.domain.ids import normalize_arxiv_id
 
         assert normalize_arxiv_id(value) == expected
 
     def test_reference_urls_are_reduced_to_ids(self) -> None:
-        from scholar_lens.src.content_extractor import Citation
+        from scholar_lens.domain.paper.models import Citation
 
         cite = Citation(
             authors="Hu", title="LoRA", arxiv_id="https://arxiv.org/pdf/2106.09685.pdf"

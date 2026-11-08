@@ -9,8 +9,8 @@ import pytest
 from bs4 import BeautifulSoup
 
 from scholar_lens.domain.evidence import SourceDocument
+from scholar_lens.domain.sources import SourceSet, url_language
 from scholar_lens.src.guide_writer import guide_documents
-from scholar_lens.src.source_set import SourceSet, url_language
 from scholar_lens.src.web_research import PageContent, published_date
 
 DOCS = "https://docs.example.dev/en/latest/index.html"

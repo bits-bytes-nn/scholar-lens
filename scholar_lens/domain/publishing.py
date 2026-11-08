@@ -10,14 +10,12 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..domain.post_names import (  # noqa: F401 - re-exported
+from scholar_lens.domain.constants import LocalPaths
+from scholar_lens.domain.post_names import (
     post_slug,
-    same_post,
-    slugify,
     title_slug,
 )
-from ..domain.validation import ArtifactKind
-from .constants import LocalPaths
+from scholar_lens.domain.validation import ArtifactKind
 
 # Blog image convention: one flat folder, referenced by absolute path.
 BLOG_IMAGES_DIR = "assets/images"

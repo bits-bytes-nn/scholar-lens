@@ -31,6 +31,8 @@ from scholar_lens.adapters.scholarly.index import (
 )
 from scholar_lens.adapters.scholarly.metadata import QuotaExhaustedError
 from scholar_lens.configs.config import Config, Survey
+from scholar_lens.domain.constants import LanguageModelId
+from scholar_lens.domain.jobs import JobRequest, JobResult
 from scholar_lens.domain.survey.plan import (
     Candidate,
     CitationData,
@@ -42,9 +44,8 @@ from scholar_lens.domain.survey.plan import (
     TimeRange,
     survey_slug,
 )
-from scholar_lens.src.constants import LanguageModelId
-from scholar_lens.src.jobs import JobRequest, JobResult
-from scholar_lens.src.metrics import TokenBudgetExceeded, TokenUsageTracker
+from scholar_lens.domain.usage import TokenBudgetExceeded
+from scholar_lens.src.metrics import TokenUsageTracker
 from scholar_lens.src.survey_pipeline import (
     CandidateFinder,
     CandidateSearchError,

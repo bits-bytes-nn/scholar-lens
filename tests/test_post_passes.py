@@ -91,7 +91,7 @@ def _engines() -> list[Any]:
     "engine", _engines(), ids=["guide", "review", "summary", "survey"]
 )
 def test_every_kind_composes_its_reads_from_the_shared_rules(engine: Any) -> None:
-    from scholar_lens.prompts.rules import CONSISTENCY_CHECKS, REPETITION_CHECKS
+    from scholar_lens.domain.prompts.rules import CONSISTENCY_CHECKS, REPETITION_CHECKS
 
     systems = engine.pass_systems
     assert CONSISTENCY_CHECKS in systems["consistency"]

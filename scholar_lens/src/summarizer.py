@@ -14,30 +14,36 @@ from typing import Any
 import boto3
 from langchain_core.runnables import Runnable
 
-from ..adapters.retry import is_access_error
-from ..application.usage import staged
-from ..domain.markdown.math import DISPLAY_MATH, HANGUL, image_sources
-from ..domain.quality_gate import publish_blockers
-from ..domain.validation import (
+from scholar_lens.adapters.retry import is_access_error
+from scholar_lens.application.usage import staged
+from scholar_lens.domain.constants import LanguageModelId
+from scholar_lens.domain.markdown.math import DISPLAY_MATH, HANGUL, image_sources
+from scholar_lens.domain.paper.models import Paper
+from scholar_lens.domain.post_format import (
+    derived_subtitle,
+    split_leading_h1,
+    summary_lead,
+)
+from scholar_lens.domain.quality_gate import publish_blockers
+from scholar_lens.domain.usage import TokenBudgetExceeded
+from scholar_lens.domain.validation import (
     description_markup,
     description_problems,
     paper_page_title,
     unsourced_numbers,
 )
-from .constants import LanguageModelId
-from .explainer import NO_CODEBASE, Paper
-from .formatting import derived_subtitle, split_leading_h1, summary_lead
-from .logger import logger
-from .metrics import TokenBudgetExceeded, TokenBudgetGuard
-from .prompt_safety import neutralize_prompt_tags
-from .prompts import (
+from scholar_lens.src.explainer import NO_CODEBASE
+from scholar_lens.src.logger import logger
+from scholar_lens.src.metrics import TokenBudgetGuard
+from scholar_lens.src.prompt_safety import neutralize_prompt_tags
+from scholar_lens.src.prompts import (
     BasePrompt,
     PaperSummaryFixPrompt,
     PaperSummaryPrompt,
     PaperSummaryShortenPrompt,
 )
-from .section_loop import TARGETED_FIX, lost_structure
-from .utils import (
+from scholar_lens.src.section_loop import TARGETED_FIX, lost_structure
+from scholar_lens.src.utils import (
     BedrockLanguageModelFactory,
     HTMLTagOutputParser,
     RetryableBase,

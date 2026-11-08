@@ -3,7 +3,7 @@ use and run it, when to choose it."""
 
 from __future__ import annotations
 
-from ..post_spec import (
+from scholar_lens.domain.post_spec import (
     AuthorityRule,
     CoverageSpec,
     EvidencePolicy,

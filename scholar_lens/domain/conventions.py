@@ -19,7 +19,7 @@ from typing import Any
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from .markdown.front_matter import split_front_matter_text
+from scholar_lens.domain.markdown.front_matter import split_front_matter_text
 
 LOCAL_CONVENTIONS_PATH = (
     Path(__file__).resolve().parents[2] / "assets" / "post_conventions.yml"

@@ -1,10 +1,10 @@
-"""Run one :class:`~scholar_lens.src.jobs.JobRequest` end to end.
+"""Run one :class:`~scholar_lens.domain.jobs.JobRequest` end to end.
 
 :func:`run_job` is the single entry for every artifact kind, whether invoked by
 the CLI locally or by the Batch worker. It builds the AWS/config context, loads
 secrets, dispatches to the paper or guide pipeline, and — whatever happens —
 records metrics, sends the SNS notification, and (for Batch runs) stores the
-:class:`~scholar_lens.src.jobs.JobResult` in S3.
+:class:`~scholar_lens.domain.jobs.JobResult` in S3.
 """
 
 from __future__ import annotations
@@ -25,19 +25,31 @@ import boto3
 from botocore.exceptions import ClientError
 from pydantic import BaseModel, ConfigDict
 
-from ..adapters.aws.storage import S3Handler, get_ssm_param_value
-from ..adapters.github.conventions import fetch_blog_posts, load_conventions
-from ..application.usage import cost_allocation
-from ..configs import Config
-from ..domain.conventions import BlogPost, PostConventions, tag_counts
-from ..domain.tags import format_tag
-from ..domain.validation import PAPER_KINDS, PostValidationError
-from .constants import RUN_SECRETS, EnvVars, LocalPaths, S3Paths, SSMParams
-from .formatting import with_spec_cover
-from .jobs import JobRequest, JobResult, ssm_base, write_result_manifest
-from .logger import is_running_in_aws, logger
-from .metrics import MetricsEmitter, TokenUsageTracker
-from .publisher import PostAssetError, Publisher, PublishError, PublishRequest
+from scholar_lens.adapters.aws.storage import S3Handler, get_ssm_param_value
+from scholar_lens.adapters.github.conventions import fetch_blog_posts, load_conventions
+from scholar_lens.application.usage import cost_allocation
+from scholar_lens.configs import Config
+from scholar_lens.domain.constants import (
+    RUN_SECRETS,
+    EnvVars,
+    LocalPaths,
+    S3Paths,
+    SSMParams,
+)
+from scholar_lens.domain.conventions import BlogPost, PostConventions, tag_counts
+from scholar_lens.domain.jobs import JobRequest, JobResult, ssm_base
+from scholar_lens.domain.post_format import with_spec_cover
+from scholar_lens.domain.tags import format_tag
+from scholar_lens.domain.validation import PAPER_KINDS, PostValidationError
+from scholar_lens.src.jobs import write_result_manifest
+from scholar_lens.src.logger import is_running_in_aws, logger
+from scholar_lens.src.metrics import MetricsEmitter, TokenUsageTracker
+from scholar_lens.src.publisher import (
+    PostAssetError,
+    Publisher,
+    PublishError,
+    PublishRequest,
+)
 
 # Working directory for papers, figures and generated posts: the container's
 # scratch space in AWS, the repository root locally.
@@ -450,7 +462,7 @@ async def load_translation_guideline(
 def _is_fetch_outage(error: BaseException) -> bool:
     """A transport failure or 429/5xx while fetching the source: the request
     is fine, so the run failed rather than being rejected."""
-    from .paper_source import PaperFetchError
+    from scholar_lens.src.paper_source import PaperFetchError
 
     return isinstance(error, PaperFetchError)
 
@@ -460,11 +472,11 @@ def _rejected_input_errors() -> tuple[type[BaseException], ...]:
 
     Imported lazily so ``status``/``submit`` never load the paper stack.
     """
-    from ..adapters.http.url_guard import UnsafeUrlError
-    from ..adapters.scholarly.arxiv import ArxivNotFoundError
-    from ..domain.survey.plan import SurveyInputError
-    from .paper_source import PaperSourceError
-    from .tech_guide import NotTechnicalContentError
+    from scholar_lens.adapters.http.url_guard import UnsafeUrlError
+    from scholar_lens.adapters.scholarly.arxiv import ArxivNotFoundError
+    from scholar_lens.domain.survey.plan import SurveyInputError
+    from scholar_lens.src.paper_source import PaperSourceError
+    from scholar_lens.src.tech_guide import NotTechnicalContentError
 
     return (
         ArxivNotFoundError,
@@ -479,18 +491,18 @@ async def _run_pipeline(
     context: RunContext, request: JobRequest, tracker: TokenUsageTracker
 ) -> PipelineOutcome:
     if request.kind == "guide":
-        from .guide_pipeline import run_guide_pipeline
+        from scholar_lens.src.guide_pipeline import run_guide_pipeline
 
         return await run_guide_pipeline(context, request, tracker)
     if request.kind == "survey_plan":
-        from .survey_pipeline import run_survey_plan_pipeline
+        from scholar_lens.src.survey_pipeline import run_survey_plan_pipeline
 
         return await run_survey_plan_pipeline(context, request, tracker)
     if request.kind == "survey_write":
-        from .survey_writer import run_survey_write_pipeline
+        from scholar_lens.src.survey_writer import run_survey_write_pipeline
 
         return await run_survey_write_pipeline(context, request, tracker)
-    from .paper_pipeline import run_paper_pipeline
+    from scholar_lens.src.paper_pipeline import run_paper_pipeline
 
     return await run_paper_pipeline(context, request, tracker)
 

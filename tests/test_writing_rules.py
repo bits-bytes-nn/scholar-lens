@@ -446,14 +446,14 @@ class TestEditGuards:
 
 @pytest.mark.parametrize("raw", ["none.", "None", "없음.", "- none"])
 def test_parse_lines_none_with_punctuation(raw: str) -> None:
-    from scholar_lens.src.utils import parse_lines
+    from scholar_lens.domain.text import parse_lines
 
     assert parse_lines(raw) == []
 
 
 @pytest.mark.parametrize("answer", ["**없음**", "*None*", "_none_"])
 def test_emphasised_none_answers_are_empty(answer: str) -> None:
-    from scholar_lens.src.utils import parse_lines
+    from scholar_lens.domain.text import parse_lines
 
     assert parse_lines(answer) == []
 
@@ -561,13 +561,13 @@ def test_korean_equation_references(text: str, flagged: bool) -> None:
     ],
 )
 def test_numbered_and_annotated_none_answers_are_empty(answer: str) -> None:
-    from scholar_lens.src.utils import parse_lines
+    from scholar_lens.domain.text import parse_lines
 
     assert parse_lines(answer) == []
 
 
 def test_real_items_with_parentheticals_are_kept() -> None:
-    from scholar_lens.src.utils import parse_lines
+    from scholar_lens.domain.text import parse_lines
 
     assert parse_lines("- ablation (Table 3)") == ["ablation (Table 3)"]
 

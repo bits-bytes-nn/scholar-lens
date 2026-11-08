@@ -10,8 +10,8 @@ from typing import Any
 from botocore.exceptions import ClientError
 from pydantic import ValidationError
 
-from ...domain.costs import RunRecord
-from ...domain.usage import RunUsage
+from scholar_lens.domain.costs import RunRecord
+from scholar_lens.domain.usage import RunUsage
 
 logger = logging.getLogger(__name__)
 _DENIED = frozenset({"AccessDenied", "AccessDeniedException", "403"})

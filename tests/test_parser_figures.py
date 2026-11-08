@@ -17,10 +17,10 @@ import pytest
 import tenacity
 
 from scholar_lens.adapters.retry import MAX_RETRIES
-from scholar_lens.src.constants import LanguageModelId
+from scholar_lens.domain.constants import LanguageModelId
+from scholar_lens.domain.paper.models import Content, Figure
 from scholar_lens.src.parser import (
-    Content,
-    Figure,
+    FigureReader,
     HTMLRichParser,
     PDFParser,
     Region,
@@ -105,7 +105,7 @@ class TestFigureModel:
 
     def test_resize_if_needed_returns_small_bytes_unchanged(self) -> None:
         small = b"not really an image but well under 5MB"
-        assert Figure._resize_if_needed(small) is small
+        assert FigureReader._resize_if_needed(small) is small
 
 
 class TestRegionModel:
@@ -250,7 +250,7 @@ class TestAttachFigureContext:
 
     @staticmethod
     def _figure(path: str, *, caption=None, analysis=None):  # type: ignore[no-untyped-def]
-        from scholar_lens.src.parser import Figure
+        from scholar_lens.domain.paper.models import Figure
 
         return Figure(figure_id="1", path=path, caption=caption, analysis=analysis)
 
@@ -362,7 +362,8 @@ class TestAttachFigureContext:
 
 class TestBindFigureSources:
     def test_figures_bound_by_element_id(self) -> None:
-        from scholar_lens.src.parser import Figure, _bind_figure_sources
+        from scholar_lens.domain.paper.models import Figure
+        from scholar_lens.src.parser import _bind_figure_sources
         from scholar_lens.src.utils.helpers import extract_text_from_html
 
         html = (
@@ -404,7 +405,7 @@ class TestEmptyDocumentParse:
         assert content.text == "fitz text"
 
     async def test_empty_response_not_cached(self, tmp_path: Path) -> None:
-        from scholar_lens.src.constants import LocalPaths
+        from scholar_lens.domain.constants import LocalPaths
 
         parser = _pdf_parser()
 
@@ -444,7 +445,7 @@ class TestParseCache:
         assert calls == ["parse", "parse"]
 
     async def test_cache_without_a_hash_is_kept(self, tmp_path: Path) -> None:
-        from scholar_lens.src.constants import LocalPaths
+        from scholar_lens.domain.constants import LocalPaths
 
         calls: list[str] = []
         parser = self._parser(calls)
@@ -467,14 +468,14 @@ class TestFigureAnalysisFailure:
     @pytest.fixture(autouse=True)
     def _no_backoff(self, monkeypatch) -> None:  # type: ignore[no-untyped-def]
         # The backoff policy is bound when decorating; swap in no wait.
-        monkeypatch.setattr(Figure._analyse.retry, "wait", tenacity.wait_none())
+        monkeypatch.setattr(FigureReader._analyse.retry, "wait", tenacity.wait_none())
 
     @staticmethod
     def _image(monkeypatch) -> None:  # type: ignore[no-untyped-def]
         async def data(_path: str) -> str:
             return "aGk="
 
-        monkeypatch.setattr(Figure, "_get_image_data", staticmethod(data))
+        monkeypatch.setattr(FigureReader, "_get_image_data", staticmethod(data))
 
     def test_exhausted_throttling_keeps_the_figure_unanalysed(self, monkeypatch) -> None:  # type: ignore[no-untyped-def]
         import asyncio
@@ -493,7 +494,7 @@ class TestFigureAnalysisFailure:
                 return await error_then_ok.ainvoke(inputs)
 
         figure = asyncio.run(
-            Figure.from_llm(Counting(), "1", "/p/1.png", "Figure 1: X.")
+            FigureReader.from_llm(Counting(), "1", "/p/1.png", "Figure 1: X.")
         )
         assert figure.caption == "Figure 1: X." and figure.analysis is None
         assert calls == MAX_RETRIES  # retried before giving up
@@ -516,7 +517,7 @@ class TestFigureAnalysisFailure:
                     )
                 return "A bar chart."
 
-        figure = asyncio.run(Figure.from_llm(Flaky(), "1", "/p/1.png"))
+        figure = asyncio.run(FigureReader.from_llm(Flaky(), "1", "/p/1.png"))
         assert calls == 2 and figure.analysis == "A bar chart."
 
     def test_model_error_keeps_the_figure_unanalysed(self, monkeypatch) -> None:  # type: ignore[no-untyped-def]
@@ -533,19 +534,21 @@ class TestFigureAnalysisFailure:
             "Converse",
         )
         figure = asyncio.run(
-            Figure.from_llm(self._analyser(denied), "1", "/p/1.png", "Figure 1: X.")
+            FigureReader.from_llm(
+                self._analyser(denied), "1", "/p/1.png", "Figure 1: X."
+            )
         )
         assert figure.caption == "Figure 1: X." and figure.analysis is None
 
     def test_token_budget_breach_still_stops_the_run(self, monkeypatch) -> None:  # type: ignore[no-untyped-def]
         import asyncio
 
-        from scholar_lens.src.metrics import TokenBudgetExceeded
+        from scholar_lens.domain.usage import TokenBudgetExceeded
 
         self._image(monkeypatch)
         with pytest.raises(TokenBudgetExceeded):
             asyncio.run(
-                Figure.from_llm(
+                FigureReader.from_llm(
                     self._analyser(TokenBudgetExceeded("over budget")), "1", "/p/1.png"
                 )
             )

@@ -9,7 +9,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from .usage import RunUsage
+from scholar_lens.domain.usage import RunUsage
 
 GroupBy = Literal["kind", "stage", "model", "day"]
 # The stage of a run whose manifest predates per-stage usage.

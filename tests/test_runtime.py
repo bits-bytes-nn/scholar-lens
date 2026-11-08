@@ -8,8 +8,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from scholar_lens.domain.constants import EnvVars, SSMParams
 from scholar_lens.src import runtime
-from scholar_lens.src.constants import EnvVars, SSMParams
 
 
 @pytest.fixture(autouse=True)
@@ -166,7 +166,7 @@ class TestRunJob:
         return finished
 
     def test_success_carries_outcome(self, monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:  # type: ignore[no-untyped-def]
-        from scholar_lens.src.jobs import JobRequest
+        from scholar_lens.domain.jobs import JobRequest
 
         async def pipeline(context, request, tracker):  # type: ignore[no-untyped-def]
             return runtime.PipelineOutcome(
@@ -188,7 +188,7 @@ class TestRunJob:
     def test_the_run_context_carries_fresh(
         self, monkeypatch: pytest.MonkeyPatch, fresh: bool
     ) -> None:
-        from scholar_lens.src.jobs import JobRequest
+        from scholar_lens.domain.jobs import JobRequest
 
         seen: list[bool] = []
 
@@ -203,7 +203,7 @@ class TestRunJob:
     def test_a_failed_pr_fails_the_run_and_keeps_the_artifact(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        from scholar_lens.src.jobs import JobRequest
+        from scholar_lens.domain.jobs import JobRequest
 
         async def pipeline(context, request, tracker):  # type: ignore[no-untyped-def]
             return runtime.PipelineOutcome(
@@ -226,7 +226,7 @@ class TestRunJob:
         assert finished == [result] and self.notified == [True]
 
     def test_rejected_input(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        from scholar_lens.src.jobs import JobRequest
+        from scholar_lens.domain.jobs import JobRequest
         from scholar_lens.src.paper_source import NotAPdfError
 
         async def pipeline(context, request, tracker):  # type: ignore[no-untyped-def]
@@ -240,7 +240,7 @@ class TestRunJob:
     def test_fetch_outage_is_a_failure_not_a_rejection(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from scholar_lens.src.jobs import JobRequest
+        from scholar_lens.domain.jobs import JobRequest
         from scholar_lens.src.paper_source import PaperFetchError
 
         async def pipeline(context, request, tracker):  # type: ignore[no-untyped-def]
@@ -254,7 +254,7 @@ class TestRunJob:
     def test_failure_is_reported_not_raised(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from scholar_lens.src.jobs import JobRequest
+        from scholar_lens.domain.jobs import JobRequest
 
         async def pipeline(context, request, tracker):  # type: ignore[no-untyped-def]
             raise RuntimeError("bedrock down")
@@ -267,7 +267,7 @@ class TestRunJob:
         assert self.notified == [True]
 
     def test_interrupt_still_finishes(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        from scholar_lens.src.jobs import JobRequest
+        from scholar_lens.domain.jobs import JobRequest
 
         async def pipeline(context, request, tracker):  # type: ignore[no-untyped-def]
             raise SystemExit(143)
@@ -285,7 +285,7 @@ class TestRunJob:
     def test_ctrl_c_carries_the_recorded_result(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from scholar_lens.src.jobs import JobRequest
+        from scholar_lens.domain.jobs import JobRequest
 
         async def pipeline(context, request, tracker):  # type: ignore[no-untyped-def]
             tracker.input_tokens = 1_200
@@ -335,7 +335,7 @@ def test_run_pipeline_dispatches_each_kind(
     import asyncio
     import importlib
 
-    from scholar_lens.src.jobs import JobRequest
+    from scholar_lens.domain.jobs import JobRequest
 
     request = JobRequest(kind=kind, **fields)  # type: ignore[arg-type]
     outcome = runtime.PipelineOutcome(title=kind)
@@ -362,7 +362,7 @@ def test_run_pipeline_dispatches_each_kind(
 
 class TestResultNotification:
     def test_success_lists_pr_and_cost(self) -> None:
-        from scholar_lens.src.jobs import JobResult
+        from scholar_lens.domain.jobs import JobResult
 
         subject, message = runtime.format_result_notification(
             JobResult(
@@ -379,7 +379,7 @@ class TestResultNotification:
         assert "$0.42" in message
 
     def test_failure_includes_error(self) -> None:
-        from scholar_lens.src.jobs import JobResult
+        from scholar_lens.domain.jobs import JobResult
 
         subject, message = runtime.format_result_notification(
             JobResult(kind="guide", input="u", error="RuntimeError: boom")
@@ -388,7 +388,7 @@ class TestResultNotification:
         assert "RuntimeError: boom" in message
 
     def test_every_warning_is_listed(self) -> None:
-        from scholar_lens.src.jobs import JobResult
+        from scholar_lens.domain.jobs import JobResult
 
         _, message = runtime.format_result_notification(
             JobResult(kind="review", input="x", warnings=["PR failed", "tag new"])
@@ -396,7 +396,7 @@ class TestResultNotification:
         assert "- PR failed" in message and "- tag new" in message
 
     def test_unknown_kind_has_a_generic_label(self) -> None:
-        from scholar_lens.src.jobs import JobResult
+        from scholar_lens.domain.jobs import JobResult
 
         subject, _ = runtime.format_result_notification(
             JobResult(kind=None, input="{}", status="rejected")
@@ -408,7 +408,7 @@ class TestFinishAndEarlyFailure:
     def test_finish_publishes_sns_and_writes_manifest(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from scholar_lens.src.jobs import JobResult
+        from scholar_lens.domain.jobs import JobResult
         from scholar_lens.src.metrics import TokenUsageTracker
 
         monkeypatch.setattr(runtime, "is_running_in_aws", lambda: True)
@@ -429,7 +429,7 @@ class TestFinishAndEarlyFailure:
     def test_unsent_failure_notification_is_flagged(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from scholar_lens.src.jobs import JobResult
+        from scholar_lens.domain.jobs import JobResult
         from scholar_lens.src.metrics import TokenUsageTracker
 
         monkeypatch.setattr(runtime, "is_running_in_aws", lambda: True)
@@ -444,7 +444,7 @@ class TestFinishAndEarlyFailure:
     def test_missing_config_in_aws_still_notifies(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from scholar_lens.src.jobs import JobRequest
+        from scholar_lens.domain.jobs import JobRequest
 
         def no_config(cls):  # type: ignore[no-untyped-def]
             raise FileNotFoundError("config.yaml")
@@ -463,7 +463,7 @@ class TestRecordUnstartedRun:
     def test_notifies_in_the_topic_region_and_writes_manifest(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from scholar_lens.src.jobs import JobResult
+        from scholar_lens.domain.jobs import JobResult
 
         monkeypatch.setattr(runtime, "is_running_in_aws", lambda: True)
         monkeypatch.setenv("TOPIC_ARN", "arn:aws:sns:us-east-1:1:t")
@@ -489,7 +489,7 @@ class TestRecordUnstartedRun:
     def test_unsent_notification_is_reported(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from scholar_lens.src.jobs import JobResult
+        from scholar_lens.domain.jobs import JobResult
 
         monkeypatch.setattr(runtime, "is_running_in_aws", lambda: True)
         monkeypatch.setenv("TOPIC_ARN", "arn:aws:sns:us-east-1:1:t")
@@ -500,7 +500,7 @@ class TestRecordUnstartedRun:
     def test_manifest_is_written_without_a_topic(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from scholar_lens.src.jobs import JobResult
+        from scholar_lens.domain.jobs import JobResult
 
         monkeypatch.setattr(runtime, "is_running_in_aws", lambda: True)
         monkeypatch.delenv("TOPIC_ARN", raising=False)
@@ -522,7 +522,7 @@ class TestRecordUnstartedRun:
         # report (the CLI still prints one JSON object).
         from botocore.exceptions import ProfileNotFound
 
-        from scholar_lens.src.jobs import JobResult
+        from scholar_lens.domain.jobs import JobResult
 
         def broken(**_: object) -> None:
             raise ProfileNotFound(profile="missing")
@@ -534,7 +534,7 @@ class TestRecordUnstartedRun:
         assert runtime.record_unstarted_run(result) is expected
 
     def test_nothing_to_send_outside_aws(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        from scholar_lens.src.jobs import JobResult
+        from scholar_lens.domain.jobs import JobResult
 
         monkeypatch.setattr(runtime, "is_running_in_aws", lambda: False)
         assert runtime.record_unstarted_run(JobResult(kind=None, input="x")) is True
@@ -660,8 +660,8 @@ def test_no_pr_run_reports_the_post_checklist(tmp_path: Path) -> None:
 def test_generator_notes_survive_a_failed_publish(
     monkeypatch: pytest.MonkeyPatch, kind: str
 ) -> None:
+    from scholar_lens.domain.jobs import JobRequest
     from scholar_lens.domain.validation import PostValidationError, Violation
-    from scholar_lens.src.jobs import JobRequest
     from scholar_lens.src.publisher import PostAssetError
 
     publisher = MagicMock()
@@ -756,7 +756,7 @@ class TestConventionsChangedDuringTheRun:
 
     @staticmethod
     def _markdown(cover: str) -> str:
-        from scholar_lens.src.formatting import render_front_matter
+        from scholar_lens.domain.post_format import render_front_matter
 
         return (
             render_front_matter(
@@ -862,7 +862,7 @@ class TestConventionsChangedDuringTheRun:
 
 def test_with_spec_cover_leaves_an_unknown_type_to_the_validator() -> None:
     from scholar_lens.domain.conventions import load_local_conventions
-    from scholar_lens.src.formatting import with_spec_cover
+    from scholar_lens.domain.post_format import with_spec_cover
 
     spec = load_local_conventions()
     markdown = TestConventionsChangedDuringTheRun._markdown("/x.jpg").replace(
@@ -877,7 +877,7 @@ def test_a_pr_run_without_a_token_fails_before_any_model_call(
 ) -> None:
     from unittest.mock import MagicMock
 
-    from scholar_lens.src.jobs import JobRequest
+    from scholar_lens.domain.jobs import JobRequest
     from scholar_lens.src.runtime import check_pr_ready
 
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)

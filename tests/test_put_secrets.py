@@ -9,7 +9,7 @@ import pytest
 from moto import mock_aws
 
 from scholar_lens.configs import Config
-from scholar_lens.src.constants import SSMParams
+from scholar_lens.domain.constants import SSMParams
 from scripts import put_secrets
 
 

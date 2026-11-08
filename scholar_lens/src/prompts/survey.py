@@ -9,7 +9,7 @@ output language. The finalization writes the finished post's description
 and taxonomy.
 """
 
-from .base import BasePrompt
+from scholar_lens.src.prompts.base import BasePrompt
 
 _SURVEY_GOAL = """
 The survey is a long-form blog post in the style of Lilian Weng's blog: it

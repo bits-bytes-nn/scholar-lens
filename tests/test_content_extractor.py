@@ -8,7 +8,7 @@ from typing import Any
 import boto3
 import pytest
 
-from scholar_lens.src.constants import LanguageModelId
+from scholar_lens.domain.constants import LanguageModelId
 from tests.fakes import FakeLLMFactory
 
 
@@ -33,7 +33,7 @@ class TestCitationFieldCoercion:
         [("N/A", None), ("arXiv:hep-th/9802150", "hep-th/9802150"), (None, None)],
     )
     def test_arxiv_id_coerced(self, arxiv_id: str | None, expected: str | None) -> None:
-        from scholar_lens.src.content_extractor import Citation
+        from scholar_lens.domain.paper.models import Citation
 
         cit = Citation(authors="A", title="T", arxiv_id=arxiv_id)
         assert cit.arxiv_id == expected
@@ -42,7 +42,7 @@ class TestCitationFieldCoercion:
         ("year", "expected"), [("2017a", 2017), ("2020, July", 2020), ("n.d.", None)]
     )
     def test_year_coerced(self, year: str, expected: int | None) -> None:
-        from scholar_lens.src.content_extractor import Citation
+        from scholar_lens.domain.paper.models import Citation
 
         assert Citation(authors="A", title="T", year=year).year == expected
 
@@ -53,7 +53,8 @@ class TestCitationFieldCoercion:
         assert cit is not None and cit.year == 2021 and cit.arxiv_id is None
 
     def test_non_latin_titles_keep_distinct_keys(self) -> None:
-        from scholar_lens.src.content_extractor import Citation, ContentExtractor
+        from scholar_lens.domain.paper.models import Citation
+        from scholar_lens.src.content_extractor import ContentExtractor
 
         a = Citation(authors="김", title="대규모 언어 모델", year=2024)
         b = Citation(authors="김", title="강화 학습 개요", year=2024)
@@ -64,14 +65,16 @@ class TestCitationDedupKey:
     def test_distinct_same_title_works_kept_apart(self) -> None:
         # Regression (data-2): two different references sharing a title (different
         # authors/year, no arXiv id) must NOT collapse to one dedup key.
-        from scholar_lens.src.content_extractor import Citation, ContentExtractor
+        from scholar_lens.domain.paper.models import Citation
+        from scholar_lens.src.content_extractor import ContentExtractor
 
         a = Citation(authors="Smith", year=2020, title="Deep Learning", arxiv_id=None)
         b = Citation(authors="Jones", year=2023, title="Deep Learning", arxiv_id=None)
         assert ContentExtractor._dedup_key(a) != ContentExtractor._dedup_key(b)
 
     def test_author_formatting_variant_collapses(self) -> None:
-        from scholar_lens.src.content_extractor import Citation, ContentExtractor
+        from scholar_lens.domain.paper.models import Citation
+        from scholar_lens.src.content_extractor import ContentExtractor
 
         a = Citation(authors="Smith", year=2020, title="Deep Learning", arxiv_id=None)
         c = Citation(
@@ -83,7 +86,8 @@ class TestCitationDedupKey:
         assert ContentExtractor._dedup_key(a) == ContentExtractor._dedup_key(c)
 
     def test_arxiv_id_dominates_identity(self) -> None:
-        from scholar_lens.src.content_extractor import Citation, ContentExtractor
+        from scholar_lens.domain.paper.models import Citation
+        from scholar_lens.src.content_extractor import ContentExtractor
 
         d = Citation(authors="X", year=None, title="T", arxiv_id="2401.06066")
         e = Citation(authors="Y", year=2021, title="Other", arxiv_id="2401.06066")
@@ -179,7 +183,7 @@ class FakeArxiv:
 
 
 def _cite(authors: str, year: int | None, title: str, arxiv_id: str | None) -> Any:
-    from scholar_lens.src.content_extractor import Citation
+    from scholar_lens.domain.paper.models import Citation
 
     return Citation(authors=authors, year=year, title=title, arxiv_id=arxiv_id)
 

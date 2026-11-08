@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 from typing import Literal, Protocol
 from urllib.parse import urlparse
 
-from ..domain.evidence import Authority, SourceAuthority
+from scholar_lens.domain.evidence import Authority, SourceAuthority
 
 VersionKind = Literal["release", "stable", "dev"]
 

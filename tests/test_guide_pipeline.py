@@ -13,13 +13,13 @@ import pytest
 from scholar_lens.configs import Github
 from scholar_lens.configs.config import Config
 from scholar_lens.domain.conventions import BlogPost, load_local_conventions
+from scholar_lens.domain.guide.models import TechGuide
+from scholar_lens.domain.jobs import JobRequest
 from scholar_lens.src import guide_pipeline
 from scholar_lens.src.guide_pipeline import guide_branch_id, guide_title
-from scholar_lens.src.jobs import JobRequest
 from scholar_lens.src.metrics import TokenUsageTracker
 from scholar_lens.src.publisher import Publisher
 from scholar_lens.src.runtime import RunContext
-from scholar_lens.src.tech_guide import TechGuide
 from tests.test_publisher import PNG, FakeGithub, FakeRepo
 
 
@@ -38,8 +38,8 @@ def test_branch_id_tells_pages_apart_by_query() -> None:
 
 
 def test_guide_document_converts_markers_and_drops_unoffered_images() -> None:
+    from scholar_lens.domain.guide.models import TechGuide
     from scholar_lens.src.guide_pipeline import guide_document
-    from scholar_lens.src.tech_guide import TechGuide
 
     arch = "https://docs.x.dev/img/arch.png"
     guide = TechGuide(topic="X 시작하기", body="", image_urls=[arch])

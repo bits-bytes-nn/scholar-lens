@@ -19,14 +19,14 @@ from moto import mock_aws
 from scholar_lens import cli
 from scholar_lens.adapters.aws.storage import S3Handler
 from scholar_lens.configs import Github
-from scholar_lens.domain.validation import PostValidationError
-from scholar_lens.src import saved_post
-from scholar_lens.src.publish_types import (
+from scholar_lens.domain.publishing import (
     PublishRequest,
     SavedPublishRequest,
     request_name,
     without_violations,
 )
+from scholar_lens.domain.validation import PostValidationError
+from scholar_lens.src import saved_post
 from scholar_lens.src.publisher import ImageLocalizer, Publisher
 from scholar_lens.src.runtime import publish_artifact
 from tests.test_publisher import PNG, VALID_POST, FakeGithub, FakeRepo

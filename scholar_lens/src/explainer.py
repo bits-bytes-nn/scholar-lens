@@ -21,22 +21,31 @@ from __future__ import annotations
 import html
 import re
 from dataclasses import dataclass, field
-from datetime import datetime
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import Any
 
 import boto3
 import nltk
 from langchain_core.output_parsers import BaseOutputParser, StrOutputParser
 from langchain_core.runnables import Runnable
 from nltk.tokenize.punkt import PunktTokenizer
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator
 
-from ..adapters.retry import is_access_error
-from ..application.usage import staged
-from ..domain.markdown.lint import arxiv_link_key, unlink_unknown_arxiv, writing_issues
-from ..domain.quality_gate import publish_blockers
-from ..domain.review_plan import (
+from scholar_lens.adapters.retry import is_access_error
+from scholar_lens.application.usage import staged
+from scholar_lens.domain.constants import LanguageModelId
+from scholar_lens.domain.ids import normalize_arxiv_id
+from scholar_lens.domain.markdown.lint import (
+    arxiv_link_key,
+    unlink_unknown_arxiv,
+    writing_issues,
+)
+from scholar_lens.domain.paper.models import (
+    Paper,
+    ReviewText,
+)
+from scholar_lens.domain.post_format import same_as_title
+from scholar_lens.domain.quality_gate import publish_blockers
+from scholar_lens.domain.review_plan import (
     RANGE_PADDING,
     PlanError,
     ReviewPlan,
@@ -63,22 +72,24 @@ from ..domain.review_plan import (
     render_outline,
     section_source,
 )
-from ..domain.validation import (
+from scholar_lens.domain.text import (
+    is_affirmative,
+    parse_lines,
+    parse_quality_score,
+    tag_body,
+)
+from scholar_lens.domain.validation import (
     description_markup,
     description_problems,
     paper_page_title,
     unsourced_numbers,
 )
-from .citation_summarizer import CitationSummarizer
-from .code_retriever import CodeRetriever
-from .constants import LanguageModelId, normalize_arxiv_id
-from .content_extractor import Attributes, Citation
-from .formatting import same_as_title
-from .logger import is_running_in_aws, logger
-from .metrics import TokenBudgetGuard
-from .parser import Content, Figure
-from .prompt_safety import neutralize_prompt_tags
-from .prompts import (
+from scholar_lens.src.citation_summarizer import CitationSummarizer
+from scholar_lens.src.code_retriever import CodeRetriever
+from scholar_lens.src.logger import is_running_in_aws, logger
+from scholar_lens.src.metrics import TokenBudgetGuard
+from scholar_lens.src.prompt_safety import neutralize_prompt_tags
+from scholar_lens.src.prompts import (
     BasePrompt,
     PaperEditPrompt,
     PaperFinalizationPrompt,
@@ -86,15 +97,11 @@ from .prompts import (
     PaperSectionCheckPrompt,
     PaperSectionPrompt,
 )
-from .utils import (
+from scholar_lens.src.utils import (
     BedrockLanguageModelFactory,
     HTMLTagOutputParser,
     RetryableBase,
-    is_affirmative,
     measure_execution_time,
-    parse_lines,
-    parse_quality_score,
-    tag_body,
 )
 
 ROOT_DIR: Path = (
@@ -125,51 +132,6 @@ def _ensure_nltk_data() -> None:
             "NLTK resource 'punkt_tab' is missing and could not be downloaded; "
             "install it (python -m nltk.downloader punkt_tab) or set NLTK_DATA."
         )
-
-
-class Paper(BaseModel):
-    model_config = ConfigDict(frozen=True)
-    arxiv_id: str = Field(min_length=1)
-    title: str = Field(min_length=1)
-    authors: list[str] = Field(default_factory=list)
-    published: datetime
-    pdf_url: HttpUrl
-    content: Content
-    attributes: Attributes
-    citations: list[Citation] = Field(default_factory=list)
-    updated: datetime | None = None
-    abstract: str | None = None
-    journal_ref: str | None = None
-    primary_category: str | None = None
-    categories: list[str] = Field(default_factory=list)
-    doi: str | None = None
-    figures: list[Figure] = Field(default_factory=list)
-    repo_urls: list[HttpUrl] = Field(default_factory=list)
-    codebase_summary: str | None = None
-    is_pdf_parsed: bool = Field(default=False)
-
-    @field_validator("repo_urls", mode="before")
-    @classmethod
-    def convert_str_urls(cls, v: Any) -> list[HttpUrl]:
-        if v is None:
-            return []
-        return [HttpUrl(url) for url in v]
-
-
-class ReviewText(NamedTuple):
-    """The generated review: body sections, TL;DR, closing assessment, and the
-    title translated into the output language (the post's subtitle)."""
-
-    body: str
-    key_takeaways: str
-    closing: str
-    subtitle: str = ""
-    # The post's search snippet (front-matter ``description``); empty lets the
-    # blog derive one.
-    description: str = ""
-    # Degraded-output notes (sections skipped or below the bar, unusable
-    # finalization) for the PR checklist and the job result.
-    notes: tuple[str, ...] = ()
 
 
 @dataclass

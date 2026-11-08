@@ -42,8 +42,8 @@ from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
+from scholar_lens.domain.jobs import JobRequest, JobResult
 from scholar_lens.domain.survey.plan import SurveyInputError
-from scholar_lens.src.jobs import JobRequest, JobResult
 
 EXIT_OK, EXIT_FAILED, EXIT_REJECTED, EXIT_PENDING, EXIT_ERROR = 0, 1, 2, 3, 4
 EXIT_PR_FAILED = 5
@@ -508,7 +508,7 @@ def _costs(args: argparse.Namespace) -> int:
     from scholar_lens.adapters.aws.billing import CostExplorerBilling
     from scholar_lens.adapters.aws.run_ledger import S3RunLedger
     from scholar_lens.application.costs import report_costs
-    from scholar_lens.src.constants import S3Paths
+    from scholar_lens.domain.constants import S3Paths
 
     until = args.until or datetime.now(UTC).replace(
         hour=0, minute=0, second=0, microsecond=0

@@ -19,8 +19,8 @@ from langchain_core.runnables import Runnable
 from PIL import Image
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
-from ..adapters.http.pinned_transport import PinnedAsyncHTTPTransport
-from ..adapters.http.rate_limit import (
+from scholar_lens.adapters.http.pinned_transport import PinnedAsyncHTTPTransport
+from scholar_lens.adapters.http.rate_limit import (
     ARXIV_RATE_LIMITER,
     ARXIV_RETRIES,
     RateLimiter,
@@ -28,20 +28,26 @@ from ..adapters.http.rate_limit import (
     arxiv_retry_hold,
     is_retryable_status,
 )
-from ..adapters.http.url_guard import UnsafeUrlError, assert_url_is_public
-from ..adapters.retry import is_transient_error
-from ..application.usage import staged
-from .constants import AppConstants, EnvVars, LanguageModelId, LocalPaths
-from .logger import logger
-from .metrics import TokenBudgetExceeded
-from .prompts import FigureAnalysisPrompt
-from .utils import (
+from scholar_lens.adapters.http.url_guard import UnsafeUrlError, assert_url_is_public
+from scholar_lens.adapters.retry import is_transient_error
+from scholar_lens.application.usage import staged
+from scholar_lens.domain.constants import (
+    AppConstants,
+    EnvVars,
+    LanguageModelId,
+    LocalPaths,
+)
+from scholar_lens.domain.paper.models import Content, Figure
+from scholar_lens.domain.usage import TokenBudgetExceeded
+from scholar_lens.src.logger import logger
+from scholar_lens.src.prompts import FigureAnalysisPrompt
+from scholar_lens.src.utils import (
     BedrockLanguageModelFactory,
     RetryableBase,
     extract_text_from_html,
 )
-from .utils.helpers import preserve_listing_spaces
-from .utils.images import is_svg, svg_to_png
+from scholar_lens.src.utils.helpers import preserve_listing_spaces
+from scholar_lens.src.utils.images import is_svg, svg_to_png
 
 DEFAULT_RESIZE_QUALITY: int = 85
 DEFAULT_TIMEOUT: int = 60
@@ -83,25 +89,6 @@ def failure_reason(error: BaseException) -> str:
     return reason
 
 
-class Content(BaseModel):
-    model_config = ConfigDict(frozen=False)
-    text: str = Field(default="")
-    # The layout parser failed and only the PDF's text layer was read, so the
-    # paper's figures and tables are unavailable.
-    text_only: bool = Field(default=False)
-    # Source downgrades (the HTML rendering failed and the PDF was read …),
-    # each a run note for the PR's review notes.
-    notes: list[str] = Field(default_factory=list)
-
-    def __str__(self) -> str:
-        return f"Content(text='{self.text[:50]}...')"
-
-    @field_validator("text", mode="before")
-    @classmethod
-    def validate_text(cls, v: str) -> str:
-        return v.strip() if isinstance(v, str) else ""
-
-
 def _is_budget_breach(error: BaseException | None) -> bool:
     """A token-budget stop anywhere in the cause chain: the run must end."""
     while error is not None:
@@ -111,18 +98,8 @@ def _is_budget_breach(error: BaseException | None) -> bool:
     return False
 
 
-class Figure(BaseModel, RetryableBase):
-    model_config = ConfigDict(frozen=True)
-    figure_id: str
-    path: str
-    caption: str | None = Field(default=None)
-    analysis: str | None = Field(default=None)
-
-    def __str__(self) -> str:
-        return (
-            f"Figure(figure_id='{self.figure_id}', path='{self.path}', "
-            f"caption='{self.caption}', analysis='{self.analysis}')"
-        )
+class FigureReader(RetryableBase):
+    """Reads a figure's image and has the vision model describe it."""
 
     @classmethod
     @staged("figures")
@@ -132,12 +109,12 @@ class Figure(BaseModel, RetryableBase):
         figure_id: str,
         path: str,
         caption: str | None = None,
-    ) -> "Figure":
+    ) -> Figure:
         try:
             image_data = await cls._get_image_data(path)
         except FigureParseError as e:
             logger.warning("Failed to get image data for figure '%s': %s", figure_id, e)
-            return cls(figure_id=figure_id, path=path, caption=caption)
+            return Figure(figure_id=figure_id, path=path, caption=caption)
         try:
             analysis = await cls._analyse(figure_analyser, caption, image_data)
         except Exception as e:
@@ -150,8 +127,10 @@ class Figure(BaseModel, RetryableBase):
             logger.warning(
                 "Figure '%s' left unanalysed (%s error): %s", figure_id, kind, e
             )
-            return cls(figure_id=figure_id, path=path, caption=caption)
-        return cls(figure_id=figure_id, path=path, caption=caption, analysis=analysis)
+            return Figure(figure_id=figure_id, path=path, caption=caption)
+        return Figure(
+            figure_id=figure_id, path=path, caption=caption, analysis=analysis
+        )
 
     @staticmethod
     @RetryableBase._retry("figure_analysing")
@@ -203,8 +182,8 @@ class Figure(BaseModel, RetryableBase):
                 raise FigureParseError(f"Could not render SVG '{path}': {e}") from e
         # Normalise to JPEG so the data URI's declared "image/jpeg" media type is
         # always accurate (figures may be PNG/WebP/etc.); then resize if needed.
-        image_bytes = Figure._to_jpeg(image_bytes)
-        processed_bytes = Figure._resize_if_needed(image_bytes)
+        image_bytes = FigureReader._to_jpeg(image_bytes)
+        processed_bytes = FigureReader._resize_if_needed(image_bytes)
         return base64.b64encode(processed_bytes).decode("utf-8")
 
     @staticmethod
@@ -286,11 +265,6 @@ class Figure(BaseModel, RetryableBase):
                 exc_info=True,
             )
             raise FigureParseError(f"Image resizing failed: {e}") from e
-
-    @field_validator("caption", "analysis", mode="before")
-    @classmethod
-    def validate_text_fields(cls, v: str | None) -> str | None:
-        return v.strip() if v is not None else v
 
 
 class HTMLParseResult(BaseModel):
@@ -530,7 +504,7 @@ class HTMLRichParser(RichParser, HTMLParser):
                 continue
             seen_urls.add(url)
             figure_tasks.append(
-                Figure.from_llm(
+                FigureReader.from_llm(
                     self.figure_analyser,
                     str(len(figure_tasks)),
                     url,
@@ -777,7 +751,7 @@ class PDFParser(RichParser):
         # ``paths`` is aligned with ``regions`` (None where a crop failed), so a
         # skipped region can never shift captions onto the wrong image.
         tasks = [
-            Figure.from_llm(
+            FigureReader.from_llm(
                 figure_analyser=self.figure_analyser,
                 figure_id=str(fd["figure_id"] or i),
                 path=str(path),

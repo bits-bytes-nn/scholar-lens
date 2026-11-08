@@ -18,10 +18,9 @@ from scholar_lens.adapters.scholarly.metadata import (
     SemanticScholarProvider,
     _inverted_index_text,
     _strip_jats,
-    abstract_fits_title,
-    arxiv_id_from_doi,
-    titles_match,
 )
+from scholar_lens.domain.ids import arxiv_id_from_doi
+from scholar_lens.domain.titles import abstract_fits_title, titles_match
 
 
 class _NoWaitLimiter:

@@ -21,9 +21,9 @@ from PIL import Image
 from scholar_lens.adapters.aws.storage import S3Handler
 from scholar_lens.configs import Github
 from scholar_lens.domain.conventions import BlogPost
+from scholar_lens.domain.post_names import slugify
 from scholar_lens.domain.validation import PostValidationError
 from scholar_lens.src.blog_sync import BlogBranchSync
-from scholar_lens.src.publish_types import slugify
 from scholar_lens.src.publisher import (
     PostAssetError,
     Publisher,

@@ -18,14 +18,12 @@ import pytest
 
 from scholar_lens.configs import Config
 from scholar_lens.domain.conventions import load_local_conventions
+from scholar_lens.domain.guide.models import TechGuide
+from scholar_lens.domain.jobs import JobRequest
+from scholar_lens.domain.paper.models import Attributes, Content, Figure, Paper
 from scholar_lens.domain.validation import PostValidationError, validate_post
 from scholar_lens.src import guide_pipeline, paper_pipeline, publisher, runtime
-from scholar_lens.src.content_extractor import Attributes
-from scholar_lens.src.explainer import Paper
-from scholar_lens.src.jobs import JobRequest
 from scholar_lens.src.metrics import TokenUsageTracker
-from scholar_lens.src.parser import Content, Figure
-from scholar_lens.src.tech_guide import TechGuide
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 64
 ARXIV_FIGURE = "https://arxiv.org/html/2106.09685v2/x1.png"
@@ -281,7 +279,7 @@ class TestReviewEndToEnd:
         pipeline_env,
         monkeypatch: pytest.MonkeyPatch,  # type: ignore[no-untyped-def]
     ) -> None:
-        from scholar_lens.src.explainer import ReviewText
+        from scholar_lens.domain.paper.models import ReviewText
 
         context, _ = pipeline_env
 
@@ -332,7 +330,7 @@ class TestReviewEndToEnd:
 async def test_an_evidence_review_runs_without_the_citation_summarizer(
     pipeline_env, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from scholar_lens.src.explainer import ReviewText
+    from scholar_lens.domain.paper.models import ReviewText
 
     context, _ = pipeline_env
     context.config.explanation.engine = "evidence"
@@ -489,7 +487,7 @@ async def test_guide_budget_abort_keeps_the_generator_notes(
     pipeline_env,
     monkeypatch: pytest.MonkeyPatch,  # type: ignore[no-untyped-def]
 ) -> None:
-    from scholar_lens.src.metrics import TokenBudgetExceeded
+    from scholar_lens.domain.usage import TokenBudgetExceeded
 
     context, _ = pipeline_env
 

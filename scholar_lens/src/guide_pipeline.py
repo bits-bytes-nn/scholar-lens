@@ -7,22 +7,23 @@ import os
 from pathlib import Path
 from urllib.parse import urlparse
 
-from ..adapters.packages.pypi import package_extras
-from ..domain.evidence_draft import drop_empty_headings
-from ..domain.markdown.lint import (
+from scholar_lens.adapters.packages.pypi import package_extras
+from scholar_lens.domain.constants import EnvVars, LanguageModelId
+from scholar_lens.domain.evidence_draft import drop_empty_headings
+from scholar_lens.domain.guide.models import TechGuide
+from scholar_lens.domain.jobs import JobRequest
+from scholar_lens.domain.markdown.lint import (
     drop_unknown_images,
     figure_markers_to_images,
     fill_image_alts,
 )
-from .constants import EnvVars, LanguageModelId
-from .formatting import build_post_meta, cut_title, format_guide
-from .guide_writer import write_guide_with_evidence
-from .jobs import JobRequest
-from .logger import logger
-from .metrics import TokenUsageTracker
-from .publish_types import slugify, title_slug
-from .publisher import PublishRequest, build_pr_body
-from .runtime import (
+from scholar_lens.domain.post_format import build_post_meta, cut_title, format_guide
+from scholar_lens.domain.post_names import slugify, title_slug
+from scholar_lens.src.guide_writer import write_guide_with_evidence
+from scholar_lens.src.logger import logger
+from scholar_lens.src.metrics import TokenUsageTracker
+from scholar_lens.src.publisher import PublishRequest, build_pr_body
+from scholar_lens.src.runtime import (
     PipelineOutcome,
     RunContext,
     check_post_type,
@@ -30,8 +31,8 @@ from .runtime import (
     load_translation_guideline,
     publish_artifact,
 )
-from .tech_guide import TechGuide, TechGuideGenerator
-from .web_research import (
+from scholar_lens.src.tech_guide import TechGuideGenerator
+from scholar_lens.src.web_research import (
     BraveSearchProvider,
     FallbackSearchProvider,
     NullSearchProvider,

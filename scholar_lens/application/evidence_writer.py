@@ -23,8 +23,16 @@ from typing import Any, Literal, TypeVar
 
 from pydantic import BaseModel, Field, ValidationError
 
-from ..domain.edit_transaction import Revision, changed_units, transact
-from ..domain.evidence import (
+from scholar_lens.application.checkpoints import WriterState
+from scholar_lens.application.ports import (
+    AgentLimits,
+    LanguageModel,
+    ModelText,
+    was_cut,
+)
+from scholar_lens.application.usage import usage_stage
+from scholar_lens.domain.edit_transaction import Revision, changed_units, transact
+from scholar_lens.domain.evidence import (
     Evidence,
     EvidenceLedger,
     SourceDocument,
@@ -32,7 +40,7 @@ from ..domain.evidence import (
     evidence_problems,
     near_duplicate,
 )
-from ..domain.evidence_draft import (
+from scholar_lens.domain.evidence_draft import (
     add_missing_figures,
     balance_math,
     cited_ids,
@@ -46,12 +54,9 @@ from ..domain.evidence_draft import (
     section_heading,
     unsourced_number_sentences,
 )
-from ..domain.post_spec import Limits
-from ..domain.verifiers import VerifierSet
-from ..prompts.rules import FIX_ANSWER
-from .checkpoints import WriterState
-from .ports import AgentLimits, LanguageModel, ModelText, was_cut
-from .usage import usage_stage
+from scholar_lens.domain.post_spec import Limits
+from scholar_lens.domain.prompts.rules import FIX_ANSWER
+from scholar_lens.domain.verifiers import VerifierSet
 
 logger = logging.getLogger(__name__)
 

@@ -1,22 +1,31 @@
-from enum import Enum, auto
+"""Shared vocabulary: model ids, storage paths, SSM parameter and
+environment variable names (plain enums, no I/O)."""
 
-from ..domain.ids import (  # noqa: F401 - re-exported for the legacy modules
-    ARXIV_ID_BODY,
-    arxiv_id_from_reference,
-    arxiv_id_from_url,
-    arxiv_paper_key,
-    bare_doi,
-    is_arxiv_host,
-    normalize_arxiv_id,
-)
-from ..settings import (  # noqa: F401 - moved; re-exported
-    EnvVars,
-)
+from enum import Enum, auto
 
 # A soft token budget (guide, survey plan and write) is a hard ceiling at this
 # multiple of it: past the budget the optional checks are skipped, past the
 # ceiling the run aborts before the next call.
 HARD_BUDGET_MULTIPLE: float = 1.5
+
+
+class EnvVars(str, Enum):
+    AWS_PROFILE_NAME = "AWS_PROFILE_NAME"
+    BRAVE_API_KEY = "BRAVE_API_KEY"
+    # Optional: Crossref's "polite pool" (a contact address), an OpenAlex key
+    # and a Semantic Scholar key, all for higher limits on reference lookups.
+    CROSSREF_MAILTO = "CROSSREF_MAILTO"
+    GITHUB_TOKEN = "GITHUB_TOKEN"
+    LANGCHAIN_API_KEY = "LANGCHAIN_API_KEY"
+    LANGCHAIN_TRACING_V2 = "LANGCHAIN_TRACING_V2"
+    LANGCHAIN_ENDPOINT = "LANGCHAIN_ENDPOINT"
+    LANGCHAIN_PROJECT = "LANGCHAIN_PROJECT"
+    LOG_LEVEL = "LOG_LEVEL"
+    OPENALEX_API_KEY = "OPENALEX_API_KEY"
+    SEMANTIC_SCHOLAR_API_KEY = "SEMANTIC_SCHOLAR_API_KEY"
+    TAVILY_API_KEY = "TAVILY_API_KEY"
+    TOPIC_ARN = "TOPIC_ARN"
+    UPSTAGE_API_KEY = "UPSTAGE_API_KEY"
 
 
 class AutoNamedEnum(str, Enum):

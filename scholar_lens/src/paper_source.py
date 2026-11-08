@@ -29,28 +29,28 @@ from urllib.parse import parse_qs, unquote, urljoin, urlparse
 import requests
 from pydantic import HttpUrl
 
-from ..adapters.http.pinned_transport import PinnedRequestsAdapter
-from ..adapters.http.rate_limit import (
+from scholar_lens.adapters.http.pinned_transport import PinnedRequestsAdapter
+from scholar_lens.adapters.http.rate_limit import (
     ARXIV_RATE_LIMITER,
     ARXIV_RETRIES,
     RateLimiter,
     arxiv_retry_hold,
 )
-from ..adapters.http.url_guard import (
+from scholar_lens.adapters.http.url_guard import (
     UnsafeUrlError,
     assert_url_is_public,
     assert_url_scheme_and_literal,
     is_temporary_dns_failure,
 )
-from ..adapters.scholarly.arxiv import ArxivHandler, ArxivMetadata
-from ..adapters.scholarly.pdf import (
+from scholar_lens.adapters.scholarly.arxiv import ArxivHandler, ArxivMetadata
+from scholar_lens.adapters.scholarly.pdf import (
     CHUNK_BYTES,
     NotPdfContentError,
     PdfTooLargeError,
     save_pdf,
 )
-from .constants import arxiv_id_from_url, is_arxiv_host, normalize_arxiv_id
-from .logger import logger
+from scholar_lens.domain.ids import arxiv_id_from_url, is_arxiv_host, normalize_arxiv_id
+from scholar_lens.src.logger import logger
 
 # "arxiv.org/abs/2106.09685" or "openreview.net/pdf?id=…" typed without a scheme.
 _SCHEMELESS_URL = re.compile(r"^[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}/", re.IGNORECASE)

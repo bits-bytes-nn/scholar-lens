@@ -24,26 +24,29 @@ from typing import Any
 import boto3
 from langchain_core.runnables import Runnable
 
-from ..adapters.aws.storage import S3Handler
-from ..adapters.scholarly.index import (
+from scholar_lens.adapters.aws.storage import S3Handler
+from scholar_lens.adapters.scholarly.index import (
     DataCiteIndex,
     OpenAlexIndex,
     datacite_record,
     openalex_record,
 )
-from ..application.usage import staged
-from ..domain.markdown.lint import drop_unknown_images, fill_image_alts
-from ..domain.markdown.math import has_math, normalize_math
-from ..domain.post_names import slugify
-from ..domain.review_plan import digest_sections
-from ..domain.survey.plan import (
+from scholar_lens.application.usage import staged
+from scholar_lens.domain.constants import LanguageModelId, S3Paths
+from scholar_lens.domain.jobs import JobRequest
+from scholar_lens.domain.markdown.lint import drop_unknown_images, fill_image_alts
+from scholar_lens.domain.markdown.math import has_math, normalize_math
+from scholar_lens.domain.post_format import build_post_meta, render_front_matter
+from scholar_lens.domain.post_names import slugify, title_slug
+from scholar_lens.domain.review_plan import digest_sections
+from scholar_lens.domain.survey.plan import (
     SourceRecord,
     SurveyInputError,
     SurveyPlan,
     survey_slug,
     unversioned_arxiv_id,
 )
-from ..domain.survey.post import (
+from scholar_lens.domain.survey.post import (
     credit_figures,
     fill_metadata,
     foreign_paper_links,
@@ -56,22 +59,18 @@ from ..domain.survey.post import (
     unlink_foreign_papers,
     validate_plan,
 )
-from ..domain.tags import controlled_tag_problems
-from ..domain.validation import (
+from scholar_lens.domain.tags import controlled_tag_problems
+from scholar_lens.domain.validation import (
     description_markup,
     description_problems,
     fit_description,
 )
-from .constants import LanguageModelId, S3Paths
-from .formatting import build_post_meta, render_front_matter
-from .jobs import JobRequest
-from .logger import logger
-from .metrics import TokenUsageTracker
-from .prompt_safety import neutralize_prompt_tags
-from .prompts import SurveyFinalizationPrompt
-from .publish_types import title_slug
-from .publisher import PublishRequest, build_pr_body
-from .runtime import (
+from scholar_lens.src.logger import logger
+from scholar_lens.src.metrics import TokenUsageTracker
+from scholar_lens.src.prompt_safety import neutralize_prompt_tags
+from scholar_lens.src.prompts import SurveyFinalizationPrompt
+from scholar_lens.src.publisher import PublishRequest, build_pr_body
+from scholar_lens.src.runtime import (
     PipelineOutcome,
     RunContext,
     check_post_type,
@@ -79,9 +78,13 @@ from .runtime import (
     load_translation_guideline,
     publish_artifact,
 )
-from .survey_pipeline import read_references, reference_excerpts
-from .utils import BedrockLanguageModelFactory, HTMLTagOutputParser, RetryableBase
-from .web_research import WebResearcher
+from scholar_lens.src.survey_pipeline import read_references, reference_excerpts
+from scholar_lens.src.utils import (
+    BedrockLanguageModelFactory,
+    HTMLTagOutputParser,
+    RetryableBase,
+)
+from scholar_lens.src.web_research import WebResearcher
 
 # Images of a paper's arXiv HTML rendering offered to its reading agent.
 MAX_PAPER_IMAGES = 40
@@ -336,10 +339,16 @@ async def write_survey_with_evidence(
 ) -> Survey:
     """The evidence engine: reading agents, an evidence-assigning outline,
     verified sections (docs/redesign.md)."""
-    from ..adapters.bedrock.strands_models import RoleModel, StrandsLanguageModel
-    from ..application.survey_engine import EngineSettings, EvidenceSurveyEngine
-    from .evidence_models import budgeted, role_model, unservable
-    from .survey_documents import PaperDocuments, evidence_store
+    from scholar_lens.adapters.bedrock.strands_models import (
+        RoleModel,
+        StrandsLanguageModel,
+    )
+    from scholar_lens.application.survey_engine import (
+        EngineSettings,
+        EvidenceSurveyEngine,
+    )
+    from scholar_lens.src.evidence_models import budgeted, role_model, unservable
+    from scholar_lens.src.survey_documents import PaperDocuments, evidence_store
 
     cfg = context.config.survey
 

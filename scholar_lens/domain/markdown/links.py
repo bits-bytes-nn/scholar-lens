@@ -6,7 +6,7 @@ import html
 from collections.abc import Iterable
 from urllib.parse import quote
 
-from ..text import is_placeholder
+from scholar_lens.domain.text import is_placeholder
 
 # Characters of an untrusted title that kramdown or Liquid would read as
 # markup inside "[text](url)": brackets end the link, a | turns the list item

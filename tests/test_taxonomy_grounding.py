@@ -5,8 +5,8 @@ from __future__ import annotations
 
 import pytest
 
+from scholar_lens.domain.sources import SourceSet
 from scholar_lens.src.guide_authority import official_reference, unverified_identifiers
-from scholar_lens.src.source_set import SourceSet
 from scholar_lens.src.web_research import (
     OfficialDocs,
     PageContent,

@@ -15,12 +15,12 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.vectorstores import VectorStore
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-from ..adapters.http.url_guard import UnsafeUrlError, assert_url_is_public
-from ..application.usage import staged
-from .constants import EmbeddingModelId, LanguageModelId, LocalPaths
-from .logger import logger
-from .prompts import CodeAnalysisPrompt, CodebaseSummaryPrompt
-from .utils import (
+from scholar_lens.adapters.http.url_guard import UnsafeUrlError, assert_url_is_public
+from scholar_lens.application.usage import staged
+from scholar_lens.domain.constants import EmbeddingModelId, LanguageModelId, LocalPaths
+from scholar_lens.src.logger import logger
+from scholar_lens.src.prompts import CodeAnalysisPrompt, CodebaseSummaryPrompt
+from scholar_lens.src.utils import (
     BatchProcessor,
     BedrockEmbeddingModelFactory,
     BedrockLanguageModelFactory,

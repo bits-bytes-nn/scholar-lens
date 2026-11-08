@@ -14,9 +14,9 @@ from collections.abc import Collection, Iterable, Mapping, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .evidence import SourceDocument
-from .evidence_draft import quote_for_prompt
-from .post_spec import CoverageSpec
+from scholar_lens.domain.evidence import SourceDocument
+from scholar_lens.domain.evidence_draft import quote_for_prompt
+from scholar_lens.domain.post_spec import CoverageSpec
 
 # How many targets one extraction answer may hold (the spec's count caps it
 # again).

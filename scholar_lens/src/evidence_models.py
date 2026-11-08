@@ -11,15 +11,15 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Callable
 
-from ..adapters.bedrock.strands_models import RoleModel
-from ..domain.usage import UsageEvent
-from .constants import LanguageModelId
-from .logger import logger
-from .metrics import TokenBudgetExceeded, TokenUsageTracker
-from .runtime import RunContext
-from .utils import BedrockCrossRegionModelHelper
-from .utils.factories import _allocated_profile
-from .utils.models import model_info_for_invoked_id
+from scholar_lens.adapters.bedrock.strands_models import RoleModel
+from scholar_lens.domain.constants import LanguageModelId
+from scholar_lens.domain.model_registry import model_info_for_invoked_id
+from scholar_lens.domain.usage import TokenBudgetExceeded, UsageEvent
+from scholar_lens.src.logger import logger
+from scholar_lens.src.metrics import TokenUsageTracker
+from scholar_lens.src.runtime import RunContext
+from scholar_lens.src.utils import BedrockCrossRegionModelHelper
+from scholar_lens.src.utils.factories import _allocated_profile
 
 
 def role_model(
@@ -65,7 +65,7 @@ def budgeted(
 
 
 def _downloadable(url: str) -> bool:
-    from .publisher import download_image
+    from scholar_lens.src.publisher import download_image
 
     try:
         download_image(url)

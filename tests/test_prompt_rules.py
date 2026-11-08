@@ -5,6 +5,13 @@ from __future__ import annotations
 import pytest
 
 from scholar_lens.domain.markdown.lint import style_hits, writing_issues
+from scholar_lens.domain.prompts.rules import (
+    KOREAN_STYLE,
+    NATURALNESS_CHECK,
+    PAPER_TABLE_RULES,
+    TABLE_SIZE_RULE,
+    TERMINOLOGY_RULES,
+)
 from scholar_lens.src.prompts import (
     AttributesExtractionPrompt,
     PaperEditPrompt,
@@ -16,14 +23,7 @@ from scholar_lens.src.prompts import (
     PaperSummaryShortenPrompt,
     SurveyFinalizationPrompt,
 )
-from scholar_lens.src.prompts.base import (
-    KOREAN_STYLE,
-    NATURALNESS_CHECK,
-    PAPER_TABLE_RULES,
-    TABLE_SIZE_RULE,
-    TERMINOLOGY_RULES,
-    BasePrompt,
-)
+from scholar_lens.src.prompts.base import BasePrompt
 from scholar_lens.src.prompts.extraction import (
     DEFAULT_CATEGORY_OPTIONS,
     DEFAULT_CONTROLLED_TAGS,
@@ -216,7 +216,7 @@ def test_naturalness_blocks_only_meaning_and_plain_da_form() -> None:
 
 
 def test_figure_introductions_carry_no_template_sentence() -> None:
-    from scholar_lens.src.prompts.base import VISUAL_RULES
+    from scholar_lens.domain.prompts.rules import VISUAL_RULES
 
     rules = " ".join(VISUAL_RULES.split())
     assert "아래 그림" not in rules

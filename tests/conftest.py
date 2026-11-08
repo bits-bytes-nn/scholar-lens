@@ -121,7 +121,7 @@ def _no_developer_keys(monkeypatch: pytest.MonkeyPatch) -> None:
     """Tests see no API key, token or alternate config from the developer's
     shell or .env (a key changes which providers a pipeline calls)."""
     from scholar_lens.configs.config import CONFIG_PATH_ENV
-    from scholar_lens.settings import EnvVars
+    from scholar_lens.domain.constants import EnvVars
 
     for name in [*(v.value for v in EnvVars), CONFIG_PATH_ENV]:
         if name not in ("LOG_LEVEL", "AWS_PROFILE_NAME"):

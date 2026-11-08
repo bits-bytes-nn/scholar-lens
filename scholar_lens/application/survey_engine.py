@@ -16,10 +16,32 @@ import logging
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 
-from ..domain.evidence import EvidenceLedger, SourceDocument
-from ..domain.evidence_draft import free_numbers
-from ..domain.specs.survey import REFERENCE_KINDS, SURVEY_SPEC
-from ..domain.survey.evidence_post import (
+from scholar_lens.application.evidence_writer import (
+    WriterPrompts,
+    block,
+    evidence_lines,
+    safe_key,
+)
+from scholar_lens.application.ports import (
+    AgentLimits,
+    CheckpointStore,
+    DocumentSource,
+    LanguageModel,
+    TextStore,
+)
+from scholar_lens.application.post_engine import (
+    PostEngine,
+    PostPrompts,
+    ReadJob,
+    ReadStart,
+    RunSettings,
+    SectionContext,
+)
+from scholar_lens.domain.evidence import EvidenceLedger, SourceDocument
+from scholar_lens.domain.evidence_draft import free_numbers
+from scholar_lens.domain.prompts import survey_evidence as prompts
+from scholar_lens.domain.specs.survey import REFERENCE_KINDS, SURVEY_SPEC
+from scholar_lens.domain.survey.evidence_post import (
     EvidenceOutline,
     OutlineSection,
     cite_papers,
@@ -33,25 +55,8 @@ from ..domain.survey.evidence_post import (
     with_canonical_table,
     without_table_evidence,
 )
-from ..domain.survey.plan import PlanPaper, SurveyPlan
-from ..domain.survey.post import without_papers
-from ..prompts import survey_evidence as prompts
-from .evidence_writer import WriterPrompts, block, evidence_lines, safe_key
-from .ports import (
-    AgentLimits,
-    CheckpointStore,
-    DocumentSource,
-    LanguageModel,
-    TextStore,
-)
-from .post_engine import (
-    PostEngine,
-    PostPrompts,
-    ReadJob,
-    ReadStart,
-    RunSettings,
-    SectionContext,
-)
+from scholar_lens.domain.survey.plan import PlanPaper, SurveyPlan
+from scholar_lens.domain.survey.post import without_papers
 
 __all__ = [
     "EngineSettings",

@@ -15,11 +15,9 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from ..markdown.links import link_list, md_link_text, md_link_url
-from ..markdown.math import segments
-from ..validation import FURTHER_READING_HEADINGS, REFERENCES_HEADING
-from ..venues import reference_venue
-from .plan import (
+from scholar_lens.domain.markdown.links import link_list, md_link_text, md_link_url
+from scholar_lens.domain.markdown.math import segments
+from scholar_lens.domain.survey.plan import (
     PlanPaper,
     SourceRecord,
     SurveyInputError,
@@ -27,6 +25,8 @@ from .plan import (
     merge_records,
     parse_paper_id,
 )
+from scholar_lens.domain.validation import FURTHER_READING_HEADINGS, REFERENCES_HEADING
+from scholar_lens.domain.venues import reference_venue
 
 _MATH_DELIMS = re.compile(r"^\$\$|\$\$$")
 

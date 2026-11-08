@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from scholar_lens.src.source_set import DomainClasses
+from scholar_lens.domain.sources import DomainClasses
 from scholar_lens.src.source_snapshot import (
     SNAPSHOT_FORMAT,
     SnapshotPolicy,

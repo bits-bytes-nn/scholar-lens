@@ -4,7 +4,7 @@ tables code builds."""
 
 from __future__ import annotations
 
-from ..post_spec import (
+from scholar_lens.domain.post_spec import (
     CoverageSpec,
     EvidencePolicy,
     KindCount,

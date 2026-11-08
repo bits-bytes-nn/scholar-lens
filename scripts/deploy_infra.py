@@ -70,15 +70,15 @@ from scholar_lens.adapters.aws.storage import get_account_id
 from scholar_lens.cli import APP_REPORTED_EXIT_CODES
 from scholar_lens.configs import Config
 from scholar_lens.configs.config import CONFIG_PATH
-from scholar_lens.domain.cost_allocation import ARTIFACT_KINDS, application_profile_name
-from scholar_lens.src.constants import (
+from scholar_lens.domain.constants import (
     RUN_SECRETS,
     EmbeddingModelId,
     EnvVars,
     LanguageModelId,
     SSMParams,
 )
-from scholar_lens.src.jobs import ssm_base
+from scholar_lens.domain.cost_allocation import ARTIFACT_KINDS, application_profile_name
+from scholar_lens.domain.jobs import ssm_base
 from scholar_lens.src.logger import logger
 from scholar_lens.src.metrics import COST_METRIC_NAME, METRICS_NAMESPACE
 

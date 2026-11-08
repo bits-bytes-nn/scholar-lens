@@ -9,9 +9,9 @@ from unittest.mock import MagicMock
 import boto3
 import pytest
 
-from scholar_lens.src.constants import LanguageModelId
+from scholar_lens.domain.constants import LanguageModelId
+from scholar_lens.domain.paper.models import Figure
 from scholar_lens.src.paper_pipeline import _figure_captions, _unanalysed_figure_notes
-from scholar_lens.src.parser import Figure
 from tests.fakes import FakeLLMFactory
 
 
@@ -74,8 +74,8 @@ def test_code_note_only_when_a_given_repository_yielded_nothing() -> None:
 
 
 def test_text_only_note_when_pdf_layout_parsing_failed() -> None:
+    from scholar_lens.domain.paper.models import Content
     from scholar_lens.src.paper_pipeline import _text_only_notes
-    from scholar_lens.src.parser import Content
 
     text_only = SimpleNamespace(content=Content(text="t", text_only=True))
     assert _text_only_notes(text_only) == [  # type: ignore[arg-type]
@@ -117,7 +117,7 @@ async def test_html_parse_failure_falls_back_to_the_pdf(monkeypatch) -> None:  #
         async def parse(self, _arxiv_id: str) -> None:
             raise ParserError("no HTML rendering")
 
-    from scholar_lens.src.parser import Content
+    from scholar_lens.domain.paper.models import Content
 
     async def fake_pdf(
         source: object, papers_dir: Path, kwargs: dict

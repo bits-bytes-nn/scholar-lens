@@ -9,9 +9,9 @@ from typing import Literal, Protocol, TypeVar
 
 from pydantic import BaseModel
 
-from ..domain.costs import RunRecord
-from ..domain.evidence import SourceDocument
-from ..domain.survey.plan import PlanPaper
+from scholar_lens.domain.costs import RunRecord
+from scholar_lens.domain.evidence import SourceDocument
+from scholar_lens.domain.survey.plan import PlanPaper
 
 
 class RunLedger(Protocol):

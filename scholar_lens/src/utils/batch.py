@@ -5,8 +5,8 @@ from typing import Any
 from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel, Field
 
-from ...adapters.retry import RetryableBase, is_transient_error
-from ..logger import logger
+from scholar_lens.adapters.retry import RetryableBase, is_transient_error
+from scholar_lens.src.logger import logger
 
 
 class BatchProcessor(BaseModel):

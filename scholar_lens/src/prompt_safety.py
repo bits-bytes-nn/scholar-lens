@@ -19,7 +19,7 @@ from __future__ import annotations
 import functools
 import re
 
-from .prompts import BasePrompt
+from scholar_lens.src.prompts import BasePrompt
 
 # A fence is a tag whose body holds a ``{placeholder}`` the input is filled
 # into; output-format tags (``<plan>``, ``<edit>``, ...) carry no input.

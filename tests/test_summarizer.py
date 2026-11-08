@@ -10,12 +10,10 @@ import boto3
 import pytest
 
 from scholar_lens.configs import Github
+from scholar_lens.domain.constants import LanguageModelId
 from scholar_lens.domain.conventions import load_local_conventions
-from scholar_lens.src.constants import LanguageModelId
-from scholar_lens.src.content_extractor import Attributes
-from scholar_lens.src.explainer import Paper
-from scholar_lens.src.formatting import format_summary, paper_post_meta
-from scholar_lens.src.parser import Content
+from scholar_lens.domain.paper.models import Attributes, Content, Paper
+from scholar_lens.domain.post_format import format_summary, paper_post_meta
 from scholar_lens.src.prompts import PaperSummaryPrompt
 from scholar_lens.src.summarizer import PaperSummarizer
 from tests.fakes import FakeLLMFactory
@@ -190,7 +188,8 @@ class TestPaperSummarizer:
         # The budget guard fires at the top of summarize(): an already-exhausted
         # budget (from prior data-prep) must abort BEFORE the (expensive) LLM call,
         # not after. Regression guard for the _enforce_token_budget() wiring.
-        from scholar_lens.src.metrics import TokenBudgetExceeded, TokenUsageTracker
+        from scholar_lens.domain.usage import TokenBudgetExceeded
+        from scholar_lens.src.metrics import TokenUsageTracker
 
         summarizer = _make_summarizer_with_stub_chain(
             {"summary": "## 연구 배경", "tags": "", "urls": ""}
@@ -348,7 +347,7 @@ class TestSummaryLength:
     async def test_exhausted_budget_during_shortening_fails_fast(
         self, sample_paper: Paper, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from scholar_lens.src.metrics import TokenBudgetExceeded
+        from scholar_lens.domain.usage import TokenBudgetExceeded
 
         summarizer = self._summarizer(self.SHORT)
 
@@ -393,13 +392,13 @@ def test_shortening_may_cut_inline_math_but_not_display_equations() -> None:
     ],
 )
 def test_lead_sentence_is_plain_text(line: str, expected: str) -> None:
-    from scholar_lens.src.formatting import _lead_sentence
+    from scholar_lens.domain.post_format import _lead_sentence
 
     assert _lead_sentence(line) == expected
 
 
 def test_long_lead_sentence_is_cut_with_an_ellipsis() -> None:
-    from scholar_lens.src.formatting import _SUBTITLE_MAX, _lead_sentence
+    from scholar_lens.domain.post_format import _SUBTITLE_MAX, _lead_sentence
 
     text = _lead_sentence("가" * 30 + " " + "나" * 30 + ", " + "다" * 30 + " 라.")
     assert text.endswith("…") and len(text) <= _SUBTITLE_MAX + 1

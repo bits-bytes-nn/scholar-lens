@@ -168,9 +168,9 @@ def test_an_agent_cut_at_the_output_limit_keeps_its_outcome(monkeypatch) -> None
 
 
 def test_an_evidence_run_stops_at_its_cost_ceiling() -> None:
-    from scholar_lens.domain.usage import UsageEvent
+    from scholar_lens.domain.usage import TokenBudgetExceeded, UsageEvent
     from scholar_lens.src.evidence_models import budgeted
-    from scholar_lens.src.metrics import TokenBudgetExceeded, TokenUsageTracker
+    from scholar_lens.src.metrics import TokenUsageTracker
 
     tracker = TokenUsageTracker()
     record = budgeted(tracker, 0.01)

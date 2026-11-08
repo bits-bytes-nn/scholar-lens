@@ -12,14 +12,14 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from scholar_lens.domain.model_registry import price_per_mtok
+from scholar_lens.domain.usage import TokenBudgetExceeded
 from scholar_lens.src.metrics import (
     METRICS_NAMESPACE,
     MetricsEmitter,
-    TokenBudgetExceeded,
     TokenBudgetGuard,
     TokenUsageTracker,
     _extract_usage,
-    price_per_mtok,
 )
 
 
@@ -152,7 +152,7 @@ class TestTokenBudgetGuard:
         guard._enforce_token_budget()  # ceiling None → no-op
 
     def test_two_tier_budget(self) -> None:
-        from scholar_lens.src.constants import HARD_BUDGET_MULTIPLE
+        from scholar_lens.domain.constants import HARD_BUDGET_MULTIPLE
 
         tracker = TokenUsageTracker(input_tokens=1000)
         guard = self._guard([tracker], 1000)
@@ -306,8 +306,8 @@ class TestRateAndExtractUsageEdges:
 
 class TestTieredPricing:
     def test_haiku_55_long_prompts_use_the_higher_tier(self) -> None:
+        from scholar_lens.domain.model_registry import event_cost_usd
         from scholar_lens.domain.usage import UsageEvent
-        from scholar_lens.src.metrics import event_cost_usd
 
         def cost(input_tokens: int) -> float:
             return event_cost_usd(

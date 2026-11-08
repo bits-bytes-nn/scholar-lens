@@ -11,38 +11,48 @@ from typing import Any
 
 from pydantic import HttpUrl
 
-from ..domain.conventions import BlogPost
-from ..domain.markdown.front_matter import split_front_matter
-from ..domain.markdown.lint import (
+from scholar_lens.domain.constants import EmbeddingModelId, LanguageModelId, LocalPaths
+from scholar_lens.domain.conventions import BlogPost
+from scholar_lens.domain.jobs import JobRequest
+from scholar_lens.domain.markdown.front_matter import split_front_matter
+from scholar_lens.domain.markdown.lint import (
     drop_unknown_images,
     figure_markers_to_images,
     fill_image_alts,
 )
-from ..domain.tags import unsupported_tags
-from ..domain.validation import unsourced_table_numbers
-from .citation_summarizer import CitationSummarizer
-from .code_retriever import CodeRetriever, NoPythonFilesError
-from .constants import EmbeddingModelId, LanguageModelId, LocalPaths
-from .content_extractor import Attributes, ContentExtractor
-from .explainer import Paper, PaperReviewer, ReviewText
-from .formatting import format_review, format_summary, paper_post_meta
-from .jobs import JobRequest
-from .logger import logger
-from .metrics import TokenUsageTracker
-from .paper_source import PaperSource, resolve_paper_source
-from .paper_writer import write_paper_with_evidence
-from .parser import (
+from scholar_lens.domain.paper.models import (
+    Attributes,
     Content,
     Figure,
+    Paper,
+    ReviewText,
+)
+from scholar_lens.domain.post_format import (
+    format_review,
+    format_summary,
+    paper_post_meta,
+)
+from scholar_lens.domain.post_names import title_slug
+from scholar_lens.domain.tags import unsupported_tags
+from scholar_lens.domain.text import is_placeholder
+from scholar_lens.domain.validation import unsourced_table_numbers
+from scholar_lens.src.citation_summarizer import CitationSummarizer
+from scholar_lens.src.code_retriever import CodeRetriever, NoPythonFilesError
+from scholar_lens.src.content_extractor import ContentExtractor
+from scholar_lens.src.explainer import PaperReviewer
+from scholar_lens.src.logger import logger
+from scholar_lens.src.metrics import TokenUsageTracker
+from scholar_lens.src.paper_source import PaperSource, resolve_paper_source
+from scholar_lens.src.paper_writer import write_paper_with_evidence
+from scholar_lens.src.parser import (
     HTMLRichParser,
     ParserError,
     PDFParser,
     attach_figure_context,
     failure_reason,
 )
-from .publish_types import title_slug
-from .publisher import PublishRequest, build_pr_body
-from .runtime import (
+from scholar_lens.src.publisher import PublishRequest, build_pr_body
+from scholar_lens.src.runtime import (
     PipelineOutcome,
     RunContext,
     check_post_type,
@@ -50,8 +60,7 @@ from .runtime import (
     load_translation_guideline,
     publish_artifact,
 )
-from .summarizer import PaperSummarizer
-from .utils import is_placeholder
+from scholar_lens.src.summarizer import PaperSummarizer
 
 # The blog's most-used tags shown to the tagging prompt (all of them are
 # still used to match spellings).

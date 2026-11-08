@@ -37,9 +37,9 @@ from scholar_lens.domain.guide.evidence_guide import (
     strip_markers,
 )
 from scholar_lens.domain.post_spec import evidence_policy
+from scholar_lens.domain.sources import SourceSet
 from scholar_lens.domain.specs import GUIDE_SPEC
 from scholar_lens.src.guide_writer import _source_urls, guide_documents
-from scholar_lens.src.source_set import SourceSet
 from scholar_lens.src.web_research import PageContent
 from tests.fakes import with_context
 

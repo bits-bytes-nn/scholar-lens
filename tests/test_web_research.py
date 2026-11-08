@@ -111,7 +111,7 @@ class TestResearchCorpus:
         assert corpus.image_urls == ["a", "b", "c"]
 
     def test_relevant_text_labels_sources_by_authority(self) -> None:
-        from scholar_lens.src.source_set import SourceSet
+        from scholar_lens.domain.sources import SourceSet
 
         corpus = ResearchCorpus(
             pages=[
@@ -1096,7 +1096,7 @@ class TestReferenceMaterialAndPapers:
     def test_reference_material_is_labelled_but_official_pages_stay_official(
         self,
     ) -> None:
-        from scholar_lens.src.source_set import SourceSet
+        from scholar_lens.domain.sources import SourceSet
 
         corpus = ResearchCorpus(
             pages=[
@@ -1112,7 +1112,7 @@ class TestReferenceMaterialAndPapers:
         assert "## Source (third-party): https://other.io/c" in text
 
     def test_without_docs_nothing_is_official(self) -> None:
-        from scholar_lens.src.source_set import SourceSet
+        from scholar_lens.domain.sources import SourceSet
         from scholar_lens.src.web_research import source_label
 
         page = PageContent("https://docs.x.dev/a", "A", "x")

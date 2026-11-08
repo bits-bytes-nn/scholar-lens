@@ -15,26 +15,31 @@ from collections.abc import Mapping, Sequence
 from typing import Any, Literal, get_args
 from urllib.parse import urlsplit
 
-from ..adapters.packages.pypi import PackageSource, package_extras, package_source
-from ..domain.evidence import Authority, SourceAuthority, SourceDocument
-from ..domain.guide.evidence_guide import (
+from scholar_lens.adapters.packages.pypi import (
+    PackageSource,
+    package_extras,
+    package_source,
+)
+from scholar_lens.domain.constants import LanguageModelId, S3Paths
+from scholar_lens.domain.evidence import Authority, SourceAuthority, SourceDocument
+from scholar_lens.domain.guide.evidence_guide import (
     SOURCE_ID_PREFIX,
     install_requirements,
     python_blocks,
     unknown_extras,
     unverified_imports,
 )
-from ..domain.guide.sdk_index import SdkIndex, api_problems
-from ..domain.post_names import slugify
-from .constants import LanguageModelId, S3Paths
-from .guide_authority import official_reference, unverified_identifiers
-from .logger import logger
-from .metrics import TokenUsageTracker
-from .runtime import RunContext
-from .source_set import engine_authority
-from .source_snapshot import SnapshotPolicy
-from .tech_guide import TechGuide, TechGuideGenerator
-from .web_research import (
+from scholar_lens.domain.guide.models import TechGuide
+from scholar_lens.domain.guide.sdk_index import SdkIndex, api_problems
+from scholar_lens.domain.post_names import slugify
+from scholar_lens.domain.sources import engine_authority
+from scholar_lens.src.guide_authority import official_reference, unverified_identifiers
+from scholar_lens.src.logger import logger
+from scholar_lens.src.metrics import TokenUsageTracker
+from scholar_lens.src.runtime import RunContext
+from scholar_lens.src.source_snapshot import SnapshotPolicy
+from scholar_lens.src.tech_guide import TechGuideGenerator
+from scholar_lens.src.web_research import (
     PageContent,
     ResearchCorpus,
     page_key,
@@ -202,10 +207,10 @@ async def write_guide_with_evidence(
     title_max_length: int,
     fresh_sources: bool = False,
 ) -> TechGuide:
-    from ..adapters.bedrock.strands_models import StrandsLanguageModel
-    from ..application.guide_engine import EvidenceGuideEngine, GuideSettings
-    from .evidence_models import budgeted, role_model, unservable
-    from .survey_documents import EvidenceTextStore, evidence_store
+    from scholar_lens.adapters.bedrock.strands_models import StrandsLanguageModel
+    from scholar_lens.application.guide_engine import EvidenceGuideEngine, GuideSettings
+    from scholar_lens.src.evidence_models import budgeted, role_model, unservable
+    from scholar_lens.src.survey_documents import EvidenceTextStore, evidence_store
 
     cfg = context.config.tech_guide
     # The gathered corpus is saved and reused for the same inputs within

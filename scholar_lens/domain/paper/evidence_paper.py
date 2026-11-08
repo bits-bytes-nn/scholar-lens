@@ -17,15 +17,15 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..evidence import EvidenceLedger
-from ..glossary import GlossaryTerm
-from ..post_spec import (
+from scholar_lens.domain.evidence import EvidenceLedger
+from scholar_lens.domain.glossary import GlossaryTerm
+from scholar_lens.domain.post_spec import (
     SectionBase,
     first_owner,
     ownership_problems,
     structure_problems,
 )
-from ..specs.paper import paper_spec
+from scholar_lens.domain.specs.paper import paper_spec
 
 PaperKind = Literal[
     "tldr", "problem", "method", "implementation", "experiments", "analysis", "closing"

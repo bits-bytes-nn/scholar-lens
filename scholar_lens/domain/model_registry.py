@@ -1,6 +1,14 @@
+"""Bedrock models the app calls: output limits, list prices, and the
+application inference profiles they are invoked through."""
+
+import logging
+
 from pydantic import BaseModel, Field
 
-from ..constants import EmbeddingModelId, LanguageModelId
+from scholar_lens.domain.constants import EmbeddingModelId, LanguageModelId
+from scholar_lens.domain.usage import UsageEvent
+
+logger = logging.getLogger(__name__)
 
 
 class EmbeddingModelInfo(BaseModel):
@@ -238,3 +246,37 @@ def model_info_for_invoked_id(invoked_id: str) -> LanguageModelInfo | None:
         if bare(model_id.value) == target:
             return info
     return None
+
+
+def event_cost_usd(event: UsageEvent) -> float:
+    """List-price cost of one call, cache tokens at their multiples of the
+    input price (the long-prompt tier is decided on all tokens read)."""
+    read = event.input_tokens + event.cache_read_tokens + event.cache_write_tokens
+    price_in, price_out = _prices(event.model_id, read)
+    return (
+        event.input_tokens * price_in
+        + event.cache_read_tokens * price_in * CACHE_READ_PRICE_MULTIPLE
+        + event.cache_write_tokens * price_in * CACHE_WRITE_PRICE_MULTIPLE
+        + event.output_tokens * price_out
+    ) / 1e6
+
+
+def _prices(model_id: str, input_tokens: int) -> tuple[float, float]:
+    info = model_info_for_invoked_id(model_id)
+    if (
+        info is not None
+        and info.long_prompt_threshold is not None
+        and info.long_prompt_price_per_mtok is not None
+        and input_tokens > info.long_prompt_threshold
+    ):
+        return info.long_prompt_price_per_mtok
+    return price_per_mtok(model_id)
+
+
+def price_per_mtok(model_id: str) -> tuple[float, float]:
+    """(input, output) USD per million tokens for an invoked model id."""
+    info = model_info_for_invoked_id(model_id)
+    if info is None:
+        logger.debug("No price for model '%s'; using the fallback rate.", model_id)
+        return FALLBACK_PRICE_PER_MTOK
+    return info.input_price_per_mtok, info.output_price_per_mtok

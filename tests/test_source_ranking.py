@@ -9,7 +9,7 @@ from collections.abc import Collection
 import httpx
 import pytest
 
-from scholar_lens.src.source_set import DomainClasses, SourceSet, search_exclusions
+from scholar_lens.domain.sources import DomainClasses, SourceSet, search_exclusions
 from scholar_lens.src.web_research import (
     BraveSearchProvider,
     FallbackSearchProvider,

@@ -46,9 +46,9 @@ from dataclasses import dataclass
 from functools import cache
 from typing import Literal
 
-from ..conventions import load_local_conventions
-from ..ids import arxiv_id_from_doi, arxiv_paper_key
-from .math import (
+from scholar_lens.domain.conventions import load_local_conventions
+from scholar_lens.domain.ids import arxiv_id_from_doi, arxiv_paper_key
+from scholar_lens.domain.markdown.math import (
     BLOG_CODE_SPAN,
     BLOG_FENCE,
     HANGUL,

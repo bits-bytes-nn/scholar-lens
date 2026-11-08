@@ -18,17 +18,17 @@ import re
 from datetime import date
 from typing import Any
 
-from ...domain.survey.plan import (
+from scholar_lens.adapters.http.rate_limit import RateLimiter
+from scholar_lens.adapters.scholarly import metadata as citation_metadata
+from scholar_lens.adapters.scholarly.arxiv import ArxivMetadata
+from scholar_lens.domain.constants import EnvVars
+from scholar_lens.domain.survey.plan import (
     CitationData,
     SourceRecord,
     normalize_doi,
     unversioned_arxiv_id,
 )
-from ...domain.venues import venue_name
-from ...settings import EnvVars
-from ..http.rate_limit import RateLimiter
-from . import metadata as citation_metadata
-from .arxiv import ArxivMetadata
+from scholar_lens.domain.venues import venue_name
 
 logger = logging.getLogger(__name__)
 

@@ -1,7 +1,7 @@
 """Prompts for the five-question paper summary (PaperSummarizer): the
 summary, its one shortening pass and its one targeted fix."""
 
-from .base import (
+from scholar_lens.domain.prompts.rules import (
     CITATION_KEY_RULES,
     EXCLUDED_CONTENT_RULES,
     HEADING_STRUCTURE_RULES,
@@ -14,8 +14,8 @@ from .base import (
     SUPPLEMENTARY_CONTEXT_RULES,
     TABLE_RULES,
     VISUAL_RULES,
-    BasePrompt,
 )
+from scholar_lens.src.prompts.base import BasePrompt
 
 
 class PaperSummaryPrompt(BasePrompt):

@@ -15,7 +15,7 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from typing import Any, NamedTuple, TypeVar
 
-from ..domain.usage import UNSTAGED
+from scholar_lens.domain.usage import UNSTAGED
 
 _STAGE: contextvars.ContextVar[str] = contextvars.ContextVar(
     "usage_stage", default=UNSTAGED

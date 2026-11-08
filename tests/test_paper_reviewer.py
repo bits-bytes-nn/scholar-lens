@@ -15,15 +15,21 @@ from unittest.mock import AsyncMock, MagicMock
 import boto3
 import pytest
 
+from scholar_lens.domain.constants import LanguageModelId
+from scholar_lens.domain.paper.models import (
+    Attributes,
+    Citation,
+    Content,
+    Paper,
+    ReviewText,
+)
 from scholar_lens.domain.quality_gate import publish_blockers, rule_issues
 from scholar_lens.domain.review_plan import PlanError, SourceText, draft_rank
+from scholar_lens.domain.usage import TokenBudgetExceeded
 from scholar_lens.domain.validation import body_errors
 from scholar_lens.src.citation_summarizer import CitationSummarizer
-from scholar_lens.src.constants import LanguageModelId
-from scholar_lens.src.content_extractor import Attributes, Citation
-from scholar_lens.src.explainer import Paper, PaperReviewer, ReviewText
-from scholar_lens.src.metrics import TokenBudgetExceeded, TokenUsageTracker
-from scholar_lens.src.parser import Content
+from scholar_lens.src.explainer import PaperReviewer
+from scholar_lens.src.metrics import TokenUsageTracker
 from tests.fakes import FakeLLMFactory
 
 MARKER = '[Image: alt="arch", src="/p/figures/0.png", caption="The architecture."]'

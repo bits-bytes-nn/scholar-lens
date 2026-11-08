@@ -16,14 +16,14 @@ from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from .evidence_draft import (
+from scholar_lens.domain.evidence_draft import (
     apply_edits,
     claim_units,
     ends_mid_sentence,
     strip_revision_notes,
     structure_lost,
 )
-from .verifiers import Problem, VerifierSet
+from scholar_lens.domain.verifiers import Problem, VerifierSet
 
 
 @dataclass(frozen=True)

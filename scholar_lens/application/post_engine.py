@@ -40,7 +40,33 @@ from typing import Any, TypeVar, cast
 
 from pydantic import BaseModel, ValidationError
 
-from ..domain.coverage import (
+from scholar_lens.application.checkpoints import (
+    CHECKPOINT_VERSION,
+    Checkpoint,
+    Checkpoints,
+    input_hash,
+)
+from scholar_lens.application.evidence_writer import (
+    EDIT_ANSWER,
+    EvidenceWriter,
+    PostFinding,
+    PostReview,
+    SectionChecks,
+    WriterPrompts,
+    all_or_none,
+    block,
+    cached_evidence,
+    evidence_lines,
+    with_canonical_evidence,
+)
+from scholar_lens.application.ports import (
+    AgentLimits,
+    CheckpointStore,
+    LanguageModel,
+    TextStore,
+)
+from scholar_lens.application.usage import usage_stage
+from scholar_lens.domain.coverage import (
     CoverageTarget,
     ExtractedTargets,
     coverage_problems,
@@ -56,13 +82,13 @@ from ..domain.coverage import (
     uncited,
     without_evidence,
 )
-from ..domain.evidence import (
+from scholar_lens.domain.evidence import (
     Evidence,
     EvidenceLedger,
     SourceDocument,
     same_fact_duplicates,
 )
-from ..domain.evidence_draft import (
+from scholar_lens.domain.evidence_draft import (
     cited_ids,
     copied_sentences,
     free_numbers,
@@ -71,9 +97,13 @@ from ..domain.evidence_draft import (
     section_numbers,
     section_problems,
 )
-from ..domain.glossary import glossary_view
-from ..domain.post_context import WrittenSection, previous_sections, taught_list
-from ..domain.post_spec import (
+from scholar_lens.domain.glossary import glossary_view
+from scholar_lens.domain.post_context import (
+    WrittenSection,
+    previous_sections,
+    taught_list,
+)
+from scholar_lens.domain.post_spec import (
     PostOutline,
     PostSection,
     PostSpec,
@@ -81,30 +111,14 @@ from ..domain.post_spec import (
     evidence_policy,
     other_sdk,
 )
-from ..domain.program import python_code_problems
-from ..domain.verifiers import Problem, VerifierSet, as_problems
-from ..prompts.rules import (
+from scholar_lens.domain.program import python_code_problems
+from scholar_lens.domain.prompts.rules import (
     FIX_ANSWER,
     TARGETS_SYSTEM,
     consistency_system,
     repetition_system,
 )
-from .checkpoints import CHECKPOINT_VERSION, Checkpoint, Checkpoints, input_hash
-from .evidence_writer import (
-    EDIT_ANSWER,
-    EvidenceWriter,
-    PostFinding,
-    PostReview,
-    SectionChecks,
-    WriterPrompts,
-    all_or_none,
-    block,
-    cached_evidence,
-    evidence_lines,
-    with_canonical_evidence,
-)
-from .ports import AgentLimits, CheckpointStore, LanguageModel, TextStore
-from .usage import usage_stage
+from scholar_lens.domain.verifiers import Problem, VerifierSet, as_problems
 
 logger = logging.getLogger(__name__)
 

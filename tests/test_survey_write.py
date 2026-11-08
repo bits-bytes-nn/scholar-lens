@@ -26,6 +26,7 @@ from scholar_lens.adapters.bedrock.strands_models import RoleModel
 from scholar_lens.application import survey_engine
 from scholar_lens.application.survey_engine import EvidenceSurvey
 from scholar_lens.configs.config import Config, Survey
+from scholar_lens.domain.constants import LanguageModelId
 from scholar_lens.domain.conventions import (
     BlogPost,
     PostConventions,
@@ -33,6 +34,7 @@ from scholar_lens.domain.conventions import (
     load_local_conventions,
 )
 from scholar_lens.domain.evidence import Evidence
+from scholar_lens.domain.jobs import JobRequest
 from scholar_lens.domain.survey.plan import SourceRecord, SurveyInputError, SurveyPlan
 from scholar_lens.domain.survey.post import (
     author_year,
@@ -46,8 +48,6 @@ from scholar_lens.domain.survey.post import (
 )
 from scholar_lens.domain.validation import validate_post
 from scholar_lens.src import evidence_models, survey_writer
-from scholar_lens.src.constants import LanguageModelId
-from scholar_lens.src.jobs import JobRequest
 from scholar_lens.src.metrics import TokenUsageTracker
 from scholar_lens.src.publisher import Publisher
 from scholar_lens.src.runtime import RunContext

@@ -28,7 +28,7 @@ from scholar_lens.domain.review_plan import (
     section_source,
     target_words,
 )
-from scholar_lens.src.utils import parse_lines
+from scholar_lens.domain.text import parse_lines
 
 MARKER_A = '[Image: alt="arch", src="/p/figures/0.png", caption="Architecture."]'
 MARKER_B = (

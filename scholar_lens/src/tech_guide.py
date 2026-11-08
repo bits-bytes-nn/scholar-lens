@@ -33,47 +33,47 @@ from urllib.parse import urlparse
 import boto3
 from langchain_core.runnables import Runnable
 
-from ..application.usage import staged
-from ..domain.guide.evidence_guide import install_requirements
-from ..domain.review_plan import digest_sections
-from ..domain.tags import controlled_tag_problems
-from ..domain.validation import description_markup, description_problems
-from .constants import LanguageModelId
-from .guide_authority import (
-    mentions_any,
-    official_reference,
-    third_party_identifiers,
-)
-from .logger import logger
-from .prompt_safety import neutralize_prompt_tags
-from .prompts import (
-    BasePrompt,
-    TechGuideRelevancePrompt,
-    TechGuideResearchPlanPrompt,
-)
-from .prompts.tech_guide import REFERENCE_LABEL, TechGuideTaxonomyPrompt
-from .source_set import (
+from scholar_lens.application.usage import staged
+from scholar_lens.domain.constants import LanguageModelId
+from scholar_lens.domain.guide.evidence_guide import install_requirements
+from scholar_lens.domain.guide.models import TechGuide
+from scholar_lens.domain.review_plan import digest_sections
+from scholar_lens.domain.sources import (
     OFFICIAL_AUTHORITIES,
     DomainClasses,
     SourceSet,
     TagLookup,
     search_exclusions,
 )
-from .source_snapshot import (
+from scholar_lens.domain.tags import controlled_tag_problems
+from scholar_lens.domain.text import is_affirmative, is_placeholder
+from scholar_lens.domain.validation import description_markup, description_problems
+from scholar_lens.src.guide_authority import (
+    mentions_any,
+    official_reference,
+    third_party_identifiers,
+)
+from scholar_lens.src.logger import logger
+from scholar_lens.src.prompt_safety import neutralize_prompt_tags
+from scholar_lens.src.prompts import (
+    BasePrompt,
+    TechGuideRelevancePrompt,
+    TechGuideResearchPlanPrompt,
+)
+from scholar_lens.src.prompts.tech_guide import REFERENCE_LABEL, TechGuideTaxonomyPrompt
+from scholar_lens.src.source_snapshot import (
     CorpusSnapshot,
     SnapshotPolicy,
     read_snapshot,
     save_snapshot,
     snapshot_key,
 )
-from .utils import (
+from scholar_lens.src.utils import (
     BedrockLanguageModelFactory,
     HTMLTagOutputParser,
     RetryableBase,
-    is_affirmative,
-    is_placeholder,
 )
-from .web_research import (
+from scholar_lens.src.web_research import (
     MAX_REFERENCE_PAGES,
     MAX_REFERENCE_SEARCHES,
     OfficialDocs,
@@ -108,23 +108,6 @@ _NO_DOCS_NOTE = (
     "the guide's commands, flags and defaults against the product's current "
     "docs."
 )
-
-
-@dataclass
-class TechGuide:
-    topic: str
-    body: str
-    source_urls: list[str] = field(default_factory=list)
-    # Page title of each source URL, for the source list's link text.
-    source_titles: dict[str, str] = field(default_factory=dict)
-    # Degraded-output notes for the PR checklist and the job result.
-    notes: list[str] = field(default_factory=list)
-    # Problems the post may not be published with as is (listed first).
-    blocking: list[str] = field(default_factory=list)
-    # Images the writer was offered; any other image in the body is dropped.
-    image_urls: list[str] = field(default_factory=list)
-    # The search description (``classify``); empty lets the blog derive one.
-    description: str = ""
 
 
 @dataclass

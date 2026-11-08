@@ -22,9 +22,13 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
-from .evidence_draft import lost_assets
-from .markdown.lint import FIGURE_MARKER, callout_lines, close_open_fence
-from .markdown.math import (
+from scholar_lens.domain.evidence_draft import lost_assets
+from scholar_lens.domain.markdown.lint import (
+    FIGURE_MARKER,
+    callout_lines,
+    close_open_fence,
+)
+from scholar_lens.domain.markdown.math import (
     DISPLAY_MATH,
     HANGUL,
     fence_roles,
@@ -32,8 +36,8 @@ from .markdown.math import (
     open_fence,
     without_fences,
 )
-from .quality_gate import added_slips
-from .text import first_sentence
+from scholar_lens.domain.quality_gate import added_slips
+from scholar_lens.domain.text import first_sentence
 
 Difficulty = Literal["easy", "medium", "hard"]
 Importance = Literal["core", "supporting", "context"]

@@ -5,7 +5,7 @@ writer, checker and editor all work from that plan, so coverage, depth and
 terminology stay consistent across sections.
 """
 
-from .base import (
+from scholar_lens.domain.prompts.rules import (
     CITATION_KEY_RULES,
     DEPTH_RULES,
     EXCLUDED_CONTENT_RULES,
@@ -22,8 +22,8 @@ from .base import (
     TABLE_SIZE_RULE,
     TERMINOLOGY_RULES,
     VISUAL_RULES,
-    BasePrompt,
 )
+from scholar_lens.src.prompts.base import BasePrompt
 
 
 class PaperPlanningPrompt(BasePrompt):

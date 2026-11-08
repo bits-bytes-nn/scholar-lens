@@ -8,17 +8,16 @@ import pytest
 
 from scholar_lens.configs import Github
 from scholar_lens.domain.conventions import BlogPost, load_local_conventions
-from scholar_lens.domain.validation import validate_post
-from scholar_lens.src.content_extractor import Attributes
-from scholar_lens.src.explainer import Paper
-from scholar_lens.src.formatting import (
+from scholar_lens.domain.guide.models import TechGuide
+from scholar_lens.domain.paper.models import Attributes, Content, Paper
+from scholar_lens.domain.post_format import (
     PostMeta,
     format_guide,
     format_summary,
     paper_front_matter,
     paper_post_meta,
 )
-from scholar_lens.src.parser import Content
+from scholar_lens.domain.validation import validate_post
 from scholar_lens.src.prompts import (
     PaperEditPrompt,
     PaperFinalizationPrompt,
@@ -26,7 +25,6 @@ from scholar_lens.src.prompts import (
     PaperSectionCheckPrompt,
     PaperSectionPrompt,
 )
-from scholar_lens.src.tech_guide import TechGuide
 
 
 def _build_front_matter(_github: Github, paper: Paper, category_type: str, **kwargs):  # type: ignore[no-untyped-def]

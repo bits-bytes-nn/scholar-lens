@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 
 from scholar_lens.cli import APP_REPORTED_EXIT_CODES, build_parser
-from scholar_lens.src.jobs import JobRequest
+from scholar_lens.domain.jobs import JobRequest
 from scripts import check_post_conventions as conventions
 from scripts.ci_synth_check import check_template, resources_of_type, synth_template
 from scripts.deploy_infra import JOB_COMMAND, check_deployable

@@ -31,27 +31,29 @@ from urllib.parse import unquote, urlsplit
 import httpx
 from github import Auth, Github, GithubRetry
 
-from ..adapters.aws.storage import S3Handler, S3OperationError
-from ..adapters.http.pinned_transport import PinnedHTTPTransport
-from ..adapters.http.rate_limit import ARXIV_RATE_LIMITER, arxiv_retry_after_seconds
-from ..adapters.http.url_guard import UnsafeUrlError, assert_url_is_public
-from ..domain.conventions import BlogPost, PostConventions, load_local_conventions
-from ..domain.markdown.front_matter import split_front_matter_text
-from ..domain.markdown.lint import drop_empty_headings, publish_body, writing_notes
-from ..domain.markdown.math import IMAGE, segments
-from ..domain.validation import PostValidationError, validate_post
-from .blog_sync import BlogBranchSync
-from .constants import (
-    ARXIV_ID_BODY,
-    AppConstants,
-    EnvVars,
-    LocalPaths,
-    S3Paths,
-    is_arxiv_host,
+from scholar_lens.adapters.aws.storage import S3Handler, S3OperationError
+from scholar_lens.adapters.http.pinned_transport import PinnedHTTPTransport
+from scholar_lens.adapters.http.rate_limit import (
+    ARXIV_RATE_LIMITER,
+    arxiv_retry_after_seconds,
 )
-from .logger import logger
-from .prompt_safety import strip_defanging
-from .publish_types import (
+from scholar_lens.adapters.http.url_guard import UnsafeUrlError, assert_url_is_public
+from scholar_lens.domain.constants import AppConstants, EnvVars, LocalPaths, S3Paths
+from scholar_lens.domain.conventions import (
+    BlogPost,
+    PostConventions,
+    load_local_conventions,
+)
+from scholar_lens.domain.ids import ARXIV_ID_BODY, is_arxiv_host
+from scholar_lens.domain.markdown.front_matter import split_front_matter_text
+from scholar_lens.domain.markdown.lint import (
+    drop_empty_headings,
+    publish_body,
+    writing_notes,
+)
+from scholar_lens.domain.markdown.math import IMAGE, segments
+from scholar_lens.domain.post_names import post_slug, same_post
+from scholar_lens.domain.publishing import (
     BLOG_IMAGES_DIR,
     REJECTED_IMAGES_DIRNAME,
     REJECTED_SUFFIX,
@@ -59,12 +61,14 @@ from .publish_types import (
     PublishRequest,
     SavedPublishRequest,
     is_post_file,
-    post_slug,
     request_name,
-    same_post,
 )
-from .publish_types import PublishError as PublishError  # re-exported
-from .utils.images import (
+from scholar_lens.domain.publishing import PublishError as PublishError  # re-exported
+from scholar_lens.domain.validation import PostValidationError, validate_post
+from scholar_lens.src.blog_sync import BlogBranchSync
+from scholar_lens.src.logger import logger
+from scholar_lens.src.prompt_safety import strip_defanging
+from scholar_lens.src.utils.images import (
     is_ar5iv_placeholder,
     is_svg,
     raster_to_png,
@@ -75,7 +79,7 @@ from .utils.images import (
 if TYPE_CHECKING:
     from github.Repository import Repository
 
-    from ..configs import Github as GithubConfig
+    from scholar_lens.configs import Github as GithubConfig
 
 _IMAGE_DOWNLOAD_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
 # Whole-download bound: the timeout above is per read, so a server dripping

@@ -10,7 +10,7 @@ from pydantic import ValidationError
 
 from scholar_lens.configs import Code, Config, Explanation, Github
 from scholar_lens.configs import TechGuide as TechGuideConfig
-from scholar_lens.src.constants import LanguageModelId
+from scholar_lens.domain.constants import LanguageModelId
 
 
 class TestConfigValidation:

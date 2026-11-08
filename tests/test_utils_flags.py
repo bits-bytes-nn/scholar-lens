@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from scholar_lens.src.utils import is_affirmative, is_placeholder
+from scholar_lens.domain.text import is_affirmative, is_placeholder
 
 
 @pytest.mark.parametrize(

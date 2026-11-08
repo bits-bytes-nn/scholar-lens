@@ -3,7 +3,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 
-from .constants import EnvVars, LocalPaths
+from scholar_lens.domain.constants import EnvVars, LocalPaths
 
 
 def is_running_in_aws() -> bool:

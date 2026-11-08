@@ -16,23 +16,22 @@ from typing import TYPE_CHECKING, Any
 from github import GithubException, InputGitAuthor
 from github import InputGitTreeElement as TreeElement
 
-from ..domain.markdown.front_matter import split_front_matter
-from .constants import LocalPaths
-from .logger import logger
-from .publish_types import (
+from scholar_lens.domain.constants import LocalPaths
+from scholar_lens.domain.markdown.front_matter import split_front_matter
+from scholar_lens.domain.post_names import post_slug, same_post
+from scholar_lens.domain.publishing import (
     BLOG_IMAGE_REF,
     BLOG_IMAGES_DIR,
     PublishError,
     PublishRequest,
     is_post_file,
-    post_slug,
-    same_post,
 )
+from scholar_lens.src.logger import logger
 
 if TYPE_CHECKING:
     from github.Repository import Repository
 
-    from ..configs import Github as GithubConfig
+    from scholar_lens.configs import Github as GithubConfig
 
 _BLOB_MODE = "100644"
 _MAX_HAND_EDIT_NOTES = 10

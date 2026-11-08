@@ -12,21 +12,30 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..evidence import EvidenceLedger, SourceDocument
-from ..evidence_draft import MARKER, block_lines, drop_empty_headings, prose_sentences
-from ..glossary import GlossaryTerm
-from ..post_spec import (
+from scholar_lens.domain.evidence import EvidenceLedger, SourceDocument
+from scholar_lens.domain.evidence_draft import (
+    MARKER,
+    block_lines,
+    drop_empty_headings,
+    prose_sentences,
+)
+from scholar_lens.domain.glossary import GlossaryTerm
+from scholar_lens.domain.post_spec import (
     SDK_LANGUAGES,
     SectionBase,
     first_owner,
     ownership_problems,
     structure_problems,
 )
-from ..post_spec import other_sdk as other_sdk  # re-exported
-from ..program import code_definitions as code_definitions  # re-exported
-from ..program import python_blocks as python_blocks  # re-exported
-from ..program import python_code_problems as python_code_problems  # re-exported
-from ..specs.guide import GUIDE_SPEC, TLDR_TITLE
+from scholar_lens.domain.post_spec import other_sdk as other_sdk  # re-exported
+from scholar_lens.domain.program import (
+    code_definitions as code_definitions,  # re-exported
+)
+from scholar_lens.domain.program import python_blocks as python_blocks  # re-exported
+from scholar_lens.domain.program import (
+    python_code_problems as python_code_problems,  # re-exported
+)
+from scholar_lens.domain.specs.guide import GUIDE_SPEC, TLDR_TITLE
 
 GuideKind = Literal[
     "tldr", "overview", "concepts", "architecture", "usage", "operations", "choosing"

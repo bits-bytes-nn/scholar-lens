@@ -28,9 +28,9 @@ import httpx
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import Runnable
 
-from ..adapters.aws.storage import S3Handler
-from ..adapters.scholarly.arxiv import ArxivHandler, ArxivPaperError
-from ..adapters.scholarly.index import (
+from scholar_lens.adapters.aws.storage import S3Handler
+from scholar_lens.adapters.scholarly.arxiv import ArxivHandler, ArxivPaperError
+from scholar_lens.adapters.scholarly.index import (
     DATACITE_MAX_IDS,
     OPENALEX_MAX_DOIS,
     DataCiteIndex,
@@ -40,9 +40,11 @@ from ..adapters.scholarly.index import (
     datacite_record,
     openalex_record,
 )
-from ..adapters.scholarly.metadata import ProviderUnavailableError, titles_match
-from ..application.usage import staged
-from ..domain.survey.plan import (
+from scholar_lens.adapters.scholarly.metadata import ProviderUnavailableError
+from scholar_lens.application.usage import staged
+from scholar_lens.domain.constants import LanguageModelId, S3Paths
+from scholar_lens.domain.jobs import JobRequest
+from scholar_lens.domain.survey.plan import (
     Candidate,
     PlanReference,
     ReferenceKind,
@@ -71,15 +73,18 @@ from ..domain.survey.plan import (
     survey_slug,
     unversioned_arxiv_id,
 )
-from .constants import LanguageModelId, S3Paths
-from .jobs import JobRequest
-from .logger import logger
-from .metrics import TokenBudgetGuard, TokenUsageTracker
-from .prompt_safety import neutralize_prompt_tags
-from .prompts import BasePrompt, SurveyScopePrompt, SurveySelectionPrompt
-from .runtime import PipelineOutcome, RunContext
-from .utils import BedrockLanguageModelFactory, RetryableBase
-from .web_research import (
+from scholar_lens.domain.titles import titles_match
+from scholar_lens.src.logger import logger
+from scholar_lens.src.metrics import TokenBudgetGuard, TokenUsageTracker
+from scholar_lens.src.prompt_safety import neutralize_prompt_tags
+from scholar_lens.src.prompts import (
+    BasePrompt,
+    SurveyScopePrompt,
+    SurveySelectionPrompt,
+)
+from scholar_lens.src.runtime import PipelineOutcome, RunContext
+from scholar_lens.src.utils import BedrockLanguageModelFactory, RetryableBase
+from scholar_lens.src.web_research import (
     PageContent,
     ResearchCorpus,
     SourceFetchError,

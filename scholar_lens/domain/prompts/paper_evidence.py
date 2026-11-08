@@ -4,7 +4,7 @@ code can check."""
 
 from __future__ import annotations
 
-from .rules import (
+from scholar_lens.domain.prompts.rules import (
     CLAIM_SCOPE,
     COVERAGE_OUTLINE,
     COVERAGE_READING,

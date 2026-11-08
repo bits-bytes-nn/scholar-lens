@@ -8,13 +8,13 @@ from unittest.mock import MagicMock
 import pytest
 from botocore.exceptions import ClientError
 
-from scholar_lens.src.constants import LanguageModelId
+from scholar_lens.domain.constants import LanguageModelId
+from scholar_lens.domain.model_registry import _LANGUAGE_MODEL_INFO
 from scholar_lens.src.utils import factories as fac
 from scholar_lens.src.utils.factories import (
     BaseBedrockWrapper,
     BedrockLanguageModelFactory,
 )
-from scholar_lens.src.utils.models import _LANGUAGE_MODEL_INFO
 
 
 @pytest.fixture(autouse=True)

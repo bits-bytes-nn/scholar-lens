@@ -8,15 +8,17 @@ import boto3
 import pymupdf
 from langchain_core.output_parsers import StrOutputParser
 
-from ..adapters.scholarly.arxiv import ArxivHandler, ArxivPaperError
-from ..adapters.scholarly.metadata import ChainedMetadataResolver, arxiv_id_from_doi
-from ..application.usage import staged
-from .constants import AppConstants, LanguageModelId, LocalPaths, normalize_arxiv_id
-from .logger import logger
-from .parser import Content, ContentParseError, HTMLParser
-from .prompt_safety import neutralize_prompt_tags
-from .prompts import CitationSummaryPrompt
-from .utils import BedrockLanguageModelFactory, RetryableBase
+from scholar_lens.adapters.scholarly.arxiv import ArxivHandler, ArxivPaperError
+from scholar_lens.adapters.scholarly.metadata import ChainedMetadataResolver
+from scholar_lens.application.usage import staged
+from scholar_lens.domain.constants import AppConstants, LanguageModelId, LocalPaths
+from scholar_lens.domain.ids import arxiv_id_from_doi, normalize_arxiv_id
+from scholar_lens.domain.paper.models import Content
+from scholar_lens.src.logger import logger
+from scholar_lens.src.parser import ContentParseError, HTMLParser
+from scholar_lens.src.prompt_safety import neutralize_prompt_tags
+from scholar_lens.src.prompts import CitationSummaryPrompt
+from scholar_lens.src.utils import BedrockLanguageModelFactory, RetryableBase
 
 DEFAULT_MAX_CONCURRENCY: int = 5
 DEFAULT_SEARCH_RESULTS_LIMIT: int = 10

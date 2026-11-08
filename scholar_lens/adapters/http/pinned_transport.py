@@ -25,7 +25,7 @@ import httpx
 import requests
 from requests.adapters import HTTPAdapter
 
-from .url_guard import resolve_validated_ip, upgrade_to_https
+from scholar_lens.adapters.http.url_guard import resolve_validated_ip, upgrade_to_https
 
 _PER_HOST_LIMITS = httpx.Limits(max_connections=10, max_keepalive_connections=2)
 

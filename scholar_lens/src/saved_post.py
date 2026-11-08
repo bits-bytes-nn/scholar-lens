@@ -17,12 +17,11 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from ..adapters.aws.storage import S3Handler
-from ..configs import Config
-from .constants import RUN_SECRETS
-from .jobs import ArtifactKind, JobResult
-from .logger import logger
-from .publish_types import (
+from scholar_lens.adapters.aws.storage import S3Handler
+from scholar_lens.configs import Config
+from scholar_lens.domain.constants import RUN_SECRETS
+from scholar_lens.domain.jobs import ArtifactKind, JobResult
+from scholar_lens.domain.publishing import (
     BLOG_IMAGE_REF,
     BLOG_IMAGES_DIR,
     REJECTED_IMAGES_DIRNAME,
@@ -32,7 +31,8 @@ from .publish_types import (
     request_name,
     without_violations,
 )
-from .runtime import (
+from scholar_lens.src.logger import logger
+from scholar_lens.src.runtime import (
     RunContext,
     build_context,
     check_pr_token,

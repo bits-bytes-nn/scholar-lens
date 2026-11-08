@@ -9,7 +9,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from scholar_lens.domain.markdown.lint import writing_issues
-from scholar_lens.src.source_set import SourceSet
+from scholar_lens.domain.sources import SourceSet
 from scholar_lens.src.web_research import (
     MAX_REFERENCE_PAGES,
     MAX_REFERENCE_SEARCHES,

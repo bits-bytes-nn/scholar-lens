@@ -16,14 +16,36 @@ import logging
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 
-from ..domain.evidence import (
+from scholar_lens.application.checkpoints import input_hash
+from scholar_lens.application.evidence_writer import (
+    WriterPrompts,
+    block,
+    brief_lines,
+    quote_for_prompt_code,
+    safe_key,
+)
+from scholar_lens.application.ports import (
+    AgentLimits,
+    CheckpointStore,
+    LanguageModel,
+    TextStore,
+)
+from scholar_lens.application.post_engine import (
+    PostEngine,
+    PostPrompts,
+    ReadJob,
+    ReadStart,
+    RunSettings,
+    SectionContext,
+)
+from scholar_lens.domain.evidence import (
     Evidence,
     EvidenceLedger,
     SourceDocument,
     duplicate_evidence,
 )
-from ..domain.evidence_draft import free_numbers
-from ..domain.guide.evidence_guide import (
+from scholar_lens.domain.evidence_draft import free_numbers
+from scholar_lens.domain.guide.evidence_guide import (
     TLDR_TITLE,
     GuideOutline,
     GuideSection,
@@ -35,26 +57,9 @@ from ..domain.guide.evidence_guide import (
     repair_guide_outline,
     strip_markers,
 )
-from ..domain.guide.sdk_index import SdkIndex, definitions_for
-from ..domain.specs.guide import GUIDE_SPEC
-from ..prompts import guide_evidence as prompts
-from .checkpoints import input_hash
-from .evidence_writer import (
-    WriterPrompts,
-    block,
-    brief_lines,
-    quote_for_prompt_code,
-    safe_key,
-)
-from .ports import AgentLimits, CheckpointStore, LanguageModel, TextStore
-from .post_engine import (
-    PostEngine,
-    PostPrompts,
-    ReadJob,
-    ReadStart,
-    RunSettings,
-    SectionContext,
-)
+from scholar_lens.domain.guide.sdk_index import SdkIndex, definitions_for
+from scholar_lens.domain.prompts import guide_evidence as prompts
+from scholar_lens.domain.specs.guide import GUIDE_SPEC
 
 logger = logging.getLogger(__name__)
 

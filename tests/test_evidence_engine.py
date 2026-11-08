@@ -520,8 +520,12 @@ def test_what_a_sentence_means_is_left_to_the_model_checks() -> None:
 
 
 def test_every_artifact_checks_sentence_meaning_with_the_model() -> None:
-    from scholar_lens.prompts import guide_evidence, paper_evidence, survey_evidence
-    from scholar_lens.prompts.rules import (
+    from scholar_lens.domain.prompts import (
+        guide_evidence,
+        paper_evidence,
+        survey_evidence,
+    )
+    from scholar_lens.domain.prompts.rules import (
         CLAIM_SCOPE,
         ILLUSTRATION_MARK,
         SELF_REFERENCE_CHECKS,

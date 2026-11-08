@@ -13,12 +13,12 @@ from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 
-from .evidence import Evidence, EvidenceLedger, near_duplicate
-from .markdown.lint import drop_empty_headings
-from .markdown.math import DISPLAY_MATH, fence_roles
-from .quality_gate import rule_issues
-from .validation import unsourced_numbers
-from .verifiers import Problem, as_problems
+from scholar_lens.domain.evidence import Evidence, EvidenceLedger, near_duplicate
+from scholar_lens.domain.markdown.lint import drop_empty_headings
+from scholar_lens.domain.markdown.math import DISPLAY_MATH, fence_roles
+from scholar_lens.domain.quality_gate import rule_issues
+from scholar_lens.domain.validation import unsourced_numbers
+from scholar_lens.domain.verifiers import Problem, as_problems
 
 # An evidence marker ("[[E12]]", "[[E12, E15]]") or the illustration mark
 # below; code removes both before publishing.
@@ -665,8 +665,8 @@ def apply_edits(
     Returns the text, the number applied and why the others were skipped.
     A list item an edit emptied goes with its marker; nothing else is
     touched."""
-    from .review_plan import Edit
-    from .review_plan import apply_edits as guarded
+    from scholar_lens.domain.review_plan import Edit
+    from scholar_lens.domain.review_plan import apply_edits as guarded
 
     text, applied, skipped = guarded(
         markdown,

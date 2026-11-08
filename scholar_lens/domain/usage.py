@@ -84,3 +84,7 @@ class RunUsage(BaseModel):
         """The ``n`` most expensive stages as (stage, cost), costliest first."""
         ranked = sorted(self.by_stage.items(), key=lambda kv: -kv[1].cost_usd)
         return [(stage, totals.cost_usd) for stage, totals in ranked[:n]]
+
+
+class TokenBudgetExceeded(RuntimeError):
+    """Raised when a run exceeds its configured total-token budget."""

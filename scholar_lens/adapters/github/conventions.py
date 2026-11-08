@@ -8,7 +8,7 @@ from urllib.parse import quote
 
 import requests
 
-from ...domain.conventions import (
+from scholar_lens.domain.conventions import (
     CANONICAL_PATH,
     BlogPost,
     PostConventions,

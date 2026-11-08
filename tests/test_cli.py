@@ -12,13 +12,13 @@ from pydantic import BaseModel, ValidationError
 
 from scholar_lens import cli
 from scholar_lens.adapters.aws.storage import BatchJobError
-from scholar_lens.src.jobs import (
+from scholar_lens.domain.jobs import (
     JobRequest,
     JobResult,
     JobStatusReport,
     SubmittedJob,
-    wait_for_job,
 )
+from scholar_lens.src.jobs import wait_for_job
 
 
 def _output(capsys: pytest.CaptureFixture) -> dict[str, Any]:

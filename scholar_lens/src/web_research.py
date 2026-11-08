@@ -28,8 +28,8 @@ from urllib.parse import urljoin, urlparse
 import httpx
 from bs4 import BeautifulSoup, Tag, UnicodeDammit
 
-from ..adapters.http.pinned_transport import PinnedHTTPTransport
-from ..adapters.http.rate_limit import (
+from scholar_lens.adapters.http.pinned_transport import PinnedHTTPTransport
+from scholar_lens.adapters.http.rate_limit import (
     ARXIV_RATE_LIMITER,
     ARXIV_RETRIES,
     RateLimiter,
@@ -37,30 +37,17 @@ from ..adapters.http.rate_limit import (
     arxiv_retry_hold,
     is_retryable_status,
 )
-from ..adapters.http.url_guard import (
+from scholar_lens.adapters.http.url_guard import (
     UnsafeUrlError,
     assert_url_is_public,
     is_temporary_dns_failure,
     is_url_public,
 )
-from ..domain.markdown.lint import FIGURE_MARKER, close_open_fence
-from ..domain.markdown.math import segments
-from .constants import EnvVars, arxiv_id_from_url, arxiv_paper_key, is_arxiv_host
-from .logger import logger
-from .parser import (
-    MIN_PARSED_TEXT_CHARS,
-    _readable_chars,
-    _real_text,
-    figure_caption,
-)
-from .prompt_safety import neutralize_prompt_tags
-from .prompts.tech_guide import (
-    OFFICIAL_LABEL,
-    OLDER_DOCS_LABEL,
-    REFERENCE_LABEL,
-    THIRD_PARTY_LABEL,
-)
-from .source_set import (
+from scholar_lens.domain.constants import EnvVars
+from scholar_lens.domain.ids import arxiv_id_from_url, arxiv_paper_key, is_arxiv_host
+from scholar_lens.domain.markdown.lint import FIGURE_MARKER, close_open_fence
+from scholar_lens.domain.markdown.math import segments
+from scholar_lens.domain.sources import (
     OFFICIAL_AUTHORITIES,
     SHARED_HOSTS,
     THIRD_PARTY_AUTHORITIES,
@@ -72,8 +59,23 @@ from .source_set import (
     normalize_url,
     search_rank,
 )
-from .utils import extract_text_from_html, parse_lines
-from .utils.helpers import is_page_furniture
+from scholar_lens.domain.text import parse_lines
+from scholar_lens.src.logger import logger
+from scholar_lens.src.parser import (
+    MIN_PARSED_TEXT_CHARS,
+    _readable_chars,
+    _real_text,
+    figure_caption,
+)
+from scholar_lens.src.prompt_safety import neutralize_prompt_tags
+from scholar_lens.src.prompts.tech_guide import (
+    OFFICIAL_LABEL,
+    OLDER_DOCS_LABEL,
+    REFERENCE_LABEL,
+    THIRD_PARTY_LABEL,
+)
+from scholar_lens.src.utils import extract_text_from_html
+from scholar_lens.src.utils.helpers import is_page_furniture
 
 # Re-exported: the URL rules moved to :mod:`source_set`.
 __all__ = ["SHARED_HOSTS", "OfficialDocs", "docs_version", "normalize_url"]

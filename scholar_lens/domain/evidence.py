@@ -16,9 +16,9 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .markdown.math import fence_roles, open_fence_line
-from .survey.post import equation_in_source
-from .validation import unsourced_numbers
+from scholar_lens.domain.markdown.math import fence_roles, open_fence_line
+from scholar_lens.domain.survey.post import equation_in_source
+from scholar_lens.domain.validation import unsourced_numbers
 
 DocumentKind = Literal["full_text", "pdf_text", "abstract"]
 # Who decides what a guide may state (``web_research.source_label``): official

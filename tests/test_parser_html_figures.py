@@ -10,9 +10,10 @@ import boto3
 import pytest
 from bs4 import BeautifulSoup
 
+from scholar_lens.domain.constants import LanguageModelId
+from scholar_lens.domain.paper.models import Figure
 from scholar_lens.src import parser as parser_module
-from scholar_lens.src.constants import LanguageModelId
-from scholar_lens.src.parser import Figure, HTMLRichParser, attach_figure_context
+from scholar_lens.src.parser import HTMLRichParser, attach_figure_context
 from scholar_lens.src.utils import extract_text_from_html
 
 BASE = "https://arxiv.org/html/2501.12948v2"
@@ -60,9 +61,11 @@ PAGE = """
 @pytest.fixture
 def figures(monkeypatch: pytest.MonkeyPatch) -> list[Figure]:
     async def fake_from_llm(cls, _analyser, figure_id, path, caption=None):  # type: ignore[no-untyped-def]
-        return cls(figure_id=figure_id, path=path, caption=caption)
+        return Figure(figure_id=figure_id, path=path, caption=caption)
 
-    monkeypatch.setattr(parser_module.Figure, "from_llm", classmethod(fake_from_llm))
+    monkeypatch.setattr(
+        parser_module.FigureReader, "from_llm", classmethod(fake_from_llm)
+    )
     parser = HTMLRichParser(
         LanguageModelId.CLAUDE_V4_5_HAIKU,
         boto3.Session(region_name="us-east-1"),

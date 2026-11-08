@@ -20,9 +20,15 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any, Protocol
 
-from ..adapters.retry import is_access_error
-from .source_set import DomainClasses, OfficialDocs, SourceSet, TagLookup, TargetVersion
-from .web_research import PageContent, ResearchCorpus, SearchResult
+from scholar_lens.adapters.retry import is_access_error
+from scholar_lens.domain.sources import (
+    DomainClasses,
+    OfficialDocs,
+    SourceSet,
+    TagLookup,
+    TargetVersion,
+)
+from scholar_lens.src.web_research import PageContent, ResearchCorpus, SearchResult
 
 logger = logging.getLogger(__name__)
 

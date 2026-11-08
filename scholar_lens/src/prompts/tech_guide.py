@@ -2,7 +2,7 @@
 planning, the relevance gate and the finished guide's taxonomy (the evidence
 engine's prompts are in ``prompts/guide_evidence.py``)."""
 
-from .base import BasePrompt
+from scholar_lens.src.prompts.base import BasePrompt
 
 # How a source is labelled in a prompt. Official pages decide commands, flags
 # and defaults; reference material (chosen by the user) and third-party pages

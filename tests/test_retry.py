@@ -70,7 +70,7 @@ class TestIsRetryable:
         assert is_transient_error(_CustomValueError("bad")) is False
 
     def test_token_budget_is_terminal(self) -> None:
-        from scholar_lens.src.metrics import TokenBudgetExceeded
+        from scholar_lens.domain.usage import TokenBudgetExceeded
 
         assert is_transient_error(TokenBudgetExceeded("over")) is False
 

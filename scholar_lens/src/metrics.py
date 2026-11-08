@@ -25,26 +25,19 @@ from typing import Any
 import boto3
 from langchain_core.callbacks import BaseCallbackHandler
 
-from ..application.usage import current_stage
-from ..domain.usage import RunUsage, UsageEvent
-from .constants import HARD_BUDGET_MULTIPLE
-from .logger import logger
-from .utils.models import (
-    CACHE_READ_PRICE_MULTIPLE,
-    CACHE_WRITE_PRICE_MULTIPLE,
-    FALLBACK_PRICE_PER_MTOK,
+from scholar_lens.application.usage import current_stage
+from scholar_lens.domain.constants import HARD_BUDGET_MULTIPLE
+from scholar_lens.domain.model_registry import (
     PRICE_VERSION,
-    model_info_for_invoked_id,
+    event_cost_usd,
     profile_source,
 )
+from scholar_lens.domain.usage import RunUsage, TokenBudgetExceeded, UsageEvent
+from scholar_lens.src.logger import logger
 
 METRICS_NAMESPACE = "ScholarLens"
 # The per-run cost metric; the stack's cost alarm watches this exact name.
 COST_METRIC_NAME = "EstimatedCostUSD"
-
-
-class TokenBudgetExceeded(RuntimeError):
-    """Raised when a run exceeds its configured total-token budget."""
 
 
 @dataclass
@@ -181,7 +174,7 @@ class TokenBudgetGuard:
 
     def _enforce_hard_token_budget(self) -> None:
         """Abort the run (``TokenBudgetExceeded``) once spend passes
-        :data:`~scholar_lens.src.constants.HARD_BUDGET_MULTIPLE` times the
+        :data:`~scholar_lens.domain.constants.HARD_BUDGET_MULTIPLE` times the
         budget: the soft limit only skips the optional checks, this is the
         true cap so a runaway can't keep issuing writer calls."""
         if self._token_tracker is not None and self.max_total_tokens:
@@ -252,40 +245,6 @@ def _extract_usage(response: Any) -> UsageEvent:  # noqa: ANN401
         cache_read_tokens=cache_read,
         cache_write_tokens=cache_write,
     )
-
-
-def event_cost_usd(event: UsageEvent) -> float:
-    """List-price cost of one call, cache tokens at their multiples of the
-    input price (the long-prompt tier is decided on all tokens read)."""
-    read = event.input_tokens + event.cache_read_tokens + event.cache_write_tokens
-    price_in, price_out = _prices(event.model_id, read)
-    return (
-        event.input_tokens * price_in
-        + event.cache_read_tokens * price_in * CACHE_READ_PRICE_MULTIPLE
-        + event.cache_write_tokens * price_in * CACHE_WRITE_PRICE_MULTIPLE
-        + event.output_tokens * price_out
-    ) / 1e6
-
-
-def _prices(model_id: str, input_tokens: int) -> tuple[float, float]:
-    info = model_info_for_invoked_id(model_id)
-    if (
-        info is not None
-        and info.long_prompt_threshold is not None
-        and info.long_prompt_price_per_mtok is not None
-        and input_tokens > info.long_prompt_threshold
-    ):
-        return info.long_prompt_price_per_mtok
-    return price_per_mtok(model_id)
-
-
-def price_per_mtok(model_id: str) -> tuple[float, float]:
-    """(input, output) USD per million tokens for an invoked model id."""
-    info = model_info_for_invoked_id(model_id)
-    if info is None:
-        logger.debug("No price for model '%s'; using the fallback rate.", model_id)
-        return FALLBACK_PRICE_PER_MTOK
-    return info.input_price_per_mtok, info.output_price_per_mtok
 
 
 class MetricsEmitter:

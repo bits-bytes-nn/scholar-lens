@@ -28,17 +28,17 @@ from typing import Any
 import httpx
 from bs4 import BeautifulSoup
 
-from ...domain.ids import (
-    arxiv_id_from_doi,  # noqa: F401 - re-exported
+from scholar_lens.adapters.http.rate_limit import MAX_RETRY_AFTER_SECONDS, RateLimiter
+from scholar_lens.domain.constants import EnvVars
+from scholar_lens.domain.ids import (
+    arxiv_id_from_doi,
     normalize_arxiv_id,
 )
-from ...domain.titles import (  # noqa: F401 - moved; re-exported
+from scholar_lens.domain.titles import (
     abstract_fits_title,
     title_similarity,
     titles_match,
 )
-from ...settings import EnvVars
-from ..http.rate_limit import MAX_RETRY_AFTER_SECONDS, RateLimiter
 
 logger = logging.getLogger(__name__)
 

@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 import boto3
 import pytest
 
-from scholar_lens.src.constants import LanguageModelId
+from scholar_lens.domain.constants import LanguageModelId
 from scholar_lens.src.prompts import (
     TechGuideRelevancePrompt,
     TechGuideResearchPlanPrompt,
@@ -330,7 +330,7 @@ class TestResearchPlanning:
         assert gen._reference_ids == ["--fast-mode"]
 
     async def test_the_blogs_title_limit_reaches_the_taxonomy(self) -> None:
-        from scholar_lens.src.tech_guide import TechGuide
+        from scholar_lens.domain.guide.models import TechGuide
 
         gen = _make_generator()
         gen.title_max_length = 55
@@ -388,7 +388,7 @@ class TestReferenceLookup:
     async def test_reference_lookup_logs_each_page_with_its_label(self) -> None:
         from unittest.mock import patch
 
-        from scholar_lens.src.source_set import SourceSet
+        from scholar_lens.domain.sources import SourceSet
 
         gen = _make_generator()
         gen._sources = SourceSet.from_urls(["https://docs.x.io/en/latest/"])
@@ -417,7 +417,7 @@ class TestClassify:
     async def test_classify_sets_a_checked_description_with_one_repair(
         self,
     ) -> None:
-        from scholar_lens.src.tech_guide import TechGuide
+        from scholar_lens.domain.guide.models import TechGuide
 
         good = (
             "vLLM serves large language models with paged attention and continuous "
@@ -442,8 +442,8 @@ class TestClassify:
         assert guide.notes == []
 
     async def test_classify_asks_again_without_a_controlled_tag(self) -> None:
+        from scholar_lens.domain.guide.models import TechGuide
         from scholar_lens.domain.tags import NO_CONTROLLED_TAG
-        from scholar_lens.src.tech_guide import TechGuide
 
         good = (
             "Ray Serve deploys models as scalable online APIs; this guide covers "
@@ -468,7 +468,7 @@ class TestClassify:
     async def test_a_description_still_marked_up_after_the_repair_is_dropped(
         self,
     ) -> None:
-        from scholar_lens.src.tech_guide import TechGuide
+        from scholar_lens.domain.guide.models import TechGuide
 
         gen = _make_generator()
         gen.taxonomy_chain = MagicMock()
@@ -482,7 +482,7 @@ class TestClassify:
         assert any("Guide description" in n for n in guide.notes)
 
     async def test_classify_reads_the_finished_body(self) -> None:
-        from scholar_lens.src.tech_guide import TechGuide
+        from scholar_lens.domain.guide.models import TechGuide
 
         gen = _make_generator()
         gen.taxonomy_chain = MagicMock()

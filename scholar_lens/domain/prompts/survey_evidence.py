@@ -7,7 +7,7 @@ back to the model as concrete failures.
 
 from __future__ import annotations
 
-from .rules import (
+from scholar_lens.domain.prompts.rules import (
     CLAIM_SCOPE,
     COVERAGE_OUTLINE,
     COVERAGE_READING,

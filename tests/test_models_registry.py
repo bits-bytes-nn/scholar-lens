@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from scholar_lens.src.constants import EmbeddingModelId, LanguageModelId
-from scholar_lens.src.utils.models import (
+from scholar_lens.domain.constants import EmbeddingModelId, LanguageModelId
+from scholar_lens.domain.model_registry import (
     _EMBEDDING_MODEL_INFO,
     _LANGUAGE_MODEL_INFO,
 )

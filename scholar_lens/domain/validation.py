@@ -18,10 +18,10 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, Literal, Protocol
 
-from .conventions import BlogPost, PostConventions
-from .ids import ARXIV_DOI_VERSION, BARE_DOI, is_arxiv_host
-from .markdown.front_matter import split_front_matter
-from .markdown.lint import (
+from scholar_lens.domain.conventions import BlogPost, PostConventions
+from scholar_lens.domain.ids import ARXIV_DOI_VERSION, BARE_DOI, is_arxiv_host
+from scholar_lens.domain.markdown.front_matter import split_front_matter
+from scholar_lens.domain.markdown.lint import (
     BLOG_HTML_ELEMENTS,
     BLOG_NEEDS_ATTRIBUTES,
     ENVELOPE_TAG,
@@ -29,7 +29,7 @@ from .markdown.lint import (
     insecure_links,
     style_hits,
 )
-from .markdown.math import (
+from scholar_lens.domain.markdown.math import (
     BLOG_CODE_SPAN,
     BLOG_FENCE_ROLES,
     ESCAPED_UNDERSCORE,
@@ -45,8 +45,8 @@ from .markdown.math import (
     image_sources,
     indented_code_lines,
 )
-from .post_names import post_slug, same_post
-from .tags import tag_problem
+from scholar_lens.domain.post_names import post_slug, same_post
+from scholar_lens.domain.tags import tag_problem
 
 ArtifactKind = Literal["review", "summarize", "guide", "survey"]
 # The kinds that review or summarize one paper (a paper type in the spec).

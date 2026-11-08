@@ -12,17 +12,17 @@ from langchain_core.messages import BaseMessage
 from langchain_core.outputs import ChatResult
 from pydantic import Field
 
-from ...application.usage import current_allocation
-from ...domain.cost_allocation import application_profile_name
-from ..constants import EmbeddingModelId, LanguageModelId
-from ..logger import logger
-from .models import (
+from scholar_lens.application.usage import current_allocation
+from scholar_lens.domain.constants import EmbeddingModelId, LanguageModelId
+from scholar_lens.domain.cost_allocation import application_profile_name
+from scholar_lens.domain.model_registry import (
     _EMBEDDING_MODEL_INFO,
     _LANGUAGE_MODEL_INFO,
     EmbeddingModelInfo,
     LanguageModelInfo,
     register_profile_source,
 )
+from scholar_lens.src.logger import logger
 
 ModelIdT = TypeVar("ModelIdT")
 ModelInfoT = TypeVar("ModelInfoT")

@@ -16,16 +16,20 @@ from pathlib import Path
 
 import pymupdf
 
-from ..adapters.aws.storage import S3Handler, S3OperationError
-from ..adapters.retry import is_access_error
-from ..adapters.scholarly.index import OpenAlexIndex
-from ..application.checkpoints import FreshStore
-from ..application.ports import TextStore
-from ..domain.evidence import SourceDocument
-from ..domain.survey.plan import PlanPaper, unversioned_arxiv_id
-from .constants import S3Paths
-from .paper_source import PaperSourceError, PdfUrlSource
-from .web_research import ResearchCorpus, SourceFetchError, WebResearcher
+from scholar_lens.adapters.aws.storage import S3Handler, S3OperationError
+from scholar_lens.adapters.retry import is_access_error
+from scholar_lens.adapters.scholarly.index import OpenAlexIndex
+from scholar_lens.application.checkpoints import FreshStore
+from scholar_lens.application.ports import TextStore
+from scholar_lens.domain.constants import S3Paths
+from scholar_lens.domain.evidence import SourceDocument
+from scholar_lens.domain.survey.plan import PlanPaper, unversioned_arxiv_id
+from scholar_lens.src.paper_source import PaperSourceError, PdfUrlSource
+from scholar_lens.src.web_research import (
+    ResearchCorpus,
+    SourceFetchError,
+    WebResearcher,
+)
 
 logger = logging.getLogger(__name__)
 

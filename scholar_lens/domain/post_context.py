@@ -9,9 +9,13 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from .evidence import EvidenceLedger
-from .evidence_draft import cited_ids, prose_sentences, section_heading
-from .program import code_definitions
+from scholar_lens.domain.evidence import EvidenceLedger
+from scholar_lens.domain.evidence_draft import (
+    cited_ids,
+    prose_sentences,
+    section_heading,
+)
+from scholar_lens.domain.program import code_definitions
 
 
 @dataclass(frozen=True)

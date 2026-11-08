@@ -18,15 +18,37 @@ from dataclasses import dataclass, field
 
 from pydantic import BaseModel
 
-from ..domain.evidence import (
+from scholar_lens.application.checkpoints import input_hash
+from scholar_lens.application.evidence_writer import (
+    WriterPrompts,
+    block,
+    brief_lines,
+    quote_for_prompt_code,
+    safe_key,
+)
+from scholar_lens.application.ports import (
+    AgentLimits,
+    CheckpointStore,
+    LanguageModel,
+    TextStore,
+)
+from scholar_lens.application.post_engine import (
+    PostEngine,
+    PostPrompts,
+    ReadJob,
+    ReadStart,
+    RunSettings,
+)
+from scholar_lens.application.usage import usage_stage
+from scholar_lens.domain.evidence import (
     Evidence,
     EvidenceLedger,
     SourceDocument,
     duplicate_evidence,
 )
-from ..domain.evidence_draft import free_numbers
-from ..domain.guide.evidence_guide import strip_markers
-from ..domain.paper.evidence_paper import (
+from scholar_lens.domain.evidence_draft import free_numbers
+from scholar_lens.domain.guide.evidence_guide import strip_markers
+from scholar_lens.domain.paper.evidence_paper import (
     PaperOutline,
     PaperSection,
     PostKind,
@@ -35,20 +57,9 @@ from ..domain.paper.evidence_paper import (
     tldr_problems,
     tldr_questions,
 )
-from ..domain.specs.paper import PAPER_REVIEW_SPEC, paper_spec
-from ..domain.validation import description_problems, fit_description
-from ..prompts import paper_evidence as prompts
-from .checkpoints import input_hash
-from .evidence_writer import (
-    WriterPrompts,
-    block,
-    brief_lines,
-    quote_for_prompt_code,
-    safe_key,
-)
-from .ports import AgentLimits, CheckpointStore, LanguageModel, TextStore
-from .post_engine import PostEngine, PostPrompts, ReadJob, ReadStart, RunSettings
-from .usage import usage_stage
+from scholar_lens.domain.prompts import paper_evidence as prompts
+from scholar_lens.domain.specs.paper import PAPER_REVIEW_SPEC, paper_spec
+from scholar_lens.domain.validation import description_problems, fit_description
 
 logger = logging.getLogger(__name__)
 
