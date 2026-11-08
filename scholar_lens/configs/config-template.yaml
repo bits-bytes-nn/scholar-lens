@@ -48,8 +48,9 @@ code:
   embed_model_id: amazon.titan-embed-text-v2:0
   chunk_size: 1024
   chunk_overlap: 256
-  # Index at most this many of the repos' most relevant Python files / chunks
-  # (vendored libraries, tests and files over 100 KB are skipped).
+  # Read at most this many of the repos' most relevant Python files; index at
+  # most this many chunks (the code index is built only for the sections
+  # review engine; vendored libraries, tests and files over 100 KB are skipped).
   max_files: 150
   max_chunks: 400
 

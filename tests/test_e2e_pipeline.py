@@ -339,7 +339,7 @@ async def test_an_evidence_review_runs_without_the_citation_summarizer(
     seen: dict[str, object] = {}
 
     async def prepare(*args, **kwargs):  # type: ignore[no-untyped-def]
-        seen["needs_citations"] = kwargs["needs_citations"]
+        seen["inputs"] = kwargs["inputs"]
         return _paper(), None, None  # no summarizer for the evidence engine
 
     async def write(context, paper, *, post, translation_guideline, tracker):  # type: ignore[no-untyped-def]
@@ -359,7 +359,9 @@ async def test_an_evidence_review_runs_without_the_citation_summarizer(
     outcome = await paper_pipeline.run_paper_pipeline(
         context, JobRequest(kind="review", source="2106.09685"), TokenUsageTracker()
     )
-    assert seen["needs_citations"] is False
+    assert seen["inputs"] == paper_pipeline.PaperInputs(
+        citations=False, code_index=False
+    )
     assert "evidence note" in outcome.warnings
     assert "## 한계와 시사점" in Path(outcome.markdown_path).read_text(encoding="utf-8")
 
