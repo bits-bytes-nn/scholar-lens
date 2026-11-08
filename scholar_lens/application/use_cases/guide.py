@@ -35,7 +35,12 @@ from scholar_lens.application.run import (
     load_translation_guideline,
     publish_artifact,
 )
-from scholar_lens.domain.evidence import Authority, SourceAuthority, SourceDocument
+from scholar_lens.domain.evidence import (
+    Authority,
+    SourceAuthority,
+    SourceDocument,
+    authority_rank,
+)
 from scholar_lens.domain.evidence_draft import drop_empty_headings
 from scholar_lens.domain.guide.authority import (
     official_reference,
@@ -442,10 +447,7 @@ def _source_urls(
 ) -> list[str]:
     """The pages the body cites (official first), then the requested pages
     the body did not cite: the user's inputs are always listed."""
-    order = {"official": 0, "reference": 1, "third_party": 2, "older_docs": 3}
-    urls = [
-        d.url for d in sorted(cited, key=lambda d: order[d.authority or "third_party"])
-    ]
+    urls = [d.url for d in sorted(cited, key=lambda d: authority_rank(d.authority))]
     # One entry per page however it was spelled (a trailing slash, .html).
     seen: dict[str, str] = {}
     for url in [*urls, *requested]:

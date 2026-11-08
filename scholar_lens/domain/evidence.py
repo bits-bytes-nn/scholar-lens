@@ -36,6 +36,27 @@ SourceAuthority = Literal[
     "older_docs",
     "dev_docs",
 ]
+# The one authority ranking, for both vocabularies (an engine ``Authority``
+# is a ``SourceAuthority`` value): official docs, then the project's
+# repository, the user's reference material, the rest; demoted classes
+# last. Search results, cited sources and source passages sort by it.
+AUTHORITY_RANK: Mapping[str, int] = {
+    "official": 0,
+    "official_repo": 1,
+    "reference": 2,
+    "third_party": 3,
+    "dev_docs": 4,
+    "older_docs": 5,
+    "forum": 6,
+}
+
+
+def authority_rank(authority: str) -> int:
+    """The rank of a source or engine authority (lower first); none ("", a
+    paper) or an unknown value ranks as a third-party page."""
+    return AUTHORITY_RANK.get(authority, AUTHORITY_RANK["third_party"])
+
+
 EvidenceKind = Literal[
     "finding",  # a result, observation or conclusion the paper reports
     "number",  # a measured value, with its model, setting and metric

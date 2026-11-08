@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 from typing import Literal, Protocol
 from urllib.parse import urlparse
 
-from scholar_lens.domain.evidence import Authority, SourceAuthority
+from scholar_lens.domain.evidence import Authority, SourceAuthority, authority_rank
 
 VersionKind = Literal["release", "stable", "dev"]
 
@@ -122,17 +122,6 @@ ENGINE_AUTHORITY: Mapping[SourceAuthority, Authority] = {
 OFFICIAL_AUTHORITIES = frozenset({"official", "official_repo"})
 # Authorities counted against ``max_third_party_pages``.
 THIRD_PARTY_AUTHORITIES = frozenset({"third_party", "forum"})
-# Search-result order: authority first (official docs, then the project's
-# repository, then the rest; demoted classes last).
-AUTHORITY_RANK: Mapping[str, int] = {
-    "official": 0,
-    "official_repo": 1,
-    "reference": 2,
-    "third_party": 3,
-    "dev_docs": 4,
-    "older_docs": 5,
-    "forum": 6,
-}
 
 
 def normalize_url(url: str) -> str:
@@ -644,4 +633,4 @@ def search_rank(record: SourceRecord, position: int) -> tuple[int, int, int, int
     ``position``. Years, not days, so a week's difference never outweighs
     the search rank."""
     year = published_year(record.published)
-    return (AUTHORITY_RANK.get(record.authority, 3), 0 if year else 1, -year, position)
+    return (authority_rank(record.authority), 0 if year else 1, -year, position)

@@ -42,6 +42,7 @@ from scholar_lens.domain.evidence import (
     Evidence,
     EvidenceLedger,
     SourceDocument,
+    authority_rank,
     duplicate_evidence,
 )
 from scholar_lens.domain.evidence_draft import free_numbers
@@ -83,7 +84,6 @@ _POST_PROMPTS = PostPrompts(
     tail=prompts.PASS_TAIL,
 )
 _PRIMARY = ("official", "reference")
-_AUTHORITY_RANK = {"official": 0, "reference": 1, "third_party": 2, "older_docs": 3}
 # The product's own definitions shown to a section's checks and fixes.
 _SDK_SOURCE_CHARS = 12_000
 
@@ -133,9 +133,7 @@ class EvidenceGuide:
 
 
 def _rank(document: SourceDocument | None) -> int:
-    return _AUTHORITY_RANK.get(
-        (document.authority if document else "") or "third_party", 2
-    )
+    return authority_rank(document.authority if document else "")
 
 
 class EvidenceGuideEngine(PostEngine[GuideOutline, GuideSection, EvidenceGuide]):

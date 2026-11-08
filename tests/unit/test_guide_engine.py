@@ -5,7 +5,9 @@ scripted run from reading to the assembled body."""
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+from typing import Any, get_args
+
+import pytest
 
 from scholar_lens.application.evidence_writer import (
     ClaimCheck,
@@ -30,8 +32,12 @@ from scholar_lens.domain.coverage import (
     ExtractedTargets,
 )
 from scholar_lens.domain.evidence import (
+    AUTHORITY_RANK,
+    Authority,
     EvidenceLedger,
+    SourceAuthority,
     SourceDocument,
+    authority_rank,
     evidence_problems,
 )
 from scholar_lens.domain.guide.evidence_guide import (
@@ -950,3 +956,45 @@ def test_cached_evidence_is_reused_only_for_the_same_reader_inputs() -> None:
     assert model.reads == 3
     asyncio.run(engine.read("Serve autoscaling", [page]))
     assert model.reads == 3 and len(store.blobs) == 3
+
+
+# ---- the one authority ranking -------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "vocabulary", [Authority, SourceAuthority], ids=["engine", "source"]
+)
+def test_every_authority_has_one_rank(vocabulary: object) -> None:
+    for value in get_args(vocabulary):
+        assert authority_rank(value) == AUTHORITY_RANK.get(
+            value, AUTHORITY_RANK["third_party"]
+        )
+    assert authority_rank("") == authority_rank("not-an-authority")
+    assert authority_rank("") == AUTHORITY_RANK["third_party"]
+
+
+@pytest.mark.parametrize("unknown", ["", "reference", "older_docs"])
+def test_cited_sources_and_passages_sort_by_the_one_ranking(unknown: str) -> None:
+    docs = [
+        SourceDocument.from_markdown(
+            f"D{k}",
+            "t",
+            "full_text",
+            "## A\n\nText.\n",
+            url=f"https://x.dev/{k}",
+            authority=a,  # type: ignore[arg-type]
+        )
+        for k, a in enumerate(["older_docs", unknown, "third_party", "official"])
+    ]
+    urls = _source_urls(docs, [])
+    assert urls == [
+        d.url for d in sorted(docs, key=lambda d: authority_rank(d.authority))
+    ]
+    engine = EvidenceGuideEngine(
+        ScriptedModel(),  # type: ignore[arg-type]
+        GuideSettings(language="Korean", title_max_length=70, reader_tag="t"),
+    )
+    engine._documents = {d.paper_id: d for d in docs}
+    assert engine.source_rank() == {
+        d.paper_id: authority_rank(d.authority) for d in docs
+    }
