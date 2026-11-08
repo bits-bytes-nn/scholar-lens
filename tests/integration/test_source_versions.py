@@ -15,6 +15,7 @@ from tests.integration.test_tech_guide import _make_generator, _relevant
 
 DOCS = "https://docs.example.dev/en/latest/index.html"
 PINNED = "https://docs.example.dev/en/v0.6.0/"
+ROOT = "https://docs.example.dev/"
 REPO = "https://github.com/example/proj"
 
 RELEASE_DOCS = [
@@ -22,7 +23,8 @@ RELEASE_DOCS = [
     ([DOCS], None, "https://docs.example.dev/en/latest/a.html", "official", "latest"),
     ([DOCS], None, "https://docs.example.dev/en/stable/a.html", "official", "stable"),
     ([DOCS], None, "https://docs.example.dev/en/v0.6.0/a.html", "older_docs", "v0.6.0"),
-    ([DOCS], None, "https://docs.example.dev/guide/a.html", "official", ""),
+    # Outside the requested docs' path scope (en/<version>): not official.
+    ([DOCS], None, "https://docs.example.dev/guide/a.html", "third_party", ""),
     # A requested rolling alias stays official; another one is development.
     ([DOCS], "1.4.2", "https://docs.example.dev/en/latest/a", "official", "latest"),
     ([DOCS], "1.4.2", "https://docs.example.dev/en/nightly/a", "dev_docs", "nightly"),
@@ -39,9 +41,10 @@ RELEASE_DOCS = [
     ([PINNED], "1.4.2", "https://docs.example.dev/en/v0.6.0/b", "official", "v0.6.0"),
     ([PINNED], "1.4.2", "https://docs.example.dev/en/stable/b", "older_docs", "stable"),
     ([PINNED], None, "https://docs.example.dev/en/latest/b", "dev_docs", "latest"),
-    # A bare major version only right after the root or a language.
-    ([DOCS], None, "https://docs.example.dev/v2/a", "older_docs", "v2"),
-    ([DOCS], None, "https://docs.example.dev/reference/rest/v1/x", "official", ""),
+    # A bare major version only right after the root or a language (the
+    # docs root requested: the whole host is in scope).
+    ([ROOT], None, "https://docs.example.dev/v2/a", "older_docs", "v2"),
+    ([ROOT], None, "https://docs.example.dev/reference/rest/v1/x", "official", ""),
     # A paper id is not a release.
     ([DOCS], None, "https://papers.example.org/papers/2106.09685", "third_party", ""),
     # Off the docs host: third-party, still with its URL version.

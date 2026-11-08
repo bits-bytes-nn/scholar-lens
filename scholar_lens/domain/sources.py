@@ -67,12 +67,15 @@ _RELEASE_NUMBER = re.compile(
 )
 _PRE_RELEASE = re.compile(r"(?:dev|rc|a|b)\d*$", re.I)
 
-# Hosts many projects and authors share: what is official there is the
-# requested project's own space (its first two path segments: owner/repo,
-# docs/<library>), not the whole host.
-SHARED_HOSTS = frozenset(
-    {"github.com", "gitlab.com", "bitbucket.org", "huggingface.co", "medium.com"}
-)
+# What is official on a requested docs host is the requested pages' path
+# scope, on every host (one host may serve many products or authors): the
+# path through the first folder after a docs version ("/en/<any
+# version>/serve/"), or, without a version, the first segments of the page's
+# folder ("owner/repo", "docs/<library>"); the host root is the whole host.
+# Request the docs root to make a whole docs site official.
+OFFICIAL_SCOPE_SEGMENTS = 2
+# A scope segment that matches any docs version.
+ANY_VERSION = "*"
 # Code hosts whose URL layout names a repository and a ref: host ->
 # (the host repository keys use, the path markers a ref follows).
 _CODE_HOSTS: Mapping[str, tuple[str, tuple[str, ...]]] = {
@@ -186,14 +189,60 @@ def newest_release(tags: Iterable[str]) -> str | None:
     return max(releases, key=_release_key) if releases else None
 
 
-def space(url: str) -> tuple[str, str]:
-    """(host, the project's space on a shared host or "")."""
+def _folder(path: str) -> list[str]:
+    """A path's folder segments, lower-cased: the last segment is a page
+    when it has an extension (``/docs/intro.html`` → ``docs``) and a
+    section otherwise (``/docs/peft/index`` keeps ``index``)."""
+    segments = [seg.lower() for seg in path.split("/") if seg]
+    if segments and "." in segments[-1] and not path.endswith("/"):
+        segments = segments[:-1]
+    return segments
+
+
+def _is_version(segment: str) -> bool:
+    return not _ARXIV_ID_SEGMENT.fullmatch(segment) and any(
+        row.pattern.fullmatch(segment) for row in URL_VERSION_PATTERNS
+    )
+
+
+def official_scope(
+    url: str, *, segments: int = OFFICIAL_SCOPE_SEGMENTS
+) -> tuple[str, str]:
+    """(host, the path scope a requested page makes official). A docs
+    version in the folder scopes to the path through the segment after it,
+    the version itself matching any version (other versions of the same
+    docs are another version, not another product); without one, the first
+    ``segments`` folder segments. "" is the whole host."""
     parts = urlparse(url)
     host = (parts.hostname or "").lower()
-    if host not in SHARED_HOSTS:
-        return host, ""
-    segments = [s.lower() for s in parts.path.split("/") if s]
-    return host, "/".join(segments[:2])
+    folder = _folder(parts.path)
+    found = url_version("/" + "/".join(folder) + "/") if folder else None
+    version = folder.index(found.value) if found else None
+    if version is not None:
+        # The segment after the version scopes when it is a folder (more
+        # path follows, or a trailing slash), not when it is the page.
+        after = folder[version + 1 : version + 2]
+        whole = [seg for seg in parts.path.split("/") if seg]
+        if after and len(whole) == version + 2 and not parts.path.endswith("/"):
+            after = []
+        kept = [*folder[:version], ANY_VERSION, *after]
+    else:
+        kept = folder[:segments]
+    return host, "/".join(kept)
+
+
+def in_scope(url: str, scope: str) -> bool:
+    """Whether ``url``'s path lies in ``scope`` (see :func:`official_scope`)."""
+    if not scope:
+        return True
+    path = [seg.lower() for seg in urlparse(url).path.split("/") if seg]
+    wanted = scope.split("/")
+    if len(path) < len(wanted):
+        return False
+    return all(
+        w == p or (w == ANY_VERSION and _is_version(p))
+        for w, p in zip(wanted, path, strict=False)
+    )
 
 
 @dataclass(frozen=True)
@@ -257,8 +306,8 @@ class _Landed(Protocol):
 @dataclass(frozen=True)
 class OfficialDocs:
     """The documentation the user asked for: its hosts, the docs versions the
-    requested URLs name (and land on) and, on a shared host, the requested
-    projects' spaces."""
+    requested URLs name (and land on) and the requested pages' path scopes
+    on each host (:func:`official_scope`)."""
 
     hosts: frozenset[str]
     versions: frozenset[str | None]
@@ -269,7 +318,7 @@ class OfficialDocs:
         return cls(
             hosts=frozenset(h for u in urls if (h := urlparse(u).hostname)),
             versions=frozenset(docs_version(u) for u in urls),
-            spaces=frozenset(space(u) for u in urls if space(u)[1]),
+            spaces=frozenset(official_scope(u) for u in urls),
         )
 
     @classmethod
@@ -290,8 +339,7 @@ class OfficialDocs:
                 continue
             if host := urlparse(page.final_url).hostname:
                 hosts.add(host)
-                if (landed_space := space(page.final_url))[1]:
-                    spaces.add(landed_space)
+                spaces.add(official_scope(page.final_url))
             asked = url_version(page.url)
             landed = docs_version(page.final_url)
             if asked is None or asked.kind != "release" or landed in base.versions:
@@ -303,17 +351,15 @@ class OfficialDocs:
         )
 
     def on_host(self, url: str) -> bool:
-        """On a requested docs host, inside the requested project's space
-        when the host is shared (a community post or a fork is not)."""
-        host, page_space = space(url)
+        """On a requested docs host and inside a requested page's path scope
+        there (another product's docs, a community post or a fork on the
+        same host is not)."""
+        host = (urlparse(url).hostname or "").lower()
         if host not in self.hosts:
             return False
-        if host not in SHARED_HOSTS:
-            return True
-        return any(
-            h == host and (page_space == s or page_space.startswith(s + "/"))
-            for h, s in self.spaces
-        )
+        scopes = [scope for h, scope in self.spaces if h == host]
+        # Hosts given without their scopes (an older record) are whole.
+        return not scopes or any(in_scope(url, scope) for scope in scopes)
 
     def covers(self, url: str) -> bool:
         """Whether ``url`` is an official page of these docs (see

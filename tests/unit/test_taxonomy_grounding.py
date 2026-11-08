@@ -86,10 +86,11 @@ def test_docs_version(url: str, version: str | None) -> None:
 
 
 def test_official_docs_are_version_aware() -> None:
-    latest = OfficialDocs.from_urls(["https://docs.vllm.ai/en/latest/quickstart/"])
+    latest = OfficialDocs.from_urls(["https://docs.vllm.ai/en/latest/quickstart.html"])
     assert latest.covers("https://docs.vllm.ai/en/latest/engine_args.html")
     assert latest.covers("https://docs.vllm.ai/en/stable/engine_args.html")
-    assert latest.covers("https://docs.vllm.ai/usage/metrics/")
+    # Outside the requested page's path scope (en/<version>).
+    assert not latest.covers("https://docs.vllm.ai/usage/metrics/")
     assert not latest.covers("https://docs.vllm.ai/en/v0.6.0/engine_args.html")
     assert not latest.covers("https://x.io/en/latest/engine_args.html")
     pinned = OfficialDocs.from_urls(["https://docs.vllm.ai/en/v0.6.0/quickstart.html"])
@@ -105,7 +106,7 @@ def test_older_docs_version_is_labelled_and_not_official() -> None:
             ("https://docs.vllm.ai/en/v0.6.0/b", "prefix caching"),
         ]
     )
-    sources = SourceSet.from_urls(["https://docs.vllm.ai/en/latest/quickstart/"])
+    sources = SourceSet.from_urls(["https://docs.vllm.ai/en/latest/quickstart.html"])
     sources.record_all(corpus.pages)
     text = corpus.relevant_text("prefix caching", max_chars=10_000, labelled=True)
     assert "(official documentation): https://docs.vllm.ai/en/latest/a" in text

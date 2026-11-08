@@ -12,7 +12,12 @@ from scholar_lens.adapters.web.research import published_date
 from scholar_lens.application.use_cases.guide import guide_documents
 from scholar_lens.domain.evidence import SourceDocument
 from scholar_lens.domain.research import PageContent
-from scholar_lens.domain.sources import SourceSet, url_language
+from scholar_lens.domain.sources import (
+    SourceSet,
+    in_scope,
+    official_scope,
+    url_language,
+)
 
 DOCS = "https://docs.example.dev/en/latest/index.html"
 TEXT = "A page long enough to become a source document. " * 10
@@ -139,3 +144,92 @@ def test_a_source_label_names_its_record() -> None:
     )
     assert recorded.label() == "official_repo, v2.3.0, 2026-05-01"
     assert doc.model_copy(update={"authority": ""}).label() == "third_party"
+
+
+# ---- the official scope is the requested pages' path scope, on every host -----
+
+
+@pytest.mark.parametrize(
+    "requested, same, other",
+    [
+        # A multi-product docs host: one product's docs, not the others'.
+        (
+            "https://docs.multi.dev/en/latest/serve/index.html",
+            "https://docs.multi.dev/en/2.9.0/serve/batching.html",
+            "https://docs.multi.dev/en/latest/data/overview.html",
+        ),
+        # A host many libraries share, with no list of such hosts.
+        (
+            "https://hub.example.org/docs/alpha/index",
+            "https://hub.example.org/docs/alpha/quicktour",
+            "https://hub.example.org/docs/beta/quicktour",
+        ),
+        # A code host: the project, not its owner's other projects.
+        (
+            "https://code.example.org/owner/proj",
+            "https://code.example.org/owner/proj/wiki/Home",
+            "https://code.example.org/owner/other",
+        ),
+        # Unversioned docs: the requested section.
+        (
+            "https://docs.single.dev/serve/batching.html",
+            "https://docs.single.dev/serve/scaling.html",
+            "https://docs.single.dev/train/intro.html",
+        ),
+    ],
+)
+def test_only_the_requested_path_scope_is_official(
+    requested: str, same: str, other: str
+) -> None:
+    sources = SourceSet.from_urls([requested])
+    assert sources.official.on_host(same)
+    assert sources.classify(other).authority == "third_party"
+
+
+@pytest.mark.parametrize(
+    "requested",
+    ["https://docs.single.dev/", "https://docs.single.dev/index.html"],
+)
+def test_the_docs_root_makes_the_whole_host_official(requested: str) -> None:
+    sources = SourceSet.from_urls([requested])
+    for url in (
+        "https://docs.single.dev/serve/a.html",
+        "https://docs.single.dev/train/b/c.html",
+    ):
+        assert sources.classify(url).authority == "official"
+
+
+def test_where_a_requested_page_landed_is_in_scope_too() -> None:
+    seed = PageContent(
+        url="https://old.example.dev/serve/",
+        title="t",
+        text="",
+        final_url="https://docs.example.dev/en/latest/serve/index.html",
+    )
+    sources = SourceSet.from_urls([seed.url], [seed])
+    assert (
+        sources.classify("https://docs.example.dev/en/latest/serve/x.html").authority
+        == "official"
+    )
+    assert (
+        sources.classify("https://docs.example.dev/en/latest/data/x.html").authority
+        == "third_party"
+    )
+
+
+@pytest.mark.parametrize(
+    "url, scope",
+    [
+        ("https://d.dev/en/latest/serve/index.html", "en/*/serve"),
+        ("https://d.dev/en/latest/quickstart.html", "en/*"),
+        ("https://d.dev/en/latest/quickstart/", "en/*/quickstart"),
+        ("https://d.dev/docs/lib/index", "docs/lib"),
+        ("https://d.dev/a.html", ""),
+        ("https://d.dev/", ""),
+    ],
+)
+def test_a_requested_page_scopes_to_its_folder_below_the_version(
+    url: str, scope: str
+) -> None:
+    assert official_scope(url) == ("d.dev", scope)
+    assert in_scope(url, scope)

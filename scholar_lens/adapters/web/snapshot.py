@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 # Bumped when the saved layout or what a record means changes: an older
 # snapshot is then gathered again instead of misread.
-SNAPSHOT_FORMAT = 1
+SNAPSHOT_FORMAT = 2
 _PAGE_FIELDS = {f.name for f in dataclasses.fields(PageContent)}
 _RESULT_FIELDS = {f.name for f in dataclasses.fields(SearchResult)}
 
