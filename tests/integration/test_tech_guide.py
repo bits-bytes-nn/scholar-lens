@@ -789,3 +789,47 @@ def test_a_targeted_fix_may_not_drop_a_code_block() -> None:
     assert lost_structure(draft, "## S\n\nText.\n\nMore text.") == "loses a code block"
     edited = draft.replace(" --bad-flag", "")
     assert lost_structure(draft, edited) == ""
+
+
+@pytest.mark.parametrize("cap", [0, 1, 2])
+async def test_the_configured_third_party_cap_reaches_the_guides_searches(
+    cap: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``tech_guide.max_third_party_pages`` goes from the config through
+    bootstrap's toolkit into the generator's searches: with a cap of N,
+    N of the third-party results are admitted."""
+    from scholar_lens import bootstrap
+    from scholar_lens.adapters.web.research import WebResearcher
+    from scholar_lens.configs import Config
+    from tests.integration.test_source_ranking import _result, _Search
+
+    monkeypatch.setattr(
+        "scholar_lens.adapters.web.guide_research.BedrockLanguageModelFactory",
+        lambda **_: FakeLLMFactory(),
+    )
+    config = Config()
+    config.tech_guide.max_third_party_pages = cap
+    session = boto3.Session(region_name="us-east-1")
+    context = bootstrap.run_context(
+        config, default_boto_session=session, bedrock_boto_session=session
+    )
+    search = _Search(
+        {"q": [_result(f"https://blog{i}.example.org/post") for i in range(5)]}
+    )
+    researcher = WebResearcher(search)
+    researcher.research = MagicMock(return_value=_corpus())  # type: ignore[method-assign]
+    gen = bootstrap.GuideToolkit(context).research(  # type: ignore[arg-type]
+        researcher, MagicMock(), title_max_length=70
+    )
+    # No network: no release or tag lookups, the gate answers.
+    gen.release_lookup = None
+    gen.repo_tags = None
+    gen.relevance_chain = MagicMock()
+    gen.relevance_chain.ainvoke = _relevant()
+    material = await gen.gather(
+        ["https://docs.x.com"], discover_subpages=False, search_queries=["q"]
+    )
+    blogs = [p for p in material.corpus.pages if "blog" in p.url]
+    assert len(blogs) == cap
+    assert all(p.authority == "third_party" for p in blogs)
+    assert gen.min_secondary_pages == config.tech_guide.min_secondary_pages
