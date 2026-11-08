@@ -13,6 +13,7 @@ import pytest
 from scholar_lens.application.evidence_writer import (
     ClaimCheck,
     Edit,
+    EvidenceCheck,
     EvidenceWriter,
     FixedSection,
     PostFinding,
@@ -424,3 +425,17 @@ def test_the_first_section_has_no_earlier_part() -> None:
     )
     ((earlier, section),) = model.contexts
     assert earlier == "" and "[E1]" in section
+
+
+class _FailingEvidenceCheck(Model):
+    async def structured(self, *, schema: Any, prompt: str, **kwargs: Any) -> Any:
+        if schema is EvidenceCheck:
+            raise ValueError("No valid EvidenceCheck (stop reason max_tokens)")
+        return await super().structured(schema=schema, prompt=prompt, **kwargs)
+
+
+def test_an_evidence_check_without_a_valid_answer_blocks_and_drops_nothing() -> None:
+    writer = _writer(_FailingEvidenceCheck())
+    assert asyncio.run(writer.wrong_evidence(list(_ledger()))) == {}
+    assert len(writer.blocking) == 1
+    assert "evidence check could not run" in writer.blocking[0]

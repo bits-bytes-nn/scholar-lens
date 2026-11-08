@@ -680,7 +680,9 @@ class EvidenceWriter:
         """Evidence whose claim, scope or cell misstates its quote (a scope
         can name the wrong benchmark while every number is in the quote):
         id -> reason. A figure's claim is checked against its caption and
-        the text before it; equations and code are checked in code."""
+        the text before it; equations and code are checked in code. A
+        check without a valid answer blocks the post and drops nothing
+        (docs/engine.md, 4.10)."""
         items = [e for e in items if e.kind not in ("equation", "code")]
         items = [e for e in items if e.kind != "figure" or e.caption or e.quote]
         if not items:
@@ -692,12 +694,17 @@ class EvidenceWriter:
             for e in items
         )
         with usage_stage("verify"):
-            check = await self.model.structured(
+            check = await self._evaluated(
+                "the evidence check",
+                blocking=True,
+                unchecked="no evidence was left out, and the post uses it unchecked",
                 role="evaluate",
                 system=self.prompts.evidence_check,
                 prompt=block("evidence", lines),
                 schema=EvidenceCheck,
             )
+        if check is None:
+            return {}
         wrong = {v.id: v.reason for v in check.verdicts if v.verdict == "wrong"}
         if wrong:
             self.notes.append(
