@@ -1,0 +1,14 @@
+{
+ "guide-rayserve/X": "new",
+ "guide-rayserve/Y": "base",
+ "review-zep/X": "base",
+ "review-zep/Y": "new",
+ "review-kimi/X": "base",
+ "review-kimi/Y": "new",
+ "review-dpo/X": "new",
+ "review-dpo/Y": "base",
+ "summary-lora/X": "new",
+ "summary-lora/Y": "base",
+ "summary-toolorchestra/X": "new",
+ "summary-toolorchestra/Y": "base"
+}
