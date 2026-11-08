@@ -14,7 +14,7 @@ from typing import Any
 import boto3
 import httpx
 import pytest
-from github import GithubException
+from github import GithubException, InputGitAuthor
 from moto import mock_aws
 from PIL import Image
 
@@ -661,15 +661,20 @@ class FakeRepo:
 
     def _view(self, sha: str) -> SimpleNamespace:
         identity = self.commits[sha][2]
-        person = (
-            identity["author"]._identity
-            if "author" in identity
-            else {"name": "Someone", "email": "someone@example.com"}
-        )
         date = datetime(2026, 1, 1, tzinfo=UTC) + timedelta(
             minutes=int(sha.removeprefix("commit"))
         )
-        actor = SimpleNamespace(**person, date=date)
+
+        def person(role: str) -> SimpleNamespace:
+            """The commit's author or committer: the identity it was made
+            with, else a person's."""
+            who = (
+                identity[role]._identity
+                if role in identity
+                else {"name": "Someone", "email": "someone@example.com"}
+            )
+            return SimpleNamespace(**who, date=date)
+
         pulls = [
             SimpleNamespace(head=SimpleNamespace(ref=pull.head))
             for pull, base in self.all_pulls
@@ -680,7 +685,9 @@ class FakeRepo:
             sha=sha,
             html_url=f"https://github.com/owner/blog/commit/{sha}",
             commit=SimpleNamespace(
-                author=actor, committer=actor, message=self.messages.get(sha, "")
+                author=person("author"),
+                committer=person("committer"),
+                message=self.messages.get(sha, ""),
             ),
             get_pulls=lambda: pulls,
         )
@@ -1078,6 +1085,89 @@ class TestBlogBranchSync:
         files = repo.files_at(_BRANCH)
         assert files["assets/images/my-guide-2.png"] == PNG + b"fixed"
         assert files["assets/images/my-guide-3.png"] == PNG + b"3"
+
+    def _branch_with_a_stale_image(self, tmp_path: Path) -> tuple[FakeRepo, str]:
+        """A first run on the open PR's branch with figure 1, which a rerun
+        no longer produces (stale, removed when only this tool wrote it)."""
+        repo = FakeRepo({"README.md": b"blog"})
+        BlogBranchSync(repo, _CONFIG).sync(
+            _request(tmp_path / "a"),
+            _post(
+                tmp_path / "a", "2026-10-11-my-guide", images={"my-guide-1.png": PNG}
+            ),
+        )
+        return repo, "assets/images/my-guide-1.png"
+
+    def _rerun_without_images(self, repo: FakeRepo, tmp_path: Path) -> None:
+        md = _post(tmp_path / "b", "2026-10-11-my-guide", body="# Post v2\n")
+        BlogBranchSync(repo, _CONFIG).sync(_request(tmp_path / "b"), md)
+
+    def test_a_stale_image_only_the_tool_wrote_is_removed(self, tmp_path: Path) -> None:
+        repo, image = self._branch_with_a_stale_image(tmp_path)
+        self._rerun_without_images(repo, tmp_path)
+        assert image not in repo.files_at(_BRANCH)
+
+    def test_a_tool_commit_a_person_amended_is_not_the_tools(
+        self, tmp_path: Path
+    ) -> None:
+        # A person amends (or rebases) the tool's commit: the author stays the
+        # tool's identity, the committer is the person.
+        repo, image = self._branch_with_a_stale_image(tmp_path)
+        head = repo.refs[_BRANCH]
+        tree, parents, identity = repo.commits[head]
+        person = InputGitAuthor("Someone", "someone@example.com")
+        amended = repo._new_commit(
+            tree, parents, {"author": identity["author"], "committer": person}
+        )
+        repo.refs[_BRANCH] = amended
+        commit = repo._view(amended).commit
+        assert commit.author.email == "bot@example.com"
+        assert commit.committer.email == "someone@example.com"
+
+        self._rerun_without_images(repo, tmp_path)
+        assert repo.files_at(_BRANCH)[image] == PNG
+
+    def test_a_file_with_an_empty_history_is_kept(self, tmp_path: Path) -> None:
+        # GitHub may list no commits for a path (e.g. history it cannot
+        # follow): nothing shows the tool wrote it, so it stays.
+        repo, image = self._branch_with_a_stale_image(tmp_path)
+        listed = repo.get_commits
+
+        def history(sha: str, path: str) -> list[SimpleNamespace]:
+            return [] if path == image else listed(sha=sha, path=path)
+
+        repo.get_commits = history  # type: ignore[method-assign]
+        self._rerun_without_images(repo, tmp_path)
+        assert repo.files_at(_BRANCH)[image] == PNG
+
+    def test_hand_edits_stop_at_the_last_generated_commit(self, tmp_path: Path) -> None:
+        # The post was hand-written, then generated, then hand-edited: only
+        # the edit after the generated version is listed, not the commit the
+        # generated version replaced.
+        post = "_posts/2026-10-10-my-guide.md"
+        repo = FakeRepo({post: b"hand written"})
+        written = repo.refs["heads/main"]
+        sync = BlogBranchSync(repo, _CONFIG)
+        sync.sync(
+            _request(tmp_path / "d1", published_path=post),
+            _post(tmp_path / "d1", post[7:-3]),
+        )
+        generated = repo.refs[_BRANCH]
+        repo.refs["heads/main"] = generated  # merged
+        repo.pulls.clear()
+        fix = repo.commit_files(generated, {post: b"# Post, fixed\n"}, "Fix typo")
+        repo.refs["heads/main"] = fix
+
+        sync.sync(
+            _request(tmp_path / "d2", published_path=post),
+            _post(tmp_path / "d2", post[7:-3]),
+        )
+        body = repo.pulls[0].body
+        notes = [
+            line for line in body.splitlines() if "Hand edit since generation" in line
+        ]
+        assert len(notes) == 1 and f'{fix[:7]} "Fix typo"' in notes[0]
+        assert written[:7] not in body and generated[:7] not in body
 
     def test_without_an_identity_nothing_is_removed(self, tmp_path: Path) -> None:
         # The token's account is a person's too: no file counts as generated.
