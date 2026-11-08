@@ -636,3 +636,12 @@ def iso_date(value: str) -> str:
 def published_year(published: str) -> int:
     found = _DATE.search(published or "")
     return int(found.group(1)) if found else 0
+
+
+def search_rank(record: SourceRecord, position: int) -> tuple[int, int, int, int]:
+    """Sort key of a search result: authority, then recency (newer years
+    first, undated pages after dated ones), then the search's own rank
+    ``position``. Years, not days, so a week's difference never outweighs
+    the search rank."""
+    year = published_year(record.published)
+    return (AUTHORITY_RANK.get(record.authority, 3), 0 if year else 1, -year, position)

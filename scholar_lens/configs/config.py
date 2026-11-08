@@ -261,6 +261,19 @@ class TechGuide(_Section):
     # material reaches the section writer (not just the outline planner); taken
     # round-robin across the queries, so 12 reads the top two of each.
     fetch_top_results: int = Field(default=12, ge=0)
+    # Search results are ranked by source authority, then publication year,
+    # then search rank; at most this many of the fetched pages are
+    # third-party (or a demoted class below), the rest go to the official
+    # docs and repository.
+    max_third_party_pages: int = Field(default=4, ge=0)
+    # Domain classes (e.g. forum, social, aggregator) -> host patterns
+    # ("example.com" with its subdomains, "*.example.com", "forum.*"): their
+    # pages rank last and count as third-party. The defaults live in
+    # config-template.yaml.
+    demoted_domains: dict[str, list[str]] = Field(default_factory=dict)
+    # Domains the search backends leave out (Tavily exclude_domains, Brave
+    # -site:); "*.example.com" is sent as example.com.
+    excluded_domains: list[str] = Field(default_factory=list)
     # Upper bound on guide sections, told to the outline planner so it plans a
     # self-contained guide (usage, internals and integration) within it.
     # Fewer, deeper sections: each teaches its features once (the guide's

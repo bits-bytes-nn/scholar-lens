@@ -25,7 +25,7 @@ from __future__ import annotations
 import asyncio
 import functools
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -51,7 +51,13 @@ from .prompts import (
     TechGuideResearchPlanPrompt,
 )
 from .prompts.tech_guide import REFERENCE_LABEL, TechGuideTaxonomyPrompt
-from .source_set import OFFICIAL_AUTHORITIES, SourceSet, TagLookup
+from .source_set import (
+    OFFICIAL_AUTHORITIES,
+    DomainClasses,
+    SourceSet,
+    TagLookup,
+    search_exclusions,
+)
 from .utils import (
     BedrockLanguageModelFactory,
     HTMLTagOutputParser,
@@ -152,6 +158,9 @@ class TechGuideGenerator(RetryableBase):
         llm_factory: BedrockLanguageModelFactory | None = None,
         release_lookup: Callable[[str], str | None] | None = None,
         repo_tags: TagLookup | None = None,
+        max_third_party_pages: int | None = None,
+        demoted_domains: Mapping[str, Collection[str]] | None = None,
+        excluded_domains: Collection[str] = (),
     ) -> None:
         """Args beyond the obvious:
         release_lookup: A package's latest release on its index (the
@@ -159,9 +168,17 @@ class TechGuideGenerator(RetryableBase):
             looks nothing up.
         repo_tags: A repository's tags (``host/owner/name``); None
             looks nothing up.
+        max_third_party_pages: At most this many third-party and demoted
+            search-result pages (None: no cap).
+        demoted_domains: Domain classes (forum, social, aggregator …) ->
+            host patterns whose pages rank last and count as third-party.
+        excluded_domains: Domains the search backends leave out.
         """
         self.release_lookup = release_lookup
         self.repo_tags = repo_tags
+        self.max_third_party_pages = max_third_party_pages
+        self.demoted = DomainClasses.from_config(demoted_domains or {})
+        self.excluded_domains = search_exclusions(excluded_domains)
         self.language = language
         # The blog's title limit (the conventions' ``seo_title_max_length``).
         self.title_max_length = title_max_length
@@ -292,6 +309,9 @@ class TechGuideGenerator(RetryableBase):
                 corpus,
                 queries,
                 fetch_top=self.fetch_top_results,
+                sources=self._sources,
+                max_third_party=self.max_third_party_pages,
+                exclude=self.excluded_domains,
             )
             self._record(corpus.pages[before:], "search")
         elif queries:
@@ -531,7 +551,11 @@ class TechGuideGenerator(RetryableBase):
                     package = name
                     break
         sources = SourceSet.from_urls(
-            urls, docs, package_release=release, repo_tags=self.repo_tags
+            urls,
+            docs,
+            package_release=release,
+            demoted=self.demoted,
+            repo_tags=self.repo_tags,
         ).with_repositories(docs)
         target = sources.target
         if target.release:

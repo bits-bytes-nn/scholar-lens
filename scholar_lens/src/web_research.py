@@ -56,12 +56,14 @@ from .prompts.tech_guide import (
 from .source_set import (
     OFFICIAL_AUTHORITIES,
     SHARED_HOSTS,
+    THIRD_PARTY_AUTHORITIES,
     OfficialDocs,
     SourceSet,
     docs_version,
     is_official,
     iso_date,
     normalize_url,
+    search_rank,
 )
 from .utils import extract_text_from_html, parse_lines
 from .utils.helpers import is_page_furniture
@@ -436,9 +438,32 @@ class WebSearchProvider(ABC):
 
     @abstractmethod
     def search(
-        self, query: str, *, count: int = 5, domains: Collection[str] = ()
+        self,
+        query: str,
+        *,
+        count: int = 5,
+        domains: Collection[str] = (),
+        exclude: Collection[str] = (),
     ) -> list[SearchResult]:
-        """Results for ``query``; ``domains`` restricts them to those hosts."""
+        """Results for ``query``; ``domains`` restricts them to those hosts,
+        ``exclude`` leaves those domains out where the backend can."""
+
+
+def _search(
+    provider: WebSearchProvider,
+    query: str,
+    *,
+    count: int = 5,
+    domains: Collection[str] = (),
+    exclude: Collection[str] = (),
+) -> list[SearchResult]:
+    """``provider.search``, passing only the arguments that are set, so a
+    provider written before a parameter keeps working."""
+    if exclude:
+        return provider.search(query, count=count, domains=domains, exclude=exclude)
+    if domains:
+        return provider.search(query, count=count, domains=domains)
+    return provider.search(query, count=count)
 
 
 class FallbackSearchProvider(WebSearchProvider):
@@ -452,15 +477,24 @@ class FallbackSearchProvider(WebSearchProvider):
         self.failed_searches = 0
 
     def search(
-        self, query: str, *, count: int = 5, domains: Collection[str] = ()
+        self,
+        query: str,
+        *,
+        count: int = 5,
+        domains: Collection[str] = (),
+        exclude: Collection[str] = (),
     ) -> list[SearchResult]:
         if not self.primary.exhausted:
             before = self.primary.failed_searches
-            results = self.primary.search(query, count=count, domains=domains)
+            results = _search(
+                self.primary, query, count=count, domains=domains, exclude=exclude
+            )
             if results or self.primary.failed_searches == before:
                 return results
         before = self.secondary.failed_searches
-        results = self.secondary.search(query, count=count, domains=domains)
+        results = _search(
+            self.secondary, query, count=count, domains=domains, exclude=exclude
+        )
         if self.secondary.failed_searches > before:
             self.failed_searches += 1
         return results
@@ -472,7 +506,12 @@ class NullSearchProvider(WebSearchProvider):
     supports_search: bool = False
 
     def search(
-        self, query: str, *, count: int = 5, domains: Collection[str] = ()
+        self,
+        query: str,
+        *,
+        count: int = 5,
+        domains: Collection[str] = (),
+        exclude: Collection[str] = (),
     ) -> list[SearchResult]:
         return []
 
@@ -504,7 +543,12 @@ class BraveSearchProvider(WebSearchProvider):
         self._client = client
 
     def search(
-        self, query: str, *, count: int = 5, domains: Collection[str] = ()
+        self,
+        query: str,
+        *,
+        count: int = 5,
+        domains: Collection[str] = (),
+        exclude: Collection[str] = (),
     ) -> list[SearchResult]:
         headers: dict[str, str] = {
             "Accept": "application/json",
@@ -512,6 +556,9 @@ class BraveSearchProvider(WebSearchProvider):
         }
         if domains:
             query = " OR ".join(f"site:{d}" for d in domains) + f" {query}"
+        if exclude:
+            # Brave has no exclusion parameter; its query syntax does.
+            query += "".join(f" -site:{d}" for d in exclude)
         params: dict[str, str | int] = {"q": query, "count": count}
         try:
             get = httpx.get if self._client is None else self._client.get
@@ -580,7 +627,12 @@ class TavilySearchProvider(WebSearchProvider):
         self._client = client
 
     def search(
-        self, query: str, *, count: int = 5, domains: Collection[str] = ()
+        self,
+        query: str,
+        *,
+        count: int = 5,
+        domains: Collection[str] = (),
+        exclude: Collection[str] = (),
     ) -> list[SearchResult]:
         payload: dict[str, object] = {
             "query": query,
@@ -590,6 +642,8 @@ class TavilySearchProvider(WebSearchProvider):
         }
         if domains:
             payload["include_domains"] = list(domains)
+        if exclude:
+            payload["exclude_domains"] = list(exclude)
         try:
             post = httpx.post if self._client is None else self._client.post
             response = post(
@@ -800,7 +854,14 @@ class WebResearcher:
         return corpus
 
     def run_searches(
-        self, corpus: ResearchCorpus, queries: list[str], *, fetch_top: int = 0
+        self,
+        corpus: ResearchCorpus,
+        queries: list[str],
+        *,
+        fetch_top: int = 0,
+        sources: SourceSet | None = None,
+        max_third_party: int | None = None,
+        exclude: Collection[str] = (),
     ) -> None:
         """Append web-search results (and optionally their pages) to a corpus.
 
@@ -815,8 +876,16 @@ class WebResearcher:
         re-fetch, so no extra SSRF surface; otherwise the URL is fetched through
         the same SSRF guard as every other fetch (Brave). Deduped against pages
         already in the corpus.
+
+        With ``sources``, the candidates are ranked by authority, then
+        recency (publication year), then search rank (the round-robin
+        order), each added page gets its record, and at most
+        ``max_third_party`` third-party and demoted pages are added.
+        ``exclude`` goes to the search backend.
         """
-        per_query = [self.search_provider.search(query) for query in queries]
+        per_query = [
+            _search(self.search_provider, query, exclude=exclude) for query in queries
+        ]
         for results in per_query:
             corpus.search_results.extend(results)
 
@@ -831,13 +900,37 @@ class WebResearcher:
             for results in per_query
             if i < len(results)
         ]
+        if sources is not None:
+            interleaved = [
+                result
+                for _, result in sorted(
+                    enumerate(interleaved),
+                    key=lambda item: search_rank(
+                        sources.classify(item[1].url, published=item[1].published),
+                        item[0],
+                    ),
+                )
+            ]
         visited = {page_key(u) for p in corpus.pages for u in (p.url, p.final_url) if u}
-        added = 0
+        added = third_party = capped = 0
+
+        def over_cap(authority: str) -> bool:
+            return (
+                max_third_party is not None
+                and authority in THIRD_PARTY_AUTHORITIES
+                and third_party >= max_third_party
+            )
+
         for result in interleaved:
             if added >= fetch_top:
                 break
             key = page_key(result.url)
             if not urlparse(result.url).hostname or key in visited:
+                continue
+            if sources is not None and over_cap(
+                sources.classify(result.url, published=result.published).authority
+            ):
+                capped += 1
                 continue
             visited.add(key)
             # An arXiv link is read from the paper's HTML rendering: the
@@ -862,11 +955,22 @@ class WebResearcher:
                 if landed != key and landed in visited:
                     continue
                 visited.add(landed)
+            if page is not None and sources is not None:
+                authority = sources.record(page).authority
+                if over_cap(authority):  # it landed on a third-party page
+                    capped += 1
+                    continue
+                third_party += authority in THIRD_PARTY_AUTHORITIES
             if page is not None:
                 corpus.pages.append(page)
                 added += 1
         logger.info(
-            "Added %d/%d search-result pages into the corpus.", added, fetch_top
+            "Added %d/%d search-result pages into the corpus (%d third-party, "
+            "%d over the third-party cap left out).",
+            added,
+            fetch_top,
+            third_party,
+            capped,
         )
 
     def add_official_reference(
