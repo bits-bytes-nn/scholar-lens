@@ -193,8 +193,19 @@ def link_key(url: str) -> str | None:
     return f"{host}{parsed.path.rstrip('/')}{query}"
 
 
-# What may follow a URL a text states (not more of the URL).
+# What may follow a URL a text states (not more of the URL), and what may
+# precede it (not more of a host name).
 _URL_END = re.compile(r"[^\w\-~%]|$")
+_URL_START = re.compile(r"[\w.\-]$")
+# A URL's scheme and "www.", which a text may write or leave out.
+_URL_PREFIX = re.compile(r"(?:https?://)?(?:www\.)?", re.IGNORECASE)
+
+
+def _bare(url: str) -> str:
+    """``url`` as a text may state it: lower-cased, without its scheme,
+    "www.", fragment or trailing slash."""
+    url = unquote(url.strip()).split("#", 1)[0].rstrip("/").lower()
+    return _URL_PREFIX.sub("", url, count=1)
 
 
 @dataclass(frozen=True)
@@ -209,9 +220,12 @@ class LinkSources:
 
     @classmethod
     def of(cls, urls: Iterable[str], *, stated_text: str = "") -> LinkSources:
-        return cls(
-            frozenset(k for u in urls if (k := link_key(u))), stated_text.lower()
-        )
+        # The sources' text with every URL's scheme and "www." left out, as
+        # :func:`_bare` leaves them out of a target.
+        stated = re.sub(
+            r"https?://(?:www\.)?|\bwww\.", "", stated_text, flags=re.IGNORECASE
+        ).lower()
+        return cls(frozenset(k for u in urls if (k := link_key(u))), stated)
 
     def allows(self, target: str) -> bool:
         """Whether ``target`` (an absolute link) is a source or one the
@@ -222,10 +236,14 @@ class LinkSources:
             return True
         if key is None or key.startswith(ARXIV_KEY_PREFIX):
             return False
-        plain = unquote(target.strip()).rstrip("/").lower()
+        plain = _bare(target)
+        if not plain:
+            return False
         start = self.stated.find(plain)
         while start != -1:
-            if _URL_END.match(self.stated, start + len(plain)):
+            if not _URL_START.search(self.stated[:start]) and _URL_END.match(
+                self.stated, start + len(plain)
+            ):
                 return True
             start = self.stated.find(plain, start + 1)
         return False

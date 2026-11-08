@@ -241,6 +241,8 @@ def segments(markdown: str) -> list[Segment]:
 # link. One that starts with a digit and has no LaTeX is currency ("$5 … $10").
 SINGLE_DOLLAR = re.compile(r"(?<![\\$])\$(?!\$)(?!\s)[^$\n]+?(?<!\\)\$(?!\$)")
 LATEX_LIKE = re.compile(r"[\\^_{]")
+# A Markdown link's destination: "](" up to its ")".
+_LINK_DESTINATION = re.compile(r"\]\([a-z][\w+.\-]*://[^)\s]*\)", re.IGNORECASE)
 
 
 def protected_spans(markdown: str) -> list[tuple[int, int]]:
@@ -252,11 +254,16 @@ def protected_spans(markdown: str) -> list[tuple[int, int]]:
     def inside(pos: int) -> bool:
         return any(a <= pos < b for a, b in spans)
 
+    def math_like(span: str) -> bool:
+        # A link's destination in the span is no LaTeX: a URL's "_" between
+        # two prices must not make the text between them math.
+        text = _LINK_DESTINATION.sub("](", span)
+        return bool(LATEX_LIKE.search(text)) or not span[1].isdigit()
+
     spans += [
         (m.start(), m.end())
         for m in SINGLE_DOLLAR.finditer(markdown)
-        if (LATEX_LIKE.search(m.group(0)) or not m.group(0)[1].isdigit())
-        and not inside(m.start())
+        if math_like(m.group(0)) and not inside(m.start())
     ]
     return sorted(spans)
 

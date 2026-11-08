@@ -170,3 +170,39 @@ def test_a_post_gets_one_note_and_its_front_matter_is_left() -> None:
     assert fixed == '---\ntitle: "[x](https://made.up)"\n---\na [b](https://b.dev)\n'
     assert len(notes) == 1 and "https://made.up" in notes[0]
     assert verify_post_links(fixed, LinkSources.of(["https://b.dev"])) == (fixed, [])
+
+
+@pytest.mark.parametrize(
+    "stated, link",
+    [
+        # A paper prints http:// or no scheme; the writer links https.
+        ("Project page: http://acme.io/proj", "https://acme.io/proj"),
+        ("Code is at github.com/acme/tool.", "https://github.com/acme/tool"),
+        ("See https://www.acme.io/docs", "https://acme.io/docs#install"),
+    ],
+)
+def test_a_link_the_source_states_in_another_spelling_is_kept(
+    stated: str, link: str
+) -> None:
+    from scholar_lens.domain.markdown.links import LinkSources, verify_links
+
+    sources = LinkSources.of([], stated_text=stated)
+    assert verify_links(f"[x]({link})", sources)[1] == []
+
+
+def test_a_longer_host_does_not_match_a_stated_one() -> None:
+    from scholar_lens.domain.markdown.links import LinkSources, verify_links
+
+    sources = LinkSources.of([], stated_text="Code: github.com/acme/tool")
+    assert verify_links("[x](https://notgithub.com/acme/tool)", sources)[1]
+
+
+def test_a_link_between_two_prices_is_checked() -> None:
+    # The text between two "$" with a URL's "_" in it is no math.
+    from scholar_lens.domain.markdown.links import LinkSources, verify_links
+
+    text = "비용 $0.5/호출, [t](https://evil.com/a_b) 및 $M$"
+    assert verify_links(text, LinkSources.of([]))[1] == ["https://evil.com/a_b"]
+    # Inline math that reads like a link stays math.
+    math = r"변환 $\mathcal{F}[f](\omega)$ 입니다."
+    assert verify_links(math, LinkSources.of([]))[1] == []
