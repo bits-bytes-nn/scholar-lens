@@ -1,0 +1,216 @@
+{
+  "item": "survey-rlhf",
+  "group": "g1",
+  "judge_notes": "Claims checked against arXiv HTML of the 22 plan papers (eval/sets/plans/survey-rlhf.json). Worked-example arithmetic labelled as hypothetical was recomputed and counted separately from source claims.",
+  "X": {
+    "scores": {
+      "A": 8.0,
+      "B": 7.5,
+      "C": 8.0,
+      "D": 8.5,
+      "E": 8.0,
+      "F": 7.0,
+      "S1": 7.5
+    },
+    "reasons": {
+      "A": "Claim-style noun-phrase headings with a coherent lineage arc (L11, L57, L240, L478, L768, L841). No H1, math only in $$. Deductions: the GRPO KL estimator equation appears twice (L725, L788); thin subsections '### 활용과 탐색을 나눈 반복 RLHF' (L687-689, one paragraph, no result) and '### 얻는 것과 치르는 비용' (L691-695, opens with the fragment '앞서 본 수렴 보장과 라운드별 생성·판정 비용, 작은 검증 규모가 이 계보의 득실입니다.'); one-sentence section intro at L494.",
+      "B": "Natural 입니다-register Korean with no register breaks. Deductions: '앞서 본' 35 times (formulaic back-reference); a citation after almost every sentence, e.g. Christiano cited about 20 times in L63-107, which hurts readability; L366 '이때 손실은 −logσ(0.3)≈0.554' with the setup sentence missing, so the reader does not know what 0.3 is.",
+      "C": "One running example (Reddit TL;DR pair A/B) is introduced at L17 and reused in nearly every lineage (L28, L173, L330, L576, L628, L636, L806). Cross-lineage links (e.g., L276 tying Gao's early-stopping result back to Ziegler/InstructGPT) are accurate. Deductions: L312 '앞서 언급한 중간 범위로 클램핑' points to a 40-60 range never stated earlier; L366 worked example has lost its premise.",
+      "D": "Hard steps get labelled hypothetical worked examples at the point of use: BT loss 0.69/0.37 (L83), noise-mixing 0.67 (L85), KL-shaped reward 1.7 (L127), Gao peak d=5 and d=e^3 (L262), odds ratio 2.25 (L542), SimPO margin (L576), Nash-MD mixing (L628), SPPO targets (L658), GRPO advantages +1.73/-0.58 (L734). All recomputed correctly. Minor: L366 example broken.",
+      "E": "46 source figures placed where discussed and referred to descriptively (no 'Figure 3' numbering); equations for every core loss. Deductions: duplicated KL estimator (L725/L788); several figure paragraphs only restate the caption (L554, L93); final table L818-839 mixes settings and results.",
+      "F": "3 of 29 sampled claims unsupported or wrong (10.3%): SPPO LC win rate stated as 28.52% (L679) where the paper and the post's own table (L837) give 28.53%; table cell '1.3B RLHF ... 61% (SFT 43%)' (L822) attributes 43% to an unspecified SFT when it is the 10x-larger supervised model; '비교 대부분을 계약자 한 명이 라벨링' (L222) misreads 'most comparisons are only labeled by 1 contractor' as one person labelling most comparisons.",
+      "S1": "Limitations come from the papers' own text (e.g., L380 DPO, L428 IPO, L560 ORPO, L642 online IPO). Table cells are noun phrases in Korean. Deductions: four comparison-table 'result' cells are settings or prose, not results: Llama 2 'PPO KL 계수 β 설정' (L829), CAI 'SL-CAI 원칙 수 16개' (L826), IPO '참 선호 0.8, 경험적 선호 1 예시' (L831), Online IPO '요약 과제 온라인 IPO 대 타 알고리즘 승률 비교 (최고 평균)' (L836); ORPO cell '87.92% / 11.33%' does not say AlpacaEval 1.0 vs 2.0 (L835)."
+    },
+    "principles": {
+      "claim_headings": {"status": "met", "evidence": "L57 '비교로 배운 보상 모델, KL에 묶인 PPO, 그 대가로 나타나는 과최적화', L478 '보상 모델 없이도 되풀이되는 과최적화'; no 다-form headings."},
+      "running_example": {"status": "met", "evidence": "TL;DR A/B pair introduced at L17 and reused at L28, L173, L330, L576, L628, L636, L806, L876."},
+      "mechanism_choice_formula_example": {"status": "met", "evidence": "e.g., Ziegler KL penalty: problem (L121) -> roles and reason (L129) -> formula (L124) -> worked number (L127); SimPO L564-576."},
+      "facts_said_once": {"status": "partly met", "evidence": "Table numbers are mostly new, but 320 GPU-days appears at L179 and L822, the KL estimator at L725 and L788, and '앞서 본' back-references are used 35 times."},
+      "numbers_with_variant_scope_unit": {"status": "partly met", "evidence": "Most numbers carry model and setting (L679, L736); exceptions L822 '(SFT 43%)' and L835 ORPO cell without AlpacaEval version."},
+      "nothing_invented": {"status": "met", "evidence": "All worked examples are marked '가상의' (L83, L127, L262, L542); no unsourced equations found."},
+      "writer_assessment_at_end": {"status": "met", "evidence": "'이 글은 …라고 봅니다' judgments at L695, L794, L816, L868, L880 distinguish the writer's view from the papers'."},
+      "length_fitted_to_difficulty": {"status": "partly met", "evidence": "Hard methods get depth (DPO, IPO, GRPO), but RLHF Workflow gets one paragraph (L687-689) and the online-lineage wrap-up is a fragment (L691-695)."},
+      "type_specific_shape": {"status": "partly met", "evidence": "Survey shape (intro, lineages, cross-cutting, comparison, insight, conclusion) present; numbers are not confined to one table (L143, L153, L222, L679 carry many body numbers) and the table has non-result cells."},
+      "korean_style": {"status": "partly met", "evidence": "Correct register throughout; overuse of '앞서 본' (35) and per-sentence citation repetition."}
+    },
+    "claims": {
+      "checked": 29,
+      "numbers_checked": 22,
+      "supported": 26,
+      "unsupported": 2,
+      "wrong": 1,
+      "error_rate": 0.103,
+      "examples": [
+        {"line": 85, "claim": "Humans assumed to answer at random 10% of the time", "verdict": "supported", "source": "Christiano: 'we assume a 10% chance that the human responds uniformly at random'"},
+        {"line": 87, "claim": "Interaction complexity reduced by about 3 orders of magnitude", "verdict": "supported", "source": "Christiano: 'reduce the interaction complexity by roughly 3 orders of magnitude'"},
+        {"line": 99, "claim": "Atari trained with 5,500 human queries", "verdict": "supported", "source": "Christiano Fig. 3 text: 'training our agent with 5,500 queries to a human rater'"},
+        {"line": 143, "claim": "5k/10k/20k RM samples similar, degrading below 5k", "verdict": "supported", "source": "Ziegler: 'performance with 5k, 10k, and 20k reward model training samples is similar, degrading only for less than 5k'"},
+        {"line": 151, "claim": "60k online model preferred to reference 96% (TL;DR) / 84% (CNN/DM), read as worrisome", "verdict": "supported", "source": "Ziegler: 'More worrisome, the 60k online model beats the human ground truth 96% ... and 84%'"},
+        {"line": 153, "claim": "RM samples at most 60k vs 2M policy episodes", "verdict": "supported", "source": "Ziegler: 'We use 2M episodes'; 60k human samples"},
+        {"line": 179, "claim": "RL fine-tuning of 6.7B took about 320 GPU-days", "verdict": "supported", "source": "Stiennon limitations"},
+        {"line": 222, "claim": "175B SFT 4.9, PPO-ptx 60, GPT-3 3,640 petaflops/s-days", "verdict": "supported", "source": "Ouyang: 'training our 175B SFT model requires 4.9 petaflops/s-days ... PPO-ptx ... 60 ... 3,640 for GPT-3'"},
+        {"line": 222, "claim": "'비교 대부분을 계약자 한 명이 라벨링'", "verdict": "unsupported", "source": "Ouyang: 'most comparisons are only labeled by 1 contractor for cost reasons' (each comparison has a single labeller, not one person for most comparisons)"},
+        {"line": 238, "claim": "FSDP caused ~20x slowdown during generation", "verdict": "supported", "source": "Touvron: 'caused a large slow down (≈20×) during generation'"},
+        {"line": 276, "claim": "KL penalty acts like early stopping; may be hyperparameter-sensitive", "verdict": "supported", "source": "Gao: 'the effect of the penalty on the gold score is akin to early stopping ... could be particularly sensitive to hyperparameters'"},
+        {"line": 330, "claim": "Humans prefer RLAIF 71% and RLHF 73% over SFT (summarization)", "verdict": "supported", "source": "Lee Table 1"},
+        {"line": 474, "claim": "Llama-7B: up to 90% of desirable data discarded while beating DPO", "verdict": "supported", "source": "Ethayarajh: 'up to 90% of the desirable data can in fact be discarded while still outperforming DPO'"},
+        {"line": 476, "claim": "Reference-free KTO beats ORPO but trails standard KTO; offline PPO lags DPO at 30B", "verdict": "supported", "source": "Ethayarajh §4 and intro"},
+        {"line": 486, "claim": "Wider KL settings peak after 25% of the data", "verdict": "supported", "source": "Rafailov 2024: 'wider KL budgets achieve their best performance after training on only 25% of the data'"},
+        {"line": 488, "claim": "Scaling-law fit halves RMSE vs quadratic in KL", "verdict": "supported", "source": "Rafailov 2024 §3.2"},
+        {"line": 612, "claim": "Small gains from 3B to 11B preference model", "verdict": "supported", "source": "Munos App. G: 'relatively small gains going from 3B to 11B'"},
+        {"line": 642, "claim": "Online IPO: IPO decays faster at large τ; 770M policy, one summarization task", "verdict": "supported", "source": "Calandriello §5-6"},
+        {"line": 679, "claim": "Mistral SPPO final iteration LC win rate 28.52%", "verdict": "wrong", "source": "Wu Table 1: Mistral-7B-SPPO Iter3 LC 28.53 (the post's own table at L837 also says 28.53)"},
+        {"line": 679, "claim": "Open LLM average 66.75 (Mistral) / 70.29 (Llama-3); DPO/IPO decline", "verdict": "supported", "source": "Wu Table 3 caption"},
+        {"line": 736, "claim": "GRPO lr 1e-6, KL 0.04, 64 outputs; iterative RM replay 10%", "verdict": "supported", "source": "Shao §4.2 and §4.1.3"},
+        {"line": 764, "claim": "Fixed point not necessarily stable at extreme p_ref; condition on β needed", "verdict": "supported", "source": "Mroueh §3: 'the fixed point is not necessarily stable and a condition on β is needed'"},
+        {"line": 802, "claim": "GPT-4(C)-human agreement 67 vs human-human 65; PPO-1 85/87; SFT 79", "verdict": "supported", "source": "Rafailov 2023 Table 2"},
+        {"line": 821, "claim": "60k fine-tuned vs supervised TL;DR 97%, CNN/DM 80%; 5k offline vs zero-shot 88% (descriptiveness 86%)", "verdict": "supported", "source": "Ziegler Tables 1 and 5"},
+        {"line": 822, "claim": "1.3B RLHF 61% (SFT 43%)", "verdict": "unsupported", "source": "Stiennon: 43% is 'a supervised model 10× its size', not the 1.3B SFT"},
+        {"line": 824, "claim": "Online PM accuracy 74/70/67 on base/RS/online", "verdict": "supported", "source": "Bai (HH) §4"},
+        {"line": 827, "claim": "Alpaca RRHF_SP HH average reward -0.96", "verdict": "supported", "source": "Yuan Table 2"},
+        {"line": 835, "claim": "Mistral-ORPO-α 87.92% / 11.33%", "verdict": "supported", "source": "Hong Table 1 (AlpacaEval 1.0 / 2.0; version not stated in the cell)"},
+        {"line": 838, "claim": "Iterative DPO 8B LC win rate 31.3", "verdict": "supported", "source": "Dong Table 2"}
+      ],
+      "worked_examples_recomputed": "L83, L85, L127, L262, L366, L542, L576, L628, L658, L734 all arithmetically correct."
+    },
+    "checklist": {
+      "repeated": 0,
+      "avoided": 5,
+      "na": 1,
+      "repeated_ids": [],
+      "details": {
+        "grpo-card-unverified-figure": {"result": "avoided", "evidence": "L764 Mroueh card has no number or equation."},
+        "copy-explains-preference": {"result": "avoided", "evidence": "L151 reports 96%/84% as 'worrisome' and the copying/heuristic remark as the authors' suspicion; it does not claim the rates are explained by heuristics."},
+        "daa-no-quantification": {"result": "avoided", "evidence": "L480-488 gives 25% and RMSE figures; no 'no quantification' claim."},
+        "grpo-row-reward": {"result": "n/a", "evidence": "Comparison table (L818-839) has no reward column; GRPO row lists accuracy numbers."},
+        "heading-da-form-offline": {"result": "avoided", "evidence": "L478 '보상 모델 없이도 되풀이되는 과최적화'."},
+        "heading-da-form-judge": {"result": "avoided", "evidence": "No 다-form heading anywhere (e.g., L800 '행마다 다른 심판과 눈금')."}
+      }
+    },
+    "extras": {
+      "plan_papers_never_cited": [],
+      "thin_sections": ["L687-689 '활용과 탐색을 나눈 반복 RLHF' (one paragraph, no result)", "L691-695 '얻는 것과 치르는 비용' (fragment + one paragraph)", "L494 lineage intro of one sentence"],
+      "venue_issues": ["L896 AISTATS spelled out in full while all others are abbreviated (inconsistent, not wrong)"],
+      "bad_table_cells": ["L826 CAI 'SL-CAI 원칙 수 16개' (setting, not result)", "L829 Llama 2 'PPO KL 계수 β 설정' (no result)", "L831 IPO '참 선호 0.8, 경험적 선호 1 예시' (setting)", "L836 Online IPO prose with no number"]
+    },
+    "top_issues": [
+      "L679: SPPO LC win rate given as 28.52%; the paper and the post's own table (L837) say 28.53%. L822 '(SFT 43%)' drops that 43% belongs to the 10x-larger supervised model; L222 misreads 'labeled by 1 contractor' as one person labelling most comparisons.",
+      "Broken or dangling text: L366 DPO worked example lacks its premise ('이때 손실은 −logσ(0.3)' with 0.3 undefined); L312 '앞서 언급한 중간 범위' refers to a 40-60 range never given; L691-693 fragment section.",
+      "Comparison table L818-839 has setting/prose cells for Llama 2 (L829), CAI (L826), IPO (L831) and Online IPO (L836); KL estimator equation duplicated (L725, L788); '앞서 본' used 35 times with per-sentence citation repetition."
+    ]
+  },
+  "Y": {
+    "scores": {
+      "A": 6.5,
+      "B": 7.5,
+      "C": 7.0,
+      "D": 8.0,
+      "E": 7.0,
+      "F": 6.5,
+      "S1": 5.5
+    },
+    "reasons": {
+      "A": "Lineage sections with per-section comparison tables. Deductions: topic-name headings instead of claim headings ('## 들어가며: 왜 선호 최적화인가' L11, '## RLHF의 기초: 보상 모델과 PPO 파이프라인' L56, '### DPO: 언어 모델 안에 숨은 보상 모델' L278); markup that breaks MathJax/blog lint: L162-163 '=&' and '\\\\' inside $$ without an aligned environment, L195 '\\beta_{\\text{bo$n$}}' puts '$' inside math; '맺으며' (L720-726) restates earlier sections.",
+      "B": "Clear, precise Korean with good intuition sentences (L108 proportional controller, L304 DPO gradient). Deductions: input-meta wording that reads as an abstract summary ('논문 요지는 RLHF와 \\'비슷한\\' 성능이라고만 밝혀' L272, '논문 요지에는 … 수치가 제시되어 있지 않습니다' L585, '초록에는 실험적 검증이 제시되지 않습니다' L638); multi-sentence prose in table cells (L33-54, L686-699).",
+      "C": "Good section transitions and synthesis paragraphs (L227-229, L397, L493, L594). Deductions: no running example; the same claims recur across the post, e.g., Mroueh's fixed-point result at L27, L54, L636, L703, L726 and DPO's 'binary classification loss' at L21, L41, L667; the final table repeats body numbers almost cell for cell.",
+      "D": "Strong help on hard steps: BT noise-mixing bounds 0.05-0.95 (L82), K=9 -> 36 pairs (L154), DPO gradient weight derivation (L304), IPO analytic example (L336), clamping 0.9 -> 0.6 (L254), x−log x−1 ≥ 0 (L624). Fewer numeric worked examples than needed for SimPO/ORPO/SPPO; RRHF gets no equation.",
+      "E": "26 figures placed in context with descriptive references; per-lineage tables are a good idea. Deductions: tables with empty cells ('세부 미기술' ×6 at L222-225; '논문 요지에 명시되지 않음' L592); final table L684-699 duplicates body numbers in prose; some figure paragraphs only describe axes (L262, L445).",
+      "F": "5 of 35 sampled claims wrong or unsupported (14.3%): CAI labels described as ensembling judgments from every principle into one label (L252) where the paper samples one principle at random per comparison label; comparison table says Llama 2's RM loss and KL reference are '세부 미기술' (L225) although the paper gives the margin ranking loss and a KL penalty to π0; and three false meta-limitations from abstracts (L272 RLAIF, L585 RLHF Workflow, L638 Mroueh).",
+      "S1": "Exactly the anti-pattern the criterion names: limitations taken from the input rather than the paper — '초록에는 실험적 검증이 제시되지 않습니다' (L638; the paper has an Experimental Validation appendix), '논문 요지에는 오프라인 방식 대비 향상 폭을 보여 주는 구체적 수치가 제시되어 있지 않습니다' (L585; the paper reports 31.3 vs 22.5 LC), '논문 요지는 RLHF와 \\'비슷한\\' 성능이라고만 밝혀' (L272). Table cells are full sentences (L33-54, L686-699), and numbers explained in sections are explained again in the final table."
+    },
+    "principles": {
+      "claim_headings": {"status": "not met", "evidence": "Mostly topic-name headings: L11, L56, L231, L274, L278, L399, L495."},
+      "running_example": {"status": "not met", "evidence": "No example carried through the post; examples are per-paper (L154, L336)."},
+      "mechanism_choice_formula_example": {"status": "partly met", "evidence": "DPO (L288-304) and IPO (L316-336) follow the arc; RRHF (L403-411) and RLHF Workflow (L581-585) have no formula or example."},
+      "facts_said_once": {"status": "not met", "evidence": "Timeline cells repeat intro sentences (L17 vs L33); Mroueh result 5 times; final table L686-699 repeats body numbers (e.g., 700/5,500 at L88 and L686; 61%/43% at L140 and L688)."},
+      "numbers_with_variant_scope_unit": {"status": "met", "evidence": "Numbers carry model, setting and judge (L171, L310, L381, L481)."},
+      "nothing_invented": {"status": "partly met", "evidence": "No invented equations; but the CAI ensembling mechanism (L252) and '세부 미기술' cells (L222-225) misstate the papers; L316 marks its own observation as outside the paper (good)."},
+      "writer_assessment_at_end": {"status": "partly met", "evidence": "'흐름과 열린 문제' (L701-718) gives judgments, but '맺으며' (L720-726) largely restates the papers' claims."},
+      "length_fitted_to_difficulty": {"status": "partly met", "evidence": "Deep on DPO/IPO/Nash-MD; Llama 2 (L211-213) and RLHF Workflow (L581-585) are abstract-level paragraphs."},
+      "type_specific_shape": {"status": "partly met", "evidence": "Survey sections present, but numbers are spread through sections and repeated in the final table rather than owned by it; synthesis sections re-describe cards (L703, L724-726)."},
+      "korean_style": {"status": "partly met", "evidence": "Correct register; meta '논문 요지/초록' phrasing and multi-sentence table cells."}
+    },
+    "claims": {
+      "checked": 35,
+      "numbers_checked": 27,
+      "supported": 30,
+      "unsupported": 3,
+      "wrong": 2,
+      "error_rate": 0.143,
+      "examples": [
+        {"line": 88, "claim": "700 human queries nearly match RL; 1,400 synthetic labels slightly better than true reward", "verdict": "supported", "source": "Christiano §3.1"},
+        {"line": 88, "claim": "Backflip 900 queries, Half-Cheetah 800, Enduro ~1,300", "verdict": "supported", "source": "Christiano §3.2"},
+        {"line": 88, "claim": "5k labels ≈ 5 h, ~$36; compute ~$25", "verdict": "supported", "source": "Christiano footnote 6"},
+        {"line": 88, "claim": "Atari 7 games with 5,500 queries; ~3 orders of magnitude", "verdict": "supported", "source": "Christiano §3.1, §4"},
+        {"line": 114, "claim": "RM retrained 20 times for summarization", "verdict": "supported", "source": "Ziegler: 'train the reward model before the first PPO episode, and then retrain it 19 more times'"},
+        {"line": 116, "claim": "88% vs zero-shot, 77% vs mock-sentiment model", "verdict": "supported", "source": "Ziegler Table 1"},
+        {"line": 116, "claim": "60k online model preferred 97% vs supervised (TL;DR)", "verdict": "supported", "source": "Ziegler Table 5"},
+        {"line": 116, "claim": "Copies whole sentences 71% (TL;DR) / 98% (CNN/DM)", "verdict": "supported", "source": "Ziegler §3.2"},
+        {"line": 116, "claim": "Authors agree about 60% on 4-way comparisons", "verdict": "supported", "source": "Ziegler §2.4"},
+        {"line": 140, "claim": "1.3B HF 61% vs 10x supervised 43%; ~65% after length control", "verdict": "supported", "source": "Stiennon §4.1"},
+        {"line": 140, "claim": "7/7 overall 45% vs 20% and 23%", "verdict": "supported", "source": "Stiennon §4.1"},
+        {"line": 140, "claim": "RM CNN/DM agreement 62.4%/66.5% vs inter-labeler 66.9%", "verdict": "supported", "source": "Stiennon §4.3"},
+        {"line": 171, "claim": "85±3%, 71±4%, FLAN 78±4%, T0 79±4%", "verdict": "supported", "source": "Ouyang §4"},
+        {"line": 171, "claim": "Hallucination 21% vs 41%", "verdict": "supported", "source": "Ouyang abstract/§4"},
+        {"line": 171, "claim": "Agreement 72.6±1.5% (training) / 77.3±1.3% (held-out)", "verdict": "supported", "source": "Ouyang §3.4"},
+        {"line": 185, "claim": "6B gold RM, 100k synthetic comparisons, proxy 3M-3B", "verdict": "supported", "source": "Gao §2.1"},
+        {"line": 205, "claim": "Predicted to n=60,000 (~10 nats) from n=1,000 (~6 nats)", "verdict": "supported", "source": "Gao §3.1"},
+        {"line": 205, "claim": "Below ~2,000 comparisons RM data has little effect", "verdict": "supported", "source": "Gao §3.3"},
+        {"line": 250, "claim": "182,831 prompts = 42,496 human + 140,335 model; 4 critique-revision pairs", "verdict": "supported", "source": "Bai (CAI) §3.3"},
+        {"line": 252, "claim": "16 principles; judgments from each principle ensembled into one label", "verdict": "wrong", "source": "Bai (CAI) §4.1: 'randomly sampled a principle for each comparison label' (ensembling is across labels, not within one)"},
+        {"line": 254, "claim": "CoT probabilities clamped to 40-60%; 135,296 human helpfulness comparisons", "verdict": "supported", "source": "Bai (CAI) §4.1-4.2"},
+        {"line": 272, "claim": "RLAIF abstract only says 'comparable', so the size of the difference cannot be judged", "verdict": "unsupported", "source": "Lee Table 1 reports 71% vs 73% vs SFT and 50% head-to-head"},
+        {"line": 310, "claim": "DPO ~61% vs PPO 57% (temp 0); CNN/DM 0.36/0.31 vs 0.26/0.23; humans prefer DPO 58%; GPT-4-human agreement 70/67 vs 65", "verdict": "supported", "source": "Rafailov 2023 §6, Tables 1-2"},
+        {"line": 336, "claim": "IPO optimal π(y1)=σ(0.5τ^-1)", "verdict": "supported", "source": "Azar §5 example"},
+        {"line": 338, "claim": "18000 steps, lr 0.01, minibatch 9", "verdict": "supported", "source": "Azar §6"},
+        {"line": 373, "claim": "KTO learning rate 2-10x DPO's", "verdict": "supported", "source": "Ethayarajh hyperparameter notes"},
+        {"line": 381, "claim": "GSM8K 40.0 vs 53.5; 0.652/0.631/0.600/0.621; 72% less data; 214 prompts 72.9±5.3 vs 62.1±5.7; λ_D=13.33", "verdict": "supported", "source": "Ethayarajh Tables 2-3, §4"},
+        {"line": 447, "claim": "ORPO AlpacaEval 2.0 11.33/12.20 vs Zephyr β 10.99; MT-Bench 7.23/7.32; IFEval 61.63/66.19; Llama-2 ORPO 9.44 vs Chat 13B 7.70", "verdict": "supported", "source": "Hong Table 1, §6"},
+        {"line": 473, "claim": "SimPO ~20% less run time, ~10% less memory; β 2.0-2.5, γ 0.5-1.5", "verdict": "supported", "source": "Meng §3, §4"},
+        {"line": 481, "claim": "Gemma-2-9B-it-SimPO 72.4 vs 51.1, Arena-Hard 59.1 vs 40.8; Llama-3-Instruct 44.7 vs DPO 40.3; Mistral-Base Arena-Hard 16.6 vs 10.4", "verdict": "supported", "source": "Meng Tables 1, 4, 11"},
+        {"line": 517, "claim": "T5X-XL PM ~0.78 vs RM ~0.76; RLHF vs SFT 0.990, BR 0.943, MD1 vs RLHF 0.598", "verdict": "supported", "source": "Munos App. G and Table 1"},
+        {"line": 527, "claim": "η_t=2/(τ(t+2)) gives KL ≤ 8/(τ²(T+1))", "verdict": "supported", "source": "Munos Theorem 1"},
+        {"line": 569, "claim": "Mistral LC 28.53; Llama-3 22.92→38.77; Arena-Hard 23.3 vs 12.6/20.7; MT-Bench 7.59 vs 7.51/7.58", "verdict": "supported", "source": "Wu Tables 1-2, Fig. 2"},
+        {"line": 585, "claim": "Abstract gives no concrete gain over offline methods", "verdict": "unsupported", "source": "Dong Table 2: iterative DPO 31.3 LC vs vanilla DPO 22.5 (false limitation drawn from the input)"},
+        {"line": 225, "claim": "Llama 2 RM loss / KL reference / online-offline: '세부 미기술'", "verdict": "wrong", "source": "Touvron §3.2.2 gives the margin ranking loss and §3.2.3 a KL penalty to the original policy π0 with iterative RLHF-V1..V5"},
+        {"line": 626, "claim": "Base 7B 64.2/36.2 vs Minerva 58.8/33.6; Instruct 82.9/46.8 → RL 88.2/51.7", "verdict": "supported", "source": "Shao abstract and §4.2"},
+        {"line": 638, "claim": "The abstract presents no experimental validation", "verdict": "unsupported", "source": "Mroueh has Appendix A 'Experimental Validation' (false limitation drawn from the input)"}
+      ]
+    },
+    "checklist": {
+      "repeated": 0,
+      "avoided": 6,
+      "na": 0,
+      "repeated_ids": [],
+      "details": {
+        "grpo-card-unverified-figure": {"result": "avoided", "evidence": "L630-638 Mroueh card has no number or equation."},
+        "copy-explains-preference": {"result": "avoided", "evidence": "L116 notes 97% preference and copying as possible heuristic exploitation without claiming the rate is explained by it."},
+        "daa-no-quantification": {"result": "avoided", "evidence": "L387-389 makes no 'no numbers' claim about 2406.02900; the same defect class recurs for 2405.07863 (L585) and 2503.06639 (L638)."},
+        "grpo-row-reward": {"result": "avoided", "evidence": "L659 binary reward is attributed to 'GRPO 이진 보상 분석 (Mroueh)', not to GRPO; but L54 labels the 2503.06639 timeline row as '[GRPO]'."},
+        "heading-da-form-offline": {"result": "avoided", "evidence": "L385 '보상 모델이 없어도 남는 과최적화'."},
+        "heading-da-form-judge": {"result": "avoided", "evidence": "No 다-form heading (L640 '오프라인과 온라인의 수렴: 같은 목적, 다른 데이터')."}
+      }
+    },
+    "extras": {
+      "plan_papers_never_cited": [],
+      "thin_sections": ["L211-213 Llama 2 (abstract-level, no method)", "L581-585 RLHF Workflow (no result)", "L403-411 RRHF (no loss or number)", "L385-389 DAA overoptimization (no number)"],
+      "venue_issues": ["'arXiv.org' index name used as venue (L732, L735, L737, L740, L744, L745, L752)", "'Trans. Mach. Learn. Res.' abbreviation (L749)"],
+      "bad_table_cells": ["L222-225 '세부 미기술' ×6 (InstructGPT online/offline; Bai RM loss; Llama 2 all three columns)", "L592 '논문 요지에 명시되지 않음'", "L33-54 and L686-699 cells are multi-sentence prose"]
+    },
+    "top_issues": [
+      "False meta-limitations drawn from abstracts, not papers: L272 (RLAIF 'only says comparable' though Table 1 gives 71/73/50%), L585 (RLHF Workflow 'no concrete numbers' though it reports 31.3 vs 22.5 LC), L638 (Mroueh 'no experimental validation' though Appendix A has it), plus '세부 미기술' cells L222-225 where Llama 2 does describe its margin loss and KL to π0.",
+      "L252 misstates the CAI labelling mechanism: it says judgments from each of the 16 principles are ensembled into one label; the paper samples one principle at random per comparison label.",
+      "Structure/markup: L162-163 '=&' and '\\\\' inside $$ without an aligned environment and L195 '\\text{bo$n$}' put stray alignment and '$' in math; topic-name headings (L11, L56, L278); no running example; final table L684-699 repeats body numbers in prose cells and the Mroueh result recurs 5 times (L27, L54, L636, L703, L726)."
+    ]
+  },
+  "preference": {
+    "A": {"winner": "X", "reason": "X has claim headings and clean math; Y has topic headings and two math-markup breaks (L162, L195)."},
+    "B": {"winner": "tie", "reason": "Both natural; X loses on '앞서 본' ×35 and citation spam, Y on abstract-meta phrasing and prose table cells."},
+    "C": {"winner": "X", "reason": "X's TL;DR running example ties all lineages; Y has none and repeats claims across sections."},
+    "D": {"winner": "X", "reason": "X gives correct numeric worked examples at each hard step; Y's intuition is strong but has fewer examples and thin cards."},
+    "E": {"winner": "X", "reason": "Both place figures well; Y's tables have empty '세부 미기술' cells and a final table that duplicates the body."},
+    "F": {"winner": "X", "reason": "X 3/29 (10.3%, one wrong digit plus two scope issues) vs Y 5/35 (14.3%, including a wrong mechanism and false limitations)."},
+    "S1": {"winner": "X", "reason": "Y repeats the input-based-limitation anti-pattern three times; X's weak cells are setting-not-result."},
+    "overall": {"winner": "X", "reason": "X wins or ties every criterion. Neither post meets the F ≥ 9 gate."}
+  }
+}

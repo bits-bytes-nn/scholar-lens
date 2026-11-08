@@ -1,0 +1,483 @@
+{
+  "item": "summary-toolorchestra",
+  "kind": "summary",
+  "source": "https://arxiv.org/html/2511.21689v1",
+  "X": {
+    "scores": {
+      "A": {
+        "score": 8,
+        "reason": "Fixed five-section arc, valid $$ math, front matter complete (subtitle, paper_author, paper_doi, two-level categories, use_math). '## 구현 방식' (L41-56) holds only the three filters and the preference-eval metric, so the heading over-promises; results table is two rows (L62-65)."
+      },
+      "B": {
+        "score": 8,
+        "reason": "Natural '입니다' prose, terms glossed once. Weak spots: L86 '이 글의 관점에서는 위 비교가 핵심 메시지를 가장 직접적으로 보여 줍니다. 그래서 ... 읽힙니다' (rewrite: '이 비교를 보면 성능 차이는 모델 크기보다 호출 정책에서 나옵니다'); L82 '이 결론이 도구를 많이 주는 것만으로 얻어지지는 않습니다' slightly abstract."
+      },
+      "C": {
+        "score": 8,
+        "reason": "Background biases (L23-27) feed method and results; the hypothetical HLE problem is carried from L39 into the eval metric at L56. A new result (tau2 62.3) first appears in the significance section (L82) rather than results."
+      },
+      "D": {
+        "score": 7.5,
+        "reason": "Two numeric worked examples (L39 reward, L56 eval normalization) help the hard part. But help is misallocated: the eval-metric formula gets a full paragraph while GRPO, the backbone and ToolScale are never explained (L43-56)."
+      },
+      "E": {
+        "score": 7,
+        "reason": "Equations where needed and one cost-accuracy figure (L71). The only results table has two rows (L62-65), so prompted baselines (Claude Opus 4.1, Qwen3-235B, GPT-5 with all tools) appear only in prose; no overview/architecture figure."
+      },
+      "F": {
+        "score": 8,
+        "reason": "25 of 26 sampled claims match the paper, including all table cells. One wrong: the L86 limitation asks whether the policy survives tool-pool or pricing changes without retraining, but the paper tests unseen models (Table 2) and unseen deepinfra pricing (Appendix H), and the post reports the former at L76. L76 also gives cost 34.8 and latency 8.2 without units."
+      },
+      "U1": {
+        "score": 6,
+        "reason": "Motivation, reward design and results are covered, but implementation is missing: no Qwen3-8B backbone as such (only '시작 모델(예: Qwen3-8B)' L49), no GRPO, no ToolScale data synthesis, no training config, no evaluation tool set."
+      },
+      "U2": {
+        "score": 7.5,
+        "reason": "Concise (about 3.9k prose chars), TL;DR is plain prose without math (L17), one distilled table. The only paper-grounded limitation-like item is future work (L84); the writer's limitations (L86) are speculative and one is contradicted by the paper."
+      }
+    },
+    "principles": {
+      "claim_headings": "not met: topic headings (연구 배경, 제안 방법...), as the fixed summary outline prescribes",
+      "running_example": "partly met: hypothetical HLE problem reused from L39 to L56",
+      "mechanism_choice_formula_example": "met for the reward (L31 reason -> L33-37 formula -> L39 example); not for training",
+      "facts_once": "met: L78 points back ('앞서 본 것처럼') instead of restating Qwen3-8B counts",
+      "numbers_with_scope_unit": "partly met: cost/latency scope stated (L60); L76 'cost 34.8, latency 8.2' unitless",
+      "nothing_invented": "met: worked examples labelled hypothetical (L39)",
+      "writer_assessment_at_end": "partly met: L86 gives a view and when to use it, but one open question is already answered by the paper",
+      "length_fitted": "met: short, five-minute read",
+      "type_shape": "met: TL;DR then five sections",
+      "korean_style": "met with minor awkwardness (L86)"
+    },
+    "claims": {
+      "checked": 26,
+      "numbers_checked": 20,
+      "unsupported": 0,
+      "wrong": 1,
+      "unverifiable": 0,
+      "error_rate": 0.038,
+      "examples": [
+        {
+          "line": 17,
+          "claim": "Orchestrator-8B HLE 37.1 vs GPT-5 (basic tools) 35.1",
+          "verdict": "supported",
+          "source": "Table 1"
+        },
+        {
+          "line": 17,
+          "claim": "cost 9.2 vs 30.2 cents",
+          "verdict": "supported",
+          "source": "Table 1 (avg HLE+FRAMES)"
+        },
+        {
+          "line": 17,
+          "claim": "latency 8.2 vs 19.8 min",
+          "verdict": "supported",
+          "source": "Table 1"
+        },
+        {
+          "line": 17,
+          "claim": "8B model trained end-to-end with RL",
+          "verdict": "supported",
+          "source": "Sec 1"
+        },
+        {
+          "line": 23,
+          "claim": "GPT-5 orchestrator calls GPT-5-mini 5.6x, GPT-5 2.7x per instance, avg HLE/FRAMES/tau2",
+          "verdict": "supported",
+          "source": "Table 15"
+        },
+        {
+          "line": 23,
+          "claim": "this is self-enhancement bias",
+          "verdict": "supported",
+          "source": "Sec 1 (i) overuse of developmentally-related variants"
+        },
+        {
+          "line": 25,
+          "claim": "prompted Qwen3-8B calls GPT-5 6.0x, web search 1.2x, code interpreter 1.6x",
+          "verdict": "supported",
+          "source": "Table 15"
+        },
+        {
+          "line": 27,
+          "claim": "GPT-5 with all tools: HLE 35.1->21.2, FRAMES 74.0->57.5",
+          "verdict": "supported",
+          "source": "Table 1"
+        },
+        {
+          "line": 31,
+          "claim": "three tool classes: basic tools, specialized math/coding LLMs, generalist LLMs",
+          "verdict": "supported",
+          "source": "Fig 2 caption, Sec 4.1"
+        },
+        {
+          "line": 33,
+          "claim": "r_outcome binary, judged by GPT-5",
+          "verdict": "supported",
+          "source": "Sec 3.2 Eq 1"
+        },
+        {
+          "line": 33,
+          "claim": "r_compute=-$(tau) from input/output tokens at third-party API pricing",
+          "verdict": "supported",
+          "source": "Sec 3.2"
+        },
+        {
+          "line": 33,
+          "claim": "min-max normalization over rollout batch; zero when max=min",
+          "verdict": "supported",
+          "source": "Sec 3.2"
+        },
+        {
+          "line": 35,
+          "claim": "R(tau)=M_norm.P if outcome else 0",
+          "verdict": "supported",
+          "source": "Eq 2"
+        },
+        {
+          "line": 37,
+          "claim": "p_outcome=1,p_compute=0 means optimize accuracy only",
+          "verdict": "supported",
+          "source": "Sec 3.2"
+        },
+        {
+          "line": 39,
+          "claim": "worked example R(A)=2,R(B)=1,R(C)=0 (labelled hypothetical; arithmetic consistent with Eq 2)",
+          "verdict": "supported",
+          "source": "Eq 2 applied"
+        },
+        {
+          "line": 45,
+          "claim": "homogeneity filter at reward std < 0.1",
+          "verdict": "supported",
+          "source": "Sec 3.2 Training techniques"
+        },
+        {
+          "line": 52,
+          "claim": "preference-eval normalization Eq 5 (M_s/max(1,M_0) for k<=n+1, inverse otherwise)",
+          "verdict": "supported",
+          "source": "Appendix L Eq 5"
+        },
+        {
+          "line": 56,
+          "claim": "benchmark score is the sum of R^e over examples",
+          "verdict": "supported",
+          "source": "Appendix L"
+        },
+        {
+          "line": 67,
+          "claim": "authors: beats GPT-5 on tau2/FRAMES at about 30% of cost",
+          "verdict": "supported",
+          "source": "Abstract"
+        },
+        {
+          "line": 69,
+          "claim": "Orchestrator beats GPT-5, Claude Opus 4.1, Qwen3-235B-A22B at a given budget",
+          "verdict": "supported",
+          "source": "Sec 6.2"
+        },
+        {
+          "line": 75,
+          "claim": "preference scores HLE 46.7, Frames 68.4, tau2 79.5, highest",
+          "verdict": "supported",
+          "source": "Table 3"
+        },
+        {
+          "line": 76,
+          "claim": "unseen config HLE 22.0, Frames 73.8, tau2 48.8, cost 34.8, latency 8.2, best on all metrics",
+          "verdict": "supported",
+          "source": "Table 2 (34.8 lowest cost, 8.2 lowest latency)"
+        },
+        {
+          "line": 78,
+          "claim": "Orchestrator calls GPT-5 1.6x, GPT-5-mini 1.7x",
+          "verdict": "supported",
+          "source": "Table 15"
+        },
+        {
+          "line": 82,
+          "claim": "GPT-5 with all tools on tau2 drops to 62.3",
+          "verdict": "supported",
+          "source": "Table 1"
+        },
+        {
+          "line": 84,
+          "claim": "future work: recursive orchestrator systems",
+          "verdict": "supported",
+          "source": "Sec 8"
+        },
+        {
+          "line": 86,
+          "claim": "open question whether the policy holds without retraining when the tool pool or pricing changes",
+          "verdict": "wrong",
+          "source": "Sec 6.3 / Table 2 test unseen models; Appendix H / Table 4 test unseen (deepinfra) pricing; the post itself reports the unseen-tools result at line 76"
+        }
+      ]
+    },
+    "checklist": {
+      "repeated": 1,
+      "avoided": 0,
+      "na": 0,
+      "repeated_ids": [
+        "tags-not-in-paper"
+      ],
+      "evidence": "L11 tags include 'Cost-Aware-Reinforcement-Learning', the exact tag PR #101 flagged; 'cost-aware' does not appear in the paper (it says efficiency-aware)."
+    },
+    "prose_chars": 3897,
+    "description_chars": 147,
+    "top_issues": [
+      "L41-56: implementation section omits the GRPO training, the Qwen3-8B backbone and training config, and ToolScale data synthesis; it explains the preference-eval metric instead",
+      "L86: limitation 'whether the policy holds when the tool pool or pricing changes without retraining' is already tested by the paper (Table 2 unseen models, Appendix H unseen pricing; the post's own L76)",
+      "L11: tag 'Cost-Aware-Reinforcement-Learning' is not a paper term (the flagged human-fix defect repeated); L62-65 results table has only two rows"
+    ]
+  },
+  "Y": {
+    "scores": {
+      "A": {
+        "score": 7.5,
+        "reason": "Clean arc with an H3 under results, real 7-row table, $$ math. L51 uses single '$' currency ('비용 $0.10)와 B(비용 $0.40)'), which the rubric bans and which may render as inline math. Front matter complete."
+      },
+      "B": {
+        "score": 8,
+        "reason": "Mostly natural. Deductions: L35 '주목할 부분은 ... 묶여 있다는 점입니다' (noun frame; rewrite '구조도에서는 세 종류의 도구가 같은 인터페이스로 묶입니다'); L23 '결과는 아래와 같았습니다.' formulaic figure lead-in; L31 '문제는 ... 정의됩니다' hides the actor ('저자들은 문제를 ... 정의합니다'); L97 '~점도 실용적입니다'."
+      },
+      "C": {
+        "score": 8.5,
+        "reason": "Pilot bias (L23-27) -> method -> ToolScale -> results; the GPT-5-mini bias returns at L87 as the explanation of the 21.2 drop, a valid callback. Figures are placed where discussed."
+      },
+      "D": {
+        "score": 8,
+        "reason": "Reward gets intuition, formula, worked example and a key-point box (L37-53); ToolScale verification is explained. The L51 example omits C's cost, which batch normalization needs for 'A=1, B=0' to hold."
+      },
+      "E": {
+        "score": 8.5,
+        "reason": "Three figures at the right places (pilot L25, architecture L33, cost curve L89), all described not numbered; 7-row table copied cell for cell (L75-83). L85 note 'Llama 계열 일부 행은 생략' under-describes the omissions (the Qwen3-8B and Qwen3-235B basic-tool rows are also dropped)."
+      },
+      "F": {
+        "score": 9,
+        "reason": "26 of 27 sampled claims match, every table cell checked. One unverifiable interpretation, L99 '성능의 상당 부분은 여전히 GPT-5 같은 프런티어 모델 호출에서 나오므로' (the paper gives call counts, not attribution). No wrong claim found."
+      },
+      "U1": {
+        "score": 9,
+        "reason": "All five questions answered: motivation with pilot (L21-27), MDP/unified tools/reward/GRPO (L31-55), backbone, config, filters, ToolScale, generalization randomization (L59-67), full results (L71-93), significance and limits (L97-99)."
+      },
+      "U2": {
+        "score": 7.5,
+        "reason": "TL;DR is plain prose (L17); one distilled results table; strong grounded limitations (L99: prompt-only baselines, no reward ablation, text-only HLE, tau2 84.2 not reproduced). But about 4.9k prose chars runs past five minutes; L59 hyperparameter list and L71 full eval tool roster are reference detail rather than summary."
+      }
+    },
+    "principles": {
+      "claim_headings": "not met: topic headings as the fixed summary outline prescribes",
+      "running_example": "not met: the A/B/C example (L51) is used once",
+      "mechanism_choice_formula_example": "met for the reward (L49 meaning -> L46 formula -> L51 example -> L53 why)",
+      "facts_once": "partly met: L87 restates table cells (30.2->9.2, 19.8->8.2, 21.2) in prose right after the table",
+      "numbers_with_scope_unit": "met: L85 states cost averaging and HLE text-only subset; units given",
+      "nothing_invented": "met: example labelled '설명용 가상 수치' (L51)",
+      "writer_assessment_at_end": "met: L97-99 separates the writer's judgment and gives specific, grounded limits",
+      "length_fitted": "partly met: implementation detail is longer than a summary needs",
+      "type_shape": "met: TL;DR then five sections",
+      "korean_style": "mostly met; noun frames and one passive (L31, L35)"
+    },
+    "claims": {
+      "checked": 27,
+      "numbers_checked": 20,
+      "unsupported": 0,
+      "wrong": 0,
+      "unverifiable": 1,
+      "error_rate": 0.0,
+      "examples": [
+        {
+          "line": 17,
+          "claim": "HLE 37.1% vs GPT-5 35.1%, 2.5x more efficient",
+          "verdict": "supported",
+          "source": "Abstract"
+        },
+        {
+          "line": 17,
+          "claim": "tau2/FRAMES: beats GPT-5 at about 30% of cost",
+          "verdict": "supported",
+          "source": "Abstract"
+        },
+        {
+          "line": 23,
+          "claim": "pilot: 300 HLE problems, tools GPT-5, GPT-5-mini, Qwen3-32B, Qwen2.5-Coder-32B, best result at lowest cost",
+          "verdict": "supported",
+          "source": "Appendix A"
+        },
+        {
+          "line": 27,
+          "claim": "Qwen3-8B delegates about 73% to GPT-5",
+          "verdict": "supported",
+          "source": "Appendix A"
+        },
+        {
+          "line": 27,
+          "claim": "GPT-5 delegates mostly to GPT-5-mini",
+          "verdict": "supported",
+          "source": "Fig 3 caption"
+        },
+        {
+          "line": 31,
+          "claim": "rollout up to 50 turns, CoT -> tool call -> observation",
+          "verdict": "supported",
+          "source": "Sec 2.2"
+        },
+        {
+          "line": 35,
+          "claim": "LLM-tool descriptions from 10 sampled training tasks written by another LLM",
+          "verdict": "supported",
+          "source": "Sec 3.1"
+        },
+        {
+          "line": 43,
+          "claim": "r_outcome by GPT-5 judge, r_compute=-$, r_latency=-Clock, batch min-max, zero if equal",
+          "verdict": "supported",
+          "source": "Sec 3.2"
+        },
+        {
+          "line": 46,
+          "claim": "final reward Eq 2",
+          "verdict": "supported",
+          "source": "Eq 2"
+        },
+        {
+          "line": 55,
+          "claim": "GRPO, group-normalized advantage, clipped surrogate",
+          "verdict": "supported",
+          "source": "Eq 3-4"
+        },
+        {
+          "line": 59,
+          "claim": "Qwen3-8B backbone, GeneralThought-430K + synthetic data",
+          "verdict": "supported",
+          "source": "Sec 4.4"
+        },
+        {
+          "line": 59,
+          "claim": "lr 1e-6, input 24,000, generation 8,000, train batch 16, rollout batch 8, 16 H100",
+          "verdict": "supported",
+          "source": "Sec 4.4"
+        },
+        {
+          "line": 61,
+          "claim": "filter batches with reward std < 0.1",
+          "verdict": "supported",
+          "source": "Sec 3.2"
+        },
+        {
+          "line": 65,
+          "claim": "ToolScale over 10 domains incl. finance, sport, medicine, railway, travel",
+          "verdict": "supported",
+          "source": "Table 5"
+        },
+        {
+          "line": 65,
+          "claim": "remove tasks failing gold execution, unsolved at pass@8, or solvable without actions",
+          "verdict": "supported",
+          "source": "Sec 3.3"
+        },
+        {
+          "line": 67,
+          "claim": "pricing randomized over 10 third-party API providers",
+          "verdict": "supported",
+          "source": "Appendix E (10 providers)"
+        },
+        {
+          "line": 71,
+          "claim": "eval tools: Tavily, Python sandbox, Faiss+Qwen3-Embedding-8B, specialized and generalist lists; temp 0; TogetherAI pricing",
+          "verdict": "supported",
+          "source": "Sec 4.1, 4.3"
+        },
+        {
+          "line": 75,
+          "claim": "7-row results table, all 35 cells",
+          "verdict": "supported",
+          "source": "Table 1, cell for cell"
+        },
+        {
+          "line": 87,
+          "claim": "cost 30.2->9.2 is about 30%",
+          "verdict": "supported",
+          "source": "9.2/30.2=30.5%"
+        },
+        {
+          "line": 87,
+          "claim": "GPT-5 calls GPT-5-mini 5.6x; Claude Opus 4.1 calls GPT-5 6.2x; Orchestrator GPT-5 1.6x, local search 1.8x, Qwen3-32B 1.3x",
+          "verdict": "supported",
+          "source": "Table 15"
+        },
+        {
+          "line": 91,
+          "claim": "max turns 10/20/50/100; Orchestrator above others at every budget",
+          "verdict": "supported",
+          "source": "Sec 6.2"
+        },
+        {
+          "line": 93,
+          "claim": "unseen config 22.0/73.8/48.8 vs Claude Opus 4.1 17.8/53.6/43.4; cost 102.4 vs 34.8",
+          "verdict": "supported",
+          "source": "Table 2"
+        },
+        {
+          "line": 93,
+          "claim": "unseen deepinfra pricing keeps the lead",
+          "verdict": "supported",
+          "source": "Appendix H, Table 4"
+        },
+        {
+          "line": 93,
+          "claim": "preference 46.7/68.4/79.5 vs runner-up Claude Opus 4.1 40.2/63.4/73.5",
+          "verdict": "supported",
+          "source": "Table 3 (Claude second on all three)"
+        },
+        {
+          "line": 99,
+          "claim": "reported GPT-5 HLE 35.2 on full set; tau2 84.2 not reproduced, 77.7 used",
+          "verdict": "supported",
+          "source": "Table 1 footnotes"
+        },
+        {
+          "line": 99,
+          "claim": "no ablation separating reward components in the main text",
+          "verdict": "supported",
+          "source": "absent from Sec 5-6"
+        },
+        {
+          "line": 99,
+          "claim": "much of the performance still comes from frontier-model calls such as GPT-5",
+          "verdict": "unverifiable",
+          "source": "paper gives call counts (Table 15) but no attribution of accuracy to GPT-5 calls; writer's interpretation"
+        }
+      ]
+    },
+    "checklist": {
+      "repeated": 0,
+      "avoided": 1,
+      "na": 0,
+      "repeated_ids": [],
+      "evidence": "L11 tags 'Efficiency-Aware-Reward', 'User-Preference-Alignment', 'Orchestrator-Model' use paper terms (abstract: efficiency- and user-preference-aware rewards); 'Synthetic-Tool-Use-Environments' is a close paraphrase of 'synthetic ... user-agent-tool environments'."
+    },
+    "prose_chars": 4920,
+    "description_chars": 146,
+    "top_issues": [
+      "L51: single '$' currency ('$0.10', '$0.40') breaks the math-delimiter rule; the example also omits C's cost, which the batch normalization needs",
+      "L59, L71: hyperparameters and the full evaluation tool roster push the summary past a five-minute read",
+      "L35, L31: noun frame '~다는 점입니다' and actor-hiding passive '정의됩니다'; L87 restates table cells in prose"
+    ]
+  },
+  "preference": {
+    "overall": "Y",
+    "per_criterion": {
+      "A": "X",
+      "B": "tie",
+      "C": "Y",
+      "D": "Y",
+      "E": "Y",
+      "F": "Y",
+      "U1": "Y",
+      "U2": "tie"
+    },
+    "reason": "Y covers the whole paper (GRPO, backbone, ToolScale, generalization), carries a verbatim 7-row results table and three well-placed figures, and closes with grounded limitations; no wrong claim. X is tighter and has a better worked example but leaves out the training method and data, its one table has two rows, it states a limitation the paper already tests, and it repeats the flagged tag defect. Y loses on A for the single-$ currency and is longer than a summary needs."
+  }
+}

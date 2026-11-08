@@ -1,0 +1,168 @@
+{
+  "item": "review-kimi",
+  "kind": "review",
+  "source": "arXiv 2507.20534 (HTML v2; Figure 1 bar chart checked as image)",
+  "X": {
+    "prose_chars": 47967,
+    "scores": {
+      "A": {"score": 7.5, "reason": "Clean Jekyll markup (no H1, no single $, raw-wrapped Liquid, real tables). But L34 '## Kimi K2 개요' and L52 '## 사전 지식' are topic headings and form an intro block right after TL;DR. The RL material is split into three sibling H2s (L472 Gym, L519 self-critique, L600 RL algorithm) instead of one RL section. L840 '### 결론부의 요약' restates the paper's conclusion."},
+      "B": {"score": 8.0, "reason": "Natural 입니다 register and consistent terms. Minor formulaic figure lead-ins repeat: L175/L189/L287/L297 '다음 그래프에서는 ... 보면 됩니다'. Light noun frames, e.g. L46 '... 비교에서 빠집니다'."},
+      "C": {"score": 8.0, "reason": "Concepts come before use (MLA logit split at L82-88 is reused at L150; the pass@k selection at L484 is reused at L628). Cross-references are accurate. Facts are restated several times: 15.5T at L42/L54/L263/L355/L842, and the headline benchmark list at L28 and L50 is repeated again at L754-797."},
+      "D": {"score": 8.0, "reason": "Excellent help on hard steps: per-head clipping numbers at L146, the MLA alpha reading at L156, the effective-rank and 2x2 spectral examples at L201/L221 (arithmetic correct), and the K1.5 objective with numbers at L628. It also pads background a competent reader knows: AdamW at L58, the RLHF reward loss at L525-531, policy-gradient baselines at L606-608, the Gym reset/step API at L734 and the WSD/YaRN glosses at L355/L366."},
+      "E": {"score": 8.5, "reason": "18 figures, each placed where discussed and described without paper numbering. Tables copy the source cells (L754 SWE rows, L827 safety rows, L357 LR schedule). The tool template code at L438 is the paper's own. Small issue: the code block drops the paper's Calculator declaration, yet L468 cites 'functions.Calculator:2'."},
+      "F": {"score": 9.0, "reason": "24 claims sampled, 0 wrong. 1 unsupported by the paper: L74 'AdamW 업데이트의 RMS는 보통 0.2~0.4' (Moonlight, external). All table cells checked match the paper, as do math averages 5.3/5.5/15.8 at L777, Tau2 per-domain values at L773, base-model exceptions at L809 and safety rows at L827-834."},
+      "G": {"score": 9.0, "reason": "Description is plain text, 131 chars, starts with 'Kimi K2', and its numbers (65.8, 66.1) are TL;DR numbers. use_math true with $$ present. Liquid is inside raw. The arXiv link is https."},
+      "R1": {"score": 9.5, "reason": "Section-by-section depth: MuonClip incl. the appendix hypothesis, rephrasing, the sparsity/head ablations, parallelism and memory, SFT data and tool template, every RL Gym domain, the critic loop, RL infra incl. the appendix pipeline, the full evaluation incl. safety and base models."},
+      "R2": {"score": 8.5, "reason": "Layering is intuition, formalism, then a numeric example (L124-L146, L612-L628). However, prose at about 48k chars over-fits the difficulty, mainly from background sections."},
+      "R3": {"score": 8.0, "reason": "TL;DR answers the four questions with scoped numbers (L28 '논씽킹 모드', L30 date). The closing at L846-850 gives a real writer's judgement (0.5B tau=30-only ablation, H800-specific choices, Security-IJ 43.90 deployment risk). It also re-lists the paper's limitations and future-release plans at L848 and has a separate conclusion-summary section at L840-842."},
+      "X1": {"score": 8.0, "reason": "Category 'Language-Models' is fine. Tags are paper-specific (MuonClip-Optimizer, QK-Clip, Sparsity-Scaling-Law). 'Agentic-AI' plus 'Mixture-of-Experts' give two controlled-style tags."}
+    },
+    "principles": {
+      "claim_headings": "partly met: many H2s carry claims (L90, L229, L519), but L34 '개요', L52 '사전 지식' and L305 are topic headings",
+      "running_example": "partly met: tau=100 / S_max=400 recurs (L146, L156), but there is no single running input across sections",
+      "mechanism_design_formula_example": "met: QK-Clip L98-L156, K1.5 objective L612-L628, sparsity L285-L291",
+      "facts_said_once": "not met: 15.5T x5, headline numbers at L28/L50 plus the eval section, conclusion summary at L842",
+      "numbers_with_scope_unit": "met: '논씽킹', mode labels for SWE-bench (L746-748), '*' reported-value caveats (L767, L777), 억/조 conversions correct",
+      "nothing_invented": "met: illustrative examples are labelled (L408, L484, L559, L701); one external number at L74",
+      "writer_assessment_end": "met: L846, L850",
+      "length_fitted": "not met: about 48k chars of prose, with background padding",
+      "type_specific_shape": "partly met: TL;DR first, but an intro/overview section follows TL;DR",
+      "korean_style": "met: minor repeated figure lead-in sentences"
+    },
+    "claims": {
+      "checked": 24,
+      "numbers": 18,
+      "supported": 23,
+      "unsupported": 1,
+      "wrong": 0,
+      "error_rate": 0.042,
+      "examples": [
+        {"line": 36, "claim": "1.04T total / 32B active", "verdict": "supported"},
+        {"line": 169, "claim": "9B active / 53B total MoE, max logit > 1000", "verdict": "supported"},
+        {"line": 195, "claim": "12.7% of heads triggered in first 70,000 steps", "verdict": "supported"},
+        {"line": 193, "claim": "no statistically significant downstream degradation", "verdict": "supported"},
+        {"line": 211, "claim": "16B Moonlight shows higher singular-value entropy under Muon", "verdict": "supported"},
+        {"line": 291, "claim": "sparsity 48 needs 1.69x/1.39x/1.15x fewer FLOPs at val loss 1.5", "verdict": "supported"},
+        {"line": 295, "claim": "128k seq, 64->128 heads = +83% inference FLOPs", "verdict": "supported"},
+        {"line": 301, "claim": "doubling heads improves val loss 0.5%-1.2%", "verdict": "supported"},
+        {"line": 309, "claim": "2 TB RAM/node, 8x400 Gbps RoCE", "verdict": "supported"},
+        {"line": 319, "claim": "BF16 params + FP32 grad buffer about 6 TB over 256 GPUs; about 30 GB per GPU", "verdict": "supported"},
+        {"line": 345, "claim": "FP8-E4M3 in 1x128 tiles with FP32 scales", "verdict": "supported"},
+        {"line": 359, "claim": "10T at 2e-4 after 500-step warmup, 5.5T cosine to 2e-5, wd 0.1, 67M batch, 400B 4k + 60B 32k at 2e-5->7e-6", "verdict": "supported"},
+        {"line": 392, "claim": "3,000+ MCP tools; 20,000+ synthetic tools", "verdict": "supported"},
+        {"line": 507, "claim": "10,000+ concurrent Kubernetes sandboxes", "verdict": "supported"},
+        {"line": 686, "claim": "full parameter update < 30 s", "verdict": "supported"},
+        {"line": 740, "claim": "8192 output cap, 16384 for Agentless", "verdict": "supported"},
+        {"line": 759, "claim": "SWE-bench rows 51.8/65.8/71.6, Claude 72.7*/72.5*/80.2*/79.4*", "verdict": "supported"},
+        {"line": 767, "claim": "PaperBench 27.8 vs 29.9/43.3; Terminus 25.0 vs 30.3; In-House 30.0 vs Opus 43.2; Aider 60.0 vs 70.7/61.8", "verdict": "supported"},
+        {"line": 773, "claim": "Tau2 Telecom 65.8 vs Opus 57.0; Retail 70.6 vs 81.8; Airline 56.5 vs 60.0; ACEBench 4.5K APIs / 8 domains", "verdict": "supported"},
+        {"line": 777, "claim": "math avg +5.3 Gemini, +5.5 DeepSeek, +15.8 GPT-4.1; HLE 4.7 below all but GPT-4.1 3.7", "verdict": "supported"},
+        {"line": 785, "claim": "HHEM 98.9, FaithJudge 92.6 (Gemini 93.2), FACTS 88.5 (Gemini 86.6)", "verdict": "supported"},
+        {"line": 809, "claim": "base exceptions: GPQA DeepSeek 50.51 vs 48.11; HellaSwag Qwen 95.27 vs 94.60; CMATH 90.26 vs 90.53", "verdict": "supported"},
+        {"line": 838, "claim": "Security-Iterative Jailbreak 43.90, DeepSeek-R1 also 43.90", "verdict": "supported"},
+        {"line": 74, "claim": "AdamW update RMS typically 0.2-0.4", "verdict": "unsupported (not in this paper; Moonlight)"}
+      ]
+    },
+    "checklist": {
+      "repeated": 1,
+      "avoided": 16,
+      "na": 0,
+      "repeated_ids": ["rl-subheading-levels"],
+      "evidence": {
+        "rl-subheading-levels": "Verifiable rewards (L472), self-critique (L519) and the RL algorithm (L600) are three sibling H2s with no single RL heading",
+        "ppo-claim": "avoided: L602 'K1.5의 정책 최적화 알고리즘을 그대로 가져와', PPO only as contrast",
+        "invented-ptx-formula": "avoided: L642 gives InstructGPT's own PTX term, attributed to it; L644 says curated high-quality samples",
+        "invented-env-code": "avoided: L734 describes the Gym API in prose as Gym's, with no code block",
+        "missing-description / arxiv-https": "avoided"
+      }
+    },
+    "top_issues": [
+      "L28/L50/L754-797, L42/L54/L263/L355/L842: headline numbers and the 15.5T fact are restated many times, and L840-842 adds a conclusion-summary section",
+      "L472/L519/L600: RL split into three sibling H2s (checklist rl-subheading-levels); L34/L52 topic-heading intro block after TL;DR",
+      "L58-76, L525-533, L606-608, L734: background padding (AdamW, RLHF loss, policy-gradient basics, Gym API) and an external number (L74 AdamW RMS 0.2-0.4) push prose to about 48k chars"
+    ]
+  },
+  "Y": {
+    "prose_chars": 21887,
+    "scores": {
+      "A": {"score": 7.0, "reason": "Claim headings throughout and a single RL section with nested H3s (L187-L233). Markup is valid. But several sections are visibly broken: L362-366 '### 수학과 STEM' opens with '다만 ...', then '그렇다고 모든 수학 벤치마크에서 이긴 것은 아닙니다.' with nothing after. L279 describes figure panels that are not in the post. L432 ends the closing with '이렇게 정리됩니다.' and no list."},
+      "B": {"score": 7.5, "reason": "Mostly natural. Some sentences are garbled. L153 '도구 저장소는 서로 보완하는 두 경로로 채웁니다. 이미 품질이 검증된 명세를 활용하는 방식입니다.' drops the subject (the 3,000 MCP tools). L31 'SWE-Bench Verified 1위는 72.5를 낸 Claude 4 Opus입니다.' is an odd result headline. L32 starts with '다만' against an unrelated bullet."},
+      "C": {"score": 6.0, "reason": "Several dangling references. L263 '앞서 언급한 대로 작았습니다': the head-ablation gain was never stated, and 0.5-1.2% is omitted. L406 '앞서 언급한 시점': the July 17 date is never given. L279 describes a missing figure. L364 is a paragraph missing its lead. L366 gives GPQA 75.1 with no comparison."},
+      "D": {"score": 8.0, "reason": "Well-calibrated help at hard steps: the per-head worked example with rotary reasoning at L87, the K1.5 objective with K=4 numbers tied to pass@k selection at L199/L203, and a labelled hypothetical payment-API example at L41. Easy parts are not padded."},
+      "E": {"score": 7.5, "reason": "8 figures placed where discussed and tables copied from the source (L127, L239, L346, L382). But the L325 table mixes Figure 1 values into a table row: Tau2 Opus 67.6 comes from the figure, while GPT-4.1 is marked '미기재' though the figure gives 54.4. The activation-offload figure is described at L279 but absent."},
+      "F": {"score": 7.0, "reason": "22 claims sampled: 2 wrong, 1 unsupported. Wrong: L31 says Claude 4 Opus 72.5 is first on SWE-bench Verified, but Sonnet 4 is 72.7 in the paper table (and in Y's own L327/L336). Wrong: L329 marks GPT-4.1 Tau2 '미기재', but Figure 1 gives 54.4. Unsupported: L426 lists the 2-stage H2D bound as an author-acknowledged limitation, while the paper says the overhead disappears at scale."},
+      "G": {"score": 9.0, "reason": "Description is plain text, 133 chars, starts with 'Kimi K2', and every number in it (15.5조, 320억, 53.7, 49.5) is a TL;DR number. use_math true. The arXiv link is https. Small issue: L195 uses '|x' rather than \\mid inside math, wrapped in a raw tag."},
+      "R1": {"score": 7.0, "reason": "Core method is covered well (MuonClip, rephrasing, the tool pipeline, the critic loop, parallelism, the checkpoint engine). RL data covers only math/STEM/logic and instruction-following (L201-205): no coding/SWE sandbox rewards, faithfulness or safety data. No tool-call template. No general, long-context, factuality or safety results. The math-data rephrasing is skipped (L107)."},
+      "R2": {"score": 8.0, "reason": "Layering is good where present (L67-L87, L193-L203), and length (about 22k chars) fits the paper's difficulty. Some hard results are cut too short (L362-366)."},
+      "R3": {"score": 6.5, "reason": "The TL;DR result answer is flawed: L31 is wrong, and K2's own SWE-bench 65.8 is missing from the TL;DR. The closing has a genuine writer's judgement (L428-430 on simulator fidelity and compounding overconfidence, labelled as not the paper's claim). But it lists a non-limitation at L426 and ends on a dangling sentence at L432."},
+      "X1": {"score": 8.0, "reason": "Same category and tag set as X. Paper-specific, reusable tags."}
+    },
+    "principles": {
+      "claim_headings": "met: e.g. L47, L101, L235, L313",
+      "running_example": "partly met: tau=100 / S_max=400 and the K=4 reward example recur (L87, L199, L203); no post-wide input",
+      "mechanism_design_formula_example": "met: QK-Clip L61-L87, RL objective L191-L203",
+      "facts_said_once": "met: numbers mostly stated once, with backward references",
+      "numbers_with_scope_unit": "partly met: scoped as non-thinking (L315-319), but L31 misattributes the top SWE-bench score",
+      "nothing_invented": "partly met: hypothetical examples are labelled (L41, L87, L175, L199); L426 limitation is a misreading",
+      "writer_assessment_end": "met: L410-L430",
+      "length_fitted": "met: about 22k chars",
+      "type_specific_shape": "met: TL;DR then problem-first sections",
+      "korean_style": "partly met: garbled L153, dangling '다만' at L32/L364"
+    },
+    "claims": {
+      "checked": 22,
+      "numbers": 16,
+      "supported": 19,
+      "unsupported": 1,
+      "wrong": 2,
+      "error_rate": 0.136,
+      "examples": [
+        {"line": 26, "claim": "1.04T total, 32B active, 15.5T tokens, tau=100, no loss spike", "verdict": "supported"},
+        {"line": 31, "claim": "SWE-Bench Verified first place is Claude 4 Opus with 72.5", "verdict": "wrong (paper table: Claude Sonnet 4 72.7*; Y's own L327 agrees)"},
+        {"line": 32, "claim": "Tau2 Opus 67.6, ACEBench GPT-4.1 80.1", "verdict": "supported (Figure 1, Table 3)"},
+        {"line": 53, "claim": "9B active / 53B total, max logit > 1000", "verdict": "supported"},
+        {"line": 93, "claim": "decay after about 30% of steps; 12.7% heads in first 70,000 steps", "verdict": "supported"},
+        {"line": 99, "claim": "0.5B/3B MoE, tau=30, negligible loss difference", "verdict": "supported"},
+        {"line": 129, "claim": "SimpleQA 23.76 / 27.39 / 28.94", "verdict": "supported"},
+        {"line": 133, "claim": "each corpus rephrased at most twice", "verdict": "supported"},
+        {"line": 139, "claim": "4,096 context, annealing 400B at 4k + 60B at 32k, YaRN to 128k", "verdict": "supported"},
+        {"line": 153, "claim": "20,000+ synthetic tools", "verdict": "supported"},
+        {"line": 242, "claim": "671B vs 1.04T, 37B vs 32.6B, 256 vs 384 experts, 128 vs 64 heads, 3 vs 1 dense layers", "verdict": "supported"},
+        {"line": 257, "claim": "1.69x/1.39x/1.15x FLOPs at val loss 1.5", "verdict": "supported"},
+        {"line": 261, "claim": "64->128 heads = +83% inference FLOPs", "verdict": "supported"},
+        {"line": 267, "claim": "16-way PP with virtual stages, 16-way EP, ZeRO-1", "verdict": "supported"},
+        {"line": 297, "claim": "full update < 30 s; broadcast-all faster than transfer-what-you-need", "verdict": "supported"},
+        {"line": 319, "claim": "temperature 0.0, deterministic adapters, Tau2 over 4 seeds", "verdict": "supported"},
+        {"line": 329, "claim": "Tau2 micro: Sonnet 4 and GPT-4.1 '미기재'", "verdict": "wrong (Figure 1 gives GPT-4.1 54.4)"},
+        {"line": 348, "claim": "LCB/OJBench/MultiPL-E/AIME/GPQA/ZebraLogic/AutoLogi rows incl. Gemini column", "verdict": "supported"},
+        {"line": 380, "claim": "Base: 10 of 12 English benchmarks; MMLU 87.79 ... EvalPlus 80.33", "verdict": "supported"},
+        {"line": 398, "claim": "Arena-Hard v2 hard 54.5, creative 85.0, above all open models", "verdict": "supported"},
+        {"line": 402, "claim": "Chinese win rates 65.4/64.6/59.6, loss about 17%", "verdict": "supported"},
+        {"line": 426, "claim": "2-stage weight update H2D bottleneck is an author-acknowledged limitation", "verdict": "unsupported (paper: the overhead disappears at scale)"}
+      ]
+    },
+    "checklist": {
+      "repeated": 0,
+      "avoided": 15,
+      "na": 2,
+      "repeated_ids": [],
+      "na_ids": ["invented-code-quality-eval", "invented-safety-monitoring"],
+      "evidence": {
+        "rl-subheading-levels": "avoided: one H2 at L187 with H3 children for objective, verifiable, self-critique and stabilizers",
+        "ppo-claim": "avoided: L193 'Kimi k1.5의 정책 최적화'",
+        "invented-budget/ptx/temperature-formula": "avoided: L229-233 are prose only; PTX uses hand-selected high-quality samples",
+        "invented-code-quality-eval / invented-safety-monitoring": "n/a: coding RL rewards and safety data are not covered"
+      }
+    },
+    "top_issues": [
+      "L31 (and L329): the TL;DR names Claude 4 Opus 72.5 as SWE-bench Verified leader, contradicting the paper and Y's own L327/L336 (Sonnet 4 72.7); the Tau2 table marks GPT-4.1 '미기재' though Figure 1 gives 54.4",
+      "L263, L279, L364-366, L406, L432: broken passages (dangling '앞서 언급한', a missing figure being described, a section opening on '다만' with no follow-through, a list intro with no list)",
+      "L201-205, L313-406, L426: coverage gaps (no coding/faithfulness/safety RL data, no tool template, no general, long-context, factuality or safety results) and a misread limitation"
+    ]
+  },
+  "preference": {
+    "overall": "X",
+    "per_criterion": {"A": "X", "B": "X", "C": "X", "D": "tie", "E": "X", "F": "X", "G": "tie", "R1": "X", "R2": "tie", "R3": "X", "X1": "tie"},
+    "reason": "X is accurate (0 wrong of 24, 1 external number) and covers the whole paper with strong worked examples. Its faults are length, repetition and RL heading structure. Y is better sized and headed but has a wrong TL;DR headline, a wrong table cell, several broken passages and dangling references, and large coverage gaps. Factual integrity and coherence outweigh concision here."
+  }
+}
