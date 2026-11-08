@@ -1143,6 +1143,16 @@ class EvidenceWriter:
             elif revision.rejected:
                 logger.info("Narrowing of %r rejected: %s", title, revision.rejected)
         settled = self._drop_unsupported(draft, claims, title=title, checks=checks)
+        if settled != draft:
+            # A deletion gives the unit after it a new context sentence, so a
+            # new verdict key: it is judged again (once; docs/engine.md 4.2),
+            # and one still unanswered then blocks under its new key.
+            fresh = set(rejudged_units(draft, settled))
+            again = [(s, v) for s, v in await found(settled) if s in fresh]
+            if again:
+                settled = self._drop_unsupported(
+                    settled, again, title=title, checks=checks
+                )
         if settled != start and checks.verifiers.added(
             [p for p in checks.verifiers.run(start) if p.kind == TOO_SHORT_PROBLEM],
             [p for p in checks.verifiers.run(settled) if p.kind == TOO_SHORT_PROBLEM],

@@ -815,3 +815,15 @@ def test_a_narrowing_that_leaves_the_section_short_is_kept_and_noted() -> None:
     assert out == narrowed_draft
     assert not writer.blocking
     assert any("below its minimum length" in n for n in writer.notes)
+
+
+def test_an_unjudged_item_after_a_deleted_sentence_still_blocks() -> None:
+    # Deleting the sentence before an unanswered one changes its verdict
+    # key; it is asked again under the new key and still blocks.
+    s = _sentences(6)
+    model = Model(bad=lambda x: x == s[0])
+    model.omit, model.omit_calls = (lambda x: x == s[1]), 99
+    writer = _writer(model)
+    out = _verify(writer, _section(s))
+    assert s[0] not in out and s[1] in out
+    assert writer.blocking
