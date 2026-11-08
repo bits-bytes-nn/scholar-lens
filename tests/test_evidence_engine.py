@@ -1039,7 +1039,11 @@ def test_a_claim_check_the_models_cannot_answer_leaves_a_note() -> None:
 
 
 def test_survey_results_and_limitations_need_table_cells() -> None:
-    from scholar_lens.application.survey_engine import _no_code
+    from scholar_lens.domain.post_spec import evidence_policy
+    from scholar_lens.domain.specs import SURVEY_SPEC
+
+    def _no_code(document, kind, fields):  # type: ignore[no-untyped-def]
+        return evidence_policy(SURVEY_SPEC.evidence, document, kind, fields)
 
     doc = _doc()
     assert _no_code(doc, "limitation", {"cell": ""})

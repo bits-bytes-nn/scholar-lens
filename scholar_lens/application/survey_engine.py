@@ -1,4 +1,5 @@
-"""The evidence-based survey writer (docs/redesign.md, 3.2).
+"""The evidence-based survey writer (docs/redesign.md, 3.2): the survey's
+spec and hooks bound to the post engine.
 
 Read (a bounded agent per paper, records checked against the paper) →
 outline (each piece of evidence to one section) → draft each section from its
@@ -10,28 +11,14 @@ injected.
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
-import json
 import logging
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 
-from ..domain.evidence import (
-    Evidence,
-    EvidenceLedger,
-    SourceDocument,
-    same_fact_duplicates,
-)
-from ..domain.evidence_draft import (
-    cited_ids,
-    draft_problems,
-    free_numbers,
-    prose_sentences,
-    section_heading,
-    section_numbers,
-)
-from ..domain.glossary import glossary_view
+from ..domain.evidence import EvidenceLedger, SourceDocument
+from ..domain.evidence_draft import free_numbers
+from ..domain.specs.survey import REFERENCE_KINDS, SURVEY_SPEC
 from ..domain.survey.evidence_post import (
     EvidenceOutline,
     OutlineSection,
@@ -40,24 +27,24 @@ from ..domain.survey.evidence_post import (
     outline_problems,
     repair_outline,
     section_targets,
+    table_evidence,
     timeline_table,
+    with_canonical_table,
+    without_table_evidence,
 )
 from ..domain.survey.plan import PlanPaper, SurveyPlan
 from ..domain.survey.post import without_papers
 from ..prompts import survey_evidence as prompts
-from .evidence_writer import (
-    EvidenceWriter,
-    WriterPrompts,
-    all_or_none,
-    block,
-    cached_evidence,
-    evidence_lines,
-    post_so_far,
-    safe_key,
-    with_canonical_evidence,
-)
+from .evidence_writer import WriterPrompts, block, evidence_lines, safe_key
 from .ports import AgentLimits, DocumentSource, LanguageModel, TextStore
-from .usage import usage_stage
+from .post_engine import (
+    PostEngine,
+    PostPrompts,
+    ReadJob,
+    ReadStart,
+    RunSettings,
+    SectionContext,
+)
 
 __all__ = [
     "EngineSettings",
@@ -81,35 +68,18 @@ SURVEY_PROMPTS = WriterPrompts(
 )
 
 
-def _no_code(document: SourceDocument, kind: str, fields: object) -> list[str]:
-    """A survey states what papers find; their code and settings are a
-    guide's evidence."""
-    if kind in ("code", "setting"):
-        return [f"kind {kind!r} is not used in a survey; record a method instead"]
-    # Results and limitations fill the comparison table: each needs its
-    # short noun-phrase cell (a claim is a sentence, not a cell).
-    cell = fields.get("cell", "") if isinstance(fields, Mapping) else ""
-    if kind in ("number", "limitation") and not str(cell).strip():
-        return [
-            f"a {kind} needs `cell`: a short noun phrase for the comparison table "
-            "(a result with its benchmark and metric, or the limitation), in the "
-            "post's language and register"
-        ]
-    return []
-
-
 @dataclass(frozen=True)
 class EngineSettings:
     language: str
     title_max_length: int
     # Cache-key part naming the reading model.
     reader_tag: str
-    max_fix_rounds: int = 2
+    max_fix_rounds: int = SURVEY_SPEC.limits.fix_rounds
     read_turns_core: int = 30
     read_turns_supporting: int = 12
     read_tokens_per_paper: int = 600_000
     concurrency: int = 4
-    outline_repairs: int = 2
+    outline_repairs: int = SURVEY_SPEC.limits.outline_repairs
     # Prose characters (Korean): per paper of a lineage section, and the
     # post's total range (survey config).
     chars_per_core: int = 3_000
@@ -139,7 +109,7 @@ class EvidenceUnavailable(RuntimeError):
     sources or the reader), never a rejected plan."""
 
 
-class EvidenceSurveyEngine(EvidenceWriter):
+class EvidenceSurveyEngine(PostEngine[EvidenceOutline, OutlineSection, EvidenceSurvey]):
     def __init__(
         self,
         model: LanguageModel,
@@ -147,10 +117,28 @@ class EvidenceSurveyEngine(EvidenceWriter):
         settings: EngineSettings,
         store: TextStore | None = None,
     ) -> None:
-        super().__init__(model, SURVEY_PROMPTS, max_fix_rounds=settings.max_fix_rounds)
+        super().__init__(
+            model,
+            SURVEY_SPEC,
+            SURVEY_PROMPTS,
+            PostPrompts(outline=prompts.OUTLINE_SYSTEM),
+            RunSettings(
+                language=settings.language,
+                concurrency=settings.concurrency,
+                outline_repairs=settings.outline_repairs,
+                min_total_chars=settings.min_total_chars,
+                max_total_chars=settings.max_total_chars,
+            ),
+            outline_schema=EvidenceOutline,
+            store=store,
+            max_fix_rounds=settings.max_fix_rounds,
+        )
         self.documents = documents
         self.settings = settings
-        self.store = store
+        self._plan: SurveyPlan  # set by write
+        self._references = ""
+        self._guideline = ""
+        self._kinds: dict[str, str] = {}
 
     # ---- read -------------------------------------------------------------------
 
@@ -166,35 +154,25 @@ class EvidenceSurveyEngine(EvidenceWriter):
     async def read(self, plan: SurveyPlan) -> tuple[EvidenceLedger, dict[str, str]]:
         """Every paper's evidence (cached per paper, reader version, model,
         language, role and document kind), in plan order."""
-        gate = asyncio.Semaphore(self.settings.concurrency)
 
-        async def one(paper: PlanPaper) -> tuple[list[Evidence], str]:
-            async with gate:
+        def start(paper: PlanPaper) -> ReadStart:
+            async def job() -> ReadJob | None:
                 document = await self.documents.document(paper)
                 if document is None:
                     self.notes.append(
                         f"No text for {paper.id}; left out of the survey."
                     )
-                    return [], "none"
-                key = self._cache_key(paper, document)
-                if self.store is not None and (cached := self.store.get(key)):
-                    kept = cached_evidence(cached, document, key=key)
-                    if kept is not None:
-                        return kept, document.kind
-                items = await self._read_paper(paper, document, plan)
-                if self.store is not None and items:
-                    self.store.put(
-                        key,
-                        json.dumps([e.model_dump() for e in items], ensure_ascii=False),
-                    )
-                return items, document.kind
+                    return None
+                return self._read_job(paper, document, plan)
 
-        with usage_stage("read"):
-            results = await all_or_none(one(p) for p in plan.papers)
+            return job
+
+        results = await self.read_all([start(p) for p in plan.papers])
         ledger = EvidenceLedger()
         kinds: dict[str, str] = {}
-        for paper, (items, kind) in zip(plan.papers, results, strict=True):
+        for paper, (job, items) in zip(plan.papers, results, strict=True):
             ledger.extend(items)
+            kind = job.document.kind if job is not None else "none"
             kinds[paper.id] = kind
             if paper.role == "core" and kind == "abstract":
                 self.notes.append(
@@ -202,9 +180,9 @@ class EvidenceSurveyEngine(EvidenceWriter):
                 )
         return ledger, kinds
 
-    async def _read_paper(
+    def _read_job(
         self, paper: PlanPaper, document: SourceDocument, plan: SurveyPlan
-    ) -> list[Evidence]:
+    ) -> ReadJob:
         core = paper.role == "core"
         required: tuple[str, ...] = ()
         if document.kind != "abstract":
@@ -224,8 +202,9 @@ class EvidenceSurveyEngine(EvidenceWriter):
                 ),
             ]
         )
-        return await self.read_document(
-            document,
+        return ReadJob(
+            document=document,
+            key=self._cache_key(paper, document),
             prompt=prompt,
             limits=AgentLimits(
                 turns=(
@@ -236,76 +215,9 @@ class EvidenceSurveyEngine(EvidenceWriter):
                 total_tokens=self.settings.read_tokens_per_paper,
             ),
             required=required,
-            rule=_no_code,
         )
 
-    # ---- outline ----------------------------------------------------------------
-
-    async def outline(
-        self, plan: SurveyPlan, ledger: EvidenceLedger, references: str, guideline: str
-    ) -> EvidenceOutline:
-        papers = "\n".join(
-            f"- {p.id} | {p.year} | {p.role} | lineage {p.lineage} | {p.title}"
-            for p in plan.papers
-        )
-        lineages = "\n".join(
-            f"- {lin.id}: {lin.name}: {lin.description}" for lin in plan.lineages
-        )
-        edges = (
-            "\n".join(f"- {e.citing} cites {e.cited}" for e in plan.edges)
-            if plan.edges
-            else ""
-        )
-        base = "\n\n".join(
-            [
-                f"Topic: {plan.topic}\nScope: {plan.scope}\nLanguage: {self.settings.language}",
-                f"Title: in English, at most {self.settings.title_max_length} characters.",
-                block("lineages", lineages),
-                block("papers", papers),
-                block("citations", edges),
-                block("evidence", evidence_lines(list(ledger))),
-                block("reference_material", references),
-                block("translation_guideline", guideline),
-            ]
-        )
-        prompt = base
-        with usage_stage("outline"):
-            for attempt in range(self.settings.outline_repairs + 1):
-                outline = await self.model.structured(
-                    role="outline",
-                    system=prompts.OUTLINE_SYSTEM,
-                    prompt=prompt,
-                    schema=EvidenceOutline,
-                )
-                outline = with_canonical_evidence(
-                    outline, same_fact_duplicates(outline.same_facts, ledger)
-                )
-                outline, repaired = repair_outline(outline, plan, ledger)
-                if repaired:
-                    logger.info("Outline repaired in code: %s", "; ".join(repaired))
-                problems = outline_problems(
-                    outline,
-                    plan,
-                    ledger,
-                    title_max_length=self.settings.title_max_length,
-                )
-                if not problems:
-                    return outline
-                logger.warning("Outline attempt %d unusable: %s", attempt + 1, problems)
-                prompt = (
-                    base
-                    + "\n\n"
-                    + block(
-                        "previous_problems",
-                        "Fix these in your next outline:\n"
-                        + "\n".join(f"- {p}" for p in problems),
-                    )
-                )
-        raise ValueError(
-            "The outline breaks the rules after repairs: " + "; ".join(problems)
-        )
-
-    # ---- sections ---------------------------------------------------------------
+    # ---- the survey ---------------------------------------------------------------
 
     async def write(
         self,
@@ -333,221 +245,167 @@ class EvidenceSurveyEngine(EvidenceWriter):
                 "Papers without evidence (left out): " + ", ".join(missing)
             )
             plan = without_papers(plan, missing)
-        outline = await self.outline(plan, ledger, references, guideline)
-        outline = await self._check_evidence(outline, ledger)
-        self._names = dict(outline.short_names)
-        glossary = {t.english: t.rendering for t in outline.glossary}
-        free = free_numbers(sorted({p.year for p in plan.papers if p.year}))
-        written: list[tuple[OutlineSection, str]] = []
-        numbers: dict[str, str] = {}
-        targets = section_targets(
+        self._plan, self._kinds = plan, kinds
+        self._references, self._guideline = references, guideline
+        self.free = free_numbers(sorted({p.year for p in plan.papers if p.year}))
+        return await self.compose(ledger)
+
+    # ---- hooks: outline -----------------------------------------------------------
+
+    def outline_prompt(
+        self, ledger: EvidenceLedger, duplicates: Mapping[str, str]
+    ) -> str:
+        plan = self._plan
+        papers = "\n".join(
+            f"- {p.id} | {p.year} | {p.role} | lineage {p.lineage} | {p.title}"
+            for p in plan.papers
+        )
+        lineages = "\n".join(
+            f"- {lin.id}: {lin.name}: {lin.description}" for lin in plan.lineages
+        )
+        edges = (
+            "\n".join(f"- {e.citing} cites {e.cited}" for e in plan.edges)
+            if plan.edges
+            else ""
+        )
+        return "\n\n".join(
+            [
+                f"Topic: {plan.topic}\nScope: {plan.scope}\nLanguage: {self.settings.language}",
+                f"Title: in English, at most {self.settings.title_max_length} characters.",
+                block("lineages", lineages),
+                block("papers", papers),
+                block("citations", edges),
+                block("evidence", evidence_lines(list(ledger))),
+                block("reference_material", self._references),
+                block("translation_guideline", self._guideline),
+            ]
+        )
+
+    def repair(
+        self, outline: EvidenceOutline, ledger: EvidenceLedger
+    ) -> tuple[EvidenceOutline, list[str]]:
+        return repair_outline(outline, self._plan, ledger)
+
+    def outline_problems(
+        self, outline: EvidenceOutline, ledger: EvidenceLedger
+    ) -> list[str]:
+        return outline_problems(
             outline,
-            plan,
+            self._plan,
+            ledger,
+            title_max_length=self.settings.title_max_length,
+        )
+
+    # The comparison table cites evidence too: its results and limitations
+    # are merged, checked and dropped like the sections'.
+    def cited_elsewhere(self, outline: EvidenceOutline) -> set[str]:
+        return table_evidence(outline)
+
+    def canonical_elsewhere(
+        self, outline: EvidenceOutline, duplicates: Mapping[str, str]
+    ) -> EvidenceOutline:
+        return with_canonical_table(outline, duplicates)
+
+    def drop_elsewhere(
+        self, outline: EvidenceOutline, wrong: Collection[str]
+    ) -> EvidenceOutline:
+        return without_table_evidence(outline, wrong)
+
+    def source_names(self, outline: EvidenceOutline) -> dict[str, str]:
+        return dict(outline.short_names)
+
+    def section_targets(self, outline: EvidenceOutline) -> list[int]:
+        return section_targets(
+            outline,
+            self._plan,
             per_core=self.settings.chars_per_core,
             per_supporting=self.settings.chars_per_supporting,
             min_total=self.settings.min_total_chars,
             max_total=self.settings.max_total_chars,
             language=self.settings.language,
         )
-        for section, target in zip(outline.sections, targets, strict=True):
-            markdown = await self._section(
-                plan,
-                outline,
-                ledger,
-                section,
-                written,
-                numbers,
-                glossary,
-                references,
-                free,
-                target,
-            )
-            heading = section_heading(markdown) or section.title
-            for n in section_numbers(markdown, free):
-                numbers.setdefault(n, heading)
-            written.append((section, markdown))
-        body = self._assemble(plan, outline, ledger, written)
-        return EvidenceSurvey(
-            title=outline.title,
-            body=body,
-            outline=outline,
-            ledger=ledger,
-            plan=plan,
-            documents=kinds,
-            notes=self.notes,
-        )
 
-    async def _section(
-        self,
-        plan: SurveyPlan,
-        outline: EvidenceOutline,
-        ledger: EvidenceLedger,
-        section: OutlineSection,
-        written: list[tuple[OutlineSection, str]],
-        numbers: dict[str, str],
-        glossary: dict[str, str],
-        references: str,
-        free: str,
-        target: int,
-    ) -> str:
-        own = [e for eid in section.evidence if (e := ledger.get(eid))]
-        # What earlier sections actually state (their final text), so a
-        # back-reference never points at a removed sentence.
-        earlier_ids = list(
-            dict.fromkeys(
-                eid
-                for _, md in written
-                for s in prose_sentences(md)
-                for eid in cited_ids(s)
-            )
-        )
-        earlier = [e for eid in earlier_ids if (e := ledger.get(eid))]
-        # Evidence a later section already referred back to once.
-        cites: dict[str, int] = {}
-        for s, md in written:
-            for eid in {i for snt in prose_sentences(md) for i in cited_ids(snt)}:
-                if eid not in s.evidence:
-                    cites[eid] = cites.get(eid, 0) + 1
-        exhausted = set(cites) - set(section.evidence)
-        figures = [e.figure_url for e in own if e.kind == "figure" and e.figure_url]
-        sections_map = "\n".join(
-            f"- {'(this) ' if s is section else ''}{s.kind}: {s.title} — {s.thesis}"
-            for s in outline.sections
-        )
-        previous = written[-1][1][-2500:] if written else ""
-        prompt = "\n\n".join(
-            [
-                f"Language: {self.settings.language}. Topic: {plan.topic}.",
-                block("outline", sections_map),
-                block(
-                    "section",
-                    f"kind: {section.kind}\ntitle: {section.title}\nthesis: {section.thesis}\n"
-                    f"question: {section.question}\ndepth: {section.depth}\n"
-                    f"length: about {target:,} characters of prose\n"
-                    f"running example: {outline.running_example or 'none'}",
-                ),
-                block("evidence", evidence_lines(own)),
-                block("already_written_evidence", evidence_lines(earlier[-60:])),
-                block(
-                    "paper_names",
-                    "\n".join(
-                        f"- {p.id}: {outline.short_names.get(p.id, p.title)} "
-                        f"({p.authors}, {p.year})"
-                        for p in plan.papers
-                    ),
-                ),
-                block("glossary", glossary_view(glossary, [m for _, m in written])),
-                block("previous_section_end", previous),
-                block(
-                    "reference_material",
-                    (
-                        references
-                        if section.kind in ("introduction", "cross_cutting", "insights")
-                        else ""
-                    ),
-                ),
-                (
-                    "The code appends this table after the section; introduce and "
-                    "interpret it (its columns are exactly these), do not "
-                    "reproduce it:\n"
-                    + (
-                        timeline_table(plan, outline, self.settings.korean)
-                        if section.kind == "introduction"
-                        else comparison_table(
-                            plan, outline, ledger, self.settings.korean
-                        )
-                    )
-                    if section.kind in ("introduction", "comparison")
-                    else ""
-                ),
-            ]
-        )
-        draft = await self.draft(
-            prompt,
-            own,
-            target,
-            retry_hint="This is a survey of published research papers for "
-            "practitioners.",
-            context=post_so_far([md for _, md in written]),
-        )
+    # ---- hooks: sections ----------------------------------------------------------
 
-        def checks(markdown: str) -> list[str]:
-            return draft_problems(
-                markdown,
-                title=section.title,
-                own=section.evidence,
-                earlier=earlier_ids,
-                ledger=ledger,
-                earlier_numbers=numbers,
-                figure_urls=figures,
-                free_numbers=free,
-                exhausted=exhausted,
-                papers=section.papers if section.kind == "lineage" else (),
-                target_chars=target,
-                depth=(
-                    section.depth
-                    if section.kind in ("lineage", "cross_cutting")
-                    else ""
+    def prompt_head(self) -> str:
+        return f"Language: {self.settings.language}. Topic: {self._plan.topic}."
+
+    def naming_blocks(
+        self, ctx: SectionContext[EvidenceOutline, OutlineSection]
+    ) -> list[str]:
+        return [
+            block(
+                "paper_names",
+                "\n".join(
+                    f"- {p.id}: {ctx.outline.short_names.get(p.id, p.title)} "
+                    f"({p.authors}, {p.year})"
+                    for p in self._plan.papers
                 ),
             )
-
-        return await self.verify_and_fix(
-            draft,
-            title=section.title,
-            review_context=f"Section kind: {section.kind}; thesis: {section.thesis}; "
-            f"depth: {section.depth}.",
-            checks=checks,
-            ledger=ledger,
-            own=own,
-            earlier=earlier,
-            free=free,
-        )
-
-    async def _check_evidence(
-        self, outline: EvidenceOutline, ledger: EvidenceLedger
-    ) -> EvidenceOutline:
-        """Check the claim, scope and cell of every number and limitation the
-        outline uses against its quote (a scope can name the wrong benchmark
-        while every number is in the quote); wrong ones leave the outline."""
-        used = {eid for s in outline.sections for eid in s.evidence} | {
-            eid for r in outline.table for eid in [*r.results, r.limitation] if eid
-        }
-        wrong = await self.wrong_evidence([e for e in ledger if e.id in used])
-        if not wrong:
-            return outline
-        sections = [
-            s.model_copy(update={"evidence": [e for e in s.evidence if e not in wrong]})
-            for s in outline.sections
         ]
-        table = [
-            r.model_copy(
-                update={
-                    "results": [e for e in r.results if e not in wrong],
-                    "limitation": None if r.limitation in wrong else r.limitation,
-                }
-            )
-            for r in outline.table
+
+    def closing_blocks(
+        self, ctx: SectionContext[EvidenceOutline, OutlineSection]
+    ) -> list[str]:
+        kind = ctx.section.kind
+        attached = self._attachment(kind, ctx.outline, ctx.ledger)
+        return [
+            block(
+                "reference_material",
+                self._references if kind in REFERENCE_KINDS else "",
+            ),
+            (
+                "The code appends this table after the section; introduce and "
+                "interpret it (its columns are exactly these), do not "
+                "reproduce it:\n" + attached
+                if attached
+                else ""
+            ),
         ]
-        return outline.model_copy(update={"sections": sections, "table": table})
+
+    def named_papers(self, section: OutlineSection) -> Sequence[str]:
+        # A lineage section cites every paper it covers.
+        return section.papers if section.kind == "lineage" else ()
+
+    def finish_section(self, section: OutlineSection, markdown: str) -> str:
+        # A survey section's missing heading is added at assembly.
+        return markdown
 
     # ---- assemble ---------------------------------------------------------------
 
-    def _assemble(
+    def _attachment(
+        self, kind: str, outline: EvidenceOutline, ledger: EvidenceLedger
+    ) -> str:
+        """The table code appends after a section of ``kind`` ("" when
+        none)."""
+        name = self.spec.attachments.get(kind, "")
+        if name == "timeline":
+            return timeline_table(self._plan, outline, self.settings.korean)
+        if name == "comparison":
+            return comparison_table(self._plan, outline, ledger, self.settings.korean)
+        return ""
+
+    async def assemble(
         self,
-        plan: SurveyPlan,
         outline: EvidenceOutline,
         ledger: EvidenceLedger,
         written: list[tuple[OutlineSection, str]],
-    ) -> str:
+        tldr: str | None,
+    ) -> EvidenceSurvey:
         parts = []
         for section, markdown in written:
             if not markdown.lstrip().startswith("## "):
                 markdown = f"## {section.title}\n\n{markdown.lstrip()}"
             parts.append(markdown)
-            if section.kind == "introduction":
-                parts.append(timeline_table(plan, outline, self.settings.korean))
-            elif section.kind == "comparison":
-                parts.append(
-                    comparison_table(plan, outline, ledger, self.settings.korean)
-                )
-        return cite_papers("\n\n".join(p.strip() for p in parts if p.strip()), ledger)
+            if attached := self._attachment(section.kind, outline, ledger):
+                parts.append(attached)
+        body = cite_papers("\n\n".join(p.strip() for p in parts if p.strip()), ledger)
+        return EvidenceSurvey(
+            title=outline.title,
+            body=body,
+            outline=outline,
+            ledger=ledger,
+            plan=self._plan,
+            documents=self._kinds,
+            notes=self.notes,
+        )

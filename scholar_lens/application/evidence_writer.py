@@ -233,9 +233,9 @@ POST_SO_FAR_CHARS = 60_000
 def with_canonical_evidence[OutlineT](
     outline: OutlineT, duplicates: Mapping[str, str]
 ) -> OutlineT:
-    """``outline`` with every duplicate evidence id (in its sections and, for
-    a survey, its comparison table) replaced by the id that keeps the fact;
-    a section then lists each fact once."""
+    """``outline`` with every duplicate evidence id in its sections replaced
+    by the id that keeps the fact; a section then lists each fact once
+    (evidence a kind cites elsewhere, a survey's table, is its hook's)."""
     if not duplicates:
         return outline
     logger.info(
@@ -243,31 +243,11 @@ def with_canonical_evidence[OutlineT](
         len(duplicates),
         ", ".join(f"{d}->{k}" for d, k in list(duplicates.items())[:20]),
     )
-
-    def ids(values: Sequence[str]) -> list[str]:
-        return canonical_ids(values, duplicates)
-
-    update: dict[str, object] = {
-        "sections": [
-            s.model_copy(update={"evidence": ids(s.evidence)})
-            for s in outline.sections  # type: ignore[attr-defined]
-        ]
-    }
-    if table := getattr(outline, "table", None):
-        update["table"] = [
-            r.model_copy(
-                update={
-                    "results": ids(r.results),
-                    "limitation": (
-                        duplicates.get(r.limitation, r.limitation)
-                        if r.limitation
-                        else r.limitation
-                    ),
-                }
-            )
-            for r in table
-        ]
-    return outline.model_copy(update=update)  # type: ignore[attr-defined,no-any-return]
+    sections = [
+        s.model_copy(update={"evidence": canonical_ids(s.evidence, duplicates)})
+        for s in outline.sections  # type: ignore[attr-defined]
+    ]
+    return outline.model_copy(update={"sections": sections})  # type: ignore[attr-defined,no-any-return]
 
 
 def post_so_far(sections: Sequence[str], limit: int = POST_SO_FAR_CHARS) -> str:

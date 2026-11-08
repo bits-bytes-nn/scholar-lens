@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable, Mapping, Sequence
 
-from .evidence import Evidence, EvidenceLedger
+from .evidence import Evidence, EvidenceLedger, near_duplicate
 from .markdown.lint import drop_empty_headings
 from .markdown.math import fence_roles
 from .quality_gate import rule_issues
@@ -569,3 +569,13 @@ def apply_edits(
         if not (role == "prose" and _BARE_ITEM.match(line))
     ]
     return "\n".join(kept), applied, skipped
+
+
+def copied_sentences(markdown: str, body: Sequence[str]) -> list[str]:
+    """Sentences of a summary (a TL;DR) that copy a ``body`` sentence
+    instead of summing up, each as a problem."""
+    return [
+        f"copies a sentence of the body; sum it up in new words: {s[:160]}"
+        for s in prose_sentences(markdown)
+        if near_duplicate(s, body)
+    ]

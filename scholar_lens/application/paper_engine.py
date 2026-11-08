@@ -1,5 +1,5 @@
 """The evidence-based paper review and summary writer (docs/redesign.md, 3.2,
-5.2).
+5.2): the paper post's spec and hooks bound to the post engine.
 
 Read (bounded agents over groups of the paper's sections, records checked
 against the paper) → outline (each piece of evidence to one section, in the
@@ -11,11 +11,8 @@ evidence cache are injected.
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
-import json
 import logging
-import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 
@@ -26,46 +23,30 @@ from ..domain.evidence import (
     EvidenceLedger,
     SourceDocument,
     duplicate_evidence,
-    same_fact_duplicates,
 )
-from ..domain.evidence_draft import (
-    cited_ids,
-    draft_problems,
-    free_numbers,
-    prose_sentences,
-    section_heading,
-    section_numbers,
-)
-from ..domain.glossary import glossary_view
+from ..domain.evidence_draft import free_numbers
 from ..domain.guide.evidence_guide import strip_markers
 from ..domain.paper.evidence_paper import (
-    TLDR_TITLE,
     PaperOutline,
     PaperSection,
     PostKind,
     paper_outline_problems,
-    paper_section_targets,
     repair_paper_outline,
     tldr_problems,
     tldr_questions,
 )
+from ..domain.specs.paper import PAPER_REVIEW_SPEC, paper_spec
 from ..domain.validation import description_problems, fit_description
 from ..prompts import paper_evidence as prompts
 from .evidence_writer import (
-    EvidenceWriter,
-    PostReview,
     WriterPrompts,
-    all_or_none,
     block,
     brief_lines,
-    cached_evidence,
-    evidence_lines,
-    post_so_far,
     quote_for_prompt_code,
     safe_key,
-    with_canonical_evidence,
 )
 from .ports import AgentLimits, LanguageModel, TextStore
+from .post_engine import PostEngine, PostPrompts, ReadJob, ReadStart, RunSettings
 from .usage import usage_stage
 
 logger = logging.getLogger(__name__)
@@ -82,6 +63,8 @@ PAPER_PROMPTS = WriterPrompts(
     review=prompts.REVIEW_SYSTEM,
     fix=prompts.FIX_SYSTEM,
 )
+# A review and a summary share every limit default.
+_LIMITS = PAPER_REVIEW_SPEC.limits
 
 
 @dataclass(frozen=True)
@@ -91,13 +74,13 @@ class PaperSettings:
     # Cache-key part naming the reading model.
     reader_tag: str
     max_sections: int = 12
-    max_fix_rounds: int = 2
+    max_fix_rounds: int = _LIMITS.fix_rounds
     # Paper characters one reading agent covers, its turns and tokens.
     chars_per_reader: int = 15_000
     read_turns: int = 24
     read_tokens: int = 500_000
     concurrency: int = 4
-    outline_repairs: int = 2
+    outline_repairs: int = _LIMITS.outline_repairs
     # Source text handed to one section's writer and checks.
     source_chars: int = 40_000
     # Prose characters (Korean) of the whole post.
@@ -156,17 +139,39 @@ def reading_groups(document: SourceDocument, chars: int) -> list[SourceDocument]
     return [g for g in out if g.sections]
 
 
-class EvidencePaperEngine(EvidenceWriter):
+class EvidencePaperEngine(PostEngine[PaperOutline, PaperSection, EvidencePaper]):
     def __init__(
         self,
         model: LanguageModel,
         settings: PaperSettings,
         store: TextStore | None = None,
     ) -> None:
-        super().__init__(model, PAPER_PROMPTS, max_fix_rounds=settings.max_fix_rounds)
+        review = settings.post == "review"
+        super().__init__(
+            model,
+            paper_spec(settings.post),
+            PAPER_PROMPTS,
+            PostPrompts(
+                outline=prompts.OUTLINE_REVIEW if review else prompts.OUTLINE_SUMMARY,
+                passes={"review": prompts.POST_REVIEW_SYSTEM},
+            ),
+            RunSettings(
+                language=settings.language,
+                concurrency=settings.concurrency,
+                outline_repairs=settings.outline_repairs,
+                min_total_chars=settings.min_total_chars,
+                max_total_chars=settings.max_total_chars,
+            ),
+            outline_schema=PaperOutline,
+            store=store,
+            max_fix_rounds=settings.max_fix_rounds,
+        )
         self.settings = settings
-        self.store = store
+        self.free = _FREE_NUMBERS
         self._documents: dict[str, SourceDocument] = {}
+        self._title = ""
+        self._abstract = ""
+        self._guideline = ""
 
     # ---- read -------------------------------------------------------------------
 
@@ -184,21 +189,13 @@ class EvidencePaperEngine(EvidenceWriter):
     ) -> EvidenceLedger:
         """The paper's evidence, a reading agent per group of sections, then
         the extra documents' (an official code summary); cached per group."""
-        gate = asyncio.Semaphore(self.settings.concurrency)
         groups = reading_groups(paper, self.settings.chars_per_reader)
         jobs = [(paper, g, n) for n, g in enumerate(groups)] + [
             (d, d, 0) for d in extra
         ]
 
-        async def one(
-            whole: SourceDocument, part: SourceDocument, n: int
-        ) -> list[Evidence]:
-            async with gate:
-                key = self._cache_key(part, n)
-                if self.store is not None and (cached := self.store.get(key)):
-                    kept = cached_evidence(cached, part, key=key)
-                    if kept is not None:
-                        return kept
+        def start(whole: SourceDocument, part: SourceDocument, n: int) -> ReadStart:
+            async def job() -> ReadJob:
                 anchors = ", ".join(s.anchor for s in part.sections)
                 prompt = "\n\n".join(
                     [
@@ -214,116 +211,22 @@ class EvidencePaperEngine(EvidenceWriter):
                         ),
                     ]
                 )
-                items = await self.read_document(
-                    part,
+                return ReadJob(
+                    document=part,
+                    key=self._cache_key(part, n),
                     prompt=prompt,
                     limits=AgentLimits(
                         turns=self.settings.read_turns,
                         total_tokens=self.settings.read_tokens,
                     ),
-                    rule=_no_code_or_settings,
                 )
-                if self.store is not None and items:
-                    self.store.put(
-                        key,
-                        json.dumps([e.model_dump() for e in items], ensure_ascii=False),
-                    )
-                return items
 
-        with usage_stage("read"):
-            results = await all_or_none((one(w, p, n) for w, p, n in jobs))
-        ledger = EvidenceLedger()
-        for items in results:
-            ledger.extend(items)
-        return ledger
+            return job
 
-    # ---- outline ----------------------------------------------------------------
+        results = await self.read_all([start(w, p, n) for w, p, n in jobs])
+        return self.ledger_of(items for _, items in results)
 
-    async def outline(
-        self, title: str, ledger: EvidenceLedger, guideline: str
-    ) -> PaperOutline:
-        system = (
-            prompts.OUTLINE_REVIEW
-            if self.settings.post == "review"
-            else prompts.OUTLINE_SUMMARY
-        )
-        # A fact the paper states in several places (abstract, introduction,
-        # results) and a figure two readers both recorded are offered once.
-        duplicates = duplicate_evidence(ledger, within_source=True)
-        if duplicates:
-            logger.info("%d evidence items repeat another.", len(duplicates))
-        base = "\n\n".join(
-            [
-                f"Paper: {title}\nLanguage: {self.settings.language}\n"
-                f"At most {self.settings.max_sections} sections.",
-                block(
-                    "evidence",
-                    brief_lines([e for e in ledger if e.id not in duplicates]),
-                ),
-                block("translation_guideline", guideline),
-            ]
-        )
-        prompt = base
-        problems: list[str] = []
-        with usage_stage("outline"):
-            for attempt in range(self.settings.outline_repairs + 1):
-                outline = await self.model.structured(
-                    role="outline", system=system, prompt=prompt, schema=PaperOutline
-                )
-                outline = with_canonical_evidence(
-                    outline,
-                    duplicates | same_fact_duplicates(outline.same_facts, ledger),
-                )
-                outline, repaired = repair_paper_outline(
-                    outline, ledger, self.settings.post, self.settings.language
-                )
-                if repaired:
-                    logger.info(
-                        "Paper outline repaired in code: %s", "; ".join(repaired)
-                    )
-                problems = paper_outline_problems(
-                    outline,
-                    ledger,
-                    self.settings.post,
-                    max_sections=self.settings.max_sections,
-                )
-                if not problems:
-                    return outline
-                logger.warning(
-                    "Paper outline attempt %d unusable: %s", attempt + 1, problems
-                )
-                prompt = (
-                    base
-                    + "\n\n"
-                    + block(
-                        "previous_problems",
-                        "Fix these in your next outline:\n"
-                        + "\n".join(f"- {p}" for p in problems),
-                    )
-                )
-        raise ValueError(
-            "The paper outline breaks the rules after repairs: " + "; ".join(problems)
-        )
-
-    async def _drop_wrong(
-        self, outline: PaperOutline, ledger: EvidenceLedger
-    ) -> PaperOutline:
-        used = {eid for s in outline.sections for eid in s.evidence}
-        wrong = await self.wrong_evidence([e for e in ledger if e.id in used])
-        if not wrong:
-            return outline
-        return outline.model_copy(
-            update={
-                "sections": [
-                    s.model_copy(
-                        update={"evidence": [e for e in s.evidence if e not in wrong]}
-                    )
-                    for s in outline.sections
-                ]
-            }
-        )
-
-    # ---- sections ---------------------------------------------------------------
+    # ---- the post -----------------------------------------------------------------
 
     async def write(
         self,
@@ -334,6 +237,7 @@ class EvidencePaperEngine(EvidenceWriter):
         abstract: str = "",
         guideline: str = "",
     ) -> EvidencePaper:
+        self._title, self._abstract, self._guideline = title, abstract, guideline
         self._documents = {d.paper_id: d for d in (paper, *extra)}
         self.passages = {
             (d.paper_id, s.anchor): s.text for d in (paper, *extra) for s in d.sections
@@ -342,43 +246,7 @@ class EvidencePaperEngine(EvidenceWriter):
         ledger = await self.read(title, paper, extra)
         if not len(ledger):
             raise ValueError("The paper gave no usable evidence.")
-        outline = await self.outline(title, ledger, guideline)
-        outline = await self._drop_wrong(outline, ledger)
-        glossary = {t.english: t.rendering for t in outline.glossary}
-        targets = paper_section_targets(
-            outline,
-            min_total=self.settings.min_total_chars,
-            max_total=self.settings.max_total_chars,
-            language=self.settings.language,
-        )
-        written: list[tuple[PaperSection, str]] = []
-        numbers: dict[str, str] = {}
-        tldr: tuple[PaperSection, int] | None = None
-        for section, target in zip(outline.sections, targets, strict=True):
-            if section.kind == "tldr":
-                tldr = (section, target)
-                continue
-            markdown = await self._section(
-                title, outline, ledger, section, written, numbers, glossary, target
-            )
-            heading = section_heading(markdown) or section.title
-            for n in section_numbers(markdown, _FREE_NUMBERS):
-                numbers.setdefault(n, heading)
-            written.append((section, markdown))
-        written = await self._review_post(title, ledger, written)
-        parts: list[tuple[str, str]] = [(s.kind, md) for s, md in written]
-        if tldr is not None:
-            parts.insert(0, ("tldr", await self._tldr(title, ledger, *tldr, written)))
-        sections = [(kind, strip_markers(md)) for kind, md in parts]
-        final = await self._final(title, abstract, sections)
-        return EvidencePaper(
-            outline=outline,
-            ledger=ledger,
-            sections=sections,
-            subtitle=final.subtitle,
-            description=final.description,
-            notes=self.notes,
-        )
+        return await self.compose(ledger)
 
     def source_sections(self, own: Sequence[Evidence]) -> str:
         """The full paper sections the evidence comes from, up to
@@ -399,175 +267,80 @@ class EvidencePaperEngine(EvidenceWriter):
             parts.append(f"[{sid} {anchor}: {section.heading}]\n{text}")
         return "\n\n".join(parts)
 
-    async def _section(
-        self,
-        title: str,
-        outline: PaperOutline,
-        ledger: EvidenceLedger,
-        section: PaperSection,
-        written: list[tuple[PaperSection, str]],
-        numbers: dict[str, str],
-        glossary: Mapping[str, str],
-        target: int,
+    # ---- hooks: outline -----------------------------------------------------------
+
+    def offered_duplicates(self, ledger: EvidenceLedger) -> dict[str, str]:
+        # A fact the paper states in several places (abstract, introduction,
+        # results) and a figure two readers both recorded are offered once.
+        return duplicate_evidence(ledger, within_source=True)
+
+    def outline_prompt(
+        self, ledger: EvidenceLedger, duplicates: Mapping[str, str]
     ) -> str:
-        own = [e for eid in section.evidence if (e := ledger.get(eid))]
-        earlier_ids = list(
-            dict.fromkeys(
-                eid
-                for _, md in written
-                for s in prose_sentences(md)
-                for eid in cited_ids(s)
-            )
-        )
-        earlier = [e for eid in earlier_ids if (e := ledger.get(eid))]
-        exhausted = {
-            eid
-            for s, md in written
-            for eid in {i for snt in prose_sentences(md) for i in cited_ids(snt)}
-            if eid not in s.evidence
-        } - set(
-            section.evidence
-        )  # a section may always state its own
-        figures = [e.figure_url for e in own if e.kind == "figure" and e.figure_url]
-        reference = self.source_sections(own)
-        sections_map = "\n".join(
-            f"- {'(this) ' if s is section else ''}{s.kind}: {s.title} — {s.thesis}"
-            for s in outline.sections
-        )
-        prompt = "\n\n".join(
+        return "\n\n".join(
             [
-                f"Language: {self.settings.language}. Paper: {title}. Post: "
-                f"{self.settings.post}.",
-                block("outline", sections_map),
+                f"Paper: {self._title}\nLanguage: {self.settings.language}\n"
+                f"At most {self.settings.max_sections} sections.",
                 block(
-                    "section",
-                    f"kind: {section.kind}\ntitle: {section.title}\nthesis: {section.thesis}\n"
-                    f"question: {section.question}\ndepth: {section.depth}\n"
-                    f"length: about {target:,} characters of prose\n"
-                    f"running example: {outline.running_example or 'none'}",
+                    "evidence",
+                    brief_lines([e for e in ledger if e.id not in duplicates]),
                 ),
-                block("evidence", evidence_lines(own)),
-                block("already_written_evidence", evidence_lines(earlier[-60:])),
-                block(
-                    "glossary", glossary_view(dict(glossary), [m for _, m in written])
-                ),
-                block(
-                    "previous_section_end", written[-1][1][-2500:] if written else ""
-                ),
-                block("source_sections", reference),
+                block("translation_guideline", self._guideline),
             ]
         )
-        draft = await self.draft(
-            prompt,
-            own,
-            target,
-            retry_hint="This is a post explaining a published research paper.",
-            context=post_so_far([md for _, md in written]),
+
+    def repair(
+        self, outline: PaperOutline, ledger: EvidenceLedger
+    ) -> tuple[PaperOutline, list[str]]:
+        return repair_paper_outline(
+            outline, ledger, self.settings.post, self.settings.language
         )
 
-        def checks(markdown: str) -> list[str]:
-            return draft_problems(
-                markdown,
-                title=section.title,
-                own=section.evidence,
-                earlier=earlier_ids,
-                ledger=ledger,
-                earlier_numbers=numbers,
-                figure_urls=figures,
-                free_numbers=_FREE_NUMBERS,
-                passages=self.passages,
-                exhausted=exhausted,
-                target_chars=target,
-                depth=section.depth if section.kind == "method" else "",
-            )
-
-        self.reference = reference
-        markdown = await self.verify_and_fix(
-            draft,
-            title=section.title,
-            review_context=f"Section kind: {section.kind}; thesis: {section.thesis}; "
-            f"depth: {section.depth}.",
-            checks=checks,
-            ledger=ledger,
-            own=own,
-            earlier=earlier,
-            free=_FREE_NUMBERS,
-        )
-        self.reference = ""
-        heading = section.title
-        if not markdown.lstrip().startswith("## "):
-            markdown = f"## {heading}\n\n{markdown.lstrip()}"
-        elif self.settings.post == "summary" or section.kind == "closing":
-            # The fixed headings of the blog's convention.
-            # A function replacement: the title is text, not a template
-            # ("$\\mathcal{O}(n)$" holds escapes).
-            markdown = re.sub(
-                r"^## .*$",
-                lambda _m: f"## {heading}",
-                markdown.lstrip(),
-                count=1,
-                flags=re.M,
-            )
-        return markdown
-
-    async def _review_post(
-        self,
-        title: str,
-        ledger: EvidenceLedger,
-        written: list[tuple[PaperSection, str]],
-    ) -> list[tuple[PaperSection, str]]:
-        """One review of the whole post (repetition, back-references to
-        nothing, talk about the sources, unseen omissions), then a fix of
-        each section it names."""
-        if not written:
-            return written
-        with usage_stage("review"):
-            review = await self.model.structured(
-                role="evaluate",
-                system=prompts.POST_REVIEW_SYSTEM,
-                prompt="\n\n".join(
-                    [
-                        f"Paper: {title}. Post: {self.settings.post}.",
-                        block("post", "\n\n".join(md for _, md in written)),
-                    ]
-                ),
-                schema=PostReview,
-            )
-        if not review.issues:
-            return written
-        logger.info("Post review: %d issue(s).", len(review.issues))
-        return await self.apply_findings(
-            written,
-            review.issues,
+    def outline_problems(
+        self, outline: PaperOutline, ledger: EvidenceLedger
+    ) -> list[str]:
+        return paper_outline_problems(
+            outline,
             ledger,
-            title_of=lambda s: s.title,
-            own_of=lambda s: [e for eid in s.evidence if (e := ledger.get(eid))],
-            reference_of=self.source_sections,
+            self.settings.post,
+            max_sections=self.settings.max_sections,
         )
 
-    async def _tldr(
+    # ---- hooks: sections and the whole post ---------------------------------------
+
+    def reference_for(self, own: Sequence[Evidence]) -> str:
+        return self.source_sections(own)
+
+    def prompt_head(self) -> str:
+        return (
+            f"Language: {self.settings.language}. Paper: {self._title}. Post: "
+            f"{self.settings.post}."
+        )
+
+    def pass_prompt(
         self,
-        title: str,
+        name: str,
+        outline: PaperOutline,
         ledger: EvidenceLedger,
-        section: PaperSection,
-        target: int,
         written: Sequence[tuple[PaperSection, str]],
     ) -> str:
-        """The TL;DR from the sections' cited evidence and openings."""
-        cited = list(
-            dict.fromkeys(
-                eid
-                for _, md in written
-                for s in prose_sentences(md)
-                for eid in cited_ids(s)
-            )
+        """One review of the whole post (repetition, back-references to
+        nothing, talk about the sources, unseen omissions)."""
+        return "\n\n".join(
+            [
+                f"Paper: {self._title}. Post: {self.settings.post}.",
+                block("post", "\n\n".join(md for _, md in written)),
+            ]
         )
-        context = [e for eid in cited if (e := ledger.get(eid)) and e.kind != "figure"]
-        openings = "\n".join(
-            f"- {section_heading(md) or s.title}: "
-            + " ".join(prose_sentences(md)[:2])[:400]
-            for s, md in written
-        )
+
+    def tldr_prompt(
+        self,
+        outline: PaperOutline,
+        section: PaperSection,
+        target: int,
+        openings: str,
+        evidence: str,
+    ) -> str:
         questions, exact = tldr_questions(self.settings.language)
         instructions = (
             prompts.TLDR_REVIEW.format(
@@ -577,51 +350,38 @@ class EvidencePaperEngine(EvidenceWriter):
             if self.settings.post == "review"
             else prompts.TLDR_SUMMARY
         )
-        prompt = "\n\n".join(
+        return "\n\n".join(
             [
-                f"Language: {self.settings.language}. Paper: {title}.",
+                f"Language: {self.settings.language}. Paper: {self._title}.",
                 instructions,
                 block("post_sections", openings),
-                block("evidence", evidence_lines(context[:80])),
+                block("evidence", evidence),
             ]
         )
-        draft = await self.draft(
-            prompt,
-            context,
-            target,
-            retry_hint="This is the TL;DR of a paper post.",
-            evidence=context[:80],
-        )
 
-        def checks(md: str) -> list[str]:
-            return draft_problems(
-                md,
-                title=TLDR_TITLE,
-                own=[e.id for e in context],
-                earlier=(),
-                ledger=ledger,
-                earlier_numbers={},
-                figure_urls=(),
-                free_numbers=_FREE_NUMBERS,
-                passages=self.passages,
-            ) + tldr_problems(md, self.settings.post, self.settings.language)
+    def tldr_problems(self, markdown: str) -> list[str]:
+        return tldr_problems(markdown, self.settings.post, self.settings.language)
 
-        markdown = await self.verify_and_fix(
-            draft,
-            title=TLDR_TITLE,
-            review_context="Section kind: tldr.",
-            checks=checks,
+    async def assemble(
+        self,
+        outline: PaperOutline,
+        ledger: EvidenceLedger,
+        written: list[tuple[PaperSection, str]],
+        tldr: str | None,
+    ) -> EvidencePaper:
+        parts: list[tuple[str, str]] = [(s.kind, md) for s, md in written]
+        if tldr is not None:
+            parts.insert(0, ("tldr", tldr))
+        sections = [(kind, strip_markers(md)) for kind, md in parts]
+        final = await self._final(self._title, self._abstract, sections)
+        return EvidencePaper(
+            outline=outline,
             ledger=ledger,
-            own=context,
-            earlier=(),
-            free=_FREE_NUMBERS,
+            sections=sections,
+            subtitle=final.subtitle,
+            description=final.description,
+            notes=self.notes,
         )
-        markdown = re.sub(
-            r"^## .*$", f"## {TLDR_TITLE}", markdown.lstrip(), count=1, flags=re.M
-        )
-        if not markdown.startswith("## "):
-            markdown = f"## {TLDR_TITLE}\n\n{markdown}"
-        return markdown
 
     async def _final(
         self, title: str, abstract: str, sections: Sequence[tuple[str, str]]
@@ -659,13 +419,3 @@ class EvidencePaperEngine(EvidenceWriter):
             "The description still broke the rules; the blog derives one."
         )
         return final.model_copy(update={"description": ""})
-
-
-def _no_code_or_settings(
-    document: SourceDocument, kind: str, fields: object
-) -> list[str]:
-    """A paper post states what the paper finds and does; code and settings
-    are a guide's evidence."""
-    if kind in ("code", "setting"):
-        return [f"kind {kind!r} is not used for a paper; record a method instead"]
-    return []

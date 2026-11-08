@@ -6,37 +6,32 @@ deterministic checks of a section draft whose sentences cite evidence as
 from __future__ import annotations
 
 import re
-from collections.abc import Sequence
+from collections.abc import Collection, Mapping, Sequence
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..evidence import EvidenceLedger
+from ..evidence import EvidenceLedger, canonical_ids
 from ..evidence_draft import MARKER, cited_ids
+from ..glossary import GlossaryTerm
 from ..lengths import DEPTH_CHARS, scaled_targets
 from ..markdown.tables import escape_cell_pipes
+from ..post_spec import Depth, ownership_problems, structure_problems
+from ..specs.survey import SURVEY_SPEC
 from .plan import SurveyPlan
 
 SectionKind = Literal[
     "introduction", "lineage", "cross_cutting", "comparison", "insights", "conclusion"
 ]
-Depth = Literal["deep", "standard", "brief"]
-
-
-_KIND_ORDER = {
-    "introduction": 0,
-    "lineage": 1,
-    "cross_cutting": 2,
-    "comparison": 3,
-    "insights": 4,
-    "conclusion": 5,
-}
 
 
 class _Strict(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+# A survey section: the common section fields (``post_spec.SectionBase``) and
+# the papers a lineage covers, in the order its schema has always shown them
+# (so not a subclass). No docstring: it would enter the outline's schema.
 class OutlineSection(_Strict):
     kind: SectionKind
     # A claim, not a topic label ("깊어질수록 흐려지는 노드 표현").
@@ -49,11 +44,6 @@ class OutlineSection(_Strict):
     papers: list[str] = Field(default_factory=list)
     evidence: list[str] = Field(default_factory=list)
     depth: Depth = "standard"
-
-
-class GlossaryTerm(_Strict):
-    english: str
-    rendering: str
 
 
 class TableRow(_Strict):
@@ -96,30 +86,20 @@ def outline_problems(
     problems: list[str] = []
     papers = {p.id: p for p in plan.papers}
     lineages = {lin.id for lin in plan.lineages}
-    if len(outline.title) > title_max_length:
-        problems.append(f"the title is longer than {title_max_length} characters")
-    kinds: list[str] = [s.kind for s in outline.sections]
-    if kinds[0] != "introduction":
-        problems.append("the first section must be the introduction")
-    if [_KIND_ORDER[k] for k in kinds] != sorted(_KIND_ORDER[k] for k in kinds):
-        problems.append(
-            "sections must go introduction, lineages, cross-cutting, comparison, "
-            "insights, conclusion"
-        )
-    for kind, count in (("comparison", 1), ("insights", 1)):
-        if kinds.count(kind) != count:
-            problems.append(f"the outline needs exactly {count} {kind} section")
-    if kinds.count("conclusion") > 1:
-        problems.append("at most one conclusion section")
-    if kinds.count("cross_cutting") > 1:
-        problems.append("at most one cross-cutting section")
+    problems += structure_problems(
+        SURVEY_SPEC,
+        [s.kind for s in outline.sections],
+        title=outline.title,
+        title_max_length=title_max_length,
+    )
     covered = [s.lineage for s in outline.sections if s.kind == "lineage"]
     for lin in sorted(lineages):
         if covered.count(lin) != 1:
             problems.append(f"lineage {lin!r} needs exactly one lineage section")
     if stray := set(covered) - lineages:
         problems.append(f"unknown lineages: {', '.join(sorted(map(str, stray)))}")
-    owner: dict[str, str] = {}
+    problems += ownership_problems(SURVEY_SPEC, outline.sections, ledger)
+    owner = {eid for s in outline.sections for eid in s.evidence}
     used: dict[str, int] = dict.fromkeys(papers, 0)
     for s in outline.sections:
         if strangers := [p for p in s.papers if p not in papers]:
@@ -131,14 +111,7 @@ def outline_problems(
         for eid in s.evidence:
             item = ledger.get(eid)
             if item is None:
-                problems.append(f"section {s.title!r} uses unknown evidence {eid}")
                 continue
-            if eid in owner:
-                problems.append(
-                    f"{eid} is given to both {owner[eid]!r} and {s.title!r}: "
-                    "give each piece of evidence to one section"
-                )
-            owner[eid] = s.title
             if s.kind == "lineage" and item.paper_id not in s.papers:
                 problems.append(
                     f"{eid} is about {item.paper_id}, which {s.title!r} does not cover"
@@ -391,3 +364,51 @@ def section_targets(
     return scaled_targets(
         raw, min_total=min_total, max_total=max_total, language=language
     )
+
+
+# ---- the table's evidence ---------------------------------------------------
+
+
+def table_evidence(outline: EvidenceOutline) -> set[str]:
+    """The evidence ids the comparison table cites (its results and
+    limitations): checked like the sections' evidence."""
+    return {eid for r in outline.table for eid in [*r.results, r.limitation] if eid}
+
+
+def with_canonical_table(
+    outline: EvidenceOutline, duplicates: Mapping[str, str]
+) -> EvidenceOutline:
+    """``outline`` with every duplicate evidence id of its table replaced by
+    the id that keeps the fact."""
+    if not duplicates:
+        return outline
+    table = [
+        r.model_copy(
+            update={
+                "results": canonical_ids(r.results, duplicates),
+                "limitation": (
+                    duplicates.get(r.limitation, r.limitation)
+                    if r.limitation
+                    else r.limitation
+                ),
+            }
+        )
+        for r in outline.table
+    ]
+    return outline.model_copy(update={"table": table})
+
+
+def without_table_evidence(
+    outline: EvidenceOutline, wrong: Collection[str]
+) -> EvidenceOutline:
+    """``outline`` with the ``wrong`` evidence left out of its table."""
+    table = [
+        r.model_copy(
+            update={
+                "results": [e for e in r.results if e not in wrong],
+                "limitation": None if r.limitation in wrong else r.limitation,
+            }
+        )
+        for r in outline.table
+    ]
+    return outline.model_copy(update={"table": table})

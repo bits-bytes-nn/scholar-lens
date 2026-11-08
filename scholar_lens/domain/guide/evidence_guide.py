@@ -18,40 +18,27 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from ..evidence import EvidenceLedger, SourceDocument
 from ..evidence_draft import MARKER, block_lines, drop_empty_headings, prose_sentences
-from ..lengths import DEPTH_CHARS, scaled_targets
+from ..glossary import GlossaryTerm
+from ..post_spec import (
+    SDK_LANGUAGES,
+    SectionBase,
+    first_owner,
+    ownership_problems,
+    structure_problems,
+)
+from ..post_spec import other_sdk as other_sdk  # re-exported
+from ..specs.guide import GUIDE_SPEC, TLDR_TITLE
 
 GuideKind = Literal[
     "tldr", "overview", "concepts", "architecture", "usage", "operations", "choosing"
 ]
-Depth = Literal["deep", "standard", "brief"]
-TLDR_TITLE = "TL;DR"
 
 # The guide's order: what it is, the problem, how it works, how to use and
 # run it, when to choose it. Kinds of one rank may interleave.
-_RANK: dict[str, int] = {
-    "tldr": 0,
-    "overview": 1,
-    "concepts": 2,
-    "architecture": 2,
-    "usage": 3,
-    "operations": 3,
-    "choosing": 4,
-}
+_RANK = GUIDE_SPEC.ranks
 _FENCE_OPEN = re.compile(
     r"^(`{3,}|~{3,})[ \t]*([\w+#-]*)[^\n]*\n(.*?)^\1[ \t]*$", re.M | re.S
 )
-# Languages of one SDK family: a guide shows one of them, not each twice.
-_SDK_LANGUAGES = {
-    "python": "python",
-    "py": "python",
-    "typescript": "typescript",
-    "ts": "typescript",
-    "javascript": "javascript",
-    "js": "javascript",
-    "java": "java",
-    "go": "go",
-    "rust": "rust",
-}
 MAX_CODE_LINES = 40
 # The engine's source ids ("src-D1" official, "src-R1" reference, "src-W1"
 # third-party, "src-O1" older docs: a form no product or model name takes)
@@ -64,22 +51,11 @@ class _Strict(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-class GuideSection(_Strict):
+class GuideSection(SectionBase):
     kind: GuideKind
-    # A claim as a noun phrase ("요청마다 다시 짜이는 배치"), not a topic label.
-    title: str = Field(min_length=1)
-    thesis: str = ""
-    question: str = ""
-    depth: Depth = "standard"
-    evidence: list[str] = Field(default_factory=list)
     # The features or concepts this section teaches ("structured output",
     # "interventions"); each is taught in one section, others refer back.
     topics: list[str] = Field(default_factory=list, max_length=8)
-
-
-class GlossaryTerm(_Strict):
-    english: str
-    rendering: str
 
 
 class GuideOutline(_Strict):
@@ -114,15 +90,7 @@ def repair_guide_outline(
                 )
             )
             continue
-        kept = []
-        for eid in s.evidence:
-            if ledger.get(eid) is None:
-                notes.append(f"unknown evidence {eid} dropped from '{s.title}'")
-            elif eid in seen:
-                notes.append(f"{eid} given twice; kept in its first section")
-            else:
-                seen.add(eid)
-                kept.append(eid)
+        kept = first_owner(s.evidence, ledger, seen, s.title, notes)
         topics = []
         for topic in s.topics:
             key = " ".join(topic.lower().split())
@@ -150,39 +118,15 @@ def guide_outline_problems(
     missing TL;DR, architecture or closing section, too many sections,
     evidence unknown or given twice, a section without evidence, sentence
     titles, and the user's reference material left unused."""
-    problems: list[str] = []
-    kinds = [s.kind for s in outline.sections]
-    if len(outline.title) > title_max_length:
-        problems.append(f"the title is longer than {title_max_length} characters")
-    if len(outline.sections) > max_sections:
-        problems.append(f"at most {max_sections} sections")
-    if kinds[0] != "tldr" or kinds.count("tldr") != 1:
-        problems.append("the guide starts with exactly one tldr section")
-    if kinds.count("overview") != 1:
-        problems.append("exactly one overview section (the problem it solves)")
-    if "architecture" not in kinds:
-        problems.append("at least one architecture section (how it works inside)")
-    if kinds[-1] != "choosing" or kinds.count("choosing") != 1:
-        problems.append(
-            "the guide ends with exactly one choosing section (when to choose it, "
-            "the alternatives, how it fails)"
-        )
-    if [_RANK[k] for k in kinds] != sorted(_RANK[k] for k in kinds):
-        problems.append(
-            "sections must go tldr, overview, concepts and architecture, usage "
-            "and operations, choosing"
-        )
-    seen: dict[str, str] = {}
-    for s in outline.sections:
-        if not s.evidence and s.kind != "tldr":
-            problems.append(f"section '{s.title}' has no evidence")
-        for eid in s.evidence:
-            if ledger.get(eid) is None:
-                problems.append(f"unknown evidence {eid} in '{s.title}'")
-            elif eid in seen:
-                problems.append(f"{eid} is in both '{seen[eid]}' and '{s.title}'")
-            else:
-                seen[eid] = s.title
+    problems = structure_problems(
+        GUIDE_SPEC,
+        [s.kind for s in outline.sections],
+        title=outline.title,
+        title_max_length=title_max_length,
+        max_sections=max_sections,
+    )
+    problems += ownership_problems(GUIDE_SPEC, outline.sections, ledger)
+    seen = {eid for s in outline.sections for eid in s.evidence}
     used_sources = {e.paper_id for eid in seen if (e := ledger.get(eid))}
     for sid, document in documents.items():
         if (
@@ -195,27 +139,6 @@ def guide_outline_problems(
                 "evidence but no section uses it"
             )
     return problems
-
-
-def guide_section_targets(
-    outline: GuideOutline, *, min_total: int, max_total: int, language: str
-) -> list[int]:
-    """Prose characters per section by depth, the total scaled into
-    ``[min_total, max_total]`` (Korean characters)."""
-    return scaled_targets(
-        [DEPTH_CHARS[s.depth] for s in outline.sections],
-        min_total=min_total,
-        max_total=max_total,
-        language=language,
-    )
-
-
-def other_sdk(evidence_sdk: str, code_language: str) -> bool:
-    """Whether evidence recorded as holding for one SDK language holds for
-    another one than the guide's code language (its reader's)."""
-    mine = _SDK_LANGUAGES.get(code_language.strip().lower(), "")
-    theirs = _SDK_LANGUAGES.get(evidence_sdk.strip().lower(), "")
-    return bool(mine and theirs and mine != theirs)
 
 
 def guide_draft_problems(markdown: str, *, code_language: str = "") -> list[str]:
@@ -238,7 +161,7 @@ def guide_draft_problems(markdown: str, *, code_language: str = "") -> list[str]
             )
     languages: set[str] = set()
     for m in _FENCE_OPEN.finditer(markdown):
-        if family := _SDK_LANGUAGES.get(m.group(2).lower()):
+        if family := SDK_LANGUAGES.get(m.group(2).lower()):
             languages.add(family)
         if (lines := m.group(3).count("\n")) > MAX_CODE_LINES:
             problems.append(

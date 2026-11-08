@@ -3,6 +3,18 @@ has yet to introduce."""
 
 from __future__ import annotations
 
+from pydantic import BaseModel, ConfigDict
+
+
+# One term of a post's glossary: the English term and how the post renders
+# it (every post kind's outline lists them). No docstring: it would enter the
+# outline's JSON schema the model reads.
+class GlossaryTerm(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    english: str
+    rendering: str
+
 
 def glossary_view(glossary: dict[str, str], earlier: list[str]) -> str:
     """The glossary for one section: each rendering with its English, marked

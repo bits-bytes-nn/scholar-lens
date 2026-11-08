@@ -21,7 +21,6 @@ from scholar_lens.application.evidence_writer import (
 from scholar_lens.application.guide_engine import (
     EvidenceGuideEngine,
     GuideSettings,
-    authority_rule,
 )
 from scholar_lens.application.ports import AgentLimits, AgentOutcome
 from scholar_lens.domain.evidence import (
@@ -36,6 +35,8 @@ from scholar_lens.domain.guide.evidence_guide import (
     repair_guide_outline,
     strip_markers,
 )
+from scholar_lens.domain.post_spec import evidence_policy
+from scholar_lens.domain.specs import GUIDE_SPEC
 from scholar_lens.src.guide_writer import _source_urls, guide_documents
 from scholar_lens.src.web_research import OfficialDocs, PageContent
 
@@ -124,6 +125,15 @@ def test_a_setting_needs_its_scope_and_names_only_quoted_identifiers() -> None:
     )
     assert any("scope" in p for p in problems)
     assert any("batch_wait_timeout_s" in p for p in problems)
+
+
+def authority_rule(has_official: bool):  # type: ignore[no-untyped-def]
+    """The guide's evidence policy for a corpus with or without official
+    docs."""
+    corpus = {"official"} if has_official else set()
+    return lambda document, kind, fields: evidence_policy(
+        GUIDE_SPEC.evidence, document, kind, fields, corpus=corpus
+    )
 
 
 def test_settings_come_from_official_pages_only() -> None:

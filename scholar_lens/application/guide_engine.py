@@ -1,4 +1,5 @@
-"""The evidence-based guide writer (docs/redesign.md, 3.2 and 5.1).
+"""The evidence-based guide writer (docs/redesign.md, 3.2 and 5.1): the
+guide's spec and hooks bound to the post engine.
 
 Read (a bounded agent per source page, records checked against the page and
 its authority) → outline (each piece of evidence to one section, in the
@@ -10,9 +11,7 @@ end). Ports only: the model and the evidence cache are injected.
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
-import json
 import logging
 import re
 from collections.abc import Callable, Mapping, Sequence
@@ -23,18 +22,8 @@ from ..domain.evidence import (
     EvidenceLedger,
     SourceDocument,
     duplicate_evidence,
-    near_duplicate,
-    same_fact_duplicates,
 )
-from ..domain.evidence_draft import (
-    cited_ids,
-    draft_problems,
-    free_numbers,
-    prose_sentences,
-    section_heading,
-    section_numbers,
-)
-from ..domain.glossary import glossary_view
+from ..domain.evidence_draft import free_numbers, section_heading
 from ..domain.guide.evidence_guide import (
     TLDR_TITLE,
     GuideOutline,
@@ -42,32 +31,31 @@ from ..domain.guide.evidence_guide import (
     cited_sources,
     guide_draft_problems,
     guide_outline_problems,
-    guide_section_targets,
     name_sources,
-    other_sdk,
     python_code_problems,
     repair_guide_outline,
     strip_markers,
 )
 from ..domain.guide.sdk_index import SdkIndex, definitions_for
+from ..domain.specs.guide import GUIDE_SPEC
 from ..prompts import guide_evidence as prompts
 from .evidence_writer import (
-    EvidenceWriter,
     PostFinding,
-    PostReview,
     WriterPrompts,
-    all_or_none,
     block,
     brief_lines,
-    cached_evidence,
-    evidence_lines,
-    post_so_far,
     quote_for_prompt_code,
     safe_key,
-    with_canonical_evidence,
 )
 from .ports import AgentLimits, LanguageModel, TextStore
-from .usage import usage_stage
+from .post_engine import (
+    PostEngine,
+    PostPrompts,
+    ReadJob,
+    ReadStart,
+    RunSettings,
+    SectionContext,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -84,14 +72,17 @@ GUIDE_PROMPTS = WriterPrompts(
     review=prompts.REVIEW_SYSTEM,
     fix=prompts.FIX_SYSTEM,
 )
+_POST_PROMPTS = PostPrompts(
+    outline=prompts.OUTLINE_SYSTEM,
+    passes={
+        "review": prompts.GUIDE_REVIEW_SYSTEM,
+        "repetition": prompts.GUIDE_REPETITION_SYSTEM,
+    },
+)
 _PRIMARY = ("official", "reference")
-_CODE_SPAN = re.compile(r"`[^`\n]+`")
 _AUTHORITY_RANK = {"official": 0, "reference": 1, "third_party": 2, "older_docs": 3}
 # The product's own definitions shown to a section's checks and fixes.
 _SDK_SOURCE_CHARS = 12_000
-# Sections whose code a reader runs (the running example); concepts and
-# architecture may quote internals to explain them.
-_RUNNABLE_KINDS = frozenset({"usage", "operations"})
 # Definitions in a code block: what later code of the running example calls.
 _DEFINITION = re.compile(
     r"^\s*(?:(?:async\s+)?def \w+\(.*|class \w+.*|(?:export\s+)?(?:async\s+)?function \w+\(.*"
@@ -115,15 +106,6 @@ def defined_in_code(markdowns: Sequence[str], limit: int = 60) -> str:
     return "\n".join(lines[-limit:])
 
 
-def _copied(markdown: str, body: Sequence[str]) -> list[str]:
-    """TL;DR sentences that copy a body sentence instead of summing up."""
-    return [
-        f"copies a sentence of the body; sum it up in new words: {s[:160]}"
-        for s in prose_sentences(markdown)
-        if near_duplicate(s, body)
-    ]
-
-
 @dataclass(frozen=True)
 class GuideSettings:
     language: str
@@ -131,7 +113,7 @@ class GuideSettings:
     # Cache-key part naming the reading model.
     reader_tag: str
     max_sections: int = 14
-    max_fix_rounds: int = 2
+    max_fix_rounds: int = GUIDE_SPEC.limits.fix_rounds
     # Agent turns per page: the docs and the user's material are read in
     # depth, search results for what they add.
     read_turns_primary: int = 24
@@ -140,7 +122,7 @@ class GuideSettings:
     # Pages read (the docs and the user's material first).
     max_sources: int = 40
     concurrency: int = 4
-    outline_repairs: int = 2
+    outline_repairs: int = GUIDE_SPEC.limits.outline_repairs
     # Source text handed to one section's writer and checks.
     source_chars: int = 40_000
     # Prose characters (Korean) of the whole guide.
@@ -164,49 +146,13 @@ class EvidenceGuide:
     notes: list[str] = field(default_factory=list)
 
 
-def authority_rule(has_official: bool) -> Callable[..., list[str]]:
-    """Settings (commands, flags, defaults) come from the official docs when
-    there are any, and never from another version of them."""
-
-    def rule(
-        document: SourceDocument, kind: str, fields: Mapping[str, str]
-    ) -> list[str]:
-        if (
-            kind == "code"
-            and has_official
-            and document.authority in ("third_party", "older_docs")
-        ):
-            return [
-                "code and commands come from the official docs (another page's "
-                "may be stale); record what this page explains instead"
-            ]
-        if kind not in ("setting", "code", "relation") and (
-            has_official
-            and document.authority in ("third_party", "older_docs")
-            and _CODE_SPAN.search(f"{fields.get('claim', '')} {fields.get('cell', '')}")
-        ):
-            return [
-                "flags, metrics, API and config names come from the official "
-                "docs; state what this page explains without the identifier"
-            ]
-        if kind != "setting":
-            return []
-        if document.authority == "older_docs":
-            return [
-                "this page documents another version: its settings are not "
-                "current; record how the mechanism worked (method) instead"
-            ]
-        if has_official and document.authority != "official":
-            return [
-                "settings come from the official docs only; record what this "
-                "page explains (finding, method, relation) instead"
-            ]
-        return []
-
-    return rule
+def _rank(document: SourceDocument | None) -> int:
+    return _AUTHORITY_RANK.get(
+        (document.authority if document else "") or "third_party", 2
+    )
 
 
-class EvidenceGuideEngine(EvidenceWriter):
+class EvidenceGuideEngine(PostEngine[GuideOutline, GuideSection, EvidenceGuide]):
     def __init__(
         self,
         model: LanguageModel,
@@ -218,11 +164,27 @@ class EvidenceGuideEngine(EvidenceWriter):
         package_facts: str = "",
         sdk: SdkIndex | None = None,
     ) -> None:
-        super().__init__(model, GUIDE_PROMPTS, max_fix_rounds=settings.max_fix_rounds)
+        super().__init__(
+            model,
+            GUIDE_SPEC,
+            GUIDE_PROMPTS,
+            _POST_PROMPTS,
+            RunSettings(
+                language=settings.language,
+                concurrency=settings.concurrency,
+                outline_repairs=settings.outline_repairs,
+                min_total_chars=settings.min_total_chars,
+                max_total_chars=settings.max_total_chars,
+            ),
+            outline_schema=GuideOutline,
+            store=store,
+            max_fix_rounds=settings.max_fix_rounds,
+        )
         self.settings = settings
+        self.free = _FREE_NUMBERS
         self._documents: dict[str, SourceDocument] = {}
-        # Source id -> the names a sentence may credit it by.
-        self.store = store
+        self._topic = ""
+        self._guideline = ""
         # Flags and arguments of a draft that no official page mentions.
         self.identifier_check = identifier_check
         # The product's names (never a source's name).
@@ -251,13 +213,7 @@ class EvidenceGuideEngine(EvidenceWriter):
         for e in own:
             if (e.paper_id, e.anchor) not in seen:
                 seen.append((e.paper_id, e.anchor))
-        seen.sort(
-            key=lambda pa: _AUTHORITY_RANK.get(
-                (d.authority if (d := self._documents.get(pa[0])) else "")
-                or "third_party",
-                2,
-            )
-        )
+        seen.sort(key=lambda pa: _rank(self._documents.get(pa[0])))
         parts: list[str] = []
         left = self.settings.source_chars
         for sid, anchor in seen:
@@ -305,22 +261,9 @@ class EvidenceGuideEngine(EvidenceWriter):
     ) -> EvidenceLedger:
         """Every page's evidence (cached per page content, reader version,
         model, language and authority), in the given order."""
-        gate = asyncio.Semaphore(self.settings.concurrency)
-        has_official = any(d.authority == "official" for d in documents)
-        rule = authority_rule(has_official)
 
-        async def one(document: SourceDocument) -> list[Evidence]:
-            async with gate:
-                key = self._cache_key(document)
-                if self.store is not None and (cached := self.store.get(key)):
-                    kept = cached_evidence(
-                        cached,
-                        document,
-                        lambda e: rule(document, e.kind, e.model_dump(mode="json")),
-                        key=key,
-                    )
-                    if kept is not None:
-                        return kept
+        def start(document: SourceDocument) -> ReadStart:
+            async def job() -> ReadJob:
                 primary = document.authority in _PRIMARY
                 prompt = "\n\n".join(
                     [
@@ -337,8 +280,9 @@ class EvidenceGuideEngine(EvidenceWriter):
                         ),
                     ]
                 )
-                items = await self.read_document(
-                    document,
+                return ReadJob(
+                    document=document,
+                    key=self._cache_key(document),
                     prompt=prompt,
                     limits=AgentLimits(
                         turns=(
@@ -348,125 +292,20 @@ class EvidenceGuideEngine(EvidenceWriter):
                         ),
                         total_tokens=self.settings.read_tokens_per_source,
                     ),
-                    rule=rule,
                     # A docs page's diagrams are its most useful visuals and
                     # the reader tends to skip them: ask for one.
                     required=("figure",) if primary and document.figures else (),
                 )
-                if self.store is not None and items:
-                    self.store.put(
-                        key,
-                        json.dumps([e.model_dump() for e in items], ensure_ascii=False),
-                    )
-                return items
 
-        with usage_stage("read"):
-            results = await all_or_none(one(d) for d in documents)
-        ledger = EvidenceLedger()
-        for items in results:
-            ledger.extend(items)
-        return ledger
+            return job
 
-    # ---- outline ----------------------------------------------------------------
-
-    async def outline(
-        self,
-        topic: str,
-        ledger: EvidenceLedger,
-        documents: Mapping[str, SourceDocument],
-        guideline: str,
-    ) -> GuideOutline:
-        # A fact several pages state is offered once, from the most
-        # authoritative page.
-        duplicates = duplicate_evidence(
-            ledger,
-            {
-                sid: _AUTHORITY_RANK.get(d.authority or "third_party", 2)
-                for sid, d in documents.items()
-            },
+        results = await self.read_all(
+            [start(d) for d in documents],
+            corpus={d.authority for d in documents},
         )
-        if duplicates:
-            logger.info("%d evidence items repeat another page's.", len(duplicates))
-        sources = "\n".join(
-            f"- {sid} | {d.authority or 'third_party'} | {d.title} | {d.url}"
-            for sid, d in documents.items()
-        )
-        base = "\n\n".join(
-            [
-                f"Topic: {topic}\nLanguage: {self.settings.language}",
-                f"Title: in English, at most {self.settings.title_max_length} characters. "
-                f"At most {self.settings.max_sections} sections.",
-                block("sources", sources),
-                block(
-                    "evidence",
-                    brief_lines([e for e in ledger if e.id not in duplicates]),
-                ),
-                block("translation_guideline", guideline),
-            ]
-        )
-        prompt = base
-        problems: list[str] = []
-        with usage_stage("outline"):
-            for attempt in range(self.settings.outline_repairs + 1):
-                outline = await self.model.structured(
-                    role="outline",
-                    system=prompts.OUTLINE_SYSTEM,
-                    prompt=prompt,
-                    schema=GuideOutline,
-                )
-                rank = {
-                    sid: _AUTHORITY_RANK.get(d.authority or "third_party", 2)
-                    for sid, d in documents.items()
-                }
-                same = duplicates | same_fact_duplicates(
-                    outline.same_facts, ledger, rank
-                )
-                outline, repaired = repair_guide_outline(
-                    with_canonical_evidence(outline, same), ledger
-                )
-                if repaired:
-                    logger.info(
-                        "Guide outline repaired in code: %s", "; ".join(repaired)
-                    )
-                problems = guide_outline_problems(
-                    outline,
-                    ledger,
-                    documents,
-                    title_max_length=self.settings.title_max_length,
-                    max_sections=self.settings.max_sections,
-                )
-                if not problems:
-                    return outline
-                logger.warning(
-                    "Guide outline attempt %d unusable: %s", attempt + 1, problems
-                )
-                prompt = (
-                    base
-                    + "\n\n"
-                    + block(
-                        "previous_problems",
-                        "Fix these in your next outline:\n"
-                        + "\n".join(f"- {p}" for p in problems),
-                    )
-                )
-        raise ValueError(
-            "The guide outline breaks the rules after repairs: " + "; ".join(problems)
-        )
+        return self.ledger_of(items for _, items in results)
 
-    async def _drop_wrong(
-        self, outline: GuideOutline, ledger: EvidenceLedger
-    ) -> GuideOutline:
-        used = {eid for s in outline.sections for eid in s.evidence}
-        wrong = await self.wrong_evidence([e for e in ledger if e.id in used])
-        if not wrong:
-            return outline
-        sections = [
-            s.model_copy(update={"evidence": [e for e in s.evidence if e not in wrong]})
-            for s in outline.sections
-        ]
-        return outline.model_copy(update={"sections": sections})
-
-    # ---- sections ---------------------------------------------------------------
+    # ---- the guide ----------------------------------------------------------------
 
     async def write(
         self,
@@ -476,8 +315,8 @@ class EvidenceGuideEngine(EvidenceWriter):
         guideline: str = "",
     ) -> EvidenceGuide:
         documents = self.selected(documents)
-        by_id = {d.paper_id: d for d in documents}
-        self._documents = by_id
+        self._topic, self._guideline = topic, guideline
+        self._documents = {d.paper_id: d for d in documents}
         self.passages = {
             (d.paper_id, s.anchor): s.text for d in documents for s in d.sections
         }
@@ -488,257 +327,136 @@ class EvidenceGuideEngine(EvidenceWriter):
         ledger = await self.read(topic, documents)
         if not len(ledger):
             raise ValueError("No source page gave usable evidence for the guide.")
-        outline = await self.outline(topic, ledger, by_id, guideline)
-        outline = await self._drop_wrong(outline, ledger)
-        # Evidence the reader recorded as one other SDK language's (a
-        # TypeScript-only behaviour in a Python guide) leaves the outline:
-        # stated there it reads as true for the guide's language.
-        other = [
-            eid
-            for sec in outline.sections
-            for eid in sec.evidence
-            if (e := ledger.get(eid)) and other_sdk(e.sdk, outline.code_language)
-        ]
-        if other:
-            logger.info(
-                "Evidence for another SDK than %s left out: %s",
-                outline.code_language,
-                ", ".join(other),
-            )
-            outline = outline.model_copy(
-                update={
-                    "sections": [
-                        sec.model_copy(
-                            update={
-                                "evidence": [i for i in sec.evidence if i not in other]
-                            }
-                        )
-                        for sec in outline.sections
-                    ]
-                }
-            )
-        # A section the checks emptied has nothing to state.
-        if empty := [
-            s.title for s in outline.sections if not s.evidence and s.kind != "tldr"
-        ]:
-            self.notes.append(
-                "Sections left without evidence were dropped: " + "; ".join(empty)
-            )
-            outline = outline.model_copy(
-                update={
-                    "sections": [
-                        s for s in outline.sections if s.evidence or s.kind == "tldr"
-                    ]
-                }
-            )
-        glossary = {t.english: t.rendering for t in outline.glossary}
-        targets = guide_section_targets(
-            outline,
-            min_total=self.settings.min_total_chars,
-            max_total=self.settings.max_total_chars,
-            language=self.settings.language,
-        )
-        written: list[tuple[GuideSection, str]] = []
-        numbers: dict[str, str] = {}
-        tldr: tuple[GuideSection, int] | None = None
-        for section, target in zip(outline.sections, targets, strict=True):
-            if section.kind == "tldr":
-                # Written last, from what the sections came to say.
-                tldr = (section, target)
-                continue
-            markdown = await self._section(
-                topic, outline, ledger, section, written, numbers, glossary, target
-            )
-            heading = section_heading(markdown) or section.title
-            for n in section_numbers(markdown, _FREE_NUMBERS):
-                numbers.setdefault(n, heading)
-            written.append((section, markdown))
-        written = await self._review_guide(topic, outline, ledger, written)
-        parts = [md for _, md in written]
-        if tldr is not None:
-            parts.insert(0, await self._tldr(topic, outline, ledger, *tldr, written))
-        body = "\n\n".join(p.strip() for p in parts if p.strip())
-        cited = [by_id[s] for s in cited_sources(body, ledger) if s in by_id]
-        return EvidenceGuide(
-            title=outline.title,
-            body=name_sources(
-                strip_markers(body), {d.paper_id: d.title for d in documents}
-            ),
-            outline=outline,
-            ledger=ledger,
-            cited=cited,
-            notes=self.notes,
-        )
+        return await self.compose(ledger)
 
-    def _prompt(
-        self,
-        topic: str,
-        outline: GuideOutline,
-        section: GuideSection,
-        own: Sequence[Evidence],
-        earlier: Sequence[Evidence],
-        written: Sequence[tuple[GuideSection, str]],
-        glossary: Mapping[str, str],
-        target: int,
-        reference: str = "",
+    # ---- hooks: outline -----------------------------------------------------------
+
+    def offered_duplicates(self, ledger: EvidenceLedger) -> dict[str, str]:
+        # A fact several pages state is offered once, from the most
+        # authoritative page.
+        return duplicate_evidence(ledger, dict(self.source_rank()))
+
+    def source_rank(self) -> Mapping[str, int]:
+        return {sid: _rank(d) for sid, d in self._documents.items()}
+
+    def outline_prompt(
+        self, ledger: EvidenceLedger, duplicates: Mapping[str, str]
     ) -> str:
-        sections_map = "\n".join(
-            f"- {'(this) ' if s is section else ''}{s.kind}: {s.title} — {s.thesis}"
-            + (f" [teaches: {', '.join(s.topics)}]" if s.topics else "")
-            for s in outline.sections
+        sources = "\n".join(
+            f"- {sid} | {d.authority or 'third_party'} | {d.title} | {d.url}"
+            for sid, d in self._documents.items()
         )
         return "\n\n".join(
             [
-                f"Language: {self.settings.language}. Topic: {topic}.",
-                block("outline", sections_map),
+                f"Topic: {self._topic}\nLanguage: {self.settings.language}",
+                f"Title: in English, at most {self.settings.title_max_length} characters. "
+                f"At most {self.settings.max_sections} sections.",
+                block("sources", sources),
                 block(
-                    "section",
-                    f"kind: {section.kind}\ntitle: {section.title}\nthesis: {section.thesis}\n"
-                    f"question: {section.question}\ndepth: {section.depth}\n"
-                    f"length: about {target:,} characters of prose\n"
-                    f"running example: {outline.running_example or 'none'}\n"
-                    f"code language: {outline.code_language or 'the docs’ main one'}",
+                    "evidence",
+                    brief_lines([e for e in ledger if e.id not in duplicates]),
                 ),
-                block("evidence", evidence_lines(own)),
-                block("already_written_evidence", evidence_lines(list(earlier)[-60:])),
-                block(
-                    "source_names",
-                    "\n".join(f"- {sid}: {name}" for sid, name in self._names.items()),
-                ),
-                block(
-                    "glossary", glossary_view(dict(glossary), [m for _, m in written])
-                ),
-                block(
-                    "previous_section_end", written[-1][1][-2500:] if written else ""
-                ),
-                block("code_defined_earlier", defined_in_code([m for _, m in written])),
-                block("source_sections", reference),
+                block("translation_guideline", self._guideline),
             ]
         )
 
-    def _checks(
-        self,
-        section: GuideSection,
-        outline: GuideOutline,
-        ledger: EvidenceLedger,
-        own: Sequence[Evidence],
-        earlier_ids: Sequence[str],
-        numbers: Mapping[str, str],
-        exhausted: set[str],
-        target: int,
-    ) -> Callable[[str], list[str]]:
-        figures = [e.figure_url for e in own if e.kind == "figure" and e.figure_url]
+    def repair(
+        self, outline: GuideOutline, ledger: EvidenceLedger
+    ) -> tuple[GuideOutline, list[str]]:
+        return repair_guide_outline(outline, ledger)
 
-        def checks(markdown: str) -> list[str]:
-            problems = draft_problems(
-                markdown,
-                title=section.title,
-                own=section.evidence,
-                earlier=earlier_ids,
-                ledger=ledger,
-                earlier_numbers=numbers,
-                figure_urls=figures,
-                free_numbers=_FREE_NUMBERS,
-                passages=self.passages,
-                exhausted=exhausted,
-                target_chars=target,
-                depth=(
-                    section.depth
-                    if section.kind in ("concepts", "architecture")
-                    else ""
-                ),
-            )
-            problems += guide_draft_problems(
-                markdown, code_language=outline.code_language
-            )
-            if self.identifier_check is not None and (
-                unknown := self.identifier_check(markdown)
-            ):
-                problems.append(
-                    "flags or arguments no official page mentions; use the "
-                    "documented ones or leave them out: " + ", ".join(unknown)
-                )
-            return problems
+    def outline_problems(
+        self, outline: GuideOutline, ledger: EvidenceLedger
+    ) -> list[str]:
+        return guide_outline_problems(
+            outline,
+            ledger,
+            self._documents,
+            title_max_length=self.settings.title_max_length,
+            max_sections=self.settings.max_sections,
+        )
 
-        return checks
+    def code_language(self, outline: GuideOutline) -> str:
+        return outline.code_language
 
-    async def _section(
-        self,
-        topic: str,
-        outline: GuideOutline,
-        ledger: EvidenceLedger,
-        section: GuideSection,
-        written: list[tuple[GuideSection, str]],
-        numbers: dict[str, str],
-        glossary: Mapping[str, str],
-        target: int,
-    ) -> str:
-        own = [e for eid in section.evidence if (e := ledger.get(eid))]
-        earlier_ids = list(
-            dict.fromkeys(
-                eid
-                for _, md in written
-                for s in prose_sentences(md)
-                for eid in cited_ids(s)
+    # ---- hooks: sections ----------------------------------------------------------
+
+    def reference_for(self, own: Sequence[Evidence]) -> str:
+        return self.source_sections(own)
+
+    def checking_reference(self, reference: str, draft: str) -> str:
+        return reference + self._sdk_source(draft)
+
+    def prompt_head(self) -> str:
+        return f"Language: {self.settings.language}. Topic: {self._topic}."
+
+    def taught(self, section: GuideSection) -> Sequence[str]:
+        return section.topics
+
+    def section_lines(self, outline: GuideOutline) -> str:
+        return f"\ncode language: {outline.code_language or 'the docs’ main one'}"
+
+    def naming_blocks(
+        self, ctx: SectionContext[GuideOutline, GuideSection]
+    ) -> list[str]:
+        return [
+            block(
+                "source_names",
+                "\n".join(f"- {sid}: {name}" for sid, name in self._names.items()),
             )
-        )
-        earlier = [e for eid in earlier_ids if (e := ledger.get(eid))]
-        # Evidence a later section already referred back to once.
-        exhausted = {
-            eid
-            for s, md in written
-            for eid in {i for snt in prose_sentences(md) for i in cited_ids(snt)}
-            if eid not in s.evidence
-        } - set(
-            section.evidence
-        )  # a section may always state its own
-        reference = self.source_sections(own)
-        prompt = self._prompt(
-            topic, outline, section, own, earlier, written, glossary, target, reference
-        )
-        draft = await self.draft(
-            prompt,
-            own,
-            target,
-            retry_hint="This is a technical guide to a software tool for practitioners.",
-            context=post_so_far([md for _, md in written]),
-        )
-        self.reference = reference + self._sdk_source(draft)
-        markdown = await self.verify_and_fix(
-            draft,
-            title=section.title,
-            review_context=f"Section kind: {section.kind}; thesis: {section.thesis}; "
+        ]
+
+    def closing_blocks(
+        self, ctx: SectionContext[GuideOutline, GuideSection]
+    ) -> list[str]:
+        return [
+            block("code_defined_earlier", defined_in_code([m for _, m in ctx.written])),
+            block("source_sections", ctx.reference),
+        ]
+
+    def review_context(self, ctx: SectionContext[GuideOutline, GuideSection]) -> str:
+        section, outline = ctx.section, ctx.outline
+        return (
+            f"Section kind: {section.kind}; thesis: {section.thesis}; "
             f"depth: {section.depth}; running example: {outline.running_example or 'none'}.\n"
-            + block("code_defined_earlier", defined_in_code([m for _, m in written])),
-            checks=self._checks(
-                section, outline, ledger, own, earlier_ids, numbers, exhausted, target
-            ),
-            ledger=ledger,
-            own=own,
-            earlier=earlier,
-            free=_FREE_NUMBERS,
+            + block(
+                "code_defined_earlier", defined_in_code([m for _, m in ctx.written])
+            )
         )
-        self.reference = ""
-        if not markdown.lstrip().startswith("## "):
-            markdown = f"## {section.title}\n\n{markdown.lstrip()}"
-        return markdown
 
-    async def _review_guide(
+    def extra_problems(
+        self, ctx: SectionContext[GuideOutline, GuideSection], markdown: str
+    ) -> list[str]:
+        problems = guide_draft_problems(
+            markdown, code_language=ctx.outline.code_language
+        )
+        if self.identifier_check is not None and (
+            unknown := self.identifier_check(markdown)
+        ):
+            problems.append(
+                "flags or arguments no official page mentions; use the "
+                "documented ones or leave them out: " + ", ".join(unknown)
+            )
+        return problems
+
+    # ---- hooks: whole guide -------------------------------------------------------
+
+    def pass_prompt(
         self,
-        topic: str,
+        name: str,
         outline: GuideOutline,
         ledger: EvidenceLedger,
-        written: list[tuple[GuideSection, str]],
-    ) -> list[tuple[GuideSection, str]]:
-        """One review of the whole guide in reading order: what no
-        section's own check sees (an import an earlier block lacked, a
-        handler that never returns its result, the guide's own policy
-        blocking its example, a back-reference to something never shown, a
-        fact repeated across sections), then a fix of each section it
-        names."""
-        if not written:
-            return written
+        written: Sequence[tuple[GuideSection, str]],
+    ) -> str:
+        """The code trace reads the guide with the official code, the
+        product's definitions and its packages: what no section's own check
+        sees (an import an earlier block lacked, a handler that never
+        returns its result, the guide's own policy blocking its example, a
+        back-reference to something never shown); the repetition read sees
+        the guide alone."""
         guide = "\n\n".join(md for _, md in written)
+        if name == "repetition":
+            return "\n\n".join([f"Topic: {self._topic}.", block("guide", guide)])
         source_code = "\n\n".join(
             f"[{e.paper_id}] {e.claim}\n{quote_for_prompt_code(e.code or '')}"
             for e in ledger
@@ -746,111 +464,67 @@ class EvidenceGuideEngine(EvidenceWriter):
             and (d := self._documents.get(e.paper_id))
             and d.authority == "official"
         )[: self.settings.source_chars]
-        with usage_stage("review"):
-            # The code trace and the repetition read are separate reads of
-            # the guide: one reviewer asked for both reports the code.
-            review, repetition = await asyncio.gather(
-                self.model.structured(
-                    role="evaluate",
-                    system=prompts.GUIDE_REVIEW_SYSTEM,
-                    prompt="\n\n".join(
-                        [
-                            f"Topic: {topic}. Running example: "
-                            f"{outline.running_example or 'none'}. Code language: "
-                            f"{outline.code_language or 'any'}.",
-                            block("guide", guide),
-                            block("source_code", source_code),
-                            block("sdk_source", self._sdk_source(guide)),
-                            block("packages", self.package_facts),
-                        ]
-                    ),
-                    schema=PostReview,
-                ),
-                self.model.structured(
-                    role="evaluate",
-                    system=prompts.GUIDE_REPETITION_SYSTEM,
-                    prompt="\n\n".join([f"Topic: {topic}.", block("guide", guide)]),
-                    schema=PostReview,
-                ),
-            )
-        if review.trace:
-            logger.info("Guide review trace: %s", review.trace[:600])
-        # What the standard library's parser sees in the code a reader pastes
-        # in order: a block that does not parse, a name nothing defines.
-        code_findings = [
+        return "\n\n".join(
+            [
+                f"Topic: {self._topic}. Running example: "
+                f"{outline.running_example or 'none'}. Code language: "
+                f"{outline.code_language or 'any'}.",
+                block("guide", guide),
+                block("source_code", source_code),
+                block("sdk_source", self._sdk_source(guide)),
+                block("packages", self.package_facts),
+            ]
+        )
+
+    def _code_problems(
+        self, written: Sequence[tuple[GuideSection, str]]
+    ) -> list[tuple[str, str]]:
+        """What the standard library's parser sees in the code a reader
+        pastes in order: a block that does not parse, a name nothing
+        defines (the running example's sections only)."""
+        return python_code_problems(
+            [
+                (
+                    section_heading(md) or s.title,
+                    md,
+                    s.kind in self.spec.runnable_kinds,
+                )
+                for s, md in written
+            ]
+        )
+
+    def code_findings(
+        self, written: Sequence[tuple[GuideSection, str]]
+    ) -> list[PostFinding]:
+        return [
             PostFinding(
                 section=title,
                 problem=problem,
                 fix="Make the code run as pasted after the earlier blocks.",
             )
-            for title, problem in python_code_problems(
-                [
-                    (section_heading(md) or s.title, md, s.kind in _RUNNABLE_KINDS)
-                    for s, md in written
-                ]
-            )
+            for title, problem in self._code_problems(written)
         ]
-        issues = [*review.issues, *repetition.issues, *code_findings]
-        if not issues:
-            return written
-        logger.info(
-            "Guide review: %d issue(s), %d repetition, %d from the code check.",
-            len(issues),
-            len(repetition.issues),
-            len(code_findings),
-        )
-        fixed = await self.apply_findings(
-            written,
-            issues,
-            ledger,
-            title_of=lambda s: s.title,
-            own_of=lambda s: [e for eid in s.evidence if (e := ledger.get(eid))],
-            reference_of=self.source_sections,
-        )
+
+    def after_review(self, written: Sequence[tuple[GuideSection, str]]) -> None:
         # The fix is checked again, not trusted: what is left goes on the PR
         # checklist.
-        if left := python_code_problems(
-            [
-                (section_heading(md) or s.title, md, s.kind in _RUNNABLE_KINDS)
-                for s, md in fixed
-            ]
-        ):
+        if left := self._code_problems(written):
             self.notes.append(
                 "Guide code that may not run as pasted: "
                 + " | ".join(f"{t}: {p}"[:200] for t, p in left[:5])
             )
-        return fixed
 
-    async def _tldr(
+    def tldr_prompt(
         self,
-        topic: str,
         outline: GuideOutline,
-        ledger: EvidenceLedger,
         section: GuideSection,
         target: int,
-        written: Sequence[tuple[GuideSection, str]],
+        openings: str,
+        evidence: str,
     ) -> str:
-        """The TL;DR from its evidence and the sections' headings and
-        opening sentences: it may state what the body states (the one place
-        a fact is said twice)."""
-        own = [e for eid in section.evidence if (e := ledger.get(eid))]
-        cited = list(
-            dict.fromkeys(
-                eid
-                for _, md in written
-                for s in prose_sentences(md)
-                for eid in cited_ids(s)
-            )
-        )
-        body = [e for eid in cited if (e := ledger.get(eid))]
-        openings = "\n".join(
-            f"- {section_heading(md) or s.title}: "
-            + " ".join(prose_sentences(md)[:2])[:400]
-            for s, md in written
-        )
-        prompt = "\n\n".join(
+        return "\n\n".join(
             [
-                f"Language: {self.settings.language}. Topic: {topic}.",
+                f"Language: {self.settings.language}. Topic: {self._topic}.",
                 block(
                     "section",
                     f"kind: tldr\ntitle: {TLDR_TITLE}\nthesis: {section.thesis}\n"
@@ -858,48 +532,33 @@ class EvidenceGuideEngine(EvidenceWriter):
                     "paragraphs, no list, no code, no figure",
                 ),
                 block("guide_sections", openings),
-                block("evidence", evidence_lines([*own, *body][:80])),
+                block("evidence", evidence),
             ]
         )
-        draft = await self.draft(
-            prompt,
-            own,
-            target,
-            retry_hint="This is the TL;DR of a technical guide for practitioners.",
-            evidence=[*own, *body][:80],
-        )
-        body_sentences = [s for _, md in written for s in prose_sentences(md)]
-        # Figures stay in their sections.
-        context = [e for e in (*own, *body) if e.kind != "figure"]
-        markdown = await self.verify_and_fix(
-            draft,
-            title=TLDR_TITLE,
-            review_context="Section kind: tldr: what the tool is, the problem, its "
-            "key mechanism and when to use it.",
-            checks=lambda md: (
-                draft_problems(
-                    md,
-                    title=TLDR_TITLE,
-                    own=[e.id for e in context],
-                    earlier=(),
-                    ledger=ledger,
-                    earlier_numbers={},
-                    figure_urls=(),
-                    free_numbers=_FREE_NUMBERS,
-                    passages=self.passages,
-                    target_chars=target,
-                )
-                + guide_draft_problems(md)
-                + _copied(md, body_sentences)
+
+    def tldr_problems(self, markdown: str) -> list[str]:
+        return guide_draft_problems(markdown)
+
+    async def assemble(
+        self,
+        outline: GuideOutline,
+        ledger: EvidenceLedger,
+        written: list[tuple[GuideSection, str]],
+        tldr: str | None,
+    ) -> EvidenceGuide:
+        parts = [md for _, md in written]
+        if tldr is not None:
+            parts.insert(0, tldr)
+        body = "\n\n".join(p.strip() for p in parts if p.strip())
+        by_id = self._documents
+        cited = [by_id[s] for s in cited_sources(body, ledger) if s in by_id]
+        return EvidenceGuide(
+            title=outline.title,
+            body=name_sources(
+                strip_markers(body), {sid: d.title for sid, d in by_id.items()}
             ),
+            outline=outline,
             ledger=ledger,
-            own=context,
-            earlier=(),
-            free=_FREE_NUMBERS,
+            cited=cited,
+            notes=self.notes,
         )
-        markdown = re.sub(
-            r"^## .*$", f"## {TLDR_TITLE}", markdown.lstrip(), count=1, flags=re.M
-        )
-        if not markdown.startswith("## "):
-            markdown = f"## {TLDR_TITLE}\n\n{markdown}"
-        return markdown
