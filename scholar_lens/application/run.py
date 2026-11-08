@@ -14,6 +14,7 @@ from typing import Any
 
 from scholar_lens.application.ports import (
     BlogSource,
+    Files,
     ObjectStore,
     PostPublisher,
     RunSettings,
@@ -40,6 +41,8 @@ class RunContext:
     publisher_factory: Callable[[RunContext], PostPublisher]
     # The run's bucket, when one is configured.
     s3_handler: ObjectStore | None = None
+    # Local files and the run's bucket by location (a path or ``s3://``).
+    files: Files
     # The run's working directory (papers, figures, generated posts).
     root_dir: Path
     # The run ignores its saved stage checkpoints and reading cache (--fresh).
@@ -257,15 +260,17 @@ async def load_translation_guideline(
         / LocalPaths.ASSETS_DIR.value
         / LocalPaths.TRANSLATION_GUIDELINE_FILE.value
     )
-    if guideline_path.exists():
-        return json.loads(await asyncio.to_thread(guideline_path.read_text, "utf-8"))
+    text = await asyncio.to_thread(context.files.read_text, str(guideline_path))
+    if text is not None:
+        return json.loads(text)
     if not context.s3_handler:
         return None
     s3_key = (
         f"{context.config.resources.s3_prefix}/"
         f"{S3Paths.TRANSLATION_GUIDELINE.value}/{guideline_path.name}"
     ).lstrip("/")
-    text = await asyncio.to_thread(context.s3_handler.get_text, s3_key)
+    location = f"s3://{context.s3_handler.bucket_name}/{s3_key}"
+    text = await asyncio.to_thread(context.files.read_text, location)
     if text is None:
         logger.info("No translation guideline at '%s'; continuing without.", s3_key)
         return None

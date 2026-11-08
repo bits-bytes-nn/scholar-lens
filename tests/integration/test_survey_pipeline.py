@@ -21,6 +21,7 @@ from pydantic import ValidationError
 from scholar_lens import cli
 from scholar_lens.adapters.bedrock.survey_calls import SurveyPlanner
 from scholar_lens.adapters.bedrock.usage import TokenUsageTracker
+from scholar_lens.adapters.files import LocalOrS3Files
 from scholar_lens.adapters.scholarly import index as scholarly_index
 from scholar_lens.adapters.scholarly import metadata as citation_metadata
 from scholar_lens.adapters.scholarly.arxiv import ArxivMetadata, ArxivPaperError
@@ -1296,11 +1297,11 @@ class TestPlanFile:
         plan = self._plan()
         path = tmp_path / survey_slug("Preference optimization!") / "plan.json"
         assert path.parent.name == "survey-preference-optimization"
-        save_plan(plan, path)
-        save_plan(plan, path)  # unchanged: no copy
+        save_plan(plan, path, LocalOrS3Files())
+        save_plan(plan, path, LocalOrS3Files())  # unchanged: no copy
         assert [p.name for p in path.parent.iterdir()] == ["plan.json"]
         path.write_text(path.read_text().replace('"core"', '"supporting"', 1))
-        save_plan(plan, path)
+        save_plan(plan, path, LocalOrS3Files())
         names = sorted(p.name for p in path.parent.iterdir())
         assert len(names) == 2 and names[0].startswith("plan.2")
         assert SurveyPlan.model_validate_json(path.read_text()) == plan

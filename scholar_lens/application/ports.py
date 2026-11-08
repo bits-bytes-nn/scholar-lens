@@ -238,6 +238,35 @@ class ObjectStore(Protocol):
     def get_bytes(self, key: str) -> bytes | None: ...
 
 
+class FileLocationError(ValueError):
+    """A location :class:`Files` does not serve (another bucket, a bad URI,
+    a write it does not support)."""
+
+
+class Files(Protocol):
+    """Text and bytes at a location: a local path or ``s3://<bucket>/<key>``
+    in the run's bucket. Reads give None for a missing file; text is UTF-8
+    (``UnicodeDecodeError`` otherwise); a location outside what the adapter
+    serves raises :class:`FileLocationError`. Writes create the parent
+    folders."""
+
+    def read_text(self, location: str) -> str | None: ...
+
+    def read_bytes(self, location: str) -> bytes | None: ...
+
+    def write_text(self, location: str, text: str) -> None: ...
+
+    def write_bytes(self, location: str, data: bytes) -> None: ...
+
+    def modified(self, location: str) -> datetime | None:
+        """When the file was last written (None: missing or unknown)."""
+        ...
+
+    def make_dir(self, location: str) -> None:
+        """A local folder (and its parents); nothing for a bucket prefix."""
+        ...
+
+
 class BlogSource(Protocol):
     """The blog's post conventions and published posts."""
 

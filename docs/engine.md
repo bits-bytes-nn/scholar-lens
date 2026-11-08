@@ -207,7 +207,7 @@ PostSpec ──┐            SourceSet ──┐
 | adapters | `scholar_lens/adapters` | Bedrock·Strands, 웹 수집·검색, 학술 색인·문서, 패키지 색인, S3, GitHub, Batch | domain, application의 포트 |
 | entrypoints | `scholar_lens/cli.py`, worker, `bootstrap` | 인자 해석, 설정 로드, 의존성 조립 | 모두 |
 
-- **포트**: `LanguageModel`, `SourceGateway`(수집·검색), `DocumentReader`(논문·PDF), `PackageIndex`, `CheckpointStore`, `PostPublisher`, `RunLedger`
+- **포트**: `LanguageModel`, `SourceGateway`(수집·검색), `DocumentReader`(논문·PDF), `PackageIndex`, `CheckpointStore`, `PostPublisher`, `RunLedger`, `Files`(로컬 경로와 `s3://` 위치의 파일. 유스케이스는 파일을 이 포트로만 읽고 씁니다)
 - **`scholar_lens/src` 해체**:
   - 유스케이스는 application으로 옮깁니다.
   - 입출력은 adapters로 옮깁니다.

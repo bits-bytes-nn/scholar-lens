@@ -20,6 +20,7 @@ from pathlib import Path
 
 from scholar_lens.application.ports import (
     CandidateSearch,
+    Files,
     ObjectStore,
     SurveyPlanning,
     SurveyPlanTools,
@@ -99,17 +100,17 @@ async def plan_survey(
     )
 
 
-def save_plan(plan: SurveyPlan, path: Path) -> None:
+def save_plan(plan: SurveyPlan, path: Path, files: Files) -> None:
     """Write ``plan`` to ``path``; a different plan already there (perhaps
-    edited by hand) is kept next to it as ``plan.<UTC timestamp>.json``."""
+    edited by hand) is kept next to it as ``plan.<UTC timestamp>.json`` (the
+    time it was last written)."""
     text = plan.to_json()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    if path.exists() and path.read_text(encoding="utf-8") != text:
-        stamp = datetime.fromtimestamp(path.stat().st_mtime, UTC).strftime(
-            "%Y%m%dT%H%M%SZ"
-        )
-        path.rename(path.with_name(f"{path.stem}.{stamp}{path.suffix}"))
-    path.write_text(text, encoding="utf-8")
+    old = files.read_text(str(path))
+    if old is not None and old != text:
+        written = files.modified(str(path)) or datetime.now(UTC)
+        stamp = written.strftime("%Y%m%dT%H%M%SZ")
+        files.write_text(str(path.with_name(f"{path.stem}.{stamp}{path.suffix}")), old)
+    files.write_text(str(path), text)
 
 
 def upload_plan(plan: SurveyPlan, s3_handler: ObjectStore, key: str) -> None:
@@ -148,7 +149,7 @@ async def run_survey_plan(
         finder.close()
     slug = survey_slug(plan.topic)
     path = context.papers_dir / slug / "plan.json"
-    await asyncio.to_thread(save_plan, plan, path)
+    await asyncio.to_thread(save_plan, plan, path, context.files)
     s3_uri = None
     if context.s3_handler is not None:
         resources = context.config.resources

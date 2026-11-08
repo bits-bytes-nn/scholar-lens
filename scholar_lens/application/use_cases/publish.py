@@ -17,7 +17,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from scholar_lens.application.ports import ObjectStore
+from scholar_lens.application.ports import FileLocationError, Files
 from scholar_lens.application.run import PipelineOutcome, RunContext, publish_artifact
 from scholar_lens.domain.jobs import ArtifactKind
 from scholar_lens.domain.publishing import (
@@ -66,7 +66,7 @@ def load_saved_post(context: RunContext, target: str) -> PublishRequest:
     """
     if target.startswith("s3://"):
         return _from_s3(context, target)
-    return _from_file(Path(target).expanduser())
+    return _from_file(context.files, Path(target).expanduser())
 
 
 def _parse(text: str, where: str) -> SavedPublishRequest:
@@ -78,18 +78,28 @@ def _parse(text: str, where: str) -> SavedPublishRequest:
         ) from e
 
 
-def _from_file(path: Path) -> PublishRequest:
-    if not path.is_file() or path.suffix != ".md":
+def _read(files: Files, location: str) -> str | None:
+    try:
+        return files.read_text(location)
+    except FileLocationError as e:
+        raise SavedPostError(str(e)) from e
+    except UnicodeDecodeError as e:
+        raise SavedPostError(f"{location} is not UTF-8: {e}") from e
+
+
+def _from_file(files: Files, path: Path) -> PublishRequest:
+    markdown = _read(files, str(path)) if path.suffix == ".md" else None
+    if markdown is None:
         raise SavedPostError(f"No Markdown post at {path}.")
     request_path = path.with_name(request_name(path.name))
-    if not request_path.is_file():
+    raw = _read(files, str(request_path))
+    if raw is None:
         raise SavedPostError(
             f"No publish request next to {path} ({request_path.name}): only a "
             "post a run saved or rejected can be published."
         )
-    saved = _parse(request_path.read_text(encoding="utf-8"), str(request_path))
-    markdown = without_violations(path.read_text(encoding="utf-8"))
-    return saved.request(markdown, path.parent.resolve())
+    saved = _parse(raw, str(request_path))
+    return saved.request(without_violations(markdown), path.parent.resolve())
 
 
 def _from_s3(context: RunContext, uri: str) -> PublishRequest:
@@ -105,27 +115,29 @@ def _from_s3(context: RunContext, uri: str) -> PublishRequest:
         )
     if not key.endswith(".md"):
         raise SavedPostError(f"Not a Markdown post: {uri}.")
-    markdown = handler.get_text(key)
+    files = context.files
+    markdown = _read(files, uri)
     if markdown is None:
         raise SavedPostError(f"No post at {uri}.")
-    raw = handler.get_text(request_name(key))
+    request_uri = f"s3://{bucket}/{request_name(key)}"
+    raw = _read(files, request_uri)
     if raw is None:
         raise SavedPostError(
             f"No publish request next to {uri}: only a post a run saved or "
             "rejected can be published."
         )
-    saved = _parse(raw, f"s3://{bucket}/{request_name(key)}")
+    saved = _parse(raw, request_uri)
     # The run's work directory is a Batch container's: a local one of the
     # same name (where a local run would have kept the post) holds it now.
     work_dir = context.papers_dir / Path(saved.work_dir).name
-    work_dir.mkdir(parents=True, exist_ok=True)
+    files.make_dir(str(work_dir))
     request = saved.request(without_violations(markdown), work_dir)
-    request.review_notes += _fetch_images(handler, key, scope, request)
+    request.review_notes += _fetch_images(files, bucket, key, scope, request)
     return request
 
 
 def _fetch_images(
-    handler: ObjectStore, key: str, scope: str, request: PublishRequest
+    files: Files, bucket: str, key: str, scope: str, request: PublishRequest
 ) -> list[str]:
     """The post's localized images, copied from S3 into its staging folder
     (where the publisher keeps the images the post shows): a rejected post's
@@ -146,14 +158,14 @@ def _fetch_images(
         }
     )
     staged = request.staged_images_dir
-    staged.mkdir(parents=True, exist_ok=True)
+    files.make_dir(str(staged))
     missing = []
     for name in names:
-        data = handler.get_bytes(f"{source}/{name}")
+        data = files.read_bytes(f"s3://{bucket}/{source}/{name}")
         if data is None:
             missing.append(name)
         else:
-            (staged / name).write_bytes(data)
+            files.write_bytes(str(staged / name), data)
     if not missing:
         return []
     return [

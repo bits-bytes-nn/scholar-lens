@@ -19,6 +19,7 @@ import pytest
 from scholar_lens import bootstrap
 from scholar_lens.adapters.bedrock.usage import TokenUsageTracker
 from scholar_lens.adapters.documents import paper_reader
+from scholar_lens.adapters.files import LocalOrS3Files
 from scholar_lens.adapters.github import publisher
 from scholar_lens.application import run as runtime
 from scholar_lens.application.ports import PaperInputs
@@ -426,6 +427,8 @@ async def test_degraded_output_reaches_pr_notes_and_job_warnings(
 
 
 class _FakeS3:
+    bucket_name = "bucket"
+
     def __init__(self, result: object) -> None:
         self.result = result
         self.keys: list[str] = []
@@ -443,6 +446,7 @@ def _guideline_context(s3: _FakeS3, root_dir: Path):  # type: ignore[no-untyped-
     return SimpleNamespace(
         root_dir=root_dir,
         s3_handler=s3,
+        files=LocalOrS3Files(s3),  # type: ignore[arg-type]
         config=SimpleNamespace(resources=SimpleNamespace(s3_prefix="sl")),
     )
 

@@ -26,6 +26,7 @@ from scholar_lens.adapters.bedrock import role_models
 from scholar_lens.adapters.bedrock.strands_models import RoleModel
 from scholar_lens.adapters.bedrock.survey_calls import SurveyWriter
 from scholar_lens.adapters.bedrock.usage import TokenUsageTracker
+from scholar_lens.adapters.files import LocalOrS3Files
 from scholar_lens.adapters.github import publisher as github_publisher
 from scholar_lens.adapters.github.publisher import Publisher
 from scholar_lens.adapters.scholarly.plan_index import PaperIndex
@@ -188,7 +189,9 @@ class TestCliAndJob:
         path.write_text(json.dumps(plan_dict()))
         s3 = MagicMock(bucket_name="bucket")
         request = JobRequest(kind="survey_write", plan=str(path))
-        staged = stage_plan_for_batch(request, s3, "scholar-lens")
+        staged = stage_plan_for_batch(
+            request, s3, "scholar-lens", files=LocalOrS3Files(s3)
+        )
         key = s3.put_text.call_args.args[0]
         assert re.fullmatch(
             r"scholar-lens/surveys/survey-preference-optimization/plan-[0-9a-f]{16}\.json",
@@ -197,9 +200,9 @@ class TestCliAndJob:
         assert staged.plan == f"s3://bucket/{key}"
         # An S3 plan is submitted as it is; without a bucket there is nowhere
         # to upload a local one.
-        assert stage_plan_for_batch(staged, None, "x") is staged
+        assert stage_plan_for_batch(staged, None, "x", files=LocalOrS3Files()) is staged
         with pytest.raises(SurveyInputError):
-            stage_plan_for_batch(request, None, "x")
+            stage_plan_for_batch(request, None, "x", files=LocalOrS3Files())
 
     def test_submit_stages_the_plan(self, tmp_path: Path) -> None:
         path = tmp_path / "plan.json"
@@ -207,6 +210,7 @@ class TestCliAndJob:
         context = MagicMock()
         context.config = Config()
         context.s3_handler.bucket_name = "bucket"
+        context.files = LocalOrS3Files(context.s3_handler)
         submitted = MagicMock()
         with (
             mock.patch("scholar_lens.cli._aws_context", return_value=context),
@@ -313,11 +317,11 @@ class TestPlanRevalidation:
         path = tmp_path / "plan.json"
         path.write_bytes('{"topic": "선호"}'.encode("cp949"))
         with pytest.raises(SurveyInputError, match="not UTF-8"):
-            read_plan_text(str(path), None)
+            read_plan_text(str(path), LocalOrS3Files())
         s3 = MagicMock(bucket_name="bucket")
         s3.get_text.side_effect = UnicodeDecodeError("utf-8", b"\xbc", 0, 1, "bad")
         with pytest.raises(SurveyInputError, match="not UTF-8"):
-            read_plan_text("s3://bucket/a/plan.json", s3)
+            read_plan_text("s3://bucket/a/plan.json", LocalOrS3Files(s3))
 
     @pytest.mark.parametrize(
         "edit, key",
@@ -338,15 +342,15 @@ class TestPlanRevalidation:
     def test_plan_locations(self, tmp_path: Path) -> None:
         path = tmp_path / "plan.json"
         path.write_text("{}")
-        assert read_plan_text(str(path), None) == "{}"
+        assert read_plan_text(str(path), LocalOrS3Files()) == "{}"
         s3 = MagicMock(bucket_name="bucket")
         s3.get_text.return_value = "{}"
-        assert read_plan_text("s3://bucket/a/plan.json", s3) == "{}"
+        assert read_plan_text("s3://bucket/a/plan.json", LocalOrS3Files(s3)) == "{}"
         s3.get_text.assert_called_once_with("a/plan.json")
         with pytest.raises(SurveyInputError, match="bucket"):
-            read_plan_text("s3://other/a/plan.json", s3)
+            read_plan_text("s3://other/a/plan.json", LocalOrS3Files(s3))
         with pytest.raises(SurveyInputError):
-            read_plan_text(str(tmp_path / "missing.json"), None)
+            read_plan_text(str(tmp_path / "missing.json"), LocalOrS3Files())
 
     def test_index_prefers_arxiv_abstract_for_a_doi_paper(self) -> None:
         openalex = MagicMock()
@@ -1059,14 +1063,22 @@ class TestStagingValidation:
         path.write_text(json.dumps(data))
         with pytest.raises(SurveyInputError, match="unknown lineage"):
             stage_plan_for_batch(
-                JobRequest(kind="survey_write", plan=str(path)), s3, "x"
+                JobRequest(kind="survey_write", plan=str(path)),
+                s3,
+                "x",
+                files=LocalOrS3Files(s3),
             )
         s3.put_text.assert_not_called()
         # A paper added by hand gets its metadata in the job: it passes here.
         data = plan_dict()
         data["papers"].append({"id": "2402.01306", "lineage": "dpo", "role": "core"})
         path.write_text(json.dumps(data))
-        stage_plan_for_batch(JobRequest(kind="survey_write", plan=str(path)), s3, "x")
+        stage_plan_for_batch(
+            JobRequest(kind="survey_write", plan=str(path)),
+            s3,
+            "x",
+            files=LocalOrS3Files(s3),
+        )
         s3.put_text.assert_called_once()
 
 

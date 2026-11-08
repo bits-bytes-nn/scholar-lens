@@ -29,6 +29,7 @@ from scholar_lens.adapters.aws.storage import S3Handler
 from scholar_lens.adapters.bedrock.role_models import BedrockEvidenceModels
 from scholar_lens.adapters.bedrock.survey_calls import SurveyPlanner, SurveyWriter
 from scholar_lens.adapters.documents import paper_reader
+from scholar_lens.adapters.files import LocalOrS3Files
 from scholar_lens.adapters.github.conventions import fetch_blog_posts, load_conventions
 from scholar_lens.adapters.github.publisher import FigureDownloads, Publisher
 from scholar_lens.adapters.packages.pypi import PyPIIndex, package_extras
@@ -182,6 +183,7 @@ def run_context(
         default_boto_session=default_boto_session,
         bedrock_boto_session=bedrock_boto_session,
         s3_handler=s3_handler,
+        files=LocalOrS3Files(s3_handler),
         root_dir=root_dir,
     )
 

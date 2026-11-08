@@ -18,6 +18,7 @@ from moto import mock_aws
 
 from scholar_lens import cli
 from scholar_lens.adapters.aws.storage import S3Handler
+from scholar_lens.adapters.files import LocalOrS3Files
 from scholar_lens.adapters.github.publisher import ImageLocalizer, Publisher
 from scholar_lens.application.run import publish_artifact
 from scholar_lens.application.use_cases import publish
@@ -71,6 +72,7 @@ def _context(tmp_path: Path, s3_handler: Any = None, prefix: str = "") -> Any:
     context.config.resources.github = _CONFIG
     context.config.resources.s3_prefix = prefix
     context.s3_handler = s3_handler
+    context.files = LocalOrS3Files(s3_handler)
     context.papers_dir = tmp_path / "papers"
     context.conventions = None
     context.publisher_factory = lambda ctx: Publisher(

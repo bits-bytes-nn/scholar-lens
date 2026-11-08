@@ -17,10 +17,11 @@ import json
 import logging
 from dataclasses import dataclass, field
 from datetime import UTC
-from pathlib import Path
 from typing import Any
 
 from scholar_lens.application.ports import (
+    FileLocationError,
+    Files,
     ObjectStore,
     PlanIndex,
     ReferenceReader,
@@ -66,29 +67,18 @@ from scholar_lens.domain.survey.references import reference_excerpts
 logger = logging.getLogger(__name__)
 
 
-def read_plan_text(location: str, s3_handler: ObjectStore | None) -> str:
+def read_plan_text(location: str, files: Files) -> str:
     """The plan file's text from a local path or ``s3://<bucket>/<key>`` in
     the run's bucket; ``SurveyInputError`` when it is not there."""
-    if location.startswith("s3://"):
-        bucket, _, key = location.removeprefix("s3://").partition("/")
-        if s3_handler is None or bucket != s3_handler.bucket_name or not key:
-            raise SurveyInputError(
-                f"The plan {location!r} is not in this run's S3 bucket."
-            )
-        try:
-            text = s3_handler.get_text(key)
-        except UnicodeDecodeError as e:
-            raise SurveyInputError(f"The plan {location!r} is not UTF-8: {e}") from e
-        if text is None:
-            raise SurveyInputError(f"No plan at {location!r}.")
-        return text
-    path = Path(location).expanduser()
-    if not path.is_file():
-        raise SurveyInputError(f"No plan file at {location!r}.")
     try:
-        return path.read_text(encoding="utf-8")
+        text = files.read_text(location)
+    except FileLocationError as e:
+        raise SurveyInputError(f"The plan {location!r}: {e}") from e
     except UnicodeDecodeError as e:
         raise SurveyInputError(f"The plan {location!r} is not UTF-8: {e}") from e
+    if text is None:
+        raise SurveyInputError(f"No plan at {location!r}.")
+    return text
 
 
 def load_plan(text: str, index: PlanIndex) -> tuple[SurveyPlan, list[str]]:
@@ -114,7 +104,11 @@ def load_plan(text: str, index: PlanIndex) -> tuple[SurveyPlan, list[str]]:
 
 
 def stage_plan_for_batch(
-    request: JobRequest, s3_handler: ObjectStore | None, s3_prefix: str
+    request: JobRequest,
+    s3_handler: ObjectStore | None,
+    s3_prefix: str,
+    *,
+    files: Files,
 ) -> JobRequest:
     """A survey_write request whose plan a Batch job can read: a local plan
     is checked against the plan schema (``SurveyInputError`` when it would
@@ -128,7 +122,7 @@ def stage_plan_for_batch(
         raise SurveyInputError(
             "--remote needs resources.s3_bucket_name to upload the plan."
         )
-    text = read_plan_text(location, None)
+    text = read_plan_text(location, files)
     data = plan_data(text)
     topic = str(data.get("topic") or "survey")
     check_plan_shape(data)
@@ -284,9 +278,7 @@ async def run_survey_write(
     github = context.config.resources.github
     spec = context.require_conventions()
     check_post_type(spec, github.survey_category, "survey_category", artifact="survey")
-    text = await asyncio.to_thread(
-        read_plan_text, request.plan or "", context.s3_handler
-    )
+    text = await asyncio.to_thread(read_plan_text, request.plan or "", context.files)
     index = tools.index()
     plan, plan_notes = await asyncio.to_thread(load_plan, text, index)
     guideline = await load_translation_guideline(context)
@@ -361,7 +353,7 @@ async def run_survey_write(
         + further_reading(survey.reading, writer.language)
     )
     work_dir = papers_dir / slug
-    work_dir.mkdir(parents=True, exist_ok=True)
+    await asyncio.to_thread(context.files.make_dir, str(work_dir))
     core = sum(p.role == "core" for p in survey.plan.papers)
     publish_request = PublishRequest(
         title=survey.title,

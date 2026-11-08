@@ -9,6 +9,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from scholar_lens import bootstrap
+from scholar_lens.adapters.files import LocalOrS3Files
 from scholar_lens.application import run as app_run
 from scholar_lens.domain.constants import EnvVars, SSMParams
 from scholar_lens.entrypoints import runtime
@@ -17,6 +18,7 @@ from scholar_lens.entrypoints import runtime
 def _run_context(config: object, **fields: object) -> app_run.RunContext:
     """A run context on the configured blog (no AWS)."""
     fields.setdefault("publisher_factory", lambda ctx: MagicMock())
+    fields.setdefault("files", LocalOrS3Files(fields.get("s3_handler")))  # type: ignore[arg-type]
     return app_run.RunContext(
         config=config,  # type: ignore[arg-type]
         blog=bootstrap.ConfiguredBlog(config),  # type: ignore[arg-type]

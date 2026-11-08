@@ -450,7 +450,9 @@ def _submit(request: JobRequest) -> int:
         from scholar_lens.application.use_cases.survey_write import stage_plan_for_batch
 
         _check_plan_bucket(request.plan or "", context.s3_handler, resources.s3_prefix)
-        request = stage_plan_for_batch(request, context.s3_handler, resources.s3_prefix)
+        request = stage_plan_for_batch(
+            request, context.s3_handler, resources.s3_prefix, files=context.files
+        )
     submitted = submit_job(
         context.default_boto_session,
         request,

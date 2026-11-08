@@ -172,7 +172,7 @@ async def run_guide(
     )
     slug = slugify(guide.topic, max_length=80)
     work_dir = context.papers_dir / f"guide-{slug}"
-    work_dir.mkdir(parents=True, exist_ok=True)
+    context.files.make_dir(str(work_dir))
     document = guide_document(
         format_guide(github, guide, meta=meta),
         guide,
