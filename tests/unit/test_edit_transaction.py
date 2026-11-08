@@ -780,3 +780,15 @@ def test_listed_items_of_one_sentence_are_shown_to_the_writer_together() -> None
     assert sum("517" in m for m in shown) == 1
     assert any(m.startswith("numbers [517, 733] without evidence") for m in shown)
     assert any(m.startswith(f"papers [{', '.join(_PAPERS[:3])}] belong") for m in shown)
+
+
+def test_an_edit_copied_with_defanged_tags_finds_the_drafts_own_text() -> None:
+    # Prompts defang tags; a model copies its find (and replace) from them.
+    from scholar_lens.domain.evidence_draft import apply_edits
+    from scholar_lens.domain.prompt_safety import neutralize_prompt_tags
+
+    draft = "## 코드\n\n설명입니다.\n\n```xml\n<title>Old</title>\n```\n"
+    find = "<​title>Old<​/title>"
+    text, applied, _ = apply_edits(draft, [(find, "<​title>New<​/title>")])
+    assert applied == 1 and "<title>New</title>" in text and "​" not in text
+    assert neutralize_prompt_tags("x") == "x"

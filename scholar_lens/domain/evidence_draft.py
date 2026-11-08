@@ -17,6 +17,7 @@ from scholar_lens.domain.evidence import Evidence, EvidenceLedger, near_duplicat
 from scholar_lens.domain.markdown.lint import drop_empty_headings
 from scholar_lens.domain.markdown.math import DISPLAY_MATH, fence_roles
 from scholar_lens.domain.post_spec import Limits
+from scholar_lens.domain.prompt_safety import ZERO_WIDTH_SPACE, strip_defanging
 from scholar_lens.domain.quality_gate import rule_issues
 from scholar_lens.domain.validation import unsourced_numbers
 from scholar_lens.domain.verifiers import Problem, item_problems
@@ -760,8 +761,14 @@ def strip_revision_notes(markdown: str, before: str = "") -> str:
 
 def quote_for_prompt(quote: str) -> str:
     """A paper's words as inert data in a prompt: tag-like markup defanged,
-    so an injection example quoted from a security paper reads as text."""
-    return re.sub(r"<(/?)([A-Za-z_][\w-]*)", r"‹\1\2", " ".join(quote.split()))
+    so an injection example quoted from a security paper reads as text. The
+    mark is the one publishing removes (:func:`strip_defanging`), so code
+    the writer copies from it is published as written."""
+    return re.sub(
+        r"<(/?)([A-Za-z_][\w-]*)",
+        lambda m: f"<{ZERO_WIDTH_SPACE}{m.group(1)}{m.group(2)}",
+        " ".join(quote.split()),
+    )
 
 
 _BARE_ITEM = re.compile(r"^[ \t]*(?:[-*+]|\d+[.)])[ \t]*$")
@@ -792,7 +799,16 @@ def apply_edits(
 
     text, applied, skipped = guarded(
         markdown,
-        [Edit(find=f, replace=r) for f, r in edits],
+        # A model copies passages from its prompt, where tags are defanged:
+        # the marks never reach the draft, and a find copied with them still
+        # finds the draft's own text.
+        [
+            Edit(
+                find=f if f in markdown else strip_defanging(f),
+                replace=strip_defanging(r),
+            )
+            for f, r in edits
+        ],
         max_edits=max_edits,
         rest=rest,
         owned_figures=owned_figures,

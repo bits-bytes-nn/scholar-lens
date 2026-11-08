@@ -25,7 +25,9 @@ import re
 # into; output-format tags (``<plan>``, ``<edit>``, ...) carry no input.
 _FENCED_PLACEHOLDER = re.compile(r"<([A-Za-z_][A-Za-z0-9_]*)>(.*?)</\1>", re.DOTALL)
 _PLACEHOLDER = re.compile(r"(?<!\{)\{[A-Za-z_]\w*\}(?!\})")
-_ZERO_WIDTH_SPACE = "\u200b"
+# The mark that defangs a tag ("<" + it); publishing removes it.
+ZERO_WIDTH_SPACE = "\u200b"
+_ZERO_WIDTH_SPACE = ZERO_WIDTH_SPACE
 
 _TAGS: set[str] = set()
 
