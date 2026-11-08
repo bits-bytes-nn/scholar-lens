@@ -290,6 +290,13 @@ class TechGuide(_Section):
     # third-party cap above still bounds them; demoted classes never count.
     # 3 is a quarter of the default fetch budget, within the default cap.
     min_secondary_pages: int = Field(default=3, ge=0)
+    # A requested docs page without a version in its path makes official the
+    # deepest prefix of its path that at least this share of its own
+    # same-host links (navigation and content) stay under: a docs site's
+    # sidebar keeps most links inside the product, while the header's few
+    # links to other products, a blog or a forum fall outside. 0.6 is a
+    # clear majority that a handful of header and footer links cannot reach.
+    official_scope_link_share: float = Field(default=0.6, gt=0, le=1)
     # Domain classes (e.g. forum, social, aggregator) -> host patterns
     # ("example.com" with its subdomains, "*.example.com", "forum.*"): their
     # pages rank last and count as third-party (config-template.yaml lists

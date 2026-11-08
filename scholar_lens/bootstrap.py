@@ -325,6 +325,7 @@ class GuideToolkit:
             repo_tags=researcher.repo_tags,
             max_third_party_pages=cfg.max_third_party_pages,
             min_secondary_pages=cfg.min_secondary_pages,
+            official_scope_link_share=cfg.official_scope_link_share,
             demoted_domains=cfg.demoted_domains,
             excluded_domains=cfg.excluded_domains,
         )

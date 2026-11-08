@@ -122,6 +122,10 @@ tech_guide:
   # pages) while such results remain, so official pages cannot fill every
   # slot. Bounded by max_third_party_pages; demoted classes never count.
   min_secondary_pages: 3
+  # A requested docs page whose path names no version makes official the
+  # deepest prefix of its path that this share of its own same-host links
+  # stay under (other products, a blog or a forum on the host are not).
+  official_scope_link_share: 0.6
   # Domain classes to demote: class name -> host patterns ("example.com"
   # with its subdomains, "*.example.com", "forum.*"). Edit or add classes;
   # an empty map demotes nothing.

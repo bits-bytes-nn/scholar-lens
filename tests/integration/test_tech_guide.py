@@ -833,3 +833,69 @@ async def test_the_configured_third_party_cap_reaches_the_guides_searches(
     assert len(blogs) == cap
     assert all(p.authority == "third_party" for p in blogs)
     assert gen.min_secondary_pages == config.tech_guide.min_secondary_pages
+
+
+def _bootstrapped_guide(
+    config: object,
+    monkeypatch: pytest.MonkeyPatch,
+    search: object,
+    seed: ResearchCorpus,
+) -> TechGuideGenerator:
+    """A guide generator built by bootstrap from ``config``, searching with
+    ``search`` and reading ``seed`` for the requested docs (no network)."""
+    from scholar_lens import bootstrap
+    from scholar_lens.adapters.web.research import WebResearcher
+
+    monkeypatch.setattr(
+        "scholar_lens.adapters.web.guide_research.BedrockLanguageModelFactory",
+        lambda **_: FakeLLMFactory(),
+    )
+    session = boto3.Session(region_name="us-east-1")
+    context = bootstrap.run_context(
+        config,  # type: ignore[arg-type]
+        default_boto_session=session,
+        bedrock_boto_session=session,
+    )
+    researcher = WebResearcher(search)  # type: ignore[arg-type]
+    researcher.research = MagicMock(return_value=seed)  # type: ignore[method-assign]
+    gen = bootstrap.GuideToolkit(context).research(  # type: ignore[arg-type]
+        researcher, MagicMock(), title_max_length=70
+    )
+    gen.release_lookup = None
+    gen.repo_tags = None
+    gen.relevance_chain = MagicMock()
+    gen.relevance_chain.ainvoke = _relevant()
+    return gen
+
+
+async def test_the_configured_link_share_scopes_the_requested_docs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``tech_guide.official_scope_link_share`` reaches the run's source set:
+    a requested product page's own links keep another product on the host
+    out of the official docs."""
+    from scholar_lens.configs import Config
+    from tests.integration.test_source_ranking import _Search
+
+    config = Config()
+    host = "https://cloud.x.com"
+    links = [f"{host}/prod-a/docs/{p}" for p in ("a", "b", "c", "d")]
+    links += [f"{host}/prod-b/docs", f"{host}/blog"]
+    seed = ResearchCorpus(
+        pages=[
+            PageContent(
+                f"{host}/prod-a/docs/start",
+                "A",
+                "How to use A.",
+                links=links,
+                content_links=links,
+            )
+        ]
+    )
+    gen = _bootstrapped_guide(config, monkeypatch, _Search({}), seed)
+    assert gen.official_scope_link_share == config.tech_guide.official_scope_link_share
+    await gen.gather([seed.pages[0].url], discover_subpages=False, search_queries=[])
+    official = gen._sources.official
+    assert official.on_host(f"{host}/prod-a/docs/e")
+    assert not official.on_host(f"{host}/prod-b/docs/start")
+    assert not official.on_host(f"{host}/prod-a/pricing")

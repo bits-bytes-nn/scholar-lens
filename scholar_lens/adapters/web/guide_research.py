@@ -152,6 +152,7 @@ class TechGuideGenerator(RetryableBase):
         repo_tags: TagLookup | None = None,
         max_third_party_pages: int | None = None,
         min_secondary_pages: int = 0,
+        official_scope_link_share: float | None = None,
         demoted_domains: Mapping[str, Collection[str]] | None = None,
         excluded_domains: Collection[str] = (),
     ) -> None:
@@ -166,6 +167,9 @@ class TechGuideGenerator(RetryableBase):
         min_secondary_pages: Fetched search-result slots kept for primary
             non-official pages (papers, design docs and posts) while such
             results remain; within the third-party cap.
+        official_scope_link_share: The share of a requested page's
+            same-host links its official scope must hold (None: the
+            page's first path segment).
         demoted_domains: Domain classes (forum, social, aggregator …) ->
             host patterns whose pages rank last and count as third-party.
         excluded_domains: Domains the search backends leave out.
@@ -175,6 +179,7 @@ class TechGuideGenerator(RetryableBase):
         self.repo_tags = repo_tags
         self.max_third_party_pages = max_third_party_pages
         self.min_secondary_pages = min_secondary_pages
+        self.official_scope_link_share = official_scope_link_share
         self.demoted = DomainClasses.from_config(demoted_domains or {})
         self.excluded_domains = search_exclusions(excluded_domains)
         self.language = language
@@ -331,6 +336,7 @@ class TechGuideGenerator(RetryableBase):
             "fetch_top_results": self.fetch_top_results,
             "max_third_party_pages": self.max_third_party_pages,
             "min_secondary_pages": self.min_secondary_pages,
+            "official_scope_link_share": self.official_scope_link_share,
             "demoted_domains": {k: list(v) for k, v in self.demoted.classes.items()},
             "excluded_domains": list(self.excluded_domains),
             "search_backend": search_chain(self.researcher.search_provider),
@@ -737,7 +743,9 @@ class TechGuideGenerator(RetryableBase):
         URL pins, else the latest release of the product's package (one the
         docs install under a product name), else the release a rolling docs
         link landed on."""
-        draft = SourceSet.from_urls(urls, docs)
+        draft = SourceSet.from_urls(
+            urls, docs, link_share=self.official_scope_link_share
+        )
         release, package = None, ""
         if self.release_lookup is not None and not draft.target.pinned:
             official_text = "\n".join(
@@ -757,6 +765,7 @@ class TechGuideGenerator(RetryableBase):
             urls,
             docs,
             package_release=release,
+            link_share=self.official_scope_link_share,
             demoted=self.demoted,
             repo_tags=self.repo_tags,
         ).with_repositories(docs)

@@ -57,22 +57,31 @@ URL_VERSION_PATTERNS: tuple[VersionPattern, ...] = (
         "release",
         re.compile(r"v?\d+(?:\.\d+)+(?:[.-]?(?:post|dev|rc|a|b)\d*)*", re.I),
     ),
+    # A release series named with an "r" ("r2.10"): docs sites that keep
+    # one tree per release line.
+    VersionPattern("release", re.compile(r"r\d+(?:\.\d+)+", re.I)),
     # A bare major release ("v2") right after the root or a language.
     VersionPattern("release", re.compile(r"v\d+", re.I), max_index=1),
 )
 # A path segment that is a paper id ("/papers/2106.09685"), not a release.
 _ARXIV_ID_SEGMENT = re.compile(r"\d{4}\.\d{4,5}(?:v\d+)?")
 _RELEASE_NUMBER = re.compile(
-    r"(?:^|[^a-z0-9])v?(\d+(?:\.\d+)*(?:[.-]?(?:post|dev|rc|a|b)\d*)*)(?![a-z0-9])"
+    r"(?:^|[^a-z0-9])[vr]?(\d+(?:\.\d+)*(?:[.-]?(?:post|dev|rc|a|b)\d*)*)(?![a-z0-9])"
 )
 _PRE_RELEASE = re.compile(r"(?:dev|rc|a|b)\d*$", re.I)
 
 # What is official on a requested docs host is the requested docs site:
 # with a docs version in the path, everything up to and including it, at
 # any version ("/en/<any version>/": one product's docs on a host that
-# serves many, "/<product>/<version>/", stays that product's); without one,
-# the whole host, except on hosts whose first path segments name a tenant
-# (a repository, an author), where it is that tenant's space.
+# serves many, "/<product>/<version>/", stays that product's). Without
+# one, the site is read from the requested page itself: the deepest prefix
+# of its path that its own same-host links (navigation and content) stay
+# under, at the configured share (``tech_guide.official_scope_link_share``),
+# so a product's docs on a host that also serves other products, a blog or
+# a Q&A forum stay that product's. A page without such links scopes to its
+# first path segment; only a request for the site root makes the whole
+# host official. Hosts whose first path segments name a tenant (a
+# repository, an author) scope to that tenant's space.
 TENANT_SEGMENTS: Mapping[str, int] = {
     "github.com": 2,
     "raw.githubusercontent.com": 2,
@@ -217,12 +226,17 @@ def _is_version(segment: str) -> bool:
     )
 
 
-def official_scope(url: str) -> tuple[str, str]:
+def official_scope(
+    url: str, links: Iterable[str] = (), *, link_share: float | None = None
+) -> tuple[str, str]:
     """(host, the path scope a requested page makes official): through the
     tenant's space on a tenant host; else through the docs version when
     the path names one (the version matching any version: other versions
     of the same docs are another version, not another product); else the
-    whole host (""). See :data:`TENANT_SEGMENTS`."""
+    whole host ("") for the site root; else the deepest prefix of the
+    page's folder that at least ``link_share`` of its same-host ``links``
+    lie under (None: links unused); else the folder's first segment. See
+    :data:`TENANT_SEGMENTS`."""
     parts = urlparse(url)
     host = (parts.hostname or "").lower()
     if tenant := TENANT_SEGMENTS.get(host, 0):
@@ -233,7 +247,32 @@ def official_scope(url: str) -> tuple[str, str]:
     found = url_version("/" + "/".join(folder) + "/") if folder else None
     if found is not None:
         return host, "/".join([*folder[: folder.index(found.value)], ANY_VERSION])
-    return host, ""
+    if not folder:
+        return host, ""
+    depth = _linked_depth(host, folder, links, link_share) or 1
+    return host, "/".join(folder[:depth])
+
+
+def _linked_depth(
+    host: str, folder: list[str], links: Iterable[str], share: float | None
+) -> int:
+    """The deepest prefix length of ``folder`` that at least ``share`` of
+    the distinct same-host link paths lie under (0: none, or no links)."""
+    if share is None:
+        return 0
+    paths = {
+        tuple(seg.lower() for seg in parsed.path.split("/") if seg)
+        for link in links
+        if ((parsed := urlparse(link)).hostname or "").lower() == host
+    }
+    if not paths:
+        return 0
+    for depth in range(len(folder), 0, -1):
+        prefix = tuple(folder[:depth])
+        under = sum(1 for path in paths if path[:depth] == prefix)
+        if under >= share * len(paths):
+            return depth
+    return 0
 
 
 def in_scope(url: str, scope: str) -> bool:
@@ -328,27 +367,40 @@ class OfficialDocs:
 
     @classmethod
     def from_research(
-        cls, urls: Collection[str], pages: Collection[_Landed]
+        cls,
+        urls: Collection[str],
+        pages: Collection[_LinkedPage],
+        *,
+        link_share: float | None = None,
     ) -> OfficialDocs:
-        """Like :meth:`from_urls`, plus where the requested pages actually
-        landed: a docs site that redirects (``pytorch.org/docs/stable`` →
-        ``docs.pytorch.org/docs/2.14``) keeps its own pages official, and the
+        """Like :meth:`from_urls`, plus what the requested pages show: a
+        docs site that redirects (``pytorch.org/docs/stable`` →
+        ``docs.pytorch.org/docs/2.14``) keeps its own pages official, the
         pinned release a rolling or unversioned link resolves to is a
-        requested version."""
+        requested version, and a fetched page's scope comes from its own
+        links (:func:`official_scope`, at ``link_share``)."""
         base = cls.from_urls(urls)
         requested = {normalize_url(u) for u in urls}
         hosts, versions = set(base.hosts), set(base.versions)
-        spaces = set(base.spaces)
-        for page in pages:
-            if not page.final_url or normalize_url(page.url) not in requested:
+        fetched = [page for page in pages if normalize_url(page.url) in requested]
+        seen = {normalize_url(page.url) for page in fetched}
+        spaces = {official_scope(u) for u in urls if normalize_url(u) not in seen}
+        for page in fetched:
+            links = [*page.links, *page.content_links]
+            for landed in {page.url, page.final_url or page.url}:
+                spaces.add(official_scope(landed, links, link_share=link_share))
+            if not page.final_url:
                 continue
             if host := urlparse(page.final_url).hostname:
                 hosts.add(host)
-                spaces.add(official_scope(page.final_url))
             asked = url_version(page.url)
-            landed = docs_version(page.final_url)
-            if asked is None or asked.kind != "release" or landed in base.versions:
-                versions.add(landed)
+            landed_version = docs_version(page.final_url)
+            if (
+                asked is None
+                or asked.kind != "release"
+                or landed_version in base.versions
+            ):
+                versions.add(landed_version)
         return cls(
             hosts=frozenset(hosts),
             versions=frozenset(versions),
@@ -513,15 +565,16 @@ class SourceSet:
     def from_urls(
         cls,
         urls: Collection[str],
-        pages: Collection[_Landed] = (),
+        pages: Collection[_LinkedPage] = (),
         *,
         package_release: str | None = None,
+        link_share: float | None = None,
         demoted: DomainClasses | None = None,
         repo_tags: TagLookup | None = None,
     ) -> SourceSet:
         """The source set of a request for ``urls`` (fetched as ``pages``)."""
         official = (
-            OfficialDocs.from_research(urls, pages)
+            OfficialDocs.from_research(urls, pages, link_share=link_share)
             if pages
             else OfficialDocs.from_urls(urls)
         )
@@ -655,6 +708,7 @@ class SourceSet:
 
 class _LinkedPage(_Landed, Protocol):
     links: list[str]
+    content_links: list[str]
 
 
 def is_official(page: RecordedPage) -> bool:
