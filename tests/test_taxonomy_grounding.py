@@ -5,14 +5,17 @@ from __future__ import annotations
 
 import pytest
 
-from scholar_lens.domain.sources import SourceSet
-from scholar_lens.src.guide_authority import official_reference, unverified_identifiers
-from scholar_lens.src.web_research import (
+from scholar_lens.adapters.web.authority import (
+    official_reference,
+    unverified_identifiers,
+)
+from scholar_lens.adapters.web.research import (
     OfficialDocs,
     PageContent,
     ResearchCorpus,
     docs_version,
 )
+from scholar_lens.domain.sources import SourceSet
 
 GUIDE = """## 서빙
 

@@ -10,6 +10,8 @@ from typing import Any
 import boto3
 import pytest
 
+from scholar_lens.adapters.bedrock.usage import TokenUsageTracker
+from scholar_lens.adapters.github.publisher import Publisher
 from scholar_lens.configs import Github
 from scholar_lens.configs.config import Config
 from scholar_lens.domain.conventions import BlogPost, load_local_conventions
@@ -17,8 +19,6 @@ from scholar_lens.domain.guide.models import TechGuide
 from scholar_lens.domain.jobs import JobRequest
 from scholar_lens.src import guide_pipeline
 from scholar_lens.src.guide_pipeline import guide_branch_id, guide_title
-from scholar_lens.src.metrics import TokenUsageTracker
-from scholar_lens.src.publisher import Publisher
 from scholar_lens.src.runtime import RunContext
 from tests.test_publisher import PNG, FakeGithub, FakeRepo
 
@@ -171,7 +171,7 @@ async def test_a_retitled_rerun_updates_the_published_guide(
     repo = FakeRepo({})
     monkeypatch.setenv("GITHUB_TOKEN", "ghp_x")
     monkeypatch.setattr(FakeGithub, "repo", repo)
-    monkeypatch.setattr("scholar_lens.src.publisher.Github", FakeGithub)
+    monkeypatch.setattr("scholar_lens.adapters.github.publisher.Github", FakeGithub)
     session = boto3.Session(region_name="us-east-1")
 
     config = Config()

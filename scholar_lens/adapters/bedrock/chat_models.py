@@ -1,3 +1,4 @@
+import logging
 from abc import ABC, abstractmethod
 from functools import lru_cache
 from typing import Any, ClassVar, Generic, TypeVar
@@ -12,7 +13,6 @@ from langchain_core.messages import BaseMessage
 from langchain_core.outputs import ChatResult
 from pydantic import Field
 
-from scholar_lens.application.usage import current_allocation
 from scholar_lens.domain.constants import EmbeddingModelId, LanguageModelId
 from scholar_lens.domain.cost_allocation import application_profile_name
 from scholar_lens.domain.model_registry import (
@@ -22,7 +22,9 @@ from scholar_lens.domain.model_registry import (
     LanguageModelInfo,
     register_profile_source,
 )
-from scholar_lens.src.logger import logger
+from scholar_lens.domain.usage_context import current_allocation
+
+logger = logging.getLogger(__name__)
 
 ModelIdT = TypeVar("ModelIdT")
 ModelInfoT = TypeVar("ModelInfoT")

@@ -8,13 +8,13 @@ from unittest.mock import MagicMock
 import pytest
 from botocore.exceptions import ClientError
 
-from scholar_lens.domain.constants import LanguageModelId
-from scholar_lens.domain.model_registry import _LANGUAGE_MODEL_INFO
-from scholar_lens.src.utils import factories as fac
-from scholar_lens.src.utils.factories import (
+from scholar_lens.adapters.bedrock import chat_models as fac
+from scholar_lens.adapters.bedrock.chat_models import (
     BaseBedrockWrapper,
     BedrockLanguageModelFactory,
 )
+from scholar_lens.domain.constants import LanguageModelId
+from scholar_lens.domain.model_registry import _LANGUAGE_MODEL_INFO
 
 
 @pytest.fixture(autouse=True)
@@ -369,7 +369,7 @@ class TestTruncationGuard:
     def test_max_tokens_stop_raises(self) -> None:
         import pytest
 
-        from scholar_lens.src.utils.factories import (
+        from scholar_lens.adapters.bedrock.chat_models import (
             OutputTruncatedError,
             _raise_if_truncated,
         )
@@ -385,7 +385,7 @@ class TestTruncationGuard:
         from langchain_aws import ChatBedrockConverse
         from langchain_core.output_parsers import StrOutputParser
 
-        from scholar_lens.src.utils.factories import (
+        from scholar_lens.adapters.bedrock.chat_models import (
             CheckedChatBedrockConverse,
             OutputTruncatedError,
         )
@@ -406,8 +406,8 @@ class TestTruncationGuard:
             await chain.ainvoke("hi")
 
     def test_truncation_is_not_retried(self) -> None:
+        from scholar_lens.adapters.bedrock.chat_models import OutputTruncatedError
         from scholar_lens.adapters.retry import is_transient_error
-        from scholar_lens.src.utils.factories import OutputTruncatedError
 
         assert is_transient_error(OutputTruncatedError("x")) is False
 

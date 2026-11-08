@@ -8,7 +8,7 @@ import pytest
 from botocore.exceptions import ClientError
 
 from scholar_lens.adapters import retry as retry_module
-from scholar_lens.src.utils.batch import BatchProcessor
+from scholar_lens.adapters.bedrock.batch import BatchProcessor
 
 
 @pytest.fixture(autouse=True)

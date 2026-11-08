@@ -103,8 +103,8 @@ def _context() -> SimpleNamespace:
 
 
 async def test_html_parse_failure_falls_back_to_the_pdf(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    from scholar_lens.adapters.documents.parser import ParserError
     from scholar_lens.src import paper_pipeline
-    from scholar_lens.src.parser import ParserError
 
     class FailingHTML:
         def __init__(self, **_kwargs: object) -> None: ...

@@ -14,7 +14,7 @@ from scholar_lens.domain.constants import LanguageModelId
 from scholar_lens.domain.conventions import load_local_conventions
 from scholar_lens.domain.paper.models import Attributes, Content, Paper
 from scholar_lens.domain.post_format import format_summary, paper_post_meta
-from scholar_lens.src.prompts import PaperSummaryPrompt
+from scholar_lens.src.prompts.summary import PaperSummaryPrompt
 from scholar_lens.src.summarizer import PaperSummarizer
 from tests.fakes import FakeLLMFactory
 
@@ -188,8 +188,8 @@ class TestPaperSummarizer:
         # The budget guard fires at the top of summarize(): an already-exhausted
         # budget (from prior data-prep) must abort BEFORE the (expensive) LLM call,
         # not after. Regression guard for the _enforce_token_budget() wiring.
+        from scholar_lens.adapters.bedrock.usage import TokenUsageTracker
         from scholar_lens.domain.usage import TokenBudgetExceeded
-        from scholar_lens.src.metrics import TokenUsageTracker
 
         summarizer = _make_summarizer_with_stub_chain(
             {"summary": "## 연구 배경", "tags": "", "urls": ""}

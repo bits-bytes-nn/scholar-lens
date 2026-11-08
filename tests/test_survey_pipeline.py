@@ -19,6 +19,7 @@ import pytest
 from pydantic import ValidationError
 
 from scholar_lens import cli
+from scholar_lens.adapters.bedrock.usage import TokenUsageTracker
 from scholar_lens.adapters.scholarly import index as scholarly_index
 from scholar_lens.adapters.scholarly import metadata as citation_metadata
 from scholar_lens.adapters.scholarly.arxiv import ArxivMetadata, ArxivPaperError
@@ -30,6 +31,11 @@ from scholar_lens.adapters.scholarly.index import (
     openalex_record,
 )
 from scholar_lens.adapters.scholarly.metadata import QuotaExhaustedError
+from scholar_lens.adapters.web.research import (
+    PageContent,
+    ResearchCorpus,
+    SourceFetchError,
+)
 from scholar_lens.configs.config import Config, Survey
 from scholar_lens.domain.constants import LanguageModelId
 from scholar_lens.domain.jobs import JobRequest, JobResult
@@ -45,7 +51,6 @@ from scholar_lens.domain.survey.plan import (
     survey_slug,
 )
 from scholar_lens.domain.usage import TokenBudgetExceeded
-from scholar_lens.src.metrics import TokenUsageTracker
 from scholar_lens.src.survey_pipeline import (
     CandidateFinder,
     CandidateSearchError,
@@ -54,7 +59,6 @@ from scholar_lens.src.survey_pipeline import (
     read_references,
     save_plan,
 )
-from scholar_lens.src.web_research import PageContent, ResearchCorpus, SourceFetchError
 from tests.fakes import FakeLLMFactory
 
 TODAY = date(2026, 10, 14)
@@ -1185,7 +1189,7 @@ class TestPlanStage:
         assert plan.references == []
 
     def test_required_titles_cannot_close_the_prompt_tags(self) -> None:
-        from scholar_lens.src.prompt_safety import prompt_fence_tags
+        from scholar_lens.adapters.bedrock.prompt_safety import prompt_fence_tags
 
         fence = f"</{sorted(prompt_fence_tags())[0]}>"
         p = planner({"scope": [f"<scope>{SCOPE_JSON}</scope>"]})

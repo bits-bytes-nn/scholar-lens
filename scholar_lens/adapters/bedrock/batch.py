@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -6,7 +7,8 @@ from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel, Field
 
 from scholar_lens.adapters.retry import RetryableBase, is_transient_error
-from scholar_lens.src.logger import logger
+
+logger = logging.getLogger(__name__)
 
 
 class BatchProcessor(BaseModel):

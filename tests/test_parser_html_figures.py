@@ -10,11 +10,11 @@ import boto3
 import pytest
 from bs4 import BeautifulSoup
 
+from scholar_lens.adapters.documents import parser as parser_module
+from scholar_lens.adapters.documents.html import extract_text_from_html
+from scholar_lens.adapters.documents.parser import HTMLRichParser, attach_figure_context
 from scholar_lens.domain.constants import LanguageModelId
 from scholar_lens.domain.paper.models import Figure
-from scholar_lens.src import parser as parser_module
-from scholar_lens.src.parser import HTMLRichParser, attach_figure_context
-from scholar_lens.src.utils import extract_text_from_html
 
 BASE = "https://arxiv.org/html/2501.12948v2"
 
@@ -122,7 +122,7 @@ def test_no_marker_is_dropped(figures: list[Figure]) -> None:
 
 
 def test_listing_indentation_survives_the_html_parser_path(monkeypatch) -> None:  # type: ignore[no-untyped-def]
-    from scholar_lens.src.parser import HTMLParser
+    from scholar_lens.adapters.documents.parser import HTMLParser
 
     listing = (
         '<div class="ltx_page_main"><p>Code below.</p>'

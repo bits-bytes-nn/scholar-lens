@@ -7,10 +7,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from scholar_lens.application.usage import current_stage, staged, usage_stage
+from scholar_lens.adapters.bedrock.usage import TokenUsageTracker
 from scholar_lens.domain.model_registry import event_cost_usd
 from scholar_lens.domain.usage import UNSTAGED, RunUsage, UsageEvent
-from scholar_lens.src.metrics import TokenUsageTracker
+from scholar_lens.domain.usage_context import current_stage, staged, usage_stage
 
 OPUS = "us.anthropic.claude-opus-5-5"
 

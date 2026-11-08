@@ -6,11 +6,11 @@ import asyncio
 
 import pytest
 
-from scholar_lens.src.utils.helpers import (
+from scholar_lens.adapters.bedrock.output_parsers import HTMLTagOutputParser
+from scholar_lens.adapters.documents.html import (
     extract_text_from_html,
     measure_execution_time,
 )
-from scholar_lens.src.utils.parsers import HTMLTagOutputParser
 
 
 class TestExtractTextFromHtml:
@@ -225,7 +225,7 @@ class TestMeasureExecutionTime:
 
 class TestHTMLTagOutputParserRepeatedEnvelope:
     def test_self_corrected_output_uses_the_last_block(self) -> None:
-        from scholar_lens.src.utils.parsers import HTMLTagOutputParser
+        from scholar_lens.adapters.bedrock.output_parsers import HTMLTagOutputParser
 
         raw = (
             "<category>Finetuning</category>\n<controlled_tags>Language-Models</controlled_tags>\n"
@@ -238,7 +238,7 @@ class TestHTMLTagOutputParserRepeatedEnvelope:
         assert parsed == {"category": "Finetuning", "controlled_tags": "Quantization"}
 
     def test_single_block_keeps_stray_close_tag_inside_body(self) -> None:
-        from scholar_lens.src.utils.parsers import HTMLTagOutputParser
+        from scholar_lens.adapters.bedrock.output_parsers import HTMLTagOutputParser
 
         raw = "<summary>Use </summary> literally in prose.</summary>"
         parsed = HTMLTagOutputParser(tag_names="summary").parse(raw)

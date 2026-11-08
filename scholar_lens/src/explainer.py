@@ -30,8 +30,15 @@ from langchain_core.output_parsers import BaseOutputParser, StrOutputParser
 from langchain_core.runnables import Runnable
 from nltk.tokenize.punkt import PunktTokenizer
 
-from scholar_lens.adapters.retry import is_access_error
-from scholar_lens.application.usage import staged
+from scholar_lens.adapters.aws.environment import is_running_in_aws
+from scholar_lens.adapters.bedrock.chat_models import BedrockLanguageModelFactory
+from scholar_lens.adapters.bedrock.output_parsers import HTMLTagOutputParser
+from scholar_lens.adapters.bedrock.prompt_safety import neutralize_prompt_tags
+from scholar_lens.adapters.bedrock.prompts.base import BasePrompt
+from scholar_lens.adapters.bedrock.usage import TokenBudgetGuard
+from scholar_lens.adapters.code.retriever import CodeRetriever
+from scholar_lens.adapters.documents.html import measure_execution_time
+from scholar_lens.adapters.retry import RetryableBase, is_access_error
 from scholar_lens.domain.constants import LanguageModelId
 from scholar_lens.domain.ids import normalize_arxiv_id
 from scholar_lens.domain.markdown.lint import (
@@ -78,6 +85,7 @@ from scholar_lens.domain.text import (
     parse_quality_score,
     tag_body,
 )
+from scholar_lens.domain.usage_context import staged
 from scholar_lens.domain.validation import (
     description_markup,
     description_problems,
@@ -85,23 +93,13 @@ from scholar_lens.domain.validation import (
     unsourced_numbers,
 )
 from scholar_lens.src.citation_summarizer import CitationSummarizer
-from scholar_lens.src.code_retriever import CodeRetriever
-from scholar_lens.src.logger import is_running_in_aws, logger
-from scholar_lens.src.metrics import TokenBudgetGuard
-from scholar_lens.src.prompt_safety import neutralize_prompt_tags
-from scholar_lens.src.prompts import (
-    BasePrompt,
+from scholar_lens.src.logger import logger
+from scholar_lens.src.prompts.review import (
     PaperEditPrompt,
     PaperFinalizationPrompt,
     PaperPlanningPrompt,
     PaperSectionCheckPrompt,
     PaperSectionPrompt,
-)
-from scholar_lens.src.utils import (
-    BedrockLanguageModelFactory,
-    HTMLTagOutputParser,
-    RetryableBase,
-    measure_execution_time,
 )
 
 ROOT_DIR: Path = (

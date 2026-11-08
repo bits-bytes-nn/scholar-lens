@@ -181,7 +181,7 @@ class TestDownloadFolder:
         # rest of the paper lived in "2106_09685/".
         from types import SimpleNamespace
 
-        from scholar_lens.src.paper_source import ArxivSource
+        from scholar_lens.adapters.scholarly.paper_source import ArxivSource
 
         handler = _handler_with(MagicMock())
         paper = SimpleNamespace(

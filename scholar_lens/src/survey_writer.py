@@ -25,13 +25,20 @@ import boto3
 from langchain_core.runnables import Runnable
 
 from scholar_lens.adapters.aws.storage import S3Handler
+from scholar_lens.adapters.bedrock.chat_models import BedrockLanguageModelFactory
+from scholar_lens.adapters.bedrock.output_parsers import HTMLTagOutputParser
+from scholar_lens.adapters.bedrock.prompt_safety import neutralize_prompt_tags
+from scholar_lens.adapters.bedrock.prompts.survey import SurveyFinalizationPrompt
+from scholar_lens.adapters.bedrock.usage import TokenUsageTracker
+from scholar_lens.adapters.github.publisher import PublishRequest, build_pr_body
+from scholar_lens.adapters.retry import RetryableBase
 from scholar_lens.adapters.scholarly.index import (
     DataCiteIndex,
     OpenAlexIndex,
     datacite_record,
     openalex_record,
 )
-from scholar_lens.application.usage import staged
+from scholar_lens.adapters.web.research import WebResearcher
 from scholar_lens.domain.constants import LanguageModelId, S3Paths
 from scholar_lens.domain.jobs import JobRequest
 from scholar_lens.domain.markdown.lint import drop_unknown_images, fill_image_alts
@@ -60,16 +67,13 @@ from scholar_lens.domain.survey.post import (
     validate_plan,
 )
 from scholar_lens.domain.tags import controlled_tag_problems
+from scholar_lens.domain.usage_context import staged
 from scholar_lens.domain.validation import (
     description_markup,
     description_problems,
     fit_description,
 )
 from scholar_lens.src.logger import logger
-from scholar_lens.src.metrics import TokenUsageTracker
-from scholar_lens.src.prompt_safety import neutralize_prompt_tags
-from scholar_lens.src.prompts import SurveyFinalizationPrompt
-from scholar_lens.src.publisher import PublishRequest, build_pr_body
 from scholar_lens.src.runtime import (
     PipelineOutcome,
     RunContext,
@@ -79,12 +83,6 @@ from scholar_lens.src.runtime import (
     publish_artifact,
 )
 from scholar_lens.src.survey_pipeline import read_references, reference_excerpts
-from scholar_lens.src.utils import (
-    BedrockLanguageModelFactory,
-    HTMLTagOutputParser,
-    RetryableBase,
-)
-from scholar_lens.src.web_research import WebResearcher
 
 # Images of a paper's arXiv HTML rendering offered to its reading agent.
 MAX_PAPER_IMAGES = 40
@@ -343,12 +341,17 @@ async def write_survey_with_evidence(
         RoleModel,
         StrandsLanguageModel,
     )
+    from scholar_lens.adapters.scholarly.survey_documents import PaperDocuments
     from scholar_lens.application.survey_engine import (
         EngineSettings,
         EvidenceSurveyEngine,
     )
-    from scholar_lens.src.evidence_models import budgeted, role_model, unservable
-    from scholar_lens.src.survey_documents import PaperDocuments, evidence_store
+    from scholar_lens.src.evidence_models import (
+        budgeted,
+        evidence_store,
+        role_model,
+        unservable,
+    )
 
     cfg = context.config.survey
 

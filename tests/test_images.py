@@ -11,8 +11,8 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from scholar_lens.src.utils import images
-from scholar_lens.src.utils.images import (
+from scholar_lens.adapters.documents import images
+from scholar_lens.adapters.documents.images import (
     MAX_RENDER_SIDE,
     is_ar5iv_placeholder,
     raster_to_png,
@@ -202,7 +202,7 @@ def test_renders_run_at_most_max_concurrent(monkeypatch) -> None:  # type: ignor
     import time
     from concurrent.futures import ThreadPoolExecutor
 
-    from scholar_lens.src.utils import images
+    from scholar_lens.adapters.documents import images
 
     active, peak, lock = 0, 0, threading.Lock()
     # Renders meet in pairs, so the cap is reached on any runner; a third

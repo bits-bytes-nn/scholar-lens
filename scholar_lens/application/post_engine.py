@@ -65,7 +65,6 @@ from scholar_lens.application.ports import (
     LanguageModel,
     TextStore,
 )
-from scholar_lens.application.usage import usage_stage
 from scholar_lens.domain.coverage import (
     CoverageTarget,
     ExtractedTargets,
@@ -118,6 +117,7 @@ from scholar_lens.domain.prompts.rules import (
     consistency_system,
     repetition_system,
 )
+from scholar_lens.domain.usage_context import usage_stage
 from scholar_lens.domain.verifiers import Problem, VerifierSet, as_problems
 
 logger = logging.getLogger(__name__)

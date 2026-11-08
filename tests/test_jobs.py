@@ -11,19 +11,19 @@ from moto import mock_aws
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from scholar_lens import cli
+from scholar_lens.adapters.aws.batch import (
+    describe_job,
+    read_result_manifest,
+    submit_job,
+    wait_for_job,
+    write_result_manifest,
+)
 from scholar_lens.adapters.aws.storage import BatchJobError, S3Handler, S3OperationError
 from scholar_lens.domain.jobs import (
     JobRequest,
     JobResult,
     JobStatusReport,
     result_manifest_key,
-)
-from scholar_lens.src.jobs import (
-    describe_job,
-    read_result_manifest,
-    submit_job,
-    wait_for_job,
-    write_result_manifest,
 )
 
 BUCKET = "scholar-lens-test-bucket"

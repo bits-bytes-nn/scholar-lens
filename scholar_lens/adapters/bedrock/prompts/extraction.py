@@ -6,10 +6,10 @@ from langchain_core.prompts import (
     SystemMessagePromptTemplate,
 )
 
-from scholar_lens.domain.conventions import load_local_conventions
-from scholar_lens.src.prompts.base import (
+from scholar_lens.adapters.bedrock.prompts.base import (
     BasePrompt,
 )
+from scholar_lens.domain.conventions import load_local_conventions
 
 # Fallback vocabularies until the caller passes the blog's post-conventions
 # spec (categories.topics and tags.controlled). Callers override them by passing

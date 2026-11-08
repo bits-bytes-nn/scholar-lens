@@ -1,5 +1,6 @@
 import asyncio
 import functools
+import logging
 import re
 import time
 from collections.abc import Callable
@@ -12,7 +13,8 @@ from bs4.element import PreformattedString
 from scholar_lens.domain.markdown.tables import (
     escape_cell_pipes,
 )
-from scholar_lens.src.logger import logger
+
+logger = logging.getLogger(__name__)
 
 # Page chrome that carries no paper/doc content (running heads, nav menus).
 _DROPPED_TAGS = (

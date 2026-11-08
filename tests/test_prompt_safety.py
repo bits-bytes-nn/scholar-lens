@@ -7,19 +7,25 @@ from pathlib import Path
 
 import pytest
 
-from scholar_lens.src.prompt_safety import (
+from scholar_lens.adapters.bedrock.prompt_safety import (
     neutralize_prompt_tags,
     prompt_fence_tags,
     strip_defanging,
 )
 
-PROMPTS_DIR = Path(__file__).parents[1] / "scholar_lens" / "src" / "prompts"
+# The sections engine's templates register on import (bootstrap imports them).
+from scholar_lens.src.prompts import review, summary  # noqa: F401
+
+PROMPTS_DIRS = (
+    Path(__file__).parents[1] / "scholar_lens" / "src" / "prompts",
+    Path(__file__).parents[1] / "scholar_lens" / "adapters" / "bedrock" / "prompts",
+)
 
 
 def _fences_in_prompt_sources() -> set[str]:
     """Tags written around a ``{placeholder}`` line in the prompt modules."""
     tags: set[str] = set()
-    for path in PROMPTS_DIR.glob("*.py"):
+    for path in (p for d in PROMPTS_DIRS for p in d.glob("*.py")):
         tags.update(
             re.findall(r"<([A-Za-z_]\w*)>\s*\{[A-Za-z_]\w*\}\s*</\1>", path.read_text())
         )

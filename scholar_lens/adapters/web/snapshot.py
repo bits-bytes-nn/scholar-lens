@@ -21,6 +21,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, Protocol
 
 from scholar_lens.adapters.retry import is_access_error
+from scholar_lens.adapters.web.research import PageContent, ResearchCorpus, SearchResult
 from scholar_lens.domain.sources import (
     DomainClasses,
     OfficialDocs,
@@ -28,7 +29,6 @@ from scholar_lens.domain.sources import (
     TagLookup,
     TargetVersion,
 )
-from scholar_lens.src.web_research import PageContent, ResearchCorpus, SearchResult
 
 logger = logging.getLogger(__name__)
 

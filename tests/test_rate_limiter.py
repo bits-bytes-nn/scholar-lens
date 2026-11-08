@@ -101,7 +101,7 @@ def test_arxiv_retry_after_is_capped(header: str, expected: float) -> None:
 async def test_arxiv_html_fetch_is_paced_and_penalty_capped() -> None:
     import httpx
 
-    from scholar_lens.src.parser import ContentParseError, HTMLParser
+    from scholar_lens.adapters.documents.parser import ContentParseError, HTMLParser
 
     clock = _FakeClock()
     limiter = _limiter_with_clock(clock, rate=1.0, per=3.0, name="arxiv")

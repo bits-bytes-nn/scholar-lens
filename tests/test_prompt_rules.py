@@ -4,6 +4,14 @@ from __future__ import annotations
 
 import pytest
 
+from scholar_lens.adapters.bedrock.prompts.base import BasePrompt
+from scholar_lens.adapters.bedrock.prompts.extraction import (
+    DEFAULT_CATEGORY_OPTIONS,
+    DEFAULT_CONTROLLED_TAGS,
+    AttributesExtractionPrompt,
+)
+from scholar_lens.adapters.bedrock.prompts.survey import SurveyFinalizationPrompt
+from scholar_lens.adapters.bedrock.prompts.tech_guide import TechGuideTaxonomyPrompt
 from scholar_lens.domain.markdown.lint import style_hits, writing_issues
 from scholar_lens.domain.prompts.rules import (
     KOREAN_STYLE,
@@ -12,23 +20,17 @@ from scholar_lens.domain.prompts.rules import (
     TABLE_SIZE_RULE,
     TERMINOLOGY_RULES,
 )
-from scholar_lens.src.prompts import (
-    AttributesExtractionPrompt,
+from scholar_lens.src.prompts.review import (
     PaperEditPrompt,
     PaperFinalizationPrompt,
     PaperPlanningPrompt,
     PaperSectionCheckPrompt,
     PaperSectionPrompt,
+)
+from scholar_lens.src.prompts.summary import (
     PaperSummaryPrompt,
     PaperSummaryShortenPrompt,
-    SurveyFinalizationPrompt,
 )
-from scholar_lens.src.prompts.base import BasePrompt
-from scholar_lens.src.prompts.extraction import (
-    DEFAULT_CATEGORY_OPTIONS,
-    DEFAULT_CONTROLLED_TAGS,
-)
-from scholar_lens.src.prompts.tech_guide import TechGuideTaxonomyPrompt
 
 WRITERS = [
     PaperSectionPrompt,

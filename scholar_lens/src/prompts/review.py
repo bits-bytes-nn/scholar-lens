@@ -5,6 +5,7 @@ writer, checker and editor all work from that plan, so coverage, depth and
 terminology stay consistent across sections.
 """
 
+from scholar_lens.adapters.bedrock.prompts.base import BasePrompt
 from scholar_lens.domain.prompts.rules import (
     CITATION_KEY_RULES,
     DEPTH_RULES,
@@ -23,7 +24,6 @@ from scholar_lens.domain.prompts.rules import (
     TERMINOLOGY_RULES,
     VISUAL_RULES,
 )
-from scholar_lens.src.prompts.base import BasePrompt
 
 
 class PaperPlanningPrompt(BasePrompt):

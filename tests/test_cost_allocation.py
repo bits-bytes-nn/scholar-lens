@@ -7,10 +7,10 @@ from unittest.mock import MagicMock
 import aws_cdk as core
 import pytest
 
-from scholar_lens.application.usage import cost_allocation
+from scholar_lens.adapters.bedrock import chat_models as factories
 from scholar_lens.domain.cost_allocation import ARTIFACT_KINDS, application_profile_name
 from scholar_lens.domain.model_registry import model_info_for_invoked_id
-from scholar_lens.src.utils import factories
+from scholar_lens.domain.usage_context import cost_allocation
 from scripts.deploy_infra import BedrockProfilesStack
 
 OPUS = "global.anthropic.claude-opus-5-5"

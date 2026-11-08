@@ -8,16 +8,15 @@ from unittest.mock import AsyncMock, MagicMock
 import boto3
 import pytest
 
-from scholar_lens.domain.constants import LanguageModelId
-from scholar_lens.src.prompts import (
-    TechGuideRelevancePrompt,
-    TechGuideResearchPlanPrompt,
-)
-from scholar_lens.src.prompts.tech_guide import (
+from scholar_lens.adapters.bedrock.prompts.tech_guide import (
     OFFICIAL_LABEL,
     REFERENCE_LABEL,
+    TechGuideRelevancePrompt,
+    TechGuideResearchPlanPrompt,
     TechGuideTaxonomyPrompt,
 )
+from scholar_lens.adapters.web.research import PageContent, ResearchCorpus, source_label
+from scholar_lens.domain.constants import LanguageModelId
 from scholar_lens.src.section_loop import lost_structure
 from scholar_lens.src.tech_guide import (
     _NO_DOCS_NOTE,
@@ -25,7 +24,6 @@ from scholar_lens.src.tech_guide import (
     NotTechnicalContentError,
     TechGuideGenerator,
 )
-from scholar_lens.src.web_research import PageContent, ResearchCorpus, source_label
 from tests.fakes import FakeLLMFactory
 
 
@@ -116,7 +114,7 @@ class TestBuildSearchProvider:
         return tg.build_search_provider()
 
     def test_prefers_tavily(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        from scholar_lens.src.web_research import TavilySearchProvider
+        from scholar_lens.adapters.web.research import TavilySearchProvider
 
         p = self._provider(monkeypatch, tavily="tvly-k")
         assert isinstance(p, TavilySearchProvider)
@@ -124,7 +122,7 @@ class TestBuildSearchProvider:
     def test_tavily_falls_back_to_brave_when_both_are_set(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from scholar_lens.src.web_research import (
+        from scholar_lens.adapters.web.research import (
             BraveSearchProvider,
             FallbackSearchProvider,
             TavilySearchProvider,
@@ -136,13 +134,13 @@ class TestBuildSearchProvider:
         assert isinstance(p.secondary, BraveSearchProvider)
 
     def test_falls_back_to_brave(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        from scholar_lens.src.web_research import BraveSearchProvider
+        from scholar_lens.adapters.web.research import BraveSearchProvider
 
         p = self._provider(monkeypatch, brave="brave-k")
         assert isinstance(p, BraveSearchProvider)
 
     def test_null_when_no_keys(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        from scholar_lens.src.web_research import NullSearchProvider
+        from scholar_lens.adapters.web.research import NullSearchProvider
 
         p = self._provider(monkeypatch)
         assert isinstance(p, NullSearchProvider)

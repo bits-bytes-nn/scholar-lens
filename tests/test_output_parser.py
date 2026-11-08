@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from scholar_lens.src.utils.parsers import HTMLTagOutputParser
+from scholar_lens.adapters.bedrock.output_parsers import HTMLTagOutputParser
 
 # --------------------------------------------------------------------------- #
 # HTMLTagOutputParser

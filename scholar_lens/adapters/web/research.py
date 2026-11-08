@@ -12,6 +12,7 @@ The search provider is an abstraction so deployments can choose their backend
 from __future__ import annotations
 
 import json
+import logging
 import math
 import os
 import random
@@ -28,6 +29,23 @@ from urllib.parse import urljoin, urlparse
 import httpx
 from bs4 import BeautifulSoup, Tag, UnicodeDammit
 
+from scholar_lens.adapters.bedrock.prompt_safety import neutralize_prompt_tags
+from scholar_lens.adapters.bedrock.prompts.tech_guide import (
+    OFFICIAL_LABEL,
+    OLDER_DOCS_LABEL,
+    REFERENCE_LABEL,
+    THIRD_PARTY_LABEL,
+)
+from scholar_lens.adapters.documents.html import (
+    extract_text_from_html,
+    is_page_furniture,
+)
+from scholar_lens.adapters.documents.parser import (
+    MIN_PARSED_TEXT_CHARS,
+    _readable_chars,
+    _real_text,
+    figure_caption,
+)
 from scholar_lens.adapters.http.pinned_transport import PinnedHTTPTransport
 from scholar_lens.adapters.http.rate_limit import (
     ARXIV_RATE_LIMITER,
@@ -60,22 +78,8 @@ from scholar_lens.domain.sources import (
     search_rank,
 )
 from scholar_lens.domain.text import parse_lines
-from scholar_lens.src.logger import logger
-from scholar_lens.src.parser import (
-    MIN_PARSED_TEXT_CHARS,
-    _readable_chars,
-    _real_text,
-    figure_caption,
-)
-from scholar_lens.src.prompt_safety import neutralize_prompt_tags
-from scholar_lens.src.prompts.tech_guide import (
-    OFFICIAL_LABEL,
-    OLDER_DOCS_LABEL,
-    REFERENCE_LABEL,
-    THIRD_PARTY_LABEL,
-)
-from scholar_lens.src.utils import extract_text_from_html
-from scholar_lens.src.utils.helpers import is_page_furniture
+
+logger = logging.getLogger(__name__)
 
 # Re-exported: the URL rules moved to :mod:`source_set`.
 __all__ = ["SHARED_HOSTS", "OfficialDocs", "docs_version", "normalize_url"]

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import itertools
+import logging
 import os
 import re
 import shutil
@@ -32,6 +33,15 @@ import httpx
 from github import Auth, Github, GithubRetry
 
 from scholar_lens.adapters.aws.storage import S3Handler, S3OperationError
+from scholar_lens.adapters.bedrock.prompt_safety import strip_defanging
+from scholar_lens.adapters.documents.images import (
+    is_ar5iv_placeholder,
+    is_svg,
+    raster_to_png,
+    source_figure,
+    svg_to_png,
+)
+from scholar_lens.adapters.github.blog_sync import BlogBranchSync, GithubSettings
 from scholar_lens.adapters.http.pinned_transport import PinnedHTTPTransport
 from scholar_lens.adapters.http.rate_limit import (
     ARXIV_RATE_LIMITER,
@@ -65,21 +75,11 @@ from scholar_lens.domain.publishing import (
 )
 from scholar_lens.domain.publishing import PublishError as PublishError  # re-exported
 from scholar_lens.domain.validation import PostValidationError, validate_post
-from scholar_lens.src.blog_sync import BlogBranchSync
-from scholar_lens.src.logger import logger
-from scholar_lens.src.prompt_safety import strip_defanging
-from scholar_lens.src.utils.images import (
-    is_ar5iv_placeholder,
-    is_svg,
-    raster_to_png,
-    source_figure,
-    svg_to_png,
-)
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from github.Repository import Repository
-
-    from scholar_lens.configs import Github as GithubConfig
 
 _IMAGE_DOWNLOAD_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
 # Whole-download bound: the timeout above is per read, so a server dripping
@@ -422,7 +422,7 @@ class Publisher:
 
     def __init__(
         self,
-        github_config: GithubConfig,
+        github_config: GithubSettings,
         *,
         root_dir: Path,
         s3_handler: S3Handler | None = None,

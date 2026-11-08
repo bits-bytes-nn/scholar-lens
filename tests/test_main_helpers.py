@@ -6,6 +6,7 @@ from datetime import datetime
 
 import pytest
 
+from scholar_lens.adapters.documents.parser import attach_figure_context
 from scholar_lens.configs import Github
 from scholar_lens.domain.conventions import load_local_conventions
 from scholar_lens.domain.guide.models import TechGuide
@@ -24,7 +25,6 @@ from scholar_lens.domain.post_format import (
     paper_post_meta,
 )
 from scholar_lens.domain.post_names import slugify as _slugify
-from scholar_lens.src.parser import attach_figure_context
 
 
 class TestSlugify:
@@ -198,9 +198,9 @@ def test_link_text_brackets_survive_math_normalization() -> None:
 
 
 def test_figure_marker_stays_one_parseable_token() -> None:
+    from scholar_lens.adapters.documents.parser import attach_figure_context
     from scholar_lens.domain.paper.models import Figure
     from scholar_lens.domain.review_plan import figure_catalog
-    from scholar_lens.src.parser import attach_figure_context
 
     fig = Figure(
         figure_id="1",

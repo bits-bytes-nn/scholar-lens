@@ -10,6 +10,7 @@ so ``status`` can report it after the container is gone.
 
 from __future__ import annotations
 
+import logging
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -37,7 +38,8 @@ from scholar_lens.domain.jobs import (
     result_manifest_key,
     ssm_base,
 )
-from scholar_lens.src.logger import logger
+
+logger = logging.getLogger(__name__)
 
 
 def write_result_manifest(

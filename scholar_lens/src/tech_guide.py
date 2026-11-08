@@ -33,7 +33,42 @@ from urllib.parse import urlparse
 import boto3
 from langchain_core.runnables import Runnable
 
-from scholar_lens.application.usage import staged
+from scholar_lens.adapters.bedrock.chat_models import BedrockLanguageModelFactory
+from scholar_lens.adapters.bedrock.output_parsers import HTMLTagOutputParser
+from scholar_lens.adapters.bedrock.prompt_safety import neutralize_prompt_tags
+from scholar_lens.adapters.bedrock.prompts.base import BasePrompt
+from scholar_lens.adapters.bedrock.prompts.tech_guide import (
+    REFERENCE_LABEL,
+    TechGuideRelevancePrompt,
+    TechGuideResearchPlanPrompt,
+    TechGuideTaxonomyPrompt,
+)
+from scholar_lens.adapters.retry import RetryableBase
+from scholar_lens.adapters.web.authority import (
+    mentions_any,
+    official_reference,
+    third_party_identifiers,
+)
+from scholar_lens.adapters.web.research import (
+    MAX_REFERENCE_PAGES,
+    MAX_REFERENCE_SEARCHES,
+    OfficialDocs,
+    PageContent,
+    ResearchCorpus,
+    SourceFetchError,
+    WebResearcher,
+    arxiv_paper_urls,
+    page_key,
+    product_names,
+    source_label,
+)
+from scholar_lens.adapters.web.snapshot import (
+    CorpusSnapshot,
+    SnapshotPolicy,
+    read_snapshot,
+    save_snapshot,
+    snapshot_key,
+)
 from scholar_lens.domain.constants import LanguageModelId
 from scholar_lens.domain.guide.evidence_guide import install_requirements
 from scholar_lens.domain.guide.models import TechGuide
@@ -47,45 +82,9 @@ from scholar_lens.domain.sources import (
 )
 from scholar_lens.domain.tags import controlled_tag_problems
 from scholar_lens.domain.text import is_affirmative, is_placeholder
+from scholar_lens.domain.usage_context import staged
 from scholar_lens.domain.validation import description_markup, description_problems
-from scholar_lens.src.guide_authority import (
-    mentions_any,
-    official_reference,
-    third_party_identifiers,
-)
 from scholar_lens.src.logger import logger
-from scholar_lens.src.prompt_safety import neutralize_prompt_tags
-from scholar_lens.src.prompts import (
-    BasePrompt,
-    TechGuideRelevancePrompt,
-    TechGuideResearchPlanPrompt,
-)
-from scholar_lens.src.prompts.tech_guide import REFERENCE_LABEL, TechGuideTaxonomyPrompt
-from scholar_lens.src.source_snapshot import (
-    CorpusSnapshot,
-    SnapshotPolicy,
-    read_snapshot,
-    save_snapshot,
-    snapshot_key,
-)
-from scholar_lens.src.utils import (
-    BedrockLanguageModelFactory,
-    HTMLTagOutputParser,
-    RetryableBase,
-)
-from scholar_lens.src.web_research import (
-    MAX_REFERENCE_PAGES,
-    MAX_REFERENCE_SEARCHES,
-    OfficialDocs,
-    PageContent,
-    ResearchCorpus,
-    SourceFetchError,
-    WebResearcher,
-    arxiv_paper_urls,
-    page_key,
-    product_names,
-    source_label,
-)
 
 DEFAULT_LANGUAGE: str = "Korean"
 # The third-party identifier lookup before writing uses a third of the

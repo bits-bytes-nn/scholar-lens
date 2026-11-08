@@ -30,7 +30,6 @@ from scholar_lens.application.ports import (
     ModelText,
     was_cut,
 )
-from scholar_lens.application.usage import usage_stage
 from scholar_lens.domain.edit_transaction import Revision, changed_units, transact
 from scholar_lens.domain.evidence import (
     Evidence,
@@ -56,6 +55,7 @@ from scholar_lens.domain.evidence_draft import (
 )
 from scholar_lens.domain.post_spec import Limits
 from scholar_lens.domain.prompts.rules import FIX_ANSWER
+from scholar_lens.domain.usage_context import usage_stage
 from scholar_lens.domain.verifiers import VerifierSet
 
 logger = logging.getLogger(__name__)

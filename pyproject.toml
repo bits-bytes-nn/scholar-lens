@@ -156,5 +156,5 @@ forbidden_modules = ["scholar_lens.src", "scholar_lens.cli"]
 [[tool.importlinter.contracts]]
 name = "Web research does not depend on the review plan"
 type = "forbidden"
-source_modules = ["scholar_lens.src.web_research"]
+source_modules = ["scholar_lens.adapters.web.research"]
 forbidden_modules = ["scholar_lens.domain.review_plan"]

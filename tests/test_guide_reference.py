@@ -8,9 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from scholar_lens.domain.markdown.lint import writing_issues
-from scholar_lens.domain.sources import SourceSet
-from scholar_lens.src.web_research import (
+from scholar_lens.adapters.web.research import (
     MAX_REFERENCE_PAGES,
     MAX_REFERENCE_SEARCHES,
     PageContent,
@@ -19,6 +17,8 @@ from scholar_lens.src.web_research import (
     WebResearcher,
     WebSearchProvider,
 )
+from scholar_lens.domain.markdown.lint import writing_issues
+from scholar_lens.domain.sources import SourceSet
 from tests.test_tech_guide import _make_generator
 
 HOST = "docs.example.ai"
@@ -147,7 +147,7 @@ def test_reference_lookup_skips_an_older_docs_version() -> None:
 
 
 def test_python_arguments_count_as_identifiers() -> None:
-    from scholar_lens.src.guide_authority import unverified_identifiers
+    from scholar_lens.adapters.web.authority import unverified_identifiers
 
     official = "Pass --gpu-memory-utilization to vllm serve."
     body = (
@@ -162,7 +162,7 @@ def test_python_arguments_count_as_identifiers() -> None:
 
 
 def test_third_party_flags_seed_the_reference_lookup() -> None:
-    from scholar_lens.src.guide_authority import third_party_identifiers
+    from scholar_lens.adapters.web.authority import third_party_identifiers
 
     corpus = ResearchCorpus(
         pages=[
@@ -221,7 +221,7 @@ def _pages_researcher(pages: dict[str, PageContent]) -> WebResearcher:
 
 
 def _settles(identifiers: list[str]):  # type: ignore[no-untyped-def]
-    from scholar_lens.src.guide_authority import mentions_any
+    from scholar_lens.adapters.web.authority import mentions_any
 
     return lambda text: mentions_any(text, identifiers)
 
@@ -336,7 +336,7 @@ def test_the_identifier_lookup_leaves_part_of_the_budget() -> None:
 def _budget_generator(search: list[SearchResult] | None):  # type: ignore[no-untyped-def]
     """A generator whose researcher has the given search results (None: no
     search backend) and a seed page linking reference-like pages."""
-    from scholar_lens.src.web_research import NullSearchProvider
+    from scholar_lens.adapters.web.research import NullSearchProvider
 
     links = [
         f"https://{HOST}/en/latest/{p}.html"
@@ -395,7 +395,7 @@ async def test_the_identifier_lookup_stays_within_its_share() -> None:
 
 
 def test_arguments_the_guides_own_code_defines_are_not_unverified() -> None:
-    from scholar_lens.src.guide_authority import unverified_identifiers
+    from scholar_lens.adapters.web.authority import unverified_identifiers
 
     body = (
         "```python\nfrom vllm import LLM\n\n"

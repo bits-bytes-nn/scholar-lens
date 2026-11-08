@@ -19,17 +19,15 @@ import pymupdf
 from scholar_lens.adapters.aws.storage import S3Handler, S3OperationError
 from scholar_lens.adapters.retry import is_access_error
 from scholar_lens.adapters.scholarly.index import OpenAlexIndex
-from scholar_lens.application.checkpoints import FreshStore
-from scholar_lens.application.ports import TextStore
-from scholar_lens.domain.constants import S3Paths
-from scholar_lens.domain.evidence import SourceDocument
-from scholar_lens.domain.survey.plan import PlanPaper, unversioned_arxiv_id
-from scholar_lens.src.paper_source import PaperSourceError, PdfUrlSource
-from scholar_lens.src.web_research import (
+from scholar_lens.adapters.scholarly.paper_source import PaperSourceError, PdfUrlSource
+from scholar_lens.adapters.web.research import (
     ResearchCorpus,
     SourceFetchError,
     WebResearcher,
 )
+from scholar_lens.domain.constants import S3Paths
+from scholar_lens.domain.evidence import SourceDocument
+from scholar_lens.domain.survey.plan import PlanPaper, unversioned_arxiv_id
 
 logger = logging.getLogger(__name__)
 
@@ -221,18 +219,3 @@ class EvidenceTextStore:
                 if is_access_error(e):
                     raise
                 logger.warning("Could not cache evidence %s in S3: %s", key, e)
-
-
-def evidence_store(
-    local_dir: Path,
-    s3_handler: S3Handler | None,
-    s3_prefix: str,
-    area: S3Paths = S3Paths.SURVEYS,
-    *,
-    fresh: bool = False,
-) -> TextStore:
-    """The run's reading cache and checkpoint store
-    (:class:`EvidenceTextStore`); a ``fresh`` run writes it without reading
-    it."""
-    store = EvidenceTextStore(local_dir, s3_handler, s3_prefix, area)
-    return FreshStore(store) if fresh else store

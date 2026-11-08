@@ -9,8 +9,7 @@ from collections.abc import Collection
 import httpx
 import pytest
 
-from scholar_lens.domain.sources import DomainClasses, SourceSet, search_exclusions
-from scholar_lens.src.web_research import (
+from scholar_lens.adapters.web.research import (
     BraveSearchProvider,
     FallbackSearchProvider,
     PageContent,
@@ -20,6 +19,7 @@ from scholar_lens.src.web_research import (
     WebResearcher,
     WebSearchProvider,
 )
+from scholar_lens.domain.sources import DomainClasses, SourceSet, search_exclusions
 
 DOCS = "https://docs.example.dev/en/latest/"
 DEMOTED = DomainClasses.from_config(

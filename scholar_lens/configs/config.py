@@ -13,8 +13,8 @@ from pydantic import (
     model_validator,
 )
 
+from scholar_lens.adapters.aws.environment import is_running_in_aws
 from scholar_lens.domain.constants import EmbeddingModelId, LanguageModelId
-from scholar_lens.src.logger import is_running_in_aws
 
 logger = logging.getLogger(__name__)
 

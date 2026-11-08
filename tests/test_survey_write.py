@@ -23,6 +23,9 @@ from pydantic import ValidationError
 
 from scholar_lens import cli
 from scholar_lens.adapters.bedrock.strands_models import RoleModel
+from scholar_lens.adapters.bedrock.usage import TokenUsageTracker
+from scholar_lens.adapters.github.publisher import Publisher
+from scholar_lens.adapters.web.research import PageContent, ResearchCorpus
 from scholar_lens.application import survey_engine
 from scholar_lens.application.survey_engine import EvidenceSurvey
 from scholar_lens.configs.config import Config, Survey
@@ -48,8 +51,6 @@ from scholar_lens.domain.survey.post import (
 )
 from scholar_lens.domain.validation import validate_post
 from scholar_lens.src import evidence_models, survey_writer
-from scholar_lens.src.metrics import TokenUsageTracker
-from scholar_lens.src.publisher import Publisher
 from scholar_lens.src.runtime import RunContext
 from scholar_lens.src.survey_writer import (
     PaperIndex,
@@ -59,7 +60,6 @@ from scholar_lens.src.survey_writer import (
     stage_plan_for_batch,
     survey_body,
 )
-from scholar_lens.src.web_research import PageContent, ResearchCorpus
 from tests.fakes import FakeLLMFactory
 
 # The blog checkout next to this repository, when there is one.
@@ -210,7 +210,7 @@ class TestCliAndJob:
         with (
             mock.patch("scholar_lens.cli._aws_context", return_value=context),
             mock.patch(
-                "scholar_lens.src.jobs.submit_job",
+                "scholar_lens.adapters.aws.batch.submit_job",
                 return_value=submitted,
             ) as submit,
             mock.patch("scholar_lens.cli._emit"),
@@ -1090,7 +1090,7 @@ def test_a_rerun_replaces_the_post_its_plan_published(
     repo.merge("paper-reviews/survey-preference-optimization", [old])
     monkeypatch.setenv("GITHUB_TOKEN", "ghp_x")
     monkeypatch.setattr(FakeGithub, "repo", repo)
-    monkeypatch.setattr("scholar_lens.src.publisher.Github", FakeGithub)
+    monkeypatch.setattr("scholar_lens.adapters.github.publisher.Github", FakeGithub)
     context = stage["context"]
     context.blog_posts = [
         BlogPost(

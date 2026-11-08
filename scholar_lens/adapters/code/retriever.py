@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import logging
 import os
 import re
 import shutil
@@ -15,17 +16,21 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.vectorstores import VectorStore
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-from scholar_lens.adapters.http.url_guard import UnsafeUrlError, assert_url_is_public
-from scholar_lens.application.usage import staged
-from scholar_lens.domain.constants import EmbeddingModelId, LanguageModelId, LocalPaths
-from scholar_lens.src.logger import logger
-from scholar_lens.src.prompts import CodeAnalysisPrompt, CodebaseSummaryPrompt
-from scholar_lens.src.utils import (
-    BatchProcessor,
+from scholar_lens.adapters.bedrock.batch import BatchProcessor
+from scholar_lens.adapters.bedrock.chat_models import (
     BedrockEmbeddingModelFactory,
     BedrockLanguageModelFactory,
-    RetryableBase,
 )
+from scholar_lens.adapters.bedrock.prompts.extraction import (
+    CodeAnalysisPrompt,
+    CodebaseSummaryPrompt,
+)
+from scholar_lens.adapters.http.url_guard import UnsafeUrlError, assert_url_is_public
+from scholar_lens.adapters.retry import RetryableBase
+from scholar_lens.domain.constants import EmbeddingModelId, LanguageModelId, LocalPaths
+from scholar_lens.domain.usage_context import staged
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_CHUNK_OVERLAP: int = 256
 DEFAULT_CHUNK_SIZE: int = 1024

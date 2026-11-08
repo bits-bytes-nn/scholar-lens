@@ -66,6 +66,7 @@ from constructs import Construct
 sys.path.append(str(Path(__file__).parent.parent))
 from dotenv import load_dotenv
 
+from scholar_lens.adapters.aws.metrics import COST_METRIC_NAME, METRICS_NAMESPACE
 from scholar_lens.adapters.aws.storage import get_account_id
 from scholar_lens.cli import APP_REPORTED_EXIT_CODES
 from scholar_lens.configs import Config
@@ -80,10 +81,9 @@ from scholar_lens.domain.constants import (
 from scholar_lens.domain.cost_allocation import ARTIFACT_KINDS, application_profile_name
 from scholar_lens.domain.jobs import ssm_base
 from scholar_lens.src.logger import logger
-from scholar_lens.src.metrics import COST_METRIC_NAME, METRICS_NAMESPACE
 
 # The single job definition runs every artifact kind; the CLI serialises a
-# JobRequest into the ``request`` parameter (scholar_lens/src/jobs.py).
+# JobRequest into the ``request`` parameter (scholar_lens/adapters/aws/batch.py).
 JOB_COMMAND = ["python3", "-m", "scholar_lens", "worker", "--request", "Ref::request"]
 
 # Bedrock model vendors the app can invoke ("anthropic", "amazon", "cohere"),

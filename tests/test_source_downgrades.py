@@ -13,14 +13,17 @@ import requests
 import responses
 
 from scholar_lens.adapters.http.rate_limit import ARXIV_RETRIES, RateLimiter
-from scholar_lens.domain.survey.plan import PlanPaper
-from scholar_lens.src.paper_source import PaperFetchError, PdfUrlSource
-from scholar_lens.src.survey_documents import MAX_PDF_PAGES, PaperDocuments
-from scholar_lens.src.web_research import (
+from scholar_lens.adapters.scholarly.paper_source import PaperFetchError, PdfUrlSource
+from scholar_lens.adapters.scholarly.survey_documents import (
+    MAX_PDF_PAGES,
+    PaperDocuments,
+)
+from scholar_lens.adapters.web.research import (
     PageContent,
     ResearchCorpus,
     SourceFetchError,
 )
+from scholar_lens.domain.survey.plan import PlanPaper
 
 
 class Clock:
@@ -107,7 +110,7 @@ def test_another_hosts_pdf_is_not_paced_or_retried(
 async def test_arxiv_html_retries_a_rate_limit_then_reads_the_page(
     limiter: CountingLimiter,
 ) -> None:
-    from scholar_lens.src.parser import HTMLParser
+    from scholar_lens.adapters.documents.parser import HTMLParser
 
     answers = iter([httpx.Response(429), httpx.Response(200, text="<p>paper</p>")])
     client = httpx.AsyncClient(
@@ -121,7 +124,11 @@ async def test_arxiv_html_retries_a_rate_limit_then_reads_the_page(
 
 
 async def test_arxiv_html_failure_names_its_status(limiter: CountingLimiter) -> None:
-    from scholar_lens.src.parser import ContentParseError, HTMLParser, failure_reason
+    from scholar_lens.adapters.documents.parser import (
+        ContentParseError,
+        HTMLParser,
+        failure_reason,
+    )
 
     client = httpx.AsyncClient(
         transport=httpx.MockTransport(lambda request: httpx.Response(502))

@@ -10,16 +10,23 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
+from pathlib import Path
 
+from scholar_lens.adapters.aws.storage import S3Handler
+from scholar_lens.adapters.bedrock.chat_models import (
+    BedrockCrossRegionModelHelper,
+    _allocated_profile,
+)
 from scholar_lens.adapters.bedrock.strands_models import RoleModel
-from scholar_lens.domain.constants import LanguageModelId
+from scholar_lens.adapters.bedrock.usage import TokenUsageTracker
+from scholar_lens.adapters.scholarly.survey_documents import EvidenceTextStore
+from scholar_lens.application.checkpoints import FreshStore
+from scholar_lens.application.ports import TextStore
+from scholar_lens.domain.constants import LanguageModelId, S3Paths
 from scholar_lens.domain.model_registry import model_info_for_invoked_id
 from scholar_lens.domain.usage import TokenBudgetExceeded, UsageEvent
 from scholar_lens.src.logger import logger
-from scholar_lens.src.metrics import TokenUsageTracker
 from scholar_lens.src.runtime import RunContext
-from scholar_lens.src.utils import BedrockCrossRegionModelHelper
-from scholar_lens.src.utils.factories import _allocated_profile
 
 
 def role_model(
@@ -65,7 +72,7 @@ def budgeted(
 
 
 def _downloadable(url: str) -> bool:
-    from scholar_lens.src.publisher import download_image
+    from scholar_lens.adapters.github.publisher import download_image
 
     try:
         download_image(url)
@@ -81,3 +88,18 @@ async def unservable(urls: list[str]) -> list[str]:
     step."""
     ok = await asyncio.gather(*(asyncio.to_thread(_downloadable, u) for u in urls))
     return [u for u, good in zip(urls, ok, strict=True) if not good]
+
+
+def evidence_store(
+    local_dir: Path,
+    s3_handler: S3Handler | None,
+    s3_prefix: str,
+    area: S3Paths = S3Paths.SURVEYS,
+    *,
+    fresh: bool = False,
+) -> TextStore:
+    """The run's reading cache and checkpoint store
+    (:class:`EvidenceTextStore`); a ``fresh`` run writes it without reading
+    it."""
+    store = EvidenceTextStore(local_dir, s3_handler, s3_prefix, area)
+    return FreshStore(store) if fresh else store

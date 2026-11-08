@@ -11,6 +11,21 @@ from typing import Any
 
 from pydantic import HttpUrl
 
+from scholar_lens.adapters.bedrock.usage import TokenUsageTracker
+from scholar_lens.adapters.code.retriever import CodeRetriever, NoPythonFilesError
+from scholar_lens.adapters.documents.content_extractor import ContentExtractor
+from scholar_lens.adapters.documents.parser import (
+    HTMLRichParser,
+    ParserError,
+    PDFParser,
+    attach_figure_context,
+    failure_reason,
+)
+from scholar_lens.adapters.github.publisher import PublishRequest, build_pr_body
+from scholar_lens.adapters.scholarly.paper_source import (
+    PaperSource,
+    resolve_paper_source,
+)
 from scholar_lens.domain.constants import EmbeddingModelId, LanguageModelId, LocalPaths
 from scholar_lens.domain.conventions import BlogPost
 from scholar_lens.domain.jobs import JobRequest
@@ -37,21 +52,9 @@ from scholar_lens.domain.tags import unsupported_tags
 from scholar_lens.domain.text import is_placeholder
 from scholar_lens.domain.validation import unsourced_table_numbers
 from scholar_lens.src.citation_summarizer import CitationSummarizer
-from scholar_lens.src.code_retriever import CodeRetriever, NoPythonFilesError
-from scholar_lens.src.content_extractor import ContentExtractor
 from scholar_lens.src.explainer import PaperReviewer
 from scholar_lens.src.logger import logger
-from scholar_lens.src.metrics import TokenUsageTracker
-from scholar_lens.src.paper_source import PaperSource, resolve_paper_source
 from scholar_lens.src.paper_writer import write_paper_with_evidence
-from scholar_lens.src.parser import (
-    HTMLRichParser,
-    ParserError,
-    PDFParser,
-    attach_figure_context,
-    failure_reason,
-)
-from scholar_lens.src.publisher import PublishRequest, build_pr_body
 from scholar_lens.src.runtime import (
     PipelineOutcome,
     RunContext,

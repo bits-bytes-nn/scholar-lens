@@ -44,8 +44,8 @@ from scholar_lens.application.ports import (
     ModelText,
     SchemaT,
 )
-from scholar_lens.application.usage import current_stage
 from scholar_lens.domain.usage import UsageEvent
+from scholar_lens.domain.usage_context import current_stage
 
 logger = logging.getLogger(__name__)
 

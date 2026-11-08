@@ -3,6 +3,7 @@ import base64
 import hashlib
 import io
 import json
+import logging
 import os
 import re
 from collections.abc import Coroutine, Sequence
@@ -19,6 +20,13 @@ from langchain_core.runnables import Runnable
 from PIL import Image
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
+from scholar_lens.adapters.bedrock.chat_models import BedrockLanguageModelFactory
+from scholar_lens.adapters.bedrock.prompts.extraction import FigureAnalysisPrompt
+from scholar_lens.adapters.documents.html import (
+    extract_text_from_html,
+    preserve_listing_spaces,
+)
+from scholar_lens.adapters.documents.images import is_svg, svg_to_png
 from scholar_lens.adapters.http.pinned_transport import PinnedAsyncHTTPTransport
 from scholar_lens.adapters.http.rate_limit import (
     ARXIV_RATE_LIMITER,
@@ -29,8 +37,7 @@ from scholar_lens.adapters.http.rate_limit import (
     is_retryable_status,
 )
 from scholar_lens.adapters.http.url_guard import UnsafeUrlError, assert_url_is_public
-from scholar_lens.adapters.retry import is_transient_error
-from scholar_lens.application.usage import staged
+from scholar_lens.adapters.retry import RetryableBase, is_transient_error
 from scholar_lens.domain.constants import (
     AppConstants,
     EnvVars,
@@ -39,15 +46,9 @@ from scholar_lens.domain.constants import (
 )
 from scholar_lens.domain.paper.models import Content, Figure
 from scholar_lens.domain.usage import TokenBudgetExceeded
-from scholar_lens.src.logger import logger
-from scholar_lens.src.prompts import FigureAnalysisPrompt
-from scholar_lens.src.utils import (
-    BedrockLanguageModelFactory,
-    RetryableBase,
-    extract_text_from_html,
-)
-from scholar_lens.src.utils.helpers import preserve_listing_spaces
-from scholar_lens.src.utils.images import is_svg, svg_to_png
+from scholar_lens.domain.usage_context import staged
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_RESIZE_QUALITY: int = 85
 DEFAULT_TIMEOUT: int = 60

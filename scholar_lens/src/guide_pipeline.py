@@ -7,7 +7,18 @@ import os
 from pathlib import Path
 from urllib.parse import urlparse
 
+from scholar_lens.adapters.bedrock.usage import TokenUsageTracker
+from scholar_lens.adapters.github.publisher import PublishRequest, build_pr_body
 from scholar_lens.adapters.packages.pypi import package_extras
+from scholar_lens.adapters.web.research import (
+    BraveSearchProvider,
+    FallbackSearchProvider,
+    NullSearchProvider,
+    TavilySearchProvider,
+    WebResearcher,
+    WebSearchProvider,
+    normalize_url,
+)
 from scholar_lens.domain.constants import EnvVars, LanguageModelId
 from scholar_lens.domain.evidence_draft import drop_empty_headings
 from scholar_lens.domain.guide.models import TechGuide
@@ -21,8 +32,6 @@ from scholar_lens.domain.post_format import build_post_meta, cut_title, format_g
 from scholar_lens.domain.post_names import slugify, title_slug
 from scholar_lens.src.guide_writer import write_guide_with_evidence
 from scholar_lens.src.logger import logger
-from scholar_lens.src.metrics import TokenUsageTracker
-from scholar_lens.src.publisher import PublishRequest, build_pr_body
 from scholar_lens.src.runtime import (
     PipelineOutcome,
     RunContext,
@@ -32,15 +41,6 @@ from scholar_lens.src.runtime import (
     publish_artifact,
 )
 from scholar_lens.src.tech_guide import TechGuideGenerator
-from scholar_lens.src.web_research import (
-    BraveSearchProvider,
-    FallbackSearchProvider,
-    NullSearchProvider,
-    TavilySearchProvider,
-    WebResearcher,
-    WebSearchProvider,
-    normalize_url,
-)
 
 
 async def run_guide_pipeline(

@@ -25,9 +25,18 @@ import boto3
 from botocore.exceptions import ClientError
 from pydantic import BaseModel, ConfigDict
 
+from scholar_lens.adapters.aws.batch import write_result_manifest
+from scholar_lens.adapters.aws.environment import is_running_in_aws
+from scholar_lens.adapters.aws.metrics import MetricsEmitter
 from scholar_lens.adapters.aws.storage import S3Handler, get_ssm_param_value
+from scholar_lens.adapters.bedrock.usage import TokenUsageTracker
 from scholar_lens.adapters.github.conventions import fetch_blog_posts, load_conventions
-from scholar_lens.application.usage import cost_allocation
+from scholar_lens.adapters.github.publisher import (
+    PostAssetError,
+    Publisher,
+    PublishError,
+    PublishRequest,
+)
 from scholar_lens.configs import Config
 from scholar_lens.domain.constants import (
     RUN_SECRETS,
@@ -40,16 +49,9 @@ from scholar_lens.domain.conventions import BlogPost, PostConventions, tag_count
 from scholar_lens.domain.jobs import JobRequest, JobResult, ssm_base
 from scholar_lens.domain.post_format import with_spec_cover
 from scholar_lens.domain.tags import format_tag
+from scholar_lens.domain.usage_context import cost_allocation
 from scholar_lens.domain.validation import PAPER_KINDS, PostValidationError
-from scholar_lens.src.jobs import write_result_manifest
-from scholar_lens.src.logger import is_running_in_aws, logger
-from scholar_lens.src.metrics import MetricsEmitter, TokenUsageTracker
-from scholar_lens.src.publisher import (
-    PostAssetError,
-    Publisher,
-    PublishError,
-    PublishRequest,
-)
+from scholar_lens.src.logger import logger
 
 # Working directory for papers, figures and generated posts: the container's
 # scratch space in AWS, the repository root locally.
@@ -462,7 +464,7 @@ async def load_translation_guideline(
 def _is_fetch_outage(error: BaseException) -> bool:
     """A transport failure or 429/5xx while fetching the source: the request
     is fine, so the run failed rather than being rejected."""
-    from scholar_lens.src.paper_source import PaperFetchError
+    from scholar_lens.adapters.scholarly.paper_source import PaperFetchError
 
     return isinstance(error, PaperFetchError)
 
@@ -474,8 +476,8 @@ def _rejected_input_errors() -> tuple[type[BaseException], ...]:
     """
     from scholar_lens.adapters.http.url_guard import UnsafeUrlError
     from scholar_lens.adapters.scholarly.arxiv import ArxivNotFoundError
+    from scholar_lens.adapters.scholarly.paper_source import PaperSourceError
     from scholar_lens.domain.survey.plan import SurveyInputError
-    from scholar_lens.src.paper_source import PaperSourceError
     from scholar_lens.src.tech_guide import NotTechnicalContentError
 
     return (

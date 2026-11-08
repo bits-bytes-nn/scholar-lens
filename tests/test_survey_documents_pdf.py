@@ -5,8 +5,8 @@ from __future__ import annotations
 
 import pytest
 
+from scholar_lens.adapters.scholarly.survey_documents import PaperDocuments
 from scholar_lens.domain.survey.plan import PlanPaper
-from scholar_lens.src.survey_documents import PaperDocuments
 
 
 @pytest.mark.parametrize("url", ["ftp://example.org/p.pdf", "http://10.0.0.5/p.pdf"])

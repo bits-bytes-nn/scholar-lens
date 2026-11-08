@@ -442,7 +442,7 @@ def _aws_context() -> Any:
 
 
 def _submit(request: JobRequest) -> int:
-    from scholar_lens.src.jobs import submit_job
+    from scholar_lens.adapters.aws.batch import submit_job
 
     context = _aws_context()
     resources = context.config.resources
@@ -479,7 +479,7 @@ def _check_plan_bucket(plan: str, s3_handler: Any, prefix: str) -> None:
 
 
 def _status(job_id: str, *, wait: bool, timeout: float) -> int:
-    from scholar_lens.src.jobs import describe_job, wait_for_job
+    from scholar_lens.adapters.aws.batch import describe_job, wait_for_job
 
     context = _aws_context()
 

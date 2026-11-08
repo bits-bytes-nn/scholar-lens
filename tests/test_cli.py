@@ -11,6 +11,7 @@ from botocore.exceptions import ClientError
 from pydantic import BaseModel, ValidationError
 
 from scholar_lens import cli
+from scholar_lens.adapters.aws.batch import wait_for_job
 from scholar_lens.adapters.aws.storage import BatchJobError
 from scholar_lens.domain.jobs import (
     JobRequest,
@@ -18,7 +19,6 @@ from scholar_lens.domain.jobs import (
     JobStatusReport,
     SubmittedJob,
 )
-from scholar_lens.src.jobs import wait_for_job
 
 
 def _output(capsys: pytest.CaptureFixture) -> dict[str, Any]:
@@ -48,7 +48,9 @@ class TestStatus:
             report.result = JobResult(kind="review", input="x", status=result_status)  # type: ignore[arg-type]
         with (
             mock.patch.object(cli, "_aws_context"),
-            mock.patch("scholar_lens.src.jobs.describe_job", return_value=report),
+            mock.patch(
+                "scholar_lens.adapters.aws.batch.describe_job", return_value=report
+            ),
         ):
             assert cli.main(["status", "j"]) == code
         assert _output(capsys)["batch_status"] == batch_status
@@ -66,7 +68,9 @@ class TestStatus:
         )
         with (
             mock.patch.object(cli, "_aws_context"),
-            mock.patch("scholar_lens.src.jobs.describe_job", return_value=report),
+            mock.patch(
+                "scholar_lens.adapters.aws.batch.describe_job", return_value=report
+            ),
         ):
             assert cli.main(["status", "j"]) == cli.EXIT_PR_FAILED
         assert _output(capsys)["result"]["pr_error"] == "403 from GitHub"
@@ -77,7 +81,7 @@ class TestStatus:
         with (
             mock.patch.object(cli, "_aws_context"),
             mock.patch(
-                "scholar_lens.src.jobs.describe_job",
+                "scholar_lens.adapters.aws.batch.describe_job",
                 side_effect=BatchJobError("AccessDenied"),
             ),
         ):
@@ -104,7 +108,9 @@ def test_remote_submits_and_prints_the_job(capsys: pytest.CaptureFixture) -> Non
     submitted = SubmittedJob(job_id="j-1", job_name="n", kind="summarize", input="x")
     with (
         mock.patch.object(cli, "_aws_context"),
-        mock.patch("scholar_lens.src.jobs.submit_job", return_value=submitted) as sub,
+        mock.patch(
+            "scholar_lens.adapters.aws.batch.submit_job", return_value=submitted
+        ) as sub,
     ):
         assert cli.main(["summarize", "2106.09685", "--remote", "--no-pr"]) == 0
     request = sub.call_args.args[1]
@@ -129,7 +135,9 @@ def test_remote_survey_write_checks_the_plan_bucket(
     job = SubmittedJob(job_id="j-1", job_name="n", kind="survey_write", input=plan)
     with (
         mock.patch.object(cli, "_aws_context", return_value=context),
-        mock.patch("scholar_lens.src.jobs.submit_job", return_value=job) as sub,
+        mock.patch(
+            "scholar_lens.adapters.aws.batch.submit_job", return_value=job
+        ) as sub,
     ):
         code = cli.main(["survey", "write", "--plan", plan, "--remote"])
     assert code == (cli.EXIT_OK if submitted else cli.EXIT_REJECTED)

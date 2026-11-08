@@ -8,7 +8,7 @@ from typing import Any
 import httpx
 import pytest
 
-from scholar_lens.src.web_research import (
+from scholar_lens.adapters.web.research import (
     BraveSearchProvider,
     NullSearchProvider,
     PageContent,
@@ -221,7 +221,7 @@ class TestRunSearches:
         # No content on the result → the URL is fetched through the SSRF guard.
         # Patch the guard so the test doesn't depend on real DNS resolution.
         monkeypatch.setattr(
-            "scholar_lens.src.web_research.is_url_public", lambda url: True
+            "scholar_lens.adapters.web.research.is_url_public", lambda url: True
         )
         result_url = "https://docs.example.com/page"
         provider = _StubProvider(content="")
@@ -398,7 +398,7 @@ class TestBraveSearchProvider:
 class TestFailedSearchesAreCounted:
     @pytest.mark.parametrize("status", [429, 500, 503])
     def test_failed_searches_become_a_run_note(self, status: int) -> None:
-        from scholar_lens.src.web_research import WebResearcher
+        from scholar_lens.adapters.web.research import WebResearcher
 
         calls: list[str] = []
 
@@ -419,7 +419,7 @@ class TestFailedSearchesAreCounted:
         assert len(calls) == 4  # one request per search: no retry
 
     def test_no_search_provider_has_no_note(self) -> None:
-        from scholar_lens.src.web_research import WebResearcher
+        from scholar_lens.adapters.web.research import WebResearcher
 
         assert WebResearcher().search_notes() == []
 
@@ -428,11 +428,11 @@ class TestHardenedFetch:
     @pytest.fixture(autouse=True)
     def _public(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
-            "scholar_lens.src.web_research.is_url_public", lambda url: True
+            "scholar_lens.adapters.web.research.is_url_public", lambda url: True
         )
 
     def test_scope_prefix(self) -> None:
-        from scholar_lens.src.web_research import _scope_prefix
+        from scholar_lens.adapters.web.research import _scope_prefix
 
         assert _scope_prefix("/guide") == "/guide/"
         assert _scope_prefix("/guide/") == "/guide/"
@@ -485,7 +485,7 @@ class TestHardenedFetch:
         assert page is not None and "한국어 문서" in page.text
 
     def test_oversized_page_skipped(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        from scholar_lens.src import web_research
+        from scholar_lens.adapters.web import research as web_research
 
         monkeypatch.setattr(web_research, "MAX_PAGE_BYTES", 10)
         researcher = _researcher(
@@ -598,8 +598,8 @@ class TestPinnedTransportKeepsHostnames:
         import httpx
 
         import scholar_lens.adapters.http.pinned_transport as pt
-        import scholar_lens.src.web_research as wr
-        from scholar_lens.src.web_research import WebResearcher
+        import scholar_lens.adapters.web.research as wr
+        from scholar_lens.adapters.web.research import WebResearcher
 
         monkeypatch.setattr(pt, "resolve_validated_ip", lambda url: "93.184.216.34")
         monkeypatch.setattr(wr, "is_url_public", lambda url: True)
@@ -624,7 +624,7 @@ class TestPinnedTransportKeepsHostnames:
 
 
 def test_relevant_text_picks_matching_pages_within_budget() -> None:
-    from scholar_lens.src.web_research import PageContent, ResearchCorpus
+    from scholar_lens.adapters.web.research import PageContent, ResearchCorpus
 
     corpus = ResearchCorpus(
         pages=[
@@ -646,7 +646,7 @@ def test_relevant_text_picks_matching_pages_within_budget() -> None:
 
 
 def test_relevant_text_records_the_pages_it_includes() -> None:
-    from scholar_lens.src.web_research import PageContent, ResearchCorpus
+    from scholar_lens.adapters.web.research import PageContent, ResearchCorpus
 
     corpus = ResearchCorpus(
         pages=[
@@ -660,7 +660,7 @@ def test_relevant_text_records_the_pages_it_includes() -> None:
 
 
 def test_relevant_text_puts_preferred_pages_first() -> None:
-    from scholar_lens.src.web_research import PageContent, ResearchCorpus
+    from scholar_lens.adapters.web.research import PageContent, ResearchCorpus
 
     corpus = ResearchCorpus(
         pages=[
@@ -770,7 +770,7 @@ def test_a_kept_piece_of_a_long_section_brings_its_heading() -> None:
     ],
 )
 def test_an_excerpt_without_room_for_parts_is_the_block_cut(block: str) -> None:
-    from scholar_lens.src.web_research import _cut, _excerpt
+    from scholar_lens.adapters.web.research import _cut, _excerpt
 
     out = _excerpt(block, 3_000, {"body"})
     assert out == _cut(block, 3_000) and len(out) <= 3_000
@@ -800,7 +800,7 @@ def test_a_preferred_long_page_keeps_its_matching_parts_in_its_share() -> None:
     ],
 )
 def test_is_topic_directory(path: str, expected: bool) -> None:
-    from scholar_lens.src.web_research import _is_topic_directory
+    from scholar_lens.adapters.web.research import _is_topic_directory
 
     assert _is_topic_directory(path) is expected
 
@@ -812,7 +812,7 @@ class TestOfficialDocsAfterRedirects:
     def test_redirected_seed_keeps_its_landing_host_and_release_official(
         self,
     ) -> None:
-        from scholar_lens.src.web_research import OfficialDocs
+        from scholar_lens.adapters.web.research import OfficialDocs
 
         seed = PageContent(
             url="https://pytorch.org/docs/stable/notes/cuda.html",
@@ -826,7 +826,7 @@ class TestOfficialDocsAfterRedirects:
         assert official.covers("https://pytorch.org/docs/stable/x.html")
 
     def test_unversioned_link_to_a_pinned_release(self) -> None:
-        from scholar_lens.src.web_research import OfficialDocs
+        from scholar_lens.adapters.web.research import OfficialDocs
 
         seed = PageContent(
             url="https://huggingface.co/docs/peft/developer_guides/lora",
@@ -867,14 +867,14 @@ class TestOfficialDocsAfterRedirects:
     def test_api_path_segments_are_not_docs_versions(
         self, url: str, version: str | None
     ) -> None:
-        from scholar_lens.src.web_research import docs_version
+        from scholar_lens.adapters.web.research import docs_version
 
         assert docs_version(url) == version
 
 
 class TestProductNames:
     def test_only_names_the_seed_pages_show_are_kept(self) -> None:
-        from scholar_lens.src.web_research import product_names
+        from scholar_lens.adapters.web.research import product_names
 
         url = "https://docs.astral.sh/uv/"
         seed = PageContent(url, "uv", "```console\n$ uv sync\n$ uvx ruff\n```")
@@ -882,7 +882,7 @@ class TestProductNames:
         assert names == ["uv", "uvx"]
 
     def test_no_name_shown_is_no_name_never_a_host_guess(self) -> None:
-        from scholar_lens.src.web_research import product_names
+        from scholar_lens.adapters.web.research import product_names
 
         url = "https://docs.astral.sh/uv/"
         seed = PageContent(url, "uv", "see docs.astral.sh/uv for more")
@@ -898,7 +898,7 @@ class TestFetchFailures:
     def test_every_seed_unreachable_is_an_outage_not_bad_input(self) -> None:
         # Regression: a Cloudflare 429 on the only URL ended as "not technical
         # documentation" and the job was rejected.
-        from scholar_lens.src.web_research import SourceFetchError
+        from scholar_lens.adapters.web.research import SourceFetchError
 
         url = "https://docs.x.dev/guide"
         researcher = _researcher(
@@ -912,7 +912,7 @@ class TestFetchFailures:
     ) -> None:
         import socket
 
-        from scholar_lens.src.web_research import SourceFetchError
+        from scholar_lens.adapters.web.research import SourceFetchError
 
         def no_dns(*_a, **_k):  # type: ignore[no-untyped-def]
             raise socket.gaierror(socket.EAI_AGAIN, "temporary failure")
@@ -928,8 +928,8 @@ class TestFetchFailures:
         import socket
 
         from scholar_lens.adapters.http.url_guard import UnsafeUrlError
-        from scholar_lens.src import web_research
-        from scholar_lens.src.web_research import SourceFetchError
+        from scholar_lens.adapters.web import research as web_research
+        from scholar_lens.adapters.web.research import SourceFetchError
 
         def connect_fails(self, url):  # type: ignore[no-untyped-def]
             try:
@@ -1037,7 +1037,7 @@ def test_a_flapping_dns_check_still_fetches_the_page(
     # Regression: the cheap pre-check failed on a resolver hiccup and the
     # second check (for the reason) passed, yet the page was skipped as
     # "non-public" and the guide ended up rejected.
-    from scholar_lens.src import web_research as wr
+    from scholar_lens.adapters.web import research as wr
 
     url = "https://docs.x.dev/guide"
     monkeypatch.setattr(wr, "is_url_public", lambda u: False)
@@ -1050,14 +1050,14 @@ def test_a_flapping_dns_check_still_fetches_the_page(
 
 
 def test_cut_never_leaves_a_math_span_open() -> None:
-    from scholar_lens.src.web_research import _cut
+    from scholar_lens.adapters.web.research import _cut
 
     text = "a " * 10 + "$$x = " + "y " * 50 + "$$ end"
     assert _cut(text, 40).count("$$") % 2 == 0
 
 
 def test_cut_ignores_shell_dollars_in_code() -> None:
-    from scholar_lens.src.web_research import _cut
+    from scholar_lens.adapters.web.research import _cut
 
     text = "Intro.\n\n```bash\necho $$ > pid\n```\n\n" + "Prose sentence. " * 3000
     out = _cut(text, 20_000)
@@ -1065,7 +1065,7 @@ def test_cut_ignores_shell_dollars_in_code() -> None:
 
 
 def test_short_product_names_match_as_command_words() -> None:
-    from scholar_lens.src.guide_authority import unverified_identifiers
+    from scholar_lens.adapters.web.authority import unverified_identifiers
 
     body = "```bash\nhf download m --local-dir d\ndocker run -e HF_TOKEN=t --gpus all img\n```"
     found = unverified_identifiers(body, "hf download --local-dir", ["hf"])
@@ -1074,7 +1074,7 @@ def test_short_product_names_match_as_command_words() -> None:
 
 @pytest.mark.parametrize("text", ["a " * 30 + "$$x$$", "a " * 30 + "`code` and `more`"])
 def test_cut_leaves_no_lone_dollar_or_backtick(text: str) -> None:
-    from scholar_lens.src.web_research import _cut
+    from scholar_lens.adapters.web.research import _cut
 
     for limit in range(55, len(text)):
         out = _cut(text, limit)
@@ -1083,7 +1083,7 @@ def test_cut_leaves_no_lone_dollar_or_backtick(text: str) -> None:
 
 
 def test_cut_keeps_the_closing_dollar_of_inline_math() -> None:
-    from scholar_lens.src.web_research import _cut
+    from scholar_lens.adapters.web.research import _cut
 
     text = "The attention cost grows as $O(n^2)$\n\nNext paragraph " + "x " * 40
     assert _cut(text, 40).endswith("$O(n^2)$")
@@ -1112,8 +1112,8 @@ class TestReferenceMaterialAndPapers:
         assert "## Source (third-party): https://other.io/c" in text
 
     def test_without_docs_nothing_is_official(self) -> None:
+        from scholar_lens.adapters.web.research import source_label
         from scholar_lens.domain.sources import SourceSet
-        from scholar_lens.src.web_research import source_label
 
         page = PageContent("https://docs.x.dev/a", "A", "x")
         SourceSet.from_urls([]).record(page)
@@ -1149,7 +1149,7 @@ class TestReferenceMaterialAndPapers:
         ],
     )
     def test_arxiv_paper_urls(self, url: str, expected: tuple[str, str] | None) -> None:
-        from scholar_lens.src.web_research import arxiv_paper_urls
+        from scholar_lens.adapters.web.research import arxiv_paper_urls
 
         assert arxiv_paper_urls(url) == expected
 
@@ -1157,7 +1157,7 @@ class TestReferenceMaterialAndPapers:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(
-            "scholar_lens.src.web_research.is_url_public", lambda url: True
+            "scholar_lens.adapters.web.research.is_url_public", lambda url: True
         )
         researcher = _researcher(
             {"https://arxiv.org/html/2309.06180": (200, "text/html", PAPER_HTML)}
@@ -1171,7 +1171,7 @@ class TestReferenceMaterialAndPapers:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(
-            "scholar_lens.src.web_research.is_url_public", lambda url: True
+            "scholar_lens.adapters.web.research.is_url_public", lambda url: True
         )
         abstract = (
             "<html><head><title>Abs</title></head><body><p>Abstract.</p></body></html>"
@@ -1190,7 +1190,7 @@ class TestReferenceMaterialAndPapers:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(
-            "scholar_lens.src.web_research.is_url_public", lambda url: True
+            "scholar_lens.adapters.web.research.is_url_public", lambda url: True
         )
         provider = _StubProvider(content="abstract only")
         provider.search = lambda q, *, count=5: [  # type: ignore[method-assign]
@@ -1221,7 +1221,9 @@ def _arxiv_researcher(
 ) -> tuple[WebResearcher, list[str]]:
     """A researcher whose client answers each arXiv URL from ``responses``
     (404 otherwise), and the URLs it was asked for, in order."""
-    monkeypatch.setattr("scholar_lens.src.web_research.is_url_public", lambda u: True)
+    monkeypatch.setattr(
+        "scholar_lens.adapters.web.research.is_url_public", lambda u: True
+    )
     requested: list[str] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -1269,7 +1271,7 @@ class TestArxivFetching:
     def test_a_reference_paper_behind_a_429_is_an_outage(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from scholar_lens.src.web_research import SourceFetchError
+        from scholar_lens.adapters.web.research import SourceFetchError
 
         researcher, _ = _arxiv_researcher(
             {self.HTML: httpx.Response(429, text="slow down")}, monkeypatch
@@ -1372,7 +1374,7 @@ class TestPaperDedup:
         self, url: str, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(
-            "scholar_lens.src.web_research.is_url_public", lambda u: True
+            "scholar_lens.adapters.web.research.is_url_public", lambda u: True
         )
         provider = _StubProvider()
         provider.search = lambda q, *, count=5: [  # type: ignore[method-assign]
@@ -1405,7 +1407,7 @@ class TestPaperDedup:
         assert corpus.pages == [held]
 
     def test_page_key_strips_the_arxiv_version_and_form(self) -> None:
-        from scholar_lens.src.web_research import page_key
+        from scholar_lens.adapters.web.research import page_key
 
         keys = {
             page_key(u)
@@ -1458,7 +1460,7 @@ def test_a_page_rate_limited_past_the_retries_fails() -> None:
 
 
 def test_fallback_search_uses_the_second_backend_after_a_failure() -> None:
-    from scholar_lens.src.web_research import (
+    from scholar_lens.adapters.web.research import (
         FallbackSearchProvider,
         SearchResult,
         WebSearchProvider,
@@ -1537,7 +1539,7 @@ def test_pypi_extras_come_from_the_json_api() -> None:
 
 
 def test_fallback_search_paths() -> None:
-    from scholar_lens.src.web_research import (
+    from scholar_lens.adapters.web.research import (
         FallbackSearchProvider,
         SearchResult,
         WebSearchProvider,
@@ -1582,7 +1584,7 @@ def test_a_rejected_brave_key_marks_the_provider_exhausted(status: int) -> None:
 
 
 def test_official_docs_on_a_shared_host_cover_only_the_projects_space() -> None:
-    from scholar_lens.src.web_research import OfficialDocs, docs_version
+    from scholar_lens.adapters.web.research import OfficialDocs, docs_version
 
     hf = OfficialDocs.from_urls(["https://huggingface.co/docs/peft/index"])
     assert hf.covers("https://huggingface.co/docs/peft/quicktour")

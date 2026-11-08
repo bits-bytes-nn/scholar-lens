@@ -12,15 +12,14 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from scholar_lens.domain.model_registry import price_per_mtok
-from scholar_lens.domain.usage import TokenBudgetExceeded
-from scholar_lens.src.metrics import (
-    METRICS_NAMESPACE,
-    MetricsEmitter,
+from scholar_lens.adapters.aws.metrics import METRICS_NAMESPACE, MetricsEmitter
+from scholar_lens.adapters.bedrock.usage import (
     TokenBudgetGuard,
     TokenUsageTracker,
     _extract_usage,
 )
+from scholar_lens.domain.model_registry import price_per_mtok
+from scholar_lens.domain.usage import TokenBudgetExceeded
 
 
 def _llm_output_response(model_id: str, input_tokens: int, output_tokens: int) -> Any:
@@ -231,7 +230,7 @@ class TestMetricsEmitter:
         )  # per-mode
 
     def test_stage_breakdown_is_emitted_per_mode_and_stage(self) -> None:
-        from scholar_lens.application.usage import usage_stage
+        from scholar_lens.domain.usage_context import usage_stage
 
         session = MagicMock()
         client = session.client.return_value
@@ -323,7 +322,7 @@ class TestTieredPricing:
         assert long == pytest.approx(200_000 / 1e6 * 0.50 + 1_000 / 1e6 * 2.50)
 
     def test_tracker_prices_each_call(self) -> None:
-        from scholar_lens.src.metrics import TokenUsageTracker
+        from scholar_lens.adapters.bedrock.usage import TokenUsageTracker
 
         tracker = TokenUsageTracker()
         tracker.on_llm_end(

@@ -12,13 +12,13 @@ import json
 import re
 from typing import Any, Literal
 
+from scholar_lens.adapters.bedrock.usage import TokenUsageTracker
 from scholar_lens.domain.constants import LanguageModelId, S3Paths
 from scholar_lens.domain.evidence import SourceDocument
 from scholar_lens.domain.markdown.lint import FIGURE_MARKER
 from scholar_lens.domain.paper.evidence_paper import assemble_review, assemble_summary
 from scholar_lens.domain.paper.models import Paper, ReviewText
 from scholar_lens.domain.post_names import slugify
-from scholar_lens.src.metrics import TokenUsageTracker
 from scholar_lens.src.runtime import RunContext
 
 
@@ -62,8 +62,12 @@ async def write_paper_with_evidence(
 ) -> tuple[ReviewText | dict[str, str], list[str], list[str]]:
     from scholar_lens.adapters.bedrock.strands_models import StrandsLanguageModel
     from scholar_lens.application.paper_engine import EvidencePaperEngine, PaperSettings
-    from scholar_lens.src.evidence_models import budgeted, role_model, unservable
-    from scholar_lens.src.survey_documents import evidence_store
+    from scholar_lens.src.evidence_models import (
+        budgeted,
+        evidence_store,
+        role_model,
+        unservable,
+    )
 
     if post == "review":
         cfg = context.config.explanation

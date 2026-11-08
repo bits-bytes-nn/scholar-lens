@@ -226,8 +226,8 @@ class TestRunJob:
         assert finished == [result] and self.notified == [True]
 
     def test_rejected_input(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from scholar_lens.adapters.scholarly.paper_source import NotAPdfError
         from scholar_lens.domain.jobs import JobRequest
-        from scholar_lens.src.paper_source import NotAPdfError
 
         async def pipeline(context, request, tracker):  # type: ignore[no-untyped-def]
             raise NotAPdfError("returned HTML")
@@ -240,8 +240,8 @@ class TestRunJob:
     def test_fetch_outage_is_a_failure_not_a_rejection(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        from scholar_lens.adapters.scholarly.paper_source import PaperFetchError
         from scholar_lens.domain.jobs import JobRequest
-        from scholar_lens.src.paper_source import PaperFetchError
 
         async def pipeline(context, request, tracker):  # type: ignore[no-untyped-def]
             raise PaperFetchError("503 from the host")
@@ -408,8 +408,8 @@ class TestFinishAndEarlyFailure:
     def test_finish_publishes_sns_and_writes_manifest(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        from scholar_lens.adapters.bedrock.usage import TokenUsageTracker
         from scholar_lens.domain.jobs import JobResult
-        from scholar_lens.src.metrics import TokenUsageTracker
 
         monkeypatch.setattr(runtime, "is_running_in_aws", lambda: True)
         monkeypatch.setenv("TOPIC_ARN", "arn:aws:sns:us-west-2:1:t")
@@ -429,8 +429,8 @@ class TestFinishAndEarlyFailure:
     def test_unsent_failure_notification_is_flagged(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        from scholar_lens.adapters.bedrock.usage import TokenUsageTracker
         from scholar_lens.domain.jobs import JobResult
-        from scholar_lens.src.metrics import TokenUsageTracker
 
         monkeypatch.setattr(runtime, "is_running_in_aws", lambda: True)
         monkeypatch.setenv("TOPIC_ARN", "arn:aws:sns:us-west-2:1:t")
@@ -546,7 +546,7 @@ class TestPublishArtifact:
     ) -> None:
         import asyncio
 
-        from scholar_lens.src.publisher import PublishError
+        from scholar_lens.adapters.github.publisher import PublishError
 
         publisher = MagicMock()
 
@@ -574,7 +574,7 @@ class TestPublishArtifact:
 def test_an_unreadable_branch_history_becomes_a_review_note() -> None:
     import asyncio
 
-    from scholar_lens.src.publisher import PublishError
+    from scholar_lens.adapters.github.publisher import PublishError
 
     publisher = MagicMock()
     publisher.find_published.side_effect = PublishError("502 from GitHub")
@@ -660,9 +660,9 @@ def test_no_pr_run_reports_the_post_checklist(tmp_path: Path) -> None:
 def test_generator_notes_survive_a_failed_publish(
     monkeypatch: pytest.MonkeyPatch, kind: str
 ) -> None:
+    from scholar_lens.adapters.github.publisher import PostAssetError
     from scholar_lens.domain.jobs import JobRequest
     from scholar_lens.domain.validation import PostValidationError, Violation
-    from scholar_lens.src.publisher import PostAssetError
 
     publisher = MagicMock()
 
@@ -775,8 +775,8 @@ class TestConventionsChangedDuringTheRun:
     ) -> tuple[object, object, object]:
         import asyncio
 
+        from scholar_lens.adapters.github.publisher import PublishRequest
         from scholar_lens.domain.conventions import load_local_conventions
-        from scholar_lens.src.publisher import PublishRequest
 
         started = load_local_conventions()
 

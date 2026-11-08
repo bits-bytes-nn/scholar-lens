@@ -19,12 +19,8 @@ from moto import mock_aws
 from PIL import Image
 
 from scholar_lens.adapters.aws.storage import S3Handler
-from scholar_lens.configs import Github
-from scholar_lens.domain.conventions import BlogPost
-from scholar_lens.domain.post_names import slugify
-from scholar_lens.domain.validation import PostValidationError
-from scholar_lens.src.blog_sync import BlogBranchSync
-from scholar_lens.src.publisher import (
+from scholar_lens.adapters.github.blog_sync import BlogBranchSync
+from scholar_lens.adapters.github.publisher import (
     PostAssetError,
     Publisher,
     PublishError,
@@ -32,6 +28,10 @@ from scholar_lens.src.publisher import (
     build_pr_body,
     image_format,
 )
+from scholar_lens.configs import Github
+from scholar_lens.domain.conventions import BlogPost
+from scholar_lens.domain.post_names import slugify
+from scholar_lens.domain.validation import PostValidationError
 
 
 @pytest.fixture
@@ -375,7 +375,7 @@ class TestImageLocalization:
     async def test_unrenderable_svg_blocks(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from scholar_lens.src import publisher
+        from scholar_lens.adapters.github import publisher
 
         def broken(data: bytes) -> bytes:
             raise ValueError("SVG rendering failed")
@@ -390,7 +390,7 @@ class TestImageLocalization:
     async def test_large_png_is_scaled_down(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from scholar_lens.src import publisher
+        from scholar_lens.adapters.github import publisher
 
         big = io.BytesIO()
         Image.effect_noise((3000, 100), 64).convert("RGB").save(big, format="PNG")
@@ -406,7 +406,7 @@ class TestImageLocalization:
     async def test_large_gif_blocks(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from scholar_lens.src import publisher
+        from scholar_lens.adapters.github import publisher
 
         monkeypatch.setattr(publisher, "_MAX_STORED_BYTES", 10)
         pub = Publisher(
@@ -1264,7 +1264,9 @@ class TestCreatePullRequest:
             def close(self) -> None:
                 pass
 
-        monkeypatch.setattr("scholar_lens.src.publisher.Github", FailingGithub)
+        monkeypatch.setattr(
+            "scholar_lens.adapters.github.publisher.Github", FailingGithub
+        )
         pub = Publisher(Github(repo_name="owner/blog"), root_dir=tmp_path)
         with pytest.raises(PublishError) as info:
             await pub.create_pull_request(_request(tmp_path), tmp_path / "x.md")
@@ -1289,7 +1291,7 @@ class TestCreatePullRequest:
             def close(self) -> None:
                 created["closed"] = True
 
-        monkeypatch.setattr("scholar_lens.src.publisher.Github", FakeGithub)
+        monkeypatch.setattr("scholar_lens.adapters.github.publisher.Github", FakeGithub)
         pub = Publisher(_CONFIG, root_dir=tmp_path)
         md = _post(tmp_path, "2026-10-11-my-guide")
         url = await pub.create_pull_request(_request(tmp_path), md)
@@ -1349,7 +1351,7 @@ class TestFindPublished:
         monkeypatch.setenv("GITHUB_TOKEN", "ghp_x")
         repo = FakeRepo({"README.md": b"blog"})
         monkeypatch.setattr(FakeGithub, "repo", repo)
-        monkeypatch.setattr("scholar_lens.src.publisher.Github", FakeGithub)
+        monkeypatch.setattr("scholar_lens.adapters.github.publisher.Github", FakeGithub)
         return repo
 
     def _find(
@@ -1369,7 +1371,7 @@ class TestFindPublished:
             "_posts/2026-01-01-old-title.md", "_posts/2026-01-01-old-title-en.md"
         )
         monkeypatch.setattr(
-            "scholar_lens.src.publisher.BlogBranchSync.merged_posts",
+            "scholar_lens.adapters.github.publisher.BlogBranchSync.merged_posts",
             lambda self, branch_id: [
                 "_posts/2026-01-01-old-title-en.md",
                 "_posts/2026-01-01-old-title.md",
@@ -1443,7 +1445,7 @@ class TestFindPublished:
             raise AssertionError("GitHub was called")
 
         monkeypatch.delenv("GITHUB_TOKEN", raising=False)
-        monkeypatch.setattr("scholar_lens.src.publisher.Github", no_github)
+        monkeypatch.setattr("scholar_lens.adapters.github.publisher.Github", no_github)
         site = _site("_posts/2026-01-06-x.md")
         assert self._find(tmp_path, site, "y") is None
         assert self._find(tmp_path, site, "x").path == "_posts/2026-01-06-x.md"
@@ -1492,7 +1494,7 @@ class TestFindPublished:
         def no_github(*args: Any, **kwargs: Any) -> None:
             raise AssertionError("GitHub was called")
 
-        monkeypatch.setattr("scholar_lens.src.publisher.Github", no_github)
+        monkeypatch.setattr("scholar_lens.adapters.github.publisher.Github", no_github)
         assert self._find(tmp_path, [], "x") is None
 
     def test_unreadable_pull_requests_are_an_error_without_the_token(
@@ -1748,7 +1750,7 @@ class TestDownloadImage:
 
     @staticmethod
     def _serve(monkeypatch: pytest.MonkeyPatch, chunks: list[bytes]) -> None:
-        from scholar_lens.src import publisher
+        from scholar_lens.adapters.github import publisher
 
         def handler(_request: httpx.Request) -> httpx.Response:
             return httpx.Response(200, stream=httpx.ByteStream(b"".join(chunks)))
@@ -1758,13 +1760,13 @@ class TestDownloadImage:
         )
 
     def test_small_image_is_returned(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        from scholar_lens.src.publisher import download_image
+        from scholar_lens.adapters.github.publisher import download_image
 
         self._serve(monkeypatch, [b"\x89PNG", b"data"])
         assert download_image(self.PUBLIC_URL) == b"\x89PNGdata"
 
     def test_oversized_stream_is_cut_off(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        from scholar_lens.src import publisher
+        from scholar_lens.adapters.github import publisher
 
         monkeypatch.setattr(publisher, "_MAX_IMAGE_BYTES", 8)
         self._serve(monkeypatch, [b"\x89PNG", b"too much data"])
@@ -1777,8 +1779,8 @@ class TestDownloadImage:
     def test_private_address_is_refused_before_any_request(
         self, monkeypatch: pytest.MonkeyPatch, url: str
     ) -> None:
+        from scholar_lens.adapters.github import publisher
         from scholar_lens.adapters.http.url_guard import UnsafeUrlError
-        from scholar_lens.src import publisher
 
         def no_transport() -> None:
             raise AssertionError("no request may be made")
@@ -1790,8 +1792,8 @@ class TestDownloadImage:
     def test_redirect_to_a_private_address_is_refused(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        from scholar_lens.adapters.github import publisher
         from scholar_lens.adapters.http.url_guard import UnsafeUrlError
-        from scholar_lens.src import publisher
 
         hops: list[str] = []
 
@@ -1808,7 +1810,7 @@ class TestDownloadImage:
         assert hops == [self.PUBLIC_URL]
 
     def test_sends_the_tool_user_agent(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        from scholar_lens.src import publisher
+        from scholar_lens.adapters.github import publisher
 
         agents: list[str] = []
 
@@ -1825,7 +1827,7 @@ class TestDownloadImage:
     def test_slow_download_hits_the_deadline(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from scholar_lens.src import publisher
+        from scholar_lens.adapters.github import publisher
 
         ticks = itertools.count(0.0, 25.0)  # each read takes 25 s
         monkeypatch.setattr(publisher, "_clock", lambda: next(ticks))
@@ -1909,7 +1911,7 @@ class TestSvgFigures:
 def test_transparent_svg_renders_on_white_and_bom_is_detected() -> None:
     from PIL import Image as PILImage
 
-    from scholar_lens.src.utils.images import is_svg, svg_to_png
+    from scholar_lens.adapters.documents.images import is_svg, svg_to_png
 
     svg = b'\xef\xbb\xbf<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"></svg>'
     assert is_svg(svg)

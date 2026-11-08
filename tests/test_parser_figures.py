@@ -16,10 +16,7 @@ import pymupdf
 import pytest
 import tenacity
 
-from scholar_lens.adapters.retry import MAX_RETRIES
-from scholar_lens.domain.constants import LanguageModelId
-from scholar_lens.domain.paper.models import Content, Figure
-from scholar_lens.src.parser import (
+from scholar_lens.adapters.documents.parser import (
     FigureReader,
     HTMLRichParser,
     PDFParser,
@@ -27,6 +24,9 @@ from scholar_lens.src.parser import (
     _is_valid_region,
     extract_figures_from_pdf,
 )
+from scholar_lens.adapters.retry import MAX_RETRIES
+from scholar_lens.domain.constants import LanguageModelId
+from scholar_lens.domain.paper.models import Content, Figure
 
 
 def _pdf_parser() -> PDFParser:
@@ -189,7 +189,7 @@ class TestFitzTextFallback:
     async def test_fallback_raises_on_empty_text(self, tmp_path: Path) -> None:
         # A PDF with no text layer (blank page) must raise, not return "" — an
         # empty body would otherwise produce an empty summary downstream.
-        from scholar_lens.src.parser import ParserError
+        from scholar_lens.adapters.documents.parser import ParserError
 
         blank = tmp_path / "blank.pdf"
         doc = pymupdf.open()
@@ -238,7 +238,7 @@ class TestConstructFigureUrl:
         assert parser._construct_figure_url(absolute) == absolute
 
     def test_missing_base_url_raises(self) -> None:
-        from scholar_lens.src.parser import ParserError
+        from scholar_lens.adapters.documents.parser import ParserError
 
         parser = self._parser("")
         with pytest.raises(ParserError, match="Base URL"):
@@ -255,7 +255,7 @@ class TestAttachFigureContext:
         return Figure(figure_id="1", path=path, caption=caption, analysis=analysis)
 
     def test_quoted_alt_with_comma_or_brackets_is_kept_whole(self) -> None:
-        from scholar_lens.src.parser import attach_figure_context
+        from scholar_lens.adapters.documents.parser import attach_figure_context
 
         fig = self._figure("/w/figures/3.png", caption="c")
         out = attach_figure_context(
@@ -268,7 +268,7 @@ class TestAttachFigureContext:
         assert 'alt="(brackets)", src="3.png"' in out
 
     def test_caption_used_when_analysis_missing(self) -> None:
-        from scholar_lens.src.parser import attach_figure_context
+        from scholar_lens.adapters.documents.parser import attach_figure_context
 
         fig = self._figure("/w/figures/3.png", caption="Figure 1: router")
         out = attach_figure_context(
@@ -284,7 +284,7 @@ class TestAttachFigureContext:
     ) -> None:
         # The vision analysis misreads plots (e.g. a colormap's direction); the
         # writer must see the paper's caption as the authority.
-        from scholar_lens.src.parser import attach_figure_context
+        from scholar_lens.adapters.documents.parser import attach_figure_context
 
         fig = self._figure(
             "/w/figures/3.png",
@@ -300,7 +300,7 @@ class TestAttachFigureContext:
         )
 
     def test_placeholder_caption_yields_to_the_analysis(self) -> None:
-        from scholar_lens.src.parser import attach_figure_context
+        from scholar_lens.adapters.documents.parser import attach_figure_context
 
         fig = self._figure(
             "/w/figures/3.png", caption="Refer to caption", analysis="A bar chart."
@@ -311,7 +311,7 @@ class TestAttachFigureContext:
         assert out.endswith('caption="A bar chart."]')
 
     def test_placeholder_alt_is_not_a_marker_alt(self) -> None:
-        from scholar_lens.src.parser import attach_figure_context
+        from scholar_lens.adapters.documents.parser import attach_figure_context
 
         fig = self._figure("/w/figures/3.png", caption="Refer to caption")
         out = attach_figure_context(
@@ -322,7 +322,7 @@ class TestAttachFigureContext:
     def test_markers_without_source_are_not_filled_by_order(self) -> None:
         # Regression: empty-alt markers used to be filled with figures in order,
         # attaching captions to the wrong images.
-        from scholar_lens.src.parser import attach_figure_context
+        from scholar_lens.adapters.documents.parser import attach_figure_context
 
         fig = self._figure("/w/figures/7.png", analysis="A bar chart.")
         out = attach_figure_context(
@@ -338,10 +338,10 @@ class TestAttachFigureContext:
         # invented, the caption text stays, and one warning gives the count.
         from unittest.mock import patch
 
-        from scholar_lens.src.parser import attach_figure_context
+        from scholar_lens.adapters.documents.parser import attach_figure_context
 
         text = '| [Image: alt="", src=""] Table 2: panels | [Image: alt="", src=""] |'
-        with patch("scholar_lens.src.parser.logger") as log:
+        with patch("scholar_lens.adapters.documents.parser.logger") as log:
             out = attach_figure_context(text, [], is_pdf_parsed=True)
         assert "[Image:" not in out
         assert "Table 2: panels" in out
@@ -349,7 +349,7 @@ class TestAttachFigureContext:
         assert log.warning.call_args.args[1] == 2
 
     def test_html_figures_keep_absolute_url(self) -> None:
-        from scholar_lens.src.parser import attach_figure_context
+        from scholar_lens.adapters.documents.parser import attach_figure_context
 
         url = "https://arxiv.org/html/2502.17416v1/x1.png"
         out = attach_figure_context(
@@ -362,9 +362,9 @@ class TestAttachFigureContext:
 
 class TestBindFigureSources:
     def test_figures_bound_by_element_id(self) -> None:
+        from scholar_lens.adapters.documents.html import extract_text_from_html
+        from scholar_lens.adapters.documents.parser import _bind_figure_sources
         from scholar_lens.domain.paper.models import Figure
-        from scholar_lens.src.parser import _bind_figure_sources
-        from scholar_lens.src.utils.helpers import extract_text_from_html
 
         html = (
             "<figure id='3'><img alt='' data-coord='x'/></figure>"
@@ -378,7 +378,7 @@ class TestBindFigureSources:
 
 class TestEmptyDocumentParse:
     def test_empty_response_is_not_content(self) -> None:
-        from scholar_lens.src.parser import _has_content
+        from scholar_lens.adapters.documents.parser import _has_content
 
         assert not _has_content({"elements": [], "content": {"html": ""}})
         assert not _has_content({"elements": [{"id": 1}], "content": {"html": " "}})
@@ -582,13 +582,13 @@ class TestUpstageHtmlEscaping:
         ],
     )
     def test_stray_angle_brackets_survive(self, html: str, kept: str) -> None:
-        from scholar_lens.src.parser import escape_stray_angle_brackets
-        from scholar_lens.src.utils import extract_text_from_html
+        from scholar_lens.adapters.documents.html import extract_text_from_html
+        from scholar_lens.adapters.documents.parser import escape_stray_angle_brackets
 
         assert kept in extract_text_from_html(escape_stray_angle_brackets(html))
 
     def test_document_parse_tags_are_kept(self) -> None:
-        from scholar_lens.src.parser import escape_stray_angle_brackets
+        from scholar_lens.adapters.documents.parser import escape_stray_angle_brackets
 
         html = "<table><tr><td colspan='2'>a</td></tr></table><br><figure id='3'>"
         assert escape_stray_angle_brackets(html) == html
@@ -600,7 +600,7 @@ class TestPdfFigureCaption:
         return {"category": category, "content": {"html": html}}
 
     def test_caption_comes_from_the_following_caption_element(self) -> None:
-        from scholar_lens.src.parser import _pdf_figure_caption
+        from scholar_lens.adapters.documents.parser import _pdf_figure_caption
 
         elements = [
             self._element(
@@ -611,7 +611,7 @@ class TestPdfFigureCaption:
         assert _pdf_figure_caption(elements, 0) == "Figure 1: Our reparametrization."
 
     def test_ocr_alt_text_is_not_a_caption(self) -> None:
-        from scholar_lens.src.parser import _pdf_figure_caption
+        from scholar_lens.adapters.documents.parser import _pdf_figure_caption
 
         elements = [
             self._element("figure", "<figure><img alt='h B=0 Pretrained'></figure>"),
@@ -620,7 +620,7 @@ class TestPdfFigureCaption:
         assert _pdf_figure_caption(elements, 0) == ""
 
     def test_multi_panel_figure_shares_the_caption_after_its_panels(self) -> None:
-        from scholar_lens.src.parser import _pdf_figure_caption
+        from scholar_lens.adapters.documents.parser import _pdf_figure_caption
 
         elements = [
             self._element("figure", "<figure><img alt='(a)'></figure>"),
@@ -636,7 +636,7 @@ class TestPdfFigureCaption:
     ) -> None:
         # Regression: every adjacent figure was skipped, so a logo at the end
         # of one page (or a long run of figures) inherited the next caption.
-        from scholar_lens.src.parser import _pdf_figure_caption
+        from scholar_lens.adapters.documents.parser import _pdf_figure_caption
 
         def figure(page: int) -> dict:
             return {**self._element("figure", "<figure></figure>"), "page": page}
@@ -657,7 +657,7 @@ class TestFigureMarkerMatching:
     def test_same_file_name_in_two_folders_never_swaps(self) -> None:
         # Regression: markers matched figures by basename, so figs/a/curve.png
         # and figs/b/curve.png both became the second figure.
-        from scholar_lens.src.parser import attach_figure_context
+        from scholar_lens.adapters.documents.parser import attach_figure_context
 
         base = "https://arxiv.org/html/2401.00001v1/"
         figures = [
@@ -674,7 +674,7 @@ class TestArxivHtmlOnly:
     async def test_conversion_stub_is_a_parse_error(self) -> None:
         # arXiv answers 200 with "See pages 1-last of main.pdf" when its
         # conversion failed; the pipeline then reads the PDF.
-        from scholar_lens.src.parser import ContentParseError, HTMLParser
+        from scholar_lens.adapters.documents.parser import ContentParseError, HTMLParser
 
         urls: list[str] = []
 

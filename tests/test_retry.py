@@ -76,7 +76,7 @@ class TestIsRetryable:
 
     def test_domain_rejections_are_terminal(self) -> None:
         from scholar_lens.adapters.http.url_guard import UnsafeUrlError
-        from scholar_lens.src.paper_source import NotAPdfError
+        from scholar_lens.adapters.scholarly.paper_source import NotAPdfError
 
         assert is_transient_error(NotAPdfError("nope")) is False
         assert is_transient_error(UnsafeUrlError("internal")) is False

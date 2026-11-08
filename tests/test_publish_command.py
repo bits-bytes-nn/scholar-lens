@@ -18,6 +18,7 @@ from moto import mock_aws
 
 from scholar_lens import cli
 from scholar_lens.adapters.aws.storage import S3Handler
+from scholar_lens.adapters.github.publisher import ImageLocalizer, Publisher
 from scholar_lens.configs import Github
 from scholar_lens.domain.publishing import (
     PublishRequest,
@@ -27,7 +28,6 @@ from scholar_lens.domain.publishing import (
 )
 from scholar_lens.domain.validation import PostValidationError
 from scholar_lens.src import saved_post
-from scholar_lens.src.publisher import ImageLocalizer, Publisher
 from scholar_lens.src.runtime import publish_artifact
 from tests.test_publisher import PNG, VALID_POST, FakeGithub, FakeRepo
 
@@ -60,7 +60,7 @@ def _request(work_dir: Path, markdown: str = BROKEN) -> PublishRequest:
 def repo(monkeypatch: pytest.MonkeyPatch) -> FakeRepo:
     repo = FakeRepo({"README.md": b"blog"})
     monkeypatch.setattr(FakeGithub, "repo", repo)
-    monkeypatch.setattr("scholar_lens.src.publisher.Github", FakeGithub)
+    monkeypatch.setattr("scholar_lens.adapters.github.publisher.Github", FakeGithub)
     monkeypatch.setenv("GITHUB_TOKEN", "test-token")
     return repo
 
@@ -183,7 +183,7 @@ def test_publish_exit_codes(
         def get_repo(self, name: str) -> Any:
             raise RuntimeError("GitHub is down")
 
-    monkeypatch.setattr("scholar_lens.src.publisher.Github", DownGithub)
+    monkeypatch.setattr("scholar_lens.adapters.github.publisher.Github", DownGithub)
     capsys.readouterr()
     assert cli.main(["publish", str(outcome.markdown_path)]) == cli.EXIT_PR_FAILED
     result = json.loads(capsys.readouterr().out)

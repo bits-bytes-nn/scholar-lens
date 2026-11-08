@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import logging
 import re
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol
 
 from github import GithubException, InputGitAuthor
 from github import InputGitTreeElement as TreeElement
@@ -26,12 +27,32 @@ from scholar_lens.domain.publishing import (
     PublishRequest,
     is_post_file,
 )
-from scholar_lens.src.logger import logger
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from github.Repository import Repository
 
-    from scholar_lens.configs import Github as GithubConfig
+
+class GithubSettings(Protocol):
+    """The blog repository settings the GitHub adapters read (the run
+    configuration's ``resources.github``)."""
+
+    @property
+    def repo_name(self) -> str | None: ...
+
+    @property
+    def base_branch(self) -> str: ...
+
+    @property
+    def branch_prefix(self) -> str: ...
+
+    @property
+    def author_name(self) -> str: ...
+
+    @property
+    def author_email(self) -> str | None: ...
+
 
 _BLOB_MODE = "100644"
 _MAX_HAND_EDIT_NOTES = 10
@@ -52,7 +73,7 @@ class BlogBranchSync:
     or closed) the branch is restarted from the base.
     """
 
-    def __init__(self, repo: Repository, config: GithubConfig) -> None:
+    def __init__(self, repo: Repository, config: GithubSettings) -> None:
         self.repo = repo
         self.config = config
 

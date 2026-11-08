@@ -270,8 +270,8 @@ async def test_prefer_full_text_keeps_the_arxiv_abstract_when_text_fails(
 ) -> None:
     # Regression: with prefer_full_text an arXiv reference whose full text
     # could not be parsed was dropped although its abstract was fetched.
+    from scholar_lens.adapters.documents.parser import ContentParseError
     from scholar_lens.adapters.scholarly import arxiv as ah
-    from scholar_lens.src.parser import ContentParseError
 
     md = ah.ArxivMetadata.model_construct(
         title="LoRA", authors=["E Hu"], abstract="LoRA abstract."
@@ -387,7 +387,7 @@ class _RecordingChain(_FakeChain):
 
 
 def test_citation_prompt_fences_are_registered() -> None:
-    from scholar_lens.src.prompt_safety import prompt_fence_tags
+    from scholar_lens.adapters.bedrock.prompt_safety import prompt_fence_tags
 
     assert {"reference", "citing_context"} <= prompt_fence_tags()
 

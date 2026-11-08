@@ -1,31 +1,26 @@
-"""Token-usage accounting, cost estimation, and CloudWatch metric emission.
+"""Token-usage accounting of the model calls in a run.
 
-The pipelines make many Bedrock calls (especially the per-section writing
-loops), the most expensive part of the system. This module provides:
+* :class:`TokenUsageTracker` — a LangChain callback (and the Strands
+  adapter's recorder) that accumulates token counts and priced
+  :class:`~scholar_lens.domain.usage.UsageEvent` records across every model
+  call in a run.
+* :class:`TokenBudgetGuard` — the token budget wiring of the LangChain
+  generators: a pathological paper or a retry storm cannot run up unbounded
+  spend (:class:`~scholar_lens.domain.usage.TokenBudgetExceeded`).
 
-* :class:`TokenUsageTracker` — a LangChain callback that accumulates input/output
-  token counts across every model call in a run.
-* :class:`TokenBudgetExceeded` + ``check_budget`` — a hard guardrail so a
-  pathological paper or a retry storm cannot run up unbounded spend.
-* :class:`MetricsEmitter` — publishes ``InputTokens`` / ``OutputTokens`` /
-  ``EstimatedCostUSD`` / ``DurationSeconds`` / ``Success`` to CloudWatch (and an
-  EMF-style line to stdout) so cost and latency are queryable and alarmable.
-
-All of it degrades to a no-op off-AWS or when boto/CloudWatch is unavailable;
-nothing here may fail the job.
+Accounting never fails a call.
 """
 
 from __future__ import annotations
 
+import logging
 import time
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
-import boto3
 from langchain_core.callbacks import BaseCallbackHandler
 
-from scholar_lens.application.usage import current_stage
 from scholar_lens.domain.constants import HARD_BUDGET_MULTIPLE
 from scholar_lens.domain.model_registry import (
     PRICE_VERSION,
@@ -33,18 +28,16 @@ from scholar_lens.domain.model_registry import (
     profile_source,
 )
 from scholar_lens.domain.usage import RunUsage, TokenBudgetExceeded, UsageEvent
-from scholar_lens.src.logger import logger
+from scholar_lens.domain.usage_context import current_stage
 
-METRICS_NAMESPACE = "ScholarLens"
-# The per-run cost metric; the stack's cost alarm watches this exact name.
-COST_METRIC_NAME = "EstimatedCostUSD"
+logger = logging.getLogger(__name__)
 
 
 @dataclass
 class TokenUsageTracker(BaseCallbackHandler):
     """Accumulates Bedrock token usage across all LLM calls in a run, and
     records each call (:class:`UsageEvent`, under the current
-    :func:`~scholar_lens.application.usage.usage_stage`) for cost tracking:
+    :func:`~scholar_lens.domain.usage_context.usage_stage`) for cost tracking:
     one ``llm_usage`` JSON log line per call and ``JobResult.usage``."""
 
     input_tokens: int = 0
@@ -245,117 +238,3 @@ def _extract_usage(response: Any) -> UsageEvent:  # noqa: ANN401
         cache_read_tokens=cache_read,
         cache_write_tokens=cache_write,
     )
-
-
-class MetricsEmitter:
-    """Publishes run metrics to CloudWatch (best-effort) and stdout."""
-
-    def __init__(
-        self,
-        boto_session: boto3.Session | None = None,
-        *,
-        namespace: str = METRICS_NAMESPACE,
-        enabled: bool = True,
-    ) -> None:
-        self.namespace = namespace
-        self.enabled = enabled
-        self._client = None
-        if enabled and boto_session is not None:
-            try:
-                self._client = boto_session.client("cloudwatch")
-            except Exception as e:  # noqa: BLE001
-                logger.debug("CloudWatch client unavailable: %s", e)
-
-    def emit_run(
-        self,
-        *,
-        mode: str,
-        success: bool,
-        duration_seconds: float,
-        tracker: TokenUsageTracker,
-    ) -> None:
-        dims = [{"Name": "Mode", "Value": mode}]
-        cost = tracker.estimated_cost_usd()
-        metrics = {
-            "InputTokens": tracker.input_tokens,
-            "OutputTokens": tracker.output_tokens,
-            "TotalTokens": tracker.total_tokens,
-            "LLMCalls": tracker.call_count,
-            COST_METRIC_NAME: cost,
-            "DurationSeconds": round(duration_seconds, 2),
-            "Success": 1 if success else 0,
-            "Failure": 0 if success else 1,
-        }
-        # Always log a structured summary line (queryable even without metrics).
-        logger.info(
-            "run_metrics mode=%s success=%s tokens_in=%d tokens_out=%d calls=%d "
-            "cost_usd=%.4f duration_s=%.1f",
-            mode,
-            success,
-            tracker.input_tokens,
-            tracker.output_tokens,
-            tracker.call_count,
-            cost,
-            duration_seconds,
-        )
-        if not self._client:
-            return
-        try:
-            # Emit each metric TWICE: once with the Mode dimension (per-pipeline
-            # breakdown) and once with NO dimensions (a stack-wide aggregate). A
-            # CloudWatch alarm can only watch a single time series — it can't
-            # SEARCH/SUM across dimensions — so the dimensionless copy is what the
-            # cost/error alarms actually alarm on.
-            self._client.put_metric_data(
-                Namespace=self.namespace,
-                MetricData=[
-                    entry
-                    for name, value in metrics.items()
-                    for entry in (
-                        {
-                            "MetricName": name,
-                            "Value": float(value),
-                            "Dimensions": dims,
-                        },
-                        {"MetricName": name, "Value": float(value)},
-                    )
-                ],
-            )
-        except Exception as e:  # noqa: BLE001 - metric emission must not fail the job
-            logger.warning("Failed to publish CloudWatch metrics: %s", e)
-        self._emit_stages(mode, tracker.run_usage())
-
-    def _emit_stages(self, mode: str, usage: RunUsage) -> None:
-        """Cost, tokens and calls per stage (dimensions Mode and Stage)."""
-        if not self._client or not usage.by_stage:
-            return
-        data = [
-            {
-                "MetricName": name,
-                "Value": float(value),
-                "Dimensions": [
-                    {"Name": "Mode", "Value": mode},
-                    {"Name": "Stage", "Value": stage},
-                ],
-            }
-            for stage, totals in usage.by_stage.items()
-            for name, value in (
-                ("StageCostUSD", totals.cost_usd),
-                (
-                    "StageTokens",
-                    totals.input_tokens
-                    + totals.output_tokens
-                    + totals.cache_read_tokens
-                    + totals.cache_write_tokens,
-                ),
-                ("StageCalls", totals.calls),
-                ("StageFailedCalls", totals.failed_calls),
-            )
-        ]
-        try:
-            for i in range(0, len(data), 1000):  # the API's per-request limit
-                self._client.put_metric_data(
-                    Namespace=self.namespace, MetricData=data[i : i + 1000]
-                )
-        except Exception as e:  # noqa: BLE001 - metric emission must not fail the job
-            logger.warning("Failed to publish stage metrics: %s", e)

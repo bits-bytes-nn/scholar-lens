@@ -29,6 +29,15 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import Runnable
 
 from scholar_lens.adapters.aws.storage import S3Handler
+from scholar_lens.adapters.bedrock.chat_models import BedrockLanguageModelFactory
+from scholar_lens.adapters.bedrock.prompt_safety import neutralize_prompt_tags
+from scholar_lens.adapters.bedrock.prompts.base import BasePrompt
+from scholar_lens.adapters.bedrock.prompts.survey import (
+    SurveyScopePrompt,
+    SurveySelectionPrompt,
+)
+from scholar_lens.adapters.bedrock.usage import TokenBudgetGuard, TokenUsageTracker
+from scholar_lens.adapters.retry import RetryableBase
 from scholar_lens.adapters.scholarly.arxiv import ArxivHandler, ArxivPaperError
 from scholar_lens.adapters.scholarly.index import (
     DATACITE_MAX_IDS,
@@ -41,7 +50,13 @@ from scholar_lens.adapters.scholarly.index import (
     openalex_record,
 )
 from scholar_lens.adapters.scholarly.metadata import ProviderUnavailableError
-from scholar_lens.application.usage import staged
+from scholar_lens.adapters.web.research import (
+    PageContent,
+    ResearchCorpus,
+    SourceFetchError,
+    WebResearcher,
+    page_key,
+)
 from scholar_lens.domain.constants import LanguageModelId, S3Paths
 from scholar_lens.domain.jobs import JobRequest
 from scholar_lens.domain.survey.plan import (
@@ -74,23 +89,9 @@ from scholar_lens.domain.survey.plan import (
     unversioned_arxiv_id,
 )
 from scholar_lens.domain.titles import titles_match
+from scholar_lens.domain.usage_context import staged
 from scholar_lens.src.logger import logger
-from scholar_lens.src.metrics import TokenBudgetGuard, TokenUsageTracker
-from scholar_lens.src.prompt_safety import neutralize_prompt_tags
-from scholar_lens.src.prompts import (
-    BasePrompt,
-    SurveyScopePrompt,
-    SurveySelectionPrompt,
-)
 from scholar_lens.src.runtime import PipelineOutcome, RunContext
-from scholar_lens.src.utils import BedrockLanguageModelFactory, RetryableBase
-from scholar_lens.src.web_research import (
-    PageContent,
-    ResearchCorpus,
-    SourceFetchError,
-    WebResearcher,
-    page_key,
-)
 
 M = TypeVar("M")
 

@@ -16,14 +16,15 @@ from unittest.mock import MagicMock
 import boto3
 import pytest
 
+from scholar_lens.adapters.bedrock.usage import TokenUsageTracker
+from scholar_lens.adapters.github import publisher
 from scholar_lens.configs import Config
 from scholar_lens.domain.conventions import load_local_conventions
 from scholar_lens.domain.guide.models import TechGuide
 from scholar_lens.domain.jobs import JobRequest
 from scholar_lens.domain.paper.models import Attributes, Content, Figure, Paper
 from scholar_lens.domain.validation import PostValidationError, validate_post
-from scholar_lens.src import guide_pipeline, paper_pipeline, publisher, runtime
-from scholar_lens.src.metrics import TokenUsageTracker
+from scholar_lens.src import guide_pipeline, paper_pipeline, runtime
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 64
 ARXIV_FIGURE = "https://arxiv.org/html/2106.09685v2/x1.png"

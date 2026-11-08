@@ -3,17 +3,8 @@ import os
 from datetime import datetime
 from pathlib import Path
 
+from scholar_lens.adapters.aws.environment import is_running_in_aws
 from scholar_lens.domain.constants import EnvVars, LocalPaths
-
-
-def is_running_in_aws() -> bool:
-    aws_env_vars = [
-        "AWS_EXECUTION_ENV",
-        "AWS_LAMBDA_FUNCTION_NAME",
-        "AWS_BATCH_JOB_ID",
-        "ECS_CONTAINER_METADATA_URI",
-    ]
-    return any(env_var in os.environ for env_var in aws_env_vars)
 
 
 class LoggerConfig:

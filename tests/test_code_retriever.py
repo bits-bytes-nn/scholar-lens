@@ -5,9 +5,9 @@ from __future__ import annotations
 import boto3
 import pytest
 
+from scholar_lens.adapters.code.retriever import CodeRetriever
 from scholar_lens.adapters.http.url_guard import UnsafeUrlError
 from scholar_lens.domain.constants import EmbeddingModelId, LanguageModelId
-from scholar_lens.src.code_retriever import CodeRetriever
 from tests.fakes import FakeEmbeddingFactory, FakeLLMFactory
 
 
@@ -33,7 +33,7 @@ class TestAssertClonable:
 
 class TestPythonFiles:
     def test_skips_symlinks_escapes_and_vendored_dirs(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
-        from scholar_lens.src.code_retriever import python_files
+        from scholar_lens.adapters.code.retriever import python_files
 
         repo = tmp_path / "repo"
         (repo / "pkg").mkdir(parents=True)
@@ -53,7 +53,7 @@ class TestPythonFiles:
     def test_lora_like_repo_is_bounded_and_ranked(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
         """microsoft/LoRA vendors a whole transformers copy under examples/;
         only the repo's own code should be indexed, README-mentioned first."""
-        from scholar_lens.src.code_retriever import python_files
+        from scholar_lens.adapters.code.retriever import python_files
 
         repo = tmp_path / "LoRA"
 
@@ -88,7 +88,7 @@ class TestPythonFiles:
         assert len(python_files(repo, max_files=2)) == 2
 
     async def test_chunks_are_capped(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
-        from scholar_lens.src.code_retriever import CodeRetriever
+        from scholar_lens.adapters.code.retriever import CodeRetriever
 
         repo = tmp_path / "r"
         (repo / "pkg").mkdir(parents=True)
@@ -119,7 +119,7 @@ class TestGitClone:
     ) -> None:  # type: ignore[no-untyped-def]
         import os
 
-        import scholar_lens.src.code_retriever as cr
+        import scholar_lens.adapters.code.retriever as cr
 
         bin_dir = tmp_path / "bin"
         bin_dir.mkdir()
@@ -137,7 +137,7 @@ class TestGitClone:
     async def test_nonzero_exit_raises_and_args_disable_redirects(self, tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:  # type: ignore[no-untyped-def]
         import os
 
-        import scholar_lens.src.code_retriever as cr
+        import scholar_lens.adapters.code.retriever as cr
 
         bin_dir = tmp_path / "bin"
         bin_dir.mkdir()
@@ -215,7 +215,7 @@ class TestOwnPackageIsIndexed:
         path.write_text(text)
 
     def test_repo_named_after_the_library_keeps_its_package(self, tmp_path) -> None:
-        from scholar_lens.src.code_retriever import python_files
+        from scholar_lens.adapters.code.retriever import python_files
 
         repo = tmp_path / "Megatron-LM-0123abcd"
         self._write(repo / "megatron" / "core" / "transformer.py")
@@ -225,7 +225,7 @@ class TestOwnPackageIsIndexed:
         assert "examples/transformers/patched.py" not in names  # still vendored
 
     def test_declared_project_name_keeps_its_package(self, tmp_path) -> None:
-        from scholar_lens.src.code_retriever import python_files
+        from scholar_lens.adapters.code.retriever import python_files
 
         repo = tmp_path / "checkout-0123abcd"
         self._write(repo / "pyproject.toml", '[project]\nname = "peft"\n')
@@ -233,7 +233,7 @@ class TestOwnPackageIsIndexed:
         assert any(p.name == "lora.py" for p in python_files(repo))
 
     def test_src_layout_package_is_kept(self, tmp_path) -> None:
-        from scholar_lens.src.code_retriever import python_files
+        from scholar_lens.adapters.code.retriever import python_files
 
         repo = tmp_path / "anything-0123abcd"
         self._write(repo / "src" / "peft" / "tuners" / "lora.py")

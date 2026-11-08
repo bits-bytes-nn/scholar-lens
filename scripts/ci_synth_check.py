@@ -18,8 +18,8 @@ from aws_cdk import Environment
 
 sys.path.append(str(Path(__file__).parent.parent))
 
+from scholar_lens.adapters.aws.metrics import COST_METRIC_NAME
 from scholar_lens.cli import APP_REPORTED_EXIT_CODES  # noqa: E402
-from scholar_lens.src.metrics import COST_METRIC_NAME  # noqa: E402
 from scripts.deploy_infra import JOB_COMMAND, PaperReviewStack  # noqa: E402
 
 FAKE_ACCOUNT = "123456789012"

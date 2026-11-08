@@ -14,8 +14,13 @@ from typing import Any
 import boto3
 from langchain_core.runnables import Runnable
 
-from scholar_lens.adapters.retry import is_access_error
-from scholar_lens.application.usage import staged
+from scholar_lens.adapters.bedrock.chat_models import BedrockLanguageModelFactory
+from scholar_lens.adapters.bedrock.output_parsers import HTMLTagOutputParser
+from scholar_lens.adapters.bedrock.prompt_safety import neutralize_prompt_tags
+from scholar_lens.adapters.bedrock.prompts.base import BasePrompt
+from scholar_lens.adapters.bedrock.usage import TokenBudgetGuard
+from scholar_lens.adapters.documents.html import measure_execution_time
+from scholar_lens.adapters.retry import RetryableBase, is_access_error
 from scholar_lens.domain.constants import LanguageModelId
 from scholar_lens.domain.markdown.math import DISPLAY_MATH, HANGUL, image_sources
 from scholar_lens.domain.paper.models import Paper
@@ -26,6 +31,7 @@ from scholar_lens.domain.post_format import (
 )
 from scholar_lens.domain.quality_gate import publish_blockers
 from scholar_lens.domain.usage import TokenBudgetExceeded
+from scholar_lens.domain.usage_context import staged
 from scholar_lens.domain.validation import (
     description_markup,
     description_problems,
@@ -34,21 +40,12 @@ from scholar_lens.domain.validation import (
 )
 from scholar_lens.src.explainer import NO_CODEBASE
 from scholar_lens.src.logger import logger
-from scholar_lens.src.metrics import TokenBudgetGuard
-from scholar_lens.src.prompt_safety import neutralize_prompt_tags
-from scholar_lens.src.prompts import (
-    BasePrompt,
+from scholar_lens.src.prompts.summary import (
     PaperSummaryFixPrompt,
     PaperSummaryPrompt,
     PaperSummaryShortenPrompt,
 )
 from scholar_lens.src.section_loop import TARGETED_FIX, lost_structure
-from scholar_lens.src.utils import (
-    BedrockLanguageModelFactory,
-    HTMLTagOutputParser,
-    RetryableBase,
-    measure_execution_time,
-)
 
 DEFAULT_LANGUAGE: str = "Korean"
 

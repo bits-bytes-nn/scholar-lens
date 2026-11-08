@@ -39,7 +39,6 @@ from scholar_lens.application.post_engine import (
     ReadStart,
     RunSettings,
 )
-from scholar_lens.application.usage import usage_stage
 from scholar_lens.domain.evidence import (
     Evidence,
     EvidenceLedger,
@@ -59,6 +58,7 @@ from scholar_lens.domain.paper.evidence_paper import (
 )
 from scholar_lens.domain.prompts import paper_evidence as prompts
 from scholar_lens.domain.specs.paper import PAPER_REVIEW_SPEC, paper_spec
+from scholar_lens.domain.usage_context import usage_stage
 from scholar_lens.domain.validation import description_problems, fit_description
 
 logger = logging.getLogger(__name__)

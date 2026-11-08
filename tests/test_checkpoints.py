@@ -13,6 +13,7 @@ from typing import Any
 
 import pytest
 
+from scholar_lens.adapters.scholarly.survey_documents import EvidenceTextStore
 from scholar_lens.application.checkpoints import (
     CHECKPOINT_VERSION,
     Checkpoint,
@@ -27,7 +28,6 @@ from scholar_lens.application.evidence_writer import (
     SentenceVerdict,
 )
 from scholar_lens.application.paper_engine import EvidencePaperEngine, PaperSettings
-from scholar_lens.src.survey_documents import EvidenceTextStore
 from tests.test_paper_engine import ScriptedModel, _paper
 
 METHOD_TITLE = "보상 모델 없이 푸는 선호 최적화"
@@ -286,7 +286,7 @@ def test_a_checkpoint_that_does_not_fit_its_stage_is_run_again(
 
 
 def test_a_fresh_runs_store_is_written_but_not_read(tmp_path: Path) -> None:
-    from scholar_lens.src.survey_documents import evidence_store
+    from scholar_lens.src.evidence_models import evidence_store
 
     kept = evidence_store(tmp_path, None, "")
     kept.put("k", "v")

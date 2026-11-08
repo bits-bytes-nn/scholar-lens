@@ -19,7 +19,11 @@ from __future__ import annotations
 import functools
 import re
 
-from scholar_lens.src.prompts import BasePrompt
+# Importing the package registers its templates; the sections engine's
+# templates register when scholar_lens.legacy is imported (the composition
+# root imports it before any run).
+from scholar_lens.adapters.bedrock import prompts  # noqa: F401
+from scholar_lens.adapters.bedrock.prompts.base import BasePrompt
 
 # A fence is a tag whose body holds a ``{placeholder}`` the input is filled
 # into; output-format tags (``<plan>``, ``<edit>``, ...) carry no input.

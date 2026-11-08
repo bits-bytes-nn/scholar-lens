@@ -19,6 +19,7 @@ pipeline should use.
 from __future__ import annotations
 
 import hashlib
+import logging
 import re
 from abc import ABC, abstractmethod
 from datetime import UTC, datetime
@@ -50,7 +51,8 @@ from scholar_lens.adapters.scholarly.pdf import (
     save_pdf,
 )
 from scholar_lens.domain.ids import arxiv_id_from_url, is_arxiv_host, normalize_arxiv_id
-from scholar_lens.src.logger import logger
+
+logger = logging.getLogger(__name__)
 
 # "arxiv.org/abs/2106.09685" or "openreview.net/pdf?id=…" typed without a scheme.
 _SCHEMELESS_URL = re.compile(r"^[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}/", re.IGNORECASE)

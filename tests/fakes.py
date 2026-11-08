@@ -6,7 +6,7 @@ from typing import Any
 
 from langchain_core.runnables import Runnable, RunnableLambda
 
-from scholar_lens.src.utils import BedrockLanguageModelFactory
+from scholar_lens.adapters.bedrock.chat_models import BedrockLanguageModelFactory
 
 
 class FakeLLMFactory:

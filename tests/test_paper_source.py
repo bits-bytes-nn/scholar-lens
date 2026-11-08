@@ -8,10 +8,7 @@ import pytest
 import requests
 import responses
 
-from scholar_lens.adapters.scholarly.pdf import MAX_PDF_BYTES
-from scholar_lens.domain.ids import arxiv_id_from_url as extract_arxiv_id_from_url
-from scholar_lens.domain.ids import normalize_arxiv_id
-from scholar_lens.src.paper_source import (
+from scholar_lens.adapters.scholarly.paper_source import (
     ArxivSource,
     NotAPdfError,
     PaperFetchError,
@@ -20,6 +17,9 @@ from scholar_lens.src.paper_source import (
     PdfUrlSource,
     resolve_paper_source,
 )
+from scholar_lens.adapters.scholarly.pdf import MAX_PDF_BYTES
+from scholar_lens.domain.ids import arxiv_id_from_url as extract_arxiv_id_from_url
+from scholar_lens.domain.ids import normalize_arxiv_id
 
 
 def is_arxiv_id(value: str) -> bool:
@@ -331,7 +331,7 @@ class TestPdfUrlSourceDownload:
 
     @responses.activate
     def test_too_many_redirects_rejected(self, tmp_papers_dir) -> None:
-        from scholar_lens.src.paper_source import _MAX_REDIRECTS
+        from scholar_lens.adapters.scholarly.paper_source import _MAX_REDIRECTS
 
         for i in range(_MAX_REDIRECTS + 2):
             here = PDF_URL if i == 0 else f"https://example.com/r{i - 1}"
@@ -453,7 +453,7 @@ def test_dns_failure_at_connect_time_is_classified(
     # The pinned adapter resolves again when it connects: a resolver hiccup
     # there is an outage too, not a rejected URL.
     from scholar_lens.adapters.http.url_guard import UnsafeUrlError
-    from scholar_lens.src import paper_source
+    from scholar_lens.adapters.scholarly import paper_source
 
     class FlakySession:
         def request(self, *_a, **_k):  # type: ignore[no-untyped-def]

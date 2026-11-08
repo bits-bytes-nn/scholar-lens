@@ -15,6 +15,7 @@ from unittest.mock import AsyncMock, MagicMock
 import boto3
 import pytest
 
+from scholar_lens.adapters.bedrock.usage import TokenUsageTracker
 from scholar_lens.domain.constants import LanguageModelId
 from scholar_lens.domain.paper.models import (
     Attributes,
@@ -29,7 +30,6 @@ from scholar_lens.domain.usage import TokenBudgetExceeded
 from scholar_lens.domain.validation import body_errors
 from scholar_lens.src.citation_summarizer import CitationSummarizer
 from scholar_lens.src.explainer import PaperReviewer
-from scholar_lens.src.metrics import TokenUsageTracker
 from tests.fakes import FakeLLMFactory
 
 MARKER = '[Image: alt="arch", src="/p/figures/0.png", caption="The architecture."]'
