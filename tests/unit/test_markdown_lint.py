@@ -664,3 +664,34 @@ def test_safe_schemes_and_class_lists_stay(markup: str) -> None:
     from scholar_lens.domain.markdown.lint import publish_body
 
     assert markup in publish_body(f"## A\n\n{markup}\n", warn=False)
+
+
+@pytest.mark.parametrize(
+    "markdown",
+    [
+        "[x][a]\n\n[a]: &#106;avascript:alert(1)",
+        "[x][a]\n\n[a]: javascript&#58;alert(1)",
+        "[x][a]\n\n[a]: javascript&colon;alert(1)",
+        '[x][a]\n\n[a]: <&#x6a;avascript:alert(1)> "t"',
+        "> [a]: &#118;bscript:x\n\n[x][a]",
+        "![i](&#106;avascript:alert(1))",
+        "[x][a]\n\n[a]: &amp;#106;avascript:alert(1)",
+    ],
+)
+def test_entity_encoded_targets_are_judged_decoded(markdown: str) -> None:
+    import html
+
+    from scholar_lens.domain.markdown.lint import publish_body
+
+    out = html.unescape(
+        html.unescape(publish_body(f"## A\n\n{markdown}\n", warn=False))
+    )
+    assert "javascript:" not in out.lower() and "vbscript:" not in out.lower()
+
+
+def test_a_markdown_tel_link_stays_a_link() -> None:
+    from scholar_lens.domain.markdown.lint import publish_body
+
+    assert "[전화](tel:+82-2-0000)" in publish_body(
+        "## A\n\n[전화](tel:+82-2-0000)\n", warn=False
+    )

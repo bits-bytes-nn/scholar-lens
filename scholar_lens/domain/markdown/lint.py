@@ -40,6 +40,7 @@ whose source is not a known figure of the artifact.
 
 from __future__ import annotations
 
+import html
 import logging
 import re
 from collections.abc import Callable, Collection
@@ -384,7 +385,12 @@ def safe_url(value: str) -> bool:
     http(s), mailto, tel or an inline image (``data:image/``). Control
     characters and spaces a browser ignores are ignored here too
     (``java\\tscript:``)."""
-    url = "".join(ch for ch in value if ch > " " and ch != "\x7f").lower()
+    # Entities as a browser decodes them (a Markdown target is copied into
+    # the attribute as written), until they stop changing.
+    decoded = value
+    while (next_ := html.unescape(decoded)) != decoded:
+        decoded = next_
+    url = "".join(ch for ch in decoded if ch > " " and ch != "\x7f").lower()
     scheme, colon, rest = url.partition(":")
     if not colon or any(ch in scheme for ch in "/?#"):
         return True  # relative or an anchor
@@ -565,7 +571,7 @@ def _warn_undefined_macros(
 
 
 _LINKED_IMAGE = re.compile(r"\[(!\[[^\]]*\]\([^)]*\))\]\(([^)]*)\)")
-_FOLLOWABLE = ("http://", "https://", "/", "#", "mailto:")
+_FOLLOWABLE = ("http://", "https://", "/", "#", "mailto:", "tel:")
 
 
 def unlink_dead_links(markdown: str) -> str:
