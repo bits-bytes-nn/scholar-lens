@@ -316,6 +316,37 @@ def test_a_whole_post_fix_settles_only_the_sentences_it_adds() -> None:
     assert model.sent[calls] == [added, sentences[1]]
 
 
+@pytest.mark.parametrize("change", ["insert", "rewrite", "delete"])
+def test_a_whole_post_fix_settles_the_sentence_after_a_change(change: str) -> None:
+    """The unit after a change is judged again in its new context: a new
+    objection to it is settled, not cached and dropped."""
+    sentences = _sentences(6)
+    model = Model()
+    writer = _writer(model)
+    md = _verify(writer, _section(sentences))
+    new = "새 문장은 캐시를 씁니다 [[E1]]."
+    edit = {
+        "insert": Edit(find=sentences[1], replace=f"{sentences[1]}\n\n{new}"),
+        "rewrite": Edit(find=sentences[1], replace=new),
+        "delete": Edit(find=sentences[1], replace=""),
+    }[change]
+    # Only the whole-post fix edits; the narrowing that follows does not.
+    model.edits = [edit]
+    original = model.structured
+
+    async def once(**call: Any) -> Any:
+        answer = await original(**call)
+        if call["schema"] is SectionEdits:
+            model.edits = []
+        return answer
+
+    model.structured = once  # type: ignore[method-assign]
+    model.bad = lambda s: s == sentences[2]
+    out = _whole_post_fix(writer, md)[0][1]
+    assert sentences[2] not in out
+    assert all(s in out for s in (sentences[0], sentences[3], sentences[5]))
+
+
 def _foreign(markdown: str) -> list[Problem]:
     """A stand-in verifier: each line citing [[E9]] cites foreign evidence."""
     return [

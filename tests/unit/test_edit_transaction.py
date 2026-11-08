@@ -3,9 +3,12 @@
 
 from __future__ import annotations
 
+import random
+from collections import Counter
+
 import pytest
 
-from scholar_lens.domain.edit_transaction import changed_units, transact
+from scholar_lens.domain.edit_transaction import changed_units, rejudged_units, transact
 from scholar_lens.domain.evidence_draft import (
     apply_edits,
     lost_assets,
@@ -262,3 +265,35 @@ def test_an_edit_that_leaves_a_complete_ending_is_taken(ending: str) -> None:
         max_prose_cut=CUT,
     )
     assert revision.taken and revision.text.rstrip().endswith(ending.rstrip())
+
+
+def _prose(units: list[str]) -> str:
+    return "## S\n\n" + "\n\n".join(units) + "\n"
+
+
+def test_rejudged_units_are_the_changes_and_the_unit_after_each() -> None:
+    """Property, over generated sections and single edits: nothing is
+    re-judged without a change; every changed unit is; an insertion or a
+    rewrite re-judges the unit after it, a deletion the unit that moved up."""
+    rng = random.Random(4242)
+    for _ in range(300):
+        units = [f"문장 {k}번은 짧습니다." for k in rng.sample(range(50), 6)]
+        k = rng.randrange(len(units))
+        new = "새로 쓴 문장입니다."
+        after = list(units)
+        kind = rng.choice(["insert", "rewrite", "delete"])
+        if kind == "insert":
+            after.insert(k, new)
+        elif kind == "rewrite":
+            after[k] = new
+        else:
+            del after[k]
+        before_md, after_md = _prose(units), _prose(after)
+        assert rejudged_units(before_md, before_md) == []
+        got = rejudged_units(before_md, after_md)
+        assert not Counter(changed_units(before_md, after_md)) - Counter(got)
+        nxt = k + 1 if kind != "delete" else k
+        expected = ([new] if kind != "delete" else []) + (
+            [after[nxt]] if nxt < len(after) else []
+        )
+        assert got == expected, (kind, k)

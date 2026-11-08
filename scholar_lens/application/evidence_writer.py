@@ -30,7 +30,7 @@ from scholar_lens.application.ports import (
     ModelText,
     was_cut,
 )
-from scholar_lens.domain.edit_transaction import Revision, changed_units, transact
+from scholar_lens.domain.edit_transaction import Revision, rejudged_units, transact
 from scholar_lens.domain.evidence import (
     Evidence,
     EvidenceLedger,
@@ -944,8 +944,8 @@ class EvidenceWriter:
         4.5): the writer narrows them once in context (an edit
         transaction), the changed sentences are checked again, and what is
         still unsupported is deleted (:meth:`_drop_unsupported`).
-        ``baseline``: only sentences the draft added to it are settled (a
-        whole-post fix)."""
+        ``baseline``: only the sentences the draft added to it, and the one
+        after each change, are settled (a whole-post fix)."""
 
         async def found(text: str) -> list[tuple[str, str]]:
             claims = await self.unsupported(
@@ -958,7 +958,10 @@ class EvidenceWriter:
             )
             if baseline is None:
                 return claims
-            fresh = set(changed_units(baseline, text))
+            # What the fix changed, and the unit after each change: its
+            # verdict is judged again (a new context sentence), so a new
+            # objection to it counts too.
+            fresh = set(rejudged_units(baseline, text))
             return [(s, v) for s, v in claims if s in fresh]
 
         claims = await found(draft)

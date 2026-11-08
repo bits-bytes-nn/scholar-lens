@@ -76,6 +76,34 @@ def changed_units(before: str, after: str) -> list[str]:
     return out
 
 
+def rejudged_units(before: str, after: str) -> list[str]:
+    """The claim units of ``after`` whose claim check reads differently from
+    ``before``'s: new or changed units and the unit right after a change
+    (an insertion, a rewrite or a deletion before it), whose context
+    sentence the verdict depends on (docs/engine.md, 4.2), in order.
+
+    Args:
+        before: A section.
+        after: The section revised.
+
+    Returns:
+        The units whose (previous unit, unit) pair ``before`` does not have
+        (as often as ``after`` has it more).
+    """
+
+    def pairs(units: list[str]) -> list[tuple[str, str]]:
+        return [(units[n - 1] if n else "", u) for n, u in enumerate(units)]
+
+    left = Counter(pairs(claim_units(before)))
+    out = []
+    for pair in pairs(claim_units(after)):
+        if left[pair] > 0:
+            left[pair] -= 1
+        else:
+            out.append(pair[1])
+    return out
+
+
 def transact(
     before: str,
     edits: Sequence[tuple[str, str]],
