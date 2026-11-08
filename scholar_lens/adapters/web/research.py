@@ -64,6 +64,7 @@ from scholar_lens.domain.research import (
 )
 from scholar_lens.domain.sources import (
     OFFICIAL_AUTHORITIES,
+    SECONDARY_AUTHORITIES,
     THIRD_PARTY_AUTHORITIES,
     SourceSet,
     docs_version,
@@ -614,6 +615,7 @@ class WebResearcher:
         fetch_top: int = 0,
         sources: SourceSet | None = None,
         max_third_party: int | None = None,
+        min_secondary: int = 0,
         exclude: Collection[str] = (),
     ) -> None:
         """Append web-search results (and optionally their pages) to a corpus.
@@ -633,7 +635,13 @@ class WebResearcher:
         With ``sources``, the candidates are ranked by authority, then
         recency (publication year), then search rank (the round-robin
         order), each added page gets its record, and at most
-        ``max_third_party`` third-party and demoted pages are added.
+        ``max_third_party`` third-party and demoted pages are added. Of the
+        ``fetch_top`` slots, ``min_secondary`` are kept for primary
+        non-official pages (:data:`SECONDARY_AUTHORITIES`) while such
+        candidates remain, so official pages ranking first cannot fill
+        every slot; the third-party cap still bounds them, and demoted
+        classes never count. A slot the reserve held that no such page
+        fills goes to the next result held back for it.
         ``exclude`` goes to the search backend.
         """
         per_query = [
@@ -665,7 +673,11 @@ class WebResearcher:
                 )
             ]
         visited = {page_key(u) for p in corpus.pages for u in (p.url, p.final_url) if u}
-        added = third_party = capped = 0
+        added = third_party = secondary = capped = 0
+
+        def authority_of(result: SearchResult) -> str:
+            assert sources is not None
+            return sources.classify(result.url, published=result.published).authority
 
         def over_cap(authority: str) -> bool:
             return (
@@ -674,17 +686,24 @@ class WebResearcher:
                 and third_party >= max_third_party
             )
 
-        for result in interleaved:
-            if added >= fetch_top:
-                break
+        def reserve_left() -> int:
+            """Slots still kept for primary non-official pages: the reserve
+            the cap leaves room for, less the ones added."""
+            if sources is None:
+                return 0
+            want = min_secondary
+            if max_third_party is not None:
+                want = min(want, max_third_party)
+            return max(0, want - secondary)
+
+        def take(result: SearchResult) -> None:
+            nonlocal added, third_party, secondary, capped
             key = page_key(result.url)
-            if not urlparse(result.url).hostname or key in visited:
-                continue
-            if sources is not None and over_cap(
-                sources.classify(result.url, published=result.published).authority
-            ):
+            if key in visited:
+                return
+            if sources is not None and over_cap(authority_of(result)):
                 capped += 1
-                continue
+                return
             visited.add(key)
             # An arXiv link is read from the paper's HTML rendering: the
             # backend's content of an abstract page is the abstract alone.
@@ -700,29 +719,68 @@ class WebResearcher:
                     title=result.title or result.url,
                     text=result.content,
                 )
-            if page is not None and not page.published:
+            if page is None:
+                return
+            if not page.published:
                 page.published = result.published
-            if page is not None and page.final_url:
+            if page.final_url:
                 # A redirect to a page the corpus already holds.
                 landed = page_key(page.final_url)
                 if landed != key and landed in visited:
-                    continue
+                    return
                 visited.add(landed)
-            if page is not None and sources is not None:
+            if sources is not None:
                 authority = sources.record(page).authority
                 if over_cap(authority):  # it landed on a third-party page
                     capped += 1
-                    continue
+                    return
                 third_party += authority in THIRD_PARTY_AUTHORITIES
-            if page is not None:
-                corpus.pages.append(page)
-                added += 1
+                secondary += authority in SECONDARY_AUTHORITIES
+            corpus.pages.append(page)
+            added += 1
+
+        candidates = [
+            r
+            for r in interleaved
+            if urlparse(r.url).hostname and page_key(r.url) not in visited
+        ]
+        held: list[SearchResult] = []
+        for index, result in enumerate(candidates):
+            if added >= fetch_top:
+                break
+            if (
+                (left := reserve_left())
+                and fetch_top - added <= left
+                and authority_of(result) not in SECONDARY_AUTHORITIES
+                and any(
+                    authority_of(r) in SECONDARY_AUTHORITIES
+                    and page_key(r.url) not in visited
+                    for r in candidates[index + 1 :]
+                )
+            ):
+                # The remaining slots are the reserve's while a primary
+                # non-official result is still to come.
+                held.append(result)
+                continue
+            if held and authority_of(result) not in SECONDARY_AUTHORITIES:
+                # The reserve is released: the results held for it rank
+                # before this one.
+                while held and added < fetch_top:
+                    take(held.pop(0))
+                if added >= fetch_top:
+                    break
+            take(result)
+        for result in held:  # slots the reserve could not fill
+            if added >= fetch_top:
+                break
+            take(result)
         logger.info(
             "Added %d/%d search-result pages into the corpus (%d third-party, "
-            "%d over the third-party cap left out).",
+            "%d primary non-official, %d over the third-party cap left out).",
             added,
             fetch_top,
             third_party,
+            secondary,
             capped,
         )
 

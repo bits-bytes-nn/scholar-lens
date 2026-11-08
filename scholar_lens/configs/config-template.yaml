@@ -117,6 +117,11 @@ tech_guide:
   # rank. At most this many fetched result pages are third-party; demoted
   # classes below count as third-party and rank last.
   max_third_party_pages: 4
+  # Of the fetched result pages, this many are kept for primary non-official
+  # material (papers, the project's design docs and posts, reference-quality
+  # pages) while such results remain, so official pages cannot fill every
+  # slot. Bounded by max_third_party_pages; demoted classes never count.
+  min_secondary_pages: 3
   # Domain classes to demote: class name -> host patterns ("example.com"
   # with its subdomains, "*.example.com", "forum.*"). Edit or add classes;
   # an empty map demotes nothing.

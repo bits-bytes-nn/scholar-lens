@@ -283,6 +283,13 @@ class TechGuide(_Section):
     # third-party (or a demoted class below), the rest go to the official
     # docs and repository.
     max_third_party_pages: int = Field(default=4, ge=0)
+    # Of the fetched result pages, this many slots are kept for primary
+    # non-official material (papers, the project's design docs and posts,
+    # reference-quality pages) while such results remain, so official pages
+    # cannot fill every slot and the guide keeps its design rationale. The
+    # third-party cap above still bounds them; demoted classes never count.
+    # 3 is a quarter of the default fetch budget, within the default cap.
+    min_secondary_pages: int = Field(default=3, ge=0)
     # Domain classes (e.g. forum, social, aggregator) -> host patterns
     # ("example.com" with its subdomains, "*.example.com", "forum.*"): their
     # pages rank last and count as third-party (config-template.yaml lists

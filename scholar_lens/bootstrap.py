@@ -324,6 +324,7 @@ class GuideToolkit:
             release_lookup=package_release,
             repo_tags=researcher.repo_tags,
             max_third_party_pages=cfg.max_third_party_pages,
+            min_secondary_pages=cfg.min_secondary_pages,
             demoted_domains=cfg.demoted_domains,
             excluded_domains=cfg.excluded_domains,
         )

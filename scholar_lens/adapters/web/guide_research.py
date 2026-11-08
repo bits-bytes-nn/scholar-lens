@@ -151,6 +151,7 @@ class TechGuideGenerator(RetryableBase):
         release_lookup: Callable[[str], str | None] | None = None,
         repo_tags: TagLookup | None = None,
         max_third_party_pages: int | None = None,
+        min_secondary_pages: int = 0,
         demoted_domains: Mapping[str, Collection[str]] | None = None,
         excluded_domains: Collection[str] = (),
     ) -> None:
@@ -162,6 +163,9 @@ class TechGuideGenerator(RetryableBase):
             looks nothing up.
         max_third_party_pages: At most this many third-party and demoted
             search-result pages (None: no cap).
+        min_secondary_pages: Fetched search-result slots kept for primary
+            non-official pages (papers, design docs and posts) while such
+            results remain; within the third-party cap.
         demoted_domains: Domain classes (forum, social, aggregator …) ->
             host patterns whose pages rank last and count as third-party.
         excluded_domains: Domains the search backends leave out.
@@ -170,6 +174,7 @@ class TechGuideGenerator(RetryableBase):
         self.release_lookup = release_lookup
         self.repo_tags = repo_tags
         self.max_third_party_pages = max_third_party_pages
+        self.min_secondary_pages = min_secondary_pages
         self.demoted = DomainClasses.from_config(demoted_domains or {})
         self.excluded_domains = search_exclusions(excluded_domains)
         self.language = language
@@ -325,6 +330,7 @@ class TechGuideGenerator(RetryableBase):
             "max_research_queries": self.max_research_queries,
             "fetch_top_results": self.fetch_top_results,
             "max_third_party_pages": self.max_third_party_pages,
+            "min_secondary_pages": self.min_secondary_pages,
             "demoted_domains": {k: list(v) for k, v in self.demoted.classes.items()},
             "excluded_domains": list(self.excluded_domains),
             "search_backend": search_chain(self.researcher.search_provider),
@@ -476,6 +482,7 @@ class TechGuideGenerator(RetryableBase):
                 fetch_top=self.fetch_top_results,
                 sources=self._sources,
                 max_third_party=self.max_third_party_pages,
+                min_secondary=self.min_secondary_pages,
                 exclude=self.excluded_domains,
             )
             self._record(corpus.pages[before:], "search")

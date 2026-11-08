@@ -132,6 +132,11 @@ ENGINE_AUTHORITY: Mapping[SourceAuthority, Authority] = {
 OFFICIAL_AUTHORITIES = frozenset({"official", "official_repo"})
 # Authorities counted against ``max_third_party_pages``.
 THIRD_PARTY_AUTHORITIES = frozenset({"third_party", "forum"})
+# Authorities of the primary non-official material a guide's search slots
+# keep room for (``min_secondary_pages``): papers, design docs and posts,
+# reference-quality pages. Official pages (any docs version) and the
+# demoted classes (forum, social, aggregator) are not among them.
+SECONDARY_AUTHORITIES = frozenset({"reference", "third_party"})
 
 
 def normalize_url(url: str) -> str:

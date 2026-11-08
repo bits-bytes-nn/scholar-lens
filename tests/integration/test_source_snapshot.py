@@ -126,6 +126,10 @@ async def test_other_inputs_or_settings_gather_again(policy) -> None:  # type: i
     capped.max_third_party_pages = 1
     await capped.gather([DOCS], discover_subpages=False, snapshots=policy)
     capped.researcher.research.assert_called_once()
+    reserved = _generator()
+    reserved.min_secondary_pages = 5
+    await reserved.gather([DOCS], discover_subpages=False, snapshots=policy)
+    reserved.researcher.research.assert_called_once()
 
 
 def test_the_key_hashes_the_inputs_canonically() -> None:

@@ -57,6 +57,7 @@ def _run(
     *,
     fetch_top: int = 10,
     max_third_party: int | None = None,
+    min_secondary: int = 0,
     exclude: Collection[str] = (),
 ) -> tuple[list[PageContent], _Search]:
     search = _Search(per_query)
@@ -69,6 +70,7 @@ def _run(
         fetch_top=fetch_top,
         sources=sources,
         max_third_party=max_third_party,
+        min_secondary=min_secondary,
         exclude=exclude,
     )
     return corpus.pages, search
@@ -257,3 +259,82 @@ def test_backends_date_their_results() -> None:
     (tavily,) = TavilySearchProvider(api_key="k", client=client).search("q")
     (brave,) = BraveSearchProvider(api_key="k", client=client).search("q")
     assert (tavily.published, brave.published) == ("2025-03-04", "2024-02-01")
+
+
+def _official_first(official: int, secondary: int, forums: int) -> dict:  # type: ignore[type-arg]
+    """One query whose results rank the official pages first, then the
+    demoted ones' would-be slots, then primary non-official pages last in
+    search rank (a paper, a design post)."""
+    return {
+        "q": [
+            *(_result(f"{DOCS}page{i}") for i in range(official)),
+            *(_result(f"https://qa.example.net/q/{i}") for i in range(forums)),
+            *(_result(f"https://papers{i}.example.org/p") for i in range(secondary)),
+        ]
+    }
+
+
+@pytest.mark.parametrize("fetch_top", [3, 6, 12])
+@pytest.mark.parametrize("reserve", [0, 1, 3, 5])
+@pytest.mark.parametrize("cap", [None, 0, 2, 4])
+@pytest.mark.parametrize("secondary", [0, 2, 6])
+def test_official_pages_never_crowd_out_the_reserved_non_official_slots(
+    fetch_top: int, reserve: int, cap: int | None, secondary: int
+) -> None:
+    pages, _ = _run(
+        _official_first(official=20, secondary=secondary, forums=4),
+        fetch_top=fetch_top,
+        max_third_party=cap,
+        min_secondary=reserve,
+    )
+    kinds = [p.authority for p in pages]
+    primary = kinds.count("third_party") + kinds.count("reference")
+    # The reserve, bounded by the cap, the budget and the pages there are.
+    want = min(reserve, fetch_top, secondary, cap if cap is not None else reserve)
+    assert primary >= want
+    # The cap still holds, and the budget is spent in full.
+    if cap is not None:
+        assert kinds.count("third_party") + kinds.count("forum") <= cap
+    assert len(pages) == fetch_top
+    # Demoted classes never fill the reserve: official pages rank before
+    # them, so none is taken while official pages remain.
+    assert "forum" not in kinds
+    # Within each authority, the ranking order is kept.
+    official = [p.url for p in pages if p.authority == "official"]
+    assert official == [f"{DOCS}page{i}" for i in range(len(official))]
+
+
+def test_a_demoted_page_does_not_count_toward_the_reserve() -> None:
+    pages, _ = _run(
+        {
+            "q": [
+                *(_result(f"{DOCS}page{i}") for i in range(4)),
+                _result("https://qa.example.net/q/1"),
+                _result("https://papers.example.org/p"),
+            ]
+        },
+        fetch_top=3,
+        min_secondary=2,
+    )
+    # Two slots are held for primary pages; the one there is takes one and
+    # the held official page takes the other, never the forum page.
+    assert [p.url for p in pages] == [
+        f"{DOCS}page0",
+        "https://papers.example.org/p",
+        f"{DOCS}page1",
+    ]
+
+
+def test_the_default_reserve_is_documented_and_within_the_default_cap() -> None:
+    from pathlib import Path
+
+    import yaml
+
+    from scholar_lens.configs.config import TechGuide
+
+    defaults = TechGuide()
+    assert 0 < defaults.min_secondary_pages <= defaults.max_third_party_pages
+    assert defaults.min_secondary_pages <= defaults.fetch_top_results
+    template = Path("scholar_lens/configs/config-template.yaml").read_text()
+    guide = yaml.safe_load(template)["tech_guide"]
+    assert guide["min_secondary_pages"] == defaults.min_secondary_pages
