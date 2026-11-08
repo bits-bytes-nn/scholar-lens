@@ -17,6 +17,7 @@ from scholar_lens.application.evidence_writer import (
     FixedSection,
     PostFinding,
     PostReview,
+    SectionChecks,
     SectionEdits,
     SectionReview,
 )
@@ -51,6 +52,7 @@ from scholar_lens.domain.post_spec import evidence_policy
 from scholar_lens.domain.research import PageContent
 from scholar_lens.domain.sources import SourceSet
 from scholar_lens.domain.specs import GUIDE_SPEC
+from scholar_lens.domain.verifiers import no_checks
 from tests.fakes import claim_check, evidence_check, with_context
 
 DOC_TEXT = """## Overview
@@ -997,3 +999,152 @@ def test_cited_sources_and_passages_sort_by_the_one_ranking(unknown: str) -> Non
     assert engine.source_rank() == {
         d.paper_id: authority_rank(d.authority) for d in docs
     }
+
+
+# ---- the whole-post fix and the program a reader pastes ----------------------
+
+_DEFINE = "client = Client()"
+_EXAMPLE = f"```python\nfrom pkg import Client\n\n{_DEFINE}\n```"
+
+
+class _RepetitionFix:
+    """The whole-post reads: the repetition read names the first usage
+    section; its fix drops the running example's definition (the block
+    still parses, the section's own checks pass)."""
+
+    def __init__(self) -> None:
+        self.fixes = 0
+
+    async def structured(self, *, system, prompt, schema, **_: Any):  # type: ignore[no-untyped-def]
+        if schema is PostReview and "repetition only" in system:
+            return PostReview(
+                issues=[
+                    PostFinding(
+                        section="클라이언트 만들기",
+                        problem="It repeats the overview.",
+                        fix="Say it once.",
+                    )
+                ]
+            )
+        if schema is PostReview:
+            return PostReview()
+        if schema is SectionEdits:
+            self.fixes += 1
+            return SectionEdits(edits=[Edit(find=f"\n{_DEFINE}", replace="")])
+        if schema is ClaimCheck:
+            return claim_check(prompt, lambda _n, _s: None)
+        if schema is EvidenceCheck:
+            return evidence_check(prompt)
+        raise AssertionError(schema)
+
+
+@pytest.mark.parametrize("runnable", [True, False], ids=["runnable", "no-runnable"])
+def test_a_whole_post_fix_that_undefines_a_later_usage_name_is_refused(
+    runnable: bool,
+) -> None:
+    """The guide's runnable sections build one program: a repetition fix
+    that drops a name a later usage section runs is not taken. A spec
+    without runnable kinds has no program to keep."""
+    model = _RepetitionFix()
+    engine = EvidenceGuideEngine(
+        model,  # type: ignore[arg-type]
+        GuideSettings(language="Korean", title_max_length=70, reader_tag="t"),
+    )
+    if not runnable:
+        engine.spec = dataclasses.replace(engine.spec, runnable_kinds=frozenset())
+    ledger = _ledger()
+    outline = _outline()
+    usage = outline.sections[3]
+    define = usage.model_copy(update={"title": "클라이언트 만들기"})
+    use = usage.model_copy(update={"title": "클라이언트 실행"})
+    written = [
+        (
+            define,
+            "## 클라이언트 만들기\n\n`max_batch_size` 기본값은 10입니다 [[E2]].\n\n"
+            + _EXAMPLE
+            + "\n",
+        ),
+        (
+            use,
+            "## 클라이언트 실행\n\n`max_batch_size` 기본값은 10입니다 [[E2]].\n\n"
+            "```python\nclient.run()\n```\n",
+        ),
+    ]
+    assert engine.program_check(written) == []
+    for section, _md in written:
+        engine.checked[id(section)] = SectionChecks(
+            no_checks(), tuple(ledger), (), "", False, ""
+        )
+    out = asyncio.run(engine.review_post(outline, ledger, written))
+    assert model.fixes == 1
+    assert (out[0][1] == written[0][1]) is runnable
+    refused = [
+        n
+        for n in engine.notes
+        if "left as they were" in n and "adds problems" in n and "client" in n
+    ]
+    assert bool(refused) is runnable
+
+
+# ---- the TL;DR's length ---------------------------------------------------------
+
+_COPIED = "컨트롤러가 레플리카를 배치하고 프록시가 요청을 보냅니다 [[E3]]."
+
+
+class _ShortTldr:
+    """A TL;DR draft well below its target that copies a body sentence;
+    its fix deletes the copy."""
+
+    def __init__(self, draft: str) -> None:
+        self.draft = draft
+        self.fixes: list[str] = []
+
+    async def text(self, **_: Any) -> str:
+        return self.draft
+
+    async def structured(self, *, prompt, schema, **_: Any):  # type: ignore[no-untyped-def]
+        if schema is SectionEdits:
+            self.fixes.append(prompt)
+            return SectionEdits(edits=[Edit(find=f" {_COPIED}", replace="")])
+        if schema is ClaimCheck:
+            return claim_check(prompt, lambda _n, _s: None)
+        if schema is SectionReview:
+            return SectionReview()
+        if schema is EvidenceCheck:
+            return evidence_check(prompt)
+        raise AssertionError(schema)
+
+
+def test_a_short_tldr_has_no_minimum_and_may_be_shortened() -> None:
+    """The TL;DR is as long as what it sums up: a draft below the share of
+    a target at or above the floor is not too short, and a fix that cuts a
+    sentence of it is taken."""
+    opening = " ".join(
+        [
+            "Serve는 레플리카마다 요청을 묶어 처리량을 높입니다 [[E1]].",
+            "요청을 하나씩 처리하면 모델의 고정 비용이 요청마다 듭니다 [[E1]].",
+            "묶어 보내면 그 비용을 여러 요청이 나눠 냅니다 [[E1]].",
+            "그래서 같은 레플리카로 더 많은 요청을 받습니다 [[E1]].",
+        ]
+    )
+    draft = f"## TL;DR\n\n{opening} {_COPIED}\n"
+    model = _ShortTldr(draft)
+    engine = EvidenceGuideEngine(
+        model,  # type: ignore[arg-type]
+        GuideSettings(language="Korean", title_max_length=70, reader_tag="t"),
+    )
+    target = engine.limits.min_length_floor
+    engine.limits = dataclasses.replace(engine.limits, short_draft_share=0.0)
+    outline = _outline()
+    written = [
+        (outline.sections[2], f"## 컨트롤러와 프록시가 나누는 일\n\n{_COPIED}\n"),
+    ]
+    tldr = asyncio.run(
+        engine.write_tldr(outline, _ledger(), outline.sections[0], target, written)
+    )
+    # The draft is below the minimum share of its target.
+    assert len(opening) < engine.limits.min_length_share * target
+    assert model.fixes and all("characters of prose" not in p for p in model.fixes)
+    assert "copies a sentence of the body" in model.fixes[0]
+    assert tldr == f"## TL;DR\n\n{opening}\n"
+    assert not any("characters of prose" in n for n in engine.notes)

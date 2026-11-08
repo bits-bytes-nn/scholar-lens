@@ -446,6 +446,7 @@ class AttemptsModel(CoverageModel):
 
 
 ONE = {"T1": ["E2"]}
+OTHER = {"T2": ["E3"]}
 NONE: dict[str, list[str]] = {}
 
 
@@ -460,6 +461,9 @@ NONE: dict[str, list[str]] = {}
         ([ONE, NONE, NONE], 2, ONE),
         # A tie keeps the later one; the last attempt sound.
         ([NONE, NONE, NONE], 2, NONE),
+        # Two sound attempts that map as many targets, then a broken one:
+        # the later of the two is kept.
+        ([ONE, OTHER, NONE], 3, OTHER),
     ],
 )
 def test_the_outline_kept_is_the_sound_one_that_maps_the_most_targets(

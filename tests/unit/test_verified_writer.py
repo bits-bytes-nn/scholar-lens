@@ -24,6 +24,7 @@ from scholar_lens.application.evidence_writer import (
 )
 from scholar_lens.application.survey_engine import SURVEY_PROMPTS
 from scholar_lens.domain.evidence import Evidence, EvidenceLedger
+from scholar_lens.domain.evidence_draft import prose_sentences, section_problems
 from scholar_lens.domain.post_spec import Limits
 from scholar_lens.domain.verifiers import Problem, VerifierSet, no_checks
 from tests.fakes import claim_check
@@ -701,5 +702,46 @@ def test_unsupported_sentences_go_even_when_the_section_becomes_short(
     verifiers = _min_prose(len(" ".join(sentences)) - 1)
     out = _verify(writer, draft, verifiers=verifiers)
     assert bad not in out and sentences[0] in out and sentences[2] in out
+    assert not writer.blocking
+    assert any("below its minimum length" in n for n in writer.notes)
+
+
+def test_a_narrowing_that_leaves_the_section_short_is_kept_and_noted() -> None:
+    """Narrowing an unsupported sentence may take the section below its
+    minimum length: the narrowed sentence is kept (not deleted as if the
+    narrowing failed), and the minimum length is left to a note."""
+    limits = Limits()
+    sentences = _sentences(30)
+    bad = "이 캐시는 모든 요청을 한 번에 처리하고 지연을 없애며 메모리를 쓰지 않습니다 [[E1]]."
+    narrowed = "캐시를 씁니다 [[E1]]."
+    draft = _section([sentences[0], bad, *sentences[1:]])
+    # The target the draft's prose just meets (at or above the floor, so
+    # the minimum applies).
+    target = int(len(" ".join(prose_sentences(draft))) / limits.min_length_share)
+    assert target >= limits.min_length_floor
+
+    def checked(markdown: str) -> list[Problem]:
+        return section_problems(
+            markdown,
+            title="캐시",
+            own=["E1"],
+            earlier=(),
+            ledger=_ledger(),
+            earlier_numbers={},
+            figure_urls=(),
+            free_numbers="",
+            target_chars=target,
+            limits=limits,
+        )
+
+    verifiers = VerifierSet("캐시", (checked,))
+    # The draft is at its minimum; the narrowed one is below it.
+    assert checked(draft) == []
+    narrowed_draft = draft.replace(bad, narrowed)
+    assert [p.kind for p in checked(narrowed_draft)] == ["too_short"]
+    model = Model(bad=lambda s: s == bad, edits=[Edit(find=bad, replace=narrowed)])
+    writer = _writer(model)
+    out = _verify(writer, draft, verifiers=verifiers)
+    assert out == narrowed_draft
     assert not writer.blocking
     assert any("below its minimum length" in n for n in writer.notes)
