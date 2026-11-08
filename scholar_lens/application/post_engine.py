@@ -982,7 +982,7 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
         def kind(markdown: str) -> list[Problem]:
             return as_problems(section.kind, self.extra_problems(ctx, markdown))
 
-        return VerifierSet(section.title, (shared, kind))
+        return VerifierSet(section.title, (shared, kind), frozenset(figures))
 
     # ---- whole post -------------------------------------------------------------
 
@@ -1213,7 +1213,7 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
             draft,
             title=tldr.title,
             review_context=tldr.review_context,
-            verifiers=VerifierSet(tldr.title, (shared, kind)),
+            verifiers=VerifierSet(tldr.title, (shared, kind), frozenset()),
             ledger=ledger,
             own=context,
             earlier=(),

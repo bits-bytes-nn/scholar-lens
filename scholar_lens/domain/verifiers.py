@@ -55,6 +55,10 @@ class VerifierSet:
 
     name: str
     checks: tuple[Check, ...]
+    # The figures given to the section (None: every figure shown is its
+    # own). Only these are the section's to keep: a figure given to another
+    # section is restored there, one given to none belongs nowhere.
+    figures: frozenset[str] | None = None
 
     def run(self, markdown: str) -> list[Problem]:
         """Every check's problems of ``markdown``, in the checks' order."""

@@ -97,13 +97,14 @@ def transact(
     Returns:
         The revision (``taken`` when the section changed).
     """
-    fixed, applied, skipped = apply_edits(before, edits, rest=rest)
+    owned = verifiers.figures
+    fixed, applied, skipped = apply_edits(before, edits, rest=rest, owned_figures=owned)
     if not applied:
         return Revision(before, skipped=tuple(skipped))
     fixed = strip_revision_notes(fixed, before)
-    reason = structure_lost(before, fixed, rest=rest, max_prose_cut=max_prose_cut) or (
-        "it stops mid-sentence" if ends_mid_sentence(fixed) else ""
-    )
+    reason = structure_lost(
+        before, fixed, rest=rest, max_prose_cut=max_prose_cut, owned_figures=owned
+    ) or ("it stops mid-sentence" if ends_mid_sentence(fixed) else "")
     if reason:
         return Revision(before, applied, tuple(skipped), reason)
     if added := verifiers.added(before, fixed):

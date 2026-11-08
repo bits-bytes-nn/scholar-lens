@@ -167,3 +167,33 @@ def test_changed_units_are_the_new_and_changed_sentences_only() -> None:
         "| LoRA | 높음 |", "| LoRA | 낮음 |"
     )
     assert changed_units(before, after) == ["나는 고친 문장입니다.", "| LoRA | 낮음 |"]
+
+
+@pytest.mark.parametrize(
+    "owned, taken",
+    [
+        # A figure given to another section (or to none) may go: its owner
+        # gets it back, and nothing else should show it.
+        (frozenset(), True),
+        (frozenset({"https://x/other.png"}), True),
+        # The section's own only copy stays.
+        (frozenset({"https://x/f.png"}), False),
+        # Without ownership, every only copy is protected.
+        (None, False),
+    ],
+)
+def test_only_a_sections_own_figure_is_protected(
+    owned: frozenset[str] | None, taken: bool
+) -> None:
+    section = (
+        "## 구조\n\n캐시는 요청을 묶습니다 [[E1]].\n\n"
+        "![다른 절의 그림](https://x/f.png)\n\n남은 문장입니다 [[E1]].\n"
+    )
+    revision = transact(
+        section,
+        [("![다른 절의 그림](https://x/f.png)\n\n", "")],
+        verifiers=VerifierSet("구조", (), owned),
+        max_prose_cut=Limits().max_prose_cut,
+    )
+    assert revision.taken is taken
+    assert ("https://x/f.png" in revision.text) is not taken

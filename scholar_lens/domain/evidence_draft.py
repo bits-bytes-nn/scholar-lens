@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import re
 from collections import Counter
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from typing import Any
 
 from scholar_lens.domain.evidence import Evidence, EvidenceLedger, near_duplicate
@@ -511,7 +511,12 @@ def assets(markdown: str) -> dict[str, list[str]]:
     }
 
 
-def lost_assets(before: str, after: str, rest: str = "") -> str:
+def lost_assets(
+    before: str,
+    after: str,
+    rest: str = "",
+    owned_figures: Collection[str] | None = None,
+) -> str:
     """The first kind of asset ``after`` lost with no copy left ("" when
     none): a revision may fix an item in place (the count stays), and may
     drop a repeated one when an equivalent copy stays in ``after`` or in
@@ -521,6 +526,8 @@ def lost_assets(before: str, after: str, rest: str = "") -> str:
         before: The text before the revision.
         after: The text after it.
         rest: The other sections of the post.
+        owned_figures: The figures given to the section; a figure not among
+            them may go (None: every figure is the section's).
 
     Returns:
         "code block", "table", "figure", "equation" or "".
@@ -531,13 +538,21 @@ def lost_assets(before: str, after: str, rest: str = "") -> str:
         if len(new[kind]) >= len(items):
             continue
         kept = set(new[kind]) | set(elsewhere.get(kind, ()))
-        if any(item not in kept for item in Counter(items) - Counter(new[kind])):
+        gone = [i for i in Counter(items) - Counter(new[kind]) if i not in kept]
+        if kind == "figure" and owned_figures is not None:
+            gone = [i for i in gone if i in owned_figures]
+        if gone:
             return kind
     return ""
 
 
 def structure_lost(
-    before: str, after: str, *, rest: str = "", max_prose_cut: float
+    before: str,
+    after: str,
+    *,
+    rest: str = "",
+    max_prose_cut: float,
+    owned_figures: Collection[str] | None = None,
 ) -> str:
     """Why a revision lost the draft's structure ("" when it did not): a
     heading gone, a code block, table, figure or display equation gone with
@@ -557,7 +572,7 @@ def structure_lost(
         _HEADINGS.findall(without_code(after))
     ):
         return "a heading was lost"
-    if kind := lost_assets(before, after, rest):
+    if kind := lost_assets(before, after, rest, owned_figures):
         return f"{'an' if kind[0] in 'aeiou' else 'a'} {kind} was lost"
     if len(" ".join(prose_sentences(after))) < (1 - max_prose_cut) * len(
         " ".join(prose_sentences(before))
@@ -654,7 +669,11 @@ MAX_EDITS = 30
 
 
 def apply_edits(
-    markdown: str, edits: Sequence[tuple[str, str]], *, rest: str = ""
+    markdown: str,
+    edits: Sequence[tuple[str, str]],
+    *,
+    rest: str = "",
+    owned_figures: Collection[str] | None = None,
 ) -> tuple[str, int, list[str]]:
     """``markdown`` with the (find, replace) edits whose ``find`` occurs
     exactly once applied in order (an empty ``replace`` deletes), with the
@@ -673,6 +692,7 @@ def apply_edits(
         [Edit(find=f, replace=r) for f, r in edits],
         max_edits=MAX_EDITS,
         rest=rest,
+        owned_figures=owned_figures,
     )
     lines = text.split("\n")
     roles = block_lines(text)

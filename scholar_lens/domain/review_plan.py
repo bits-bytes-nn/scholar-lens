@@ -16,7 +16,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -823,7 +823,12 @@ def _is_subsequence(items: list[str], within: list[str]) -> bool:
 
 
 def apply_edits(
-    text: str, edits: list[Edit], *, max_edits: int, rest: str = ""
+    text: str,
+    edits: list[Edit],
+    *,
+    max_edits: int,
+    rest: str = "",
+    owned_figures: Collection[str] | None = None,
 ) -> tuple[str, int, list[str]]:
     """Apply edits whose ``find`` occurs exactly once in the current text.
 
@@ -855,7 +860,7 @@ def apply_edits(
             continue
         edited = edited.replace(edit.find, edit.replace, 1)
         applied.append(edit)
-    if applied and not _guard(text, applied, edited, rest):
+    if applied and not _guard(text, applied, edited, rest, owned_figures):
         return edited, len(applied), skipped + over
     count, skipped = 0, []
     for edit in batch:
@@ -863,7 +868,7 @@ def apply_edits(
             skipped.append(reason)
             continue
         edited = text.replace(edit.find, edit.replace, 1)
-        if reason := _guard(text, [edit], edited, rest):
+        if reason := _guard(text, [edit], edited, rest, owned_figures):
             skipped.append(f"{reason}: {edit.find[:60]!r}")
             continue
         text = edited
@@ -881,7 +886,13 @@ def _anchor_problem(text: str, edit: Edit) -> str:
     return ""
 
 
-def _guard(text: str, edits: Sequence[Edit], edited: str, rest: str = "") -> str:
+def _guard(
+    text: str,
+    edits: Sequence[Edit],
+    edited: str,
+    rest: str = "",
+    owned_figures: Collection[str] | None = None,
+) -> str:
     """Why ``edits``, which turned ``text`` into ``edited``, may not stand
     ("" when they may): a fence left unbalanced, a top-level heading changed,
     the only copy of a figure, equation, table or code block removed, or a
@@ -910,7 +921,7 @@ def _guard(text: str, edits: Sequence[Edit], edited: str, rest: str = "") -> str
     # the open code block had swallowed; it may not lose or rename one.
     if after != before and not (closes_fence and _is_subsequence(before, after)):
         return "would change a heading"
-    if lost := _lost_assets(text, edited, rest):
+    if lost := lost_assets(text, edited, rest, owned_figures):
         return f"would remove the only {lost}"
     if added := added_slips(text, edited):
         return f"would add a writing-rule slip ({added[0]})"
@@ -923,14 +934,6 @@ _BARE_FENCE_LINE = re.compile(r"(?m)^[ \t]*(?:`{3,}|~{3,})[ \t]*\n?")
 def _without_bare_fences(text: str) -> str:
     """``text`` without lines that are only a fence (a closing fence)."""
     return _BARE_FENCE_LINE.sub("", text).strip()
-
-
-def _lost_assets(text: str, edited: str, rest: str = "") -> str:
-    """The kind of figure, display equation, table or code block the edits
-    removed without another copy left ("" when none): fixing one in place
-    keeps the count and is fine; dropping a repeated copy leaves the other
-    in ``edited`` or in ``rest``."""
-    return lost_assets(text, edited, rest)
 
 
 _TABLE_HEADER = re.compile(r"^(\|[^\n]*\|)[ \t]*\n\|[ \t]*:?-+", re.MULTILINE)
