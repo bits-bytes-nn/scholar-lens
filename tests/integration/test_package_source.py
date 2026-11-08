@@ -340,3 +340,25 @@ def test_a_target_release_the_index_cannot_answer_is_noted_never_replaced() -> N
     # The latest release's extras never stand in for the target's.
     assert provided == {"other": ("3.0", frozenset())}
     assert len(notes) == 2 and all("gear 0.9" in n for n in notes)
+
+
+@pytest.mark.parametrize(
+    "path, wheel, kept",
+    [
+        # Inside an importable package: public API (pkg.testing).
+        ("pkg/testing/__init__.py", True, True),
+        ("pkg/docs/build.py", True, True),
+        # Beside the packages: the project's own tests and docs.
+        ("tests/test_core.py", True, False),
+        ("pkg-1.0/tests/test_core.py", False, False),
+        ("pkg-1.0/src/docs/conf.py", False, False),
+        ("pkg-1.0/src/pkg/testing/__init__.py", False, True),
+    ],
+)
+def test_only_project_level_tests_and_docs_are_skipped(
+    path: str, wheel: bool, kept: bool
+) -> None:
+    from scholar_lens.adapters.packages.pypi import _SKIP_IN_SDIST, _SKIP_IN_WHEEL
+
+    skip = _SKIP_IN_WHEEL if wheel else _SKIP_IN_SDIST
+    assert (skip.match(path) is None) is kept

@@ -101,7 +101,12 @@ def package_extras(
 # only its .py members are kept.
 MAX_ARCHIVE_BYTES = 80_000_000
 MAX_SOURCE_CHARS = 12_000_000
-_SKIP_PART = re.compile(r"(?:^|/)(?:tests?|testing|benchmarks?|examples?|docs?)/")
+# A project's own tests, docs, examples and benchmarks, beside its packages:
+# at a wheel's root, or at an sdist's project root (or its src/). Inside an
+# importable package (pkg/testing/) such a folder is public API and kept.
+_SKIP_DIRS = r"(?:tests?|testing|benchmarks?|examples?|docs?)/"
+_SKIP_IN_WHEEL = re.compile(rf"^{_SKIP_DIRS}")
+_SKIP_IN_SDIST = re.compile(rf"^[^/]+/(?:src/)?{_SKIP_DIRS}")
 # The top-level import names a distribution's metadata lists.
 _TOP_LEVEL = re.compile(r"(?:^|/)[^/]+\.(?:dist|egg)-info/top_level\.txt$")
 _IDENTIFIER = re.compile(r"^[A-Za-z_]\w*$")
@@ -178,7 +183,8 @@ def package_source(
             text = read().decode("utf-8", errors="replace")
             tops.update(t for t in text.split() if _IDENTIFIER.match(t))
             return
-        if not path.endswith(".py") or _SKIP_PART.search(path):
+        skip = _SKIP_IN_WHEEL if wheel else _SKIP_IN_SDIST
+        if not path.endswith(".py") or skip.match(path):
             return
         root = path.split("/", 1)[0]
         if wheel and "/" in path and not root.endswith((".dist-info", ".data")):

@@ -1067,9 +1067,11 @@ def test_a_claim_check_the_models_cannot_answer_blocks_the_post() -> None:
         writer.check_claims("## 공격\n\n공격은 성공했습니다 [[E2]].\n", _ledger())
     )
     assert found == []
-    # Changed in E2 (docs/engine.md, 4.10): an unchecked section is not a
-    # pass; it blocks the post instead of leaving a note.
-    assert any("공격" in b and "unchecked" in b for b in writer.blocking)
+    # Not a pass (docs/engine.md, 4.10): nothing is cached as supported,
+    # and the section's final text blocks the post on its unjudged items
+    # (tests/unit/test_verified_writer.py).
+    assert len(writer.verdicts) == 0
+    assert writer.notes == []
 
 
 def test_survey_results_and_limitations_need_table_cells() -> None:

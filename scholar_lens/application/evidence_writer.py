@@ -347,7 +347,7 @@ async def all_or_none[T](aws: Iterable[Awaitable[T]]) -> list[T]:
 class ItemAnswers[K, V]:
     """What a structured per-item check answered: the answer of each item
     it named, the items it never answered, and whether every call gave a
-    valid answer (a call that did not has blocked the post already)."""
+    valid answer."""
 
     answers: dict[K, V]
     missing: list[K]
@@ -1568,12 +1568,11 @@ class EvidenceWriter:
         result = await complete_answers(sent, ask, asks=self.limits.answer_asks)
         for n, verdict in result.answers.items():
             self.verdicts.put(keys[n], verdict)
-        if result.ran:
-            # Blocked by the section's final text (:meth:`_block_unchecked`):
-            # a later check may judge them, a fix rewrite or delete them.
-            # (A check that did not run has blocked the post already.)
-            for n in result.missing:
-                self._unanswered[keys[n]] = None
+        # Blocked by the section's final text (:meth:`_block_unchecked`),
+        # whether the check left them out or did not run at all: a later
+        # check may judge them, a fix rewrite or delete them.
+        for n in result.missing:
+            self._unanswered[keys[n]] = None
         return [
             (sentence, verdict)
             for sentence, key in zip(sentences, keys, strict=True)
@@ -1641,7 +1640,8 @@ class EvidenceWriter:
         with usage_stage("verify"):
             check = await self._evaluated(
                 what if not attempt else f"{what} (items it left out)",
-                blocking=True,
+                # Its unanswered items block by the final text instead.
+                quiet=True,
                 role="evaluate",
                 system=self.prompts.claim_check,
                 # Shared by every claim check of the section (each round);
@@ -1674,6 +1674,7 @@ class EvidenceWriter:
         what: str,
         *,
         blocking: bool = False,
+        quiet: bool = False,
         unchecked: str = "its sentences are unchecked",
         **call: Any,
     ) -> Any:
@@ -1681,11 +1682,15 @@ class EvidenceWriter:
         answer even on the fallback model (a content filter, a cut answer):
         the run goes on with the draft as it is. A ``blocking`` check that
         did not run blocks the post (``unchecked`` says what is left
-        unchecked); another one leaves a note on the PR checklist."""
+        unchecked); a ``quiet`` one leaves that to its caller (the claim
+        check blocks on the items its final text still has unjudged);
+        another one leaves a note on the PR checklist."""
         try:
             return await self.model.structured(**call)
         except ValueError as e:
             logger.warning("%s did not run: %s", what, e)
+            if quiet:
+                return None
             if blocking:
                 self._block(
                     f"{what[0].upper()}{what[1:]} could not run ({e}): {unchecked}."

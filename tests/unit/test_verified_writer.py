@@ -168,15 +168,30 @@ def test_a_cached_unsupported_verdict_is_merged_back() -> None:
 # ---- a check that cannot run -------------------------------------------------------
 
 
-def test_a_failed_claim_check_blocks_the_post_and_is_not_cached() -> None:
+def test_a_claim_check_that_never_runs_blocks_by_the_final_text() -> None:
+    # Its sentences are unchecked, not passed, and not cached; the block
+    # comes from the section's final text still holding them unjudged.
     model = Model(fail_claims=True)
     writer = _writer(model)
     draft = _section(_sentences(2))
     assert asyncio.run(writer.check_claims(draft, _ledger())) == []
-    assert len(writer.blocking) == 1 and "unchecked" in writer.blocking[0]
     model.fail_claims = False
     asyncio.run(writer.check_claims(draft, _ledger()))
     assert len(model.sent) == 1
+    model.fail_claims = True
+    writer = _writer(model)
+    _verify(writer, draft)
+    assert len(writer.blocking) == 1 and "unchecked" in writer.blocking[0]
+
+
+def test_a_claim_check_that_fails_once_then_judges_leaves_no_block() -> None:
+    model = Model(fail_claims=True)
+    writer = _writer(model)
+    draft = _section(_sentences(3))
+    assert asyncio.run(writer.check_claims(draft, _ledger())) == []
+    model.fail_claims = False
+    _verify(writer, draft)
+    assert writer.blocking == []
 
 
 @pytest.mark.parametrize("bad", [False, True])
