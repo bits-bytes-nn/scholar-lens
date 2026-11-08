@@ -5,13 +5,16 @@ from __future__ import annotations
 
 from ..post_spec import (
     AuthorityRule,
+    CoverageSpec,
     EvidencePolicy,
     KindCount,
     KindOrder,
     KindSpec,
     MaxSections,
     Ownership,
+    PostPasses,
     PostSpec,
+    TargetKind,
     TitleLength,
     TldrSpec,
 )
@@ -118,7 +121,25 @@ GUIDE_SPEC = PostSpec(
     runnable_kinds=frozenset({"usage", "operations"}),
     # A section the checks emptied has nothing to state.
     empty_sections="drop",
-    # The code trace and the repetition read are separate reads of the
-    # guide: one reviewer asked for both reports the code.
-    post_passes=("review", "repetition"),
+    # The consistency read traces the running example and checks the code
+    # against the official code; the repetition read is a separate read of
+    # the guide (one reviewer asked for both reports the code).
+    post_passes=PostPasses(code_trace=True),
+    # The docs' main topics, and every document the user chose.
+    coverage=CoverageSpec(
+        kinds=(
+            TargetKind(
+                "topic",
+                "a main topic of the requested documentation: a capability, "
+                "mechanism or workflow its pages teach that a reader of the "
+                "guide must learn",
+            ),
+        ),
+        count=(3, 8),
+        authorities=frozenset({"official"}),
+        per_document=frozenset({"reference"}),
+        document_kind=TargetKind(
+            "reference", "material the user chose for the guide; the guide uses it"
+        ),
+    ),
 )

@@ -23,6 +23,7 @@ from scholar_lens.application.guide_engine import (
     GuideSettings,
 )
 from scholar_lens.application.ports import AgentLimits, AgentOutcome
+from scholar_lens.domain.coverage import ExtractedTarget, ExtractedTargets
 from scholar_lens.domain.evidence import (
     EvidenceLedger,
     SourceDocument,
@@ -39,6 +40,7 @@ from scholar_lens.domain.post_spec import evidence_policy
 from scholar_lens.domain.specs import GUIDE_SPEC
 from scholar_lens.src.guide_writer import _source_urls, guide_documents
 from scholar_lens.src.web_research import OfficialDocs, PageContent
+from tests.fakes import with_context
 
 DOC_TEXT = """## Overview
 
@@ -418,13 +420,23 @@ class ScriptedModel:
                 role=role, system=system, prompt=prompt, context=context
             )
             return FixedSection(section=section, notes="고친 내용: 수치를 바로잡음")
-        prompt = f"{context}\n\n{prompt}"
+        prompt = with_context(context, prompt)
         self.calls.append(schema.__name__)
+        if schema is ExtractedTargets:
+            # The key-target extraction reads the official page (E3).
+            assert "[D1] Ray Serve batching (official)" in prompt
+            return ExtractedTargets(
+                targets=[
+                    ExtractedTarget(
+                        statement="max_batch_size caps a batch", source="D1"
+                    )
+                ]
+            )
         if schema is GuideOutline:
             sections = [s.model_dump() for s in _outline().sections]
             sections[3]["evidence"] = ["E2", "E5"]
             sections[4]["evidence"] = ["E6"]
-            return _outline(sections=sections)
+            return _outline(sections=sections, coverage={"T1": ["E2"]})
         if schema is ClaimCheck:
             bad = "기본값은 20" in prompt
             return ClaimCheck(
@@ -449,7 +461,10 @@ class ScriptedModel:
                 ]
             )
         if schema is PostReview:
-            assert "<guide>" in prompt and "@serve.batch" in prompt
+            # The consistency read (E3: one generic read with the spec's code
+            # trace, the post under <post>).
+            assert "<post>" in prompt and "@serve.batch" in prompt
+            assert "<source_code>" in prompt
             return PostReview(
                 trace="request -> handler -> result",
                 issues=[
@@ -463,7 +478,7 @@ class ScriptedModel:
         raise AssertionError(schema)
 
     async def text(self, *, role, system, prompt, context="") -> str:
-        prompt = f"{context}\n\n{prompt}"
+        prompt = with_context(context, prompt)
         self.calls.append(f"text:{role}")
         if "serve is not imported" in prompt:
             self.calls.append("code-fix")

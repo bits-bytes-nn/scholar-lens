@@ -141,11 +141,13 @@ class PostReview(BaseModel):
 @dataclass(frozen=True)
 class SectionChecks:
     """What every change of one section is checked with: its verifier set,
-    the claim check's evidence and source passages, whether it is the
-    post's own assessment, and the numbers it may state freely."""
+    the claim check's evidence (the section's own, and what earlier sections
+    cite) and source passages, whether it is the post's own assessment, and
+    the numbers it may state freely."""
 
     verifiers: VerifierSet
-    context: tuple[Evidence, ...]
+    own: tuple[Evidence, ...]
+    earlier: tuple[Evidence, ...]
     reference: str
     judgement: bool
     free: str
@@ -300,9 +302,6 @@ def _removable(verdict: str) -> bool:
     return verdict.startswith(("wrong", "about_sources"))
 
 
-POST_SO_FAR_CHARS = 60_000
-
-
 def with_canonical_evidence[OutlineT](
     outline: OutlineT, duplicates: Mapping[str, str]
 ) -> OutlineT:
@@ -321,16 +320,6 @@ def with_canonical_evidence[OutlineT](
         for s in outline.sections  # type: ignore[attr-defined]
     ]
     return outline.model_copy(update={"sections": sections})  # type: ignore[attr-defined,no-any-return]
-
-
-def post_so_far(sections: Sequence[str], limit: int = POST_SO_FAR_CHARS) -> str:
-    """The sections already written, in order, as the next section's writer
-    reads them (evidence markers kept: what is cited is visible); when the
-    post outgrows ``limit`` its earliest sections are left out whole."""
-    kept = [md.strip() for md in sections if md.strip()]
-    while kept and sum(map(len, kept)) > limit:
-        kept.pop(0)
-    return block("post_so_far", "\n\n".join(kept)) if kept else ""
 
 
 def _kept(answer: str) -> str:
@@ -688,16 +677,12 @@ class EvidenceWriter:
         *,
         retry_hint: str,
         evidence: Sequence[Evidence] | None = None,
-        context: str = "",
     ) -> str:
         """A section draft; a short or cut-off answer is asked again, then
         written from the claims alone (quoted text can derail the model):
         the prompt's ``<evidence>`` block, holding ``evidence`` (``own``
-        unless given), is swapped for their claims. ``context`` (the post
-        so far) leads the prompt: it changes every section, so a cache
-        write would cost more than it saves."""
-        if context:
-            prompt = f"{context}\n\n{prompt}"
+        unless given), is swapped for their claims. The prompt changes
+        every section, so no message is cached."""
         with usage_stage("draft"):
             text = _kept(
                 await self.model.text(
@@ -781,16 +766,15 @@ class EvidenceWriter:
         Returns:
             The section.
         """
-        context = [*own, *earlier]
         checks = SectionChecks(
-            verifiers, tuple(context), self.reference, judgement, free
+            verifiers, tuple(own), tuple(earlier), self.reference, judgement, free
         )
         if section is not None:
             self.checked[id(section)] = checks
         evidence = [*own, *earlier[-30:]]
         for round_ in range(self.max_fix_rounds + 1):
             code = verifiers.run(draft)
-            claims = await self.check_claims(draft, ledger, context)
+            claims = await self.check_claims(draft, ledger, own, earlier)
             review = await self.review(draft, review_context) if round_ == 0 else []
             issues = [p.text for p in code] + [f"{v}: {s}" for s, v in claims] + review
             if not issues or round_ == self.max_fix_rounds:
@@ -845,7 +829,12 @@ class EvidenceWriter:
 
         async def found(text: str) -> list[tuple[str, str]]:
             claims = await self.unsupported(
-                text, ledger, checks.free, checks.context, reference=checks.reference
+                text,
+                ledger,
+                checks.free,
+                checks.own,
+                checks.earlier,
+                reference=checks.reference,
             )
             if baseline is None:
                 return claims
@@ -1116,14 +1105,17 @@ class EvidenceWriter:
         draft: str,
         ledger: EvidenceLedger,
         free: str,
-        context: Sequence[Evidence] = (),
+        own: Sequence[Evidence] = (),
+        earlier: Sequence[Evidence] = (),
         *,
         reference: str | None = None,
     ) -> list[tuple[str, str]]:
         """The claim check's unsupported sentences (cached verdicts: a
         sentence already judged in the same context is not sent again) and
         the sentences whose numbers their evidence does not state."""
-        found = await self.check_claims(draft, ledger, context, reference=reference)
+        found = await self.check_claims(
+            draft, ledger, own, earlier, reference=reference
+        )
         known = {s for s, _ in found}
         found += [
             (s, "numbers not in its evidence")
@@ -1136,7 +1128,8 @@ class EvidenceWriter:
         self,
         draft: str,
         ledger: EvidenceLedger,
-        context: Sequence[Evidence] = (),
+        own: Sequence[Evidence] = (),
+        earlier: Sequence[Evidence] = (),
         *,
         reference: str | None = None,
     ) -> list[tuple[str, str]]:
@@ -1146,10 +1139,16 @@ class EvidenceWriter:
         the cached verdicts are merged in. When the model gives no valid
         answer, the unsent units stay unchecked and the post is blocked.
 
+        The shared context is two cached parts (docs/engine.md, 4.10): the
+        evidence earlier sections cite first (it only grows, so it is the
+        most stable prefix), then this section's evidence and source
+        passages.
+
         Args:
             draft: The section.
             ledger: The run's evidence.
-            context: The section's evidence context.
+            own: The section's evidence.
+            earlier: The evidence earlier sections cite.
             reference: The source passages the check reads (the writer's
                 current ones when None).
 
@@ -1161,7 +1160,10 @@ class EvidenceWriter:
         sentences = claim_units(draft)
         if not sentences:
             return []
-        evidence_context = evidence_lines(list(context))
+        earlier_text = evidence_lines(list(earlier))
+        own_text = evidence_lines(list(own))
+        # What the verdicts depend on: both parts of the context.
+        evidence_context = f"{earlier_text}\n\n{own_text}"
         keys = [
             self.verdicts.key(
                 sentence,
@@ -1203,12 +1205,16 @@ class EvidenceWriter:
                     blocking=True,
                     role="evaluate",
                     system=self.prompts.claim_check,
-                    # Shared by every claim check of the section (each round).
-                    context=block("section_evidence", evidence_context)
-                    + (
-                        "\n\n" + block("source_sections", reference)
-                        if reference
-                        else ""
+                    # Shared by every claim check of the section (each round);
+                    # the earlier part by the later sections' checks too.
+                    context=(
+                        block("earlier_evidence", earlier_text) if earlier else "",
+                        block("section_evidence", own_text)
+                        + (
+                            "\n\n" + block("source_sections", reference)
+                            if reference
+                            else ""
+                        ),
                     ),
                     prompt=block("sentences", "\n".join(lines)),
                     schema=ClaimCheck,
@@ -1242,30 +1248,39 @@ class EvidenceWriter:
         ]
 
     async def _evaluated(
-        self, what: str, *, blocking: bool = False, **call: Any
+        self,
+        what: str,
+        *,
+        blocking: bool = False,
+        unchecked: str = "its sentences are unchecked",
+        **call: Any,
     ) -> Any:
         """A structured check's answer, or None when the model gave no valid
         answer even on the fallback model (a content filter, a cut answer):
         the run goes on with the draft as it is. A ``blocking`` check that
-        did not run blocks the post; another one leaves a note on the PR
-        checklist."""
+        did not run blocks the post (``unchecked`` says what is left
+        unchecked); another one leaves a note on the PR checklist."""
         try:
             return await self.model.structured(**call)
         except ValueError as e:
             logger.warning("%s did not run: %s", what, e)
             if blocking:
                 self._block(
-                    f"{what[0].upper()}{what[1:]} could not run ({e}): "
-                    "its sentences are unchecked."
+                    f"{what[0].upper()}{what[1:]} could not run ({e}): {unchecked}."
                 )
             else:
                 self.notes.append(f"Check by hand: {what} could not run ({e}).")
             return None
 
     async def review(self, draft: str, context: str) -> list[str]:
+        """The section review's located reader problems. A review that gives
+        no valid answer blocks the post, as a failed claim check does: the
+        section would go out unreviewed."""
         with usage_stage("review"):
             review = await self._evaluated(
                 f"the review of '{section_heading(draft) or 'a section'}'",
+                blocking=True,
+                unchecked="the section is unreviewed",
                 role="evaluate",
                 system=self.prompts.review,
                 prompt="\n\n".join([context, block("section", draft)]),

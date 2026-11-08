@@ -25,6 +25,7 @@ from ..domain.survey.evidence_post import (
     cite_papers,
     comparison_table,
     outline_problems,
+    plan_targets,
     repair_outline,
     section_targets,
     table_evidence,
@@ -56,7 +57,7 @@ logger = logging.getLogger(__name__)
 
 # Bump when the reader's prompt or the evidence schema changes meaning; the
 # prompt's wording alone does not invalidate cached evidence.
-READER_VERSION = 7
+READER_VERSION = 8
 
 SURVEY_PROMPTS = WriterPrompts(
     reader=prompts.READER_SYSTEM,
@@ -124,7 +125,12 @@ class EvidenceSurveyEngine(PostEngine[EvidenceOutline, OutlineSection, EvidenceS
             model,
             SURVEY_SPEC,
             SURVEY_PROMPTS,
-            PostPrompts(outline=prompts.OUTLINE_SYSTEM),
+            PostPrompts(
+                outline=prompts.OUTLINE_SYSTEM,
+                subject=prompts.PASS_SUBJECT,
+                repetition=prompts.REPETITION_EXTRA,
+                tail=prompts.PASS_TAIL,
+            ),
             RunSettings(
                 language=settings.language,
                 concurrency=settings.concurrency,
@@ -229,6 +235,9 @@ class EvidenceSurveyEngine(PostEngine[EvidenceOutline, OutlineSection, EvidenceS
         references: str = "",
         guideline: str = "",
     ) -> EvidenceSurvey:
+        # Every core paper and lineage, from the plan in code: the readers
+        # record their evidence first.
+        self.targets = plan_targets(plan)
         ledger, kinds = await self.read(plan)
         missing = [p.id for p in plan.papers if not ledger.of_paper(p.id)]
         # Not the plan's fault: the papers' text could not be read or gave no
@@ -248,6 +257,8 @@ class EvidenceSurveyEngine(PostEngine[EvidenceOutline, OutlineSection, EvidenceS
                 "Papers without evidence (left out): " + ", ".join(missing)
             )
             plan = without_papers(plan, missing)
+            # The papers left out take their targets with them.
+            self.targets = plan_targets(plan)
         self._plan, self._kinds = plan, kinds
         self._references, self._guideline = references, guideline
         self.free = free_numbers(sorted({p.year for p in plan.papers if p.year}))

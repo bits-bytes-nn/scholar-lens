@@ -16,6 +16,7 @@ from scholar_lens.application.evidence_writer import (
     Edit,
     EvidenceCheck,
     FixedSection,
+    PostReview,
     SectionEdits,
     SectionReview,
     SentenceVerdict,
@@ -44,6 +45,7 @@ from scholar_lens.domain.survey.evidence_post import (
 )
 from scholar_lens.domain.survey.plan import SurveyPlan
 from scholar_lens.domain.verifiers import no_checks
+from tests.fakes import with_context
 
 PAPER_TEXT = """## Abstract
 
@@ -352,7 +354,7 @@ class ScriptedModel:
                 role=role, system=system, prompt=prompt, context=context
             )
             return FixedSection(section=section, notes="고친 내용: 수치를 바로잡음")
-        prompt = f"{context}\n\n{prompt}"
+        prompt = with_context(context, prompt)
         self.calls.append(schema.__name__)
         if schema is EvidenceOutline:
             return _outline()
@@ -367,10 +369,17 @@ class ScriptedModel:
             return SectionReview()
         if schema is EvidenceCheck:
             return EvidenceCheck()
+        if schema is PostReview:
+            # A survey has whole-post reads since E3: consistency and
+            # repetition.
+            self.calls.append(
+                "repetition" if "repetition only" in system else "consistency"
+            )
+            return PostReview()
         raise AssertionError(schema)
 
     async def text(self, *, role, system, prompt, context="") -> str:
-        prompt = f"{context}\n\n{prompt}"
+        prompt = with_context(context, prompt)
         self.calls.append(f"text:{role}")
         if "<problems>" in prompt:  # the fix: the wrong number corrected
             title = prompt.split("## ", 1)[1].split("\n", 1)[0]
@@ -420,6 +429,7 @@ def test_a_scripted_run_reads_outlines_writes_fixes_and_assembles() -> None:
     assert "[@2305.18290]" in body and "[[E" not in body
     assert "| DPO | 오프라인 | 승률 61%" in body
     assert model.calls.count("read") == 1 and "text:write" in model.calls
+    assert model.calls.count("consistency") == model.calls.count("repetition") == 1
     # The paper's evidence is cached: a second run does not read it again.
     (key,) = store.data
     assert len(json.loads(store.data[key])) == 4

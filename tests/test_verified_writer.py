@@ -270,3 +270,72 @@ def test_a_whole_post_fix_settles_only_the_sentences_it_adds() -> None:
     # The fix's claim check read the new sentence and the one after it (its
     # context changed); the others' verdicts were cached.
     assert model.sent[calls] == [added, sentences[1]]
+
+
+# ---- a failed review, and the claim check's cache parts (4.10) -------------------
+
+
+class _FailingReview(Model):
+    async def structured(self, *, schema: Any, prompt: str, **kwargs: Any) -> Any:
+        if schema is SectionReview:
+            raise ValueError("No valid SectionReview (stop reason content_filtered)")
+        return await super().structured(schema=schema, prompt=prompt, **kwargs)
+
+
+def test_a_review_without_a_valid_answer_blocks_the_post() -> None:
+    writer = _writer(_FailingReview())
+    draft = _section(_sentences(2))
+    assert _verify(writer, draft) == draft
+    assert len(writer.blocking) == 1
+    assert "review of '캐시' could not run" in writer.blocking[0]
+    assert "unreviewed" in writer.blocking[0]
+
+
+class _Contexts(Model):
+    def __init__(self) -> None:
+        super().__init__()
+        self.contexts: list[Any] = []
+
+    async def structured(self, *, schema: Any, prompt: str, **kwargs: Any) -> Any:
+        if schema is ClaimCheck:
+            self.contexts.append(kwargs.get("context"))
+        return await super().structured(schema=schema, prompt=prompt, **kwargs)
+
+
+def _earlier() -> Evidence:
+    return Evidence(
+        id="E9",
+        paper_id="P",
+        kind="finding",
+        claim="앞 절의 사실입니다",
+        quote="an earlier fact",
+        anchor="S2",
+    )
+
+
+def test_the_claim_check_context_puts_earlier_evidence_first() -> None:
+    model = _Contexts()
+    writer = _writer(model)
+    draft = _section(_sentences(1))
+    asyncio.run(
+        writer.check_claims(
+            draft, _ledger(), list(_ledger()), [_earlier()], reference="passage"
+        )
+    )
+    ((earlier, section),) = model.contexts
+    # Two parts, each cached on its own: what only grows across sections,
+    # then this section's evidence and its source passages.
+    assert earlier.startswith("<earlier_evidence>") and "[E9]" in earlier
+    assert "[E1]" not in earlier
+    assert section.startswith("<section_evidence>") and "[E1]" in section
+    assert "<source_sections>\npassage" in section
+
+
+def test_the_first_section_has_no_earlier_part() -> None:
+    model = _Contexts()
+    writer = _writer(model)
+    asyncio.run(
+        writer.check_claims(_section(_sentences(1)), _ledger(), list(_ledger()))
+    )
+    ((earlier, section),) = model.contexts
+    assert earlier == "" and "[E1]" in section

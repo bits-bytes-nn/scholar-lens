@@ -11,6 +11,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from ..coverage import CoverageTarget
 from ..evidence import EvidenceLedger, canonical_ids
 from ..evidence_draft import MARKER, cited_ids
 from ..glossary import GlossaryTerm
@@ -70,6 +71,33 @@ class EvidenceOutline(_Strict):
     # Groups of evidence ids that state one fact in different words; code
     # keeps one of each, so the post states the fact once.
     same_facts: list[list[str]] = Field(default_factory=list, max_length=60)
+    # Key target id -> the evidence ids that state it (docs/engine.md, 4.6).
+    coverage: dict[str, list[str]] = Field(default_factory=dict)
+
+
+def plan_targets(plan: SurveyPlan) -> list[CoverageTarget]:
+    """The survey's key targets, derived from its plan in code (no model
+    call): every core paper (its title and why it is in the survey), then
+    every lineage (its name and description). Their kinds are the survey
+    spec's coverage kinds."""
+    paper, lineage = (k.name for k in SURVEY_SPEC.coverage.kinds)
+    found: list[tuple[str, str, str]] = [
+        (f"{p.title}: {p.reason}" if p.reason else p.title, p.id, paper)
+        for p in plan.papers
+        if p.role == "core"
+    ]
+    found += [
+        (
+            f"{lin.name}: {lin.description}" if lin.description else lin.name,
+            lin.id,
+            lineage,
+        )
+        for lin in plan.lineages
+    ]
+    return [
+        CoverageTarget(id=f"T{n}", statement=statement, source=source, kind=kind)
+        for n, (statement, source, kind) in enumerate(found, 1)
+    ]
 
 
 def outline_problems(

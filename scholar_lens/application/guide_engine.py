@@ -22,7 +22,7 @@ from ..domain.evidence import (
     SourceDocument,
     duplicate_evidence,
 )
-from ..domain.evidence_draft import free_numbers, section_heading
+from ..domain.evidence_draft import free_numbers
 from ..domain.guide.evidence_guide import (
     TLDR_TITLE,
     GuideOutline,
@@ -32,7 +32,6 @@ from ..domain.guide.evidence_guide import (
     guide_draft_problems,
     guide_outline_problems,
     name_sources,
-    python_code_problems,
     repair_guide_outline,
     strip_markers,
 )
@@ -40,7 +39,6 @@ from ..domain.guide.sdk_index import SdkIndex, definitions_for
 from ..domain.specs.guide import GUIDE_SPEC
 from ..prompts import guide_evidence as prompts
 from .evidence_writer import (
-    PostFinding,
     WriterPrompts,
     block,
     brief_lines,
@@ -60,7 +58,7 @@ from .post_engine import (
 logger = logging.getLogger(__name__)
 
 # Bump when the reader's prompt or the evidence schema changes meaning.
-GUIDE_READER_VERSION = 8
+GUIDE_READER_VERSION = 9
 # Small counts and ordinals a guide states without evidence.
 _FREE_NUMBERS = free_numbers()
 
@@ -74,10 +72,9 @@ GUIDE_PROMPTS = WriterPrompts(
 )
 _POST_PROMPTS = PostPrompts(
     outline=prompts.OUTLINE_SYSTEM,
-    passes={
-        "review": prompts.GUIDE_REVIEW_SYSTEM,
-        "repetition": prompts.GUIDE_REPETITION_SYSTEM,
-    },
+    subject=prompts.PASS_SUBJECT,
+    code_trace=prompts.CODE_TRACE,
+    tail=prompts.PASS_TAIL,
 )
 _PRIMARY = ("official", "reference")
 _AUTHORITY_RANK = {"official": 0, "reference": 1, "third_party": 2, "older_docs": 3}
@@ -307,6 +304,9 @@ class EvidenceGuideEngine(PostEngine[GuideOutline, GuideSection, EvidenceGuide])
         self._names = {
             d.paper_id: f"{d.title} [{d.authority or 'third_party'}]" for d in documents
         }
+        # The docs' main topics and the user's material: the readers record
+        # their evidence first.
+        self.targets = await self.key_targets(documents)
         ledger = await self.read(topic, documents)
         if not len(ledger):
             raise ValueError("No source page gave usable evidence for the guide.")
@@ -389,17 +389,6 @@ class EvidenceGuideEngine(PostEngine[GuideOutline, GuideSection, EvidenceGuide])
             )
         ]
 
-    def closing_blocks(
-        self, ctx: SectionContext[GuideOutline, GuideSection]
-    ) -> list[str]:
-        return [
-            block(
-                "code_defined_earlier",
-                "\n".join(code_definitions([m for _, m in ctx.written])),
-            ),
-            block("source_sections", ctx.reference),
-        ]
-
     def review_context(self, ctx: SectionContext[GuideOutline, GuideSection]) -> str:
         section, outline = ctx.section, ctx.outline
         return (
@@ -428,22 +417,11 @@ class EvidenceGuideEngine(PostEngine[GuideOutline, GuideSection, EvidenceGuide])
 
     # ---- hooks: whole guide -------------------------------------------------------
 
-    def pass_prompt(
-        self,
-        name: str,
-        outline: GuideOutline,
-        ledger: EvidenceLedger,
-        written: Sequence[tuple[GuideSection, str]],
-    ) -> str:
-        """The code trace reads the guide with the official code, the
-        product's definitions and its packages: what no section's own check
-        sees (an import an earlier block lacked, a handler that never
-        returns its result, the guide's own policy blocking its example, a
-        back-reference to something never shown); the repetition read sees
-        the guide alone."""
-        guide = "\n\n".join(md for _, md in written)
-        if name == "repetition":
-            return "\n\n".join([f"Topic: {self._topic}.", block("guide", guide)])
+    def code_reference(self, ledger: EvidenceLedger, post: str) -> list[str]:
+        """The official docs' code, the product's definitions of what the
+        guide uses and its packages: what the consistency read checks the
+        guide's code against (an import an earlier block lacked, a handler
+        that never returns its result, an install extra missing)."""
         source_code = "\n\n".join(
             f"[{e.paper_id}] {e.claim}\n{quote_for_prompt_code(e.code or '')}"
             for e in ledger
@@ -451,55 +429,11 @@ class EvidenceGuideEngine(PostEngine[GuideOutline, GuideSection, EvidenceGuide])
             and (d := self._documents.get(e.paper_id))
             and d.authority == "official"
         )[: self.settings.source_chars]
-        return "\n\n".join(
-            [
-                f"Topic: {self._topic}. Running example: "
-                f"{outline.running_example or 'none'}. Code language: "
-                f"{outline.code_language or 'any'}.",
-                block("guide", guide),
-                block("source_code", source_code),
-                block("sdk_source", self._sdk_source(guide)),
-                block("packages", self.package_facts),
-            ]
-        )
-
-    def _code_problems(
-        self, written: Sequence[tuple[GuideSection, str]]
-    ) -> list[tuple[str, str]]:
-        """What the standard library's parser sees in the code a reader
-        pastes in order: a block that does not parse, a name nothing
-        defines (the running example's sections only)."""
-        return python_code_problems(
-            [
-                (
-                    section_heading(md) or s.title,
-                    md,
-                    s.kind in self.spec.runnable_kinds,
-                )
-                for s, md in written
-            ]
-        )
-
-    def code_findings(
-        self, written: Sequence[tuple[GuideSection, str]]
-    ) -> list[PostFinding]:
         return [
-            PostFinding(
-                section=title,
-                problem=problem,
-                fix="Make the code run as pasted after the earlier blocks.",
-            )
-            for title, problem in self._code_problems(written)
+            block("source_code", source_code),
+            block("sdk_source", self._sdk_source(post)),
+            block("packages", self.package_facts),
         ]
-
-    def after_review(self, written: Sequence[tuple[GuideSection, str]]) -> None:
-        # The fix is checked again, not trusted: what is left goes on the PR
-        # checklist.
-        if left := self._code_problems(written):
-            self.notes.append(
-                "Guide code that may not run as pasted: "
-                + " | ".join(f"{t}: {p}"[:200] for t, p in left[:5])
-            )
 
     def tldr_prompt(
         self,

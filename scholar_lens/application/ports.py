@@ -60,8 +60,20 @@ class AgentOutcome:
     stop_reason: str
 
 
+# What repeated calls share, before the call's own prompt: one part, or
+# parts ordered from the most stable (shared by the most calls) to the least.
+ModelContext = str | tuple[str, ...]
+# Cache points the adapter places in a call's messages; parts past it join
+# the last. One: the calls that repeat a context (a section's check rounds)
+# repeat all of it, and a section's earlier evidence grows from one section
+# to the next, so a second point would not be read back.
+MAX_CONTEXT_PARTS = 1
+
+
 class LanguageModel(Protocol):
-    """Model calls by role (the adapter maps a role to a model and effort)."""
+    """Model calls by role (the adapter maps a role to a model and effort).
+    ``context``: see :data:`ModelContext`; empty parts are left out, and a
+    call without context writes no message to the cache."""
 
     async def structured(
         self,
@@ -70,11 +82,11 @@ class LanguageModel(Protocol):
         system: str,
         prompt: str,
         schema: type[SchemaT],
-        context: str = "",
+        context: ModelContext = "",
     ) -> SchemaT: ...
 
     async def text(
-        self, *, role: ModelRole, system: str, prompt: str, context: str = ""
+        self, *, role: ModelRole, system: str, prompt: str, context: ModelContext = ""
     ) -> str: ...
 
     async def run_agent(

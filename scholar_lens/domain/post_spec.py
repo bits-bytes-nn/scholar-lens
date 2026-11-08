@@ -99,6 +99,9 @@ class PostOutline(Protocol):
     @property
     def same_facts(self) -> list[list[str]]: ...
 
+    @property
+    def coverage(self) -> Mapping[str, list[str]]: ...
+
     def model_copy(
         self, *, update: Mapping[str, Any] | None = None, deep: bool = False
     ) -> Self: ...
@@ -248,6 +251,61 @@ class TldrSpec:
 
 
 @dataclass(frozen=True)
+class TargetKind:
+    """A kind of key target and what it is (the extraction is told).
+    ``headline``: how many targets of the kind, in the extraction's order
+    (most important first), the TL;DR must state (0: none)."""
+
+    name: str
+    meaning: str
+    headline: int = 0
+
+
+@dataclass(frozen=True)
+class CoverageSpec:
+    """Where a post's key targets come from (docs/engine.md, 4.6).
+
+    One structured call extracts ``count`` targets from the documents whose
+    authority is in ``authorities`` (every document when empty), reading
+    the sections whose heading names one of ``sections`` (each document's
+    outline when empty); every document whose authority is in
+    ``per_document`` is a target of its own, in code. A kind that derives
+    its targets from its plan (no model call) extracts none: ``count`` is
+    ``(0, 0)``."""
+
+    kinds: tuple[TargetKind, ...] = ()
+    count: tuple[int, int] = (0, 0)
+    authorities: frozenset[str] = frozenset()
+    sections: tuple[str, ...] = ()
+    per_document: frozenset[str] = frozenset()
+    # The kind of a per-document target, and what it is.
+    document_kind: TargetKind = TargetKind(
+        "document", "a document the user chose; the post uses it"
+    )
+
+    @property
+    def headline_kinds(self) -> dict[str, int]:
+        return {k.name: k.headline for k in self.kinds if k.headline}
+
+
+PassName = Literal["consistency", "repetition", "coverage"]
+
+
+@dataclass(frozen=True)
+class PostPasses:
+    """The whole-post steps, run in this order after the sections
+    (docs/engine.md, 4.7): ``consistency`` and ``repetition`` are model
+    reads of the whole post, run together; ``coverage`` is code."""
+
+    names: tuple[PassName, ...] = ("consistency", "repetition", "coverage")
+    # The consistency read also traces one run of the running example
+    # through the post and checks its code against the sources' code, and
+    # code checks the program the runnable sections build (a post whose
+    # code a reader pastes and runs).
+    code_trace: bool = False
+
+
+@dataclass(frozen=True)
 class Limits:
     """Defaults of the engine's loops (settings may override them)."""
 
@@ -262,6 +320,15 @@ class Limits:
     # post is blocked for a reader; at a half, a short section losing one of
     # three sentences is still an ordinary deletion.
     max_drop_share: float = 0.5
+    # Earlier sections the next section's writer reads in full (the rest
+    # it sees as the "already taught" list), and the characters of an
+    # evidence claim that list shows.
+    previous_sections: int = 1
+    taught_claim_chars: int = 200
+    # Source characters the key-target extraction reads.
+    coverage_source_chars: int = 30_000
+    # Evidence items a TL;DR prompt shows at most (the body cites more).
+    tldr_evidence: int = 80
 
 
 @dataclass(frozen=True)
@@ -290,8 +357,10 @@ class PostSpec:
     judgement_kinds: frozenset[str] = frozenset()
     # Sections the checks emptied: kept, or dropped with a note.
     empty_sections: Literal["keep", "drop"] = "keep"
-    # The whole-post reviews, run together in this order.
-    post_passes: tuple[str, ...] = ()
+    # The whole-post steps and their options.
+    post_passes: PostPasses = PostPasses()
+    # Where the key targets come from.
+    coverage: CoverageSpec = CoverageSpec()
     # Kind -> the block code builds and appends after the section (a table).
     attachments: Mapping[str, str] = field(default_factory=dict)
     limits: Limits = Limits()

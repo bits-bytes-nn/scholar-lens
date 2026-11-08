@@ -1,10 +1,12 @@
 """The one post engine (docs/engine.md, 4 and 8 E1).
 
-read → outline (repaired in code, asked again with its problems) → wrong
-evidence left out → each section drafted from its evidence, checked and
-fixed → whole-post reviews → the TL;DR last → assembly. The engine knows no
-post kind: what differs comes from the kind's ``PostSpec`` (data) and the
-small hooks below, which a kind's engine overrides. The shared loop pieces
+key targets → read → outline (repaired in code, asked again with its
+problems, every key target given evidence) → wrong evidence left out → each
+section drafted from its evidence and what earlier sections taught, checked
+and fixed → the whole-post steps (consistency, repetition, coverage) → the
+TL;DR last → assembly. The engine knows no post kind: what differs comes
+from the kind's ``PostSpec`` (data) and the small hooks below, which a
+kind's engine overrides. The shared loop pieces
 (reading agent, claim check, fix) are ``EvidenceWriter``'s. Ports only: the
 model and the evidence cache are injected.
 """
@@ -16,11 +18,27 @@ import json
 import logging
 import re
 from collections.abc import Awaitable, Callable, Collection, Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, cast
 
 from pydantic import BaseModel
 
+from ..domain.coverage import (
+    CoverageTarget,
+    ExtractedTargets,
+    coverage_problems,
+    document_targets,
+    extraction_documents,
+    extraction_text,
+    headline_evidence,
+    headline_problems,
+    repair_coverage,
+    target_lines,
+    targets_from,
+    unassigned,
+    uncited,
+    without_evidence,
+)
 from ..domain.evidence import (
     Evidence,
     EvidenceLedger,
@@ -37,6 +55,7 @@ from ..domain.evidence_draft import (
     section_problems,
 )
 from ..domain.glossary import glossary_view
+from ..domain.post_context import WrittenSection, previous_sections, taught_list
 from ..domain.post_spec import (
     PostOutline,
     PostSection,
@@ -45,7 +64,9 @@ from ..domain.post_spec import (
     evidence_policy,
     other_sdk,
 )
+from ..domain.program import python_code_problems
 from ..domain.verifiers import Problem, VerifierSet, as_problems
+from ..prompts.rules import TARGETS_SYSTEM, consistency_system, repetition_system
 from .evidence_writer import (
     EvidenceWriter,
     PostFinding,
@@ -55,19 +76,12 @@ from .evidence_writer import (
     block,
     cached_evidence,
     evidence_lines,
-    post_so_far,
     with_canonical_evidence,
 )
 from .ports import AgentLimits, LanguageModel, TextStore
 from .usage import usage_stage
 
 logger = logging.getLogger(__name__)
-
-# Evidence a TL;DR or a section prompt shows at most.
-_TLDR_EVIDENCE = 80
-_EARLIER_EVIDENCE = 60
-# The end of the previous section the next section's writer reads.
-_PREVIOUS_END_CHARS = 2_500
 
 
 @dataclass(frozen=True)
@@ -90,10 +104,20 @@ ReadStart = Callable[[], Awaitable[ReadJob | None]]
 
 @dataclass(frozen=True)
 class PostPrompts:
-    """The system prompts of the outline and of each whole-post review."""
+    """The outline's system prompt and the kind's parts of the whole-post
+    reads, which ``prompts.rules`` composes with the shared checks."""
 
     outline: str
-    passes: Mapping[str, str] = field(default_factory=dict)
+    # What the post is, without an article ("technical guide").
+    subject: str
+    # The kind's own checks of the consistency and the repetition read.
+    consistency: str = ""
+    repetition: str = ""
+    # The kind's additions to the code checks (read when the spec's
+    # whole-post steps trace code).
+    code_trace: str = ""
+    # Appended to every whole-post read (source rules, security).
+    tail: str = ""
 
 
 @dataclass(frozen=True)
@@ -158,6 +182,90 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
         self.store = store
         # Numbers a sentence may state without evidence.
         self.free = free_numbers()
+        # What the post must state (set before reading: the readers record
+        # its evidence first).
+        self.targets: list[CoverageTarget] = []
+        trace = spec.post_passes.code_trace
+        # The system prompts of the whole-post reads, by step name.
+        self.pass_systems = {
+            "consistency": consistency_system(
+                post_prompts.subject,
+                post_prompts.consistency,
+                code_trace=trace,
+                trace_extra=post_prompts.code_trace,
+                tail=post_prompts.tail,
+            ),
+            "repetition": repetition_system(
+                post_prompts.subject, post_prompts.repetition, tail=post_prompts.tail
+            ),
+        }
+
+    # ---- key targets ------------------------------------------------------------
+
+    async def key_targets(
+        self, documents: Sequence[SourceDocument]
+    ) -> list[CoverageTarget]:
+        """The post's key targets from ``documents`` as the spec's coverage
+        names them (docs/engine.md, 4.6): one structured call over the
+        documents it extracts from, then one target per document of a
+        ``per_document`` authority (code). An extraction that gives no
+        valid answer leaves a note, and the post goes on with the targets
+        code derives."""
+        spec = self.spec.coverage
+        read = extraction_documents(spec, documents)
+        targets: list[CoverageTarget] = []
+        if read:
+            low, high = spec.count
+            kinds = "\n".join(
+                f"- {k.name}: {k.meaning}"
+                + (
+                    f" (the first {k.headline} of this kind are the post's headline)"
+                    if k.headline
+                    else ""
+                )
+                for k in spec.kinds
+            )
+            prompt = "\n\n".join(
+                [
+                    self.prompt_head(),
+                    f"List {low}-{high} key targets.",
+                    block("kinds", kinds),
+                    block(
+                        "sources",
+                        extraction_text(spec, read, self.limits.coverage_source_chars),
+                    ),
+                ]
+            )
+            with usage_stage("coverage"):
+                answer = await self._evaluated(
+                    "the key-target extraction",
+                    role="evaluate",
+                    system=TARGETS_SYSTEM,
+                    prompt=prompt,
+                    schema=ExtractedTargets,
+                )
+            if answer is not None:
+                targets = targets_from(answer, spec, [d.paper_id for d in read])
+                if len(targets) < low:
+                    logger.info(
+                        "The extraction gave %d key targets (asked %d-%d).",
+                        len(targets),
+                        low,
+                        high,
+                    )
+        targets += document_targets(spec, documents, start=len(targets) + 1)
+        if targets:
+            logger.info(
+                "Key targets: %s",
+                "; ".join(f"{t.id} {t.statement[:80]}" for t in targets),
+            )
+        return targets
+
+    def targets_block(self) -> str:
+        """The key targets as a prompt block ("" without targets)."""
+        if not self.targets:
+            return ""
+        return block("key_targets", target_lines(self.targets))
 
     # ---- read -------------------------------------------------------------------
 
@@ -192,6 +300,7 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
                 job = await start()
                 if job is None:
                     return None, []
+                prompt = "\n\n".join(p for p in (job.prompt, self.targets_block()) if p)
                 if self.store is not None and (cached := self.store.get(job.key)):
                     document = job.document
                     kept = (
@@ -208,7 +317,7 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
                         return job, kept
                 items = await self.read_document(
                     job.document,
-                    prompt=job.prompt,
+                    prompt=prompt,
                     limits=job.limits,
                     required=job.required,
                     rule=rule,
@@ -235,7 +344,10 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
 
     async def plan(self, ledger: EvidenceLedger) -> OutlineT:
         """The outline: asked, its duplicate facts merged, repaired in code,
-        and asked again with its problems up to ``outline_repairs`` times.
+        and asked again with its problems up to ``outline_repairs`` times. A
+        key target no evidence of a section is mapped to is a problem too;
+        on the last attempt it stays a note (the readers may have found no
+        evidence of it) rather than a failed run.
 
         Raises:
             ValueError: The outline still breaks the spec's rules.
@@ -244,9 +356,14 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
         duplicates = self.offered_duplicates(ledger)
         if duplicates:
             logger.info("%d evidence items repeat another.", len(duplicates))
-        base = self.outline_prompt(ledger, duplicates)
+        base = "\n\n".join(
+            p
+            for p in (self.outline_prompt(ledger, duplicates), self.targets_block())
+            if p
+        )
         prompt = base
         problems: list[str] = []
+        known = {e.id for e in ledger}
         with usage_stage("outline"):
             for attempt in range(self.run.outline_repairs + 1):
                 # The schema is a pydantic model the protocol cannot name.
@@ -272,9 +389,30 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
                         name.capitalize(),
                         "; ".join(repaired),
                     )
+                outline = outline.model_copy(
+                    update={
+                        "coverage": repair_coverage(
+                            outline.coverage, self.targets, known, same
+                        )
+                    }
+                )
                 problems = self.outline_problems(outline, ledger)
-                if not problems:
+                used = self.used_evidence(outline)
+                missing = coverage_problems(self.targets, outline.coverage, used)
+                if not problems and (
+                    not missing or attempt == self.run.outline_repairs
+                ):
+                    if lacking := unassigned(self.targets, outline.coverage, used):
+                        self.notes.append(
+                            "Key targets no section of the outline has evidence "
+                            "for: "
+                            + " | ".join(
+                                f"{t.id} [{t.source}] {t.statement[:140]}"
+                                for t in lacking[:8]
+                            )
+                        )
                     return outline
+                problems += missing
                 logger.warning(
                     "%s attempt %d unusable: %s",
                     name.capitalize(),
@@ -294,6 +432,13 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
             f"The {name} breaks the rules after repairs: " + "; ".join(problems)
         )
 
+    def used_evidence(self, outline: OutlineT) -> set[str]:
+        """The evidence the outline uses: its sections' and what the kind
+        cites elsewhere."""
+        return {
+            eid for s in outline.sections for eid in s.evidence
+        } | self.cited_elsewhere(outline)
+
     @staticmethod
     def _without(outline: OutlineT, ids: Collection[str]) -> OutlineT:
         return outline.model_copy(
@@ -303,16 +448,15 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
                         update={"evidence": [e for e in s.evidence if e not in ids]}
                     )
                     for s in outline.sections
-                ]
+                ],
+                "coverage": without_evidence(outline.coverage, ids),
             }
         )
 
     async def drop_wrong(self, outline: OutlineT, ledger: EvidenceLedger) -> OutlineT:
         """The outline without the evidence it uses (sections and what the
         kind cites elsewhere) whose claim misstates its quote."""
-        used = {
-            eid for s in outline.sections for eid in s.evidence
-        } | self.cited_elsewhere(outline)
+        used = self.used_evidence(outline)
         wrong = await self.wrong_evidence([e for e in ledger if e.id in used])
         if not wrong:
             return outline
@@ -466,7 +610,6 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
             own,
             target,
             retry_hint=self.spec.retry_hint,
-            context=post_so_far([md for _, md in written]),
         )
         self.reference = self.checking_reference(ctx.reference, draft)
         markdown = await self.verify_and_fix(
@@ -485,10 +628,22 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
         self.reference = ""
         return self.finish_section(section, markdown)
 
+    def written_sections(
+        self, written: Sequence[tuple[SectionT, str]]
+    ) -> list[WrittenSection]:
+        """The written sections as the earlier-section context reads them."""
+        return [
+            WrittenSection(s.title, md, s.kind in self.spec.runnable_kinds)
+            for s, md in written
+        ]
+
     def section_prompt(self, ctx: SectionContext[OutlineT, SectionT]) -> str:
         """The section writer's prompt: the shared skeleton with the kind's
-        blocks."""
+        blocks. What earlier sections said comes as the list of what each
+        taught and the last ``limits.previous_sections`` in full
+        (docs/engine.md, 4.8)."""
         section, outline = ctx.section, ctx.outline
+        done = self.written_sections(ctx.written)
         sections_map = "\n".join(
             f"- {'(this) ' if s is section else ''}{s.kind}: {s.title} — {s.thesis}"
             + (f" [teaches: {', '.join(t)}]" if (t := self.taught(s)) else "")
@@ -508,8 +663,10 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
                 ),
                 block("evidence", evidence_lines(ctx.own)),
                 block(
-                    "already_written_evidence",
-                    evidence_lines(ctx.earlier[-_EARLIER_EVIDENCE:]),
+                    "already_taught",
+                    taught_list(
+                        done, ctx.ledger, claim_chars=self.limits.taught_claim_chars
+                    ),
                 ),
                 *self.naming_blocks(ctx),
                 block(
@@ -517,8 +674,8 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
                     glossary_view(dict(ctx.glossary), [m for _, m in ctx.written]),
                 ),
                 block(
-                    "previous_section_end",
-                    ctx.written[-1][1][-_PREVIOUS_END_CHARS:] if ctx.written else "",
+                    "previous_sections",
+                    previous_sections(done, self.limits.previous_sections),
                 ),
                 *self.closing_blocks(ctx),
             ]
@@ -572,49 +729,134 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
         ledger: EvidenceLedger,
         written: list[tuple[SectionT, str]],
     ) -> list[tuple[SectionT, str]]:
-        """The spec's whole-post reviews read the post in order (run
-        together), the kind's code findings join them, and each section they
-        name is fixed."""
-        passes = self.spec.post_passes
-        if not passes or not written:
+        """The whole-post steps the spec lists, in order (docs/engine.md,
+        4.7): the consistency and repetition reads of the post (run
+        together; with the spec's code trace, code's program check of the
+        runnable sections joins them), each section they name fixed as an
+        edit transaction, and the coverage check of the fixed post. A read
+        that gives no valid answer blocks the post."""
+        steps = self.spec.post_passes
+        if not written:
             return written
+        reads = [n for n in steps.names if n in self.pass_systems]
         with usage_stage("review"):
-            reviews = await asyncio.gather(
+            answers = await asyncio.gather(
                 *(
-                    self.model.structured(
+                    self._evaluated(
+                        f"the whole-post {name} review",
+                        blocking=True,
+                        unchecked="the post is unreviewed",
                         role="evaluate",
-                        system=self.post_prompts.passes[name],
+                        system=self.pass_systems[name],
                         prompt=self.pass_prompt(name, outline, ledger, written),
                         schema=PostReview,
                     )
-                    for name in passes
+                    for name in reads
                 )
             )
-        for name, review in zip(passes, reviews, strict=True):
+        reviews: list[tuple[str, PostReview]] = [
+            (n, r) for n, r in zip(reads, answers, strict=True) if r is not None
+        ]
+        for name, review in reviews:
             if review.trace:
                 logger.info("Post review %s trace: %s", name, review.trace[:600])
-        found = self.code_findings(written)
-        issues = [i for r in reviews for i in r.issues] + found
-        if not issues:
-            return written
-        logger.info(
-            "Post review: %d issue(s) (%s), %d from the code check.",
-            len(issues),
-            ", ".join(
-                f"{n}: {len(r.issues)}" for n, r in zip(passes, reviews, strict=True)
-            ),
-            len(found),
-        )
-        fixed = await self.apply_findings(
-            written,
-            issues,
-            ledger,
-            title_of=lambda s: s.title,
-            own_of=lambda s: self.own(s, ledger),
-            reference_of=self.reference_for,
-        )
-        self.after_review(fixed)
+        program = steps.code_trace and "consistency" in steps.names
+        found = self.program_findings(written) if program else []
+        issues = [i for _, r in reviews for i in r.issues] + found
+        fixed = written
+        if issues:
+            logger.info(
+                "Post review: %d issue(s) (%s), %d from the code check.",
+                len(issues),
+                ", ".join(f"{n}: {len(r.issues)}" for n, r in reviews),
+                len(found),
+            )
+            fixed = await self.apply_findings(
+                written,
+                issues,
+                ledger,
+                title_of=lambda s: s.title,
+                own_of=lambda s: self.own(s, ledger),
+                reference_of=self.reference_for,
+            )
+        # The fixes are checked again, not trusted: what is left goes on the
+        # PR checklist.
+        if program and (left := self.program_problems(fixed)):
+            self.notes.append(
+                "Code that may not run as pasted: "
+                + " | ".join(f"{t}: {p}"[:200] for t, p in left[:5])
+            )
+        if "coverage" in steps.names:
+            self.coverage_notes(outline, fixed)
         return fixed
+
+    def pass_prompt(
+        self,
+        name: str,
+        outline: OutlineT,
+        ledger: EvidenceLedger,
+        written: Sequence[tuple[SectionT, str]],
+    ) -> str:
+        """The prompt of the whole-post read ``name``: the post in order;
+        the consistency read also gets the running example and, with the
+        spec's code trace, the code language and the kind's code sources."""
+        post = "\n\n".join(md for _, md in written)
+        if name != "consistency":
+            return "\n\n".join([self.prompt_head(), block("post", post)])
+        head = (
+            f"{self.prompt_head()}\nRunning example: "
+            f"{outline.running_example or 'none'}."
+        )
+        if not self.spec.post_passes.code_trace:
+            return "\n\n".join([head, block("post", post)])
+        head += f" Code language: {self.code_language(outline) or 'any'}."
+        return "\n\n".join(
+            [head, block("post", post), *self.code_reference(ledger, post)]
+        )
+
+    def program_problems(
+        self, written: Sequence[tuple[SectionT, str]]
+    ) -> list[tuple[str, str]]:
+        """(section heading, problem) of the code a reader pastes in order:
+        a block that does not parse, a name nothing defines (the runnable
+        sections only; every section's definitions count)."""
+        return python_code_problems(
+            [
+                (
+                    section_heading(md) or s.title,
+                    md,
+                    s.kind in self.spec.runnable_kinds,
+                )
+                for s, md in written
+            ]
+        )
+
+    def program_findings(
+        self, written: Sequence[tuple[SectionT, str]]
+    ) -> list[PostFinding]:
+        """:meth:`program_problems` as whole-post findings."""
+        return [
+            PostFinding(
+                section=title,
+                problem=problem,
+                fix="Make the code run as pasted after the earlier blocks.",
+            )
+            for title, problem in self.program_problems(written)
+        ]
+
+    def coverage_notes(
+        self, outline: OutlineT, written: Sequence[tuple[SectionT, str]]
+    ) -> None:
+        """A PR note for each key target none of whose evidence the body
+        cites (a reader decides; it does not block the post)."""
+        if missing := uncited(self.targets, outline.coverage, self.cited(written)):
+            self.notes.append(
+                "Key targets the body never states (no evidence mapped to them "
+                "is cited): "
+                + " | ".join(
+                    f"{t.id} [{t.source}] {t.statement[:140]}" for t in missing[:8]
+                )
+            )
 
     async def write_tldr(
         self,
@@ -629,18 +871,50 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
         states (the one place a fact is said twice)."""
         tldr = self.spec.tldr
         assert tldr is not None
-        pool = [*self.own(section, ledger)]
-        pool += [e for eid in self.cited(written) if (e := ledger.get(eid))]
+        # The headline targets' evidence comes first: the TL;DR must state
+        # them (docs/engine.md, 4.6), and the prompt shows a bounded list.
+        flagged = [
+            eid
+            for t in self.targets
+            if t.headline
+            for eid in outline.coverage.get(t.id, ())
+        ]
+        pool = [
+            e
+            for eid in dict.fromkeys(
+                [*section.evidence, *flagged, *self.cited(written)]
+            )
+            if (e := ledger.get(eid)) is not None
+        ]
         # Figures stay in their sections.
         context = [e for e in pool if e.kind != "figure"]
-        shown = (pool if tldr.figures_in_prompt else context)[:_TLDR_EVIDENCE]
+        shown = (pool if tldr.figures_in_prompt else context)[
+            : self.limits.tldr_evidence
+        ]
+        headline = headline_evidence(
+            self.targets,
+            outline.coverage,
+            {e.id for e in shown if e.kind != "figure"},
+        )
         openings = "\n".join(
             f"- {section_heading(md) or s.title}: "
             + " ".join(prose_sentences(md)[:2])[:400]
             for s, md in written
         )
+        prompt = self.tldr_prompt(
+            outline, section, target, openings, evidence_lines(shown)
+        )
+        if headline:
+            prompt += "\n\n" + block(
+                "headline_targets",
+                "State each of these, citing its evidence:\n"
+                + "\n".join(
+                    f"- {t.id}: {t.statement} (evidence: {', '.join(ids)})"
+                    for t, ids in headline
+                ),
+            )
         draft = await self.draft(
-            self.tldr_prompt(outline, section, target, openings, evidence_lines(shown)),
+            prompt,
             shown,
             target,
             retry_hint=tldr.retry_hint,
@@ -666,6 +940,10 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
             problems = as_problems(tldr.kind, self.tldr_problems(md))
             if tldr.no_body_copies:
                 problems += as_problems("body_copy", copied_sentences(md, body))
+            cited_here = {i for snt in prose_sentences(md) for i in cited_ids(snt)}
+            problems += as_problems(
+                "coverage_headline", headline_problems(headline, cited_here)
+            )
             return problems
 
         markdown = await self.verify_and_fix(
@@ -800,24 +1078,11 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
 
     # ---- hooks: whole post and assembly -----------------------------------------
 
-    def pass_prompt(
-        self,
-        name: str,
-        outline: OutlineT,
-        ledger: EvidenceLedger,
-        written: Sequence[tuple[SectionT, str]],
-    ) -> str:
-        """The prompt of the whole-post review ``name``."""
-        raise NotImplementedError
-
-    def code_findings(
-        self, written: Sequence[tuple[SectionT, str]]
-    ) -> list[PostFinding]:
-        """Whole-post problems code finds, fixed with the reviews'."""
+    def code_reference(self, ledger: EvidenceLedger, post: str) -> list[str]:
+        """Prompt blocks the consistency read checks the post's code against
+        (the sources' code, the product's definitions), with the spec's code
+        trace."""
         return []
-
-    def after_review(self, written: Sequence[tuple[SectionT, str]]) -> None:
-        """Checks of the post after the whole-post fixes."""
 
     def tldr_prompt(
         self,

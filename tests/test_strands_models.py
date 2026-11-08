@@ -375,3 +375,55 @@ def test_an_agent_conversation_keeps_its_message_cache_point(monkeypatch) -> Non
         )
     )
     assert [_message_cache_points(r) for r in stub.requests] == [1]
+
+
+def test_context_parts_share_one_cache_point() -> None:
+    from scholar_lens.adapters.bedrock.strands_models import _content
+
+    point = {"cachePoint": {"type": "default"}}
+    # Parts join, most stable first, before the one cache point.
+    assert _content(("earlier", "section"), "check") == [
+        {"text": "earlier\n\nsection"},
+        point,
+        {"text": "check"},
+    ]
+    # Empty parts are left out; no part, no cache point.
+    assert _content(("", "section"), "check") == [
+        {"text": "section"},
+        point,
+        {"text": "check"},
+    ]
+    assert _content(("", " "), "check") == "check"
+
+
+@pytest.mark.parametrize(
+    "context, points", [(("", ""), 0), (("earlier", ""), 1), (("earlier", "own"), 1)]
+)
+def test_a_structured_call_caches_its_context_once(
+    monkeypatch, context: tuple[str, ...], points: int
+) -> None:
+    from pydantic import BaseModel
+
+    class Answer(BaseModel):
+        section: str
+
+    model, stub = _stubbed(monkeypatch)
+    asyncio.run(
+        model.structured(
+            role="write", system="s", prompt="p", schema=Answer, context=context
+        )
+    )
+    assert stub.requests
+    assert [_message_cache_points(r) for r in stub.requests] == [points] * len(
+        stub.requests
+    )
+    first = stub.requests[0]["messages"][0]["content"]
+    assert first[-1] == {"text": "p"}
+    # The request stays within Bedrock's four cache points.
+    assert all(
+        _message_cache_points(r)
+        + sum("cachePoint" in b for b in r["system"])
+        + sum("cachePoint" in t for t in r.get("toolConfig", {}).get("tools", []))
+        <= 4
+        for r in stub.requests
+    )

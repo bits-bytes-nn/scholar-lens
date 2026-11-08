@@ -10,11 +10,12 @@ from __future__ import annotations
 
 from .rules import (
     CLAIM_SCOPE,
+    COVERAGE_OUTLINE,
+    COVERAGE_READING,
+    EARLIER_SECTIONS,
     ILLUSTRATION_MARK,
     MATH_RULES,
-    POST_SO_FAR,
     READER_PROFILE,
-    REPETITION_CHECKS,
     SAME_FACTS,
     SELF_REFERENCE_CHECKS,
     STYLE_RULES,
@@ -83,8 +84,8 @@ How a good guide on this blog is written:
   once.
 - Code a reader would paste runs as shown: it has its imports, and the
   running example's code calls the functions, classes and methods with the
-  names and signatures earlier sections defined (listed as
-  code_defined_earlier) or defines them first; client and server agree on
+  names and signatures earlier sections defined (listed under
+  already_taught or as code_defined_earlier) or defines them first; client and server agree on
   the request's shape.
 - Keep a fact's qualifier (Python only, a version, a provider, a
   condition) wherever you state it. When two official pages disagree (a
@@ -158,7 +159,7 @@ is the official docs' to state: from a third-party page (a forum thread, a
 vendor comparison, an old post) record it only as that page's report, with
 its date or version when the page gives one.
 Stop with finish when the evidence covers the page as the guide needs it.
-""" + SOURCE_AUTHORITY + SECURITY
+""" + COVERAGE_READING + SOURCE_AUTHORITY + SECURITY
 
 OUTLINE_SYSTEM = """
 You plan a technical guide from the evidence of its sources. Give each piece
@@ -196,7 +197,7 @@ glossary has the topic's key terms (English | rendering in the guide's
 language, no parentheses). The title is in English. `topics` names the
 features or concepts each section teaches; a feature is taught in one
 section only, and evidence about it goes there.
-""" + SAME_FACTS + SOURCE_AUTHORITY + SECURITY
+""" + SAME_FACTS + COVERAGE_OUTLINE + SOURCE_AUTHORITY + SECURITY
 
 WRITER_SYSTEM = (
     """
@@ -213,8 +214,8 @@ Evidence:
   states a fact about the tool with its evidence ids, e.g.
   "... 기본값은 `1`입니다 [[E12]]." (several: [[E12, E15]]). Code removes the
   markers and lists the sources; do not write links to the sources yourself.
-- You may refer back to earlier sections' evidence (listed as already
-  written) by content, citing its id, but never repeat it.
+- You may refer back to earlier sections' evidence (listed under
+  already_taught) by content, citing its id, but never repeat it.
 - A feature another section teaches (the outline lists each section's
   `teaches`) gets one sentence pointing to that section, never a second
   explanation, even when source_sections describe it again.
@@ -240,7 +241,7 @@ Evidence:
     + MATH_RULES
     + STYLE_RULES
     + SDK_SOURCE
-    + POST_SO_FAR
+    + EARLIER_SECTIONS
     + SECURITY
 )
 
@@ -326,52 +327,15 @@ evidence marker as it is. A claim the evidence does not support is narrowed
 to what the evidence says or deleted.
 """ + GUIDE_PRINCIPLES + MATH_RULES + SDK_SOURCE + SECURITY
 
-GUIDE_REVIEW_SYSTEM = """
-You review a whole technical guide, in the order a reader meets it, as an
-engineer who pastes each block and runs the running example end to end.
-
-First, in `trace`, follow one request of the final running example through
-every piece the guide sets up on the way (hooks, middleware, guards,
-allow-lists, policies, limits, retries, the handler) and write what each
-does to it and what the caller finally gets. A structured output, a tool or
-a model call the guide's own allow-list or policy does not permit is
-blocked; say so.
-
-Then report each problem that stops the guide from working or reading as it
-says:
-- code: a missing import or install extra, a name or method neither the
-  block nor an earlier block defines, a call that does not match its
-  definition, a block that silently replaces an earlier definition with a
-  fragment, a client and server that disagree on the request's shape, a
-  config file referred to but never shown, an import path, flag, metric or
-  API name that contradicts the source code listed (the official docs'
-  code wins);
-- the example defeating itself: what the trace shows never reaches the
-  result the text promises (a policy or guard blocking a tool the example
-  needs, a limit it always hits, a result never returned);
-- no install command for the packages and extras the code imports, or an
+# The whole-post reads (prompts.rules composes them): what the guide is,
+# what its code trace adds to the shared one, and what every read ends with.
+PASS_SUBJECT = "technical guide"
+CODE_TRACE = """- no install command for the packages and extras the code imports, or an
   install command without the extra a feature the code uses needs (the
   extras each package provides are listed under packages; report it on the
   first usage section);
-- a config file or command that, where it appears, needs code shown only
-  later (a config setting `cache_dir` before the `load` call that reads
-  it), or a "changed lines only" fragment the reader cannot assemble;
-- a sentence that points back to something earlier sections never show
-  ("앞서 계산한 대로", "앞서 보낸 요청", a recap of code the earlier blocks
-  do not contain), or that uses the running example before it is
-  introduced;
-For each problem give the section title exactly as it appears in the guide's
-`## ` heading, the problem, and the fix (the corrected lines, using names and
-import paths from the guide or the source code listed). Return no issues
-when there are none.
-""" + SDK_SOURCE + SECURITY
-
-GUIDE_REPETITION_SYSTEM = """
-You review a whole technical guide for repetition only: what it teaches
-more than once. Report each place with the section title exactly as it
-appears in its `## ` heading, the repeated passage quoted as it stands, the
-problem (what it repeats and the section that keeps it in full) and the
-fix (delete the passage, or the short back-reference that replaces it).
-A restatement that adds a new condition, number or exception is not
-repetition: keep the new part. Return no issues when there are none.
-""" + REPETITION_CHECKS + SECURITY
+- an import path, flag, metric or API name a page other than the official
+  docs gives where the official docs' code (listed as source_code) differs:
+  the official docs' code wins.
+""" + SDK_SOURCE
+PASS_TAIL = SECURITY

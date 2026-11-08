@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Literal
 
 from ..post_spec import (
+    CoverageSpec,
     EvidencePolicy,
     KindCount,
     KindOrder,
@@ -19,6 +20,7 @@ from ..post_spec import (
     OutlineCheck,
     Ownership,
     PostSpec,
+    TargetKind,
     TldrSpec,
 )
 
@@ -86,6 +88,30 @@ _TLDR = TldrSpec(
 _RETRY_HINT = "This is a post explaining a published research paper."
 # The closing section holds the post's own assessment of the paper.
 _JUDGEMENT = frozenset({"closing"})
+_CLAIM = TargetKind(
+    "claim",
+    "a key claim other than a main result: the problem and the gap it fills, "
+    "the key idea, a property or limitation the paper states",
+)
+
+
+def _coverage(count: tuple[int, int], headline: int) -> CoverageSpec:
+    """Key targets from the abstract and the introduction; the first
+    ``headline`` main results are what the TL;DR must state."""
+    return CoverageSpec(
+        kinds=(
+            _CLAIM,
+            TargetKind(
+                "result",
+                "a main result: the paper's method against its baselines in its "
+                "headline setting, with the benchmark and metric",
+                headline=headline,
+            ),
+        ),
+        count=count,
+        sections=("abstract", "introduction"),
+    )
+
 
 PAPER_REVIEW_SPEC = PostSpec(
     outline_name="paper outline",
@@ -98,7 +124,7 @@ PAPER_REVIEW_SPEC = PostSpec(
     fixed_titles={"closing": CLOSING_TITLES},
     depth_kinds=frozenset({"method"}),
     judgement_kinds=_JUDGEMENT,
-    post_passes=("review",),
+    coverage=_coverage((5, 8), headline=2),
 )
 
 PAPER_SUMMARY_SPEC = PostSpec(
@@ -125,7 +151,7 @@ PAPER_SUMMARY_SPEC = PostSpec(
     },
     depth_kinds=frozenset({"method"}),
     judgement_kinds=_JUDGEMENT,
-    post_passes=("review",),
+    coverage=_coverage((3, 5), headline=1),
 )
 
 

@@ -9,9 +9,11 @@ from __future__ import annotations
 
 from .rules import (
     CLAIM_SCOPE,
+    COVERAGE_OUTLINE,
+    COVERAGE_READING,
+    EARLIER_SECTIONS,
     ILLUSTRATION_MARK,
     MATH_RULES,
-    POST_SO_FAR,
     READER_PROFILE,
     SAME_FACTS,
     SELF_REFERENCE_CHECKS,
@@ -85,7 +87,7 @@ sentences), and every number in `claim` or `cell` must be in the quote.
 Read the sections you need: the method and experiments of a core paper in
 depth, the abstract, introduction and conclusion of a supporting paper.
 Stop with finish when the evidence covers the paper as the survey needs it.
-""" + SECURITY
+""" + COVERAGE_READING + SECURITY
 
 OUTLINE_SYSTEM = """
 You plan a survey post (Lilian Weng's style: a topic's major papers by
@@ -121,7 +123,7 @@ queries or a setting. `ideas` gives every paper a noun
 phrase; `short_names` every paper a short name; `lineage_names` every lineage
 a short name. The glossary has the topic's key terms (English | rendering in
 the survey's language, no parentheses).
-""" + SAME_FACTS + SECURITY
+""" + SAME_FACTS + COVERAGE_OUTLINE + SECURITY
 
 WRITER_SYSTEM = (
     """
@@ -136,8 +138,8 @@ Evidence:
   states something about a paper with its evidence ids, e.g.
   "... 승률을 기록했습니다 [[E12]]." (several: [[E12, E15]]). Code turns them
   into citations; do not write citation keys or links to papers yourself.
-- You may refer back to earlier sections' evidence (listed as already
-  written) by content, citing its id, but never repeat its numbers.
+- You may refer back to earlier sections' evidence (listed under
+  already_taught) by content, citing its id, but never repeat its numbers.
 - Every number must come from the cited evidence (claim, quote or scope).
 - Show each assigned figure where it is discussed as
   ![what it shows](url), and explain what to look at from its caption and
@@ -151,7 +153,7 @@ Evidence:
     + VISUAL_RULES
     + MATH_RULES
     + STYLE_RULES
-    + POST_SO_FAR
+    + EARLIER_SECTIONS
     + SECURITY
 )
 
@@ -207,3 +209,12 @@ Rewrite or delete exactly the sentences named; keep every other sentence,
 heading, figure, equation and evidence marker as it is. A claim the evidence
 does not support is narrowed to what the evidence says or deleted.
 """ + WRITING_PRINCIPLES + MATH_RULES + SECURITY
+
+# The whole-post reads (prompts.rules composes them): what the post is, the
+# survey's own repetition check, and what every read ends with.
+PASS_SUBJECT = "survey post"
+REPETITION_EXTRA = """- a paper's idea, result or equivalence explained in full again in a later
+  section (cross-cutting, comparison, insights, conclusion) instead of
+  named and referred back to where its lineage section explains it.
+"""
+PASS_TAIL = SECURITY

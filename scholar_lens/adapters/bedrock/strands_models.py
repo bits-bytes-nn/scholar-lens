@@ -36,8 +36,10 @@ from strands.telemetry.metrics import EventLoopMetrics
 from strands.types.exceptions import MaxTokensReachedException
 
 from ...application.ports import (
+    MAX_CONTEXT_PARTS,
     AgentLimits,
     AgentOutcome,
+    ModelContext,
     ModelRole,
     ModelText,
     SchemaT,
@@ -73,17 +75,34 @@ class RoleModel:
     fallback: RoleModel | None = None
 
 
-def _has_context(context: str) -> bool:
-    return bool(context.strip())
+def _context_parts(context: ModelContext) -> list[str]:
+    """The non-empty parts of ``context``, at most :data:`MAX_CONTEXT_PARTS`:
+    parts past the last allowed one join it (the earlier, more stable parts
+    keep their own cache points)."""
+    given = (context,) if isinstance(context, str) else context
+    parts = [p for p in given if p.strip()]
+    if len(parts) > MAX_CONTEXT_PARTS:
+        last = MAX_CONTEXT_PARTS - 1
+        parts = [*parts[:last], "\n\n".join(parts[last:])]
+    return parts
 
 
-def _content(context: str, prompt: str) -> str | list[dict[str, object]]:
-    """The user turn: ``context`` (what repeated calls share: evidence, source
-    passages) before a cache point, then ``prompt``. Calls that differ only
-    after the cache point read the shared part at the cache-read rate."""
-    if not _has_context(context):
+def _has_context(context: ModelContext) -> bool:
+    return bool(_context_parts(context))
+
+
+def _content(context: ModelContext, prompt: str) -> str | list[dict[str, object]]:
+    """The user turn: each part of ``context`` (what repeated calls share:
+    evidence, source passages; the most stable first) followed by a cache
+    point, then ``prompt``. Calls that share a part and everything before
+    it read that prefix at the cache-read rate."""
+    parts = _context_parts(context)
+    if not parts:
         return prompt
-    return [{"text": context}, {"cachePoint": {"type": "default"}}, {"text": prompt}]
+    content: list[dict[str, object]] = []
+    for part in parts:
+        content += [{"text": part}, {"cachePoint": {"type": "default"}}]
+    return [*content, {"text": prompt}]
 
 
 def _no_message_cache_point(context: InvokeModelContext) -> InvokeModelContext:
@@ -209,7 +228,7 @@ class StrandsLanguageModel:
         system: str,
         prompt: str,
         schema: type[SchemaT],
-        context: str = "",
+        context: ModelContext = "",
     ) -> SchemaT:
         stop = ""
         for n, (model, thinking) in enumerate(self._tries(role)):
@@ -243,7 +262,7 @@ class StrandsLanguageModel:
         )
 
     async def text(
-        self, *, role: ModelRole, system: str, prompt: str, context: str = ""
+        self, *, role: ModelRole, system: str, prompt: str, context: ModelContext = ""
     ) -> str:
         # Bedrock's content filter can stop a long answer about attacks
         # (jailbreaks, injections) mid-sentence, and not on every attempt:

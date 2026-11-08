@@ -5,6 +5,7 @@ tables code builds."""
 from __future__ import annotations
 
 from ..post_spec import (
+    CoverageSpec,
     EvidencePolicy,
     KindCount,
     KindOrder,
@@ -12,6 +13,7 @@ from ..post_spec import (
     Ownership,
     PostSpec,
     RequiredField,
+    TargetKind,
     TitleLength,
 )
 
@@ -79,4 +81,12 @@ SURVEY_SPEC = PostSpec(
     # The post's reading of the field and its closing view.
     judgement_kinds=frozenset({"insights", "conclusion"}),
     attachments={"introduction": "timeline", "comparison": "comparison"},
+    # Every core paper and every lineage of the plan, derived in code from
+    # the plan (no extraction).
+    coverage=CoverageSpec(
+        kinds=(
+            TargetKind("paper", "a core paper of the survey"),
+            TargetKind("lineage", "a lineage of the survey"),
+        )
+    ),
 )

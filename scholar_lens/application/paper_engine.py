@@ -52,7 +52,7 @@ from .usage import usage_stage
 logger = logging.getLogger(__name__)
 
 # Bump when the reader's prompt or the evidence schema changes meaning.
-PAPER_READER_VERSION = 2
+PAPER_READER_VERSION = 3
 _FREE_NUMBERS = free_numbers()
 
 PAPER_PROMPTS = WriterPrompts(
@@ -156,7 +156,9 @@ class EvidencePaperEngine(PostEngine[PaperOutline, PaperSection, EvidencePaper])
             PAPER_PROMPTS,
             PostPrompts(
                 outline=prompts.OUTLINE_REVIEW if review else prompts.OUTLINE_SUMMARY,
-                passes={"review": prompts.POST_REVIEW_SYSTEM},
+                subject=prompts.PASS_SUBJECT,
+                consistency=prompts.CONSISTENCY_EXTRA,
+                tail=prompts.PASS_TAIL,
             ),
             RunSettings(
                 language=settings.language,
@@ -246,6 +248,9 @@ class EvidencePaperEngine(PostEngine[PaperOutline, PaperSection, EvidencePaper])
             (d.paper_id, s.anchor): s.text for d in (paper, *extra) for s in d.sections
         }
         self._names = {d.paper_id: d.title for d in (paper, *extra)}
+        # Key claims of the abstract and introduction: the readers record
+        # their evidence first.
+        self.targets = await self.key_targets([paper])
         ledger = await self.read(title, paper, extra)
         if not len(ledger):
             raise ValueError("The paper gave no usable evidence.")
@@ -318,22 +323,6 @@ class EvidencePaperEngine(PostEngine[PaperOutline, PaperSection, EvidencePaper])
         return (
             f"Language: {self.settings.language}. Paper: {self._title}. Post: "
             f"{self.settings.post}."
-        )
-
-    def pass_prompt(
-        self,
-        name: str,
-        outline: PaperOutline,
-        ledger: EvidenceLedger,
-        written: Sequence[tuple[PaperSection, str]],
-    ) -> str:
-        """One review of the whole post (repetition, back-references to
-        nothing, talk about the sources, unseen omissions)."""
-        return "\n\n".join(
-            [
-                f"Paper: {self._title}. Post: {self.settings.post}.",
-                block("post", "\n\n".join(md for _, md in written)),
-            ]
         )
 
     def tldr_prompt(

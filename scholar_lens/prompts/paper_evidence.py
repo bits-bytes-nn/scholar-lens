@@ -6,12 +6,13 @@ from __future__ import annotations
 
 from .rules import (
     CLAIM_SCOPE,
+    COVERAGE_OUTLINE,
+    COVERAGE_READING,
+    EARLIER_SECTIONS,
     ILLUSTRATION_MARK,
     MATH_RULES,
     NUMBER_RULES,
-    POST_SO_FAR,
     READER_PROFILE,
-    REPETITION_CHECKS,
     SAME_FACTS,
     SELF_REFERENCE_CHECKS,
     STYLE_RULES,
@@ -82,7 +83,7 @@ those numbers first, one record per method and benchmark, before figures,
 ablations and analyses: a post that reports the paper cannot leave them
 out, and a small evidence budget is spent on them first.
 Read your sections in depth; stop with finish when they are covered.
-""" + SECURITY
+""" + COVERAGE_READING + SECURITY
 
 OUTLINE_REVIEW = """
 You plan a review post of one paper from its evidence. Give each piece of
@@ -108,7 +109,7 @@ Titles are claims written as noun phrases; each section has a one-sentence
 thesis and the reader's question it answers. Depth: deep for the hard
 mechanism, brief for context. The glossary has the paper's key terms
 (English | rendering in the post's language, no parentheses).
-""" + SAME_FACTS + SECURITY
+""" + SAME_FACTS + COVERAGE_OUTLINE + SECURITY
 
 OUTLINE_SUMMARY = """
 You plan a short summary post of one paper (readable in five minutes) from
@@ -126,7 +127,7 @@ Pick only the evidence the summary needs: the key equation, the headline
 results with their settings, one or two figures, one or two limitations.
 Depth: standard for method and experiments, brief for the rest. The
 glossary has the paper's key terms (English | rendering, no parentheses).
-""" + SAME_FACTS + SECURITY
+""" + SAME_FACTS + COVERAGE_OUTLINE + SECURITY
 
 WRITER_SYSTEM = (
     """
@@ -143,8 +144,8 @@ Evidence:
   the paper with its evidence ids, e.g. "... 오류율 3.4%를 기록했습니다 [[E12]]."
   (several: [[E12, E15]]); code removes the markers. Never let a marker
   stand for a word.
-- You may refer back to earlier sections' evidence (listed as already
-  written) by content, citing its id, but never repeat its numbers.
+- You may refer back to earlier sections' evidence (listed under
+  already_taught) by content, citing its id, but never repeat its numbers.
 - Every number must come from the cited evidence or the passages.
 - Show each assigned figure where it is discussed as ![what it shows](url),
   and explain what to look at from its caption and evidence only.
@@ -167,7 +168,7 @@ Evidence:
     + NUMBER_RULES
     + MATH_RULES
     + STYLE_RULES
-    + POST_SO_FAR
+    + EARLIER_SECTIONS
     + SECURITY
 )
 
@@ -248,19 +249,10 @@ TL;DR and sections:
   TL;DR.
 """ + SECURITY
 
-POST_REVIEW_SYSTEM = """
-You review a whole post about a research paper, in the order a reader meets
-it, for what no single section's check sees. Report each problem with the
-section title exactly as it appears in its `## ` heading, the problem, and
-the fix:
-- repetition (below);
-- a sentence that points back to something earlier sections never show, or
-  uses a term or example before it is introduced;
-- talk about the post's own sources or making ("근거에서", "제공된 자료",
-  "표의 수치는 …에서 가져왔습니다") instead of the paper;
-- a claim that the paper does not state, show or report something (the
-  writer saw only parts of the paper): state what it does say or drop it;
-- values read off a figure presented as the paper's numbers;
+# The whole-post reads (prompts.rules composes them): what the post is, the
+# paper post's own consistency checks, and what every read ends with.
+PASS_SUBJECT = "post about a research paper"
+CONSISTENCY_EXTRA = """- values read off a figure presented as the paper's numbers;
 - a results table with blank ("—") cells or cells that are sentences.
-Return no issues when there are none.
-""" + REPETITION_CHECKS + SECURITY
+"""
+PASS_TAIL = SECURITY

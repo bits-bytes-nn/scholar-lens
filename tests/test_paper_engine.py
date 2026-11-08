@@ -23,6 +23,7 @@ from scholar_lens.application.paper_engine import (
     reading_groups,
 )
 from scholar_lens.application.ports import AgentLimits, AgentOutcome
+from scholar_lens.domain.coverage import ExtractedTargets
 from scholar_lens.domain.evidence import EvidenceLedger, SourceDocument
 from scholar_lens.domain.paper.evidence_paper import (
     REVIEW_TLDR_QUESTIONS,
@@ -32,6 +33,7 @@ from scholar_lens.domain.paper.evidence_paper import (
     repair_paper_outline,
     tldr_problems,
 )
+from tests.fakes import with_context
 
 PAPER = """## Abstract
 
@@ -258,8 +260,12 @@ class ScriptedModel:
                 role=role, system=system, prompt=prompt, context=context
             )
             return FixedSection(section=section, notes="고친 내용: 수치를 바로잡음")
-        prompt = f"{context}\n\n{prompt}"
+        prompt = with_context(context, prompt)
         self.calls.append(schema.__name__)
+        if schema is ExtractedTargets:
+            # The key-target extraction (E3) runs before reading; this script
+            # finds none, so the run below is the one before coverage.
+            return ExtractedTargets()
         if schema is PaperOutline:
             sections = [s.model_dump() for s in _outline().sections]
             if self.post == "summary":
@@ -280,6 +286,11 @@ class ScriptedModel:
         if schema is EvidenceCheck:
             return EvidenceCheck()
         if schema is PostReview:
+            # A paper post now has a consistency and a repetition read (one
+            # combined review before E3).
+            self.calls.append(
+                "repetition" if "repetition only" in system else "consistency"
+            )
             return PostReview()
         if schema is FinalText:
             return FinalText(
@@ -291,7 +302,7 @@ class ScriptedModel:
         raise AssertionError(schema)
 
     async def text(self, *, role, system, prompt, context="") -> str:
-        prompt = f"{context}\n\n{prompt}"
+        prompt = with_context(context, prompt)
         self.calls.append("text")
         if "Write the review's TL;DR" in prompt:
             questions = REVIEW_TLDR_QUESTIONS["Korean"]
@@ -339,6 +350,7 @@ def test_a_scripted_review_run() -> None:
         "DPO는"
     )
     assert model.calls.count("read") == 1
+    assert {"consistency", "repetition", "ExtractedTargets"} <= set(model.calls)
 
 
 def test_a_scripted_summary_run() -> None:
