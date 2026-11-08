@@ -11,6 +11,7 @@ loop. Ports only: the model is injected.
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import hashlib
 import json
 import logging
@@ -56,7 +57,7 @@ from scholar_lens.domain.markdown.lint import drop_empty_headings
 from scholar_lens.domain.post_spec import Limits
 from scholar_lens.domain.prompts.rules import FIX_ANSWER
 from scholar_lens.domain.usage_context import usage_stage
-from scholar_lens.domain.verifiers import VerifierSet
+from scholar_lens.domain.verifiers import Problem, VerifierSet
 
 logger = logging.getLogger(__name__)
 
@@ -974,6 +975,7 @@ class EvidenceWriter:
         checks: SectionChecks,
         evidence: Sequence[Evidence],
         rest: str,
+        later: str = "",
         baseline: str | None = None,
     ) -> str:
         """``draft`` with its unsupported sentences settled (docs/engine.md,
@@ -1013,6 +1015,7 @@ class EvidenceWriter:
                 ],
                 verifiers=checks.verifiers,
                 rest=rest,
+                later=later,
             )
             if revision.taken and revision.text.strip() != draft.strip():
                 draft = revision.text
@@ -1095,13 +1098,21 @@ class EvidenceWriter:
         title_of: Callable[[SectionT], str],
         own_of: Callable[[SectionT], list[Evidence]],
         reference_of: Callable[[Sequence[Evidence]], str],
+        post_check: (
+            Callable[[Sequence[tuple[SectionT, str]]], list[Problem]] | None
+        ) = None,
     ) -> list[tuple[SectionT, str]]:
         """Each section a whole-post review names, fixed with its evidence
         and source passages as an edit transaction that runs the section's
         registered verifier set (a fix that adds a problem, or loses
         structure, is not taken); the sentences the fix adds are settled
         like a section's (narrowed, checked, deleted), and what the
-        section's verifier set still finds is noted."""
+        section's verifier set still finds is noted. A code block may go
+        only when a copy stays in the section or an earlier one (code is
+        run in reading order). ``post_check``: problems of the whole post
+        (the program a reader pastes in order), run in each fix's
+        transaction with the section's checks, so a fix that adds one to
+        any section is not taken."""
         out: list[tuple[SectionT, str]] = []
         names_seen = {
             n
@@ -1141,9 +1152,16 @@ class EvidenceWriter:
                 continue
             own = own_of(section)
             self.reference = reference_of(own)
+            later = "\n\n".join(m for _, m in written[i + 1 :])
             rest = "\n\n".join([m for _, m in out] + [m for _, m in written[i + 1 :]])
+            verifiers = checks.verifiers
+            if post_check is not None:
+                verifiers = self._with_post_check(
+                    verifiers, post_check, out, section, written[i + 1 :]
+                )
+            fixing = dataclasses.replace(checks, verifiers=verifiers)
             revision = await self._fix(
-                md, own, issues, verifiers=checks.verifiers, rest=rest
+                md, own, issues, verifiers=verifiers, rest=rest, later=later
             )
             if not revision.taken or revision.text.strip() == md.strip():
                 self.notes.append(
@@ -1158,15 +1176,32 @@ class EvidenceWriter:
                     revision.text,
                     title=title,
                     ledger=ledger,
-                    checks=checks,
+                    checks=fixing,
                     evidence=own,
                     rest=rest,
+                    later=later,
                     baseline=md,
                 )
                 self._note_leftovers(md, title=title, verifiers=checks.verifiers)
             self.reference = ""
             out.append((section, md))
         return out
+
+    @staticmethod
+    def _with_post_check(
+        verifiers: VerifierSet,
+        post_check: Callable[[Sequence[tuple[SectionT, str]]], list[Problem]],
+        before: Sequence[tuple[SectionT, str]],
+        section: SectionT,
+        after: Sequence[tuple[SectionT, str]],
+    ) -> VerifierSet:
+        """``verifiers`` with the whole post's check of the post with this
+        section's text in its place."""
+
+        def whole(markdown: str) -> list[Problem]:
+            return post_check([*before, (section, markdown), *after])
+
+        return dataclasses.replace(verifiers, checks=(*verifiers.checks, whole))
 
     async def _fix(
         self,
@@ -1176,6 +1211,7 @@ class EvidenceWriter:
         *,
         verifiers: VerifierSet,
         rest: str = "",
+        later: str = "",
     ) -> Revision:
         """The section revised for ``issues`` by minimal edits (each an
         exact passage replaced or deleted), applied as one edit transaction;
@@ -1203,6 +1239,7 @@ class EvidenceWriter:
                 verifiers=verifiers,
                 max_prose_cut=self.limits.max_prose_cut,
                 rest=rest,
+                later=later,
             )
 
         with usage_stage("fix"):

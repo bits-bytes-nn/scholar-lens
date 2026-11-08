@@ -407,6 +407,74 @@ class _FailingReview(Model):
         return await super().structured(schema=schema, prompt=prompt, **kwargs)
 
 
+# ---- the whole-post fix and the program a reader pastes ----------------------------
+
+_DEFINE = "client = Client()"
+_EXAMPLE = f"```python\nfrom pkg import Client\n\n{_DEFINE}\n```"
+_USE = "```python\nclient.run()\n```"
+
+
+def _program(written: Any) -> list[Problem]:
+    from scholar_lens.domain.program import program_problems
+
+    return program_problems([(t, md, True) for t, md in written])
+
+
+@pytest.mark.parametrize("checked", [True, False])
+def test_a_whole_post_fix_that_breaks_a_later_sections_code_is_not_taken(
+    checked: bool,
+) -> None:
+    sentences = _sentences(3)
+    model = Model()
+    writer = _writer(model)
+    md = _verify(writer, _section(sentences, _EXAMPLE))
+    # The later section runs the example's client; the fix drops its
+    # definition (the block still parses, the section's own checks pass).
+    later = ("뒤 절", "## 뒤 절\n\n실행합니다.\n\n" + _USE + "\n")
+    model.edits = [Edit(find=f"\n{_DEFINE}", replace="")]
+    out = asyncio.run(
+        writer.apply_findings(
+            [(SECTION, md), later],
+            [PostFinding(section="캐시", problem="p", fix="f")],
+            _ledger(),
+            title_of=lambda s: s,
+            own_of=lambda _s: list(_ledger()),
+            reference_of=lambda _e: "",
+            post_check=_program if checked else None,
+        )
+    )
+    assert (out[0][1] == md) == checked
+    if checked:
+        assert any("adds problems" in n and "client" in n for n in writer.notes)
+
+
+def test_a_whole_post_fix_may_not_delete_the_first_copy_of_a_code_block() -> None:
+    """A later section repeats the running example's block: the first
+    copy stays (the code between them uses it); a copy in an earlier
+    section lets it go."""
+    sentences = _sentences(3)
+    copy = ("다른 절", "## 다른 절\n\n같은 코드입니다.\n\n" + _EXAMPLE + "\n")
+    for earlier in (False, True):
+        model = Model()
+        writer = _writer(model)
+        md = _verify(writer, _section(sentences, _EXAMPLE))
+        model.edits = [Edit(find=_EXAMPLE, replace="")]
+        written = [copy, (SECTION, md)] if earlier else [(SECTION, md), copy]
+        out = dict(
+            asyncio.run(
+                writer.apply_findings(
+                    written,
+                    [PostFinding(section="캐시", problem="p", fix="f")],
+                    _ledger(),
+                    title_of=lambda s: s,
+                    own_of=lambda _s: list(_ledger()),
+                    reference_of=lambda _e: "",
+                )
+            )
+        )
+        assert (_EXAMPLE in out[SECTION]) == (not earlier)
+
+
 def test_a_review_without_a_valid_answer_blocks_the_post() -> None:
     writer = _writer(_FailingReview())
     draft = _section(_sentences(2))

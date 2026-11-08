@@ -94,6 +94,34 @@ def test_a_block_may_go_only_when_a_copy_remains(asset: str, copy: str) -> None:
         assert fixed.count(asset) == (1 if copy == "section" else 0)
 
 
+@pytest.mark.parametrize(
+    "asset", [CODE, TABLE, "$$\ny = Wx\n$$", "![구조](https://x/a.png)"]
+)
+@pytest.mark.parametrize("copy", ["earlier", "later", "both"])
+def test_a_code_block_may_go_only_when_a_copy_stays_before_it(
+    asset: str, copy: str
+) -> None:
+    """Code runs in reading order: deleting a block whose copy is only in a
+    later section breaks the code between them. Figures, tables and
+    equations keep the any-section rule."""
+    text = _section("설명입니다.", asset, "다음 설명입니다.")
+    other = _section("다른 절입니다.", asset)
+    earlier = other if copy in ("earlier", "both") else _section("앞 절.")
+    later = other if copy in ("later", "both") else _section("뒤 절.")
+    rest = f"{earlier}\n\n{later}"
+    edits = [(f"{asset}\n\n다음", "다음")]
+    revision = transact(
+        text, edits, verifiers=no_checks(), max_prose_cut=CUT, rest=rest, later=later
+    )
+    fixed, applied, _ = apply_edits(text, edits, rest=rest, later=later)
+    removable = copy != "later" or asset != CODE
+    assert revision.taken == removable and (applied == 1) == removable
+    gone = _section("설명입니다.", "다음 설명입니다.")
+    assert (lost_assets(text, gone, rest, None, later) == "") == removable
+    # Without ``later``, the whole rest counts as before the section.
+    assert lost_assets(text, gone, rest) == ""
+
+
 def test_an_asset_fixed_in_place_is_not_lost() -> None:
     before = _section("설명입니다.", CODE)
     after = before.replace("retries=3", "retries=5")
@@ -390,3 +418,32 @@ def test_the_default_limits_keep_the_former_thresholds() -> None:
     limits = Limits()
     assert limits.max_length_share == 1.5
     assert dict(limits.min_visuals) == {"deep": 2, "standard": 1, "brief": 0}
+
+
+# ---- the program check as transaction problems ----------------------------------
+
+
+def _program_set(later: str) -> VerifierSet:
+    from scholar_lens.domain.program import program_problems
+
+    def whole(markdown: str) -> list[Problem]:
+        return program_problems([("앞", markdown, True), ("뒤", later, True)])
+
+    return VerifierSet("앞", (whole,))
+
+
+def test_a_block_rewritten_with_the_same_fault_adds_no_program_problem() -> None:
+    before = _section("```python\n@serve.batch(\n```")
+    after = _section("```python\nfrom ray import serve\n\n@serve.batch(\n```")
+    assert _program_set("").added(before, after) == []
+
+
+def test_one_more_undefined_name_is_a_new_program_problem() -> None:
+    later = _section("```python\nclient.run(store)\n```")
+    before = _section("```python\nclient, store = 1, 2\n```")
+    after = _section("```python\nstore = 2\n```")
+    (added,) = _program_set(later).added(before, after)
+    assert added.kind == "program" and added.text.endswith("client")
+    # The later block already lacking a name: one more is still new.
+    fewer = _section("```python\nclient = 1\n```")
+    assert _program_set(later).added(fewer, _section("```python\nx = 1\n```"))

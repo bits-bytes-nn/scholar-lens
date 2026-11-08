@@ -11,6 +11,9 @@ import re
 import symtable
 import textwrap
 from collections.abc import Sequence
+from dataclasses import dataclass
+
+from scholar_lens.domain.verifiers import Problem
 
 _PYTHON_INFO = ("python", "py", "python3")
 
@@ -150,10 +153,62 @@ def placeholder_lines(tree: ast.Module) -> list[int]:
     return lines
 
 
+@dataclass(frozen=True)
+class _CodeFinding:
+    """One problem of the code check: its section, its message, the part of
+    the message that quotes the block, and the names a block uses that
+    nothing defines (a names problem)."""
+
+    title: str
+    message: str
+    passage: str = ""
+    names: tuple[str, ...] = ()
+
+
 def python_code_problems(
     sections: Sequence[tuple[str, str, bool]],
 ) -> list[tuple[str, str]]:
-    """(section title, problem) for the guide's Python code read in order,
+    """(section title, problem) of :func:`_code_findings`."""
+    return [(f.title, f.message) for f in _code_findings(sections)]
+
+
+# The problem kind of the whole post's program check.
+PROGRAM_PROBLEM = "program"
+
+
+def program_problems(sections: Sequence[tuple[str, str, bool]]) -> list[Problem]:
+    """:func:`python_code_problems` as problems an edit transaction compares:
+    a block that does not parse or has placeholders quotes the block as its
+    passage (a rewritten block with the same fault is the same problem),
+    and each name nothing defines is a problem of its own (a fix that
+    leaves one more name undefined adds one).
+
+    Args:
+        sections: (title, markdown, checked), in reading order.
+
+    Returns:
+        The problems, in order.
+    """
+    out: list[Problem] = []
+    for f in _code_findings(sections):
+        if f.names:
+            out += [
+                Problem(
+                    PROGRAM_PROBLEM,
+                    f"{f.title}: a python block uses a name no earlier block or "
+                    f"import defines: {name}",
+                )
+                for name in f.names
+            ]
+        else:
+            out.append(Problem(PROGRAM_PROBLEM, f"{f.title}: {f.message}", f.passage))
+    return out
+
+
+def _code_findings(
+    sections: Sequence[tuple[str, str, bool]],
+) -> list[_CodeFinding]:
+    """The problems of the guide's Python code read in order,
     as a reader pastes it: a block that does not parse, and a name a block
     uses that no block so far (nor Python itself) defines. ``sections`` are
     (title, markdown, checked): every block's definitions count (a REPL or
@@ -166,7 +221,7 @@ def python_code_problems(
     standard library (``ast``, ``symtable``)."""
     known = set(dir(builtins)) | {"__name__", "__file__"}
     reliable = True
-    problems: list[tuple[str, str]] = []
+    problems: list[_CodeFinding] = []
     for title, markdown, checked in sections:
         for block in python_blocks(markdown):
             session = _session_code(block)
@@ -179,11 +234,10 @@ def python_code_problems(
                 known |= _recovered_names(code)
                 if report:
                     reason = e.msg if isinstance(e, SyntaxError) else str(e)
+                    passage = f"({reason}): {code.strip()[:120]}"
                     problems.append(
-                        (
-                            title,
-                            f"a python block does not parse ({reason}): "
-                            f"{code.strip()[:120]}",
+                        _CodeFinding(
+                            title, f"a python block does not parse {passage}", passage
                         )
                     )
                 continue
@@ -194,23 +248,26 @@ def python_code_problems(
             ):
                 reliable = False
             if report and not is_excerpt(code) and placeholder_lines(tree):
+                passage = code.strip()[:120]
                 problems.append(
-                    (
+                    _CodeFinding(
                         title,
                         "the block has placeholders; show runnable code or "
                         "mark it as an excerpt (its first line "
-                        f"`{EXCERPT_MARKER}`): {code.strip()[:120]}",
+                        f"`{EXCERPT_MARKER}`): {passage}",
+                        passage,
                     )
                 )
             bound = _bound_names(table)
             missing = sorted(_free_globals(table) - bound - known)
             if report and reliable and missing:
                 problems.append(
-                    (
+                    _CodeFinding(
                         title,
                         "a python block uses names no earlier block or import "
                         f"defines: {', '.join(missing)}; define or import them "
                         "where a reader pasting the blocks in order has them",
+                        names=tuple(missing),
                     )
                 )
             known |= bound

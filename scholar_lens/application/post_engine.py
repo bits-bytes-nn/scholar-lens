@@ -115,7 +115,7 @@ from scholar_lens.domain.post_spec import (
     evidence_policy,
     other_sdk,
 )
-from scholar_lens.domain.program import python_code_problems
+from scholar_lens.domain.program import program_problems, python_code_problems
 from scholar_lens.domain.prompts.rules import (
     FIX_ANSWER,
     TARGETS_SYSTEM,
@@ -1119,6 +1119,7 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
                 title_of=lambda s: s.title,
                 own_of=lambda s: self.own(s, ledger),
                 reference_of=self.reference_for,
+                post_check=self.program_check if self.spec.runnable_kinds else None,
             )
         # The fixes are checked again, not trusted: what is left goes on the
         # PR checklist.
@@ -1161,16 +1162,21 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
         """(section heading, problem) of the code a reader pastes in order:
         a block that does not parse, a name nothing defines (the runnable
         sections only; every section's definitions count)."""
-        return python_code_problems(
-            [
-                (
-                    section_heading(md) or s.title,
-                    md,
-                    s.kind in self.spec.runnable_kinds,
-                )
-                for s, md in written
-            ]
-        )
+        return python_code_problems(self._program_sections(written))
+
+    def _program_sections(
+        self, written: Sequence[tuple[SectionT, str]]
+    ) -> list[tuple[str, str, bool]]:
+        """(heading, markdown, runnable) of the written sections, in order."""
+        return [
+            (section_heading(md) or s.title, md, s.kind in self.spec.runnable_kinds)
+            for s, md in written
+        ]
+
+    def program_check(self, written: Sequence[tuple[SectionT, str]]) -> list[Problem]:
+        """The program check of :meth:`program_problems` as problems (a
+        whole-post fix's transaction refuses a fix that adds one)."""
+        return program_problems(self._program_sections(written))
 
     def program_findings(
         self, written: Sequence[tuple[SectionT, str]]

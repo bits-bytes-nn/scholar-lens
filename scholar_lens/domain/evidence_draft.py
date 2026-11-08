@@ -520,16 +520,23 @@ def assets(markdown: str) -> dict[str, list[str]]:
     }
 
 
+# The asset kind a reader runs in order: its copy must come first.
+_CODE_BLOCK = "code block"
+
+
 def lost_assets(
     before: str,
     after: str,
     rest: str = "",
     owned_figures: Collection[str] | None = None,
+    later: str = "",
 ) -> str:
     """The first kind of asset ``after`` lost with no copy left ("" when
     none): a revision may fix an item in place (the count stays), and may
     drop a repeated one when an equivalent copy stays in ``after`` or in
-    ``rest`` (the rest of the post).
+    ``rest`` (the rest of the post). A code block is run in reading order:
+    its copy must stay in ``after`` or in a section before this one (a copy
+    only in ``later`` comes after the code that uses it).
 
     Args:
         before: The text before the revision.
@@ -537,12 +544,19 @@ def lost_assets(
         rest: The other sections of the post.
         owned_figures: The figures given to the section; a figure not among
             them may go (None: every figure is the section's).
+        later: The part of ``rest`` after this section ("": all of
+            ``rest`` comes before it).
 
     Returns:
         "code block", "table", "figure", "equation" or "".
     """
     old, new = assets(before), assets(after)
     elsewhere = assets(rest) if rest else {}
+    if later and elsewhere:
+        before_this = Counter(elsewhere[_CODE_BLOCK]) - Counter(
+            assets(later)[_CODE_BLOCK]
+        )
+        elsewhere[_CODE_BLOCK] = list(before_this.elements())
     for kind, items in old.items():
         if len(new[kind]) >= len(items):
             continue
@@ -586,6 +600,7 @@ def structure_lost(
     rest: str = "",
     max_prose_cut: float,
     owned_figures: Collection[str] | None = None,
+    later: str = "",
 ) -> str:
     """Why a revision lost the draft's structure ("" when it did not): a
     heading gone, a code block, table, figure or display equation gone with
@@ -597,6 +612,8 @@ def structure_lost(
         after: The revision.
         rest: The other sections of the post.
         max_prose_cut: The largest share of the prose a revision may cut.
+        owned_figures: The figures given to the section.
+        later: The part of ``rest`` after this section.
 
     Returns:
         The reason, or "".
@@ -605,7 +622,7 @@ def structure_lost(
         _HEADINGS.findall(without_code(after))
     ):
         return "a heading was lost"
-    if kind := lost_assets(before, after, rest, owned_figures):
+    if kind := lost_assets(before, after, rest, owned_figures, later):
         return f"{'an' if kind[0] in 'aeiou' else 'a'} {kind} was lost"
     if len(" ".join(prose_sentences(after))) < (1 - max_prose_cut) * len(
         " ".join(prose_sentences(before))
@@ -707,13 +724,15 @@ def apply_edits(
     *,
     rest: str = "",
     owned_figures: Collection[str] | None = None,
+    later: str = "",
 ) -> tuple[str, int, list[str]]:
     """``markdown`` with the (find, replace) edits whose ``find`` occurs
     exactly once applied in order (an empty ``replace`` deletes), with the
     guards of the review editor on the final text (edits one by one when it
     fails): no edit may unbalance a code fence, change a ``## `` heading,
     remove the only copy of a figure, equation, table or code block (a copy
-    in ``rest``, the other sections, counts), or add a writing-rule slip.
+    in ``rest``, the other sections, counts; a code block's only before
+    ``later``, the sections after this one), or add a writing-rule slip.
     Returns the text, the number applied and why the others were skipped.
     A list item an edit emptied goes with its marker; nothing else is
     touched."""
@@ -726,6 +745,7 @@ def apply_edits(
         max_edits=MAX_EDITS,
         rest=rest,
         owned_figures=owned_figures,
+        later=later,
     )
     lines = text.split("\n")
     roles = block_lines(text)

@@ -829,6 +829,7 @@ def apply_edits(
     max_edits: int,
     rest: str = "",
     owned_figures: Collection[str] | None = None,
+    later: str = "",
 ) -> tuple[str, int, list[str]]:
     """Apply edits whose ``find`` occurs exactly once in the current text.
 
@@ -839,8 +840,9 @@ def apply_edits(
     redundant ``###``/``####`` subsection may be (level jumps are repaired at
     publish time). An edit may drop a repeated figure, display equation,
     table or code block, never its only copy (``rest``: the other sections
-    of the post, where a copy may remain), and may not add a writing-rule
-    slip.
+    of the post, where a copy may remain; a code block's copy only in a
+    section before ``later``, the sections after this one), and may not add
+    a writing-rule slip.
 
     The guards judge the edits' final text: edits that only pass together
     (a table's header and its delimiter row changed apart) are applied
@@ -860,7 +862,7 @@ def apply_edits(
             continue
         edited = edited.replace(edit.find, edit.replace, 1)
         applied.append(edit)
-    if applied and not _guard(text, applied, edited, rest, owned_figures):
+    if applied and not _guard(text, applied, edited, rest, owned_figures, later):
         return edited, len(applied), skipped + over
     count, skipped = 0, []
     for edit in batch:
@@ -868,7 +870,7 @@ def apply_edits(
             skipped.append(reason)
             continue
         edited = text.replace(edit.find, edit.replace, 1)
-        if reason := _guard(text, [edit], edited, rest, owned_figures):
+        if reason := _guard(text, [edit], edited, rest, owned_figures, later):
             skipped.append(f"{reason}: {edit.find[:60]!r}")
             continue
         text = edited
@@ -892,6 +894,7 @@ def _guard(
     edited: str,
     rest: str = "",
     owned_figures: Collection[str] | None = None,
+    later: str = "",
 ) -> str:
     """Why ``edits``, which turned ``text`` into ``edited``, may not stand
     ("" when they may): a fence left unbalanced, a top-level heading changed,
@@ -921,7 +924,7 @@ def _guard(
     # the open code block had swallowed; it may not lose or rename one.
     if after != before and not (closes_fence and _is_subsequence(before, after)):
         return "would change a heading"
-    if lost := lost_assets(text, edited, rest, owned_figures):
+    if lost := lost_assets(text, edited, rest, owned_figures, later):
         return f"would remove the only {lost}"
     if added := added_slips(text, edited):
         return f"would add a writing-rule slip ({added[0]})"

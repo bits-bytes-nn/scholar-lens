@@ -113,6 +113,7 @@ def transact(
     verifiers: VerifierSet,
     max_prose_cut: float,
     rest: str = "",
+    later: str = "",
 ) -> Revision:
     """``before`` revised by ``edits``, or as it was when they may not stand.
 
@@ -121,19 +122,29 @@ def transact(
         edits: (find, replace) pairs; an empty replace deletes.
         verifiers: The section's verifier set.
         max_prose_cut: The largest share of the prose one revision may cut.
-        rest: The other sections of the post: a figure, equation, table or
-            code block may go when an equivalent copy stays there.
+        rest: The other sections of the post: a figure, equation or table
+            may go when an equivalent copy stays there, a code block when
+            one stays in a section before this one.
+        later: The part of ``rest`` after this section ("": all of it
+            comes before).
 
     Returns:
         The revision (``taken`` when the section changed).
     """
     owned = verifiers.figures
-    fixed, applied, skipped = apply_edits(before, edits, rest=rest, owned_figures=owned)
+    fixed, applied, skipped = apply_edits(
+        before, edits, rest=rest, owned_figures=owned, later=later
+    )
     if not applied:
         return Revision(before, skipped=tuple(skipped))
     fixed = strip_revision_notes(fixed, before)
     reason = structure_lost(
-        before, fixed, rest=rest, max_prose_cut=max_prose_cut, owned_figures=owned
+        before,
+        fixed,
+        rest=rest,
+        max_prose_cut=max_prose_cut,
+        owned_figures=owned,
+        later=later,
     ) or ("it stops mid-sentence" if ends_mid_sentence(fixed) else "")
     if reason:
         return Revision(before, applied, tuple(skipped), reason)
