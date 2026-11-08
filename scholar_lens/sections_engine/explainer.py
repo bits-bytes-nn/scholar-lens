@@ -202,12 +202,13 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
         max_code_results: int = 8,
         callbacks: list[Any] | None = None,
         max_total_tokens: int | None = None,
+        max_cost_usd: float | None = None,
         llm_factory: BedrockLanguageModelFactory | None = None,
     ) -> None:
         self.paper = paper
         self.language = language
         self.callbacks = callbacks or []
-        self._init_token_budget(self.callbacks, max_total_tokens)
+        self._init_token_budget(self.callbacks, max_total_tokens, max_cost_usd)
         self.citation_summarizer = citation_summarizer
         self.code_retriever = code_retriever
         self.translation_guideline = translation_guideline or []

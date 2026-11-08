@@ -116,6 +116,9 @@ class PipelineOutcome:
     # The blog PR was requested and enabled but could not be opened.
     pr_error: str | None = None
     warnings: list[str] = field(default_factory=list)
+    # Problems the post may not be merged with as is (also first in
+    # ``warnings``, marked, for readers of the warnings alone).
+    blocking: list[str] = field(default_factory=list)
 
 
 def blocking_notes(blocking: Sequence[str]) -> list[str]:
@@ -243,6 +246,7 @@ async def publish_artifact(
             *blocking_notes(request.blocking),
             *request.validation_warnings,
         ],
+        blocking=list(request.blocking),
     )
     github = context.config.resources.github
     if create_pr and not github.enabled:

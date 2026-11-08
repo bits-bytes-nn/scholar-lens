@@ -190,3 +190,33 @@ def test_access_errors_are_told_apart_from_throttling() -> None:
     assert is_access_error(error("AccessDeniedException", 403))
     assert not is_access_error(error("ThrottlingException", 429))
     assert not is_access_error(ValueError("bad JSON"))
+
+
+def test_expired_or_missing_credentials_are_access_errors() -> None:
+    from botocore.exceptions import NoCredentialsError, TokenRetrievalError
+
+    from scholar_lens.adapters.retry import is_access_error, stops_the_run
+
+    expired = TokenRetrievalError(provider="sso", error_msg="Token has expired")
+    for error in (NoCredentialsError(), expired):
+        wrapped = RuntimeError("figure analysis failed")
+        wrapped.__cause__ = error
+        assert is_access_error(wrapped) and stops_the_run(wrapped)
+
+
+def test_only_the_callers_own_refusal_stops_optional_work() -> None:
+    from botocore.exceptions import ClientError
+
+    from scholar_lens.adapters.retry import stops_the_run
+    from scholar_lens.domain.usage import TokenBudgetExceeded
+
+    def error(code: str) -> ClientError:
+        return ClientError({"Error": {"Code": code}}, "Converse")
+
+    assert stops_the_run(error("AccessDeniedException"))
+    assert stops_the_run(error("ExpiredTokenException"))
+    assert stops_the_run(TokenBudgetExceeded("spent"))
+    # One image the model refuses: that figure stays unanalysed, the run goes on.
+    assert not stops_the_run(error("ValidationException"))
+    assert not stops_the_run(error("ThrottlingException"))
+    assert not stops_the_run(ValueError("bad JSON"))

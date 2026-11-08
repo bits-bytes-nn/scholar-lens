@@ -167,6 +167,66 @@ async def test_code_analysis_failure_degrades_to_no_codebase(  # type: ignore[no
     assert result == (None, None)
 
 
+async def test_a_failed_code_index_keeps_the_codebase_summary(  # type: ignore[no-untyped-def]
+    monkeypatch, tmp_path
+) -> None:
+    from scholar_lens.adapters.documents import paper_reader as paper_pipeline
+
+    class Retriever:
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
+            pass
+
+        async def download_repositories(self, urls: list[str]) -> None:
+            pass
+
+        async def build_index(self) -> None:
+            raise RuntimeError("embedding model not enabled")
+
+        async def generate_codebase_summary(self) -> str:
+            return "a LoRA trainer"
+
+    monkeypatch.setattr(paper_pipeline, "LanguageModelId", lambda value: value)
+    monkeypatch.setattr(paper_pipeline, "CodeRetriever", Retriever)
+    result = await paper_pipeline._process_code(
+        _context(),  # type: ignore[arg-type]
+        tmp_path,
+        ["https://github.com/x/y"],
+        [],
+        index=True,
+        index_factory=Retriever,  # type: ignore[arg-type]
+    )
+    assert result == ("a LoRA trainer", None)
+
+
+async def test_refused_credentials_stop_code_analysis(  # type: ignore[no-untyped-def]
+    monkeypatch, tmp_path
+) -> None:
+    from botocore.exceptions import NoCredentialsError
+
+    from scholar_lens.adapters.documents import paper_reader as paper_pipeline
+
+    class Retriever:
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
+            pass
+
+        async def download_repositories(self, urls: list[str]) -> None:
+            pass
+
+        async def generate_codebase_summary(self) -> str:
+            raise NoCredentialsError()
+
+    monkeypatch.setattr(paper_pipeline, "LanguageModelId", lambda value: value)
+    monkeypatch.setattr(paper_pipeline, "CodeRetriever", Retriever)
+    with pytest.raises(NoCredentialsError):
+        await paper_pipeline._process_code(
+            _context(),  # type: ignore[arg-type]
+            tmp_path,
+            ["https://github.com/x/y"],
+            [],
+            index=False,
+        )
+
+
 @pytest.mark.parametrize("index", [False, True])
 async def test_the_code_index_is_built_only_when_asked(  # type: ignore[no-untyped-def]
     monkeypatch, tmp_path, index: bool
@@ -201,7 +261,7 @@ async def test_the_code_index_is_built_only_when_asked(  # type: ignore[no-untyp
     )
     assert summary == "a LoRA trainer"
     assert (retriever is not None) is index
-    assert calls == ["download", *(["index"] if index else []), "summary"]
+    assert calls == ["download", "summary", *(["index"] if index else [])]
 
 
 @pytest.mark.parametrize(

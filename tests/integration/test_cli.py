@@ -205,6 +205,17 @@ def test_invalid_request_is_rejected(capsys: pytest.CaptureFixture) -> None:
     assert _output(capsys)["status"] == "rejected"
 
 
+def test_an_invalid_request_reads_as_a_usage_error(
+    capsys: pytest.CaptureFixture,
+) -> None:
+    assert cli.main(["survey", "plan", "x", "--since", "2025", "--until", "2020"]) == (
+        cli.EXIT_REJECTED
+    )
+    error = _output(capsys)["error"]
+    assert error.startswith(f"{cli.PROG}: invalid arguments: ")
+    assert "errors.pydantic.dev" not in error and "input_value" not in error
+
+
 def test_ctrl_c_in_a_local_run_prints_an_interrupted_result(
     capsys: pytest.CaptureFixture,
 ) -> None:

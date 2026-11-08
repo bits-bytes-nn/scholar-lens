@@ -42,12 +42,13 @@ from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
-from scholar_lens.domain.jobs import JobRequest, JobResult
+from scholar_lens.domain.jobs import JobRequest, JobResult, validation_summary
 from scholar_lens.domain.survey.plan import SurveyInputError
 from scholar_lens.entrypoints.logs import configure_logging
 
 EXIT_OK, EXIT_FAILED, EXIT_REJECTED, EXIT_PENDING, EXIT_ERROR = 0, 1, 2, 3, 4
 EXIT_PR_FAILED = 5
+PROG = "scholar-lens"
 _EXIT_CODES_HELP = (
     "Exit codes: 0 succeeded or submitted, 1 failed, 2 rejected input, "
     "3 still running, 4 the command itself failed, 5 artifact saved but the "
@@ -122,7 +123,7 @@ class _JsonArgumentParser(argparse.ArgumentParser):
 
 def build_parser() -> argparse.ArgumentParser:
     parser = _JsonArgumentParser(
-        prog="scholar-lens",
+        prog=PROG,
         description=(
             "Generate AI/ML paper reviews, summaries, technical guides and "
             "paper surveys."
@@ -331,6 +332,14 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_false",
         help="Check and save the post without opening a pull request.",
     )
+    publish.add_argument(
+        "--resolved",
+        action="store_true",
+        help=(
+            "The run's blocking problems are fixed in the edited post: they no "
+            "longer block the PR and stay in its checklist as items to check."
+        ),
+    )
 
     status = commands.add_parser("status", help="Show a remote job's state and result.")
     status.add_argument("job_id")
@@ -530,11 +539,11 @@ def _run(request: JobRequest, *, job_id: str | None = None) -> JobResult:
     return result
 
 
-def _publish(post: str, *, create_pr: bool) -> int:
+def _publish(post: str, *, create_pr: bool, resolved: bool) -> int:
     """``publish``: one result, the exit code a run would have."""
     from scholar_lens.entrypoints.runtime import run_publish
 
-    result = run_publish(post, create_pr=create_pr)
+    result = run_publish(post, create_pr=create_pr, resolved=resolved)
     _emit(result)
     return result_exit_code(result)
 
@@ -643,7 +652,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "worker":
         return _work(args.request)
     if args.command == "publish":
-        return _publish(args.post, create_pr=args.create_pr)
+        return _publish(args.post, create_pr=args.create_pr, resolved=args.resolved)
     if args.command == "costs":
         try:
             return _costs(args)
@@ -654,7 +663,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         try:
             request = _request_from_args(args)
         except ValidationError as e:
-            _emit({"status": "rejected", "error": str(e)})
+            # A usage error, as argparse reports its own (prog: message).
+            _emit(
+                {
+                    "status": "rejected",
+                    "error": f"{PROG}: invalid arguments: {validation_summary(e)}",
+                }
+            )
             return EXIT_REJECTED
     try:
         if args.command == "status":

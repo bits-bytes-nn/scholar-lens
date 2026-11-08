@@ -5,9 +5,10 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from botocore.exceptions import ClientError
+from botocore.exceptions import ClientError, NoCredentialsError
 
 from scholar_lens.adapters import retry as retry_module
+from scholar_lens.domain.usage import TokenBudgetExceeded
 from scholar_lens.sections_engine.batch import BatchProcessor
 
 
@@ -97,6 +98,23 @@ class TestAExecuteWithFallback:
         chain = FakeChain(fail_in_batch={2}, batch_error=ValueError("bad input"))
         assert await _run(processor, [1, 2, 3], chain) == [10, None, 30]
         assert chain.single_calls == []  # not paid for twice
+
+    @pytest.mark.parametrize(
+        "error",
+        [
+            ClientError({"Error": {"Code": "AccessDeniedException"}}, "InvokeModel"),
+            NoCredentialsError(),
+            TokenBudgetExceeded("spent"),
+        ],
+    )
+    async def test_an_error_that_stops_the_run_is_not_folded_into_none(
+        self, processor: BatchProcessor, error: Exception
+    ) -> None:
+        # Every item would fail alike: the run stops instead of writing a
+        # review on empty analyses.
+        chain = FakeChain(fail_in_batch={2}, batch_error=error)
+        with pytest.raises(type(error)):
+            await _run(processor, [1, 2, 3], chain)
 
 
 class TestBatchProcessorValidation:

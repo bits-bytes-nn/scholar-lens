@@ -25,7 +25,11 @@ from scholar_lens.application.ports import (
 )
 from scholar_lens.domain.constants import LanguageModelId
 from scholar_lens.domain.model_registry import model_info_for_invoked_id
-from scholar_lens.domain.usage import TokenBudgetExceeded, UsageEvent
+from scholar_lens.domain.usage import (
+    TokenBudgetExceeded,
+    UsageEvent,
+    cost_ceiling_message,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -68,8 +72,7 @@ def budgeted(
         tracker.record(event)
         if max_cost_usd and tracker.cost_usd > max_cost_usd:
             raise TokenBudgetExceeded(
-                f"Cost ceiling passed: ${tracker.cost_usd:.2f} > ${max_cost_usd:.2f} "
-                f"(across {tracker.call_count} calls)."
+                cost_ceiling_message(tracker.cost_usd, tracker.call_count, max_cost_usd)
             )
 
     return record

@@ -527,6 +527,28 @@ class TestFigureAnalysisFailure:
         from botocore.exceptions import ClientError
 
         self._image(monkeypatch)
+        refused = ClientError(
+            {
+                "Error": {"Code": "ValidationException"},
+                "ResponseMetadata": {"HTTPStatusCode": 400},
+            },
+            "Converse",
+        )
+        figure = asyncio.run(
+            FigureReader.from_llm(
+                self._analyser(refused), "1", "/p/1.png", "Figure 1: X."
+            )
+        )
+        assert figure.caption == "Figure 1: X." and figure.analysis is None
+
+    def test_denied_model_access_stops_the_run(self, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+        import asyncio
+
+        from botocore.exceptions import ClientError
+
+        # Every figure would fail alike: the run stops instead of publishing
+        # a post whose figures were never read.
+        self._image(monkeypatch)
         denied = ClientError(
             {
                 "Error": {"Code": "AccessDeniedException"},
@@ -534,12 +556,8 @@ class TestFigureAnalysisFailure:
             },
             "Converse",
         )
-        figure = asyncio.run(
-            FigureReader.from_llm(
-                self._analyser(denied), "1", "/p/1.png", "Figure 1: X."
-            )
-        )
-        assert figure.caption == "Figure 1: X." and figure.analysis is None
+        with pytest.raises(ClientError):
+            asyncio.run(FigureReader.from_llm(self._analyser(denied), "1", "/p/1.png"))
 
     def test_token_budget_breach_still_stops_the_run(self, monkeypatch) -> None:  # type: ignore[no-untyped-def]
         import asyncio

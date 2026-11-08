@@ -6,7 +6,11 @@ from typing import Any
 from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel, Field
 
-from scholar_lens.adapters.retry import RetryableBase, is_transient_error
+from scholar_lens.adapters.retry import (
+    RetryableBase,
+    is_transient_error,
+    stops_the_run,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +49,8 @@ class BatchProcessor(BaseModel):
                 try:
                     return await retrying(single_input)
                 except Exception as e:
+                    if stops_the_run(e):
+                        raise
                     logger.error("'%s' failed for one item: %s", task_name, e)
                     return None
 
@@ -72,6 +78,9 @@ class BatchProcessor(BaseModel):
                 i: r for i, r in enumerate(chunk_results) if isinstance(r, Exception)
             }
             failed = [i for i, e in errors.items() if is_transient_error(e)]
+            for error in errors.values():
+                if stops_the_run(error):
+                    raise error
             for i, error in errors.items():
                 if i not in failed:
                     logger.error("'%s' failed for one item: %s", task_name, error)

@@ -37,7 +37,11 @@ from scholar_lens.adapters.http.rate_limit import (
     is_retryable_status,
 )
 from scholar_lens.adapters.http.url_guard import UnsafeUrlError, assert_url_is_public
-from scholar_lens.adapters.retry import RetryableBase, is_transient_error
+from scholar_lens.adapters.retry import (
+    RetryableBase,
+    is_transient_error,
+    stops_the_run,
+)
 from scholar_lens.domain.constants import (
     AppConstants,
     EnvVars,
@@ -45,7 +49,6 @@ from scholar_lens.domain.constants import (
     LocalPaths,
 )
 from scholar_lens.domain.paper.models import Content, Figure
-from scholar_lens.domain.usage import TokenBudgetExceeded
 from scholar_lens.domain.usage_context import staged
 
 logger = logging.getLogger(__name__)
@@ -90,15 +93,6 @@ def failure_reason(error: BaseException) -> str:
     return reason
 
 
-def _is_budget_breach(error: BaseException | None) -> bool:
-    """A token-budget stop anywhere in the cause chain: the run must end."""
-    while error is not None:
-        if isinstance(error, TokenBudgetExceeded):
-            return True
-        error = error.__cause__ or error.__context__
-    return False
-
-
 class FigureReader(RetryableBase):
     """Reads a figure's image and has the vision model describe it."""
 
@@ -119,7 +113,7 @@ class FigureReader(RetryableBase):
         try:
             analysis = await cls._analyse(figure_analyser, caption, image_data)
         except Exception as e:
-            if _is_budget_breach(e):
+            if stops_the_run(e):
                 raise
             # Retries exhausted, or the model refused the image: the figure (and
             # its caption) still belongs in the post, unanalysed (the pipeline
@@ -521,7 +515,7 @@ def _completed_figures(results: Sequence[Figure | BaseException]) -> list[Figure
     figures = []
     for result in results:
         if isinstance(result, BaseException):
-            if _is_budget_breach(result):
+            if stops_the_run(result):
                 raise result
             logger.warning("Figure extraction failed: %s", result)
             continue

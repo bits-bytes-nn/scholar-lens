@@ -10,11 +10,13 @@ from pydantic import (
     ConfigDict,
     EmailStr,
     Field,
+    ValidationError,
     model_validator,
 )
 
 from scholar_lens.adapters.aws.environment import is_running_in_aws
 from scholar_lens.domain.constants import EmbeddingModelId, LanguageModelId
+from scholar_lens.domain.jobs import validation_summary
 
 logger = logging.getLogger(__name__)
 
@@ -166,7 +168,8 @@ class Explanation(_Section):
     paper_evaluation_model_id: LanguageModelId = Field(
         default=LanguageModelId.CLAUDE_V5_5_OPUS
     )
-    # Writes the subtitle, TL;DR and closing assessment from the edited review.
+    # Sections engine: writes the subtitle, TL;DR and closing assessment from
+    # the edited review.
     paper_finalization_model_id: LanguageModelId = Field(
         default=LanguageModelId.CLAUDE_V5_5_OPUS
     )
@@ -187,27 +190,31 @@ class Explanation(_Section):
             raise ValueError("explanation.min_total_chars exceeds max_total_chars")
         return self
 
+    # Sections engine: thinking for the section judge and writer.
     evaluator_enable_thinking: bool = Field(default=False)
     synthesizer_enable_thinking: bool = Field(default=False)
     thinking_effort: ThinkingEffort = Field(default="medium")
     # Planning and whole-article editing decide coverage and consistency, so
     # they think harder than the per-section calls.
     planning_effort: ThinkingEffort = Field(default="high")
-    # A section scoring below min_quality_score, or missing a must-cover item,
-    # is revised; max_synthesis_attempts counts drafts per section.
+    # Sections engine: a section scoring below min_quality_score, or missing a
+    # must-cover item, is revised; max_synthesis_attempts counts drafts per
+    # section.
     min_quality_score: int = Field(default=70, ge=0, le=100)
     max_synthesis_attempts: int = Field(default=3, ge=1, le=6)
-    # Upper bound on planned sections; overflow is merged into the last one.
+    # Upper bound on planned sections (both engines); overflow is merged into
+    # the last one.
     max_sections: int = Field(default=20, ge=1, le=60)
-    # Whole-article edit passes; a second pass runs only for reported coverage
-    # gaps. 0 disables editing.
+    # Sections engine: whole-article edit passes; a second pass runs only for
+    # reported coverage gaps. 0 disables editing.
     max_edit_rounds: int = Field(default=2, ge=0, le=3)
-    # Hard total-token ceiling for one review run (None = no limit). The default
+    # Sections engine: hard total-token ceiling for one review run (None = no
+    # limit; max_cost_usd applies too). The default
     # leaves ~6x headroom over a LoRA-length paper (~1.4M tokens, ~$6 on Opus
     # 5.5) and stops a runaway run near $40.
     max_total_tokens: int | None = Field(default=8_000_000, gt=0)
-    # Evidence engine: hard ceiling on one run's estimated cost (list prices,
-    # USD; None = no limit). A review costs about $5-11.
+    # Both engines: hard ceiling on one run's estimated cost (list prices,
+    # USD; None = no limit). A review costs about $5-13.
     max_cost_usd: float | None = Field(default=40.0, gt=0)
     # Evidence engine: paper characters one reading agent covers (a longer
     # paper gets more readers, each on its own part).
@@ -229,13 +236,14 @@ class Summary(_Section):
             raise ValueError("summary.min_total_chars exceeds max_total_chars")
         return self
 
+    # Sections engine.
     summarizer_enable_thinking: bool = Field(default=False)
     thinking_effort: ThinkingEffort = Field(default="medium")
-    # Hard total-token ceiling for one summary run (None = no limit); a typical
-    # summary uses ~0.13M tokens.
+    # Sections engine: hard total-token ceiling for one summary run (None = no
+    # limit; max_cost_usd applies too); a typical summary uses ~0.13M tokens.
     max_total_tokens: int | None = Field(default=1_000_000, gt=0)
-    # Evidence engine: hard ceiling on one run's estimated cost (list prices,
-    # USD; None = no limit). A summary costs about $3.
+    # Both engines: hard ceiling on one run's estimated cost (list prices,
+    # USD; None = no limit). A summary costs about $1-3.
     max_cost_usd: float | None = Field(default=12.0, gt=0)
     # Evidence engine: paper characters one reading agent covers; a summary
     # needs fewer details, so one reader covers more of the paper.
@@ -399,6 +407,10 @@ class Survey(_Section):
         return self
 
 
+class ConfigFileError(ValueError):
+    """A configuration file with invalid settings."""
+
+
 class Config(_Section):
     resources: Resources = Field(
         default_factory=lambda: Resources(project_name="scholar-lens")
@@ -414,9 +426,18 @@ class Config(_Section):
 
     @classmethod
     def from_yaml(cls, file_path: str | Path) -> "Config":
+        """The configuration in ``file_path``.
+
+        Raises:
+            ConfigFileError: The file's settings are invalid (each failing
+                key named, with the file).
+        """
         with open(file_path, encoding="utf-8") as f:
             config_data = yaml.safe_load(f)
-        return cls(**config_data if config_data else {})
+        try:
+            return cls(**config_data if config_data else {})
+        except ValidationError as e:
+            raise ConfigFileError(f"{file_path}: {validation_summary(e)}") from e
 
     @classmethod
     def load(cls) -> "Config":

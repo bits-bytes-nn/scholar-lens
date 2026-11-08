@@ -323,3 +323,32 @@ def test_a_republished_post_keeps_the_images_it_shows(tmp_path: Path) -> None:
         "my-guide-1.png",
         "my-guide-2.png",
     ]
+
+
+def test_blocking_problems_are_their_own_result_field_and_resolvable(
+    context: Any,
+    repo: FakeRepo,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    work_dir = tmp_path / "guide-my-guide"
+    work_dir.mkdir()
+    outcome = asyncio.run(
+        publish_artifact(context, _request(work_dir, VALID_POST), create_pr=False)
+    )
+    assert outcome.blocking == ["the claim check did not run"]
+    post = str(outcome.markdown_path)
+
+    # Published as is, the run's blocking problems still block the PR.
+    capsys.readouterr()
+    assert cli.main(["publish", post, "--no-pr"]) == cli.EXIT_OK
+    result = json.loads(capsys.readouterr().out)
+    assert result["blocking"] == ["the claim check did not run"]
+
+    # The editor states they are fixed: no longer blocking, still to check.
+    assert cli.main(["publish", post, "--resolved"]) == cli.EXIT_OK
+    result = json.loads(capsys.readouterr().out)
+    assert result["blocking"] == []
+    (pull,) = repo.pulls
+    assert "### Blocking" not in pull.body
+    assert f"{publish.RESOLVED_NOTE}the claim check did not run" in pull.body

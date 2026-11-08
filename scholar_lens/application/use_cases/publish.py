@@ -174,10 +174,28 @@ def _fetch_images(
     ]
 
 
+RESOLVED_NOTE = "Marked resolved by the editor at publish (check before merging): "
+
+
+def mark_resolved(request: PublishRequest) -> None:
+    """The editor states the run's blocking problems are fixed in the
+    (edited) post: they stop blocking and stay in the PR checklist as items
+    to check, so the claim is reviewed rather than the problem dropped."""
+    request.review_notes += [f"{RESOLVED_NOTE}{b}" for b in request.blocking]
+    request.blocking = []
+
+
 async def publish_saved_post(
-    context: RunContext, request: PublishRequest, *, create_pr: bool
+    context: RunContext,
+    request: PublishRequest,
+    *,
+    create_pr: bool,
+    resolved: bool = False,
 ) -> PipelineOutcome:
     """Run the publisher's post-processing and validation on ``request``
     again and open (or update) its blog PR, exactly as the run's last step
-    would."""
+    would. ``resolved``: the editor fixed the run's blocking problems
+    (:func:`mark_resolved`)."""
+    if resolved:
+        mark_resolved(request)
     return await publish_artifact(context, request, create_pr=create_pr)

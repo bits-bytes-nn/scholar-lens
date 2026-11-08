@@ -94,6 +94,7 @@ class PaperSummarizer(RetryableBase, TokenBudgetGuard):
         enable_thinking: bool = False,
         thinking_effort: str = "medium",
         max_total_tokens: int | None = None,
+        max_cost_usd: float | None = None,
         callbacks: list[Any] | None = None,
         llm_factory: BedrockLanguageModelFactory | None = None,
     ) -> None:
@@ -104,7 +105,7 @@ class PaperSummarizer(RetryableBase, TokenBudgetGuard):
         # Hard total-token ceiling (None = no limit). Checked before the summary
         # call so an already-exhausted budget (from data prep) aborts rather than
         # spending more — parity with the review/guide token guards.
-        self._init_token_budget(callbacks, max_total_tokens)
+        self._init_token_budget(callbacks, max_total_tokens, max_cost_usd)
         self.llm_factory = llm_factory or BedrockLanguageModelFactory(
             boto_session=boto_session
         )

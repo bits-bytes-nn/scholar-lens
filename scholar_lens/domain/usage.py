@@ -88,3 +88,15 @@ class RunUsage(BaseModel):
 
 class TokenBudgetExceeded(RuntimeError):
     """Raised when a run exceeds its configured total-token budget."""
+
+
+def cost_ceiling_message(cost_usd: float, calls: int, max_cost_usd: float) -> str:
+    """Why a run stopped at its cost ceiling, and how to go on."""
+    return (
+        f"Cost ceiling passed: ${cost_usd:.2f} > ${max_cost_usd:.2f} "
+        f"(across {calls} calls). Raise the kind's ceiling "
+        "(explanation.max_cost_usd, summary.max_cost_usd, "
+        "tech_guide.max_cost_usd or survey.write_max_cost_usd; null for none). "
+        "On the evidence engine, a rerun with the same inputs resumes from its "
+        "saved stages."
+    )

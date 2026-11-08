@@ -74,6 +74,7 @@ class SectionsPaperWriter:
             synthesizer_enable_thinking=cfg.synthesizer_enable_thinking,
             callbacks=[tracker],
             max_total_tokens=cfg.max_total_tokens,
+            max_cost_usd=cfg.max_cost_usd,
         )
         review = await reviewer.run()
         logger.info("Generated the review body, TL;DR and closing assessment.")
@@ -95,6 +96,7 @@ class SectionsPaperWriter:
             enable_thinking=cfg.summarizer_enable_thinking,
             thinking_effort=cfg.thinking_effort,
             max_total_tokens=cfg.max_total_tokens,
+            max_cost_usd=cfg.max_cost_usd,
             callbacks=[tracker],
         )
         result = await summarizer.summarize(paper)

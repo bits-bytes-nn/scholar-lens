@@ -20,9 +20,18 @@ from botocore.exceptions import (
     ClientError,
     ConnectionClosedError,
     ConnectTimeoutError,
+    CredentialRetrievalError,
     EndpointConnectionError,
+    LoginError,
+    NoAuthTokenError,
+    NoCredentialsError,
+    PartialCredentialsError,
     ReadTimeoutError,
+    SSOError,
+    TokenRetrievalError,
 )
+
+from scholar_lens.domain.usage import TokenBudgetExceeded
 
 logger = logging.getLogger(__name__)
 
@@ -145,14 +154,59 @@ def is_transient_error(exc: BaseException) -> bool:
     return True in verdicts
 
 
+# Credentials that are missing, expired or cannot be loaded (an SSO or login
+# session that ran out mid-run): botocore raises these before any request.
+_CREDENTIAL_ERRORS: tuple[type[Exception], ...] = (
+    NoCredentialsError,
+    PartialCredentialsError,
+    CredentialRetrievalError,
+    TokenRetrievalError,
+    NoAuthTokenError,
+    SSOError,
+    LoginError,
+)
+
+
 def is_access_error(exc: BaseException) -> bool:
-    """Whether ``exc`` is an AWS service refusal no retry or degraded result
-    can fix (credentials, permissions, a rejected request): a step that
-    tolerates failures of optional work still raises it."""
+    """Whether ``exc`` is an AWS refusal no retry or degraded result can fix
+    (missing or expired credentials, permissions, a rejected request): a
+    step that tolerates failures of optional work still raises it."""
     return any(
-        isinstance(link, ClientError) and _classify(link) is False
+        isinstance(link, _CREDENTIAL_ERRORS)
+        or (isinstance(link, ClientError) and _classify(link) is False)
         for link in _cause_chain(exc)
     )
+
+
+# AWS refusals of the caller itself (not of one request's content).
+_DENIED_CODES: frozenset[str] = frozenset(
+    {
+        "AccessDenied",
+        "AccessDeniedException",
+        "UnauthorizedOperation",
+        "UnrecognizedClientException",
+        "ExpiredToken",
+        "ExpiredTokenException",
+        "InvalidClientTokenId",
+        "InvalidSignatureException",
+        "SignatureDoesNotMatch",
+    }
+)
+
+
+def stops_the_run(exc: BaseException) -> bool:
+    """Whether ``exc`` ends the run even inside optional work that degrades
+    on a failed item (figure and code analysis): missing, expired or
+    refused credentials, or a spent budget, anywhere in its cause chain. A
+    refusal of one item's content (a ``ValidationException`` for an image)
+    does not: every item would fail alike only for the caller's access."""
+    for link in _cause_chain(exc):
+        if isinstance(link, (*_CREDENTIAL_ERRORS, TokenBudgetExceeded)):
+            return True
+        if isinstance(link, ClientError):
+            if link.response.get("Error", {}).get("Code", "") in _DENIED_CODES:
+                return True
+    return False
 
 
 def _should_stop(retry_state: tenacity.RetryCallState) -> bool:

@@ -25,6 +25,7 @@ from scholar_lens.adapters.documents.parser import (
     attach_figure_context,
     failure_reason,
 )
+from scholar_lens.adapters.retry import stops_the_run
 from scholar_lens.adapters.scholarly.paper_source import PaperSource
 from scholar_lens.application.ports import PaperInputs
 from scholar_lens.domain.constants import LanguageModelId, LocalPaths
@@ -199,8 +200,10 @@ async def _process_code(
 ) -> tuple[str | None, Any]:
     """The codebase summary of the paper's repositories and, with ``index``,
     a retriever over its searchable code index (otherwise None: no chunk is
-    analysed or embedded). Code grounding is supplementary, so any failure
-    degrades to "no codebase" instead of failing the whole run."""
+    analysed or embedded). Code grounding is supplementary, so a failure
+    degrades to "no codebase" (or no code search, when only the index
+    fails) instead of failing the whole run, except one that stops the run
+    anywhere (refused or expired credentials, a spent budget)."""
     if not repo_urls:
         return None, None
     code_cfg = context.config.code
@@ -218,15 +221,27 @@ async def _process_code(
                 callbacks=callbacks,
             )
         await code_retriever.download_repositories(repo_urls)
-        if code_index is not None:
-            await code_index.build_index()
+        # The summary reads the files only: an index that cannot be built
+        # (an embedding model not enabled) leaves it, and the review is
+        # written without code search.
         summary = await code_retriever.generate_codebase_summary()
-        return summary, code_index
     except NoPythonFilesError:
         logger.warning("No Python files in the repositories; skipping code analysis.")
+        return None, None
     except Exception as e:  # noqa: BLE001 - supplementary input, see docstring
+        if stops_the_run(e):
+            raise
         logger.warning("Code analysis failed; continuing without it: %s", e)
-    return None, None
+        return None, None
+    if code_index is not None:
+        try:
+            await code_index.build_index()
+        except Exception as e:  # noqa: BLE001 - supplementary input
+            if stops_the_run(e):
+                raise
+            logger.warning("Code index failed; reviewing without code search: %s", e)
+            code_index = None
+    return summary, code_index
 
 
 async def _write_json(path: Path, data: Any) -> None:

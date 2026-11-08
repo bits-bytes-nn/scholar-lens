@@ -240,6 +240,30 @@ class TestRunJob:
         # A finished failure, not an interrupt: the failure is announced.
         assert finished == [result] and self.notified == [True]
 
+    def test_a_batch_result_points_to_s3_only(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """A Batch run's local files are gone with its container."""
+        from scholar_lens.domain.jobs import JobRequest
+
+        async def pipeline(context, request, tracker):  # type: ignore[no-untyped-def]
+            return runtime.PipelineOutcome(
+                title="LoRA",
+                markdown_path=tmp_path / "post.md",
+                plan_path=tmp_path / "plan.md",
+                s3_uri="s3://b/post.md",
+                blocking=["b"],
+            )
+
+        self._patch(monkeypatch, pipeline)
+        request = JobRequest(kind="review", source="2106.09685")
+        result = runtime.run_job(request, job_id="job-1")
+        assert result.markdown_path is None and result.plan_path is None
+        assert result.s3_uri == "s3://b/post.md" and result.blocking == ["b"]
+        local = runtime.run_job(request)
+        assert local.markdown_path == str(tmp_path / "post.md")
+        assert local.plan_path == str(tmp_path / "plan.md")
+
     def test_rejected_input(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from scholar_lens.adapters.scholarly.paper_source import NotAPdfError
         from scholar_lens.domain.jobs import JobRequest

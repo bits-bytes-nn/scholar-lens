@@ -13,7 +13,7 @@ from __future__ import annotations
 from typing import Literal
 from urllib.parse import urlparse
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from scholar_lens.domain.constants import S3Paths
 from scholar_lens.domain.survey.plan import parse_paper_id
@@ -193,6 +193,11 @@ class JobResult(BaseModel):
     # Set only on a failed run whose artifact was saved but whose PR failed.
     pr_error: str | None = None
     warnings: list[str] = Field(default_factory=list)
+    # Problems the post may not be merged with as is (a check that did not
+    # run, a claim check that objects to most of a section); also the first,
+    # marked ``warnings``. A run without a PR still succeeds with them, so a
+    # caller decides on this list.
+    blocking: list[str] = Field(default_factory=list)
     error: str | None = None
     # Blog-convention violations that blocked publishing (see post_validator).
     violations: list[str] = Field(default_factory=list)
@@ -235,3 +240,13 @@ def ssm_base(project_name: str, stage: str) -> str:
 
 def result_manifest_key(s3_prefix: str, job_id: str) -> str:
     return f"{s3_prefix}/{S3Paths.RESULTS.value}/{job_id}.json".lstrip("/")
+
+
+def validation_summary(error: ValidationError) -> str:
+    """``error`` as one line a user can act on: each failing field's dotted
+    path and pydantic's message, without the input dump and help links."""
+    parts = []
+    for item in error.errors(include_url=False, include_input=False):
+        where = ".".join(str(p) for p in item["loc"])
+        parts.append(f"{where}: {item['msg']}" if where else item["msg"])
+    return "; ".join(parts)

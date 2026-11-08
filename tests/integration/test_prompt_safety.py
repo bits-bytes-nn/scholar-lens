@@ -14,11 +14,11 @@ from scholar_lens.domain.prompt_safety import (
 )
 
 # The sections engine's templates register on import (bootstrap imports them).
-from scholar_lens.sections_engine.prompts import (
+from scholar_lens.sections_engine.prompts import (  # noqa: F401
     extraction,
     review,
     summary,
-)  # noqa: F401
+)
 
 PROMPTS_DIRS = (
     Path(__file__).parents[2] / "scholar_lens" / "sections_engine" / "prompts",

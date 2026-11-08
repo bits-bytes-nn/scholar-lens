@@ -10,7 +10,7 @@ from pydantic import ValidationError
 
 from scholar_lens.configs import Code, Config, Explanation, Github
 from scholar_lens.configs import TechGuide as TechGuideConfig
-from scholar_lens.configs.config import CONFIG_PATH
+from scholar_lens.configs.config import CONFIG_PATH, ConfigFileError
 from scholar_lens.domain.constants import LanguageModelId
 
 
@@ -60,7 +60,8 @@ class TestConfigValidation:
     ) -> None:
         cfg_file = tmp_path / "config.yaml"
         cfg_file.write_text(f"{section}:\n  {key}: x\n", encoding="utf-8")
-        with pytest.raises(ValidationError, match=key):
+        # The error names the file and the key, without pydantic's dump.
+        with pytest.raises(ConfigFileError, match=f"config.yaml: {section}.{key}"):
             Config.from_yaml(str(cfg_file))
 
     def test_guide_research_defaults_read_the_top_results_of_each_query(
@@ -178,7 +179,7 @@ class TestConfigLoading:
             "explanation:\n" "  paper_finalization_model_id: not-a-real-model\n",
             encoding="utf-8",
         )
-        with pytest.raises(ValidationError, match="paper_finalization_model_id"):
+        with pytest.raises(ConfigFileError, match="paper_finalization_model_id"):
             Config.from_yaml(str(cfg_file))
 
 

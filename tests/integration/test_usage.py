@@ -138,3 +138,17 @@ def test_a_response_cut_at_its_limit_is_still_priced(
         model.invoke([HumanMessage(content="hi")])
     assert tracker.output_tokens == 2_000 and tracker.cost_usd > 0
     assert tracker.events[-1].outcome == ("failed" if stop == "max_tokens" else "ok")
+
+
+def test_one_cost_ceiling_stops_the_sections_engine_too() -> None:
+    from scholar_lens.adapters.bedrock.usage import TokenBudgetGuard
+    from scholar_lens.domain.usage import TokenBudgetExceeded
+
+    tracker = TokenUsageTracker()
+    tracker.cost_usd = 5.0  # what the run's calls cost so far
+    guard = TokenBudgetGuard()
+    guard._init_token_budget([tracker], max_total_tokens=None, max_cost_usd=4.0)
+    with pytest.raises(TokenBudgetExceeded, match="explanation.max_cost_usd"):
+        guard._enforce_token_budget()
+    guard._init_token_budget([tracker], max_total_tokens=None, max_cost_usd=6.0)
+    guard._enforce_token_budget()

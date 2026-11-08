@@ -191,7 +191,7 @@ def run_job(request: JobRequest, *, job_id: str | None = None) -> JobResult:
         check_pr_ready(context, request)
         with cost_allocation(resources.project_name, resources.stage, request.kind):
             outcome = run_coroutine(run_use_case(context, request, tracker))
-        record_outcome(result, outcome, keep_plan_path=job_id is None)
+        record_outcome(result, outcome)
     except Exception as e:
         record_error(result, e, rejected_errors)
     except (KeyboardInterrupt, SystemExit) as e:
@@ -210,26 +210,25 @@ def run_job(request: JobRequest, *, job_id: str | None = None) -> JobResult:
         result.output_tokens = tracker.output_tokens
         result.estimated_cost_usd = round(tracker.estimated_cost_usd(), 4)
         result.usage = tracker.run_usage()
+        if job_id is not None:
+            # A Batch run's local files are gone with its container: its
+            # result points to the S3 copies (s3_uri) only.
+            result.markdown_path = result.plan_path = None
         _finish(context, result, tracker, notify=not interrupted)
     return result
 
 
-def record_outcome(
-    result: JobResult, outcome: PipelineOutcome, *, keep_plan_path: bool = True
-) -> None:
+def record_outcome(result: JobResult, outcome: PipelineOutcome) -> None:
     """Fold a pipeline's (or ``publish``'s) outcome into ``result``: a PR
-    that was requested but failed fails the run, its artifact's paths kept.
-    ``keep_plan_path``: False for a Batch run, whose plan file is gone with
-    its container (``s3_uri`` only)."""
+    that was requested but failed fails the run, its artifact's paths kept."""
     result.status = "succeeded"
     result.title = outcome.title
     result.markdown_path = str(outcome.markdown_path) if outcome.markdown_path else None
-    result.plan_path = (
-        str(outcome.plan_path) if outcome.plan_path and keep_plan_path else None
-    )
+    result.plan_path = str(outcome.plan_path) if outcome.plan_path else None
     result.s3_uri = outcome.s3_uri
     result.pr_url = outcome.pr_url
     result.warnings = outcome.warnings
+    result.blocking = outcome.blocking
     if outcome.pr_error is not None:
         # The artifact is saved (paths above) but not published.
         result.status = "failed"
@@ -403,7 +402,7 @@ def format_result_notification(result: JobResult) -> tuple[str, str]:
     return format_alarm(event=label, status=result.status.upper(), fields=fields)
 
 
-def run_publish(target: str, *, create_pr: bool) -> JobResult:
+def run_publish(target: str, *, create_pr: bool, resolved: bool = False) -> JobResult:
     """Check the saved or rejected post at ``target`` again and open its PR.
 
     The result is a run's: ``succeeded``; ``failed`` (the post broke a blog
@@ -415,6 +414,7 @@ def run_publish(target: str, *, create_pr: bool) -> JobResult:
         target: A local ``.md`` path or an ``s3://`` URI (see
             :func:`load_saved_post`).
         create_pr: Open (or update) the blog PR when GitHub is enabled.
+        resolved: The editor fixed the run's blocking problems in the post.
 
     Returns:
         The result, as a run reports it.
@@ -433,7 +433,7 @@ def run_publish(target: str, *, create_pr: bool) -> JobResult:
         result.kind = RESULT_KINDS.get(request.kind)
         check_pr_token(context, create_pr)
         outcome = run_coroutine(
-            publish_saved_post(context, request, create_pr=create_pr)
+            publish_saved_post(context, request, create_pr=create_pr, resolved=resolved)
         )
         record_outcome(result, outcome)
     except Exception as e:  # noqa: BLE001 - folded into the result

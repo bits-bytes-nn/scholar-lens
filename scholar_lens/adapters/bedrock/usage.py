@@ -32,6 +32,7 @@ from scholar_lens.domain.usage import (
     RunUsage,
     TokenBudgetExceeded,
     UsageEvent,
+    cost_ceiling_message,
 )
 from scholar_lens.domain.usage_context import current_stage
 
@@ -143,12 +144,19 @@ class TokenUsageTracker(BaseCallbackHandler):
         Bedrock bills at its own rates, so treat this as an estimate."""
         return round(self.cost_usd, 4)
 
-    def check_budget(self, max_total_tokens: int | None) -> None:
-        """Raise :class:`TokenBudgetExceeded` if over the configured budget."""
+    def check_budget(
+        self, max_total_tokens: int | None, max_cost_usd: float | None = None
+    ) -> None:
+        """Raise :class:`TokenBudgetExceeded` if over the configured token
+        budget or cost ceiling."""
         if max_total_tokens and self.total_tokens > max_total_tokens:
             raise TokenBudgetExceeded(
                 f"Token budget exceeded: {self.total_tokens} > {max_total_tokens} "
                 f"(across {self.call_count} calls)."
+            )
+        if max_cost_usd and self.cost_usd > max_cost_usd:
+            raise TokenBudgetExceeded(
+                cost_ceiling_message(self.cost_usd, self.call_count, max_cost_usd)
             )
 
 
@@ -168,22 +176,26 @@ class TokenBudgetGuard:
 
     _token_tracker: TokenUsageTracker | None
     max_total_tokens: int | None
+    max_cost_usd: float | None = None
 
     def _init_token_budget(
         self,
         callbacks: Sequence[BaseCallbackHandler] | None,
         max_total_tokens: int | None,
+        max_cost_usd: float | None = None,
     ) -> None:
         self._token_tracker = next(
             (cb for cb in (callbacks or []) if isinstance(cb, TokenUsageTracker)),
             None,
         )
         self.max_total_tokens = max_total_tokens
+        self.max_cost_usd = max_cost_usd
 
     def _enforce_token_budget(self) -> None:
-        """Abort the run if the configured total-token budget is exceeded."""
-        if self._token_tracker is not None and self.max_total_tokens:
-            self._token_tracker.check_budget(self.max_total_tokens)
+        """Abort the run if the configured total-token budget or cost
+        ceiling is exceeded."""
+        if self._token_tracker is not None:
+            self._token_tracker.check_budget(self.max_total_tokens, self.max_cost_usd)
 
     def _enforce_hard_token_budget(self) -> None:
         """Abort the run (``TokenBudgetExceeded``) once spend passes
