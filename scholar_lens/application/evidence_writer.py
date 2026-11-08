@@ -813,10 +813,14 @@ class EvidenceWriter:
         if section is not None:
             self.checked[id(section)] = checks
         evidence = [*own, *earlier[-30:]]
+        # The review runs once; its problems stand until a fix made for them
+        # is taken (the claims and code are checked again below).
+        unaddressed: list[str] = []
         for round_ in range(self.max_fix_rounds + 1):
             code = verifiers.run(draft)
             claims = await self.check_claims(draft, ledger, own, earlier)
             review = await self.review(draft, review_context) if round_ == 0 else []
+            unaddressed += review
             issues = [p.text for p in code] + [f"{v}: {s}" for s, v in claims] + review
             if not issues or round_ == self.max_fix_rounds:
                 break
@@ -830,6 +834,12 @@ class EvidenceWriter:
                 logger.info("Fix of %r changed nothing; stopping.", title)
                 break
             draft = revision.text
+            unaddressed = []
+        if unaddressed:
+            self.notes.append(
+                f"Section '{title}': review problems no fix addressed: "
+                + " | ".join(i[:200] for i in unaddressed[:5])
+            )
         draft = await self._settle(
             draft,
             title=title,

@@ -16,6 +16,7 @@ from scholar_lens.application.evidence_writer import (
     EvidenceWriter,
     FixedSection,
     PostFinding,
+    ReviewIssue,
     SectionEdits,
     SectionReview,
     SentenceVerdict,
@@ -339,6 +340,40 @@ def test_a_review_without_a_valid_answer_blocks_the_post() -> None:
     assert len(writer.blocking) == 1
     assert "review of '캐시' could not run" in writer.blocking[0]
     assert "unreviewed" in writer.blocking[0]
+
+
+class _Reviewed(Model):
+    """A review that finds one problem in the first sentence."""
+
+    def __init__(self, sentence: str, edits: list[Edit]) -> None:
+        super().__init__(edits=edits)
+        self.sentence = sentence
+
+    async def structured(self, *, schema: Any, prompt: str, **kwargs: Any) -> Any:
+        if schema is SectionReview:
+            return SectionReview(
+                issues=[
+                    ReviewIssue(sentence=self.sentence, category="depth", fix="깊게")
+                ]
+            )
+        return await super().structured(schema=schema, prompt=prompt, **kwargs)
+
+
+@pytest.mark.parametrize("outcome", ["taken", "rejected", "unchanged", "unparsed"])
+def test_review_problems_no_taken_fix_addressed_reach_the_notes(outcome: str) -> None:
+    sentences = _sentences(5)
+    replace = {
+        "taken": "고친 문장은 캐시를 자세히 씁니다 [[E1]].",
+        "rejected": f"{sentences[0]}\n\n### 세부",
+        "unchanged": sentences[0],
+        "unparsed": "",
+    }[outcome]
+    edits = [] if outcome == "unparsed" else [Edit(find=sentences[0], replace=replace)]
+    writer = _writer(_Reviewed(sentences[0], edits))
+    _verify(writer, _section(sentences), verifiers=VerifierSet("캐시", (_subheadings,)))
+    noted = [n for n in writer.notes if "review problems no fix addressed" in n]
+    assert bool(noted) is (outcome != "taken")
+    assert all(sentences[0][:20] in n for n in noted)
 
 
 class _Contexts(Model):
