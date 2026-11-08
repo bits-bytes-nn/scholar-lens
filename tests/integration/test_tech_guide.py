@@ -49,6 +49,8 @@ def _make_generator(*, auto_research: bool = False) -> TechGuideGenerator:
     """
     researcher = MagicMock()
     researcher.add_official_reference = MagicMock(return_value=[])
+    # Searches that failed (the real backends count them).
+    researcher.search_provider.failed_searches = 0
     gen = TechGuideGenerator(
         LanguageModelId.CLAUDE_V4_5_HAIKU,
         boto3.Session(region_name="us-east-1"),

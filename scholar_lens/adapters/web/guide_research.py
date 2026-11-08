@@ -41,11 +41,12 @@ from scholar_lens.adapters.bedrock.prompts.tech_guide import (
     TechGuideResearchPlanPrompt,
     TechGuideTaxonomyPrompt,
 )
-from scholar_lens.adapters.retry import RetryableBase
+from scholar_lens.adapters.retry import RetryableBase, is_access_error
 from scholar_lens.adapters.web.research import (
     MAX_REFERENCE_PAGES,
     MAX_REFERENCE_SEARCHES,
     WebResearcher,
+    search_chain,
 )
 from scholar_lens.adapters.web.snapshot import (
     CorpusSnapshot,
@@ -88,6 +89,7 @@ from scholar_lens.domain.sources import (
 )
 from scholar_lens.domain.tags import controlled_tag_problems
 from scholar_lens.domain.text import is_affirmative, is_placeholder
+from scholar_lens.domain.usage import TokenBudgetExceeded
 from scholar_lens.domain.usage_context import staged
 from scholar_lens.domain.validation import description_markup, description_problems
 
@@ -126,6 +128,12 @@ class TechGuideGenerator(RetryableBase):
     _reference_pages: list[PageContent]
     _reference_ids: list[str]
     _reference_searches: int = 0
+    # Why the last gather is incomplete (planning failed, a search failed, a
+    # requested page was not read): such a corpus is not saved for reuse.
+    _gaps: list[str]
+    # The package whose latest release set the target version ("" when the
+    # docs URL pinned it or none was looked up).
+    _package: str = ""
 
     def __init__(
         self,
@@ -176,6 +184,7 @@ class TechGuideGenerator(RetryableBase):
         self.callbacks = callbacks or []
         self.notes: list[str] = []
         self._reference_pages, self._reference_ids = [], []
+        self._gaps = []
         self.researcher = researcher or WebResearcher()
         self.llm_factory = llm_factory or BedrockLanguageModelFactory(
             boto_session=boto_session
@@ -238,8 +247,10 @@ class TechGuideGenerator(RetryableBase):
 
         With ``snapshots``, a corpus gathered from the same inputs (URLs,
         references, explicit queries and the settings that change what is
-        gathered) within the policy's TTL is reused, and a newly gathered
-        one is saved."""
+        gathered) within the policy's TTL is reused while the package
+        release it targeted is still the latest, and a newly gathered one is
+        saved when it is complete (planning ran, no search failed, every
+        requested page was read)."""
         if snapshots is None:
             return await self._gather(
                 urls,
@@ -259,7 +270,7 @@ class TechGuideGenerator(RetryableBase):
             demoted=self.demoted,
             repo_tags=self.repo_tags,
         )
-        if found is not None:
+        if found is not None and await asyncio.to_thread(self._release_holds, found):
             logger.info("Reusing the corpus snapshot %s.", key)
             return self._restore(found)
         start = len(self.notes)
@@ -280,7 +291,15 @@ class TechGuideGenerator(RetryableBase):
             reference_ids=list(self._reference_ids),
             reference_searches=self._reference_searches,
             reference_urls=[p.url for p in self._reference_pages],
+            package=self._package,
         )
+        if self._gaps:
+            logger.info(
+                "Not saving the corpus snapshot %s: the gather is incomplete (%s).",
+                key,
+                "; ".join(self._gaps),
+            )
+            return material
         try:
             await asyncio.to_thread(save_snapshot, snapshots, key, snapshot)
         except OSError as e:  # the corpus is in hand; only a rerun gathers again
@@ -308,9 +327,32 @@ class TechGuideGenerator(RetryableBase):
             "max_third_party_pages": self.max_third_party_pages,
             "demoted_domains": {k: list(v) for k, v in self.demoted.classes.items()},
             "excluded_domains": list(self.excluded_domains),
-            "search_backend": type(self.researcher.search_provider).__name__,
+            "search_backend": search_chain(self.researcher.search_provider),
             "max_subpages": self._max_subpages(),
         }
+
+    def _release_holds(self, snapshot: CorpusSnapshot) -> bool:
+        """Whether a snapshot's target release is still the one a gather
+        would resolve: the latest release of the package it looked up (a
+        pinned docs URL, or no lookup, always holds)."""
+        if not snapshot.package or self.release_lookup is None:
+            return True
+        latest = self.release_lookup(snapshot.package)
+        if latest == snapshot.sources.target.release:
+            return True
+        logger.info(
+            "The corpus snapshot targets %s %s, the latest is %s: gathering again.",
+            snapshot.package,
+            snapshot.sources.target.release,
+            latest,
+        )
+        return False
+
+    def _gap(self, note: str) -> None:
+        """A run note for a part of the gather that is missing, which also
+        keeps the corpus from being saved for reuse."""
+        self.notes.append(note)
+        self._gaps.append(note)
 
     def _note_abstract_pages(self, corpus: ResearchCorpus) -> None:
         """A run note for the arXiv papers read from their abstract page
@@ -375,6 +417,8 @@ class TechGuideGenerator(RetryableBase):
         self._sources = SourceSet.from_urls(urls)
         self._reference_pages, self._reference_ids = [], []
         self._reference_searches = 0
+        self._gaps, self._package = [], ""
+        failed_before = self.researcher.search_provider.failed_searches
 
         # Fetch the docs URLs (+ in-scope sub-pages) once. WebResearcher is
         # synchronous (blocking HTTP crawl); run it off the event loop.
@@ -386,6 +430,12 @@ class TechGuideGenerator(RetryableBase):
             if not corpus.pages:
                 raise NotTechnicalContentError(
                     "None of the supplied URLs returned readable content."
+                )
+            read = {page_key(p.url) for p in corpus.pages}
+            if missing := [u for u in urls if page_key(u) not in read]:
+                self._gap(
+                    "Documentation pages that could not be read (left out): "
+                    + ", ".join(missing)
                 )
         else:
             self.notes.append(_NO_DOCS_NOTE)
@@ -443,6 +493,9 @@ class TechGuideGenerator(RetryableBase):
         )
 
         self._note_abstract_pages(corpus)
+        if self.researcher.search_provider.failed_searches > failed_before:
+            # The researcher's search notes say how many.
+            self._gaps.append("web searches failed")
         topic = (
             planned_topic
             if planned_topic and not is_placeholder(planned_topic)
@@ -484,7 +537,7 @@ class TechGuideGenerator(RetryableBase):
         read = {page_key(p.url) for p in fetched.pages}
         missing = [u for u in references if page_key(u) not in read]
         if missing:
-            self.notes.append(
+            self._gap(
                 "Reference material that could not be read (left out): "
                 + ", ".join(missing)
             )
@@ -558,33 +611,50 @@ class TechGuideGenerator(RetryableBase):
     ) -> tuple[str | None, list[str]]:
         """Plan web-search queries from the seed corpus to broaden coverage.
 
-        Best-effort: a planning failure degrades to researching only the
-        supplied URLs, never aborting the run.
+        Best-effort: once the retry policy gives up, a planning failure
+        degrades to the seed pages (a run note, and the corpus is not saved
+        for reuse); a refused permission or a spent budget still raises.
         """
         try:
-            result = await self.research_plan_chain.ainvoke(
+            result = await self._invoke_plan(
                 {
                     "sources": self._sources_digest(corpus),
                     "max_queries": self.max_research_queries,
                 }
             )
-            topic = (result.get("topic") or "").strip()
-            queries = self._parse_queries(result.get("queries", ""))
-            logger.info(
-                "Research plan: topic='%s', %d queries: %s",
-                topic,
-                len(queries),
-                queries,
-            )
-            return (topic or None), queries
         except Exception as e:  # noqa: BLE001 - planning is best-effort
+            if is_access_error(e) or isinstance(e, TokenBudgetExceeded):
+                raise
             logger.warning("Research planning failed; using seed URLs only: %s", e)
+            self._gap(
+                f"Research planning failed ({type(e).__name__}: {str(e)[:160]}); "
+                "the corpus is the seed pages only."
+            )
             return None, []
+        topic = (result.get("topic") or "").strip()
+        queries = self._parse_queries(result.get("queries", ""))
+        logger.info(
+            "Research plan: topic='%s', %d queries: %s",
+            topic,
+            len(queries),
+            queries,
+        )
+        return (topic or None), queries
+
+    @RetryableBase._retry("tech_guide_research_plan")
+    async def _invoke_plan(self, payload: dict[str, Any]) -> dict[str, Any]:
+        result: dict[str, Any] = await self.research_plan_chain.ainvoke(payload)
+        return result
+
+    @RetryableBase._retry("tech_guide_relevance")
+    async def _invoke_relevance(self, payload: dict[str, Any]) -> dict[str, Any]:
+        result: dict[str, Any] = await self.relevance_chain.ainvoke(payload)
+        return result
 
     @staged("relevance")
     async def _assert_relevant(self, corpus: ResearchCorpus) -> str:
         sources = self._sources_digest(corpus)
-        result = await self.relevance_chain.ainvoke({"sources": sources})
+        result = await self._invoke_relevance({"sources": sources})
         is_relevant = is_affirmative(result.get("is_relevant"))
         reason = result.get("reason", "").strip()
         if not is_relevant:
@@ -674,6 +744,7 @@ class TechGuideGenerator(RetryableBase):
             repo_tags=self.repo_tags,
         ).with_repositories(docs)
         target = sources.target
+        self._package = package if release and target.release == release else ""
         if target.release:
             origin = (
                 "the requested docs URL"

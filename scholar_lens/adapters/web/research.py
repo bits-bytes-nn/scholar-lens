@@ -227,6 +227,17 @@ class FallbackSearchProvider(WebSearchProvider):
         return results
 
 
+def search_chain(provider: WebSearchProvider) -> str:
+    """The search backends a provider asks, in order ("Fallback(Tavily,
+    Brave)"): what decides the results, for a gathered corpus's key."""
+    if isinstance(provider, FallbackSearchProvider):
+        return (
+            f"Fallback({search_chain(provider.primary)},"
+            f"{search_chain(provider.secondary)})"
+        )
+    return type(provider).__name__
+
+
 class NullSearchProvider(WebSearchProvider):
     """No-op provider: research relies solely on the supplied URLs."""
 

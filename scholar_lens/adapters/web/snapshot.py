@@ -72,6 +72,9 @@ class CorpusSnapshot:
     reference_searches: int = 0
     reference_urls: list[str] = field(default_factory=list)
     gathered_at: str = ""
+    # The package whose latest release was the target ("" for none): a
+    # newer release makes the snapshot stale.
+    package: str = ""
 
 
 def snapshot_key(inputs: Mapping[str, Any]) -> str:
@@ -129,6 +132,7 @@ def dump_snapshot(snapshot: CorpusSnapshot) -> str:
             "reference_ids": snapshot.reference_ids,
             "reference_searches": snapshot.reference_searches,
             "reference_urls": snapshot.reference_urls,
+            "package": snapshot.package,
             "sources": _sources_json(snapshot.sources),
             "pages": [dataclasses.asdict(p) for p in snapshot.corpus.pages],
             "search_results": [
@@ -168,6 +172,7 @@ def load_snapshot(
             reference_searches=int(data.get("reference_searches", 0)),
             reference_urls=list(data.get("reference_urls", [])),
             gathered_at=str(data.get("gathered_at", "")),
+            package=str(data.get("package", "")),
         )
     except (ValueError, KeyError, TypeError) as e:
         logger.warning("Ignoring an unreadable corpus snapshot: %s", e)
