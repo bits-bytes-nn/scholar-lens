@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 import os
 import time
 from collections.abc import Coroutine
@@ -44,7 +45,8 @@ from scholar_lens.domain.constants import (
 from scholar_lens.domain.jobs import JobRequest, JobResult, ssm_base
 from scholar_lens.domain.usage_context import cost_allocation
 from scholar_lens.domain.validation import PostValidationError
-from scholar_lens.src.logger import logger
+
+logger = logging.getLogger(__name__)
 
 
 def load_secrets_from_ssm(

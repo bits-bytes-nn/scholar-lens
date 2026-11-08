@@ -80,7 +80,9 @@ from scholar_lens.domain.constants import (
 )
 from scholar_lens.domain.cost_allocation import ARTIFACT_KINDS, application_profile_name
 from scholar_lens.domain.jobs import ssm_base
-from scholar_lens.src.logger import logger
+from scholar_lens.entrypoints.logs import get_default_logger
+
+logger = get_default_logger()
 
 # The single job definition runs every artifact kind; the CLI serialises a
 # JobRequest into the ``request`` parameter (scholar_lens/adapters/aws/batch.py).

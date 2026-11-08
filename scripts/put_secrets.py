@@ -21,8 +21,10 @@ sys.path.append(str(Path(__file__).parent.parent))
 from scholar_lens.configs import Config
 from scholar_lens.domain.constants import RUN_SECRETS, SSMParams
 from scholar_lens.domain.jobs import ssm_base
-from scholar_lens.src.logger import logger
+from scholar_lens.entrypoints.logs import get_default_logger
 from scripts.deploy_infra import deploy_session
+
+logger = get_default_logger()
 
 
 def put_secure_secrets(

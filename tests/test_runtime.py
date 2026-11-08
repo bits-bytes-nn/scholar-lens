@@ -11,7 +11,7 @@ import pytest
 from scholar_lens import bootstrap
 from scholar_lens.application import run as app_run
 from scholar_lens.domain.constants import EnvVars, SSMParams
-from scholar_lens.src import runtime
+from scholar_lens.entrypoints import runtime
 
 
 def _run_context(config: object, **fields: object) -> app_run.RunContext:
@@ -867,7 +867,7 @@ def test_a_pr_run_without_a_token_fails_before_any_model_call(
     from unittest.mock import MagicMock
 
     from scholar_lens.domain.jobs import JobRequest
-    from scholar_lens.src.runtime import check_pr_ready
+    from scholar_lens.entrypoints.runtime import check_pr_ready
 
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
     context = MagicMock()

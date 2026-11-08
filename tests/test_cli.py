@@ -177,7 +177,7 @@ def test_a_local_run_whose_pr_failed_exits_with_the_pr_code(
         pr_error="403 from GitHub",
         error="Blog PR not created: 403 from GitHub",
     )
-    with mock.patch("scholar_lens.src.runtime.run_job", return_value=result):
+    with mock.patch("scholar_lens.entrypoints.runtime.run_job", return_value=result):
         assert cli.main(["summarize", "2106.09685"]) == cli.EXIT_PR_FAILED
     output = _output(capsys)
     assert output["status"] == "failed" and output["pr_error"] == "403 from GitHub"
@@ -208,9 +208,11 @@ def test_invalid_request_is_rejected(capsys: pytest.CaptureFixture) -> None:
 def test_ctrl_c_in_a_local_run_prints_an_interrupted_result(
     capsys: pytest.CaptureFixture,
 ) -> None:
-    from scholar_lens.src.runtime import INTERRUPTED_ERROR
+    from scholar_lens.entrypoints.runtime import INTERRUPTED_ERROR
 
-    with mock.patch("scholar_lens.src.runtime.run_job", side_effect=KeyboardInterrupt):
+    with mock.patch(
+        "scholar_lens.entrypoints.runtime.run_job", side_effect=KeyboardInterrupt
+    ):
         assert cli.main(["summarize", "2106.09685", "--no-pr"]) == cli.EXIT_FAILED
     output = _output(capsys)
     assert output["status"] == "failed"
@@ -221,7 +223,7 @@ def test_ctrl_c_in_a_local_run_prints_an_interrupted_result(
 def test_ctrl_c_prints_the_recorded_cost_and_tokens(
     capsys: pytest.CaptureFixture,
 ) -> None:
-    from scholar_lens.src.runtime import INTERRUPTED_ERROR
+    from scholar_lens.entrypoints.runtime import INTERRUPTED_ERROR
 
     recorded = JobResult(
         kind="summarize",
@@ -233,7 +235,7 @@ def test_ctrl_c_prints_the_recorded_cost_and_tokens(
     )
     interrupt = KeyboardInterrupt()
     interrupt.job_result = recorded  # type: ignore[attr-defined]
-    with mock.patch("scholar_lens.src.runtime.run_job", side_effect=interrupt):
+    with mock.patch("scholar_lens.entrypoints.runtime.run_job", side_effect=interrupt):
         assert cli.main(["summarize", "2106.09685", "--no-pr"]) == cli.EXIT_FAILED
     output = _output(capsys)
     assert output["error"] == INTERRUPTED_ERROR
@@ -253,7 +255,7 @@ class TestWorker:
     ) -> None:
         monkeypatch.setenv("AWS_BATCH_JOB_ID", "job-7")
         with mock.patch(
-            "scholar_lens.src.runtime.record_unstarted_run", return_value=True
+            "scholar_lens.entrypoints.runtime.record_unstarted_run", return_value=True
         ) as record:
             code = cli.main(["worker", "--request", '{"kind": "guide"}'])
         assert code == cli.WORKER_REPORTED_REJECTED
@@ -267,7 +269,9 @@ class TestWorker:
 
         request = '{"kind": "summarize", "source": "2106.09685"}'
         with (
-            mock.patch("scholar_lens.src.runtime.run_job", side_effect=interrupted),
+            mock.patch(
+                "scholar_lens.entrypoints.runtime.run_job", side_effect=interrupted
+            ),
             mock.patch.object(cli.os, "_exit", side_effect=RuntimeError) as exit_,
             pytest.raises(RuntimeError),
         ):
@@ -287,7 +291,9 @@ class TestWorker:
 
         request = '{"kind": "summarize", "source": "2106.09685"}'
         with (
-            mock.patch("scholar_lens.src.runtime.run_job", side_effect=interrupted),
+            mock.patch(
+                "scholar_lens.entrypoints.runtime.run_job", side_effect=interrupted
+            ),
             mock.patch.object(cli.os, "_exit", side_effect=RuntimeError) as exit_,
             pytest.raises(RuntimeError),
         ):
@@ -302,7 +308,7 @@ class TestWorker:
 
         request = '{"kind": "summarize", "source": "2106.09685"}'
         with (
-            mock.patch("scholar_lens.src.runtime.run_job", side_effect=stopped),
+            mock.patch("scholar_lens.entrypoints.runtime.run_job", side_effect=stopped),
             mock.patch.object(cli.os, "_exit") as exit_,
             pytest.raises(SystemExit),
         ):
@@ -313,7 +319,7 @@ class TestWorker:
         self, capsys: pytest.CaptureFixture
     ) -> None:
         with mock.patch(
-            "scholar_lens.src.runtime.record_unstarted_run", return_value=True
+            "scholar_lens.entrypoints.runtime.record_unstarted_run", return_value=True
         ) as record:
             code = cli.main(["worker", "--request", "not json"])
         assert code == cli.WORKER_REPORTED_REJECTED
@@ -326,10 +332,12 @@ class TestWorker:
         request = JobRequest(kind="summarize", source="x")
         with (
             mock.patch(
-                "scholar_lens.src.runtime.run_job", side_effect=ImportError("faiss")
+                "scholar_lens.entrypoints.runtime.run_job",
+                side_effect=ImportError("faiss"),
             ),
             mock.patch(
-                "scholar_lens.src.runtime.record_unstarted_run", return_value=True
+                "scholar_lens.entrypoints.runtime.record_unstarted_run",
+                return_value=True,
             ) as record,
         ):
             code = cli.main(["worker", "--request", request.model_dump_json()])
@@ -343,7 +351,9 @@ class TestWorker:
         request = JobRequest(kind="summarize", source="x")
         result = JobResult(kind="summarize", input="x", error="boom")
         result.notification_failed = True
-        with mock.patch("scholar_lens.src.runtime.run_job", return_value=result):
+        with mock.patch(
+            "scholar_lens.entrypoints.runtime.run_job", return_value=result
+        ):
             code = cli.main(["worker", "--request", request.model_dump_json()])
         assert code == cli.EXIT_ERROR and code not in cli.APP_REPORTED_EXIT_CODES
         assert "notification_failed" not in _output(capsys)
@@ -361,7 +371,9 @@ class TestWorker:
             result = JobResult(
                 kind="summarize", input="x", status=status, pr_error=pr_error
             )
-            with mock.patch("scholar_lens.src.runtime.run_job", return_value=result):
+            with mock.patch(
+                "scholar_lens.entrypoints.runtime.run_job", return_value=result
+            ):
                 assert (
                     cli.main(["worker", "--request", request.model_dump_json()])
                     == expected
@@ -373,7 +385,7 @@ class TestWorker:
     ) -> None:
         # The stack's EventBridge rule then notifies instead.
         with mock.patch(
-            "scholar_lens.src.runtime.record_unstarted_run",
+            "scholar_lens.entrypoints.runtime.record_unstarted_run",
             side_effect=ImportError("broken image"),
         ):
             code = cli.main(["worker", "--request", "{}"])

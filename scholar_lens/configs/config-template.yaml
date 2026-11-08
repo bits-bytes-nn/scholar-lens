@@ -32,7 +32,7 @@ resources:
     tech_guide_category: Tech Guides
     survey_category: Paper Surveys   # a type the blog's post conventions must list
 
-# Any *_model_id accepts a LanguageModelId value (scholar_lens/src/constants.py),
+# Any *_model_id accepts a LanguageModelId value (scholar_lens/domain/constants.py),
 # e.g. anthropic.claude-fable-5-1 for the highest quality at a higher price.
 paper:
   figure_analysis_model_id: anthropic.claude-haiku-5-5

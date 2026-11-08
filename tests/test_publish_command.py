@@ -29,7 +29,7 @@ from scholar_lens.domain.publishing import (
     without_violations,
 )
 from scholar_lens.domain.validation import PostValidationError
-from scholar_lens.src import runtime as saved_post
+from scholar_lens.entrypoints import runtime as saved_post
 from tests.test_publisher import PNG, VALID_POST, FakeGithub, FakeRepo
 
 BROKEN = VALID_POST.replace('paper_author: "Microsoft"', 'author: "Edward Hu"')

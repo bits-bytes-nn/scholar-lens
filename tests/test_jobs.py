@@ -149,7 +149,9 @@ class TestCliMapping:
         self, status: str, code: int, capsys: pytest.CaptureFixture
     ) -> None:
         result = JobResult(kind="summarize", input="2106.09685", status=status)
-        with mock.patch("scholar_lens.src.runtime.run_job", return_value=result):
+        with mock.patch(
+            "scholar_lens.entrypoints.runtime.run_job", return_value=result
+        ):
             assert cli.main(["summarize", "2106.09685"]) == code
         assert json.loads(capsys.readouterr().out)["status"] == status
 
@@ -161,7 +163,9 @@ class TestCliMapping:
         request = JobRequest(kind="summarize", source="x")
         with (
             mock.patch("scholar_lens.cli._raise_on_sigterm"),
-            mock.patch("scholar_lens.src.runtime.run_job", return_value=result) as run,
+            mock.patch(
+                "scholar_lens.entrypoints.runtime.run_job", return_value=result
+            ) as run,
         ):
             cli.main(["worker", "--request", request.model_dump_json()])
         assert run.call_args.kwargs["job_id"] == "job-123"

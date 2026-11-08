@@ -23,7 +23,9 @@ os.environ.setdefault("AWS_DEFAULT_REGION", "us-east-1")
 
 # Test output must not land in the repository's logs/ directory. The app's file
 # handler opens its file lazily, so dropping it here leaves no file behind.
-from scholar_lens.src.logger import logger as _app_logger  # noqa: E402
+from scholar_lens.entrypoints.logs import configure_logging  # noqa: E402
+
+_app_logger = configure_logging()
 
 for _handler in [h for h in _app_logger.handlers if isinstance(h, logging.FileHandler)]:
     _app_logger.removeHandler(_handler)

@@ -193,7 +193,9 @@ class TestCliAndJob:
             status="succeeded",
             plan_path="/tmp/papers/survey-x/plan.json",
         )
-        with mock.patch("scholar_lens.src.runtime.run_job", return_value=result):
+        with mock.patch(
+            "scholar_lens.entrypoints.runtime.run_job", return_value=result
+        ):
             assert cli.main(["survey", "plan", "x"]) == cli.EXIT_OK
         assert json.loads(capsys.readouterr().out)["plan_path"].endswith("plan.json")
 
@@ -204,7 +206,9 @@ class TestCliAndJob:
         result = JobResult(kind="survey_plan", input="x", status="succeeded")
         with (
             mock.patch("scholar_lens.cli._raise_on_sigterm"),
-            mock.patch("scholar_lens.src.runtime.run_job", return_value=result) as run,
+            mock.patch(
+                "scholar_lens.entrypoints.runtime.run_job", return_value=result
+            ) as run,
         ):
             raw = JobRequest(kind="survey_plan", topic="x").model_dump_json(
                 exclude_defaults=True
@@ -238,7 +242,7 @@ class TestCliAndJob:
     def test_a_batch_run_reports_no_container_plan_path(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from scholar_lens.src import runtime
+        from scholar_lens.entrypoints import runtime
 
         outcome = runtime.PipelineOutcome(
             title="t", plan_path=Path("/app/papers/p.json"), s3_uri="s3://b/p.json"
@@ -253,7 +257,7 @@ class TestCliAndJob:
         assert batch.plan_path is None and batch.s3_uri == "s3://b/p.json"
 
     def test_survey_input_errors_are_rejections(self) -> None:
-        from scholar_lens.src.runtime import _rejected_input_errors
+        from scholar_lens.entrypoints.runtime import _rejected_input_errors
 
         assert SurveyInputError in _rejected_input_errors()
 

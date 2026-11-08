@@ -1,3 +1,6 @@
+"""Logging of the entrypoints: console, and a dated log file outside AWS."""
+
+import functools
 import logging
 import os
 from datetime import datetime
@@ -68,7 +71,9 @@ def get_default_logger(name: str = "app") -> logging.Logger:
     return configure_logger(config)
 
 
-logger = get_default_logger()
-# Modules of the new layers log through ``logging.getLogger(__name__)``; their
-# records reach the same handlers through the package logger.
-package_logger = get_default_logger("scholar_lens")
+@functools.cache
+def configure_logging() -> logging.Logger:
+    """Send the package's records (every module logs through
+    ``logging.getLogger(__name__)``) to the console and, outside AWS, the
+    day's log file; the level comes from ``LOG_LEVEL``. Once per process."""
+    return get_default_logger("scholar_lens")

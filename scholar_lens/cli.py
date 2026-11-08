@@ -44,6 +44,7 @@ from pydantic import BaseModel, ValidationError
 
 from scholar_lens.domain.jobs import JobRequest, JobResult
 from scholar_lens.domain.survey.plan import SurveyInputError
+from scholar_lens.entrypoints.logs import configure_logging
 
 EXIT_OK, EXIT_FAILED, EXIT_REJECTED, EXIT_PENDING, EXIT_ERROR = 0, 1, 2, 3, 4
 EXIT_PR_FAILED = 5
@@ -519,7 +520,7 @@ def _costs(args: argparse.Namespace) -> int:
 
 
 def _run(request: JobRequest, *, job_id: str | None = None) -> JobResult:
-    from scholar_lens.src.runtime import run_job
+    from scholar_lens.entrypoints.runtime import run_job
 
     result: JobResult = run_job(request, job_id=job_id)
     _emit(result)
@@ -528,7 +529,7 @@ def _run(request: JobRequest, *, job_id: str | None = None) -> JobResult:
 
 def _publish(post: str, *, create_pr: bool) -> int:
     """``publish``: one result, the exit code a run would have."""
-    from scholar_lens.src.runtime import run_publish
+    from scholar_lens.entrypoints.runtime import run_publish
 
     result = run_publish(post, create_pr=create_pr)
     _emit(result)
@@ -559,7 +560,7 @@ def _report_worker_failure(result: JobResult) -> int:
     notification went out (see ``APP_REPORTED_EXIT_CODES``)."""
     _emit(result)
     try:
-        from scholar_lens.src.runtime import record_unstarted_run
+        from scholar_lens.entrypoints.runtime import record_unstarted_run
 
         reported = record_unstarted_run(result)
     except Exception as e:  # noqa: BLE001 - e.g. the runtime stack fails to import
@@ -637,6 +638,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     # faiss-cpu bundles its own OpenMP runtime; tolerate a second copy loaded
     # by another native wheel instead of aborting.
     os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
+    configure_logging()
     args = parse_args(argv)
     if args.command == "worker":
         return _work(args.request)
@@ -670,7 +672,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     except KeyboardInterrupt as e:
         # Ctrl-C: run_job has cleaned up and re-raised with its recorded result
         # (cost, tokens, duration); still print one result.
-        from scholar_lens.src.runtime import INTERRUPTED_ERROR
+        from scholar_lens.entrypoints.runtime import INTERRUPTED_ERROR
 
         _emit(
             getattr(e, "job_result", None)
