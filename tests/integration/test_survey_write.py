@@ -712,6 +712,7 @@ class FakeEngine:
         self.calls: list[dict[str, Any]] = []
         self.figures = [DPO_FIGURE]
         self.notes: list[str] = []
+        self.blocking: list[str] = []
         self.error: Exception | None = None
 
     def __call__(
@@ -742,6 +743,7 @@ class FakeEngine:
             ledger=[figure_evidence(u, n) for n, u in enumerate(self.figures, 1)],
             plan=plan,
             notes=list(self.notes),
+            blocking=list(self.blocking),
         )
 
 
@@ -1132,3 +1134,44 @@ def test_a_rerun_replaces_the_post_its_plan_published(
         if v.level == "error"
     ]
     assert errors == []
+
+
+def test_blocking_problems_lead_the_warnings_and_the_pr_body(
+    stage: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The engine's blocking problems reach the job's warnings first and the
+    PR body's first checklist, ahead of the review notes."""
+    from scholar_lens.configs import Github
+    from tests.integration.test_publisher import FakeGithub, FakeRepo
+
+    repo = FakeRepo({})
+    monkeypatch.setenv("GITHUB_TOKEN", "ghp_x")
+    monkeypatch.setattr(FakeGithub, "repo", repo)
+    monkeypatch.setattr("scholar_lens.adapters.github.publisher.Github", FakeGithub)
+    github = Github(
+        enabled=True,
+        repo_name="owner/blog",
+        author_name="Bot",
+        author_email="bot@example.com",
+    )
+    stage["context"].config.resources.github = github
+    stage["context"].publisher_factory = lambda ctx: Publisher(
+        github,
+        root_dir=stage["tmp"],
+        conventions=survey_spec(),
+        site_posts=ctx.blog_posts,
+        fetch_image=lambda url: png(),
+    )
+    stage["request"] = JobRequest(
+        kind="survey_write", plan=stage["request"].plan, create_pr=True
+    )
+    stage["engine"].blocking = ["the claim check of 'x' did not run"]
+    stage["engine"].notes = ["Section 'y' kept a flagged sentence."]
+    outcome = run_stage(stage)
+    assert outcome.warnings[0] == "Blocking: the claim check of 'x' did not run"
+    assert outcome.pr_url and repo.pulls
+    body = repo.pulls[-1].body
+    blocking = body.index("### Blocking")
+    assert body.index("- [ ] the claim check of 'x' did not run") > blocking
+    assert blocking < body.index("### Review checklist")
+    assert body.index("Section 'y' kept a flagged sentence.") > blocking

@@ -100,9 +100,18 @@ class FakeGuideGenerator:
     """The guide generator with its model calls replaced: each run gives the
     guide a new title and proposes a new topic."""
 
-    def __init__(self, title: str, topic: str) -> None:
+    def __init__(
+        self,
+        title: str,
+        topic: str,
+        *,
+        blocking: list[str] | None = None,
+        notes: list[str] | None = None,
+    ) -> None:
         self.title, self.topic = title, topic
         self.notes: list[str] = []
+        self.blocking = blocking or []
+        self.guide_notes = notes or []
 
     def guide(self, urls: list[str]) -> TechGuide:
         """What the evidence engine (faked) writes for this run."""
@@ -112,6 +121,8 @@ class FakeGuideGenerator:
             body=body,
             source_urls=list(urls),
             image_urls=["https://arxiv.org/html/2309.06180v1/x1.png"],
+            notes=list(self.guide_notes),
+            blocking=list(self.blocking),
         )
 
     async def classify(self, guide: TechGuide, **_: Any) -> dict[str, str]:
@@ -127,6 +138,8 @@ async def _run_guide(
     monkeypatch: pytest.MonkeyPatch,
     context: RunContext,
     generator: FakeGuideGenerator,
+    *,
+    create_pr: bool = False,
 ) -> Any:
     async def no_guideline(_: RunContext) -> None:
         return None
@@ -156,7 +169,7 @@ async def _run_guide(
         ),
     )
     monkeypatch.setattr(guide_pipeline, "load_translation_guideline", no_guideline)
-    request = JobRequest(kind="guide", urls=[DOCS], create_pr=False)
+    request = JobRequest(kind="guide", urls=[DOCS], create_pr=create_pr)
     return await guide_pipeline.run_guide(
         context,
         request,
@@ -232,6 +245,50 @@ async def test_a_retitled_rerun_updates_the_published_guide(
     assert 'categories: ["Tech Guides", "Language-Models"]' in post
     assert "cover: /assets/images/language-models.jpg" in post
     assert "](/assets/images/vllm-serving-guide-1.png)" in post
+
+
+async def test_blocking_problems_lead_the_warnings_and_the_pr_body(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The engine's blocking problems reach the job's warnings first and the
+    PR body's first checklist, ahead of the review notes."""
+    spec = load_local_conventions()
+    repo = FakeRepo({})
+    monkeypatch.setenv("GITHUB_TOKEN", "ghp_x")
+    monkeypatch.setattr(FakeGithub, "repo", repo)
+    monkeypatch.setattr("scholar_lens.adapters.github.publisher.Github", FakeGithub)
+    session = boto3.Session(region_name="us-east-1")
+    config = Config()
+    config.resources.github = _GITHUB
+    context = bootstrap.run_context(
+        config,
+        default_boto_session=session,
+        bedrock_boto_session=session,
+        publisher_factory=lambda ctx: Publisher(
+            _GITHUB,
+            root_dir=tmp_path,
+            conventions=spec,
+            site_posts=ctx.blog_posts,
+            fetch_image=lambda url: PNG,
+        ),
+    )
+    context.conventions, context.blog_posts, context.blog_tags = spec, [], {}
+    generator = FakeGuideGenerator(
+        "vLLM Serving Guide",
+        "Language-Models",
+        blocking=["the claim check of 'x' did not run"],
+        notes=["Section 'y' kept a flagged sentence."],
+    )
+    outcome = await _run_guide(
+        tmp_path, monkeypatch, context, generator, create_pr=True
+    )
+    assert outcome.warnings[0] == "Blocking: the claim check of 'x' did not run"
+    assert outcome.pr_url and repo.pulls
+    body = repo.pulls[-1].body
+    blocking = body.index("### Blocking")
+    assert body.index("- [ ] the claim check of 'x' did not run") > blocking
+    assert blocking < body.index("### Review checklist")
+    assert body.index("Section 'y' kept a flagged sentence.") > blocking
 
 
 async def test_the_evidence_engine_gets_the_request_and_failures_keep_the_notes(
