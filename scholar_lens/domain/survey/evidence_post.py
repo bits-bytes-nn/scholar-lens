@@ -94,8 +94,18 @@ def plan_targets(plan: SurveyPlan) -> list[CoverageTarget]:
         )
         for lin in plan.lineages
     ]
+    # A lineage is stated by its papers' evidence.
+    members: dict[str, list[str]] = {}
+    for p in plan.papers:
+        members.setdefault(p.lineage, []).append(p.id)
     return [
-        CoverageTarget(id=f"T{n}", statement=statement, source=source, kind=kind)
+        CoverageTarget(
+            id=f"T{n}",
+            statement=statement,
+            source=source,
+            kind=kind,
+            evidence_sources=members.get(source, []) if kind == lineage else [],
+        )
         for n, (statement, source, kind) in enumerate(found, 1)
     ]
 

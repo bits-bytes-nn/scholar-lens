@@ -14,7 +14,7 @@ from collections.abc import Collection, Iterable, Mapping, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from scholar_lens.domain.evidence import SourceDocument
+from scholar_lens.domain.evidence import Evidence, SourceDocument
 from scholar_lens.domain.evidence_draft import quote_for_prompt
 from scholar_lens.domain.post_spec import CoverageSpec
 
@@ -37,6 +37,13 @@ class CoverageTarget(BaseModel):
     kind: str = ""
     # Whether the TL;DR must state it.
     headline: bool = False
+    # The sources whose evidence can state it, when ``source`` is not one
+    # (a survey lineage: its papers); empty: ``source`` itself.
+    evidence_sources: list[str] = Field(default_factory=list)
+
+    def stated_by(self) -> set[str]:
+        """The source ids whose evidence can state this target."""
+        return set(self.evidence_sources) or {self.source}
 
 
 class ExtractedTarget(BaseModel):
@@ -230,18 +237,33 @@ def unassigned(
     return [t for t in targets if not set(coverage.get(t.id, ())) & set(used)]
 
 
+def unsatisfiable(
+    targets: Sequence[CoverageTarget], ledger: Iterable[Evidence]
+) -> list[CoverageTarget]:
+    """The targets no evidence of ``ledger`` can state: none of the sources
+    that state them (:meth:`CoverageTarget.stated_by`) has evidence."""
+    have = {e.paper_id for e in ledger}
+    return [t for t in targets if not t.stated_by() & have]
+
+
 def coverage_problems(
     targets: Sequence[CoverageTarget],
     coverage: Mapping[str, Sequence[str]],
     used: Collection[str],
+    ledger: Iterable[Evidence] | None = None,
 ) -> list[str]:
     """One outline problem per target :func:`unassigned` finds, worded for
-    the outline writer."""
+    the outline writer; with ``ledger``, not for the targets it cannot
+    state (:func:`unsatisfiable`): no outline can map them."""
+    hopeless = (
+        {t.id for t in unsatisfiable(targets, ledger)} if ledger is not None else set()
+    )
     return [
         f"key target {t.id} ({t.statement[:160]}) has no evidence in `coverage` "
         "that a section uses: map it to the ids of the evidence that states it "
         "and give that evidence to a section"
         for t in unassigned(targets, coverage, used)
+        if t.id not in hopeless
     ]
 
 

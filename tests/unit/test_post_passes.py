@@ -7,6 +7,7 @@ note, and the next writer sees what earlier sections taught."""
 from __future__ import annotations
 
 import asyncio
+import random
 from typing import Any
 
 import pytest
@@ -19,12 +20,14 @@ from scholar_lens.domain.coverage import (
     CoverageTarget,
     ExtractedTarget,
     ExtractedTargets,
+    coverage_problems,
     extraction_text,
     headline_problems,
     repair_coverage,
     targets_from,
     unassigned,
     uncited,
+    unsatisfiable,
 )
 from scholar_lens.domain.evidence import Evidence, EvidenceLedger
 from scholar_lens.domain.paper.evidence_paper import PaperOutline
@@ -177,6 +180,52 @@ def test_a_survey_derives_its_targets_from_the_plan() -> None:
     core = [p.id for p in plan.papers if p.role == "core"]
     assert [t.source for t in targets] == core + [lin.id for lin in plan.lineages]
     assert {t.kind for t in targets} == {k.name for k in SURVEY_SPEC.coverage.kinds}
+    # A lineage is stated by its papers' evidence.
+    for lin in plan.lineages:
+        (target,) = [t for t in targets if t.source == lin.id]
+        assert target.stated_by() == {p.id for p in plan.papers if p.lineage == lin.id}
+
+
+def _evidence_from(*sources: str) -> list[Evidence]:
+    return [
+        Evidence(
+            id=f"E{n}", paper_id=s, kind="method", claim="c", quote="q", anchor="S1"
+        )
+        for n, s in enumerate(sources, 1)
+    ]
+
+
+def test_targets_no_evidence_can_state_are_not_outline_problems() -> None:
+    """Property, over generated targets and ledgers: with the ledger, the
+    coverage problems are exactly the unassigned targets some source of
+    which has evidence; the others are :func:`unsatisfiable`."""
+    rng = random.Random(7)
+    names = ["A", "B", "C", "D"]
+    for _ in range(200):
+        targets = [
+            CoverageTarget(
+                id=f"T{n}",
+                statement=f"s{n}",
+                source=rng.choice(names),
+                evidence_sources=rng.sample(names, rng.randint(0, 2)),
+            )
+            for n in range(1, rng.randint(1, 6))
+        ]
+        ledger = _evidence_from(*rng.sample(names, rng.randint(0, 3)))
+        coverage = {t.id: [e.id for e in ledger if rng.random() < 0.3] for t in targets}
+        used = {e.id for e in ledger if rng.random() < 0.7}
+        hopeless = {t.id for t in unsatisfiable(targets, ledger)}
+        have = {e.paper_id for e in ledger}
+        assert hopeless == {t.id for t in targets if not t.stated_by() & have}
+        expected = [
+            t.id for t in unassigned(targets, coverage, used) if t.id not in hopeless
+        ]
+        problems = coverage_problems(targets, coverage, used, ledger)
+        assert [p.split()[2] for p in problems] == expected
+        # Without the ledger, every unassigned target is a problem.
+        assert len(coverage_problems(targets, coverage, used)) == len(
+            unassigned(targets, coverage, used)
+        )
 
 
 # ---- the earlier-section context ------------------------------------------------
@@ -341,6 +390,50 @@ def test_a_target_still_unassigned_on_the_last_attempt_is_a_note() -> None:
     engine, result = _run(model, outline_repairs=1)
     assert len(model.outline_prompts) == 2
     assert any("Key targets no section of the outline" in n for n in result.notes)
+    assert not result.blocking
+
+
+def test_a_later_outline_that_breaks_a_rule_falls_back_to_the_best_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An attempt that maps no targets but is sound, then repairs that
+    break a structure rule: the sound outline is kept, with the note,
+    instead of a failed run."""
+    model = CoverageModel("review", mapped_from=99)
+    original = EvidencePaperEngine.outline_problems
+    seen: list[int] = []
+
+    def broken_after_first(self: Any, outline: Any, ledger: Any) -> list[str]:
+        seen.append(1)
+        found = original(self, outline, ledger)
+        return found if len(seen) == 1 else [*found, "a section breaks a rule"]
+
+    monkeypatch.setattr(EvidencePaperEngine, "outline_problems", broken_after_first)
+    _, result = _run(model, outline_repairs=2)
+    assert len(model.outline_prompts) == 3
+    assert any("Key targets no section of the outline" in n for n in result.notes)
+    assert result.outline.sections
+
+
+def test_a_target_whose_source_gave_no_evidence_is_a_note_not_a_retry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A target only an unread source states cannot be mapped: no outline
+    is asked again for it, and the PR note says why."""
+    model = CoverageModel("review")
+    original = EvidencePaperEngine.key_targets
+
+    async def with_unread(self: Any, documents: Any) -> list[CoverageTarget]:
+        found = await original(self, documents)
+        return [
+            *found,
+            CoverageTarget(id="T9", statement="unread", source="no-such-source"),
+        ]
+
+    monkeypatch.setattr(EvidencePaperEngine, "key_targets", with_unread)
+    _, result = _run(model, outline_repairs=2)
+    assert len(model.outline_prompts) == 1
+    assert any("sources gave no evidence" in n and "T9" in n for n in result.notes)
     assert not result.blocking
 
 

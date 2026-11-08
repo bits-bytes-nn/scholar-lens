@@ -80,6 +80,7 @@ from scholar_lens.domain.coverage import (
     targets_from,
     unassigned,
     uncited,
+    unsatisfiable,
     without_evidence,
 )
 from scholar_lens.domain.evidence import (
@@ -545,9 +546,11 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
     async def plan(self, ledger: EvidenceLedger) -> OutlineT:
         """The outline: asked, its duplicate facts merged, repaired in code,
         and asked again with its problems up to ``outline_repairs`` times. A
-        key target no evidence of a section is mapped to is a problem too;
-        on the last attempt it stays a note (the readers may have found no
-        evidence of it) rather than a failed run.
+        key target no evidence of a section is mapped to is a problem too,
+        unless no evidence of the ledger can state it (its sources gave
+        none); on the last attempt it stays a note rather than a failed
+        run. When the later attempts break a rule, the best structurally
+        sound earlier outline (fewest unmapped targets) is kept.
 
         Raises:
             ValueError: The outline still breaks the spec's rules.
@@ -563,6 +566,7 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
         )
         prompt = base
         problems: list[str] = []
+        best: tuple[OutlineT, list[str]] | None = None
         known = {e.id for e in ledger}
         with usage_stage("outline"):
             for attempt in range(self.run.outline_repairs + 1):
@@ -598,20 +602,17 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
                 )
                 problems = self.outline_problems(outline, ledger)
                 used = self.used_evidence(outline)
-                missing = coverage_problems(self.targets, outline.coverage, used)
-                if not problems and (
-                    not missing or attempt == self.run.outline_repairs
-                ):
-                    if lacking := unassigned(self.targets, outline.coverage, used):
-                        self.notes.append(
-                            "Key targets no section of the outline has evidence "
-                            "for: "
-                            + " | ".join(
-                                f"{t.id} [{t.source}] {t.statement[:140]}"
-                                for t in lacking[:8]
-                            )
-                        )
-                    return outline
+                missing = coverage_problems(
+                    self.targets, outline.coverage, used, ledger
+                )
+                if not problems:
+                    # The structurally sound outline that maps the most
+                    # targets: what a later attempt that breaks a rule
+                    # falls back to.
+                    if best is None or len(missing) <= len(best[1]):
+                        best = (outline, missing)
+                    if not missing or attempt == self.run.outline_repairs:
+                        return self._noted_coverage(outline, ledger)
                 problems += missing
                 logger.warning(
                     "%s attempt %d unusable: %s",
@@ -628,9 +629,42 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
                         + "\n".join(f"- {p}" for p in problems),
                     )
                 )
+        if best is not None:
+            logger.warning(
+                "%s: the last attempts broke the rules; keeping the best earlier "
+                "outline, %d key targets unmapped.",
+                name.capitalize(),
+                len(best[1]),
+            )
+            return self._noted_coverage(best[0], ledger)
         raise ValueError(
             f"The {name} breaks the rules after repairs: " + "; ".join(problems)
         )
+
+    def _noted_coverage(self, outline: OutlineT, ledger: EvidenceLedger) -> OutlineT:
+        """``outline``, with a PR note of the key targets no section has
+        evidence for (those no evidence of the ledger can state named
+        apart)."""
+        used = self.used_evidence(outline)
+        lacking = unassigned(self.targets, outline.coverage, used)
+        hopeless = {t.id for t in unsatisfiable(self.targets, ledger)}
+
+        def listed(targets: list[CoverageTarget]) -> str:
+            return " | ".join(
+                f"{t.id} [{t.source}] {t.statement[:140]}" for t in targets[:8]
+            )
+
+        if mappable := [t for t in lacking if t.id not in hopeless]:
+            self.notes.append(
+                "Key targets no section of the outline has evidence for: "
+                + listed(mappable)
+            )
+        if unread := [t for t in lacking if t.id in hopeless]:
+            self.notes.append(
+                "Key targets whose sources gave no evidence (the post cannot "
+                "state them): " + listed(unread)
+            )
+        return outline
 
     def used_evidence(self, outline: OutlineT) -> set[str]:
         """The evidence the outline uses: its sections' and what the kind
