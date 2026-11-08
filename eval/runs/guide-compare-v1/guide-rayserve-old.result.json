@@ -1,0 +1,131 @@
+{
+  "kind": "guide",
+  "status": "succeeded",
+  "input": "https://docs.ray.io/en/latest/serve/getting_started.html",
+  "title": "Ray Serve in Practice: Deploying, Composing, Scaling, Operating Models",
+  "markdown_path": "/private/tmp/sl-old/papers/guide-ray-serve-in-practice-deploying-composing-scaling-operating-models/2026-11-08-ray-serve-in-practice-deploying-composing-scaling-operating-models.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-11-08-ray-serve-in-practice-deploying-composing-scaling-operating-models.md",
+  "pr_url": null,
+  "warnings": [
+    "Guide section 'Controller·Proxy·Replica 아키텍처' kept below the bar (score 80, 1 blocking issue(s); targeted fix reverted after re-scoring): check it: \"요청 수명 주기의 3단계와 Power of Two Choices 설명이 서로 맞지 않습니다. 3단계는 \"모든 레플리카가 각각 `max_ongoing_requests`보다 많은 요청을 처리 중이라 가용 레플리카가 없으면\"이라고 쓰고, 아래 문단은 \"어떤 레플리카도 동시에 `max_ongoing_requests`보다 많은 요청을 처리하지 않도록 제한합니다\"라고\"",
+    "[image] line 605: remote image not localized (linked to its source): https://docs.ray.io/en/latest/_images/architecture-2.0.svg",
+    "[image] line 936: remote image not localized (linked to its source): https://raw.githubusercontent.com/ray-project/images/master/docs/serve/autoscaling.svg",
+    "[image] line 1260: remote image not localized (linked to its source): https://raw.githubusercontent.com/ray-project/images/master/docs/serve/multi-app/applications-dashboard.png",
+    "[image] line 1447: remote image not localized (linked to its source): https://raw.githubusercontent.com/ray-project/images/master/docs/serve/multi-app/deployments-dashboard.png",
+    "[image] line 1451: remote image not localized (linked to its source): https://raw.githubusercontent.com/ray-project/images/master/docs/serve/multi-app/replica-dashboard.png"
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 2046.9,
+  "input_tokens": 2326156,
+  "output_tokens": 238365,
+  "estimated_cost_usd": 13.525,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 56,
+      "failed_calls": 0,
+      "input_tokens": 2326156,
+      "output_tokens": 238365,
+      "cache_read_tokens": 0,
+      "cache_write_tokens": 0,
+      "cost_usd": 13.524951
+    },
+    "by_stage": {
+      "outline": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 178214,
+        "output_tokens": 2458,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.381008
+      },
+      "draft": {
+        "calls": 13,
+        "failed_calls": 0,
+        "input_tokens": 538178,
+        "output_tokens": 60149,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 3.355692
+      },
+      "review": {
+        "calls": 20,
+        "failed_calls": 0,
+        "input_tokens": 872110,
+        "output_tokens": 69946,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 4.88736
+      },
+      "revise": {
+        "calls": 6,
+        "failed_calls": 0,
+        "input_tokens": 295234,
+        "output_tokens": 35490,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 1.890736
+      },
+      "fix": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 48066,
+        "output_tokens": 5387,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.300004
+      },
+      "verify": {
+        "calls": 13,
+        "failed_calls": 0,
+        "input_tokens": 361564,
+        "output_tokens": 62982,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 2.705896
+      },
+      "finalize": {
+        "calls": 2,
+        "failed_calls": 0,
+        "input_tokens": 32790,
+        "output_tokens": 1953,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.004255
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-sonnet-5-5": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 178214,
+        "output_tokens": 2458,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.381008
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 53,
+        "failed_calls": 0,
+        "input_tokens": 2115152,
+        "output_tokens": 233954,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 13.139688
+      },
+      "global.anthropic.claude-haiku-5-5": {
+        "calls": 2,
+        "failed_calls": 0,
+        "input_tokens": 32790,
+        "output_tokens": 1953,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.004255
+      }
+    }
+  }
+}

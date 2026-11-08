@@ -1,0 +1,173 @@
+{
+  "kind": "guide",
+  "status": "succeeded",
+  "input": "https://docs.ray.io/en/latest/serve/getting_started.html",
+  "title": "Ray Serve: Composable, Autoscaled Model Serving on Ray",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/guide-ray-serve-composable-autoscaled-model-serving-on-ray/2026-11-08-ray-serve-composable-autoscaled-model-serving-on-ray.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-11-08-ray-serve-composable-autoscaled-model-serving-on-ray.md",
+  "pr_url": null,
+  "warnings": [
+    "Section '여러 모델과 비즈니스 로직을 한 Python 프로그램으로 묶는 온라인 추론 계층': the writer could not fix: - **별도 웹 서버 문장과 FastAPI 문장 (1번, 5번 문제):** 두 문장과 앞의 \"HTTP 처리도 같은 프로그램 안에 있습니다\"를 한 문장으로 합쳤습니다. 이제 HTTP 처리가 같은 프로그램에 들어간다는 내용만 남습니다. 이 문단에 있던 \"별도 웹 서버가 필요 없다\"는 주장은 근거가 없어 지웠습니다. - **`num_replicas: auto` (2번 문제):** 근거에 없는 설정이라 빼고, 오토스케일링을 뒤에서 다룬다는 안내만 남겼습니다. - **`serve run`과 \"그대로\" (3번, 6번 문제):** 근거에 없는 ",
+    "Section '디플로이먼트·레플리카·애플리케이션·인그레스로 이루어진 Serve의 기본 모델' still has: a standard section needs at least 1 visuals (its figures, an equation, or a small table from its number evidence)",
+    "Section '파워 오브 투 초이스에서 접두사 인식·커스텀 라우터로 확장되는 요청 라우팅': the writer could not fix: Not fixed: naming the capacity-token router (E161) and the affinity router that uses `num_fallback_replicas` (E163). The evidence gives neither name. Both are described by how they work.",
+    "Section '파워 오브 투 초이스에서 접두사 인식·커스텀 라우터로 확장되는 요청 라우팅': 1 edit(s) not applied: would add a writing-rule slip (self-reference '이 절'): '앞서 본 핸들 경로에서 Summarizer 안의 Translator 핸들이 레플리카를 고르는 일이 요청 라우'",
+    "Section '파워 오브 투 초이스에서 접두사 인식·커스텀 라우터로 확장되는 요청 라우팅' still has: flags or arguments no official page mentions; use the documented ones or leave them out: module `ray.serve.request_router` does not exist in ray ray 2.60.0, `serve` is not in `ray` (ray ray 2.60.0)",
+    "Section 'pip 설치부터 serve run과 HTTP 질의까지 이어지는 첫 Translator 애플리케이션': the writer could not fix: I didn't change `from ray import serve` in any code block. Without that import none of the Serve code runs. The evidence also uses this exact import (E5, E35, E43, E14, E19, E18), and I have no documented alternative to put in its place. The \"`serve` is not in `ray`\" flag doesn't match the quoted co",
+    "Section 'pip 설치부터 serve run과 HTTP 질의까지 이어지는 첫 Translator 애플리케이션': the writer could not fix: I did not fix this problem: \"`serve` is not in `ray` (ray 2.60.0)\". The official Ray 2.60.0 pages document `from ray import serve` and `pip install \"ray[serve]\"` in every code example the section draws on (E35, E14, E19, E5, E43, E36). The `[sdk_source: ray 2.60.0]` excerpt covers only `ray._private",
+    "Section 'pip 설치부터 serve run과 HTTP 질의까지 이어지는 첫 Translator 애플리케이션': the writer could not fix: Not fixed: \"`serve` is not in `ray` (ray 2.60.0)\". All the official Ray 2.60.0 pages in the evidence (Quickstart E35, Key Concepts E14/E18/E19, Getting Started E5, Develop and Deploy E43) import it as `from ray import serve` and use `serve.run`, `@serve.deployment` and `@serve.ingress`. The sdk_sour",
+    "Section 'pip 설치부터 serve run과 HTTP 질의까지 이어지는 첫 Translator 애플리케이션' still has: flags or arguments no official page mentions; use the documented ones or leave them out: `serve` is not in `ray` (ray ray 2.60.0)",
+    "Section 'DeploymentHandle로 Summarizer와 Translator를 잇는 모델 합성': the writer could not fix: I did not change the `from ray import serve` and `from ray.serve.handle import ...` imports. Every code sample in the evidence (E15, E55, E57, E58) uses them, and the ray 2.60.0 source excerpt is partial: it just doesn't list these modules. Taking them out would break the documented API. I did remov",
+    "Section 'DeploymentHandle로 Summarizer와 Translator를 잇는 모델 합성': the writer could not fix: Not fixed: the flag that `serve` is not in `ray` and `ray.serve.handle` does not exist in ray 2.60.0. The Ray 2.60.0 official examples ([[E13]], [[E15]], [[E55]], [[E57]], [[E58]]) and the API page ([[E139]], `serve.handle.DeploymentHandle`) use `from ray import serve` and `from ray.serve.handle imp",
+    "Section 'DeploymentHandle로 Summarizer와 Translator를 잇는 모델 합성': the writer could not fix: Not fixed: the check says `serve` is not in `ray` and `ray.serve.handle` does not exist in ray 2.60.0. The evidence contradicts this. Every official Ray 2.60.0 code example (E13, E15, E55, E57, E58, and the src-D1, src-D2 and src-D6 pages) uses `from ray import serve` and `from ray.serve.handle impo",
+    "Section 'DeploymentHandle로 Summarizer와 Translator를 잇는 모델 합성' still has: flags or arguments no official page mentions; use the documented ones or leave them out: `serve` is not in `ray` (ray ray 2.60.0), module `ray.serve.handle` does not exist in ray ray 2.60.0",
+    "Section '레플리카 자원·헬스 체크·백프레셔와 `num_replicas=\"auto\"`로 켜는 오토스케일링 설정': the writer could not fix: The forum log report (E185) has no date or Ray version in the evidence, so I couldn't add one. I labelled it as a forum user's report and cited it instead. The flag-check problem says `serve` and `ray.serve.config` are missing from the ray 2.60.0 source excerpt. I removed the `BackpressureConfig` im",
+    "Section '레플리카 자원·헬스 체크·백프레셔와 `num_replicas=\"auto\"`로 켜는 오토스케일링 설정': the writer could not fix: I didn't fix the \"`serve` is not in `ray`\" problem because it is a false positive. The official code evidence imports it directly: E81, E14, E19, E35, E55 and E166 all show `from ray import serve`. The sdk_source excerpt covers only aiohttp, ray.autoscaler and ray.data, and never shows ray.serve, so",
+    "Section '레플리카 자원·헬스 체크·백프레셔와 `num_replicas=\"auto\"`로 켜는 오토스케일링 설정': the writer could not fix: I did not fix the flagged problem (\"`serve` is not in `ray`\"). The evidence contradicts it, so I left the section unchanged. Many official code samples, including the Ray 2.60.0 configuration and getting-started pages, use `from ray import serve` (E81, E90, E35, E14, E55, E57, E58, E166). The ray 2.",
+    "Section '레플리카 자원·헬스 체크·백프레셔와 num_replicas=auto 오토스케일링 설정' still has: flags or arguments no official page mentions; use the documented ones or leave them out: `serve` is not in `ray` (ray ray 2.60.0)",
+    "Section 'serve build로 만든 선언적 config와 멀티 애플리케이션 프로덕션 배포': the writer could not fix: Imports `from ray import serve` / `ray.serve.handle` in the classifier code block are kept: the official code evidence for this exact example (E68, src-D7) and E58 use them, and the provided sdk_source listing is a partial excerpt of unrelated functions that does not show their absence. Removing the",
+    "Section 'serve build로 만든 선언적 config와 멀티 애플리케이션 프로덕션 배포' still has: 4,164 characters of prose for a target of 2,500: cut background, repetition and minor detail | flags or arguments no official page mentions; use the documented ones or leave them out: `serve` is not in `ray` (ray ray 2.60.0), module `ray.serve.handle` does not exist in ray ray 2.60.0",
+    "Section '애플리케이션에서 레플리카까지 내려가는 대시보드와 Prometheus·Grafana 메트릭': the writer could not fix: Not fixed: the usage-stats sentence still doesn't name an environment variable or command. E129 only says collection can be turned off through Ray usage stats and gives no specific setting, so I left the sentence as it was. The Python `LLMConfig` code block is deleted. The SDK source for ray 2.60.0 ",
+    "Section 'Ray 대시보드·Grafana·Prometheus로 보는 Serve와 LLM 메트릭' still has: ['8265'] already stated in 'serve build로 만든 선언적 config와 멀티 애플리케이션 프로덕션 배포': refer back without repeating: 기본값은 `http://localhost:8265`이고, `ray.init`이 돌려주는 컨텍스트 객체에서 주소를 꺼낼 수도 있습니다 . | flags or arguments no official page mentions; use the documented ones or leave them out: `serve` is not in `ray` (ray ray 2.60.0), module `ray.serve.llm` does not exist in ray ray 2.60.0",
+    "Section 'Ray Serve가 맞는 워크로드와 맞지 않는 경우의 경계': the writer could not fix: 고치지 않은 지적: 분할 GPU 공유(flow). 첫 문단의 첫 문장은 분할 GPU 공유나 소수 `num_gpus`를 직접 언급하지 않아서 뺄 내용이 없습니다. 또 주어진 근거에는 소수 `num_gpus`를 뒷받침하는 항목이 없어서 근거를 붙인 문장을 새로 넣을 수도 없었습니다. 그래서 이 문장은 그대로 두었습니다. 참고: 고쳐 쓴 문장 두 개는 [[E112]]와 [[E114]]를 인용하는데, 두 항목 모두 제가 받은 근거 목록에는 없습니다. 기본값 1이 적용된다는 조건은 지적 사항의 표현을 따라 되살렸고, Autoscaler가 노",
+    "Section 'Ray Serve가 맞는 워크로드와 맞지 않는 경우의 경계': check 1 sentence(s) the evidence may not support: 노드나 클러스터 전체 장애에서 복구하려면 KubeRay RayService가 필요합니다 [[E95]]. (unsupported: The evidence (E24) says recovery from a Ray cluster failure is impossible without KubeRay. It does not say KubeRay RayService is needed to recover from a single node failure. (not supported: 노드 장애에서 복구하려면 KubeRay RayService가 필요))",
+    "Section 'pip 설치부터 serve run과 HTTP 질의까지 이어지는 첫 Translator 애플리케이션': 1 edit(s) not applied: would add a writing-rule slip (English stem with a Korean ending 'import하고'): '예제의 Translator는 파일로 저장한 뒤 CLI로 실행합니다. 아래 스크립트를 `serve_quicks'",
+    "Section 'serve build로 만든 선언적 config와 멀티 애플리케이션 프로덕션 배포': 1 edit(s) not applied: would add a writing-rule slip (English stem with a Korean ending 'import할'): '이름은 `app1`, `app2`처럼 자동으로 붙으므로, 원하는 이름이 있으면 배포 전에 파일에서 바꿉니다 '",
+    "Flags/metrics the official pages fetched for this guide never mention; verify them against the current reference: module `ray.serve.request_router` does not exist in ray ray 2.60.0, `serve` is not in `ray` (ray ray 2.60.0), module `ray.serve.handle` does not exist in ray ray 2.60.0, module `ray.serve.llm` does not exist in ray ray 2.60.0",
+    "[image] line 147: remote image not localized (linked to its source): https://raw.githubusercontent.com/ray-project/images/master/docs/serve/autoscaling.svg",
+    "[image] line 1186: remote image not localized (linked to its source): https://raw.githubusercontent.com/ray-project/images/master/docs/serve/multi-app/applications-dashboard.png",
+    "[image] line 1190: remote image not localized (linked to its source): https://raw.githubusercontent.com/ray-project/images/master/docs/serve/multi-app/deployments-dashboard.png",
+    "[image] line 1194: remote image not localized (linked to its source): https://raw.githubusercontent.com/ray-project/images/master/docs/serve/multi-app/replica-dashboard.png"
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 2544.9,
+  "input_tokens": 3588883,
+  "output_tokens": 375534,
+  "estimated_cost_usd": 16.146,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 208,
+      "failed_calls": 0,
+      "input_tokens": 469167,
+      "output_tokens": 375534,
+      "cache_read_tokens": 1486959,
+      "cache_write_tokens": 1632757,
+      "cost_usd": 16.146022
+    },
+    "by_stage": {
+      "relevance": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 2494,
+        "output_tokens": 171,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.000335
+      },
+      "research_plan": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 2663,
+        "output_tokens": 767,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.00065
+      },
+      "read": {
+        "calls": 113,
+        "failed_calls": 0,
+        "input_tokens": 272,
+        "output_tokens": 112688,
+        "cache_read_tokens": 761847,
+        "cache_write_tokens": 209862,
+        "cost_usd": 1.804454
+      },
+      "outline": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 9036,
+        "cache_read_tokens": 2143,
+        "cache_write_tokens": 20742,
+        "cost_usd": 0.285303
+      },
+      "verify": {
+        "calls": 33,
+        "failed_calls": 0,
+        "input_tokens": 272249,
+        "output_tokens": 79522,
+        "cache_read_tokens": 392675,
+        "cache_write_tokens": 416217,
+        "cost_usd": 4.917583
+      },
+      "draft": {
+        "calls": 11,
+        "failed_calls": 0,
+        "input_tokens": 44,
+        "output_tokens": 61604,
+        "cache_read_tokens": 47487,
+        "cache_write_tokens": 449416,
+        "cost_usd": 3.498333
+      },
+      "review": {
+        "calls": 13,
+        "failed_calls": 0,
+        "input_tokens": 52,
+        "output_tokens": 34073,
+        "cache_read_tokens": 27646,
+        "cache_write_tokens": 143456,
+        "cost_usd": 1.410011
+      },
+      "fix": {
+        "calls": 33,
+        "failed_calls": 0,
+        "input_tokens": 160843,
+        "output_tokens": 75728,
+        "cache_read_tokens": 255161,
+        "cache_write_tokens": 393064,
+        "cost_usd": 4.225326
+      },
+      "finalize": {
+        "calls": 2,
+        "failed_calls": 0,
+        "input_tokens": 30546,
+        "output_tokens": 1945,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.004027
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-haiku-5-5": {
+        "calls": 4,
+        "failed_calls": 0,
+        "input_tokens": 35703,
+        "output_tokens": 2883,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.005012
+      },
+      "global.anthropic.claude-sonnet-5-5": {
+        "calls": 113,
+        "failed_calls": 0,
+        "input_tokens": 272,
+        "output_tokens": 112688,
+        "cache_read_tokens": 761847,
+        "cache_write_tokens": 209862,
+        "cost_usd": 1.804454
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 91,
+        "failed_calls": 0,
+        "input_tokens": 433192,
+        "output_tokens": 259963,
+        "cache_read_tokens": 725112,
+        "cache_write_tokens": 1422895,
+        "cost_usd": 14.336556
+      }
+    }
+  }
+}

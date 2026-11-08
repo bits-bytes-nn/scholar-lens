@@ -1,0 +1,256 @@
+{
+  "item": "guide-rayserve-Y",
+  "post": "/tmp/guide-compare/blind/guide-rayserve-Y.md",
+  "judge_run": 1,
+  "sdk_checked": "ray 2.60.0 with ray[serve] (uv venv, Python 3.11, /tmp/rs-judge/venv) plus torch, transformers 5.x, pillow, fastapi; docs fetched live from docs.ray.io/en/latest (titles say 2.58-2.60), SDK source read for config defaults",
+  "sampling": "Split the body into 316 blank-line paragraphs (fenced blocks whole, Sources included); offset 0, stride 3; 15 claims, 9 numbers; each checked against the live docs page, SDK 2.60 source/CLI help, the cited blog, or by running the guide's code.",
+  "scores": {
+    "A": 6.5,
+    "B": 8.0,
+    "C": 8.0,
+    "D": 8.5,
+    "E": 8.5,
+    "F": 8.0,
+    "T1": 8.5,
+    "T2": 8.5,
+    "T3": 7.5
+  },
+  "score_evidence": {
+    "A": "Real tables, fenced code, absolute images with Korean alt (L605), no math so no use_math. Deductions: no TL;DR (L10 opens '소개와 설치'); topic-name headings (L205, L599, L664, L683, L854, L1414); architecture at L599 after the whole tutorial; the post ends with a further-reading list (L1545) rather than a closing section.",
+    "B": "Natural, readable Korean with varied sentence shapes and few calques. Deductions: '배포' covers both deployment and deploy, e.g. L1052 '애플리케이션은 배포가 목표 레플리카 수에 도달하지 못한 동안' (rewrite: '디플로이먼트가 목표 레플리카 수에 이르기 전까지 애플리케이션은 DEPLOYING 상태입니다'); some '할 수 있습니다' where things simply happen (L445, L1289).",
+    "C": "Follows a clean learning order (plain class -> deployment -> run -> compose -> architecture -> config -> scaling -> production -> multi-app -> routing -> monitoring) with explicit back-references that resolve. Deductions: file-name drift (L984 config.yaml vs L1048 serve_config.yaml), text_ml.py assumed at L1016 but never written; L178 overwrites the model.py from L61.",
+    "D": "Help lands where it is hard: the max_ongoing_requests experiment with three predicted timings (L635-662), the 20-user autoscaling calculation (L942), the 30 s/600 s asymmetry rationale (L957), the response-object table (L593). Deductions: basics get padding (pre-Serve Translator L53-101, the status walkthrough L288-292), and the L660 sync-handler prediction misleads.",
+    "E": "Tables are well chosen (decorator args L152, config defaults L693, autoscaling knobs L946, REST endpoints L1060, response objects L593, symptom->view L1463); architecture and autoscaling diagrams placed where discussed (L605, L936); FastAPI and get_app_handle shown as diffs (L178, L1268) instead of full repeats. Minor: the composed Translator body is printed again at L314.",
+    "F": "APIs, flags and defaults match docs, SDK 2.60 and CLI help (see claims). Deductions: L660 '약 6초' prediction for sync handlers is contradicted by running the guide's own script (3.6 s / 1.0 s) (-2); L752 import path copied from a docs mismatch so the YAML cannot load.",
+    "T1": "Almost every no-GPU block ran: hello, model.py, quickstart, FastAPI, composition, parallel calls, chain, stream, ObjectRef, the timing script, reconfigure, autoscale, serve build, multi-app with get_app_handle, the custom router app. Deductions: L749-764 YAML import path fails; text_ml.py and serve_config.yaml are referenced but never created; the REST example's external zip breaks on transformers 5.",
+    "T2": "Grounded in the sources and ordered for learning; covers getting started, composition, architecture, configuration, autoscaling (incl. advanced knobs), production config, REST API, KubeRay, multi-app, custom routing, dashboard and registries without padding.",
+    "T3": "Internals are present and often explained with reasons (why controller is off the data path L613/L681, two queues and backpressure L623, autoscaler metric window and delays L938-961, Serve vs Ray autoscaler L965-973, router placement and consistency L1385/L1397). Deductions: they arrive late (L599) after a long tutorial; few non-official design sources (15%); no closing on when to choose Serve, alternatives, or a failure-mode summary."
+  },
+  "principles": {
+    "claim_headings": {
+      "status": "not met",
+      "evidence": "Topic-name headings throughout: L10 'Ray Serve 소개와 설치', L205 '로컬 실행과 HTTP 테스트', L599 'Controller·Proxy·Replica 아키텍처', L664 '장애 허용', L683 '대용량 요청 처리', L854 '확장과 오토스케일링', L1414 '모니터링과 관측성'."
+    },
+    "running_example": {
+      "status": "met",
+      "evidence": "Translator (L55) -> Serve deployment (L111) -> Summarizer+Translator (L304) -> reconfigure by language (L807) -> autoscaled Translator (L904) -> text_ml config (L1018) -> German translator app (L1166)."
+    },
+    "mechanism_design_code_example": {
+      "status": "partly met",
+      "evidence": "max_ongoing_requests: mechanism (L629-633) -> script (L637) -> worked timings (L660-662); autoscaling delays: L942-957 with the 30/600 s asymmetry rationale. Most other sections follow the docs' how-to order without a design-choice step."
+    },
+    "facts_said_once": {
+      "status": "partly met",
+      "evidence": "Controller-death behaviour twice (L681, L961); max_ongoing_requests defined at L621, L631, L698 and L928; dictionary-override rule at L797 and again L852; KubeRay recovery at L677 and L1099."
+    },
+    "numbers_with_scope_unit": {
+      "status": "met",
+      "evidence": "L631 'Ray 2.32.0에서 100에서 5로'; L1408 '프리픽스를 공유하도록 생성한 데이터셋으로 32B 모델 ... TTFT가 60%'; L948-955 defaults with units; L660 and L942 labelled '실측값이 아니라 손으로 따라간 예시 계산'."
+    },
+    "nothing_invented": {
+      "status": "partly met",
+      "evidence": "L660 '약 6초 쪽으로 늘어납니다' is the writer's own prediction and is contradicted by running the guide's script (3.6 s / 1.0 s). L752 import path copied from a docs mismatch."
+    },
+    "writer_assessment_at_end": {
+      "status": "not met",
+      "evidence": "Ends with 'Ray Serve에는 모델 수명 주기 관리 기능이 없습니다 ... 후속 학습으로는 Key Concepts, ... 권합니다' (L1545) - a docs next-steps list, not a judgement on when to use it."
+    },
+    "length_fitted": {
+      "status": "partly met",
+      "evidence": "1,569 lines; the tutorial part (L53-293) spends a lot on basics (pre-Serve Translator, two clients, status walkthrough) while design rationale is brief in places."
+    },
+    "type_specific_shape": {
+      "status": "not met",
+      "evidence": "No TL;DR (L10 opens with intro/install); architecture only at L599 after setup; 15% non-official sources; no closing on when to choose and how it fails."
+    },
+    "korean_style": {
+      "status": "partly met",
+      "evidence": "Clear, natural 입니다체 with varied sentences. '배포' is used for both deployment and deploying, which blurs sentences such as L1052 '애플리케이션은 배포가 목표 레플리카 수에 도달하지 못한 동안 DEPLOYING 상태'; '> **핵심:**' callouts at L449/L799 are fine."
+    }
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 14,
+    "unsupported": 0,
+    "wrong": 1,
+    "unverifiable": 0,
+    "numbers_among_checked": 9,
+    "examples": [
+      {
+        "line": 12,
+        "claim": "Unlike framework-specific tools such as TorchServe, Serve does no model-specific optimisation",
+        "verdict": "supported",
+        "source": "serve/index.html FAQ 'TFServing, TorchServe, ONNXRuntime': Serve 'doesn't perform any model-specific optimizations'"
+      },
+      {
+        "line": 154,
+        "claim": "num_replicas defaults to 1",
+        "verdict": "supported",
+        "source": "configure-serve-deployment.html: 'num_replicas ... Defaults to 1.'"
+      },
+      {
+        "line": 631,
+        "claim": "max_ongoing_requests defaults to 5; it changed from 100 to 5 in Ray 2.32.0",
+        "verdict": "supported",
+        "source": "configure-serve-deployment.html: 'Defaults to 5 (note the default changed from 100 to 5 in Ray 2.32.0)'"
+      },
+      {
+        "line": 660,
+        "claim": "With def and time.sleep(1) the replica stalls per request, so six requests take about 6 s regardless of the limit",
+        "verdict": "wrong",
+        "source": "Ran the guide's L637 script on ray 2.60 with def/time.sleep(1): 3.6 s at max_ongoing_requests=2 and 1.0 s at 6. architecture.html does say 'Otherwise, the replica blocks until the handler returns', but the 6 s figure is the writer's own and is contradicted by running the guide's own code."
+      },
+      {
+        "line": 685,
+        "claim": "Objects of 100KiB+ go to the object store, read zero-copy",
+        "verdict": "supported",
+        "source": "architecture.html FAQ: 'Larger request objects (100KiB+) ... zero-copy read'"
+      },
+      {
+        "line": 702,
+        "claim": "health_check_period_s 10 s, timeout 30 s, wait loop 2 s, graceful timeout 20 s",
+        "verdict": "supported",
+        "source": "configure-serve-deployment.html defaults 10s/30s/2s/20s"
+      },
+      {
+        "line": 897,
+        "claim": "num_replicas='auto' equals max_ongoing_requests 5, target 2, min 1, max 100",
+        "verdict": "supported",
+        "source": "autoscaling-guide.html: 'Setting num_replicas=\"auto\" is equivalent to ...' (5/2/1/100)"
+      },
+      {
+        "line": 948,
+        "claim": "upscale_delay_s 30 s, downscale_delay_s 600 s, look_back_period_s 30 s, aggregation mean",
+        "verdict": "supported",
+        "source": "ray 2.60 AutoscalingConfig(): 30.0 / 600.0 / 30.0 / AggregationFunction.MEAN"
+      },
+      {
+        "line": 981,
+        "claim": "serve build prints to stdout without -o; -d/--app-dir defaults to the current directory",
+        "verdict": "supported",
+        "source": "serve build --help (2.60): 'If not provided, the config will be printed to STDOUT.'; '-d, --app-dir ... Defaults to \".\"'"
+      },
+      {
+        "line": 1054,
+        "claim": "serve deploy -a defaults to http://localhost:8265 or RAY_DASHBOARD_ADDRESS",
+        "verdict": "supported",
+        "source": "serve deploy --help (2.60)"
+      },
+      {
+        "line": 1062,
+        "claim": "PUT removes applications not in the new config if Serve runs, otherwise starts Serve",
+        "verdict": "supported",
+        "source": "serve/api/index.html PUT: 'removes all applications not listed in the new config. If Serve is not running on the Ray cluster, starts Serve.'"
+      },
+      {
+        "line": 1250,
+        "claim": "Classifier returns 'brown bear, bruin, Ursus arctos'; translator 'Hallo, das Wetter ist heute ziemlich gut!'",
+        "verdict": "supported",
+        "source": "multi-app.html; reproduced on ray 2.60 with Y's L1123/L1166 code"
+      },
+      {
+        "line": 1350,
+        "claim": "choose_replicas returns ranks; Serve tries the shortest-queue replica of each rank, then calls again after backoff",
+        "verdict": "supported",
+        "source": "custom-request-router.html: 'each inner list represents a rank ... attempted to be routed to the replica with the shortest request queue ...'"
+      },
+      {
+        "line": 1408,
+        "claim": "On a prefix-sharing dataset with a 32B model TTFT fell 60%",
+        "verdict": "supported",
+        "source": "anyscale.com blog: '32B parameter model showed 60% reduction in TTFT'; PrefixRepetitionDataset"
+      },
+      {
+        "line": 1466,
+        "claim": "Ray Status (the ray status output) is in the Jobs view",
+        "verdict": "supported",
+        "source": "ray-observability/getting-started.html: 'Ray Status# The Jobs view displays the status of the Ray Cluster. This information is the output of the ray status CLI command.'"
+      }
+    ],
+    "off_sample_findings": [
+      {
+        "line": 752,
+        "claim": "The Serve config for configure_serve.py uses import_path configure_serve:translator_app",
+        "verdict": "wrong",
+        "source": "The guide's own L716-735 defines example_app (class Example), so the import path does not exist; running it on ray 2.60: AttributeError: module 'configure_serve' has no attribute 'translator_app'. The docs page carries the same mismatch, so it is inherited, not invented."
+      }
+    ]
+  },
+  "checklist": {
+    "repeated": 0,
+    "avoided": 1,
+    "na": 1,
+    "repeated_ids": [],
+    "items": [
+      {
+        "id": "arch-diagram-relative-link",
+        "status": "avoided",
+        "evidence": "L605: ![Serve 인스턴스를 구성하는 컨트롤러, 프록시, 레플리카 액터와 요청 흐름을 나타낸 아키텍처 구성도](https://docs.ray.io/en/latest/_images/architecture-2.0.svg) - absolute URL, Korean alt; other images absolute (L936, L1260, L1447, L1451)."
+      },
+      {
+        "id": "proxy-env-ray-start-unsupported",
+        "status": "n/a",
+        "evidence": "No proxy env-var section; KubeRay section (L1097-1101) makes no ray start/env claim."
+      }
+    ]
+  },
+  "extras": {
+    "architecture_first_line": 599,
+    "architecture_note": "L14 gives a two-sentence concept summary; the controller/proxy/replica architecture, request lifecycle and fault tolerance start at L599, after install (L16), conversion (L103), local run (L205) and composition (L294).",
+    "sources_total": 20,
+    "sources_listed": 20,
+    "sources_non_official": 3,
+    "non_official_share": 0.15,
+    "non_official_list": [
+      "anyscale.com blog (custom routing)",
+      "discuss.ray.io forum thread 12515",
+      "gocodeo.com post (listed; no body claim traced to it)"
+    ],
+    "opens_with_problem": true,
+    "opens_note": "L12 states the problem ('텐서 입력, 텐서 출력' tools fall short for multi-model pipelines) inside an intro-and-install section; there is no TL;DR.",
+    "closes_with_when_to_choose_and_failure_modes": false,
+    "closes_note": "Ends with model-registry integration and the docs' further-reading list (L1507-1545). No when-to-choose section; failure modes are covered mid-post (L664-681) but not summarised at the end."
+  },
+  "runnable_code": {
+    "verdict": "Ran in reading order on ray 2.60; all core flows pass, including the custom router. Failures: the configure_serve YAML import path (docs-inherited), the L660 sync-handler timing prediction, missing text_ml.py / serve_config.yaml files, and the REST example's external zip (transformers 5 drift).",
+    "passed": [
+      "L24 hello world: {'result': 'Hello world!'}",
+      "L61 model.py: 'Bonjour monde!' (post shows 'Bonjour Monde!' as the docs do)",
+      "L111 serve_quickstart.py + L213 serve run + L235 client: 'Bonjour monde!'; L271 serve status shape matches (RUNNING: 2)",
+      "L178 FastAPI model.py (with the elided bodies filled from L111 as the text says) + L219 serve run + L255 client: 'Bonjour monde!'",
+      "L304 composed app + L374/L378 client: \"C'était le meilleur des temps, c'était le pire des temps,\"",
+      "L412 Hello/World parallel calls, L459 chain.py (12), L513 stream.py, L559 _to_object_ref: all asserts pass",
+      "L637 ongoing_requests.py: 3.8 s (post predicts ~3 s); max_ongoing_requests=6 -> 1.0 s (predicts ~1 s)",
+      "L716/L739 configure_serve definitions construct",
+      "L807 reconfigure Translator with user_config language=german: 'Hallo Welt!'",
+      "L904 autoscale_translator.py + L918 serve run: RUNNING, answers",
+      "L983 serve build model:translator_app: applications block matches L1000-1012",
+      "L1123/L1166 two apps + L1206 config (prefixes as written) + L1244 client: 'brown bear, bruin, Ursus arctos' / 'Hallo, das Wetter ist heute ziemlich gut!'",
+      "L1268 get_app_handle change + L1280 client: 'Braunbär, Bruin, Ursus arctos' (after a fresh deploy; re-deploying an unchanged config does not pick up code edits)",
+      "L1317 custom_request_router.py + L1354 uniform_app.py: both print lines and a Replica(...) response",
+      "L1428 ray.init().dashboard_url: 127.0.0.1:8265"
+    ],
+    "failed": [
+      "L749-764 YAML: import_path configure_serve:translator_app does not exist in L716-735 (example_app) -> serve run loops on AttributeError (docs-inherited)",
+      "L660 prediction for def + time.sleep(1): post says ~6 s; measured 3.6 s (limit 2) and 1.0 s (limit 6)",
+      "L1068 REST PUT example: request accepted (200) but text_ml:app from the remote serve_config_examples zip fails with transformers 5 (KeyError: task translation_en_to_fr removed) -> DEPLOY_FAILED; external example drift",
+      "L1018-1050: text_ml.py is never shown (reader must assemble it) and L1048 deploys serve_config.yaml while L984 wrote config.yaml",
+      "L1202 serve build writes route_prefix /app1, /app2, not /classify, /translate as L1225/L1233 show (docs-inherited)",
+      "L776 snippet lacks 'from ray import serve' (NameError if pasted alone)"
+    ],
+    "notes": "Environment notes (affect both guides equally): Ray 2.60 on this host runs the dashboard with token auth, so CLI calls needed RAY_AUTH_MODE=token and REST calls an authorization header; the uv venv needed pip for runtime_env.pip; all generated code ran with AWS credentials removed (env -u AWS_*, AWS_CONFIG_FILE=/dev/null). Not run: L1518 MLflow deployment (needs a registry); L1483 Serve LLM (vLLM/GPU); L1046 serve deploy serve_config.yaml as named (file never created)."
+  },
+  "other_sdk_as_python": "none found: Python SDK only; YAML and CLI shown as such.",
+  "topic_taught_twice": "some: controller death and autoscaling pause (L681, L961); max_ongoing_requests (L621, L631, L698, L928); dictionary override (L797, L852); KubeRay recovery (L677, L1099).",
+  "causes_scope_beyond_sources": "Within the sources except L660's sync-handler timing, which extrapolates the docs' 'replica blocks' sentence into a number that current Ray does not show.",
+  "edit_residue": [
+    "L984 writes config.yaml but L1048 deploys serve_config.yaml",
+    "L1016 assumes text_ml.py that is never shown",
+    "L776 snippet without 'from ray import serve'"
+  ],
+  "top_issues": [
+    "Guide shape: no TL;DR (L10 opens with '소개와 설치'), architecture only at L599 after setup, topic-name headings (L205, L664, L683, L854), and it ends with the docs' next-steps list (L1545) instead of when to choose Serve and how it fails.",
+    "L660: '핸들러를 def로 바꾸고 time.sleep(1)을 쓰면 ... 약 6초' - running the guide's own L637 script on ray 2.60 gives 3.6 s (limit 2) and 1.0 s (limit 6); sync handlers do not serialise requests on current Ray.",
+    "Runnability gaps: L752 `import_path: configure_serve:translator_app` does not exist in L716-735 (example_app; inherited from the docs); text_ml.py (L1016) is never shown and L1048 deploys serve_config.yaml while L984 wrote config.yaml; the L1068 REST example's remote zip fails with transformers 5."
+  ]
+}

@@ -1,0 +1,268 @@
+{
+  "item": "guide-vllm",
+  "post": "/tmp/guide-compare/blind/guide-vllm-Y.md",
+  "judge_run": 2,
+  "sdk_checked": "vLLM main source (git clone --depth 1, commit d187921, 2026-11-08) imported from source in a scratch uv venv (Python 3.12, torch + requirements/common.txt, openai SDK; VLLM_TARGET_DEVICE=cpu, no compiled kernels). Every `vllm serve` flag in the post parsed with vllm.entrypoints.common.cli_args.make_arg_parser and the `serve` subcommand parser (config-file precedence checked: positional model beats the YAML `model`); LLM/SamplingParams/LLM.chat/EngineArgs.generation_config, ObservabilityConfig.custom_histogram_buckets validation, KVCacheManager (allocate_slots, get_computed_blocks, free, reset_prefix_cache, take_events), scheduler.py and loggers.py read in source; Prometheus exposition of a Counter named vllm:prefix_cache_hits checked with prometheus_client (exported as vllm:prefix_cache_hits_total). Client blocks and curl commands run against a local fake OpenAI-compatible server on 127.0.0.1:18000 (no key) and 127.0.0.1:18001 (keys new-key, old-key); localhost:8000 was taken by an unrelated local process, so base_url was rewritten in scratch copies only. Official docs read from the same commit's docs/ tree (getting_started/quickstart.md, installation/gpu*.md, cpu*.md, deployment, design/metrics.md, usage/metrics.md, serving/parallelism_scaling.md) plus live docs.vllm.ai pages (installation/gpu, stable api kv_cache_manager); arXiv HTML 2309.06180; blog.vllm.ai 2023-06-20. Non-official fetched: robulka.com/vllm, parseable.com vLLM OTel post, discuss.vllm.ai thread 1260 (JSON). Remote image/link URLs checked with curl. All code run with AWS_PROFILE/AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY/AWS_SESSION_TOKEN unset and AWS_CONFIG_FILE=AWS_SHARED_CREDENTIALS_FILE=/dev/null; no weights downloaded, no GPU, no paid model.",
+  "sampling": "221 blank-line paragraphs after front matter; paragraphs 2,5,8,...; 15 claims drawn anew from those paragraphs; whole post re-read for off-sample findings",
+  "scores": {
+    "A": 8.5,
+    "B": 7.5,
+    "C": 8.0,
+    "D": 8.5,
+    "E": 8.5,
+    "F": 6.5,
+    "T1": 7.5,
+    "T2": 8.0,
+    "T3": 9.0
+  },
+  "score_evidence": {
+    "A": "TL;DR, claim headings, architecture first and a closing judgement; the 404 bare URL (L514) and four restatements of the waste figure are the main structural blemishes.",
+    "B": "Clear and natural; repeated figure-intro shape ('~을 따라가면 됩니다' L78, L135; '주목하면 됩니다' L121; '보면 됩니다' L587) and forward pointers (L86, L197).",
+    "C": "Coherent arc; the running example ties sections together; the Nano-vLLM detour at L291-297 interrupts the vLLM description.",
+    "D": "Worked examples at each hard step (L25, L72-74, L141-147, L203-208, L256); the beam-search walk-through is especially clear.",
+    "E": "Well-chosen figures and tables, all referred to descriptively; one explanatory ASCII diagram flagged as 설명용.",
+    "F": "Second sample: two wrong (L301 stale API behaviour; L541 PromQL names), 13 supported; L514 link 404 off-sample.",
+    "T1": "Runnable parts run; the PromQL that a reader would paste into Grafana is broken; Helm stops at a dead link.",
+    "T2": "Grounded coverage in a learning order; installation kept proportionate.",
+    "T3": "Depth and breadth are the post's strength: internals, design reasons, trade-offs, observability semantics and when not to use vLLM."
+  },
+  "principles": {
+    "claim_headings": {
+      "status": "met",
+      "evidence": "Major headings state claims: L17 '## 연속 메모리 예약이 KV 캐시의 60–80%를 버리는 문제와 vLLM의 위치', L80 '### 마지막 블록 하나로 묶인 낭비', L101 '### 전용 커널이 치르는 어텐션 지연 비용', L577 '## vLLM을 고를 때와 피할 때'. A few are topic-like (L303 '### 통계·초기화·이벤트를 꺼내는 메서드')."
+    },
+    "running_example": {
+      "status": "met",
+      "evidence": "Qwen/Qwen2.5-1.5B-Instruct chat server announced at L155 and reused in the request flow (L171), allocate_slots example (L256), common-prefix discussion (L301), install (L337), YAML (L418), Docker (L473), prefix-cache metric reading (L544) and the closing judgement (L615)."
+    },
+    "mechanism_design_code_example": {
+      "status": "met",
+      "evidence": "Block model: OS analogy and design choice (L46-50) -> blockwise attention formula (L56) -> worked block-table steps (L70-74) -> trade-off table (L94-97); KVCacheManager: segment layout (L242-246) -> stages (L250-252) -> worked numbers (L256) -> source excerpt (L262-281)."
+    },
+    "facts_said_once": {
+      "status": "partly met",
+      "evidence": "60-80% waste appears at L13, L17, L19 and L25; 'one model per server' at L15, L340, L514 and L606; 20-26% at L15 and L109; per-instance memory limit at L532 and L608."
+    },
+    "numbers_with_scope_unit": {
+      "status": "met",
+      "evidence": "Baselines kept apart (table L31-34 '두 수치는 기준선이 달라 서로 바꿔 인용하면 안 됩니다'), scope note for 55%/2.2x (L163), setting for the blog benchmark (L583 'A10G의 LLaMA-7B와 A100 40GB의 LLaMA-13B'), hypothetical numbers flagged (L25, L203, L454)."
+    },
+    "nothing_invented": {
+      "status": "partly met",
+      "evidence": "Illustrative numbers and the ASCII diagram are flagged ('가상의 숫자', '설명용 그림'). But L301 describes get_num_common_prefix_blocks as counting shared blocks, while the cited API page says 'Deprecated: cascade attention has been removed. Always returns 0'; L541/L544 give counter names without the exported `_total` suffix."
+    },
+    "writer_assessment_at_end": {
+      "status": "met",
+      "evidence": "L613-615 '### 이 글의 판단' names where vLLM is the default choice, where the gain is small, and what to measure before deciding; preceded by a limits table (L604-611)."
+    },
+    "length_fitted": {
+      "status": "mostly met",
+      "evidence": "636 lines, weighted to the hard parts (L40-305). Some API minutiae exceed what a reader needs (L305 take_events annotating kv_cache_spec_kind; L260 reserved_blocks for async KV-connector loads)."
+    },
+    "type_specific_shape": {
+      "status": "met",
+      "evidence": "Opens with ## TL;DR (L11) and the problem (L17); architecture and mechanisms (L40-305) come before installation (L307); closes with when to choose/avoid and failure modes (L577-615)."
+    },
+    "korean_style": {
+      "status": "partly met",
+      "evidence": "Natural 입니다 register. Frequent forward signposting ('이어지는 두 개념 설명에서 다룹니다' L27, L86, L197, L225, L305); the same figure-intro shape repeats ('~을 따라가면 됩니다/주목하면 됩니다/보면 됩니다' L78, L121, L135, L587); noun frame L50 '볼 부분은 ... 사실입니다'; missing space L109 '20–26%높습니다'."
+    }
+  },
+  "claims": {
+    "checked": 15,
+    "numeric": 15,
+    "supported": 13,
+    "unsupported": 0,
+    "wrong": 2,
+    "unverifiable": 0,
+    "examples": [
+      {
+        "line": 13,
+        "claim": "paper: 2-4x vs FasterTransformer/Orca at the same latency; blog: up to 24x vs HF Transformers",
+        "verdict": "supported",
+        "source": "https://arxiv.org/html/2309.06180 abstract; https://blog.vllm.ai/2023/06/20/vllm.html"
+      },
+      {
+        "line": 19,
+        "claim": "existing systems waste 60-80% of KV cache memory",
+        "verdict": "supported",
+        "source": "https://blog.vllm.ai/2023/06/20/vllm.html"
+      },
+      {
+        "line": 25,
+        "claim": "2,048-token reservation ending at 300 tokens leaves about 85% unused",
+        "verdict": "supported",
+        "source": "arithmetic (1748/2048 = 85.4%); flagged as hypothetical"
+      },
+      {
+        "line": 72,
+        "claim": "block size 4, 7-token prompt: logical 0,1 -> physical 7,1; 4 + 3 tokens; one free slot",
+        "verdict": "supported",
+        "source": "https://arxiv.org/html/2309.06180 §4.3 (Fig. 6)"
+      },
+      {
+        "line": 74,
+        "claim": "second decode step allocates physical block 3",
+        "verdict": "supported",
+        "source": "https://arxiv.org/html/2309.06180 §4.3"
+      },
+      {
+        "line": 99,
+        "claim": "default block size 16",
+        "verdict": "supported",
+        "source": "https://arxiv.org/html/2309.06180 §7.2 'vLLM sets its default block size as 16'"
+      },
+      {
+        "line": 145,
+        "claim": "beam k=4: blocks 2, 4, 5, 8 freed; 9-12 allocated; all share 0, 1, 3",
+        "verdict": "supported",
+        "source": "https://arxiv.org/html/2309.06180 §4.4: 'frees all physical blocks whose reference counts reach 0 (blocks 2, 4, 5, 8) ... (blocks 9-12) ... share blocks 0, 1, 3'"
+      },
+      {
+        "line": 163,
+        "claim": "memory usage down up to 55%, up to 2.2x throughput, for parallel sampling and beam search",
+        "verdict": "supported",
+        "source": "https://blog.vllm.ai/2023/06/20/vllm.html: 'cutting their memory usage by up to 55%. This can translate into up to 2.2x improvement in throughput'"
+      },
+      {
+        "line": 201,
+        "claim": "V1 scheduler has no prefill/decode phase; num_computed_tokens and num_tokens_with_spec",
+        "verdict": "supported",
+        "source": "vllm/v1/core/sched/scheduler.py L719-725 comment"
+      },
+      {
+        "line": 256,
+        "claim": "block size 16, 32 cached + 18 new = 50 tokens = 4 blocks, 2 new",
+        "verdict": "supported",
+        "source": "arithmetic (ceil(50/16) = 4)"
+      },
+      {
+        "line": 301,
+        "claim": "get_num_common_prefix_blocks returns per-group shared-prefix block counts, 0 only in an undetectable case",
+        "verdict": "wrong",
+        "source": "https://docs.vllm.ai/en/stable/api/vllm/v1/core/kv_cache_manager: 'Deprecated: cascade attention has been removed. Always returns 0 for each KV cache group.'"
+      },
+      {
+        "line": 322,
+        "claim": "binaries compiled with CUDA 12.9; 12.8 and 13.0 builds also published; GPU guide uses --managed-python",
+        "verdict": "supported",
+        "source": "gpu.cuda.inc.md L53; python_env_setup.inc.md L5"
+      },
+      {
+        "line": 328,
+        "claim": "Linux and Python 3.11-3.14; TPU via `uv pip install vllm-tpu`",
+        "verdict": "supported",
+        "source": "gpu.md L28; installation README"
+      },
+      {
+        "line": 456,
+        "claim": "CPU --max-num-seqs default 256 x world_size offline, 128 x world_size online",
+        "verdict": "supported",
+        "source": "cpu.md L309-311"
+      },
+      {
+        "line": 541,
+        "claim": "hit-rate query rate(vllm:prefix_cache_hits[5m]) / rate(vllm:prefix_cache_queries[5m])",
+        "verdict": "wrong",
+        "source": "exported series are vllm:prefix_cache_hits_total and vllm:prefix_cache_queries_total (prometheus_client Counter exposition); the query matches nothing"
+      }
+    ],
+    "off_sample_findings": [
+      {
+        "line": 514,
+        "claim": "Helm deployment docs URL",
+        "verdict": "wrong",
+        "source": "HTTP 404"
+      },
+      {
+        "line": 476,
+        "claim": "release tags `latest`/`v<version>`, arch tags latest-x86_64/latest-aarch64; -ubuntu2404 no longer published",
+        "verdict": "supported",
+        "source": "gpu.cuda.inc.md L281-285 (listed as a verified off-sample fact)"
+      }
+    ]
+  },
+  "checklist": {
+    "repeated": 0,
+    "avoided": 5,
+    "na": 0,
+    "repeated_ids": [],
+    "note": "guide-vllm has no item-specific fixes; the five generic guide checks from human_fixes.yaml notes are used.",
+    "items": [
+      {
+        "id": "cross-ref-nonexistent-section",
+        "status": "avoided",
+        "evidence": "Cross-references name sections that exist (L155 \"뒤의 'uv 설치부터…' 절\" -> L307; L197 KVCacheManager -> L233; L225 metrics -> L548)."
+      },
+      {
+        "id": "tag-remnant-entity-leak",
+        "status": "avoided",
+        "evidence": "No tag remnants or &gt;/&amp; leaks in the body; `&#124;` only in two Sources link titles (L630, L634), rendering as '|'."
+      },
+      {
+        "id": "unclosed-code-fence",
+        "status": "avoided",
+        "evidence": "17 fenced blocks, all closed (parsed)."
+      },
+      {
+        "id": "stale-cli-flags",
+        "status": "avoided",
+        "evidence": "Every flag parses on vLLM main (incl. --custom-histogram-buckets, --attention-backend, --generation-config, --config); the old `python -m vllm.entrypoints.openai.api_server` is labelled as the 2023 blog's form (L340). Stale API behaviour exists elsewhere (L301), not in CLI flags."
+      },
+      {
+        "id": "install-centric-coverage",
+        "status": "avoided",
+        "evidence": "Installation is one section (L307-400) after ~290 lines of internals."
+      }
+    ]
+  },
+  "extras": {
+    "architecture_first_line": 40,
+    "architecture_note": "Problem and positioning at L17; the memory model section starts at L40 ('## 고정 크기 블록과 블록 테이블로 구성된 PagedAttention 메모리 모델'), the V1 process/scheduler flow at L165, KVCacheManager at L233; installation only at L307.",
+    "sources_total": 17,
+    "sources_non_official": 5,
+    "non_official_share": 0.29,
+    "non_official_list": [
+      "linkedin.com Understanding vLLM Serving Part 1",
+      "robulka.com/vllm",
+      "languisher.top Nano-vLLM BlockManager",
+      "artifacthub.io vllm-stack 0.1.3",
+      "discuss.vllm.ai thread 1260"
+    ],
+    "opens_with_problem": true,
+    "opens_note": "## TL;DR (L11-15) states the problem, the mechanism, the cost and who benefits; L17 opens the body with the 60-80% waste problem.",
+    "closes_with_when_to_choose_and_failure_modes": true,
+    "closes_note": "L577-615: throughput vs HF/TGI by output count, LMSYS case, a limits/failure table (L604-611) and the writer's judgement (L613-615)."
+  },
+  "runnable_code": {
+    "verdict": "mostly runnable; one PromQL query would return no data",
+    "passed": [
+      "serve command lines (L337, L437, L568) and the flags named in prose (--host/--port, --generation-config vllm, --api-key with several keys, --kv-cache-metrics, --kv-cache-metrics-sample, --api-server-count, --kv-cache-memory-bytes, --max-num-seqs) parse with make_arg_parser",
+      "config.yaml (L416-422) loads with `vllm serve --config`; `SOME_MODEL --config config.yaml` yields model_tag SOME_MODEL as L430 says",
+      "openai chat client (L346-366) against the fake server",
+      "curl /v1/completions (L370-379) and curl /metrics (L524-526) against the fake server",
+      "API key check: request without key -> 401, Bearer old-key -> 200 (L442; real middleware checks Authorization Bearer)",
+      "offline code (L387-398): `from vllm.entrypoints.llm import LLM` is the same class as `vllm.LLM`; LLM.chat(messages_list) and LLM(..., generation_config='vllm') match the source",
+      "watermark excerpt (L262-281) matches vllm/v1/core/kv_cache_manager.py allocate_slots apart from the marked omission",
+      "custom-histogram-buckets: request_latency list accepted; an unknown family key is rejected by ObservabilityConfig validation (L571)"
+    ],
+    "failed": [
+      "PromQL at L541 `rate(vllm:prefix_cache_hits[5m]) / rate(vllm:prefix_cache_queries[5m])`: prometheus_client exports these Counters as vllm:prefix_cache_hits_total / vllm:prefix_cache_queries_total, so the query matches no series (checked with prometheus_client exposition)",
+      "link at L514 https://docs.vllm.ai/projects/production-stack/en/latest/helm.html returns 404"
+    ],
+    "notes": "Offline generation, Docker, Kubernetes and Prometheus could not be executed (no GPU, no cluster). Neither the GPU memory fraction flag (`--gpu-memory-utilization`, alluded to at L532 'GPU 메모리 사용 한도 설정') nor SamplingParams is shown, and the Helm path stops at a link (L514)."
+  },
+  "topic_taught_twice": "60-80% waste (L13, L17, L19, L25); one model per server (L15, L340, L514, L606); 20-26% kernel overhead (L15, L109); per-instance memory limit (L532, L608).",
+  "causes_scope_beyond_sources": "KVCacheManager API minutiae (L283-305: full_sequence_must_fit, delay_cache_blocks, take_events metadata) go beyond what a guide needs; the get_num_common_prefix_blocks subsection describes behaviour the cited page no longer has.",
+  "edit_residue": [
+    "L109 '20–26%높습니다' (missing space)",
+    "L430 trailing space",
+    "L514 bare URL in parentheses instead of a link"
+  ],
+  "changes_vs_v16": "n/a (blind A/B comparison; no earlier run of this artifact)",
+  "top_issues": [
+    "L301 describes `get_num_common_prefix_blocks(running_request_id)` as counting blocks whose ref_cnt equals the number of requests and returning 0 only when an unscheduled request does not share the prefix; the cited API page says 'Deprecated: cascade attention has been removed. Always returns 0 for each KV cache group.' The whole subsection (L299-301) is stale.",
+    "Prefix-cache hit-rate PromQL (L541) and L544 '실제 카운터 이름은 `vllm:prefix_cache_hits`와 `vllm:prefix_cache_queries`' omit the `_total` suffix Prometheus exposes for Counters, so the query returns nothing; the Helm deployment link at L514 is a bare URL that returns 404.",
+    "Repetition and meta signposting: 60-80% waste stated four times (L13, L17, L19, L25), 'one model per server' four times (L15, L340, L514, L606); forward pointers like '이어지는 ... 설명에서 다룹니다' (L27, L86, L197, L225, L305) and a repeated figure-intro sentence shape (L78, L121, L135, L587)."
+  ]
+}

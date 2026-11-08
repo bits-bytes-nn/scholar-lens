@@ -1,0 +1,269 @@
+{
+  "item": "guide-vllm",
+  "post": "/tmp/guide-compare/blind/guide-vllm-X.md",
+  "judge_run": 2,
+  "sdk_checked": "vLLM main source (git clone --depth 1, commit d187921, 2026-11-08) imported from source in a scratch uv venv (Python 3.12, torch + requirements/common.txt, openai SDK; VLLM_TARGET_DEVICE=cpu, no compiled kernels). Every `vllm serve` flag in the post parsed with vllm.entrypoints.common.cli_args.make_arg_parser and the `serve` subcommand parser (config-file precedence checked: positional model beats the YAML `model`); LLM/SamplingParams/LLM.chat/EngineArgs.generation_config, ObservabilityConfig.custom_histogram_buckets validation, KVCacheManager (allocate_slots, get_computed_blocks, free, reset_prefix_cache, take_events), scheduler.py and loggers.py read in source; Prometheus exposition of a Counter named vllm:prefix_cache_hits checked with prometheus_client (exported as vllm:prefix_cache_hits_total). Client blocks and curl commands run against a local fake OpenAI-compatible server on 127.0.0.1:18000 (no key) and 127.0.0.1:18001 (keys new-key, old-key); localhost:8000 was taken by an unrelated local process, so base_url was rewritten in scratch copies only. Official docs read from the same commit's docs/ tree (getting_started/quickstart.md, installation/gpu*.md, cpu*.md, deployment, design/metrics.md, usage/metrics.md, serving/parallelism_scaling.md) plus live docs.vllm.ai pages (installation/gpu, stable api kv_cache_manager); arXiv HTML 2309.06180; blog.vllm.ai 2023-06-20. Non-official fetched: robulka.com/vllm, parseable.com vLLM OTel post, discuss.vllm.ai thread 1260 (JSON). Remote image/link URLs checked with curl. All code run with AWS_PROFILE/AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY/AWS_SESSION_TOKEN unset and AWS_CONFIG_FILE=AWS_SHARED_CREDENTIALS_FILE=/dev/null; no weights downloaded, no GPU, no paid model.",
+  "sampling": "339 blank-line paragraphs after front matter; paragraphs 2,5,8,...; 15 claims drawn anew from those paragraphs; whole post re-read for off-sample findings",
+  "scores": {
+    "A": 6.0,
+    "B": 7.5,
+    "C": 7.0,
+    "D": 8.0,
+    "E": 8.0,
+    "F": 7.5,
+    "T1": 8.0,
+    "T2": 7.0,
+    "T3": 8.0
+  },
+  "score_evidence": {
+    "A": "No TL;DR and no closing judgement; headings are topics; long installation block before any internals (L85-210). Repetition across sections (download-kernels L100/L486, --ipc=host L174/L1047). Markdown valid.",
+    "B": "Clear sentences; occasional filler (L377, L296) and three '> **핵심:**' boxes; L1057 '인프라 요구와 사용 사례의 복잡도에 맞춰 고르면 됩니다.' is generic.",
+    "C": "Docs-order sequencing makes the reader meet `LLMEngine` scheduling (L254-259) and backends (L446) before blocks and the scheduler; L494 restarts the paging story already told at L48-52.",
+    "D": "Worked examples at the hard points (L623, L767, L922, L1147); over-explained easy points (L240 sampling parameters, L79 version check).",
+    "E": "Good use of tables, ASCII diagram and formulas; low-information backend table (L458-466).",
+    "F": "Second sample all supported (15/15), but off-sample errors stand: L109/L123 stale XPU-wheel claim; L640 '약 20%'.",
+    "T1": "Runnable as far as checkable; omissions of `--gpu-memory-utilization` and of a config-file example remain.",
+    "T2": "Grounded but padded with platform build recipes (L123-209) and a second Docker section (L1045-1047).",
+    "T3": "Internals, design reasons and operations are covered in depth; trade-offs named (L627-640, L689-695); closing guidance absent."
+  },
+  "principles": {
+    "claim_headings": {
+      "status": "not met",
+      "evidence": "Major headings are topic names: L64 '## 사전 요구 사항', L85 '## vLLM 설치하기', L211 '## 오프라인 배치 추론', L446 '## 어텐션 백엔드 선택', L644 '## 스케줄러와 연속 배칭', L1061 '## Prometheus 메트릭과 관측성'."
+    },
+    "running_example": {
+      "status": "not met",
+      "evidence": "Model changes from example to example: facebook/opt-125m (L230, L974), Qwen/Qwen2.5-1.5B-Instruct (L326), Qwen/Qwen3-0.6B (L171, L1157), unsloth/Llama-3.2-1B-Instruct (L1070), facebook/opt-13b (L1027). The toy block manager and scheduler use their own numbers."
+    },
+    "mechanism_design_code_example": {
+      "status": "met",
+      "evidence": "Block section goes problem (L494) -> logical/physical design and reason (L503) -> formula L507-510 -> toy BlockManager L548-621 -> hand trace L623; scheduler goes progress-only design (L662-666) -> simulator L701-765 -> trace L767; both traces match the code when run."
+    },
+    "facts_said_once": {
+      "status": "partly met",
+      "evidence": "PagedAttention blocks/paging explained at L48-52 and again at L494-503 ('앞에서 다뤘습니다'); `vllm download-kernels` reason at L100 and again L486; `--ipc=host` shared-memory reason at L174 and again L1047; generation_config default at L300 and again L337; 55% sharing saving at L52 and L532."
+    },
+    "numbers_with_scope_unit": {
+      "status": "partly met",
+      "evidence": "Most numbers carry scope (L42 '기존 시스템 ... 20.4%~38.2%', L936 '예시 다섯 개 ... Orca-Oracle보다 ... 3.58배', L966 CPU-backend table). L640 '어텐션 연산 자체는 약 20% 느려집니다' drops the paper's 20-26% range and the FasterTransformer baseline."
+    },
+    "nothing_invented": {
+      "status": "partly met",
+      "evidence": "Toy code is labelled '설명용 장난감' (L546), '설명용 시뮬레이터' (L699), '설명용 구현' (L834). But L123 'Intel XPU는 사전 빌드 휠이 아직 없습니다' contradicts the current GPU install page ('Pre-built vLLM XPU wheels are published to wheels.vllm.ai')."
+    },
+    "writer_assessment_at_end": {
+      "status": "not met",
+      "evidence": "The post ends at L1286 with alert-rule advice ('그래도 원인이 보이지 않는 느린 요청은 트레이스로 추적합니다.'); no closing section on when to choose vLLM, its limits or failure modes."
+    },
+    "length_fitted": {
+      "status": "partly met",
+      "evidence": "1,310 lines. Hard parts get room (block manager, scheduler, histogram interpolation), but installation runs L85-210 with Intel XPU source build, ROCm setup.py, Docker image build from source and QEMU registration (L207-209), and trivial steps get their own block (L79-81 'python3 --version')."
+    },
+    "type_specific_shape": {
+      "status": "not met",
+      "evidence": "No TL;DR. The opening section (L11-62) is a problem framing, which is good, but internals start only at L492 after installation, offline, online and backend sections; no closing 'when to choose and how it fails' section."
+    },
+    "korean_style": {
+      "status": "partly met",
+      "evidence": "Natural 입니다 register overall. Repeated formula blocks '> **핵심:** ...' (L54, L642, L808); padding sentences such as L377 '예제에서는 `api_key`에 `\"EMPTY\"`를 넣었습니다.' and L296 '`chat` 예제는 원래 질문을 `prompts[idx]`에서 꺼내 출력합니다.'"
+    }
+  },
+  "claims": {
+    "checked": 15,
+    "numeric": 15,
+    "supported": 15,
+    "unsupported": 0,
+    "wrong": 0,
+    "unverifiable": 0,
+    "examples": [
+      {
+        "line": 23,
+        "claim": "LLaMA-13B KV cache up to 1.7GB per sequence",
+        "verdict": "supported",
+        "source": "https://blog.vllm.ai/2023/06/20/vllm.html: 'Takes up to 1.7GB for a single sequence in LLaMA-13B'"
+      },
+      {
+        "line": 33,
+        "claim": "existing systems reserve the maximum length (e.g. 2048 tokens) as a contiguous chunk",
+        "verdict": "supported",
+        "source": "https://arxiv.org/html/2309.06180 §3: 'statically allocates a chunk of memory for a request based on the request's maximum possible sequence length' (2048 given as the OPT example)"
+      },
+      {
+        "line": 62,
+        "claim": "LMSYS cut serving GPUs by 50%; 30K average and 60K peak requests per day",
+        "verdict": "supported",
+        "source": "https://blog.vllm.ai/2023/06/20/vllm.html: 'cut the number of GPUs used ... by 50%. ... average of 30K requests daily and a peak of 60K'"
+      },
+      {
+        "line": 98,
+        "claim": "--torch-backend=auto (or UV_TORCH_BACKEND=auto) picks the PyTorch index from the CUDA driver; cu126 to pin",
+        "verdict": "supported",
+        "source": "quickstart.md L33"
+      },
+      {
+        "line": 205,
+        "claim": "aarch64 build with --platform linux/arm64, parallelism via max_jobs and nvcc_threads",
+        "verdict": "supported",
+        "source": "gpu.cuda.inc.md L394-398"
+      },
+      {
+        "line": 261,
+        "claim": "generate returns a list of RequestOutput; output.outputs[0].text",
+        "verdict": "supported",
+        "source": "quickstart.md offline example; vllm/entrypoints/llm.py generate return type"
+      },
+      {
+        "line": 512,
+        "claim": "16-token OPT-13B block is about 12.8MB",
+        "verdict": "supported",
+        "source": "https://arxiv.org/html/2309.06180 §3 800 KB per token x 16"
+      },
+      {
+        "line": 971,
+        "claim": "CPU, world_size 1, online: 2048 tokens and 128 seqs",
+        "verdict": "supported",
+        "source": "cpu.md L306-311 (2048 x 1, 128 x 1)"
+      },
+      {
+        "line": 981,
+        "claim": "VLLM_CPU_KVCACHE_SPACE in GiB, 40 means 40GiB, default 0 means no override, legacy; use --kv-cache-memory-bytes",
+        "verdict": "supported",
+        "source": "cpu.md L151 and L296"
+      },
+      {
+        "line": 983,
+        "claim": "CPU: --block-size in multiples of 32, default 128",
+        "verdict": "supported",
+        "source": "cpu.md L302: 'Use multiples of 32 as --block-size, which is 128 by default.'"
+      },
+      {
+        "line": 1024,
+        "claim": "XPU pipeline parallel is a beta for online serving, single node with mp; PP=2 x TP=8 example",
+        "verdict": "supported",
+        "source": "gpu.xpu.inc.md L132-141"
+      },
+      {
+        "line": 1126,
+        "claim": "TPOT recorded as 0 for requests with <=1 token; vllm bench serve excludes them",
+        "verdict": "supported",
+        "source": "docs/design/metrics.md L55, L77-78"
+      },
+      {
+        "line": 1147,
+        "claim": "p95 of 140 samples interpolates to about 0.073s",
+        "verdict": "supported",
+        "source": "arithmetic on the documented buckets: 0.06 + (133-123)/(138-123) x 0.02 = 0.0733"
+      },
+      {
+        "line": 1186,
+        "claim": "deprecated in X.Y, hidden in X.Y+1 (re-enable with --show-hidden-metrics-for-version), removed in X.Y+2",
+        "verdict": "supported",
+        "source": "docs/usage/metrics.md L134; flag parses"
+      },
+      {
+        "line": 1201,
+        "claim": "OTLP collector listens on 4317 (gRPC) and 4318 (HTTP)",
+        "verdict": "supported",
+        "source": "parseable.com vLLM OTel post (ports 4317:4317, 4318:4318); standard OTLP ports"
+      }
+    ],
+    "off_sample_findings": [
+      {
+        "line": 109,
+        "claim": "Intel XPU installs by source build or official Docker image only",
+        "verdict": "wrong",
+        "source": "gpu.xpu.inc.md 'pre-built-wheels': 'Pre-built vLLM XPU wheels are published to wheels.vllm.ai'"
+      },
+      {
+        "line": 640,
+        "claim": "attention about 20% slower",
+        "verdict": "unsupported",
+        "source": "https://arxiv.org/html/2309.06180 §7.1: 20-26%"
+      },
+      {
+        "line": 948,
+        "claim": "the GPU memory fraction argument is left unnamed ('정확한 인자 이름과 기본값은 ... 확인')",
+        "verdict": "unsupported",
+        "source": "omission rather than an error: the engine arg is --gpu-memory-utilization (it even appears as a label at L1180)"
+      }
+    ]
+  },
+  "checklist": {
+    "repeated": 0,
+    "avoided": 5,
+    "na": 0,
+    "repeated_ids": [],
+    "note": "guide-vllm has no item-specific fixes; the five generic guide checks from human_fixes.yaml notes are used.",
+    "items": [
+      {
+        "id": "cross-ref-nonexistent-section",
+        "status": "avoided",
+        "evidence": "Cross-references are relative ('앞서 설명한', '앞의 표') and point to existing sections; no numbered chapter references."
+      },
+      {
+        "id": "tag-remnant-entity-leak",
+        "status": "avoided",
+        "evidence": "No tag remnants or &gt;/&amp; leaks in the body; the only entities are `&#124;` in two Sources link titles (L1296, L1299), which render as '|'."
+      },
+      {
+        "id": "unclosed-code-fence",
+        "status": "avoided",
+        "evidence": "40 fenced blocks, all closed (parsed)."
+      },
+      {
+        "id": "stale-cli-flags",
+        "status": "avoided",
+        "evidence": "All 16 serve command lines parse against vLLM main (incl. --custom-histogram-buckets, --collect-detailed-traces, --kv-cache-metrics-sample, --show-hidden-metrics-for-version). The stale item is a docs fact, not a flag (L123 XPU wheels)."
+      },
+      {
+        "id": "install-centric-coverage",
+        "status": "avoided",
+        "evidence": "Internals are substantial (L492-1060: block tables, refcount/CoW, scheduler, prefix-cache hashing, TP). Installation still comes first and is long (L85-210)."
+      }
+    ]
+  },
+  "extras": {
+    "architecture_first_line": 492,
+    "architecture_note": "PagedAttention is introduced as a concept at L48-54, but the architecture/internals sections start at L492 ('## PagedAttention과 블록 기반 KV 캐시 관리'); the request lifecycle and process split appear at L650/L777.",
+    "sources_total": 20,
+    "sources_non_official": 6,
+    "non_official_share": 0.3,
+    "non_official_list": [
+      "robulka.com/vllm",
+      "languisher.top Nano-vLLM BlockManager",
+      "parseable.com vLLM OpenTelemetry",
+      "linkedin.com Understanding vLLM Serving Part 1",
+      "artifacthub.io vllm-stack 0.1.3",
+      "discuss.vllm.ai thread 1260"
+    ],
+    "opens_with_problem": true,
+    "opens_note": "Opens with '## vLLM이 해결하는 문제와 핵심 아이디어' and '### LLM 서빙은 왜 메모리 문제인가' (L11-13), but without a TL;DR.",
+    "closes_with_when_to_choose_and_failure_modes": false,
+    "closes_note": "Ends with OpenTelemetry and alert rules (L1188-1286). Failure signals are scattered (preemption L775, OOM L950) but there is no closing judgement on when to pick vLLM."
+  },
+  "runnable_code": {
+    "verdict": "runnable within the limits of a no-GPU check",
+    "passed": [
+      "16 `vllm serve` command lines (L326, L340, L428, L433, L476, L974, L990, L1027, L1070, L1157, L1197, plus the trace/metrics flags at L1141, L1186, L1194, L1203) parse with make_arg_parser",
+      "openai completions client (L360-375) and chat client (L397-416) against the fake server",
+      "curl /v1/models, /v1/completions, /v1/chat/completions and /metrics (L332, L347-356, L383-393, L1073)",
+      "API key rotation: request without key -> 401, Bearer old-key -> 200; chat client with new-key -> 200 (L425-436; real middleware checks Authorization Bearer)",
+      "toy BlockManager (L548-621) prints A:[0,2] B:[0,1], ref_count [2,1,1]; matches the hand trace at L623",
+      "toy scheduler (L701-765) prints {'B':4,'A':3}, {'B':4,'A':1,'C':2}, {'B':2,'A':1,'C':1}, {'B':1}; matches the trace at L767",
+      "toy prefix cache (L836-920) prints [0, 1, 2] 0 and [0, 1, 3] 8 as claimed at L922",
+      "LLM, SamplingParams(temperature=0.8, top_p=0.95), LLM.generate(prompts, sampling_params), LLM.chat(messages, sampling_params) and LLM(..., generation_config='vllm') match the source signatures",
+      "OpenTelemetry Collector YAML (L1209-1244) parses"
+    ],
+    "failed": [],
+    "notes": "Offline generation, Docker, Kubernetes and PromQL could not be executed (no GPU, no cluster, no Prometheus). The memory-budget section never names `--gpu-memory-utilization` (L948 '정확한 인자 이름과 기본값은 설치한 버전의 vllm.config 설정 클래스에서 확인합니다'), and the YAML config section neither shows a file nor names `--config` (L444), so two common tasks are not runnable from the post."
+  },
+  "topic_taught_twice": "PagedAttention paging/blocks (L48-52 and L492-503), download-kernels (L100, L486), --ipc=host (L174, L1047), generation_config (L298-315, L337-341).",
+  "causes_scope_beyond_sources": "Installation recipes for Intel XPU, ROCm source builds, Docker image builds and QEMU (L123-209) go beyond what a vLLM serving guide needs; the XPU part is also stale.",
+  "edit_residue": [],
+  "changes_vs_v16": "n/a (blind A/B comparison; no earlier run of this artifact)",
+  "top_issues": [
+    "No TL;DR, topic headings and docs-order layout: installation, offline and online usage and backend choice (L64-490) come before the internals at L492, and the post ends at L1286 on alert rules with no 'when to choose / how it fails' judgement.",
+    "Stale or imprecise facts: L109/L123 say Intel XPU has no pre-built wheels ('사전 빌드 휠이 아직 없습니다'), but the current GPU install page publishes XPU wheels on wheels.vllm.ai; L640 '약 20% 느려집니다' drops the paper's 20-26% (vs FasterTransformer) range.",
+    "Facts taught twice and padding: paging/blocks (L48-52 vs L494-503), download-kernels (L100 vs L486), --ipc=host (L174 vs L1047), generation_config (L300 vs L337); install section padded with source builds and QEMU (L123-209) while `--gpu-memory-utilization` and `--config` are never named (L444, L948)."
+  ]
+}

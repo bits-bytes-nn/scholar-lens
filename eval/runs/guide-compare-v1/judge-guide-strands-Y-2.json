@@ -1,0 +1,272 @@
+{
+  "item": "guide-strands",
+  "post": "/tmp/guide-compare/blind/guide-strands-Y.md",
+  "judge_run": 2,
+  "sdk_checked": "strands-agents 1.64.0 (PyPI, scratch venv with anthropic/ollama/openai/gemini extras, cedarpy, strands-harness 0.3.4, strands-dynamodb-storage 0.2.0); @strands-agents/sdk + tsc for TypeScript blocks; docs fetched 2026-11-08 (site shows SDK Python v1.64.0)",
+  "sampling": "Run 2: re-read the artifact and sampled 15 claims (limits/concurrency/structured output/hooks/providers), at least 8 numeric, checked against the fetched official pages, the API reference and SDK 1.64.0 source.",
+  "scores": {
+    "A": 7.0,
+    "B": 7.5,
+    "C": 7.5,
+    "D": 7.0,
+    "E": 8.5,
+    "F": 7.0,
+    "T1": 8.0,
+    "T2": 8.0,
+    "T3": 9.0
+  },
+  "score_evidence": {
+    "A": "Clean Markdown, real tables, fenced code incl. TypeScript; deductions: no ## TL;DR (first heading L10 '## 에이전트 루프의 동작 원리'), topic-name headings ('### 설치' L96, '## 훅 쿡북' L978, '### 데이터 레이아웃' L1867), no closing section - the post stops after '### 관측 지표' (L2079).",
+    "B": "Mostly natural 입니다 prose with consistent terms; deductions: formulaic '볼 점/곳은 N' openers (L299, L1066, L1337, L1884) and six '~다는 점' noun frames (e.g. L1066 '오류 메시지로 대체된다는 점입니다' -> '오류 메시지로 대체됩니다').",
+    "C": "Good internal references (흐름도의 되먹임 경로가 코드에서는 이 재귀 호출입니다 L86; 앞서 본 LimitToolCounts와 함께 쓰면 L1189); deductions: no running example so each section restarts with a new toy domain; abrupt end without synthesis.",
+    "D": "Hard parts helped at the right moment (token trace table L292-297, hook order symmetry analogy L855, 124 s retry total L551); deductions: near-verbatim cookbook and layout dumps pad easy material (L978-1252, L1867-1905).",
+    "E": "Strong visuals: ASCII loop diagram (L18-33), Python/TS comparison tables (L270, L573, L653), event contract table (L833-845), storage trees (L1871-1901); deduction: the checkpoint table (L364-370) is the TypeScript table.",
+    "F": "Most sampled claims match the docs; deductions: L362-370 presents the TypeScript five-checkpoint table as general in a Python-led section (Python has four, incl. 'During MCP tool execution'); L1748 '세션 매니저는 플러그인으로 구현' is TS-only (Python SessionManager subclasses HookProvider); L187 tool_context[\"tool_use\"] fails at runtime; observability facts from a community article stated without attribution (L2085); two Sources never used (L2108, L2110). max_delay 128 (L577) follows the retry-strategies page but the API reference and SDK code say 240.",
+    "T1": "Many concrete, mostly runnable Python blocks plus four type-checking TS blocks; deductions: three blocks use undefined names without saying so (sleep L1061, my_tool L1140, flaky_api_call L1180), the dict-style ToolContext access (L187) breaks, and there is no end-to-end program.",
+    "T2": "Covers loop, limits, cancellation, concurrency, retries, structured output, hooks, interventions, HITL, state and sessions in a sensible order; deductions: harness and AgentCore Evaluations sources listed but unused, hooks cookbook and layouts largely restate docs.",
+    "T3": "Deep internals: event attribute contract and AttributeError guard (L847), After-event reversal within order groups (L859), cancellation polling latency and provider abort limits (L410-412), snapshot vs record layouts and their write cost (L1905), multi-agent single-writer (L1950-1984), observability (L2081-2085)."
+  },
+  "principles": {
+    "claim_headings": {
+      "status": "not met",
+      "evidence": "Topic headings throughout: L96 '### 설치', L106 '### 모델 공급자 선택', L978 '## 훅 쿡북', L1867 '### 데이터 레이아웃', L1986 '### 보안 모범 사례', L2079 '### 관측 지표'."
+    },
+    "running_example": {
+      "status": "not met",
+      "evidence": "No example carries through: strawberry letter_counter (L161), SQL audit (L310), TicketTriage once (L673), email/SSN (L1341), log deletion (L1533), haiku (L1210), research graph (L1961)."
+    },
+    "mechanism_design_code_example": {
+      "status": "met",
+      "evidence": "Limits: check placement (L280) -> reason (L282) -> code (L248) -> worked token trace table (L292-297); retries: default schedule, 124 s total (L551), parameters, code."
+    },
+    "facts_said_once": {
+      "status": "partly met",
+      "evidence": "Stop-reason vs exception exits at L225 and L2073; retry-strategy instances not shareable at L621 and L2077; Contact class defined twice (L765, L804); per-request agent rationale at L532, L1948, L1996."
+    },
+    "numbers_with_scope_unit": {
+      "status": "partly met",
+      "evidence": "Most numbers scoped ('최대 약 50ms의 지연' with as_tool nesting L410; Python/TS table L573-578), but L362 '체크포인트는 다섯 곳' is the TypeScript count presented without scope in a Python-led section."
+    },
+    "nothing_invented": {
+      "status": "partly met",
+      "evidence": "Illustrative numbers labelled ('토큰 수는 설명을 위해 임의로 정한 값' L290); but L1748 '세션 매니저는 플러그인으로 구현되어 있어서' holds only for TypeScript (Python SessionManager is a HookProvider)."
+    },
+    "writer_assessment_at_end": {
+      "status": "not met",
+      "evidence": "Post ends with the observability subsection (L2079-2085); there is no closing judgement or summary of what works and when to pick it."
+    },
+    "length_fitted": {
+      "status": "partly met",
+      "evidence": "2,110 lines; the hooks cookbook (L978-1252) and both storage layouts (L1867-1905) restate the docs nearly verbatim, while the closing choice section is absent."
+    },
+    "type_specific_shape": {
+      "status": "not met",
+      "evidence": "No ## TL;DR (body starts at L10 '## 에이전트 루프의 동작 원리'); architecture first is met (L10-90); does not close with when to choose it and its failure modes (failure patterns appear mid-post at L1937)."
+    },
+    "korean_style": {
+      "status": "partly met",
+      "evidence": "Natural 입니다 register; repeated formula '이 표에서 볼 점은 셋입니다' (L299), '설계에서 볼 부분이 둘 있습니다' (L1066), '표에서 눈여겨볼 곳이 두 군데 있습니다' (L1337), '구조에서 볼 곳은 두 군데입니다' (L1884); 6 '~다는 점' noun frames."
+    }
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 15,
+    "unsupported": 0,
+    "wrong": 0,
+    "unverifiable": 0,
+    "numbers_among_checked": 9,
+    "examples": [
+      {
+        "line": 127,
+        "claim": "OpenAIModel(model_id='gpt-5.4') with OPENAI_API_KEY",
+        "verdict": "supported",
+        "source": "quickstart/python"
+      },
+      {
+        "line": 128,
+        "claim": "GeminiModel(model_id='gemini-2.5-flash') with GEMINI_API_KEY",
+        "verdict": "supported",
+        "source": "quickstart/python"
+      },
+      {
+        "line": 149,
+        "claim": "Also supports LiteLLM, Mistral, SageMaker, Llama API, llama.cpp, Writer, OpenAI-compatible endpoints",
+        "verdict": "supported",
+        "source": "quickstart/python L158-159"
+      },
+      {
+        "line": 256,
+        "claim": "Example limits turns 5, output_tokens 2000, total_tokens 10000",
+        "verdict": "supported",
+        "source": "lifecycle-controls / agent-loop example"
+      },
+      {
+        "line": 294,
+        "claim": "Trace: 2,300 -> 5,300 -> 11,500 cumulative; stop at turn 4 as limit_turns",
+        "verdict": "supported",
+        "source": "Labelled illustrative values; arithmetic and priority rule consistent with lifecycle-controls"
+      },
+      {
+        "line": 412,
+        "claim": "Bedrock closes streaming at next chunk boundary; cannot abort pre-header or streaming=False calls",
+        "verdict": "supported",
+        "source": "agent-loop external cancellation signals"
+      },
+      {
+        "line": 43,
+        "claim": "Security example finds 12 call sites before reporting",
+        "verdict": "supported",
+        "source": "agent-loop concrete example: 'The model sees 12 call sites in the search results.'"
+      },
+      {
+        "line": 1845,
+        "claim": "snapshot_trigger example checkpoints when message count is a multiple of 4",
+        "verdict": "supported",
+        "source": "session-management snapshot_trigger example"
+      },
+      {
+        "line": 526,
+        "claim": "Tokens compared with ==, need not be hashable; ignored under UNSAFE_REENTRANT",
+        "verdict": "supported",
+        "source": "api agent: 'Matched by == (any equatable object; need not be hashable)'; agent-loop 'an idempotency token is ignored'"
+      },
+      {
+        "line": 576,
+        "claim": "TS maxAttempts default 6, must be >= 1",
+        "verdict": "supported",
+        "source": "retry-strategies TS table"
+      },
+      {
+        "line": 1861,
+        "claim": "Without tools the first call leaves 2 messages and the second 4, so the first checkpoint follows call two",
+        "verdict": "supported",
+        "source": "Writer's derivation from the % 4 trigger and user/assistant message pairs; consistent with session-management"
+      },
+      {
+        "line": 633,
+        "claim": "Python adds the recovered partial message to history before raising MaxTokensReachedException; TS exposes partialMessage only",
+        "verdict": "supported",
+        "source": "lifecycle-controls 'Handle a truncated model response'"
+      },
+      {
+        "line": 841,
+        "claim": "AfterToolsEvent exposes writable end_turn",
+        "verdict": "supported",
+        "source": "api hooks.events AfterToolsEvent end_turn"
+      },
+      {
+        "line": 580,
+        "claim": "jitter options none/full/equal/decorrelated, default 'full'",
+        "verdict": "supported",
+        "source": "retry-strategies backoff strategies"
+      },
+      {
+        "line": 1641,
+        "claim": "SlidingWindowConversationManager keeps the most recent N message pairs and reduces context on overflow",
+        "verdict": "supported",
+        "source": "state: 'Keeps the most recent N message pairs'; 'Handles context window overflow exceptions by reducing context'"
+      }
+    ],
+    "off_sample_findings": [
+      {
+        "line": 362,
+        "claim": "Five cancellation checkpoints presented generally",
+        "verdict": "wrong",
+        "source": "TypeScript-only table; Python lists four incl. MCP"
+      },
+      {
+        "line": 187,
+        "claim": "tool_context[\"tool_use\"][\"toolUseId\"]",
+        "verdict": "wrong (runtime)",
+        "source": "Matches the tools.decorator API docstring example, but SDK 1.64.0 raises TypeError: 'ToolContext' object is not subscriptable"
+      },
+      {
+        "line": 1748,
+        "claim": "Session manager implemented as a plugin",
+        "verdict": "unsupported",
+        "source": "TS only; Python SessionManager is a HookProvider"
+      },
+      {
+        "line": 2085,
+        "claim": "OTel span hierarchy and backend swap",
+        "verdict": "supported (unattributed)",
+        "source": "From the AWS Builder Center community article, stated as SDK fact without naming the source"
+      }
+    ]
+  },
+  "checklist": {
+    "repeated": 1,
+    "avoided": 2,
+    "na": 2,
+    "repeated_ids": [
+      "result-fields-incomplete"
+    ],
+    "items": [
+      {
+        "id": "loop-diagram-remote",
+        "status": "avoided",
+        "evidence": "No image links; the loop is drawn as an ASCII flow diagram (L18-33)."
+      },
+      {
+        "id": "shared-agent-throw-scope",
+        "status": "n/a",
+        "evidence": "No shared module-level agent/async-handler warning; ConcurrencyException described per docs (L498, L509)."
+      },
+      {
+        "id": "shared-agent-history-leak",
+        "status": "avoided",
+        "evidence": "'두 요청이 인스턴스를 공유하지 않으므로 ... 대화 기록이 섞일 위험도 없습니다' (L1996) and per-request agent state leak warning (L1744); invoke_async is not recommended (partial)."
+      },
+      {
+        "id": "result-fields-incomplete",
+        "status": "repeated",
+        "evidence": "result.stop_reason shown (L234-241) but no example calls result.metrics.get_summary(); metrics only named in prose (L299, L2083)."
+      },
+      {
+        "id": "multi-agent-subject",
+        "status": "n/a",
+        "evidence": "No multi-agent minimal-unit sentence."
+      }
+    ]
+  },
+  "extras": {
+    "architecture_first_line": 10,
+    "architecture_note": "The post opens with the loop architecture (L10-90: cycle, messages, tool execution, event_loop_cycle and recurse_event_loop) before installation (L96).",
+    "sources_total": 21,
+    "sources_listed": 21,
+    "sources_non_official": 1,
+    "non_official_share": 0.048,
+    "non_official_list": [
+      "Observability for AI Agents with OpenTelemetry (AWS Builder Center, community author) - used at L2083-2085 without attribution"
+    ],
+    "opens_with_problem": true,
+    "opens_note": "L12 frames why a loop is needed ('학습 데이터만으로 해결하지 못하는 요청'), but there is no TL;DR.",
+    "closes_with_when_to_choose_and_failure_modes": false,
+    "closes_note": "Ends at '### 관측 지표' (L2079-2085). Failure patterns sit mid-post (L1937-1948); no when-to-choose section. 'AgentCore evaluations' and 'Strands harness quickstart' are listed in Sources (L2108, L2110) but never used in the body."
+  },
+  "runnable_code": {
+    "verdict": "mostly runs",
+    "passed": [
+      "50 of 55 Python blocks ran in reading order with a scripted fake model and AWS credentials removed (stubs only for names the text says are assumed: calculator, search, delete_file, llm_review, is_unprofessional): providers (L111, L139), tools (L156, L196), stop reasons/limits (L228-L325), cancel/deadline (L385, L435, L467), concurrency/idempotency (L504, L523), retry (L560, L605), structured output (L666-L800), hooks/plugins (L862-L1110, L1192, L1218), interventions/HITL/Cedar (L1265-L1593), state (L1644-L1723), snapshot sessions incl. immutable snapshot restore (L1755, L1836, L1918), Graph session (L1955), handle_request (L2001).",
+      "Probes: prompt-less agent(limits={'turns':8}) continues after limit_turns; block_sensitive cancels the tool with the given message; PropagateUnexpectedExceptions re-raises; ToolGuard denies delete_file; session_id without a manager has 8 hex chars.",
+      "All 4 TypeScript blocks (L417, L583, L958, L1297) type-check with tsc --strict against @strands-agents/sdk (L1297 needs searchTool/deleteTool stubs it does not define)."
+    ],
+    "failed": [
+      "L1024 LimitToolCounts example: NameError 'sleep' (undefined, not stated as assumed).",
+      "L1119 PropagateUnexpectedExceptions example: NameError 'my_tool'.",
+      "L1150 RetryOnToolError example: NameError 'flaky_api_call'.",
+      "L187 inline code tool_context[\"tool_use\"][\"toolUseId\"] fails at runtime: TypeError 'ToolContext' object is not subscriptable (copied from the decorator API docstring).",
+      "L76 event_loop_cycle signature excerpt (reference only); L1797 S3 and L1813 DynamoDB blocks need real AWS resources (expected)."
+    ],
+    "notes": "With stubs for the three undefined names those blocks also run. Code is a set of independent snippets rather than one program."
+  },
+  "other_sdk_as_python": "L362-374 TypeScript five-checkpoint table presented generally next to Python code; L1748 TS-only plugin implementation stated for session managers generally.",
+  "topic_taught_twice": "Stop reason vs exception exits (L225, L2073); retry strategy not shareable (L621, L2077); Contact class twice (L765, L804); per-request agents (L532, L1948, L1996).",
+  "causes_scope_beyond_sources": "No invented features; advice such as '토큰은 입력 쪽이 출력보다 훨씬 커지는 경우가 흔합니다' (L2083) reads as a recommendation. Two listed sources unused.",
+  "edit_residue": [],
+  "top_issues": [
+    "L362-370: the five-checkpoint cancellation table is the TypeScript table, presented as general right before Python threading.Event code; Python checks four points including 'During MCP tool execution'.",
+    "Guide shape: no ## TL;DR (starts at L10), topic headings ('### 설치' L96, '## 훅 쿡북' L978), no running example, and no closing judgement or when-to-choose section - the post ends at '### 관측 지표' (L2079-2085) while harness/AgentCore sources (L2108, L2110) go unused.",
+    "Code defects: L187 tool_context[\"tool_use\"][\"toolUseId\"] raises TypeError at runtime; L1061 sleep, L1140 my_tool and L1180 flaky_api_call are undefined and not marked as assumed."
+  ]
+}

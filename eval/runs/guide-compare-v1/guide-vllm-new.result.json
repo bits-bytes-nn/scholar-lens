@@ -1,0 +1,165 @@
+{
+  "kind": "guide",
+  "status": "succeeded",
+  "input": "https://docs.vllm.ai/en/latest/getting_started/quickstart.html, https://arxiv.org/abs/2309.06180, https://blog.vllm.ai/2023/06/20/vllm.html",
+  "title": "vLLM and PagedAttention: Paged KV Cache from Install to Production",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/guide-vllm-and-pagedattention-paged-kv-cache-from-install-to-production/2026-11-08-vllm-and-pagedattention-paged-kv-cache-from-install-to-production.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-11-08-vllm-and-pagedattention-paged-kv-cache-from-install-to-production.md",
+  "pr_url": null,
+  "warnings": [
+    "Section 'KVCacheManager의 슬롯 할당·해제와 해시 체인 기반 프리픽스 캐시': the writer could not fix: The Nano-vLLM explainer (Languisher blog) is now named once, but without the date or version the problem asked for, because the evidence gives neither.",
+    "Section 'KVCacheManager의 슬롯 할당·해제와 해시 체인 기반 프리픽스 캐시': check 2 sentence(s) the evidence may not support: 요청이 끝나면 블록을 역순으로 돌려주므로 꼬리 블록이 먼저 축출됩니다 [[E86, E85, E87]]. (unsupported: Official docs say tail blocks are evicted first only when caching is enabled; the qualifier is dropped. (not supported: 꼬리 블록이 먼저 축출됩니다 (without 'when caching is enabled'))) | 이 통계가 Prometheus로 나가는 형태는 `/metrics`를 다루는 부분에서 설명합니다. (unsupported: No evidence that these prefix cache stats are exported to Prometheus via /metrics. (not supported: 이 통계가 Prometheus로 나가는 형태))",
+    "Section 'KVCacheManager의 슬롯 할당·해제와 해시 체인 기반 프리픽스 캐시' still has: a deep section needs at least 2 visuals (its figures, an equation, or a small table from its number evidence)",
+    "Section 'uv 설치부터 Qwen2.5 채팅 서버 첫 요청까지의 최소 경로': the writer could not fix: Not fixed: the `from vllm import LLM, SamplingParams` import in the offline code block, and the sentence that introduces it. The Quickstart shows exactly this import [[E3]], and the vllm 0.33.0 source shows the `LLM` class at `vllm.entrypoints.llm.LLM`. So the import is documented. The source excerp",
+    "Section '엔진 인자, YAML 설정 파일, CPU 백엔드 환경 변수로 나뉘는 구성': the writer could not fix: `--config`는 그대로 두었습니다. 공식 serve_args 페이지에 해당하는 근거 [[E72]]에 `vllm serve --config config.yaml`이 나오고, 명령줄 우선순위 예시 [[E74]]에도 등장합니다. 이 플래그를 빼면 YAML 설정 파일 부분이 성립하지 않습니다. world_size는 따로 정의한 근거가 없어서 '병렬로 함께 도는 프로세스 수'라고만 짧게 풀었고, TP×PP 같은 식은 넣지 않았습니다. '첫 토큰 성능'(TTFT)은 그 표현이 들어 있던 `--max-num-batched-tokens` 문",
+    "Section '엔진 인자, YAML 설정 파일, CPU 백엔드 환경 변수로 나뉘는 구성': the writer could not fix: `--config` 문제는 고치지 않았습니다. 공식 serve_args.md 페이지가 이 플래그를 직접 보여 줍니다(`vllm serve --config config.yaml` [[E72]], 우선순위 예시 `vllm serve SOME_MODEL --config config.yaml` [[E74]]). 지우면 근거가 있는 YAML 설정 파일 절이 무너집니다.",
+    "Section '엔진 인자, YAML 설정 파일, CPU 백엔드 환경 변수로 나뉘는 구성' still has: flags or arguments no official page mentions; use the documented ones or leave them out: --config",
+    "Section 'Docker 이미지와 Production Stack(Helm·CRD·Gateway)을 통한 배포': the writer could not fix: Code: the evidence names no CPU backend image, so I left the NUMA `docker run` line as an options-only line and said in the text before it that `...` stands for the rest of the reader's existing command. Kindness: the evidence only says agentgateway, Gateway API Inference Extension and llm-d Router ",
+    "Section 'Docker 이미지와 Production Stack(Helm·CRD·Gateway)을 통한 배포': 1 edit(s) not applied: would change a heading: '## Docker 이미지와 Production Stack(Helm·CRD·Gateway)을 통한 배포'",
+    "Section '/metrics의 Prometheus 메트릭으로 보는 KV 캐시 포화와 요청 지연': the writer could not fix: The forum answer's date or vLLM version is not given in the evidence, so I couldn't add it. The answer is named once and marked as a third-party report. The `--collect-detailed-traces` problem is resolved by narrowing that sentence to what [[E100]] supports: the activation condition and the flag val",
+    "Section '/metrics의 Prometheus 메트릭으로 보는 KV 캐시 포화와 요청 지연': check 1 sentence(s) the evidence may not support: 모델 forward만 따로 재는 히스토그램으로는 요청이 배치에 있을 때 모델 forward에 쓴 시간을 담는 `vllm:model_forward_time_milliseconds`가 있습니다 [[E100]]. (unsupported: The source says this metric is enabled only when OpenTelemetry tracing is on and --collect-detailed-traces=all/model/worker is used; the sentence presents it without that condition. (not supported: metric available without the OpenTelemetry/--collect-detailed-traces condition))",
+    "Section 'vLLM을 고를 때와 피할 때: HF·TGI 대비 처리량 이득과 한계': the writer could not fix: 메모리 한도 행에 설정 이름(`--gpu-memory-utilization`)을 적지 않았습니다. 근거에 그 플래그 이름도, 값이 비율이라는 설명도 없기 때문입니다. `vllm download-kernels` 정의는 넣지 않고 표에서 뺐습니다. 이 명령이 무엇을 내려받는지와 업그레이드할 때 다시 실행해야 하는지가 근거에 없어서입니다.",
+    "Section 'vLLM을 고를 때와 피할 때: HF·TGI 대비 처리량 이득과 한계': check 3 sentence(s) the evidence may not support: 블록 테이블을 거치는 어텐션 커널 자체는 지연이 20–26% 더 높습니다 [[E53]]. (unsupported: E53 measures the 20–26% higher kernel latency against FasterTransformer, but the sentence omits that baseline. (not supported: 지연이 20–26% 더 높습니다 (FasterTransformer 대비라는 비교 기준 누락))) | | 인스턴스별 메모리 한도 | 같은 GPU를 쓰는 다른 프로세스와 조율하지 않음. 한도가 너무 높으면 OOM 위험, 너무 낮으면 처리량 제한 | GPU를 공유하지 않거나 인스턴스마다 한도를 따로 맞춤 [[E131]] (unsupported: Only a third-party forum answer (E131) describes this per-instance limit behaviour; no official item confirms it, yet the row states it as current behaviour. (not supported: 같은 GPU를 쓰는 다른 프로세스와 조율하지 않음; 한도가 너무 높으면 OOM 위험, 너무 낮으면 처리량 제한)) | | 메모리 분해 미노출 | 가중치·KV 캐시·오버헤드 내역이 시작 로그에만 남음 | 시작 로그 보관 [[E129]] | (unsupported: Only a third-party forum answer (E129) says the metrics do not expose a memory breakdown; no official item confirms it, yet the row states it as current behaviour. (not supported: 가중치·KV 캐시·오버헤드 내역이 시작 로그에만 남음))",
+    "Section 'vLLM을 고를 때와 피할 때: HF·TGI 대비 처리량 이득과 한계' still has: ['30'] already stated in '엔진 인자, YAML 설정 파일, CPU 백엔드 환경 변수로 나뉘는 구성': refer back without repeating: LMSYS의 초기 내부 마이크로벤치마크에서 vLLM 백엔드는 초기 HF 백엔드보다 처리량이 최대 30배 높았습니다 . | ['50'] already stated in 'KVCacheManager의 슬롯 할당·해제와 해시 체인 기반 프리픽스 캐시': refer back without repeating: 2023년 4~5월 실제 운영에서는 같은 트래픽을 서빙하는 GPU 수가 50% 줄었고, vLLM은 하루 평균 3만 건, 최대 6만 건의 요청을 처리했습니다 . | ['20', '26'] already stated in '고정 크기 블록과 블록 테이블로 구성된 PagedAttention 메모리 모델': refer back without repeating: 블록 테이블을 거치는 어텐션 커널 자체는 지연이 20–26% 더 높습니다 .",
+    "Section '고정 크기 블록과 블록 테이블로 구성된 PagedAttention 메모리 모델': 1 edit(s) not applied: would add a writing-rule slip (self-reference '다음 절'): '블록 테이블에는 이점이 하나 더 있습니다. 여러 시퀀스의 논리 블록을 같은 물리 블록에 매핑하면 KV 캐시를'",
+    "Section '참조 카운트와 쓰기 시 복사에 기반한 요청 내·요청 간 블록 공유': the writer could not fix: The V1 request-flow section is not in this text, so I couldn't change it. The running example still has to be introduced there or earlier.",
+    "Flags/metrics the official pages fetched for this guide never mention; verify them against the current reference: --config",
+    "[image] line 48: remote image not localized (linked to its source): https://vllm.ai/blog-assets/figures/annimation0.gif",
+    "[image] line 76: remote image not localized (linked to its source): https://vllm.ai/blog-assets/figures/annimation1.gif",
+    "[image] line 119: remote image not localized (linked to its source): https://vllm.ai/blog-assets/figures/annimation2.gif",
+    "[image] line 133: remote image not localized (linked to its source): https://vllm.ai/blog-assets/figures/annimation3.gif",
+    "[image] line 585: remote image not localized (linked to its source): https://vllm.ai/blog-assets/figures/perf_a100_n3_light.png"
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 2283.9,
+  "input_tokens": 2562561,
+  "output_tokens": 281957,
+  "estimated_cost_usd": 12.3563,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 156,
+      "failed_calls": 0,
+      "input_tokens": 435002,
+      "output_tokens": 281957,
+      "cache_read_tokens": 1035270,
+      "cache_write_tokens": 1092289,
+      "cost_usd": 12.356303
+    },
+    "by_stage": {
+      "relevance": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 1610,
+        "output_tokens": 201,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.000262
+      },
+      "research_plan": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 2439,
+        "output_tokens": 548,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.000518
+      },
+      "read": {
+        "calls": 59,
+        "failed_calls": 0,
+        "input_tokens": 142,
+        "output_tokens": 40877,
+        "cache_read_tokens": 391894,
+        "cache_write_tokens": 96648,
+        "cost_usd": 0.729054
+      },
+      "outline": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 6886,
+        "cache_read_tokens": 2143,
+        "cache_write_tokens": 16126,
+        "cost_usd": 0.219223
+      },
+      "verify": {
+        "calls": 38,
+        "failed_calls": 0,
+        "input_tokens": 276271,
+        "output_tokens": 90638,
+        "cache_read_tokens": 365671,
+        "cache_write_tokens": 273895,
+        "cost_usd": 4.43358
+      },
+      "draft": {
+        "calls": 11,
+        "failed_calls": 0,
+        "input_tokens": 44,
+        "output_tokens": 53166,
+        "cache_read_tokens": 47487,
+        "cache_write_tokens": 377839,
+        "cost_usd": 2.971688
+      },
+      "review": {
+        "calls": 13,
+        "failed_calls": 0,
+        "input_tokens": 52,
+        "output_tokens": 37918,
+        "cache_read_tokens": 27646,
+        "cache_write_tokens": 115735,
+        "cost_usd": 1.348306
+      },
+      "fix": {
+        "calls": 30,
+        "failed_calls": 0,
+        "input_tokens": 134360,
+        "output_tokens": 48613,
+        "cache_read_tokens": 200429,
+        "cache_write_tokens": 212046,
+        "cost_usd": 2.650109
+      },
+      "finalize": {
+        "calls": 2,
+        "failed_calls": 0,
+        "input_tokens": 20080,
+        "output_tokens": 3110,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.003563
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-haiku-5-5": {
+        "calls": 4,
+        "failed_calls": 0,
+        "input_tokens": 24129,
+        "output_tokens": 3859,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.004343
+      },
+      "global.anthropic.claude-sonnet-5-5": {
+        "calls": 59,
+        "failed_calls": 0,
+        "input_tokens": 142,
+        "output_tokens": 40877,
+        "cache_read_tokens": 391894,
+        "cache_write_tokens": 96648,
+        "cost_usd": 0.729054
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 93,
+        "failed_calls": 0,
+        "input_tokens": 410731,
+        "output_tokens": 237221,
+        "cache_read_tokens": 643376,
+        "cache_write_tokens": 995641,
+        "cost_usd": 11.622906
+      }
+    }
+  }
+}

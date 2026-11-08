@@ -1,0 +1,253 @@
+{
+  "item": "guide-rayserve-X",
+  "post": "/tmp/guide-compare/blind/guide-rayserve-X.md",
+  "judge_run": 3,
+  "sdk_checked": "ray 2.60.0 with ray[serve] (uv venv, Python 3.11, /tmp/rs-judge/venv) plus torch, transformers 5.x, pillow, fastapi; docs fetched live from docs.ray.io/en/latest (titles say 2.58-2.60), SDK source read for config defaults",
+  "sampling": "Same split; offset 2, stride 3 (paragraphs 3,6,9,...) plus TL;DR; 15 claims, 9 numbers; re-checked against docs, CLI help, SDK source and the forum/blog sources. Off-sample finding from executing the code.",
+  "scores": {
+    "A": 8.5,
+    "B": 7.5,
+    "C": 7.0,
+    "D": 8.0,
+    "E": 7.0,
+    "F": 6.0,
+    "T1": 8.0,
+    "T2": 8.5,
+    "T3": 9.0
+  },
+  "score_evidence": {
+    "A": "TL;DR first (L11), claim H2s, architecture before usage, real tables, $$ math with use_math: true (L582, L786), absolute image URLs. Deductions: the TL;DR (L13-15) is two dense paragraphs that pre-teach the whole post; the setup section (L295) only arrives after custom-router code (L221); Sources link text keeps HTML entities ('&#91;RFC&#93;' L1286, '&#124;' L1296).",
+    "B": "Clear, mostly natural 입니다체. Deductions: transliterated '파워 오브 투 초이스' (L13, L139, L177) instead of the term; source-reconciliation prose at L389 ('Getting Started 가이드는 ... 설명합니다. Ray 2.59.0 API 레퍼런스는 ... 적고 있습니다') - rewrite: 'Ctrl-C를 누르면 클러스터의 Serve가 종료됩니다.'; L778 '앞서 밝힌 Ray Serve 버전 기준입니다' refers to a version never stated; L15 crams eight claims in one paragraph.",
+    "C": "The Summarizer->Translator example threads the post (L27, L92, L133, L163, L786, L1200). Deductions: many forward pointers ('뒤의 ... 부분에서 다룹니다' L74, L84, L108, L133, L139, L381) because mechanisms precede the code they describe; L1271 'failure points' just points back; L778 dangling version reference.",
+    "D": "Strong worked numbers at the hard spots: queue capacity (L133), P2C pick (L192), backpressure 10+64 (L744), sizing 60/2=30 -> 36 and 7.2 CPUs (L786, L805). Deduction: the Ray-paper scheduler detour (L165-175) explains what a Serve reader does not need here.",
+    "E": "Good tables (fault handling L155, router decision L204, router defaults L271, auto vs manual defaults L771, alternatives L1260), autoscaling diagram (L147), text trees. Deductions: the t5 Translator body is repeated four times (L342, L419, L475, L967) and ImageClassifier twice in full (L928, L1058); no architecture diagram for the controller/proxy/replica section (L110).",
+    "F": "Most API, default and number claims match docs, SDK 2.60 and cited sources (see claims). Deductions: L261 invents a request_router_class decorator kwarg (TypeError on 2.60; docs use request_router_config) (-2); L1252 Klaviyo case attributed to a gocodeo page that does not contain it (-2).",
+    "T1": "Nearly every no-GPU block ran in reading order (hello, quickstart, FastAPI, composition, streaming, ObjectRef, configs, serve build/deploy/status, multi-app with get_app_handle, adding a third app). Deductions: the custom-router attachment (L257-267) fails with TypeError; MLflow and LLM blocks need a registry or GPU by design.",
+    "T2": "Covers the sources' main topics: concepts, architecture, routing, getting started, composition, configuration, autoscaling, production config, multi-app, registries, dashboard, LLM observability. Deductions: the 2018 Ray-paper scheduler section (L165-175) and LLM usage-stats list (L1240-1242) are padding relative to a Serve guide.",
+    "T3": "Explains internals and why: request lifecycle and two queues (L125-141), P2C and its payload-agnostic assumption (L185-198), router design trade-offs (char tree vs KV events, broadcast vs singleton, L211, L281-283), autoscaler placement and controller failure (L143-163), Serve vs Ray autoscaler (L803-805), when to choose and alternatives (L1244-1273). Advice reads as advice (L1273). Minor: the failure-modes close only points back (L1271)."
+  },
+  "principles": {
+    "claim_headings": {
+      "status": "met",
+      "evidence": "H2s are claim noun phrases: L17 '여러 모델과 비즈니스 로직을 한 Python 프로그램으로 묶는 온라인 추론 계층', L110 '컨트롤러·프록시·레플리카 액터와 요청의 수명', L177 '파워 오브 투 초이스에서 접두사 인식·커스텀 라우터로 확장되는 요청 라우팅'. A few H3s are topic names (L285 '믹스인과 실험적 라우터', L1202 'Serve LLM의 서비스 수준·엔진 메트릭')."
+    },
+    "running_example": {
+      "status": "met",
+      "evidence": "Summarizer->Translator text service set up at L27 and reused in the unit tree (L92), queue arithmetic (L133), fault example (L163), P2C (L192), sizing (L786), config (L760, L861) and Grafana triage (L1200)."
+    },
+    "mechanism_design_code_example": {
+      "status": "met",
+      "evidence": "Routing: problem (payload-agnostic P2C misses KV reuse, L196) -> design choice with reason (character tree over KV events for overhead/complexity, L211) -> code (L221) -> numbers (L192, L213). Autoscaling: L780-801 with 60/2=30 -> 36."
+    },
+    "facts_said_once": {
+      "status": "not met",
+      "evidence": "TL;DR L13-15 restates L118-163 and L185-213 almost sentence for sentence; max_ongoing_requests is explained at L13, L131-133 and L740; the t5 Translator body is printed four times (L342, L419, L475, L967) and the ImageClassifier module twice in full (L928, L1058)."
+    },
+    "numbers_with_scope_unit": {
+      "status": "met",
+      "evidence": "L213 '32B 파라미터 모델 ... TTFT가 60% 줄고 종단 간 처리량이 40% 넘게' with RayTurbo/open-source scope; L273-277 defaults with units; L744/L786 worked numbers labelled as assumptions."
+    },
+    "nothing_invented": {
+      "status": "partly met",
+      "evidence": "L261 invents a request_router_class decorator kwarg (TypeError on 2.60); L1252 attributes a Klaviyo case to a source that does not contain it."
+    },
+    "writer_assessment_at_end": {
+      "status": "met",
+      "evidence": "L1273 '이 글의 판단으로는, ... Serve를 기본 선택으로 둘 만합니다 ... 프로덕션이라면 Kubernetes와 KubeRay를 처음부터 함께 계획'."
+    },
+    "length_fitted": {
+      "status": "partly met",
+      "evidence": "1,300 lines. The 2018 Ray-paper scheduler digression (L165-175) and the duplicated code blocks add length without new Serve knowledge; hard parts (queues, routing) get the space they need."
+    },
+    "type_specific_shape": {
+      "status": "met",
+      "evidence": "Opens with TL;DR (L11) and the problem (L21); architecture and mechanisms (L64-L293) precede setup (L295) and configuration (L668); 26% non-official sources; ends with fit, alternatives and the writer's choice (L1244-1273). The TL;DR itself is two dense paragraphs of about 25 sentences."
+    },
+    "korean_style": {
+      "status": "partly met",
+      "evidence": "Mostly natural 입니다체, but 'Power of Two Choices' is transliterated as '파워 오브 투 초이스' throughout (L13, L139, L177); version-reconciliation residue at L389 ('Getting Started 가이드는 ... Ray 2.59.0 API 레퍼런스는 ...') and L778 ('앞서 밝힌 Ray Serve 버전 기준' - no version was stated); very long sentences in L13-15."
+    }
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 14,
+    "unsupported": 1,
+    "wrong": 0,
+    "unverifiable": 0,
+    "numbers_among_checked": 9,
+    "examples": [
+      {
+        "line": 13,
+        "claim": "max_ongoing_requests caps one replica's concurrent requests; when all replicas hit it requests wait in the queue",
+        "verdict": "supported",
+        "source": "architecture.html step 3 and autoscaling-guide.html: 'max_ongoing_requests is the maximum number of ongoing requests allowed for a replica'"
+      },
+      {
+        "line": 133,
+        "claim": "2 Summarizer replicas x max_ongoing_requests=4 -> at most 8 in flight, the 9th waits in the queue",
+        "verdict": "supported",
+        "source": "Arithmetic on architecture.html step 3 ('more than max_ongoing_requests requests are outstanding at each replica ... left in the queue')"
+      },
+      {
+        "line": 289,
+        "claim": "The affinity (consistent-hash) router's num_fallback_replicas defaults to 2; 0 gives strict affinity",
+        "verdict": "supported",
+        "source": "custom-request-router.html: 'num_fallback_replicas (default 2) ... Set to 0 for strict affinity with no fallback.'"
+      },
+      {
+        "line": 666,
+        "claim": "RayServeHandle and RayServeSyncHandle were fully removed in Ray 2.10",
+        "verdict": "supported",
+        "source": "model_composition.html: 'The deprecated RayServeHandle and RayServeSyncHandle APIs have been fully removed as of Ray 2.10.'"
+      },
+      {
+        "line": 782,
+        "claim": "An October 2023 forum thread: equal values gave fewer replicas than the max; the answer: set max_concurrent_queries above target_num_ongoing_requests_per_replica",
+        "verdict": "supported",
+        "source": "discuss.ray.io/t/12515, 19 Oct 2023: 'You need a larger value for max_concurrent_queries than target_num_ongoing_requests_per_replica otherwise the deployment will not scale up correctly.'"
+      },
+      {
+        "line": 805,
+        "claim": "Controller warned that replicas took more than 30 s to be scheduled; 36 replicas x 0.2 CPU = 7.2 CPUs",
+        "verdict": "supported",
+        "source": "discuss.ray.io/t/12515 log: 'has 4 replicas that have taken more than 30s to be scheduled. This may be due to waiting for the cluster to auto-scale or for a runtime environment to be installed.'; arithmetic"
+      },
+      {
+        "line": 849,
+        "claim": "gRPC port 9000 equals serve start's default gRPC port",
+        "verdict": "supported",
+        "source": "serve start --help (2.60): '--grpc-port INTEGER ... Defaults to 9000.'"
+      },
+      {
+        "line": 740,
+        "claim": "max_ongoing_requests defaults to 5; max_queued_requests -1 means unlimited",
+        "verdict": "supported",
+        "source": "configure-serve-deployment.html: 'Defaults to 5' ... 'Defaults to -1 (no limit).'"
+      },
+      {
+        "line": 742,
+        "claim": "backpressure status_code may only be 503 (default) or 429; Retry-After is rounded up to whole seconds; gRPC maps to RESOURCE_EXHAUSTED; BackpressureConfig is alpha",
+        "verdict": "supported",
+        "source": "ray/serve/config.py (2.60) BackpressureConfig: '@PublicAPI(stability=\"alpha\")', 'Must be 503 (default) or 429', 'rounded up to an integer number of seconds', 'backpressure rejections always map to RESOURCE_EXHAUSTED'"
+      },
+      {
+        "line": 776,
+        "claim": "max_replicas default is 100 with num_replicas='auto' but 1 when autoscaling_config is written by hand",
+        "verdict": "supported",
+        "source": "autoscaling-guide.html Note: 'including max_replicas: 100. However, if you configure autoscaling manually ... the base default for max_replicas is 1'"
+      },
+      {
+        "line": 1252,
+        "claim": "The gocodeo article reports Klaviyo runs a real-time segmentation/recommendation system on Ray Serve with sub-second multi-tenant execution",
+        "verdict": "unsupported",
+        "source": "gocodeo.com post fetched 2026-11-08: no 'Klaviyo', 'segmentation' or 'sub-second' anywhere in the page; it only describes @serve.batch max batch size / wait timeout"
+      },
+      {
+        "line": 1256,
+        "claim": "MLflow's built-in REST server is not optimised for high-concurrency GPU workloads; use HF Hub or W&B for LLM/diffusion models",
+        "verdict": "supported",
+        "source": "model-registries.html: 'MLflow's built-in REST server isn't optimized for high-concurrency GPU workloads ... use Hugging Face Hub or Weights & Biases'"
+      },
+      {
+        "line": 881,
+        "claim": "With a YAML, serve run does not update existing applications whose code did not change",
+        "verdict": "supported",
+        "source": "serve run --help: 'If passing a YAML config, existing applications with no code changes will not be updated.'"
+      },
+      {
+        "line": 283,
+        "claim": "A singleton metric actor becomes a bottleneck at ~1000s of requests/s and adds a network hop per routing decision",
+        "verdict": "supported",
+        "source": "routing-policies.html Pattern 1 cons: 'bottleneck in high-throughput applications where TTFT is impacted by the RPC call (~1000s of requests/s). Requires an additional network hop for every routing decision.'"
+      },
+      {
+        "line": 1242,
+        "claim": "Serve LLM usage stats cover architecture, JSON mode, LoRA count, autoscaling min/max, TP size, initial replicas, GPU type and count",
+        "verdict": "supported",
+        "source": "llm/user-guides/observability.html 'Usage data collection' list (same seven items)"
+      }
+    ],
+    "off_sample_findings": [
+      {
+        "line": 261,
+        "claim": "A custom router is attached with @serve.deployment(request_router_class=UniformRequestRouter)",
+        "verdict": "wrong",
+        "source": "ray 2.60 serve.deployment has no request_router_class parameter (inspect.signature lists request_router_config); running the block raises TypeError: deployment() got an unexpected keyword argument 'request_router_class'. custom-request-router.html's code uses request_router_config=RequestRouterConfig(request_router_class=...)."
+      }
+    ]
+  },
+  "checklist": {
+    "repeated": 0,
+    "avoided": 1,
+    "na": 1,
+    "repeated_ids": [],
+    "items": [
+      {
+        "id": "arch-diagram-relative-link",
+        "status": "avoided",
+        "evidence": "No empty-text or docs-relative links. Images use absolute URLs with Korean alt (L147 autoscaling.svg, L1186/L1190/L1194 dashboard PNGs) and one local /assets path (L173). Note the architecture-2.0 diagram itself is not included."
+      },
+      {
+        "id": "proxy-env-ray-start-unsupported",
+        "status": "n/a",
+        "evidence": "No KubeRay/proxy env-var section. The only env var (L293 RAY_SERVE_QUEUE_LENGTH_RESPONSE_DEADLINE_S) is not tied to ray start or a process."
+      }
+    ]
+  },
+  "extras": {
+    "architecture_first_line": 13,
+    "architecture_note": "TL;DR (L13) already names controller, proxies, replicas and P2C; key concepts at L64; the full controller/proxy/replica section and request lifecycle at L110-175, before install at L295 and configuration at L668. The architecture-2.0 diagram itself is absent (text trees at L33-44 and L92-104).",
+    "sources_total": 23,
+    "sources_listed": 23,
+    "sources_non_official": 6,
+    "non_official_share": 0.26,
+    "non_official_list": [
+      "github.com/ray-project/ray/issues/53016 (RFC)",
+      "anyscale.com blog (custom routing)",
+      "arxiv.org/html/1712.05889 (Ray paper)",
+      "paper.lingyunyang.com reading notes",
+      "discuss.ray.io forum thread 12515",
+      "gocodeo.com post"
+    ],
+    "opens_with_problem": true,
+    "opens_note": "L21-27: single-model servers and static YAML graphs break down for multi-stage pipelines; the running Summarizer->Translator example is set up there.",
+    "closes_with_when_to_choose_and_failure_modes": true,
+    "closes_note": "L1244-1273: fit, gaps (no model optimisation, no lifecycle management), alternatives table, and the writer's judgement (L1273). The failure-modes subsection (L1269-1271) only points back to the fault table and autoscaling sections."
+  },
+  "runnable_code": {
+    "verdict": "Ran in reading order on ray 2.60; all core Serve flows pass. One real failure: the custom-router attachment (L257-267) raises TypeError. The multi-app 'generated' route prefixes differ from what serve build emits (docs-inherited).",
+    "passed": [
+      "L309 hello world (serve.run + requests): {'result': 'Hello world!'}",
+      "L342 serve_quickstart.py + L385 serve run + L395 client: 'Bonjour monde!' (status RUNNING, 2 replicas)",
+      "L419 FastAPI Translator + L458 params client: 'Bonjour monde!'",
+      "L475+L510 composed app + L552 serve run + L558 client: \"C'était le meilleur des temps, c'était le pire des temps,\" (matches L577)",
+      "L592 streaming Streamer/Caller: assert passes",
+      "L636 _to_object_ref: assert passes",
+      "L676, L697, L715, L750, L788 decorator/options/user_config/auto/autoscaling_config definitions construct; L715 user_config deployment deploys",
+      "L819 / L855 serve build: output matches L825 apart from the 2.60 header, enable_reflection and a logging_config block",
+      "L861 config + L887 ray start/serve deploy: both deployments HEALTHY; serve status as L898; serve config works",
+      "L928/L967 two apps + L1006 config (route prefixes as written) + L1058 get_app_handle + L1103 client: 'Braunbär, Bruin, Ursus arctos'",
+      "L1042 third app appended and redeployed: /summarize RUNNING and answers",
+      "L1173 ray.init().dashboard_url: 127.0.0.1:8265"
+    ],
+    "failed": [
+      "L257-267: @serve.deployment(request_router_class=UniformRequestRouter) -> TypeError: deployment() got an unexpected keyword argument 'request_router_class' (ray 2.60 takes request_router_config=RequestRouterConfig(...))",
+      "L1000 serve build of the two apps writes route_prefix /app1 and /app2, not /classify and /translate as L1025/L1033 show (docs-inherited); the config works only after editing the prefixes as the post's YAML does"
+    ],
+    "notes": "Environment notes (affect both guides equally): Ray 2.60 on this host runs the dashboard with token auth, so CLI calls needed RAY_AUTH_MODE=token and REST calls an authorization header; the uv venv needed pip for runtime_env.pip; all generated code ran with AWS credentials removed (env -u AWS_*, AWS_CONFIG_FILE=/dev/null). Not run: L1124 MLflow deployment (needs a registry holding a production-tagged model); L1216 Serve LLM (vLLM/GPU); L1210 ray[serve,llm] install."
+  },
+  "other_sdk_as_python": "none found: Python SDK only; YAML and CLI shown as such.",
+  "topic_taught_twice": "yes: TL;DR L13-15 repeats L118-163 and L185-213; max_ongoing_requests at L13, L131-133, L740; handle path = HTTP path at L15 and L139; controller death at L15 and L159; Translator code x4 (L342, L419, L475, L967); ImageClassifier x2 (L928, L1058).",
+  "causes_scope_beyond_sources": "Mostly within the sources. Beyond them: L261 decorator kwarg (not in docs or SDK); L1252 Klaviyo case (not in the cited page); L165-175 brings the 2018 Ray paper's scheduler into a Serve guide (sourced and labelled as early design).",
+  "edit_residue": [
+    "L389: two-source reconciliation ('Getting Started 가이드는 ... Ray 2.59.0 API 레퍼런스는 ...')",
+    "L778: '앞서 밝힌 Ray Serve 버전 기준' with no version stated earlier",
+    "L1269-1271: 'failure points' subsection that only points back"
+  ],
+  "top_issues": [
+    "L261: `@serve.deployment(request_router_class=UniformRequestRouter, ...)` raises TypeError on ray 2.60 - serve.deployment has no such kwarg; the docs attach routers with request_router_config=RequestRouterConfig(request_router_class=...).",
+    "L1252: the Klaviyo real-time segmentation case is credited to the gocodeo article, which does not mention Klaviyo, segmentation or sub-second latency.",
+    "Repetition: the TL;DR (L13-15) restates L118-163 and L185-213; the t5 Translator body is printed four times (L342, L419, L475, L967) and ImageClassifier twice in full (L928, L1058); residue at L389 and L778 ('앞서 밝힌 Ray Serve 버전' with no version stated).",
+    "L165-175: a 2018 Ray-paper scheduler digression (bottom-up local/global scheduler, chain replication) that is labelled as outdated and adds little to running Serve."
+  ]
+}

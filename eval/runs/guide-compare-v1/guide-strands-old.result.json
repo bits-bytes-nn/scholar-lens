@@ -1,0 +1,128 @@
+{
+  "kind": "guide",
+  "status": "succeeded",
+  "input": "https://strandsagents.com/docs/user-guide/sdk/agents/agent-loop/, https://strandsagents.com/docs/user-guide/sdk/agents/hooks/",
+  "title": "Strands Agents SDK: The Agent Loop and Its Production Controls",
+  "markdown_path": "/private/tmp/sl-old/papers/guide-strands-agents-sdk-the-agent-loop-and-its-production-controls/2026-11-08-strands-agents-sdk-the-agent-loop-and-its-production-controls.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-11-08-strands-agents-sdk-the-agent-loop-and-its-production-controls.md",
+  "pr_url": null,
+  "warnings": [
+    "Guide section '첫 에이전트와 도구 실행 흐름' kept below the bar (score 82, 1 blocking issue(s); targeted fix reverted after re-scoring): check it: \"\"모델이 보낸 입력은 이 스키마로 만든 Pydantic 모델로 검증하고, 가능하면 올바른 타입으로 변환한 뒤 함수에 넘깁니다.\" → 이 문장은 '입력'이 검증과 변환을 하는 주체처럼 읽혀 행위자가 흐려집니다. \"SDK는 모델이 보낸 입력을 이 스키마로 만든 Pydantic 모델로 검증하고, 가능하면 올바른 타입으로 변환한 뒤 함수에 넘깁니다.\"로 고칩니다.\"",
+    "Guide description still breaks the rules after a repair: description has 119 characters; write 120-160",
+    "[description] line 1: description has 119 characters; the blog's descriptions run 120-160"
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 2695.0,
+  "input_tokens": 2878583,
+  "output_tokens": 325811,
+  "estimated_cost_usd": 17.3855,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 63,
+      "failed_calls": 0,
+      "input_tokens": 2878583,
+      "output_tokens": 325811,
+      "cache_read_tokens": 0,
+      "cache_write_tokens": 0,
+      "cost_usd": 17.385526
+    },
+    "by_stage": {
+      "outline": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 181173,
+        "output_tokens": 2686,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.389206
+      },
+      "draft": {
+        "calls": 14,
+        "failed_calls": 0,
+        "input_tokens": 654066,
+        "output_tokens": 90496,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 4.426184
+      },
+      "review": {
+        "calls": 23,
+        "failed_calls": 0,
+        "input_tokens": 1124833,
+        "output_tokens": 85780,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 6.214932
+      },
+      "revise": {
+        "calls": 6,
+        "failed_calls": 0,
+        "input_tokens": 301990,
+        "output_tokens": 32716,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 1.86228
+      },
+      "fix": {
+        "calls": 3,
+        "failed_calls": 0,
+        "input_tokens": 153117,
+        "output_tokens": 17009,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.952648
+      },
+      "verify": {
+        "calls": 14,
+        "failed_calls": 0,
+        "input_tokens": 417194,
+        "output_tokens": 93247,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 3.533716
+      },
+      "finalize": {
+        "calls": 2,
+        "failed_calls": 0,
+        "input_tokens": 46210,
+        "output_tokens": 3877,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.00656
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-sonnet-5-5": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 181173,
+        "output_tokens": 2686,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.389206
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 60,
+        "failed_calls": 0,
+        "input_tokens": 2651200,
+        "output_tokens": 319248,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 16.98976
+      },
+      "global.anthropic.claude-haiku-5-5": {
+        "calls": 2,
+        "failed_calls": 0,
+        "input_tokens": 46210,
+        "output_tokens": 3877,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.00656
+      }
+    }
+  }
+}
