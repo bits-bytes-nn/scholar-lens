@@ -578,3 +578,63 @@ def test_the_edits_one_fix_may_apply_are_the_limit(cap: int) -> None:
     )
     assert revision.applied == min(cap, len(edits))
     assert any("over the cap" in r for r in revision.skipped) is (cap < len(edits))
+
+
+def _section_set(target: int = 0) -> VerifierSet:
+    from scholar_lens.domain.evidence_draft import section_problems
+
+    def check(markdown: str) -> list[Problem]:
+        return section_problems(
+            markdown,
+            title="구조",
+            own=(),
+            earlier=(),
+            ledger=EvidenceLedger(),
+            earlier_numbers={},
+            figure_urls=(),
+            free_numbers="",
+            target_chars=target,
+        )
+
+    return VerifierSet("구조", (check,))
+
+
+def test_an_edit_near_an_existing_rule_slip_adds_no_problem() -> None:
+    from scholar_lens.domain.quality_gate import rule_issues
+
+    section = (
+        "## 구조\n\n이 섹션에서는 스케줄러가 요청을 묶어 처리하는 과정을 "
+        "설명합니다.\n\n큐는 요청을 차례로 받습니다.\n"
+    )
+    assert rule_issues(section), "the fixture must hold a rule slip"
+    revision = transact(
+        section,
+        [("요청을 묶어 처리하는", "요청을 모아 처리하는")],
+        verifiers=_section_set(),
+        max_prose_cut=Limits().max_prose_cut,
+    )
+    # The slip is as it was; only its quoted surroundings changed.
+    assert revision.taken, revision.rejected
+
+
+@pytest.mark.parametrize("tolerated", [(), ("too_short",)])
+def test_a_section_below_its_minimum_is_not_cut_further(
+    tolerated: tuple[str, ...],
+) -> None:
+    sentences = [f"큐는 {k}번째 요청을 차례로 받아 처리합니다." for k in range(6)]
+    section = "## 구조\n\n" + " ".join(sentences) + "\n"
+    limits = Limits()
+    # A target the section is already short of.
+    target = max(
+        limits.min_length_floor, int(len(section) / limits.min_length_share) * 2
+    )
+    assert any(p.kind == "too_short" for p in _section_set(target).run(section))
+    revision = transact(
+        section,
+        [(sentences[-1], "")],
+        verifiers=_section_set(target),
+        max_prose_cut=limits.max_prose_cut,
+        tolerated=tolerated,
+    )
+    # Only a deletion of unsupported content (which tolerates it) may cut.
+    assert revision.taken is bool(tolerated)

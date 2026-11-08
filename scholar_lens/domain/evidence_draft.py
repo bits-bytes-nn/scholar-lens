@@ -19,7 +19,7 @@ from scholar_lens.domain.markdown.math import DISPLAY_MATH, fence_roles
 from scholar_lens.domain.post_spec import Limits
 from scholar_lens.domain.quality_gate import rule_issues
 from scholar_lens.domain.validation import unsourced_numbers
-from scholar_lens.domain.verifiers import Problem, as_problems
+from scholar_lens.domain.verifiers import Problem
 
 # An evidence marker ("[[E12]]", "[[E12, E15]]") or the illustration mark
 # below; code removes both before publishing.
@@ -349,7 +349,13 @@ def section_problems(
         add("mid_sentence", "the section stops mid-sentence: finish it")
     # The blog's Markdown and math rules (an unbalanced $$ breaks every
     # later equation of the post).
-    problems += as_problems("rule", rule_issues(MARKER.sub("", markdown)))
+    # A rule hit is "rule 'offending text': context"; the context is its
+    # position (what quality_gate.added_slips also leaves out), so an edit
+    # nearby that leaves the hit as it is adds no problem.
+    problems += [
+        Problem("rule", issue, issue.split(":", 1)[1] if ":" in issue else "")
+        for issue in rule_issues(MARKER.sub("", markdown))
+    ]
     if (need := dict(limits.min_visuals).get(depth, 0)) and visual_count(
         markdown
     ) < need:

@@ -17,10 +17,12 @@ from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 
 from scholar_lens.domain.evidence_draft import (
+    TOO_SHORT_PROBLEM,
     VISUALS_PROBLEM,
     apply_edits,
     claim_units,
     ends_mid_sentence,
+    prose_sentences,
     removed_duplicate_visuals,
     strip_revision_notes,
     structure_lost,
@@ -167,6 +169,19 @@ def transact(
         # section's own, it does not keep a copy another section owns.
         added = [p for p in added if p.kind != VISUALS_PROBLEM]
     added = [p for p in added if p.kind not in tolerated]
+    if (
+        TOO_SHORT_PROBLEM not in tolerated
+        and _prose(fixed) < _prose(before)
+        and any(p.kind == TOO_SHORT_PROBLEM for p in verifiers.run(before))
+    ):
+        # Already below its minimum, the section keeps the same problem
+        # whatever is cut: the cut itself is refused.
+        return Revision(
+            before,
+            applied,
+            tuple(skipped),
+            "it shortens a section already below its minimum length",
+        )
     if added:
         return Revision(
             before,
@@ -178,3 +193,8 @@ def transact(
     return Revision(
         fixed, applied, tuple(skipped), changed=tuple(changed_units(before, fixed))
     )
+
+
+def _prose(markdown: str) -> int:
+    """The characters of prose the length checks count."""
+    return len(" ".join(prose_sentences(markdown)))
