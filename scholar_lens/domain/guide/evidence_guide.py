@@ -36,6 +36,7 @@ from scholar_lens.domain.program import (
     python_code_problems as python_code_problems,  # re-exported
 )
 from scholar_lens.domain.specs.guide import GUIDE_SPEC, TLDR_TITLE
+from scholar_lens.domain.verifiers import Problem
 
 GuideKind = Literal[
     "tldr", "overview", "concepts", "architecture", "usage", "operations", "choosing"
@@ -151,23 +152,33 @@ def guide_outline_problems(
     return problems
 
 
-def guide_draft_problems(markdown: str, *, code_language: str = "") -> list[str]:
+def guide_draft_problems(markdown: str, *, code_language: str = "") -> list[Problem]:
     """Guide-only problems of a section draft: an internal source id in the
     text, the same code in two SDK languages, and code blocks longer than
-    the paragraph around them can explain."""
-    problems: list[str] = []
+    the paragraph around them can explain. A problem of a line or sentence
+    quotes it as its passage."""
+    problems: list[Problem] = []
     for line, role in zip(markdown.split("\n"), block_lines(markdown), strict=True):
         if role == "code" and MARKER.search(line):
+            quoted = line.strip()[:120]
             problems.append(
-                "an evidence marker inside code; markers go at the end of prose "
-                f"sentences only: {line.strip()[:120]}"
+                Problem(
+                    "marker_in_code",
+                    "an evidence marker inside code; markers go at the end of "
+                    f"prose sentences only: {quoted}",
+                    quoted,
+                )
             )
     for sentence in prose_sentences(markdown):
         plain = MARKER.sub("", sentence)
         if _SOURCE_ID.search(plain):
             problems.append(
-                "names a source by its internal id; name the page or leave it "
-                f"out: {plain[:160]}"
+                Problem(
+                    "source_id",
+                    "names a source by its internal id; name the page or leave "
+                    f"it out: {plain[:160]}",
+                    plain[:160],
+                )
             )
     languages: set[str] = set()
     for m in _FENCE_OPEN.finditer(markdown):
@@ -175,14 +186,23 @@ def guide_draft_problems(markdown: str, *, code_language: str = "") -> list[str]
             languages.add(family)
         if (lines := m.group(3).count("\n")) > MAX_CODE_LINES:
             problems.append(
-                f"a {lines}-line code block; show the {MAX_CODE_LINES} or fewer "
-                "lines the text explains and say what the rest does"
+                Problem(
+                    "long_code",
+                    f"a {lines}-line code block; show the {MAX_CODE_LINES} or "
+                    "fewer lines the text explains and say what the rest does",
+                )
             )
     if len(languages) > 1:
         keep = code_language or "one language"
+        shown = str(sorted(languages))
+        # The languages are its passage: dropping one of three is no new one.
         problems.append(
-            f"code in {sorted(languages)}: show it in {keep} and name the other "
-            "SDK's difference in a sentence"
+            Problem(
+                "sdk_languages",
+                f"code in {shown}: show it in {keep} and name the other SDK's "
+                "difference in a sentence",
+                shown,
+            )
         )
     return problems
 

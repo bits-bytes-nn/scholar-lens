@@ -9,7 +9,7 @@ from collections import Counter
 import pytest
 
 from scholar_lens.domain.edit_transaction import changed_units, rejudged_units, transact
-from scholar_lens.domain.evidence import EvidenceLedger
+from scholar_lens.domain.evidence import Evidence, EvidenceLedger
 from scholar_lens.domain.evidence_draft import (
     apply_edits,
     free_numbers,
@@ -21,7 +21,13 @@ from scholar_lens.domain.evidence_draft import (
 from scholar_lens.domain.post_spec import Limits
 from scholar_lens.domain.review_plan import Edit
 from scholar_lens.domain.review_plan import apply_edits as guarded
-from scholar_lens.domain.verifiers import Problem, VerifierSet, no_checks
+from scholar_lens.domain.verifiers import (
+    Problem,
+    VerifierSet,
+    item_problems,
+    messages,
+    no_checks,
+)
 
 CUT = Limits().max_prose_cut
 CODE = "```python\nclient = Client(retries=3)\n```"
@@ -638,3 +644,139 @@ def test_a_section_below_its_minimum_is_not_cut_further(
     )
     # Only a deletion of unsupported content (which tolerates it) may cut.
     assert revision.taken is bool(tolerated)
+
+
+# ---- problems that list several items ---------------------------------------
+
+_NUMBERS = ("517", "86.4", "733", "1.25", "9410", "348")
+_PAPERS = ("2305.18290", "2401.00001", "2402.11223", "2310.04444", "2209.07858")
+_IMAGES = tuple(f"https://example.org/f{k}.png" for k in range(6))
+
+
+def _listing_ledger() -> EvidenceLedger:
+    return EvidenceLedger(
+        items=[
+            Evidence(
+                id=f"E{k + 1}",
+                paper_id=pid,
+                kind="method",
+                claim="방법",
+                quote="a method",
+                anchor="S1",
+            )
+            for k, pid in enumerate(_PAPERS)
+        ]
+    )
+
+
+def _listing_verifiers(
+    papers: tuple[str, ...], figures: tuple[str, ...]
+) -> VerifierSet:
+    ledger = _listing_ledger()
+
+    def shared(markdown: str) -> list[Problem]:
+        return section_problems(
+            markdown,
+            title="사용법",
+            own=[e.id for e in ledger],
+            earlier=[],
+            ledger=ledger,
+            earlier_numbers={},
+            figure_urls=figures,
+            free_numbers=free_numbers(),
+            papers=papers,
+        )
+
+    flags = ("--alpha", "--beta", "--gamma", "--delta")
+
+    def unknown_flags(markdown: str) -> list[Problem]:
+        # A check in the shape of the guide's flags check.
+        return item_problems(
+            "unknown_flags",
+            [f for f in flags if f in markdown],
+            "flags no official page mentions: ",
+            "",
+        )
+
+    return VerifierSet("사용법", (shared, unknown_flags), frozenset(figures))
+
+
+def _listing_section(
+    numbers: list[str], cited: list[str], images: list[str], flags: list[str]
+) -> str:
+    blocks = []
+    if numbers:
+        blocks.append("측정값은 " + " 그리고 ".join(numbers) + " 입니다.")
+    blocks += [f"이 방법을 씁니다 [[E{_PAPERS.index(p) + 1}]]." for p in cited]
+    blocks += [f"![그림]({u})" for u in images]
+    if flags:
+        blocks.append("```bash\nserve " + " ".join(flags) + "\n```")
+    blocks.append("끝입니다.")
+    return _section(*blocks)
+
+
+def _subset(rng: random.Random, items: list[str]) -> list[str]:
+    return [i for i in items if rng.random() < 0.5]
+
+
+@pytest.mark.parametrize("seed", range(40))
+def test_settling_some_listed_items_adds_no_problem_and_one_more_item_does(
+    seed: int,
+) -> None:
+    rng = random.Random(seed)
+    papers = tuple(rng.sample(_PAPERS, rng.randint(1, len(_PAPERS))))
+    figures = tuple(rng.sample(_IMAGES, rng.randint(0, 3)))
+    verifiers = _listing_verifiers(papers, figures)
+    others = [u for u in _IMAGES if u not in figures]
+    # A section with N items wrong of each listing kind.
+    numbers = rng.sample(_NUMBERS, rng.randint(1, len(_NUMBERS) - 1))
+    cited = _subset(rng, list(papers))
+    images = [*_subset(rng, list(figures)), *rng.sample(others, rng.randint(0, 2))]
+    flags = rng.sample(("--alpha", "--beta", "--gamma"), rng.randint(0, 3))
+    before = _listing_section(numbers, cited, images, flags)
+    old = verifiers.run(before)
+
+    # Any subset of the items fixed: no problem is added.
+    fixed = _listing_section(
+        [n for n in numbers if rng.random() < 0.5],
+        [*cited, *_subset(rng, [p for p in papers if p not in cited])],
+        [
+            *[u for u in images if u in figures or rng.random() < 0.5],
+            *_subset(rng, [u for u in figures if u not in images]),
+        ],
+        [f for f in flags if rng.random() < 0.5],
+    )
+    assert verifiers.added(old, fixed) == []
+
+    # One more item of any kind: exactly one problem of its kind is added.
+    more: dict[str, str] = {
+        "numbers_uncited": _listing_section(
+            [*numbers, next(n for n in _NUMBERS if n not in numbers)],
+            cited,
+            images,
+            flags,
+        ),
+        "unknown_flags": _listing_section(numbers, cited, images, [*flags, "--delta"]),
+    }
+    if cited:
+        more["papers_uncovered"] = _listing_section(numbers, cited[1:], images, flags)
+    if spare := [u for u in others if u not in images]:
+        more["extra_images"] = _listing_section(
+            numbers, cited, [*images, spare[0]], flags
+        )
+    if shown := [u for u in images if u in figures]:
+        more["missing_figures"] = _listing_section(
+            numbers, cited, [u for u in images if u != shown[0]], flags
+        )
+    for kind, after in more.items():
+        assert [p.kind for p in verifiers.added(old, after)] == [kind], kind
+
+
+def test_listed_items_of_one_sentence_are_shown_to_the_writer_together() -> None:
+    verifiers = _listing_verifiers(_PAPERS[:3], ())
+    problems = verifiers.run(_listing_section(["517", "733"], [], [], []))
+    assert [p.item for p in problems if p.kind == "numbers_uncited"] == ["517", "733"]
+    shown = messages(problems)
+    assert sum("517" in m for m in shown) == 1
+    assert any(m.startswith("numbers [517, 733] without evidence") for m in shown)
+    assert any(m.startswith(f"papers [{', '.join(_PAPERS[:3])}] belong") for m in shown)

@@ -1309,7 +1309,7 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
         def kind(md: str) -> list[Problem]:
             problems = as_problems(tldr.kind, self.tldr_problems(md))
             if tldr.no_body_copies:
-                problems += as_problems("body_copy", copied_sentences(md, body))
+                problems += copied_sentences(md, body)
             cited_here = {i for snt in prose_sentences(md) for i in cited_ids(snt)}
             problems += as_problems(
                 "coverage_headline", headline_problems(headline, cited_here)
@@ -1433,8 +1433,9 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
 
     def extra_problems(
         self, ctx: SectionContext[OutlineT, SectionT], markdown: str
-    ) -> list[str]:
-        """The kind's own problems of a section draft."""
+    ) -> Sequence[str | Problem]:
+        """The kind's own problems of a section draft (a message is a problem
+        of the section's kind that quotes no passage)."""
         return []
 
     def finish_section(self, section: SectionT, markdown: str) -> str:
@@ -1465,8 +1466,9 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
         """The TL;DR writer's prompt."""
         raise NotImplementedError
 
-    def tldr_problems(self, markdown: str) -> list[str]:
-        """The kind's own problems of a TL;DR draft."""
+    def tldr_problems(self, markdown: str) -> Sequence[str | Problem]:
+        """The kind's own problems of a TL;DR draft (a message is a problem
+        of the TL;DR's kind that quotes no passage)."""
         return []
 
     async def assemble(

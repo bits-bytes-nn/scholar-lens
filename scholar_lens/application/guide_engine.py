@@ -62,6 +62,7 @@ from scholar_lens.domain.guide.evidence_guide import (
 from scholar_lens.domain.guide.sdk_index import SdkIndex, definitions_for
 from scholar_lens.domain.prompts import guide_evidence as prompts
 from scholar_lens.domain.specs.guide import GUIDE_SPEC, TLDR_TITLE
+from scholar_lens.domain.verifiers import Problem, item_problems
 
 logger = logging.getLogger(__name__)
 
@@ -432,16 +433,17 @@ class EvidenceGuideEngine(PostEngine[GuideOutline, GuideSection, EvidenceGuide])
 
     def extra_problems(
         self, ctx: SectionContext[GuideOutline, GuideSection], markdown: str
-    ) -> list[str]:
+    ) -> list[Problem]:
         problems = guide_draft_problems(
             markdown, code_language=ctx.outline.code_language
         )
-        if self.identifier_check is not None and (
-            unknown := self.identifier_check(markdown)
-        ):
-            problems.append(
+        if self.identifier_check is not None:
+            problems += item_problems(
+                "unknown_flags",
+                self.identifier_check(markdown),
                 "flags or arguments no official page mentions; use the "
-                "documented ones or leave them out: " + ", ".join(unknown)
+                "documented ones or leave them out: ",
+                "",
             )
         return problems
 
@@ -487,7 +489,7 @@ class EvidenceGuideEngine(PostEngine[GuideOutline, GuideSection, EvidenceGuide])
             ]
         )
 
-    def tldr_problems(self, markdown: str) -> list[str]:
+    def tldr_problems(self, markdown: str) -> list[Problem]:
         return guide_draft_problems(markdown)
 
     async def assemble(

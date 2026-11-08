@@ -65,7 +65,7 @@ from scholar_lens.domain.markdown.lint import drop_empty_headings
 from scholar_lens.domain.post_spec import Limits
 from scholar_lens.domain.prompts.rules import FIX_ANSWER
 from scholar_lens.domain.usage_context import usage_stage
-from scholar_lens.domain.verifiers import Problem, VerifierSet
+from scholar_lens.domain.verifiers import Problem, VerifierSet, messages
 
 logger = logging.getLogger(__name__)
 
@@ -975,7 +975,7 @@ class EvidenceWriter:
             claims = await self.check_claims(draft, ledger, own, earlier)
             review = await self.review(draft, review_context) if round_ == 0 else []
             unaddressed += review
-            issues = [p.text for p in code] + [f"{v}: {s}" for s, v in claims] + review
+            issues = messages(code) + [f"{v}: {s}" for s, v in claims] + review
             if not issues or round_ == self.max_fix_rounds:
                 break
             revision = await self._fix(
@@ -1040,8 +1040,7 @@ class EvidenceWriter:
         """A PR note of the problems the section's verifier set still finds."""
         if leftover := verifiers.run(draft):
             self.notes.append(
-                f"Section '{title}' still has: "
-                + " | ".join(p.text for p in leftover[:5])
+                f"Section '{title}' still has: " + " | ".join(messages(leftover)[:5])
             )
 
     async def _settle(

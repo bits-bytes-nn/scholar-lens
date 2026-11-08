@@ -19,7 +19,7 @@ from scholar_lens.domain.markdown.math import DISPLAY_MATH, fence_roles
 from scholar_lens.domain.post_spec import Limits
 from scholar_lens.domain.quality_gate import rule_issues
 from scholar_lens.domain.validation import unsourced_numbers
-from scholar_lens.domain.verifiers import Problem
+from scholar_lens.domain.verifiers import Problem, item_problems
 
 # An evidence marker ("[[E12]]", "[[E12, E15]]") or the illustration mark
 # below; code removes both before publishing.
@@ -234,6 +234,11 @@ def section_problems(
     def add(kind: str, text: str, where: str = "") -> None:
         problems.append(Problem(kind, text, where))
 
+    def each(
+        kind: str, items: Iterable[str], before: str, after: str, where: str = ""
+    ) -> None:
+        problems.extend(item_problems(kind, items, before, after, where))
+
     if drop_empty_headings(markdown) != markdown:
         add("empty_heading", "a heading with nothing under it; delete it or fill it")
     if not markdown.lstrip().startswith("## "):
@@ -243,7 +248,13 @@ def section_problems(
         quoted = _plain(sentence)[:160]
         ids = cited_ids(sentence)
         if unknown := [i for i in ids if ledger.get(i) is None]:
-            add("unknown_evidence", f"unknown evidence {unknown} in: {quoted}", quoted)
+            each(
+                "unknown_evidence",
+                unknown,
+                "unknown evidence ",
+                f" in: {quoted}",
+                quoted,
+            )
             continue
         if _MARKER_AS_WORD.search(sentence):
             add(
@@ -253,26 +264,31 @@ def section_problems(
                 sentence[:160],
             )
         if spent := [i for i in ids if i in set(exhausted)]:
-            add(
+            each(
                 "exhausted_evidence",
-                f"evidence {spent} was already referred back to once; do not "
-                f"restate it again: {quoted}",
+                spent,
+                "evidence ",
+                f" was already referred back to once; do not restate it again: "
+                f"{quoted}",
                 quoted,
             )
         if foreign := [i for i in ids if i not in allowed]:
-            add(
+            each(
                 "foreign_evidence",
-                f"evidence {foreign} belongs to another section; leave it out: "
-                f"{quoted}",
+                foreign,
+                "evidence ",
+                f" belongs to another section; leave it out: {quoted}",
                 quoted,
             )
         numbers = stated_numbers(sentence, free_numbers)
         example = is_illustration(sentence)
         if numbers and not ids and not example:
-            add(
+            each(
                 "numbers_uncited",
-                f"numbers {numbers} without evidence (cite it; an illustration "
-                f"of your own ends with {EXAMPLE_MARK}): {quoted}",
+                numbers,
+                "numbers ",
+                f" without evidence (cite it; an illustration of your own ends "
+                f"with {EXAMPLE_MARK}): {quoted}",
                 quoted,
             )
         elif numbers and not example:
@@ -280,22 +296,25 @@ def section_problems(
             if missing := unsourced_numbers(
                 _plain(sentence), f"{support} {free_numbers}"
             ):
-                add(
+                each(
                     "numbers_not_in_evidence",
-                    f"numbers {missing} are not in the cited evidence: {quoted}",
+                    missing,
+                    "numbers ",
+                    f" are not in the cited evidence: {quoted}",
                     quoted,
                 )
-        if not example and (
-            repeated := [
-                n for n in numbers if n in earlier_numbers and not _MODEL_SIZE.match(n)
-            ]
-        ):
-            add(
-                "numbers_repeated",
-                f"{repeated} already stated in '{earlier_numbers[repeated[0]]}': "
-                f"refer back without repeating: {quoted}",
-                quoted,
-            )
+        if not example:
+            for n in dict.fromkeys(numbers):
+                if n in earlier_numbers and not _MODEL_SIZE.match(n):
+                    problems.append(
+                        Problem(
+                            "numbers_repeated",
+                            f"[{n}] already stated in '{earlier_numbers[n]}': "
+                            f"refer back without repeating: {quoted}",
+                            quoted,
+                            item=n,
+                        )
+                    )
         if _PAPER_ID.search(_plain(sentence)):
             add(
                 "paper_id",
@@ -321,10 +340,12 @@ def section_problems(
         if (e := ledger.get(i))
     }
     if uncovered := [p for p in papers if p not in cited_papers]:
-        add(
+        each(
             "papers_uncovered",
-            f"papers {uncovered} belong to this section but no sentence cites "
-            "their evidence: cover each",
+            uncovered,
+            "papers ",
+            " belong to this section but no sentence cites their evidence: "
+            "cover each",
         )
     length = len(" ".join(prose_sentences(markdown)))
     if target_chars and length > limits.max_length_share * target_chars:
@@ -366,10 +387,18 @@ def section_problems(
         )
     expected = set(figure_urls)
     shown = set(_IMAGE.findall(markdown))
-    if extra := sorted(shown - expected):
-        add("extra_images", f"images not given to this section: {extra}")
-    if missing := sorted(expected - shown):
-        add("missing_figures", f"figures given to this section are missing: {missing}")
+    each(
+        "extra_images",
+        sorted(shown - expected),
+        "images not given to this section: ",
+        "",
+    )
+    each(
+        "missing_figures",
+        sorted(expected - shown),
+        "figures given to this section are missing: ",
+        "",
+    )
     return problems
 
 
@@ -779,11 +808,15 @@ def apply_edits(
     return "\n".join(kept), applied, skipped
 
 
-def copied_sentences(markdown: str, body: Sequence[str]) -> list[str]:
+def copied_sentences(markdown: str, body: Sequence[str]) -> list[Problem]:
     """Sentences of a summary (a TL;DR) that copy a ``body`` sentence
-    instead of summing up, each as a problem."""
+    instead of summing up, each a ``body_copy`` problem quoting it."""
     return [
-        f"copies a sentence of the body; sum it up in new words: {s[:160]}"
+        Problem(
+            "body_copy",
+            f"copies a sentence of the body; sum it up in new words: {s[:160]}",
+            s[:160],
+        )
         for s in prose_sentences(markdown)
         if near_duplicate(s, body)
     ]

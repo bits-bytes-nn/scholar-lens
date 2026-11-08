@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+from types import SimpleNamespace
 from typing import Any, get_args
 
 import pytest
@@ -52,7 +53,7 @@ from scholar_lens.domain.post_spec import evidence_policy
 from scholar_lens.domain.research import PageContent
 from scholar_lens.domain.sources import SourceSet
 from scholar_lens.domain.specs import GUIDE_SPEC
-from scholar_lens.domain.verifiers import no_checks
+from scholar_lens.domain.verifiers import VerifierSet, no_checks
 from tests.fakes import claim_check, evidence_check, with_context
 
 DOC_TEXT = """## Overview
@@ -319,8 +320,8 @@ def test_guide_draft_problems() -> None:
         f"{long_code}\n\n```typescript\nconst a = 1;\n```\n"
     )
     problems = guide_draft_problems(draft, code_language="python")
-    assert any("45-line code block" in p for p in problems)
-    assert any("show it in python" in p for p in problems)
+    assert any("45-line code block" in p.text for p in problems)
+    assert any("show it in python" in p.text for p in problems)
     assert guide_draft_problems("## 배치\n\n기본값은 10입니다 [[E2]].\n") == []
 
 
@@ -730,7 +731,7 @@ def test_a_figure_without_a_quote_takes_the_text_before_it() -> None:
 
 def test_internal_source_ids_in_the_text_are_problems() -> None:
     assert any(
-        "internal id" in p
+        "internal id" in p.text
         for p in guide_draft_problems("## A\n\n영상 튜토리얼(src-W8)이 보여 줍니다.\n")
     )
     # Product and model names never take the id form.
@@ -877,7 +878,7 @@ def test_definitions_in_list_items_sessions_and_bad_blocks_still_count() -> None
     )
     assert problems and "missing_name" in problems[0][1]
     code_marker = "## A\n\n설명입니다 [[E1]].\n\n```python\nx = 1  # [[E2]]\n```\n"
-    assert any("inside code" in p for p in guide_draft_problems(code_marker))
+    assert any("inside code" in p.text for p in guide_draft_problems(code_marker))
 
 
 def test_evidence_for_another_sdk_is_recognised_by_its_field() -> None:
@@ -1148,3 +1149,35 @@ def test_a_short_tldr_has_no_minimum_and_may_be_shortened() -> None:
     assert "copies a sentence of the body" in model.fixes[0]
     assert tldr == f"## TL;DR\n\n{opening}\n"
     assert not any("characters of prose" in n for n in engine.notes)
+
+
+@pytest.mark.parametrize("dropped", range(4))
+def test_settling_one_of_the_guides_listed_items_adds_no_problem(dropped: int) -> None:
+    flags = ["--alpha", "--beta", "--gamma", "--delta"]
+    engine = EvidenceGuideEngine(
+        ScriptedModel(),
+        GuideSettings(language="Korean", title_max_length=70, reader_tag="sonnet"),
+        identifier_check=lambda md: [f for f in flags if f in md],
+    )
+    ctx: Any = SimpleNamespace(outline=SimpleNamespace(code_language="python"))
+    verifiers = VerifierSet("A", (lambda md: engine.extra_problems(ctx, md),))
+    sdk = ["python", "typescript", "java", "go"]
+
+    def section(kept: list[str]) -> str:
+        code = "\n\n".join(f"```{lang}\nx\n```" for lang in kept)
+        return (
+            "## A\n\n영상 튜토리얼(src-W8)이 보여 줍니다.\n\n"
+            f"```bash\nserve {' '.join(flags)}\n```\n\n{code}\n"
+        )
+
+    before = section(sdk)
+    after = section([lang for k, lang in enumerate(sdk) if k != dropped]).replace(
+        flags[dropped], ""
+    )
+    problems = verifiers.run(before)
+    # One problem per unknown flag; the sentence and the languages a
+    # problem quotes are its passage.
+    assert [p.item for p in problems if p.kind == "unknown_flags"] == flags
+    assert all(p.where for p in problems if p.kind in ("source_id", "sdk_languages"))
+    assert verifiers.added(before, after) == []
+    assert [p.kind for p in verifiers.added(after, before)] == ["unknown_flags"]
