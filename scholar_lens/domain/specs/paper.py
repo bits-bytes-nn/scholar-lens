@@ -16,6 +16,7 @@ from scholar_lens.domain.post_spec import (
     KindOrder,
     KindSequence,
     KindSpec,
+    Limits,
     MaxSections,
     OutlineCheck,
     Ownership,
@@ -154,6 +155,8 @@ PAPER_SUMMARY_SPEC = PostSpec(
     depth_kinds=frozenset({"method"}),
     judgement_kinds=_JUDGEMENT,
     coverage=_coverage((3, 5), headline=1),
+    # What a five-minute summary needs.
+    limits=Limits(main_source_evidence=(6, 12)),
 )
 
 

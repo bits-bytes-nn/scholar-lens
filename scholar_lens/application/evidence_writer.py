@@ -65,10 +65,6 @@ SectionT = TypeVar("SectionT")
 _EVIDENCE_KINDS: tuple[str, ...] = Evidence.model_fields["kind"].annotation.__args__  # type: ignore[union-attr]
 
 
-# Turns of the follow-up that asks a reader for a required kind it skipped.
-FOLLOW_UP_TURNS = 8
-
-
 class SentenceVerdict(BaseModel):
     n: int
     # about_sources: the sentence is about the post's inputs (its evidence,
@@ -506,7 +502,8 @@ class EvidenceWriter:
     ) -> list[Evidence]:
         """One agent reads ``document`` and records evidence; every record
         is checked against the document (and ``rule``) before it is kept.
-        ``finish`` asks twice for any ``required`` kind still missing."""
+        ``finish`` asks again (``limits.required_kind_asks`` times) for any
+        ``required`` kind still missing."""
         ledger = EvidenceLedger()
         rejected = 0
         refusals = 0
@@ -521,7 +518,7 @@ class EvidenceWriter:
                 return f"Unknown anchor {anchor!r}. Anchors: " + ", ".join(
                     s.anchor for s in document.sections
                 )
-            return f"{section.anchor} | {section.heading}\n\n{section.text[:30_000]}"
+            return f"{section.anchor} | {section.heading}\n\n{section.text[: self.limits.read_section_chars]}"
 
         def search_source(query: str) -> str:
             """Find passages of the source containing every word of the
@@ -620,7 +617,7 @@ class EvidenceWriter:
             nonlocal refusals
             kinds = {e.kind for e in ledger}
             missing = [k for k in required if k not in kinds]
-            if missing and refusals < 2:
+            if missing and refusals < self.limits.required_kind_asks:
                 refusals += 1
                 return (
                     "Not yet: this source needs at least one piece of evidence "
@@ -655,7 +652,8 @@ class EvidenceWriter:
                 ),
                 tools=[read_section, search_source, record_evidence, finish],
                 limits=AgentLimits(
-                    turns=FOLLOW_UP_TURNS, total_tokens=limits.total_tokens
+                    turns=self.limits.follow_up_turns,
+                    total_tokens=limits.total_tokens,
                 ),
             )
         logger.info(
@@ -733,7 +731,8 @@ class EvidenceWriter:
                 )
             )
             if (own or evidence) and (
-                prose_length(text) < 0.3 * target or _incomplete(text)
+                prose_length(text) < self.limits.short_draft_share * target
+                or _incomplete(text)
             ):
                 logger.warning(
                     "Section came back short (%d chars): %r",
@@ -752,7 +751,8 @@ class EvidenceWriter:
                     )
                 )
             if (own or evidence) and (
-                prose_length(text) < 0.3 * target or _incomplete(text)
+                prose_length(text) < self.limits.short_draft_share * target
+                or _incomplete(text)
             ):
                 logger.warning("Section still short; writing it from the claims alone.")
                 text = _kept(
@@ -812,7 +812,6 @@ class EvidenceWriter:
         )
         if section is not None:
             self.checked[id(section)] = checks
-        evidence = [*own, *earlier[-30:]]
         # The review runs once; its problems stand until a fix made for them
         # is taken (the claims and code are checked again below).
         unaddressed: list[str] = []
@@ -825,7 +824,11 @@ class EvidenceWriter:
             if not issues or round_ == self.max_fix_rounds:
                 break
             revision = await self._fix(
-                draft, evidence, issues, verifiers=verifiers, rest=rest
+                draft,
+                self.fix_evidence(draft, own, earlier),
+                issues,
+                verifiers=verifiers,
+                rest=rest,
             )
             if revision.rejected:
                 logger.info("Fix of %r rejected: %s", title, revision.rejected)
@@ -845,7 +848,7 @@ class EvidenceWriter:
             title=title,
             ledger=ledger,
             checks=checks,
-            evidence=evidence,
+            evidence=self.fix_evidence(draft, own, earlier),
             rest=rest,
         )
         draft = add_missing_figures(draft, [e for e in own if e.kind == "figure"])
@@ -855,6 +858,26 @@ class EvidenceWriter:
             self.notes.append(f"Section '{title}': a lone $$ was removed.")
         self._note_leftovers(draft, title=title, verifiers=verifiers)
         return draft
+
+    def fix_evidence(
+        self, draft: str, own: Sequence[Evidence], earlier: Sequence[Evidence]
+    ) -> list[Evidence]:
+        """The evidence a fix of ``draft`` sees: the section's own, then the
+        earlier evidence the claim check judges against, up to
+        ``limits.fix_earlier_evidence`` items: what the draft cites first,
+        then the latest (in their order)."""
+        cap = self.limits.fix_earlier_evidence
+        cited = set(cited_ids(draft))
+        chosen = {i for i, e in enumerate(earlier) if e.id in cited}
+        for i in range(len(earlier) - 1, -1, -1):
+            if len(chosen) >= cap:
+                break
+            chosen.add(i)
+        picked = sorted(chosen)
+        if len(picked) > cap:
+            # More cited than the cap: the latest of them.
+            picked = picked[-cap:] if cap > 0 else []
+        return [*own, *(earlier[i] for i in picked)]
 
     def _note_leftovers(
         self, draft: str, *, title: str, verifiers: VerifierSet

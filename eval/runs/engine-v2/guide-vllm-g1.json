@@ -1,0 +1,181 @@
+{
+  "item": "guide-vllm",
+  "judge_setup": {
+    "sources_checked": "Quickstart (docs.vllm.ai/en/latest), arXiv HTML 2309.06180, vLLM blog 2023-06-20, plus the docs pages each post cites (GPU/CPU install, Docker, metrics usage+design, engine args, V1 guide, arch overview, benchmark CLI, kv_cache_manager/scheduler API, v0.8.3 engine args, V1 blog, Oracle OKE, vLLM forum); vLLM main source b022bb7 (2026-11-08).",
+    "t1_method": "No GPU. Every CLI flag in both posts grepped against vLLM source (arg_utils.py, entrypoints/cli, benchmarks, Dockerfiles); uv flags against uv 0.13.0 --help. Client code, curl blocks and /metrics/v1/models calls run against a local fake OpenAI-compatible server (openai 3.46.0) with AWS credentials removed. Offline LLM scripts parsed with ast only."
+  },
+  "X": {
+    "scores": {
+      "A": {"score": 9, "reason": "TL;DR, then problem, PagedAttention (L40), V1 flow (L165) and KVCacheManager (L233) before install (L307); clean markup (no H1, $$ only, fences closed, desc 127 chars). Running example appears only at L155; trailing space L430."},
+      "B": {"score": 8, "reason": "Mostly natural Korean. Repeated figure lead-ins ('따라가면 됩니다/주목하면 됩니다/보면 됩니다' L78, L121, L135, L587); noun frame L50 '붙어 있을 필요가 없다는 사실입니다'; missing space L109 '20–26%높습니다'; meta sentence L163 '이 범위 안에서만 인용해야 합니다'."},
+      "C": {"score": 8, "reason": "Good forward/back references ('이어지는 KVCacheManager 설명에서' L197). But the '현재 vLLM의 KVCacheManager' section switches to Nano-vLLM's BlockManager for free/hash paths (L291-297), so the reader can't tell which system is being described. L38 promises an LLM-class walkthrough that the next sections don't give."},
+      "D": {"score": 8, "reason": "Small worked examples land in the right places (2048 vs 300 tokens L25, allocate_slots 32+18 tokens L256, NUMA 8+30>32 GiB L454, step table L203-208). Over-explains niche internals (get_num_common_prefix_blocks edge case L301, take_events metadata L305, five-region token layout L239-254)."},
+      "E": {"score": 8.5, "reason": "Tables fit (baselines L31-34, CoW states L125-129, metric intervals L552-558, failure modes L604-611), the watermark excerpt is verbatim from source. Two GIFs for the same parallel-sampling mechanism (L119, L133); four animations in total."},
+      "F": {"score": 8, "reason": "Of 24 checked claims, 23 are supported and 1 is unsupported: L225 '다시 계산할 때는 프리픽스 캐싱과 LRU 축출 덕분에 대부분 캐시 히트가 납니다' is not in the docs, the paper or the cited robulka page. L532 applies a forum bot answer about gpu_cache_usage_perc to the renamed kv_cache_usage_perc (weak source, but consistent). Numbers all match their sources and baselines."},
+      "T1": {"score": 8.5, "reason": "Install, serve, OpenAI client, Completions curl, YAML --config, Docker, Dockerfile, metrics curl and bucket flags are all real. All flags exist in source (--config, --attention-backend, --custom-histogram-buckets, --kv-cache-metrics(-sample), --api-server-count, --uvicorn-log-level, uv --managed-python/--torch-backend). The client and both curl calls ran OK against the fake server; the bucket JSON is valid and strictly increasing. No chat curl; Helm install is explicitly left out (L514)."},
+      "T2": {"score": 8.5, "reason": "Covers the quickstart topics, including attention-backend override, API keys and generation_config, with the paper and blog for mechanisms. Missing SamplingParams, ModelScope, 'uv run --with' and /v1/models. The KVCacheManager depth goes beyond what a quickstart-anchored guide needs."},
+      "T3": {"score": 9, "reason": "Strong internals: block table, CoW, beam search, TP, V1 API server/EngineCore split, allocate_slots. Strong system fit: Docker, CPU seccomp, Production Stack options, a full Prometheus section (saturation, waiting reasons, PromQL hit rate, intervals, buckets) and a failure-mode table. No benchmarking."}
+    },
+    "principles": {
+      "claim_headings": "met (e.g. L17, L233, L516)",
+      "running_example": "met, but introduced late (Qwen2.5 server first named L155, used through L615)",
+      "mechanism_design_code_example": "met (block size trade-off L88-99, kernel costs L101-109, allocate_slots L237-256)",
+      "facts_once": "partly met (60–80% at L13, L17, L19, L25; 20–26% at L15, L109)",
+      "numbers_scoped": "met (baseline table L31-34; 55%/2.2x scoped L163; blog table caveat L594)",
+      "nothing_invented": "partly met (L225 unsupported; hypothetical numbers are labelled 가상의 숫자)",
+      "writer_assessment_end": "met (L613-615)",
+      "length_fitted": "partly met (KVCacheManager API minutiae L299-305 are long)",
+      "type_shape": "met (TL;DR, architecture first, ends with when to choose / limits)",
+      "korean_style": "partly met (repeated figure lead-ins, L109 spacing)"
+    },
+    "claims": {
+      "checked": 24,
+      "numbers": 14,
+      "supported": 23,
+      "unsupported": 1,
+      "wrong": 0,
+      "unverifiable_extra": ["L514 Artifact Hub chart description (page not retrievable)"],
+      "error_rate": 0.042,
+      "examples": [
+        {"line": 13, "claim": "2–4x vs FasterTransformer/Orca at same latency", "status": "supported", "source": "arXiv 2309.06180 abstract"},
+        {"line": 21, "claim": "LLaMA-13B up to 1.7GB per sequence", "status": "supported", "source": "vLLM blog 2023-06-20"},
+        {"line": 82, "claim": "waste under 4%", "status": "supported", "source": "vLLM blog"},
+        {"line": 96, "claim": "ShareGPT 16–128, Alpaca 16/32 block sizes", "status": "supported", "source": "paper §7.2"},
+        {"line": 109, "claim": "20–26% higher attention kernel latency", "status": "supported", "source": "paper §7.1"},
+        {"line": 163, "claim": "up to 55% memory, 2.2x throughput (parallel sampling/beam search)", "status": "supported", "source": "vLLM blog"},
+        {"line": 222, "claim": "swap: stops accepting new requests until preempted sequences finish", "status": "supported", "source": "paper §4.5"},
+        {"line": 225, "claim": "recompute after preemption mostly hits the prefix cache thanks to LRU eviction", "status": "unsupported", "source": "not in docs, paper or cited robulka page"},
+        {"line": 254, "claim": "allocate_slots raises ValueError when all three token counts are 0", "status": "supported", "source": "vllm/v1/core/kv_cache_manager.py"},
+        {"line": 287, "claim": "num_tokens_to_cache = min(total_computed_tokens + num_new_tokens, request.num_tokens)", "status": "supported", "source": "kv_cache_manager.py"},
+        {"line": 322, "claim": "CUDA 12.9 default, 12.8/13.0 builds", "status": "supported", "source": "GPU install page"},
+        {"line": 330, "claim": "Quickstart ROCm Py3.12/ROCm 7.0/glibc>=2.35; GPU page ROCm 6.3+, MI350 7.0+", "status": "supported", "source": "Quickstart, GPU install"},
+        {"line": 456, "claim": "CPU --max-num-seqs 256*world_size offline, 128*world_size online", "status": "supported", "source": "CPU install page"},
+        {"line": 476, "claim": "-ubuntu2404 tags no longer published; latest-x86_64/aarch64", "status": "supported", "source": "Docker deployment page"},
+        {"line": 522, "claim": "multiprocess mode only when --api-server-count > 1", "status": "supported", "source": "metrics design doc"},
+        {"line": 544, "claim": "prompt_tokens_cached_by_source sums to prefix_cache_hits + external_prefix_cache_hits", "status": "supported", "source": "Production Metrics page"},
+        {"line": 591, "claim": "HF 14–24x / TGI 2.2–2.5x (n=1); 8.5–15x / 3.3–3.5x (n=3)", "status": "supported", "source": "vLLM blog"},
+        {"line": 598, "claim": "LMSYS 30x micro-benchmark, 50% fewer GPUs, 30K avg / 60K peak daily", "status": "supported", "source": "vLLM blog"}
+      ]
+    },
+    "checklist": {
+      "source": "guide-vllm has no item fixes; generic guide checks from its notes",
+      "repeated": 0, "avoided": 5, "na": 0, "repeated_ids": [],
+      "evidence": {
+        "nonexistent_cross_refs": "avoided (refs are descriptive, e.g. 'uv 설치부터…' 절 L155)",
+        "tag_or_entity_leak": "avoided (only '&#124;' inside source link titles L630, L634, which renders as '|')",
+        "unclosed_fence": "avoided (fence count even)",
+        "stale_cli_flags": "avoided (old api_server command named as the early blog's, L340)",
+        "install_centric": "avoided (install starts at L307 of 615)"
+      }
+    },
+    "extras": {
+      "architecture_first_line": 40,
+      "non_official_source_share": "7/17 (paper, 2023 blog, LinkedIn, robulka, Languisher, Artifact Hub, forum)",
+      "opens_with_problem": true,
+      "closes_with_choice_and_failure_modes": true
+    },
+    "t1_execution": {
+      "flags_in_source": "all present",
+      "client_python_L346": "ran, ChatCompletion parsed",
+      "curl_completions_L370": "ran, 200",
+      "curl_metrics_L524": "ran, 200",
+      "offline_L387": "syntax OK; import path vllm.entrypoints.llm.LLM exists; not executed (no GPU)"
+    },
+    "top_issues": [
+      "L225: unsupported claim that recomputed prefills mostly hit the prefix cache thanks to LRU eviction",
+      "L291-305: Nano-vLLM BlockManager mixed into the 'current vLLM KVCacheManager' section, plus API minutiae (get_num_common_prefix_blocks, take_events) that over-explain",
+      "L13/L17/L19/L25: 60–80% repeated four times; repeated figure lead-in formula (L78, L121, L135, L587); two GIFs for one mechanism (L119, L133)"
+    ]
+  },
+  "Y": {
+    "scores": {
+      "A": {"score": 9, "reason": "TL;DR, then problem, PagedAttention (L45), scheduler (L118) and V1 processes (L191) before install (L257); clean markup (desc 143 chars). TL;DR is two dense paragraphs that already cover process layout and hardware (L13-15)."},
+      "B": {"score": 8, "reason": "Natural overall. English-only table L228-234 in a Korean post; 'TPOT는 … 작게 나옵니다. 따라서 … 따라서' L568; L41 restates the TL;DR definition; trailing space L508."},
+      "C": {"score": 8.5, "reason": "Sections build on each other (budget table reused at L177, preemption to reset_prefix_cache L189, process table to CPU sizing L255). Nano-vLLM queues are used to explain vLLM's scheduler (L124), but labelled."},
+      "D": {"score": 9, "reason": "Hard parts get numeric help: a blockwise softmax example that checks out (4.5, L67-76), a 300-token/16-block count (L90), a token-budget table (510+510+180=1200, L139-148), and TPOT vs ITL under speculative decoding (L564-568). count_vllm_processes (L240-253) only restates a table."},
+      "E": {"score": 8.5, "reason": "Equation, worked math, tables (process counts L228-234, V1 feature status L530-544, install paths L353-358) and figures all match their text. The process-count function adds little; the V1 table keeps the source emoji verbatim."},
+      "F": {"score": 9, "reason": "Of 24 primary-checked claims, all 24 are supported. Two third-party claims can't be verified: nano-vLLM 1,434.13 vs 1,361.84 tok/s (L653; page not retrievable, though the 5.3% arithmetic holds) and the qualitative Medium comparison (L508, L647). L368 'Intel XPU용 사전 빌드 wheel은 아직 나오지 않았습니다' matches the Quickstart but contradicts the GPU install page, so the docs disagree with each other."},
+      "T1": {"score": 9, "reason": "Covers install, offline llm.chat with SamplingParams, serve, /v1/models, chat curl, OpenAI client, editable/full source builds, Docker run/build, CPU container and ARM build, engine-arg combos, and bench serve/throughput/prefix-caching. All flags exist in source (-tp/-dp/-q, --scheduling-policy, --logprobs-mode, bench --endpoint/--dataset-name/--random-*-len, benchmark_prefix_caching.py --dataset-path/--repeat-count/--input-length-range, Dockerfile targets vllm-openai, VLLM_CPU_ARM_BF16, the vllm[bench] extra). The client, chat curl and /v1/models ran OK; the process function prints 6/17/3 as claimed."},
+      "T2": {"score": 8.5, "reason": "Covers the quickstart (incl. ModelScope, 'uv run --with', generation_config, API keys), with the paper and blog for mechanisms, then V1 docs and benchmarks. Leaves out the quickstart's --attention-backend section and the Completions API curl."},
+      "T3": {"score": 8.5, "reason": "Strong internals: PagedAttention with math, CoW, scheduler token budget, _preempt_request, deferred frees, V1 process architecture with CPU sizing, V1 behaviour changes. Integration is thinner: Production Stack only via an Oracle tutorial (L428), no metrics or observability, and the alternatives comparison rests on a qualitative Medium post."}
+    },
+    "principles": {
+      "claim_headings": "met (e.g. L45, L118, L191)",
+      "running_example": "met (Qwen chat service from L35 through L659)",
+      "mechanism_design_code_example": "met (blockwise attention L57-80, block size L100-102, preemption L152-179)",
+      "facts_once": "partly met (24x, 2-4x, 60–80% and 4% each in TL;DR and once more in body; L41 restates the definition)",
+      "numbers_scoped": "met (baselines separated L43; Hermes-3 vs Qwen stated L589, L604)",
+      "nothing_invented": "met (illustrative numbers and diagrams labelled 예시/가정)",
+      "writer_assessment_end": "met (L659)",
+      "length_fitted": "met",
+      "type_shape": "met (TL;DR, architecture first, ends with choice and limits; the failure modes are only a recap list L657)",
+      "korean_style": "partly met (English table, doubled 따라서)"
+    },
+    "claims": {
+      "checked": 24,
+      "numbers": 16,
+      "supported": 24,
+      "unsupported": 0,
+      "wrong": 0,
+      "unverifiable_extra": ["L653 nano-vLLM 1,434.13 vs 1,361.84 tok/s (third-party page JS-rendered)", "L508/L647 Medium qualitative comparison"],
+      "error_rate": 0.0,
+      "examples": [
+        {"line": 21, "claim": "13B on A100 40GB: ~65% weights, ~30% KV cache", "status": "supported", "source": "paper §1"},
+        {"line": 37, "claim": "only 20.4%–38.2% of KV memory stores token states", "status": "supported", "source": "paper §3"},
+        {"line": 43, "claim": "2-4x vs FT/Orca, no accuracy impact", "status": "supported", "source": "paper abstract/§1"},
+        {"line": 88, "claim": "waste under 4%", "status": "supported", "source": "vLLM blog"},
+        {"line": 112, "claim": "55% memory, 2.2x throughput", "status": "supported", "source": "vLLM blog"},
+        {"line": 177, "claim": "_preempt_request frees blocks, sets num_computed_tokens=0, prepends to waiting", "status": "supported", "source": "vllm/v1/core/sched/scheduler.py"},
+        {"line": 185, "claim": "recompute overhead never >20% of swap; 16–64 comparable", "status": "supported", "source": "paper §7.3"},
+        {"line": 185, "claim": "v0.8.3 had --preemption-mode", "status": "supported", "source": "v0.8.3 engine args"},
+        {"line": 199, "claim": "V1 up to 1.7x vs V0 without multi-step; Llama 3.1 8B/3.3 70B ShareGPT", "status": "supported", "source": "V1 blog"},
+        {"line": 216, "claim": "VLLM_MEDIA_LOADING_THREAD_COUNT default 8", "status": "supported", "source": "arch overview"},
+        {"line": 236, "claim": "-tp=4: 6 processes; -tp=2 -dp=4: 17", "status": "supported", "source": "arch overview"},
+        {"line": 362, "claim": "compute capability 7.5+ (T4…B200)", "status": "supported", "source": "GPU install"},
+        {"line": 368, "claim": "no pre-built Intel XPU wheels yet", "status": "supported", "source": "Quickstart ('will be available soon'); GPU install page says they are published"},
+        {"line": 391, "claim": "GCC/G++ >= 13 for source build", "status": "supported", "source": "GPU install"},
+        {"line": 428, "claim": "router default 500 Mi can OOMKill", "status": "supported", "source": "Oracle OKE tutorial"},
+        {"line": 492, "claim": "--model default Qwen/Qwen3-0.6B", "status": "supported", "source": "engine args"},
+        {"line": 518, "claim": "prefix caching <1% throughput drop at 0% hit rate", "status": "supported", "source": "V1 blog"},
+        {"line": 589, "claim": "TTFT 71.54 ms, TPOT 7.91, ITL 7.74, 382.89 tok/s (Hermes-3)", "status": "supported", "source": "Benchmark CLI"},
+        {"line": 604, "claim": "7.15 req/s, 4647.50 / 1072.50 tok/s, 5000/1500 tokens", "status": "supported", "source": "Benchmark CLI"},
+        {"line": 641, "claim": "up to 22x higher request rate than FasterTransformer", "status": "supported", "source": "paper §6.2"}
+      ]
+    },
+    "checklist": {
+      "source": "guide-vllm has no item fixes; generic guide checks from its notes",
+      "repeated": 0, "avoided": 5, "na": 0, "repeated_ids": [],
+      "evidence": {
+        "nonexistent_cross_refs": "avoided (descriptive refs, e.g. '엔진 인자 튜닝을 다루는 부분에서' L137)",
+        "tag_or_entity_leak": "avoided (only '&#124;' in source link titles L673, L676)",
+        "unclosed_fence": "avoided",
+        "stale_cli_flags": "avoided (v0.8.3 preemption-mode named as that version's, L185)",
+        "install_centric": "avoided (install starts at L257 of 659)"
+      }
+    },
+    "extras": {
+      "architecture_first_line": 45,
+      "non_official_source_share": "6/16 (paper, 2023 blog, V1 blog, morphllm, Oracle, Medium)",
+      "opens_with_problem": true,
+      "closes_with_choice_and_failure_modes": "partly (choice guidance L659; failure modes only recapped as a list L657)"
+    },
+    "t1_execution": {
+      "flags_in_source": "all present",
+      "client_python_L332": "ran, ChatCompletion parsed",
+      "curl_chat_L318": "ran, 200",
+      "curl_models_L314": "ran, 200",
+      "process_count_L240": "ran, printed 6/17/3 as stated",
+      "offline_L280": "syntax OK; not executed (no GPU)"
+    },
+    "top_issues": [
+      "L653, L508, L647: the alternatives/nano-vLLM comparison rests on unverifiable third-party numbers and a qualitative Medium post",
+      "L228-234 English table in a Korean post; L568 doubled '따라서'; TL;DR overloaded (L13-15)",
+      "No observability/metrics coverage and no --attention-backend from the quickstart; Production Stack only via an Oracle tutorial (L428)"
+    ]
+  },
+  "preference": {
+    "winner": "Y",
+    "per_criterion": {"A": "tie", "B": "tie", "C": "Y", "D": "Y", "E": "tie", "F": "Y", "T1": "Y", "T2": "tie", "T3": "X"},
+    "reason": "Y has no unsupported primary-source claims (X has one at L225), better worked examples (verified blockwise-softmax and token-budget tables), and more runnable commands, all of which exist in source (source builds, CPU container, benchmarks). X is stronger on system integration: its Prometheus metrics section and failure-mode table have no counterpart in Y. X also blurs Nano-vLLM with vLLM internals and over-details the KVCacheManager API. On balance, Y by a small margin."
+  }
+}

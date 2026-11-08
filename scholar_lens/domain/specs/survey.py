@@ -10,6 +10,7 @@ from scholar_lens.domain.post_spec import (
     KindCount,
     KindOrder,
     KindSpec,
+    Limits,
     Ownership,
     PostSpec,
     RequiredField,
@@ -90,4 +91,6 @@ SURVEY_SPEC = PostSpec(
             TargetKind("lineage", "a lineage of the survey"),
         )
     ),
+    # A core paper is read in depth; a supporting one for what it adds.
+    limits=Limits(main_source_evidence=(12, 25), minor_source_evidence=(4, 8)),
 )

@@ -329,6 +329,23 @@ class Limits:
     coverage_source_chars: int = 30_000
     # Evidence items a TL;DR prompt shows at most (the body cites more).
     tldr_evidence: int = 80
+    # Earlier sections' evidence a fix sees at most besides the section's
+    # own: what the section cites first, then the latest. The claim check
+    # judges against the earlier evidence, so a fix must see what it cites.
+    fix_earlier_evidence: int = 30
+    # A draft shorter than this share of its target prose is asked again.
+    short_draft_share: float = 0.3
+    # The reader: turns of the follow-up that asks for a required kind it
+    # skipped, how often ``finish`` refuses while one is missing, and the
+    # characters ``read_section`` returns of one section.
+    follow_up_turns: int = 8
+    required_kind_asks: int = 2
+    read_section_chars: int = 30_000
+    # Evidence a reader is asked to record (low, high): of a main source
+    # (the docs, a core paper, the paper) and of a minor one (another page,
+    # a supporting paper).
+    main_source_evidence: tuple[int, int] = (10, 25)
+    minor_source_evidence: tuple[int, int] = (3, 10)
 
 
 @dataclass(frozen=True)

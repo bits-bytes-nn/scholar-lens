@@ -203,6 +203,11 @@ class EvidenceSurveyEngine(PostEngine[EvidenceOutline, OutlineSection, EvidenceS
         self, paper: PlanPaper, document: SourceDocument, plan: SurveyPlan
     ) -> ReadJob:
         core = paper.role == "core"
+        low, high = (
+            self.limits.main_source_evidence
+            if core
+            else self.limits.minor_source_evidence
+        )
         required: tuple[str, ...] = ()
         if document.kind != "abstract":
             required = ("method", "number", "limitation") if core else ("limitation",)
@@ -214,11 +219,7 @@ class EvidenceSurveyEngine(PostEngine[EvidenceOutline, OutlineSection, EvidenceS
                 f"Text available: {document.kind.replace('_', ' ')}.",
                 block("outline", document.outline()),
                 f"Survey language for claims and cells: {self.settings.language}.",
-                (
-                    "Record about 12-25 pieces of evidence."
-                    if core
-                    else "Record about 4-8 pieces of evidence."
-                ),
+                f"Record about {low}-{high} pieces of evidence.",
             ]
         )
         return ReadJob(

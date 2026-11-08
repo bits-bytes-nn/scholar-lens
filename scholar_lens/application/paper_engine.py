@@ -219,17 +219,18 @@ class EvidencePaperEngine(PostEngine[PaperOutline, PaperSection, EvidencePaper])
         def start(whole: SourceDocument, part: SourceDocument, n: int) -> ReadStart:
             async def job() -> ReadJob:
                 anchors = ", ".join(s.anchor for s in part.sections)
+                low, high = self.limits.main_source_evidence
                 prompt = "\n\n".join(
                     [
                         f"Paper: {title}",
                         block("paper_outline", whole.outline()),
                         f"Your sections: {anchors}. Record evidence from them only.",
                         f"Post language for claims and cells: {self.settings.language}.",
-                        (
-                            "Record about 10-25 pieces of evidence."
+                        f"Record about {low}-{high} pieces of evidence"
+                        + (
+                            "."
                             if self.settings.post == "review"
-                            else "Record about 6-12 pieces of evidence: what a "
-                            "five-minute summary needs."
+                            else ": what a five-minute summary needs."
                         ),
                     ]
                 )

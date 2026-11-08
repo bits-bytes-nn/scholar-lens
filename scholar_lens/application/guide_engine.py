@@ -255,6 +255,8 @@ class EvidenceGuideEngine(PostEngine[GuideOutline, GuideSection, EvidenceGuide])
         def start(document: SourceDocument) -> ReadStart:
             async def job() -> ReadJob:
                 primary = document.authority in _PRIMARY
+                main = self.limits.main_source_evidence
+                minor = self.limits.minor_source_evidence
                 prompt = "\n\n".join(
                     [
                         f"Guide topic: {topic}",
@@ -263,10 +265,10 @@ class EvidenceGuideEngine(PostEngine[GuideOutline, GuideSection, EvidenceGuide])
                         block("outline", document.outline()),
                         f"Guide language for claims and cells: {self.settings.language}.",
                         (
-                            "Record about 10-25 pieces of evidence."
+                            f"Record about {main[0]}-{main[1]} pieces of evidence."
                             if primary
-                            else "Record about 3-10 pieces of evidence: what this "
-                            "page adds to the docs."
+                            else f"Record about {minor[0]}-{minor[1]} pieces of "
+                            "evidence: what this page adds to the docs."
                         ),
                     ]
                 )
