@@ -376,6 +376,49 @@ def test_deleting_a_duplicate_table_is_not_held_to_the_visuals_minimum(
         assert OTHER not in revision.text and TABLE in revision.text
 
 
+FIGURE = "![구조](https://x/a.png)"
+
+
+@pytest.mark.parametrize(
+    ("blocks", "edits", "rest"),
+    [
+        # A table repeated within the section only: the copy left is the
+        # section's own, nothing another section keeps.
+        (
+            ["표를 봅니다.", TABLE, "다음 표입니다.", TABLE, "끝입니다."],
+            [(f"{TABLE}\n\n끝입니다.", "끝입니다.")],
+            _section("앞 절."),
+        ),
+        # A figure not given to the section (it may go) that no other
+        # section shows.
+        (
+            ["그림을 봅니다.", FIGURE, "표입니다.", TABLE, "끝입니다."],
+            [(f"\n\n{FIGURE}", "")],
+            _section("앞 절."),
+        ),
+        # Two visuals removed, only one with a copy elsewhere.
+        (
+            ["표를 봅니다.", TABLE, "다음 표입니다.", OTHER, TABLE, "끝입니다."],
+            [(f"\n\n{OTHER}\n\n{TABLE}", "")],
+            _section("앞 절입니다.", OTHER),
+        ),
+    ],
+    ids=["copy-in-section", "unowned-figure", "some-copied"],
+)
+def test_a_removal_without_copies_elsewhere_is_held_to_the_visuals_minimum(
+    blocks: list[str], edits: list[tuple[str, str]], rest: str
+) -> None:
+    text = _section(*blocks)
+    base = _deep_checks(Limits())
+    # The section owns no figure: a figure may go, so only the visuals
+    # minimum can hold it.
+    verifiers = VerifierSet(base.name, base.checks, frozenset())
+    assert not any(p.kind == "visuals" for p in verifiers.run(text))
+    revision = transact(text, edits, verifiers=verifiers, max_prose_cut=CUT, rest=rest)
+    assert revision.applied and not revision.taken
+    assert [p.kind for p in revision.added] == ["visuals"]
+
+
 def test_removing_a_duplicate_does_not_excuse_other_new_problems() -> None:
     text = _section("표를 봅니다.", TABLE, "다음 표입니다.", OTHER, "끝입니다.")
     revision = transact(
