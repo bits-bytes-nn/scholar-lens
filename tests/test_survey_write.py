@@ -714,8 +714,15 @@ class FakeEngine:
         self.error: Exception | None = None
 
     def __call__(
-        self, model: Any, documents: Any, settings: Any, store: Any = None
+        self,
+        model: Any,
+        documents: Any,
+        settings: Any,
+        store: Any = None,
+        *,
+        checkpoints: Any = None,
     ) -> FakeEngine:
+        assert checkpoints is store
         self.created.append({"documents": documents, "settings": settings})
         return self
 

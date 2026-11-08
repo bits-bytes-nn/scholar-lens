@@ -205,7 +205,7 @@ async def write_guide_with_evidence(
     from ..adapters.bedrock.strands_models import StrandsLanguageModel
     from ..application.guide_engine import EvidenceGuideEngine, GuideSettings
     from .evidence_models import budgeted, role_model, unservable
-    from .survey_documents import EvidenceTextStore
+    from .survey_documents import EvidenceTextStore, evidence_store
 
     cfg = context.config.tech_guide
     # The gathered corpus is saved and reused for the same inputs within
@@ -292,6 +292,13 @@ async def write_guide_with_evidence(
         ]
 
     language = context.config.output_language
+    store = evidence_store(
+        context.papers_dir / "guide-evidence",
+        context.s3_handler,
+        context.config.resources.s3_prefix,
+        S3Paths.GUIDES,
+        fresh=context.fresh,
+    )
     engine = EvidenceGuideEngine(
         model,
         GuideSettings(
@@ -303,12 +310,8 @@ async def write_guide_with_evidence(
             min_total_chars=cfg.min_total_chars,
             max_total_chars=cfg.max_total_chars,
         ),
-        store=EvidenceTextStore(
-            context.papers_dir / "guide-evidence",
-            context.s3_handler,
-            context.config.resources.s3_prefix,
-            S3Paths.GUIDES,
-        ),
+        store=store,
+        checkpoints=store,
         identifier_check=identifier_check,
         products=products,
         package_facts=package_facts,

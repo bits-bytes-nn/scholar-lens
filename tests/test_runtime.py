@@ -184,6 +184,22 @@ class TestRunJob:
         assert result.warnings == ["w"]
         assert finished == [result]
 
+    @pytest.mark.parametrize("fresh", [False, True])
+    def test_the_run_context_carries_fresh(
+        self, monkeypatch: pytest.MonkeyPatch, fresh: bool
+    ) -> None:
+        from scholar_lens.src.jobs import JobRequest
+
+        seen: list[bool] = []
+
+        async def pipeline(context, request, tracker):  # type: ignore[no-untyped-def]
+            seen.append(context.fresh)
+            return runtime.PipelineOutcome(title="LoRA")
+
+        self._patch(monkeypatch, pipeline)
+        runtime.run_job(JobRequest(kind="review", source="2106.09685", fresh=fresh))
+        assert seen == [fresh]
+
     def test_a_failed_pr_fails_the_run_and_keeps_the_artifact(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:

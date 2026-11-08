@@ -67,9 +67,9 @@ poetry run python -m scholar_lens summarize 2106.09685 --no-pr
 
 - `resources`: `profile_name`, `bedrock_region_name`, `s3_bucket_name`(`cdk deploy --all`와 Batch 실행에 필요. 없으면 `status`는 저장된 결과 없이 Batch 상태만 보여 줌), `email_address`(SNS 알림)
 - `resources.github`: `enabled`, `repo_name`(예: `owner/owner.github.io`), `base_branch`, `branch_prefix`, `author_email`(이 도구의 커밋 정체성. 글을 다시 생성하려면 필요하며, 없으면 재실행이 슬러그가 같은 글만 바꾸고 브랜치에 남은 예전 사본을 지우지 않음), 산출물 유형별 카테고리 이름
-- 단계별 `*_model_id`, `thinking_effort`, 품질 기준과 비용 상한: `sections` 엔진의 리뷰·요약과 서베이 계획은 `max_total_tokens`(기본값 800만, 100만, 30만 토큰), 근거 장부 엔진은 실행의 추정 비용 상한(`max_cost_usd`: `tech_guide` $60, `explanation` $40, `summary` $12. `survey.write_max_cost_usd` $60. `null`이면 상한 없음)
+- 단계별 `*_model_id`, `thinking_effort`, 품질 기준과 비용 상한: `sections` 엔진의 리뷰·요약과 서베이 계획은 `max_total_tokens`(기본값 800만, 100만, 30만 토큰), 근거 장부 엔진은 실행의 추정 비용 상한(`max_cost_usd`: `tech_guide` $60, `explanation` $40, `summary` $12. `survey.write_max_cost_usd` $60. `null`이면 상한 없음). 상한은 현재 시도에서 쓴 비용만 셉니다. 재실행이나 Batch 재시도가 checkpoint에서 불러온 단계는 비용이 들지 않고 다시 세지도 않으므로, 상한에 걸려 멈춘 실행을 재개하면 남은 단계에 상한만큼 더 쓸 수 있습니다
 - `explanation.engine`, `summary.engine`: `sections`(기본값) 또는 `evidence`. `evidence` 엔진은 `reader_model_id`와 `min_total_chars`·`max_total_chars`(리뷰 25,000·55,000, 요약 2,500·4,500)를 씁니다
-- 근거 캐시: 근거 장부 엔진은 읽기 에이전트가 출처마다 기록한 근거를 로컬 `papers/paper-evidence/`, `papers/guide-evidence/`, `papers/survey-evidence/`와 S3 `<s3_prefix>/papers/evidence/`, `<s3_prefix>/guides/evidence/`, `<s3_prefix>/surveys/evidence/`에 저장합니다. 키는 원문 텍스트 해시, 읽기 버전, 읽기 모델, 언어로 정합니다. 다시 실행하면 캐시를 쓰되 오늘의 검사를 통과하지 못한 근거는 버리고, 하나도 통과하지 못하면 그 출처를 다시 읽습니다. 새로 읽게 하려면 해당 항목을 로컬과 S3에서 모두 지웁니다([상세](./docs/design.md#45-근거-장부-엔진-공통))
+- 근거 캐시: 근거 장부 엔진은 읽기 에이전트가 출처마다 기록한 근거를 로컬 `papers/paper-evidence/`, `papers/guide-evidence/`, `papers/survey-evidence/`와 S3 `<s3_prefix>/papers/evidence/`, `<s3_prefix>/guides/evidence/`, `<s3_prefix>/surveys/evidence/`에 저장합니다. 키는 원문 텍스트 해시, 읽기 버전, 읽기 모델, 언어로 정합니다. 다시 실행하면 캐시를 쓰되 오늘의 검사를 통과하지 못한 근거는 버리고, 하나도 통과하지 못하면 그 출처를 다시 읽습니다. 같은 저장소의 `checkpoints/` 아래에 단계별 checkpoint도 둡니다([재개와 게시](#재개와-게시)). `--fresh`는 한 실행 동안 둘 다 무시합니다([상세](./docs/design.md#45-근거-장부-엔진-공통))
 - `survey`: `min_papers`·`max_papers`(6·25), `candidate_pool`(60), 쓰기 단계의 `chars_per_core_paper`·`chars_per_supporting_paper`(3,000·800), `min_total_chars`·`max_total_chars`(20,000·70,000)
 - `resources.github.survey_category`(`Paper Surveys`): 블로그 글 규칙에 있는 유형이어야 하며, 없으면 `survey write`가 모델을 부르기 전에 멈춥니다
 - `output_language`(기본값 `Korean`)
@@ -89,6 +89,9 @@ poetry run python -m scholar_lens survey plan "preference optimization for LLM a
   --reference "https://arxiv.org/abs/2312.14925"                # papers/survey-<slug>/plan.json 저장
 poetry run python -m scholar_lens survey write \
   --plan papers/survey-preference-optimization-for-llm-alignment/plan.json --no-pr
+poetry run python -m scholar_lens review 2106.09685 --fresh      # 모든 단계를 새로 계산
+poetry run python -m scholar_lens publish papers/guide-<slug>/<slug>.rejected.md  # 고친 뒤 게시
+poetry run python -m scholar_lens publish "s3://<bucket>/<s3_prefix>/posts/<date>-<slug>.md"
 poetry run python -m scholar_lens review 2106.09685 --remote     # AWS Batch에 제출
 poetry run python -m scholar_lens status <job-id> --wait         # 원격 작업 조회
 poetry run python -m scholar_lens costs --since 2026-11-01 --by stage --billed  # Batch 실행 비용
@@ -106,14 +109,21 @@ poetry run python -m scholar_lens costs --since 2026-11-01 --by stage --billed  
 | `--reference URL` | survey plan | 참고할 자료입니다(반복 가능). 블로그 글, 서베이·리뷰 글, 논문 페이지를 HTML 페이지나 arXiv 링크로 줍니다. 한 번 읽어 발췌로 범위를 잡고, 자료 자신이거나 자료가 링크한 논문(arXiv abs·pdf·html, doi.org 링크, 본문의 `arXiv:<id>`)을 후보에 더합니다. 이 후보는 `[REFERENCED by N]`으로 표시하고, 그 논문을 가리킨 자료 수는 주제 근거(풀 안의 피인용 수와 검색어 적중)가 같은 후보 사이의 순서를 정하며, 필수 논문은 아닙니다. 읽지 못한 자료는 실패가 아니라 계획 메모로 남습니다. 계획은 자료를 `references[]`로 저장하고, `survey write`가 그중 글(article)을 다시 읽어 개요와 도입·가로지르는 절·통찰 절에 설명 자료로 주고 `### 참고 자료`(영어 출력은 `### Further reading`)로 나열합니다 |
 | `--since YEAR`, `--until YEAR` | survey plan | 이 연도의 논문만 다룹니다(필수 논문은 예외) |
 | `--plan PATH_OR_S3_URI` | survey write | 계획 파일입니다. 로컬 경로 또는 설정한 버킷의 `s3://<bucket>/<key>`이며, `--remote`이면 로컬 계획을 먼저 `<s3_prefix>/surveys/<slug>/plan-<sha256 앞 16자리>.json`에 올립니다 |
-| `--no-pr` | review, summarize, guide, survey write | 글은 저장(·업로드)하되 PR은 열지 않습니다 |
+| `--no-pr` | review, summarize, guide, survey write, publish | 글은 저장(·업로드)하되 PR은 열지 않습니다 |
+| `--fresh` | review, summarize, guide, survey write | 모든 단계를 새로 계산합니다. 저장한 단계별 checkpoint와 근거 캐시를 읽지 않고(쓰기는 함), 가이드는 출처도 새로 수집합니다(`--fresh-sources` 포함) |
 | `--remote` | review, summarize, guide, survey plan, survey write | AWS Batch에 제출하고 작업 ID를 돌려줍니다 |
 | `--wait`, `--timeout S` | status | 작업이 끝나거나 `S`초가 지날 때까지 조회합니다(기본값 14400초, 4시간) |
 | `--since D`, `--until D`, `--by kind\|stage\|model\|day`, `--billed` | costs | `[since, until)`(UTC 날짜)에 끝난 Batch 실행을 결과 매니페스트로 종류·단계·모델·날짜별로 묶고 실패한 실행의 비용도 보여 줍니다. `--billed`는 `ProjectName=<resources.project_name>` 태그가 붙은 리소스(스택과 종류별 Bedrock 추론 프로필)의 Cost Explorer 청구액을 더합니다. 먼저 Billing 콘솔에서 `ProjectName`(과 `Kind`)을 비용 할당 태그로 활성화해야 합니다 |
 
 `survey plan`은 글을 쓰지 않습니다. `JobResult`의 `plan_path`(로컬 `papers/survey-<slug>/plan.json`. `--remote` 실행은 컨테이너가 사라지므로 비어 있음)와 `s3_uri`(S3 사본. 원격 실행 뒤에는 이 값을 `survey write --plan`에 넘김)가 계획 파일입니다. 계획을 고친 뒤(논문 빼기·더하기·옮기기, 역할 바꾸기, 계보 이름 바꾸기) `survey write --plan`에 넘깁니다. 계획 단계를 다시 실행하면 내용이 다른 기존 계획은 `plan.<UTC 시각>.json`으로 남습니다. 손으로 더하는 논문은 `id`(arXiv ID나 URL, 또는 DOI), `lineage`, `role`만 있으면 되고, 제목·저자·연도·URL은 쓰기 단계가 채웁니다. 손으로 더하는 참고 자료는 `url`만 있으면 되고 `kind`는 URL로 정합니다(arXiv·doi.org 링크는 `paper`, 나머지는 `article`). 쓰기 단계는 `article`만 읽습니다. 계획에는 `core` 논문이 하나 이상 있어야 합니다. 논문마다 기록한 근거는 논문, 원문 해시, 읽기 버전, 모델, 언어, 역할, 원문 종류별로 캐시하므로(로컬 `papers/survey-evidence/`, S3 `<s3_prefix>/surveys/evidence/`) 다시 실행하거나 같은 논문을 다루는 다른 서베이가 재사용합니다. 계획 필드와 쓰기 단계는 [설계 문서](./docs/design.md#43-논문-서베이)에 있습니다.
 
-모든 명령은 stdout에 JSON 객체 하나(실행은 `JobResult`, `--remote`는 `job_id`, `status`는 Batch 상태와 저장된 결과)를 출력하고, 로그는 stderr로 보냅니다. 종료 코드는 `0` 성공 또는 제출, `1` 실패, `2` 입력 거부, `3` 진행 중, `4` 명령 자체의 실패, `5` 산출물은 저장했지만 요청한 블로그 PR을 만들지 못함(결과는 `failed`이고 `pr_error`, `markdown_path`, `s3_uri`를 담음)입니다. Batch `worker`는 자체 알림을 보낸 뒤 `10`(실패)이나 `11`(거부)로, 그 알림을 보내지 못하면 `4`로, Batch가 작업을 멈추면 `143`으로 끝납니다([상세](./docs/design.md#21-명령)). URL은 따옴표로 감쌉니다. zsh에서는 따옴표 없는 URL의 `?`가 glob으로 해석되어 명령이 실패합니다.
+### 재개와 게시
+
+근거 장부 엔진은 단계마다 결과를 입력 해시로 저장합니다. 저장하는 단계는 핵심 대상, 개요, 확정된 절, 글 전체 검토 결과, TL;DR, 그리고 리뷰·요약의 부제와 설명입니다. 단계의 키는 근거 장부, 글 종류, 그 단계가 읽는 설정, 그 단계가 쓰는 시스템 프롬프트(프롬프트를 바꾸면 무효), 바로 앞 단계의 결과를 포함합니다. 그래서 입력 하나를 바꾸면 그 단계와 뒤 단계만 다시 계산합니다. 같은 입력으로 다시 실행하면 실패, 중단, 비용 상한 정지 뒤에도 저장한 단계를 모델 호출 없이 불러와 자동으로 이어 갑니다. Batch 재시도(작업 정의는 호스트가 사라졌을 때만 재시도)도 근거 캐시 옆 S3 위치(`<s3_prefix>/<papers|guides|surveys>/checkpoints/`)에서 같은 방식으로 이어 갑니다. 불러온 절은 다시 검사하지 않고, 그 절의 PR 메모, 차단 문제, 사실 확인 판정을 함께 복원합니다. 모두 새로 계산하려면 `--fresh`를 씁니다.
+
+모든 실행은 게시 요청(글 본문을 뺀 제목, 브랜치 키, PR 제목과 본문, 차단 문제와 검토 메모, 글 파일 이름)을 저장한 글이나 거절된 `*.rejected.md` 옆에 `<name>.request.json`으로 남기고, S3의 `posts/`나 `rejected/` 사본 옆에도 둡니다. 거절된 글의 이미지는 `rejected/blog-images/<slug>/`에 둡니다. `publish <markdown_path|s3_uri>`는 고쳤을 수 있는 글과 그 요청을 읽어 게시 단계의 후처리와 블로그 규칙 검사를 다시 하고, 실행의 브랜치에서 PR을 열거나 갱신합니다. `--no-pr`이면 검사와 저장만 합니다. 로컬에서만 실행하며(`--remote` 없음) 종료 코드는 실행과 같습니다. `0` 성공, `1` 글이 아직 규칙을 어김(다시 `*.rejected.md`로 남김), `2` 글이 없거나 옆에 요청이 없음, `5` PR 실패입니다. 이 버전이 모르는 필드가 있는 요청은 거부합니다.
+
+모든 명령은 stdout에 JSON 객체 하나(실행은 `JobResult`, `--remote`는 `job_id`, `status`는 Batch 상태와 저장된 결과)를 출력하고, 로그는 stderr로 보냅니다. 종료 코드는 `0` 성공 또는 제출, `1` 실패, `2` 입력 거부, `3` 진행 중, `4` 명령 자체의 실패, `5` 산출물은 저장했지만 요청한 블로그 PR을 만들지 못함(결과는 `failed`이고 `pr_error`, `markdown_path`, `s3_uri`를 담음. `publish`도 같음)입니다. Batch `worker`는 자체 알림을 보낸 뒤 `10`(실패)이나 `11`(거부)로, 그 알림을 보내지 못하면 `4`로, Batch가 작업을 멈추면 `143`으로 끝납니다([상세](./docs/design.md#21-명령)). URL은 따옴표로 감쌉니다. zsh에서는 따옴표 없는 URL의 `?`가 glob으로 해석되어 명령이 실패합니다.
 
 ## 에이전트에서 쓰기(OpenClaw, Claude Code, Codex)
 
@@ -153,6 +163,7 @@ actionlint                                       # GitHub 워크플로 검사
 
 ## 변경 이력
 
+- 2026-11-08: 근거 장부 엔진이 모든 단계(핵심 대상, 개요, 절, 글 전체 검토 결과, TL;DR, 마무리 문구)를 입력 해시로 저장하고, 같은 입력의 재실행은 Batch 재시도를 포함해 저장한 단계부터 이어 갑니다. `--fresh`는 모두 새로 계산합니다. `publish <markdown_path|s3_uri>`는 저장했거나 거절된(고친) 글을 다시 검사해 실행의 브랜치에서 PR을 엽니다. 이를 위해 모든 실행이 글 옆에 게시 요청을 저장합니다.
 - 2026-11-08: 가이드를 제품 자체 코드와 대조합니다. 공식 문서가 설치하는 패키지를 PyPI에서 받아 실행하지 않고 읽어 색인하고, 가이드 코드의 import 경로·이름·키워드 인자가 그 안에 있어야 하며, 절이 쓰는 정의가 사실 확인에서 기본값·시그니처·반환값을 정합니다. 가이드의 절은 가르칠 기능(`topics`)을 하나씩 맡고, 다른 SDK 언어의 근거는 개요에서 빠지며, 범위·SDK 한정자는 사실과 함께 써야 합니다. 가이드 기본값은 최대 11절, 25,000–45,000자입니다.
 - 2026-11-07: 모델을 부르기 전에 카테고리 유형이 블로그 규칙에 맞는지, PR을 열 실행에 `GITHUB_TOKEN`이 있는지, `--search-query`에 검색 제공자가 있는지 확인합니다. 사실 확인이 글의 출처를 말하는 문장도 지우고, 수정 메모는 본문에 섞이지 않으며, 논문에서 반복된 사실과 그림은 한 절에만 배정합니다. 가이드 사용·운영 절의 Python 코드 블록은 읽는 순서대로 파싱 실패와 앞 블록에 정의되지 않은 이름을 검사하고(REPL·노트북 셀과 `import *` 뒤 코드는 판단하지 않음), 수정 뒤 다시 검사합니다. 모델이 사실 확인이나 검토에 답하지 못하면 초안을 그대로 두고 실행 메모를 남깁니다. 데이터 소스는 호스트별 HTTP 연결, 공유 호스트(GitHub, Hugging Face)에서 프로젝트 범위로 한정한 공식 문서, "…Is Not…"이나 "…: A Survey"를 거부하고 약칭이 빠진 제목은 받아들이는 제목 비교, 워크숍·지역 지부의 학회명을 그대로 두는 처리로 바뀌었습니다. `costs --billed`는 `resources.project_name`으로 거르고, Batch는 `SCHOLAR_LENS_BATCH_TRACING=true`일 때만 LangSmith에 추적을 보냅니다.
 - 2026-11-06: 가이드와 서베이는 근거 장부 엔진만 씁니다. 가이드 `sections` 엔진과 서베이 `cards` 엔진이 없어졌고, 그 설정 키 `tech_guide.engine`, `writer_enable_thinking`, `evaluator_enable_thinking`, `verify_grounding`, `min_quality_score`, `max_revision_attempts`, `max_total_tokens`와 `survey.engine`, `card_source_chars`, `min_quality_score`, `max_revision_attempts`, `verify_grounding`, `write_max_total_tokens`도 없어졌습니다. `config.yaml`에서 지우지 않으면 `extra_forbidden`으로 로드에 실패합니다. 실행 비용은 `tech_guide.max_cost_usd`와 `survey.write_max_cost_usd`가 막습니다. 리뷰와 요약은 두 엔진(`explanation.engine`, `summary.engine`)을 그대로 둡니다.

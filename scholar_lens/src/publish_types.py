@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field
 
 from ..domain.post_names import (  # noqa: F401 - re-exported
     post_slug,
@@ -13,13 +16,21 @@ from ..domain.post_names import (  # noqa: F401 - re-exported
     slugify,
     title_slug,
 )
+from ..domain.validation import ArtifactKind
 from .constants import LocalPaths
-
-if TYPE_CHECKING:  # a type only: keeps this module a leaf
-    from ..domain.validation import ArtifactKind
 
 # Blog image convention: one flat folder, referenced by absolute path.
 BLOG_IMAGES_DIR = "assets/images"
+# An image a post shows: any reference into the blog's image folder.
+BLOG_IMAGE_REF = re.compile(rf"/{re.escape(BLOG_IMAGES_DIR)}/([^\s)\"'<>?#]+)")
+# A post that was not published is kept as ``<slug>.rejected.md``; why
+# follows its text in a comment that opens with this line.
+REJECTED_SUFFIX = ".rejected.md"
+VIOLATIONS_OPENING = "<!-- violations\n"
+# The saved publish request of ``<name>.md`` is ``<name>.request.json``.
+REQUEST_SUFFIX = ".request.json"
+# Inside the rejected area (S3): the rejected posts' localized images.
+REJECTED_IMAGES_DIRNAME = "blog-images"
 # Scratch folder (inside the artifact's work_dir) holding the localized images
 # that are uploaded to S3 and committed to the blog, one sub-folder per post
 # slug: a paper's summary and review share the work_dir.
@@ -58,6 +69,9 @@ class PublishRequest:
     # Publisher.find_published): the post keeps that file name, URL and image
     # names.
     published_path: str | None = None
+    # The post file's name without ``.md`` once a publish named it (set by
+    # Publisher.publish): a later ``publish`` of the saved post keeps it.
+    post_name: str | None = None
 
     @property
     def slug(self) -> str:
@@ -103,3 +117,78 @@ def is_post_file(path: str) -> bool:
     return (
         path.startswith(f"{posts}/") and path.count("/") == 1 and path.endswith(".md")
     )
+
+
+def request_name(markdown_name: str) -> str:
+    """The saved publish request's name (a file or S3 key) next to the post
+    ``markdown_name`` (``x.md`` or ``x.rejected.md``)."""
+    return markdown_name.removesuffix(".md") + REQUEST_SUFFIX
+
+
+def without_violations(markdown: str) -> str:
+    """A rejected post's text without the violations comment the publisher
+    appended (any other text unchanged)."""
+    at = markdown.rfind("\n\n" + VIOLATIONS_OPENING)
+    if at == -1 or not markdown.rstrip().endswith("-->"):
+        return markdown
+    return markdown[:at].rstrip("\n") + "\n"
+
+
+class SavedPublishRequest(BaseModel):
+    """A :class:`PublishRequest` without the post's text, saved as JSON next
+    to the saved or rejected post (and in S3): ``scholar-lens publish``
+    reads it back to check the (possibly edited) post again and open its PR
+    on the same branch. A field this version does not know fails loudly; a
+    missing optional field takes its default."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    version: Literal[1] = 1
+    title: str
+    # Where the run kept the post's files (a Batch run's is gone: publish
+    # then uses a local directory of the same name).
+    work_dir: str
+    branch_id: str
+    pr_title: str
+    pr_body: str
+    commit_message: str
+    kind: ArtifactKind = "review"
+    review_notes: list[str] = Field(default_factory=list)
+    blocking: list[str] = Field(default_factory=list)
+    published_path: str | None = None
+    post_name: str | None = None
+
+    @classmethod
+    def of(cls, request: PublishRequest) -> SavedPublishRequest:
+        """``request`` without its text (and its validation warnings, which
+        a publish computes again)."""
+        return cls(
+            title=request.title,
+            work_dir=str(request.work_dir),
+            branch_id=request.branch_id,
+            pr_title=request.pr_title,
+            pr_body=request.pr_body,
+            commit_message=request.commit_message,
+            kind=request.kind,
+            review_notes=list(request.review_notes),
+            blocking=list(request.blocking),
+            published_path=request.published_path,
+            post_name=request.post_name,
+        )
+
+    def request(self, markdown: str, work_dir: Path) -> PublishRequest:
+        """The publish request of ``markdown``, its files in ``work_dir``."""
+        return PublishRequest(
+            title=self.title,
+            markdown=markdown,
+            work_dir=work_dir,
+            branch_id=self.branch_id,
+            pr_title=self.pr_title,
+            pr_body=self.pr_body,
+            commit_message=self.commit_message,
+            kind=self.kind,
+            review_notes=list(self.review_notes),
+            blocking=list(self.blocking),
+            published_path=self.published_path,
+            post_name=self.post_name,
+        )

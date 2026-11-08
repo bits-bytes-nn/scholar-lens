@@ -339,7 +339,7 @@ async def write_survey_with_evidence(
     from ..adapters.bedrock.strands_models import RoleModel, StrandsLanguageModel
     from ..application.survey_engine import EngineSettings, EvidenceSurveyEngine
     from .evidence_models import budgeted, role_model, unservable
-    from .survey_documents import EvidenceTextStore, PaperDocuments
+    from .survey_documents import PaperDocuments, evidence_store
 
     cfg = context.config.survey
 
@@ -371,6 +371,12 @@ async def write_survey_with_evidence(
         {pid: r.abstract for pid, r in records.items() if r.abstract},
     )
     language = context.config.output_language
+    store = evidence_store(
+        papers_dir / "survey-evidence",
+        context.s3_handler,
+        context.config.resources.s3_prefix,
+        fresh=context.fresh,
+    )
     engine = EvidenceSurveyEngine(
         model,
         documents,
@@ -383,11 +389,8 @@ async def write_survey_with_evidence(
             min_total_chars=cfg.min_total_chars,
             max_total_chars=cfg.max_total_chars,
         ),
-        store=EvidenceTextStore(
-            papers_dir / "survey-evidence",
-            context.s3_handler,
-            context.config.resources.s3_prefix,
-        ),
+        store=store,
+        checkpoints=store,
     )
     articles = [r for r in plan.references if r.kind == "article"]
     read = await asyncio.to_thread(

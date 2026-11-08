@@ -8,7 +8,24 @@ TL;DR last → assembly. The engine knows no post kind: what differs comes
 from the kind's ``PostSpec`` (data) and the small hooks below, which a
 kind's engine overrides. The shared loop pieces
 (reading agent, claim check, fix) are ``EvidenceWriter``'s. Ports only: the
-model and the evidence cache are injected.
+model, the evidence cache and the checkpoint store are injected.
+
+Checkpoints (docs/engine.md, 4.9; :mod:`.checkpoints`): with a store, the
+key targets, the outline (after the wrong evidence, other-SDK evidence and
+empty sections are left out), every accepted section (after
+``verify_and_fix``), the whole-post result and the TL;DR are saved, each
+under a hash of the stage's inputs chained to the output before it, and a
+rerun loads every stage whose key exists instead of calling the model. A
+loaded section is not checked again. The writer state later stages read is
+restored as follows:
+
+- persisted: the notes, blocking problems and claim-check verdicts each
+  stage added (:class:`~.checkpoints.WriterState`, replayed in order);
+- persisted and re-derived: a section's registered checks (the verifier
+  set whole-post fixes run) are rebuilt in code from the outline, the
+  ledger and the earlier sections exactly as the writer built them, and
+  the source passages they read from the section's saved draft;
+- re-derived: the key targets and source names (from the loaded stages).
 """
 
 from __future__ import annotations
@@ -19,9 +36,9 @@ import logging
 import re
 from collections.abc import Awaitable, Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import Any, TypeVar, cast
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from ..domain.coverage import (
     CoverageTarget,
@@ -66,11 +83,19 @@ from ..domain.post_spec import (
 )
 from ..domain.program import python_code_problems
 from ..domain.verifiers import Problem, VerifierSet, as_problems
-from ..prompts.rules import TARGETS_SYSTEM, consistency_system, repetition_system
+from ..prompts.rules import (
+    FIX_ANSWER,
+    TARGETS_SYSTEM,
+    consistency_system,
+    repetition_system,
+)
+from .checkpoints import CHECKPOINT_VERSION, Checkpoint, Checkpoints, input_hash
 from .evidence_writer import (
+    EDIT_ANSWER,
     EvidenceWriter,
     PostFinding,
     PostReview,
+    SectionChecks,
     WriterPrompts,
     all_or_none,
     block,
@@ -78,10 +103,12 @@ from .evidence_writer import (
     evidence_lines,
     with_canonical_evidence,
 )
-from .ports import AgentLimits, LanguageModel, TextStore
+from .ports import AgentLimits, CheckpointStore, LanguageModel, TextStore
 from .usage import usage_stage
 
 logger = logging.getLogger(__name__)
+
+StageT = TypeVar("StageT")
 
 
 @dataclass(frozen=True)
@@ -147,6 +174,19 @@ class SectionContext[OutlineT, SectionT]:
     reference: str
 
 
+class SavedSection(BaseModel):
+    """An accepted section's checkpoint: the section, and the draft its
+    checks were registered with (the source passages they read follow
+    from it)."""
+
+    markdown: str
+    draft: str
+
+
+def _fingerprint(document: SourceDocument) -> str:
+    return input_hash(document.model_dump(mode="json"))
+
+
 def _with_title(markdown: str, title: str) -> str:
     """``markdown``'s first ``##`` heading set to ``title`` (a function
     replacement: the title is text, not a template, "$\\mathcal{O}(n)$"
@@ -170,6 +210,7 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
         *,
         outline_schema: type[OutlineT],
         store: TextStore | None = None,
+        checkpoints: CheckpointStore | None = None,
         max_fix_rounds: int,
     ) -> None:
         super().__init__(
@@ -180,6 +221,12 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
         self.run = run
         self.outline_schema = outline_schema
         self.store = store
+        self.checkpoints = (
+            Checkpoints(checkpoints, spec.name) if checkpoints is not None else None
+        )
+        # The output digest of the last stage run or loaded: the next
+        # stage's key includes it (a recomputed stage invalidates the rest).
+        self._upstream = ""
         # Numbers a sentence may state without evidence.
         self.free = free_numbers()
         # What the post must state (set before reading: the readers record
@@ -200,6 +247,99 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
             ),
         }
 
+    # ---- checkpoints ------------------------------------------------------------
+
+    async def staged(
+        self,
+        stage: str,
+        inputs: Sequence[object],
+        compute: Callable[[], Awaitable[StageT]],
+        *,
+        dump: Callable[[StageT], Any],
+        load: Callable[[Any], StageT],
+    ) -> StageT:
+        """``compute``'s result, or the one saved for the same inputs.
+
+        Without a checkpoint store the stage simply runs. With one, its key
+        hashes the checkpoint version, the kind, ``stage``, the previous
+        stage's output and ``inputs``; a saved checkpoint is loaded (and the
+        writer-state changes it recorded replayed), else the stage runs and
+        is saved with what it added to the writer's state. A checkpoint
+        ``load`` cannot use is run again.
+
+        Args:
+            stage: The stage name (a key segment).
+            inputs: What decides the stage's output besides the previous
+                stage: its prompts, system prompts and settings.
+            compute: Runs the stage.
+            dump: The result as JSON-ready data.
+            load: The result from that data (may register derived state);
+                raises ``ValueError``/``TypeError``/``KeyError`` when the
+                data does not fit.
+
+        Returns:
+            The stage's result.
+        """
+        if self.checkpoints is None:
+            return await compute()
+        key = self.checkpoints.key(
+            stage,
+            input_hash(
+                CHECKPOINT_VERSION, self.spec.name, stage, self._upstream, *inputs
+            ),
+        )
+        saved = self.checkpoints.load(key)
+        if saved is not None:
+            try:
+                value = load(saved.value)
+            except (ValueError, TypeError, KeyError, ValidationError) as e:
+                logger.warning(
+                    "Checkpoint %s does not fit (%s); running again.", key, e
+                )
+            else:
+                self.replay_state(saved.state)
+                self._upstream = input_hash(key, saved.value)
+                logger.info("Stage %s loaded from its checkpoint %s.", stage, key)
+                return value
+        mark = self.state_mark()
+        value = await compute()
+        data = dump(value)
+        self.checkpoints.save(
+            key,
+            Checkpoint(
+                version=CHECKPOINT_VERSION,
+                stage=stage,
+                value=data,
+                state=self.state_since(mark),
+            ),
+        )
+        # Through JSON, as a load would see it.
+        self._upstream = input_hash(key, json.loads(json.dumps(data)))
+        return value
+
+    def writing_inputs(self) -> list[object]:
+        """What decides every section-level stage besides its prompt: the
+        system prompts of drafting, checking, review and fixes (a prompt
+        change invalidates), the answer formats, the loop settings and the
+        kind's settings."""
+        p = self.prompts
+        return [
+            input_hash(
+                p.writer, p.claim_check, p.review, p.fix, EDIT_ANSWER, FIX_ANSWER
+            ),
+            self.run,
+            self.limits,
+            self.max_fix_rounds,
+            self.free,
+            self.checkpoint_inputs(),
+        ]
+
+    def checkpoint_inputs(self) -> object:
+        """The kind's settings and run inputs its sections' checks and
+        prompts read beyond what the prompt shows (JSON-ready; see
+        :func:`~.checkpoints.input_hash`)."""
+        return {}
+
     # ---- key targets ------------------------------------------------------------
 
     async def key_targets(
@@ -210,7 +350,25 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
         documents it extracts from, then one target per document of a
         ``per_document`` authority (code). An extraction that gives no
         valid answer leaves a note, and the post goes on with the targets
-        code derives."""
+        code derives. A checkpointed stage: keyed by the documents, the
+        coverage spec, the extraction's prompts and the prompt head."""
+        return await self.staged(
+            "targets",
+            [
+                TARGETS_SYSTEM,
+                self.prompt_head(),
+                self.spec.coverage,
+                self.limits.coverage_source_chars,
+                [_fingerprint(d) for d in documents],
+            ],
+            lambda: self._extract_targets(documents),
+            dump=lambda targets: [t.model_dump(mode="json") for t in targets],
+            load=lambda data: [CoverageTarget.model_validate(t) for t in data],
+        )
+
+    async def _extract_targets(
+        self, documents: Sequence[SourceDocument]
+    ) -> list[CoverageTarget]:
         spec = self.spec.coverage
         read = extraction_documents(spec, documents)
         targets: list[CoverageTarget] = []
@@ -509,22 +667,81 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
     # ---- the flow ---------------------------------------------------------------
 
     async def compose(self, ledger: EvidenceLedger) -> ResultT:
-        """From the read evidence to the assembled post."""
-        outline = await self.plan(ledger)
-        outline = await self.drop_wrong(outline, ledger)
-        outline = self.keep_code_language(outline, ledger)
-        outline = self.drop_empty(outline)
+        """From the read evidence to the assembled post. The outline, each
+        section, the whole-post result and the TL;DR are checkpointed
+        stages (:meth:`staged`); the chain starts at the outline, whose key
+        holds the ledger and the key targets."""
+        self._upstream = ""
+        outline = await self.staged(
+            "outline",
+            [
+                input_hash(self.post_prompts.outline, self.prompts.evidence_check),
+                self.outline_prompt(ledger, self.offered_duplicates(ledger)),
+                [t.model_dump(mode="json") for t in self.targets],
+                [e.model_dump(mode="json") for e in ledger],
+                self.run.outline_repairs,
+                self.spec.empty_sections,
+                self.spec.evidence.same_code_language,
+            ],
+            lambda: self.planned(ledger),
+            dump=lambda o: cast(BaseModel, o).model_dump(mode="json"),
+            load=lambda data: cast(
+                OutlineT,
+                cast(type[BaseModel], self.outline_schema).model_validate(data),
+            ),
+        )
         self._names = self.source_names(outline)
         glossary = {t.english: t.rendering for t in outline.glossary}
         targets = self.section_targets(outline)
         written, tldr = await self.write_sections(outline, ledger, glossary, targets)
-        written = await self.review_post(outline, ledger, written)
+        written = await self.reviewed(outline, ledger, written)
         opening = (
-            await self.write_tldr(outline, ledger, *tldr, written)
+            await self.staged(
+                "tldr",
+                [self.spec.tldr, tldr[1], *self.writing_inputs()],
+                lambda: self.write_tldr(outline, ledger, *tldr, written),
+                dump=lambda md: md,
+                load=lambda data: str(data),
+            )
             if tldr is not None
             else None
         )
         return await self.assemble(outline, ledger, written, opening)
+
+    async def planned(self, ledger: EvidenceLedger) -> OutlineT:
+        """The outline as the sections are written from it: planned, without
+        wrong evidence, other-SDK evidence and emptied sections."""
+        outline = await self.plan(ledger)
+        outline = await self.drop_wrong(outline, ledger)
+        outline = self.keep_code_language(outline, ledger)
+        return self.drop_empty(outline)
+
+    async def reviewed(
+        self,
+        outline: OutlineT,
+        ledger: EvidenceLedger,
+        written: list[tuple[SectionT, str]],
+    ) -> list[tuple[SectionT, str]]:
+        """:meth:`review_post` as a checkpointed stage: the sections' text
+        after the whole-post steps."""
+
+        def load(data: Any) -> list[tuple[SectionT, str]]:
+            texts = [str(md) for md in data]
+            if len(texts) != len(written):
+                raise ValueError("the saved post has another number of sections")
+            return [(s, md) for (s, _), md in zip(written, texts, strict=True)]
+
+        return await self.staged(
+            "review",
+            [
+                input_hash(*(self.pass_systems[n] for n in sorted(self.pass_systems))),
+                self.spec.post_passes,
+                *self.writing_inputs(),
+            ],
+            lambda: self.review_post(outline, ledger, written),
+            dump=lambda fixed: [md for _, md in fixed],
+            load=load,
+        )
 
     @staticmethod
     def own(section: SectionT, ledger: EvidenceLedger) -> list[Evidence]:
@@ -580,6 +797,11 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
         glossary: Mapping[str, str],
         target: int,
     ) -> str:
+        """One section, drafted and checked, or loaded from its checkpoint
+        (keyed by its prompt, which holds its evidence, what earlier
+        sections taught and the last ones in full; the earlier sections'
+        text is in the chain). A loaded section registers the checks the
+        writer would have registered, not run again."""
         own = self.own(section, ledger)
         # What earlier sections actually state (their final text), so a
         # back-reference never points at a removed sentence.
@@ -605,28 +827,55 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
             target=target,
             reference=self.reference_for(own),
         )
-        draft = await self.draft(
-            self.section_prompt(ctx),
-            own,
-            target,
-            retry_hint=self.spec.retry_hint,
+        prompt = self.section_prompt(ctx)
+        verifiers = self.section_verifiers(ctx, numbers, exhausted)
+        judgement = section.kind in self.spec.judgement_kinds
+
+        async def compute() -> SavedSection:
+            draft = await self.draft(
+                prompt, own, target, retry_hint=self.spec.retry_hint
+            )
+            self.reference = self.checking_reference(ctx.reference, draft)
+            markdown = await self.verify_and_fix(
+                draft,
+                title=section.title,
+                review_context=self.review_context(ctx),
+                verifiers=verifiers,
+                ledger=ledger,
+                own=own,
+                earlier=earlier,
+                free=self.free,
+                section=section,
+                judgement=judgement,
+                rest="\n\n".join(md for _, md in written),
+            )
+            self.reference = ""
+            return SavedSection(
+                markdown=self.finish_section(section, markdown), draft=draft
+            )
+
+        def load(data: Any) -> SavedSection:
+            saved = SavedSection.model_validate(data)
+            # What verify_and_fix registers: every later change of the
+            # section (a whole-post fix) runs these.
+            self.checked[id(section)] = SectionChecks(
+                verifiers,
+                tuple(own),
+                tuple(earlier),
+                self.checking_reference(ctx.reference, saved.draft),
+                judgement,
+                self.free,
+            )
+            return saved
+
+        saved = await self.staged(
+            "section",
+            [prompt, self.review_context(ctx), *self.writing_inputs()],
+            compute,
+            dump=lambda saved: saved.model_dump(mode="json"),
+            load=load,
         )
-        self.reference = self.checking_reference(ctx.reference, draft)
-        markdown = await self.verify_and_fix(
-            draft,
-            title=section.title,
-            review_context=self.review_context(ctx),
-            verifiers=self.section_verifiers(ctx, numbers, exhausted),
-            ledger=ledger,
-            own=own,
-            earlier=earlier,
-            free=self.free,
-            section=section,
-            judgement=section.kind in self.spec.judgement_kinds,
-            rest="\n\n".join(md for _, md in written),
-        )
-        self.reference = ""
-        return self.finish_section(section, markdown)
+        return saved.markdown
 
     def written_sections(
         self, written: Sequence[tuple[SectionT, str]]

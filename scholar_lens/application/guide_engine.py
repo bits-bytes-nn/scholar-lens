@@ -38,6 +38,7 @@ from ..domain.guide.evidence_guide import (
 from ..domain.guide.sdk_index import SdkIndex, definitions_for
 from ..domain.specs.guide import GUIDE_SPEC
 from ..prompts import guide_evidence as prompts
+from .checkpoints import input_hash
 from .evidence_writer import (
     WriterPrompts,
     block,
@@ -45,7 +46,7 @@ from .evidence_writer import (
     quote_for_prompt_code,
     safe_key,
 )
-from .ports import AgentLimits, LanguageModel, TextStore
+from .ports import AgentLimits, CheckpointStore, LanguageModel, TextStore
 from .post_engine import (
     PostEngine,
     PostPrompts,
@@ -139,6 +140,7 @@ class EvidenceGuideEngine(PostEngine[GuideOutline, GuideSection, EvidenceGuide])
         settings: GuideSettings,
         store: TextStore | None = None,
         *,
+        checkpoints: CheckpointStore | None = None,
         identifier_check: Callable[[str], list[str]] | None = None,
         products: Sequence[str] = (),
         package_facts: str = "",
@@ -158,6 +160,7 @@ class EvidenceGuideEngine(PostEngine[GuideOutline, GuideSection, EvidenceGuide])
             ),
             outline_schema=GuideOutline,
             store=store,
+            checkpoints=checkpoints,
             max_fix_rounds=settings.max_fix_rounds,
         )
         self.settings = settings
@@ -165,6 +168,8 @@ class EvidenceGuideEngine(PostEngine[GuideOutline, GuideSection, EvidenceGuide])
         self._documents: dict[str, SourceDocument] = {}
         self._topic = ""
         self._guideline = ""
+        # A digest of the pages read (set by write; checkpoint input).
+        self._sources = ""
         # Flags and arguments of a draft that no official page mentions.
         self.identifier_check = identifier_check
         # The product's names (never a source's name).
@@ -297,6 +302,7 @@ class EvidenceGuideEngine(PostEngine[GuideOutline, GuideSection, EvidenceGuide])
         documents = self.selected(documents)
         self._topic, self._guideline = topic, guideline
         self._documents = {d.paper_id: d for d in documents}
+        self._sources = input_hash([d.model_dump(mode="json") for d in documents])
         self.passages = {
             (d.paper_id, s.anchor): s.text for d in documents for s in d.sections
         }
@@ -309,6 +315,23 @@ class EvidenceGuideEngine(PostEngine[GuideOutline, GuideSection, EvidenceGuide])
         if not len(ledger):
             raise ValueError("No source page gave usable evidence for the guide.")
         return await self.compose(ledger)
+
+    def checkpoint_inputs(self) -> object:
+        # The checks read the pages (passages, the flags they mention), the
+        # product's names, its packages and its code besides the prompt.
+        sdk = self.sdk
+        return {
+            "settings": self.settings,
+            "sources": self._sources,
+            "guideline": self._guideline,
+            "products": list(self.products),
+            "package_facts": self.package_facts,
+            "sdk": (
+                [sdk.version, sorted(sdk.packages), sdk.partial, len(sdk.modules)]
+                if sdk is not None
+                else None
+            ),
+        }
 
     # ---- hooks: outline -----------------------------------------------------------
 

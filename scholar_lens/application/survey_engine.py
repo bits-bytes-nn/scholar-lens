@@ -37,7 +37,13 @@ from ..domain.survey.plan import PlanPaper, SurveyPlan
 from ..domain.survey.post import without_papers
 from ..prompts import survey_evidence as prompts
 from .evidence_writer import WriterPrompts, block, evidence_lines, safe_key
-from .ports import AgentLimits, DocumentSource, LanguageModel, TextStore
+from .ports import (
+    AgentLimits,
+    CheckpointStore,
+    DocumentSource,
+    LanguageModel,
+    TextStore,
+)
 from .post_engine import (
     PostEngine,
     PostPrompts,
@@ -120,6 +126,8 @@ class EvidenceSurveyEngine(PostEngine[EvidenceOutline, OutlineSection, EvidenceS
         documents: DocumentSource,
         settings: EngineSettings,
         store: TextStore | None = None,
+        *,
+        checkpoints: CheckpointStore | None = None,
     ) -> None:
         super().__init__(
             model,
@@ -140,6 +148,7 @@ class EvidenceSurveyEngine(PostEngine[EvidenceOutline, OutlineSection, EvidenceS
             ),
             outline_schema=EvidenceOutline,
             store=store,
+            checkpoints=checkpoints,
             max_fix_rounds=settings.max_fix_rounds,
         )
         self.documents = documents
@@ -259,6 +268,16 @@ class EvidenceSurveyEngine(PostEngine[EvidenceOutline, OutlineSection, EvidenceS
         self._references, self._guideline = references, guideline
         self.free = free_numbers(sorted({p.year for p in plan.papers if p.year}))
         return await self.compose(ledger)
+
+    def checkpoint_inputs(self) -> object:
+        # The plan decides the sections' lengths, named papers and tables.
+        return {
+            "settings": self.settings,
+            "plan": self._plan,
+            "references": self._references,
+            "guideline": self._guideline,
+            "documents": self._kinds,
+        }
 
     # ---- hooks: outline -----------------------------------------------------------
 

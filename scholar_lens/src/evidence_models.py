@@ -45,7 +45,13 @@ def budgeted(
 ) -> Callable[[UsageEvent], None]:
     """The model port's usage recorder: each call recorded, the run stopped
     (:class:`TokenBudgetExceeded`) once its estimated cost passes
-    ``max_cost_usd``."""
+    ``max_cost_usd``.
+
+    The ceiling counts this attempt's spend only: ``tracker`` is the
+    attempt's, and a stage loaded from its checkpoint makes no call, so a
+    resumed run (a rerun, a Batch retry) is neither charged again for the
+    stages it loads nor credited for them. A run stopped at the ceiling and
+    resumed may spend up to the ceiling once more on the stages left."""
 
     def record(event: UsageEvent) -> None:
         tracker.record(event)

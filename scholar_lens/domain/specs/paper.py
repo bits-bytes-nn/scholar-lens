@@ -114,6 +114,7 @@ def _coverage(count: tuple[int, int], headline: int) -> CoverageSpec:
 
 
 PAPER_REVIEW_SPEC = PostSpec(
+    name="review",
     outline_name="paper outline",
     kinds=_KINDS,
     outline_checks=(*_SHAPE, MaxSections()),
@@ -128,6 +129,7 @@ PAPER_REVIEW_SPEC = PostSpec(
 )
 
 PAPER_SUMMARY_SPEC = PostSpec(
+    name="summary",
     outline_name="paper outline",
     kinds=_KINDS,
     outline_checks=(

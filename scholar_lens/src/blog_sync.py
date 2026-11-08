@@ -20,6 +20,7 @@ from ..domain.markdown.front_matter import split_front_matter
 from .constants import LocalPaths
 from .logger import logger
 from .publish_types import (
+    BLOG_IMAGE_REF,
     BLOG_IMAGES_DIR,
     PublishError,
     PublishRequest,
@@ -34,8 +35,6 @@ if TYPE_CHECKING:
     from ..configs import Github as GithubConfig
 
 _BLOB_MODE = "100644"
-# An image a post shows: any reference into the blog's image folder.
-_IMAGE_REF = re.compile(rf"/{re.escape(BLOG_IMAGES_DIR)}/([^\s)\"'<>?#]+)")
 _MAX_HAND_EDIT_NOTES = 10
 
 
@@ -289,7 +288,7 @@ class BlogBranchSync:
         images = sorted(
             {
                 f"{BLOG_IMAGES_DIR}/{name}"
-                for name in _IMAGE_REF.findall(body)
+                for name in BLOG_IMAGE_REF.findall(body)
                 if f"{BLOG_IMAGES_DIR}/{name}" in on_base
             }
         )

@@ -21,6 +21,7 @@ from ..post_spec import (
 REFERENCE_KINDS = frozenset({"introduction", "cross_cutting", "insights"})
 
 SURVEY_SPEC = PostSpec(
+    name="survey",
     outline_name="outline",
     kinds=(
         KindSpec("introduction", 0),

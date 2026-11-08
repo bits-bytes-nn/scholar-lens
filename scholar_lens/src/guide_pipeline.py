@@ -93,7 +93,7 @@ async def run_guide_pipeline(
             translation_guideline=translation_guideline,
             tracker=tracker,
             title_max_length=spec.seo_title_max_length,
-            fresh_sources=request.fresh_sources,
+            fresh_sources=request.fresh_gathering,
         )
         taxonomy = await generator.classify(
             guide,

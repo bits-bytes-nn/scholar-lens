@@ -107,6 +107,7 @@ def test_a_guide_run_wires_roles_ceiling_cache_and_sources(
             settings,
             *,
             store,
+            checkpoints,
             identifier_check,
             products,  # type: ignore[no-untyped-def]
             package_facts,
@@ -114,6 +115,9 @@ def test_a_guide_run_wires_roles_ceiling_cache_and_sources(
         ) -> None:
             seen.settings.append(settings)
             seen.stores.append(store)
+            # The checkpoints share the reading cache's directory and S3
+            # prefix (a Batch retry reads both back).
+            assert checkpoints is store
             self.check = identifier_check
 
         async def write(self, topic, documents, *, guideline):  # type: ignore[no-untyped-def]
@@ -202,9 +206,10 @@ def test_a_paper_run_wires_roles_ceiling_and_shape(
     seen: Seen, monkeypatch: pytest.MonkeyPatch, post: str
 ) -> None:
     class FakePaperEngine:
-        def __init__(self, model, settings, *, store) -> None:  # type: ignore[no-untyped-def]
+        def __init__(self, model, settings, *, store, checkpoints) -> None:  # type: ignore[no-untyped-def]
             seen.settings.append(settings)
             seen.stores.append(store)
+            assert checkpoints is store
 
         async def write(self, title, document, **_kwargs):  # type: ignore[no-untyped-def]
             sections = [

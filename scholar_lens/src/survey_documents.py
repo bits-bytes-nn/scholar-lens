@@ -19,6 +19,8 @@ import pymupdf
 from ..adapters.aws.storage import S3Handler, S3OperationError
 from ..adapters.retry import is_access_error
 from ..adapters.scholarly.index import OpenAlexIndex
+from ..application.checkpoints import FreshStore
+from ..application.ports import TextStore
 from ..domain.evidence import SourceDocument
 from ..domain.survey.plan import PlanPaper, unversioned_arxiv_id
 from .constants import S3Paths
@@ -178,7 +180,10 @@ def _reason(error: BaseException) -> str:
 
 class EvidenceTextStore:
     """Evidence on disk (``local_dir``) and, with a bucket, in S3
-    (``<prefix>/<area>/``: ``surveys`` or ``guides``)."""
+    (``<prefix>/<area>/``: ``surveys``, ``guides`` or ``papers``). It also
+    holds the engine's stage checkpoints (its ``checkpoints/`` keys): a
+    Batch attempt's scratch disk is gone with its container, so a retried
+    attempt reads them back from S3."""
 
     def __init__(
         self,
@@ -212,3 +217,18 @@ class EvidenceTextStore:
                 if is_access_error(e):
                     raise
                 logger.warning("Could not cache evidence %s in S3: %s", key, e)
+
+
+def evidence_store(
+    local_dir: Path,
+    s3_handler: S3Handler | None,
+    s3_prefix: str,
+    area: S3Paths = S3Paths.SURVEYS,
+    *,
+    fresh: bool = False,
+) -> TextStore:
+    """The run's reading cache and checkpoint store
+    (:class:`EvidenceTextStore`); a ``fresh`` run writes it without reading
+    it."""
+    store = EvidenceTextStore(local_dir, s3_handler, s3_prefix, area)
+    return FreshStore(store) if fresh else store

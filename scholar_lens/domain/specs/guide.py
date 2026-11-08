@@ -24,6 +24,7 @@ TLDR_TITLE = "TL;DR"
 _SECONDARY = frozenset({"third_party", "older_docs"})
 
 GUIDE_SPEC = PostSpec(
+    name="guide",
     outline_name="guide outline",
     kinds=(
         KindSpec("tldr", 0),

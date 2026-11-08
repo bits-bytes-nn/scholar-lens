@@ -63,7 +63,7 @@ async def write_paper_with_evidence(
     from ..adapters.bedrock.strands_models import StrandsLanguageModel
     from ..application.paper_engine import EvidencePaperEngine, PaperSettings
     from .evidence_models import budgeted, role_model, unservable
-    from .survey_documents import EvidenceTextStore
+    from .survey_documents import evidence_store
 
     if post == "review":
         cfg = context.config.explanation
@@ -110,6 +110,13 @@ async def write_paper_with_evidence(
         budgeted(tracker, max_cost),
     )
     document, extra = paper_documents(paper)
+    store = evidence_store(
+        context.papers_dir / "paper-evidence",
+        context.s3_handler,
+        context.config.resources.s3_prefix,
+        S3Paths.PAPERS,
+        fresh=context.fresh,
+    )
     engine = EvidencePaperEngine(
         model,
         PaperSettings(
@@ -121,12 +128,8 @@ async def write_paper_with_evidence(
             min_total_chars=lengths[0],
             max_total_chars=lengths[1],
         ),
-        store=EvidenceTextStore(
-            context.papers_dir / "paper-evidence",
-            context.s3_handler,
-            context.config.resources.s3_prefix,
-            S3Paths.PAPERS,
-        ),
+        store=store,
+        checkpoints=store,
     )
     result = await engine.write(
         paper.title,

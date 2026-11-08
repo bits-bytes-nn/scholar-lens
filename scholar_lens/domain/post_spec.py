@@ -364,6 +364,8 @@ class PostSpec:
     # Kind -> the block code builds and appends after the section (a table).
     attachments: Mapping[str, str] = field(default_factory=dict)
     limits: Limits = Limits()
+    # The kind's name in stage checkpoint keys ("guide", "review").
+    name: str = "post"
 
     @property
     def ranks(self) -> dict[str, int]:

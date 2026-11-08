@@ -17,6 +17,7 @@ every artifact type publishes identically:
 from __future__ import annotations
 
 import asyncio
+import itertools
 import os
 import re
 import shutil
@@ -30,7 +31,7 @@ from urllib.parse import unquote, urlsplit
 import httpx
 from github import Auth, Github, GithubRetry
 
-from ..adapters.aws.storage import S3Handler
+from ..adapters.aws.storage import S3Handler, S3OperationError
 from ..adapters.http.pinned_transport import PinnedHTTPTransport
 from ..adapters.http.rate_limit import ARXIV_RATE_LIMITER, arxiv_retry_after_seconds
 from ..adapters.http.url_guard import UnsafeUrlError, assert_url_is_public
@@ -52,9 +53,14 @@ from .logger import logger
 from .prompt_safety import strip_defanging
 from .publish_types import (
     BLOG_IMAGES_DIR,
+    REJECTED_IMAGES_DIRNAME,
+    REJECTED_SUFFIX,
+    VIOLATIONS_OPENING,
     PublishRequest,
+    SavedPublishRequest,
     is_post_file,
     post_slug,
+    request_name,
     same_post,
 )
 from .publish_types import PublishError as PublishError  # re-exported
@@ -226,7 +232,9 @@ class ImageLocalizer:
 
     Images are named ``<slug>-<n>.<ext>`` in order of first appearance; the
     same source reused in the post maps to the same file. A figure that
-    cannot be stored raises :class:`PostAssetError`.
+    cannot be stored raises :class:`PostAssetError`. An image already staged
+    that the post still shows by its blog path (a saved post published
+    again) is kept, and new images are numbered past it.
     """
 
     def __init__(
@@ -246,10 +254,21 @@ class ImageLocalizer:
 
     def localize(self, markdown: str) -> str:
         """The post with the paper's figures stored."""
+        kept: dict[str, bytes] = {}
         if self.staging_dir.exists():
-            # This post's own scratch folder: drop a previous run's images.
+            # This post's own scratch folder: drop a previous run's images,
+            # except those the post already shows by their blog path.
+            kept = {
+                path.name: path.read_bytes()
+                for path in self.staging_dir.iterdir()
+                if path.is_file() and f"/{BLOG_IMAGES_DIR}/{path.name}" in markdown
+            }
             shutil.rmtree(self.staging_dir)
         self.staging_dir.mkdir(parents=True)
+        for name, data in kept.items():
+            (self.staging_dir / name).write_bytes(data)
+        taken = {Path(name).stem for name in kept}
+        numbers = itertools.count(1)
         hosted: dict[str, str] = {}
         failures: list[str] = []
         # arXiv id -> its source archive, or why it could not be fetched.
@@ -283,7 +302,10 @@ class ImageLocalizer:
             except PostAssetError as e:
                 failures.append(str(e))
                 return None
-            name = f"{self.slug}-{len(hosted) + 1}.{extension}"
+            stem = next(
+                stem for n in numbers if (stem := f"{self.slug}-{n}") not in taken
+            )
+            name = f"{stem}.{extension}"
             (self.staging_dir / name).write_bytes(data)
             hosted[src] = f"/{BLOG_IMAGES_DIR}/{name}"
             return hosted[src]
@@ -435,8 +457,10 @@ class Publisher:
         file_name = (
             Path(request.published_path).stem
             if request.published_path
-            else f"{datetime.now(UTC).strftime('%Y-%m-%d')}-{slug}"
+            else request.post_name or f"{datetime.now(UTC).strftime('%Y-%m-%d')}-{slug}"
         )
+        # Saved with the request: a later publish validates the same name.
+        request.post_name = file_name
         # Body-only passes: the front matter is already YAML-escaped and must
         # not be math-normalized or HTML-escaped.
         # Defanged prompt tags a model copied from its input get their plain
@@ -464,7 +488,7 @@ class Publisher:
             rejected = self._save_rejected(markdown, request, [f"- image: {e}"])
             logger.error("Post blocked by its images; kept at '%s'", rejected)
             e.rejected_path = str(rejected)
-            await self._keep_rejected_copy(e)
+            await self._keep_rejected_copy(e, request)
             raise
         try:
             request.validation_warnings = [
@@ -474,11 +498,12 @@ class Publisher:
                 *self._validate(markdown, request, f"{file_name}.md"),
             ]
         except PostValidationError as e:
-            await self._keep_rejected_copy(e)
+            await self._keep_rejected_copy(e, request)
             raise
 
         markdown_path = request.work_dir / f"{file_name}.md"
         await asyncio.to_thread(markdown_path.write_text, markdown, encoding="utf-8")
+        await asyncio.to_thread(self._save_request, request, markdown_path)
 
         s3_url = await self._upload_to_s3(request, markdown_path)
         return s3_url, markdown_path
@@ -555,12 +580,24 @@ class Publisher:
         return [str(v) for v in violations]
 
     @staticmethod
+    def _save_request(request: PublishRequest, markdown_path: Path) -> Path:
+        """Save ``request`` without its text next to the post it published
+        or rejected (``<name>.request.json``): ``scholar-lens publish``
+        reads it back."""
+        path = markdown_path.with_name(request_name(markdown_path.name))
+        path.write_text(
+            SavedPublishRequest.of(request).model_dump_json(indent=2), encoding="utf-8"
+        )
+        return path
+
+    @staticmethod
     def _save_rejected(
         markdown: str, request: PublishRequest, findings: list[str]
     ) -> Path:
         """Keep a post that is not published as ``<slug>.rejected.md`` in the
-        work dir, with why and the generators' notes at its end."""
-        rejected = request.work_dir / f"{request.slug}.rejected.md"
+        work dir, with why and the generators' notes at its end, and its
+        publish request next to it."""
+        rejected = request.work_dir / f"{request.slug}{REJECTED_SUFFIX}"
         report = "\n".join(
             [
                 *(f"- blocking: {b}" for b in request.blocking),
@@ -569,15 +606,18 @@ class Publisher:
             ]
         )
         rejected.write_text(
-            f"{markdown}\n\n<!-- violations\n{report}\n-->\n", encoding="utf-8"
+            f"{markdown}\n\n{VIOLATIONS_OPENING}{report}\n-->\n", encoding="utf-8"
         )
+        Publisher._save_request(request, rejected)
         return rejected
 
     async def _keep_rejected_copy(
-        self, error: PostValidationError | PostAssetError
+        self, error: PostValidationError | PostAssetError, request: PublishRequest
     ) -> None:
         """In Batch the work dir is container scratch: copy the rejected post
-        to S3. A failed copy must not hide why the post was rejected."""
+        to S3, its publish request next to it and its localized images
+        under ``rejected/blog-images/<slug>/`` (what ``publish`` needs). A
+        failed copy must not hide why the post was rejected."""
         if not (error.rejected_path and self.s3_handler):
             return
         key = f"{self.s3_prefix}/rejected".lstrip("/")
@@ -585,8 +625,30 @@ class Publisher:
         try:
             await self.s3_handler.upload_file_async(path, key)
             error.rejected_s3_uri = f"s3://{self.s3_bucket_name}/{key}/{path.name}"
+            await self._copy_request(key, path)
+            staged = request.staged_images_dir
+            if staged.is_dir() and any(staged.iterdir()):
+                await asyncio.to_thread(
+                    self.s3_handler.upload_directory,
+                    staged,
+                    f"{key}/{REJECTED_IMAGES_DIRNAME}/{request.slug}",
+                )
         except Exception as upload_error:  # noqa: BLE001
             logger.warning("Could not copy the rejected post: %s", upload_error)
+
+    async def _copy_request(self, key: str, markdown_path: Path) -> None:
+        """The saved publish request of ``markdown_path`` next to its S3
+        copy under ``key``; a failed copy is logged (the post is kept)."""
+        assert self.s3_handler is not None
+        path = markdown_path.with_name(request_name(markdown_path.name))
+        try:
+            await asyncio.to_thread(
+                self.s3_handler.put_text,
+                f"{key}/{path.name}",
+                path.read_text(encoding="utf-8"),
+            )
+        except (OSError, S3OperationError) as e:
+            logger.warning("Could not copy the publish request %s: %s", path.name, e)
 
     async def _upload_to_s3(
         self, request: PublishRequest, markdown_path: Path
@@ -597,6 +659,7 @@ class Publisher:
         posts_key = f"{prefix}/{S3Paths.POSTS.value}".lstrip("/")
         images_key = f"{prefix}/{BLOG_IMAGES_DIR}".lstrip("/")
         await self.s3_handler.upload_file_async(markdown_path, posts_key)
+        await self._copy_request(posts_key, markdown_path)
 
         staged = request.staged_images_dir
         if staged.is_dir() and any(staged.iterdir()):

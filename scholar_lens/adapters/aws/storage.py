@@ -55,6 +55,11 @@ class S3Handler:
 
     def get_text(self, s3_key: str) -> str | None:
         """Return the object's text, or None when it does not exist."""
+        data = self.get_bytes(s3_key)
+        return None if data is None else data.decode("utf-8")
+
+    def get_bytes(self, s3_key: str) -> bytes | None:
+        """Return the object's bytes, or None when it does not exist."""
         try:
             body = self._s3_client.get_object(Bucket=self.bucket_name, Key=s3_key)
             data: bytes = body["Body"].read()
@@ -64,7 +69,7 @@ class S3Handler:
             raise S3OperationError(f"Failed to read '{s3_key}'") from e
         except BotoCoreError as e:  # connection / read timeout (transient)
             raise S3OperationError(f"Failed to read '{s3_key}'") from e
-        return data.decode("utf-8")
+        return data
 
     def upload_directory(self, local_dir: Path, s3_prefix: str) -> int:
         """Upload every file under ``local_dir`` (private objects)."""

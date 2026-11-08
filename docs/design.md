@@ -77,7 +77,7 @@ Batch worker ┘                                    │     (수집 → 생성 �
 
 ### 2.1 명령
 
-`cli.py::build_parser`가 하위 명령 일곱 개를 정의합니다(`survey`는 `plan`·`write` 두 단계).
+`cli.py::build_parser`가 하위 명령 여덟 개를 정의합니다(`survey`는 `plan`·`write` 두 단계).
 
 | 명령 | 동작 |
 | --- | --- |
@@ -85,13 +85,14 @@ Batch worker ┘                                    │     (수집 → 생성 �
 | `guide [URL...] [--reference URL]...` | 기술 가이드를 로컬에서 실행하거나 `--remote`로 제출(문서 URL과 참고 자료 URL 중 하나 이상) |
 | `survey plan TOPIC [--paper ID]... [--reference URL]... [--since Y] [--until Y]` | 서베이 계획 파일을 만들거나 `--remote`로 제출(4.3절). 글을 쓰지 않으므로 `--no-pr`가 없습니다 |
 | `survey write --plan PATH_OR_S3_URI [--no-pr]` | 계획 파일로 서베이 글을 쓰거나 `--remote`로 제출(4.3절). `--remote`이면 로컬 계획을 먼저 `<s3_prefix>/surveys/<slug>/plan-<sha256 앞 16자>.json`에 올리고(내용별 키라 덮어쓰지 않음, `survey_writer.py::stage_plan_for_batch`) 그 URI로 제출합니다 |
+| `publish MARKDOWN_PATH_OR_S3_URI [--no-pr]` | 실행이 저장했거나 거절한 글(고쳤을 수 있음)을 다시 검사하고 실행의 브랜치에서 PR을 열거나 갱신(`saved_post.py::run_publish`, 2.4절). 로컬에서만 실행합니다 |
 | `status JOB_ID [--wait] [--timeout S]` | Batch 상태와 결과 매니페스트 조회(`jobs.py::describe_job`, `wait_for_job`). `--timeout` 기본값은 14,400초(4시간, `DEFAULT_WAIT_SECONDS`) |
 | `costs --since D [--until D] [--by kind\|stage\|model\|day] [--billed]` | 기간 `[since, until)`(UTC 날짜, `--until` 기본값은 내일)의 결과 매니페스트로 실행 비용을 묶어 보고(`application/costs.py::report_costs`, 11장). `--by` 기본값은 `kind`, `--billed`는 Cost Explorer 청구액을 더함. S3 버킷이 없으면 실패(종료 코드 4) |
 | `worker --request JSON` | Batch 진입점. `AWS_BATCH_JOB_ID`를 작업 ID로 사용 |
 
 `guide`의 문서 URL은 옵션 앞·사이·뒤 어디에 와도 됩니다(`guide DOC1 --reference R DOC2`). argparse는 옵션 뒤에 온 위치 인자를 남는 인자로 돌려주므로, `cli.py::parse_args`는 `parse_known_args`로 파싱한 뒤 명령이 `guide`이고 남은 인자가 모두 `-`로 시작하지 않으면 문서 URL(`urls`)에 덧붙입니다. 그 밖의 남은 인자는 사용법 오류(`unrecognized arguments`)입니다.
 
-stdout에는 JSON 객체 하나만 출력하고 로그는 stderr로 보냅니다. 인자 누락 같은 사용법 오류도 사용법은 stderr로, `{"status": "rejected"}`는 stdout으로 내고 2로 끝납니다. 종료 코드의 정본은 `cli.py` 모듈 docstring이고, `JobResult.status`의 `succeeded`·`failed`·`rejected`가 각각 0·1·2입니다(`_EXIT_BY_STATUS`). 다만 PR을 요청했고 GitHub 연동이 켜져 있는데 PR 생성이 실패하면 산출물은 저장된 `failed` 결과에 `pr_error`가 붙고 5(`EXIT_PR_FAILED`, `cli.py::result_exit_code`)로 끝납니다. `status`도 그 결과 매니페스트에 같은 코드를 돌려줍니다. 로컬 실행이 설정·자격 증명 문제로 시작하지 못해도 `failed`(1)입니다.
+stdout에는 JSON 객체 하나만 출력하고 로그는 stderr로 보냅니다. 인자 누락 같은 사용법 오류도 사용법은 stderr로, `{"status": "rejected"}`는 stdout으로 내고 2로 끝납니다. 종료 코드의 정본은 `cli.py` 모듈 docstring이고, `JobResult.status`의 `succeeded`·`failed`·`rejected`가 각각 0·1·2입니다(`_EXIT_BY_STATUS`). 다만 PR을 요청했고 GitHub 연동이 켜져 있는데 PR 생성이 실패하면 산출물은 저장된 `failed` 결과에 `pr_error`가 붙고 5(`EXIT_PR_FAILED`, `cli.py::result_exit_code`)로 끝납니다. `status`도 그 결과 매니페스트에 같은 코드를 돌려줍니다. `publish`도 실행과 같은 코드를 씁니다(글이 아직 규칙을 어기면 1, 글이나 그 옆의 게시 요청이 없거나 읽을 수 없으면 2, PR 실패는 5). 로컬 실행이 설정·자격 증명 문제로 시작하지 못해도 `failed`(1)입니다.
 
 `--remote`는 `SubmittedJob`을 출력하고 0으로 끝납니다. `status`는 결과 매니페스트가 있으면 그 상태의 종료 코드를 돌려줍니다. 없으면 Batch가 `FAILED`일 때 1, 아직 끝나지 않았거나 `--wait`가 시간 초과되면 3, `SUCCEEDED`인데 매니페스트가 없으면 0입니다. `--wait` 중 Batch 조회나 결과 매니페스트 읽기의 요청 제한·5xx·네트워크 오류는 건너뛰고 계속 조회합니다.
 
@@ -109,6 +110,8 @@ stdout에는 JSON 객체 하나만 출력하고 로그는 stderr로 보냅니다
 | `urls`, `reference_urls`, `search_queries`, `discover_subpages` | guide | `[]`, `[]`(둘 중 하나 이상 필수), `[]`, `true` |
 | `topic`, `paper_ids`, `reference_urls`, `since_year`, `until_year` | survey_plan | `topic` 필수, `[]`, `[]`, 없음, 없음. 다른 종류에 `topic` 등을 주면 거부하고, `since_year`가 `until_year`보다 늦거나 `paper_ids`에 arXiv ID·URL·DOI가 아닌 값, `reference_urls`에 http(s) URL이 아닌 값이 있어도 거부합니다(`domain/survey/plan.py::parse_paper_id`, Batch 제출 전) |
 | `plan` | survey_write | 필수. 로컬 경로 또는 설정한 버킷의 `s3://<bucket>/<key>`. `plan`과 `create_pr` 밖의 필드를 주면 거부하고, 다른 종류에 `plan`을 주면 거부합니다 |
+| `fresh_sources` | guide | `false`. 저장한 수집 자료를 쓰지 않고 출처를 새로 수집 |
+| `fresh` | review, summarize, guide, survey_write | `false`. 단계별 checkpoint와 근거 캐시를 읽지 않고(쓰기는 함) 모든 단계를 새로 계산. 가이드는 `fresh_sources`도 뜻함(`JobRequest.fresh_gathering`). survey_plan에 주면 거부 |
 | `create_pr` | 전체 | `true`(GitHub 연동이 켜져 있을 때만 의미, survey_plan은 쓰지 않음) |
 
 서베이 두 종류는 자기 행의 필드와 `create_pr`만 받습니다. 다른 행의 필드에 기본값이 아닌 값(`parse_pdf: true`, `discover_subpages: false` 포함)을 주면 거부합니다.
@@ -129,6 +132,14 @@ stdout에는 JSON 객체 하나만 출력하고 로그는 stderr로 보냅니다
 worker는 SIGTERM을 `SystemExit`로 바꿔(`cli.py::_raise_on_sigterm`) Batch 시간 초과나 취소, 호스트 종료 때도 4단계가 실행되게 합니다. 파이프라인은 `asyncio.run` 대신 `runtime.py::run_coroutine`으로 돌려, 중단 시 작업자 스레드에서 진행 중인 Bedrock 호출을 기다리지 않고 바로 정리 단계로 갑니다(Batch는 SIGTERM 약 30초 뒤 SIGKILL). 이때는 매니페스트만 저장하고(`INTERRUPTED_ERROR`) SNS 실패 알림은 보내지 않습니다. 정상 종료는 인터프리터가 남은 작업자 스레드를 기다리므로, worker는 정리 뒤 중단된 실행의 `JobResult`를 stdout에 출력하고 `os._exit(143)`으로 바로 끝납니다(`cli.py::_work`). `run_job` 밖에서 받은 SIGTERM(실행 시작 전이나 결과 출력 뒤)은 더 출력하지 않습니다. 호스트가 사라졌으면 Batch가 재시도하고, 최종 실패면 EventBridge 규칙이 알립니다.
 
 `run_job` 밖의 실패(잘못된 요청 JSON, 런타임 모듈 import 실패 등)는 `cli.py::_work`가 받아 `runtime.py::record_unstarted_run`으로 알림과 매니페스트를 남깁니다. worker는 실패 알림을 보낸 뒤 로컬 CLI와 다른 종료 코드 10(실패)·11(거부)(`APP_REPORTED_EXIT_CODES`)로 끝납니다. 1·2는 worker 코드가 돌기 전의 Python 오류·인자 오류와 겹치기 때문입니다. 실패 알림을 보내지 못하면(`run_job` 안이든 밖이든, `JobResult.notification_failed`) 4로 끝나 EventBridge 규칙이 대신 알립니다.
+
+### 2.4 재개와 `publish`
+
+**재개.** 근거 장부 엔진(`application/post_engine.py::PostEngine.staged`, `application/checkpoints.py`)은 핵심 대상, 개요(잘못된 근거·다른 SDK 근거·빈 절을 뺀 뒤), 확정된 절(`verify_and_fix` 뒤), 글 전체 검토 결과, TL;DR, 리뷰·요약의 부제와 설명을 단계마다 저장합니다. 키는 checkpoint 형식 버전(`CHECKPOINT_VERSION`), 글 종류(`PostSpec.name`), 단계 이름, 바로 앞 단계 결과의 해시, 그 단계의 입력(프롬프트 본문, 그 단계가 쓰는 시스템 프롬프트의 해시, 그 단계가 읽는 설정)의 해시입니다. 개요의 입력에는 근거 장부와 핵심 대상이 들어갑니다. 앞 단계 결과가 키에 들어가므로 입력이 바뀌면 그 단계와 뒤 단계만 다시 계산하고, 키가 입력 해시라 저장본이 있으면 언제나 이어 가도 안전합니다. 저장소는 근거 캐시와 같은 `TextStore`(`survey_documents.py::EvidenceTextStore`, 로컬 디렉터리와 S3 접두부)의 `checkpoints/<kind>/<stage>/` 영역입니다(포트 `CheckpointStore`). Batch 재시도는 새 컨테이너에서 같은 설정으로 같은 S3 위치를 읽으므로 그대로 이어 갑니다. 작업 역할의 S3 권한(`<s3_prefix>/*`)이 이 영역을 포함합니다.
+
+뒤 단계가 읽는 작성기 상태는 다음과 같이 복원합니다. PR 메모, 차단 문제, 사실 확인 판정(`VerdictCache`)은 단계마다 그 단계가 더한 것을 함께 저장해 순서대로 다시 넣습니다(`WriterState`). 절에 등록된 검사(글 전체 수정이 실행하는 검증기 묶음)는 개요, 근거 장부, 앞 절로 작성기와 같은 코드로 다시 만들고, 그 검사가 읽는 원문 구간은 저장한 초안으로 다시 계산합니다. 불러온 절은 다시 검사하지 않습니다. 비용 상한(`max_cost_usd`)은 현재 시도의 지출만 셉니다(`evidence_models.py::budgeted`). 불러온 단계는 호출이 없으므로 다시 세지 않고, 상한에 걸려 멈춘 실행을 재개하면 남은 단계에 상한만큼 더 쓸 수 있습니다. `--fresh`(`JobRequest.fresh`, `RunContext.fresh`)는 근거 캐시와 checkpoint를 읽지 않고 쓰기만 하는 저장소(`FreshStore`)를 씁니다. 그래서 그 실행의 결과는 다음 실행이 이어 쓸 수 있습니다.
+
+**`publish`.** `Publisher.publish`는 저장한 글과 거절된 글(`<slug>.rejected.md`) 옆에 글 본문을 뺀 게시 요청을 `<name>.request.json`(`publish_types.py::SavedPublishRequest`, `extra="forbid"`, `version: 1`)으로 남기고, S3에서도 `posts/`·`rejected/` 사본 옆에 둡니다. 거절된 글의 현지화한 이미지는 `rejected/blog-images/<slug>/`에 올립니다. 요청에는 글 파일 이름(`post_name`)도 들어가 나중의 게시가 같은 이름으로 검증합니다. `publish`는 글과 요청을 읽고(위반 주석은 뗌) `runtime.py::publish_artifact`로 결정적 후처리, 이미지 현지화, 블로그 규칙 검사, 저장, S3 업로드, PR을 실행 마지막 단계와 똑같이 합니다. 브랜치 키(`branch_id`)가 같으므로 PR을 새로 만들지 않고 갱신합니다. 이미지 현지화는 글이 이미 `/assets/images/`로 가리키는 준비된 이미지를 지우지 않고 둡니다. S3의 글은 실행의 작업 디렉터리 이름으로 로컬 `papers/` 아래에 받습니다. `publish`는 로컬에서만 실행합니다. 원격 실행은 작업 계약에 새 종류를 더해야 하지만, 모델 호출이 없는 몇 초짜리 단계라 이점이 없습니다.
 
 ## 3. 리뷰 워크플로
 
@@ -306,7 +317,7 @@ OpenAlex는 arXiv 시대 ML 논문의 인용 수를 크게 적게 세고(실측:
 | 가이드 | `papers/guide-evidence/evidence/<URL 해시>-<텍스트 해시>/…` | `<prefix>/guides/evidence/…` | 페이지 URL의 SHA-256 앞 16자, 텍스트 SHA-256 앞 12자, `GUIDE_READER_VERSION`, 읽기 모델, 언어, 출처 권한 |
 | 서베이 | `papers/survey-evidence/evidence/<논문 ID>/…` | `<prefix>/surveys/evidence/<논문 ID>/…` | 원문 텍스트의 SHA-256 앞 12자, `READER_VERSION`, 읽기 모델, 언어, 역할(`core`·`supporting`), 원문 종류 |
 
-원문이 바뀌거나 읽기 버전·모델·언어가 바뀌면 키가 달라져 다시 읽습니다. 캐시를 쓸 때도 각 근거를 오늘의 검사로 다시 확인해(`application/evidence_writer.py::cached_evidence`) 통과하지 못한 근거는 버리고, 읽을 수 없는 캐시이거나 하나도 통과하지 못하면 그 문서를 다시 읽습니다. 프롬프트 문구만 바꿔서는 캐시가 무효화되지 않습니다. 다시 읽게 하려면 해당 캐시 파일을 로컬과 S3 양쪽에서 지웁니다(CLI 옵션은 없음. 로컬만 지우면 S3 사본을 읽음). 로컬 경로는 저장소 루트 기준이고, AWS 안에서는 `/tmp/papers/…`(`runtime.py::ROOT_DIR`)라 Batch 실행마다 비어 있으므로 Batch에서는 S3 사본만 지우면 됩니다.
+원문이 바뀌거나 읽기 버전·모델·언어가 바뀌면 키가 달라져 다시 읽습니다. 캐시를 쓸 때도 각 근거를 오늘의 검사로 다시 확인해(`application/evidence_writer.py::cached_evidence`) 통과하지 못한 근거는 버리고, 읽을 수 없는 캐시이거나 하나도 통과하지 못하면 그 문서를 다시 읽습니다. 프롬프트 문구만 바꿔서는 캐시가 무효화되지 않습니다. 한 실행 동안 캐시를 읽지 않으려면 `--fresh`를 씁니다(새로 읽은 근거는 그대로 저장하며, 단계별 checkpoint도 함께 무시함, 2.4절). 로컬 경로는 저장소 루트 기준이고, AWS 안에서는 `/tmp/papers/…`(`runtime.py::ROOT_DIR`)라 Batch 실행마다 비어 있으므로 Batch에서는 S3 사본을 읽습니다. 같은 저장소의 `checkpoints/` 영역에 엔진의 단계별 checkpoint가 있습니다(2.4절).
 
 **문장 검사와 수정.** 사실 확인은 문장마다 `supported`·`unsupported`·`wrong`·`about_sources` 중 하나로 판정합니다. `about_sources`는 주제 대신 작성자가 받은 자료를 말하는 문장("이 근거에서 따로 설명되지 않습니다")이고, `wrong`처럼 먼저 고치게 한 뒤 남으면 코드가 지웁니다(`application/evidence_writer.py::_removable`). 수정 단계는 구조화 응답(`FixedSection`: `section`, `notes`)으로 받아 `section`만 쓰므로 작성자의 수정 메모가 본문에 섞이지 않습니다. 여러 읽기 에이전트가 같은 논문의 같은 수치·코드를 같은 범위로 기록했거나 같은 그림을 두 번 기록하면 개요에는 한 번만 보입니다(`domain/evidence.py::duplicate_evidence`). 표현만 다른 같은 사실은 개요 모델이 `same_facts`로 묶어 알리고, 코드가 묶음마다 가장 권위 있는·앞선 근거 하나만 남깁니다. 수치·코드가 서로 다른 근거가 섞인 묶음은 받지 않습니다(`same_fact_duplicates`). 가이드는 Python 코드 블록을 읽는 순서대로 표준 라이브러리 `ast`·`symtable`로 검사합니다(`domain/guide/evidence_guide.py::python_code_problems`). 모든 블록(목록 안 블록, REPL·노트북 블록, 파싱되지 않는 블록 포함)의 정의를 앞에서부터 쌓고, 독자가 실행하는 사용·운영 절에서만 파싱되지 않는 블록과 어디에도 정의되지 않은 이름을 글 전체 검토의 수정 항목으로 넘깁니다. `import *` 뒤에는 정의되지 않은 이름을 판단하지 않습니다. 수정 뒤 다시 검사해 남은 문제는 PR 체크리스트에 올립니다. 사실 확인이나 검토 호출이 대체 모델로도 답하지 못하면 그 절 초안을 그대로 두고 어떤 검사가 실행되지 않았는지 실행 메모에 남깁니다.
 

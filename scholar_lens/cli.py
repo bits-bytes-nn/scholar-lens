@@ -9,6 +9,7 @@ and scripts can parse the outcome directly::
     scholar-lens guide "https://docs.vllm.ai/en/latest/" --reference "https://arxiv.org/abs/2309.06180"
     scholar-lens survey plan "LLM preference optimization" --paper 2305.18290 --reference "https://huggingface.co/blog/rlhf"
     scholar-lens survey write --plan papers/survey-llm-preference-optimization/plan.json
+    scholar-lens publish papers/guide-x/x.rejected.md
     scholar-lens status <job-id> --wait
     scholar-lens costs --since 2026-11-01 --by stage --billed
 
@@ -17,7 +18,10 @@ Exit codes: 0 succeeded (or submitted), 1 failed, 2 rejected input,
 or ``status``: ``"status": "error"`` for AWS credentials, config, Batch/S3 API
 errors), so the job's state is unknown, 5 the artifact was saved but the
 requested blog PR failed (a ``failed`` result with ``pr_error``, its
-``markdown_path`` and ``s3_uri`` kept; also from ``status``). A local run that cannot start (a
+``markdown_path`` and ``s3_uri`` kept; also from ``status`` and ``publish``).
+``publish`` exits like a run: 0, 1 (the post still breaks a blog rule, its
+rejected copy kept), 2 (no such post or no publish request next to it), 5. A
+local run that cannot start (a
 broken config) reports ``failed`` and exits 1. The Batch ``worker`` exits 10 (failed) or 11 (rejected) once it
 has sent its own notification, 4 when that notification could not be sent,
 and 143 (128 + SIGTERM) when Batch stopped it (timeout, cancel, host
@@ -138,6 +142,15 @@ def build_parser() -> argparse.ArgumentParser:
             dest="create_pr",
             action="store_false",
             help="Do not open a blog pull request (the post is still saved).",
+        )
+        sub.add_argument(
+            "--fresh",
+            action="store_true",
+            help=(
+                "Compute every stage again instead of resuming from the stages "
+                "a run with the same inputs saved (also reads the sources again "
+                "and, for a guide, gathers them again)."
+            ),
         )
 
     for kind, help_text in (
@@ -294,6 +307,30 @@ def build_parser() -> argparse.ArgumentParser:
     )
     add_run_options(survey_write)
 
+    publish = commands.add_parser(
+        "publish",
+        help="Check a saved or rejected post again and open its blog PR.",
+        description=(
+            "Check a post a run saved (--no-pr) or rejected (*.rejected.md), "
+            "possibly edited, against the blog rules again and open or update "
+            "its pull request on the run's branch. Runs locally."
+        ),
+    )
+    publish.add_argument(
+        "post",
+        metavar="MARKDOWN_PATH_OR_S3_URI",
+        help=(
+            "The post: a local path, or s3://<bucket>/<key> in the configured "
+            "bucket (a Batch run's posts/ or rejected/ copy)."
+        ),
+    )
+    publish.add_argument(
+        "--no-pr",
+        dest="create_pr",
+        action="store_false",
+        help="Check and save the post without opening a pull request.",
+    )
+
     status = commands.add_parser("status", help="Show a remote job's state and result.")
     status.add_argument("job_id")
     status.add_argument(
@@ -353,7 +390,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 def _request_from_args(args: argparse.Namespace) -> JobRequest:
     if args.command == "survey" and args.survey_stage == "write":
-        return JobRequest(kind="survey_write", plan=args.plan, create_pr=args.create_pr)
+        return JobRequest(
+            kind="survey_write",
+            plan=args.plan,
+            create_pr=args.create_pr,
+            fresh=args.fresh,
+        )
     if args.command == "survey":
         return JobRequest(
             kind="survey_plan",
@@ -372,6 +414,7 @@ def _request_from_args(args: argparse.Namespace) -> JobRequest:
             discover_subpages=args.discover_subpages,
             fresh_sources=args.fresh_sources,
             create_pr=args.create_pr,
+            fresh=args.fresh,
         )
     return JobRequest(
         kind=args.command,
@@ -379,6 +422,7 @@ def _request_from_args(args: argparse.Namespace) -> JobRequest:
         repo_urls=args.repo_urls,
         parse_pdf=args.parse_pdf,
         create_pr=args.create_pr,
+        fresh=args.fresh,
     )
 
 
@@ -508,6 +552,15 @@ def _run(request: JobRequest, *, job_id: str | None = None) -> JobResult:
     return result
 
 
+def _publish(post: str, *, create_pr: bool) -> int:
+    """``publish``: one result, the exit code a run would have."""
+    from scholar_lens.src.saved_post import run_publish
+
+    result = run_publish(post, create_pr=create_pr)
+    _emit(result)
+    return result_exit_code(result)
+
+
 def _worker_exit(result: JobResult, *, reported: bool) -> int:
     """A failed run whose notification did not go out exits 4, which the
     stack's EventBridge rule reports instead."""
@@ -613,6 +666,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     if args.command == "worker":
         return _work(args.request)
+    if args.command == "publish":
+        return _publish(args.post, create_pr=args.create_pr)
     if args.command == "costs":
         try:
             return _costs(args)

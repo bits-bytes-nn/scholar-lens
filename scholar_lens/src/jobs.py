@@ -68,6 +68,11 @@ class JobRequest(BaseModel):
     discover_subpages: bool = True
     # guide: gather the sources again instead of reusing a saved corpus.
     fresh_sources: bool = False
+    # Compute every stage again: ignore the saved stage checkpoints and the
+    # reading cache (both are still written), and gather a guide's sources
+    # again (implies ``fresh_sources``). Without it a rerun with the same
+    # inputs resumes from the stages it saved.
+    fresh: bool = False
     # survey_plan: the topic, papers the survey must include (arXiv ids or
     # URLs, DOIs), an optional year range and ``reference_urls``.
     topic: str | None = None
@@ -96,6 +101,8 @@ class JobRequest(BaseModel):
                 f"A {self.kind} request takes no 'parse_pdf', 'discover_subpages' "
                 "or 'fresh_sources'."
             )
+        if self.kind == "survey_plan" and self.fresh:
+            raise ValueError("A survey_plan request takes no 'fresh'.")
         if self.kind == "survey_write":
             if not (self.plan and self.plan.strip()):
                 raise ValueError("A survey_write request needs a 'plan'.")
@@ -160,6 +167,12 @@ class JobRequest(BaseModel):
             # Checked before any paid stage: the paper record needs URLs.
             _check_urls("A repository", self.repo_urls)
         return self
+
+    @property
+    def fresh_gathering(self) -> bool:
+        """Whether a guide gathers its sources again (``fresh`` implies
+        ``fresh_sources``)."""
+        return self.fresh or self.fresh_sources
 
     def describe(self) -> str:
         """Short human label of the input, for logs and notifications."""

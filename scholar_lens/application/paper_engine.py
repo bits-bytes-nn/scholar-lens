@@ -38,6 +38,7 @@ from ..domain.paper.evidence_paper import (
 from ..domain.specs.paper import PAPER_REVIEW_SPEC, paper_spec
 from ..domain.validation import description_problems, fit_description
 from ..prompts import paper_evidence as prompts
+from .checkpoints import input_hash
 from .evidence_writer import (
     WriterPrompts,
     block,
@@ -45,7 +46,7 @@ from .evidence_writer import (
     quote_for_prompt_code,
     safe_key,
 )
-from .ports import AgentLimits, LanguageModel, TextStore
+from .ports import AgentLimits, CheckpointStore, LanguageModel, TextStore
 from .post_engine import PostEngine, PostPrompts, ReadJob, ReadStart, RunSettings
 from .usage import usage_stage
 
@@ -148,6 +149,8 @@ class EvidencePaperEngine(PostEngine[PaperOutline, PaperSection, EvidencePaper])
         model: LanguageModel,
         settings: PaperSettings,
         store: TextStore | None = None,
+        *,
+        checkpoints: CheckpointStore | None = None,
     ) -> None:
         review = settings.post == "review"
         super().__init__(
@@ -169,6 +172,7 @@ class EvidencePaperEngine(PostEngine[PaperOutline, PaperSection, EvidencePaper])
             ),
             outline_schema=PaperOutline,
             store=store,
+            checkpoints=checkpoints,
             max_fix_rounds=settings.max_fix_rounds,
         )
         self.settings = settings
@@ -177,6 +181,8 @@ class EvidencePaperEngine(PostEngine[PaperOutline, PaperSection, EvidencePaper])
         self._title = ""
         self._abstract = ""
         self._guideline = ""
+        # A digest of the documents read (set by write; checkpoint input).
+        self._sources = ""
 
     # ---- read -------------------------------------------------------------------
 
@@ -244,6 +250,7 @@ class EvidencePaperEngine(PostEngine[PaperOutline, PaperSection, EvidencePaper])
     ) -> EvidencePaper:
         self._title, self._abstract, self._guideline = title, abstract, guideline
         self._documents = {d.paper_id: d for d in (paper, *extra)}
+        self._sources = input_hash([d.model_dump(mode="json") for d in (paper, *extra)])
         self.passages = {
             (d.paper_id, s.anchor): s.text for d in (paper, *extra) for s in d.sections
         }
@@ -274,6 +281,15 @@ class EvidencePaperEngine(PostEngine[PaperOutline, PaperSection, EvidencePaper])
             left -= len(text)
             parts.append(f"[{sid} {anchor}: {section.heading}]\n{text}")
         return "\n\n".join(parts)
+
+    def checkpoint_inputs(self) -> object:
+        return {
+            "settings": self.settings,
+            "sources": self._sources,
+            "title": self._title,
+            "abstract": self._abstract,
+            "guideline": self._guideline,
+        }
 
     # ---- hooks: outline -----------------------------------------------------------
 
@@ -381,7 +397,18 @@ class EvidencePaperEngine(PostEngine[PaperOutline, PaperSection, EvidencePaper])
     ) -> FinalText:
         """Subtitle and search description, checked by the post validator's
         description rules with one repair; a description still unusable is
-        dropped (the blog derives one)."""
+        dropped (the blog derives one). A checkpointed stage."""
+        return await self.staged(
+            "final",
+            [prompts.FINAL_SYSTEM, title, abstract, list(sections), self.settings],
+            lambda: self._final_text(title, abstract, sections),
+            dump=lambda final: final.model_dump(mode="json"),
+            load=FinalText.model_validate,
+        )
+
+    async def _final_text(
+        self, title: str, abstract: str, sections: Sequence[tuple[str, str]]
+    ) -> FinalText:
         tldr = next((md for kind, md in sections if kind == "tldr"), "")
         base = "\n\n".join(
             [

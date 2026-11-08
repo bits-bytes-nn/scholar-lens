@@ -104,6 +104,30 @@ class TestCliMapping:
         assert request.fresh_sources is True
         assert self._request(["guide", "https://docs.x.dev"]).fresh_sources is False
 
+    @pytest.mark.parametrize(
+        "argv",
+        [
+            ["review", "2106.09685"],
+            ["summarize", "2106.09685"],
+            ["guide", "https://docs.x.dev"],
+            ["survey", "write", "--plan", "plan.json"],
+        ],
+    )
+    def test_every_writing_run_takes_fresh(self, argv: list[str]) -> None:
+        assert self._request([*argv, "--fresh"]).fresh is True
+        request = self._request(argv)
+        assert request.fresh is False and request.fresh_gathering is False
+
+    def test_fresh_implies_fresh_sources_and_a_plan_takes_neither(self) -> None:
+        guide = JobRequest(kind="guide", urls=["https://docs.x.dev"], fresh=True)
+        assert guide.fresh_gathering is True and guide.fresh_sources is False
+        with pytest.raises(ValueError, match="fresh"):
+            JobRequest(kind="survey_plan", topic="DPO", fresh=True)
+        # Left out of a submitted request when unset (older worker images).
+        assert "fresh" not in JobRequest(
+            kind="review", source="2106.09685"
+        ).model_dump_json(exclude_defaults=True)
+
     def test_only_a_guide_takes_fresh_sources(self) -> None:
         with pytest.raises(ValueError, match="fresh_sources"):
             JobRequest(kind="review", source="2106.09685", fresh_sources=True)

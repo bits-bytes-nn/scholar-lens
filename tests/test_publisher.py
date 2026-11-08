@@ -1630,7 +1630,11 @@ class TestRejectedCopy:
                 o["Key"]
                 for o in client.list_objects_v2(Bucket=BUCKET).get("Contents", [])
             ]
-            assert keys == [key]
+            # The post and, next to it, its publish request (`publish`).
+            assert sorted(keys) == [
+                key,
+                f"scholar-lens/rejected/{request.slug}.rejected.request.json",
+            ]
         assert info.value.rejected_s3_uri == f"s3://{BUCKET}/{key}"
 
     async def test_failed_copy_still_reports_the_rejection(

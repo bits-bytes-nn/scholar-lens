@@ -49,6 +49,7 @@ from ..domain.evidence_draft import (
 from ..domain.post_spec import Limits
 from ..domain.verifiers import VerifierSet
 from ..prompts.rules import FIX_ANSWER
+from .checkpoints import WriterState
 from .ports import AgentLimits, LanguageModel, ModelText, was_cut
 from .usage import usage_stage
 
@@ -209,6 +210,12 @@ class VerdictCache:
 
     def put(self, key: VerdictKey, verdict: str) -> None:
         self._verdicts[key] = verdict
+
+    def entries(self, start: int = 0) -> list[tuple[VerdictKey, str]]:
+        """The verdicts in the order they were stored, from the
+        ``start``-th on (a key is stored once: the check sends only units
+        without a verdict)."""
+        return list(self._verdicts.items())[start:]
 
 
 @dataclass(frozen=True)
@@ -451,6 +458,35 @@ class EvidenceWriter:
         # checked against the whole sections its evidence is quoted from
         # (guides and papers; a survey checks against the evidence alone).
         self.passages: dict[tuple[str, str], str] = {}
+
+    # ---- shared state ----------------------------------------------------------
+
+    def state_mark(self) -> tuple[int, int, int]:
+        """Where the shared state stands (notes, blocking, verdicts)."""
+        return len(self.notes), len(self.blocking), len(self.verdicts)
+
+    def state_since(self, mark: tuple[int, int, int]) -> WriterState:
+        """What was added to the shared state since ``mark``, in order."""
+        notes, blocking, verdicts = mark
+        return WriterState(
+            notes=self.notes[notes:],
+            blocking=self.blocking[blocking:],
+            verdicts=[
+                (s, p, list(c), e, r, v)
+                for (s, p, c, e, r), v in self.verdicts.entries(verdicts)
+            ],
+        )
+
+    def replay_state(self, state: WriterState) -> None:
+        """Add a saved stage's state changes as the stage made them: its
+        notes and blocking problems after the ones already there, its
+        verdicts to the cache (later checks of the same sentences in the
+        same context then send nothing, as in an uninterrupted run)."""
+        self.notes.extend(state.notes)
+        for problem in state.blocking:
+            self._block(problem)
+        for s, p, c, e, r, v in state.verdicts:
+            self.verdicts.put((s, p, tuple(c), e, r), v)
 
     # ---- read -------------------------------------------------------------------
 

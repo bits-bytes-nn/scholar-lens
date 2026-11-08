@@ -113,3 +113,15 @@ class TextStore(Protocol):
     def get(self, key: str) -> str | None: ...
 
     def put(self, key: str, text: str) -> None: ...
+
+
+class CheckpointStore(Protocol):
+    """Saved stage outputs of the post engine, by a hash of each stage's
+    inputs (docs/engine.md, 4.9). The adapter is a :class:`TextStore` (the
+    reading cache's local directory and S3 prefix): the engine keeps its
+    checkpoints under its ``checkpoints/`` area. ``get`` is None for a key
+    never saved; a ``put`` that could not be kept anywhere raises."""
+
+    def get(self, key: str) -> str | None: ...
+
+    def put(self, key: str, text: str) -> None: ...

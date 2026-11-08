@@ -61,6 +61,8 @@ class RunContext(BaseModel):
     publisher_factory: Callable[[RunContext], Publisher] | None = None
     # The blog's post conventions, loaded once per run (see load_run_conventions).
     conventions: PostConventions | None = None
+    # The run ignores its saved stage checkpoints and reading cache (--fresh).
+    fresh: bool = False
 
     # The blog's posts (tags, descriptions, translation ids), loaded on first
     # use, and the tags they use that a new post may reuse, with their post
@@ -496,13 +498,13 @@ async def _run_pipeline(
 def check_pr_ready(context: RunContext, request: JobRequest) -> None:
     """Fail before any model call when the run is to open a blog PR it
     cannot open (no token: the post would be paid for twice to get one)."""
+    check_pr_token(context, request.create_pr and request.kind != "survey_plan")
+
+
+def check_pr_token(context: RunContext, create_pr: bool) -> None:
+    """Fail when a blog PR is wanted, GitHub is enabled and no token is set."""
     github = context.config.resources.github
-    if (
-        request.create_pr
-        and github.enabled
-        and request.kind != "survey_plan"
-        and not os.getenv(EnvVars.GITHUB_TOKEN.value)
-    ):
+    if create_pr and github.enabled and not os.getenv(EnvVars.GITHUB_TOKEN.value):
         raise ValueError(
             f"{EnvVars.GITHUB_TOKEN.value} is not set, so the blog PR cannot be "
             "opened: set it (in Batch, the SSM parameter github-token) or pass "
@@ -536,6 +538,8 @@ def run_job(request: JobRequest, *, job_id: str | None = None) -> JobResult:
         logger.error("Run could not start: %s", e)
         result.notification_failed = not record_unstarted_run(result)
         return result
+    # Resumes from the stages a run with the same inputs saved, unless fresh.
+    context.fresh = request.fresh
     load_secrets_from_ssm(context, RUN_SECRETS)
     tracker = TokenUsageTracker()
     started = time.monotonic()
@@ -544,50 +548,9 @@ def run_job(request: JobRequest, *, job_id: str | None = None) -> JobResult:
         check_pr_ready(context, request)
         with cost_allocation(resources.project_name, resources.stage, request.kind):
             outcome = run_coroutine(_run_pipeline(context, request, tracker))
-        result.status = "succeeded"
-        result.title = outcome.title
-        result.markdown_path = (
-            str(outcome.markdown_path) if outcome.markdown_path else None
-        )
-        # A Batch run's plan file is gone with its container: s3_uri only.
-        result.plan_path = (
-            str(outcome.plan_path) if outcome.plan_path and job_id is None else None
-        )
-        result.s3_uri = outcome.s3_uri
-        result.pr_url = outcome.pr_url
-        result.warnings = outcome.warnings
-        if outcome.pr_error is not None:
-            # The artifact is saved (paths above) but not published.
-            result.status = "failed"
-            result.pr_error = outcome.pr_error
-            result.error = f"Blog PR not created: {outcome.pr_error}"
-    except rejected_errors as e:
-        if _is_fetch_outage(e):  # the source exists but could not be reached
-            result.error = f"{type(e).__name__}: {e}"
-            logger.error("Run failed: %s", e)
-        else:
-            result.status = "rejected"
-            result.error = str(e)
-            logger.warning("Request rejected: %s", e)
-    except PostValidationError as e:
-        # The post broke a blog convention: nothing was published.
-        result.error = str(e)
-        result.violations = [str(v) for v in e.violations]
-        result.markdown_path = e.rejected_path
-        result.s3_uri = e.rejected_s3_uri
-        result.warnings = list(getattr(e, "run_notes", []))
-        logger.error("Post failed validation: %s", e)
-    except PostAssetError as e:
-        # A paper figure could not be stored: nothing was published.
-        result.error = f"{type(e).__name__}: {e}"
-        result.markdown_path = e.rejected_path
-        result.s3_uri = e.rejected_s3_uri
-        result.warnings = list(getattr(e, "run_notes", []))
-        logger.error("Post blocked by its images: %s", e)
+        record_outcome(result, outcome, keep_plan_path=job_id is None)
     except Exception as e:
-        result.error = f"{type(e).__name__}: {e}"
-        result.warnings = list(getattr(e, "run_notes", []))
-        logger.error("Run failed: %s", e, exc_info=True)
+        record_error(result, e, rejected_errors)
     except (KeyboardInterrupt, SystemExit) as e:
         # Ctrl-C or SIGTERM: the caller still prints this run's result
         # (filled in below).
@@ -606,6 +569,66 @@ def run_job(request: JobRequest, *, job_id: str | None = None) -> JobResult:
         result.usage = tracker.run_usage()
         _finish(context, result, tracker, notify=not interrupted)
     return result
+
+
+def record_outcome(
+    result: JobResult, outcome: PipelineOutcome, *, keep_plan_path: bool = True
+) -> None:
+    """Fold a pipeline's (or ``publish``'s) outcome into ``result``: a PR
+    that was requested but failed fails the run, its artifact's paths kept.
+    ``keep_plan_path``: False for a Batch run, whose plan file is gone with
+    its container (``s3_uri`` only)."""
+    result.status = "succeeded"
+    result.title = outcome.title
+    result.markdown_path = str(outcome.markdown_path) if outcome.markdown_path else None
+    result.plan_path = (
+        str(outcome.plan_path) if outcome.plan_path and keep_plan_path else None
+    )
+    result.s3_uri = outcome.s3_uri
+    result.pr_url = outcome.pr_url
+    result.warnings = outcome.warnings
+    if outcome.pr_error is not None:
+        # The artifact is saved (paths above) but not published.
+        result.status = "failed"
+        result.pr_error = outcome.pr_error
+        result.error = f"Blog PR not created: {outcome.pr_error}"
+
+
+def record_error(
+    result: JobResult,
+    error: Exception,
+    rejected_errors: tuple[type[BaseException], ...],
+) -> None:
+    """Fold a run's (or ``publish``'s) failure into ``result``: a rejected
+    input, a post the blog rules or its images blocked (its rejected copy's
+    paths kept), or a failure."""
+    if isinstance(error, rejected_errors):
+        if _is_fetch_outage(error):  # the source exists but could not be reached
+            result.error = f"{type(error).__name__}: {error}"
+            logger.error("Run failed: %s", error)
+        else:
+            result.status = "rejected"
+            result.error = str(error)
+            logger.warning("Request rejected: %s", error)
+    elif isinstance(error, PostValidationError):
+        # The post broke a blog convention: nothing was published.
+        result.error = str(error)
+        result.violations = [str(v) for v in error.violations]
+        result.markdown_path = error.rejected_path
+        result.s3_uri = error.rejected_s3_uri
+        result.warnings = list(getattr(error, "run_notes", []))
+        logger.error("Post failed validation: %s", error)
+    elif isinstance(error, PostAssetError):
+        # A paper figure could not be stored: nothing was published.
+        result.error = f"{type(error).__name__}: {error}"
+        result.markdown_path = error.rejected_path
+        result.s3_uri = error.rejected_s3_uri
+        result.warnings = list(getattr(error, "run_notes", []))
+        logger.error("Post blocked by its images: %s", error)
+    else:
+        result.error = f"{type(error).__name__}: {error}"
+        result.warnings = list(getattr(error, "run_notes", []))
+        logger.error("Run failed: %s", error, exc_info=error)
 
 
 # SIGTERM (Batch timeout, cancel, host termination) or Ctrl-C. Batch may still
