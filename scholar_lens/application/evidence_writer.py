@@ -260,9 +260,14 @@ def cached_evidence(
 ) -> list[Evidence] | None:
     """A document's stored evidence still usable today, bound to the
     document's current source id (ids are numbered per run), or None when it
-    must be read again: unreadable, or nothing passes today's checks."""
+    must be read again: unreadable (not a non-empty list of records: only
+    a read that recorded something is stored), or nothing passes today's
+    checks."""
     try:
-        items = [Evidence.model_validate(e) for e in json.loads(raw)]
+        data = json.loads(raw)
+        if not isinstance(data, list) or not data:
+            raise ValueError("not a list of evidence records")
+        items = [Evidence.model_validate(e) for e in data]
     except (ValueError, ValidationError):
         logger.warning("Unreadable cached evidence %s; reading again.", key)
         return None
