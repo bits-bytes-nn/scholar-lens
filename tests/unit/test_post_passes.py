@@ -415,6 +415,62 @@ def test_a_later_outline_that_breaks_a_rule_falls_back_to_the_best_one(
     assert result.outline.sections
 
 
+class AttemptsModel(CoverageModel):
+    """The outline maps ``coverages[k]`` on its k-th answer."""
+
+    def __init__(self, coverages: list[dict[str, list[str]]]) -> None:
+        super().__init__("review", mapped_from=99)
+        self.coverages = coverages
+
+    async def structured(self, *, role, system, prompt, schema, context=""):  # type: ignore[no-untyped-def]
+        outline = await super().structured(
+            role=role, system=system, prompt=prompt, schema=schema, context=context
+        )
+        if schema is PaperOutline:
+            coverage = self.coverages[len(self.outline_prompts) - 1]
+            outline = outline.model_copy(update={"coverage": coverage})
+        return outline
+
+
+ONE = {"T1": ["E2"]}
+NONE: dict[str, list[str]] = {}
+
+
+@pytest.mark.parametrize(
+    ("coverages", "broken", "kept"),
+    [
+        # Sound and better, then sound and worse, then broken.
+        ([ONE, NONE, NONE], 3, ONE),
+        # Sound and worse, then sound and better, then broken.
+        ([NONE, ONE, NONE], 3, ONE),
+        # Sound and better, broken, then the last sound but worse.
+        ([ONE, NONE, NONE], 2, ONE),
+        # A tie keeps the later one; the last attempt sound.
+        ([NONE, NONE, NONE], 2, NONE),
+    ],
+)
+def test_the_outline_kept_is_the_sound_one_that_maps_the_most_targets(
+    monkeypatch: pytest.MonkeyPatch,
+    coverages: list[dict[str, list[str]]],
+    broken: int,
+    kept: dict[str, list[str]],
+) -> None:
+    model = AttemptsModel(coverages)
+    original = EvidencePaperEngine.outline_problems
+    seen: list[int] = []
+
+    def breaks_one(self: Any, outline: Any, ledger: Any) -> list[str]:
+        seen.append(1)
+        found = original(self, outline, ledger)
+        return found if len(seen) != broken else [*found, "a section breaks a rule"]
+
+    monkeypatch.setattr(EvidencePaperEngine, "outline_problems", breaks_one)
+    _, result = _run(model, outline_repairs=2)
+    assert len(model.outline_prompts) == 3
+    assert {t: ids for t, ids in result.outline.coverage.items() if ids} == kept
+    assert any("Key targets no section of the outline" in n for n in result.notes)
+
+
 def test_a_target_whose_source_gave_no_evidence_is_a_note_not_a_retry(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

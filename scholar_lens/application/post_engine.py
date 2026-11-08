@@ -564,8 +564,9 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
         key target no evidence of a section is mapped to is a problem too,
         unless no evidence of the ledger can state it (its sources gave
         none); on the last attempt it stays a note rather than a failed
-        run. When the later attempts break a rule, the best structurally
-        sound earlier outline (fewest unmapped targets) is kept.
+        run. When no attempt maps every target, the structurally sound
+        outline with the fewest unmapped targets is kept (the later one on
+        a tie), whether the last attempt was sound or not.
 
         Raises:
             ValueError: The outline still breaks the spec's rules.
@@ -622,12 +623,14 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
                 )
                 if not problems:
                     # The structurally sound outline that maps the most
-                    # targets: what a later attempt that breaks a rule
-                    # falls back to.
+                    # targets (the later one on a tie): what the last
+                    # attempt gives back, sound or not.
                     if best is None or len(missing) <= len(best[1]):
                         best = (outline, missing)
-                    if not missing or attempt == self.run.outline_repairs:
+                    if not missing:
                         return self._noted_coverage(outline, ledger)
+                    if attempt == self.run.outline_repairs:
+                        break
                 problems += missing
                 logger.warning(
                     "%s attempt %d unusable: %s",
@@ -646,8 +649,8 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
                 )
         if best is not None:
             logger.warning(
-                "%s: the last attempts broke the rules; keeping the best earlier "
-                "outline, %d key targets unmapped.",
+                "%s: no attempt mapped every key target; keeping the sound "
+                "outline that mapped the most, %d key targets unmapped.",
                 name.capitalize(),
                 len(best[1]),
             )
