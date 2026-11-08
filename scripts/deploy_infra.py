@@ -107,7 +107,6 @@ class PaperReviewStack(Stack):
         s3_bucket_name: str | None = None,
         s3_prefix: str = "",
         bedrock_region_name: str | None = None,
-        public_assets: bool = False,
         environment_vars: dict[str, str] | None = None,
         **kwargs: Any,
     ) -> None:
@@ -118,7 +117,6 @@ class PaperReviewStack(Stack):
         self.s3_bucket_name = s3_bucket_name
         self.s3_prefix = s3_prefix
         self.bedrock_region_name = bedrock_region_name
-        self.public_assets = public_assets
         # Keep encryption keys and logs when a prod stack is deleted.
         self.removal_policy = (
             RemovalPolicy.RETAIN if stage == "prod" else RemovalPolicy.DESTROY
@@ -272,12 +270,11 @@ class PaperReviewStack(Stack):
         )
         # Posts, figures, the translation guideline and the result
         # manifest (<prefix>/results/<job id>.json) all live under the prefix.
-        object_actions = ["s3:GetObject", "s3:PutObject"]
-        if self.public_assets:
-            object_actions.append("s3:PutObjectAcl")
         return [
             iam.PolicyStatement(
-                sid="S3ObjectAccess", actions=object_actions, resources=[object_arn]
+                sid="S3ObjectAccess",
+                actions=["s3:GetObject", "s3:PutObject"],
+                resources=[object_arn],
             ),
             # ListBucket lets a missing object (the optional translation
             # guideline) read as 404, not 403. A GetObject carries no
@@ -775,7 +772,6 @@ def main() -> None:
             s3_bucket_name=resources.s3_bucket_name,
             s3_prefix=resources.s3_prefix,
             bedrock_region_name=resources.bedrock_region_name,
-            public_assets=resources.github.public_assets,
             environment_vars=env_vars,
             env=core.Environment(
                 account=account_id, region=resources.default_region_name

@@ -595,10 +595,7 @@ class Publisher:
         staged = request.staged_images_dir
         if staged.is_dir() and any(staged.iterdir()):
             await asyncio.to_thread(
-                self.s3_handler.upload_directory,
-                staged,
-                images_key,
-                public_readable=self.github_config.public_assets,
+                self.s3_handler.upload_directory, staged, images_key
             )
         return f"s3://{self.s3_bucket_name}/{posts_key}/{markdown_path.name}"
 

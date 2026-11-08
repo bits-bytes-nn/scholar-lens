@@ -31,9 +31,6 @@ resources:
     summary_category: Paper Summaries
     tech_guide_category: Tech Guides
     survey_category: Paper Surveys   # a type the blog's post conventions must list
-    # Upload figures to S3 with a public-read ACL (blog images normally come
-    # from the blog repository, so keep this off).
-    public_assets: false
 
 # Any *_model_id accepts a LanguageModelId value (scholar_lens/src/constants.py),
 # e.g. anthropic.claude-fable-5-1 for the highest quality at a higher price.

@@ -63,18 +63,21 @@ class TestS3HandlerSync:
         assert count == 2
         assert _keys(boto_session) == {"out/image.png", "out/sub/b.jpg"}
 
-    def test_upload_directory_public_readable_does_not_error(
+    def test_uploaded_files_are_private(
         self, boto_session: boto3.Session, s3_bucket: str, tmp_path: Path
     ) -> None:
-        src = tmp_path / "pub"
+        src = tmp_path / "images"
         src.mkdir()
         (src / "page.png").write_bytes(b"\x89PNG\r\n")
         handler = S3Handler(boto_session, s3_bucket)
 
-        count = handler.upload_directory(src, s3_prefix="public", public_readable=True)
+        assert handler.upload_directory(src, s3_prefix="images") == 1
 
-        assert count == 1
-        assert _keys(boto_session) == {"public/page.png"}
+        acl = boto_session.client("s3").get_object_acl(
+            Bucket=s3_bucket, Key="images/page.png"
+        )
+        grantees = [g["Grantee"] for g in acl["Grants"]]
+        assert all(g.get("Type") == "CanonicalUser" for g in grantees)
 
     def test_upload_directory_rejects_non_directory(
         self, boto_session: boto3.Session, s3_bucket: str, tmp_path: Path

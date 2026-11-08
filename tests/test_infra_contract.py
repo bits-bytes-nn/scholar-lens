@@ -70,7 +70,7 @@ class TestStackWiring:
                 actions.update([value] if isinstance(value, str) else value)
         assert not {a for a in actions if a.startswith("batch:")}
         assert "s3:DeleteObject" not in actions
-        assert "s3:PutObjectAcl" not in actions  # public_assets is off
+        assert "s3:PutObjectAcl" not in actions  # uploads are always private
 
     @staticmethod
     def _statements(template: dict[str, Any], sid: str) -> list[dict[str, Any]]:

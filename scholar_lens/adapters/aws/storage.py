@@ -66,17 +66,12 @@ class S3Handler:
             raise S3OperationError(f"Failed to read '{s3_key}'") from e
         return data.decode("utf-8")
 
-    def upload_directory(
-        self,
-        local_dir: Path,
-        s3_prefix: str,
-        public_readable: bool = False,
-    ) -> int:
+    def upload_directory(self, local_dir: Path, s3_prefix: str) -> int:
+        """Upload every file under ``local_dir`` (private objects)."""
         if not local_dir.is_dir():
             raise NotADirectoryError(f"Local path is not a directory: {local_dir}")
 
         config = TransferConfig(use_threads=True, max_concurrency=10)
-        extra_args = {"ACL": "public-read"} if public_readable else {}
         upload_count = 0
 
         files_to_upload = [p for p in local_dir.rglob("*") if p.is_file()]
@@ -90,7 +85,6 @@ class S3Handler:
                     self.bucket_name,
                     s3_key,
                     Config=config,
-                    ExtraArgs=extra_args,
                 )
                 upload_count += 1
             except _UPLOAD_ERRORS as e:
