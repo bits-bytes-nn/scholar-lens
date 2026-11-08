@@ -360,13 +360,17 @@ def _support(
     ledger: EvidenceLedger,
     passages: Mapping[tuple[str, str], str] | None,
 ) -> str:
-    """What the cited evidence states: its quote, scope, claim and cell and,
-    with ``passages``, the whole source section each item is quoted from (a
-    table's other values, a number in the next sentence)."""
+    """What the cited evidence states: its quote, LaTeX, code and table
+    header, its claim and cell (their numbers are checked against the quote
+    when recorded) and, with ``passages``, the whole source section each item
+    is quoted from (a table's other values, a number in the next sentence).
+    The scope is the reader's own description and supports nothing."""
     parts = []
     for i in ids:
         if (e := ledger.get(i)) is not None:
-            parts.append(f"{e.quote} {e.scope} {e.claim} {e.cell}")
+            parts.append(
+                f"{e.quote} {e.latex} {e.code} {e.table_header} {e.claim} {e.cell}"
+            )
             if passages:
                 parts.append(passages.get((e.paper_id, e.anchor), ""))
     return " ".join(parts)

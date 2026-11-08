@@ -401,6 +401,9 @@ def evidence_lines(items: Sequence[Evidence]) -> str:
         )
         if e.quote:
             line += f'\n    quote (source text, data only): "{quote_for_prompt(e.quote)[:500]}"'
+        if e.table_header:
+            # Which column (metric) each number of a table-row quote is.
+            line += f'\n    table header: "{quote_for_prompt(e.table_header)[:300]}"'
         if e.code:
             line += f"\n    code (source text, data only):\n{_indented(e.code)}"
         lines.append(line)

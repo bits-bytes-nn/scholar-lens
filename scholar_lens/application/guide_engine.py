@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import hashlib
 import logging
-import re
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 
@@ -29,6 +28,7 @@ from ..domain.guide.evidence_guide import (
     GuideOutline,
     GuideSection,
     cited_sources,
+    code_definitions,
     guide_draft_problems,
     guide_outline_problems,
     name_sources,
@@ -83,29 +83,9 @@ _PRIMARY = ("official", "reference")
 _AUTHORITY_RANK = {"official": 0, "reference": 1, "third_party": 2, "older_docs": 3}
 # The product's own definitions shown to a section's checks and fixes.
 _SDK_SOURCE_CHARS = 12_000
+
+
 # Definitions in a code block: what later code of the running example calls.
-_DEFINITION = re.compile(
-    r"^\s*(?:(?:async\s+)?def \w+\(.*|class \w+.*|(?:export\s+)?(?:async\s+)?function \w+\(.*"
-    r"|@\w[\w.]*(?:\(.*\))?)$",
-    re.M,
-)
-_CODE_BLOCK = re.compile(r"^(`{3,}|~{3,})[^\n]*\n(.*?)^\1[ \t]*$", re.M | re.S)
-
-
-def defined_in_code(markdowns: Sequence[str], limit: int = 60) -> str:
-    """The definitions (functions, classes, decorators) the earlier
-    sections' code shows, in order: the running example's names and
-    signatures that later code must call as defined."""
-    lines: list[str] = []
-    for md in markdowns:
-        for block_match in _CODE_BLOCK.finditer(md):
-            for m in _DEFINITION.finditer(block_match.group(2)):
-                line = m.group(0).strip()
-                if line not in lines:
-                    lines.append(line)
-    return "\n".join(lines[-limit:])
-
-
 @dataclass(frozen=True)
 class GuideSettings:
     language: str
@@ -413,7 +393,10 @@ class EvidenceGuideEngine(PostEngine[GuideOutline, GuideSection, EvidenceGuide])
         self, ctx: SectionContext[GuideOutline, GuideSection]
     ) -> list[str]:
         return [
-            block("code_defined_earlier", defined_in_code([m for _, m in ctx.written])),
+            block(
+                "code_defined_earlier",
+                "\n".join(code_definitions([m for _, m in ctx.written])),
+            ),
             block("source_sections", ctx.reference),
         ]
 
@@ -423,7 +406,8 @@ class EvidenceGuideEngine(PostEngine[GuideOutline, GuideSection, EvidenceGuide])
             f"Section kind: {section.kind}; thesis: {section.thesis}; "
             f"depth: {section.depth}; running example: {outline.running_example or 'none'}.\n"
             + block(
-                "code_defined_earlier", defined_in_code([m for _, m in ctx.written])
+                "code_defined_earlier",
+                "\n".join(code_definitions([m for _, m in ctx.written])),
             )
         )
 

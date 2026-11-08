@@ -602,20 +602,6 @@ def test_a_fact_two_pages_state_is_kept_from_the_official_page() -> None:
     assert duplicate_evidence(ledger, {"D1": 0, "W1": 2}) == {"E1": "E2"}
 
 
-def test_code_defined_earlier_lists_the_running_examples_definitions() -> None:
-    from scholar_lens.application.guide_engine import defined_in_code
-
-    md = (
-        "## A\n\n```python\n@serve.deployment\nclass Translator:\n"
-        "    def translate(self, text: str) -> str:\n        return text\n```\n"
-    )
-    assert defined_in_code([md]).split("\n") == [
-        "@serve.deployment",
-        "class Translator:",
-        "def translate(self, text: str) -> str:",
-    ]
-
-
 def test_stripping_markers_leaves_no_empty_heading_or_marker_line() -> None:
     body = "## A\n\n[[E1]]\n\n## B\n\n내용입니다 [[E2]].\n"
     assert strip_markers(body) == "## B\n\n내용입니다.\n"
