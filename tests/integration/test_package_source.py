@@ -275,3 +275,31 @@ def test_a_target_release_the_index_lacks_skips_the_checks_with_a_note() -> None
     # Never the latest release in its place.
     assert ("source", "gear", None) not in index.asked
     assert len(notes) == 2 and all("gear 0.9" in n for n in notes)
+
+
+class _UnreachableAtRelease(_ReleaseIndex):
+    """The index answers for the latest release, not for the target (an
+    outage or an unknown release reported as None by the port)."""
+
+    def extras(
+        self, name: str, release: str | None = None
+    ) -> tuple[str, frozenset[str]] | None:
+        self.asked.append(("extras", name, release))
+        return None if release else ("1.0", frozenset({"x1.0"}))
+
+    def source(self, name: str, release: str | None = None) -> PackageSource | None:
+        self.asked.append(("source", name, release))
+        if release:
+            return None
+        return PackageSource("1.0", {"gear/__init__.py": "def run():\n    pass\n"})
+
+
+def test_a_target_release_the_index_cannot_answer_is_noted_never_replaced() -> None:
+    index = _UnreachableAtRelease()
+    latest = {"gear": ("1.0", frozenset({"x1.0"})), "other": ("3.0", frozenset())}
+    notes: list[str] = []
+    assert guide_writer.product_sdk(latest, ["gear"], index, "0.9", notes) is None
+    provided = guide_writer.release_packages(latest, ["gear"], "0.9", index, notes)
+    # The latest release's extras never stand in for the target's.
+    assert provided == {"other": ("3.0", frozenset())}
+    assert len(notes) == 2 and all("gear 0.9" in n for n in notes)

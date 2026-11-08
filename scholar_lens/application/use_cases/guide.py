@@ -433,8 +433,16 @@ def release_packages(
             notes.append(_release_note(name, release, e, "install extras check"))
             out.pop(name, None)
             continue
-        if found is not None:
-            out[name] = found
+        if found is None:
+            # Unknown or unreachable at the target: its latest release's
+            # extras are another release's, so it is not checked.
+            notes.append(
+                f"Package {name} {release} could not be read from the package "
+                "index; its install extras were not checked."
+            )
+            out.pop(name, None)
+            continue
+        out[name] = found
     return out
 
 
@@ -463,6 +471,11 @@ def product_sdk(
                 notes.append(_release_note(name, release, e, "code check"))
             continue
         if found is None:
+            if notes is not None and release:
+                notes.append(
+                    f"Package {name} {release} could not be read from the "
+                    "package index; its code was not checked."
+                )
             continue
         read.append((name, found))
     files = {path: text for _, found in read for path, text in found.files.items()}
