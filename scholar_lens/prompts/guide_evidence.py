@@ -38,10 +38,12 @@ is wrong; one that relies on behaviour it does not show is unsupported.
 """
 
 SOURCE_AUTHORITY = """
-Sources carry an authority label:
-- official: the requested documentation (current version). It alone decides
-  commands, flags, API names, defaults, configuration keys, environment
-  variables, metric names and version or platform support.
+Sources carry a label: an authority, then the version and publication date
+when known. The guide is about one target version (the run notes name it).
+- official: the requested documentation (current version), or official_repo:
+  the project's repository at that release. It alone decides commands,
+  flags, API names, defaults, configuration keys, environment variables,
+  metric names and version or platform support.
 - reference: material the user chose (a paper, a design doc, a deep-dive
   post): build on it for concepts, internals, design rationale and
   trade-offs.
@@ -49,8 +51,11 @@ Sources carry an authority label:
   integration patterns; primary ones (a paper, the project's design docs or
   maintainers' posts) outweigh tutorials; a vendor page speaks only for its
   own product.
-- older_docs: another version of the docs; it never decides current
-  behaviour; a mechanism only it describes is that version's design.
+- older_docs: another version of the docs, or dev_docs: unreleased
+  development docs; neither decides current behaviour; a mechanism or a
+  setting only it describes is stated with its version ("v0.9에서는",
+  "개발 버전에서는").
+- forum: a discussion thread; it reports experience, never behaviour.
 Where a non-official page conflicts with an official one about current
 behaviour, the official page wins.
 """

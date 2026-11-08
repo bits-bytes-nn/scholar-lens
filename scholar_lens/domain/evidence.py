@@ -125,6 +125,15 @@ class SourceDocument(_Strict):
     published: str = ""
     language: str = ""
 
+    def label(self) -> str:
+        """How prompts name the source's standing: its authority (the finer
+        record when there is one), version and publication date, e.g.
+        ``official_repo, v2.3.0, 2026-05-01``; the version lets a writer say
+        which release a fact is about."""
+        parts = [self.source_authority or self.authority or "third_party"]
+        parts += [p for p in (self.version, self.published) if p]
+        return ", ".join(parts)
+
     @classmethod
     def from_markdown(
         cls,

@@ -209,7 +209,7 @@ class EvidenceGuideEngine(PostEngine[GuideOutline, GuideSection, EvidenceGuide])
             left -= len(text)
             parts.append(
                 f"[{sid} {anchor}: {document.title} | {section.heading}"
-                f" | {document.authority or 'third_party'}]\n{text}"
+                f" | {document.label()}]\n{text}"
             )
         return "\n\n".join(parts)
 
@@ -249,7 +249,7 @@ class EvidenceGuideEngine(PostEngine[GuideOutline, GuideSection, EvidenceGuide])
                     [
                         f"Guide topic: {topic}",
                         f"Page {document.paper_id}: {document.title} ({document.url}); "
-                        f"authority: {document.authority or 'third_party'}.",
+                        f"authority: {document.label()}.",
                         block("outline", document.outline()),
                         f"Guide language for claims and cells: {self.settings.language}.",
                         (
@@ -301,9 +301,7 @@ class EvidenceGuideEngine(PostEngine[GuideOutline, GuideSection, EvidenceGuide])
             (d.paper_id, s.anchor): s.text for d in documents for s in d.sections
         }
         # The claim check sees which kind of source a fact comes from.
-        self._names = {
-            d.paper_id: f"{d.title} [{d.authority or 'third_party'}]" for d in documents
-        }
+        self._names = {d.paper_id: f"{d.title} [{d.label()}]" for d in documents}
         # The docs' main topics and the user's material: the readers record
         # their evidence first.
         self.targets = await self.key_targets(documents)
@@ -326,7 +324,7 @@ class EvidenceGuideEngine(PostEngine[GuideOutline, GuideSection, EvidenceGuide])
         self, ledger: EvidenceLedger, duplicates: Mapping[str, str]
     ) -> str:
         sources = "\n".join(
-            f"- {sid} | {d.authority or 'third_party'} | {d.title} | {d.url}"
+            f"- {sid} | {d.label()} | {d.title} | {d.url}"
             for sid, d in self._documents.items()
         )
         return "\n\n".join(

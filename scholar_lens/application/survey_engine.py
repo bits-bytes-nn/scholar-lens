@@ -183,10 +183,6 @@ class EvidenceSurveyEngine(PostEngine[EvidenceOutline, OutlineSection, EvidenceS
             ledger.extend(items)
             kind = job.document.kind if job is not None else "none"
             kinds[paper.id] = kind
-            if paper.role == "core" and kind == "abstract":
-                self.notes.append(
-                    f"Core paper {paper.id} was read from its abstract only."
-                )
         return ledger, kinds
 
     def _read_job(

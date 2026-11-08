@@ -120,3 +120,21 @@ def test_a_page_keeps_its_own_date_in_the_record() -> None:
 )
 def test_the_sdk_language_comes_from_the_url_path(url: str, language: str) -> None:
     assert url_language(url) == language
+
+
+def test_a_source_label_names_its_record() -> None:
+    from scholar_lens.domain.evidence import SourceDocument
+
+    doc = SourceDocument.from_markdown(
+        "D1", "Docs", "full_text", "## A\n\nText.", authority="official"
+    )
+    assert doc.label() == "official"
+    recorded = doc.model_copy(
+        update={
+            "source_authority": "official_repo",
+            "version": "v2.3.0",
+            "published": "2026-05-01",
+        }
+    )
+    assert recorded.label() == "official_repo, v2.3.0, 2026-05-01"
+    assert doc.model_copy(update={"authority": ""}).label() == "third_party"
