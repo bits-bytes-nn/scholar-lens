@@ -18,11 +18,7 @@ from scholar_lens.adapters.scholarly.survey_documents import (
     MAX_PDF_PAGES,
     PaperDocuments,
 )
-from scholar_lens.adapters.web.research import (
-    PageContent,
-    ResearchCorpus,
-    SourceFetchError,
-)
+from scholar_lens.domain.research import PageContent, ResearchCorpus, SourceFetchError
 from scholar_lens.domain.survey.plan import PlanPaper
 
 

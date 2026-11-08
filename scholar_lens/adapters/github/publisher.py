@@ -33,7 +33,6 @@ import httpx
 from github import Auth, Github, GithubRetry
 
 from scholar_lens.adapters.aws.storage import S3Handler, S3OperationError
-from scholar_lens.adapters.bedrock.prompt_safety import strip_defanging
 from scholar_lens.adapters.documents.images import (
     is_ar5iv_placeholder,
     is_svg,
@@ -63,6 +62,7 @@ from scholar_lens.domain.markdown.lint import (
 )
 from scholar_lens.domain.markdown.math import IMAGE, segments
 from scholar_lens.domain.post_names import post_slug, same_post
+from scholar_lens.domain.prompt_safety import strip_defanging
 from scholar_lens.domain.publishing import (
     BLOG_IMAGES_DIR,
     REJECTED_IMAGES_DIRNAME,

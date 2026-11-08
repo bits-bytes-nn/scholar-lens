@@ -10,7 +10,6 @@ import pymupdf
 from langchain_core.output_parsers import StrOutputParser
 
 from scholar_lens.adapters.bedrock.chat_models import BedrockLanguageModelFactory
-from scholar_lens.adapters.bedrock.prompt_safety import neutralize_prompt_tags
 from scholar_lens.adapters.bedrock.prompts.extraction import CitationSummaryPrompt
 from scholar_lens.adapters.documents.parser import ContentParseError, HTMLParser
 from scholar_lens.adapters.retry import RetryableBase
@@ -19,6 +18,7 @@ from scholar_lens.adapters.scholarly.metadata import ChainedMetadataResolver
 from scholar_lens.domain.constants import AppConstants, LanguageModelId, LocalPaths
 from scholar_lens.domain.ids import arxiv_id_from_doi, normalize_arxiv_id
 from scholar_lens.domain.paper.models import Content
+from scholar_lens.domain.prompt_safety import neutralize_prompt_tags
 from scholar_lens.domain.usage_context import staged
 
 logger = logging.getLogger(__name__)

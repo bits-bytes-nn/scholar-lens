@@ -10,7 +10,6 @@ from langchain_core.callbacks import BaseCallbackHandler
 
 from scholar_lens.adapters.bedrock.chat_models import BedrockLanguageModelFactory
 from scholar_lens.adapters.bedrock.output_parsers import HTMLTagOutputParser
-from scholar_lens.adapters.bedrock.prompt_safety import neutralize_prompt_tags
 from scholar_lens.adapters.bedrock.prompts.extraction import (
     AttributesExtractionPrompt,
     CitationExtractionPrompt,
@@ -23,6 +22,7 @@ from scholar_lens.adapters.scholarly.arxiv import (
 )
 from scholar_lens.domain.constants import LanguageModelId
 from scholar_lens.domain.paper.models import Attributes, Citation
+from scholar_lens.domain.prompt_safety import neutralize_prompt_tags
 from scholar_lens.domain.text import is_affirmative, is_placeholder
 from scholar_lens.domain.titles import titles_match
 from scholar_lens.domain.usage_context import staged

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from scholar_lens.adapters.bedrock.prompt_safety import (
+from scholar_lens.domain.prompt_safety import (
     neutralize_prompt_tags,
     prompt_fence_tags,
     strip_defanging,

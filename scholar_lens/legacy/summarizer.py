@@ -17,7 +17,6 @@ from langchain_core.runnables import Runnable
 
 from scholar_lens.adapters.bedrock.chat_models import BedrockLanguageModelFactory
 from scholar_lens.adapters.bedrock.output_parsers import HTMLTagOutputParser
-from scholar_lens.adapters.bedrock.prompt_safety import neutralize_prompt_tags
 from scholar_lens.adapters.bedrock.prompts.base import BasePrompt
 from scholar_lens.adapters.bedrock.usage import TokenBudgetGuard
 from scholar_lens.adapters.documents.html import measure_execution_time
@@ -30,6 +29,7 @@ from scholar_lens.domain.post_format import (
     split_leading_h1,
     summary_lead,
 )
+from scholar_lens.domain.prompt_safety import neutralize_prompt_tags
 from scholar_lens.domain.quality_gate import publish_blockers
 from scholar_lens.domain.usage import TokenBudgetExceeded
 from scholar_lens.domain.usage_context import staged

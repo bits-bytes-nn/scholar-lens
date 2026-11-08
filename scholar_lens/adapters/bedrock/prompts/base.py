@@ -7,9 +7,11 @@ from langchain_core.prompts import (
     SystemMessagePromptTemplate,
 )
 
-# Shared writing rules for the review, summary and guide prompts. Each block
-# states one concern once; prompts compose the blocks they need instead of
-# restating them, so the rules cannot drift between artifacts.
+from scholar_lens.domain.prompt_safety import register_prompt_templates
+
+# Shared writing rules for the review, summary and guide prompts live in
+# scholar_lens.domain.prompts.rules: each block states one concern once and
+# prompts compose the blocks they need, so the rules cannot drift.
 
 
 @dataclass(frozen=True)
@@ -18,6 +20,14 @@ class BasePrompt(ABC):
     human_prompt_template: str
     input_variables: list[str]
     output_variables: list[str] | None = None
+
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        super().__init_subclass__(**kwargs)
+        # Untrusted input can never close one of this prompt's fences.
+        register_prompt_templates(
+            str(getattr(cls, "system_prompt_template", "") or ""),
+            str(getattr(cls, "human_prompt_template", "") or ""),
+        )
 
     def __post_init__(self) -> None:
         self._validate_prompt_variables()

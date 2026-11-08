@@ -7,7 +7,6 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from scholar_lens.adapters.web.research import PageContent
 from scholar_lens.application.evidence_writer import (
     ClaimCheck,
     Edit,
@@ -38,6 +37,7 @@ from scholar_lens.domain.guide.evidence_guide import (
     strip_markers,
 )
 from scholar_lens.domain.post_spec import evidence_policy
+from scholar_lens.domain.research import PageContent
 from scholar_lens.domain.sources import SourceSet
 from scholar_lens.domain.specs import GUIDE_SPEC
 from scholar_lens.src.guide_writer import _source_urls, guide_documents

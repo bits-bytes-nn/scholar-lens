@@ -10,8 +10,10 @@ and code in the source stay intact.
 
 The tag set is derived from the prompt templates themselves (every tag that
 wraps a ``{placeholder}``), so a new fence is protected without anyone
-remembering to list it. ``strip_defanging`` removes the marks again from
-generated Markdown, in case a model copied a defanged tag into its output.
+remembering to list it: each template class registers its templates when it
+is defined (:func:`register_prompt_templates`). ``strip_defanging`` removes the
+marks again from generated Markdown, in case a model copied a defanged tag into
+its output.
 """
 
 from __future__ import annotations
@@ -19,47 +21,38 @@ from __future__ import annotations
 import functools
 import re
 
-# Importing the package registers its templates; the sections engine's
-# templates register when scholar_lens.legacy is imported (the composition
-# root imports it before any run).
-from scholar_lens.adapters.bedrock import prompts  # noqa: F401
-from scholar_lens.adapters.bedrock.prompts.base import BasePrompt
-
 # A fence is a tag whose body holds a ``{placeholder}`` the input is filled
 # into; output-format tags (``<plan>``, ``<edit>``, ...) carry no input.
 _FENCED_PLACEHOLDER = re.compile(r"<([A-Za-z_][A-Za-z0-9_]*)>(.*?)</\1>", re.DOTALL)
 _PLACEHOLDER = re.compile(r"(?<!\{)\{[A-Za-z_]\w*\}(?!\})")
 _ZERO_WIDTH_SPACE = "\u200b"
 
-
-def _prompt_classes() -> list[type]:
-    found: list[type] = []
-    pending = list(BasePrompt.__subclasses__())
-    while pending:
-        cls = pending.pop()
-        found.append(cls)
-        pending.extend(cls.__subclasses__())
-    return found
+_TAGS: set[str] = set()
 
 
-@functools.cache
+def register_prompt_templates(*templates: str) -> None:
+    """Protect the fences of ``templates`` (a prompt's system and human
+    templates) from now on."""
+    found = {
+        match.group(1).lower()
+        for template in templates
+        for match in _FENCED_PLACEHOLDER.finditer(template or "")
+        if _PLACEHOLDER.search(match.group(2))
+    }
+    if not found <= _TAGS:
+        _TAGS.update(found)
+        _fence_pattern.cache_clear()
+
+
 def prompt_fence_tags() -> frozenset[str]:
-    """Names of the tags that wrap an input placeholder in any prompt template."""
-    tags: set[str] = set()
-    for cls in _prompt_classes():
-        for attr in ("system_prompt_template", "human_prompt_template"):
-            template = str(getattr(cls, attr, "") or "")
-            tags.update(
-                match.group(1).lower()
-                for match in _FENCED_PLACEHOLDER.finditer(template)
-                if _PLACEHOLDER.search(match.group(2))
-            )
-    return frozenset(tags)
+    """Names of the tags that wrap an input placeholder in any registered
+    prompt template."""
+    return frozenset(_TAGS)
 
 
 @functools.cache
 def _fence_pattern() -> re.Pattern[str]:
-    names = sorted(prompt_fence_tags(), key=len, reverse=True)
+    names = sorted(_TAGS, key=len, reverse=True)
     # Spacing variants ("</ paper>", "< /paper >") and attributes still read
     # as the fence to a model, so they are defanged too.
     return re.compile(

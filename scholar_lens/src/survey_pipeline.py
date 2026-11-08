@@ -30,7 +30,6 @@ from langchain_core.runnables import Runnable
 
 from scholar_lens.adapters.aws.storage import S3Handler
 from scholar_lens.adapters.bedrock.chat_models import BedrockLanguageModelFactory
-from scholar_lens.adapters.bedrock.prompt_safety import neutralize_prompt_tags
 from scholar_lens.adapters.bedrock.prompts.base import BasePrompt
 from scholar_lens.adapters.bedrock.prompts.survey import (
     SurveyScopePrompt,
@@ -50,15 +49,16 @@ from scholar_lens.adapters.scholarly.index import (
     openalex_record,
 )
 from scholar_lens.adapters.scholarly.metadata import ProviderUnavailableError
-from scholar_lens.adapters.web.research import (
+from scholar_lens.adapters.web.research import WebResearcher
+from scholar_lens.domain.constants import LanguageModelId, S3Paths
+from scholar_lens.domain.jobs import JobRequest
+from scholar_lens.domain.prompt_safety import neutralize_prompt_tags
+from scholar_lens.domain.research import (
     PageContent,
     ResearchCorpus,
     SourceFetchError,
-    WebResearcher,
     page_key,
 )
-from scholar_lens.domain.constants import LanguageModelId, S3Paths
-from scholar_lens.domain.jobs import JobRequest
 from scholar_lens.domain.survey.plan import (
     Candidate,
     PlanReference,

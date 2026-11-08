@@ -34,7 +34,6 @@ from nltk.tokenize.punkt import PunktTokenizer
 from scholar_lens.adapters.aws.environment import is_running_in_aws
 from scholar_lens.adapters.bedrock.chat_models import BedrockLanguageModelFactory
 from scholar_lens.adapters.bedrock.output_parsers import HTMLTagOutputParser
-from scholar_lens.adapters.bedrock.prompt_safety import neutralize_prompt_tags
 from scholar_lens.adapters.bedrock.prompts.base import BasePrompt
 from scholar_lens.adapters.bedrock.usage import TokenBudgetGuard
 from scholar_lens.adapters.documents.html import measure_execution_time
@@ -51,6 +50,7 @@ from scholar_lens.domain.paper.models import (
     ReviewText,
 )
 from scholar_lens.domain.post_format import same_as_title
+from scholar_lens.domain.prompt_safety import neutralize_prompt_tags
 from scholar_lens.domain.quality_gate import publish_blockers
 from scholar_lens.domain.review_plan import (
     RANGE_PADDING,

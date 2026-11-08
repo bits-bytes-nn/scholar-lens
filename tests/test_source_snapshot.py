@@ -9,13 +9,13 @@ from unittest.mock import MagicMock
 import pytest
 
 from scholar_lens.adapters.scholarly.survey_documents import EvidenceTextStore
-from scholar_lens.adapters.web.research import PageContent, ResearchCorpus, SearchResult
 from scholar_lens.adapters.web.snapshot import (
     SNAPSHOT_FORMAT,
     SnapshotPolicy,
     load_snapshot,
     snapshot_key,
 )
+from scholar_lens.domain.research import PageContent, ResearchCorpus, SearchResult
 from scholar_lens.domain.sources import DomainClasses
 from tests.test_tech_guide import _make_generator, _relevant
 

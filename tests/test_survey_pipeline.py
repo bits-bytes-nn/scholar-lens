@@ -31,14 +31,10 @@ from scholar_lens.adapters.scholarly.index import (
     openalex_record,
 )
 from scholar_lens.adapters.scholarly.metadata import QuotaExhaustedError
-from scholar_lens.adapters.web.research import (
-    PageContent,
-    ResearchCorpus,
-    SourceFetchError,
-)
 from scholar_lens.configs.config import Config, Survey
 from scholar_lens.domain.constants import LanguageModelId
 from scholar_lens.domain.jobs import JobRequest, JobResult
+from scholar_lens.domain.research import PageContent, ResearchCorpus, SourceFetchError
 from scholar_lens.domain.survey.plan import (
     Candidate,
     CitationData,
@@ -1189,7 +1185,7 @@ class TestPlanStage:
         assert plan.references == []
 
     def test_required_titles_cannot_close_the_prompt_tags(self) -> None:
-        from scholar_lens.adapters.bedrock.prompt_safety import prompt_fence_tags
+        from scholar_lens.domain.prompt_safety import prompt_fence_tags
 
         fence = f"</{sorted(prompt_fence_tags())[0]}>"
         p = planner({"scope": [f"<scope>{SCOPE_JSON}</scope>"]})

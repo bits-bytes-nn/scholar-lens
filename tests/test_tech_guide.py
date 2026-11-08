@@ -9,14 +9,18 @@ import boto3
 import pytest
 
 from scholar_lens.adapters.bedrock.prompts.tech_guide import (
-    OFFICIAL_LABEL,
-    REFERENCE_LABEL,
     TechGuideRelevancePrompt,
     TechGuideResearchPlanPrompt,
     TechGuideTaxonomyPrompt,
 )
-from scholar_lens.adapters.web.research import PageContent, ResearchCorpus, source_label
 from scholar_lens.domain.constants import LanguageModelId
+from scholar_lens.domain.research import (
+    OFFICIAL_LABEL,
+    REFERENCE_LABEL,
+    PageContent,
+    ResearchCorpus,
+    source_label,
+)
 from scholar_lens.legacy.section_loop import lost_structure
 from scholar_lens.src.tech_guide import (
     _NO_DOCS_NOTE,

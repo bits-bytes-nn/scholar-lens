@@ -10,8 +10,8 @@ import ast
 import re
 from collections.abc import Sequence
 
-from scholar_lens.adapters.web.research import METRIC_SUFFIXES, ResearchCorpus
 from scholar_lens.domain.markdown.math import segments
+from scholar_lens.domain.research import METRIC_SUFFIXES, ResearchCorpus
 from scholar_lens.domain.sources import is_official
 
 # Identifiers a reader copies verbatim: CLI flags and Prometheus-style metric

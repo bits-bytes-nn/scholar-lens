@@ -25,7 +25,6 @@ from scholar_lens import cli
 from scholar_lens.adapters.bedrock.strands_models import RoleModel
 from scholar_lens.adapters.bedrock.usage import TokenUsageTracker
 from scholar_lens.adapters.github.publisher import Publisher
-from scholar_lens.adapters.web.research import PageContent, ResearchCorpus
 from scholar_lens.application import survey_engine
 from scholar_lens.application.survey_engine import EvidenceSurvey
 from scholar_lens.configs.config import Config, Survey
@@ -38,6 +37,7 @@ from scholar_lens.domain.conventions import (
 )
 from scholar_lens.domain.evidence import Evidence
 from scholar_lens.domain.jobs import JobRequest
+from scholar_lens.domain.research import PageContent, ResearchCorpus
 from scholar_lens.domain.survey.plan import SourceRecord, SurveyInputError, SurveyPlan
 from scholar_lens.domain.survey.post import (
     author_year,

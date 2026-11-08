@@ -27,7 +27,6 @@ from langchain_core.runnables import Runnable
 from scholar_lens.adapters.aws.storage import S3Handler
 from scholar_lens.adapters.bedrock.chat_models import BedrockLanguageModelFactory
 from scholar_lens.adapters.bedrock.output_parsers import HTMLTagOutputParser
-from scholar_lens.adapters.bedrock.prompt_safety import neutralize_prompt_tags
 from scholar_lens.adapters.bedrock.prompts.survey import SurveyFinalizationPrompt
 from scholar_lens.adapters.bedrock.usage import TokenUsageTracker
 from scholar_lens.adapters.github.publisher import PublishRequest, build_pr_body
@@ -45,6 +44,7 @@ from scholar_lens.domain.markdown.lint import drop_unknown_images, fill_image_al
 from scholar_lens.domain.markdown.math import has_math, normalize_math
 from scholar_lens.domain.post_format import build_post_meta, render_front_matter
 from scholar_lens.domain.post_names import slugify, title_slug
+from scholar_lens.domain.prompt_safety import neutralize_prompt_tags
 from scholar_lens.domain.review_plan import digest_sections
 from scholar_lens.domain.survey.plan import (
     SourceRecord,

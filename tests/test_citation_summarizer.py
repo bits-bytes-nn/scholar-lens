@@ -387,7 +387,7 @@ class _RecordingChain(_FakeChain):
 
 
 def test_citation_prompt_fences_are_registered() -> None:
-    from scholar_lens.adapters.bedrock.prompt_safety import prompt_fence_tags
+    from scholar_lens.domain.prompt_safety import prompt_fence_tags
 
     assert {"reference", "citing_context"} <= prompt_fence_tags()
 

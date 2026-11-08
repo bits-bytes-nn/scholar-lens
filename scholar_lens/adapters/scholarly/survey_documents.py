@@ -20,13 +20,10 @@ from scholar_lens.adapters.aws.storage import S3Handler, S3OperationError
 from scholar_lens.adapters.retry import is_access_error
 from scholar_lens.adapters.scholarly.index import OpenAlexIndex
 from scholar_lens.adapters.scholarly.paper_source import PaperSourceError, PdfUrlSource
-from scholar_lens.adapters.web.research import (
-    ResearchCorpus,
-    SourceFetchError,
-    WebResearcher,
-)
+from scholar_lens.adapters.web.research import WebResearcher
 from scholar_lens.domain.constants import S3Paths
 from scholar_lens.domain.evidence import SourceDocument
+from scholar_lens.domain.research import ResearchCorpus, SourceFetchError
 from scholar_lens.domain.survey.plan import PlanPaper, unversioned_arxiv_id
 
 logger = logging.getLogger(__name__)

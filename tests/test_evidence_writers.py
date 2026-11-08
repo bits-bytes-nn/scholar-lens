@@ -17,12 +17,13 @@ import pytest
 from scholar_lens.adapters.bedrock import strands_models
 from scholar_lens.adapters.bedrock.strands_models import RoleModel
 from scholar_lens.adapters.bedrock.usage import TokenUsageTracker
-from scholar_lens.adapters.web.research import OfficialDocs, PageContent, ResearchCorpus
 from scholar_lens.application import guide_engine, paper_engine
 from scholar_lens.application.paper_engine import EvidencePaper
 from scholar_lens.configs import Config
 from scholar_lens.domain.evidence import EvidenceLedger, SourceDocument
 from scholar_lens.domain.paper.models import Attributes, Content, Paper, ReviewText
+from scholar_lens.domain.research import PageContent, ResearchCorpus
+from scholar_lens.domain.sources import OfficialDocs
 from scholar_lens.src import evidence_models, guide_writer, paper_writer, runtime
 from scholar_lens.src.tech_guide import GuideMaterial
 

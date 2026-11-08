@@ -8,8 +8,9 @@ import json
 import pytest
 from bs4 import BeautifulSoup
 
-from scholar_lens.adapters.web.research import PageContent, published_date
+from scholar_lens.adapters.web.research import published_date
 from scholar_lens.domain.evidence import SourceDocument
+from scholar_lens.domain.research import PageContent
 from scholar_lens.domain.sources import SourceSet, url_language
 from scholar_lens.src.guide_writer import guide_documents
 

@@ -8,11 +8,8 @@ from unittest.mock import MagicMock
 import httpx
 import pytest
 
-from scholar_lens.adapters.web.research import (
-    PageContent,
-    ResearchCorpus,
-    WebResearcher,
-)
+from scholar_lens.adapters.web.research import WebResearcher
+from scholar_lens.domain.research import PageContent, ResearchCorpus
 from scholar_lens.domain.sources import SourceSet
 from tests.test_tech_guide import _make_generator, _relevant
 

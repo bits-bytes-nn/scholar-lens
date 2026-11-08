@@ -35,32 +35,17 @@ from langchain_core.runnables import Runnable
 
 from scholar_lens.adapters.bedrock.chat_models import BedrockLanguageModelFactory
 from scholar_lens.adapters.bedrock.output_parsers import HTMLTagOutputParser
-from scholar_lens.adapters.bedrock.prompt_safety import neutralize_prompt_tags
 from scholar_lens.adapters.bedrock.prompts.base import BasePrompt
 from scholar_lens.adapters.bedrock.prompts.tech_guide import (
-    REFERENCE_LABEL,
     TechGuideRelevancePrompt,
     TechGuideResearchPlanPrompt,
     TechGuideTaxonomyPrompt,
 )
 from scholar_lens.adapters.retry import RetryableBase
-from scholar_lens.adapters.web.authority import (
-    mentions_any,
-    official_reference,
-    third_party_identifiers,
-)
 from scholar_lens.adapters.web.research import (
     MAX_REFERENCE_PAGES,
     MAX_REFERENCE_SEARCHES,
-    OfficialDocs,
-    PageContent,
-    ResearchCorpus,
-    SourceFetchError,
     WebResearcher,
-    arxiv_paper_urls,
-    page_key,
-    product_names,
-    source_label,
 )
 from scholar_lens.adapters.web.snapshot import (
     CorpusSnapshot,
@@ -70,12 +55,29 @@ from scholar_lens.adapters.web.snapshot import (
     snapshot_key,
 )
 from scholar_lens.domain.constants import LanguageModelId
+from scholar_lens.domain.guide.authority import (
+    mentions_any,
+    official_reference,
+    third_party_identifiers,
+)
 from scholar_lens.domain.guide.evidence_guide import install_requirements
 from scholar_lens.domain.guide.models import TechGuide
+from scholar_lens.domain.prompt_safety import neutralize_prompt_tags
+from scholar_lens.domain.research import (
+    REFERENCE_LABEL,
+    PageContent,
+    ResearchCorpus,
+    SourceFetchError,
+    arxiv_paper_urls,
+    page_key,
+    product_names,
+    source_label,
+)
 from scholar_lens.domain.review_plan import digest_sections
 from scholar_lens.domain.sources import (
     OFFICIAL_AUTHORITIES,
     DomainClasses,
+    OfficialDocs,
     SourceSet,
     TagLookup,
     search_exclusions,

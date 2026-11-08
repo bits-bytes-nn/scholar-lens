@@ -21,18 +21,13 @@ from scholar_lens.adapters.packages.pypi import (
     package_extras,
     package_source,
 )
-from scholar_lens.adapters.web.authority import (
-    official_reference,
-    unverified_identifiers,
-)
-from scholar_lens.adapters.web.research import (
-    PageContent,
-    ResearchCorpus,
-    page_key,
-)
 from scholar_lens.adapters.web.snapshot import SnapshotPolicy
 from scholar_lens.domain.constants import LanguageModelId, S3Paths
 from scholar_lens.domain.evidence import Authority, SourceAuthority, SourceDocument
+from scholar_lens.domain.guide.authority import (
+    official_reference,
+    unverified_identifiers,
+)
 from scholar_lens.domain.guide.evidence_guide import (
     SOURCE_ID_PREFIX,
     install_requirements,
@@ -43,6 +38,7 @@ from scholar_lens.domain.guide.evidence_guide import (
 from scholar_lens.domain.guide.models import TechGuide
 from scholar_lens.domain.guide.sdk_index import SdkIndex, api_problems
 from scholar_lens.domain.post_names import slugify
+from scholar_lens.domain.research import PageContent, ResearchCorpus, page_key
 from scholar_lens.domain.sources import engine_authority
 from scholar_lens.src.logger import logger
 from scholar_lens.src.runtime import RunContext

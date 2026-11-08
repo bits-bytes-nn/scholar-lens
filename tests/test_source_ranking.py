@@ -12,13 +12,11 @@ import pytest
 from scholar_lens.adapters.web.research import (
     BraveSearchProvider,
     FallbackSearchProvider,
-    PageContent,
-    ResearchCorpus,
-    SearchResult,
     TavilySearchProvider,
     WebResearcher,
     WebSearchProvider,
 )
+from scholar_lens.domain.research import PageContent, ResearchCorpus, SearchResult
 from scholar_lens.domain.sources import DomainClasses, SourceSet, search_exclusions
 
 DOCS = "https://docs.example.dev/en/latest/"

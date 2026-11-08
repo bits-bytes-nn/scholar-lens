@@ -4,14 +4,6 @@ engine's prompts are in ``prompts/guide_evidence.py``)."""
 
 from scholar_lens.adapters.bedrock.prompts.base import BasePrompt
 
-# How a source is labelled in a prompt. Official pages decide commands, flags
-# and defaults; reference material (chosen by the user) and third-party pages
-# ground concepts, internals and architecture.
-OFFICIAL_LABEL = "official documentation"
-OLDER_DOCS_LABEL = "older docs version"
-REFERENCE_LABEL = "reference material"
-THIRD_PARTY_LABEL = "third-party"
-
 
 class TechGuideResearchPlanPrompt(BasePrompt):
     """Turns a seed topic + initial sources into targeted web-search queries.
