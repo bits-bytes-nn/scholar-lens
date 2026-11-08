@@ -8,6 +8,7 @@ inside, how to use and run it, and when to choose it. Deterministic checks in
 
 from __future__ import annotations
 
+from scholar_lens.domain.program import EXCERPT_MARKER
 from scholar_lens.domain.prompts.rules import (
     CLAIM_SCOPE,
     COVERAGE_OUTLINE,
@@ -60,7 +61,8 @@ Where a non-official page conflicts with an official one about current
 behaviour, the official page wins.
 """
 
-GUIDE_PRINCIPLES = """
+GUIDE_PRINCIPLES = (
+    """
 How a good guide on this blog is written:
 - It opens with what the tool is and the problem it solves, then how it
   works inside (architecture, core mechanisms, why it is built that way
@@ -91,7 +93,12 @@ How a good guide on this blog is written:
   running example's code calls the functions, classes and methods with the
   names and signatures earlier sections defined (listed under
   already_taught or as code_defined_earlier) or defines them first; client and server agree on
-  the request's shape.
+  the request's shape. It has no `...` placeholder for a body, an argument
+  list or omitted lines, and defines every class it uses. A block that is
+  deliberately not runnable (a signature, a stub, part of a larger file)
+  starts with the line `"""
+    + EXCERPT_MARKER
+    + """: <what it shows>`.
 - Keep a fact's qualifier (Python only, a version, a provider, a
   condition) wherever you state it. When two official pages disagree (a
   default on one page, another on a second), say so with each page's scope
@@ -117,6 +124,7 @@ How a good guide on this blog is written:
 - Vary how a figure, table or code block is introduced; never the same
   formula twice ("다음과 같습니다"), and avoid noun frames such as "~다는 점".
 """
+)
 
 READER_SYSTEM = """
 You read one source page for a technical guide and record the evidence the
@@ -320,7 +328,8 @@ change:
 - code: code that would not run as pasted: a missing import, a name or
   method that neither this block nor code_defined_earlier defines, a call
   that does not match its definition, a client and server that disagree on
-  the request's shape.
+  the request's shape, a `...` placeholder in a block not marked as an
+  excerpt.
 Do not report matters of taste. Return no issues when there are none.
 """ + GUIDE_PRINCIPLES + SELF_REFERENCE_CHECKS + SECURITY
 

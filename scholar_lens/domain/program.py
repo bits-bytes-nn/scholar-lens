@@ -90,6 +90,66 @@ def _recovered_names(code: str) -> set[str]:
     return names
 
 
+# The first line of a block the writer marks as not meant to run as pasted
+# (a signature, a stub, part of a larger file): its ``...`` placeholders
+# are not reported. The writer prompt documents it.
+EXCERPT_MARKER = "# excerpt"
+# Decorators whose function is a stub by design (its body is ``...``).
+_STUB_DECORATORS = frozenset({"overload", "abstractmethod"})
+
+
+def is_excerpt(code: str) -> bool:
+    """Whether a block's first non-blank line is the excerpt marker."""
+    first = next((ln.strip() for ln in code.split("\n") if ln.strip()), "")
+    return first.lower().startswith(EXCERPT_MARKER)
+
+
+def _last_name(node: ast.expr) -> str:
+    """``Protocol`` of ``Protocol``, ``typing.Protocol`` or ``t.Protocol[T]``."""
+    if isinstance(node, ast.Subscript):
+        node = node.value
+    if isinstance(node, ast.Call):
+        node = node.func
+    if isinstance(node, ast.Attribute):
+        return node.attr
+    return node.id if isinstance(node, ast.Name) else ""
+
+
+def placeholder_lines(tree: ast.Module) -> list[int]:
+    """Lines of the ``...`` statements of ``tree`` (Ellipsis as a statement,
+    so a body that is only ``...`` too), leaving out ``.pyi``-style stubs: the
+    bodies of a ``Protocol`` class and of ``@overload`` or
+    ``@abstractmethod`` functions."""
+    lines: list[int] = []
+
+    def visit(body: Sequence[ast.stmt], stub: bool) -> None:
+        for node in body:
+            if (
+                isinstance(node, ast.Expr)
+                and isinstance(node.value, ast.Constant)
+                and node.value.value is Ellipsis
+            ):
+                if not stub:
+                    lines.append(node.lineno)
+                continue
+            inner = stub
+            if isinstance(node, ast.ClassDef):
+                inner = stub or any(_last_name(b) == "Protocol" for b in node.bases)
+            elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                inner = stub or any(
+                    _last_name(d) in _STUB_DECORATORS for d in node.decorator_list
+                )
+            for field in ("body", "orelse", "finalbody"):
+                visit(getattr(node, field, None) or [], inner)
+            for handler in getattr(node, "handlers", None) or []:
+                visit(handler.body, inner)
+            for case in getattr(node, "cases", None) or []:
+                visit(case.body, inner)
+
+    visit(tree.body, False)
+    return lines
+
+
 def python_code_problems(
     sections: Sequence[tuple[str, str, bool]],
 ) -> list[tuple[str, str]]:
@@ -100,8 +160,10 @@ def python_code_problems(
     notebook block's too, and a best-effort reading of a block that does not
     parse), problems are reported for ``checked`` sections only (the running
     example's usage, not an internals excerpt). After a star import later
-    names are unknowable and are not reported. Parsing and scopes come from
-    the standard library (``ast``, ``symtable``)."""
+    names are unknowable and are not reported. A checked block with a
+    ``...`` placeholder (:func:`placeholder_lines`) is a problem unless its
+    first line is :data:`EXCERPT_MARKER`. Parsing and scopes come from the
+    standard library (``ast``, ``symtable``)."""
     known = set(dir(builtins)) | {"__name__", "__file__"}
     reliable = True
     problems: list[tuple[str, str]] = []
@@ -131,6 +193,15 @@ def python_code_problems(
                 for node in ast.walk(tree)
             ):
                 reliable = False
+            if report and not is_excerpt(code) and placeholder_lines(tree):
+                problems.append(
+                    (
+                        title,
+                        "the block has placeholders; show runnable code or "
+                        "mark it as an excerpt (its first line "
+                        f"`{EXCERPT_MARKER}`): {code.strip()[:120]}",
+                    )
+                )
             bound = _bound_names(table)
             missing = sorted(_free_globals(table) - bound - known)
             if report and reliable and missing:
