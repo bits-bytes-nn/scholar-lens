@@ -21,12 +21,23 @@ import pytest
 from PIL import Image
 from pydantic import ValidationError
 
-from scholar_lens import cli
+from scholar_lens import bootstrap, cli
+from scholar_lens.adapters.bedrock import role_models
 from scholar_lens.adapters.bedrock.strands_models import RoleModel
+from scholar_lens.adapters.bedrock.survey_calls import SurveyWriter
 from scholar_lens.adapters.bedrock.usage import TokenUsageTracker
+from scholar_lens.adapters.github import publisher as github_publisher
 from scholar_lens.adapters.github.publisher import Publisher
-from scholar_lens.application import survey_engine
+from scholar_lens.adapters.scholarly.plan_index import PaperIndex
+from scholar_lens.application.run import RunContext
 from scholar_lens.application.survey_engine import EvidenceSurvey
+from scholar_lens.application.use_cases import survey_write as survey_writer
+from scholar_lens.application.use_cases.survey_write import (
+    load_plan,
+    read_plan_text,
+    stage_plan_for_batch,
+    survey_body,
+)
 from scholar_lens.configs.config import Config, Survey
 from scholar_lens.domain.constants import LanguageModelId
 from scholar_lens.domain.conventions import (
@@ -50,16 +61,6 @@ from scholar_lens.domain.survey.post import (
     unlink_foreign_papers,
 )
 from scholar_lens.domain.validation import validate_post
-from scholar_lens.src import evidence_models, survey_writer
-from scholar_lens.src.runtime import RunContext
-from scholar_lens.src.survey_writer import (
-    PaperIndex,
-    SurveyWriter,
-    load_plan,
-    read_plan_text,
-    stage_plan_for_batch,
-    survey_body,
-)
 from tests.fakes import FakeLLMFactory
 
 # The blog checkout next to this repository, when there is one.
@@ -757,16 +758,16 @@ def stage(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     broken: set[str] = set()
     plan_path = tmp_path / "plan.json"
     plan_path.write_text(json.dumps(plan_dict()))
-    monkeypatch.setattr(survey_writer, "SurveyWriter", lambda **_: writer)
-    monkeypatch.setattr(survey_writer, "WebResearcher", lambda **_: researcher)
-    monkeypatch.setattr(survey_writer, "PaperIndex", lambda *_: index)
-    monkeypatch.setattr(survey_writer, "DataCiteIndex", MagicMock())
-    monkeypatch.setattr(survey_writer, "OpenAlexIndex", MagicMock())
-    monkeypatch.setattr(survey_engine, "EvidenceSurveyEngine", engine)
+    monkeypatch.setattr(bootstrap, "SurveyWriter", lambda **_: writer)
+    monkeypatch.setattr(bootstrap, "WebResearcher", lambda **_: researcher)
+    monkeypatch.setattr(bootstrap, "PaperIndex", lambda *_: index)
+    monkeypatch.setattr(bootstrap, "DataCiteIndex", MagicMock())
+    monkeypatch.setattr(bootstrap, "OpenAlexIndex", MagicMock())
+    monkeypatch.setattr(survey_writer, "EvidenceSurveyEngine", engine)
     monkeypatch.setattr(
-        evidence_models,
+        role_models,
         "role_model",
-        lambda _ctx, model_id, effort, thinking: RoleModel(
+        lambda _session, _region, model_id, effort, thinking: RoleModel(
             invoke_id=model_id, model_label=model_id, effort=effort, thinking=thinking
         ),
     )
@@ -774,7 +775,7 @@ def stage(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     async def unservable(urls: list[str]) -> list[str]:
         return [u for u in urls if u in broken]
 
-    monkeypatch.setattr(evidence_models, "unservable", unservable)
+    monkeypatch.setattr(github_publisher, "unservable", unservable)
 
     async def guideline(_: RunContext) -> list[dict[str, str]]:
         return GUIDELINE
@@ -791,16 +792,14 @@ def stage(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         )
 
     session = boto3.Session(region_name="us-east-1")
-    context = RunContext(
-        config=Config(),
+    context = bootstrap.run_context(
+        Config(),
         default_boto_session=session,
         bedrock_boto_session=session,
         root_dir=tmp_path,
         publisher_factory=publisher,
-        conventions=spec,
-        blog_posts=[],
-        blog_tags={},
     )
+    context.conventions, context.blog_posts, context.blog_tags = spec, [], {}
     return {
         "writer": writer,
         "researcher": researcher,
@@ -817,9 +816,7 @@ def stage(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
 
 def run_stage(stage: dict[str, Any]) -> Any:
     return asyncio.run(
-        survey_writer.run_survey_write_pipeline(
-            stage["context"], stage["request"], TokenUsageTracker()
-        )
+        bootstrap.run_use_case(stage["context"], stage["request"], TokenUsageTracker())
     )
 
 

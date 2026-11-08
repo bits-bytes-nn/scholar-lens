@@ -524,6 +524,11 @@ class WebResearcher:
             str(t["name"]) for t in data if isinstance(t, dict) and t.get("name")
         )
 
+    @property
+    def supports_search(self) -> bool:
+        """Whether the run has a web search backend."""
+        return self.search_provider.supports_search
+
     def search_notes(self) -> list[str]:
         """A run note when web searches failed (their results are missing
         from the research), else nothing."""

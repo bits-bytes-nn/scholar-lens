@@ -81,7 +81,6 @@ _WORKER_EXIT_BY_STATUS = {
 
 # The cost allocation tag on every stack resource (scripts/deploy_infra.py).
 # The stack tags its resources ProjectName=<resources.project_name>.
-COST_TAG_KEY = "ProjectName"
 
 # How long `status --wait` polls before returning the current state: one
 # 3-hour Batch attempt plus queueing time.
@@ -435,8 +434,8 @@ def _emit(payload: BaseModel | dict[str, Any]) -> None:
 
 
 def _aws_context() -> Any:
+    from scholar_lens.bootstrap import build_context
     from scholar_lens.configs import Config
-    from scholar_lens.src.runtime import build_context
 
     return build_context(Config.load())
 
@@ -447,7 +446,7 @@ def _submit(request: JobRequest) -> int:
     context = _aws_context()
     resources = context.config.resources
     if request.kind == "survey_write":
-        from scholar_lens.src.survey_writer import stage_plan_for_batch
+        from scholar_lens.application.use_cases.survey_write import stage_plan_for_batch
 
         _check_plan_bucket(request.plan or "", context.s3_handler, resources.s3_prefix)
         request = stage_plan_for_batch(request, context.s3_handler, resources.s3_prefix)
@@ -479,19 +478,12 @@ def _check_plan_bucket(plan: str, s3_handler: Any, prefix: str) -> None:
 
 
 def _status(job_id: str, *, wait: bool, timeout: float) -> int:
-    from scholar_lens.adapters.aws.batch import describe_job, wait_for_job
+    from scholar_lens.application.use_cases.status import job_status
+    from scholar_lens.bootstrap import job_queue
 
-    context = _aws_context()
-
-    def describe():  # type: ignore[no-untyped-def]
-        return describe_job(
-            context.default_boto_session,
-            job_id,
-            s3_handler=context.s3_handler,
-            s3_prefix=context.config.resources.s3_prefix,
-        )
-
-    report = wait_for_job(describe, timeout_seconds=timeout) if wait else describe()
+    report = job_status(
+        job_queue(_aws_context()), job_id, wait=wait, timeout_seconds=timeout
+    )
     _emit(report)
     if report.result is not None:
         return result_exit_code(report.result)
@@ -505,10 +497,8 @@ def _status(job_id: str, *, wait: bool, timeout: float) -> int:
 def _costs(args: argparse.Namespace) -> int:
     from datetime import UTC, datetime, timedelta
 
-    from scholar_lens.adapters.aws.billing import CostExplorerBilling
-    from scholar_lens.adapters.aws.run_ledger import S3RunLedger
-    from scholar_lens.application.costs import report_costs
-    from scholar_lens.domain.constants import S3Paths
+    from scholar_lens.application.use_cases.costs import report_costs
+    from scholar_lens.bootstrap import cost_sources
 
     until = args.until or datetime.now(UTC).replace(
         hour=0, minute=0, second=0, microsecond=0
@@ -517,26 +507,10 @@ def _costs(args: argparse.Namespace) -> int:
         _emit({"status": "rejected", "error": "--until must be after --since."})
         return EXIT_REJECTED
     context = _aws_context()
-    resources = context.config.resources
-    if not resources.s3_bucket_name:
+    if not context.config.resources.s3_bucket_name:
         _emit({"status": "error", "error": "No S3 bucket is configured."})
         return EXIT_ERROR
-    session = context.default_boto_session
-    ledger = S3RunLedger(
-        session.client("s3"),
-        resources.s3_bucket_name,
-        f"{resources.s3_prefix}/{S3Paths.RESULTS.value}".lstrip("/"),
-    )
-    billing = (
-        CostExplorerBilling(
-            # Cost Explorer's API endpoint is in us-east-1.
-            session.client("ce", region_name="us-east-1"),
-            COST_TAG_KEY,
-            resources.project_name,
-        )
-        if args.billed
-        else None
-    )
+    ledger, billing = cost_sources(context, billed=args.billed)
     report = report_costs(
         ledger, since=args.since, until=until, by=args.by, billing=billing
     )
@@ -554,7 +528,7 @@ def _run(request: JobRequest, *, job_id: str | None = None) -> JobResult:
 
 def _publish(post: str, *, create_pr: bool) -> int:
     """``publish``: one result, the exit code a run would have."""
-    from scholar_lens.src.saved_post import run_publish
+    from scholar_lens.src.runtime import run_publish
 
     result = run_publish(post, create_pr=create_pr)
     _emit(result)

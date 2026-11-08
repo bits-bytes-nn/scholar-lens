@@ -286,7 +286,7 @@ def test_a_checkpoint_that_does_not_fit_its_stage_is_run_again(
 
 
 def test_a_fresh_runs_store_is_written_but_not_read(tmp_path: Path) -> None:
-    from scholar_lens.src.evidence_models import evidence_store
+    from scholar_lens.bootstrap import evidence_store
 
     kept = evidence_store(tmp_path, None, "")
     kept.put("k", "v")

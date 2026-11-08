@@ -19,6 +19,8 @@ from moto import mock_aws
 from scholar_lens import cli
 from scholar_lens.adapters.aws.storage import S3Handler
 from scholar_lens.adapters.github.publisher import ImageLocalizer, Publisher
+from scholar_lens.application.run import publish_artifact
+from scholar_lens.application.use_cases import publish
 from scholar_lens.configs import Github
 from scholar_lens.domain.publishing import (
     PublishRequest,
@@ -27,8 +29,7 @@ from scholar_lens.domain.publishing import (
     without_violations,
 )
 from scholar_lens.domain.validation import PostValidationError
-from scholar_lens.src import saved_post
-from scholar_lens.src.runtime import publish_artifact
+from scholar_lens.src import runtime as saved_post
 from tests.test_publisher import PNG, VALID_POST, FakeGithub, FakeRepo
 
 BROKEN = VALID_POST.replace('paper_author: "Microsoft"', 'author: "Edward Hu"')
@@ -218,13 +219,13 @@ _REQUIRED = {
 
 def test_an_unknown_request_field_fails_loudly(context: Any, tmp_path: Path) -> None:
     post = _write_request(tmp_path, {**_REQUIRED, "surprise": 1})
-    with pytest.raises(saved_post.SavedPostError, match="not one this version"):
-        saved_post.load_saved_post(context, str(post))
+    with pytest.raises(publish.SavedPostError, match="not one this version"):
+        publish.load_saved_post(context, str(post))
     result = saved_post.run_publish(str(post), create_pr=False)
     assert result.status == "rejected" and "surprise" in (result.error or "")
     # A request of a later format version is refused too.
-    with pytest.raises(saved_post.SavedPostError):
-        saved_post.load_saved_post(
+    with pytest.raises(publish.SavedPostError):
+        publish.load_saved_post(
             context, str(_write_request(tmp_path, {**_REQUIRED, "version": 2}))
         )
 
@@ -233,7 +234,7 @@ def test_missing_optional_request_fields_take_their_defaults(
     context: Any, tmp_path: Path
 ) -> None:
     post = _write_request(tmp_path, _REQUIRED)
-    request = saved_post.load_saved_post(context, str(post))
+    request = publish.load_saved_post(context, str(post))
     assert request.kind == "review" and request.blocking == []
     assert request.review_notes == [] and request.published_path is None
     assert request.post_name is None
@@ -287,11 +288,11 @@ def test_a_rejected_post_in_s3_brings_its_images(tmp_path: Path) -> None:
             Key="scholar-lens/rejected/blog-images/my-guide/my-guide-1.png",
             Body=PNG,
         )
-        loaded = saved_post.load_saved_post(
+        loaded = publish.load_saved_post(
             context, f"s3://{BUCKET}/scholar-lens/rejected/my-guide.rejected.md"
         )
-        with pytest.raises(saved_post.SavedPostError, match="not under"):
-            saved_post.load_saved_post(context, "s3://other/scholar-lens/x.md")
+        with pytest.raises(publish.SavedPostError, match="not under"):
+            publish.load_saved_post(context, "s3://other/scholar-lens/x.md")
     assert loaded.work_dir == tmp_path / "papers" / "guide-my-guide"
     assert loaded.markdown == markdown
     assert (loaded.staged_images_dir / "my-guide-1.png").read_bytes() == PNG

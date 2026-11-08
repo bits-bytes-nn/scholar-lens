@@ -325,7 +325,7 @@ async def test_reference_lookups_share_the_per_guide_caps() -> None:
 
 
 def test_the_identifier_lookup_leaves_part_of_the_budget() -> None:
-    from scholar_lens.src import tech_guide
+    from scholar_lens.adapters.web import guide_research as tech_guide
 
     assert 0 < tech_guide._IDENTIFIER_REFERENCE_PAGES < MAX_REFERENCE_PAGES
     assert 0 < tech_guide._IDENTIFIER_REFERENCE_SEARCHES < MAX_REFERENCE_SEARCHES
@@ -369,7 +369,7 @@ async def test_without_a_search_backend_the_lookup_follows_the_seed_links() -> N
 
 
 async def test_the_identifier_lookup_stays_within_its_share() -> None:
-    from scholar_lens.src.tech_guide import (
+    from scholar_lens.adapters.web.guide_research import (
         _IDENTIFIER_REFERENCE_PAGES,
         _IDENTIFIER_REFERENCE_SEARCHES,
     )

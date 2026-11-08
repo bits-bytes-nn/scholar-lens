@@ -166,3 +166,25 @@ def wait_for_job(
             if report.batch_status in TERMINAL_BATCH_STATES or clock() >= deadline:
                 return report
         sleep(min(poll_seconds, max(0.0, deadline - clock())))
+
+
+class BatchJobs:
+    """The :class:`~scholar_lens.application.ports.JobQueue` on AWS Batch,
+    the finished jobs' results read from their S3 manifests."""
+
+    def __init__(
+        self, session: boto3.Session, *, s3_handler: S3Handler | None, s3_prefix: str
+    ) -> None:
+        self.session = session
+        self.s3_handler = s3_handler
+        self.s3_prefix = s3_prefix
+
+    def describe(self, job_id: str) -> JobStatusReport:
+        return describe_job(
+            self.session, job_id, s3_handler=self.s3_handler, s3_prefix=self.s3_prefix
+        )
+
+    def wait(self, job_id: str, *, timeout_seconds: float) -> JobStatusReport:
+        return wait_for_job(
+            lambda: self.describe(job_id), timeout_seconds=timeout_seconds
+        )

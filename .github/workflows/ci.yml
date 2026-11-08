@@ -116,7 +116,7 @@ jobs:
       - name: Import PyMuPDF and every pipeline in the image (catches a missing runtime dependency)
         run: >-
           docker run --rm scholar-lens-batch:ci python3 -c
-          "import pymupdf, scholar_lens.src.paper_pipeline, scholar_lens.src.paper_writer, scholar_lens.application.paper_engine, scholar_lens.application.evidence_writer, scholar_lens.src.guide_pipeline, scholar_lens.src.guide_writer, scholar_lens.src.survey_pipeline, scholar_lens.src.survey_writer, scholar_lens.src.evidence_models, scholar_lens.adapters.scholarly.survey_documents, scholar_lens.application.guide_engine, scholar_lens.application.survey_engine, scholar_lens.adapters.bedrock.strands_models, scholar_lens.adapters.code.retriever"
+          "import pymupdf, scholar_lens.bootstrap, scholar_lens.application.use_cases.paper, scholar_lens.application.use_cases.guide, scholar_lens.application.use_cases.survey_plan, scholar_lens.application.use_cases.survey_write, scholar_lens.application.use_cases.publish, scholar_lens.adapters.documents.paper_reader, scholar_lens.adapters.scholarly.survey_documents, scholar_lens.adapters.bedrock.strands_models, scholar_lens.adapters.code.retriever, scholar_lens.legacy.writers"
       - name: Worker reports a malformed request (JSON, exit 11)
         run: |
           set +e

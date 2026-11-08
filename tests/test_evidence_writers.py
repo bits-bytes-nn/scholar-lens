@@ -14,18 +14,21 @@ from typing import Any
 import boto3
 import pytest
 
-from scholar_lens.adapters.bedrock import strands_models
+from scholar_lens import bootstrap
+from scholar_lens.adapters.bedrock import role_models, strands_models
 from scholar_lens.adapters.bedrock.strands_models import RoleModel
 from scholar_lens.adapters.bedrock.usage import TokenUsageTracker
-from scholar_lens.application import guide_engine, paper_engine
+from scholar_lens.adapters.github import publisher
+from scholar_lens.application import guide_engine
 from scholar_lens.application.paper_engine import EvidencePaper
+from scholar_lens.application.use_cases import guide as guide_writer
+from scholar_lens.application.use_cases import paper as paper_writer
 from scholar_lens.configs import Config
 from scholar_lens.domain.evidence import EvidenceLedger, SourceDocument
+from scholar_lens.domain.guide.models import GuideMaterial
 from scholar_lens.domain.paper.models import Attributes, Content, Paper, ReviewText
 from scholar_lens.domain.research import PageContent, ResearchCorpus
 from scholar_lens.domain.sources import OfficialDocs
-from scholar_lens.src import evidence_models, guide_writer, paper_writer, runtime
-from scholar_lens.src.tech_guide import GuideMaterial
 
 FIGURE = "https://docs.x.dev/img/arch.png"
 BROKEN = "https://docs.x.dev/img/gone.png"
@@ -48,7 +51,7 @@ def seen(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Seen:
         def __init__(self, session, roles, record) -> None:  # type: ignore[no-untyped-def]
             seen.roles = roles
 
-    def role_model(context, model_id, effort, thinking):  # type: ignore[no-untyped-def]
+    def role_model(session, region, model_id, effort, thinking):  # type: ignore[no-untyped-def]
         return RoleModel(
             invoke_id=model_id, model_label=model_id, effort=effort, thinking=thinking
         )
@@ -61,16 +64,16 @@ def seen(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Seen:
         return [u for u in urls if u == BROKEN]
 
     monkeypatch.setattr(strands_models, "StrandsLanguageModel", FakeModel)
-    monkeypatch.setattr(evidence_models, "role_model", role_model)
-    monkeypatch.setattr(evidence_models, "budgeted", budgeted)
-    monkeypatch.setattr(evidence_models, "unservable", unservable)
+    monkeypatch.setattr(role_models, "role_model", role_model)
+    monkeypatch.setattr(role_models, "budgeted", budgeted)
+    monkeypatch.setattr(publisher, "unservable", unservable)
     seen.root = tmp_path
     return seen
 
 
-def _context(root: Path) -> runtime.RunContext:
-    return runtime.RunContext(
-        config=Config(),
+def _context(root: Path) -> bootstrap.AwsRunContext:
+    return bootstrap.run_context(
+        Config(),
         root_dir=root,
         default_boto_session=boto3.Session(region_name="us-west-2"),
         bedrock_boto_session=boto3.Session(region_name="us-west-2"),
@@ -135,12 +138,13 @@ def test_a_guide_run_wires_roles_ceiling_cache_and_sources(
                 notes=["engine note"],
             )
 
-    monkeypatch.setattr(guide_engine, "EvidenceGuideEngine", FakeGuideEngine)
-    monkeypatch.setattr(guide_writer, "docs_packages", lambda _text: {})
+    monkeypatch.setattr(guide_writer, "EvidenceGuideEngine", FakeGuideEngine)
+    monkeypatch.setattr(guide_writer, "docs_packages", lambda _text, _index: {})
     context = _context(seen.root)
     guide = asyncio.run(
         guide_writer.write_guide_with_evidence(
             context,
+            bootstrap.GuideToolkit(context),
             FakeGenerator(),  # type: ignore[arg-type]
             urls=["https://docs.x.dev/guide/start"],
             reference_urls=[],
@@ -227,11 +231,12 @@ def test_a_paper_run_wires_roles_ceiling_and_shape(
                 notes=["engine note"],
             )
 
-    monkeypatch.setattr(paper_engine, "EvidencePaperEngine", FakePaperEngine)
+    monkeypatch.setattr(paper_writer, "EvidencePaperEngine", FakePaperEngine)
     context = _context(seen.root)
     written, notes, _blocking = asyncio.run(
         paper_writer.write_paper_with_evidence(
             context,
+            bootstrap.PaperToolkit(context),
             _paper(),
             post=post,  # type: ignore[arg-type]
             translation_guideline=None,

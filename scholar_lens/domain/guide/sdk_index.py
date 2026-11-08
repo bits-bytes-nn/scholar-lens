@@ -486,3 +486,19 @@ def definitions_for(text: str, index: SdkIndex, limit_chars: int) -> str:
             left -= len(block)
             parts.append(block)
     return "\n\n".join(parts)
+
+
+@dataclass(frozen=True)
+class PackageSource:
+    """A release's Python code as read from its archive.
+
+    ``files`` maps archive paths to source. ``complete`` is False when the
+    size cap stopped the reading, so a module absent from ``files`` may
+    still exist. ``top_levels`` are the import names the wheel installs at
+    its root (or its metadata lists): namespace packages count as packages
+    of the distribution, build and tooling directories do not."""
+
+    version: str
+    files: dict[str, str]
+    complete: bool = True
+    top_levels: frozenset[str] = frozenset()

@@ -9,9 +9,12 @@ from unittest.mock import MagicMock
 import boto3
 import pytest
 
+from scholar_lens.application.use_cases.paper import (
+    _figure_captions,
+    _unanalysed_figure_notes,
+)
 from scholar_lens.domain.constants import LanguageModelId
 from scholar_lens.domain.paper.models import Figure
-from scholar_lens.src.paper_pipeline import _figure_captions, _unanalysed_figure_notes
 from tests.fakes import FakeLLMFactory
 
 
@@ -49,7 +52,7 @@ def test_unanalysed_figures_are_noted() -> None:
 
 def test_unsourced_citations_reach_the_review_notes() -> None:
     from scholar_lens.legacy.citation_summarizer import CitationSummarizer
-    from scholar_lens.src.paper_pipeline import _citation_notes
+    from scholar_lens.legacy.writers import _citation_notes
 
     summarizer = CitationSummarizer(
         LanguageModelId.CLAUDE_V4_5_HAIKU,
@@ -66,7 +69,7 @@ def test_unsourced_citations_reach_the_review_notes() -> None:
 
 
 def test_code_note_only_when_a_given_repository_yielded_nothing() -> None:
-    from scholar_lens.src.paper_pipeline import _code_notes
+    from scholar_lens.application.use_cases.paper import _code_notes
 
     assert _code_notes(SimpleNamespace(repo_urls=["https://g/x"], codebase_summary=None))  # type: ignore[arg-type]
     assert not _code_notes(SimpleNamespace(repo_urls=["https://g/x"], codebase_summary="s"))  # type: ignore[arg-type]
@@ -74,8 +77,8 @@ def test_code_note_only_when_a_given_repository_yielded_nothing() -> None:
 
 
 def test_text_only_note_when_pdf_layout_parsing_failed() -> None:
+    from scholar_lens.application.use_cases.paper import _text_only_notes
     from scholar_lens.domain.paper.models import Content
-    from scholar_lens.src.paper_pipeline import _text_only_notes
 
     text_only = SimpleNamespace(content=Content(text="t", text_only=True))
     assert _text_only_notes(text_only) == [  # type: ignore[arg-type]
@@ -103,8 +106,9 @@ def _context() -> SimpleNamespace:
 
 
 async def test_html_parse_failure_falls_back_to_the_pdf(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    from scholar_lens.adapters.documents import paper_reader as paper_pipeline
     from scholar_lens.adapters.documents.parser import ParserError
-    from scholar_lens.src import paper_pipeline
+    from scholar_lens.application.use_cases.paper import _text_only_notes
 
     class FailingHTML:
         def __init__(self, **_kwargs: object) -> None: ...
@@ -138,24 +142,27 @@ async def test_html_parse_failure_falls_back_to_the_pdf(monkeypatch) -> None:  #
         "(no HTML rendering)."
     ]
     paper = SimpleNamespace(content=content)
-    assert paper_pipeline._text_only_notes(paper) == content.notes  # type: ignore[arg-type]
+    assert _text_only_notes(paper) == content.notes  # type: ignore[arg-type]
 
 
 async def test_code_analysis_failure_degrades_to_no_codebase(  # type: ignore[no-untyped-def]
     monkeypatch, tmp_path
 ) -> None:
-    from scholar_lens.src import paper_pipeline
+    from scholar_lens.adapters.documents import paper_reader as paper_pipeline
 
     class BrokenRetriever:
         def __init__(self, *_args: object, **_kwargs: object) -> None:
             raise RuntimeError("clone failed")
 
     monkeypatch.setattr(paper_pipeline, "LanguageModelId", lambda value: value)
-    monkeypatch.setattr(paper_pipeline, "EmbeddingModelId", lambda value: value)
     monkeypatch.setattr(paper_pipeline, "CodeRetriever", BrokenRetriever)
-    monkeypatch.setattr(paper_pipeline, "CodeIndex", BrokenRetriever)
     result = await paper_pipeline._process_code(
-        _context(), tmp_path, ["https://github.com/x/y"], [], index=True  # type: ignore[arg-type]
+        _context(),  # type: ignore[arg-type]
+        tmp_path,
+        ["https://github.com/x/y"],
+        [],
+        index=True,
+        index_factory=BrokenRetriever,  # type: ignore[arg-type]
     )
     assert result == (None, None)
 
@@ -164,7 +171,7 @@ async def test_code_analysis_failure_degrades_to_no_codebase(  # type: ignore[no
 async def test_the_code_index_is_built_only_when_asked(  # type: ignore[no-untyped-def]
     monkeypatch, tmp_path, index: bool
 ) -> None:
-    from scholar_lens.src import paper_pipeline
+    from scholar_lens.adapters.documents import paper_reader as paper_pipeline
 
     calls: list[str] = []
 
@@ -183,11 +190,14 @@ async def test_the_code_index_is_built_only_when_asked(  # type: ignore[no-untyp
             return "a LoRA trainer"
 
     monkeypatch.setattr(paper_pipeline, "LanguageModelId", lambda value: value)
-    monkeypatch.setattr(paper_pipeline, "EmbeddingModelId", lambda value: value)
     monkeypatch.setattr(paper_pipeline, "CodeRetriever", Retriever)
-    monkeypatch.setattr(paper_pipeline, "CodeIndex", Retriever)
     summary, retriever = await paper_pipeline._process_code(
-        _context(), tmp_path, ["https://github.com/x/y"], [], index=index  # type: ignore[arg-type]
+        _context(),  # type: ignore[arg-type]
+        tmp_path,
+        ["https://github.com/x/y"],
+        [],
+        index=index,
+        index_factory=Retriever,  # type: ignore[arg-type]
     )
     assert summary == "a LoRA trainer"
     assert (retriever is not None) is index
@@ -206,18 +216,19 @@ async def test_the_code_index_is_built_only_when_asked(  # type: ignore[no-untyp
 def test_only_the_sections_review_needs_citations_and_the_code_index(
     kind: str, engine: str, sections_review: bool
 ) -> None:
-    from scholar_lens.src.paper_pipeline import PaperInputs, paper_inputs
+    from scholar_lens.application.ports import PaperInputs
+    from scholar_lens.bootstrap import PaperToolkit
 
     context = SimpleNamespace(
         config=SimpleNamespace(explanation=SimpleNamespace(engine=engine))
     )
-    assert paper_inputs(context, kind) == PaperInputs(  # type: ignore[arg-type]
+    assert PaperToolkit(context).inputs(kind) == PaperInputs(  # type: ignore[arg-type]
         citations=sections_review, code_index=sections_review
     )
 
 
 def test_number_notes_name_table_rows_the_paper_never_states() -> None:
-    from scholar_lens.src.paper_pipeline import _number_notes
+    from scholar_lens.application.use_cases.paper import _number_notes
 
     paper = SimpleNamespace(content=SimpleNamespace(text="respondents 272 122 199"))
     doc = "---\ntitle: x\n---\n| 비교 | A | B | C |\n| --- | --- | --- | --- |\n| n | 27 | 21 | 22 |\n"
@@ -231,8 +242,11 @@ def test_a_retitled_arxiv_version_replaces_the_published_post() -> None:
     # of the post the version-free branch published.
     from pathlib import Path
 
+    from scholar_lens.application.use_cases.paper import (
+        _build_publish_request,
+        paper_branch_id,
+    )
     from scholar_lens.domain.conventions import BlogPost
-    from scholar_lens.src.paper_pipeline import _build_publish_request, paper_branch_id
 
     paper = SimpleNamespace(
         arxiv_id="2106.09685v2",

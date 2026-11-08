@@ -1,42 +1,20 @@
-"""Paper-survey plan stage: references → scope → candidates → selection →
-plan file.
-
-``survey plan`` writes an editable plan (``papers/survey-<slug>/plan.json``
-and its S3 copy); the write stage (``survey write --plan``,
-``survey_writer``) reads it. The user's reference material (``--reference``)
-is read once: excerpts go to the scope call and the papers each reference is
-or links to join the candidates. The scope and selection calls are the only
-model calls; the candidate step is deterministic API work
-(``scholarly_index``) and every check on the models' answers is code
-(``survey_plan``).
-"""
+"""The survey plan stage's candidate step (deterministic API work): the
+required papers resolved, the user's references read, candidates gathered
+from OpenAlex and arXiv search with arXiv's metadata from DataCite (and
+Semantic Scholar's citation data with a key)."""
 
 from __future__ import annotations
 
-import asyncio
-import hashlib
 import json
+import logging
 from collections import Counter
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
-from datetime import UTC, date, datetime
-from pathlib import Path
+from datetime import date
 from typing import Any, TypeVar
 
-import boto3
 import httpx
-from langchain_core.output_parsers import StrOutputParser
-from langchain_core.runnables import Runnable
 
-from scholar_lens.adapters.aws.storage import S3Handler
-from scholar_lens.adapters.bedrock.chat_models import BedrockLanguageModelFactory
-from scholar_lens.adapters.bedrock.prompts.base import BasePrompt
-from scholar_lens.adapters.bedrock.prompts.survey import (
-    SurveyScopePrompt,
-    SurveySelectionPrompt,
-)
-from scholar_lens.adapters.bedrock.usage import TokenBudgetGuard, TokenUsageTracker
-from scholar_lens.adapters.retry import RetryableBase
 from scholar_lens.adapters.scholarly.arxiv import ArxivHandler, ArxivPaperError
 from scholar_lens.adapters.scholarly.index import (
     DATACITE_MAX_IDS,
@@ -50,56 +28,44 @@ from scholar_lens.adapters.scholarly.index import (
 )
 from scholar_lens.adapters.scholarly.metadata import ProviderUnavailableError
 from scholar_lens.adapters.web.research import WebResearcher
-from scholar_lens.domain.constants import LanguageModelId, S3Paths
-from scholar_lens.domain.jobs import JobRequest
-from scholar_lens.domain.prompt_safety import neutralize_prompt_tags
 from scholar_lens.domain.research import (
-    PageContent,
     ResearchCorpus,
     SourceFetchError,
     page_key,
 )
 from scholar_lens.domain.survey.plan import (
     Candidate,
-    PlanReference,
-    ReferenceKind,
     SourceRecord,
     SurveyInputError,
-    SurveyPlan,
-    SurveyPlanError,
     SurveyScope,
-    SurveySelection,
     TimeRange,
     add_citation_data,
-    build_plan,
-    check_selection,
     citation_edges,
-    cited_paper_ids,
     in_time_range,
     merge_records,
     paper_id_of,
     parse_paper_id,
-    parse_tagged_json,
     rank_candidates,
     reference_kind,
     semantic_scholar_id,
-    shortlist,
-    shortlist_digest,
-    survey_slug,
     unversioned_arxiv_id,
 )
+from scholar_lens.domain.survey.references import CandidatePool, ReadReference
 from scholar_lens.domain.titles import titles_match
-from scholar_lens.domain.usage_context import staged
-from scholar_lens.src.logger import logger
-from scholar_lens.src.runtime import PipelineOutcome, RunContext
+
+logger = logging.getLogger(__name__)
+
 
 M = TypeVar("M")
 
+
 # Results kept per search query and provider, and per landmark title.
 SEARCH_RESULTS = 25
+
+
 LANDMARK_RESULTS = 5
-# Reference material shown to the scope call, over all references.
-SCOPE_REFERENCE_CHARS = 8_000
+
+
 _UNDERCOUNT_NOTE = (
     "Citation counts are OpenAlex's, which undercount arXiv-era ML papers and "
     "list few of their references (so few citation edges); set "
@@ -110,35 +76,6 @@ _UNDERCOUNT_NOTE = (
 class CandidateSearchError(RuntimeError):
     """Every topic search, or every arXiv metadata lookup, failed (outage or
     spent quota): nothing reliable to plan from. The run fails; try again."""
-
-
-# ---- the user's reference material ---------------------------------------------
-
-
-@dataclass
-class ReadReference:
-    """A reference the user passed and its page (None when it could not be
-    read)."""
-
-    url: str
-    kind: ReferenceKind
-    page: PageContent | None
-
-    def cited_ids(self) -> list[str]:
-        """Plan ids of the paper the reference is (a paper link) and of the
-        papers its content links to or names by arXiv id."""
-        own = paper_id_of(self.url)
-        cited = (
-            cited_paper_ids(self.page.content_links, self.page.text, own=own)
-            if self.page
-            else []
-        )
-        return [own, *cited] if own else cited
-
-    def plan_reference(self) -> PlanReference:
-        return PlanReference(
-            url=self.url, title=self.page.title if self.page else "", kind=self.kind
-        )
 
 
 def read_references(
@@ -162,35 +99,6 @@ def read_references(
         page = corpus.pages[0] if corpus.pages else None
         read.append(ReadReference(url, reference_kind(url), page))
     return read
-
-
-def reference_excerpts(pages: Sequence[PageContent], query: str, max_chars: int) -> str:
-    """Each reference page's parts most relevant to ``query``, an equal share
-    of ``max_chars`` each, labelled "(reference material)" and defanged
-    (:meth:`ResearchCorpus.relevant_text`); "none" without pages."""
-    if not pages:
-        return "none"
-    pages = [replace(p, user_reference=True, authority="reference") for p in pages]
-    return ResearchCorpus(pages=pages).relevant_text(
-        query,
-        max_chars=max_chars,
-        labelled=True,
-        prefer=[p.url for p in pages],
-    )
-
-
-def unread_note(references: Sequence[ReadReference]) -> list[str]:
-    """The plan note on references that could not be read, if any."""
-    unread = [r.url for r in references if r.page is None]
-    if not unread:
-        return []
-    return [
-        "Reference material that could not be read (a paper link among it is "
-        "still a candidate): " + ", ".join(unread)
-    ]
-
-
-# ---- candidate step (deterministic, network) -------------------------------
 
 
 @dataclass
@@ -247,16 +155,6 @@ class _Calls:
 _MAX_FAILURES = 2
 
 
-@dataclass
-class CandidatePool:
-    """Candidates in rank order with the citation edges among them."""
-
-    candidates: list[Candidate]
-    edges: list[tuple[str, str]]
-    sources: list[str]
-    notes: list[str]
-
-
 class CandidateFinder:
     """Gathers survey candidates from OpenAlex and arXiv search, with
     arXiv's metadata from DataCite (and Semantic Scholar's citation data with
@@ -287,6 +185,10 @@ class CandidateFinder:
         # Candidates with neither an arXiv id nor a DOI (an OpenAlex work
         # only): the write stage cannot resolve them, so they are left out.
         self.unresolvable = 0
+
+    def close(self) -> None:
+        """Release the researcher's connections."""
+        self.researcher.close()
 
     def resolve_required(self, paper_ids: Sequence[str]) -> list[SourceRecord]:
         """Records of the papers the user requires: arXiv's metadata (from
@@ -562,306 +464,15 @@ def _arxiv_query(query: str) -> str:
     return " AND ".join(f"all:{word}" for word in _quote_free(query).split())
 
 
-# ---- model calls ---------------------------------------------------------------
+class ReferencePages:
+    """The :class:`~scholar_lens.application.ports.ReferenceReader` on a
+    researcher."""
 
+    def __init__(self, researcher: WebResearcher) -> None:
+        self.researcher = researcher
 
-class SurveyCalls(RetryableBase, TokenBudgetGuard):
-    """Model calls answering with JSON in a tag, parsed and checked in code
-    with one repair round, within the run's two-tier token budget (shared
-    by the plan and write stages)."""
+    def read_references(self, urls: Sequence[str]) -> list[ReadReference]:
+        return read_references(urls, self.researcher)
 
-    async def _ask(
-        self,
-        chain: Runnable,
-        payload: dict[str, Any],
-        parse: Callable[[str], tuple[M, list[str]]],
-        *,
-        tag: str,
-        accept_last: bool = False,
-    ) -> M:
-        """Call, parse and check; once more with the problems listed (within
-        the soft token limit); then fail with ``SurveyPlanError``. With
-        ``accept_last`` the last answer that parses is returned despite its
-        problems (the caller removes what they concern)."""
-        payload = {**payload, "repair_note": ""}
-        problems: list[str] = []
-        for attempt in range(2):
-            raw = await self._invoke(chain, payload)
-            try:
-                result, problems = parse(raw)
-            except SurveyPlanError as e:
-                problems = [str(e)[:1000]]
-            else:
-                last = attempt == 1 or self._over_soft_token_budget()
-                if not problems or (accept_last and last):
-                    return result
-            logger.warning(
-                "Survey %s unusable (attempt %d): %s", tag, attempt + 1, problems
-            )
-            if self._over_soft_token_budget():
-                break
-            payload["repair_note"] = (
-                "\nYour previous answer could not be used:\n"
-                + "\n".join(f"- {p}" for p in problems)
-                + f"\nReturn the complete answer again as valid JSON inside <{tag}> "
-                "tags, fixing every problem."
-            )
-        raise SurveyPlanError(
-            f"The survey {tag} call gave no usable answer: {problems}"
-        )
-
-    @RetryableBase._retry("survey_call")
-    async def _invoke(self, chain: Runnable, payload: dict[str, Any]) -> str:
-        self._enforce_hard_token_budget()
-        raw: str = await chain.ainvoke(payload)
-        return raw
-
-
-class SurveyPlanner(SurveyCalls):
-    """The scope and selection calls, each parsed and checked in code with
-    one repair round."""
-
-    def __init__(
-        self,
-        *,
-        scope_model_id: LanguageModelId,
-        selection_model_id: LanguageModelId,
-        boto_session: boto3.Session,
-        thinking_effort: str,
-        max_total_tokens: int | None,
-        callbacks: list[Any] | None = None,
-        llm_factory: BedrockLanguageModelFactory | None = None,
-    ) -> None:
-        self.callbacks = callbacks or []
-        self._init_token_budget(self.callbacks, max_total_tokens)
-        factory = llm_factory or BedrockLanguageModelFactory(boto_session=boto_session)
-
-        def chain(
-            prompt: type[BasePrompt], model_id: LanguageModelId, *, thinking: bool
-        ) -> Runnable:
-            model = factory.get_model(
-                model_id,
-                temperature=0.0,
-                callbacks=self.callbacks or None,
-                enable_thinking=thinking,
-                thinking_effort=thinking_effort,
-            )
-            return prompt.get_prompt() | model | StrOutputParser()
-
-        self.scope_chain = chain(SurveyScopePrompt, scope_model_id, thinking=False)
-        # Choosing and grouping the papers is the stage's main judgment.
-        self.selection_chain = chain(
-            SurveySelectionPrompt, selection_model_id, thinking=True
-        )
-
-    @staged("scope")
-    async def scope(
-        self,
-        topic: str,
-        time_range: TimeRange,
-        required: list[Candidate],
-        references: Sequence[ReadReference] = (),
-    ) -> SurveyScope:
-        payload = {
-            "topic": neutralize_prompt_tags(topic),
-            "time_range": _range_text(time_range),
-            "required_papers": neutralize_prompt_tags(
-                "\n".join(f"- {c.title} ({c.year or 'year unknown'})" for c in required)
-                or "- none"
-            ),
-            "references": reference_excerpts(
-                [r.page for r in references if r.page],
-                topic,
-                SCOPE_REFERENCE_CHARS,
-            ),
-        }
-
-        def parse(raw: str) -> tuple[SurveyScope, list[str]]:
-            return parse_tagged_json(raw, "scope", SurveyScope), []
-
-        return await self._ask(self.scope_chain, payload, parse, tag="scope")
-
-    @staged("select")
-    async def select(
-        self,
-        topic: str,
-        scope: SurveyScope,
-        pool: CandidatePool,
-        shortlist_: list[Candidate],
-        *,
-        min_papers: int,
-        max_papers: int,
-        today: date,
-    ) -> SurveySelection:
-        payload = {
-            "topic": neutralize_prompt_tags(topic),
-            "scope": scope.topic,
-            "lineages": "\n".join(
-                f"- {lineage.id}: {lineage.name} — {lineage.description}"
-                for lineage in scope.lineages
-            ),
-            "candidates": neutralize_prompt_tags(
-                shortlist_digest(shortlist_, pool.edges, today)
-            ),
-            "min_papers": min(min_papers, len(shortlist_)),
-            "max_papers": max_papers,
-        }
-
-        def parse(raw: str) -> tuple[SurveySelection, list[str]]:
-            selection = parse_tagged_json(raw, "selection", SurveySelection)
-            problems = check_selection(
-                selection, shortlist_, min_papers=min_papers, max_papers=max_papers
-            )
-            return selection, problems
-
-        return await self._ask(self.selection_chain, payload, parse, tag="selection")
-
-
-def _range_text(time_range: TimeRange) -> str:
-    if time_range.since is None and time_range.until is None:
-        return "none"
-    return f"{time_range.since or 'open'} to {time_range.until or 'open'}"
-
-
-# ---- the stage -----------------------------------------------------------------
-
-
-async def plan_survey(
-    request: JobRequest,
-    *,
-    planner: SurveyPlanner,
-    finder: CandidateFinder,
-    min_papers: int,
-    max_papers: int,
-    candidate_pool: int,
-    now: datetime,
-) -> SurveyPlan:
-    """Read the references, scope the topic, gather and rank candidates,
-    select the papers and build the plan."""
-    topic = (request.topic or "").strip()
-    user_range = TimeRange(since=request.since_year, until=request.until_year)
-    required_records = await asyncio.to_thread(
-        finder.resolve_required, request.paper_ids
-    )
-    required = merge_records(required_records)
-    references = await asyncio.to_thread(finder.read_references, request.reference_urls)
-    referenced = await asyncio.to_thread(finder.referenced_records, references)
-    scope = await planner.scope(topic, user_range, required, references)
-    pool = await asyncio.to_thread(
-        finder.gather,
-        scope,
-        [*required_records, *referenced],
-        time_range=user_range,
-        today=now.date(),
-    )
-    picks = shortlist(pool.candidates, candidate_pool)
-    logger.info(
-        "Survey pool: %d candidates, %d citation edges; shortlist of %d.",
-        len(pool.candidates),
-        len(pool.edges),
-        len(picks),
-    )
-    selection = await planner.select(
-        topic,
-        scope,
-        pool,
-        picks,
-        min_papers=min_papers,
-        max_papers=max_papers,
-        today=now.date(),
-    )
-    return build_plan(
-        topic=topic,
-        scope=scope,
-        selection=selection,
-        pool=picks,
-        edges=pool.edges,
-        time_range=user_range,
-        references=[r.plan_reference() for r in references],
-        sources=pool.sources,
-        notes=[*pool.notes, *unread_note(references)],
-        created_at=now,
-    )
-
-
-def save_plan(plan: SurveyPlan, path: Path) -> None:
-    """Write ``plan`` to ``path``; a different plan already there (perhaps
-    edited by hand) is kept next to it as ``plan.<UTC timestamp>.json``."""
-    text = plan.to_json()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    if path.exists() and path.read_text(encoding="utf-8") != text:
-        stamp = datetime.fromtimestamp(path.stat().st_mtime, UTC).strftime(
-            "%Y%m%dT%H%M%SZ"
-        )
-        path.rename(path.with_name(f"{path.stem}.{stamp}{path.suffix}"))
-    path.write_text(text, encoding="utf-8")
-
-
-def upload_plan(plan: SurveyPlan, s3_handler: S3Handler, key: str) -> None:
-    """Upload ``plan`` to ``key``; a different plan already there (perhaps
-    edited and staged by hand) is kept next to it as
-    ``plan-<sha256 prefix>.json``, the name ``survey write --remote`` gives an
-    uploaded plan, so the same content never takes two keys."""
-    text = plan.to_json()
-    old = s3_handler.get_text(key)
-    if old is not None and old != text:
-        digest = hashlib.sha256(old.encode()).hexdigest()[:16]
-        s3_handler.put_text(key.rsplit("/", 1)[0] + f"/plan-{digest}.json", old)
-    s3_handler.put_text(key, text)
-
-
-async def run_survey_plan_pipeline(
-    context: RunContext, request: JobRequest, tracker: TokenUsageTracker
-) -> PipelineOutcome:
-    cfg = context.config.survey
-    planner = SurveyPlanner(
-        scope_model_id=LanguageModelId(cfg.scope_model_id),
-        selection_model_id=LanguageModelId(cfg.selection_model_id),
-        boto_session=context.bedrock_boto_session,
-        thinking_effort=cfg.thinking_effort,
-        max_total_tokens=cfg.max_total_tokens,
-        callbacks=[tracker],
-    )
-    researcher = WebResearcher()
-    finder = CandidateFinder(
-        openalex=OpenAlexIndex(),
-        arxiv=ArxivHandler(),
-        datacite=DataCiteIndex(),
-        semantic_scholar=SemanticScholarIndex(),
-        researcher=researcher,
-    )
-    try:
-        plan = await plan_survey(
-            request,
-            planner=planner,
-            finder=finder,
-            min_papers=cfg.min_papers,
-            max_papers=cfg.max_papers,
-            candidate_pool=cfg.candidate_pool,
-            now=datetime.now(UTC),
-        )
-    finally:
-        researcher.close()
-    slug = survey_slug(plan.topic)
-    path = context.papers_dir / slug / "plan.json"
-    await asyncio.to_thread(save_plan, plan, path)
-    s3_uri = None
-    if context.s3_handler is not None:
-        resources = context.config.resources
-        key = f"{resources.s3_prefix}/{S3Paths.SURVEYS.value}/{slug}/plan.json".lstrip(
-            "/"
-        )
-        await asyncio.to_thread(upload_plan, plan, context.s3_handler, key)
-        s3_uri = f"s3://{resources.s3_bucket_name}/{key}"
-    logger.info(
-        "Survey plan: %d papers in %d lineages -> %s",
-        len(plan.papers),
-        len(plan.lineages),
-        path,
-    )
-    return PipelineOutcome(
-        title=plan.scope,
-        plan_path=path,
-        s3_uri=s3_uri,
-        warnings=list(plan.notes),
-    )
+    def close(self) -> None:
+        self.researcher.close()

@@ -19,10 +19,16 @@ import pytest
 from pydantic import ValidationError
 
 from scholar_lens import cli
+from scholar_lens.adapters.bedrock.survey_calls import SurveyPlanner
 from scholar_lens.adapters.bedrock.usage import TokenUsageTracker
 from scholar_lens.adapters.scholarly import index as scholarly_index
 from scholar_lens.adapters.scholarly import metadata as citation_metadata
 from scholar_lens.adapters.scholarly.arxiv import ArxivMetadata, ArxivPaperError
+from scholar_lens.adapters.scholarly.candidates import (
+    CandidateFinder,
+    CandidateSearchError,
+    read_references,
+)
 from scholar_lens.adapters.scholarly.index import (
     DataCiteIndex,
     OpenAlexIndex,
@@ -31,6 +37,7 @@ from scholar_lens.adapters.scholarly.index import (
     openalex_record,
 )
 from scholar_lens.adapters.scholarly.metadata import QuotaExhaustedError
+from scholar_lens.application.use_cases.survey_plan import plan_survey, save_plan
 from scholar_lens.configs.config import Config, Survey
 from scholar_lens.domain.constants import LanguageModelId
 from scholar_lens.domain.jobs import JobRequest, JobResult
@@ -47,14 +54,6 @@ from scholar_lens.domain.survey.plan import (
     survey_slug,
 )
 from scholar_lens.domain.usage import TokenBudgetExceeded
-from scholar_lens.src.survey_pipeline import (
-    CandidateFinder,
-    CandidateSearchError,
-    SurveyPlanner,
-    plan_survey,
-    read_references,
-    save_plan,
-)
 from tests.fakes import FakeLLMFactory
 
 TODAY = date(2026, 10, 14)
@@ -227,7 +226,7 @@ class TestCliAndJob:
         with (
             mock.patch("scholar_lens.cli._aws_context"),
             mock.patch(
-                "scholar_lens.src.survey_writer.stage_plan_for_batch",
+                "scholar_lens.application.use_cases.survey_write.stage_plan_for_batch",
                 side_effect=SurveyInputError("No plan file at 'x.json'."),
             ),
         ):
@@ -246,7 +245,7 @@ class TestCliAndJob:
         )
         for name in ("Config", "build_context", "load_secrets_from_ssm", "_finish"):
             monkeypatch.setattr(runtime, name, MagicMock())
-        monkeypatch.setattr(runtime, "_run_pipeline", AsyncMock(return_value=outcome))
+        monkeypatch.setattr(runtime, "run_use_case", AsyncMock(return_value=outcome))
         request = JobRequest(kind="survey_plan", topic="x")
         local = runtime.run_job(request)
         batch = runtime.run_job(request, job_id="job-1")
@@ -829,7 +828,7 @@ class TestCandidateFinder:
     def test_unverified_arxiv_ids_are_left_out(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from scholar_lens.src import survey_pipeline
+        from scholar_lens.adapters.scholarly import candidates as survey_pipeline
 
         # One arXiv id per DataCite lookup; the lookup of 2305.18290 fails,
         # 2203.02155 is unknown to DataCite. OpenAlex's records of both
@@ -1307,10 +1306,11 @@ class TestPlanFile:
     ) -> None:
         import asyncio
 
-        from scholar_lens.src import survey_pipeline
+        from scholar_lens import bootstrap
+        from scholar_lens.application.use_cases import survey_plan as survey_pipeline
 
         plan = self._plan()
-        monkeypatch.setattr(survey_pipeline, "SurveyPlanner", MagicMock())
+        monkeypatch.setattr(bootstrap, "SurveyPlanner", MagicMock())
         monkeypatch.setattr(
             survey_pipeline, "plan_survey", AsyncMock(return_value=plan)
         )
@@ -1321,8 +1321,11 @@ class TestPlanFile:
         context.config.resources.s3_bucket_name = "bucket"
         request = JobRequest(kind="survey_plan", topic="preference optimization")
         outcome = asyncio.run(
-            survey_pipeline.run_survey_plan_pipeline(
-                context, request, TokenUsageTracker()
+            survey_pipeline.run_survey_plan(
+                context,
+                request,
+                TokenUsageTracker(),
+                bootstrap.SurveyPlanToolkit(context),
             )
         )
         key = "scholar-lens/surveys/survey-preference-optimization/plan.json"
@@ -1335,7 +1338,7 @@ class TestPlanFile:
     def test_upload_keeps_a_different_s3_plan(self) -> None:
         import hashlib
 
-        from scholar_lens.src.survey_pipeline import upload_plan
+        from scholar_lens.application.use_cases.survey_plan import upload_plan
 
         plan = self._plan()
         s3 = MagicMock()

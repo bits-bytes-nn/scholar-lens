@@ -1,57 +1,52 @@
-"""Paper-survey write stage: plan file → evidence engine → post.
+"""``scholar-lens survey write``: plan file → evidence engine → post.
 
 ``survey write --plan`` reads the plan (local or S3) the plan stage wrote and
 the user may have edited, resolves papers added by hand (DataCite for arXiv
 ids, OpenAlex for DOIs), reads the plan's reference articles again
 (explanatory material, listed as further reading), writes the post with the
-evidence engine (:func:`write_survey_with_evidence`, docs/redesign.md) and
-publishes it like the other kinds. Every check on the models' answers is
-code (``survey_post``).
+evidence engine (:func:`write_survey_with_evidence`) and publishes it like
+the other kinds. Every check on the models' answers is code
+(``domain.survey.post``).
 """
 
 from __future__ import annotations
 
 import asyncio
-import dataclasses
 import hashlib
 import json
-from collections.abc import Sequence
-from dataclasses import dataclass, field, replace
+import logging
+from dataclasses import dataclass, field
 from datetime import UTC
 from pathlib import Path
 from typing import Any
 
-import boto3
-from langchain_core.runnables import Runnable
-
-from scholar_lens.adapters.aws.storage import S3Handler
-from scholar_lens.adapters.bedrock.chat_models import BedrockLanguageModelFactory
-from scholar_lens.adapters.bedrock.output_parsers import HTMLTagOutputParser
-from scholar_lens.adapters.bedrock.prompts.survey import SurveyFinalizationPrompt
-from scholar_lens.adapters.bedrock.usage import TokenUsageTracker
-from scholar_lens.adapters.github.publisher import PublishRequest, build_pr_body
-from scholar_lens.adapters.retry import RetryableBase
-from scholar_lens.adapters.scholarly.index import (
-    DataCiteIndex,
-    OpenAlexIndex,
-    datacite_record,
-    openalex_record,
+from scholar_lens.application.ports import (
+    ObjectStore,
+    PlanIndex,
+    ReferenceReader,
+    SurveyWriteTools,
+    UsageTracker,
 )
-from scholar_lens.adapters.web.research import WebResearcher
-from scholar_lens.domain.constants import LanguageModelId, S3Paths
+from scholar_lens.application.run import (
+    PipelineOutcome,
+    RunContext,
+    check_post_type,
+    find_published_post,
+    load_translation_guideline,
+    publish_artifact,
+)
+from scholar_lens.application.survey_engine import EngineSettings, EvidenceSurveyEngine
+from scholar_lens.domain.constants import S3Paths
 from scholar_lens.domain.jobs import JobRequest
 from scholar_lens.domain.markdown.lint import drop_unknown_images, fill_image_alts
 from scholar_lens.domain.markdown.math import has_math, normalize_math
 from scholar_lens.domain.post_format import build_post_meta, render_front_matter
-from scholar_lens.domain.post_names import slugify, title_slug
-from scholar_lens.domain.prompt_safety import neutralize_prompt_tags
-from scholar_lens.domain.review_plan import digest_sections
+from scholar_lens.domain.post_names import title_slug
+from scholar_lens.domain.publishing import PublishRequest, build_pr_body
 from scholar_lens.domain.survey.plan import (
-    SourceRecord,
     SurveyInputError,
     SurveyPlan,
     survey_slug,
-    unversioned_arxiv_id,
 )
 from scholar_lens.domain.survey.post import (
     credit_figures,
@@ -66,30 +61,12 @@ from scholar_lens.domain.survey.post import (
     unlink_foreign_papers,
     validate_plan,
 )
-from scholar_lens.domain.tags import controlled_tag_problems
-from scholar_lens.domain.usage_context import staged
-from scholar_lens.domain.validation import (
-    description_markup,
-    description_problems,
-    fit_description,
-)
-from scholar_lens.src.logger import logger
-from scholar_lens.src.runtime import (
-    PipelineOutcome,
-    RunContext,
-    check_post_type,
-    find_published_post,
-    load_translation_guideline,
-    publish_artifact,
-)
-from scholar_lens.src.survey_pipeline import read_references, reference_excerpts
+from scholar_lens.domain.survey.references import reference_excerpts
 
-# Images of a paper's arXiv HTML rendering offered to its reading agent.
-MAX_PAPER_IMAGES = 40
-# ---- reading the plan ---------------------------------------------------------------
+logger = logging.getLogger(__name__)
 
 
-def read_plan_text(location: str, s3_handler: S3Handler | None) -> str:
+def read_plan_text(location: str, s3_handler: ObjectStore | None) -> str:
     """The plan file's text from a local path or ``s3://<bucket>/<key>`` in
     the run's bucket; ``SurveyInputError`` when it is not there."""
     if location.startswith("s3://"):
@@ -114,45 +91,7 @@ def read_plan_text(location: str, s3_handler: S3Handler | None) -> str:
         raise SurveyInputError(f"The plan {location!r} is not UTF-8: {e}") from e
 
 
-class PaperIndex:
-    """Bibliographic records and abstracts of plan papers: arXiv's own
-    metadata (DataCite) for arXiv ids, OpenAlex's for DOIs. A DOI paper that
-    is also on arXiv takes arXiv's abstract (OpenAlex's abstracts of arXiv
-    records are unreliable) and keeps its arXiv id. Blocking."""
-
-    def __init__(self, datacite: DataCiteIndex, openalex: OpenAlexIndex) -> None:
-        self.datacite = datacite
-        self.openalex = openalex
-
-    def records(self, paper_ids: Sequence[str]) -> dict[str, SourceRecord]:
-        found: dict[str, SourceRecord] = {}
-        arxiv_of = {i: i for i in paper_ids if unversioned_arxiv_id(i)}
-        for doi in (i for i in paper_ids if i not in arxiv_of):
-            works = self.openalex.by_doi(doi)
-            if records := [r for w in works if (r := openalex_record(w, "plan"))]:
-                found[doi] = records[0]
-                if records[0].arxiv_id:
-                    arxiv_of[doi] = records[0].arxiv_id
-        if not arxiv_of:
-            return found
-        arxiv = {
-            record.arxiv_id: record
-            for item in self.datacite.arxiv_papers(sorted(set(arxiv_of.values())))
-            if (record := datacite_record(item, None)) and record.arxiv_id
-        }
-        for paper_id, arxiv_id in arxiv_of.items():
-            if arxiv_id not in arxiv:
-                continue
-            if paper_id in found:
-                found[paper_id] = replace(
-                    found[paper_id], abstract=arxiv[arxiv_id].abstract
-                )
-            else:
-                found[paper_id] = arxiv[arxiv_id]
-        return found
-
-
-def load_plan(text: str, index: PaperIndex) -> tuple[SurveyPlan, list[str]]:
+def load_plan(text: str, index: PlanIndex) -> tuple[SurveyPlan, list[str]]:
     """Validate an edited plan again: ids normalized, stale edges and empty
     lineages dropped, papers added by hand completed from the indexes
     (``SurveyInputError`` for one no index knows), then the plan schema."""
@@ -175,7 +114,7 @@ def load_plan(text: str, index: PaperIndex) -> tuple[SurveyPlan, list[str]]:
 
 
 def stage_plan_for_batch(
-    request: JobRequest, s3_handler: S3Handler | None, s3_prefix: str
+    request: JobRequest, s3_handler: ObjectStore | None, s3_prefix: str
 ) -> JobRequest:
     """A survey_write request whose plan a Batch job can read: a local plan
     is checked against the plan schema (``SurveyInputError`` when it would
@@ -230,184 +169,44 @@ class Survey:
     figures: dict[str, tuple[str, str]] = field(default_factory=dict)
 
 
-class SurveyWriter(RetryableBase):
-    """The write stage's finalization call (description and taxonomy of
-    the finished post)."""
-
-    def __init__(
-        self,
-        *,
-        finalization_model_id: LanguageModelId,
-        boto_session: boto3.Session,
-        language: str,
-        thinking_effort: str,
-        callbacks: list[Any] | None = None,
-        llm_factory: BedrockLanguageModelFactory | None = None,
-    ) -> None:
-        self.callbacks = callbacks or []
-        self.language = language
-        self.notes: list[str] = []
-        factory = llm_factory or BedrockLanguageModelFactory(boto_session=boto_session)
-        model = factory.get_model(
-            finalization_model_id,
-            temperature=0.0,
-            callbacks=self.callbacks or None,
-            enable_thinking=False,
-            thinking_effort=thinking_effort,
-        )
-        self.finalization_chain: Runnable = (
-            SurveyFinalizationPrompt.get_prompt()
-            | model
-            | HTMLTagOutputParser(
-                tag_names=SurveyFinalizationPrompt.output_variables or []
-            )
-        )
-
-    async def finalize(
-        self,
-        title: str,
-        body: str,
-        *,
-        category_options: Sequence[str],
-        controlled_tags: Sequence[str],
-    ) -> dict[str, str]:
-        """Topic, tags and the search description, checked by the post
-        validator's description rules with one repair round. A description
-        the validator would reject (markup, not longer than the title) is
-        dropped: the blog then derives one from the first paragraph."""
-        payload = {
-            "title": title,
-            "outline": neutralize_prompt_tags(digest_sections([body])),
-            "category_options": ", ".join(category_options),
-            "controlled_tags": ", ".join(controlled_tags),
-            "language": self.language,
-            "repair_note": "",
-        }
-        result: dict[str, str] = {}
-        problems: list[str] = []
-        description = ""
-        for attempt in range(2):
-            result = await self._finalize(payload)
-            description = fit_description(
-                " ".join((result.get("description") or "").split())
-            )
-            result["description"] = description
-            if not (
-                problems := description_problems(description, body)
-                + controlled_tag_problems(
-                    result.get("controlled_tags"), controlled_tags
-                )
-            ):
-                return result
-            logger.warning(
-                "Survey finalization answer unusable (attempt %d): %s",
-                attempt + 1,
-                problems,
-            )
-            payload["repair_note"] = (
-                "Your previous answer could not be used: "
-                + "; ".join(problems)
-                + ". Answer all four parts again."
-            )
-        self.notes.append(
-            "Survey description still breaks the rules after a repair: "
-            + "; ".join(problems)
-        )
-        if description_markup(description) or len(description) <= len(title):
-            result["description"] = ""
-        return result
-
-    @RetryableBase._retry("survey_finalization")
-    @staged("finalize")
-    async def _finalize(self, payload: dict[str, Any]) -> dict[str, str]:
-        result: dict[str, str] = await self.finalization_chain.ainvoke(payload)
-        return result
-
-
 async def write_survey_with_evidence(
     context: RunContext,
+    tools: SurveyWriteTools,
     plan: SurveyPlan,
     *,
-    index: PaperIndex,
-    researcher: WebResearcher,
-    papers_dir: Path,
+    index: PlanIndex,
+    reader: ReferenceReader,
     translation_guideline: str,
-    tracker: TokenUsageTracker,
+    tracker: UsageTracker,
     title_max_length: int,
 ) -> Survey:
     """The evidence engine: reading agents, an evidence-assigning outline,
     verified sections (docs/redesign.md)."""
-    from scholar_lens.adapters.bedrock.strands_models import (
-        RoleModel,
-        StrandsLanguageModel,
-    )
-    from scholar_lens.adapters.scholarly.survey_documents import PaperDocuments
-    from scholar_lens.application.survey_engine import (
-        EngineSettings,
-        EvidenceSurveyEngine,
-    )
-    from scholar_lens.src.evidence_models import (
-        budgeted,
-        evidence_store,
-        role_model,
-        unservable,
-    )
-
-    cfg = context.config.survey
-
-    def role(model_id: str, effort: str, thinking: bool) -> RoleModel:
-        return role_model(context, model_id, effort, thinking)
-
-    model = StrandsLanguageModel(
-        context.bedrock_boto_session,
-        {
-            "read": role(cfg.card_model_id, cfg.thinking_effort, False),
-            "outline": role(cfg.outline_model_id, "high", True),
-            # The writer falls back to the reading model when Bedrock's
-            # content filter keeps stopping it (attack-heavy sections).
-            "write": dataclasses.replace(
-                role(cfg.writing_model_id, cfg.thinking_effort, True),
-                fallback=role(cfg.card_model_id, cfg.thinking_effort, True),
-            ),
-            "evaluate": dataclasses.replace(
-                role(cfg.evaluation_model_id, cfg.thinking_effort, True),
-                fallback=role(cfg.card_model_id, cfg.thinking_effort, True),
-            ),
-        },
-        budgeted(tracker, cfg.write_max_cost_usd),
-    )
+    writing = tools.writing
+    model = tools.models.language_model(writing.roles, tracker, writing.max_cost_usd)
     records = await asyncio.to_thread(index.records, [p.id for p in plan.papers])
-    documents = PaperDocuments(
-        researcher,
-        index.openalex,
-        {pid: r.abstract for pid, r in records.items() if r.abstract},
+    documents = tools.documents(
+        reader, index, {pid: r.abstract for pid, r in records.items() if r.abstract}
     )
     language = context.config.output_language
-    store = evidence_store(
-        papers_dir / "survey-evidence",
-        context.s3_handler,
-        context.config.resources.s3_prefix,
-        fresh=context.fresh,
-    )
+    store = tools.evidence_store(fresh=context.fresh)
     engine = EvidenceSurveyEngine(
         model,
         documents,
         EngineSettings(
             language=language,
             title_max_length=title_max_length,
-            reader_tag=slugify(LanguageModelId(cfg.card_model_id).value),
-            chars_per_core=cfg.chars_per_core_paper,
-            chars_per_supporting=cfg.chars_per_supporting_paper,
-            min_total_chars=cfg.min_total_chars,
-            max_total_chars=cfg.max_total_chars,
+            reader_tag=writing.reader_tag,
+            chars_per_core=writing.chars_per_core,
+            chars_per_supporting=writing.chars_per_supporting,
+            min_total_chars=writing.min_total_chars,
+            max_total_chars=writing.max_total_chars,
         ),
         store=store,
         checkpoints=store,
     )
     articles = [r for r in plan.references if r.kind == "article"]
-    read = await asyncio.to_thread(
-        read_references, [r.url for r in articles], researcher
-    )
+    read = await asyncio.to_thread(reader.read_references, [r.url for r in articles])
     pages = [r.page for r in read if r.page]
     titles = {r.url: r.title for r in articles}
     reading = [(titles.get(r.url) or r.page.title, r.url) for r in read if r.page]
@@ -431,7 +230,7 @@ async def write_survey_with_evidence(
     # arXiv HTML lists some figures it does not serve (404): an image that
     # cannot be downloaded would fail the publish step, so it is dropped
     # here (survey_body removes images without an owner).
-    broken = await unservable(list(figures))
+    broken = await tools.figures.unservable(list(figures))
     for url in broken:
         figures.pop(url)
     if broken:
@@ -476,35 +275,31 @@ def survey_body(survey: Survey, language: str) -> tuple[str, list[str]]:
     return normalize_math(body.strip()), notes
 
 
-async def run_survey_write_pipeline(
-    context: RunContext, request: JobRequest, tracker: TokenUsageTracker
+async def run_survey_write(
+    context: RunContext,
+    request: JobRequest,
+    tracker: UsageTracker,
+    tools: SurveyWriteTools,
 ) -> PipelineOutcome:
-    cfg = context.config.survey
     github = context.config.resources.github
     spec = context.require_conventions()
     check_post_type(spec, github.survey_category, "survey_category", artifact="survey")
     text = await asyncio.to_thread(
         read_plan_text, request.plan or "", context.s3_handler
     )
-    index = PaperIndex(DataCiteIndex(), OpenAlexIndex())
+    index = tools.index()
     plan, plan_notes = await asyncio.to_thread(load_plan, text, index)
     guideline = await load_translation_guideline(context)
-    writer = SurveyWriter(
-        finalization_model_id=LanguageModelId(cfg.outline_model_id),
-        boto_session=context.bedrock_boto_session,
-        language=context.config.output_language,
-        thinking_effort=cfg.thinking_effort,
-        callbacks=[tracker],
-    )
-    researcher = WebResearcher(max_images_per_page=MAX_PAPER_IMAGES)
+    writer = tools.finalizer(tracker)
+    reader = tools.reader()
     papers_dir = context.papers_dir
     try:
         survey = await write_survey_with_evidence(
             context,
+            tools,
             plan,
             index=index,
-            researcher=researcher,
-            papers_dir=papers_dir,
+            reader=reader,
             # The same JSON the review and guide writers get, not a repr.
             translation_guideline=(
                 json.dumps(guideline, ensure_ascii=False) if guideline else ""
@@ -524,7 +319,7 @@ async def run_survey_write_pipeline(
         e.run_notes = [*plan_notes, *writer.notes]  # type: ignore[attr-defined]
         raise
     finally:
-        researcher.close()
+        reader.close()
     # Keyed by the plan's topic, not the model's title: a rerun of the same
     # plan updates the same branch, pull request and published post.
     slug = survey_slug(plan.topic)

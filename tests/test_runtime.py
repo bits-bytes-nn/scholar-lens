@@ -8,8 +8,21 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from scholar_lens import bootstrap
+from scholar_lens.application import run as app_run
 from scholar_lens.domain.constants import EnvVars, SSMParams
 from scholar_lens.src import runtime
+
+
+def _run_context(config: object, **fields: object) -> app_run.RunContext:
+    """A run context on the configured blog (no AWS)."""
+    fields.setdefault("publisher_factory", lambda ctx: MagicMock())
+    return app_run.RunContext(
+        config=config,  # type: ignore[arg-type]
+        blog=bootstrap.ConfiguredBlog(config),  # type: ignore[arg-type]
+        root_dir=Path("."),
+        **fields,  # type: ignore[arg-type]
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -154,7 +167,7 @@ class TestRunJob:
         )
         monkeypatch.setattr(runtime, "build_context", lambda config: context)
         monkeypatch.setattr(runtime, "load_secrets_from_ssm", lambda *a: None)
-        monkeypatch.setattr(runtime, "_run_pipeline", pipeline)
+        monkeypatch.setattr(runtime, "run_use_case", pipeline)
         finished: list = []
         self.notified: list[bool] = []
 
@@ -301,61 +314,37 @@ class TestRunJob:
 
 
 @pytest.mark.parametrize(
-    ("kind", "module", "function", "fields"),
+    ("kind", "function", "fields"),
     [
-        ("review", "paper_pipeline", "run_paper_pipeline", {"source": "2106.09685"}),
-        (
-            "summarize",
-            "paper_pipeline",
-            "run_paper_pipeline",
-            {"source": "2106.09685"},
-        ),
-        ("guide", "guide_pipeline", "run_guide_pipeline", {"urls": ["https://d.io"]}),
-        (
-            "survey_plan",
-            "survey_pipeline",
-            "run_survey_plan_pipeline",
-            {"topic": "LLM preference optimization"},
-        ),
-        (
-            "survey_write",
-            "survey_writer",
-            "run_survey_write_pipeline",
-            {"plan": "plan.json"},
-        ),
+        ("review", "run_paper", {"source": "2106.09685"}),
+        ("summarize", "run_paper", {"source": "2106.09685"}),
+        ("guide", "run_guide", {"urls": ["https://d.io"]}),
+        ("survey_plan", "run_survey_plan", {"topic": "LLM preference optimization"}),
+        ("survey_write", "run_survey_write", {"plan": "plan.json"}),
     ],
 )
 def test_run_pipeline_dispatches_each_kind(
     monkeypatch: pytest.MonkeyPatch,
     kind: str,
-    module: str,
     function: str,
     fields: dict[str, object],
 ) -> None:
     import asyncio
-    import importlib
 
     from scholar_lens.domain.jobs import JobRequest
 
     request = JobRequest(kind=kind, **fields)  # type: ignore[arg-type]
     outcome = runtime.PipelineOutcome(title=kind)
     calls: list[tuple[str, object]] = []
-    for name, attr in {
-        "paper_pipeline": "run_paper_pipeline",
-        "guide_pipeline": "run_guide_pipeline",
-        "survey_pipeline": "run_survey_plan_pipeline",
-        "survey_writer": "run_survey_write_pipeline",
-    }.items():
+    for attr in ("run_paper", "run_guide", "run_survey_plan", "run_survey_write"):
 
-        async def fake(context, req, tracker, _attr=attr):  # type: ignore[no-untyped-def]
+        async def fake(context, req, tracker, tools, _attr=attr):  # type: ignore[no-untyped-def]
             calls.append((_attr, req))
             return outcome
 
-        monkeypatch.setattr(
-            importlib.import_module(f"scholar_lens.src.{name}"), attr, fake
-        )
+        monkeypatch.setattr(bootstrap, attr, fake)
 
-    got = asyncio.run(runtime._run_pipeline(MagicMock(), request, MagicMock()))
+    got = asyncio.run(bootstrap.run_use_case(MagicMock(), request, MagicMock()))
     assert got is outcome
     assert calls == [(function, request)]
 
@@ -546,7 +535,7 @@ class TestPublishArtifact:
     ) -> None:
         import asyncio
 
-        from scholar_lens.adapters.github.publisher import PublishError
+        from scholar_lens.domain.publishing import PublishError
 
         publisher = MagicMock()
 
@@ -563,7 +552,7 @@ class TestPublishArtifact:
         request = MagicMock()
         request.title = "LoRA"
         outcome = asyncio.run(
-            runtime.publish_artifact(context, request, create_pr=True)
+            app_run.publish_artifact(context, request, create_pr=True)
         )
         assert outcome.s3_uri == "s3://b/post.md" and outcome.pr_url is None
         assert outcome.markdown_path == tmp_path / "post.md"
@@ -574,12 +563,12 @@ class TestPublishArtifact:
 def test_an_unreadable_branch_history_becomes_a_review_note() -> None:
     import asyncio
 
-    from scholar_lens.adapters.github.publisher import PublishError
+    from scholar_lens.domain.publishing import PublishError
 
     publisher = MagicMock()
     publisher.find_published.side_effect = PublishError("502 from GitHub")
     published, notes = asyncio.run(
-        runtime.find_published_post(
+        app_run.find_published_post(
             MagicMock(blog_listing_error=None, publisher_factory=lambda c: publisher),
             slug="x",
             branch_id="guide-abc",
@@ -599,17 +588,17 @@ def test_a_failed_blog_listing_becomes_a_review_note(
     def fail(*args: object) -> list[object]:
         raise RuntimeError("403 rate limit")
 
-    monkeypatch.setattr(runtime, "fetch_blog_posts", fail)
+    monkeypatch.setattr(bootstrap, "fetch_blog_posts", fail)
     config = MagicMock()
     config.resources.github.enabled = True
-    context = runtime.RunContext.model_construct(
+    context = _run_context(
         config=config,
         blog_posts=None,
         blog_listing_error=None,
         publisher_factory=lambda ctx: _publisher(ctx.require_blog_posts()),
     )
     published, notes = asyncio.run(
-        runtime.find_published_post(
+        app_run.find_published_post(
             context, slug="x", branch_id="b", category="Tech Guides"
         )
     )
@@ -630,7 +619,7 @@ def test_a_listed_blog_adds_no_lookup_note() -> None:
         blog_listing_error=None, publisher_factory=lambda c: _publisher([])
     )
     _, notes = asyncio.run(
-        runtime.find_published_post(
+        app_run.find_published_post(
             context,
             slug="x",
             branch_id="b",
@@ -652,7 +641,7 @@ def test_no_pr_run_reports_the_post_checklist(tmp_path: Path) -> None:
     publisher.publish = publish
     request = MagicMock()
     context = MagicMock(publisher_factory=lambda ctx: publisher)
-    outcome = asyncio.run(runtime.publish_artifact(context, request, create_pr=False))
+    outcome = asyncio.run(app_run.publish_artifact(context, request, create_pr=False))
     assert outcome.warnings == ["Summary is still long", "numbered reference"]
 
 
@@ -682,7 +671,7 @@ def test_generator_notes_survive_a_failed_publish(
         context.publisher_factory = lambda ctx: publisher
         publish_request = MagicMock()
         publish_request.review_notes = ["Review section 'Method' produced no text"]
-        return await runtime.publish_artifact(context, publish_request, create_pr=False)
+        return await app_run.publish_artifact(context, publish_request, create_pr=False)
 
     TestRunJob()._patch(monkeypatch, pipeline)
     result = runtime.run_job(JobRequest(kind="review", source="2106.09685"))
@@ -707,8 +696,8 @@ class TestBlogTagFilter:
             BlogPost(path="_posts/b.md", tags=["LoRA", "Paged Attention", "a/b"]),
             BlogPost(path="_posts/c.md", tags=["vLLM", "Paged Attention"]),
         ]
-        monkeypatch.setattr(runtime, "load_run_blog_posts", lambda config: posts)
-        context = runtime.RunContext.model_construct(
+        monkeypatch.setattr(bootstrap, "load_run_blog_posts", lambda config: posts)
+        context = _run_context(
             config=MagicMock(), conventions=spec, blog_posts=None, blog_tags=None
         )
         # Controlled and retired tags, and spellings a post may not use, are out.
@@ -775,8 +764,8 @@ class TestConventionsChangedDuringTheRun:
     ) -> tuple[object, object, object]:
         import asyncio
 
-        from scholar_lens.adapters.github.publisher import PublishRequest
         from scholar_lens.domain.conventions import load_local_conventions
+        from scholar_lens.domain.publishing import PublishRequest
 
         started = load_local_conventions()
 
@@ -786,7 +775,7 @@ class TestConventionsChangedDuringTheRun:
                 raise fresh
             return fresh if fresh is not None else started
 
-        monkeypatch.setattr(runtime, "load_run_conventions", load)
+        monkeypatch.setattr(bootstrap, "load_run_conventions", load)
         validated_with: list[object] = []
         publisher = MagicMock()
 
@@ -800,7 +789,7 @@ class TestConventionsChangedDuringTheRun:
             validated_with.append(context.require_conventions())
             return publisher
 
-        context = runtime.RunContext.model_construct(
+        context = _run_context(
             config=MagicMock(), conventions=started, publisher_factory=build
         )
         request = PublishRequest(
@@ -814,7 +803,7 @@ class TestConventionsChangedDuringTheRun:
             kind="guide",
         )
         outcome = asyncio.run(
-            runtime.publish_artifact(context, request, create_pr=False)
+            app_run.publish_artifact(context, request, create_pr=False)
         )
         return request, validated_with[0], outcome
 

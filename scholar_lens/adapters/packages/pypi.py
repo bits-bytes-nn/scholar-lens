@@ -7,9 +7,10 @@ import functools
 import logging
 import re
 from collections.abc import Callable
-from dataclasses import dataclass
 
 import httpx
+
+from scholar_lens.domain.guide.sdk_index import PackageSource
 
 logger = logging.getLogger(__name__)
 
@@ -51,22 +52,6 @@ _SKIP_PART = re.compile(r"(?:^|/)(?:tests?|testing|benchmarks?|examples?|docs?)/
 # The top-level import names a distribution's metadata lists.
 _TOP_LEVEL = re.compile(r"(?:^|/)[^/]+\.(?:dist|egg)-info/top_level\.txt$")
 _IDENTIFIER = re.compile(r"^[A-Za-z_]\w*$")
-
-
-@dataclass(frozen=True)
-class PackageSource:
-    """A release's Python code as read from its archive.
-
-    ``files`` maps archive paths to source. ``complete`` is False when the
-    size cap stopped the reading, so a module absent from ``files`` may
-    still exist. ``top_levels`` are the import names the wheel installs at
-    its root (or its metadata lists): namespace packages count as packages
-    of the distribution, build and tooling directories do not."""
-
-    version: str
-    files: dict[str, str]
-    complete: bool = True
-    top_levels: frozenset[str] = frozenset()
 
 
 def package_source(
@@ -171,3 +156,13 @@ def package_source(
             len(sources),
         )
     return PackageSource(version, sources, complete, frozenset(tops))
+
+
+class PyPIIndex:
+    """The :class:`~scholar_lens.application.ports.PackageIndex` on PyPI."""
+
+    def extras(self, name: str) -> tuple[str, frozenset[str]] | None:
+        return package_extras(name)
+
+    def source(self, name: str) -> PackageSource | None:
+        return package_source(name)

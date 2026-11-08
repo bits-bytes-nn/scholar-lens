@@ -23,14 +23,12 @@ from scholar_lens.adapters.github.blog_sync import BlogBranchSync
 from scholar_lens.adapters.github.publisher import (
     PostAssetError,
     Publisher,
-    PublishError,
-    PublishRequest,
-    build_pr_body,
     image_format,
 )
 from scholar_lens.configs import Github
 from scholar_lens.domain.conventions import BlogPost
 from scholar_lens.domain.post_names import slugify
+from scholar_lens.domain.publishing import PublishError, PublishRequest, build_pr_body
 from scholar_lens.domain.validation import PostValidationError
 
 

@@ -13,7 +13,9 @@ from scholar_lens.adapters.bedrock.prompts.tech_guide import (
     TechGuideResearchPlanPrompt,
     TechGuideTaxonomyPrompt,
 )
+from scholar_lens.adapters.web.guide_research import _NO_DOCS_NOTE, TechGuideGenerator
 from scholar_lens.domain.constants import LanguageModelId
+from scholar_lens.domain.guide.models import GuideMaterial, NotTechnicalContentError
 from scholar_lens.domain.research import (
     OFFICIAL_LABEL,
     REFERENCE_LABEL,
@@ -22,12 +24,6 @@ from scholar_lens.domain.research import (
     source_label,
 )
 from scholar_lens.legacy.section_loop import lost_structure
-from scholar_lens.src.tech_guide import (
-    _NO_DOCS_NOTE,
-    GuideMaterial,
-    NotTechnicalContentError,
-    TechGuideGenerator,
-)
 from tests.fakes import FakeLLMFactory
 
 
@@ -107,7 +103,7 @@ class TestBuildSearchProvider:
     """build_search_provider prefers Tavily > Brave > Null."""
 
     def _provider(self, monkeypatch, *, tavily=None, brave=None):  # type: ignore[no-untyped-def]
-        from scholar_lens.src import guide_pipeline as tg
+        from scholar_lens import bootstrap as tg
 
         for var in ("TAVILY_API_KEY", "BRAVE_API_KEY"):
             monkeypatch.delenv(var, raising=False)
@@ -403,7 +399,7 @@ class TestReferenceLookup:
             published="2026-01-02",
         )
         gen.researcher.add_official_reference = MagicMock(return_value=[page])
-        with patch("scholar_lens.src.tech_guide.logger") as log:
+        with patch("scholar_lens.adapters.web.guide_research.logger") as log:
             await gen._add_reference(ResearchCorpus(), ["--flag"])
         log.info.assert_any_call(
             "Added %s page [%s%s%s] %s",

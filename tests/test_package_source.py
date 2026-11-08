@@ -5,12 +5,14 @@ from __future__ import annotations
 
 import io
 import zipfile
+from types import SimpleNamespace
 
 import httpx
 import pytest
 
-from scholar_lens.adapters.packages.pypi import PackageSource, package_source
-from scholar_lens.src import guide_writer
+from scholar_lens.adapters.packages.pypi import package_source
+from scholar_lens.application.use_cases import guide as guide_writer
+from scholar_lens.domain.guide.sdk_index import PackageSource
 
 
 def _wheel(members: dict[str, str]) -> bytes:
@@ -83,22 +85,26 @@ def fetched(monkeypatch: pytest.MonkeyPatch) -> list[str]:
         names.append(name)
         return _source(tops.get(name, name.replace("-", "_")))
 
-    monkeypatch.setattr(guide_writer, "package_source", fake)
+    _INDEX.source = fake
     return names
+
+
+# The package index product_sdk reads (its source lookup set by ``fetched``).
+_INDEX = SimpleNamespace(source=None, extras=lambda _name: None)
 
 
 def test_a_distribution_of_the_products_name_is_matched_exactly(
     fetched: list[str],
 ) -> None:
     provided = {n: ("1.0", frozenset()) for n in ("gearbox", "Gear", "other")}
-    index = guide_writer.product_sdk(provided, ["gear"])
+    index = guide_writer.product_sdk(provided, ["gear"], _INDEX)
     # "gearbox" starts with the name but is another distribution.
     assert fetched == ["Gear"] and index is not None
 
 
 def test_names_compare_as_pep_503_normalises_them(fetched: list[str]) -> None:
     provided = {"Gear_Kit": ("1.0", frozenset())}
-    assert guide_writer.product_sdk(provided, ["gear.kit"]) is not None
+    assert guide_writer.product_sdk(provided, ["gear.kit"], _INDEX) is not None
     assert fetched == ["Gear_Kit"]
 
 
@@ -106,6 +112,9 @@ def test_without_a_distribution_of_the_name_its_import_package_decides(
     fetched: list[str],
 ) -> None:
     provided = {n: ("1.0", frozenset()) for n in ("gearbox", "gear-kit")}
-    index = guide_writer.product_sdk(provided, ["gear"])
+    index = guide_writer.product_sdk(provided, ["gear"], _INDEX)
     assert index is not None and index.packages == {"gear"}
-    assert guide_writer.product_sdk({"gearbox": ("1.0", frozenset())}, ["gear"]) is None
+    assert (
+        guide_writer.product_sdk({"gearbox": ("1.0", frozenset())}, ["gear"], _INDEX)
+        is None
+    )

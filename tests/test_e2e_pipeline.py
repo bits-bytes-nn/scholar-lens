@@ -16,15 +16,21 @@ from unittest.mock import MagicMock
 import boto3
 import pytest
 
+from scholar_lens import bootstrap
 from scholar_lens.adapters.bedrock.usage import TokenUsageTracker
+from scholar_lens.adapters.documents import paper_reader
 from scholar_lens.adapters.github import publisher
+from scholar_lens.application import run as runtime
+from scholar_lens.application.ports import PaperInputs
+from scholar_lens.application.use_cases import guide as guide_pipeline
+from scholar_lens.application.use_cases import paper as paper_pipeline
 from scholar_lens.configs import Config
 from scholar_lens.domain.conventions import load_local_conventions
 from scholar_lens.domain.guide.models import TechGuide
 from scholar_lens.domain.jobs import JobRequest
 from scholar_lens.domain.paper.models import Attributes, Content, Figure, Paper
 from scholar_lens.domain.validation import PostValidationError, validate_post
-from scholar_lens.src import guide_pipeline, paper_pipeline, runtime
+from scholar_lens.legacy import writers as legacy_writers
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 64
 ARXIV_FIGURE = "https://arxiv.org/html/2106.09685v2/x1.png"
@@ -97,14 +103,14 @@ def pipeline_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):  # type: igno
             fetch_image=fetch,
         )
 
-    context = runtime.RunContext(
-        config=Config(),
+    context = bootstrap.run_context(
+        Config(),
         default_boto_session=boto3.Session(region_name="us-west-2"),
         bedrock_boto_session=boto3.Session(region_name="us-west-2"),
         root_dir=tmp_path,
         publisher_factory=build_publisher,
-        conventions=load_local_conventions(),
     )
+    context.conventions = load_local_conventions()
     return context, fetched
 
 
@@ -138,13 +144,13 @@ class TestSummaryEndToEnd:
     ) -> None:
         context, fetched = pipeline_env
         monkeypatch.setattr(
-            paper_pipeline, "_prepare_paper_data", _fake_paper_data(_paper())
+            paper_reader, "prepare_paper_data", _fake_paper_data(_paper())
         )
         monkeypatch.setattr(
-            paper_pipeline, "PaperSummarizer", _fake_summarizer(SUMMARY_FROM_MODEL)
+            legacy_writers, "PaperSummarizer", _fake_summarizer(SUMMARY_FROM_MODEL)
         )
 
-        outcome = await paper_pipeline.run_paper_pipeline(
+        outcome = await bootstrap.run_use_case(
             context,
             JobRequest(kind="summarize", source="2106.09685"),
             TokenUsageTracker(),
@@ -178,15 +184,13 @@ class TestSummaryEndToEnd:
             keywords=["Low-Rank Adaptation"],
             category="Training & Inference",
         )
+        monkeypatch.setattr(paper_reader, "prepare_paper_data", _fake_paper_data(paper))
         monkeypatch.setattr(
-            paper_pipeline, "_prepare_paper_data", _fake_paper_data(paper)
-        )
-        monkeypatch.setattr(
-            paper_pipeline, "PaperSummarizer", _fake_summarizer(SUMMARY_FROM_MODEL)
+            legacy_writers, "PaperSummarizer", _fake_summarizer(SUMMARY_FROM_MODEL)
         )
 
         with pytest.raises(PostValidationError) as info:
-            await paper_pipeline.run_paper_pipeline(
+            await bootstrap.run_use_case(
                 context,
                 JobRequest(kind="summarize", source="2106.09685"),
                 TokenUsageTracker(),
@@ -230,11 +234,11 @@ class TestGuideEndToEnd:
         async def evidence(*args, **kwargs) -> TechGuide:  # type: ignore[no-untyped-def]
             return guide
 
-        monkeypatch.setattr(guide_pipeline, "TechGuideGenerator", FakeGenerator)
+        monkeypatch.setattr(bootstrap, "TechGuideGenerator", FakeGenerator)
         monkeypatch.setattr(guide_pipeline, "write_guide_with_evidence", evidence)
-        monkeypatch.setattr(guide_pipeline, "WebResearcher", MagicMock())
+        monkeypatch.setattr(bootstrap, "WebResearcher", MagicMock())
 
-        outcome = await guide_pipeline.run_guide_pipeline(
+        outcome = await bootstrap.run_use_case(
             context,
             JobRequest(kind="guide", urls=["https://docs.vllm.ai/en/latest/"]),
             TokenUsageTracker(),
@@ -302,10 +306,10 @@ class TestReviewEndToEnd:
         async def prepare(*args, **kwargs):  # type: ignore[no-untyped-def]
             return _paper(), None, MagicMock()
 
-        monkeypatch.setattr(paper_pipeline, "_prepare_paper_data", prepare)
-        monkeypatch.setattr(paper_pipeline, "PaperReviewer", FakeReviewer)
+        monkeypatch.setattr(paper_reader, "prepare_paper_data", prepare)
+        monkeypatch.setattr(legacy_writers, "PaperReviewer", FakeReviewer)
 
-        outcome = await paper_pipeline.run_paper_pipeline(
+        outcome = await bootstrap.run_use_case(
             context, JobRequest(kind="review", source="2106.09685"), TokenUsageTracker()
         )
         post = Path(outcome.markdown_path).read_text(encoding="utf-8")
@@ -341,7 +345,7 @@ async def test_an_evidence_review_runs_without_the_citation_summarizer(
         seen["inputs"] = kwargs["inputs"]
         return _paper(), None, None  # no summarizer for the evidence engine
 
-    async def write(context, paper, *, post, translation_guideline, tracker):  # type: ignore[no-untyped-def]
+    async def write(context, tools, paper, *, post, translation_guideline, tracker):  # type: ignore[no-untyped-def]
         return (
             ReviewText(
                 body=REVIEW_BODY_FROM_MODEL,
@@ -354,14 +358,12 @@ async def test_an_evidence_review_runs_without_the_citation_summarizer(
             ["evidence blocking"],
         )
 
-    monkeypatch.setattr(paper_pipeline, "_prepare_paper_data", prepare)
+    monkeypatch.setattr(paper_reader, "prepare_paper_data", prepare)
     monkeypatch.setattr(paper_pipeline, "write_paper_with_evidence", write)
-    outcome = await paper_pipeline.run_paper_pipeline(
+    outcome = await bootstrap.run_use_case(
         context, JobRequest(kind="review", source="2106.09685"), TokenUsageTracker()
     )
-    assert seen["inputs"] == paper_pipeline.PaperInputs(
-        citations=False, code_index=False
-    )
+    assert seen["inputs"] == PaperInputs(citations=False, code_index=False)
     assert "evidence note" in outcome.warnings
     # A blocking problem leads the job's warnings.
     assert outcome.warnings[0] == "Blocking: evidence blocking"
@@ -374,9 +376,9 @@ async def test_tags_the_paper_never_mentions_become_pr_notes(
 ) -> None:
     context, _ = pipeline_env
     paper = _paper(keywords=["Low-Rank Adaptation", "Direct Preference Optimization"])
-    monkeypatch.setattr(paper_pipeline, "_prepare_paper_data", _fake_paper_data(paper))
+    monkeypatch.setattr(paper_reader, "prepare_paper_data", _fake_paper_data(paper))
     monkeypatch.setattr(
-        paper_pipeline, "PaperSummarizer", _fake_summarizer(SUMMARY_FROM_MODEL)
+        legacy_writers, "PaperSummarizer", _fake_summarizer(SUMMARY_FROM_MODEL)
     )
     captured: list = []
     real = runtime.publish_artifact
@@ -386,7 +388,7 @@ async def test_tags_the_paper_never_mentions_become_pr_notes(
         return await real(context, request, create_pr=create_pr)
 
     monkeypatch.setattr(paper_pipeline, "publish_artifact", spy)
-    await paper_pipeline.run_paper_pipeline(
+    await bootstrap.run_use_case(
         context, JobRequest(kind="summarize", source="2106.09685"), TokenUsageTracker()
     )
     notes = captured[0].review_notes
@@ -399,9 +401,7 @@ async def test_degraded_output_reaches_pr_notes_and_job_warnings(
     monkeypatch: pytest.MonkeyPatch,  # type: ignore[no-untyped-def]
 ) -> None:
     context, _ = pipeline_env
-    monkeypatch.setattr(
-        paper_pipeline, "_prepare_paper_data", _fake_paper_data(_paper())
-    )
+    monkeypatch.setattr(paper_reader, "prepare_paper_data", _fake_paper_data(_paper()))
     fake = _fake_summarizer(SUMMARY_FROM_MODEL)
 
     class NotingSummarizer(fake):  # type: ignore[misc, valid-type]
@@ -409,7 +409,7 @@ async def test_degraded_output_reaches_pr_notes_and_job_warnings(
             super().__init__(*args, **kwargs)
             self.notes = ["Summary is still long (4,000 Hangul characters)."]
 
-    monkeypatch.setattr(paper_pipeline, "PaperSummarizer", NotingSummarizer)
+    monkeypatch.setattr(legacy_writers, "PaperSummarizer", NotingSummarizer)
     captured: list = []
     real = runtime.publish_artifact
 
@@ -418,7 +418,7 @@ async def test_degraded_output_reaches_pr_notes_and_job_warnings(
         return await real(context, request, create_pr=create_pr)
 
     monkeypatch.setattr(paper_pipeline, "publish_artifact", spy)
-    outcome = await paper_pipeline.run_paper_pipeline(
+    outcome = await bootstrap.run_use_case(
         context, JobRequest(kind="summarize", source="2106.09685"), TokenUsageTracker()
     )
     assert any("still long" in w for w in outcome.warnings)
@@ -449,7 +449,7 @@ def _guideline_context(s3: _FakeS3, root_dir: Path):  # type: ignore[no-untyped-
 
 async def test_translation_guideline_is_optional(tmp_path: Path) -> None:
     from scholar_lens.adapters.aws.storage import S3OperationError
-    from scholar_lens.src import runtime
+    from scholar_lens.application import run as runtime
 
     load = runtime.load_translation_guideline
     missing = _FakeS3(None)
@@ -474,9 +474,9 @@ async def test_guideline_failure_stops_before_paid_stages(
         raise RuntimeError("s3 down")
 
     monkeypatch.setattr(paper_pipeline, "load_translation_guideline", broken)
-    monkeypatch.setattr(paper_pipeline, "_prepare_paper_data", prepare)
+    monkeypatch.setattr(paper_reader, "prepare_paper_data", prepare)
     with pytest.raises(RuntimeError, match="s3 down"):
-        await paper_pipeline.run_paper_pipeline(
+        await bootstrap.run_use_case(
             context,
             JobRequest(kind="summarize", source="2106.09685"),
             TokenUsageTracker(),
@@ -499,11 +499,11 @@ async def test_guide_budget_abort_keeps_the_generator_notes(
     async def evidence(*args, **kwargs):  # type: ignore[no-untyped-def]
         raise TokenBudgetExceeded("Cost ceiling passed: $61.00 > $60.00")
 
-    monkeypatch.setattr(guide_pipeline, "TechGuideGenerator", FakeGenerator)
+    monkeypatch.setattr(bootstrap, "TechGuideGenerator", FakeGenerator)
     monkeypatch.setattr(guide_pipeline, "write_guide_with_evidence", evidence)
-    monkeypatch.setattr(guide_pipeline, "WebResearcher", MagicMock())
+    monkeypatch.setattr(bootstrap, "WebResearcher", MagicMock())
     with pytest.raises(TokenBudgetExceeded) as caught:
-        await guide_pipeline.run_guide_pipeline(
+        await bootstrap.run_use_case(
             context,
             JobRequest(kind="guide", urls=["https://docs.vllm.ai/en/latest/"]),
             TokenUsageTracker(),

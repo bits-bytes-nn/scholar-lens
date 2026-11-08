@@ -24,9 +24,9 @@ from __future__ import annotations
 
 import asyncio
 import functools
+import logging
 import re
 from collections.abc import Callable, Collection, Mapping
-from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import urlparse
 
@@ -61,7 +61,11 @@ from scholar_lens.domain.guide.authority import (
     third_party_identifiers,
 )
 from scholar_lens.domain.guide.evidence_guide import install_requirements
-from scholar_lens.domain.guide.models import TechGuide
+from scholar_lens.domain.guide.models import (
+    GuideMaterial,
+    NotTechnicalContentError,
+    TechGuide,
+)
 from scholar_lens.domain.prompt_safety import neutralize_prompt_tags
 from scholar_lens.domain.research import (
     REFERENCE_LABEL,
@@ -86,7 +90,8 @@ from scholar_lens.domain.tags import controlled_tag_problems
 from scholar_lens.domain.text import is_affirmative, is_placeholder
 from scholar_lens.domain.usage_context import staged
 from scholar_lens.domain.validation import description_markup, description_problems
-from scholar_lens.src.logger import logger
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_LANGUAGE: str = "Korean"
 # The third-party identifier lookup before writing uses a third of the
@@ -100,27 +105,11 @@ def _normalized(name: str) -> str:
     return re.sub(r"[-_.]+", "-", name).lower()
 
 
-class NotTechnicalContentError(Exception):
-    """Raised when the supplied URLs are not technical documentation."""
-
-
 _NO_DOCS_NOTE = (
     "No documentation URL was given, so no page counted as official: verify "
     "the guide's commands, flags and defaults against the product's current "
     "docs."
 )
-
-
-@dataclass
-class GuideMaterial:
-    """What :meth:`TechGuideGenerator.gather` collected."""
-
-    topic: str
-    corpus: ResearchCorpus
-    # The user's reference URLs not already among the docs URLs.
-    references: list[str] = field(default_factory=list)
-    # The web-search queries run (explicit or planned).
-    queries: list[str] = field(default_factory=list)
 
 
 class TechGuideGenerator(RetryableBase):

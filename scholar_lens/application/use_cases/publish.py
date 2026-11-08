@@ -1,26 +1,25 @@
 """``scholar-lens publish``: check a saved or rejected post again and open
 its blog PR.
 
-Every run saves its :class:`~.publish_types.PublishRequest` without the post
-text (:class:`~.publish_types.SavedPublishRequest`) next to the saved or
-rejected post, locally and in S3. ``publish`` reads the (possibly edited)
-post and that request back, runs the publisher's deterministic
-post-processing and validation (:meth:`~.publisher.Publisher.publish`) again
-and opens or updates the PR on the request's branch, exactly as the run's
-last step would. It runs locally: a Batch run's post is read from S3.
+Every run saves its :class:`~scholar_lens.domain.publishing.PublishRequest`
+without the post text (:class:`~scholar_lens.domain.publishing.SavedPublishRequest`)
+next to the saved or rejected post, locally and in S3. ``publish`` reads the
+(possibly edited) post and that request back, runs the publisher's
+deterministic post-processing and validation again and opens or updates the
+PR on the request's branch, exactly as the run's last step would. It runs
+locally: a Batch run's post is read from S3.
 """
 
 from __future__ import annotations
 
-import time
+import logging
 from pathlib import Path
 
 from pydantic import ValidationError
 
-from scholar_lens.adapters.aws.storage import S3Handler
-from scholar_lens.configs import Config
-from scholar_lens.domain.constants import RUN_SECRETS
-from scholar_lens.domain.jobs import ArtifactKind, JobResult
+from scholar_lens.application.ports import ObjectStore
+from scholar_lens.application.run import PipelineOutcome, RunContext, publish_artifact
+from scholar_lens.domain.jobs import ArtifactKind
 from scholar_lens.domain.publishing import (
     BLOG_IMAGE_REF,
     BLOG_IMAGES_DIR,
@@ -31,20 +30,12 @@ from scholar_lens.domain.publishing import (
     request_name,
     without_violations,
 )
-from scholar_lens.src.logger import logger
-from scholar_lens.src.runtime import (
-    RunContext,
-    build_context,
-    check_pr_token,
-    load_secrets_from_ssm,
-    publish_artifact,
-    record_error,
-    record_outcome,
-    run_coroutine,
-)
+
+logger = logging.getLogger(__name__)
+
 
 # The job kind a post's validation kind reports as.
-_RESULT_KINDS: dict[str, ArtifactKind] = {
+RESULT_KINDS: dict[str, ArtifactKind] = {
     "review": "review",
     "summarize": "summarize",
     "guide": "guide",
@@ -134,7 +125,7 @@ def _from_s3(context: RunContext, uri: str) -> PublishRequest:
 
 
 def _fetch_images(
-    handler: S3Handler, key: str, scope: str, request: PublishRequest
+    handler: ObjectStore, key: str, scope: str, request: PublishRequest
 ) -> list[str]:
     """The post's localized images, copied from S3 into its staging folder
     (where the publisher keeps the images the post shows): a rejected post's
@@ -171,39 +162,10 @@ def _fetch_images(
     ]
 
 
-def run_publish(target: str, *, create_pr: bool) -> JobResult:
-    """Check the saved or rejected post at ``target`` again and open its PR.
-
-    The result is a run's: ``succeeded``; ``failed`` (the post broke a blog
-    rule or its images could not be stored, with the rejected copy's paths,
-    or the PR failed, with ``pr_error``); ``rejected`` when the post or its
-    publish request cannot be read. Never raises for these.
-
-    Args:
-        target: A local ``.md`` path or an ``s3://`` URI (see
-            :func:`load_saved_post`).
-        create_pr: Open (or update) the blog PR when GitHub is enabled.
-
-    Returns:
-        The result, as a run reports it.
-    """
-    result = JobResult(kind=None, input=target)
-    started = time.monotonic()
-    try:
-        context = build_context(Config.load())
-    except Exception as e:  # noqa: BLE001 - reported, publishing cannot start
-        result.error = f"{type(e).__name__}: {e}"
-        logger.error("Publish could not start: %s", e)
-        return result
-    load_secrets_from_ssm(context, RUN_SECRETS)
-    try:
-        request = load_saved_post(context, target)
-        result.kind = _RESULT_KINDS.get(request.kind)
-        check_pr_token(context, create_pr)
-        outcome = run_coroutine(publish_artifact(context, request, create_pr=create_pr))
-        record_outcome(result, outcome)
-    except Exception as e:  # noqa: BLE001 - folded into the result
-        record_error(result, e, (SavedPostError,))
-    finally:
-        result.duration_seconds = round(time.monotonic() - started, 1)
-    return result
+async def publish_saved_post(
+    context: RunContext, request: PublishRequest, *, create_pr: bool
+) -> PipelineOutcome:
+    """Run the publisher's post-processing and validation on ``request``
+    again and open (or update) its blog PR, exactly as the run's last step
+    would."""
+    return await publish_artifact(context, request, create_pr=create_pr)

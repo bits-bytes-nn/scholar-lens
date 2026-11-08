@@ -182,17 +182,24 @@ source_modules = ["scholar_lens.legacy.section_loop"]
 forbidden_modules = [
     "scholar_lens.legacy.explainer",
     "scholar_lens.legacy.summarizer",
-    "scholar_lens.src.tech_guide",
-    "scholar_lens.src.guide_pipeline",
-    "scholar_lens.src.guide_writer",
-    "scholar_lens.src.survey_pipeline",
-    "scholar_lens.src.survey_writer",
+    "scholar_lens.adapters.web.guide_research",
+    "scholar_lens.application.use_cases",
 ]
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
 name = "The survey stages do not use the guide or review generators"
 type = "forbidden"
-source_modules = ["scholar_lens.src.survey_pipeline", "scholar_lens.src.survey_writer"]
-forbidden_modules = ["scholar_lens.src.tech_guide", "scholar_lens.legacy.explainer"]
+source_modules = [
+    "scholar_lens.application.use_cases.survey_plan",
+    "scholar_lens.application.use_cases.survey_write",
+    "scholar_lens.adapters.scholarly.candidates",
+    "scholar_lens.adapters.bedrock.survey_calls",
+]
+forbidden_modules = [
+    "scholar_lens.application.use_cases.guide",
+    "scholar_lens.application.use_cases.paper",
+    "scholar_lens.adapters.web.guide_research",
+    "scholar_lens.legacy",
+]
 allow_indirect_imports = true

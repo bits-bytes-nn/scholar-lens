@@ -12,7 +12,7 @@ from moto import mock_aws
 
 from scholar_lens.adapters.aws.billing import CostExplorerBilling
 from scholar_lens.adapters.aws.run_ledger import S3RunLedger
-from scholar_lens.application.costs import report_costs
+from scholar_lens.application.use_cases.costs import report_costs
 from scholar_lens.domain.costs import UNRECORDED, RunRecord, cost_report
 from scholar_lens.domain.usage import RunUsage, UsageEvent
 

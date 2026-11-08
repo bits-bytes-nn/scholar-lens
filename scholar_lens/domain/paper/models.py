@@ -10,6 +10,7 @@ from typing import Any, NamedTuple
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator
 
 from scholar_lens.domain.ids import arxiv_id_from_reference
+from scholar_lens.domain.text import is_placeholder
 
 
 class Content(BaseModel):
@@ -132,3 +133,17 @@ class ReviewText(NamedTuple):
     # Degraded-output notes (sections skipped or below the bar, unusable
     # finalization) for the PR checklist and the job result.
     notes: tuple[str, ...] = ()
+
+
+def backfill_metadata(
+    meta_fields: dict[str, Any], attributes: Attributes, *, title_is_fallback: bool
+) -> dict[str, Any]:
+    """Prefer the title/authors parsed from the paper text when the source had
+    none (a bare PDF URL yields a URL-derived title and placeholder authors)."""
+    title = str(meta_fields.get("title", "")).strip()
+    if not is_placeholder(attributes.title) and (title_is_fallback or not title):
+        meta_fields["title"] = attributes.title
+    authors = [a for a in (meta_fields.get("authors") or []) if not is_placeholder(a)]
+    if not authors and attributes.authors:
+        meta_fields["authors"] = attributes.authors
+    return meta_fields

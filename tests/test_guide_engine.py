@@ -23,6 +23,7 @@ from scholar_lens.application.guide_engine import (
     GuideSettings,
 )
 from scholar_lens.application.ports import AgentLimits, AgentOutcome
+from scholar_lens.application.use_cases.guide import _source_urls, guide_documents
 from scholar_lens.domain.coverage import ExtractedTarget, ExtractedTargets
 from scholar_lens.domain.evidence import (
     EvidenceLedger,
@@ -40,7 +41,6 @@ from scholar_lens.domain.post_spec import evidence_policy
 from scholar_lens.domain.research import PageContent
 from scholar_lens.domain.sources import SourceSet
 from scholar_lens.domain.specs import GUIDE_SPEC
-from scholar_lens.src.guide_writer import _source_urls, guide_documents
 from tests.fakes import with_context
 
 DOC_TEXT = """## Overview
@@ -808,7 +808,7 @@ def test_install_commands_are_checked_against_the_package_extras() -> None:
 
 
 def test_decorative_images_are_matched_by_word_not_substring() -> None:
-    from scholar_lens.src.guide_writer import _decorative
+    from scholar_lens.application.use_cases.guide import _decorative
 
     assert _decorative("https://d.dev/static/logo.svg")
     assert _decorative("https://d.dev/img/icons/gpu.png")

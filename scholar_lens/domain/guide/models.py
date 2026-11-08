@@ -1,8 +1,10 @@
-"""A written technical guide, as the guide pipeline publishes it."""
+"""A technical guide: the material gathered for it and the written guide."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+
+from scholar_lens.domain.research import ResearchCorpus
 
 
 @dataclass
@@ -20,3 +22,19 @@ class TechGuide:
     image_urls: list[str] = field(default_factory=list)
     # The search description (``classify``); empty lets the blog derive one.
     description: str = ""
+
+
+class NotTechnicalContentError(Exception):
+    """Raised when the supplied URLs are not technical documentation."""
+
+
+@dataclass
+class GuideMaterial:
+    """What :meth:`TechGuideGenerator.gather` collected."""
+
+    topic: str
+    corpus: ResearchCorpus
+    # The user's reference URLs not already among the docs URLs.
+    references: list[str] = field(default_factory=list)
+    # The web-search queries run (explicit or planned).
+    queries: list[str] = field(default_factory=list)

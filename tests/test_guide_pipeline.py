@@ -10,16 +10,17 @@ from typing import Any
 import boto3
 import pytest
 
+from scholar_lens import bootstrap
 from scholar_lens.adapters.bedrock.usage import TokenUsageTracker
 from scholar_lens.adapters.github.publisher import Publisher
+from scholar_lens.application.run import RunContext
+from scholar_lens.application.use_cases import guide as guide_pipeline
+from scholar_lens.application.use_cases.guide import guide_branch_id, guide_title
 from scholar_lens.configs import Github
 from scholar_lens.configs.config import Config
 from scholar_lens.domain.conventions import BlogPost, load_local_conventions
 from scholar_lens.domain.guide.models import TechGuide
 from scholar_lens.domain.jobs import JobRequest
-from scholar_lens.src import guide_pipeline
-from scholar_lens.src.guide_pipeline import guide_branch_id, guide_title
-from scholar_lens.src.runtime import RunContext
 from tests.test_publisher import PNG, FakeGithub, FakeRepo
 
 
@@ -38,8 +39,8 @@ def test_branch_id_tells_pages_apart_by_query() -> None:
 
 
 def test_guide_document_converts_markers_and_drops_unoffered_images() -> None:
+    from scholar_lens.application.use_cases.guide import guide_document
     from scholar_lens.domain.guide.models import TechGuide
-    from scholar_lens.src.guide_pipeline import guide_document
 
     arch = "https://docs.x.dev/img/arch.png"
     guide = TechGuide(topic="X 시작하기", body="", image_urls=[arch])
@@ -132,23 +133,34 @@ async def _run_guide(
     context.root_dir = tmp_path
 
     async def evidence(
-        _context: RunContext, gen: FakeGuideGenerator, *, urls: list[str], **_: Any
+        _context: RunContext,
+        _tools: Any,
+        gen: FakeGuideGenerator,
+        *,
+        urls: list[str],
+        **_: Any,
     ) -> TechGuide:
         return gen.guide(urls)
 
-    monkeypatch.setattr(guide_pipeline, "TechGuideGenerator", lambda **_: generator)
+    monkeypatch.setattr(bootstrap, "TechGuideGenerator", lambda **_: generator)
     monkeypatch.setattr(guide_pipeline, "write_guide_with_evidence", evidence)
     monkeypatch.setattr(
-        guide_pipeline,
+        bootstrap,
         "WebResearcher",
         lambda **_: SimpleNamespace(
-            close=lambda: None, search_notes=lambda: [], repo_tags=lambda _: None
+            close=lambda: None,
+            search_notes=lambda: [],
+            repo_tags=lambda _: None,
+            supports_search=True,
         ),
     )
     monkeypatch.setattr(guide_pipeline, "load_translation_guideline", no_guideline)
     request = JobRequest(kind="guide", urls=[DOCS], create_pr=False)
-    return await guide_pipeline.run_guide_pipeline(
-        context, request, TokenUsageTracker()
+    return await guide_pipeline.run_guide(
+        context,
+        request,
+        TokenUsageTracker(),
+        bootstrap.GuideToolkit(context),  # type: ignore[arg-type]
     )
 
 
@@ -177,13 +189,10 @@ async def test_a_retitled_rerun_updates_the_published_guide(
     config = Config()
 
     def context(posts: list[BlogPost]) -> RunContext:
-        return RunContext(
-            config=config,
+        ctx = bootstrap.run_context(
+            config,
             default_boto_session=session,
             bedrock_boto_session=session,
-            conventions=spec,
-            blog_posts=posts,
-            blog_tags={},
             publisher_factory=lambda ctx: Publisher(
                 _GITHUB,
                 root_dir=tmp_path,
@@ -192,6 +201,8 @@ async def test_a_retitled_rerun_updates_the_published_guide(
                 fetch_image=lambda url: PNG,
             ),
         )
+        ctx.conventions, ctx.blog_posts, ctx.blog_tags = spec, posts, {}
+        return ctx
 
     first = await _run_guide(
         tmp_path / "1",
@@ -232,7 +243,7 @@ async def test_the_evidence_engine_gets_the_request_and_failures_keep_the_notes(
     class Stop(Exception):
         pass
 
-    async def evidence(context, generator, **kwargs):  # type: ignore[no-untyped-def]
+    async def evidence(context, tools, generator, **kwargs):  # type: ignore[no-untyped-def]
         seen.update(kwargs, generator=generator)
         generator.notes.append("Reference material that could not be read")
         raise Stop
@@ -245,8 +256,8 @@ async def test_the_evidence_engine_gets_the_request_and_failures_keep_the_notes(
     researcher = MagicMock()
     researcher.search_notes.return_value = ["Search fell back to Brave"]
     monkeypatch.setattr(guide_pipeline, "write_guide_with_evidence", evidence)
-    monkeypatch.setattr(guide_pipeline, "TechGuideGenerator", Generator)
-    monkeypatch.setattr(guide_pipeline, "WebResearcher", lambda **_: researcher)
+    monkeypatch.setattr(bootstrap, "TechGuideGenerator", Generator)
+    monkeypatch.setattr(bootstrap, "WebResearcher", lambda **_: researcher)
 
     async def no_guideline(context):  # type: ignore[no-untyped-def]
         return None
@@ -262,7 +273,9 @@ async def test_the_evidence_engine_gets_the_request_and_failures_keep_the_notes(
         discover_subpages=False,
     )
     with pytest.raises(Stop) as failed:
-        await guide_pipeline.run_guide_pipeline(context, request, MagicMock())
+        await guide_pipeline.run_guide(
+            context, request, MagicMock(), bootstrap.GuideToolkit(context)
+        )
     assert seen["urls"] == [DOCS]
     assert seen["reference_urls"] == ["https://blog.x.io/a"]
     assert seen["search_queries"] == ["vllm paged attention"]
@@ -286,23 +299,25 @@ async def test_search_queries_without_a_provider_fail_before_any_model_call(
         return None
 
     researcher = MagicMock()
-    researcher.search_provider.supports_search = False
+    researcher.supports_search = False
     built = MagicMock()
     monkeypatch.setattr(guide_pipeline, "load_translation_guideline", no_guideline)
-    monkeypatch.setattr(guide_pipeline, "WebResearcher", lambda **_: researcher)
-    monkeypatch.setattr(guide_pipeline, "TechGuideGenerator", built)
+    monkeypatch.setattr(bootstrap, "WebResearcher", lambda **_: researcher)
+    monkeypatch.setattr(bootstrap, "TechGuideGenerator", built)
     context = MagicMock()
     context.config = Config()
     context.require_conventions.return_value.type_problem.return_value = ""
     request = MagicMock(urls=[DOCS], reference_urls=[], search_queries=["q"])
     with pytest.raises(ValueError, match="TAVILY_API_KEY"):
-        await guide_pipeline.run_guide_pipeline(context, request, MagicMock())
+        await guide_pipeline.run_guide(
+            context, request, MagicMock(), bootstrap.GuideToolkit(context)
+        )
     built.assert_not_called()
 
 
 def test_a_category_that_cannot_label_the_post_fails_at_run_start() -> None:
+    from scholar_lens.application.run import check_post_type
     from scholar_lens.domain.conventions import load_local_conventions
-    from scholar_lens.src.runtime import check_post_type
 
     spec = load_local_conventions()
     paper_type = next(t for t in spec.types if spec.is_paper_type(t))
