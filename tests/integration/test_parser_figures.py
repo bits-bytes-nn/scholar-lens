@@ -21,6 +21,7 @@ from scholar_lens.adapters.documents.parser import (
     HTMLRichParser,
     PDFParser,
     Region,
+    _completed_figures,
     _is_valid_region,
     extract_figures_from_pdf,
 )
@@ -552,6 +553,12 @@ class TestFigureAnalysisFailure:
                     self._analyser(TokenBudgetExceeded("over budget")), "1", "/p/1.png"
                 )
             )
+
+    def test_a_budget_breach_among_the_figures_is_raised(self) -> None:
+        from scholar_lens.domain.usage import TokenBudgetExceeded
+
+        with pytest.raises(TokenBudgetExceeded, match="over budget"):
+            _completed_figures([TokenBudgetExceeded("over budget")])
 
 
 class TestUpstageHtmlEscaping:

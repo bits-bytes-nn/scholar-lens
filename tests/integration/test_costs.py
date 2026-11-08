@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import io
 import json
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from unittest.mock import MagicMock
 
 import boto3
 import pytest
+from botocore.exceptions import ClientError
 from moto import mock_aws
 
 from scholar_lens.adapters.aws.billing import CostExplorerBilling
@@ -112,6 +115,58 @@ def test_s3_ledger_reads_manifests_in_the_period() -> None:
         by="model",
     )
     assert [(r.key, r.cost_usd) for r in report.rows] == [("opus", 0.5)]
+
+
+class _StubS3:
+    """Lists ``bodies`` (key -> manifest, or the error code ``get_object``
+    raises) under ``sl/results/``, all finished on ``DAY``."""
+
+    def __init__(self, bodies: dict[str, bytes | str]) -> None:
+        self.bodies = bodies
+
+    def get_paginator(self, _name: str) -> Any:
+        contents = [{"Key": k, "LastModified": DAY} for k in self.bodies]
+        paginator = MagicMock()
+        paginator.paginate.return_value = [{"Contents": contents}]
+        return paginator
+
+    def get_object(self, *, Bucket: str, Key: str) -> dict[str, Any]:  # noqa: N803
+        body = self.bodies[Key]
+        if isinstance(body, str):
+            raise ClientError({"Error": {"Code": body}}, "GetObject")
+        return {"Body": io.BytesIO(body)}
+
+
+def _manifest(job_id: str, **fields: Any) -> bytes:
+    return json.dumps({"job_id": job_id, "kind": "guide", **fields}).encode()
+
+
+def test_a_refused_manifest_read_fails_the_report() -> None:
+    s3 = _StubS3(
+        {
+            "sl/results/a.json": _manifest("a", estimated_cost_usd=1.0),
+            "sl/results/b.json": "AccessDenied",
+        }
+    )
+    ledger = S3RunLedger(s3, "results-bucket", "sl/results")
+    with pytest.raises(ClientError, match="AccessDenied"):
+        report_costs(ledger, since=DAY, until=NEXT, by="kind")
+
+
+def test_a_manifest_gone_after_listing_is_skipped_and_no_status_is_waste() -> None:
+    s3 = _StubS3(
+        {
+            "sl/results/a.json": _manifest(
+                "a", status="succeeded", estimated_cost_usd=2.0
+            ),
+            "sl/results/gone.json": "NoSuchKey",
+            # Written by a run that died before recording its status.
+            "sl/results/c.json": _manifest("c", estimated_cost_usd=1.0),
+        }
+    )
+    ledger = S3RunLedger(s3, "results-bucket", "sl/results")
+    report = report_costs(ledger, since=DAY, until=NEXT, by="kind")
+    assert (report.runs, report.cost_usd, report.wasted_usd) == (2, 3.0, 1.0)
 
 
 def test_billing_sums_services_across_pages_for_the_tag() -> None:

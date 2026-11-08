@@ -13,8 +13,8 @@ import pytest
 
 from scholar_lens.adapters.packages.pypi import package_extras, package_source
 from scholar_lens.application.use_cases import guide as guide_writer
-from scholar_lens.domain.guide.sdk_index import PackageSource
-from scholar_lens.domain.sources import ReleaseUnavailable
+from scholar_lens.domain.guide.sdk_index import PackageSource, api_problems
+from scholar_lens.domain.sources import IndexUnreachable, ReleaseUnavailable
 
 
 def _wheel(members: dict[str, str]) -> bytes:
@@ -120,6 +120,43 @@ def test_without_a_distribution_of_the_name_its_import_package_decides(
         guide_writer.product_sdk({"gearbox": ("1.0", frozenset())}, ["gear"], _INDEX)
         is None
     )
+
+
+def test_an_index_that_answers_html_is_unreachable_not_unknown() -> None:
+    # A captive portal or an error page served as 200.
+    client = httpx.Client(
+        transport=httpx.MockTransport(
+            lambda _request: httpx.Response(200, text="<html>Sign in</html>")
+        )
+    )
+    with pytest.raises(IndexUnreachable, match="gear"):
+        package_extras("gear", client=client)
+
+
+def test_a_partial_source_makes_the_product_index_partial() -> None:
+    """Code cut at the size cap: a module or name it did not read is no
+    verdict, while what it read is still judged."""
+
+    def source(_name: str, _release: str | None = None) -> PackageSource:
+        return PackageSource(
+            "1.0",
+            {"gear/__init__.py": "", "gear/core.py": "def spin():\n    pass\n"},
+            complete=False,
+        )
+
+    index = guide_writer.product_sdk(
+        {"gear": ("1.0", frozenset())},
+        ["gear"],
+        SimpleNamespace(source=source, extras=lambda _n, _r=None: None),
+    )
+    assert index is not None and index.partial
+    code = (
+        "from gear.unread import Thing\nfrom gear import unread_sub\n"
+        "from gear.core import spin, missing\n"
+    )
+    assert api_problems([code], index) == [
+        "`missing` is not in `gear.core` (gear gear 1.0)"
+    ]
 
 
 # ---- the run's target release ---------------------------------------------------
