@@ -31,6 +31,7 @@ restored as follows:
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import re
@@ -136,6 +137,20 @@ class ReadJob:
     prompt: str
     limits: AgentLimits
     required: tuple[str, ...] = ()
+
+
+def reader_key(job: ReadJob, prompt: str) -> str:
+    """The cache key of a job's evidence: the job's key (the source, the
+    reader version and model) with a digest of everything else the reader
+    is given: its prompt (the topic, the key targets, the counts asked
+    for), its limits and the kinds it is asked again for."""
+    inputs = json.dumps(
+        [prompt, job.limits.turns, job.limits.total_tokens, list(job.required)],
+        ensure_ascii=False,
+    )
+    digest = hashlib.sha256(inputs.encode()).hexdigest()[:12]
+    stem = job.key.removesuffix(".json")
+    return f"{stem}-r{digest}.json"
 
 
 # Makes a read job inside the reading gate (a survey fetches the paper's
@@ -457,7 +472,8 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
         self, starts: Iterable[ReadStart], *, corpus: Collection[str] = ()
     ) -> list[tuple[ReadJob | None, list[Evidence]]]:
         """Every job's evidence, in order, at most ``concurrency`` readers at
-        once; evidence is cached per job key, and a failure cancels the
+        once; evidence is cached per :func:`reader_key` (the job's key and
+        the reader's whole prompt), and a failure cancels the
         rest. ``corpus``: the authorities of the run's sources (the policy
         reads them)."""
         gate = asyncio.Semaphore(self.run.concurrency)
@@ -473,17 +489,18 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
                 if job is None:
                     return None, []
                 prompt = "\n\n".join(p for p in (job.prompt, self.targets_block()) if p)
-                if self.store is not None and (cached := self.store.get(job.key)):
+                key = reader_key(job, prompt)
+                if self.store is not None and (cached := self.store.get(key)):
                     document = job.document
                     kept = (
                         cached_evidence(
                             cached,
                             document,
                             lambda e: rule(document, e.kind, e.model_dump(mode="json")),
-                            key=job.key,
+                            key=key,
                         )
                         if self.spec.evidence.recheck_cached
-                        else cached_evidence(cached, document, key=job.key)
+                        else cached_evidence(cached, document, key=key)
                     )
                     if kept is not None:
                         return job, kept
@@ -496,7 +513,7 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
                 )
                 if self.store is not None and items:
                     self.store.put(
-                        job.key,
+                        key,
                         json.dumps([e.model_dump() for e in items], ensure_ascii=False),
                     )
                 return job, items

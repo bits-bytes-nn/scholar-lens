@@ -24,7 +24,11 @@ from scholar_lens.application.guide_engine import (
 )
 from scholar_lens.application.ports import AgentLimits, AgentOutcome
 from scholar_lens.application.use_cases.guide import _source_urls, guide_documents
-from scholar_lens.domain.coverage import ExtractedTarget, ExtractedTargets
+from scholar_lens.domain.coverage import (
+    CoverageTarget,
+    ExtractedTarget,
+    ExtractedTargets,
+)
 from scholar_lens.domain.evidence import (
     EvidenceLedger,
     SourceDocument,
@@ -890,3 +894,59 @@ def test_a_topic_is_owned_by_its_first_section() -> None:
     taught = [s.topics for s in outline.sections]
     assert ["Structured output"] in taught and ["Hooks"] in taught
     assert any("kept in its first section" in n for n in notes)
+
+
+# ---- the evidence cache key ---------------------------------------------------
+
+
+class _DictStore:
+    def __init__(self) -> None:
+        self.blobs: dict[str, str] = {}
+
+    def get(self, key: str) -> str | None:
+        return self.blobs.get(key)
+
+    def put(self, key: str, text: str) -> None:
+        self.blobs[key] = text
+
+
+class _Reader:
+    """A reader that records one finding of the official page."""
+
+    def __init__(self) -> None:
+        self.reads = 0
+
+    async def run_agent(self, *, tools, **_: Any) -> AgentOutcome:  # type: ignore[no-untyped-def]
+        self.reads += 1
+        record = {t.__name__: t for t in tools}["record_evidence"]
+        record(
+            "finding",
+            "레플리카마다 요청을 묶습니다",
+            "Serve batches requests on each replica to raise throughput.",
+            "S1",
+        )
+        return AgentOutcome(text="done", stop_reason="end_turn")
+
+
+def test_cached_evidence_is_reused_only_for_the_same_reader_inputs() -> None:
+    model = _Reader()
+    store = _DictStore()
+    engine = EvidenceGuideEngine(
+        model,  # type: ignore[arg-type]
+        GuideSettings(language="Korean", title_max_length=70, reader_tag="t"),
+        store,
+    )
+    page = SourceDocument.from_markdown(
+        "D1", "Ray Serve batching", "full_text", DOC_TEXT, authority="official"
+    )
+    asyncio.run(engine.read("Serve batching", [page]))
+    asyncio.run(engine.read("Serve batching", [page]))
+    assert model.reads == 1
+    # Another topic, or other key targets, is another reader prompt.
+    asyncio.run(engine.read("Serve autoscaling", [page]))
+    assert model.reads == 2
+    engine.targets = [CoverageTarget(id="T1", statement="a batch cap", source="D1")]
+    asyncio.run(engine.read("Serve autoscaling", [page]))
+    assert model.reads == 3
+    asyncio.run(engine.read("Serve autoscaling", [page]))
+    assert model.reads == 3 and len(store.blobs) == 3
