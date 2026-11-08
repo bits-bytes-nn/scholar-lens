@@ -426,6 +426,36 @@ async def test_degraded_output_reaches_pr_notes_and_job_warnings(
     assert any("still long" in n for n in captured[0].review_notes)
 
 
+async def test_only_the_papers_own_figures_reach_the_publisher(
+    pipeline_env,
+    monkeypatch: pytest.MonkeyPatch,  # type: ignore[no-untyped-def]
+) -> None:
+    context, _ = pipeline_env
+    invented = "https://arxiv.org/html/2106.09685v2/x9.png"
+    local = "figures/invented_plot.png"
+    output = SUMMARY_FROM_MODEL.replace(
+        "아래 그림은",
+        f"![없는 그림]({invented})\n\n![로컬 그림]({local})\n\n아래 그림은",
+    )
+    assert invented in output and local in output
+    monkeypatch.setattr(paper_reader, "prepare_paper_data", _fake_paper_data(_paper()))
+    monkeypatch.setattr(legacy_writers, "PaperSummarizer", _fake_summarizer(output))
+    captured: list = []
+    real = runtime.publish_artifact
+
+    async def spy(context, request, *, create_pr):  # type: ignore[no-untyped-def]
+        captured.append(request)
+        return await real(context, request, create_pr=create_pr)
+
+    monkeypatch.setattr(paper_pipeline, "publish_artifact", spy)
+    await bootstrap.run_use_case(
+        context, JobRequest(kind="summarize", source="2106.09685"), TokenUsageTracker()
+    )
+    markdown = captured[0].markdown
+    assert f"]({ARXIV_FIGURE})" in markdown
+    assert invented not in markdown and local not in markdown
+
+
 class _FakeS3:
     bucket_name = "bucket"
 

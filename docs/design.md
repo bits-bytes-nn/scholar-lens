@@ -474,7 +474,7 @@ OpenAlex는 arXiv 시대 ML 논문의 인용 수를 크게 적게 세고(실측:
 4. `<work_dir>/<YYYY-MM-DD>-<slug>.md`로 저장합니다. 파일명 날짜는 게시일(UTC)이고, front matter `date`는 논문 발행 시각입니다(가이드는 생성 시각, 서베이는 계획의 `created_at`). 블로그에 이미 있는 글을 바꾸는 실행(`PublishRequest.published_path`, 아래)은 그 글의 파일 이름을 그대로 쓰고, 슬러그(이미지 이름과 `blog-images/<slug>/`)도 그 글의 것입니다. 블로그가 UTC로 빌드하므로 두 날짜 모두 UTC로 씁니다. `slugify`는 ASCII 슬러그를 만들고(80자 안에서 단어 경계로 자름), ASCII 글자가 없는 제목은 `untitled-<8자리 해시>`로, 글자·숫자가 하나도 없는 제목은 `untitled`로 바꿉니다.
 5. S3 버킷이 있으면 글은 `<prefix>/posts/`, 이미지는 `<prefix>/assets/images/`에 올립니다. 이미지 하나라도 실패하면 오류입니다. 업로드는 항상 비공개 객체이며(ACL 없음), 글은 이미지를 블로그 저장소에서 읽습니다.
 
-`application/run.py::publish_artifact`는 `create_pr`이고 GitHub 연동이 켜져 있으면 `create_pull_request`를 호출합니다. PR 실패(`PublishError`)는 실행을 실패시키지 않고 `warnings`에 남깁니다.
+`application/run.py::publish_artifact`는 `create_pr`이고 GitHub 연동이 켜져 있으면 `create_pull_request`를 호출합니다. PR 실패(`PublishError`)는 저장한 글의 경로(`markdown_path`·`s3_uri`)를 그대로 둔 채 실행을 `failed`로 만들고 원인을 `pr_error`에 남깁니다(2.3절). 로컬 CLI는 5(`EXIT_PR_FAILED`)로, Batch worker는 실패 알림을 보낸 뒤 10으로 끝납니다.
 
 다시 생성한 글이 바꿀 블로그 글은 파이프라인이 front matter를 만들기 전에 정합니다(`application/run.py::find_published_post` → `Publisher.find_published`). 실행 시작 때 읽은 기준 브랜치의 글 목록(`_posts/` 바로 아래, `domain/conventions.py::BlogPost`)에서 다음 순서로 찾습니다.
 

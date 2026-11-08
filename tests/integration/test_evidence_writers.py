@@ -9,6 +9,7 @@ import asyncio
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import boto3
@@ -363,3 +364,122 @@ def test_a_paper_run_wires_roles_ceiling_and_shape(
     assert seen.stores[0].local_dir.name == "paper-evidence"
     assert seen.stores[0].local_dir.is_relative_to(seen.root)
     assert "engine note" in notes and any(BROKEN in n for n in notes)
+
+
+# ---- the guide's identifier check -----------------------------------------------
+
+_OFFICIAL = (
+    "xserve serves models.\n\n```bash\npip install xserve[gpu]\n"
+    "xserve serve --port 8000\n```\n\n```python\nfrom xserve import run\n"
+    'run("m", port=8000)\n```\n'
+) * 4
+
+# Each line breaks one rule: an install extra the index lacks, a flag no page
+# mentions, an import path and a keyword the package does not have.
+_WRONG_BODY = (
+    "## xserve\n\n```bash\npip install xserve[turbo]\n"
+    "xserve serve --port 8000 --warp-speed\n```\n\n```python\n"
+    "from xserve import run\nfrom xserve.engines import Fast\n"
+    'run("m", colour=1)\n```\n'
+)
+
+
+class _ServeIndex:
+    """xserve 1.0 on the package index, its code read when ``code``."""
+
+    def __init__(self, code: bool) -> None:
+        self.code = code
+
+    def extras(self, name, release=None):  # type: ignore[no-untyped-def]
+        return ("1.0", frozenset({"gpu"})) if name == "xserve" else None
+
+    def source(self, name, release=None):  # type: ignore[no-untyped-def]
+        if name != "xserve" or not self.code:
+            return None
+        return PackageSource(
+            "1.0", {"xserve/__init__.py": "def run(model, port=8000):\n    pass\n"}
+        )
+
+
+def _checked_guide(
+    seen: Seen, monkeypatch: pytest.MonkeyPatch, *, code: bool
+) -> tuple[list[str], list[str]]:
+    """The engine's section hook problems and the final notes of a guide
+    whose body is ``_WRONG_BODY``, the identifier check built by the run."""
+    hook: list[str] = []
+
+    class Generator(FakeGenerator):
+        async def gather(self, urls, **_kwargs):  # type: ignore[no-untyped-def]
+            page = PageContent(
+                url="https://docs.x.dev/guide/start",
+                title="Start",
+                text=_OFFICIAL,
+                authority="official",
+            )
+            return GuideMaterial(topic="xserve", corpus=ResearchCorpus(pages=[page]))
+
+    class Engine(guide_engine.EvidenceGuideEngine):
+        async def write(self, topic, documents, *, guideline):  # type: ignore[no-untyped-def]
+            ctx = SimpleNamespace(outline=SimpleNamespace(code_language="python"))
+            hook.extend(
+                p.text
+                for p in self.extra_problems(ctx, _WRONG_BODY)  # type: ignore[arg-type]
+                if p.kind == "unknown_flags"
+            )
+            return guide_engine.EvidenceGuide(
+                title="xserve",
+                body=_WRONG_BODY,
+                outline=None,  # type: ignore[arg-type]
+                ledger=EvidenceLedger(),
+                cited=list(documents),
+                notes=[],
+            )
+
+    monkeypatch.setattr(guide_writer, "EvidenceGuideEngine", Engine)
+    context = _context(seen.root)
+    tools = bootstrap.GuideToolkit(context)
+    tools.packages = _ServeIndex(code)  # type: ignore[assignment]
+    guide = asyncio.run(
+        guide_writer.write_guide_with_evidence(
+            context,
+            tools,
+            Generator(),  # type: ignore[arg-type]
+            urls=["https://docs.x.dev/guide/start"],
+            reference_urls=[],
+            discover_subpages=False,
+            search_queries=None,
+            translation_guideline=None,
+            tracker=TokenUsageTracker(),
+            title_max_length=60,
+        )
+    )
+    (note,) = [n for n in guide.notes if n.startswith("Flags/metrics")]
+    return hook, [note]
+
+
+def test_the_guide_check_reports_what_the_package_code_lacks(
+    seen: Seen, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    hook, notes = _checked_guide(seen, monkeypatch, code=True)
+    for problem in (
+        "`run()` takes no keyword 'colour'",
+        "module `xserve.engines` does not exist",
+        "--warp-speed",
+        "xserve[turbo]",
+    ):
+        assert any(problem in p for p in hook), problem
+        assert problem in notes[0], problem
+    # What the package's code defines is not reported.
+    assert not any("[port]" in p or "[--port]" in p for p in hook)
+
+
+def test_the_guide_check_without_package_code_reports_unseen_imports(
+    seen: Seen, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    hook, notes = _checked_guide(seen, monkeypatch, code=False)
+    for problem in ("[xserve.engines]", "[--warp-speed]", "[xserve[turbo]]"):
+        assert any(problem in p for p in hook), problem
+    for item in ("xserve.engines", "--warp-speed", "xserve[turbo]"):
+        assert item in notes[0], item
+    # The import path the official pages show is not reported.
+    assert not any("[xserve]" in p for p in hook)
