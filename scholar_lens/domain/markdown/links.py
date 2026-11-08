@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import Literal
 from urllib.parse import quote, unquote, urlsplit
 
-from scholar_lens.domain.ids import paper_link_key
+from scholar_lens.domain.ids import ARXIV_KEY_PREFIX, paper_link_key
 from scholar_lens.domain.markdown.math import in_spans, protected_spans
 from scholar_lens.domain.text import is_placeholder
 
@@ -220,7 +220,7 @@ class LinkSources:
         key = link_key(target)
         if key is not None and key in self.keys:
             return True
-        if key is None or key.startswith("arxiv:"):
+        if key is None or key.startswith(ARXIV_KEY_PREFIX):
             return False
         plain = unquote(target.strip()).rstrip("/").lower()
         start = self.stated.find(plain)

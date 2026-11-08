@@ -134,14 +134,19 @@ def doi_from_link(url: str | None) -> str | None:
     return doi.lower() if doi else None
 
 
+# The prefixes of :func:`paper_link_key`'s keys.
+ARXIV_KEY_PREFIX = "arxiv:"
+PAPER_KEY_PREFIXES = (ARXIV_KEY_PREFIX, "doi:")
+
+
 def paper_link_key(url: str | None) -> str | None:
     """One key per paper whatever link names it: ``arxiv:<id>`` for any
     arXiv URL or arXiv DOI (version dropped), ``doi:<doi>`` for any other
     DOI link; None for a link that names no paper by an identifier."""
     if key := arxiv_link_key(url):
-        return f"arxiv:{key}"
+        return f"{ARXIV_KEY_PREFIX}{key}"
     if doi := doi_from_link(url):
-        return f"doi:{doi}"
+        return f"{PAPER_KEY_PREFIXES[1]}{doi}"
     return None
 
 

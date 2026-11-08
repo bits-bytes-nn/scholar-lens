@@ -19,8 +19,14 @@ from pathlib import Path
 from typing import Any, Literal, Protocol
 
 from scholar_lens.domain.conventions import BlogPost, PostConventions
-from scholar_lens.domain.ids import ARXIV_DOI_VERSION, BARE_DOI, is_arxiv_host
+from scholar_lens.domain.ids import (
+    ARXIV_DOI_VERSION,
+    BARE_DOI,
+    PAPER_KEY_PREFIXES,
+    is_arxiv_host,
+)
 from scholar_lens.domain.markdown.front_matter import split_front_matter
+from scholar_lens.domain.markdown.links import link_key, markdown_links
 from scholar_lens.domain.markdown.lint import (
     BLOG_HTML_ELEMENTS,
     BLOG_NEEDS_ATTRIBUTES,
@@ -369,7 +375,7 @@ def validate_post(
         _check_description(lines, offset, add)
     _check_blog_markup(front, body, offset, add)
     if kind == "survey":
-        _check_survey_citations(lines, offset, add)
+        _check_survey_citations(body, lines, offset, add)
     return found
 
 
@@ -1404,22 +1410,21 @@ def _check_style(body: str, offset: int, add: Add) -> None:
 
 # A writer's citation key ("[@2305.18290]") that was never rendered.
 _CITATION_KEY = re.compile(r"\[@[^\]\n]*\]")
-_LINK_TARGET = re.compile(r"\]\((https?://[^)\s]+)\)")
-# A link to a paper itself (what a survey's citations and references point to).
-_PAPER_LINK = re.compile(r"^https?://(?:arxiv\.org/abs/|doi\.org/)")
 REFERENCES_HEADING = "### References"
 # The survey's list of the user's reference articles, after References, by
 # output language ("" for any other): links the body need not cite.
 FURTHER_READING_HEADINGS = {"Korean": "### 참고 자료", "": "### Further reading"}
 
 
-def _check_survey_citations(lines: Lines, offset: int, add: Add) -> None:
+def _check_survey_citations(body: str, lines: Lines, offset: int, add: Add) -> None:
     """A survey's citations and its reference list agree: no citation key
     is left unrendered, every listed reference is cited, and every paper the
     body links is listed. A reference only a table cites is a warning: the
     code-built timeline links every paper of the plan, so the prose skipped
     it. The list ends at the next heading: the further-reading list of the
-    user's articles after it is no list of cited papers."""
+    user's articles after it is no list of cited papers. Links are read by
+    the publish step's parser (:func:`markdown_links`) and compared by
+    :func:`link_key`, so any arXiv or DOI form of a paper is that paper."""
     start = next((i for i, line in lines if line.strip() == REFERENCES_HEADING), None)
     if start is None:
         add("error", "references", offset, f"a survey ends with '{REFERENCES_HEADING}'")
@@ -1428,33 +1433,36 @@ def _check_survey_citations(lines: Lines, offset: int, add: Add) -> None:
         (i for i, line in lines if i > start and _HEADING.match(line)),
         lines[-1][0] + 1,
     )
-    cited: set[str] = set()
-    in_prose: set[str] = set()
+    prose = dict(lines)
     for i, line in lines:
-        prose = BLOG_CODE_SPAN.sub("", line)
         if i < start:
-            for key in _CITATION_KEY.findall(prose):
+            for key in _CITATION_KEY.findall(BLOG_CODE_SPAN.sub("", line)):
                 add("error", "citations", offset + i, f"unresolved citation {key}")
-            targets = _LINK_TARGET.findall(prose)
-            cited.update(targets)
-            if not line.lstrip().startswith("|"):
-                in_prose.update(targets)
-    listed = {
-        url: i
-        for i, line in lines
-        if start < i < end and line.lstrip().startswith("* ")
-        for url in _LINK_TARGET.findall(line)
-    }
-    for url, i in listed.items():
-        if url not in cited:
+    cited: dict[str, str] = {}
+    in_prose: set[str] = set()
+    listed: dict[str, tuple[int, str]] = {}
+    for link in markdown_links(body):
+        key = link_key(link.target)
+        i = body.count("\n", 0, link.start)
+        if key is None or i not in prose or link.form == "definition":
+            continue
+        if i < start:
+            cited.setdefault(key, link.target)
+            if not prose[i].lstrip().startswith("|"):
+                in_prose.add(key)
+        elif i < end and prose[i].lstrip().startswith("* "):
+            listed.setdefault(key, (i, link.target))
+    for key, (i, url) in listed.items():
+        if key not in cited:
             add("error", "references", offset + i, f"reference never cited: {url}")
-        elif url not in in_prose:
+        elif key not in in_prose:
             # Only the code-built timeline links it: the prose skips the paper.
             add("warning", "references", offset + i, f"cited only in a table: {url}")
-    for url in sorted(u for u in cited if _PAPER_LINK.match(u) and u not in listed):
-        add(
-            "error",
-            "citations",
-            offset + start,
-            f"cited paper not in References: {url}",
-        )
+    for key, url in sorted(cited.items()):
+        if key.startswith(PAPER_KEY_PREFIXES) and key not in listed:
+            add(
+                "error",
+                "citations",
+                offset + start,
+                f"cited paper not in References: {url}",
+            )

@@ -179,38 +179,6 @@ def _outside_code(text: str) -> list[re.Match[str]]:
     ]
 
 
-# A link to a paper's own page (what a citation renders to).
-_PAPER_LINK = re.compile(
-    r"\[([^\]\n]+)\]\((https?://(?:arxiv\.org/abs/|doi\.org/)[^)\s]+)\)"
-)
-
-
-def _plan_urls(papers: Iterable[PlanPaper]) -> set[str]:
-    return {u for p in papers for u in (p.url, md_link_url(p.url))}
-
-
-def foreign_paper_links(text: str, papers: Iterable[PlanPaper]) -> list[str]:
-    """Links to papers outside the survey that a writer typed by hand
-    (outside code); the validator rejects them, since References lists only
-    the survey's papers."""
-    known = _plan_urls(papers)
-    code = [(s.start, s.end) for s in segments(text) if s.kind in ("fence", "icode")]
-    return [
-        m.group(2)
-        for m in _PAPER_LINK.finditer(text)
-        if m.group(2) not in known and not any(a <= m.start() < b for a, b in code)
-    ]
-
-
-def unlink_foreign_papers(text: str, papers: Iterable[PlanPaper]) -> str:
-    """``text`` with hand-typed links to papers outside the survey reduced
-    to their link text."""
-    foreign = set(foreign_paper_links(text, papers))
-    return _PAPER_LINK.sub(
-        lambda m: m.group(1) if m.group(2) in foreign else m.group(0), text
-    )
-
-
 def plan_link_sources(plan: SurveyPlan) -> LinkSources:
     """What a survey may link: its papers (any arXiv or DOI form of each)
     and the user's reference articles. A paper among the references that

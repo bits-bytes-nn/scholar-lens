@@ -52,7 +52,6 @@ from scholar_lens.domain.survey.plan import (
 from scholar_lens.domain.survey.post import (
     credit_figures,
     fill_metadata,
-    foreign_paper_links,
     further_reading,
     needs_metadata,
     normalize_plan_data,
@@ -60,7 +59,6 @@ from scholar_lens.domain.survey.post import (
     plan_link_sources,
     reference_list,
     render_citations,
-    unlink_foreign_papers,
     validate_plan,
 )
 from scholar_lens.domain.survey.references import reference_excerpts
@@ -245,12 +243,11 @@ async def write_survey_with_evidence(
 def survey_body(survey: Survey, language: str) -> tuple[str, list[str]]:
     """The body as published: citation keys rendered (unknown ones removed),
     images the writers were not offered dropped, figures credited to their
-    paper, math normalized. Returns it with notes."""
+    paper, math normalized. Returns it with notes. Links to anything but the
+    plan's papers and articles are unlinked when it is published
+    (:func:`plan_link_sources`)."""
     papers = {p.id: p for p in survey.plan.papers}
-    foreign = foreign_paper_links(survey.body, papers.values())
-    body, unknown = render_citations(
-        unlink_foreign_papers(survey.body, papers.values()), papers
-    )
+    body, unknown = render_citations(survey.body, papers)
     owned = {u: f for u, f in survey.figures.items() if f[0] in papers}
     owners = {url: papers[paper_id] for url, (paper_id, _) in owned.items()}
     captions = {url: caption for url, (_, caption) in owned.items()}
@@ -262,11 +259,6 @@ def survey_body(survey: Survey, language: str) -> tuple[str, list[str]]:
         notes.append(
             "Citations of papers outside the survey removed: "
             + ", ".join(sorted(set(unknown)))
-        )
-    if foreign:
-        notes.append(
-            "Links to papers outside the survey reduced to text: "
-            + ", ".join(sorted(set(foreign)))
         )
     return normalize_math(body.strip()), notes
 

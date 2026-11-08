@@ -45,17 +45,17 @@ from scholar_lens.domain.constants import LanguageModelId
 from scholar_lens.domain.conventions import BlogPost, PostConventions, TypeSpec
 from scholar_lens.domain.evidence import Evidence
 from scholar_lens.domain.jobs import JobRequest
+from scholar_lens.domain.markdown.links import markdown_links, verify_links
 from scholar_lens.domain.research import PageContent, ResearchCorpus
 from scholar_lens.domain.survey.plan import SourceRecord, SurveyInputError, SurveyPlan
 from scholar_lens.domain.survey.post import (
     author_year,
     credit_figures,
     equation_in_source,
-    foreign_paper_links,
     further_reading,
+    plan_link_sources,
     reference_list,
     render_citations,
-    unlink_foreign_papers,
 )
 from scholar_lens.domain.validation import validate_post
 from tests.integration.fakes import FakeLLMFactory
@@ -496,6 +496,38 @@ class TestValidator:
         )
         no_refs = rules(survey_post("## 들어가며\n\n본문입니다.\n"))
         assert any(r.startswith("error:references:a survey ends with") for r in no_refs)
+
+    @pytest.mark.parametrize(
+        "link",
+        [
+            "[PPO](https://arxiv.org/pdf/1707.06347v2)",
+            "[PPO](https://www.arxiv.org/abs/1707.06347)",
+            "[PPO](https://dx.doi.org/10.1234/PPO)",
+            '[PPO](https://arxiv.org/abs/1707.06347 "PPO")',
+            "[PPO [Schulman et al.]](https://arxiv.org/abs/1707.06347)",
+            "<https://arxiv.org/abs/1707.06347>",
+            "[PPO][ppo]\n\n[ppo]: https://arxiv.org/abs/1707.06347\n",
+        ],
+    )
+    def test_a_cited_paper_in_any_link_form_must_be_listed(self, link: str) -> None:
+        body = GOOD_BODY.replace("다룹니다.", f"다룹니다. {link}\n")
+        found = [r for r in rules(survey_post(body)) if "not in References" in r]
+        assert len(found) == 1
+
+    @pytest.mark.parametrize(
+        "link",
+        [
+            "[DPO](https://arxiv.org/pdf/2305.18290v2)",
+            "[DPO](https://doi.org/10.48550/arXiv.2305.18290)",
+            "<https://www.arxiv.org/abs/2305.18290>",
+        ],
+    )
+    def test_a_listed_paper_cited_in_another_form_is_cited(self, link: str) -> None:
+        body = GOOD_BODY.replace(
+            "DPO([Rafailov et al., 2023](https://arxiv.org/abs/2305.18290))를",
+            f"DPO({link})를",
+        )
+        assert [r for r in rules(survey_post(body)) if r.startswith("error")] == []
 
     def test_further_reading_is_not_a_list_of_cited_papers(self) -> None:
         body = GOOD_BODY + further_reading(
@@ -1026,11 +1058,14 @@ class TestSurveyBody:
         )
         text, notes = survey_body(survey, "Korean")
         assert "([Rafailov et al., 2023](https://arxiv.org/abs/2305.18290))" in text
-        assert "2501.99999" not in text and "ORPO를" in text
+        assert "2501.99999" not in text
         assert "logo.png" not in text
         assert f"]({offered})\n\n*출처: [Rafailov et al., 2023]" in text
         assert any("2501.99999" in n for n in notes)
-        assert any("https://arxiv.org/abs/2403.07691" in n for n in notes)
+        # The paper outside the plan is unlinked when the post is published.
+        published, removed = verify_links(text, plan_link_sources(plan()))
+        assert "ORPO를" in published
+        assert removed == ["https://arxiv.org/abs/2403.07691"]
 
 
 class TestReviewFixes:
@@ -1062,18 +1097,37 @@ class TestReviewFixes:
         with pytest.raises(SurveyInputError):
             load_plan(json.dumps(data), FakeIndex({}))
 
-    def test_hand_typed_links_to_other_papers(self) -> None:
-        papers = {p.id: p for p in plan().papers}
+    @pytest.mark.parametrize(
+        "link",
+        [
+            "[ORPO](https://arxiv.org/abs/2403.07691)",
+            "[ORPO](https://arxiv.org/pdf/2403.07691v2)",
+            "[ORPO](https://www.arxiv.org/abs/2403.07691)",
+            '[ORPO](https://arxiv.org/abs/2403.07691 "ORPO")',
+            "[ORPO [Hong et al.]](https://arxiv.org/abs/2403.07691)",
+            "[ORPO](https://dx.doi.org/10.18653/v1/2024.emnlp-main.626)",
+            "[ORPO](https://openreview.net/forum?id=orpo)",
+            "<https://arxiv.org/abs/2403.07691>",
+            "[ORPO][orpo]\n\n[orpo]: https://arxiv.org/abs/2403.07691\n",
+        ],
+    )
+    def test_hand_typed_links_to_other_papers(self, link: str) -> None:
+        """Any link form to a paper the plan does not have is unlinked; the
+        plan's papers stay in any arXiv form, and code is left."""
         text = (
-            "DPO[@2305.18290]와 [ORPO](https://arxiv.org/abs/2403.07691), "
-            "[DPO 원문](https://arxiv.org/abs/2305.18290), `[x](https://doi.org/1)`"
+            f"DPO[@2305.18290]와 {link}, "
+            "[DPO 원문](https://arxiv.org/pdf/2305.18290v3), "
+            "[DPO DOI](https://doi.org/10.48550/arXiv.2305.18290), "
+            "`[x](https://doi.org/10.1/x)`"
         )
-        assert foreign_paper_links(text, papers.values()) == [
-            "https://arxiv.org/abs/2403.07691"
-        ]
-        assert unlink_foreign_papers(text, papers.values()) == text.replace(
-            "[ORPO](https://arxiv.org/abs/2403.07691)", "ORPO"
-        )
+        fixed, removed = verify_links(text, plan_link_sources(plan()))
+        assert len(removed) == 1
+        assert "](https://arxiv.org/pdf/2305.18290v3)" in fixed
+        assert "](https://doi.org/10.48550/arXiv.2305.18290)" in fixed
+        assert "`[x](https://doi.org/10.1/x)`" in fixed
+        assert removed[0] not in {x.target for x in markdown_links(fixed)}
+        # The link's text stays (an autolink's is its URL).
+        assert "ORPO" in fixed or removed[0] in fixed
 
     def test_a_description_the_validator_rejects_is_dropped(
         self, stage: dict[str, Any]
