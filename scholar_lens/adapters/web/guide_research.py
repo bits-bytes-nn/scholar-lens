@@ -26,7 +26,7 @@ import asyncio
 import functools
 import logging
 import re
-from collections.abc import Callable, Collection, Mapping
+from collections.abc import Collection, Mapping
 from typing import Any
 from urllib.parse import urlparse
 
@@ -82,7 +82,9 @@ from scholar_lens.domain.review_plan import digest_sections
 from scholar_lens.domain.sources import (
     OFFICIAL_AUTHORITIES,
     DomainClasses,
+    IndexUnreachable,
     OfficialDocs,
+    ReleaseLookup,
     SourceSet,
     TagLookup,
     search_exclusions,
@@ -148,7 +150,7 @@ class TechGuideGenerator(RetryableBase):
         fetch_top_results: int,
         callbacks: list[Any] | None = None,
         llm_factory: BedrockLanguageModelFactory | None = None,
-        release_lookup: Callable[[str], str | None] | None = None,
+        release_lookup: ReleaseLookup | None = None,
         repo_tags: TagLookup | None = None,
         max_third_party_pages: int | None = None,
         min_secondary_pages: int = 0,
@@ -159,7 +161,8 @@ class TechGuideGenerator(RetryableBase):
         """Args beyond the obvious:
         release_lookup: A package's latest release on its index (the
             run's target version when the docs URL pins none); None
-            looks nothing up.
+            looks nothing up. An index that cannot answer leaves a run
+            note and keeps the corpus from being saved for reuse.
         repo_tags: A repository's tags (``host/owner/name``); None
             looks nothing up.
         max_third_party_pages: At most this many third-party and demoted
@@ -349,7 +352,18 @@ class TechGuideGenerator(RetryableBase):
         pinned docs URL, or no lookup, always holds)."""
         if not snapshot.package or self.release_lookup is None:
             return True
-        latest = self.release_lookup(snapshot.package)
+        try:
+            latest = self.release_lookup(snapshot.package)
+        except IndexUnreachable as e:
+            # The snapshot's release was the latest when it was saved
+            # (within its TTL); whether a newer one exists is unknown.
+            self.notes.append(
+                f"The package index could not be reached ({e}): the saved "
+                f"corpus targets {snapshot.package} "
+                f"{snapshot.sources.target.release}, not checked against the "
+                "latest release."
+            )
+            return True
         if latest == snapshot.sources.target.release:
             return True
         logger.info(
@@ -756,9 +770,18 @@ class TechGuideGenerator(RetryableBase):
             )
             products = {_normalized(p) for p in self._products}
             for name, _ in install_requirements(official_text):
-                if _normalized(name) in products and (
-                    release := self.release_lookup(name)
-                ):
+                if _normalized(name) not in products:
+                    continue
+                try:
+                    release = self.release_lookup(name)
+                except IndexUnreachable as e:
+                    self._gap(
+                        f"The package index could not be reached for {name} "
+                        f"({e}): the target version is not its latest release, "
+                        "and pages are not marked by version against it."
+                    )
+                    continue
+                if release:
                     package = name
                     break
         sources = SourceSet.from_urls(

@@ -26,7 +26,7 @@ from scholar_lens.adapters.web.snapshot import (
     snapshot_key,
 )
 from scholar_lens.domain.research import PageContent, ResearchCorpus, SearchResult
-from scholar_lens.domain.sources import DomainClasses
+from scholar_lens.domain.sources import DomainClasses, IndexUnreachable
 from tests.integration.test_tech_guide import _make_generator, _relevant
 
 DOCS = "https://docs.example.dev/en/latest/"
@@ -308,6 +308,65 @@ async def test_a_snapshot_holds_only_while_its_target_release_is_the_latest(
     await again.gather([DOCS], discover_subpages=False, snapshots=policy)
     assert again.researcher.research.called is (latest != "2.1.0")
     assert again.sources.target.release == latest
+
+
+def _release_generator(lookup):  # type: ignore[no-untyped-def]
+    gen = _generator()
+    gen.release_lookup = lookup
+    gen.relevance_chain.ainvoke = AsyncMock(
+        return_value={
+            "is_relevant": "yes",
+            "topic": "Using Example",
+            "reason": "ok",
+            "commands": "example",
+        }
+    )
+    page = PageContent(
+        url=DOCS, title="Docs", text="Install it:\n\n    pip install example\n"
+    )
+    gen.researcher.research = MagicMock(return_value=ResearchCorpus(pages=[page]))
+    return gen
+
+
+def _unreachable(name: str) -> str | None:
+    raise IndexUnreachable(f"PyPI lookup of {name} failed: timed out")
+
+
+async def test_an_unreachable_package_index_is_noted_and_its_corpus_not_saved(
+    policy,  # type: ignore[no-untyped-def]
+) -> None:
+    """An outage is not an unknown package: the run says the target version
+    could not be resolved, and the corpus (without a target) is not reused
+    for its TTL."""
+    first = _release_generator(_unreachable)
+    await first.gather([DOCS], discover_subpages=False, snapshots=policy)
+    assert first.sources.target.release is None
+    assert any("could not be reached for example" in n for n in first.notes)
+    again = _release_generator(lambda name: "2.1.0")
+    await again.gather([DOCS], discover_subpages=False, snapshots=policy)
+    again.researcher.research.assert_called_once()
+    assert again.sources.target.release == "2.1.0"
+
+
+async def test_an_unknown_package_leaves_no_gap(policy) -> None:  # type: ignore[no-untyped-def]
+    first = _release_generator(lambda name: None)
+    await first.gather([DOCS], discover_subpages=False, snapshots=policy)
+    assert not any("could not be reached" in n for n in first.notes)
+    again = _release_generator(lambda name: None)
+    await again.gather([DOCS], discover_subpages=False, snapshots=policy)
+    again.researcher.research.assert_not_called()
+
+
+async def test_a_saved_corpus_is_reused_with_a_note_when_the_index_is_down(
+    policy,  # type: ignore[no-untyped-def]
+) -> None:
+    first = _release_generator(lambda name: "2.1.0")
+    await first.gather([DOCS], discover_subpages=False, snapshots=policy)
+    again = _release_generator(_unreachable)
+    await again.gather([DOCS], discover_subpages=False, snapshots=policy)
+    again.researcher.research.assert_not_called()
+    assert again.sources.target.release == "2.1.0"
+    assert any("not checked against the latest release" in n for n in again.notes)
 
 
 async def test_a_failed_tag_lookup_is_noted_and_its_corpus_not_saved(policy) -> None:  # type: ignore[no-untyped-def]

@@ -11,6 +11,7 @@ from collections.abc import Callable
 import httpx
 
 from scholar_lens.domain.guide.sdk_index import PackageSource
+from scholar_lens.domain.sources import IndexUnreachable
 
 logger = logging.getLogger(__name__)
 
@@ -22,8 +23,13 @@ def package_extras(
     name: str, *, client: httpx.Client | None = None, timeout: float = 10.0
 ) -> tuple[str, frozenset[str]] | None:
     """(latest version, extras) of ``name`` on PyPI, or None when the index
-    does not know it or cannot be reached (the check is skipped, never
-    failed)."""
+    does not know it (or the name is not a package name).
+
+    Raises:
+        IndexUnreachable: PyPI could not answer (a timeout, a connection
+            or server error, an unreadable answer): unlike an unknown
+            package, the answer is missing.
+    """
     if not _NAME.match(name):
         return None
     owned = client is None
@@ -36,7 +42,7 @@ def package_extras(
         info = response.json().get("info") or {}
     except (httpx.HTTPError, ValueError) as e:
         logger.warning("PyPI lookup of %s failed: %s", name, e)
-        return None
+        raise IndexUnreachable(f"PyPI lookup of {name} failed: {e}") from e
     finally:
         if owned:
             http.close()
@@ -162,7 +168,12 @@ class PyPIIndex:
     """The :class:`~scholar_lens.application.ports.PackageIndex` on PyPI."""
 
     def extras(self, name: str) -> tuple[str, frozenset[str]] | None:
-        return package_extras(name)
+        """The protocol's answer: None when unknown or unreachable (the
+        extras check of an install command is skipped, never failed)."""
+        try:
+            return package_extras(name)
+        except IndexUnreachable:
+            return None
 
     def source(self, name: str) -> PackageSource | None:
         return package_source(name)

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from typing import Any
+from unittest.mock import patch
 
 import httpx
 import pytest
@@ -1577,6 +1578,28 @@ def test_pypi_extras_come_from_the_json_api() -> None:
     )
     assert package_extras("no-such-package", client=client) is None
     assert package_extras("bad name;rm", client=client) is None
+
+
+@pytest.mark.parametrize("outage", ["status", "timeout"])
+def test_an_unreachable_pypi_is_not_an_unknown_package(outage: str) -> None:
+    from scholar_lens.adapters.packages.pypi import PyPIIndex, package_extras
+    from scholar_lens.domain.sources import IndexUnreachable
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if outage == "timeout":
+            raise httpx.ConnectTimeout("timed out", request=request)
+        return httpx.Response(503)
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    with pytest.raises(IndexUnreachable, match="strands-agents"):
+        package_extras("strands-agents", client=client)
+    # The extras check of install commands is skipped, never failed.
+    index = PyPIIndex()
+    with patch(
+        "scholar_lens.adapters.packages.pypi.package_extras",
+        side_effect=IndexUnreachable("down"),
+    ):
+        assert index.extras("strands-agents") is None
 
 
 def test_fallback_search_paths() -> None:

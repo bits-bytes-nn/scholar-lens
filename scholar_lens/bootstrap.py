@@ -250,7 +250,9 @@ def _reader_tag(model_id: str) -> str:
 
 
 def package_release(name: str) -> str | None:
-    """``name``'s latest release on PyPI (None when unknown or unreachable)."""
+    """``name``'s latest release on PyPI (None when unknown; raises
+    :class:`~scholar_lens.domain.sources.IndexUnreachable` when PyPI cannot
+    answer)."""
     found = package_extras(name)
     return (found[0] or None) if found else None
 

@@ -494,6 +494,17 @@ class RecordedPage(Protocol):
 TagLookup = Callable[[str], "frozenset[str] | None"]
 
 
+class IndexUnreachable(RuntimeError):
+    """A package index that could not answer (a timeout, a connection or
+    server error): the answer is missing, unlike an unknown package (None),
+    whose answer is "none"."""
+
+
+# A package's latest release on its index: None when the index does not
+# know the package; raises :class:`IndexUnreachable` when it cannot answer.
+ReleaseLookup = Callable[[str], "str | None"]
+
+
 @dataclass(frozen=True)
 class DomainClasses:
     """Configured domain classes (``forum``, ``social``, ``aggregator`` …)
