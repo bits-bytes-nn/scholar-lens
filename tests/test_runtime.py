@@ -462,7 +462,7 @@ class TestRecordUnstartedRun:
             sessions.append(kwargs)
             return MagicMock()
 
-        monkeypatch.setattr(runtime.boto3, "Session", session)
+        monkeypatch.setattr(runtime, "aws_session", session)
         config = MagicMock()
         config.resources.s3_bucket_name = "b"
         config.resources.s3_prefix = "p"
@@ -482,7 +482,7 @@ class TestRecordUnstartedRun:
 
         monkeypatch.setattr(runtime, "is_running_in_aws", lambda: True)
         monkeypatch.setenv("TOPIC_ARN", "arn:aws:sns:us-east-1:1:t")
-        monkeypatch.setattr(runtime.boto3, "Session", lambda **kw: MagicMock())
+        monkeypatch.setattr(runtime, "aws_session", lambda **kw: MagicMock())
         monkeypatch.setattr(runtime, "publish_sns", lambda *a, **kw: False)
         assert runtime.record_unstarted_run(JobResult(kind=None, input="x")) is False
 
@@ -518,7 +518,7 @@ class TestRecordUnstartedRun:
 
         monkeypatch.setattr(runtime, "is_running_in_aws", lambda: in_aws)
         monkeypatch.setenv("TOPIC_ARN", "arn:aws:sns:us-east-1:1:t")
-        monkeypatch.setattr(runtime.boto3, "Session", broken)
+        monkeypatch.setattr(runtime, "aws_session", broken)
         result = JobResult(kind=None, input="x", job_id="job-3")
         assert runtime.record_unstarted_run(result) is expected
 

@@ -158,3 +158,15 @@ def get_ssm_param_value(boto_session: boto3.Session, param_name: str) -> str:
         return response["Parameter"]["Value"]
     except ClientError as e:
         raise AWSHandlerError(f"Failed to get SSM parameter '{param_name}'") from e
+
+
+def is_parameter_not_found(error: BaseException) -> bool:
+    current: BaseException | None = error
+    while current is not None:
+        if (
+            isinstance(current, ClientError)
+            and current.response.get("Error", {}).get("Code") == "ParameterNotFound"
+        ):
+            return True
+        current = current.__cause__
+    return False

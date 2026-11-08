@@ -105,75 +105,154 @@ exclude = "(cdk\\.out|logs|papers)"
 # - misc: Pydantic class-level field defaults accessed via the class object.
 disable_error_code = ["call-overload", "misc"]
 
-# Dependency rules of the hexagonal layers (docs/redesign.md, section 4.1).
-# The legacy scholar_lens.src package may use the new layers while it is
-# being migrated; the new layers never import it.
+# Dependency rules of the layers (docs/engine.md, 5.1): the domain is pure,
+# the application depends on the domain, the adapters on the domain and the
+# application's ports, the legacy sections engine is wired by the composition
+# root only, and only the entrypoints and the composition root read the
+# configuration. Third-party SDKs are imported by the adapters and the legacy
+# engine only.
 [tool.importlinter]
 root_package = "scholar_lens"
 include_external_packages = true
 
 [[tool.importlinter.contracts]]
-name = "The domain is pure"
+name = "The domain imports nothing of the other layers or the SDKs"
 type = "forbidden"
 source_modules = ["scholar_lens.domain"]
 forbidden_modules = [
     "scholar_lens.application",
     "scholar_lens.adapters",
-    "scholar_lens.src",
+    "scholar_lens.legacy",
     "scholar_lens.configs",
+    "scholar_lens.bootstrap",
+    "scholar_lens.entrypoints",
     "scholar_lens.cli",
     "boto3",
     "botocore",
     "httpx",
     "requests",
-    "langchain_core",
     "strands",
+    "langchain_core",
+    "faiss",
 ]
 
 [[tool.importlinter.contracts]]
-name = "The application depends on the domain and ports only"
+name = "The application imports the domain only"
 type = "forbidden"
 source_modules = ["scholar_lens.application"]
 forbidden_modules = [
     "scholar_lens.adapters",
-    "scholar_lens.src",
+    "scholar_lens.legacy",
     "scholar_lens.configs",
+    "scholar_lens.bootstrap",
+    "scholar_lens.entrypoints",
     "scholar_lens.cli",
     "boto3",
     "botocore",
     "httpx",
     "requests",
-    "langchain_core",
     "strands",
+    "langchain_core",
+    "faiss",
 ]
 
 [[tool.importlinter.contracts]]
-name = "Adapters do not use the legacy package"
+name = "The adapters import the domain and the application's ports only"
 type = "forbidden"
 source_modules = ["scholar_lens.adapters"]
-forbidden_modules = ["scholar_lens.src", "scholar_lens.cli"]
+forbidden_modules = [
+    "scholar_lens.application.checkpoints",
+    "scholar_lens.application.evidence_writer",
+    "scholar_lens.application.guide_engine",
+    "scholar_lens.application.paper_engine",
+    "scholar_lens.application.post_engine",
+    "scholar_lens.application.run",
+    "scholar_lens.application.survey_engine",
+    "scholar_lens.application.use_cases",
+    "scholar_lens.legacy",
+    "scholar_lens.configs",
+    "scholar_lens.bootstrap",
+    "scholar_lens.entrypoints",
+    "scholar_lens.cli",
+]
+
+[[tool.importlinter.contracts]]
+name = "The legacy engine imports the domain, the ports and the adapters only"
+type = "forbidden"
+source_modules = ["scholar_lens.legacy"]
+forbidden_modules = [
+    "scholar_lens.application.checkpoints",
+    "scholar_lens.application.evidence_writer",
+    "scholar_lens.application.guide_engine",
+    "scholar_lens.application.paper_engine",
+    "scholar_lens.application.post_engine",
+    "scholar_lens.application.run",
+    "scholar_lens.application.survey_engine",
+    "scholar_lens.application.use_cases",
+    "scholar_lens.configs",
+    "scholar_lens.bootstrap",
+    "scholar_lens.entrypoints",
+    "scholar_lens.cli",
+]
+
+[[tool.importlinter.contracts]]
+name = "Only the composition root imports the legacy engine"
+type = "forbidden"
+source_modules = [
+    "scholar_lens.domain",
+    "scholar_lens.application",
+    "scholar_lens.adapters",
+    "scholar_lens.configs",
+    "scholar_lens.entrypoints",
+    "scholar_lens.cli",
+]
+forbidden_modules = ["scholar_lens.legacy"]
+# The entrypoints reach the legacy engine through the composition root.
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "Only the entrypoints and the composition root read the configuration"
+type = "forbidden"
+source_modules = [
+    "scholar_lens.domain",
+    "scholar_lens.application",
+    "scholar_lens.adapters",
+    "scholar_lens.legacy",
+]
+forbidden_modules = ["scholar_lens.configs"]
+
+[[tool.importlinter.contracts]]
+name = "Only the adapters and the legacy engine import the SDKs"
+type = "forbidden"
+source_modules = [
+    "scholar_lens.domain",
+    "scholar_lens.application",
+    "scholar_lens.configs",
+    "scholar_lens.bootstrap",
+    "scholar_lens.entrypoints",
+    "scholar_lens.cli",
+]
+forbidden_modules = [
+    "boto3",
+    "botocore",
+    "httpx",
+    "requests",
+    "strands",
+    "langchain_core",
+    "langchain_aws",
+    "langchain_community",
+    "langchain_text_splitters",
+    "faiss",
+    "github",
+]
+# The entrypoints and the composition root build adapters, which import them.
+allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
 name = "Web research does not depend on the review plan"
 type = "forbidden"
 source_modules = ["scholar_lens.adapters.web.research"]
 forbidden_modules = ["scholar_lens.domain.review_plan"]
-
-[[tool.importlinter.contracts]]
-name = "The layers do not use the legacy sections engine"
-type = "forbidden"
-source_modules = [
-    "scholar_lens.domain",
-    "scholar_lens.application",
-    "scholar_lens.adapters",
-]
-forbidden_modules = ["scholar_lens.legacy"]
-
-[[tool.importlinter.contracts]]
-name = "The legacy sections engine does not use the src pipelines"
-type = "forbidden"
-source_modules = ["scholar_lens.legacy"]
-forbidden_modules = ["scholar_lens.src", "scholar_lens.cli"]
 
 [[tool.importlinter.contracts]]
 name = "The draft checks are independent of every writer"

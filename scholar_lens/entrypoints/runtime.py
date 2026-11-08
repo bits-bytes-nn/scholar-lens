@@ -19,13 +19,16 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from typing import Any
 
-import boto3
-from botocore.exceptions import ClientError
-
 from scholar_lens.adapters.aws.batch import write_result_manifest
 from scholar_lens.adapters.aws.environment import is_running_in_aws
 from scholar_lens.adapters.aws.metrics import MetricsEmitter
-from scholar_lens.adapters.aws.storage import S3Handler, get_ssm_param_value
+from scholar_lens.adapters.aws.notifications import publish_sns
+from scholar_lens.adapters.aws.session import aws_session
+from scholar_lens.adapters.aws.storage import (
+    S3Handler,
+    get_ssm_param_value,
+    is_parameter_not_found,
+)
 from scholar_lens.adapters.bedrock.usage import TokenUsageTracker
 from scholar_lens.adapters.github.publisher import PostAssetError
 from scholar_lens.application.run import PipelineOutcome
@@ -69,22 +72,10 @@ def load_secrets_from_ssm(
             )
             logger.info("Set env var '%s' from SSM.", env_var.value)
         except Exception as e:  # noqa: BLE001 - optional secret; never abort the run
-            if _is_parameter_not_found(e):
+            if is_parameter_not_found(e):
                 logger.info("SSM secret for '%s' is not set.", env_var.value)
             else:
                 logger.warning("Could not read '%s' from SSM: %s", env_var.value, e)
-
-
-def _is_parameter_not_found(error: BaseException) -> bool:
-    current: BaseException | None = error
-    while current is not None:
-        if (
-            isinstance(current, ClientError)
-            and current.response.get("Error", {}).get("Code") == "ParameterNotFound"
-        ):
-            return True
-        current = current.__cause__
-    return False
 
 
 PROJECT = "scholar-lens"
@@ -130,23 +121,6 @@ def format_alarm(
     lines.append(f"— {ts} UTC")
 
     return subject, "\n".join(lines)
-
-
-def publish_sns(
-    session: boto3.Session, topic_arn: str, *, subject: str, message: str
-) -> bool:
-    """Publish a plain-text SNS notification; a failure must not fail the job.
-
-    Returns whether the notification was sent.
-    """
-    try:
-        session.client("sns").publish(
-            TopicArn=topic_arn, Subject=subject, Message=message
-        )
-        return True
-    except Exception as e:  # noqa: BLE001 - notification failure must not fail the job
-        logger.warning("Failed to send SNS notification: %s", e)
-        return False
 
 
 def _is_fetch_outage(error: BaseException) -> bool:
@@ -375,7 +349,7 @@ def record_unstarted_run(result: JobResult) -> bool:
     )
     due = is_running_in_aws() and bool(topic_arn)
     try:
-        session = boto3.Session(region_name=region or None)
+        session = aws_session(region_name=region or None)
     except Exception as e:  # noqa: BLE001 - e.g. the AWS profile that broke startup
         logger.warning("No AWS session to report the failed start: %s", e)
         return not due

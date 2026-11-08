@@ -14,8 +14,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, cast
 
-import boto3
-
 # Every prompt template registers its fences before a run reads untrusted
 # text (domain.prompt_safety); the sections engine's templates included.
 import scholar_lens.adapters.bedrock.prompts  # noqa: F401
@@ -25,6 +23,7 @@ from scholar_lens.adapters.aws.batch import BatchJobs
 from scholar_lens.adapters.aws.billing import CostExplorerBilling
 from scholar_lens.adapters.aws.environment import is_running_in_aws
 from scholar_lens.adapters.aws.run_ledger import S3RunLedger
+from scholar_lens.adapters.aws.session import AwsSession, aws_session
 from scholar_lens.adapters.aws.storage import S3Handler
 from scholar_lens.adapters.bedrock.role_models import BedrockEvidenceModels
 from scholar_lens.adapters.bedrock.survey_calls import SurveyPlanner, SurveyWriter
@@ -101,8 +100,8 @@ class AwsRunContext(RunContext):
     adapters are built on and the run's bucket."""
 
     config: Config
-    default_boto_session: boto3.Session
-    bedrock_boto_session: boto3.Session
+    default_boto_session: AwsSession
+    bedrock_boto_session: AwsSession
     s3_handler: S3Handler | None = None
 
 
@@ -167,8 +166,8 @@ def build_publisher(context: RunContext) -> Publisher:
 def run_context(
     config: Config,
     *,
-    default_boto_session: boto3.Session,
-    bedrock_boto_session: boto3.Session,
+    default_boto_session: AwsSession,
+    bedrock_boto_session: AwsSession,
     s3_handler: S3Handler | None = None,
     root_dir: Path = ROOT_DIR,
     publisher_factory: Any = None,
@@ -197,10 +196,10 @@ def build_context(config: Config) -> AwsRunContext:
         if is_running_in_aws()
         else config.resources.profile_name
     )
-    default_session = boto3.Session(
+    default_session = aws_session(
         profile_name=profile_name, region_name=config.resources.default_region_name
     )
-    bedrock_session = boto3.Session(
+    bedrock_session = aws_session(
         profile_name=profile_name, region_name=config.resources.bedrock_region_name
     )
     s3_handler = (
