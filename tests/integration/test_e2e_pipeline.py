@@ -456,6 +456,33 @@ async def test_only_the_papers_own_figures_reach_the_publisher(
     assert invented not in markdown and local not in markdown
 
 
+async def test_only_links_to_the_papers_sources_reach_the_post(
+    pipeline_env,
+    monkeypatch: pytest.MonkeyPatch,  # type: ignore[no-untyped-def]
+) -> None:
+    """The publish step checks a paper post's links against the paper's
+    sources: the paper in another arXiv form stays, a recalled arXiv id and
+    an invented page keep only their text, with one run note."""
+    context, _ = pipeline_env
+    output = SUMMARY_FROM_MODEL.replace(
+        "아래 그림은",
+        "[논문](https://www.arxiv.org/abs/2106.09685v1), "
+        "[이전 연구](https://arxiv.org/abs/1912.03356), "
+        "[블로그](https://blog.example.org/lora)를 참고합니다.\n\n아래 그림은",
+    )
+    monkeypatch.setattr(paper_reader, "prepare_paper_data", _fake_paper_data(_paper()))
+    monkeypatch.setattr(legacy_writers, "PaperSummarizer", _fake_summarizer(output))
+    outcome = await bootstrap.run_use_case(
+        context, JobRequest(kind="summarize", source="2106.09685"), TokenUsageTracker()
+    )
+    post = Path(outcome.markdown_path).read_text(encoding="utf-8")
+    assert "[논문](https://www.arxiv.org/abs/2106.09685v1)" in post
+    assert "이전 연구, 블로그를 참고합니다." in post
+    assert "1912.03356" not in post and "blog.example.org" not in post
+    (note,) = [w for w in outcome.warnings if w.startswith("Unlinked")]
+    assert "1912.03356" in note and "blog.example.org/lora" in note
+
+
 class _FakeS3:
     bucket_name = "bucket"
 

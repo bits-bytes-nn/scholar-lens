@@ -11,6 +11,8 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from scholar_lens.domain.constants import LocalPaths
+from scholar_lens.domain.markdown.front_matter import split_front_matter_text
+from scholar_lens.domain.markdown.links import LinkSources, verify_links
 from scholar_lens.domain.post_names import (
     post_slug,
     title_slug,
@@ -70,6 +72,11 @@ class PublishRequest:
     # The post file's name without ``.md`` once a publish named it (set by
     # Publisher.publish): a later ``publish`` of the saved post keeps it.
     post_name: str | None = None
+    # What the post may link (its sources, see :func:`verify_post_links`),
+    # set by every generating run. None for a saved post published again:
+    # its links were checked when it was written, and edits since are the
+    # user's.
+    link_sources: LinkSources | None = None
 
     @property
     def slug(self) -> str:
@@ -89,6 +96,22 @@ class PublishRequest:
             [*self.validation_warnings, *extra_notes],
             blocking=self.blocking,
         )
+
+
+def verify_post_links(markdown: str, sources: LinkSources) -> tuple[str, list[str]]:
+    """``markdown`` (front matter and body) with every body link to a
+    target ``sources`` do not allow reduced to its text
+    (:func:`verify_links`), and a run note naming the removed targets
+    (none when nothing was removed). Every kind of post publishes through
+    this one check."""
+    front, body = split_front_matter_text(markdown)
+    body, removed = verify_links(body, sources)
+    if not removed:
+        return markdown, []
+    return f"{front}{body}", [
+        f"Unlinked {len(removed)} link(s) to targets that are not among the "
+        "post's sources (kept as text): " + ", ".join(removed)
+    ]
 
 
 def with_review_checklist(

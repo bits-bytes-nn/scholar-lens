@@ -551,7 +551,7 @@ class TestPublishArtifact:
         publisher.create_pull_request = create_pull_request
         context = MagicMock(publisher_factory=lambda ctx: publisher)
         context.config.resources.github.enabled = True
-        request = MagicMock()
+        request = MagicMock(link_sources=None)
         request.title = "LoRA"
         outcome = asyncio.run(
             app_run.publish_artifact(context, request, create_pr=True)
@@ -641,7 +641,7 @@ def test_no_pr_run_reports_the_post_checklist(tmp_path: Path) -> None:
         return "s3://b/post.md", tmp_path / "post.md"
 
     publisher.publish = publish
-    request = MagicMock()
+    request = MagicMock(link_sources=None)
     context = MagicMock(publisher_factory=lambda ctx: publisher)
     outcome = asyncio.run(app_run.publish_artifact(context, request, create_pr=False))
     assert outcome.warnings == ["Summary is still long", "numbered reference"]
@@ -671,7 +671,7 @@ def test_generator_notes_survive_a_failed_publish(
 
     async def pipeline(context, request, tracker):  # type: ignore[no-untyped-def]
         context.publisher_factory = lambda ctx: publisher
-        publish_request = MagicMock()
+        publish_request = MagicMock(link_sources=None)
         publish_request.review_notes = ["Review section 'Method' produced no text"]
         return await app_run.publish_artifact(context, publish_request, create_pr=False)
 

@@ -55,6 +55,7 @@ from scholar_lens.domain.guide.evidence_guide import (
 from scholar_lens.domain.guide.models import TechGuide
 from scholar_lens.domain.guide.sdk_index import PackageSource, SdkIndex, api_problems
 from scholar_lens.domain.jobs import JobRequest
+from scholar_lens.domain.markdown.links import LinkSources
 from scholar_lens.domain.markdown.lint import (
     drop_empty_headings,
     drop_unknown_images,
@@ -176,6 +177,10 @@ async def run_guide(
         guide, work_dir, document, branch_id=branch_id
     )
     publish_request.published_path = published.path if published else None
+    # The gathered pages, the requested ones and the listed sources.
+    publish_request.link_sources = LinkSources.of(
+        [*guide.link_urls, *sources, *guide.source_urls]
+    )
     publish_request.blocking += guide.blocking
     publish_request.review_notes += [
         *lookup_notes,
@@ -337,6 +342,9 @@ async def write_guide_with_evidence(
         notes=notes,
         blocking=list(result.blocking),
         image_urls=[u for u in figures if u not in set(broken)],
+        link_urls=list(
+            dict.fromkeys(u for p in corpus.pages for u in (p.url, p.final_url) if u)
+        ),
     )
 
 

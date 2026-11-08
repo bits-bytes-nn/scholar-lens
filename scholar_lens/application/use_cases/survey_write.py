@@ -57,6 +57,7 @@ from scholar_lens.domain.survey.post import (
     needs_metadata,
     normalize_plan_data,
     plan_data,
+    plan_link_sources,
     reference_list,
     render_citations,
     unlink_foreign_papers,
@@ -376,6 +377,7 @@ async def run_survey_write(
         kind="survey",
         published_path=published.path if published else None,
     )
+    publish_request.link_sources = plan_link_sources(survey.plan)
     publish_request.blocking += survey.blocking
     publish_request.review_notes += [
         *lookup_notes,

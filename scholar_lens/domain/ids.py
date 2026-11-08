@@ -2,7 +2,7 @@
 and DOIs, as the blog, the indexes and the publisher compare them."""
 
 import re
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 # arXiv identifiers: modern "2401.06066" and legacy "hep-th/9901001" /
 # "math.GT/0309136", each with an optional version suffix ("v2").
@@ -109,3 +109,45 @@ def arxiv_id_from_doi(doi: str | None) -> str | None:
     """The arXiv id behind an arXiv DOI, or None for any other value."""
     match = _ARXIV_DOI.search((doi or "").strip())
     return normalize_arxiv_id(match.group(1)) if match else None
+
+
+def arxiv_link_key(url: str | None) -> str | None:
+    """The unversioned arXiv id an arXiv URL (any mirror, abs/pdf/html,
+    with or without ``www.``) or arXiv DOI link names, or None for any
+    other link."""
+    if key := arxiv_paper_key(url):
+        return key
+    arxiv_id = arxiv_id_from_doi(url)
+    return re.sub(r"v\d+$", "", arxiv_id) if arxiv_id else None
+
+
+_DOI_HOST = re.compile(r"^(?:(?:dx|www)\.)?doi\.org$", re.IGNORECASE)
+
+
+def doi_from_link(url: str | None) -> str | None:
+    """The DOI a ``doi.org`` (or ``dx.doi.org``) link names, lower-cased
+    (DOIs ignore case), percent-encoding decoded; None for any other link."""
+    parsed = urlparse(unquote((url or "").strip()))
+    if not _DOI_HOST.match(parsed.hostname or ""):
+        return None
+    doi = bare_doi(parsed.path.lstrip("/"))
+    return doi.lower() if doi else None
+
+
+def paper_link_key(url: str | None) -> str | None:
+    """One key per paper whatever link names it: ``arxiv:<id>`` for any
+    arXiv URL or arXiv DOI (version dropped), ``doi:<doi>`` for any other
+    DOI link; None for a link that names no paper by an identifier."""
+    if key := arxiv_link_key(url):
+        return f"arxiv:{key}"
+    if doi := doi_from_link(url):
+        return f"doi:{doi}"
+    return None
+
+
+def paper_url(paper_id: str) -> str:
+    """The link of a paper by its id (an arXiv id or a DOI): its arXiv
+    abstract page, else its ``doi.org`` page."""
+    if arxiv_id := normalize_arxiv_id(paper_id):
+        return f"https://arxiv.org/abs/{arxiv_id}"
+    return f"https://doi.org/{paper_id}"

@@ -180,6 +180,11 @@ def test_a_guide_run_wires_roles_ceiling_cache_and_sources(
     assert guide.notes[:2] == ["gather note", "engine note"]
     assert any(BROKEN in n for n in guide.notes)
     assert guide.image_urls == [FIGURE]
+    # What it may link: the gathered page as requested and as served.
+    assert guide.link_urls == [
+        "https://docs.x.dev/guide/start",
+        "https://docs.x.dev/guide/start/",
+    ]
 
 
 class _PinnedIndex:

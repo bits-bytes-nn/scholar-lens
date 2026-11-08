@@ -12,6 +12,7 @@ import pytest
 from scholar_lens.adapters.conventions_file import load_local_conventions
 from scholar_lens.configs import Github
 from scholar_lens.domain.constants import LanguageModelId
+from scholar_lens.domain.markdown.links import verify_links
 from scholar_lens.domain.paper.models import Attributes, Content, Paper
 from scholar_lens.domain.post_format import format_summary, paper_post_meta
 from scholar_lens.legacy.prompts.summary import PaperSummaryPrompt
@@ -132,11 +133,10 @@ class TestPaperSummarizer:
             }
         )
         result = await summarizer.summarize(sample_paper)
-        assert (
-            "2401.99999" not in result["summary"] and "이전 방법" in result["summary"]
-        )
+        # The body's links are checked when the post is published.
+        body, removed = verify_links(result["summary"], sample_paper.link_sources())
+        assert removed == ["https://arxiv.org/abs/2401.99999"] and "이전 방법" in body
         assert result["urls"] == ""
-        assert any("Unlinked 1 arXiv" in n for n in summarizer.notes)
         assert any("does not state" in n and "made-up" in n for n in summarizer.notes)
 
     async def test_unsourced_tldr_numbers_and_description_slips_are_noted(

@@ -714,6 +714,8 @@ class FakeEngine:
         self.notes: list[str] = []
         self.blocking: list[str] = []
         self.error: Exception | None = None
+        # Text the writer adds before the closing section.
+        self.extra = ""
 
     def __call__(
         self,
@@ -741,7 +743,9 @@ class FakeEngine:
             raise self.error
         return EvidenceSurvey(
             title=TITLE,
-            body=evidence_body(plan, self.figures),
+            body=evidence_body(plan, self.figures).replace(
+                "## 맺으며", f"{self.extra}## 맺으며"
+            ),
             outline=MagicMock(),
             ledger=[figure_evidence(u, n) for n, u in enumerate(self.figures, 1)],
             plan=plan,
@@ -974,6 +978,33 @@ class TestReferenceArticles:
         )
         # The engine gets the read article's excerpts as reference material.
         assert "Reward hacking" in stage["engine"].calls[0]["references"]
+
+    def test_only_links_to_the_plan_reach_the_post(self, stage: dict[str, Any]) -> None:
+        """A plan paper in another link form and a reference article stay; a
+        paper host the plan does not know keeps only the link text."""
+        data = plan_dict()
+        data["schema_version"] = 3
+        data["references"] = [{"url": ARTICLE}]
+        Path(stage["request"].plan).write_text(json.dumps(data), encoding="utf-8")
+        stage["engine"].extra = (
+            "[DPO 원문](https://arxiv.org/pdf/2305.18290v2)과 "
+            f"[해설]({ARTICLE}), [리뷰](https://openreview.net/forum?id=x)를 봅니다.\n\n"
+        )
+        outcome = run_stage(stage)
+        post = outcome.markdown_path.read_text()
+        assert "[DPO 원문](https://arxiv.org/pdf/2305.18290v2)" in post
+        assert f"[해설]({ARTICLE})" in post
+        assert "리뷰를 봅니다." in post and "openreview.net" not in post
+        assert any(
+            w.startswith("Unlinked 1 link") and "openreview.net" in w
+            for w in outcome.warnings
+        )
+        errors = [
+            v
+            for v in validate_post(post, survey_spec(), "survey")
+            if v.level == "error"
+        ]
+        assert errors == []
 
 
 class TestSurveyBody:

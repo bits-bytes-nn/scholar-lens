@@ -17,6 +17,7 @@ import pytest
 
 from scholar_lens.adapters.bedrock.usage import TokenUsageTracker
 from scholar_lens.domain.constants import LanguageModelId
+from scholar_lens.domain.markdown.links import verify_links
 from scholar_lens.domain.paper.models import (
     Attributes,
     Citation,
@@ -1022,8 +1023,13 @@ async def test_only_verified_arxiv_links_survive() -> None:
     ]
     review = await reviewer.run()
     assert reviewer.linkable_arxiv == {"2106.09685", "1412.6980", "2001.00001"}
-    assert "](https://arxiv.org/abs/1912.03356)" not in review.body
-    assert "Bradbury et al., 2018" in review.body
+    # The review hands the resolved work on; the publish step unlinks the
+    # rest against the paper's sources and those.
+    assert "https://arxiv.org/pdf/2001.00001" in review.link_sources
+    body, removed = verify_links(
+        review.body, reviewer.paper.link_sources(review.link_sources)
+    )
+    assert removed == ["https://arxiv.org/abs/1912.03356"]
+    assert "Bradbury et al., 2018" in body
     for kept in ("abs/2106.09685v2", "pdf/2001.00001", "abs/1412.6980"):
-        assert f"https://arxiv.org/{kept})" in review.body
-    assert any("1912.03356" in note for note in review.notes)
+        assert f"https://arxiv.org/{kept})" in body

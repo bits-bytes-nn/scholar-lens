@@ -38,11 +38,8 @@ from scholar_lens.adapters.bedrock.prompts.base import BasePrompt
 from scholar_lens.adapters.bedrock.usage import TokenBudgetGuard
 from scholar_lens.adapters.retry import RetryableBase, is_access_error
 from scholar_lens.domain.constants import LanguageModelId
-from scholar_lens.domain.markdown.lint import (
-    arxiv_link_key,
-    unlink_unknown_arxiv,
-    writing_issues,
-)
+from scholar_lens.domain.ids import arxiv_link_key, paper_url
+from scholar_lens.domain.markdown.lint import writing_issues
 from scholar_lens.domain.paper.models import (
     Paper,
     ReviewText,
@@ -225,6 +222,8 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
         self.open_defects: list[str] = []
         self.open_gaps: list[str] = []
         self.linkable_arxiv: set[str] = set()
+        # The works the citation summaries link (resolved, not recalled).
+        self.cited_urls: set[str] = set()
         self.llm_factory = llm_factory or BedrockLanguageModelFactory(
             boto_session=boto_session
         )
@@ -392,11 +391,14 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
                 enrichment.citation_summaries = [
                     s for s in summaries if CitationSummarizer.FAILURE_STRING not in s
                 ]
-                self.linkable_arxiv.update(
-                    key
+                urls = [
+                    url
                     for summary in enrichment.citation_summaries
                     for url in _LINK_URL.findall(summary)
-                    if (key := arxiv_link_key(url))
+                ]
+                self.cited_urls.update(urls)
+                self.linkable_arxiv.update(
+                    key for url in urls if (key := arxiv_link_key(url))
                 )
             except Exception as e:  # noqa: BLE001 - supplementary input
                 if is_access_error(e):
@@ -761,22 +763,6 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
             final["description"] = ""
         return final
 
-    def _unlink_unverified(self, text: str) -> str:
-        """``text`` without links to arXiv papers the review has no verified
-        record of (:func:`unlink_unknown_arxiv`), noted for the PR."""
-        text, removed = unlink_unknown_arxiv(text, self.linkable_arxiv)
-        if removed:
-            logger.warning(
-                "Unlinked %d arXiv link(s) to unverified papers: %s",
-                len(removed),
-                ", ".join(removed[:10]),
-            )
-            self.notes.append(
-                f"Unlinked {len(removed)} arXiv link(s) the writer added to papers "
-                "that are not among the verified references: " + ", ".join(removed[:10])
-            )
-        return text
-
     @measure_execution_time
     async def run(self) -> ReviewText:
         paper = self._source()
@@ -786,8 +772,10 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
         _, reference_ids = self._references()
         # The arXiv papers the review may link: the paper itself and its
         # citations' ids (checked against arXiv at extraction); _enrich adds
-        # the references the citation summaries resolved by title.
+        # the references the citation summaries resolved by title, and the
+        # review hands them on as link sources.
         self.linkable_arxiv = self.paper.linkable_arxiv()
+        self.cited_urls = set()
 
         written: list[str] = []
         for index, section in enumerate(plan.sections):
@@ -817,10 +805,8 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
         if self.max_edit_rounds:
             article = await self._edit(plan, article, paper.text)
         final = await self._finalize(plan, article)
-        # The editor and finalizer write links too: guard the finished text.
-        article = self._unlink_unverified(article)
-        for part in ("key_takeaways", "closing"):
-            final[part] = self._unlink_unverified(final[part])
+        # The publish step unlinks what the writers linked beyond these and
+        # the paper's own sources (publishing.verify_post_links).
         return ReviewText(
             body=article,
             key_takeaways=final["key_takeaways"],
@@ -828,6 +814,9 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
             subtitle=final["subtitle"],
             description=final["description"],
             notes=tuple(self.notes),
+            link_sources=tuple(
+                sorted(self.cited_urls | {paper_url(k) for k in self.linkable_arxiv})
+            ),
         )
 
 

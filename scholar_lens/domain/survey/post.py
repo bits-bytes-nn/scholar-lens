@@ -15,7 +15,13 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from scholar_lens.domain.markdown.links import link_list, md_link_text, md_link_url
+from scholar_lens.domain.ids import paper_url
+from scholar_lens.domain.markdown.links import (
+    LinkSources,
+    link_list,
+    md_link_text,
+    md_link_url,
+)
 from scholar_lens.domain.markdown.math import segments
 from scholar_lens.domain.survey.plan import (
     PlanPaper,
@@ -202,6 +208,19 @@ def unlink_foreign_papers(text: str, papers: Iterable[PlanPaper]) -> str:
     foreign = set(foreign_paper_links(text, papers))
     return _PAPER_LINK.sub(
         lambda m: m.group(1) if m.group(2) in foreign else m.group(0), text
+    )
+
+
+def plan_link_sources(plan: SurveyPlan) -> LinkSources:
+    """What a survey may link: its papers (any arXiv or DOI form of each)
+    and the user's reference articles. A paper among the references that
+    the plan dropped is no source: References lists the plan's papers
+    only."""
+    return LinkSources.of(
+        [
+            *(u for p in plan.papers for u in (p.url, paper_url(p.id))),
+            *(r.url for r in plan.references if r.kind == "article"),
+        ]
     )
 
 

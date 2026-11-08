@@ -22,6 +22,9 @@ class TechGuide:
     image_urls: list[str] = field(default_factory=list)
     # The search description (``classify``); empty lets the blog derive one.
     description: str = ""
+    # What the guide may link: every gathered page as requested and as
+    # served (after redirects); any other link in the body is unlinked.
+    link_urls: list[str] = field(default_factory=list)
 
 
 class NotTechnicalContentError(Exception):

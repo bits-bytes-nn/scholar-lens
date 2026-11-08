@@ -103,11 +103,11 @@ async def run_paper(
             ),
         )
         if request.kind == "summarize":
-            document, degraded, blocking = await _generate_summary(
+            document, degraded, blocking, verified = await _generate_summary(
                 context, tools, paper, translation_guideline, tracker, published
             )
         else:
-            document, degraded, blocking = await _generate_review(
+            document, degraded, blocking, verified = await _generate_review(
                 context,
                 tools,
                 paper,
@@ -145,6 +145,7 @@ async def run_paper(
         )
         publish_request.blocking += blocking
         publish_request.review_notes += degraded
+        publish_request.link_sources = paper.link_sources(verified)
         outcome = await publish_artifact(
             context, publish_request, create_pr=request.create_pr
         )
@@ -164,7 +165,9 @@ async def _generate_review(
     translation_guideline: list[dict[str, Any]] | None,
     tracker: UsageTracker,
     published: BlogPost | None,
-) -> tuple[str, list[str], list[str]]:
+) -> tuple[str, list[str], list[str], tuple[str, ...]]:
+    """The review post, its notes, its blocking problems and the links its
+    writer verified beyond the paper's sources."""
     github = context.config.resources.github
     if tools.engine("review") == "evidence":
         written, notes, blocking = await write_paper_with_evidence(
@@ -183,7 +186,8 @@ async def _generate_review(
             known_tags=context.require_blog_tags(),
             published=published,
         )
-        return format_review(github, paper, written, meta=meta), notes, blocking
+        document = format_review(github, paper, written, meta=meta)
+        return document, notes, blocking, written.link_sources
     # The sections engine's prerequisite summaries (_prepare_paper_data builds
     # the summarizer for that engine only).
     if citation_summarizer is None:
@@ -202,7 +206,8 @@ async def _generate_review(
         known_tags=context.require_blog_tags(),
         published=published,
     )
-    return format_review(github, paper, review, meta=meta), notes, []
+    document = format_review(github, paper, review, meta=meta)
+    return document, notes, [], review.link_sources
 
 
 async def _generate_summary(
@@ -212,7 +217,7 @@ async def _generate_summary(
     translation_guideline: list[dict[str, Any]] | None,
     tracker: UsageTracker,
     published: BlogPost | None,
-) -> tuple[str, list[str], list[str]]:
+) -> tuple[str, list[str], list[str], tuple[str, ...]]:
     if tools.engine("summary") == "evidence":
         written, notes, blocking = await write_paper_with_evidence(
             context,
@@ -231,7 +236,7 @@ async def _generate_summary(
             known_tags=context.require_blog_tags(),
             published=published,
         )
-        return format_summary(github, paper, written, meta=meta), notes, blocking
+        return format_summary(github, paper, written, meta=meta), notes, blocking, ()
     result, notes = await tools.sections().summary(
         paper, translation_guideline=translation_guideline, tracker=tracker
     )
@@ -243,7 +248,7 @@ async def _generate_summary(
         known_tags=context.require_blog_tags(),
         published=published,
     )
-    return format_summary(github, paper, result, meta=meta), notes, []
+    return format_summary(github, paper, result, meta=meta), notes, [], ()
 
 
 def paper_documents(paper: Paper) -> tuple[SourceDocument, list[SourceDocument]]:

@@ -410,3 +410,51 @@ def test_guide_documents_keep_content_images_whatever_their_url_says(url: str) -
     )
     (document,) = guide_documents([page])
     assert [f.url for f in document.figures] == [url]
+
+
+async def test_the_guide_publishes_only_links_to_its_gathered_pages(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A writer's link to a page the run never gathered keeps only its text
+    with a run note; links to the requested page, to a gathered page under
+    the address it landed on, and in code stay."""
+    spec = load_local_conventions()
+    session = boto3.Session(region_name="us-east-1")
+    context = bootstrap.run_context(
+        Config(),
+        default_boto_session=session,
+        bedrock_boto_session=session,
+        publisher_factory=lambda ctx: Publisher(
+            _GITHUB,
+            root_dir=tmp_path,
+            conventions=spec,
+            site_posts=ctx.blog_posts,
+            fetch_image=lambda url: PNG,
+        ),
+    )
+    context.conventions, context.blog_posts, context.blog_tags = spec, [], {}
+    landed = "https://docs.vllm.ai/en/stable/serving/"
+
+    class Linking(FakeGuideGenerator):
+        def guide(self, urls: list[str]) -> TechGuide:
+            guide = super().guide(urls)
+            guide.body += (
+                f"\n[문서]({DOCS}), [서빙](https://docs.vllm.ai/en/stable/serving), "
+                "[블로그](https://blog.example.org/made-up)와 "
+                "`[코드](https://blog.example.org/in-code)`를 봅니다.\n"
+            )
+            guide.link_urls = [*urls, "https://docs.vllm.ai/en/latest/serving", landed]
+            return guide
+
+    outcome = await _run_guide(
+        tmp_path, monkeypatch, context, Linking("vLLM Serving Guide", "Language-Models")
+    )
+    post = outcome.markdown_path.read_text()
+    assert "블로그와" in post and "](https://blog.example.org/made-up)" not in post
+    assert f"[문서]({DOCS})" in post
+    assert "[서빙](https://docs.vllm.ai/en/stable/serving)" in post
+    assert "`[코드](https://blog.example.org/in-code)`" in post
+    assert any(
+        "Unlinked 1 link" in w and "blog.example.org/made-up" in w
+        for w in outcome.warnings
+    )

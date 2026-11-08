@@ -4,12 +4,19 @@ extracted attributes and citations, and the generated review text."""
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from datetime import datetime
 from typing import Any, NamedTuple
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator
 
-from scholar_lens.domain.ids import arxiv_id_from_reference, normalize_arxiv_id
+from scholar_lens.domain.ids import (
+    arxiv_id_from_reference,
+    bare_doi,
+    normalize_arxiv_id,
+    paper_url,
+)
+from scholar_lens.domain.markdown.links import LinkSources
 from scholar_lens.domain.text import is_placeholder
 
 
@@ -124,6 +131,23 @@ class Paper(BaseModel):
             if arxiv_id
         }
 
+    def link_sources(self, extra: Iterable[str] = ()) -> LinkSources:
+        """What a post about the paper may link: the paper (its arXiv id,
+        DOI and PDF), its verified citations (:meth:`linkable_arxiv`), its
+        repositories, the URLs its text or code summary write out and
+        ``extra`` (links the writer verified)."""
+        urls = [
+            *(paper_url(i) for i in self.linkable_arxiv()),
+            *([paper_url(doi)] if (doi := bare_doi(self.doi)) else []),
+            str(self.pdf_url),
+            *(str(u) for u in self.repo_urls),
+            *extra,
+        ]
+        return LinkSources.of(
+            urls,
+            stated_text=f"{self.content.text}\n{self.codebase_summary or ''}",
+        )
+
     @field_validator("repo_urls", mode="before")
     @classmethod
     def convert_str_urls(cls, v: Any) -> list[HttpUrl]:
@@ -146,6 +170,9 @@ class ReviewText(NamedTuple):
     # Degraded-output notes (sections skipped or below the bar, unusable
     # finalization) for the PR checklist and the job result.
     notes: tuple[str, ...] = ()
+    # Links the writer verified beyond the paper's own sources (works its
+    # citation lookups resolved); the post may link these too.
+    link_sources: tuple[str, ...] = ()
 
 
 def backfill_metadata(

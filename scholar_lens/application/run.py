@@ -22,7 +22,11 @@ from scholar_lens.application.ports import (
 from scholar_lens.domain.constants import LocalPaths, S3Paths
 from scholar_lens.domain.conventions import BlogPost, PostConventions, tag_counts
 from scholar_lens.domain.post_format import with_spec_cover
-from scholar_lens.domain.publishing import PublishError, PublishRequest
+from scholar_lens.domain.publishing import (
+    PublishError,
+    PublishRequest,
+    verify_post_links,
+)
 from scholar_lens.domain.tags import format_tag
 from scholar_lens.domain.validation import PAPER_KINDS
 
@@ -202,7 +206,9 @@ async def publish_artifact(
     context: RunContext, request: PublishRequest, *, create_pr: bool
 ) -> PipelineOutcome:
     """Save + upload the document, then open the blog PR when enabled. The
-    blog's conventions are re-read first (:func:`refresh_conventions`).
+    body's links are checked against the post's sources first
+    (:func:`verify_post_links`), then the blog's conventions are re-read
+    (:func:`refresh_conventions`).
 
     The outcome's warnings are the post's checklist (review notes, rule slips,
     validator warnings), so ``--no-pr`` runs report them too.
@@ -210,6 +216,11 @@ async def publish_artifact(
     A PR failure is kept on the outcome (``pr_error``) next to the saved
     artifact's paths; the run is reported as failed.
     """
+    if request.link_sources is not None:
+        request.markdown, notes = verify_post_links(
+            request.markdown, request.link_sources
+        )
+        request.review_notes += notes
     await asyncio.to_thread(refresh_conventions, context, request)
     publisher = context.publisher_factory(context)
     try:
