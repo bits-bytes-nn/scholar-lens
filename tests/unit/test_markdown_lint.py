@@ -632,6 +632,10 @@ def test_code_keeps_active_html_as_written() -> None:
         # kramdown attribute lists that set attributes.
         ('[x](https://a.com){: onclick="alert(1)"}', '{: onclick="alert(1)"}'),
         ('para\n{: onmouseover="alert(1)"}', "\n{: onmouseover"),
+        # An attribute list across a line break.
+        ('para\n{: \nonclick="alert(1)"}', "{: "),
+        ('*x*{: \nonmouseover="alert(1)"}', "{: "),
+        ('{:evil: \nonclick="alert(1)"}\n\npara\n{: evil}', "{:"),
         # Brackets in the link text, definitions in a quote or a list.
         ("[a [b] c](javascript:alert(1))", "(javascript:"),
         ("> [r]: javascript:alert(1)\n\n[x][r]", "]: javascript:"),
@@ -647,7 +651,7 @@ def test_kramdown_bypasses_are_inert(markdown: str, gone: str) -> None:
     out = publish_body(f"## A\n\n{markdown}\n", warn=False)
     if gone.lstrip("\n").startswith("{:"):
         # An attribute list that sets attributes is escaped: kramdown shows it.
-        assert not re.search(r"(?<!\\)\{:[^}\n]*=", out)
+        assert not re.search(r"(?<!\\)\{:[^}]*=", out)
     else:
         assert gone not in out
 

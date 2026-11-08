@@ -440,7 +440,8 @@ _DESTINATION = re.compile(
     r"\]\([ \t]*(?P<inline><[^>\n]*>|[^)\s]+)|\]:[ \t]*(?P<defined><[^>\n]*>|\S+)"
 )
 # A kramdown attribute list ("{: .class #id key=value}").
-_ATTRIBUTE_LIST = re.compile(r"\{:[^}\n]*\}")
+# (kramdown accepts one across lines, so the pattern ends at its brace.)
+_ATTRIBUTE_LIST = re.compile(r"\{:[^}]*\}")
 
 
 def escape_active_html(markdown: str) -> str:
