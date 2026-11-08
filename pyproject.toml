@@ -132,7 +132,6 @@ forbidden_modules = [
     "requests",
     "strands",
     "langchain_core",
-    
 ]
 
 [[tool.importlinter.contracts]]
@@ -152,7 +151,6 @@ forbidden_modules = [
     "requests",
     "strands",
     "langchain_core",
-    
 ]
 
 [[tool.importlinter.contracts]]
@@ -241,7 +239,6 @@ forbidden_modules = [
     "langchain_aws",
     "langchain_community",
     "langchain_text_splitters",
-    
     "github",
 ]
 # The entrypoints and the composition root build adapters, which import them.
