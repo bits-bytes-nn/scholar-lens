@@ -207,6 +207,49 @@ class TestWarnings:
         assert unlink_dead_links(linked) == linked
 
 
+# Fourier and convolution notation: brackets then parentheses, never a link.
+MATH_WITH_LINK_SHAPES = [
+    pytest.param(
+        "$$\\mathcal{F}[f](\\omega) = \\hat{f}(\\omega)$$", id="display-fourier"
+    ),
+    pytest.param(
+        "$$\n(f * g)[n](k) = \\sum_m f[m] g[n - m]\n$$", id="display-block-conv"
+    ),
+    pytest.param("식 \\(\\mathcal{F}[f](\\omega)\\) 참고", id="paren-fourier"),
+    pytest.param("\\[\n(f * g)[n](k)\n\\]", id="bracket-conv"),
+    pytest.param("$\\mathcal{F}[f](\\omega)$", id="dollar-fourier"),
+    pytest.param("$(f * g)[n](k)$", id="dollar-conv"),
+]
+
+
+class TestLinkRewritesLeaveMath:
+    @pytest.mark.parametrize("math", MATH_WITH_LINK_SHAPES)
+    def test_dead_link_rewrite(self, math: str) -> None:
+        text = f"변환\n\n{math}\n\n뒤 [x](bad target)"
+        assert unlink_dead_links(text) == f"변환\n\n{math}\n\n뒤 x"
+
+    @pytest.mark.parametrize("math", MATH_WITH_LINK_SHAPES)
+    def test_lint_markdown(self, math: str) -> None:
+        # Delimiters may be normalized to $$; the bracket-paren pair stays.
+        fixed = lint_markdown(f"a\n\n{math}\n\nb", warn=False)
+        assert "[f](\\omega)" in fixed or "[n](k)" in fixed
+
+    def test_unknown_arxiv_rewrite(self) -> None:
+        text = (
+            "$$[x](https://arxiv.org/abs/1912.03356)$$ "
+            "$\\hat{y}[y](https://arxiv.org/abs/1912.03356)$"
+        )
+        assert unlink_unknown_arxiv(text, set()) == (text, [])
+
+    @pytest.mark.parametrize("math", MATH_WITH_LINK_SHAPES)
+    def test_image_rewrites(self, math: str) -> None:
+        text = f"{math.replace('[f]', '![f]').replace('[n]', '![n]')}"
+        assert drop_unknown_images(text, set()) == text
+
+    def test_currency_is_no_math(self) -> None:
+        assert unlink_dead_links("$5 [x](bad target) $10") == "$5 x $10"
+
+
 def test_lint_is_idempotent() -> None:
     src = "text\n## H\nbody with \\(P(a|b)\\)"
     once = lint_markdown(src)

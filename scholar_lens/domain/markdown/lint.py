@@ -42,7 +42,7 @@ from __future__ import annotations
 
 import logging
 import re
-from collections.abc import Collection, Iterable
+from collections.abc import Callable, Collection, Iterable
 from dataclasses import dataclass
 from typing import Literal
 
@@ -52,12 +52,15 @@ from scholar_lens.domain.markdown.math import (
     BLOG_FENCE,
     HANGUL,
     IMAGE,
+    LATEX_LIKE,
     QUOTE_PREFIX,
+    SINGLE_DOLLAR,
     blog_bare,
     blog_fence_roles,
     blog_line_roles,
     blog_unquote,
     fence_roles,
+    in_spans,
     indent_width,
     indented_code_bases,
     indented_code_lines,
@@ -65,6 +68,7 @@ from scholar_lens.domain.markdown.math import (
     list_column,
     normalize_math,
     open_fence,
+    protected_spans,
     segments,
 )
 
@@ -97,9 +101,6 @@ def undefined_macros(defined: Collection[str]) -> frozenset[str]:
 
 # A bare "|" not already escaped or part of \vert/\mid/\| etc.
 _BARE_PIPE = re.compile(r"(?<!\\)\|")
-# Single-$ inline math: a $...$ that is not part of a $$ display block. Used only
-# to warn, never to rewrite (could be currency).
-_SINGLE_DOLLAR = re.compile(r"(?<![\\$])\$(?!\$)(?!\s)[^$\n]+?(?<!\\)\$(?!\$)")
 # A Markdown link (not an image): text and target.
 _MD_LINK = re.compile(r"(?<!\!)\[([^\]]*)\]\(([^)]*)\)")
 # LaTeX control words (\foo); \\ and single-char controls (\,, \{) are ignored.
@@ -158,7 +159,6 @@ NUMBERED_REF = re.compile(
     rf"|\d+(?:\.\d+)*\s*절(?:{_KO_REF_END})|\d+(?:\.\d+)+장(?:{_KO_REF_END})"
     r"|§\s*\d+"
 )
-_LATEX_LIKE = re.compile(r"[\\^_{]")
 
 # Real inline HTML tags a post may legitimately use; these must NOT be escaped.
 # Everything else that looks like <word ...> in prose is treated as a
@@ -392,10 +392,10 @@ def _warn_fragile_math(markdown: str, regions: list[tuple[int, int, str]]) -> No
 
 def _warn_single_dollar(markdown: str, regions: list[tuple[int, int, str]]) -> None:
     code = [(s, e) for s, e, k in regions if k in ("fence", "icode", "display")]
-    for m in _SINGLE_DOLLAR.finditer(markdown):
+    for m in SINGLE_DOLLAR.finditer(markdown):
         if any(s <= m.start() < e for s, e in code):
             continue
-        if not _LATEX_LIKE.search(m.group(0)):
+        if not LATEX_LIKE.search(m.group(0)):
             continue  # most likely a currency amount
         logger.warning(
             "Markdown lint: single-$ math %r will NOT render on the blog (use "
@@ -437,11 +437,11 @@ def arxiv_link_key(url: str) -> str | None:
 
 
 def unlink_unknown_arxiv(markdown: str, known: set[str]) -> tuple[str, list[str]]:
-    """``markdown`` with every link (outside code) to an arXiv paper whose
+    """``markdown`` with every link (outside code and math) to an arXiv paper whose
     unversioned id is not in ``known`` reduced to its text, and the targets
     removed. A writer model links arXiv ids from memory, which resolve to
     real but unrelated papers; only ids checked against arXiv are kept."""
-    keep = _outside(_classify_regions(markdown), ("fence", "icode"))
+    keep = _in_prose(markdown)
     removed: list[str] = []
 
     def repl(m: re.Match[str]) -> str:
@@ -490,7 +490,8 @@ _FOLLOWABLE = ("http://", "https://", "/", "#", "mailto:")
 
 
 def unlink_dead_links(markdown: str) -> str:
-    """Keep only the text of a link the blog cannot follow, outside code.
+    """Keep only the text of a link the blog cannot follow, outside code
+    and math (``\\mathcal{F}[f](\\omega)`` is no link).
 
     A target that is not an http(s) URL, a site-relative path or an anchor
     (``../_images/x.svg`` copied from a docs page, ``부록 참조``) fails the
@@ -498,7 +499,7 @@ def unlink_dead_links(markdown: str) -> str:
     the image it wrapped was dropped). The text (or the linked image) stays;
     an empty link goes.
     """
-    keep = _outside(_classify_regions(markdown), ("fence", "icode"))
+    keep = _in_prose(markdown)
 
     def image_repl(m: re.Match[str]) -> str:
         if not keep(m.start()) or m.group(2).strip().startswith(_FOLLOWABLE):
@@ -516,7 +517,7 @@ def unlink_dead_links(markdown: str) -> str:
         return text
 
     markdown = _LINKED_IMAGE.sub(image_repl, markdown)
-    keep = _outside(_classify_regions(markdown), ("fence", "icode"))
+    keep = _in_prose(markdown)
     return _MD_LINK.sub(repl, markdown)
 
 
@@ -617,6 +618,14 @@ def _outside(regions: list[tuple[int, int, str]], kinds: tuple[str, ...]):  # ty
     return lambda pos: not any(s <= pos < e for s, e in spans)
 
 
+def _in_prose(markdown: str) -> Callable[[int], bool]:
+    """Whether an offset of ``markdown`` is outside code and math (every
+    delimiter, single ``$`` included): where a link or image rewrite may
+    touch the text."""
+    protected = in_spans(protected_spans(markdown))
+    return lambda pos: not protected(pos)
+
+
 def _remove_envelope_tags(markdown: str) -> str:
     keep = _outside(_classify_regions(markdown), ("fence", "icode"))
     return ENVELOPE_TAG.sub(
@@ -693,7 +702,7 @@ def drop_unknown_images(markdown: str, known_sources: set[str]) -> str:
         known_names.setdefault(name, {}).setdefault(
             (_host(source), _paper_id(source)), source
         )
-    keep = _outside(_classify_regions(markdown), ("fence", "icode"))
+    keep = _in_prose(markdown)
 
     def repl(m: re.Match[str]) -> str:
         src = m.group(2)
@@ -782,7 +791,7 @@ def fill_image_alts(
     Otherwise an empty alt gets the figure's caption (without its "Figure 3:"
     label) when the source is known, else ``fallback``.
     """
-    keep = _outside(_classify_regions(markdown), ("fence", "icode"))
+    keep = _in_prose(markdown)
 
     def repl(m: re.Match[str]) -> str:
         alt, src = m.group(1).strip(), m.group(2)
@@ -976,8 +985,8 @@ def writing_issues(markdown: str) -> list[str]:
             f"{_snippet(markdown, m.start(), m.end())}"
         )
     code = _masked(markdown, ("fence", "icode", "display"))
-    for m in _SINGLE_DOLLAR.finditer(code):
-        if _LATEX_LIKE.search(m.group(0)):
+    for m in SINGLE_DOLLAR.finditer(code):
+        if LATEX_LIKE.search(m.group(0)):
             issues.append(f"single-$ math '{m.group(0)[:60]}' (use $$ … $$)")
     return list(dict.fromkeys(issues))
 

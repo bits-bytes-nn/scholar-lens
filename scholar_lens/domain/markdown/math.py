@@ -236,6 +236,42 @@ def segments(markdown: str) -> list[Segment]:
     return out
 
 
+# Single-$ inline math: a $...$ not part of a $$ span. It does not render on
+# the blog, but a writer's \mathcal{F}[f](\omega) in it is still math, not a
+# link. One that starts with a digit and has no LaTeX is currency ("$5 … $10").
+SINGLE_DOLLAR = re.compile(r"(?<![\\$])\$(?!\$)(?!\s)[^$\n]+?(?<!\\)\$(?!\$)")
+LATEX_LIKE = re.compile(r"[\\^_{]")
+
+
+def protected_spans(markdown: str) -> list[tuple[int, int]]:
+    """``(start, end)`` of every span a Markdown rewrite must leave as is:
+    code (fenced, inline), math of every delimiter :func:`segments` knows
+    and single-``$`` spans outside them that are no currency amounts."""
+    spans = [(s.start, s.end) for s in segments(markdown)]
+
+    def inside(pos: int) -> bool:
+        return any(a <= pos < b for a, b in spans)
+
+    spans += [
+        (m.start(), m.end())
+        for m in SINGLE_DOLLAR.finditer(markdown)
+        if (LATEX_LIKE.search(m.group(0)) or not m.group(0)[1].isdigit())
+        and not inside(m.start())
+    ]
+    return sorted(spans)
+
+
+def in_spans(spans: list[tuple[int, int]]) -> Callable[[int], bool]:
+    """Whether an offset falls in one of ``spans`` (sorted, disjoint)."""
+    starts = [s for s, _ in spans]
+
+    def test(pos: int) -> bool:
+        i = bisect_right(starts, pos) - 1
+        return i >= 0 and pos < spans[i][1]
+
+    return test
+
+
 _TEX_COMMAND = re.compile(r"\\[A-Za-z]")
 _PAREN_DELIMS = re.compile(r"^\\{1,2}\(|\\{1,2}\)$")
 # Letters only, so "\(s\)" after a word is a suffix, not math.
