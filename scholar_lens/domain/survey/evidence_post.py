@@ -13,7 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from scholar_lens.domain.coverage import CoverageTarget
 from scholar_lens.domain.evidence import EvidenceLedger, canonical_ids
-from scholar_lens.domain.evidence_draft import MARKER, cited_ids
+from scholar_lens.domain.evidence_draft import MARKER, block_lines, cited_ids
 from scholar_lens.domain.glossary import GlossaryTerm
 from scholar_lens.domain.lengths import DEPTH_CHARS, scaled_targets
 from scholar_lens.domain.markdown.tables import escape_cell_pipes
@@ -293,7 +293,35 @@ def cite_papers(markdown: str, ledger: EvidenceLedger) -> str:
 
     out = re.sub(r"(?P<space>[ \t]*)" + MARKER.pattern, repl, markdown, flags=re.I)
     # The same paper cited twice in a row reads as a slip.
-    return re.sub(r"(\[@[^\]]+\])(\s*\1)+", r"\1", out)
+    out = re.sub(r"(\[@[^\]]+\])(\s*\1)+", r"\1", out)
+    return _one_citation_per_run(out)
+
+
+# A sentence's citation keys ("[@a][@b]").
+_CITATION_GROUP = re.compile(r"(?:[ \t]*\[@[^\]]+\])+")
+
+
+def _one_citation_per_run(markdown: str) -> str:
+    """Within one prose line (a paragraph or list item), a run of sentences
+    citing the same papers keeps the citation after the run's last sentence
+    only: the same key after every sentence reads as noise. The claim check
+    judged each sentence on its own markers before this conversion, so no
+    check loses its evidence. Code, math, tables and headings are left
+    alone."""
+    lines = markdown.split("\n")
+    for i, (line, role) in enumerate(zip(lines, block_lines(markdown), strict=True)):
+        if role != "prose" or line.lstrip().startswith(("|", "#")):
+            continue
+        groups = list(_CITATION_GROUP.finditer(line))
+        drop = [
+            g
+            for g, nxt in zip(groups, groups[1:], strict=False)
+            if g.group(0).strip() == nxt.group(0).strip()
+        ]
+        for g in reversed(drop):
+            line = line[: g.start()] + line[g.end() :]
+        lines[i] = line
+    return "\n".join(lines)
 
 
 def repair_outline(

@@ -27,6 +27,7 @@ from scholar_lens.application.survey_engine import (
     EvidenceSurveyEngine,
 )
 from scholar_lens.domain.evidence import (
+    Evidence,
     EvidenceLedger,
     SourceDocument,
     evidence_problems,
@@ -1378,3 +1379,34 @@ class TestTableEvidenceRewrites:
         kept = without_table_evidence(outline, {"E9"})
         assert kept.table[0].results == ["E2", "E5"]
         assert kept.table[0].limitation == "E3"
+
+
+def test_a_run_of_sentences_citing_one_paper_cites_it_once() -> None:
+    from scholar_lens.domain.survey.evidence_post import cite_papers
+
+    ledger = EvidenceLedger(
+        items=[
+            Evidence(
+                id=f"E{i}",
+                paper_id=pid,
+                kind="finding",
+                claim="c",
+                quote="q" * 30,
+                anchor="s",
+            )
+            for i, pid in ((1, "a"), (2, "a"), (3, "a"), (4, "b"))
+        ]
+    )
+    md = (
+        "첫 문장입니다 [[E1]]. 둘째 문장입니다 [[E2]]. 셋째는 다른 논문입니다 [[E4]]. "
+        "넷째는 다시 앞 논문입니다 [[E3]].\n\n"
+        "| 열 | 값 |\n| --- | --- |\n| x [[E1]] | y [[E2]] |\n"
+    )
+    out = cite_papers(md, ledger)
+    first, table = out.split("\n\n")
+    assert first == (
+        "첫 문장입니다. 둘째 문장입니다 [@a]. 셋째는 다른 논문입니다 [@b]. "
+        "넷째는 다시 앞 논문입니다 [@a]."
+    )
+    # Table cells keep their own citations.
+    assert table.count("[@a]") == 2
