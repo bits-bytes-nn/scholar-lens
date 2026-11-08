@@ -356,3 +356,150 @@ def test_a_survey_rerun_calls_no_model(store: EvidenceTextStore) -> None:
     again_model, again = run()
     assert again_model.calls == []
     assert again.body == first.body and again.blocking == first.blocking
+
+
+# ---- chaining: a stage's key holds the output of the stage before it ----------
+
+
+def _counts(tmp_path: Path, kind: str) -> dict[str, int]:
+    """Saved checkpoints per stage of ``kind``."""
+    root = tmp_path / "evidence" / "checkpoints" / kind
+    return {
+        d.name: len(list(d.glob("*"))) for d in sorted(root.iterdir()) if d.is_dir()
+    }
+
+
+def _recomputed(before: dict[str, int], after: dict[str, int]) -> set[str]:
+    """The stages a second run saved new checkpoints for (a stage it
+    loaded adds none)."""
+    return {stage for stage, n in after.items() if n > before.get(stage, 0)}
+
+
+DOWNSTREAM = {"section", "review", "tldr", "final"}
+
+
+def test_a_changed_outline_prompt_recomputes_every_stage_after_it(
+    store: EvidenceTextStore, tmp_path: Path
+) -> None:
+    """The scripted outline comes back the same, so only the chained key
+    (the outline stage's inputs and output) tells the sections it changed."""
+    _write(_engine(StatefulModel(), store))
+    before = _counts(tmp_path, "review")
+    engine = _engine(StatefulModel(), store)
+    engine.post_prompts = engine.post_prompts.__class__(
+        **{**engine.post_prompts.__dict__, "outline": "A new outline prompt."}
+    )
+    _write(engine)
+    after = _counts(tmp_path, "review")
+    assert _recomputed(before, after) == {"outline"} | DOWNSTREAM
+    # Every section again, not only the first.
+    assert after["section"] == 2 * before["section"]
+    calls = engine.model.calls  # type: ignore[attr-defined]
+    assert {"text", "PostReview", "FinalText"} <= set(calls)
+
+
+def test_a_changed_paper_recomputes_the_reading_and_every_stage(
+    store: EvidenceTextStore, tmp_path: Path
+) -> None:
+    from scholar_lens.domain.evidence import SourceDocument
+    from tests.unit.test_paper_engine import PAPER
+
+    _write(_engine(StatefulModel(), store))
+    before = _counts(tmp_path, "review")
+    model = StatefulModel()
+    edited = SourceDocument.from_markdown(
+        "2305.18290", "DPO", "full_text", PAPER + "The loss needs no sampling.\n"
+    )
+    asyncio.run(_engine(model, store).write("DPO", edited, abstract="We propose DPO."))
+    after = _counts(tmp_path, "review")
+    # The scripted reader records the same evidence from the edited text and
+    # the targets come back the same, so the outline (keyed by them) is
+    # loaded; every stage that reads the text runs again.
+    assert _recomputed(before, after) == set(after) - {"outline"}
+    assert DOWNSTREAM | {"targets"} <= _recomputed(before, after)
+    assert "read" in model.calls
+
+
+def _guide_run(store: EvidenceTextStore, pages: list[Any]) -> Any:
+    from scholar_lens.application.guide_engine import (
+        EvidenceGuideEngine,
+        GuideSettings,
+    )
+    from tests.unit.test_guide_engine import ScriptedModel as GuideModel
+
+    model = GuideModel()
+    engine = EvidenceGuideEngine(
+        model,
+        GuideSettings(
+            language="Korean",
+            title_max_length=70,
+            reader_tag="sonnet",
+            min_total_chars=5_000,
+        ),
+        store=store,
+        checkpoints=store,
+        identifier_check=lambda md: [],
+    )
+    asyncio.run(engine.write("Ray Serve batching", pages))
+    return model
+
+
+def test_a_changed_guide_page_recomputes_the_reading_and_every_stage(
+    store: EvidenceTextStore, tmp_path: Path
+) -> None:
+    from tests.unit.test_guide_engine import _blog, _official
+
+    _guide_run(store, [_blog(), _official()])
+    before = _counts(tmp_path, "guide")
+    blog = _blog()
+    edited = blog.from_markdown(
+        blog.paper_id,
+        blog.title,
+        "full_text",
+        blog.text + "\nA batch also caps memory use.\n",
+        url=blog.url,
+        authority=blog.authority,
+    )
+    model = _guide_run(store, [edited, _official()])
+    after = _counts(tmp_path, "guide")
+    recomputed = _recomputed(before, after)
+    assert recomputed >= set(after) - {"outline"}
+    assert {"targets", "section", "review", "tldr"} <= recomputed
+    assert "read" in model.calls
+
+
+def _survey_run(store: EvidenceTextStore, plan: Any) -> Any:
+    from scholar_lens.application.survey_engine import (
+        EngineSettings,
+        EvidenceSurveyEngine,
+    )
+    from tests.unit.test_evidence_engine import FakeDocuments
+    from tests.unit.test_evidence_engine import ScriptedModel as SurveyModel
+
+    model = SurveyModel()
+    engine = EvidenceSurveyEngine(
+        model,
+        FakeDocuments(),
+        EngineSettings(language="Korean", title_max_length=70, reader_tag="sonnet"),
+        store,
+        checkpoints=store,
+    )
+    asyncio.run(engine.write(plan))
+    return model
+
+
+def test_an_edited_survey_plan_recomputes_the_reading_and_every_stage(
+    store: EvidenceTextStore, tmp_path: Path
+) -> None:
+    from tests.unit.test_evidence_engine import _plan
+
+    _survey_run(store, _plan())
+    before = _counts(tmp_path, "survey")
+    plan = _plan()
+    edited = plan.model_copy(update={"scope": plan.scope + " Offline methods only."})
+    model = _survey_run(store, edited)
+    after = _counts(tmp_path, "survey")
+    # The plan is in every reader's and the outline's prompt.
+    assert _recomputed(before, after) == set(after) == {"outline", "section", "review"}
+    assert after["section"] == 2 * before["section"]
+    assert "read" in model.calls
