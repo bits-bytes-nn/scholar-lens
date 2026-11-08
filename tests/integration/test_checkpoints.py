@@ -28,7 +28,7 @@ from scholar_lens.application.evidence_writer import (
     SentenceVerdict,
 )
 from scholar_lens.application.paper_engine import EvidencePaperEngine, PaperSettings
-from tests.test_paper_engine import ScriptedModel, _paper
+from tests.unit.test_paper_engine import ScriptedModel, _paper
 
 METHOD_TITLE = "보상 모델 없이 푸는 선호 최적화"
 # The whole-post finding's marker (its fix adds a sentence to the method).
@@ -305,8 +305,8 @@ def test_a_guide_rerun_calls_no_model(store: EvidenceTextStore) -> None:
         EvidenceGuideEngine,
         GuideSettings,
     )
-    from tests.test_guide_engine import ScriptedModel as GuideModel
-    from tests.test_guide_engine import _blog, _official
+    from tests.unit.test_guide_engine import ScriptedModel as GuideModel
+    from tests.unit.test_guide_engine import _blog, _official
 
     def run() -> tuple[Any, Any]:
         model = GuideModel()
@@ -337,8 +337,8 @@ def test_a_survey_rerun_calls_no_model(store: EvidenceTextStore) -> None:
         EngineSettings,
         EvidenceSurveyEngine,
     )
-    from tests.test_evidence_engine import FakeDocuments, _plan
-    from tests.test_evidence_engine import ScriptedModel as SurveyModel
+    from tests.unit.test_evidence_engine import FakeDocuments, _plan
+    from tests.unit.test_evidence_engine import ScriptedModel as SurveyModel
 
     def run() -> tuple[Any, Any]:
         model = SurveyModel()

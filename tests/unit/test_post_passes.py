@@ -41,8 +41,8 @@ from scholar_lens.domain.specs import (
     SURVEY_SPEC,
 )
 from scholar_lens.domain.survey.evidence_post import plan_targets
-from tests.test_evidence_engine import FakeDocuments, _plan
-from tests.test_paper_engine import ScriptedModel, _outline, _paper
+from tests.unit.test_evidence_engine import FakeDocuments, _plan
+from tests.unit.test_paper_engine import ScriptedModel, _outline, _paper
 
 ALL_SPECS = [GUIDE_SPEC, PAPER_REVIEW_SPEC, PAPER_SUMMARY_SPEC, SURVEY_SPEC]
 

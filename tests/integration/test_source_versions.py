@@ -11,7 +11,7 @@ import pytest
 from scholar_lens.adapters.web.research import WebResearcher
 from scholar_lens.domain.research import PageContent, ResearchCorpus
 from scholar_lens.domain.sources import SourceSet
-from tests.test_tech_guide import _make_generator, _relevant
+from tests.integration.test_tech_guide import _make_generator, _relevant
 
 DOCS = "https://docs.example.dev/en/latest/index.html"
 PINNED = "https://docs.example.dev/en/v0.6.0/"

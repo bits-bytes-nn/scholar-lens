@@ -11,7 +11,7 @@ from scholar_lens.domain.validation import (
     unsourced_table_numbers,
     validate_post,
 )
-from tests.test_post_validator import SPEC, make_post
+from tests.unit.test_post_validator import SPEC, make_post
 
 
 def math_errors(body: str) -> list[str]:
@@ -163,7 +163,7 @@ def test_unbalanced_dollars_across_sibling_items_are_reported() -> None:
 
 
 def test_ordered_list_restarting_after_a_display_warns() -> None:
-    from tests.test_post_validator import warnings
+    from tests.unit.test_post_validator import warnings
 
     post = make_post("1. 첫째\n\n$$x$$\n\n2. 둘째")
     found = [
@@ -184,7 +184,7 @@ def test_ordered_list_restarting_after_a_display_warns() -> None:
     ],
 )
 def test_list_restart_after_a_display_and_paragraph_warns(body: str) -> None:
-    from tests.test_post_validator import warnings
+    from tests.unit.test_post_validator import warnings
 
     found = [
         v
@@ -195,7 +195,7 @@ def test_list_restart_after_a_display_and_paragraph_warns(body: str) -> None:
 
 
 def test_inline_math_starting_a_continuation_line_is_no_display() -> None:
-    from tests.test_post_validator import warnings
+    from tests.unit.test_post_validator import warnings
 
     post = make_post("1. 첫째\n$$x$$는 값입니다\n2. 둘째")
     assert not [
@@ -231,7 +231,7 @@ def test_bare_pipe_on_a_continuation_line_renders_and_passes() -> None:
 
 
 def test_callout_inside_a_numbered_step_is_no_list_restart() -> None:
-    from tests.test_post_validator import warnings
+    from tests.unit.test_post_validator import warnings
 
     post = make_post("1. 첫\n   > **핵심:** 식입니다.\n   > $$x$$\n2. 둘째")
     assert not [
@@ -267,7 +267,7 @@ def test_korean_jamo_inside_inline_math_is_reported() -> None:
 
 
 def test_list_inside_a_quote_does_not_warn() -> None:
-    from tests.test_post_validator import warnings
+    from tests.unit.test_post_validator import warnings
 
     post = make_post("> 1. 첫\n>\n>    $$x$$\n>\n> 2. 둘")
     assert not [

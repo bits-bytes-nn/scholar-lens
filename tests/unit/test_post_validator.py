@@ -14,7 +14,7 @@ import pytest
 from scholar_lens.domain.conventions import load_local_conventions
 from scholar_lens.domain.validation import Violation, errors, validate_post
 
-FIXTURES = Path(__file__).parent / "fixtures" / "blog_defects"
+FIXTURES = Path(__file__).parents[1] / "fixtures" / "blog_defects"
 SPEC = load_local_conventions()
 # A description as the blog's hand-written ones read (PR #88): plain text,
 # 120-160 characters, opening with the model's name.

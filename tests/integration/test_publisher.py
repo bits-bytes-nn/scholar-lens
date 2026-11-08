@@ -1660,7 +1660,7 @@ class TestRejectedCopy:
 
 
 PLACEHOLDER = (
-    Path(__file__).parent / "fixtures" / "ar5iv_placeholder.png"
+    Path(__file__).parents[1] / "fixtures" / "ar5iv_placeholder.png"
 ).read_bytes()
 
 

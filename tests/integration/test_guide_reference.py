@@ -17,7 +17,7 @@ from scholar_lens.adapters.web.research import (
 from scholar_lens.domain.markdown.lint import writing_issues
 from scholar_lens.domain.research import PageContent, ResearchCorpus, SearchResult
 from scholar_lens.domain.sources import SourceSet
-from tests.test_tech_guide import _make_generator
+from tests.integration.test_tech_guide import _make_generator
 
 HOST = "docs.example.ai"
 QUICKSTART = f"https://{HOST}/en/latest/quickstart.html"

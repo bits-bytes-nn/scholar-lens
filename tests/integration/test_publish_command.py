@@ -30,7 +30,7 @@ from scholar_lens.domain.publishing import (
 )
 from scholar_lens.domain.validation import PostValidationError
 from scholar_lens.entrypoints import runtime as saved_post
-from tests.test_publisher import PNG, VALID_POST, FakeGithub, FakeRepo
+from tests.integration.test_publisher import PNG, VALID_POST, FakeGithub, FakeRepo
 
 BROKEN = VALID_POST.replace('paper_author: "Microsoft"', 'author: "Edward Hu"')
 _CONFIG = Github(

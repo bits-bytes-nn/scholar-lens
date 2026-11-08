@@ -17,8 +17,8 @@ from scholar_lens.domain.prompt_safety import (
 from scholar_lens.legacy.prompts import review, summary  # noqa: F401
 
 PROMPTS_DIRS = (
-    Path(__file__).parents[1] / "scholar_lens" / "legacy" / "prompts",
-    Path(__file__).parents[1] / "scholar_lens" / "adapters" / "bedrock" / "prompts",
+    Path(__file__).parents[2] / "scholar_lens" / "legacy" / "prompts",
+    Path(__file__).parents[2] / "scholar_lens" / "adapters" / "bedrock" / "prompts",
 )
 
 

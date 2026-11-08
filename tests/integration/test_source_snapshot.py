@@ -17,7 +17,7 @@ from scholar_lens.adapters.web.snapshot import (
 )
 from scholar_lens.domain.research import PageContent, ResearchCorpus, SearchResult
 from scholar_lens.domain.sources import DomainClasses
-from tests.test_tech_guide import _make_generator, _relevant
+from tests.integration.test_tech_guide import _make_generator, _relevant
 
 DOCS = "https://docs.example.dev/en/latest/"
 

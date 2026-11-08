@@ -64,7 +64,7 @@ from scholar_lens.domain.validation import validate_post
 from tests.fakes import FakeLLMFactory
 
 # The blog checkout next to this repository, when there is one.
-BLOG = Path(__file__).resolve().parents[2] / "tech-blog"
+BLOG = Path(__file__).resolve().parents[3] / "tech-blog"
 SURVEY_TYPE = "Paper Surveys"
 LOSS = r"\mathcal{L}_\text{DPO} = -\log \sigma(\beta \Delta)"
 
@@ -1080,7 +1080,7 @@ def test_a_rerun_replaces_the_post_its_plan_published(
 
     from scholar_lens.configs import Github
     from scholar_lens.domain.conventions import BlogPost
-    from tests.test_publisher import FakeGithub, FakeRepo
+    from tests.integration.test_publisher import FakeGithub, FakeRepo
 
     old = "_posts/2026-10-02-preference-learning-for-llms.md"
     repo = FakeRepo({})

@@ -266,7 +266,7 @@ def test_raster_to_png_converts_cmyk() -> None:
         assert image.format == "PNG" and image.mode == "RGBA"
 
 
-PLACEHOLDER = Path(__file__).parent / "fixtures" / "ar5iv_placeholder.png"
+PLACEHOLDER = Path(__file__).parents[1] / "fixtures" / "ar5iv_placeholder.png"
 
 
 def test_ar5iv_placeholder_is_recognized_by_its_bytes() -> None:

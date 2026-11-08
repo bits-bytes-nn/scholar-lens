@@ -219,7 +219,7 @@ def test_a_paper_without_an_html_rendering_names_why(tmp_path: Path) -> None:
 
 
 def test_a_guides_arxiv_paper_read_from_its_abstract_is_noted() -> None:
-    from tests.test_tech_guide import _make_generator
+    from tests.integration.test_tech_guide import _make_generator
 
     gen = _make_generator()
     gen.researcher.arxiv_fallbacks = {

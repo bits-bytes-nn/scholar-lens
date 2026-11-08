@@ -21,7 +21,7 @@ from scholar_lens.configs.config import Config
 from scholar_lens.domain.conventions import BlogPost, load_local_conventions
 from scholar_lens.domain.guide.models import TechGuide
 from scholar_lens.domain.jobs import JobRequest
-from tests.test_publisher import PNG, FakeGithub, FakeRepo
+from tests.integration.test_publisher import PNG, FakeGithub, FakeRepo
 
 
 def test_branch_id_follows_the_source_urls_not_the_title() -> None:

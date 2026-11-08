@@ -8,7 +8,7 @@ import pytest
 
 from scholar_lens.domain.markdown.lint import publish_body
 from scholar_lens.domain.validation import errors, validate_post
-from tests.test_post_validator import DESCRIPTION, SPEC, make_post
+from tests.unit.test_post_validator import DESCRIPTION, SPEC, make_post
 
 
 def messages(body: str, **kwargs) -> list[str]:  # type: ignore[no-untyped-def]
