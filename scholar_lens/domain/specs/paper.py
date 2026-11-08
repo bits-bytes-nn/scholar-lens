@@ -45,6 +45,10 @@ SUMMARY_SECTIONS: dict[str, tuple[tuple[str, str], ...]] = {
     ),
 }
 
+# The most sections a summary's outline has: its fixed sections and the
+# TL;DR (the bound of the summary spec's ``MaxSections`` check).
+SUMMARY_MAX_SECTIONS = len(SUMMARY_SECTIONS[""]) + 1
+
 _KINDS = (
     KindSpec("tldr", 0),
     KindSpec("problem", 1),

@@ -82,6 +82,7 @@ explanation:
   # paper uses ~1.4M.
   max_total_tokens: 8000000
   max_cost_usd: 40               # evidence engine: hard ceiling (USD, null = none)
+  chars_per_reader: 15000        # evidence engine: paper characters per reading agent
 
 summary:
   summary_model_id: anthropic.claude-opus-5-5
@@ -93,6 +94,7 @@ summary:
   thinking_effort: medium
   max_total_tokens: 1000000        # sections engine: hard ceiling (null = no limit)
   max_cost_usd: 12                 # evidence engine: hard ceiling (USD)
+  chars_per_reader: 40000          # evidence engine: paper characters per reading agent
 
 tech_guide:
   # The evidence engine writes the guide (docs/redesign.md): the relevance

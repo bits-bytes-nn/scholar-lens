@@ -209,6 +209,9 @@ class Explanation(_Section):
     # Evidence engine: hard ceiling on one run's estimated cost (list prices,
     # USD; None = no limit). A review costs about $5-11.
     max_cost_usd: float | None = Field(default=40.0, gt=0)
+    # Evidence engine: paper characters one reading agent covers (a longer
+    # paper gets more readers, each on its own part).
+    chars_per_reader: int = Field(default=15_000, ge=2_000, le=200_000)
 
 
 class Summary(_Section):
@@ -234,6 +237,9 @@ class Summary(_Section):
     # Evidence engine: hard ceiling on one run's estimated cost (list prices,
     # USD; None = no limit). A summary costs about $3.
     max_cost_usd: float | None = Field(default=12.0, gt=0)
+    # Evidence engine: paper characters one reading agent covers; a summary
+    # needs fewer details, so one reader covers more of the paper.
+    chars_per_reader: int = Field(default=40_000, ge=2_000, le=200_000)
 
 
 # The default demoted domain classes of ``tech_guide.demoted_domains``.

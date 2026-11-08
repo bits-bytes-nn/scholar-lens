@@ -85,6 +85,7 @@ from scholar_lens.domain.conventions import BlogPost, PostConventions
 from scholar_lens.domain.jobs import JobRequest
 from scholar_lens.domain.paper.models import Paper
 from scholar_lens.domain.post_names import slugify
+from scholar_lens.domain.specs.paper import SUMMARY_MAX_SECTIONS
 from scholar_lens.legacy import writers as legacy_writers
 
 logger = logging.getLogger(__name__)
@@ -426,7 +427,7 @@ class PaperToolkit:
             )
             reader_id, effort = cfg.reader_model_id, cfg.thinking_effort
             lengths = (cfg.min_total_chars, cfg.max_total_chars)
-            max_sections, chars_per_reader = cfg.max_sections, 15_000
+            max_sections, chars_per_reader = cfg.max_sections, cfg.chars_per_reader
             max_cost = cfg.max_cost_usd
             # The review plans at the configured planning effort.
             planning_effort: str = cfg.planning_effort
@@ -435,7 +436,8 @@ class PaperToolkit:
             writer_id = outline_id = judge_id = scfg.summary_model_id
             reader_id, effort = scfg.reader_model_id, scfg.thinking_effort
             lengths = (scfg.min_total_chars, scfg.max_total_chars)
-            max_sections, chars_per_reader = 6, 40_000
+            max_sections = SUMMARY_MAX_SECTIONS
+            chars_per_reader = scfg.chars_per_reader
             max_cost = scfg.max_cost_usd
             # A summary's short outline at high effort.
             planning_effort = "high"
