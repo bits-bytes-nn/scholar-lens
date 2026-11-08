@@ -74,3 +74,19 @@ def test_a_title_that_differs_by_without_is_another_paper() -> None:
         "Learning with Noisy Labels", "Learning without Noisy Labels"
     )
     assert titles_match("Learning with Noisy Labels", "Learning with noisy labels")
+
+
+@pytest.mark.parametrize(
+    "a, b",
+    [
+        # The same words in another order are another paper.
+        ("Graphs for Deep Learning", "Deep Learning for Graphs"),
+        ("Language Models for Code Generation", "Code Generation for Language Models"),
+    ],
+)
+def test_titles_with_the_same_words_in_another_order_do_not_match(
+    a: str, b: str
+) -> None:
+    from scholar_lens.domain.titles import titles_match
+
+    assert not titles_match(a, b)
