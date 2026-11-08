@@ -20,14 +20,14 @@ from scholar_lens.domain.prompts.rules import (
     TABLE_SIZE_RULE,
     TERMINOLOGY_RULES,
 )
-from scholar_lens.src.prompts.review import (
+from scholar_lens.legacy.prompts.review import (
     PaperEditPrompt,
     PaperFinalizationPrompt,
     PaperPlanningPrompt,
     PaperSectionCheckPrompt,
     PaperSectionPrompt,
 )
-from scholar_lens.src.prompts.summary import (
+from scholar_lens.legacy.prompts.summary import (
     PaperSummaryPrompt,
     PaperSummaryShortenPrompt,
 )

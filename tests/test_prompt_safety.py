@@ -14,10 +14,10 @@ from scholar_lens.adapters.bedrock.prompt_safety import (
 )
 
 # The sections engine's templates register on import (bootstrap imports them).
-from scholar_lens.src.prompts import review, summary  # noqa: F401
+from scholar_lens.legacy.prompts import review, summary  # noqa: F401
 
 PROMPTS_DIRS = (
-    Path(__file__).parents[1] / "scholar_lens" / "src" / "prompts",
+    Path(__file__).parents[1] / "scholar_lens" / "legacy" / "prompts",
     Path(__file__).parents[1] / "scholar_lens" / "adapters" / "bedrock" / "prompts",
 )
 

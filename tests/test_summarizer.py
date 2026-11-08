@@ -14,8 +14,8 @@ from scholar_lens.domain.constants import LanguageModelId
 from scholar_lens.domain.conventions import load_local_conventions
 from scholar_lens.domain.paper.models import Attributes, Content, Paper
 from scholar_lens.domain.post_format import format_summary, paper_post_meta
-from scholar_lens.src.prompts.summary import PaperSummaryPrompt
-from scholar_lens.src.summarizer import PaperSummarizer
+from scholar_lens.legacy.prompts.summary import PaperSummaryPrompt
+from scholar_lens.legacy.summarizer import PaperSummarizer
 from tests.fakes import FakeLLMFactory
 
 
@@ -368,7 +368,7 @@ class TestSummaryLength:
 
 
 def test_shortening_may_cut_inline_math_but_not_display_equations() -> None:
-    from scholar_lens.src.summarizer import _skeleton
+    from scholar_lens.legacy.summarizer import _skeleton
 
     text = "> 요약\n\n## 방법\n\n$$\nh = Wx\n$$\n\n- $$r$$은 랭크입니다.\n- $$\\alpha$$는 배율입니다."
     cut_inline = text.rsplit("\n", 1)[0]
@@ -413,7 +413,7 @@ async def test_derived_subtitle_is_noted(sample_paper: Paper) -> None:
 
 
 def test_shortening_may_not_trade_one_blocker_for_another() -> None:
-    from scholar_lens.src.summarizer import _blockers
+    from scholar_lens.legacy.summarizer import _blockers
 
     ragged = "| a | b |\n| --- | --- |\n| 1 | 2 | 3 |\n"
     repeated = "| a | b |\n| --- | --- |\n| 1 | 2 |\n| 1 | 2 |\n"

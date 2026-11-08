@@ -48,7 +48,7 @@ def test_unanalysed_figures_are_noted() -> None:
 
 
 def test_unsourced_citations_reach_the_review_notes() -> None:
-    from scholar_lens.src.citation_summarizer import CitationSummarizer
+    from scholar_lens.legacy.citation_summarizer import CitationSummarizer
     from scholar_lens.src.paper_pipeline import _citation_notes
 
     summarizer = CitationSummarizer(
@@ -153,6 +153,7 @@ async def test_code_analysis_failure_degrades_to_no_codebase(  # type: ignore[no
     monkeypatch.setattr(paper_pipeline, "LanguageModelId", lambda value: value)
     monkeypatch.setattr(paper_pipeline, "EmbeddingModelId", lambda value: value)
     monkeypatch.setattr(paper_pipeline, "CodeRetriever", BrokenRetriever)
+    monkeypatch.setattr(paper_pipeline, "CodeIndex", BrokenRetriever)
     result = await paper_pipeline._process_code(
         _context(), tmp_path, ["https://github.com/x/y"], [], index=True  # type: ignore[arg-type]
     )
@@ -184,6 +185,7 @@ async def test_the_code_index_is_built_only_when_asked(  # type: ignore[no-untyp
     monkeypatch.setattr(paper_pipeline, "LanguageModelId", lambda value: value)
     monkeypatch.setattr(paper_pipeline, "EmbeddingModelId", lambda value: value)
     monkeypatch.setattr(paper_pipeline, "CodeRetriever", Retriever)
+    monkeypatch.setattr(paper_pipeline, "CodeIndex", Retriever)
     summary, retriever = await paper_pipeline._process_code(
         _context(), tmp_path, ["https://github.com/x/y"], [], index=index  # type: ignore[arg-type]
     )

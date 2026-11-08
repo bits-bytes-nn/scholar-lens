@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -19,7 +20,8 @@ from scholar_lens.domain.constants import AppConstants, LanguageModelId, LocalPa
 from scholar_lens.domain.ids import arxiv_id_from_doi, normalize_arxiv_id
 from scholar_lens.domain.paper.models import Content
 from scholar_lens.domain.usage_context import staged
-from scholar_lens.src.logger import logger
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_MAX_CONCURRENCY: int = 5
 DEFAULT_SEARCH_RESULTS_LIMIT: int = 10

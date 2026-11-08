@@ -158,3 +158,41 @@ name = "Web research does not depend on the review plan"
 type = "forbidden"
 source_modules = ["scholar_lens.adapters.web.research"]
 forbidden_modules = ["scholar_lens.domain.review_plan"]
+
+[[tool.importlinter.contracts]]
+name = "The layers do not use the legacy sections engine"
+type = "forbidden"
+source_modules = [
+    "scholar_lens.domain",
+    "scholar_lens.application",
+    "scholar_lens.adapters",
+]
+forbidden_modules = ["scholar_lens.legacy"]
+
+[[tool.importlinter.contracts]]
+name = "The legacy sections engine does not use the src pipelines"
+type = "forbidden"
+source_modules = ["scholar_lens.legacy"]
+forbidden_modules = ["scholar_lens.src", "scholar_lens.cli"]
+
+[[tool.importlinter.contracts]]
+name = "The draft checks are independent of every writer"
+type = "forbidden"
+source_modules = ["scholar_lens.legacy.section_loop"]
+forbidden_modules = [
+    "scholar_lens.legacy.explainer",
+    "scholar_lens.legacy.summarizer",
+    "scholar_lens.src.tech_guide",
+    "scholar_lens.src.guide_pipeline",
+    "scholar_lens.src.guide_writer",
+    "scholar_lens.src.survey_pipeline",
+    "scholar_lens.src.survey_writer",
+]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "The survey stages do not use the guide or review generators"
+type = "forbidden"
+source_modules = ["scholar_lens.src.survey_pipeline", "scholar_lens.src.survey_writer"]
+forbidden_modules = ["scholar_lens.src.tech_guide", "scholar_lens.legacy.explainer"]
+allow_indirect_imports = true

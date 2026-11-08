@@ -28,8 +28,8 @@ from scholar_lens.domain.quality_gate import publish_blockers, rule_issues
 from scholar_lens.domain.review_plan import PlanError, SourceText, draft_rank
 from scholar_lens.domain.usage import TokenBudgetExceeded
 from scholar_lens.domain.validation import body_errors
-from scholar_lens.src.citation_summarizer import CitationSummarizer
-from scholar_lens.src.explainer import PaperReviewer
+from scholar_lens.legacy.citation_summarizer import CitationSummarizer
+from scholar_lens.legacy.explainer import PaperReviewer
 from tests.fakes import FakeLLMFactory
 
 MARKER = '[Image: alt="arch", src="/p/figures/0.png", caption="The architecture."]'
@@ -332,7 +332,7 @@ async def test_unbalanced_writer_tags_are_stripped() -> None:
 
 
 def test_an_unclosed_has_more_tag_does_not_leak_its_value() -> None:
-    from scholar_lens.src.explainer import _split_writer_output
+    from scholar_lens.legacy.explainer import _split_writer_output
 
     assert _split_writer_output("충분합니다.<has_more>n") == ("충분합니다.", False)
 
@@ -710,7 +710,7 @@ async def test_finalization_repair_never_swaps_in_an_empty_part(
 def test_nltk_data_is_used_when_present_and_a_failed_download_raises(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from scholar_lens.src import explainer
+    from scholar_lens.legacy import explainer
 
     download = MagicMock(return_value=True)
     monkeypatch.setattr(explainer.nltk, "download", download)
@@ -728,7 +728,7 @@ def test_nltk_data_is_used_when_present_and_a_failed_download_raises(
 
 
 def test_finalization_problems_are_structural_only() -> None:
-    from scholar_lens.src.explainer import _finalization_problems
+    from scholar_lens.legacy.explainer import _finalization_problems
 
     long_closing = "## 한계와 시사점\n\n" + "한계를 설명합니다. " * 120
     final = {
@@ -745,7 +745,7 @@ def test_finalization_problems_are_structural_only() -> None:
 def test_subtitle_that_repeats_the_title_is_a_problem() -> None:
     # A bare model name ("Pixtral 12B") "translates" to itself; the repair
     # round must ask for a descriptive subtitle instead.
-    from scholar_lens.src.explainer import _finalization_problems
+    from scholar_lens.legacy.explainer import _finalization_problems
 
     final = {
         "subtitle": "pixtral  12B",
@@ -879,7 +879,7 @@ class TestPublishableDraftWins:
 
 
 def test_finalization_part_that_the_validator_would_reject_is_a_problem() -> None:
-    from scholar_lens.src.explainer import _finalization_problems
+    from scholar_lens.legacy.explainer import _finalization_problems
 
     closing = "## 한계와 시사점\n\n| 방법 | |\n| --- | --- |\n| A | 1 |\n"
     final = {
@@ -894,7 +894,7 @@ def test_finalization_part_that_the_validator_would_reject_is_a_problem() -> Non
 def test_description_numbers_come_from_the_tldr_only() -> None:
     # As the finalizer prompt asks: a number only the abstract states is
     # still unsourced in the post's description.
-    from scholar_lens.src.explainer import _finalization_problems
+    from scholar_lens.legacy.explainer import _finalization_problems
 
     final = {
         "subtitle": "s",

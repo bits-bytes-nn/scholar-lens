@@ -51,8 +51,10 @@ from scholar_lens.domain.post_names import title_slug
 from scholar_lens.domain.tags import unsupported_tags
 from scholar_lens.domain.text import is_placeholder
 from scholar_lens.domain.validation import unsourced_table_numbers
-from scholar_lens.src.citation_summarizer import CitationSummarizer
-from scholar_lens.src.explainer import PaperReviewer
+from scholar_lens.legacy.citation_summarizer import CitationSummarizer
+from scholar_lens.legacy.code_index import CodeIndex
+from scholar_lens.legacy.explainer import PaperReviewer
+from scholar_lens.legacy.summarizer import PaperSummarizer
 from scholar_lens.src.logger import logger
 from scholar_lens.src.paper_writer import write_paper_with_evidence
 from scholar_lens.src.runtime import (
@@ -63,7 +65,6 @@ from scholar_lens.src.runtime import (
     load_translation_guideline,
     publish_artifact,
 )
-from scholar_lens.src.summarizer import PaperSummarizer
 
 # The blog's most-used tags shown to the tagging prompt (all of them are
 # still used to match spellings).
@@ -97,7 +98,7 @@ async def run_paper_pipeline(
     """Generate and publish a review (``kind="review"``) or summary."""
     assert request.source is not None  # guaranteed by JobRequest validation
     source = resolve_paper_source(request.source)
-    code_retriever: CodeRetriever | None = None
+    code_retriever: CodeIndex | None = None
     try:
         # Checked first: a config or S3 failure must not follow the paid stages.
         github = context.config.resources.github
@@ -196,7 +197,7 @@ async def _generate_review(
     context: RunContext,
     paper: Paper,
     citation_summarizer: CitationSummarizer | None,
-    code_retriever: CodeRetriever | None,
+    code_retriever: CodeIndex | None,
     translation_guideline: list[dict[str, Any]] | None,
     tracker: TokenUsageTracker,
     published: BlogPost | None,
@@ -320,7 +321,7 @@ async def _prepare_paper_data(
     tracker: TokenUsageTracker,
     *,
     inputs: PaperInputs,
-) -> tuple[Paper, CodeRetriever | None, CitationSummarizer | None]:
+) -> tuple[Paper, CodeIndex | None, CitationSummarizer | None]:
     """Parse the paper and extract what the selected generator needs
     (``inputs``): citations and the code index are slow and costly, so they
     are built only for the generator that reads them.
@@ -443,7 +444,7 @@ async def _process_code(
     callbacks: list[Any],
     *,
     index: bool,
-) -> tuple[str | None, CodeRetriever | None]:
+) -> tuple[str | None, CodeIndex | None]:
     """The codebase summary of the paper's repositories and, with ``index``,
     a retriever over its searchable code index (otherwise None: no chunk is
     analysed or embedded). Code grounding is supplementary, so any failure
@@ -452,23 +453,34 @@ async def _process_code(
         return None, None
     code_cfg = context.config.code
     try:
-        code_retriever = CodeRetriever(
-            LanguageModelId(code_cfg.code_analysis_model_id),
-            LanguageModelId(code_cfg.code_summarization_model_id),
-            EmbeddingModelId(code_cfg.embed_model_id),
-            paper_dir=paper_dir,
-            boto_session=context.bedrock_boto_session,
-            chunk_size=code_cfg.chunk_size,
-            chunk_overlap=code_cfg.chunk_overlap,
-            max_files=code_cfg.max_files,
-            max_chunks=code_cfg.max_chunks,
-            callbacks=callbacks,
-        )
-        await code_retriever.download_repositories(repo_urls)
+        code_index: CodeIndex | None = None
+        code_retriever: CodeRetriever
         if index:
-            await code_retriever.build_index()
+            code_retriever = code_index = CodeIndex(
+                LanguageModelId(code_cfg.code_analysis_model_id),
+                LanguageModelId(code_cfg.code_summarization_model_id),
+                EmbeddingModelId(code_cfg.embed_model_id),
+                paper_dir=paper_dir,
+                boto_session=context.bedrock_boto_session,
+                chunk_size=code_cfg.chunk_size,
+                chunk_overlap=code_cfg.chunk_overlap,
+                max_files=code_cfg.max_files,
+                max_chunks=code_cfg.max_chunks,
+                callbacks=callbacks,
+            )
+        else:
+            code_retriever = CodeRetriever(
+                LanguageModelId(code_cfg.code_summarization_model_id),
+                paper_dir=paper_dir,
+                boto_session=context.bedrock_boto_session,
+                max_files=code_cfg.max_files,
+                callbacks=callbacks,
+            )
+        await code_retriever.download_repositories(repo_urls)
+        if code_index is not None:
+            await code_index.build_index()
         summary = await code_retriever.generate_codebase_summary()
-        return summary, code_retriever if index else None
+        return summary, code_index
     except NoPythonFilesError:
         logger.warning("No Python files in the repositories; skipping code analysis.")
     except Exception as e:  # noqa: BLE001 - supplementary input, see docstring

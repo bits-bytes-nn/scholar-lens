@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 import html
+import logging
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -36,7 +37,6 @@ from scholar_lens.adapters.bedrock.output_parsers import HTMLTagOutputParser
 from scholar_lens.adapters.bedrock.prompt_safety import neutralize_prompt_tags
 from scholar_lens.adapters.bedrock.prompts.base import BasePrompt
 from scholar_lens.adapters.bedrock.usage import TokenBudgetGuard
-from scholar_lens.adapters.code.retriever import CodeRetriever
 from scholar_lens.adapters.documents.html import measure_execution_time
 from scholar_lens.adapters.retry import RetryableBase, is_access_error
 from scholar_lens.domain.constants import LanguageModelId
@@ -92,15 +92,17 @@ from scholar_lens.domain.validation import (
     paper_page_title,
     unsourced_numbers,
 )
-from scholar_lens.src.citation_summarizer import CitationSummarizer
-from scholar_lens.src.logger import logger
-from scholar_lens.src.prompts.review import (
+from scholar_lens.legacy.citation_summarizer import CitationSummarizer
+from scholar_lens.legacy.code_index import CodeIndex
+from scholar_lens.legacy.prompts.review import (
     PaperEditPrompt,
     PaperFinalizationPrompt,
     PaperPlanningPrompt,
     PaperSectionCheckPrompt,
     PaperSectionPrompt,
 )
+
+logger = logging.getLogger(__name__)
 
 ROOT_DIR: Path = (
     Path("/tmp")
@@ -189,7 +191,7 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
         finalization_model_id: LanguageModelId,
         boto_session: boto3.Session,
         citation_summarizer: CitationSummarizer,
-        code_retriever: CodeRetriever | None = None,
+        code_retriever: CodeIndex | None = None,
         translation_guideline: list[dict[str, Any]] | None = None,
         language: str = "Korean",
         min_quality_score: int = 70,

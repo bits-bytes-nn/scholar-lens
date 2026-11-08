@@ -88,14 +88,14 @@ class TestPythonFiles:
         assert len(python_files(repo, max_files=2)) == 2
 
     async def test_chunks_are_capped(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
-        from scholar_lens.adapters.code.retriever import CodeRetriever
+        from scholar_lens.legacy.code_index import CodeIndex
 
         repo = tmp_path / "r"
         (repo / "pkg").mkdir(parents=True)
         for i in range(5):
             (repo / "pkg" / f"m{i}.py").write_text("def f():\n    return 1\n\n" * 200)
         model = LanguageModelId.CLAUDE_V4_5_HAIKU
-        retriever = CodeRetriever(
+        retriever = CodeIndex(
             model,
             model,
             EmbeddingModelId.TITAN_EMBED_V2,

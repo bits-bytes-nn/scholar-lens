@@ -8,6 +8,7 @@ tables and math, using the same writing rules as the review.
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import Any
 
@@ -38,14 +39,15 @@ from scholar_lens.domain.validation import (
     paper_page_title,
     unsourced_numbers,
 )
-from scholar_lens.src.explainer import NO_CODEBASE
-from scholar_lens.src.logger import logger
-from scholar_lens.src.prompts.summary import (
+from scholar_lens.legacy.explainer import NO_CODEBASE
+from scholar_lens.legacy.prompts.summary import (
     PaperSummaryFixPrompt,
     PaperSummaryPrompt,
     PaperSummaryShortenPrompt,
 )
-from scholar_lens.src.section_loop import TARGETED_FIX, lost_structure
+from scholar_lens.legacy.section_loop import TARGETED_FIX, lost_structure
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_LANGUAGE: str = "Korean"
 
