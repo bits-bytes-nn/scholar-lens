@@ -66,7 +66,7 @@ domain (순수 코드: 모델, 규칙, 검증, Markdown, 프롬프트 본문)
 - `adapters`와 `legacy`는 `domain`과 `application.ports`(legacy는 어댑터도)만 import합니다.
 - `legacy`는 `bootstrap.py`만 import합니다. 삭제(engine.md E9)는 디렉터리 하나와 설정 필드만 지우면 됩니다.
 - `scholar_lens.configs`는 엔트리포인트와 `bootstrap.py`만 읽습니다. 다른 계층은 설정 값을 생성자 인자나 `application.ports.RunSettings`(구조적 타입)로 받습니다.
-- 외부 SDK(boto3, botocore, httpx, requests, strands, LangChain, faiss, PyGithub)는 `adapters`와 `legacy`만 직접 import합니다.
+- 외부 SDK(boto3, botocore, httpx, requests, strands, LangChain, PyGithub)는 `adapters`와 `legacy`만 직접 import합니다.
 
 ### 1.2 모듈
 

@@ -10,10 +10,8 @@ python = "^3.12"
 arxiv = ">=2.1.3"
 beautifulsoup4 = ">=4.12.3"
 boto3 = ">=1.35.86,<2.0"
-faiss-cpu = ">=1.9.0.post1"
 httpx = ">=0.28.1"
 langchain-aws = ">=1.0,<2.0"
-langchain-community = ">=0.4,<1.0"
 langchain-core = ">=1.2.22,<2.0"
 langchain-text-splitters = ">=1.1.2,<2.0"
 nltk = ">=3.9.1"
@@ -134,7 +132,7 @@ forbidden_modules = [
     "requests",
     "strands",
     "langchain_core",
-    "faiss",
+    
 ]
 
 [[tool.importlinter.contracts]]
@@ -154,7 +152,7 @@ forbidden_modules = [
     "requests",
     "strands",
     "langchain_core",
-    "faiss",
+    
 ]
 
 [[tool.importlinter.contracts]]
@@ -243,7 +241,7 @@ forbidden_modules = [
     "langchain_aws",
     "langchain_community",
     "langchain_text_splitters",
-    "faiss",
+    
     "github",
 ]
 # The entrypoints and the composition root build adapters, which import them.
