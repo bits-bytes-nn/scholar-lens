@@ -437,8 +437,45 @@ def _read_tags(
 # ("]: dest"), wherever they sit: in a blockquote or list item too, and
 # after link text with brackets in it.
 _DESTINATION = re.compile(
-    r"\]\([ \t]*(?P<inline><[^>\n]*>|[^)\s]+)|\]:[ \t]*(?P<defined><[^>\n]*>|\S+)"
+    # An inline target, after link text that may hold brackets.
+    r"\]\([ \t]*(?P<inline><[^>\n]*>|[^)\s]+)"
+    # A definition, at a line's start (after quote and list markers, not a
+    # footnote's "[^1]:"): its whole target up to an optional title, since
+    # a tab or space inside it reaches the attribute too.
+    r"|^(?:[ \t]*(?:>|[-*+]|\d+[.)]))*[ \t]*\[(?!\^)[^\]\n]+\]:[ \t]*"
+    r"(?P<defined><[^>\n]*>|.+?)"
+    r"(?:[ \t]+(?:\"[^\"\n]*\"|'[^'\n]*'|\([^)\n]*\)))?[ \t]*$",
+    re.MULTILINE,
 )
+# Where a tag may start.
+_TAG_OPEN = re.compile(r"<[A-Za-z]")
+
+
+def _tag_end(text: str, start: int) -> int:
+    """The end (exclusive) of the start tag opening at ``start``, as the HTML
+    tokenizer reads it: a quoted attribute value (after "=") runs to its
+    closing quote, and the first ">" outside one ends the tag; -1 when it
+    never ends."""
+    i, n = start + 1, len(text)
+    while i < n:
+        ch = text[i]
+        if ch == ">":
+            return i + 1
+        if ch == "=":
+            i += 1
+            while i < n and text[i] in " \t\n\r\f":
+                i += 1
+            if i < n and text[i] in "\"'":
+                close = text.find(text[i], i + 1)
+                if close == -1:
+                    return -1
+                i = close + 1
+                continue
+            continue
+        i += 1
+    return -1
+
+
 # A kramdown attribute list ("{: .class #id key=value}").
 # (kramdown accepts one across lines, so the pattern ends at its brace.)
 _ATTRIBUTE_LIST = re.compile(r"\{:[^}]*\}")
@@ -467,11 +504,17 @@ def escape_active_html(markdown: str) -> str:
         for i in range(s, e):
             if blank[i] != "\n":
                 blank[i] = " "
-    line_starts = [0, *(i + 1 for i, ch in enumerate(markdown) if ch == "\n")]
-    for name, attrs, (line, col), text in _read_tags("".join(blank)):
-        start = line_starts[line - 1] + col
-        end = start + len(text)
-        if text and not inside(start, end) and _active(name, attrs):
+    # Each "<" that may open a tag is read on its own: a parser reading the
+    # whole text would let an opener kramdown prints as text ("<?x", "<!x",
+    # "<!--") swallow the tag after it.
+    blanked = "".join(blank)
+    for m in _TAG_OPEN.finditer(blanked):
+        start = m.start()
+        end = _tag_end(blanked, start)
+        if end == -1 or inside(start, end):
+            continue
+        text = markdown[start:end]
+        if any(_active(name, attrs) for name, attrs, _, _ in _read_tags(text)):
             edits.append((start, end, text.replace("<", "&lt;").replace(">", "&gt;")))
     for m in _DESTINATION.finditer(markdown):
         group = "inline" if m.group("inline") is not None else "defined"

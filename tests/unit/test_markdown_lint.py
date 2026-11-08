@@ -699,3 +699,65 @@ def test_a_markdown_tel_link_stays_a_link() -> None:
     assert "[전화](tel:+82-2-0000)" in publish_body(
         "## A\n\n[전화](tel:+82-2-0000)\n", warn=False
     )
+
+
+@pytest.mark.parametrize(
+    "markdown",
+    [
+        # Openers kramdown prints as text must not hide the tag after them.
+        '<?x <img src=x onerror="alert(1)">',
+        'Use <!x to start <a href="javascript:alert(1)">x</a>',
+        '</x <a href="javascript:alert(1)">x</a>',
+        '<!-- <a href="javascript:alert(1)">x</a>',
+        # An escaped backtick opens no code span.
+        '\\` <img src=x onerror="alert(1)"> `',
+        # A tag longer than any window is still read whole.
+        "<img src=x " + " " * 20_000 + 'onerror="alert(1)">',
+    ],
+)
+def test_tags_kramdown_renders_are_judged_where_they_start(markdown: str) -> None:
+    import re
+
+    from scholar_lens.domain.markdown.lint import active_html, publish_body
+
+    out = publish_body(f"## A\n\n{markdown}\n", warn=False)
+    assert not any(active_html(t) for t in re.findall(r"<[A-Za-z][^<>]*>", out))
+    assert (
+        "onerror=" not in out.replace("&lt;", "").split("&gt;")[0] or "&lt;img" in out
+    )
+
+
+@pytest.mark.parametrize(
+    "prose",
+    [
+        "[^1]: Source: Vaswani et al.",
+        "[^1]: 출처: 논문 3절",
+        "The output of [Step 2]: note: see below.",
+        "| [x]: y:z |",
+    ],
+)
+def test_prose_with_a_colon_after_brackets_is_kept(prose: str) -> None:
+    from scholar_lens.domain.markdown.lint import publish_body
+
+    assert prose in publish_body(f"## A\n\n{prose}\n", warn=False)
+
+
+@pytest.mark.parametrize(
+    "markdown, gone",
+    [
+        ("[x][a]\n\n[a]:\tjava\tscript:alert(1)", "script:alert"),
+        ('[x][a]\n\n[a]: java script:alert(1) "t"', "script:alert"),
+        ('<iframe src="data:text/html,<b>x</b>"></iframe>', "<iframe"),
+        ('[x](https://a.com){: href="javascript:alert(1)"}', "{: href="),
+    ],
+)
+def test_split_and_non_image_targets_are_inert(markdown: str, gone: str) -> None:
+    import re
+
+    from scholar_lens.domain.markdown.lint import publish_body
+
+    out = publish_body(f"## A\n\n{markdown}\n", warn=False)
+    if gone.startswith("{:"):
+        assert not re.search(r"(?<!\\)\{:[^}]*=", out)
+    else:
+        assert gone not in out

@@ -203,7 +203,7 @@ def without_fences(markdown: str) -> str:
 # Fenced code is found by :func:`fence_spans` (a regex cannot pair fences).
 _SPANS = re.compile(
     r"""
-    (?P<icode>(?<!`)(?P<ib>`+)[^\n]*?(?<!`)(?P=ib)(?!`))
+    (?P<icode>(?<![`\\])(?P<ib>`+)[^\n]*?(?<!`)(?P=ib)(?!`))
     | (?P<display>\$\$.+?\$\$)
     | (?P<paren>\\{1,2}\((?:\\.|[^\n\\])+?\\{1,2}\))
     | (?P<bracket>^[ \t]*(?:>[ \t]?)*[ \t]*\\{1,2}\[.+?\\{1,2}\][ \t]*$)
