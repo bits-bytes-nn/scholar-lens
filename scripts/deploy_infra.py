@@ -428,7 +428,7 @@ class PaperReviewStack(Stack):
             image=ecs.ContainerImage.from_docker_image_asset(image_asset),
             job_role=self.job_role,
             execution_role=self.execution_role,
-            # PDF parsing and FAISS code embeddings are memory-hungry.
+            # PDF parsing and the in-memory code index are memory-hungry.
             cpu=2,
             memory=core.Size.mebibytes(8192),
             command=JOB_COMMAND,

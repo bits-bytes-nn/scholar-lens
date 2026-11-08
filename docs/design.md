@@ -89,7 +89,7 @@ domain (순수 코드: 모델, 규칙, 검증, Markdown, 프롬프트 본문)
 | `adapters/web/` | 웹 조사(`research.py`), 수집 자료 저장본(`snapshot.py`), 가이드 자료 수집·분류(`guide_research.py`) |
 | `adapters/github/` | 발행기(`publisher.py`), 블로그 브랜치·PR 동기화(`blog_sync.py`), 블로그 규칙·글 조회(`conventions.py`) |
 | `adapters/code/`, `adapters/packages/`, `adapters/http/`, `adapters/retry.py` | 저장소 복제와 코드 요약, PyPI, SSRF 방지·IP 고정 전송·속도 제한, 재시도 정책 |
-| `legacy/` | 이전 sections 엔진: 리뷰(`explainer.py`), 요약(`summarizer.py`), 표적 수정 검사(`section_loop.py`), 인용 요약, FAISS 코드 색인(`code_index.py`), 임베딩, 배치 처리, 프롬프트, 포트 구현(`writers.py`) |
+| `legacy/` | 이전 sections 엔진: 리뷰(`explainer.py`), 요약(`summarizer.py`), 표적 수정 검사(`section_loop.py`), 인용 요약, 메모리 안 코드 색인(`code_index.py`, `InMemoryVectorStore`), 임베딩, 배치 처리, 프롬프트, 포트 구현(`writers.py`) |
 | `scripts/` | CDK 스택, CI synth 검사, 비밀값 기록, 블로그 규칙 불일치 검사 |
 
 ## 2. CLI와 작업 계약
@@ -378,7 +378,7 @@ OpenAlex는 arXiv 시대 ML 논문의 인용 수를 크게 적게 세고(실측:
 
 ### 5.5 코드 저장소
 
-`adapters/code/retriever.py::CodeRetriever`는 저장소를 얕게(depth 1, 단일 브랜치, 심볼릭 링크 제외) 시간 제한을 두고 clone합니다. 가상환경·벤더 디렉터리와 저장소 밖을 가리키는 파일은 건너뛰고, 코드베이스 요약을 만들고, 그 색인을 검색하는 생성기(`sections` 리뷰 엔진)일 때만 Python 파일을 청크로 나눠(청크마다 분석 모델 호출 한 번) Titan 임베딩 FAISS 인덱스를 만듭니다(`bootstrap.py::PaperToolkit.inputs`). 요약과 `evidence` 리뷰는 코드베이스 요약만 씁니다. 인덱스는 저장소 집합별로 구분합니다. 코드 분석 실패는 "코드 없음"으로 처리합니다.
+`adapters/code/retriever.py::CodeRetriever`는 저장소를 얕게(depth 1, 단일 브랜치, 심볼릭 링크 제외) 시간 제한을 두고 clone합니다. 가상환경·벤더 디렉터리와 저장소 밖을 가리키는 파일은 건너뛰고, 코드베이스 요약을 만들고, 그 색인을 검색하는 생성기(`sections` 리뷰 엔진)일 때만 Python 파일을 청크로 나눠(청크마다 분석 모델 호출 한 번) Titan 임베딩으로 `langchain_core`의 `InMemoryVectorStore` 색인(코사인 유사도)을 만듭니다(`bootstrap.py::PaperToolkit.inputs`). 요약과 `evidence` 리뷰는 코드베이스 요약만 씁니다. 색인은 실행마다 메모리에서만 만들고 저장하지 않습니다. 코드 분석 실패는 "코드 없음"으로 처리합니다.
 
 ### 5.6 웹 조사
 

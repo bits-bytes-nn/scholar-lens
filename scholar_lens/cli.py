@@ -638,9 +638,6 @@ _SIGTERM_EXIT = 128 + signal.SIGTERM
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    # faiss-cpu bundles its own OpenMP runtime; tolerate a second copy loaded
-    # by another native wheel instead of aborting.
-    os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
     configure_logging()
     args = parse_args(argv)
     if args.command == "worker":
