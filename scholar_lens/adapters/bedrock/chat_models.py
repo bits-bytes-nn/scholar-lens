@@ -208,7 +208,12 @@ def _application_profiles(
 class OutputTruncatedError(RuntimeError):
     """The model stopped at ``max_tokens``: its output is incomplete, so it must
     never be parsed as if it were whole. Not retried (the same request would
-    stop at the same place); raise the call's ``max_tokens`` instead."""
+    stop at the same place); raise the call's ``max_tokens`` instead.
+    ``result`` is the billed response, so its usage is still counted."""
+
+    def __init__(self, message: str, result: ChatResult | None = None) -> None:
+        super().__init__(message)
+        self.result = result
 
 
 def _raise_if_truncated(
@@ -219,7 +224,8 @@ def _raise_if_truncated(
         reason = metadata.get("stopReason") or metadata.get("stop_reason")
         if reason == "max_tokens":
             raise OutputTruncatedError(
-                f"'{model_id}' hit max_tokens={max_tokens}; the output is incomplete."
+                f"'{model_id}' hit max_tokens={max_tokens}; the output is incomplete.",
+                result,
             )
 
 

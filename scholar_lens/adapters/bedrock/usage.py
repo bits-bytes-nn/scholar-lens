@@ -17,6 +17,7 @@ import logging
 import time
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from types import SimpleNamespace
 from typing import Any
 
 from langchain_core.callbacks import BaseCallbackHandler
@@ -27,7 +28,11 @@ from scholar_lens.domain.model_registry import (
     event_cost_usd,
     profile_source,
 )
-from scholar_lens.domain.usage import RunUsage, TokenBudgetExceeded, UsageEvent
+from scholar_lens.domain.usage import (
+    RunUsage,
+    TokenBudgetExceeded,
+    UsageEvent,
+)
 from scholar_lens.domain.usage_context import current_stage
 
 logger = logging.getLogger(__name__)
@@ -64,6 +69,12 @@ class TokenUsageTracker(BaseCallbackHandler):
         self._started[kwargs.get("run_id")] = time.monotonic()
 
     def on_llm_end(self, response: Any, **kwargs: Any) -> None:  # noqa: ANN401
+        self._priced(response, kwargs.get("run_id"))
+
+    def _priced(
+        self, response: Any, run_id: Any, outcome: str = "ok"
+    ) -> None:  # noqa: ANN401
+        """Count and price a response the model returned (and billed)."""
         usage = _extract_usage(response)
         # The budget counts every token the model read, cached or not.
         read = usage.input_tokens + usage.cache_read_tokens + usage.cache_write_tokens
@@ -79,13 +90,22 @@ class TokenUsageTracker(BaseCallbackHandler):
         cost = event_cost_usd(usage)
         self.cost_usd += cost
         self._record(
-            usage.model_copy(update={"cost_usd": round(cost, 6)}),
-            kwargs.get("run_id"),
+            usage.model_copy(update={"cost_usd": round(cost, 6), "outcome": outcome}),
+            run_id,
         )
 
     def on_llm_error(self, error: BaseException, **kwargs: Any) -> None:
-        # Tokens of a failed call are not reported; the call is still counted
-        # so failure-heavy stages show up.
+        # A response cut at its output limit was returned and billed: its
+        # usage counts toward the cost and the budgets like any other.
+        if (result := getattr(error, "result", None)) is not None:
+            self._priced(
+                SimpleNamespace(llm_output=None, generations=[result.generations]),
+                kwargs.get("run_id"),
+                outcome="failed",
+            )
+            return
+        # Tokens of a call that failed without a response are not reported;
+        # the call is still counted so failure-heavy stages show up.
         self._record(
             UsageEvent(stage=current_stage(), model_id="unknown", outcome="failed"),
             kwargs.get("run_id"),

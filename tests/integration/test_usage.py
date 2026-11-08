@@ -94,3 +94,47 @@ def test_run_usage_totals_and_top_stages() -> None:
 def test_uncached_event_cost_matches_list_prices() -> None:
     event = UsageEvent(model_id=OPUS, input_tokens=1_000_000, output_tokens=1_000_000)
     assert event_cost_usd(event) == pytest.approx(24.0)
+
+
+@pytest.mark.parametrize("stop", ["end_turn", "max_tokens"])
+def test_a_response_cut_at_its_limit_is_still_priced(
+    monkeypatch: pytest.MonkeyPatch, stop: str
+) -> None:
+    # Bedrock bills a response cut at max_tokens: its usage counts toward
+    # the run's cost and budgets even though the call raises.
+    from langchain_aws import ChatBedrockConverse
+    from langchain_core.messages import AIMessage, HumanMessage
+    from langchain_core.outputs import ChatGeneration, ChatResult
+
+    from scholar_lens.adapters.bedrock.chat_models import (
+        CheckedChatBedrockConverse,
+        OutputTruncatedError,
+    )
+
+    def generate(self, messages, stop_=None, run_manager=None, **kwargs):  # type: ignore[no-untyped-def]
+        message = AIMessage(
+            content="partial",
+            usage_metadata={
+                "input_tokens": 1_000,
+                "output_tokens": 2_000,
+                "total_tokens": 3_000,
+            },
+            response_metadata={"stopReason": stop, "model_name": "m"},
+        )
+        return ChatResult(generations=[ChatGeneration(message=message)])
+
+    monkeypatch.setattr(ChatBedrockConverse, "_generate", generate)
+    tracker = TokenUsageTracker()
+    model = CheckedChatBedrockConverse(
+        model="anthropic.claude-test",
+        region_name="us-west-2",
+        max_tokens=2_000,
+        callbacks=[tracker],
+    )
+    if stop == "max_tokens":
+        with pytest.raises(OutputTruncatedError):
+            model.invoke([HumanMessage(content="hi")])
+    else:
+        model.invoke([HumanMessage(content="hi")])
+    assert tracker.output_tokens == 2_000 and tracker.cost_usd > 0
+    assert tracker.events[-1].outcome == ("failed" if stop == "max_tokens" else "ok")
