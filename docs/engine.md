@@ -65,19 +65,22 @@ PostSpec ──┐            SourceSet ──┐
 
 | 필드 | 뜻 |
 | --- | --- |
-| `kinds` | 절 종류, 순서 순위, 개수(정확히 1, 1 이상, 선택), 기본 깊이 |
+| `kinds` | 절 종류, 순서 순위, 기본 깊이 |
+| `outline_checks` | 개요 규칙: 종류별 개수(정확히 1, 1 이상, 선택), 순서, 연속 순서, 제목 길이, 최대 절 수 |
+| `ownership` | 근거 하나가 한 절에 속하는 규칙과 어겼을 때의 메시지 |
+| `evidence` | 근거 종류별로 허용하는 출처 신뢰도, 필수 필드(예: 수치의 표 칸), 언어 일치 조건(`EvidencePolicy`) |
+| `tldr` | TL;DR의 종류와 제목, 프롬프트에 그림을 줄지, 목표 길이와 본문 문장 복사 검사 여부 |
 | `fixed_titles` | 코드가 정하는 제목(언어별) |
-| `evidence_policy` | 근거 종류별로 허용하는 출처 신뢰도, 필수 필드(예: 수치의 표 칸), 언어 일치 조건 |
-| `routing` | 근거 종류의 기본 배정 절(예: 한계 → 마무리) |
-| `length` | 총 길이 범위와 깊이별 가중치 |
+| `depth_kinds` | 깊이별 시각 요소 최소 개수를 지키는 절 |
 | `runnable_kinds` | 독자가 실행하는 코드가 있는 절 |
+| `judgement_kinds` | 글 자신의 평가 문장이 있는 절(근거 없는 문장을 지우지 않고 PR 확인 항목으로 올림) |
+| `empty_sections` | 검사가 비운 절을 남길지 메모와 함께 뺄지 |
 | `attachments` | 코드가 만들어 붙이는 블록(표, 연표)과 그 절 |
 | `coverage` | 핵심 대상을 뽑는 출처와 개수 범위 |
 | `post_passes` | 글 전체 검토의 종류와 옵션(실행 예제 추적 등) |
-| `prompts` | 읽기·개요·작성·검토 프롬프트의 종류별 본문 |
 | `limits` | 수정 회차, 개요 수리 횟수, 한 수정의 편집 수 상한(`max_edits`), 삭제 상한 비율, 앞 절 맥락 크기, 수정이 보는 앞 절 근거 수, 짧은 초안 재요청 비율, 너무 긴 절의 기준 배수(`max_length_share`), 너무 짧은 절의 기준 비율(`min_length_share`, 기본 0.6)과 이를 적용하지 않는 목표 하한(`min_length_floor`, 기본 800자), 항목별 검사 호출 수(`answer_asks`), 깊이별 시각 요소 최소 개수(`min_visuals`), 읽기 에이전트의 후속 턴·재요청 횟수·절 길이, 출처별 근거 개수 범위 |
 
-리뷰·요약·가이드·서베이의 명세는 `domain/specs/`에 데이터로 둡니다. 공통 작성 규칙은 `domain/prompts/rules.py` 한 벌입니다.
+리뷰·요약·가이드·서베이의 명세는 `domain/specs/`에 데이터로 둡니다. 종류별 프롬프트 본문은 `domain/prompts/`에, 공통 작성 규칙은 `domain/prompts/rules.py` 한 벌에 있습니다. 길이 범위는 실행 설정(`min_total_chars`, `max_total_chars`)이 정합니다.
 
 ### 4.1 Verifier 묶음
 
