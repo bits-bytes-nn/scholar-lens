@@ -236,6 +236,23 @@ class Summary(_Section):
     max_cost_usd: float | None = Field(default=12.0, gt=0)
 
 
+# The default demoted domain classes of ``tech_guide.demoted_domains``.
+DEMOTED_DOMAINS: dict[str, tuple[str, ...]] = {
+    "forum": (
+        "stackoverflow.com",
+        "*.stackexchange.com",
+        "reddit.com",
+        "news.ycombinator.com",
+        "discuss.*",
+        "forum.*",
+        "forums.*",
+        "community.*",
+    ),
+    "social": ("x.com", "twitter.com", "linkedin.com", "facebook.com", "youtube.com"),
+    "aggregator": ("*.libhunt.com", "stackshare.io", "alternativeto.net"),
+}
+
+
 class TechGuide(_Section):
     # The guide is written by the evidence engine (docs/redesign.md): the
     # relevance model gates the sources, plans the searches and files the
@@ -268,9 +285,11 @@ class TechGuide(_Section):
     max_third_party_pages: int = Field(default=4, ge=0)
     # Domain classes (e.g. forum, social, aggregator) -> host patterns
     # ("example.com" with its subdomains, "*.example.com", "forum.*"): their
-    # pages rank last and count as third-party. The defaults live in
-    # config-template.yaml.
-    demoted_domains: dict[str, list[str]] = Field(default_factory=dict)
+    # pages rank last and count as third-party (config-template.yaml lists
+    # the same defaults; a test keeps the two equal).
+    demoted_domains: dict[str, list[str]] = Field(
+        default_factory=lambda: {k: list(v) for k, v in DEMOTED_DOMAINS.items()}
+    )
     # Domains the search backends leave out (Tavily exclude_domains, Brave
     # -site:); "*.example.com" is sent as example.com.
     excluded_domains: list[str] = Field(default_factory=list)

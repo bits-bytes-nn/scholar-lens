@@ -10,6 +10,7 @@ from pydantic import ValidationError
 
 from scholar_lens.configs import Code, Config, Explanation, Github
 from scholar_lens.configs import TechGuide as TechGuideConfig
+from scholar_lens.configs.config import CONFIG_PATH
 from scholar_lens.domain.constants import LanguageModelId
 
 
@@ -236,3 +237,35 @@ def test_a_repo_name_needs_an_owner_and_a_name() -> None:
     for name in ("owner/", "/repo", "a/b/c"):
         with pytest.raises(ValidationError):
             Github(enabled=True, repo_name=name)
+
+
+def _leaves(data: object, path: str = "") -> dict[str, object]:
+    """Every leaf value of a dumped config, by its dotted key."""
+    if isinstance(data, dict):
+        out: dict[str, object] = {}
+        for key, value in data.items():
+            out |= _leaves(value, f"{path}.{key}" if path else str(key))
+        return out
+    return {path: data}
+
+
+def test_the_whole_config_template_is_the_code_defaults() -> None:
+    # Every key the template sets has the code's default, so a config with
+    # a section left out behaves as the template documents it.
+    template = Config.from_yaml(CONFIG_PATH.with_name("config-template.yaml"))
+    given = _leaves(template.model_dump(mode="json"))
+    defaults = _leaves(Config().model_dump(mode="json"))
+    differ = {
+        key: (given.get(key), defaults.get(key))
+        for key in given.keys() | defaults.keys()
+        if given.get(key) != defaults.get(key)
+    }
+    assert differ == {}
+    assert template == Config()
+
+
+def test_default_demoted_domains_are_copies() -> None:
+    first, second = Config().tech_guide, Config().tech_guide
+    first.demoted_domains["forum"].append("example.org")
+    assert "example.org" not in second.demoted_domains["forum"]
+    assert set(second.demoted_domains) == {"forum", "social", "aggregator"}
