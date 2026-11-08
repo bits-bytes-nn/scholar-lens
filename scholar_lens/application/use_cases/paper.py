@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from scholar_lens.application.paper_engine import EvidencePaperEngine, PaperSettings
-from scholar_lens.application.ports import PaperTools, UsageTracker
+from scholar_lens.application.ports import FigureCheck, PaperTools, UsageTracker
 from scholar_lens.application.run import (
     PipelineOutcome,
     RunContext,
@@ -90,6 +90,9 @@ async def run_paper(
             tracker,
             inputs=tools.inputs(request.kind),
         )
+        # Before any writing: a figure that cannot be downloaded would be
+        # written about and then dropped (or fail the publish step).
+        paper, figure_notes = await servable_paper(paper, tools.figures)
         branch_id = paper_branch_id(paper, request.kind)
         github = context.config.resources.github
         published, lookup_notes = await find_published_post(
@@ -118,7 +121,8 @@ async def run_paper(
                 published,
             )
         degraded += (
-            lookup_notes
+            figure_notes
+            + lookup_notes
             + _text_only_notes(paper)
             + _unanalysed_figure_notes(paper)
             + _code_notes(paper)
@@ -251,6 +255,38 @@ async def _generate_summary(
     return format_summary(github, paper, result, meta=meta), notes, [], ()
 
 
+async def servable_paper(paper: Paper, figures: FigureCheck) -> tuple[Paper, list[str]]:
+    """``paper`` without the remote figures that cannot be downloaded (arXiv
+    HTML lists some it does not serve), from its figure list and its text's
+    figure markers, and a note naming them: neither engine then writes about
+    a figure the post cannot show."""
+    remote = list(
+        dict.fromkeys(
+            [str(f.path) for f in paper.figures if str(f.path).startswith("http")]
+            + [
+                m.group("src")
+                for m in FIGURE_MARKER.finditer(paper.content.text)
+                if m.group("src").startswith("http")
+            ]
+        )
+    )
+    broken = set(await figures.unservable(remote)) if remote else set()
+    if not broken:
+        return paper, []
+    text = FIGURE_MARKER.sub(
+        lambda m: "" if m.group("src") in broken else m.group(0), paper.content.text
+    )
+    paper = paper.model_copy(
+        update={
+            "figures": [f for f in paper.figures if str(f.path) not in broken],
+            "content": paper.content.model_copy(update={"text": text}),
+        }
+    )
+    return paper, [
+        "Figures that cannot be downloaded were left out: " + ", ".join(sorted(broken))
+    ]
+
+
 def paper_documents(paper: Paper) -> tuple[SourceDocument, list[SourceDocument]]:
     """The paper as a source document (its figures from the text's
     ``[Image: …]`` markers) and, when the pipeline has one, its official
@@ -321,23 +357,8 @@ async def write_paper_with_evidence(
         ),
     )
     notes = list(result.notes)
-    remote = [
-        e.figure_url
-        for e in result.ledger
-        if e.kind == "figure"
-        and e.figure_url
-        and e.figure_url.startswith("http")
-        and any(e.figure_url in md for _, md in result.sections)
-    ]
-    if broken := await tools.figures.unservable(remote):
-        notes.append(
-            "Figures that cannot be downloaded were left out: " + ", ".join(broken)
-        )
-        sections = [
-            (kind, _drop_images(md, set(broken))) for kind, md in result.sections
-        ]
-    else:
-        sections = result.sections
+    # The paper's figures were checked before writing (servable_paper).
+    sections = result.sections
     if post == "review":
         key, body, closing = assemble_review(sections)
         return (
@@ -361,14 +382,6 @@ async def write_paper_with_evidence(
         },
         notes,
         list(result.blocking),
-    )
-
-
-def _drop_images(markdown: str, urls: set[str]) -> str:
-    return re.sub(
-        r"!\[[^\]]*\]\(([^)\s]+)[^)]*\)\n?",
-        lambda m: "" if m.group(1) in urls else m.group(0),
-        markdown,
     )
 
 

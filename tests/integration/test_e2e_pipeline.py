@@ -89,8 +89,14 @@ def _paper(**attribute_overrides: object) -> Paper:
 
 @pytest.fixture
 def pipeline_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):  # type: ignore[no-untyped-def]
-    """A RunContext with local conventions, no S3/GitHub, faked image fetch."""
+    """A RunContext with local conventions, no S3/GitHub, faked image fetch
+    (and figure servability check: every figure downloads)."""
     fetched: list[str] = []
+
+    async def servable(urls: list[str]) -> list[str]:
+        return []
+
+    monkeypatch.setattr(publisher, "unservable", servable)
 
     def build_publisher(context):  # type: ignore[no-untyped-def]
         def fetch(url: str) -> bytes:

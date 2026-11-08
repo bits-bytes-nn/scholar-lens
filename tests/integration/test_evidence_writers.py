@@ -351,13 +351,11 @@ def test_a_paper_run_wires_roles_ceiling_and_shape(
         assert seen.ceilings == [cfg.max_cost_usd]
         assert isinstance(written, ReviewText)
         assert written.closing.startswith("## 한계와 시사점")
-        assert BROKEN not in written.body
     else:
         scfg = context.config.summary
         assert seen.roles["write"].invoke_id == scfg.summary_model_id
         assert seen.ceilings == [scfg.max_cost_usd]
         assert isinstance(written, dict) and written["subtitle"] == "부제"
-        assert BROKEN not in written["summary"]
     assert seen.roles["read"].invoke_id == (
         context.config.explanation.reader_model_id
         if post == "review"
@@ -368,7 +366,7 @@ def test_a_paper_run_wires_roles_ceiling_and_shape(
     assert engine_roles["write"].model_id == seen.roles["write"].invoke_id
     assert seen.stores[0].local_dir.name == "paper-evidence"
     assert seen.stores[0].local_dir.is_relative_to(seen.root)
-    assert "engine note" in notes and any(BROKEN in n for n in notes)
+    assert notes == ["engine note"]
 
 
 @pytest.mark.parametrize("post", ["review", "summary"])
@@ -613,3 +611,32 @@ def test_the_guide_check_without_package_code_reports_unseen_imports(
         assert item in notes[0], item
     # The import path the official pages show is not reported.
     assert not any("[xserve]" in p for p in hook)
+
+
+def test_figures_that_cannot_be_downloaded_leave_the_paper_before_writing(
+    seen: Seen,
+) -> None:
+    """Both engines then write only about figures the post can show."""
+    from scholar_lens.domain.paper.models import Figure
+
+    paper = _paper()
+    text = (
+        f'{paper.content.text}\n[Image: alt="a", src="{FIGURE}"]\n'
+        f'[Image: alt="b", src="{BROKEN}"]\n'
+    )
+    paper = paper.model_copy(
+        update={
+            "figures": [
+                Figure(figure_id="1", path=FIGURE),
+                Figure(figure_id="2", path=BROKEN),
+            ],
+            "content": paper.content.model_copy(update={"text": text}),
+        }
+    )
+    context = _context(seen.root)
+    kept, notes = asyncio.run(
+        paper_writer.servable_paper(paper, bootstrap.PaperToolkit(context).figures)
+    )
+    assert [f.path for f in kept.figures] == [FIGURE]
+    assert FIGURE in kept.content.text and BROKEN not in kept.content.text
+    assert notes == [f"Figures that cannot be downloaded were left out: {BROKEN}"]
