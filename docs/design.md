@@ -91,7 +91,7 @@ Batch worker ┘                                    │     (수집 → 생성 �
 
 `guide`의 문서 URL은 옵션 앞·사이·뒤 어디에 와도 됩니다(`guide DOC1 --reference R DOC2`). argparse는 옵션 뒤에 온 위치 인자를 남는 인자로 돌려주므로, `cli.py::parse_args`는 `parse_known_args`로 파싱한 뒤 명령이 `guide`이고 남은 인자가 모두 `-`로 시작하지 않으면 문서 URL(`urls`)에 덧붙입니다. 그 밖의 남은 인자는 사용법 오류(`unrecognized arguments`)입니다.
 
-stdout에는 JSON 객체 하나만 출력하고 로그는 stderr로 보냅니다. 인자 누락 같은 사용법 오류도 사용법은 stderr로, `{"status": "rejected"}`는 stdout으로 내고 2로 끝납니다. 종료 코드의 정본은 `cli.py` 모듈 docstring이고, `JobResult.status`의 `succeeded`·`failed`·`rejected`가 각각 0·1·2입니다(`_EXIT_BY_STATUS`). 로컬 실행이 설정·자격 증명 문제로 시작하지 못해도 `failed`(1)입니다.
+stdout에는 JSON 객체 하나만 출력하고 로그는 stderr로 보냅니다. 인자 누락 같은 사용법 오류도 사용법은 stderr로, `{"status": "rejected"}`는 stdout으로 내고 2로 끝납니다. 종료 코드의 정본은 `cli.py` 모듈 docstring이고, `JobResult.status`의 `succeeded`·`failed`·`rejected`가 각각 0·1·2입니다(`_EXIT_BY_STATUS`). 다만 PR을 요청했고 GitHub 연동이 켜져 있는데 PR 생성이 실패하면 산출물은 저장된 `failed` 결과에 `pr_error`가 붙고 5(`EXIT_PR_FAILED`, `cli.py::result_exit_code`)로 끝납니다. `status`도 그 결과 매니페스트에 같은 코드를 돌려줍니다. 로컬 실행이 설정·자격 증명 문제로 시작하지 못해도 `failed`(1)입니다.
 
 `--remote`는 `SubmittedJob`을 출력하고 0으로 끝납니다. `status`는 결과 매니페스트가 있으면 그 상태의 종료 코드를 돌려줍니다. 없으면 Batch가 `FAILED`일 때 1, 아직 끝나지 않았거나 `--wait`가 시간 초과되면 3, `SUCCEEDED`인데 매니페스트가 없으면 0입니다. `--wait` 중 Batch 조회나 결과 매니페스트 읽기의 요청 제한·5xx·네트워크 오류는 건너뛰고 계속 조회합니다.
 
@@ -115,7 +115,7 @@ stdout에는 JSON 객체 하나만 출력하고 로그는 stderr로 보냅니다
 
 로컬 CLI와 Batch worker는 같은 객체를 씁니다. `--remote`는 `JobRequest.model_dump_json(exclude_defaults=True)`를 Batch 파라미터 `request` 하나로 넘기고, 작업 정의의 명령은 `["python3", "-m", "scholar_lens", "worker", "--request", "Ref::request"]`입니다(`scripts/deploy_infra.py::JOB_COMMAND`). 두 경로가 같은 파서를 쓰므로 인자 계약이 어긋나지 않습니다. 기본값인 필드는 보내지 않으므로, 새 필드를 쓰지 않는 요청은 그 필드가 생기기 전에 배포한 worker 이미지(`extra="forbid"`)도 받습니다. 새 필드(예: `reference_urls`)를 쓰는 요청은 `cdk deploy --all`로 이미지를 갱신한 뒤에만 원격 실행됩니다(`tests/test_jobs.py`가 `reference_urls` 이전 worker의 필드 집합 사본으로 검증).
 
-`jobs.py::JobResult`에는 `status`, `title`, `markdown_path`, `plan_path`(로컬 survey_plan 실행의 계획 파일, 이때 `s3_uri`는 그 S3 사본. Batch 실행은 컨테이너와 함께 사라지는 경로라 비우고 `s3_uri`만 남김), `s3_uri`, `pr_url`, `warnings`, `violations`, `error`, `job_id`, `duration_seconds`, 토큰 수, `estimated_cost_usd`, `usage`(단계·모델별 사용량, 11장)가 들어갑니다. Batch 실행은 이 결과를 `s3://<bucket>/<s3_prefix>/results/<job_id>.json`에 저장하고(`jobs.py::write_result_manifest`), `status`가 이를 읽어 붙입니다.
+`jobs.py::JobResult`에는 `status`, `title`, `markdown_path`, `plan_path`(로컬 survey_plan 실행의 계획 파일, 이때 `s3_uri`는 그 S3 사본. Batch 실행은 컨테이너와 함께 사라지는 경로라 비우고 `s3_uri`만 남김), `s3_uri`, `pr_url`, `pr_error`(산출물은 저장했지만 요청한 PR을 만들지 못한 실패 실행에만), `warnings`, `violations`, `error`, `job_id`, `duration_seconds`, 토큰 수, `estimated_cost_usd`, `usage`(단계·모델별 사용량, 11장)가 들어갑니다. Batch 실행은 이 결과를 `s3://<bucket>/<s3_prefix>/results/<job_id>.json`에 저장하고(`jobs.py::write_result_manifest`), `status`가 이를 읽어 붙입니다.
 
 ### 2.3 실행 수명주기
 
@@ -123,7 +123,7 @@ stdout에는 JSON 객체 하나만 출력하고 로그는 stderr로 보냅니다
 
 1. `Config.load()`와 `build_context`로 boto 세션(기본 리전, Bedrock 리전)과 S3 핸들러를 만듭니다.
 2. AWS 안에서는 SSM SecureString에서 비밀값을 환경 변수로 읽습니다(`load_secrets_from_ssm`). 로컬은 `.env`를 씁니다.
-3. 파이프라인을 실행합니다. 입력 오류는 `rejected`, `PostValidationError`는 `failed`와 `violations`, `PostAssetError`(논문 그림을 저장하지 못함)는 `failed`, 그 밖의 예외는 `failed`로 기록합니다. 앞의 두 발행 오류는 `markdown_path`·`s3_uri`에 거부된 초안(`<slug>.rejected.md`)의 위치를 담습니다. `SystemExit`·`KeyboardInterrupt`는 정리 후 다시 던집니다. 로컬 실행의 Ctrl-C는 `cli.py::main`이 받아 `INTERRUPTED_ERROR`인 `failed` 결과를 JSON으로 출력하고 1로 끝냅니다.
+3. 파이프라인을 실행합니다. 입력 오류는 `rejected`, `PostValidationError`는 `failed`와 `violations`, `PostAssetError`(논문 그림을 저장하지 못함)는 `failed`, 그 밖의 예외는 `failed`로 기록합니다. 글을 저장한 뒤 블로그 PR 생성이 실패하면(`PublishError`, `runtime.py::publish_artifact`) 경로(`markdown_path`·`s3_uri`)는 그대로 두고 `failed`와 `pr_error`를 기록합니다. worker는 이때 실패 알림을 보내고 10으로 끝납니다. 앞의 두 발행 오류는 `markdown_path`·`s3_uri`에 거부된 초안(`<slug>.rejected.md`)의 위치를 담습니다. `SystemExit`·`KeyboardInterrupt`는 정리 후 다시 던집니다. 로컬 실행의 Ctrl-C는 `cli.py::main`이 받아 `INTERRUPTED_ERROR`인 `failed` 결과를 JSON으로 출력하고 1로 끝냅니다.
 4. `finally`에서 지표를 보내고, AWS 안에서 `TOPIC_ARN`이 있으면 성공·실패 모두 SNS로 알리며(`format_result_notification`), Batch 실행이면 결과 매니페스트를 저장합니다.
 
 worker는 SIGTERM을 `SystemExit`로 바꿔(`cli.py::_raise_on_sigterm`) Batch 시간 초과나 취소, 호스트 종료 때도 4단계가 실행되게 합니다. 파이프라인은 `asyncio.run` 대신 `runtime.py::run_coroutine`으로 돌려, 중단 시 작업자 스레드에서 진행 중인 Bedrock 호출을 기다리지 않고 바로 정리 단계로 갑니다(Batch는 SIGTERM 약 30초 뒤 SIGKILL). 이때는 매니페스트만 저장하고(`INTERRUPTED_ERROR`) SNS 실패 알림은 보내지 않습니다. 정상 종료는 인터프리터가 남은 작업자 스레드를 기다리므로, worker는 정리 뒤 중단된 실행의 `JobResult`를 stdout에 출력하고 `os._exit(143)`으로 바로 끝납니다(`cli.py::_work`). `run_job` 밖에서 받은 SIGTERM(실행 시작 전이나 결과 출력 뒤)은 더 출력하지 않습니다. 호스트가 사라졌으면 Batch가 재시도하고, 최종 실패면 EventBridge 규칙이 알립니다.
@@ -531,7 +531,7 @@ PR 본문(`build_pr_body`)에는 논문 ID, PDF URL, 파싱 방식, 글자 수, 
 - **경보**:
   - 1시간 추정 비용 합계 50달러 초과, 경보 1개. 지표는 실행이 끝날 때 보내므로 진행 중인 실행을 멈추지 못합니다(8.3절). 지표는 AWS 안에서만 보내므로 이 경보는 Batch 실행만 다루고, 로컬 실행 비용은 `JobResult.estimated_cost_usd`와 `run_metrics` 로그로만 확인합니다
   - EventBridge의 Batch `FAILED` 이벤트를 SNS로 전달. 앱이 직접 알리고 종료 코드 10·11로 끝난 작업은 제외하고, 그 밖의 종료 코드(시간 초과·중단 143, OOM·비정상 종료, worker 실행 전 Python·인자 오류 1·2, 알림 실패 4)와 종료 코드가 없는 경우(호스트 유실)는 알림. 이 규칙의 SNS 전달이 실패하면(`FailedInvocations`) 경보 하나가 같은 토픽으로 알림
-  - 실행 결과는 앱 알림과 이 규칙이 다루므로 로그 `ERROR` 경보는 두지 않습니다. 실행을 멈추지 않는 문제는 warning 로그로 남깁니다. PR 생성 실패처럼 결과에 남는 경고는 알림에 모두 적고, 알림·매니페스트 저장 실패는 로그에만 남습니다(실패 실행의 알림 실패는 위의 종료 코드 4로 보고). 성공한 실행의 알림이 실패하면 작업은 0으로 끝나 아무도 알리지 않지만, 결과 매니페스트가 있어 `status`로 결과를 볼 수 있습니다.
+  - 실행 결과는 앱 알림과 이 규칙이 다루므로 로그 `ERROR` 경보는 두지 않습니다. 실행을 멈추지 않는 문제는 warning 로그로 남깁니다. 결과에 남는 경고는 알림에 모두 적고(PR 생성 실패는 경고가 아니라 실패로 알림), 알림·매니페스트 저장 실패는 로그에만 남습니다(실패 실행의 알림 실패는 위의 종료 코드 4로 보고). 성공한 실행의 알림이 실패하면 작업은 0으로 끝나 아무도 알리지 않지만, 결과 매니페스트가 있어 `status`로 결과를 볼 수 있습니다.
 - **결과 매니페스트**: 원격 실행의 최종 상태는 S3 매니페스트와 `status` 명령으로 확인합니다.
 
 ## 12. 테스트와 CI

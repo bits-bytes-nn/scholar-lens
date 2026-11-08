@@ -15,7 +15,9 @@ and scripts can parse the outcome directly::
 Exit codes: 0 succeeded (or submitted), 1 failed, 2 rejected input,
 3 still running (``status``), 4 a remote command itself failed (``--remote``
 or ``status``: ``"status": "error"`` for AWS credentials, config, Batch/S3 API
-errors), so the job's state is unknown. A local run that cannot start (a
+errors), so the job's state is unknown, 5 the artifact was saved but the
+requested blog PR failed (a ``failed`` result with ``pr_error``, its
+``markdown_path`` and ``s3_uri`` kept; also from ``status``). A local run that cannot start (a
 broken config) reports ``failed`` and exits 1. The Batch ``worker`` exits 10 (failed) or 11 (rejected) once it
 has sent its own notification, 4 when that notification could not be sent,
 and 143 (128 + SIGTERM) when Batch stopped it (timeout, cancel, host
@@ -40,11 +42,27 @@ from scholar_lens.domain.survey.plan import SurveyInputError
 from scholar_lens.src.jobs import JobRequest, JobResult
 
 EXIT_OK, EXIT_FAILED, EXIT_REJECTED, EXIT_PENDING, EXIT_ERROR = 0, 1, 2, 3, 4
+EXIT_PR_FAILED = 5
+_EXIT_CODES_HELP = (
+    "Exit codes: 0 succeeded or submitted, 1 failed, 2 rejected input, "
+    "3 still running, 4 the command itself failed, 5 artifact saved but the "
+    "blog PR failed (see pr_error)."
+)
 _EXIT_BY_STATUS = {
     "succeeded": EXIT_OK,
     "failed": EXIT_FAILED,
     "rejected": EXIT_REJECTED,
 }
+
+
+def result_exit_code(result: JobResult) -> int:
+    """The CLI exit code of a finished run: its status, except a run whose
+    artifact was saved but whose blog PR failed."""
+    if result.pr_error is not None:
+        return EXIT_PR_FAILED
+    return _EXIT_BY_STATUS[result.status]
+
+
 # The Batch worker exits with these after it has sent its own failure
 # notification. They differ from 1/2 so that a Python crash (1) or an argparse
 # error (2) before the worker code runs is still reported by the stack's
@@ -105,6 +123,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Generate AI/ML paper reviews, summaries, technical guides and "
             "paper surveys."
         ),
+        epilog=_EXIT_CODES_HELP,
     )
     commands = parser.add_subparsers(dest="command", required=True)
 
@@ -422,7 +441,7 @@ def _status(job_id: str, *, wait: bool, timeout: float) -> int:
     report = wait_for_job(describe, timeout_seconds=timeout) if wait else describe()
     _emit(report)
     if report.result is not None:
-        return _EXIT_BY_STATUS[report.result.status]
+        return result_exit_code(report.result)
     if report.batch_status == "FAILED":
         return EXIT_FAILED
     if report.batch_status == "SUCCEEDED":
@@ -609,7 +628,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         _emit({"status": "error", "error": f"{type(e).__name__}: {e}"})
         return EXIT_ERROR
     try:
-        return _EXIT_BY_STATUS[_run(request).status]
+        return result_exit_code(_run(request))
     except KeyboardInterrupt as e:
         # Ctrl-C: run_job has cleaned up and re-raised with its recorded result
         # (cost, tokens, duration); still print one result.

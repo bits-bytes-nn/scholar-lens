@@ -167,8 +167,10 @@ class JobRequest(BaseModel):
 
 
 class JobResult(BaseModel):
-    """Outcome of one run. ``warnings`` lists non-fatal problems (e.g. a PR
-    that could not be opened even though the artifact was generated)."""
+    """Outcome of one run. ``warnings`` lists non-fatal problems (review
+    notes, rule slips). A blog PR that was requested but could not be opened
+    fails the run: ``pr_error`` says why, and ``markdown_path``/``s3_uri``
+    still point to the saved artifact."""
 
     # None only for a Batch request too malformed to name its kind.
     kind: ArtifactKind | None
@@ -181,6 +183,8 @@ class JobResult(BaseModel):
     plan_path: str | None = None
     s3_uri: str | None = None
     pr_url: str | None = None
+    # Set only on a failed run whose artifact was saved but whose PR failed.
+    pr_error: str | None = None
     warnings: list[str] = Field(default_factory=list)
     error: str | None = None
     # Blog-convention violations that blocked publishing (see post_validator).

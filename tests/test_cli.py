@@ -53,6 +53,24 @@ class TestStatus:
             assert cli.main(["status", "j"]) == code
         assert _output(capsys)["batch_status"] == batch_status
 
+    def test_a_failed_pr_has_its_own_exit_code(
+        self, capsys: pytest.CaptureFixture
+    ) -> None:
+        report = JobStatusReport(job_id="j", batch_status="FAILED")
+        report.result = JobResult(
+            kind="review",
+            input="x",
+            status="failed",
+            s3_uri="s3://b/post.md",
+            pr_error="403 from GitHub",
+        )
+        with (
+            mock.patch.object(cli, "_aws_context"),
+            mock.patch("scholar_lens.src.jobs.describe_job", return_value=report),
+        ):
+            assert cli.main(["status", "j"]) == cli.EXIT_PR_FAILED
+        assert _output(capsys)["result"]["pr_error"] == "403 from GitHub"
+
     def test_api_error_is_not_a_job_failure(
         self, capsys: pytest.CaptureFixture
     ) -> None:
@@ -137,6 +155,39 @@ def test_config_validation_error_is_an_error_not_a_rejection(
     with mock.patch.object(cli, "_aws_context", side_effect=config_error.value):
         assert cli.main(argv) == cli.EXIT_ERROR
     assert _output(capsys)["status"] == "error"
+
+
+def test_a_local_run_whose_pr_failed_exits_with_the_pr_code(
+    capsys: pytest.CaptureFixture,
+) -> None:
+    result = JobResult(
+        kind="summarize",
+        input="2106.09685",
+        status="failed",
+        markdown_path="papers/post.md",
+        s3_uri="s3://b/post.md",
+        pr_error="403 from GitHub",
+        error="Blog PR not created: 403 from GitHub",
+    )
+    with mock.patch("scholar_lens.src.runtime.run_job", return_value=result):
+        assert cli.main(["summarize", "2106.09685"]) == cli.EXIT_PR_FAILED
+    output = _output(capsys)
+    assert output["status"] == "failed" and output["pr_error"] == "403 from GitHub"
+    assert output["markdown_path"] == "papers/post.md"
+    assert cli.EXIT_PR_FAILED not in (
+        cli.EXIT_OK,
+        cli.EXIT_FAILED,
+        cli.EXIT_REJECTED,
+        cli.EXIT_PENDING,
+        cli.EXIT_ERROR,
+        *cli.APP_REPORTED_EXIT_CODES,
+    )
+
+
+def test_the_help_lists_the_exit_codes(capsys: pytest.CaptureFixture) -> None:
+    with pytest.raises(SystemExit):
+        cli.main(["--help"])
+    assert f"{cli.EXIT_PR_FAILED} artifact saved" in capsys.readouterr().out
 
 
 def test_invalid_request_is_rejected(capsys: pytest.CaptureFixture) -> None:
@@ -293,11 +344,15 @@ class TestWorker:
         self, capsys: pytest.CaptureFixture
     ) -> None:
         request = JobRequest(kind="summarize", source="x")
-        for status, expected in (
-            ("failed", cli.WORKER_REPORTED_FAILED),
-            ("succeeded", cli.EXIT_OK),
+        for status, pr_error, expected in (
+            ("failed", None, cli.WORKER_REPORTED_FAILED),
+            # The failure notification went out: an app-reported failure.
+            ("failed", "403 from GitHub", cli.WORKER_REPORTED_FAILED),
+            ("succeeded", None, cli.EXIT_OK),
         ):
-            result = JobResult(kind="summarize", input="x", status=status)
+            result = JobResult(
+                kind="summarize", input="x", status=status, pr_error=pr_error
+            )
             with mock.patch("scholar_lens.src.runtime.run_job", return_value=result):
                 assert (
                     cli.main(["worker", "--request", request.model_dump_json()])
