@@ -11,6 +11,7 @@ The search provider is an abstraction so deployments can choose their backend
 
 from __future__ import annotations
 
+import json
 import math
 import os
 import random
@@ -28,7 +29,14 @@ import httpx
 from bs4 import BeautifulSoup, Tag, UnicodeDammit
 
 from ..adapters.http.pinned_transport import PinnedHTTPTransport
-from ..adapters.http.rate_limit import ARXIV_RATE_LIMITER, arxiv_retry_after_seconds
+from ..adapters.http.rate_limit import (
+    ARXIV_RATE_LIMITER,
+    ARXIV_RETRIES,
+    RateLimiter,
+    arxiv_retry_after_seconds,
+    arxiv_retry_hold,
+    is_retryable_status,
+)
 from ..adapters.http.url_guard import (
     UnsafeUrlError,
     assert_url_is_public,
@@ -52,8 +60,23 @@ from .prompts.tech_guide import (
     REFERENCE_LABEL,
     THIRD_PARTY_LABEL,
 )
+from .source_set import (
+    OFFICIAL_AUTHORITIES,
+    SHARED_HOSTS,
+    THIRD_PARTY_AUTHORITIES,
+    OfficialDocs,
+    SourceSet,
+    docs_version,
+    is_official,
+    iso_date,
+    normalize_url,
+    search_rank,
+)
 from .utils import extract_text_from_html, parse_lines
 from .utils.helpers import is_page_furniture
+
+# Re-exported: the URL rules moved to :mod:`source_set`.
+__all__ = ["SHARED_HOSTS", "OfficialDocs", "docs_version", "normalize_url"]
 
 DEFAULT_TIMEOUT: int = 30
 DEFAULT_MAX_SUBPAGES: int = 8
@@ -108,59 +131,14 @@ def _reference_words(identifiers: list[str]) -> set[str]:
     return words
 
 
-# A docs version in a URL path: a rolling alias or a pinned release such as
-# "v0.6.0", "0.6" or "v2" (a bare number like a year is not a version). Aliases
-# and dotted releases count at any depth (/deeplearning/nemo/user-guide/docs/en/
-# v1.23.0/); a bare "vN" only right after the root or a language, since deeper
-# it is an API version ("/reference/rest/v1/"), not a docs release.
-_ROLLING_DOCS_VERSIONS = frozenset({"latest", "stable", "main", "dev", "nightly"})
-# A release with an optional PEP 440 suffix: v0.6.0, 0.6, v0.4.0.post1, 2.0rc1.
-_DOTTED_DOCS_VERSION = re.compile(
-    r"v?\d+(?:\.\d+)+(?:[.-]?(?:post|dev|rc|a|b)\d*)*", re.I
-)
-_BARE_DOCS_VERSION = re.compile(r"v\d+", re.I)
-_ARXIV_ID_SEGMENT = re.compile(r"\d{4}\.\d{4,5}(?:v\d+)?")
-# Hosts many projects and authors share: what is official there is the
-# requested project's own space (its first two path segments: owner/repo,
-# docs/<library>), not the whole host.
-SHARED_HOSTS = frozenset(
-    {"github.com", "gitlab.com", "bitbucket.org", "huggingface.co", "medium.com"}
-)
-
-
-def _space(url: str) -> tuple[str, str]:
-    """(host, the project's space on a shared host or "")."""
-    parts = urlparse(url)
-    host = (parts.hostname or "").lower()
-    if host not in SHARED_HOSTS:
-        return host, ""
-    segments = [s.lower() for s in parts.path.split("/") if s]
-    return host, "/".join(segments[:2])
-
-
-_BARE_VERSION_SEGMENTS = 2  # "v2" only right after the root or a language
 _BRAVE_WEB_SEARCH_URL = "https://api.search.brave.com/res/v1/web/search"
+_GITHUB_TAGS_URL = "https://api.github.com/repos/{repo}/tags?per_page=100"
 _TAVILY_SEARCH_URL = "https://api.tavily.com/search"
 # Tavily's answers for a spent plan quota or key: no later query succeeds.
 # A rejected key; Tavily also answers a spent plan or credit quota with
 # 432 or 433.
 _AUTH_FAILED_STATUSES = frozenset({401, 403})
 _TAVILY_EXHAUSTED_STATUSES = _AUTH_FAILED_STATUSES | {432, 433}
-
-
-def docs_version(url: str) -> str | None:
-    """The first path segment that names a docs version (``latest``,
-    ``stable``, ``v0.6.0``, ``0.6`` …), lower-cased; ``None`` when there is none."""
-    segments = [s for s in urlparse(url).path.split("/") if s]
-    for index, segment in enumerate(segments):
-        lowered = segment.lower()
-        if _ARXIV_ID_SEGMENT.fullmatch(lowered):
-            continue  # a paper id ("/papers/2106.09685"), not a release
-        if lowered in _ROLLING_DOCS_VERSIONS or _DOTTED_DOCS_VERSION.fullmatch(lowered):
-            return lowered
-        if index < _BARE_VERSION_SEGMENTS and _BARE_DOCS_VERSION.fullmatch(lowered):
-            return lowered
-    return None
 
 
 def arxiv_paper_urls(url: str) -> tuple[str, str] | None:
@@ -179,83 +157,6 @@ def page_key(url: str) -> str:
     and every version), else :func:`normalize_url`."""
     paper = arxiv_paper_key(url)
     return f"arxiv:{paper}" if paper else normalize_url(url)
-
-
-def _is_current(version: str | None) -> bool:
-    return version is None or version in _ROLLING_DOCS_VERSIONS
-
-
-@dataclass(frozen=True)
-class OfficialDocs:
-    """The documentation the user asked for: its hosts and docs versions. A page
-    on those hosts is official only for a compatible version, so an old pinned
-    release (``/en/v0.6.0/``) does not override the current docs."""
-
-    hosts: frozenset[str]
-    versions: frozenset[str | None]
-    # On a shared host (:data:`SHARED_HOSTS`), the requested projects' spaces.
-    spaces: frozenset[tuple[str, str]] = frozenset()
-
-    @classmethod
-    def from_urls(cls, urls: Collection[str]) -> OfficialDocs:
-        return cls(
-            hosts=frozenset(h for u in urls if (h := urlparse(u).hostname)),
-            versions=frozenset(docs_version(u) for u in urls),
-            spaces=frozenset(_space(u) for u in urls if _space(u)[1]),
-        )
-
-    @classmethod
-    def from_research(
-        cls, urls: Collection[str], pages: Collection[PageContent]
-    ) -> OfficialDocs:
-        """Like :meth:`from_urls`, plus where the requested pages actually
-        landed: a docs site that redirects (``pytorch.org/docs/stable`` →
-        ``docs.pytorch.org/docs/2.14``) keeps its own pages official, and the
-        pinned release a rolling or unversioned link resolves to is current."""
-        base = cls.from_urls(urls)
-        requested = {normalize_url(u) for u in urls}
-        hosts, versions = set(base.hosts), set(base.versions)
-        spaces = set(base.spaces)
-        for page in pages:
-            if not page.final_url or normalize_url(page.url) not in requested:
-                continue
-            if host := urlparse(page.final_url).hostname:
-                hosts.add(host)
-                if (space := _space(page.final_url))[1]:
-                    spaces.add(space)
-            landed = docs_version(page.final_url)
-            if _is_current(docs_version(page.url)) or landed in base.versions:
-                versions.add(landed)
-        return cls(
-            hosts=frozenset(hosts),
-            versions=frozenset(versions),
-            spaces=frozenset(spaces),
-        )
-
-    def on_host(self, url: str) -> bool:
-        """On a requested docs host, inside the requested project's space
-        when the host is shared (a community post or a fork is not)."""
-        host, space = _space(url)
-        if host not in self.hosts:
-            return False
-        if host not in SHARED_HOSTS:
-            return True
-        return any(
-            h == host and (space == s or space.startswith(s + "/"))
-            for h, s in self.spaces
-        )
-
-    def covers(self, url: str) -> bool:
-        if not self.on_host(url):
-            return False
-        version = docs_version(url)
-        if version is None or version in self.versions:
-            return True
-        if version in _ROLLING_DOCS_VERSIONS:
-            # Rolling aliases describe the current release, like an
-            # unversioned input does.
-            return not self.versions or any(_is_current(v) for v in self.versions)
-        return False  # a pinned release none of the inputs asked for
 
 
 def product_names(proposed: str, pages: Collection[PageContent]) -> list[str]:
@@ -307,6 +208,9 @@ class SearchResult:
     # Cleaned, extracted page body when the search backend provides it (Tavily).
     # Lets the corpus use the result directly instead of re-fetching the URL.
     content: str = ""
+    # When the backend dates the page (Brave's ``page_age``, Tavily's
+    # ``published_date``): ``YYYY-MM-DD``, else "".
+    published: str = ""
 
 
 @dataclass
@@ -328,6 +232,13 @@ class PageContent:
     # Explanatory material the user passed with the request (a paper, design
     # doc or deep-dive post): labelled reference material, never official.
     user_reference: bool = False
+    # The source record (:mod:`source_set`), decided once at gather time by
+    # :meth:`SourceSet.record`; "" until then. ``published`` is the page's
+    # own date (its metadata, else the search backend's), ``YYYY-MM-DD``.
+    authority: str = ""
+    version: str = ""
+    published: str = ""
+    language: str = ""
 
 
 @dataclass
@@ -353,7 +264,7 @@ class ResearchCorpus:
         query: str,
         *,
         max_chars: int,
-        official: OfficialDocs | None = None,
+        labelled: bool = False,
         prefer: Collection[str] = (),
     ) -> str:
         """The pages most relevant to ``query`` (word overlap with title and
@@ -364,9 +275,9 @@ class ResearchCorpus:
         official page out; the room they leave goes to the other pages by
         rank, a cut preferred page first. Each section of a guide reads only
         the material it needs instead of the whole corpus.
-        With ``official``, each source is labelled official, older docs
-        version, reference material or third-party so the writer knows which
-        one decides a flag or default."""
+        With ``labelled``, each source is labelled by its record (official,
+        another docs version, reference material or third-party) so the
+        writer knows which one decides a flag or default."""
         words = {w for w in re.findall(r"[a-z0-9][a-z0-9_.-]{2,}", query.lower())}
 
         def score(page: PageContent) -> float:
@@ -382,7 +293,7 @@ class ResearchCorpus:
             (p for p in self.pages if id(p) not in chosen), key=score, reverse=True
         )
         ordered = preferred + others
-        blocks = [_source_block(page, official) for page in ordered]
+        blocks = [_source_block(page, labelled) for page in ordered]
         share = max_chars // len(preferred) if preferred else 0
         cuts = [_excerpt(blocks[i], share, words) for i in range(len(preferred))]
         cuts += [""] * len(others)
@@ -490,11 +401,10 @@ def _excerpt(block: str, limit: int, words: Collection[str]) -> str:
     return header + sep + "\n\n".join(part for part in out if part)
 
 
-def _source_block(page: PageContent, official: OfficialDocs | None) -> str:
+def _source_block(page: PageContent, labelled: bool) -> str:
     """One page for a prompt: URL, title and text, defanged (all three are
-    page-controlled), labelled by :func:`source_label` when ``official`` is
-    given."""
-    label = f" ({source_label(page, official)})" if official is not None else ""
+    page-controlled), labelled by :func:`source_label` when ``labelled``."""
+    label = f" ({source_label(page)})" if labelled else ""
     return (
         f"## Source{label}: {neutralize_prompt_tags(page.url)}\n"
         f"# {neutralize_prompt_tags(page.title)}\n\n"
@@ -502,17 +412,23 @@ def _source_block(page: PageContent, official: OfficialDocs | None) -> str:
     )
 
 
-def source_label(page: PageContent, official: OfficialDocs) -> str:
-    """How a prompt labels ``page``: a current page of the requested docs is
-    official (also when the user passed it as reference material), another
-    version of them is an older docs version, and any other page is reference
-    material when the user passed it, else third-party."""
-    url = page.final_url or page.url
-    if official.covers(url):
-        return OFFICIAL_LABEL
-    if official.on_host(url):
-        return OLDER_DOCS_LABEL
-    return REFERENCE_LABEL if page.user_reference else THIRD_PARTY_LABEL
+# How a prompt names each record authority.
+_LABELS: dict[str, str] = {
+    "official": OFFICIAL_LABEL,
+    "official_repo": OFFICIAL_LABEL,
+    "reference": REFERENCE_LABEL,
+    "third_party": THIRD_PARTY_LABEL,
+    "forum": THIRD_PARTY_LABEL,
+    "older_docs": OLDER_DOCS_LABEL,
+    "dev_docs": OLDER_DOCS_LABEL,
+}
+
+
+def source_label(page: PageContent) -> str:
+    """How a prompt labels ``page``, read off its record (third-party until
+    the page is recorded): its docs or repository are official, another docs
+    version is an older docs version."""
+    return _LABELS.get(page.authority, THIRD_PARTY_LABEL)
 
 
 class WebSearchProvider(ABC):
@@ -529,9 +445,32 @@ class WebSearchProvider(ABC):
 
     @abstractmethod
     def search(
-        self, query: str, *, count: int = 5, domains: Collection[str] = ()
+        self,
+        query: str,
+        *,
+        count: int = 5,
+        domains: Collection[str] = (),
+        exclude: Collection[str] = (),
     ) -> list[SearchResult]:
-        """Results for ``query``; ``domains`` restricts them to those hosts."""
+        """Results for ``query``; ``domains`` restricts them to those hosts,
+        ``exclude`` leaves those domains out where the backend can."""
+
+
+def _search(
+    provider: WebSearchProvider,
+    query: str,
+    *,
+    count: int = 5,
+    domains: Collection[str] = (),
+    exclude: Collection[str] = (),
+) -> list[SearchResult]:
+    """``provider.search``, passing only the arguments that are set, so a
+    provider written before a parameter keeps working."""
+    if exclude:
+        return provider.search(query, count=count, domains=domains, exclude=exclude)
+    if domains:
+        return provider.search(query, count=count, domains=domains)
+    return provider.search(query, count=count)
 
 
 class FallbackSearchProvider(WebSearchProvider):
@@ -545,15 +484,24 @@ class FallbackSearchProvider(WebSearchProvider):
         self.failed_searches = 0
 
     def search(
-        self, query: str, *, count: int = 5, domains: Collection[str] = ()
+        self,
+        query: str,
+        *,
+        count: int = 5,
+        domains: Collection[str] = (),
+        exclude: Collection[str] = (),
     ) -> list[SearchResult]:
         if not self.primary.exhausted:
             before = self.primary.failed_searches
-            results = self.primary.search(query, count=count, domains=domains)
+            results = _search(
+                self.primary, query, count=count, domains=domains, exclude=exclude
+            )
             if results or self.primary.failed_searches == before:
                 return results
         before = self.secondary.failed_searches
-        results = self.secondary.search(query, count=count, domains=domains)
+        results = _search(
+            self.secondary, query, count=count, domains=domains, exclude=exclude
+        )
         if self.secondary.failed_searches > before:
             self.failed_searches += 1
         return results
@@ -565,7 +513,12 @@ class NullSearchProvider(WebSearchProvider):
     supports_search: bool = False
 
     def search(
-        self, query: str, *, count: int = 5, domains: Collection[str] = ()
+        self,
+        query: str,
+        *,
+        count: int = 5,
+        domains: Collection[str] = (),
+        exclude: Collection[str] = (),
     ) -> list[SearchResult]:
         return []
 
@@ -597,7 +550,12 @@ class BraveSearchProvider(WebSearchProvider):
         self._client = client
 
     def search(
-        self, query: str, *, count: int = 5, domains: Collection[str] = ()
+        self,
+        query: str,
+        *,
+        count: int = 5,
+        domains: Collection[str] = (),
+        exclude: Collection[str] = (),
     ) -> list[SearchResult]:
         headers: dict[str, str] = {
             "Accept": "application/json",
@@ -605,6 +563,9 @@ class BraveSearchProvider(WebSearchProvider):
         }
         if domains:
             query = " OR ".join(f"site:{d}" for d in domains) + f" {query}"
+        if exclude:
+            # Brave has no exclusion parameter; its query syntax does.
+            query += "".join(f" -site:{d}" for d in exclude)
         params: dict[str, str | int] = {"q": query, "count": count}
         try:
             get = httpx.get if self._client is None else self._client.get
@@ -634,6 +595,7 @@ class BraveSearchProvider(WebSearchProvider):
                 title=r.get("title", ""),
                 url=r.get("url", ""),
                 description=r.get("description", ""),
+                published=iso_date(str(r.get("page_age") or "")),
             )
             for r in results
             if isinstance(r, dict) and r.get("url")
@@ -672,7 +634,12 @@ class TavilySearchProvider(WebSearchProvider):
         self._client = client
 
     def search(
-        self, query: str, *, count: int = 5, domains: Collection[str] = ()
+        self,
+        query: str,
+        *,
+        count: int = 5,
+        domains: Collection[str] = (),
+        exclude: Collection[str] = (),
     ) -> list[SearchResult]:
         payload: dict[str, object] = {
             "query": query,
@@ -682,6 +649,8 @@ class TavilySearchProvider(WebSearchProvider):
         }
         if domains:
             payload["include_domains"] = list(domains)
+        if exclude:
+            payload["exclude_domains"] = list(exclude)
         try:
             post = httpx.post if self._client is None else self._client.post
             response = post(
@@ -713,6 +682,7 @@ class TavilySearchProvider(WebSearchProvider):
                 content=absolute_markdown_links(
                     r.get("raw_content") or r.get("content") or "", r["url"]
                 ),
+                published=iso_date(str(r.get("published_date") or "")),
             )
             for r in results
             if isinstance(r, dict) and r.get("url")
@@ -782,8 +752,14 @@ class WebResearcher:
         max_images_per_page: int = DEFAULT_MAX_IMAGES_PER_PAGE,
         client: httpx.Client | None = None,
         sleep: Callable[[float], None] = time.sleep,
+        arxiv_limiter: RateLimiter | None = None,
     ) -> None:
         self.search_provider = search_provider or NullSearchProvider()
+        # Paces every arXiv request (default: the process-wide limiter).
+        self._arxiv_limiter = arxiv_limiter or ARXIV_RATE_LIMITER
+        # arXiv HTML renderings that could not be used: html URL -> why
+        # (the abstract page was read instead). Callers turn them into notes.
+        self.arxiv_fallbacks: dict[str, str] = {}
         # Injected so tests do not wait out a rate limit.
         self._sleep = sleep
         # Host -> its llms.txt entries (empty when it has none).
@@ -805,6 +781,28 @@ class WebResearcher:
                 transport=PinnedHTTPTransport(),
             )
         return self._client
+
+    def repo_tags(self, repo: str) -> frozenset[str] | None:
+        """The tags of a GitHub repository (``github.com/<owner>/<name>``)
+        from the GitHub API (its first page, newest first); an empty set when
+        it has none, None for another host or when the API cannot answer
+        (then the release decides alone)."""
+        host, _, path = repo.partition("/")
+        if host != "github.com" or path.count("/") != 1:
+            return None
+        url = _GITHUB_TAGS_URL.format(repo=path)
+        try:
+            response = self.client.get(url, headers={"Accept": "application/json"})
+            response.raise_for_status()
+            data = response.json()
+        except (httpx.HTTPError, UnsafeUrlError, ValueError) as e:
+            logger.info("Could not list the tags of %s: %s", repo, e)
+            return None
+        if not isinstance(data, list):
+            return None
+        return frozenset(
+            str(t["name"]) for t in data if isinstance(t, dict) and t.get("name")
+        )
 
     def search_notes(self) -> list[str]:
         """A run note when web searches failed (their results are missing
@@ -869,7 +867,14 @@ class WebResearcher:
         return corpus
 
     def run_searches(
-        self, corpus: ResearchCorpus, queries: list[str], *, fetch_top: int = 0
+        self,
+        corpus: ResearchCorpus,
+        queries: list[str],
+        *,
+        fetch_top: int = 0,
+        sources: SourceSet | None = None,
+        max_third_party: int | None = None,
+        exclude: Collection[str] = (),
     ) -> None:
         """Append web-search results (and optionally their pages) to a corpus.
 
@@ -884,8 +889,16 @@ class WebResearcher:
         re-fetch, so no extra SSRF surface; otherwise the URL is fetched through
         the same SSRF guard as every other fetch (Brave). Deduped against pages
         already in the corpus.
+
+        With ``sources``, the candidates are ranked by authority, then
+        recency (publication year), then search rank (the round-robin
+        order), each added page gets its record, and at most
+        ``max_third_party`` third-party and demoted pages are added.
+        ``exclude`` goes to the search backend.
         """
-        per_query = [self.search_provider.search(query) for query in queries]
+        per_query = [
+            _search(self.search_provider, query, exclude=exclude) for query in queries
+        ]
         for results in per_query:
             corpus.search_results.extend(results)
 
@@ -900,13 +913,37 @@ class WebResearcher:
             for results in per_query
             if i < len(results)
         ]
+        if sources is not None:
+            interleaved = [
+                result
+                for _, result in sorted(
+                    enumerate(interleaved),
+                    key=lambda item: search_rank(
+                        sources.classify(item[1].url, published=item[1].published),
+                        item[0],
+                    ),
+                )
+            ]
         visited = {page_key(u) for p in corpus.pages for u in (p.url, p.final_url) if u}
-        added = 0
+        added = third_party = capped = 0
+
+        def over_cap(authority: str) -> bool:
+            return (
+                max_third_party is not None
+                and authority in THIRD_PARTY_AUTHORITIES
+                and third_party >= max_third_party
+            )
+
         for result in interleaved:
             if added >= fetch_top:
                 break
             key = page_key(result.url)
             if not urlparse(result.url).hostname or key in visited:
+                continue
+            if sources is not None and over_cap(
+                sources.classify(result.url, published=result.published).authority
+            ):
+                capped += 1
                 continue
             visited.add(key)
             # An arXiv link is read from the paper's HTML rendering: the
@@ -923,23 +960,36 @@ class WebResearcher:
                     title=result.title or result.url,
                     text=result.content,
                 )
+            if page is not None and not page.published:
+                page.published = result.published
             if page is not None and page.final_url:
                 # A redirect to a page the corpus already holds.
                 landed = page_key(page.final_url)
                 if landed != key and landed in visited:
                     continue
                 visited.add(landed)
+            if page is not None and sources is not None:
+                authority = sources.record(page).authority
+                if over_cap(authority):  # it landed on a third-party page
+                    capped += 1
+                    continue
+                third_party += authority in THIRD_PARTY_AUTHORITIES
             if page is not None:
                 corpus.pages.append(page)
                 added += 1
         logger.info(
-            "Added %d/%d search-result pages into the corpus.", added, fetch_top
+            "Added %d/%d search-result pages into the corpus (%d third-party, "
+            "%d over the third-party cap left out).",
+            added,
+            fetch_top,
+            third_party,
+            capped,
         )
 
     def add_official_reference(
         self,
         corpus: ResearchCorpus,
-        official: OfficialDocs,
+        sources: SourceSet,
         identifiers: list[str],
         *,
         product: str = "",
@@ -947,7 +997,7 @@ class WebResearcher:
         max_pages: int = MAX_REFERENCE_PAGES,
         settles: Callable[[str], bool] | None = None,
     ) -> list[PageContent]:
-        """Fetch reference pages of the ``official`` docs that can settle the
+        """Fetch reference pages of the official docs that can settle the
         given flags and metric names, add them to ``corpus`` and return them.
 
         Candidates are search results restricted to those hosts (one query per
@@ -957,9 +1007,15 @@ class WebResearcher:
         it settles an identifier (``settles(page.text)``); one that does not
         (an index of the CLI pages) is left out, and its reference-like links join the end of the candidates, ranked the
         same way. At most ``max_pages`` are added and ``2 * max_pages``
-        fetched, each through the same SSRF-guarded fetch.
+        fetched, each through the same SSRF-guarded fetch. What is official is
+        read off each page's record (``sources`` records the fetched ones).
         """
-        hosts = sorted(official.hosts)
+        hosts = sorted(sources.official.hosts)
+        sources.record_all(corpus.pages)  # a page that has a record keeps it
+
+        def covers(url: str) -> bool:
+            return sources.classify(url).authority in OFFICIAL_AUTHORITIES
+
         if not hosts or not identifiers or max_pages <= 0:
             return []
         visited = {normalize_url(p.final_url or p.url) for p in corpus.pages}
@@ -982,9 +1038,9 @@ class WebResearcher:
             batch = [
                 link
                 for page in pages
-                if official.covers(page.final_url or page.url)
+                if is_official(page)
                 for link in page.links
-                if official.covers(link)
+                if covers(link)
                 and _REFERENCE_LINK.search(urlparse(link).path)
                 and normalize_url(link) not in visited
             ]
@@ -1002,7 +1058,7 @@ class WebResearcher:
             norm = normalize_url(result.url)
             if not norm or norm in visited:
                 continue
-            if not official.covers(result.url):
+            if not covers(result.url):
                 continue  # off-host (a backend ignoring the filter) or an old release
             visited.add(norm)
             page: PageContent | None
@@ -1017,7 +1073,10 @@ class WebResearcher:
             else:
                 fetches += 1
                 page = self._fetch_page(result.url)
-            if page is None or not official.covers(page.final_url or page.url):
+            if page is None:
+                continue
+            sources.record(page)
+            if not is_official(page):
                 continue
             if settles is None or settles(page.text):
                 added.append(page)
@@ -1122,6 +1181,7 @@ class WebResearcher:
             url=url,
             title=title,
             text=text,
+            published=published_date(soup),
             image_urls=image_urls,
             image_captions=images,
             links=links,
@@ -1165,28 +1225,34 @@ class WebResearcher:
             if e.response.status_code != 404:
                 raise
             logger.info("No HTML rendering at '%s'; reading '%s'.", html_url, abs_url)
+            self.arxiv_fallbacks[html_url] = "no HTML rendering (HTTP 404)"
             return self._get_page(abs_url)
         if fetched is not None and _readable_chars(fetched[0]) >= MIN_PARSED_TEXT_CHARS:
             return fetched
         logger.info("'%s' has almost no text; reading '%s'.", html_url, abs_url)
+        self.arxiv_fallbacks[html_url] = "the HTML rendering has almost no text"
         return self._get_page(abs_url)
 
     def _get_page(self, url: str) -> tuple[str, str] | None:
         """:meth:`_get_page_once`, with a site that answers 429 or 503 (a
         docs site behind a bot shield) asked again up to
         :data:`PAGE_RATE_LIMIT_RETRIES` times after its Retry-After (capped)
-        or a growing wait. arXiv is not retried here: its limiter holds every
-        later request back and the job fails retryably."""
+        or a growing wait. An arXiv 429 or 5xx is asked again
+        :data:`ARXIV_RETRIES` times through the shared arXiv limiter, which
+        holds every arXiv request back meanwhile."""
         for attempt in range(PAGE_RATE_LIMIT_RETRIES + 1):
             try:
                 return self._get_page_once(url)
             except httpx.HTTPStatusError as e:
                 status = e.response.status_code
-                if (
-                    status not in (429, 503)
-                    or is_arxiv_host(url)
-                    or attempt == PAGE_RATE_LIMIT_RETRIES
-                ):
+                if is_arxiv_host(url):
+                    if not is_retryable_status(status) or attempt >= ARXIV_RETRIES:
+                        raise
+                    if status != 429:  # _get_page_once held a 429 back already
+                        self._arxiv_limiter.penalize(arxiv_retry_hold(e, attempt))
+                    logger.info("'%s' answered %d; asking arXiv again.", url, status)
+                    continue
+                if status not in (429, 503) or attempt == PAGE_RATE_LIMIT_RETRIES:
                     raise
                 hinted = "retry-after" in e.response.headers
                 wait = (
@@ -1208,13 +1274,13 @@ class WebResearcher:
         holds every later arXiv request back."""
         on_arxiv = is_arxiv_host(url)
         if on_arxiv:
-            ARXIV_RATE_LIMITER.acquire()
+            self._arxiv_limiter.acquire()
         with self.client.stream("GET", url) as response:
             try:
                 response.raise_for_status()
             except httpx.HTTPStatusError as e:
                 if on_arxiv and response.status_code == 429:
-                    ARXIV_RATE_LIMITER.penalize(arxiv_retry_after_seconds(e))
+                    self._arxiv_limiter.penalize(arxiv_retry_after_seconds(e))
                 raise
             content_type = response.headers.get("Content-Type", "").lower()
             if "html" not in content_type and "xml" not in content_type:
@@ -1376,6 +1442,52 @@ class WebResearcher:
         return selected
 
 
+# Page metadata that dates a page: Open Graph article and common meta names.
+_DATE_META = (
+    ("property", "article:published_time"),
+    ("name", "article:published_time"),
+    ("itemprop", "datePublished"),
+    ("name", "date"),
+    ("name", "publish-date"),
+    ("name", "pubdate"),
+    ("name", "dc.date"),
+    ("name", "dc.date.issued"),
+    ("name", "citation_publication_date"),
+)
+
+
+def published_date(soup: BeautifulSoup) -> str:
+    """The page's publication date (``YYYY-MM-DD``) from its metadata:
+    ``article:published_time`` and similar meta tags, else a JSON-LD
+    ``datePublished``; "" when it states none."""
+    metas = [m for m in soup.find_all("meta") if isinstance(m, Tag)]
+    for attribute, name in _DATE_META:
+        for meta in metas:
+            if str(meta.get(attribute, "")).strip().lower() == name.lower():
+                if found := iso_date(str(meta.get("content", ""))):
+                    return found
+    for script in soup.find_all("script", attrs={"type": "application/ld+json"}):
+        try:
+            data = json.loads(script.get_text() or "null")
+        except ValueError:
+            continue
+        if found := _json_ld_date(data):
+            return found
+    return ""
+
+
+def _json_ld_date(data: object) -> str:
+    """The first ``datePublished`` in a JSON-LD value (objects, lists and
+    ``@graph`` nodes)."""
+    if isinstance(data, list):
+        return next((d for item in data if (d := _json_ld_date(item))), "")
+    if not isinstance(data, dict):
+        return ""
+    if found := iso_date(str(data.get("datePublished") or "")):
+        return found
+    return _json_ld_date(data.get("@graph") or [])
+
+
 def _main_content(soup: BeautifulSoup) -> str:
     """The page's single ``<article>`` (else its single ``<main>``) as HTML,
     so the sidebars, version pickers and "rate this page" widgets around it
@@ -1458,9 +1570,3 @@ def _is_topic_directory(path: str) -> bool:
         return True
     index = [s.lower() for s in segments].index(version)
     return index < len(segments) - 1
-
-
-def normalize_url(url: str) -> str:
-    """Dedup key: scheme and host are case-insensitive, the path is not."""
-    parsed = urlparse(url)
-    return f"{parsed.scheme.lower()}://{parsed.netloc.lower()}{parsed.path}".rstrip("/")

@@ -112,6 +112,43 @@ tech_guide:
   auto_research: true
   max_research_queries: 6
   fetch_top_results: 12
+  # Search results are ranked by source authority (official docs, the
+  # project's repository, then the rest), then publication year, then search
+  # rank. At most this many fetched result pages are third-party; demoted
+  # classes below count as third-party and rank last.
+  max_third_party_pages: 4
+  # Domain classes to demote: class name -> host patterns ("example.com"
+  # with its subdomains, "*.example.com", "forum.*"). Edit or add classes;
+  # an empty map demotes nothing.
+  demoted_domains:
+    forum:
+      - stackoverflow.com
+      - "*.stackexchange.com"
+      - reddit.com
+      - news.ycombinator.com
+      - "discuss.*"
+      - "forum.*"
+      - "forums.*"
+      - "community.*"
+    social:
+      - x.com
+      - twitter.com
+      - linkedin.com
+      - facebook.com
+      - youtube.com
+    aggregator:
+      - "*.libhunt.com"
+      - stackshare.io
+      - alternativeto.net
+  # Domains the search backends leave out entirely (Tavily exclude_domains,
+  # Brave -site:), e.g. [pinterest.com].
+  excluded_domains: []
+  # The gathered corpus (queries, results, pages and their source records) is
+  # saved under a hash of the inputs (local work dir and S3 guides/sources/)
+  # and reused by a rerun with the same inputs within this many days, so
+  # reruns and evaluations write from the same sources. 0 = always gather
+  # again; `guide --fresh-sources` gathers again once.
+  source_snapshot_ttl_days: 7
   # At most this many sections (3-30); the outline plans within it.
   max_sections: 11
   # Hard ceiling on one run's estimated cost (USD).

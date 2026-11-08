@@ -11,7 +11,8 @@ import re
 from collections.abc import Sequence
 
 from ..domain.markdown.math import segments
-from .web_research import METRIC_SUFFIXES, OfficialDocs, ResearchCorpus
+from .source_set import is_official
+from .web_research import METRIC_SUFFIXES, ResearchCorpus
 
 # Identifiers a reader copies verbatim: CLI flags and Prometheus-style metric
 # names ("vllm:time_to_first_token_seconds", "..._requests_total").
@@ -32,12 +33,11 @@ def _mentions(text: str, token: str) -> bool:
     return re.search(rf"(?<![\w-]){re.escape(token)}(?![\w-])", text) is not None
 
 
-def official_reference(official: OfficialDocs, corpus: ResearchCorpus) -> str:
-    """Text of the fetched pages of the requested docs (where they landed, in
-    a compatible docs version)."""
-    return "\n".join(
-        p.text for p in corpus.pages if official.covers(p.final_url or p.url)
-    )
+def official_reference(corpus: ResearchCorpus) -> str:
+    """Text of the fetched pages whose record makes them official: the
+    requested docs at the target version and the project's repository at its
+    release."""
+    return "\n".join(p.text for p in corpus.pages if is_official(p))
 
 
 def _flag_spellings(flag: str, both_styles: bool) -> list[str]:
@@ -181,15 +181,15 @@ def unverified_identifiers(
 
 
 def third_party_identifiers(
-    corpus: ResearchCorpus, official: OfficialDocs, products: Sequence[str]
+    corpus: ResearchCorpus, products: Sequence[str]
 ) -> list[str]:
     """Flags and API arguments the corpus's other pages (blogs, older docs
     versions) show for the product that the official pages never mention:
     what the official reference must settle before a section is written."""
-    official_text = official_reference(official, corpus)
+    official_text = official_reference(corpus)
     found: list[str] = []
     for page in corpus.pages:
-        if official.covers(page.final_url or page.url):
+        if is_official(page):
             continue
         for identifier in unverified_identifiers(page.text, official_text, products):
             if identifier not in found:

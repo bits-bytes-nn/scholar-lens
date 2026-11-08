@@ -105,7 +105,7 @@ async def test_arxiv_html_fetch_is_paced_and_penalty_capped() -> None:
 
     clock = _FakeClock()
     limiter = _limiter_with_clock(clock, rate=1.0, per=3.0, name="arxiv")
-    statuses = iter([200, 429])
+    statuses = iter([200, 429, 429, 429])
 
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(next(statuses), headers={"Retry-After": "86400"})
@@ -118,8 +118,9 @@ async def test_arxiv_html_fetch_is_paced_and_penalty_capped() -> None:
     await html._fetch_html_from_url("https://arxiv.org/html/1")
     with pytest.raises(ContentParseError):
         await html._fetch_html_from_url("https://arxiv.org/html/2")
-    assert clock.now - start == pytest.approx(3.0)  # the second request waited
-    # A day-long Retry-After holds arXiv back for the cap, not a day.
+    # The second request waited its turn, then each of its two retries waited
+    # out a day-long Retry-After held to the cap, not a day.
+    assert clock.now - start == pytest.approx(3.0 + 2 * 60.0)
     assert limiter._blocked_until - clock.now == pytest.approx(60.0)
 
 

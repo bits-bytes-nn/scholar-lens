@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
 
 import pymupdf
@@ -36,10 +37,39 @@ class PaperDocuments:
         researcher: WebResearcher,
         openalex: OpenAlexIndex,
         abstracts: dict[str, str],
+        *,
+        pdf_source: Callable[[str], PdfUrlSource] = PdfUrlSource,
     ) -> None:
         self.researcher = researcher
         self.openalex = openalex
         self.abstracts = abstracts
+        self._pdf_source = pdf_source
+        # Source downgrades, by kind: paper id -> why (see :meth:`notes`).
+        self._html_to_pdf: dict[str, str] = {}
+        self._abstract_only: list[str] = []
+        self._cut: dict[str, int] = {}
+
+    def notes(self) -> list[str]:
+        """Run notes for every paper read from less than its full text: from
+        the PDF because the arXiv HTML rendering could not be used (with the
+        reason), from its abstract alone, or with its PDF text cut."""
+        notes: list[str] = []
+        if self._html_to_pdf:
+            notes.append(
+                "Read from the PDF (the arXiv HTML rendering could not be used): "
+                + ", ".join(f"{pid} ({why})" for pid, why in self._html_to_pdf.items())
+            )
+        if self._abstract_only:
+            notes.append(
+                "Read from the abstract only (no HTML or PDF text could be had): "
+                + ", ".join(self._abstract_only)
+            )
+        if self._cut:
+            notes.append(
+                f"PDF text cut at {MAX_PDF_PAGES} pages: "
+                + ", ".join(f"{pid} ({n} pages)" for pid, n in self._cut.items())
+            )
+        return notes
 
     async def document(self, paper: PlanPaper) -> SourceDocument | None:
         arxiv_id = unversioned_arxiv_id(paper.id)
@@ -54,22 +84,34 @@ class PaperDocuments:
         )
         if pdf_url and (doc := await asyncio.to_thread(self._pdf, paper, pdf_url)):
             return doc
+        # The PDF did not do either: the HTML note no longer describes it.
+        self._html_to_pdf.pop(paper.id, None)
         if abstract := self.abstracts.get(paper.id):
+            self._abstract_only.append(paper.id)
             return SourceDocument.from_markdown(
                 paper.id, paper.title, "abstract", f"## Abstract\n\n{abstract}"
             )
         return None
 
     def _arxiv_html(self, paper: PlanPaper, arxiv_id: str) -> SourceDocument | None:
+        html_url = f"https://arxiv.org/html/{arxiv_id}"
         try:
             corpus = self.researcher.research(
                 [f"https://arxiv.org/abs/{arxiv_id}"], discover_subpages=False
             )
         except SourceFetchError as e:
             logger.warning("Could not read arXiv %s: %s", arxiv_id, e)
+            self._html_to_pdf[paper.id] = _reason(e)
             corpus = ResearchCorpus()
         page = corpus.pages[0] if corpus.pages else None
         if page is None or "/html/" not in (page.final_url or page.url):
+            if paper.id not in self._html_to_pdf:
+                fallbacks = getattr(self.researcher, "arxiv_fallbacks", {})
+                self._html_to_pdf[paper.id] = (
+                    fallbacks.get(html_url, "unreadable")
+                    if isinstance(fallbacks, dict)
+                    else "unreadable"
+                )
             return None
         return SourceDocument.from_markdown(
             paper.id,
@@ -101,10 +143,11 @@ class PaperDocuments:
         try:
             # A malformed or non-public URL (an index's pdf_url) is one
             # paper's missing PDF, not the survey's failure.
-            source = PdfUrlSource(url)
+            source = self._pdf_source(url)
             with tempfile.TemporaryDirectory() as tmp:
                 path = source.download_pdf(Path(tmp))
                 with pymupdf.open(path) as pdf:
+                    total = pdf.page_count
                     pages = [
                         f"## Page {n}\n\n{page.get_text().strip()}"
                         for n, page in enumerate(pdf, 1)
@@ -119,7 +162,18 @@ class PaperDocuments:
         text = "\n\n".join(pages)
         if len(text) < 2_000:  # a scanned or empty PDF
             return None
+        if total > MAX_PDF_PAGES:
+            self._cut[paper.id] = total
         return SourceDocument.from_markdown(paper.id, paper.title, "pdf_text", text)
+
+
+def _reason(error: BaseException) -> str:
+    """A fetch failure's cause, short: "HTTP 429", else its message."""
+    cause = error.__cause__
+    response = getattr(cause, "response", None)
+    if (status := getattr(response, "status_code", None)) is not None:
+        return f"HTTP {status}"
+    return str(cause or error)[:160]
 
 
 class EvidenceTextStore:

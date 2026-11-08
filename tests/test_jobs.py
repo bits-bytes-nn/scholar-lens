@@ -95,11 +95,18 @@ class TestCliMapping:
                 "--search-query",
                 "paged attention internals",
                 "--no-subpages",
+                "--fresh-sources",
             ]
         )
         assert request.urls == ["https://docs.x.dev"]
         assert request.search_queries == ["paged attention internals"]
         assert request.discover_subpages is False
+        assert request.fresh_sources is True
+        assert self._request(["guide", "https://docs.x.dev"]).fresh_sources is False
+
+    def test_only_a_guide_takes_fresh_sources(self) -> None:
+        with pytest.raises(ValueError, match="fresh_sources"):
+            JobRequest(kind="review", source="2106.09685", fresh_sources=True)
 
     def test_invalid_request_exits_rejected(
         self, capsys: pytest.CaptureFixture

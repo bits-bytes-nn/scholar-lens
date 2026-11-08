@@ -30,6 +30,12 @@ import requests
 from pydantic import HttpUrl
 
 from ..adapters.http.pinned_transport import PinnedRequestsAdapter
+from ..adapters.http.rate_limit import (
+    ARXIV_RATE_LIMITER,
+    ARXIV_RETRIES,
+    RateLimiter,
+    arxiv_retry_hold,
+)
 from ..adapters.http.url_guard import (
     UnsafeUrlError,
     assert_url_is_public,
@@ -43,7 +49,7 @@ from ..adapters.scholarly.pdf import (
     PdfTooLargeError,
     save_pdf,
 )
-from .constants import arxiv_id_from_url, normalize_arxiv_id
+from .constants import arxiv_id_from_url, is_arxiv_host, normalize_arxiv_id
 from .logger import logger
 
 # "arxiv.org/abs/2106.09685" or "openreview.net/pdf?id=…" typed without a scheme.
@@ -152,7 +158,23 @@ class PdfUrlSource(PaperSource):
     :class:`PaperFetchError`.
     """
 
-    def __init__(self, url: str, session: requests.Session | None = None) -> None:
+    def __init__(
+        self,
+        url: str,
+        session: requests.Session | None = None,
+        *,
+        rate_limiter: RateLimiter | None = None,
+    ) -> None:
+        """No request is made until the PDF is downloaded.
+
+        Args:
+            url: The PDF URL.
+            session: The HTTP session (default: one pinned to the
+                SSRF-validated address of every hop).
+            rate_limiter: Paces requests to arXiv (default: the
+                process-wide arXiv limiter); other hosts are not paced.
+        """
+        self._limiter = ARXIV_RATE_LIMITER if rate_limiter is None else rate_limiter
         self._url = HttpUrl(url)
         self._raw_url = url
         # SSRF guard (cheap, offline): reject bad schemes and internal IP
@@ -243,6 +265,9 @@ class PdfUrlSource(PaperSource):
                 if is_temporary_dns_failure(e):
                     raise PaperFetchError(str(e)) from e
                 raise PaperSourceError(str(e)) from e
+            if is_arxiv_host(current):
+                # Every arXiv request shares the process-wide arXiv pace.
+                self._limiter.acquire()
             try:
                 response = self._session.request(
                     method, current, allow_redirects=False, stream=True, **kwargs
@@ -268,16 +293,41 @@ class PdfUrlSource(PaperSource):
         """Download the PDF in one streamed GET: an HTML content type or a body
         without PDF magic bytes is :class:`NotAPdfError` (a ``.pdf`` suffix is
         only a hint; servers return login pages from such URLs), a transport
-        failure or 429/5xx is :class:`PaperFetchError`."""
+        failure or 429/5xx is :class:`PaperFetchError`. An arXiv 429 or 5xx
+        holds every arXiv request back (the shared limiter) and is asked again
+        :data:`ARXIV_RETRIES` times first."""
         paper_dir = papers_dir / self.source_id
         paper_dir.mkdir(parents=True, exist_ok=True)
         pdf_path = paper_dir / f"{self.source_id}.pdf"
+        for attempt in range(ARXIV_RETRIES + 1):
+            if self._download_once(pdf_path, attempt):
+                break
+        self._discovered_title = self._extract_pdf_title(pdf_path)
+        logger.info("Successfully downloaded PDF to: '%s'", pdf_path)
+        return pdf_path
+
+    def _download_once(self, pdf_path: Path, attempt: int) -> bool:
+        """One download attempt: True when saved, False when arXiv asked to
+        come back later and another attempt is left."""
         try:
             with self._safe_request(
                 "GET", self._raw_url, timeout=_PDF_DOWNLOAD_TIMEOUT_SECONDS
             ) as response:
                 status = response.status_code
                 if status == 429 or status >= 500:
+                    final_url = str(response.url or self._raw_url)
+                    if is_arxiv_host(final_url):
+                        hold = arxiv_retry_hold(
+                            requests.HTTPError(response=response), attempt
+                        )
+                        self._limiter.penalize(hold)
+                        if attempt < ARXIV_RETRIES:
+                            logger.info(
+                                "'%s' answered %d; asking arXiv again.",
+                                final_url,
+                                status,
+                            )
+                            return False
                     raise PaperFetchError(
                         f"'{self._raw_url}' is unavailable right now (HTTP {status})."
                     )
@@ -305,9 +355,7 @@ class PdfUrlSource(PaperSource):
             raise PaperFetchError(
                 f"Failed to download PDF from '{self._raw_url}': {e}"
             ) from e
-        self._discovered_title = self._extract_pdf_title(pdf_path)
-        logger.info("Successfully downloaded PDF to: '%s'", pdf_path)
-        return pdf_path
+        return True
 
     @staticmethod
     def _extract_pdf_title(pdf_path: Path) -> str | None:

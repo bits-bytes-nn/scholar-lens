@@ -39,7 +39,8 @@ from scholar_lens.domain.guide.evidence_guide import (
 from scholar_lens.domain.post_spec import evidence_policy
 from scholar_lens.domain.specs import GUIDE_SPEC
 from scholar_lens.src.guide_writer import _source_urls, guide_documents
-from scholar_lens.src.web_research import OfficialDocs, PageContent
+from scholar_lens.src.source_set import SourceSet
+from scholar_lens.src.web_research import PageContent
 from tests.fakes import with_context
 
 DOC_TEXT = """## Overview
@@ -325,9 +326,7 @@ def test_markers_are_stripped_and_cited_sources_listed() -> None:
 
 
 def test_pages_become_documents_by_authority() -> None:
-    official = OfficialDocs.from_urls(
-        ["https://docs.ray.io/en/latest/serve/index.html"]
-    )
+    sources = SourceSet.from_urls(["https://docs.ray.io/en/latest/serve/index.html"])
     pages = [
         PageContent(
             url="https://docs.ray.io/en/latest/serve/batching.html",
@@ -343,7 +342,8 @@ def test_pages_become_documents_by_authority() -> None:
         ),
         PageContent(url="https://example.com/stub", title="Stub", text="menu"),
     ]
-    docs = guide_documents(pages, official)
+    sources.record_all(pages)
+    docs = guide_documents(pages)
     assert [(d.paper_id, d.authority) for d in docs] == [
         ("src-D1", "official"),
         ("src-W1", "third_party"),
@@ -763,9 +763,7 @@ def test_dropping_a_sentence_leaves_code_and_tables_alone() -> None:
 
 
 def test_the_projects_own_repository_counts_as_official() -> None:
-    official = OfficialDocs.from_urls(
-        ["https://docs.ray.io/en/latest/serve/index.html"]
-    )
+    requested = ["https://docs.ray.io/en/latest/serve/index.html"]
     edit = "https://github.com/ray-project/ray/edit/master/doc/serve.md"
     pages = [
         PageContent(
@@ -785,8 +783,12 @@ def test_the_projects_own_repository_counts_as_official() -> None:
             url="https://github.com/someone/fork", title="Fork", text=BLOG_TEXT * 3
         ),
     ]
-    docs = guide_documents(pages, official)
+    # Decided at gather time: the repositories the docs pages link to.
+    SourceSet.from_urls(requested).with_repositories(pages).record_all(pages)
+    docs = guide_documents(pages)
     assert [d.authority for d in docs[3:]] == ["official", "third_party"]
+    assert [d.source_authority for d in docs[3:]] == ["official_repo", "third_party"]
+    assert docs[3].version == "master"
 
 
 def test_install_commands_are_checked_against_the_package_extras() -> None:

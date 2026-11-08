@@ -117,10 +117,12 @@ async def test_html_parse_failure_falls_back_to_the_pdf(monkeypatch) -> None:  #
         async def parse(self, _arxiv_id: str) -> None:
             raise ParserError("no HTML rendering")
 
+    from scholar_lens.src.parser import Content
+
     async def fake_pdf(
         source: object, papers_dir: Path, kwargs: dict
-    ) -> tuple[list, str]:
-        return [], "pdf content"
+    ) -> tuple[list, Content]:
+        return [], Content(text="pdf content")
 
     monkeypatch.setattr(paper_pipeline, "LanguageModelId", lambda value: value)
     monkeypatch.setattr(paper_pipeline, "HTMLRichParser", FailingHTML)
@@ -129,7 +131,14 @@ async def test_html_parse_failure_falls_back_to_the_pdf(monkeypatch) -> None:  #
     figures, content, is_pdf = await paper_pipeline._parse_paper_content(
         _context(), source, parse_pdf=False, callbacks=[]  # type: ignore[arg-type]
     )
-    assert (figures, content, is_pdf) == ([], "pdf content", True)
+    assert (figures, content.text, is_pdf) == ([], "pdf content", True)
+    # The downgrade is a run note with its reason.
+    assert content.notes == [
+        "Read from the PDF: the arXiv HTML rendering could not be used "
+        "(no HTML rendering)."
+    ]
+    paper = SimpleNamespace(content=content)
+    assert paper_pipeline._text_only_notes(paper) == content.notes  # type: ignore[arg-type]
 
 
 async def test_code_analysis_failure_degrades_to_no_codebase(  # type: ignore[no-untyped-def]

@@ -141,7 +141,9 @@ async def _run_guide(
     monkeypatch.setattr(
         guide_pipeline,
         "WebResearcher",
-        lambda **_: SimpleNamespace(close=lambda: None, search_notes=lambda: []),
+        lambda **_: SimpleNamespace(
+            close=lambda: None, search_notes=lambda: [], repo_tags=lambda _: None
+        ),
     )
     monkeypatch.setattr(guide_pipeline, "load_translation_guideline", no_guideline)
     request = JobRequest(kind="guide", urls=[DOCS], create_pr=False)

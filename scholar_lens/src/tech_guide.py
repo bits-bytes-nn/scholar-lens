@@ -25,13 +25,16 @@ from __future__ import annotations
 import asyncio
 import functools
 import re
+from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass, field
 from typing import Any
+from urllib.parse import urlparse
 
 import boto3
 from langchain_core.runnables import Runnable
 
 from ..application.usage import staged
+from ..domain.guide.evidence_guide import install_requirements
 from ..domain.review_plan import digest_sections
 from ..domain.tags import controlled_tag_problems
 from ..domain.validation import description_markup, description_problems
@@ -49,6 +52,20 @@ from .prompts import (
     TechGuideResearchPlanPrompt,
 )
 from .prompts.tech_guide import REFERENCE_LABEL, TechGuideTaxonomyPrompt
+from .source_set import (
+    OFFICIAL_AUTHORITIES,
+    DomainClasses,
+    SourceSet,
+    TagLookup,
+    search_exclusions,
+)
+from .source_snapshot import (
+    CorpusSnapshot,
+    SnapshotPolicy,
+    read_snapshot,
+    save_snapshot,
+    snapshot_key,
+)
 from .utils import (
     BedrockLanguageModelFactory,
     HTMLTagOutputParser,
@@ -64,6 +81,7 @@ from .web_research import (
     ResearchCorpus,
     SourceFetchError,
     WebResearcher,
+    arxiv_paper_urls,
     page_key,
     product_names,
     source_label,
@@ -74,6 +92,11 @@ DEFAULT_LANGUAGE: str = "Korean"
 # per-guide reference caps.
 _IDENTIFIER_REFERENCE_PAGES: int = MAX_REFERENCE_PAGES * 2 // 3 // 2
 _IDENTIFIER_REFERENCE_SEARCHES: int = MAX_REFERENCE_SEARCHES * 2 // 3 // 2
+
+
+def _normalized(name: str) -> str:
+    """A distribution or command name as PEP 503 compares them."""
+    return re.sub(r"[-_.]+", "-", name).lower()
 
 
 class NotTechnicalContentError(Exception):
@@ -112,13 +135,17 @@ class GuideMaterial:
     corpus: ResearchCorpus
     # The user's reference URLs not already among the docs URLs.
     references: list[str] = field(default_factory=list)
+    # The web-search queries run (explicit or planned).
+    queries: list[str] = field(default_factory=list)
 
 
 class TechGuideGenerator(RetryableBase):
     """Gathers a guide's sources and files the finished guide."""
 
-    # The requested docs (hosts and versions): the authority for flags and defaults.
-    _official: OfficialDocs = OfficialDocs(frozenset(), frozenset())
+    # Decides each gathered page's source record (authority, version, date,
+    # language) once; the requested docs are the authority for flags and
+    # defaults.
+    _sources: SourceSet = SourceSet(OfficialDocs(frozenset(), frozenset()))
     # The names the docs' commands go by (set by the relevance gate).
     _products: tuple[str, ...] = ()
     # Official reference pages fetched this run, the identifiers they were
@@ -140,7 +167,30 @@ class TechGuideGenerator(RetryableBase):
         fetch_top_results: int,
         callbacks: list[Any] | None = None,
         llm_factory: BedrockLanguageModelFactory | None = None,
+        release_lookup: Callable[[str], str | None] | None = None,
+        repo_tags: TagLookup | None = None,
+        max_third_party_pages: int | None = None,
+        demoted_domains: Mapping[str, Collection[str]] | None = None,
+        excluded_domains: Collection[str] = (),
     ) -> None:
+        """Args beyond the obvious:
+        release_lookup: A package's latest release on its index (the
+            run's target version when the docs URL pins none); None
+            looks nothing up.
+        repo_tags: A repository's tags (``host/owner/name``); None
+            looks nothing up.
+        max_third_party_pages: At most this many third-party and demoted
+            search-result pages (None: no cap).
+        demoted_domains: Domain classes (forum, social, aggregator …) ->
+            host patterns whose pages rank last and count as third-party.
+        excluded_domains: Domains the search backends leave out.
+        """
+        self.relevance_model_id = relevance_model_id
+        self.release_lookup = release_lookup
+        self.repo_tags = repo_tags
+        self.max_third_party_pages = max_third_party_pages
+        self.demoted = DomainClasses.from_config(demoted_domains or {})
+        self.excluded_domains = search_exclusions(excluded_domains)
         self.language = language
         # The blog's title limit (the conventions' ``seo_title_max_length``).
         self.title_max_length = title_max_length
@@ -187,7 +237,12 @@ class TechGuideGenerator(RetryableBase):
     @property
     def official(self) -> OfficialDocs:
         """The requested docs (set by :meth:`gather`)."""
-        return self._official
+        return self._sources.official
+
+    @property
+    def sources(self) -> SourceSet:
+        """The run's source set (set by :meth:`gather`)."""
+        return self._sources
 
     @property
     def products(self) -> tuple[str, ...]:
@@ -201,22 +256,150 @@ class TechGuideGenerator(RetryableBase):
         reference_urls: list[str] | None = None,
         discover_subpages: bool = True,
         search_queries: list[str] | None = None,
+        snapshots: SnapshotPolicy | None = None,
     ) -> GuideMaterial:
         """Everything a guide is written from: the docs (and sub-pages), the
         user's reference material, the planned searches' top pages and the
         official reference pages for third-party identifiers, after the
-        relevance gate (raises :class:`NotTechnicalContentError`)."""
+        relevance gate (raises :class:`NotTechnicalContentError`).
+
+        With ``snapshots``, a corpus gathered from the same inputs (URLs,
+        references, explicit queries and the settings that change what is
+        gathered) within the policy's TTL is reused, and a newly gathered
+        one is saved."""
+        if snapshots is None:
+            return await self._gather(
+                urls,
+                reference_urls=reference_urls or [],
+                discover_subpages=discover_subpages,
+                search_queries=search_queries or [],
+            )
+        key = snapshot_key(
+            self._gather_inputs(
+                urls, reference_urls or [], discover_subpages, search_queries or []
+            )
+        )
+        found = await asyncio.to_thread(
+            read_snapshot,
+            snapshots,
+            key,
+            demoted=self.demoted,
+            repo_tags=self.repo_tags,
+        )
+        if found is not None:
+            logger.info("Reusing the corpus snapshot %s.", key)
+            return self._restore(found)
+        start = len(self.notes)
+        material = await self._gather(
+            urls,
+            reference_urls=reference_urls or [],
+            discover_subpages=discover_subpages,
+            search_queries=search_queries or [],
+        )
+        snapshot = CorpusSnapshot(
+            topic=material.topic,
+            corpus=material.corpus,
+            references=material.references,
+            queries=material.queries,
+            products=self._products,
+            sources=self._sources,
+            notes=[*self.notes[start:], *self.researcher.search_notes()],
+            reference_ids=list(self._reference_ids),
+            reference_searches=self._reference_searches,
+            reference_urls=[p.url for p in self._reference_pages],
+        )
+        try:
+            await asyncio.to_thread(save_snapshot, snapshots, key, snapshot)
+        except OSError as e:  # the corpus is in hand; only a rerun gathers again
+            logger.warning("Could not save the corpus snapshot %s: %s", key, e)
+        return material
+
+    def _gather_inputs(
+        self,
+        urls: list[str],
+        references: list[str],
+        discover_subpages: bool,
+        queries: list[str],
+    ) -> dict[str, object]:
+        """What decides a gathered corpus: the request and every setting
+        that changes what is fetched, searched or how it is recorded."""
+        return {
+            "urls": list(urls),
+            "references": list(references),
+            "discover_subpages": discover_subpages,
+            "search_queries": list(queries),
+            "relevance_model_id": str(self.relevance_model_id),
+            "auto_research": self.auto_research,
+            "max_research_queries": self.max_research_queries,
+            "fetch_top_results": self.fetch_top_results,
+            "max_third_party_pages": self.max_third_party_pages,
+            "demoted_domains": {k: list(v) for k, v in self.demoted.classes.items()},
+            "excluded_domains": list(self.excluded_domains),
+            "search_backend": type(self.researcher.search_provider).__name__,
+            "max_subpages": self._max_subpages(),
+        }
+
+    def _note_abstract_pages(self, corpus: ResearchCorpus) -> None:
+        """A run note for the arXiv papers read from their abstract page
+        because their HTML rendering could not be used (with the reason)."""
+        fallbacks = getattr(self.researcher, "arxiv_fallbacks", None)
+        reasons = fallbacks if isinstance(fallbacks, dict) else {}
+        found = []
+        for page in corpus.pages:
+            url = page.final_url or page.url
+            paper = arxiv_paper_urls(url)
+            if paper and "/abs/" in urlparse(url).path:
+                found.append(f"{url} ({reasons.get(paper[0], 'no HTML rendering')})")
+        if found:
+            self.notes.append(
+                "arXiv papers read from their abstract only (no usable HTML "
+                "rendering): " + ", ".join(found)
+            )
+
+    def _max_subpages(self) -> int | None:
+        found = getattr(self.researcher, "max_subpages", None)
+        return found if isinstance(found, int) else None
+
+    def _restore(self, snapshot: CorpusSnapshot) -> GuideMaterial:
+        """The generator's state and material as a saved gather left them."""
+        self._sources = snapshot.sources
+        self._products = snapshot.products
+        self._reference_ids = list(snapshot.reference_ids)
+        self._reference_searches = snapshot.reference_searches
+        looked_up = set(snapshot.reference_urls)
+        self._reference_pages = [p for p in snapshot.corpus.pages if p.url in looked_up]
+        self.notes += [
+            *snapshot.notes,
+            f"Sources reused from the corpus gathered at {snapshot.gathered_at} "
+            f"({len(snapshot.corpus.pages)} pages); rerun with --fresh-sources "
+            "to gather them again.",
+        ]
+        return GuideMaterial(
+            topic=snapshot.topic,
+            corpus=snapshot.corpus,
+            references=snapshot.references,
+            queries=snapshot.queries,
+        )
+
+    async def _gather(
+        self,
+        urls: list[str],
+        *,
+        reference_urls: list[str],
+        discover_subpages: bool,
+        search_queries: list[str],
+    ) -> GuideMaterial:
         # One spelling per page (and per arXiv paper: abs, pdf, any version).
         held = {page_key(u) for u in urls}
         references: list[str] = []
-        for url in reference_urls or []:
+        for url in reference_urls:
             if (key := page_key(url)) not in held:
                 held.add(key)
                 references.append(url)
         if not urls and not references:
             raise ValueError("At least one source URL is required.")
         # The requested docs are the authority for flags, defaults and names.
-        self._official = OfficialDocs.from_urls(urls)
+        self._sources = SourceSet.from_urls(urls)
         self._reference_pages, self._reference_ids = [], []
         self._reference_searches = 0
 
@@ -231,9 +414,6 @@ class TechGuideGenerator(RetryableBase):
                 raise NotTechnicalContentError(
                     "None of the supplied URLs returned readable content."
                 )
-            # Where the requested pages actually landed (redirects, a pinned
-            # version behind "stable") is official too.
-            self._official = OfficialDocs.from_research(urls, corpus.pages)
         else:
             self.notes.append(_NO_DOCS_NOTE)
         docs = ResearchCorpus(pages=list(corpus.pages))
@@ -244,6 +424,12 @@ class TechGuideGenerator(RetryableBase):
         # rejected input spends nothing on searches.
         gate_topic = await self._assert_relevant(docs if docs.pages else corpus)
 
+        # Every page's record is decided here, once: where the requested
+        # pages landed (redirects, a pinned version behind "stable") is
+        # official too, and so are the repositories the docs link to.
+        self._sources = self._source_set(urls, docs.pages)
+        self._record(corpus.pages, "seed")
+
         # Deep-research planning: when no explicit queries are supplied, derive
         # search queries (and an early topic guess) from the seed pages so the
         # corpus is broadened with complementary material — the guide should not
@@ -251,7 +437,7 @@ class TechGuideGenerator(RetryableBase):
         # the search backend can't actually return results.
         can_search = self.researcher.search_provider.supports_search
         planned_topic: str | None = None
-        queries = list(search_queries or [])
+        queries = list(search_queries)
         if not queries and self.auto_research and can_search:
             planned_topic, queries = await self._plan_research(corpus)
         if queries and can_search:
@@ -263,8 +449,11 @@ class TechGuideGenerator(RetryableBase):
                 corpus,
                 queries,
                 fetch_top=self.fetch_top_results,
+                sources=self._sources,
+                max_third_party=self.max_third_party_pages,
+                exclude=self.excluded_domains,
             )
-            self._log_added("search", corpus.pages[before:])
+            self._record(corpus.pages[before:], "search")
         elif queries:
             logger.info(
                 "Search backend has no results; skipping %d queries.", len(queries)
@@ -275,17 +464,20 @@ class TechGuideGenerator(RetryableBase):
         # official source backs.
         await self._add_reference(
             corpus,
-            third_party_identifiers(corpus, self._official, self._products),
+            third_party_identifiers(corpus, self._products),
             max_pages=_IDENTIFIER_REFERENCE_PAGES,
             max_searches=_IDENTIFIER_REFERENCE_SEARCHES,
         )
 
+        self._note_abstract_pages(corpus)
         topic = (
             planned_topic
             if planned_topic and not is_placeholder(planned_topic)
             else gate_topic
         )
-        return GuideMaterial(topic=topic, corpus=corpus, references=references)
+        return GuideMaterial(
+            topic=topic, corpus=corpus, references=references, queries=queries
+        )
 
     async def _add_material(
         self, corpus: ResearchCorpus, references: list[str]
@@ -312,7 +504,6 @@ class TechGuideGenerator(RetryableBase):
                 page.user_reference = True
                 corpus.pages.append(page)
                 held |= keys
-                self._log_added("reference-material", [page])
         if not corpus.pages:
             raise NotTechnicalContentError(
                 "None of the supplied URLs returned readable content."
@@ -459,14 +650,14 @@ class TechGuideGenerator(RetryableBase):
         )
         # Only pages that settle an identifier, as the unverified check reads
         # them, are kept.
-        official_text = official_reference(self._official, corpus)
+        official_text = official_reference(corpus)
         settles = functools.partial(
             mentions_any, identifiers=identifiers, official_text=official_text
         )
         added = await asyncio.to_thread(
             self.researcher.add_official_reference,
             corpus,
-            self._official,
+            self._sources,
             identifiers,
             product=self._products[0] if self._products else "",
             max_searches=searches_left,
@@ -480,14 +671,65 @@ class TechGuideGenerator(RetryableBase):
         self._log_added("reference-lookup", added)
         return added
 
+    def _source_set(self, urls: list[str], docs: list[PageContent]) -> SourceSet:
+        """The run's source set from the requested URLs and the docs pages
+        they returned. Its target version is the release the requested docs
+        URL pins, else the latest release of the product's package (one the
+        docs install under a product name), else the release a rolling docs
+        link landed on."""
+        draft = SourceSet.from_urls(urls, docs)
+        release, package = None, ""
+        if self.release_lookup is not None and not draft.target.pinned:
+            official_text = "\n".join(
+                p.text
+                for p in docs
+                if draft.classify(p.final_url or p.url).authority
+                in OFFICIAL_AUTHORITIES
+            )
+            products = {_normalized(p) for p in self._products}
+            for name, _ in install_requirements(official_text):
+                if _normalized(name) in products and (
+                    release := self.release_lookup(name)
+                ):
+                    package = name
+                    break
+        sources = SourceSet.from_urls(
+            urls,
+            docs,
+            package_release=release,
+            demoted=self.demoted,
+            repo_tags=self.repo_tags,
+        ).with_repositories(docs)
+        target = sources.target
+        if target.release:
+            origin = (
+                "the requested docs URL"
+                if target.pinned
+                else f"the latest {package} release" if package else "the docs"
+            )
+            logger.info("Target version %s (%s).", target.release, origin)
+            self.notes.append(
+                f"Target version {target.release} ({origin}): docs and "
+                "repository pages at other versions are marked as another "
+                "version."
+            )
+        return sources
+
+    def _record(self, pages: list[PageContent], kind: str) -> None:
+        """Record ``pages`` (:meth:`SourceSet.record`) and log them."""
+        self._sources.record_all(pages)
+        self._log_added(kind, pages)
+
     def _log_added(self, kind: str, pages: list[PageContent]) -> None:
-        """One INFO line per page added to the corpus: how it came in, the
-        label prompts give it, and its URL."""
+        """One INFO line per page added to the corpus: how it came in, its
+        record and its URL."""
         for page in pages:
             logger.info(
-                "Added %s page [%s] %s",
+                "Added %s page [%s%s%s] %s",
                 kind,
-                source_label(page, self._official),
+                page.authority or source_label(page),
+                f" {page.version}" if page.version else "",
+                f" {page.published}" if page.published else "",
                 page.final_url or page.url,
             )
 

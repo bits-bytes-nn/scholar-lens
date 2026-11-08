@@ -80,7 +80,6 @@ from .prompts import BasePrompt, SurveyScopePrompt, SurveySelectionPrompt
 from .runtime import PipelineOutcome, RunContext
 from .utils import BedrockLanguageModelFactory, RetryableBase
 from .web_research import (
-    OfficialDocs,
     PageContent,
     ResearchCorpus,
     SourceFetchError,
@@ -165,11 +164,11 @@ def reference_excerpts(pages: Sequence[PageContent], query: str, max_chars: int)
     (:meth:`ResearchCorpus.relevant_text`); "none" without pages."""
     if not pages:
         return "none"
-    pages = [replace(p, user_reference=True) for p in pages]
+    pages = [replace(p, user_reference=True, authority="reference") for p in pages]
     return ResearchCorpus(pages=pages).relevant_text(
         query,
         max_chars=max_chars,
-        official=OfficialDocs.from_urls([]),
+        labelled=True,
         prefer=[p.url for p in pages],
     )
 

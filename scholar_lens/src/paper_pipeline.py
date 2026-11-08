@@ -38,6 +38,7 @@ from .parser import (
     ParserError,
     PDFParser,
     attach_figure_context,
+    failure_reason,
 )
 from .publish_types import title_slug
 from .publisher import PublishRequest, build_pr_body
@@ -400,12 +401,16 @@ async def _parse_paper_content(
             result = await parser.parse(arxiv_html_id)
             return result.figures, result.content, False
     except ParserError as e:
+        reason = failure_reason(e)
         logger.warning(
             "HTML parsing failed for '%s' (%s); falling back to PDF.",
             source.source_id,
-            e,
+            reason,
         )
         figures, content = await _parse_pdf(source, context.papers_dir, parser_kwargs)
+        content.notes.append(
+            f"Read from the PDF: the arXiv HTML rendering could not be used ({reason})."
+        )
         return figures, content, True
 
 
@@ -498,11 +503,13 @@ def _figure_captions(paper: Paper) -> dict[str, str]:
 
 
 def _text_only_notes(paper: Paper) -> list[str]:
-    """A note when PDF layout parsing failed and the post was written from the
-    PDF's text layer alone."""
+    """The paper's source downgrades (HTML rendering to PDF) and a note when
+    PDF layout parsing failed and the post was written from the PDF's text
+    layer alone."""
+    notes = list(paper.content.notes)
     if paper.content.text_only:
-        return ["PDF parsed as text only; figures and tables unavailable."]
-    return []
+        notes.append("PDF parsed as text only; figures and tables unavailable.")
+    return notes
 
 
 def _unanalysed_figure_notes(paper: Paper) -> list[str]:

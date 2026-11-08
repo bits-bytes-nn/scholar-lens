@@ -111,7 +111,7 @@ class TestResearchCorpus:
         assert corpus.image_urls == ["a", "b", "c"]
 
     def test_relevant_text_labels_sources_by_authority(self) -> None:
-        from scholar_lens.src.web_research import OfficialDocs
+        from scholar_lens.src.source_set import SourceSet
 
         corpus = ResearchCorpus(
             pages=[
@@ -119,8 +119,8 @@ class TestResearchCorpus:
                 PageContent("https://blog.x.io/b", "B", "y"),
             ]
         )
-        official = OfficialDocs.from_urls(["https://docs.x.dev/"])
-        text = corpus.relevant_text("x y", max_chars=10_000, official=official)
+        SourceSet.from_urls(["https://docs.x.dev/"]).record_all(corpus.pages)
+        text = corpus.relevant_text("x y", max_chars=10_000, labelled=True)
         assert "## Source (official documentation): https://docs.x.dev/a" in text
         assert "## Source (third-party): https://blog.x.io/b" in text
         unlabelled = corpus.relevant_text("x y", max_chars=10_000)
@@ -1096,7 +1096,7 @@ class TestReferenceMaterialAndPapers:
     def test_reference_material_is_labelled_but_official_pages_stay_official(
         self,
     ) -> None:
-        from scholar_lens.src.web_research import OfficialDocs
+        from scholar_lens.src.source_set import SourceSet
 
         corpus = ResearchCorpus(
             pages=[
@@ -1105,20 +1105,20 @@ class TestReferenceMaterialAndPapers:
                 PageContent("https://other.io/c", "C", "z"),
             ]
         )
-        text = corpus.relevant_text(
-            "x",
-            max_chars=50_000,
-            official=OfficialDocs.from_urls(["https://docs.x.dev/"]),
-        )
+        SourceSet.from_urls(["https://docs.x.dev/"]).record_all(corpus.pages)
+        text = corpus.relevant_text("x", max_chars=50_000, labelled=True)
         assert "## Source (official documentation): https://docs.x.dev/a" in text
         assert "## Source (reference material): https://blog.x.io/b" in text
         assert "## Source (third-party): https://other.io/c" in text
 
     def test_without_docs_nothing_is_official(self) -> None:
-        from scholar_lens.src.web_research import OfficialDocs, source_label
+        from scholar_lens.src.source_set import SourceSet
+        from scholar_lens.src.web_research import source_label
 
         page = PageContent("https://docs.x.dev/a", "A", "x")
-        assert source_label(page, OfficialDocs.from_urls([])) == "third-party"
+        SourceSet.from_urls([]).record(page)
+        assert page.authority == "third_party"
+        assert source_label(page) == "third-party"
 
     @pytest.mark.parametrize(
         "url,expected",
@@ -1256,10 +1256,14 @@ class TestArxivFetching:
     def test_a_rate_limit_server_error_or_timeout_is_a_recorded_failure(
         self, failure: httpx.Response | Exception, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        from scholar_lens.adapters.http.rate_limit import ARXIV_RETRIES
+
         researcher, requested = _arxiv_researcher({self.HTML: failure}, monkeypatch)
         failures: list[BaseException] = []
         assert researcher._fetch_page(self.ABS, failures=failures) is None
-        assert requested == [self.HTML]  # no fallback, no retry here
+        # A 429 or 5xx is asked again through the limiter; a timeout is not.
+        tries = ARXIV_RETRIES + 1 if isinstance(failure, httpx.Response) else 1
+        assert requested == [self.HTML] * tries  # no fallback to the abstract
         assert len(failures) == 1
 
     def test_a_reference_paper_behind_a_429_is_an_outage(
@@ -1293,7 +1297,7 @@ class TestArxivFetching:
             monkeypatch,
         )
         researcher._fetch_page(self.ABS, failures=[])
-        assert penalties == [7.0]
+        assert penalties == [7.0] * 3  # each attempt holds arXiv back
 
     def test_every_arxiv_request_waits_for_the_shared_limiter(
         self, monkeypatch: pytest.MonkeyPatch
