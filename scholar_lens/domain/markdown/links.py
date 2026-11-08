@@ -11,7 +11,7 @@ from typing import Literal
 from urllib.parse import quote, unquote, urlsplit
 
 from scholar_lens.domain.ids import ARXIV_KEY_PREFIX, paper_link_key
-from scholar_lens.domain.markdown.math import in_spans, protected_spans
+from scholar_lens.domain.markdown.math import in_spans, segments
 from scholar_lens.domain.text import is_placeholder
 
 # Characters of an untrusted title that kramdown or Liquid would read as
@@ -118,8 +118,12 @@ def markdown_links(markdown: str) -> list[MarkdownLink]:
     links (``[t](url "title")``, nested brackets in the text), references
     to a definition (``[t][label]``, ``[label][]``, ``[label]``), autolinks
     (``<url>``) and the definitions themselves. Images are not links here;
-    a reference without a definition is plain text."""
-    protected = in_spans(protected_spans(markdown))
+    a reference without a definition is plain text. Only what the blog
+    renders as code or math is skipped: a single ``$`` renders as text, so
+    a link between two of them is a live link and is read (a math-looking
+    relative target there, as in ``\\mathcal{F}[f](\\omega)``, is never
+    absolute and so never checked)."""
+    protected = in_spans([(s.start, s.end) for s in segments(markdown)])
     definitions: dict[str, str] = {}
     links: list[MarkdownLink] = []
     defined_spans: list[tuple[int, int]] = []

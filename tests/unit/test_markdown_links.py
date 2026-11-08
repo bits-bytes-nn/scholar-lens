@@ -144,7 +144,7 @@ class TestVerifyLinks:
     def test_code_math_images_anchors_and_site_paths_are_left(self) -> None:
         text = (
             "`[k](https://k.dev)` $$\\mathcal{F}[f](https://m.dev)$$ "
-            "$(f * g)[n](https://n.dev)$ ![fig](https://f.dev/a.png) "
+            "$(f * g)[n](k)$ ![fig](https://f.dev/a.png) "
             "[top](#tldr) [post](/posts/x)\n\n```\n[c](https://c.dev)\n```\n"
         )
         assert verify_links(text, LinkSources()) == (text, [])
@@ -224,3 +224,28 @@ def test_a_target_only_part_of_a_stated_url_is_removed(stated: str, link: str) -
     from scholar_lens.domain.markdown.links import LinkSources, verify_links
 
     assert verify_links(f"[x]({link})", LinkSources.of([], stated_text=stated))[1]
+
+
+@pytest.mark.parametrize(
+    "text, removed",
+    [
+        # Single "$" renders as text: the links between them are live.
+        (
+            "Set $AWS_PROFILE, see [docs](https://made-up.example.com/x), "
+            "then $AWS_REGION.",
+            ["https://made-up.example.com/x"],
+        ),
+        (
+            "cost $x [p](https://arxiv.org/abs/2499.99999) y$",
+            ["https://arxiv.org/abs/2499.99999"],
+        ),
+        # Display math is math: nothing in it is a link.
+        ("$$\\mathcal{F}[f](\\omega)$$", []),
+    ],
+)
+def test_links_between_single_dollars_are_verified(
+    text: str, removed: list[str]
+) -> None:
+    from scholar_lens.domain.markdown.links import LinkSources, verify_links
+
+    assert verify_links(text, LinkSources.of([]))[1] == removed

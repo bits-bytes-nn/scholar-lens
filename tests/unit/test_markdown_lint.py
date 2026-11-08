@@ -235,11 +235,14 @@ class TestLinkRewritesLeaveMath:
         assert "[f](\\omega)" in fixed or "[n](k)" in fixed
 
     def test_link_verification(self) -> None:
-        text = (
-            "$$[x](https://arxiv.org/abs/1912.03356)$$ "
-            "$\\hat{y}[y](https://arxiv.org/abs/1912.03356)$"
-        )
-        assert verify_links(text, LinkSources()) == (text, [])
+        # What the blog renders as math is no link; a single "$" renders as
+        # text, so an absolute link between two of them is live and checked.
+        math = "$$[x](https://arxiv.org/abs/1912.03356)$$"
+        assert verify_links(math, LinkSources()) == (math, [])
+        text = "$\\hat{y}[y](https://arxiv.org/abs/1912.03356)$"
+        assert verify_links(text, LinkSources())[1] == [
+            "https://arxiv.org/abs/1912.03356"
+        ]
 
     @pytest.mark.parametrize("math", MATH_WITH_LINK_SHAPES)
     def test_image_rewrites(self, math: str) -> None:
