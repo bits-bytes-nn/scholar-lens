@@ -16,6 +16,7 @@ from typing import Any
 from scholar_lens.domain.evidence import Evidence, EvidenceLedger, near_duplicate
 from scholar_lens.domain.markdown.lint import drop_empty_headings
 from scholar_lens.domain.markdown.math import DISPLAY_MATH, fence_roles
+from scholar_lens.domain.post_spec import Limits
 from scholar_lens.domain.quality_gate import rule_issues
 from scholar_lens.domain.validation import unsourced_numbers
 from scholar_lens.domain.verifiers import Problem, as_problems
@@ -163,11 +164,6 @@ def stated_numbers(sentence: str, free: str) -> list[str]:
     return unsourced_numbers(_plain(sentence), free)
 
 
-# Visuals a lineage or cross-cutting section needs by depth (images, display
-# equations and tables); the code-built tables follow other kinds.
-MIN_VISUALS = {"deep": 2, "standard": 1, "brief": 0}
-
-
 # A table cell a writer left blank: fill it from the evidence or drop the
 # row or column.
 _BLANK_CELL = re.compile(r"\|\s*(?:—|–|-|N/A|n/a)?\s*(?=\|)")
@@ -195,6 +191,12 @@ def visual_count(markdown: str) -> int:
     return len(_IMAGE.findall(body)) + equations + tables
 
 
+# The problem kind of a section below its depth's visuals minimum.
+VISUALS_PROBLEM = "visuals"
+# The asset kinds (:func:`assets`) that count as a section's visuals.
+_VISUAL_ASSETS = ("table", "figure", "equation")
+
+
 def section_problems(
     markdown: str,
     *,
@@ -210,6 +212,7 @@ def section_problems(
     papers: Iterable[str] = (),
     target_chars: int = 0,
     passages: Mapping[tuple[str, str], str] | None = None,
+    limits: Limits | None = None,
 ) -> list[Problem]:
     """Deterministic problems of a section draft (each quotes its sentence):
     a missing heading, unknown or foreign evidence ids, a number without
@@ -217,7 +220,9 @@ def section_problems(
     already stated, a sentence about the post's own inputs, an unassigned or
     missing figure. What a sentence means (talk about the post's sources, a
     claim that a source leaves something out, style) is the claim check's
-    and the review's, in any language."""
+    and the review's, in any language. ``limits`` gives the length share
+    and the visuals by depth (the spec's)."""
+    limits = limits or Limits()
     problems: list[Problem] = []
 
     def add(kind: str, text: str, where: str = "") -> None:
@@ -317,7 +322,8 @@ def section_problems(
         )
     if (
         target_chars
-        and (length := len(" ".join(prose_sentences(markdown)))) > 1.5 * target_chars
+        and (length := len(" ".join(prose_sentences(markdown))))
+        > limits.max_length_share * target_chars
     ):
         add(
             "too_long",
@@ -329,9 +335,11 @@ def section_problems(
     # The blog's Markdown and math rules (an unbalanced $$ breaks every
     # later equation of the post).
     problems += as_problems("rule", rule_issues(MARKER.sub("", markdown)))
-    if (need := MIN_VISUALS.get(depth, 0)) and visual_count(markdown) < need:
+    if (need := dict(limits.min_visuals).get(depth, 0)) and visual_count(
+        markdown
+    ) < need:
         add(
-            "visuals",
+            VISUALS_PROBLEM,
             f"a {depth} section needs at least {need} visuals (its figures, an "
             "equation, or a small table from its number evidence)",
         )
@@ -545,6 +553,30 @@ def lost_assets(
         if gone:
             return kind
     return ""
+
+
+def removed_duplicate_visuals(before: str, after: str, rest: str) -> bool:
+    """Whether ``after`` removed visuals of ``before`` and each one removed
+    has a copy in ``rest`` (another section owns it): a repetition's
+    deletion, which takes nothing from the post.
+
+    Args:
+        before: The section before the revision.
+        after: The section after it.
+        rest: The other sections of the post.
+
+    Returns:
+        True when visuals were removed, all with a copy in ``rest``.
+    """
+    old, new, elsewhere = assets(before), assets(after), assets(rest)
+    removed = [
+        (kind, item)
+        for kind in _VISUAL_ASSETS
+        for item in Counter(old[kind]) - Counter(new[kind])
+    ]
+    return bool(removed) and all(
+        item in elsewhere.get(kind, ()) for kind, item in removed
+    )
 
 
 def structure_lost(

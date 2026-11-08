@@ -9,9 +9,13 @@ from collections import Counter
 import pytest
 
 from scholar_lens.domain.edit_transaction import changed_units, rejudged_units, transact
+from scholar_lens.domain.evidence import EvidenceLedger
 from scholar_lens.domain.evidence_draft import (
     apply_edits,
+    free_numbers,
     lost_assets,
+    prose_sentences,
+    section_problems,
     structure_lost,
 )
 from scholar_lens.domain.post_spec import Limits
@@ -297,3 +301,92 @@ def test_rejudged_units_are_the_changes_and_the_unit_after_each() -> None:
             [after[nxt]] if nxt < len(after) else []
         )
         assert got == expected, (kind, k)
+
+
+def _deep_checks(limits: Limits) -> VerifierSet:
+    """A deep section's shared checks, as the engine builds them."""
+    ledger = EvidenceLedger()
+
+    def shared(markdown: str) -> list[Problem]:
+        return section_problems(
+            markdown,
+            title="사용법",
+            own=[],
+            earlier=[],
+            ledger=ledger,
+            earlier_numbers={},
+            figure_urls=[],
+            free_numbers=free_numbers(),
+            depth="deep",
+            limits=limits,
+        )
+
+    return VerifierSet("사용법", (shared,))
+
+
+OTHER = "| 모델 | 속도 |\n| --- | --- |\n| 작은 것 | 빠름 |"
+
+
+@pytest.mark.parametrize("copy", ["rest", "nowhere"])
+def test_deleting_a_duplicate_table_is_not_held_to_the_visuals_minimum(
+    copy: str,
+) -> None:
+    """A deep section's repeated table goes when another section keeps it,
+    even though the section falls below its visuals minimum; the only copy
+    of a table stays."""
+    text = _section("표를 봅니다.", TABLE, "다음 표입니다.", OTHER, "끝입니다.")
+    rest = _section("앞 절입니다.", OTHER) if copy == "rest" else _section("앞 절.")
+    revision = transact(
+        text,
+        [(f"\n\n{OTHER}", "")],
+        verifiers=_deep_checks(Limits()),
+        max_prose_cut=CUT,
+        rest=rest,
+    )
+    assert revision.taken is (copy == "rest")
+    if copy == "rest":
+        assert OTHER not in revision.text and TABLE in revision.text
+
+
+def test_removing_a_duplicate_does_not_excuse_other_new_problems() -> None:
+    text = _section("표를 봅니다.", TABLE, "다음 표입니다.", OTHER, "끝입니다.")
+    revision = transact(
+        text,
+        [(f"\n\n{OTHER}", ""), ("끝입니다.", "끝입니다 [[E7]].")],
+        verifiers=_deep_checks(Limits()),
+        max_prose_cut=CUT,
+        rest=_section("앞 절입니다.", OTHER),
+    )
+    assert not revision.taken and "unknown evidence" in revision.rejected
+
+
+@pytest.mark.parametrize("share", [1.0, 1.5, 2.0, 3.0])
+@pytest.mark.parametrize("need", [0, 1, 2, 3])
+def test_the_length_share_and_visuals_minimum_come_from_the_limits(
+    share: float, need: int
+) -> None:
+    text = _section("가" * 100 + "입니다.", TABLE)
+    limits = Limits(max_length_share=share, min_visuals=(("deep", need),))
+    problems = section_problems(
+        text,
+        title="사용법",
+        own=[],
+        earlier=[],
+        ledger=EvidenceLedger(),
+        earlier_numbers={},
+        free_numbers=free_numbers(),
+        figure_urls=[],
+        target_chars=50,
+        depth="deep",
+        limits=limits,
+    )
+    kinds = {p.kind for p in problems}
+    length = len(" ".join(prose_sentences(text)))
+    assert ("too_long" in kinds) is (length > share * 50)
+    assert ("visuals" in kinds) is (need > 1)
+
+
+def test_the_default_limits_keep_the_former_thresholds() -> None:
+    limits = Limits()
+    assert limits.max_length_share == 1.5
+    assert dict(limits.min_visuals) == {"deep": 2, "standard": 1, "brief": 0}

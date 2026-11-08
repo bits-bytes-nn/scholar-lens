@@ -1042,6 +1042,7 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
                 papers=papers,
                 target_chars=ctx.target,
                 depth=depth,
+                limits=self.limits,
             )
 
         def kind(markdown: str) -> list[Problem]:
@@ -1262,6 +1263,7 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
                 free_numbers=self.free,
                 passages=self.passages,
                 target_chars=target if tldr.checks_length else 0,
+                limits=self.limits,
             )
 
         def kind(md: str) -> list[Problem]:

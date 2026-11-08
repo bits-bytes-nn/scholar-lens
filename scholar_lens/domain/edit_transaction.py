@@ -17,9 +17,11 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from scholar_lens.domain.evidence_draft import (
+    VISUALS_PROBLEM,
     apply_edits,
     claim_units,
     ends_mid_sentence,
+    removed_duplicate_visuals,
     strip_revision_notes,
     structure_lost,
 )
@@ -135,7 +137,13 @@ def transact(
     ) or ("it stops mid-sentence" if ends_mid_sentence(fixed) else "")
     if reason:
         return Revision(before, applied, tuple(skipped), reason)
-    if added := verifiers.added(before, fixed):
+    added = verifiers.added(before, fixed)
+    if rest and removed_duplicate_visuals(before, fixed, rest):
+        # A repeated table or figure deleted where another section keeps
+        # it: the visuals minimum asks the writer for visuals of the
+        # section's own, it does not keep a copy another section owns.
+        added = [p for p in added if p.kind != VISUALS_PROBLEM]
+    if added:
         return Revision(
             before,
             applied,

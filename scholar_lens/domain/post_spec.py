@@ -346,6 +346,18 @@ class Limits:
     # a supporting paper).
     main_source_evidence: tuple[int, int] = (10, 25)
     minor_source_evidence: tuple[int, int] = (3, 10)
+    # A section whose prose runs past this multiple of its target is too
+    # long: half again leaves room for a dense section without letting one
+    # take a neighbour's share of the post.
+    max_length_share: float = 1.5
+    # Visuals (images, display equations, tables) a section of the spec's
+    # ``depth_kinds`` needs, by depth: a deep section shows its mechanism
+    # and a result, a standard one one of them.
+    min_visuals: tuple[tuple[str, int], ...] = (
+        ("deep", 2),
+        ("standard", 1),
+        ("brief", 0),
+    )
 
 
 @dataclass(frozen=True)
