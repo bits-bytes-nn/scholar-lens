@@ -529,7 +529,7 @@ PR 본문(`build_pr_body`)에는 논문 ID, PDF URL, 파싱 방식, 글자 수, 
 - `resources.github.*_category`: `categories[0]`이 되므로 블로그 spec의 `types`에 있어야 합니다.
 - `explanation.max_synthesis_attempts`·`max_edit_rounds`: 리뷰 `sections` 엔진의 호출 수와 비용을 정하는 반복 상한입니다.
 - `explanation.engine`·`summary.engine`(기본 `sections`, 또는 `evidence`), `reader_model_id`(Sonnet 5.5), `min_total_chars`·`max_total_chars`(리뷰 25,000·55,000, 요약 2,500·4,500, 하한 ≤ 상한), `max_cost_usd`(리뷰 $40, 요약 $12), `chars_per_reader`(리뷰 15,000, 요약 40,000): 리뷰·요약의 엔진 선택과 근거 장부 엔진의 읽기 모델, 글 길이, 비용 상한, 읽기 에이전트 하나가 맡는 논문 글자 수입니다(4.4절). 길이, 비용 상한과 `chars_per_reader`는 `evidence` 엔진만 씁니다. 요약의 절 수 상한은 설정이 아니라 요약 명세의 고정 절과 TL;DR 수입니다(`domain/specs/paper.py::SUMMARY_MAX_SECTIONS`).
-- `tech_guide.max_sources_read`(40), `min_total_chars`·`max_total_chars`(30,000·55,000, 하한 ≤ 상한), `max_cost_usd`($60): 가이드가 읽는 페이지 수, 글 길이와 비용 상한입니다(4.2절).
+- `tech_guide.max_sources_read`(40), `min_total_chars`·`max_total_chars`(25,000·45,000, 하한 ≤ 상한), `max_cost_usd`($60): 가이드가 읽는 페이지 수, 글 길이와 비용 상한입니다(4.2절).
 - `survey.min_papers`·`max_papers`(기본 6·25, `max_papers` ≤ `candidate_pool`), `candidate_pool`(60): 서베이 논문 수 범위와 후보 수집 범위입니다(4.3절).
 - `survey.chars_per_core_paper`·`chars_per_supporting_paper`(3,000·800), `min_total_chars`·`max_total_chars`(20,000·70,000, 하한 ≤ 상한), `write_max_cost_usd`($60): 서베이 글 길이와 쓰기 단계의 비용 상한입니다(4.3.1절). `resources.github.survey_category`는 블로그 규칙의 유형이어야 합니다.
 
