@@ -4,11 +4,10 @@
 from __future__ import annotations
 
 import random
-from collections import Counter
 
 import pytest
 
-from scholar_lens.domain.edit_transaction import changed_units, rejudged_units, transact
+from scholar_lens.domain.edit_transaction import rejudged_units, transact
 from scholar_lens.domain.evidence import Evidence, EvidenceLedger
 from scholar_lens.domain.evidence_draft import (
     apply_edits,
@@ -203,7 +202,7 @@ def test_a_problem_moved_is_kept_and_one_more_of_a_form_is_added(
     assert len(revision.added) == count - 1
     assert all(p.kind == "numbers" for p in revision.added)
     if count == 1:
-        assert "설정은 4개 값을 받습니다." in revision.changed
+        assert "설정은 4개 값을 받습니다." in rejudged_units(text, revision.text)
 
 
 @pytest.mark.parametrize("before_count", [0, 1, 2])
@@ -221,12 +220,14 @@ def test_added_counts_the_growth_of_each_normalised_form(
     assert len(added) == max(0, after_count - before_count)
 
 
-def test_changed_units_are_the_new_and_changed_sentences_only() -> None:
-    before = _section("가는 문장입니다. 나는 문장입니다.", TABLE)
-    after = before.replace("나는 문장입니다.", "나는 고친 문장입니다.").replace(
-        "| LoRA | 높음 |", "| LoRA | 낮음 |"
-    )
-    assert changed_units(before, after) == ["나는 고친 문장입니다.", "| LoRA | 낮음 |"]
+def test_rejudged_units_are_the_changed_ones_and_the_unit_after() -> None:
+    before = _section("가는 문장입니다. 나는 문장입니다. 다는 문장입니다.", TABLE)
+    after = before.replace("나는 문장입니다.", "나는 고친 문장입니다.")
+    # The rewritten sentence and the one whose previous sentence changed.
+    assert rejudged_units(before, after) == [
+        "나는 고친 문장입니다.",
+        "다는 문장입니다.",
+    ]
 
 
 @pytest.mark.parametrize(
@@ -329,7 +330,6 @@ def test_rejudged_units_are_the_changes_and_the_unit_after_each() -> None:
         before_md, after_md = _prose(units), _prose(after)
         assert rejudged_units(before_md, before_md) == []
         got = rejudged_units(before_md, after_md)
-        assert not Counter(changed_units(before_md, after_md)) - Counter(got)
         nxt = k + 1 if kind != "delete" else k
         expected = ([new] if kind != "delete" else []) + (
             [after[nxt]] if nxt < len(after) else []

@@ -196,7 +196,7 @@ def link_key(url: str) -> str | None:
 # What may follow a URL a text states (not more of the URL), and what may
 # precede it (not more of a host name).
 _URL_END = re.compile(r"[^\w\-~%]|$")
-_URL_START = re.compile(r"[\w.\-]$")
+_URL_START = re.compile(r"[\w.\-/:@]$")
 # A URL's scheme and "www.", which a text may write or leave out.
 _URL_PREFIX = re.compile(r"(?:https?://)?(?:www\.)?", re.IGNORECASE)
 

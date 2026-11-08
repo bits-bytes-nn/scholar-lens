@@ -206,3 +206,21 @@ def test_a_link_between_two_prices_is_checked() -> None:
     # Inline math that reads like a link stays math.
     math = r"변환 $\mathcal{F}[f](\omega)$ 입니다."
     assert verify_links(math, LinkSources.of([]))[1] == []
+
+
+@pytest.mark.parametrize(
+    "stated, link",
+    [
+        # A strict prefix of a stated URL is another target.
+        ("Code: https://github.com/acme/tool-v2", "https://github.com/acme/tool"),
+        # A target found inside another stated URL is not stated.
+        (
+            "Mirror: https://mirror.org/github.com/acme/tool",
+            "https://github.com/acme/tool",
+        ),
+    ],
+)
+def test_a_target_only_part_of_a_stated_url_is_removed(stated: str, link: str) -> None:
+    from scholar_lens.domain.markdown.links import LinkSources, verify_links
+
+    assert verify_links(f"[x]({link})", LinkSources.of([], stated_text=stated))[1]

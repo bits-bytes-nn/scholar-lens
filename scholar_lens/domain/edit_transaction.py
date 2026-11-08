@@ -43,8 +43,6 @@ class Revision:
         rejected: Why the applied edits were not taken ("" when they were,
             or when none applied).
         added: The new problems a rejected batch would have brought.
-        changed: The claim units of ``text`` the draft did not have (new or
-            changed sentences and table rows).
     """
 
     text: str
@@ -52,33 +50,11 @@ class Revision:
     skipped: tuple[str, ...] = ()
     rejected: str = ""
     added: tuple[Problem, ...] = ()
-    changed: tuple[str, ...] = ()
 
     @property
     def taken(self) -> bool:
         """Whether the section changed."""
         return self.applied > 0 and not self.rejected
-
-
-def changed_units(before: str, after: str) -> list[str]:
-    """The claim units of ``after`` that ``before`` does not have (as often
-    as ``after`` has them more), in order.
-
-    Args:
-        before: A section.
-        after: The section revised.
-
-    Returns:
-        The new or changed sentences and table rows.
-    """
-    left = Counter(claim_units(before))
-    out = []
-    for unit in claim_units(after):
-        if left[unit] > 0:
-            left[unit] -= 1
-        else:
-            out.append(unit)
-    return out
 
 
 def rejudged_units(before: str, after: str) -> list[str]:
@@ -190,9 +166,7 @@ def transact(
             "adds problems: " + " | ".join(p.text[:120] for p in added[:3]),
             tuple(added),
         )
-    return Revision(
-        fixed, applied, tuple(skipped), changed=tuple(changed_units(before, fixed))
-    )
+    return Revision(fixed, applied, tuple(skipped))
 
 
 def _prose(markdown: str) -> int:
