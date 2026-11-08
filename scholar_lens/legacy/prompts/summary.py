@@ -97,7 +97,7 @@ class PaperSummaryPrompt(BasePrompt):
       translation would equal the title, a short descriptive subtitle instead).
     - <description>: the post's search snippet, one plain text paragraph of
       120-160 characters in {language}: no math, Markdown, links or tags. It
-      opens with the model or method name as the paper writes it ("Mistral
+      opens with the model or method name as the paper writes it ("Tarnet
       7B는 …"), never with a generic opener ("대규모 언어 모델의 발전으로 …"),
       and says what the paper does and its headline result. Numbers only from
       the opening blockquote or the paper's abstract.

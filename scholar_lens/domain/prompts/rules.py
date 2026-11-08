@@ -180,10 +180,10 @@ TERMINOLOGY_RULES: str = """
 - A term the translation guideline lists takes its rendering there (the
   glossary already applies it). Any other technical term is written in the
   target language when a natural translation exists. Keep English only for
-  proper nouns, product, API, model and code names (vLLM, Adam, `max_tokens`)
-  and terms with no natural translation.
+  proper nouns, product, API, model and code names (Quillstream, Velmora,
+  `max_widgets`) and terms with no natural translation.
 - A rendering carries no parenthetical: add the English once, at the term's
-  first use in the post ("연속 배칭(continuous batching)").
+  first use in the post ("지연 평가(lazy evaluation)").
 - Never glue a Korean ending to an English word ("cache합니다"): write
   "캐시에 저장합니다".
 """

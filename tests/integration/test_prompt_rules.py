@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
+import json
+import re
+from pathlib import Path
+from urllib.parse import urlparse
+
 import pytest
+import yaml
 
 from scholar_lens.adapters.bedrock.prompts.base import BasePrompt
 from scholar_lens.adapters.bedrock.prompts.extraction import (
@@ -266,3 +272,81 @@ def test_the_table_size_cap_has_one_source() -> None:
 def test_guide_taxonomy_returns_a_description() -> None:
     assert "description" in TechGuideTaxonomyPrompt.output_variables
     assert "120-160 characters" in _render(TechGuideTaxonomyPrompt)
+
+
+# ---- prompt examples stay off the evaluation set ------------------------------
+
+_ROOT = Path(__file__).resolve().parents[2]
+_PROMPT_DIRS = (
+    "scholar_lens/domain/prompts",
+    "scholar_lens/legacy/prompts",
+    "scholar_lens/adapters/bedrock/prompts",
+)
+
+
+def _words(text: str) -> list[str]:
+    return re.findall(r"[a-z0-9]+", text.lower())
+
+
+def eval_item_names() -> set[str]:
+    """The names of the evaluation set's subjects, read from
+    eval/sets/baseline.yaml: an item key's subject (``guide-vllm`` → vllm)
+    and its docs host (``docs.ray.io`` → ray); for a survey, the plan's
+    paper names (a title's head before its colon, up to three words) and
+    the key's subject when the plan's topic writes it as a name (an
+    acronym, not a common noun such as "security")."""
+    items = yaml.safe_load((_ROOT / "eval/sets/baseline.yaml").read_text())["items"]
+    names: set[str] = set()
+    for key, item in items.items():
+        subject = key.split("-", 1)[1]
+        if plan_file := item.get("plan"):
+            plan = json.loads((_ROOT / plan_file).read_text())
+            topic_words = re.findall(r"[A-Za-z0-9]+", plan["topic"])
+            if any(w.lower() == subject and w != w.lower() for w in topic_words):
+                names.add(subject)
+            for paper in plan["papers"]:
+                head, colon, _ = paper["title"].partition(":")
+                if colon and len(head.split()) <= 3:
+                    names.add(head)
+        else:
+            names.add(subject)
+        for url in item.get("urls", []):
+            names.add((urlparse(url).hostname or "").split(".")[-2])
+    return names
+
+
+def _mentions(words: list[str], name: str) -> bool:
+    """Whether ``name`` occurs in ``words`` as whole words, or spelled
+    together ("rayserve" for "Ray Serve")."""
+    wanted = _words(name)
+    joined = "".join(wanted)
+    return any(words[i : i + len(wanted)] == wanted for i in range(len(words))) or any(
+        "".join(words[i : i + k]) == joined
+        for k in (2, 3)
+        for i in range(len(words) - k + 1)
+    )
+
+
+def test_the_eval_item_names_are_read_from_the_set() -> None:
+    names = {n.lower() for n in eval_item_names()}
+    assert {"vllm", "dpo", "lora", "ray", "rlhf", "struq"} <= names
+    assert "security" not in names
+
+
+@pytest.mark.parametrize(
+    "module",
+    sorted(p for d in _PROMPT_DIRS for p in (_ROOT / d).glob("*.py")),
+    ids=lambda p: f"{p.parent.name}/{p.name}",
+)
+def test_prompt_modules_name_no_eval_item(module: Path) -> None:
+    """Prompt examples are invented (docs/engine.md 2.2): a prompt that
+    names an evaluation subject pulls every post toward it and makes the
+    evaluation measure the example."""
+    names = eval_item_names()
+    hits = [
+        f"{n}: line {number}"
+        for number, line in enumerate(module.read_text().splitlines(), 1)
+        for n in sorted(names)
+        if _mentions(_words(line), n)
+    ]
+    assert not hits, hits

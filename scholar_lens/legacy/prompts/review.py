@@ -626,7 +626,7 @@ class PaperFinalizationPrompt(BasePrompt):
     3. Description (inside <description>): the post's search snippet, one plain
        text paragraph of 120-160 characters in {language}: no math, Markdown,
        links or tags. It opens with the model or method name as the paper
-       writes it ("Mistral 7B는 …", "DPO는 …"), never with a generic opener
+       writes it ("Tarnet 7B는 …", "Velmora는 …"), never with a generic opener
        ("대규모 언어 모델의 발전으로 …"), says what the paper does and its
        headline result, and may end with what the review covers ("… 구조와
        학습 과정을 정리합니다."). Its numbers appear in your TL;DR.
