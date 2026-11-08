@@ -129,23 +129,33 @@ StageT = TypeVar("StageT")
 @dataclass(frozen=True)
 class ReadJob:
     """One reading agent's work: a source (or part of one), the cache key
-    of its evidence, the reader's prompt and limits, and the evidence kinds
-    it is asked again for when it skips them."""
+    of its evidence, the reader's prompt and limits, the evidence kinds
+    it is asked again for when it skips them, and the low end of the
+    evidence count its prompt asks for (a reader that records fewer is
+    asked again for the rest)."""
 
     document: SourceDocument
     key: str
     prompt: str
     limits: AgentLimits
     required: tuple[str, ...] = ()
+    minimum: int = 0
 
 
 def reader_key(job: ReadJob, prompt: str) -> str:
     """The cache key of a job's evidence: the job's key (the source, the
     reader version and model) with a digest of everything else the reader
     is given: its prompt (the topic, the key targets, the counts asked
-    for), its limits and the kinds it is asked again for."""
+    for), its limits, the kinds it is asked again for and the count below
+    which it is continued."""
     inputs = json.dumps(
-        [prompt, job.limits.turns, job.limits.total_tokens, list(job.required)],
+        [
+            prompt,
+            job.limits.turns,
+            job.limits.total_tokens,
+            list(job.required),
+            job.minimum,
+        ],
         ensure_ascii=False,
     )
     digest = hashlib.sha256(inputs.encode()).hexdigest()[:12]
@@ -510,6 +520,7 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
                     limits=job.limits,
                     required=job.required,
                     rule=rule,
+                    minimum=job.minimum,
                 )
                 if self.store is not None and items:
                     self.store.put(

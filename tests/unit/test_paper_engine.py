@@ -7,6 +7,8 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
+import pytest
+
 from scholar_lens.application.evidence_writer import (
     ClaimCheck,
     Edit,
@@ -33,6 +35,7 @@ from scholar_lens.domain.paper.evidence_paper import (
     repair_paper_outline,
     tldr_problems,
 )
+from scholar_lens.domain.specs.paper import paper_spec
 from tests.fakes import with_context
 
 PAPER = """## Abstract
@@ -214,10 +217,15 @@ class ScriptedModel:
     def __init__(self, post: str) -> None:
         self.post = post
         self.calls: list[str] = []
+        self.follow_ups: list[str] = []
 
     async def run_agent(
         self, *, role, system, prompt, tools, limits: AgentLimits
     ) -> AgentOutcome:
+        if "<already_recorded>" in prompt:  # the follow-up of a short read
+            self.calls.append("follow-up")
+            self.follow_ups.append(prompt)
+            return AgentOutcome(text="", stop_reason="end_turn")
         self.calls.append("read")
         record = {t.__name__: t for t in tools}["record_evidence"]
         record(
@@ -351,6 +359,17 @@ def test_a_scripted_review_run() -> None:
     )
     assert model.calls.count("read") == 1
     assert {"consistency", "repetition", "ExtractedTargets"} <= set(model.calls)
+
+
+@pytest.mark.parametrize("post", ["review", "summary"])
+def test_a_paper_reader_short_of_its_specs_count_is_continued(post: str) -> None:
+    """The reader records 4 items, below the low end of either post's
+    count: each reading group gets one follow-up asking for the rest, at
+    the low end of its own spec (a review reads more than a summary)."""
+    model, _ = _run(post)
+    low = paper_spec(post).limits.main_source_evidence[0]  # type: ignore[arg-type]
+    assert model.calls.count("follow-up") == model.calls.count("read") == 1
+    assert f"fewer than the {low} or more asked for" in model.follow_ups[0]
 
 
 def test_a_scripted_summary_run() -> None:

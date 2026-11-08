@@ -371,6 +371,9 @@ class ScriptedModel:
     async def run_agent(
         self, *, role, system, prompt, tools, limits: AgentLimits
     ) -> AgentOutcome:
+        if "<already_recorded>" in prompt:  # the follow-up of a short read
+            self.calls.append("follow-up")
+            return AgentOutcome(text="", stop_reason="end_turn")
         self.calls.append("read")
         record = {t.__name__: t for t in tools}["record_evidence"]
         if "Page D1" in prompt:
@@ -527,6 +530,9 @@ def test_a_scripted_guide_run() -> None:
         identifier_check=lambda md: ["--made-up"] if "--made-up" in md else [],
     )
     guide = asyncio.run(engine.write("Ray Serve batching", [_blog(), _official()]))
+    # Each page's reader recorded fewer than the low end of its count
+    # (the spec's main or minor range) and was continued once.
+    assert model.calls.count("follow-up") == model.calls.count("read") == 2
     body = guide.body
     # The docs are read first; their ids number the ledger.
     assert guide.ledger.get("E2").kind == "setting"
@@ -922,7 +928,9 @@ class _Reader:
     def __init__(self) -> None:
         self.reads = 0
 
-    async def run_agent(self, *, tools, **_: Any) -> AgentOutcome:  # type: ignore[no-untyped-def]
+    async def run_agent(self, *, prompt, tools, **_: Any) -> AgentOutcome:  # type: ignore[no-untyped-def]
+        if "<already_recorded>" in prompt:  # the follow-up of a short read
+            return AgentOutcome(text="", stop_reason="end_turn")
         self.reads += 1
         record = {t.__name__: t for t in tools}["record_evidence"]
         record(

@@ -306,6 +306,9 @@ class ScriptedModel:
     async def run_agent(
         self, *, role, system, prompt, tools, limits: AgentLimits
     ) -> AgentOutcome:
+        if "<already_recorded>" in prompt:  # the follow-up of a short read
+            self.calls.append("follow-up")
+            return AgentOutcome(text="", stop_reason="end_turn")
         self.calls.append("read")
         by_name = {t.__name__: t for t in tools}
         record = by_name["record_evidence"]
@@ -419,6 +422,9 @@ def test_a_scripted_run_reads_outlines_writes_fixes_and_assembles() -> None:
     )
     survey = asyncio.run(engine.write(_plan()))
     assert len(survey.ledger) == 4
+    # Each reader recorded fewer than the low end of its count and was
+    # continued once.
+    assert model.calls.count("follow-up") == model.calls.count("read") >= 1
     body = survey.body
     assert (
         body.index("## RL 없는")

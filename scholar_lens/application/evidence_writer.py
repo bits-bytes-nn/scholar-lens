@@ -499,11 +499,15 @@ class EvidenceWriter:
         limits: AgentLimits,
         required: Sequence[str] = (),
         rule: RecordRule | None = None,
+        minimum: int = 0,
     ) -> list[Evidence]:
         """One agent reads ``document`` and records evidence; every record
         is checked against the document (and ``rule``) before it is kept.
         ``finish`` asks again (``limits.required_kind_asks`` times) for any
-        ``required`` kind still missing."""
+        ``required`` kind still missing. A reader that ends with a required
+        kind missing or fewer than ``minimum`` records (the low end of the
+        count it was asked for) is continued once, in a follow-up of
+        ``limits.follow_up_turns`` turns."""
         ledger = EvidenceLedger()
         rejected = 0
         refusals = 0
@@ -633,10 +637,31 @@ class EvidenceWriter:
             tools=[read_section, search_source, record_evidence, finish],
             limits=limits,
         )
-        # The agent may end its turn without calling finish: ask once, in a
-        # short follow-up, for the required kinds it has not recorded.
-        if missing := [k for k in required if k not in {e.kind for e in ledger}]:
+        # The agent may end its turn without calling finish, or stop at the
+        # first few records: ask once, in a short follow-up, for the
+        # required kinds it has not recorded and the rest of the evidence
+        # its sections hold.
+        missing = [k for k in required if k not in {e.kind for e in ledger}]
+        short = len(ledger) < minimum
+        if missing or short:
             recorded = "\n".join(f"- ({e.kind}) {e.claim[:120]}" for e in ledger)
+            asks: list[str] = []
+            if missing:
+                asks.append(
+                    f"Evidence of kind {missing} is still missing. Record "
+                    "it now if the source has it (for a figure: the one "
+                    "that best shows the architecture, a flow or a result, "
+                    "described from the text before it)."
+                )
+            if short:
+                asks.append(
+                    f"You recorded {len(ledger)} pieces of evidence, fewer "
+                    f"than the {minimum} or more asked for. Read the rest of "
+                    "your sections and record the evidence they hold that "
+                    "already_recorded does not: each a different fact of the "
+                    "right kind. If the source holds no more, say so in "
+                    "finish."
+                )
             await self.model.run_agent(
                 role="read",
                 system=self.prompts.reader,
@@ -644,10 +669,7 @@ class EvidenceWriter:
                     [
                         prompt,
                         block("already_recorded", recorded),
-                        f"Evidence of kind {missing} is still missing. Record "
-                        "it now if the source has it (for a figure: the one "
-                        "that best shows the architecture, a flow or a result, "
-                        "described from the text before it), then call finish.",
+                        " ".join([*asks, "Then call finish."]),
                     ]
                 ),
                 tools=[read_section, search_source, record_evidence, finish],

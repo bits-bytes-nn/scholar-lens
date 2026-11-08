@@ -235,6 +235,7 @@ class EvidenceSurveyEngine(PostEngine[EvidenceOutline, OutlineSection, EvidenceS
                 total_tokens=self.settings.read_tokens_per_paper,
             ),
             required=required,
+            minimum=low,
         )
 
     # ---- the survey ---------------------------------------------------------------

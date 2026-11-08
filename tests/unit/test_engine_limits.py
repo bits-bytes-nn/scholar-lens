@@ -160,3 +160,104 @@ def test_every_count_range_is_ordered(field: str) -> None:
         low, high = getattr(spec.limits, field)
         assert 0 < low <= high
     assert field in {f.name for f in dataclasses.fields(Limits)}
+
+
+_FACTS = (
+    "Serve batches requests",
+    "Each replica batches requests",
+    "Requests are batched per replica",
+    "Batching happens on each replica",
+    "A replica groups requests",
+    "Replicas collect requests into batches",
+)
+
+
+class _StopsEarly:
+    """Records ``first`` distinct facts on its first run and ``then`` more
+    on each later run, then ends its turn without calling ``finish``."""
+
+    def __init__(self, first: int, then: int = 1) -> None:
+        self.first = first
+        self.then = then
+        self.prompts: list[str] = []
+        self.turns: list[int] = []
+        self.done = 0
+
+    async def run_agent(
+        self, *, prompt: str, tools: Any, limits: AgentLimits, **_: Any
+    ) -> Any:
+        named = {t.__name__: t for t in tools}
+        self.prompts.append(prompt)
+        self.turns.append(limits.turns)
+        count = self.first if len(self.prompts) == 1 else self.then
+        for _ in range(count):
+            result = named["record_evidence"](
+                "finding",
+                _FACTS[self.done],
+                "Serve batches requests on each replica.",
+                "S1",
+            )
+            assert result.startswith("recorded"), result
+            self.done += 1
+        return AgentOutcome(text="", stop_reason="end_turn")
+
+
+@pytest.mark.parametrize("minimum", [0, 1, 3, 5])
+@pytest.mark.parametrize("first", [0, 2, 4])
+def test_a_reader_short_of_its_count_is_continued_once(
+    minimum: int, first: int
+) -> None:
+    limits = Limits(follow_up_turns=4)
+    agent = _StopsEarly(first)
+    writer = EvidenceWriter(agent, SURVEY_PROMPTS, max_fix_rounds=1, limits=limits)  # type: ignore[arg-type]
+    items = asyncio.run(
+        writer.read_document(
+            _document(),
+            prompt="read",
+            limits=AgentLimits(turns=20),
+            minimum=minimum,
+        )
+    )
+    short = first < minimum
+    # One follow-up, however short the reader still is after it.
+    assert agent.turns == ([20, limits.follow_up_turns] if short else [20])
+    assert len(items) == first + (agent.then if short else 0)
+    if short:
+        follow_up = agent.prompts[1]
+        assert f"You recorded {first} pieces of evidence" in follow_up
+        assert f"fewer than the {minimum}" in follow_up
+        # What it already has is shown, so the rest is new evidence.
+        assert follow_up.count("- (finding)") == first
+
+
+def test_a_short_reader_missing_a_kind_gets_one_follow_up_asking_both() -> None:
+    agent = _StopsEarly(1)
+    writer = EvidenceWriter(agent, SURVEY_PROMPTS, max_fix_rounds=1)  # type: ignore[arg-type]
+    asyncio.run(
+        writer.read_document(
+            _document(),
+            prompt="read",
+            limits=AgentLimits(turns=20),
+            required=("method",),
+            minimum=3,
+        )
+    )
+    assert len(agent.prompts) == 2
+    assert "['method'] is still missing" in agent.prompts[1]
+    assert "fewer than the 3" in agent.prompts[1]
+
+
+def test_the_coverage_reading_rule_keeps_the_full_reading() -> None:
+    """Key targets are a must-include within a full reading: the rule never
+    tells a reader to record the targets first and the rest after, and
+    every reader prompt that carries it still asks for its count."""
+    from scholar_lens.application.guide_engine import GUIDE_PROMPTS
+    from scholar_lens.application.paper_engine import PAPER_PROMPTS
+    from scholar_lens.domain.prompts.rules import COVERAGE_READING
+
+    rule = " ".join(COVERAGE_READING.split())
+    assert "never a substitute" in rule and "read all of your sections" in rule
+    assert "count asked for still stands" in rule
+    assert "before anything else" not in rule.lower()
+    for prompts in (GUIDE_PROMPTS, PAPER_PROMPTS, SURVEY_PROMPTS):
+        assert COVERAGE_READING in prompts.reader

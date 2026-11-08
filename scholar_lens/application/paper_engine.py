@@ -242,6 +242,7 @@ class EvidencePaperEngine(PostEngine[PaperOutline, PaperSection, EvidencePaper])
                         turns=self.settings.read_turns,
                         total_tokens=self.settings.read_tokens,
                     ),
+                    minimum=low,
                 )
 
             return job

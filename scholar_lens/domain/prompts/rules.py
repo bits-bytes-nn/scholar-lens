@@ -334,10 +334,12 @@ number or condition; repetition is cut from prose only.
 
 COVERAGE_READING: str = """
 `key_targets` lists what the post must cover, each with the source it comes
-from. Before anything else, record the evidence that states each target
-your source states (the statement's own facts, numbers and settings, as a
-record of the right kind); then record the rest. A target your source does
-not state is skipped, never forced.
+from. It is a must-include within your full reading, never a substitute
+for it: read all of your sections and record the evidence they hold as the
+rest of this prompt asks (the count asked for still stands), and make sure
+that evidence includes each target your source states (the statement's own
+facts, numbers and settings, as a record of the right kind). A target your
+source does not state is skipped, never forced.
 """
 
 

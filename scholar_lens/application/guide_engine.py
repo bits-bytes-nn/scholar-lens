@@ -285,6 +285,7 @@ class EvidenceGuideEngine(PostEngine[GuideOutline, GuideSection, EvidenceGuide])
                     # A docs page's diagrams are its most useful visuals and
                     # the reader tends to skip them: ask for one.
                     required=("figure",) if primary and document.figures else (),
+                    minimum=(main if primary else minor)[0],
                 )
 
             return job
