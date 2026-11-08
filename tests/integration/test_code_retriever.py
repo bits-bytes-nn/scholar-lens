@@ -238,3 +238,130 @@ class TestOwnPackageIsIndexed:
         repo = tmp_path / "anything-0123abcd"
         self._write(repo / "src" / "peft" / "tuners" / "lora.py")
         assert any(p.name == "lora.py" for p in python_files(repo))
+
+
+# ---- the legacy embeddings and in-memory code index ------------------------------
+
+
+class _EmbeddingClient:
+    """A Bedrock runtime client double: a text's embedding is its SHA-256
+    as 32 numbers (the same text, the same vector); the first ``throttle``
+    calls raise a throttling ``ClientError``. Records every input."""
+
+    def __init__(self, throttle: int = 0) -> None:
+        self.throttle = throttle
+        self.inputs: list[str] = []
+        self.lock = __import__("threading").Lock()
+
+    def invoke_model(self, *, body: str, **_: object) -> dict[str, object]:
+        import hashlib
+        import io
+        import json
+
+        from botocore.exceptions import ClientError
+
+        with self.lock:
+            if self.throttle > 0:
+                self.throttle -= 1
+                raise ClientError(
+                    {"Error": {"Code": "ThrottlingException", "Message": "slow"}},
+                    "InvokeModel",
+                )
+            text = json.loads(body)["inputText"]
+            self.inputs.append(text)
+        vector = [b / 255 + 0.01 for b in hashlib.sha256(text.encode()).digest()]
+        return {"body": io.BytesIO(json.dumps({"embedding": vector}).encode())}
+
+
+class _WrapperFactory:
+    def __init__(self, client: _EmbeddingClient, max_sequence_length: int) -> None:
+        self.client = client
+        self.max_sequence_length = max_sequence_length
+
+    def get_model(self, model_id: object, **_: object) -> object:
+        from scholar_lens.legacy.embeddings import BedrockEmbeddingsWrapper
+
+        return BedrockEmbeddingsWrapper(
+            client=self.client,
+            model_id="amazon.titan-embed-text-v2:0",
+            max_sequence_length=self.max_sequence_length,
+        )
+
+    def get_max_sequence_length(self, model_id: object) -> int:
+        return self.max_sequence_length
+
+
+def _index(tmp_path, client: _EmbeddingClient, max_sequence_length: int = 8192):  # type: ignore[no-untyped-def]
+    from scholar_lens.legacy.code_index import CodeIndex
+
+    model = LanguageModelId.CLAUDE_V4_5_HAIKU
+    return CodeIndex(
+        model,
+        model,
+        EmbeddingModelId.TITAN_EMBED_V2,
+        paper_dir=tmp_path / "paper",
+        boto_session=boto3.Session(region_name="us-east-1"),
+        llm_factory=FakeLLMFactory(),  # type: ignore[arg-type]
+        embedding_factory=_WrapperFactory(client, max_sequence_length),  # type: ignore[arg-type]
+    )
+
+
+def _documents(n: int) -> list:  # type: ignore[type-arg]
+    from langchain_core.documents import Document
+
+    return [
+        Document(
+            page_content=f"def f{i}():\n    return {i}\n",
+            metadata={"source": f"m{i}.py"},
+        )
+        for i in range(n)
+    ]
+
+
+class TestCodeIndex:
+    async def test_a_throttled_embedding_call_is_retried(
+        self, tmp_path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:  # type: ignore[no-untyped-def]
+        from scholar_lens.legacy.code_index import CodeIndex
+
+        waits: list[float] = []
+
+        async def no_wait(seconds: float) -> None:
+            waits.append(seconds)
+
+        monkeypatch.setattr(
+            CodeIndex._afrom_documents_with_retry.retry,  # type: ignore[attr-defined]
+            "sleep",
+            no_wait,
+        )
+        client = _EmbeddingClient(throttle=1)
+        index = _index(tmp_path, client)
+        await index._create_index(_documents(3))
+        assert len(waits) == 1
+        (found,) = await index.search_similar_code("def f1():\n    return 1\n", k=1)
+        assert found["source"] == "m1.py"
+
+    async def test_more_chunks_than_a_batch_are_all_indexed_and_findable(
+        self, tmp_path
+    ) -> None:  # type: ignore[no-untyped-def]
+        from scholar_lens.legacy.code_index import EMBEDDING_BATCH_SIZE
+
+        count = 2 * EMBEDDING_BATCH_SIZE + 37
+        client = _EmbeddingClient()
+        index = _index(tmp_path, client)
+        documents = _documents(count)
+        await index._create_index(documents)
+        assert len(client.inputs) == count
+        for i in (0, EMBEDDING_BATCH_SIZE, count - 1):
+            (found,) = await index.search_similar_code(documents[i].page_content, k=1)
+            assert found["source"] == f"m{i}.py"
+
+    async def test_a_long_query_is_cut_to_the_models_sequence_length(
+        self, tmp_path
+    ) -> None:  # type: ignore[no-untyped-def]
+        client = _EmbeddingClient()
+        index = _index(tmp_path, client, max_sequence_length=50)
+        await index._create_index(_documents(2))
+        client.inputs.clear()
+        await index.search_similar_code("x" * 500, k=1)
+        assert client.inputs == ["x" * 50]
