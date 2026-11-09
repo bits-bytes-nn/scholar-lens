@@ -146,14 +146,19 @@ class TestPaperSummarizer:
             {
                 "subtitle": "부제",
                 "description": f"`LoRA`는 {DESCRIPTION}",
-                "summary": "> **요약:** 파라미터를 31337배 줄입니다.\n\n## 연구 배경",
+                "summary": (
+                    "> **요약:** 파라미터를 31337배 줄입니다.\n\n## 연구 배경\n\n"
+                    "본문은 정확도를 42.4242% 높였다고 씁니다."
+                ),
                 "urls": "",
             }
         )
         result = await summarizer.summarize(sample_paper)
         assert result["description"] == ""  # the blog derives one instead
         notes = " ".join(summarizer.notes)
-        assert "TL;DR numbers the paper never states" in notes and "31337" in notes
+        # The TL;DR's and the body's numbers alike.
+        assert "numbers the paper never states" in notes
+        assert "31337" in notes and "42.4242" in notes
         assert "description is plain text" in notes
 
     async def test_description_no_longer_than_the_page_title_is_dropped(
@@ -492,6 +497,18 @@ class TestSummaryTargetedFix:
         summarizer = self._summarizer(self.BROKEN, fixed)
         result = await summarizer.summarize(sample_paper)
         assert result["summary"] == self.BROKEN.strip()
+
+    async def test_writing_slips_alone_get_the_same_one_fix(
+        self, sample_paper: Paper
+    ) -> None:
+        # The summary's ## headings are fixed; a subsection's may be fixed.
+        slipped = "> 리드입니다.\n\n## 질문\n\n### 보상 모델을 없애다\n\n본문입니다.\n"
+        fixed = "> 리드입니다.\n\n## 질문\n\n### 보상 모델 없는 학습\n\n본문입니다.\n"
+        summarizer = self._summarizer(slipped, fixed)
+        result = await summarizer.summarize(sample_paper)
+        assert result["summary"] == fixed.strip()
+        sent = summarizer.fix_chain.ainvoke.await_args.args[0]
+        assert "sentence heading" in sent["request"]
 
     async def test_a_clean_summary_makes_no_fix_call(self, sample_paper: Paper) -> None:
         summarizer = self._summarizer(self.FIXED, self.BROKEN)

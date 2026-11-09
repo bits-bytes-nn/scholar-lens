@@ -11,6 +11,7 @@ from pydantic import (
     EmailStr,
     Field,
     ValidationError,
+    field_validator,
     model_validator,
 )
 
@@ -422,7 +423,14 @@ class Config(_Section):
     summary: Summary = Field(default_factory=Summary)
     tech_guide: TechGuide = Field(default_factory=TechGuide)
     survey: Survey = Field(default_factory=Survey)
-    output_language: str = Field(default="Korean")
+    output_language: str = Field(default="Korean", min_length=1)
+
+    @field_validator("output_language")
+    @classmethod
+    def _language_name(cls, value: str) -> str:
+        # One spelling for every comparison and lookup ("korean" -> "Korean"):
+        # fixed titles, alt texts and length targets are keyed by it.
+        return " ".join(word.capitalize() for word in value.split())
 
     @classmethod
     def from_yaml(cls, file_path: str | Path) -> "Config":

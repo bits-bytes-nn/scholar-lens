@@ -25,6 +25,7 @@ from scholar_lens.domain.post_spec import (
     SectionBase,
     first_owner,
     ownership_problems,
+    sentence_title_problems,
     structure_problems,
 )
 from scholar_lens.domain.post_spec import other_sdk as other_sdk  # re-exported
@@ -137,6 +138,7 @@ def guide_outline_problems(
         max_sections=max_sections,
     )
     problems += ownership_problems(GUIDE_SPEC, outline.sections, ledger)
+    problems += sentence_title_problems(s.title for s in outline.sections)
     seen = {eid for s in outline.sections for eid in s.evidence}
     used_sources = {e.paper_id for eid in seen if (e := ledger.get(eid))}
     for sid, document in documents.items():

@@ -270,3 +270,8 @@ def test_default_demoted_domains_are_copies() -> None:
     first.demoted_domains["forum"].append("example.org")
     assert "example.org" not in second.demoted_domains["forum"]
     assert set(second.demoted_domains) == {"forum", "social", "aggregator"}
+
+
+def test_the_output_language_has_one_spelling() -> None:
+    assert Config(output_language=" korean ").output_language == "Korean"
+    assert Config(output_language="ENGLISH").output_language == "English"

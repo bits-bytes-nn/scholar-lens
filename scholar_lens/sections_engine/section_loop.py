@@ -7,7 +7,11 @@ from __future__ import annotations
 import re
 from collections import Counter
 
-from scholar_lens.domain.markdown.lint import TABLE_DELIMITER, TABLE_ROW
+from scholar_lens.domain.markdown.lint import (
+    TABLE_DELIMITER,
+    TABLE_ROW,
+    sentence_headings,
+)
 from scholar_lens.domain.markdown.math import (
     DISPLAY_MATH,
     IMAGE,
@@ -81,11 +85,18 @@ def lost_structure(draft: str, edited: str) -> str:
     if _fence_count(edited) < _fence_count(draft):
         return "loses a code block"
     before, after = without_fences(draft), without_fences(edited)
+    # A heading written as a sentence may be reworded (a writing-rule fix),
+    # as long as no heading goes.
+    same_count = len(_HEADING_LINE.findall(after)) >= len(_HEADING_LINE.findall(before))
+    renamable = set(sentence_headings(draft)) if same_count else set()
     for kind, items in (
         ("heading", lambda text: [h.strip() for h in _HEADING_LINE.findall(text)]),
         ("image", image_sources),
     ):
-        if lost := list((Counter(items(before)) - Counter(items(after))).elements()):
+        lost = list((Counter(items(before)) - Counter(items(after))).elements())
+        if kind == "heading":
+            lost = [h for h in lost if h.lstrip("#").strip() not in renamable]
+        if lost:
             return f"loses {kind} {lost[0]!r}"
     if lost_keys := sorted(_citation_keys(before) - _citation_keys(after)):
         return f"loses citation [@{lost_keys[0]}]"

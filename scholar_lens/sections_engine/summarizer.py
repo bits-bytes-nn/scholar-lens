@@ -22,6 +22,7 @@ from scholar_lens.adapters.bedrock.usage import TokenBudgetGuard
 from scholar_lens.adapters.retry import RetryableBase, is_access_error
 from scholar_lens.domain.constants import LanguageModelId
 from scholar_lens.domain.markdown.links import unsourced_links
+from scholar_lens.domain.markdown.lint import writing_issues
 from scholar_lens.domain.markdown.math import DISPLAY_MATH, HANGUL, image_sources
 from scholar_lens.domain.paper.models import Paper
 from scholar_lens.domain.post_format import (
@@ -51,6 +52,13 @@ from scholar_lens.sections_engine.timing import measure_execution_time
 logger = logging.getLogger(__name__)
 
 DEFAULT_LANGUAGE: str = "Korean"
+
+
+def _issues(text: str) -> list[str]:
+    """What the one targeted fix is asked to fix: the publish blockers, then
+    the writing-rule slips it can fix from the text alone."""
+    blockers = publish_blockers(text)
+    return [*blockers, *(s for s in writing_issues(text) if s not in blockers)]
 
 
 def _blockers(text: str) -> set[str]:
@@ -163,8 +171,9 @@ class PaperSummarizer(RetryableBase, TokenBudgetGuard):
         ``description`` the search snippet (empty lets the blog derive one);
         ``urls`` is a comma-separated Markdown link list taken from the paper.
         The body gets at most one shortening and one targeted fix of its
-        publish blockers; numbers in the TL;DR the paper never states, and a
-        description that breaks its rules, become review notes.
+        publish blockers (and its writing-rule slips with them); numbers the
+        paper never states, and a description that breaks its rules, become
+        review notes.
         """
         self._enforce_token_budget()
         result = await self._summarize(paper.content.text, paper.codebase_summary)
@@ -181,10 +190,10 @@ class PaperSummarizer(RetryableBase, TokenBudgetGuard):
                 "derived from the first sentence: check it."
             )
         tldr = summary_lead(summary)
-        if missing := unsourced_numbers(tldr, paper.content.text):
+        if missing := unsourced_numbers(summary, paper.content.text):
             self.notes.append(
-                "Summary TL;DR numbers the paper never states (check each against "
-                "the paper; 1B is 10억, 1M is 100만): " + ", ".join(missing)
+                "Summary numbers the paper never states (check each against the "
+                "paper; 1B is 10억, 1M is 100만): " + ", ".join(missing)
             )
         description = result.get("description", "").strip()
         if problems := description_problems(
@@ -259,15 +268,21 @@ class PaperSummarizer(RetryableBase, TokenBudgetGuard):
 
     async def _fix_blockers(self, summary: str) -> str:
         """ONE targeted fix call (section_loop's targeted-fix order) when the
-        summary has publish blockers. The fixed text is kept only when it has
-        fewer blockers, adds no new kind and keeps the summary's structure
+        summary has publish blockers or writing-rule slips. The fixed text is
+        kept only when it has fewer of them, no more blockers, no new blocker
+        kind and keeps the summary's structure
         (:func:`section_loop.lost_structure`); any failure keeps the
         original, whose blockers the publisher then reports."""
         blockers = publish_blockers(summary)
-        if not blockers:
+        issues = _issues(summary)
+        if not issues:
             return summary
-        logger.info("Summary has %d publish blocker(s); fixing once.", len(blockers))
-        request = TARGETED_FIX + "\n".join(f"- {b}" for b in blockers)
+        logger.info(
+            "Summary has %d publish blocker(s) and %d writing slip(s); fixing once.",
+            len(blockers),
+            len(issues) - len(blockers),
+        )
+        request = TARGETED_FIX + "\n".join(f"- {b}" for b in issues)
         try:
             self._enforce_token_budget()
             result = await self._fix(request, summary)
@@ -281,8 +296,10 @@ class PaperSummarizer(RetryableBase, TokenBudgetGuard):
             return summary
         if not fixed or fixed == summary:
             reason = "no change"
-        elif len(publish_blockers(fixed)) >= len(blockers):
-            reason = "blockers did not decrease"
+        elif len(publish_blockers(fixed)) > len(blockers):
+            reason = "blockers increased"
+        elif len(_issues(fixed)) >= len(issues):
+            reason = "problems did not decrease"
         elif not _blockers(fixed) <= _blockers(summary):
             reason = "adds a new publish blocker"
         else:

@@ -1078,6 +1078,13 @@ _SENTENCE_HEADING = re.compile(
 )
 
 
+def sentence_headings(markdown: str) -> list[str]:
+    """The headings (their text) written as a Korean sentence, outside code
+    and math."""
+    prose = _masked(markdown, ("fence", "icode", *_MATH_KINDS))
+    return [m.group(0).lstrip("#").strip() for m in _SENTENCE_HEADING.finditer(prose)]
+
+
 def writing_issues(markdown: str) -> list[str]:
     """Deterministic writing-rule violations in a generated post, one line
     each with the offending text, for an editor or reviser to fix.

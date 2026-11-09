@@ -23,6 +23,7 @@ from scholar_lens.domain.post_spec import (
     SectionBase,
     first_owner,
     ownership_problems,
+    sentence_title_problems,
     structure_problems,
 )
 from scholar_lens.domain.specs.paper import paper_spec
@@ -157,6 +158,7 @@ def paper_outline_problems(
     if any(e.kind == "number" for e in ledger) and "experiments" not in kinds:
         problems.append("the paper reports results: add an experiments section")
     problems += ownership_problems(spec, outline.sections, ledger)
+    problems += sentence_title_problems(s.title for s in outline.sections)
     return problems
 
 

@@ -557,20 +557,20 @@ def test_mechanical_outline_problems_are_repaired_in_code() -> None:
         sections=[
             {
                 "kind": "introduction",
-                "title": "도입입니다",
+                "title": "도입",
                 "thesis": "t",
                 "evidence": ["E1", "E2"],
             },
             {
                 "kind": "lineage",
-                "title": "DPO입니다",
+                "title": "DPO 계보",
                 "thesis": "t",
                 "lineage": "offline",
                 "papers": ["2305.18290"],
                 "evidence": ["E2"],
             },
-            {"kind": "comparison", "title": "비교입니다", "thesis": "t"},
-            {"kind": "insights", "title": "통찰입니다", "thesis": "t"},
+            {"kind": "comparison", "title": "비교", "thesis": "t"},
+            {"kind": "insights", "title": "통찰", "thesis": "t"},
         ],
     )
     fixed, notes = repair_outline(broken, _plan(), _ledger())
@@ -1410,3 +1410,11 @@ def test_a_run_of_sentences_citing_one_paper_cites_it_once() -> None:
     )
     # Table cells keep their own citations.
     assert table.count("[@a]") == 2
+
+
+def test_an_outline_title_written_as_a_sentence_is_an_outline_problem() -> None:
+    from scholar_lens.domain.post_spec import sentence_title_problems
+
+    assert sentence_title_problems(["보상 모델 없는 학습", "보상 모델을 없앤다"]) == [
+        "section title '보상 모델을 없앤다' is a sentence; write a noun phrase"
+    ]

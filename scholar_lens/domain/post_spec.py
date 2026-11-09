@@ -13,7 +13,7 @@ policy.
 from __future__ import annotations
 
 import re
-from collections.abc import Collection, Mapping, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol, Self
 
@@ -21,6 +21,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from scholar_lens.domain.evidence import EvidenceLedger, SourceDocument
 from scholar_lens.domain.lengths import DEPTH_CHARS, scaled_targets
+from scholar_lens.domain.markdown.lint import sentence_headings
 
 Depth = Literal["deep", "standard", "brief"]
 
@@ -477,6 +478,17 @@ def _count_ok(count: str, n: int) -> bool:
     if count == "at_most_one":
         return n <= 1
     return True
+
+
+def sentence_title_problems(titles: Iterable[str]) -> list[str]:
+    """Outline section titles written as a sentence (a section's heading is
+    its outline title, so the section writer cannot fix it): each a
+    problem for the outline writer."""
+    return [
+        f"section title '{title}' is a sentence; write a noun phrase"
+        for title in titles
+        if sentence_headings(f"## {title}")
+    ]
 
 
 def structure_problems(
