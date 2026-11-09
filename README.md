@@ -128,7 +128,7 @@ Every command prints one JSON object on stdout (a run's `JobResult`, the `job_id
 
 ## Agents (OpenClaw, Claude Code, Codex)
 
-The same CLI is the agent interface. The skill `~/.openclaw/workspace/skills/scholar-lens/SKILL.md` tells an agent how to call it, when to use `--remote`, and that `--no-pr` is the default unless the user asked to publish. A CLI plus skill was chosen over an MCP server because runs take minutes to an hour: `--remote` + `status` already gives an asynchronous contract, and the skill directory is shared with Claude Code and Codex.
+The same CLI is the agent interface. The skill `~/Projects/agent-config/skills/scholar-lens/SKILL.md` tells an agent how to call it, when to use `--remote`, and that `--no-pr` is the default unless the user asked to publish. A CLI plus skill was chosen over an MCP server because runs take minutes to an hour: `--remote` + `status` already gives an asynchronous contract, and the skill directory is shared with Claude Code and Codex.
 
 ## Blog conventions gate
 
@@ -168,6 +168,7 @@ actionlint                                       # lint the GitHub workflows
 
 ## Changelog
 
+- 2026-11-10: stage checkpoints are kept under a version of the check code (a hash of the domain package and the engine modules), so a deploy that changes checks, repairs or edit rules never resumes from a stage the old code made; the reading cache is unaffected. The first run of each input after such a deploy recomputes its stages once.
 - 2026-11-09: the evidence engines' outline checkpoints include the version of the outline checks asked again for (key targets, sentence titles, source sections a review leaves out): runs resumed after this upgrade recompute their outline and later stages once. A survey comparison table shows only result cells that state a number in a noun phrase; other numbers stay in their section.
 - 2026-11-09: `cancel <job-id>` stops a remote job, `status` reports its CloudWatch `log_group` and `log_stream` once it started, and the guide code check flags a call that does not match the post's own definition of a function or class (missing required arguments, unknown keywords).
 - 2026-11-09: `max_cost_usd` stops reviews and summaries on either engine; a failed run's result lists `blocking` problems on their own, `publish --resolved` clears them after a fix, and a Batch result no longer points to container paths. Expired or missing AWS credentials and denied access stop figure and code analysis instead of leaving a degraded post; a failed code index keeps the codebase summary. Invalid arguments and config files are reported in one line naming each bad key (and the file).

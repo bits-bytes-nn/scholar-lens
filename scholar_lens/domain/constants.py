@@ -129,3 +129,8 @@ RUN_SECRETS: dict[SSMParams, EnvVars] = {
     SSMParams.OPENALEX_API_KEY: EnvVars.OPENALEX_API_KEY,
     SSMParams.SEMANTIC_SCHOLAR_API_KEY: EnvVars.SEMANTIC_SCHOLAR_API_KEY,
 }
+
+
+# The key area of the post engine's stage checkpoints in its store
+# (docs/engine.md, 4.9).
+CHECKPOINT_AREA = "checkpoints"

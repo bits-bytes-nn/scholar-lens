@@ -28,6 +28,7 @@ from scholar_lens.adapters.aws.session import AwsSession, aws_session
 from scholar_lens.adapters.aws.storage import S3Handler
 from scholar_lens.adapters.bedrock.role_models import BedrockEvidenceModels
 from scholar_lens.adapters.bedrock.survey_calls import SurveyPlanner, SurveyWriter
+from scholar_lens.adapters.checkpoint_version import VersionedCheckpoints
 from scholar_lens.adapters.documents import paper_reader
 from scholar_lens.adapters.files import LocalOrS3Files
 from scholar_lens.adapters.github.conventions import fetch_blog_posts, load_conventions
@@ -231,9 +232,14 @@ def evidence_store(
     fresh: bool = False,
 ) -> TextStore:
     """The run's reading cache and checkpoint store
-    (:class:`EvidenceTextStore`); a ``fresh`` run writes it without reading
-    it."""
-    store = EvidenceTextStore(local_dir, s3_handler, s3_prefix, area)
+    (:class:`EvidenceTextStore`, checkpoints under the check code's version,
+    :class:`VersionedCheckpoints`); a ``fresh`` run writes it without
+    reading it."""
+    # Checkpoints sit under the check code's version: a code change never
+    # resumes from a stage the old code made.
+    store: TextStore = VersionedCheckpoints(
+        EvidenceTextStore(local_dir, s3_handler, s3_prefix, area)
+    )
     return FreshStore(store) if fresh else store
 
 

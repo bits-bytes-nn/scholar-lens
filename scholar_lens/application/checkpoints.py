@@ -29,6 +29,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from scholar_lens.application.ports import CheckpointStore, TextStore
+from scholar_lens.domain.constants import CHECKPOINT_AREA
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +37,6 @@ logger = logging.getLogger(__name__)
 # meaning (a prompt change needs no bump: the prompts are hashed).
 CHECKPOINT_VERSION = 2
 # The store's area the checkpoints live in.
-CHECKPOINT_AREA = "checkpoints"
 
 
 def _jsonable(value: object) -> Any:

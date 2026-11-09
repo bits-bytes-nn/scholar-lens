@@ -568,3 +568,35 @@ def test_an_edited_survey_plan_recomputes_the_reading_and_every_stage(
     assert _recomputed(before, after) == set(after) == {"outline", "section", "review"}
     assert after["section"] == 2 * before["section"]
     assert "read" in model.calls
+
+
+def test_checkpoints_sit_under_the_check_codes_version() -> None:
+    """A stage the old checks made is never resumed by new check code; the
+    reading cache is shared across versions."""
+    from scholar_lens.adapters.checkpoint_version import (
+        VersionedCheckpoints,
+        check_code_version,
+    )
+
+    class Memory:
+        def __init__(self) -> None:
+            self.data: dict[str, str] = {}
+
+        def get(self, key: str) -> str | None:
+            return self.data.get(key)
+
+        def put(self, key: str, text: str) -> None:
+            self.data[key] = text
+
+    memory = Memory()
+    old, new = VersionedCheckpoints(memory, "v1"), VersionedCheckpoints(memory, "v2")
+    old.put("checkpoints/review/outline/abc.json", "saved")
+    old.put("evidence/p/x.json", "read")
+    assert set(memory.data) == {
+        "checkpoints/v1/review/outline/abc.json",
+        "evidence/p/x.json",
+    }
+    assert new.get("checkpoints/review/outline/abc.json") is None
+    assert new.get("evidence/p/x.json") == "read"
+    version = check_code_version()
+    assert len(version) == 16 and version == check_code_version()
