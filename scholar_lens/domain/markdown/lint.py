@@ -1180,7 +1180,9 @@ def ends_in_plain_declarative(text: str) -> bool:
     is a noun phrase or an "입니다" sentence, KOREAN_STYLE)."""
     # A trailing parenthesized note ("(HH)") and closing marks are not the
     # ending.
-    bare = re.sub(r"(?:\s*\([^()]*\))+\s*$", "", text.strip()).rstrip(".!?")
+    bare = text.strip().rstrip(".!?\"'”’」』")
+    bare = re.sub(r"(?:\s*(?:\([^()]*\)|\[[^\[\]]*\]))+\s*$", "", bare)
+    bare = bare.rstrip(".!?\"'”’」』")
     words = bare.split()
     if not words or words[-1].endswith("니다"):
         return False

@@ -1514,3 +1514,67 @@ def test_a_number_the_table_cannot_show_stays_in_its_section() -> None:
     # The table shows the number it can; the other stays in its section.
     assert fixed.table[0].results == ["E2"]
     assert unusable.id in fixed.sections[1].evidence
+    assert not outline_problems(fixed, _plan(), ledger, title_max_length=70)
+
+
+def _only_unusable_cells() -> EvidenceLedger:
+    """A core paper whose number and limitation cells the table cannot show."""
+    ledger = EvidenceLedger()
+    doc = _doc()
+    ledger.add(
+        doc,
+        kind="method",
+        claim="보상 모델 없이 최적화",
+        quote="optimizes preferences without a reward model",
+        anchor="S1",
+    )
+    ledger.add(
+        doc,
+        kind="number",
+        claim="승률 61%",
+        quote="DPO reaches a 61% win rate against PPO",
+        anchor="S3",
+        scope="TL;DR, GPT-4 judge",
+        cell="승률을 61%로 끌어올린다",
+    )
+    ledger.add(
+        doc,
+        kind="limitation",
+        claim="beta가 작으면 불안정",
+        quote="Training is less stable when beta is small.",
+        anchor="S3",
+        cell="작은 beta에서 학습이 불안정하다",
+    )
+    return ledger
+
+
+@pytest.mark.parametrize("in_section", [True, False])
+def test_a_paper_with_only_unusable_cells_still_gives_a_sound_outline(
+    in_section: bool,
+) -> None:
+    from scholar_lens.domain.survey.evidence_post import repair_outline
+
+    ledger = _only_unusable_cells()
+    lineage_evidence = ["E1", "E2"] if in_section else ["E1"]
+    outline = _outline(
+        table=[{"paper": "2305.18290", "results": ["E2"], "limitation": "E3"}],
+        sections=[
+            {"kind": "introduction", "title": "도입", "thesis": "t", "evidence": []},
+            {
+                "kind": "lineage",
+                "title": "DPO 계보",
+                "thesis": "t",
+                "lineage": "offline",
+                "papers": ["2305.18290"],
+                "evidence": lineage_evidence,
+            },
+            {"kind": "comparison", "title": "비교", "thesis": "t"},
+            {"kind": "insights", "title": "통찰", "thesis": "t"},
+        ],
+    )
+    fixed, _ = repair_outline(outline, _plan(), ledger)
+    assert fixed.table[0].results == [] and fixed.table[0].limitation is None
+    # No number leaves the post: one the outline gave the table only goes
+    # back to its paper's section.
+    assert {"E2", "E3"} <= set(fixed.sections[1].evidence)
+    assert not outline_problems(fixed, _plan(), ledger, title_max_length=70)

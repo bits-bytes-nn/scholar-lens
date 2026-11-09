@@ -175,8 +175,14 @@ def outline_problems(
         if missing := sorted(set(keys) - set(mapping)):
             problems.append(f"{name} misses {missing}")
     core = {p.id for p in plan.papers if p.role == "core"}
-    with_numbers = {e.paper_id for e in ledger if e.kind == "number"}
-    with_limits = {e.paper_id for e in ledger if e.kind == "limitation"}
+    # The evidence the table can show (the repair's rule: other numbers and
+    # limitations stay in their sections).
+    with_numbers = {
+        e.paper_id for e in ledger if e.kind == "number" and result_cell(e.cell)
+    }
+    with_limits = {
+        e.paper_id for e in ledger if e.kind == "limitation" and limitation_cell(e.cell)
+    }
     for row in outline.table:
         if row.paper in with_numbers and not row.results:
             problems.append(
@@ -397,6 +403,7 @@ def repair_outline(
     rows = {
         r.paper: r.model_copy(deep=True) for r in outline.table if r.paper in papers
     }
+    used = {eid for s in sections for eid in s.evidence}
     for pid, paper in papers.items():
         # Only evidence whose cell the table can show goes there (the rest
         # stays in its section, so no number leaves the post).
@@ -415,9 +422,23 @@ def repair_outline(
             notes.append(f"added {pid} to the table")
         if pid in rows:
             row = rows[pid]
+            # What the outline gave the table that the table cannot show
+            # goes to the paper's lineage section instead of nowhere.
+            dropped = [
+                e
+                for e in [*row.results, *([row.limitation] if row.limitation else [])]
+                if e not in numbers and e not in limits and e not in used
+            ]
             row.results = [e for e in row.results if e in numbers][:2] or numbers[:2]
             if row.limitation not in limits:
                 row.limitation = limits[0] if limits else None
+            if dropped and (target := home.get(pid)) is not None:
+                sections[target].evidence += [
+                    e
+                    for e in dropped
+                    if (item := ledger.get(e)) and item.paper_id == pid
+                ]
+                notes.append(f"gave {dropped} back to {pid}'s lineage section")
     order = [p.id for p in plan.papers]
     table = sorted(rows.values(), key=lambda r: order.index(r.paper))
     # The table owns its results: a number shown there is not restated in
