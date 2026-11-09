@@ -1602,7 +1602,7 @@ def _rows_outline(table: list[dict], lineage: list[str]) -> Any:
     )
 
 
-def test_a_merged_fact_is_not_brought_back_beside_its_copy() -> None:
+def test_a_merged_fact_is_shown_once_by_the_copy_the_table_can_show() -> None:
     from scholar_lens.domain.survey.evidence_post import repair_outline
 
     ledger = _only_unusable_cells()  # E2: an unshowable 61% cell
@@ -1615,15 +1615,42 @@ def test_a_merged_fact_is_not_brought_back_beside_its_copy() -> None:
         scope="TL;DR, GPT-4 judge",
         cell="승률 61%",
     )
-    # The outline merged the showable copy into E2 (same fact).
+    # The showable copy was merged into E2 (same fact); sections and the
+    # table hold E2.
     fixed, _ = repair_outline(
-        _rows_outline([{"paper": "2305.18290", "results": ["E2"]}], ["E1"]),
+        _rows_outline([{"paper": "2305.18290", "results": ["E2"]}], ["E1", "E2"]),
         _plan(),
         ledger,
-        merged={shown.id},
+        merged={shown.id: "E2"},
     )
-    shown_ids = set(fixed.table[0].results) | set(fixed.sections[1].evidence)
-    assert not ({"E2", shown.id} <= shown_ids)  # the fact once
+    assert fixed.table[0].results == [shown.id]  # the copy the table can show
+    assert "E2" not in fixed.sections[1].evidence  # the fact once
+    assert not outline_problems(fixed, _plan(), ledger, title_max_length=70)
+
+
+def test_a_core_paper_is_not_covered_by_the_table_alone() -> None:
+    ledger = _ledger()  # E1 method, E2 number, E3 limitation, E4 figure
+    outline = _rows_outline(
+        [{"paper": "2305.18290", "results": ["E2"], "limitation": "E3"}], []
+    )
+    assert any(
+        "needs evidence in its lineage section" in p
+        for p in outline_problems(outline, _plan(), ledger, title_max_length=70)
+    )
+
+
+def test_a_limitation_the_table_shows_leaves_the_section() -> None:
+    from scholar_lens.domain.survey.evidence_post import repair_outline
+
+    fixed, _ = repair_outline(
+        _rows_outline(
+            [{"paper": "2305.18290", "results": ["E2"], "limitation": "E3"}],
+            ["E1", "E3", "E4"],
+        ),
+        _plan(),
+        _ledger(),
+    )
+    assert "E3" not in fixed.sections[1].evidence and fixed.table[0].limitation == "E3"
 
 
 def test_a_row_listing_an_unshowable_id_twice_gives_it_back_once() -> None:

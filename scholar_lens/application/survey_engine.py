@@ -325,7 +325,7 @@ class EvidenceSurveyEngine(PostEngine[EvidenceOutline, OutlineSection, EvidenceS
         self,
         outline: EvidenceOutline,
         ledger: EvidenceLedger,
-        merged: Collection[str] = (),
+        merged: Mapping[str, str] | None = None,
     ) -> tuple[EvidenceOutline, list[str]]:
         return repair_outline(outline, self._plan, ledger, merged=merged)
 

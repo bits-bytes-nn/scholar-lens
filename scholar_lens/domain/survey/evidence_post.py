@@ -6,7 +6,7 @@ deterministic checks of a section draft whose sentences cite evidence as
 from __future__ import annotations
 
 import re
-from collections.abc import Collection, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -143,7 +143,7 @@ def outline_problems(
         problems.append(f"unknown lineages: {', '.join(sorted(map(str, stray)))}")
     problems += ownership_problems(SURVEY_SPEC, outline.sections, ledger)
     owner = {eid for s in outline.sections for eid in s.evidence}
-    used: dict[str, int] = dict.fromkeys(papers, 0)
+    in_sections: dict[str, set[str]] = {pid: set() for pid in papers}
     for s in outline.sections:
         if strangers := [p for p in s.papers if p not in papers]:
             problems.append(f"section {s.title!r} names unknown papers: {strangers}")
@@ -159,20 +159,32 @@ def outline_problems(
                 problems.append(
                     f"{eid} is about {item.paper_id}, which {s.title!r} does not cover"
                 )
-            if item.paper_id in used:
-                used[item.paper_id] += 1
-    # The table shows a paper's results too: they count toward its share.
+            if item.paper_id in in_sections:
+                in_sections[item.paper_id].add(eid)
+    # A paper's share counts its evidence in sections and its table row,
+    # each item once; a core paper's sections still need one item when it
+    # has evidence the table cannot hold (its method, figures, findings).
+    shares = {pid: set(ids) for pid, ids in in_sections.items()}
     for row in outline.table:
-        if row.paper in used:
-            used[row.paper] += len(
-                {*row.results, *([row.limitation] if row.limitation else [])}
-            )
-    for pid, count in used.items():
+        if row.paper in shares:
+            shares[row.paper] |= {
+                *row.results,
+                *([row.limitation] if row.limitation else []),
+            }
+    for pid, ids in shares.items():
         need = 2 if papers[pid].role == "core" else 1
-        if count < need and len(ledger.of_paper(pid)) >= need:
+        if len(ids) < need and len(ledger.of_paper(pid)) >= need:
             problems.append(
                 f"{pid} needs at least {need} pieces of evidence in sections "
                 "or its table row"
+            )
+        prose_only = any(
+            e.kind not in ("number", "limitation") for e in ledger.of_paper(pid)
+        )
+        if papers[pid].role == "core" and prose_only and not in_sections[pid]:
+            problems.append(
+                f"core paper {pid} needs evidence in its lineage section, not "
+                "only the table"
             )
     for name, mapping, keys in (
         ("short_names", outline.short_names, papers),
@@ -365,14 +377,16 @@ def repair_outline(
     plan: SurveyPlan,
     ledger: EvidenceLedger,
     *,
-    merged: Collection[str] = (),
+    merged: Mapping[str, str] | None = None,
 ) -> tuple[EvidenceOutline, list[str]]:
     """Fix what code can fix in an outline, deterministically: evidence given
     twice keeps its first section; evidence a lineage section does not cover
     goes to its paper's lineage section; a core paper's unassigned figures
     and equations go there too; missing table rows and cells are filled from
-    the paper's first number and limitation evidence. Returns the outline
-    and what was changed; what is left for the model is structure."""
+    the paper's first number and limitation evidence. ``merged``: evidence
+    merged as the same fact -> the item kept. Returns the outline and what
+    was changed; what is left for the model is structure."""
+    merged = merged or {}
     notes: list[str] = []
     papers = {p.id: p for p in plan.papers}
     home = {
@@ -414,60 +428,79 @@ def repair_outline(
     rows = {
         r.paper: r.model_copy(deep=True) for r in outline.table if r.paper in papers
     }
-    used = {eid for s in sections for eid in s.evidence}
+
+    def fact(eid: str) -> str:
+        # Evidence merged as the same fact counts as the item it was merged
+        # into (the one sections hold).
+        return merged.get(eid, eid)
+
+    def shown_copy(eid: str, kind: str, showable: Callable[[str], bool]) -> str | None:
+        """The copy of ``eid``'s fact the table can show: itself, else
+        another item merged with it, else None."""
+        group = [eid, *(e.id for e in ledger if fact(e.id) == fact(eid))]
+        for candidate in dict.fromkeys(group):
+            item = ledger.get(candidate)
+            if item is not None and item.kind == kind and showable(item.cell):
+                return candidate
+        return None
+
+    def first_copies(pid: str, kind: str, showable: Callable[[str], bool]) -> list[str]:
+        """The paper's evidence of ``kind`` the table can show, one copy per
+        fact, in ledger order."""
+        out: dict[str, str] = {}
+        for e in ledger.of_paper(pid):
+            if e.kind == kind and showable(e.cell):
+                out.setdefault(fact(e.id), e.id)
+        return list(out.values())
+
+    in_sections = {fact(eid) for s in sections for eid in s.evidence}
     for pid, paper in papers.items():
-        # Only evidence whose cell the table can show goes there (the rest
-        # stays in its section, so no number leaves the post).
-        # A fact merged into another (same_facts) is never brought back.
-        numbers = [
-            e.id
-            for e in ledger.of_paper(pid)
-            if e.kind == "number" and result_cell(e.cell) and e.id not in merged
-        ]
-        limits = [
-            e.id
-            for e in ledger.of_paper(pid)
-            if e.kind == "limitation" and limitation_cell(e.cell) and e.id not in merged
-        ]
+        # Only evidence whose cell the table can show goes there, one copy
+        # per fact; the rest stays in (or goes back to) its section, so no
+        # fact leaves the post and none is said twice.
+        numbers = first_copies(pid, "number", result_cell)
+        limits = first_copies(pid, "limitation", limitation_cell)
         if pid not in rows and (paper.role == "core" or numbers):
             rows[pid] = TableRow(paper=pid)
             notes.append(f"added {pid} to the table")
-        if pid in rows:
-            row = rows[pid]
-            # What the outline gave the table that the table cannot show
-            # (each id against the column it sits in) goes to its paper's
-            # lineage section instead of nowhere.
-            off_table = [e for e in row.results if e not in numbers] + (
-                [row.limitation]
-                if row.limitation and row.limitation not in limits
-                else []
-            )
-            row.results = (
-                list(dict.fromkeys(e for e in row.results if e in numbers))[:2]
-                or numbers[:2]
-            )
-            if row.limitation not in limits:
-                row.limitation = limits[0] if limits else None
-            shown = {*row.results, *([row.limitation] if row.limitation else [])}
-            for eid in dict.fromkeys(off_table):
-                item = ledger.get(eid)
-                if item is None or eid in used or eid in shown or eid in merged:
-                    continue
-                if (target := home.get(item.paper_id)) is not None:
-                    sections[target].evidence.append(eid)
-                    used.add(eid)
-                    notes.append(
-                        f"gave {eid} back to {item.paper_id}'s lineage section"
-                    )
+        if pid not in rows:
+            continue
+        row = rows[pid]
+        asked = [*row.results, *([row.limitation] if row.limitation else [])]
+        results: dict[str, str] = {}
+        for eid in row.results:
+            if (copy := shown_copy(eid, "number", result_cell)) is not None:
+                results.setdefault(fact(copy), copy)
+        row.results = list(results.values())[:2] or numbers[:2]
+        limitation = (
+            shown_copy(row.limitation, "limitation", limitation_cell)
+            if row.limitation
+            else None
+        )
+        row.limitation = limitation or (limits[0] if limits else None)
+        shown = {fact(e) for e in [*row.results, row.limitation] if e}
+        for eid in dict.fromkeys(fact(e) for e in asked):
+            item = ledger.get(eid)
+            if item is None or eid in shown or eid in in_sections:
+                continue
+            if (target := home.get(item.paper_id)) is not None:
+                sections[target].evidence.append(eid)
+                in_sections.add(eid)
+                notes.append(f"gave {eid} back to {item.paper_id}'s lineage section")
     order = [p.id for p in plan.papers]
     table = sorted(rows.values(), key=lambda r: order.index(r.paper))
-    # The table owns its results: a number shown there is not restated in
-    # a section (facts said once; the survey's numbers in one table).
-    in_table = {eid for r in table for eid in r.results}
+    # The table owns the facts it shows: a result or limitation shown there
+    # is not restated in a section (facts said once; the survey's numbers in
+    # one table).
+    in_table = {
+        fact(eid)
+        for r in table
+        for eid in [*r.results, *([r.limitation] if r.limitation else [])]
+    }
     for s in sections:
-        moved = [eid for eid in s.evidence if eid in in_table]
+        moved = [eid for eid in s.evidence if fact(eid) in in_table]
         if moved:
-            s.evidence = [eid for eid in s.evidence if eid not in in_table]
+            s.evidence = [eid for eid in s.evidence if fact(eid) not in in_table]
             notes.append(f"left {moved} to the table")
         # Synthesis sections interpret; they are not retellings.
         if s.kind in ("comparison", "insights", "conclusion") and s.depth == "deep":
