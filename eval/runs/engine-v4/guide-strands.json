@@ -1,0 +1,785 @@
+{
+ "item": "guide-strands",
+ "kind": "guide",
+ "source": [
+  "https://strandsagents.com/docs/user-guide/sdk/agents/agent-loop/",
+  "https://strandsagents.com/docs/user-guide/sdk/agents/hooks/"
+ ],
+ "criteria_note": "Scored A-F, G, X1 and guide-specific T1-T3 (R/U/S criteria do not apply). Claims checked against the live official Strands docs pages (agent-loop, hooks, hooks-events, lifecycle-controls, retry-strategies, conversation-management, structured-output-behavior, interventions, human-in-the-loop, approve-before-acting, state, session-management, middleware, steering, observability, strands.hooks.registry API) and the cited New Relic blog, fetched 2026-11-09. Code was read, not executed. Prose length excludes front matter, headings, fenced code (CommonMark fence rules), display math, table rows, images and the Sources list; X's count includes about 1k chars of code that its broken fence renders as prose.",
+ "X": {
+  "prose_length_chars": 27792,
+  "scores": {
+   "A": {
+    "score": 6.5,
+    "reason": "Good arc (TL;DR -> loop -> hooks/interventions -> structured output -> approval -> controls -> retry -> state -> tracing -> when to choose) and claim headings, but line 169 ends a paragraph with an inline '```python' ('A가 연 자원을 A가 마지막에 닫게 되는 구조입니다. ```python'), so lines 171-193 render as prose with two stray H2 headings ('## excerpt: 감사 로그 훅 A와...' l171, '## A, B 순으로 등록...' l189) inside an H3 section, and the prose at 195-197 is swallowed into a code block until l212. Tangential ReAct subsection (l22-24) and orphan one-sentence paragraphs (l26 'Strands Agents는 모델 주도... SDK입니다.', l38)."
+   },
+   "B": {
+    "score": 7.5,
+    "reason": "Mostly natural Korean in 입니다 register. Deductions: formulaic '결국 한 번의 호출로 메시지 네 개, 즉 두 쌍이 쌓입니다' (l79; rewrite '한 번 호출하면 메시지가 네 개, 두 쌍 쌓입니다'); translation-like 'Strands는 에이전트 루프를 직접 작성해야 할 자리에 쓰도록 설계됐습니다.' (l38); repeated hedging '서드파티 블로그는 ... 보고합니다 ... 이 블로그에 따르면 ... 같은 블로그는 ... 설명합니다' (l1081, l1093); English cells in a Korean table ('Before the agent loop starts', l245-249)."
+   },
+   "C": {
+    "score": 7.0,
+    "reason": "Running example ties sections, but hooks code uses lookup_customer before it is defined and the post admits it later ('앞선 훅 예제들이 정의 없이 써 온 lookup_customer를 여기서 정의합니다', l421); ReAct paragraph (l24) and the l26 sentence read as stitched fragments; '하네스도 함께 검토할 만합니다' (l1103) relies on a concept never introduced; l1093 says there are 'two gaps to fill' but the second only restates that telemetry goes to span events without saying what breaks."
+   },
+   "D": {
+    "score": 8.0,
+    "reason": "Hard parts get worked examples at the right time: message counting (l79), hook order A/B (l169), RateLimiter/Validator trace (l264), token overshoot 6,000+5,000 (l679), fail-open vs fail-closed (l335-358). Padding: the ReAct experiment numbers (l24) are not needed by a Strands user; the window_size worked example (l139) teaches a wrong mental model."
+   },
+   "E": {
+    "score": 7.5,
+    "reason": "Useful tables (stop reasons l99, intervention methods/actions l243-258, checkpoints l687, retry params l826, state layers l939, limits l1123) and an ASCII loop diagram. Missing a hook-event list although Hooks is a primary source; Datadog screenshot (l1087) is a remote hot-linked marketing image; English source cells left untranslated in a Korean table (l245-249)."
+   },
+   "F": {
+    "score": 7.0,
+    "reason": "One factual error with a downstream wrong example: 'SlidingWindowConversationManager는 최근 N개의 메시지 쌍을 유지' and 'window_size=10, # 유지할 최대 메시지 쌍 수' (l126, l133) vs docs 'Maximum number of messages to keep'; hence 'window_size=10일 때 대략 최근 다섯 건의 티켓' (l139) is wrong (about 2.5 tickets). Other 30 checked claims supported; third-party claims are attributed."
+   },
+   "G": {
+    "score": 6.0,
+    "reason": "No math, so no use_math is correct; description 120 chars (at the lower bound), opens with the product name. The broken fence at l169 produces stray headings and swaps code/prose rendering (blog lint would flag body H2 inside H3 and broken code); remote image with query string (l1087); stray leading space at l832."
+   },
+   "X1": {
+    "score": 8.0,
+    "reason": "Controlled tag Agentic-AI plus product and feature tags (Strands-Agents-SDK, Agent-Loop, Structured-Output); 'Human-in-the-Loop-Approval' and 'OpenTelemetry-Tracing' are long, low-reuse spellings."
+   },
+   "T1": {
+    "score": 7.5,
+    "reason": "Concrete Python code for one ticket-triage app with real arguments (limits, cancel_signal, structured_output_model, HumanInTheLoop, SnapshotSessionManager). But the assembled service handler handle_ticket uses HumanInTheLoop(ask='stdio') inside a per-request server function (l794), which would block on terminal input in a service; several snippets are excerpts relying on later definitions (l171, l219, l267); the broken fence at l169 makes one example unreadable as code."
+   },
+   "T2": {
+    "score": 7.0,
+    "reason": "Agent loop page is well covered; Hooks page only partly (ordering, tool interception, resume, retry hooks) while the event catalogue, cancel_tool/limit-tool-count, exception propagation and multi-agent hooks are absent. Adds sessions, HITL, Cedar and telemetry from other official pages (supported) plus a ReAct experiment summary (l24) that is padding."
+   },
+   "T3": {
+    "score": 8.0,
+    "reason": "Explains why mechanisms are designed as they are (schema-as-tool, typed interventions vs mutating hooks, cooperative cancellation, fail-open vs fail-closed) and how the agent fits a system (per-request agents, session storage trust boundary and lack of locks, OTLP backends, telemetry PII). Includes non-official sources (Datadog, New Relic) clearly framed as reports."
+   }
+  },
+  "principles": {
+   "claim_headings": {
+    "verdict": "met",
+    "evidence": "Noun-phrase claim headings throughout, e.g. '## 대화 기록에 누적되는 모델 호출-도구 실행 사이클과 정지 이유' (l44), '### 수렴을 핸들러가 보장해야 하는 after_model_call의 Guide' (l306)."
+   },
+   "running_example": {
+    "verdict": "met",
+    "evidence": "One ticket-triage agent (lookup_customer, TicketTriage, issue_refund, handle_ticket) runs from l20 to the telemetry section (l1061) and the limits table (l1123)."
+   },
+   "mechanism_design_code_example": {
+    "verdict": "met",
+    "evidence": "e.g. structured output: problem (l362) -> schema becomes a tool and why (l465) -> code (l479) -> worked failure/retry narrative (l508); interventions: hook weakness (l237) -> typed actions -> code -> RateLimiter trace (l264)."
+   },
+   "facts_said_once": {
+    "verdict": "partly met",
+    "evidence": "Uses pointers ('앞서 본 정지 이유 표를 참고합니다' l740), but the TL;DR (l12-14) restates most body facts and the ConcurrencyException/THROW fact appears at l14 and l751."
+   },
+   "numbers_with_scope": {
+    "verdict": "partly met",
+    "evidence": "Retry defaults and limit numbers are scoped by SDK (l826-832), but window_size is given the wrong unit (message pairs, l126/l133)."
+   },
+   "nothing_invented": {
+    "verdict": "partly met",
+    "evidence": "Third-party claims attributed (l1081, l1121); example outputs labelled typical (l411, l451). The 'message pairs' unit and the five-ticket estimate (l139) are not in the source."
+   },
+   "writer_assessment_at_end": {
+    "verdict": "met",
+    "evidence": "'## Strands 루프가 맞는 경우와 하네스·분류기·세션 저장소의 한계' (l1097) gives when it fits and four limits with a symptom/response table (l1123)."
+   },
+   "length_fitted_to_difficulty": {
+    "verdict": "met",
+    "evidence": "About 27,800 prose characters for 11 control topics; easy parts are short (install l50), hard parts get traces."
+   },
+   "type_specific_shape": {
+    "verdict": "met",
+    "evidence": "Opens with TL;DR (l10) and the problem (l16-20), loop architecture before configuration (l44), includes non-official sources (Datadog, New Relic), closes with when to choose and failure modes (l1097-1131)."
+   },
+   "korean_style": {
+    "verdict": "partly met",
+    "evidence": "Generally natural; formulaic '결국 ... 즉' (l79), translation-like l38, repetitive '보고합니다' hedging (l1081-1099), untranslated table cells (l245-249)."
+   }
+  },
+  "claims": {
+   "checked": 32,
+   "numbers_checked": 17,
+   "supported": 30,
+   "unsupported": 0,
+   "wrong": 2,
+   "unverifiable": 0,
+   "error_rate": 0.0625,
+   "items": [
+    {
+     "claim": "max_tokens: truncated response, unrecoverable in current loop",
+     "line": 108,
+     "verdict": "supported",
+     "number_or_default": false,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/agents/agent-loop/ 'This is unrecoverable within the current loop.'"
+    },
+    {
+     "claim": "limit_* stop reasons leave history valid and reinvokable",
+     "line": 104,
+     "verdict": "supported",
+     "number_or_default": false,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/agents/agent-loop/ 'The agent's message history remains in a valid state'"
+    },
+    {
+     "claim": "SlidingWindowConversationManager keeps the most recent N message PAIRS; window_size = max message pairs",
+     "line": 126,
+     "verdict": "wrong",
+     "number_or_default": true,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/agents/conversation-management/ 'maintains a fixed number of recent messages'; code comment 'window_size=20, # Maximum number of messages to keep'"
+    },
+    {
+     "claim": "window_size=10 keeps roughly the last five tickets (2 pairs per ticket)",
+     "line": 139,
+     "verdict": "wrong",
+     "number_or_default": true,
+     "source": "Follows from the pairs error: 10 messages / 4 messages per ticket is about 2.5 tickets"
+    },
+    {
+     "claim": "agent.tool.notebook(..., record_direct_tool_call=False) is not recorded; from strands.vended_tools import notebook",
+     "line": 143,
+     "verdict": "supported",
+     "number_or_default": false,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/agents/state/ 'The second does not, because it passes record_direct_tool_call=False.'"
+    },
+    {
+     "claim": "HookOrder.SDK_FIRST/DEFAULT/SDK_LAST presets, not enforced bounds; float('-inf')/float('inf') for absolute order",
+     "line": 167,
+     "verdict": "supported",
+     "number_or_default": true,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/agents/hooks/ 'These are not enforced bounds ... float('-inf')/float('inf')'"
+    },
+    {
+     "claim": "After-event callbacks run in reverse registration order within the same order group",
+     "line": 166,
+     "verdict": "supported",
+     "number_or_default": false,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/agents/hooks/ 'Within the same order group, Before events preserve registration order and After events reverse it.'"
+    },
+    {
+     "claim": "AfterInvocationEvent.resume re-invokes the agent with the given input",
+     "line": 233,
+     "verdict": "supported",
+     "number_or_default": false,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/agents/hooks-events/ 'resume - Trigger a follow-up agent invocation with new input.'"
+    },
+    {
+     "claim": "Valid actions per intervention lifecycle method (e.g. after_tool_call: Proceed, Transform only)",
+     "line": 243,
+     "verdict": "supported",
+     "number_or_default": false,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/agents/interventions/ lifecycle table"
+    },
+    {
+     "claim": "Precedence deny > confirm > guide > transform > proceed",
+     "line": 262,
+     "verdict": "supported",
+     "number_or_default": false,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/agents/interventions/ 'well-defined precedence (deny > confirm > guide > transform > proceed)'"
+    },
+    {
+     "claim": "Confirm default evaluate accepts True, 'y', 'yes' case-insensitively",
+     "line": 312,
+     "verdict": "supported",
+     "number_or_default": true,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/agents/interventions/ 'The default accepts True, \"y\", or \"yes\" (case-insensitive).'"
+    },
+    {
+     "claim": "on_error default is 'throw'",
+     "line": 335,
+     "verdict": "supported",
+     "number_or_default": true,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/agents/interventions/ \"'throw' Rethrow the error (default).\""
+    },
+    {
+     "claim": "Python structured-output tool is named after the class; TypeScript tool is strands_structured_output",
+     "line": 465,
+     "verdict": "supported",
+     "number_or_default": false,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/agents/structured-output-behavior/"
+    },
+    {
+     "claim": "Forced retry adds user message 'You must format the previous response as structured output.'; structured_output_prompt overrides, call wins",
+     "line": 512,
+     "verdict": "supported",
+     "number_or_default": true,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/agents/structured-output-behavior/"
+    },
+    {
+     "claim": "Each limits cap must be a positive integer (TS positive finite number)",
+     "line": 662,
+     "verdict": "supported",
+     "number_or_default": true,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/agents/lifecycle-controls/ 'Each cap must be a positive integer.'"
+    },
+    {
+     "claim": "Reported stop reason priority: turns, total tokens, output tokens, structured output attempts",
+     "line": 679,
+     "verdict": "supported",
+     "number_or_default": true,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/agents/lifecycle-controls/ 'priority order: turns, then total tokens, then output tokens, then structured output attempts'"
+    },
+    {
+     "claim": "Total-token limit counts prompt-cache reads and writes in full on Bedrock, Anthropic, OpenAI, Gemini",
+     "line": 681,
+     "verdict": "supported",
+     "number_or_default": false,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/agents/agent-loop/ 'On Amazon Bedrock, Anthropic, OpenAI, and Google Gemini, that total counts prompt-cache reads and writes in full'"
+    },
+    {
+     "claim": "Four cancellation checkpoints (streaming, before tool, during MCP tool, after tool)",
+     "line": 685,
+     "verdict": "supported",
+     "number_or_default": true,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/agents/agent-loop/ 'The agent checks for cancellation at four checkpoints'"
+    },
+    {
+     "claim": "Python agent.cancel() while idle cancels the next invocation",
+     "line": 694,
+     "verdict": "supported",
+     "number_or_default": false,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/agents/lifecycle-controls/ 'Calling it while the agent is idle cancels the next invocation.'"
+    },
+    {
+     "claim": "ModelRetryStrategy defaults max_attempts=6, initial_delay=4, max_delay=128",
+     "line": 826,
+     "verdict": "supported",
+     "number_or_default": true,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/agents/retry-strategies/ parameter table"
+    },
+    {
+     "claim": "Default waits 4, 8, 16, 32, 64 s; retries up to 5 times (6 attempts)",
+     "line": 822,
+     "verdict": "supported",
+     "number_or_default": true,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/agents/retry-strategies/ 'retry throttling errors up to 5 times (6 total attempts) with exponential backoff starting at 4 seconds'"
+    },
+    {
+     "claim": "TS DefaultModelRetryStrategy backoff default ExponentialBackoff({ baseMs: 4000, maxMs: 240000 })",
+     "line": 832,
+     "verdict": "supported",
+     "number_or_default": true,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/agents/retry-strategies/"
+    },
+    {
+     "claim": "HITL stdio: t/trust approves this and later calls to the same tool while the agent exists; negated tool always prompts",
+     "line": 603,
+     "verdict": "supported",
+     "number_or_default": false,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/agents/approve-before-acting/"
+    },
+    {
+     "claim": "Classifier can be a System One model such as Jev or Strands Decider; classifier failure asks a person",
+     "line": 610,
+     "verdict": "supported",
+     "number_or_default": false,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/agents/approve-before-acting/ 'If the classifier's model call fails, the handler asks a person'"
+    },
+    {
+     "claim": "SnapshotSessionManager save_latest_on default 'invocation'; no storage -> LocalFileStorage('./.strands/')",
+     "line": 1018,
+     "verdict": "supported",
+     "number_or_default": true,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/agents/session-management/ 'Python falls back to LocalFileStorage(\"./.strands/\")'"
+    },
+    {
+     "claim": "Snapshot IDs are UUID v7 and sort chronologically",
+     "line": 1024,
+     "verdict": "supported",
+     "number_or_default": true,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/agents/session-management/ 'Snapshot IDs are UUID v7, so they sort lexicographically in chronological order.'"
+    },
+    {
+     "claim": "multi_agent_save_latest_on default 'node' saves after each node and at invocation end",
+     "line": 1044,
+     "verdict": "supported",
+     "number_or_default": true,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/agents/session-management/ 'The default \"node\" strategy saves after every node and when the invocation ends.'"
+    },
+    {
+     "claim": "Default IDs agent_id='default' / TS id 'agent'; no distributed lock; non-atomic session creation",
+     "line": 1111,
+     "verdict": "supported",
+     "number_or_default": true,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/agents/session-management/ 'Sessions, Agents, and Concurrency'"
+    },
+    {
+     "claim": "Python returns the request_state slot as result.state; TS returns full invocationState",
+     "line": 990,
+     "verdict": "supported",
+     "number_or_default": false,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/agents/state/ 'Python returns its request_state slot as result.state'"
+    },
+    {
+     "claim": "New Relic blog: Strands GenAI telemetry captures tool I/O content irrespective of OTEL_INSTRUMENTATION_GENAI_CAPTURE_* config",
+     "line": 1121,
+     "verdict": "supported",
+     "number_or_default": false,
+     "source": "https://newrelic.com/blog/observability/traces-for-ai-agents-otel-strand 'captures the message content as part of the tool input/output irrespective of the configuration'"
+    },
+    {
+     "claim": "ReAct with PaLM-540B prompting: +34% / +10% absolute success on ALFWorld / WebShop with one or two in-context examples",
+     "line": 24,
+     "verdict": "supported",
+     "number_or_default": true,
+     "source": "https://arxiv.org/abs/2210.03629 abstract"
+    },
+    {
+     "claim": "StrandsTelemetry().setup_console_exporter() before creating the agent",
+     "line": 1059,
+     "verdict": "supported",
+     "number_or_default": false,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/observability-evaluation/ 'Configure an exporter before you create'"
+    }
+   ]
+  },
+  "checklist": {
+   "repeated": 1,
+   "avoided": 2,
+   "na": 2,
+   "repeated_ids": [
+    "result-fields-incomplete"
+   ],
+   "details": {
+    "loop-diagram-remote": {
+     "verdict": "avoided",
+     "evidence": "Loop diagram is an inline text block (l60-73); no docs-host image. Note: a remote Datadog screenshot is hot-linked at l1087 (not a docs host)."
+    },
+    "shared-agent-throw-scope": {
+     "verdict": "n/a",
+     "evidence": "No shared-agent warning; l751 states THROW/ConcurrencyException generically and l753 recommends per-request agents, without the invoke_async vs sync-in-async-handler distinction."
+    },
+    "shared-agent-history-leak": {
+     "verdict": "avoided",
+     "evidence": "'# A fresh agent per message keeps tickets from sharing conversation history' (l397) and per-request agents in the service handler (l753)."
+    },
+    "result-fields-incomplete": {
+     "verdict": "repeated",
+     "evidence": "Results show stop_reason (l525, l673) and structured_output, but metrics.get_summary() never appears."
+    },
+    "multi-agent-subject": {
+     "verdict": "n/a",
+     "evidence": "No multi-agent execution-unit sentence."
+    }
+   }
+  },
+  "extras": {
+   "architecture_first_line": 44,
+   "architecture_note": "TL;DR (l10-14) already summarises the loop and stop reasons; the loop cycle section starts at l44, before any configuration detail.",
+   "sources_total": 15,
+   "non_official_sources": 3,
+   "non_official_share": 0.2,
+   "non_official_list": [
+    "ReAct arXiv 2210.03629",
+    "New Relic blog",
+    "Datadog blog"
+   ],
+   "opens_with_problem": true,
+   "opens_with_tldr": true,
+   "closes_with_when_to_choose_and_failure_modes": true,
+   "closing_lines": "1097-1131"
+  },
+  "top_issues": [
+   "Wrong unit for SlidingWindowConversationManager.window_size ('메시지 쌍', l126/l133) and the derived 'about five tickets' example (l139); docs say messages.",
+   "Broken code fence at l169 (inline '```python' at paragraph end) renders the hook-order example as prose with two stray H2 headings (l171, l189) and swallows following prose into a code block.",
+   "Assembled service handler uses HumanInTheLoop(ask='stdio') inside a per-request server function (l794), which blocks on terminal input.",
+   "Hooks source page under-covered: no event catalogue, cancel_tool/limit-count, exception propagation or multi-agent hooks; ReAct experiment summary (l24) is padding.",
+   "AgentResult examples never show metrics.get_summary() (human-fix checklist)."
+  ],
+  "mean_score": 7.27
+ },
+ "Y": {
+  "prose_length_chars": 50338,
+  "scores": {
+   "A": {
+    "score": 7.0,
+    "reason": "Clean Markdown, correct fences and $$ math with blank lines. But a guide without a TL;DR (body opens with '## 에이전트 루프의 동작 원리', l11); the outline mirrors the docs' table of contents with topic headings ('## 훅과 이벤트 모델', '## 재시도 전략', '## 대화 관리', '## 구조화된 출력') and several sentence headings ('### 정지 이유는 \"다음에 무엇을 할지\"를 정합니다' l185, '### SDK는 반복이 시작될 때 한도를 검사합니다' l309, '### 전체 토큰 한도는 비용이 아니라 토큰을 셉니다' l319); it ends on a production code block with no closing assessment."
+   },
+   "B": {
+    "score": 8.0,
+    "reason": "Natural, precise Korean with consistent terms. Minor: formulaic openers repeated ('다이어그램에서 볼 곳은' l35, '표에서 먼저 볼 곳은' l201); emphatic callouts '> **핵심:**' used four times (l177, l482, l788); occasional 'Strands Agents SDK(PyPI의 strands-agents, npm의 ...)' restated (l13, l575)."
+   },
+   "C": {
+    "score": 8.0,
+    "reason": "Sections hand off with reasons ('호출 한도는 작업량을 미리 정해 두는 장치라서, 호출이 시작된 뒤에 생긴 사정까지는 반영하지 못합니다' l354; '훅은 생명주기 이벤트를 관찰하고 반응하는 데 쓰므로...' l1313); cross-references back are accurate. The security-analysis example from l73 is dropped after the first section, and the final section (l2600) is a list of problems rather than a conclusion."
+   },
+   "D": {
+    "score": 7.5,
+    "reason": "Strong help at hard points: hand traces for the loop (l77), order groups (l783), limit counter (l982), proactive compression (l1867), and explanations of why (reverse order symmetry l721, why tool results sit in user messages l89). Over-length: nearly every snippet is given twice (Python and TypeScript) and some facts are re-explained (history stays valid after limits: l201, l315, l325)."
+   },
+   "E": {
+    "score": 8.5,
+    "reason": "Many apt comparison tables (stop reasons with app action l189, Python vs TS limit scope l341, checkpoints by SDK l362, hook events with writable attributes l689, hooks vs middleware l1494, retry strategy vs hook l1652), a loop diagram, and formulas that match the docs (backoff, compression threshold). The history-growth formula (l98) is decorative; no figures."
+   },
+   "F": {
+    "score": 9.5,
+    "reason": "All 32 checked claims supported, including fine details (50 ms polling, Bedrock chunk-boundary abort, Python/TS checkpoint split, pin metadata timing, ToolLedgerProvider maxEntries 100). Pseudo-code and traces are labelled as illustrations ('개념 설명용 의사 코드입니다. Strands SDK의 실제 API가 아닙니다.' l42; '설명용 예시이며 실제 실행 로그가 아닙니다' l75). No wrong items found."
+   },
+   "G": {
+    "score": 9.0,
+    "reason": "use_math: true with $$ present, display blocks blank-line separated, \\_ only inside \\text{}; fence info strings single words; description 142 chars and opens with the product name. Nit: '`string \\| SystemContentBlock[]`' escape inside a table cell (l2499)."
+   },
+   "X1": {
+    "score": 7.0,
+    "reason": "Controlled tag Agentic-AI and Structured-Output/Conversation-Management are reusable, but no product tag, and 'Stop-Reasons', 'Tool-Execution' and the compound 'Hooks-and-Middleware' are low-reuse or restate section titles."
+   },
+   "T1": {
+    "score": 8.0,
+    "reason": "Dozens of runnable doc-accurate snippets in both SDKs with real parameters (limits, cancel_signal, idempotency_token, ModelRetryStrategy, SlidingWindowConversationManager options, middleware stages). Many are fragments ('BeforeToolCallEvent import는 생략했습니다' l2111; 'sleep은 이미 정의된 도구라고 가정합니다' l970), and there is no single end-to-end app; the final handler (l2610) is the only assembled piece."
+   },
+   "T2": {
+    "score": 8.5,
+    "reason": "Covers both source pages thoroughly (loop, messages, tool execution, stop reasons, cancellation, concurrency; hook registration, event lifecycle, writable attributes, ordering, all cookbook patterns, multi-agent hooks) in a sensible order. Middleware, steering and conversation management come from linked official pages and are supported, but add bulk beyond the item's two sources."
+   },
+   "T3": {
+    "score": 7.5,
+    "reason": "Good on internal mechanisms and design reasons (checkpoints keep tool-use/result pairs valid, retries multiply across middleware and strategy, hooks outside the middleware chain). Weak on system integration: no sessions/persistence, observability only in one paragraph (l1502), and essentially no non-official explanatory sources (only an AWS blog listed, never used in the body)."
+   }
+  },
+  "principles": {
+   "claim_headings": {
+    "verdict": "not met",
+    "evidence": "Mostly topic headings ('## 훅과 이벤트 모델' l573, '## 재시도 전략' l1504, '## 대화 관리' l1660) plus sentence headings ('### SDK는 반복이 시작될 때 한도를 검사합니다' l309)."
+   },
+   "running_example": {
+    "verdict": "not met",
+    "evidence": "The codebase security-analysis example (l73) is used only in the first section; later examples are unrelated doc snippets ('Summarize this document' l272, calculator l856, sleep l971, send_email l1233)."
+   },
+   "mechanism_design_code_example": {
+    "verdict": "met",
+    "evidence": "e.g. limits: why two limits (l254) -> check timing (l311) -> code (l267) -> numeric overshoot 9,000+3,000 (l313); hook order: rule -> reason (l721) -> code (l733) -> trace table (l783)."
+   },
+   "facts_said_once": {
+    "verdict": "partly met",
+    "evidence": "Repeats 'history stays valid after a limit stop' (l201, l315, l325) and 'one agent per task/request is safer' (l558, l571, l1646, l2608); the cancelled-message rule is pointed back to correctly (l375)."
+   },
+   "numbers_with_scope": {
+    "verdict": "met",
+    "evidence": "Numbers carry SDK and unit (retry table l1541/l1557, 50 ms polling l410, compression trace labelled as assumed values l1865)."
+   },
+   "nothing_invented": {
+    "verdict": "met",
+    "evidence": "Illustrations explicitly labelled (l42, l75, l157, l781, l980, l1865); no unsupported claim found in 32 checks."
+   },
+   "writer_assessment_at_end": {
+    "verdict": "partly met",
+    "evidence": "Ends with '## 자주 겪는 문제와 설계 권장사항' (l2600) and a production handler; no judgement of when to choose Strands or what it does not handle."
+   },
+   "length_fitted_to_difficulty": {
+    "verdict": "not met",
+    "evidence": "About 50,300 prose characters (2,668 lines); most snippets duplicated in Python and TypeScript, and doc pages beyond the two sources (middleware, steering, conversation managers) are reproduced in full."
+   },
+   "type_specific_shape": {
+    "verdict": "partly met",
+    "evidence": "Opens with the problem (l13) and the loop architecture first, but has no TL;DR, includes almost no non-official design sources (one AWS blog listed, unused), and does not close with when to choose it."
+   },
+   "korean_style": {
+    "verdict": "met",
+    "evidence": "Varied sentence shapes, subjects stated, consistent 입니다 register; minor repetition of '볼 곳은' openers and '핵심:' callouts."
+   }
+  },
+  "claims": {
+   "checked": 32,
+   "numbers_checked": 12,
+   "supported": 32,
+   "unsupported": 0,
+   "wrong": 0,
+   "unverifiable": 0,
+   "error_rate": 0.0,
+   "items": [
+    {
+     "claim": "max_tokens raises MaxTokensReachedException (Py) / MaxTokensError (TS) instead of returning",
+     "line": 209,
+     "verdict": "supported",
+     "number_or_default": false,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/agents/lifecycle-controls/ 'the loop raises MaxTokensReachedException MaxTokensError rather than returning a result'"
+    },
+    {
+     "claim": "TS MaxTokensError exposes partialMessage but does not add it to history; Python adds it",
+     "line": 2606,
+     "verdict": "supported",
+     "number_or_default": false,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/agents/lifecycle-controls/ 'Handle a truncated model response'"
+    },
+    {
+     "claim": "Simultaneous turn and total-token caps report only limit_turns (priority order)",
+     "line": 317,
+     "verdict": "supported",
+     "number_or_default": true,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/agents/agent-loop/ 'priority order: turns, then total tokens, then output tokens'"
+    },
+    {
+     "claim": "Python token limits count only the agent's own model calls; agents as tools and summarization run outside; TS limits cover the whole request",
+     "line": 341,
+     "verdict": "supported",
+     "number_or_default": false,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/agents/agent-loop/ limits section (Python vs TypeScript tabs)"
+    },
+    {
+     "claim": "Python has 4 cancellation checkpoints incl. MCP; TS has 5 incl. top of loop cycle and between sequential tools",
+     "line": 362,
+     "verdict": "supported",
+     "number_or_default": true,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/agents/agent-loop/ 'four checkpoints' (Python) and 'five checkpoints' (TypeScript)"
+    },
+    {
+     "claim": "External cancel_signal polled with up to ~50 ms latency, compounding per as_tool() nesting",
+     "line": 410,
+     "verdict": "supported",
+     "number_or_default": true,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/agents/agent-loop/ '(up to ~50 ms latency, compounding per as_tool() nesting level)'"
+    },
+    {
+     "claim": "Bedrock closes the stream at the next chunk boundary; cannot abort pre-header or streaming=False calls",
+     "line": 412,
+     "verdict": "supported",
+     "number_or_default": false,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/agents/agent-loop/ External cancellation signals"
+    },
+    {
+     "claim": "TS stop tool uses cancel({ afterCurrentTools: true })",
+     "line": 373,
+     "verdict": "supported",
+     "number_or_default": false,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/agents/agent-loop/ TS checkpoint table"
+    },
+    {
+     "claim": "TS agent.cancel() while idle is a no-op",
+     "line": 381,
+     "verdict": "supported",
+     "number_or_default": false,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/agents/lifecycle-controls/ 'Calling agent.cancel() while the agent is idle is a no-op.'"
+    },
+    {
+     "claim": "concurrent_invocation_mode: THROW (default) or UNSAFE_REENTRANT, imported from strands.types.agent",
+     "line": 503,
+     "verdict": "supported",
+     "number_or_default": true,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/agents/agent-loop/ 'from strands.types.agent import ConcurrentInvocationMode'"
+    },
+    {
+     "claim": "Deduplicated call gets only the final result; its callback_handler fires once",
+     "line": 543,
+     "verdict": "supported",
+     "number_or_default": false,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/agents/agent-loop/ 'Its callback_handler still fires once with that result'"
+    },
+    {
+     "claim": "add_callback(None, cb) infers from type hints, unions register both; ValueError if not inferable or async AgentInitializedEvent callback",
+     "line": 581,
+     "verdict": "supported",
+     "number_or_default": false,
+     "source": "https://strandsagents.com/docs/api/python/strands.hooks.registry add_callback docstring"
+    },
+    {
+     "claim": "HookOrder.SDK_FIRST=-100, DEFAULT=0, SDK_LAST=100",
+     "line": 727,
+     "verdict": "supported",
+     "number_or_default": true,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/agents/hooks/ 'HookOrder.SDK_FIRST (-100) ... HookOrder.SDK_LAST (100)'"
+    },
+    {
+     "claim": "Reverse order applies only within the same order group",
+     "line": 781,
+     "verdict": "supported",
+     "number_or_default": false,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/agents/hooks/ 'Within the same order group, ... After events reverse it.'"
+    },
+    {
+     "claim": "AfterToolsEvent.end_turn: True/string/content blocks become the final message; stop_reason end_turn",
+     "line": 711,
+     "verdict": "supported",
+     "number_or_default": false,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/agents/hooks-events/"
+    },
+    {
+     "claim": "Python hook events raise AttributeError on non-writable attributes",
+     "line": 706,
+     "verdict": "supported",
+     "number_or_default": false,
+     "source": "strands.hooks.registry 'AttributeError - Always raised to prevent setting attributes on hook events.'"
+    },
+    {
+     "claim": "Retry defaults 6 attempts, 4 s initial, doubling, max_delay 128",
+     "line": 1510,
+     "verdict": "supported",
+     "number_or_default": true,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/agents/retry-strategies/"
+    },
+    {
+     "claim": "TS ExponentialBackoff baseMs*multiplier^(attempt-1); jitter none/full/equal/decorrelated, default full",
+     "line": 1566,
+     "verdict": "supported",
+     "number_or_default": true,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/agents/retry-strategies/"
+    },
+    {
+     "claim": "Retry strategy runs outside the middleware chain, so retries re-run middleware",
+     "line": 1407,
+     "verdict": "supported",
+     "number_or_default": false,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/agents/middleware/ 'outside the middleware chain, so each of its retries runs your middleware again'"
+    },
+    {
+     "claim": "summary_ratio default 0.3 clamped 0.1-0.8; preserve_recent_messages default 10",
+     "line": 1742,
+     "verdict": "supported",
+     "number_or_default": true,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/agents/conversation-management/"
+    },
+    {
+     "claim": "proactive_compression=True uses threshold 0.7",
+     "line": 1834,
+     "verdict": "supported",
+     "number_or_default": true,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/agents/conversation-management/ 'Pass true for the default 0.7 threshold'"
+    },
+    {
+     "claim": "per_turn False/True/N; not supported in TypeScript",
+     "line": 1724,
+     "verdict": "supported",
+     "number_or_default": false,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/agents/conversation-management/ '// Not supported in TypeScript'"
+    },
+    {
+     "claim": "Truncation keeps head and tail with <truncated chars=\"N\"/>; typed placeholders for images etc.",
+     "line": 1699,
+     "verdict": "supported",
+     "number_or_default": false,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/agents/conversation-management/"
+    },
+    {
+     "claim": "Pin metadata is written at the first context reduction",
+     "line": 1797,
+     "verdict": "supported",
+     "number_or_default": false,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/agents/conversation-management/ 'The pin metadata is written during the first context reduction'"
+    },
+    {
+     "claim": "Steering targets tasks with 30+ steps; ToolLedgerProvider maxEntries default 100",
+     "line": 2436,
+     "verdict": "supported",
+     "number_or_default": true,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/agents/interventions/steering/"
+    },
+    {
+     "claim": "HITL trust state stored in agent.state / appState, resets on re-creation",
+     "line": 2430,
+     "verdict": "supported",
+     "number_or_default": false,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/agents/interventions/human-in-the-loop/ 'Trust state is stored in agent.state'"
+    },
+    {
+     "claim": "Middleware routes calls with projected input > 50,000 tokens to global.anthropic.claude-sonnet-4-6",
+     "line": 1447,
+     "verdict": "supported",
+     "number_or_default": true,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/agents/middleware/ routing example"
+    },
+    {
+     "claim": "Production handler MODEL_ID global.anthropic.claude-sonnet-5, limits turns 6 / total_tokens 20_000, 20 s deadline",
+     "line": 2617,
+     "verdict": "supported",
+     "number_or_default": true,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/agents/lifecycle-controls/ worked example"
+    },
+    {
+     "claim": "TS classify also treats 'refusal' as blocked",
+     "line": 248,
+     "verdict": "supported",
+     "number_or_default": false,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/agents/lifecycle-controls/ TS worked example \"stopReason === 'refusal'\""
+    },
+    {
+     "claim": "Guide on after_model_call has no framework retry cap; After-event Deny only warns",
+     "line": 2240,
+     "verdict": "supported",
+     "number_or_default": false,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/agents/interventions/ 'The framework imposes no retry cap on guide-triggered retries.'"
+    },
+    {
+     "claim": "Python invocation state passed as call kwarg agent('...', user_id='user123')",
+     "line": 676,
+     "verdict": "supported",
+     "number_or_default": false,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/agents/hooks/ example 'user_id=\"user123\"'"
+    },
+    {
+     "claim": "Agent initialization registers tools, sets up conversation manager and metrics; user input becomes first message",
+     "line": 96,
+     "verdict": "supported",
+     "number_or_default": false,
+     "source": "https://strandsagents.com/docs/user-guide/sdk/agents/agent-loop/ 'it initializes by registering tools, setting up the conversation manager, and preparing metrics collection'"
+    }
+   ]
+  },
+  "checklist": {
+   "repeated": 2,
+   "avoided": 2,
+   "na": 1,
+   "repeated_ids": [
+    "shared-agent-throw-scope",
+    "result-fields-incomplete"
+   ],
+   "details": {
+    "loop-diagram-remote": {
+     "verdict": "avoided",
+     "evidence": "Loop diagram is an inline text block (l19-33); no remote images."
+    },
+    "shared-agent-throw-scope": {
+     "verdict": "repeated",
+     "evidence": "'우연히 같은 에이전트를 공유하는 웹 요청 두 개가 겹치는 경우 ... 겹치는 호출은 거부합니다' (l499-503) ties shared web-request agents to rejection without saying THROW applies to overlapping invoke_async calls and that sync agent(...) in an async handler blocks instead (partial repeat)."
+    },
+    "shared-agent-history-leak": {
+     "verdict": "avoided",
+     "evidence": "'요청마다 새 에이전트를 만들어 이력을 공유하지 않습니다' (l2627) and the per-request recommendation (l2608); no invoke_async advice."
+    },
+    "result-fields-incomplete": {
+     "verdict": "repeated",
+     "evidence": "Result examples show stop_reason/stopReason (l281, l404) and structured_output; l317 mentions usage metrics in prose but no metrics.get_summary() example."
+    },
+    "multi-agent-subject": {
+     "verdict": "n/a",
+     "evidence": "No such sentence."
+    }
+   }
+  },
+  "extras": {
+   "architecture_first_line": 11,
+   "architecture_note": "Opens directly with the loop mechanism (l11-35); no TL;DR.",
+   "sources_total": 16,
+   "non_official_sources": 1,
+   "non_official_share": 0.0625,
+   "non_official_list": [
+    "AWS ML blog 'Strands Agents SDK: A technical deep dive' (listed, not used in the body)"
+   ],
+   "opens_with_problem": true,
+   "opens_with_tldr": false,
+   "closes_with_when_to_choose_and_failure_modes": false,
+   "closing_note": "Closes with common problems and a production handler (l2600-2648): failure modes yes, when to choose no."
+  },
+  "top_issues": [
+   "No TL;DR and no closing judgement on when to choose Strands; the outline follows the docs' table of contents with topic and sentence headings (l185, l309, l319).",
+   "Over-long (about 50k prose chars): nearly every snippet duplicated in Python and TypeScript, and whole linked doc pages (middleware, steering, conversation managers) reproduced.",
+   "No running example after the first section; later code is generic doc snippets relying on undefined tools ('sleep', 'calculator', 'search').",
+   "Thin on system integration (no sessions/persistence, observability in one paragraph) and effectively no non-official explanatory sources.",
+   "Shared-agent concurrency stated without the invoke_async vs sync-in-async distinction (l499-503); no metrics.get_summary() example."
+  ],
+  "mean_score": 8.05
+ },
+ "preference": {
+  "overall": "Y",
+  "per_criterion": {
+   "A": "Y",
+   "B": "Y",
+   "C": "Y",
+   "D": "X",
+   "E": "Y",
+   "F": "Y",
+   "G": "Y",
+   "X1": "X",
+   "T1": "Y",
+   "T2": "Y",
+   "T3": "X"
+  },
+  "reason": "Y is factually clean (0/32 errors vs 2/32 for X), renders correctly, and covers both source pages, especially Hooks, in depth with accurate Python/TypeScript detail. X has the better guide shape (TL;DR, one running ticket-triage example, system-integration sections on sessions and telemetry, a closing when-to-choose and limits table, non-official sources) but carries a wrong default/unit with a wrong worked example, a broken code fence that corrupts a section's rendering, a service handler that blocks on stdin, and thin Hooks coverage. Y's weaknesses (no TL;DR, docs-ToC outline, excessive length, no running example) cost readability, not correctness, so Y is preferred moderately, not decisively."
+ }
+}
