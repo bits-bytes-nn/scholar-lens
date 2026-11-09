@@ -707,9 +707,10 @@ class Publisher:
 # (429, 5xx, a timeout) tried again before the figure counts as unservable.
 FIGURE_CHECK_CONCURRENCY = 4
 FIGURE_CHECK_ATTEMPTS = 3
-# The whole check's deadline, so a stalled source cannot hold a run (above
-# one figure's worst case: three downloads within their own deadlines).
-FIGURE_CHECK_DEADLINE_S = 300
+# One figure's deadline, from when it gets a slot (above its worst case:
+# three downloads within their own timeouts), so a stalled host cannot hold
+# the run; a figure not checked in time is left out.
+FIGURE_CHECK_DEADLINE_S = 120
 
 
 def _downloadable(url: str, sleep: Callable[[float], None] = time.sleep) -> bool:
@@ -730,32 +731,28 @@ def _downloadable(url: str, sleep: Callable[[float], None] = time.sleep) -> bool
 
 async def unservable(urls: list[str]) -> list[str]:
     """The figure URLs that cannot be downloaded (arXiv HTML lists some it
-    does not serve), or that could not be checked within
-    :data:`FIGURE_CHECK_DEADLINE_S`: an image that fails to download fails
-    the publish step."""
+    does not serve), or whose check took over :data:`FIGURE_CHECK_DEADLINE_S`
+    once started: an image that fails to download fails the publish step."""
     gate = asyncio.Semaphore(FIGURE_CHECK_CONCURRENCY)
 
     async def check(url: str) -> bool:
         async with gate:
-            return await asyncio.to_thread(_downloadable, url)
+            # Each figure's deadline starts when it gets a slot, so figures
+            # waiting behind a slow host are still tried.
+            try:
+                return await asyncio.wait_for(
+                    asyncio.to_thread(_downloadable, url), FIGURE_CHECK_DEADLINE_S
+                )
+            except TimeoutError:
+                logger.warning(
+                    "Figure %s not checked within %ds; left out.",
+                    url,
+                    FIGURE_CHECK_DEADLINE_S,
+                )
+                return False
 
-    tasks = {asyncio.ensure_future(check(u)): u for u in urls}
-    if not tasks:
-        return []
-    done, pending = await asyncio.wait(tasks, timeout=FIGURE_CHECK_DEADLINE_S)
-    for task in pending:
-        task.cancel()
-    if pending:
-        # A source that stalls must not hold the run. A figure not checked in
-        # time counts as unservable: publishing fails on an image it cannot
-        # download, so writing about it would waste the run.
-        logger.warning(
-            "Figure check stopped after %ds; %d figure(s) not checked in time "
-            "are left out.",
-            FIGURE_CHECK_DEADLINE_S,
-            len(pending),
-        )
-    return [u for task, u in tasks.items() if task in pending or not task.result()]
+    ok = await asyncio.gather(*(check(u) for u in urls))
+    return [u for u, good in zip(urls, ok, strict=True) if not good]
 
 
 class FigureDownloads:

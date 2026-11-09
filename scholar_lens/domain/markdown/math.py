@@ -193,14 +193,16 @@ def unglue_fences(markdown: str) -> str:
                 indent + m.group("fence"),
                 *lines[i + 1 :],
             ]
-            # Only a move that leaves every fence closed and every opener with
-            # a language word still an opener: one that re-pairs the rest of
-            # the text is not the writer's slip.
+            # Only a move that leaves every fence closed and keeps every
+            # opener with a language word an opener: one that turns such an
+            # opener into code re-pairs the rest of the text, which is not the
+            # writer's slip. (Later blocks the slip swallowed become openers
+            # again: that is the repair.)
             if open_fence_line(moved) is not None:
                 continue
             after = fence_roles(moved)
             if any(
-                roles[j] != after[j + (2 if j > i else 0)]
+                roles[j] == "open" and after[j + (2 if j > i else 0)] != "open"
                 for j in range(len(lines))
                 if j != i and _INFO_FENCE.match(lines[j])
             ):

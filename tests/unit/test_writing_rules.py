@@ -780,6 +780,12 @@ def test_a_fence_opener_glued_to_prose_moves_to_its_own_line() -> None:
         "백틱 세 개로 감쌉니다 ```\n```\n빈 블록 예시\n```\n\n다음.\n\n```python\ny = 1\n```\n",
     ):
         assert unglue_fences(text) == text
+    # A later block the slip swallowed opens again.
+    assert unglue_fences(
+        "설치는 다음과 같습니다. ```python\nx = 1\n```\n\n실행합니다.\n\n```bash\npython a.py\n```\n"
+    ) == (
+        "설치는 다음과 같습니다.\n\n```python\nx = 1\n```\n\n실행합니다.\n\n```bash\npython a.py\n```\n"
+    )
     # In a list item the block stays in the item.
     assert unglue_fences("1. 설치합니다: ```bash\n   pip install x\n   ```\n") == (
         "1. 설치합니다:\n\n   ```bash\n   pip install x\n   ```\n"
@@ -793,6 +799,15 @@ def test_a_fence_opener_glued_to_prose_moves_to_its_own_line() -> None:
         ("병목은 디코딩으로 옮겨 간다", True),
         ("사용자가 데이터를 판다", True),
         ("모델은 데이터와 함께 자란다", True),
+        ("다음 단계로 간다", True),
+        ("설계를 바꿨다", True),
+        ("구조가 다르다", True),
+        ("학습이 느리다", True),
+        ("알아봅시다", True),
+        ("직접 실행해 보세요", True),
+        ("레서판다", False),
+        ("아시아 판다", False),
+        ("라이브러리 미란다", False),
         ("카메라와 라이다", False),
         ("아나콘다 환경", False),
         ("귀여운 판다", False),

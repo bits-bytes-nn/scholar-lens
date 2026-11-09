@@ -2080,6 +2080,8 @@ def test_a_stalled_figure_check_leaves_out_the_figures_it_could_not_check(
 
     monkeypatch.setattr(publisher_module, "_downloadable", slow)
     monkeypatch.setattr(publisher_module, "FIGURE_CHECK_DEADLINE_S", 0.2)
+    monkeypatch.setattr(publisher_module, "FIGURE_CHECK_CONCURRENCY", 1)
+    # One slot: the figures queued behind the slow one are still checked.
     urls = ["https://x/gone.png", "https://x/slow.png", "https://x/ok.png"]
     # A figure not checked in time is left out too: publishing would fail on it.
     assert asyncio.run(publisher_module.unservable(urls)) == [

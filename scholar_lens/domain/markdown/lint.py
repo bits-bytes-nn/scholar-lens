@@ -1074,10 +1074,12 @@ def style_hits(body: str) -> list[StyleHit]:
 # "필요" and "주요" end otherwise), "~죠", or "~다" as a verb or adjective
 # ends (:func:`_declarative`), optional final punctuation.
 _HEADING_TEXT = re.compile(r"^#{2,6} (.*\S)[ \t]*$", re.M)
-_POLITE = re.compile(r"(?:[아어여에예워와해돼봐줘까네래대]요|[가-힣]죠)[.!]?$")
+_POLITE = re.compile(r"(?:[아어여에예워와해돼봐줘까네래대세]요|[가-힣]죠|시다)[.!]?$")
 # Syllables a "~다" follows as an ending: the copula and the stems and
 # tense marks of predicates ("모델이다", "가능하다", "되다", "있다", "했다").
-_PREDICATE_BEFORE_DA = frozenset("이하되않없같있었았였했겠렵롭답많좋낫닿크쉽깊높낮옳")
+_PREDICATE_BEFORE_DA = frozenset(
+    "이하되않없같있었았였했겠렵롭답많좋낫닿크쉽깊높낮옳르리"
+)
 # Nouns (loanwords, names) whose last syllables read like a predicate
 # ending: those that are no verb form match as word endings ("아나콘다",
 # "카메라와 라이다"); those that are also common verb endings ("간다", "판다")
@@ -1093,9 +1095,12 @@ _NOUNS_LIKE_DA = frozenset(
         "우간다",
         "르완다",
         "베란다",
+        "미란다",
         "프로파간다",
     }
 )
+# A compound that ends in a noun of the set ("레서판다", "자이언트판다").
+_COMPOUND_NOUNS_LIKE_DA = ("판다",)
 
 
 def _declarative(word: str) -> bool:
@@ -1108,18 +1113,25 @@ def _declarative(word: str) -> bool:
         or not word.endswith("다")
         or word in _NOUNS_LIKE_DA
         or word.endswith(_NOUN_ENDINGS_LIKE_DA)
+        or (len(word) > 2 and word.endswith(_COMPOUND_NOUNS_LIKE_DA))
     ):
         return False
     before = word[-2]
     if not "가" <= before <= "힣":
         return False
     final = (ord(before) - ord("가")) % 28
-    return final == 4 or before == "니" or before in _PREDICATE_BEFORE_DA
+    # A final ㄴ (present tense) or ㅆ (past tense: "바꿨다").
+    return final in (4, 20) or before == "니" or before in _PREDICATE_BEFORE_DA
 
 
 # Endings of a word before a verb: a subject or object particle or a
 # connective ("데이터를 판다", "옮겨 간다"), not a noun's company ("카메라와").
-_BEFORE_A_VERB = re.compile(r"[을를이가은는도어아여서고게겨워해려쳐져혀돼봐줘]$")
+# Particles (subject, object, topic, direction, place) and contracted
+# connectives; a bare final 아/어/서 is left out, as many nouns end in them
+# ("아시아", "소프트웨어", "레서").
+_BEFORE_A_VERB = re.compile(
+    r"(?:[을를이가은는도로에]|에서|[고게겨워해려쳐져혀돼봐줘])$"
+)
 
 
 def _is_sentence_heading(text: str) -> bool:
