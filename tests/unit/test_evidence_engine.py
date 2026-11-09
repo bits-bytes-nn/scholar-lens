@@ -1634,7 +1634,7 @@ def test_a_core_paper_is_not_covered_by_the_table_alone() -> None:
         [{"paper": "2305.18290", "results": ["E2"], "limitation": "E3"}], []
     )
     assert any(
-        "needs evidence in its lineage section" in p
+        "needs evidence in a section" in p
         for p in outline_problems(outline, _plan(), ledger, title_max_length=70)
     )
 
@@ -1792,10 +1792,21 @@ def test_a_survey_keeps_same_fact_merges_within_one_paper() -> None:
         scope="TL;DR, GPT-4 judge",
         cell="승률 61%",
     )
+    copy = ledger.add(
+        _doc(),
+        kind="number",
+        claim="PPO 대비 승률 61%",
+        quote="DPO reaches a 61% win rate against PPO",
+        anchor="S3",
+        scope="TL;DR, GPT-4 judge",
+        cell="승률 61%",
+    )
     engine = EvidenceSurveyEngine.__new__(EvidenceSurveyEngine)
     # A group across papers is split by paper: same-paper copies still merge.
     assert engine.same_fact_groups([[other.id, "E2"]], ledger) == []
-    assert engine.same_fact_groups([["E2", other.id, "E3"]], ledger) == [["E2", "E3"]]
+    assert engine.same_fact_groups([["E2", other.id, copy.id]], ledger) == [
+        ["E2", copy.id]
+    ]
 
 
 def _three_numbers() -> EvidenceLedger:
@@ -1852,3 +1863,41 @@ def test_a_row_named_by_its_papers_short_name_is_that_papers() -> None:
     fixed, _ = repair_outline(outline, _plan(), _three_numbers())
     assert [r.paper for r in fixed.table] == ["2305.18290"]
     assert fixed.table[0].results[0] == "E4"
+
+
+def test_same_fact_groups_sharing_an_item_are_one_fact_in_any_order() -> None:
+    from scholar_lens.domain.evidence import same_fact_duplicates
+
+    ledger = _ledger()
+    for _ in range(2):
+        ledger.add(
+            _doc(),
+            kind="number",
+            claim="PPO 대비 승률 61%",
+            quote="DPO reaches a 61% win rate against PPO",
+            anchor="S3",
+            scope="TL;DR, GPT-4 judge",
+            cell="승률 61%",
+        )
+    a, b, c = [e.id for e in ledger if e.kind == "number"]
+    assert same_fact_duplicates([[a, c], [c, b]], ledger) == {b: a, c: a}
+
+
+def test_a_row_for_a_short_name_outside_the_plan_is_dropped() -> None:
+    from scholar_lens.domain.survey.evidence_post import repair_outline
+
+    outline = _rows_outline([{"paper": "Ghost", "results": []}], ["E1"])
+    outline = outline.model_copy(
+        update={"short_names": {"2305.18290": "DPO", "9999.00001": "Ghost"}}
+    )
+    fixed, notes = repair_outline(outline, _plan(), _three_numbers())
+    assert [r.paper for r in fixed.table] == ["2305.18290"]
+    assert any("not a survey paper" in n for n in notes)
+
+
+def test_a_survey_does_not_merge_a_method_into_a_limitation() -> None:
+    from scholar_lens.application.survey_engine import EvidenceSurveyEngine
+
+    engine = EvidenceSurveyEngine.__new__(EvidenceSurveyEngine)
+    # E1 is a method, E3 a limitation of the same paper.
+    assert engine.same_fact_groups([["E3", "E1"]], _ledger()) == []

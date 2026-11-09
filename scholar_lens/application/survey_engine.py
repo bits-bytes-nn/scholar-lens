@@ -338,15 +338,18 @@ class EvidenceSurveyEngine(PostEngine[EvidenceOutline, OutlineSection, EvidenceS
         self, groups: Sequence[Sequence[str]], ledger: EvidenceLedger
     ) -> list[list[str]]:
         # A survey states each paper's own results: a group is split by
-        # paper, so one paper's fact is never merged into another's (its
-        # row, share and section would lose it) and the same paper's copies
-        # still merge.
+        # paper (and kind), so one paper's fact is never merged into
+        # another's (its row, share and section would lose it) and the same
+        # paper's copies still merge.
         out: list[list[str]] = []
         for group in groups:
-            by_paper: dict[str, list[str]] = {}
+            # By paper and kind too: a method and a limitation without
+            # numbers would otherwise pass for one fact, and the table's
+            # limitation would take the method out of its section.
+            by_paper: dict[tuple[str, str], list[str]] = {}
             for eid in group:
                 if (item := ledger.get(eid)) is not None:
-                    by_paper.setdefault(item.paper_id, []).append(eid)
+                    by_paper.setdefault((item.paper_id, item.kind), []).append(eid)
             out += [ids for ids in by_paper.values() if len(ids) > 1]
         return out
 

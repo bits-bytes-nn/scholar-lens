@@ -191,9 +191,9 @@ def outline_problems(
         )
         if papers[pid].role == "core" and prose_only and not in_sections[pid]:
             problems.append(
-                f"core paper {pid} needs evidence in its lineage section: the "
-                "numbers and limitations the table shows do not count; give it "
-                "a method, finding or figure"
+                f"core paper {pid} needs evidence in a section: the table's "
+                "results and limitation do not count; give a section one of its "
+                "other items (a method, finding, definition, equation or figure)"
             )
     for name, mapping, keys in (
         ("short_names", outline.short_names, papers),
@@ -388,13 +388,24 @@ def repair_outline(
     *,
     merged: Mapping[str, str] | None = None,
 ) -> tuple[EvidenceOutline, list[str]]:
-    """Fix what code can fix in an outline, deterministically: evidence given
-    twice keeps its first section; evidence a lineage section does not cover
-    goes to its paper's lineage section; a core paper's unassigned figures
-    and equations go there too; missing table rows and cells are filled from
-    the paper's first number and limitation evidence. ``merged``: evidence
-    merged as the same fact -> the item kept. Returns the outline and what
-    was changed; what is left for the model is structure."""
+    """Fix what code can fix in an outline, deterministically, by fact
+    (``merged``: evidence merged as the same fact -> the item kept):
+
+    - evidence given twice keeps its first section; evidence a lineage
+      section does not cover goes to its paper's lineage section (it stays
+      when the paper has none, for the outline check to name);
+    - a core paper's unassigned figures and equations go to its section;
+    - table rows: a row naming its paper by its short name is that paper's,
+      a paper's later rows add to its first, a row for a paper outside the
+      plan is dropped; a row shows its own paper's evidence the table can
+      show (``result_cell``, ``limitation_cell``; a merged fact by its
+      showable copy), filled from the paper's first such items, and every id
+      any row gave that the table does not show goes back to its paper's
+      lineage section;
+    - a fact the table shows leaves the sections (said once).
+
+    Returns the outline and what was changed; what is left for the model is
+    structure."""
     merged = merged or {}
     notes: list[str] = []
     papers = {p.id: p for p in plan.papers}
@@ -446,13 +457,13 @@ def repair_outline(
     # Rows by paper: a row that names its paper by its short name is that
     # paper's, and a paper's later rows add to its first. Every id any row
     # gave is accounted for below (shown, or given back to its section).
-    by_short = {name: pid for pid, name in outline.short_names.items()}
+    by_short = {name: pid for pid, name in outline.short_names.items() if pid in papers}
     rows: dict[str, TableRow] = {}
     asked: list[str] = []
     for r in outline.table:
         asked += [*r.results, *([r.limitation] if r.limitation else [])]
         pid = r.paper if r.paper in papers else by_short.get(r.paper)
-        if pid is None:
+        if pid is None or pid not in papers:
             notes.append(f"dropped table row {r.paper!r} (not a survey paper)")
         elif pid in rows:
             rows[pid].results += r.results
@@ -531,6 +542,11 @@ def repair_outline(
             sections[target].evidence.append(eid)
             in_sections.add(eid)
             notes.append(f"gave {eid} back to {item.paper_id}'s lineage section")
+        else:
+            notes.append(
+                f"dropped {eid} from the table: {item.paper_id} has no lineage "
+                "section to take it"
+            )
     order = [p.id for p in plan.papers]
     table = sorted(rows.values(), key=lambda r: order.index(r.paper))
     # The table owns the facts it shows: a result or limitation shown there

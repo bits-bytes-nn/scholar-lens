@@ -534,26 +534,41 @@ def same_fact_duplicates(
     refuses a group that cannot be one fact: unknown ids, figures or code,
     or items whose numbers or code spans differ."""
     order = {e.id: n for n, e in enumerate(ledger)}
-    duplicates: dict[str, str] = {}
+    # Groups that share an item are one fact (union-find over the valid
+    # groups: [[E1, E3], [E3, E2]] is E1, E2 and E3).
+    parent: dict[str, str] = {}
+
+    def root(eid: str) -> str:
+        while parent.get(eid, eid) != eid:
+            parent[eid] = parent.get(parent[eid], parent[eid])
+            eid = parent[eid]
+        return eid
+
     for group in groups:
         items = [e for i in dict.fromkeys(group) if (e := ledger.get(i))]
         if len(items) < 2 or any(e.kind in ("figure", "code") for e in items):
             continue
         if len({frozenset(_facts(f"{e.claim} {e.cell}")) for e in items}) != 1:
             continue
+        for e in items:
+            parent.setdefault(e.id, e.id)
+        first = root(items[0].id)
+        for e in items[1:]:
+            if (r := root(e.id)) != first:
+                parent[r] = first
+    components: dict[str, list[Evidence]] = {}
+    for eid in parent:
+        if (e := ledger.get(eid)) is not None:
+            components.setdefault(root(eid), []).append(e)
+    duplicates: dict[str, str] = {}
+    for items in components.values():
+        if len(items) < 2:
+            continue
         keep = min(items, key=lambda e: ((rank or {}).get(e.paper_id, 0), order[e.id]))
         for e in items:
-            if e.id != keep.id and e.id not in duplicates:
+            if e.id != keep.id:
                 duplicates[e.id] = keep.id
-    # Each duplicate points to the item finally kept (groups may chain:
-    # [[E1, E2], [E2, E3]] keeps E1 for both), never to another duplicate.
-    for dup, kept in list(duplicates.items()):
-        seen = {dup}
-        while kept in duplicates and kept not in seen:
-            seen.add(kept)
-            kept = duplicates[kept]
-        duplicates[dup] = kept
-    return {d: k for d, k in duplicates.items() if d != k}
+    return duplicates
 
 
 def canonical_ids(ids: Iterable[str], duplicates: Mapping[str, str]) -> list[str]:
