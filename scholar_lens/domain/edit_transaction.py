@@ -22,7 +22,7 @@ from scholar_lens.domain.evidence_draft import (
     apply_edits,
     claim_units,
     ends_mid_sentence,
-    prose_sentences,
+    prose_length,
     removed_duplicate_visuals,
     strip_revision_notes,
     structure_lost,
@@ -169,6 +169,4 @@ def transact(
     return Revision(fixed, applied, tuple(skipped))
 
 
-def _prose(markdown: str) -> int:
-    """The characters of prose the length checks count."""
-    return len(" ".join(prose_sentences(markdown)))
+_prose = prose_length

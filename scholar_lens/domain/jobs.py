@@ -229,9 +229,11 @@ class CancelledJob(BaseModel):
     terminated and its result says it was interrupted."""
 
     job_id: str
-    # The job's state when the stop was requested.
+    # The job's state when the stop was requested, and right after (a job
+    # that finished in between shows SUCCEEDED here: nothing was stopped).
     previous_status: str
     reason: str
+    status: str = ""
 
 
 class SubmittedJob(BaseModel):

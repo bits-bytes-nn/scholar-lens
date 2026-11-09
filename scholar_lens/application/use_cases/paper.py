@@ -120,6 +120,16 @@ async def run_paper(
                 tracker,
                 published,
             )
+        post: Literal["review", "summary"] = (
+            "summary" if request.kind == "summarize" else "review"
+        )
+        if context.fresh and tools.engine(post) == "sections":
+            # The sections engine saves no stages: there is nothing to skip.
+            figure_notes = [
+                "--fresh has no effect on the sections engine (it saves no stages "
+                "and recomputes every run)",
+                *figure_notes,
+            ]
         degraded += (
             figure_notes
             + lookup_notes

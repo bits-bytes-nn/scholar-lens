@@ -588,3 +588,19 @@ async def test_guide_budget_abort_keeps_the_generator_notes(
             TokenUsageTracker(),
         )
     assert caught.value.run_notes == FakeGenerator().notes  # type: ignore[attr-defined]
+
+
+async def test_fresh_on_the_sections_engine_is_noted(
+    pipeline_env,
+    monkeypatch: pytest.MonkeyPatch,  # type: ignore[no-untyped-def]
+) -> None:
+    context, _ = pipeline_env
+    context.fresh = True
+    monkeypatch.setattr(paper_reader, "prepare_paper_data", _fake_paper_data(_paper()))
+    monkeypatch.setattr(
+        sections_writers, "PaperSummarizer", _fake_summarizer(SUMMARY_FROM_MODEL)
+    )
+    outcome = await bootstrap.run_use_case(
+        context, JobRequest(kind="summarize", source="2106.09685"), TokenUsageTracker()
+    )
+    assert any("--fresh has no effect" in w for w in outcome.warnings)

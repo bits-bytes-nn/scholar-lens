@@ -97,6 +97,7 @@ from scholar_lens.domain.evidence_draft import (
     cited_ids,
     copied_sentences,
     free_numbers,
+    prose_length,
     prose_sentences,
     section_heading,
     section_numbers,
@@ -129,6 +130,11 @@ from scholar_lens.domain.usage_context import usage_stage
 from scholar_lens.domain.verifiers import Problem, VerifierSet, as_problems
 
 logger = logging.getLogger(__name__)
+
+# The soft outline checks plan() asks again for (key targets, sentence
+# titles, source sections a review leaves out): part of the outline stage's
+# key, raised when one is added or changed.
+OUTLINE_CHECKS_VERSION = 2
 
 StageT = TypeVar("StageT")
 
@@ -802,6 +808,10 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
                 self.run.outline_repairs,
                 self.spec.empty_sections,
                 self.spec.evidence.same_code_language,
+                # What plan() asks again for beyond the spec's rules: an
+                # outline saved before a check existed is not reused.
+                OUTLINE_CHECKS_VERSION,
+                [d.paper_id for d in self.covered_documents()],
             ],
             lambda: self.planned(ledger),
             dump=lambda o: cast(BaseModel, o).model_dump(mode="json"),
@@ -834,10 +844,7 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
         below the configured minimum total (``run.min_total_chars``, in
         the post's language's characters), naming the shortfall."""
         minimum = round(self.run.min_total_chars * char_factor(self.run.language))
-        total = sum(
-            len(" ".join(prose_sentences(md)))
-            for md in [*sections, *([tldr] if tldr else [])]
-        )
+        total = sum(prose_length(md) for md in [*sections, *([tldr] if tldr else [])])
         if total < minimum:
             self.notes.append(
                 f"The post has {total:,} characters of prose, {minimum - total:,} "

@@ -123,6 +123,12 @@ def prose_sentences(markdown: str) -> list[str]:
     return out
 
 
+def prose_length(markdown: str) -> int:
+    """The characters of prose every length check counts (one definition:
+    :func:`prose_sentences` joined by single spaces)."""
+    return len(" ".join(prose_sentences(markdown)))
+
+
 def table_rows(markdown: str) -> list[str]:
     """The data rows of the draft's tables (header and rule rows left out),
     as written: what a claim check reads besides the prose."""
@@ -415,7 +421,7 @@ def section_problems(
             " belong to this section but no sentence cites their evidence: "
             "cover each",
         )
-    length = len(" ".join(prose_sentences(markdown)))
+    length = prose_length(markdown)
     if target_chars and length > limits.max_length_share * target_chars:
         add(
             "too_long",
@@ -762,9 +768,7 @@ def structure_lost(
         return "a heading was lost"
     if kind := lost_assets(before, after, rest, owned_figures, later):
         return f"{'an' if kind[0] in 'aeiou' else 'a'} {kind} was lost"
-    if len(" ".join(prose_sentences(after))) < (1 - max_prose_cut) * len(
-        " ".join(prose_sentences(before))
-    ):
+    if prose_length(after) < (1 - max_prose_cut) * prose_length(before):
         return f"more than {max_prose_cut:.0%} of the prose was cut"
     return ""
 

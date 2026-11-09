@@ -285,6 +285,7 @@ class TestSubmitAndDescribe:
             cancelled = cancel_job(aws, "job-1", reason="r")
         batch.terminate_job.assert_called_once_with(jobId="job-1", reason="r")
         assert cancelled.previous_status == "RUNNING"
+        assert cancelled.status == "RUNNING"  # Batch stops it asynchronously
         # A finished job is not "cancelled".
         batch.reset_mock()
         batch.describe_jobs.return_value = {"jobs": [{"status": "SUCCEEDED"}]}

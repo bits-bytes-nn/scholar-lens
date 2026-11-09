@@ -167,9 +167,15 @@ def cancel_job(session: boto3.Session, job_id: str, *, reason: str) -> Cancelled
         if status in TERMINAL_BATCH_STATES:
             raise JobAlreadyFinished(f"Batch job '{job_id}' already {status}.")
         client.terminate_job(jobId=job_id, reason=reason)
+        after = client.describe_jobs(jobs=[job_id]).get("jobs", [])
     except (ClientError, HTTPClientError, BotoConnectionError) as e:
         raise BatchJobError(f"Failed to cancel Batch job '{job_id}': {e}") from e
-    return CancelledJob(job_id=job_id, previous_status=status, reason=reason)
+    return CancelledJob(
+        job_id=job_id,
+        previous_status=status,
+        reason=reason,
+        status=after[0]["status"] if after else status,
+    )
 
 
 def wait_for_job(

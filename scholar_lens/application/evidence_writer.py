@@ -58,7 +58,7 @@ from scholar_lens.domain.evidence_draft import (
     heading_names,
     is_illustration,
     merge_thin_subsections,
-    prose_sentences,
+    prose_length,
     quote_for_prompt,
     section_heading,
     unsourced_number_sentences,
@@ -331,10 +331,6 @@ def cached_evidence(
         logger.warning("No cached evidence of %s passes today; reading again.", key)
         return None
     return kept
-
-
-def prose_length(markdown: str) -> int:
-    return len(" ".join(prose_sentences(markdown)))
 
 
 async def all_or_none[T](aws: Iterable[Awaitable[T]]) -> list[T]:
