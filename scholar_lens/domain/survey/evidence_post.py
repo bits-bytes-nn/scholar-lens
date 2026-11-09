@@ -238,6 +238,12 @@ def timeline_table(plan: SurveyPlan, outline: EvidenceOutline, korean: bool) -> 
     return _table(head, rows)
 
 
+def limitation_cell(cell: str) -> bool:
+    """Whether a limitation's cell can stand in the comparison table: a
+    noun phrase or an "입니다" sentence, no plain-style one."""
+    return bool(cell) and not ends_in_plain_declarative(cell)
+
+
 def result_cell(cell: str) -> bool:
     """Whether a number evidence's cell can stand in the comparison table's
     results column: it states a number and is no plain-style sentence (a
@@ -276,13 +282,7 @@ def comparison_table(
                 outline.lineage_names.get(paper.lineage, paper.lineage),
                 "; ".join(e.cell for e in results if result_cell(e.cell))
                 or none_result,
-                (
-                    limit.cell
-                    if limit
-                    and limit.cell
-                    and not ends_in_plain_declarative(limit.cell)
-                    else none_limit
-                ),
+                limit.cell if limit and limitation_cell(limit.cell) else none_limit,
             ]
         )
     return _table(head, rows)
@@ -398,10 +398,18 @@ def repair_outline(
         r.paper: r.model_copy(deep=True) for r in outline.table if r.paper in papers
     }
     for pid, paper in papers.items():
-        # The numbers whose cells the table can show, first.
-        found = [e for e in ledger.of_paper(pid) if e.kind == "number"]
-        numbers = [e.id for e in sorted(found, key=lambda e: not result_cell(e.cell))]
-        limits = [e.id for e in ledger.of_paper(pid) if e.kind == "limitation"]
+        # Only evidence whose cell the table can show goes there (the rest
+        # stays in its section, so no number leaves the post).
+        numbers = [
+            e.id
+            for e in ledger.of_paper(pid)
+            if e.kind == "number" and result_cell(e.cell)
+        ]
+        limits = [
+            e.id
+            for e in ledger.of_paper(pid)
+            if e.kind == "limitation" and limitation_cell(e.cell)
+        ]
         if pid not in rows and (paper.role == "core" or numbers):
             rows[pid] = TableRow(paper=pid)
             notes.append(f"added {pid} to the table")

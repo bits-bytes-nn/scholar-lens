@@ -88,7 +88,8 @@ class PaperSettings:
     # Cache-key part naming the reading model.
     reader_tag: str
     # The run passes these from its configuration; the defaults equal the
-    # configuration's (a contract test holds them together).
+    # review's (``explanation``; a contract test holds them together). A
+    # summary always gets its own values from the run.
     max_sections: int = 20
     max_fix_rounds: int = _LIMITS.fix_rounds
     # Paper characters one reading agent covers, its turns and tokens.

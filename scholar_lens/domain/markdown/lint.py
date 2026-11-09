@@ -1178,8 +1178,17 @@ def ends_in_plain_declarative(text: str) -> bool:
     """Whether ``text`` ends as a plain-style Korean sentence ("~한다",
     "~이다"; not the polite "~니다"): what a table cell may not be (a cell
     is a noun phrase or an "입니다" sentence, KOREAN_STYLE)."""
-    words = text.strip().rstrip(".!?").split()
-    return bool(words) and not words[-1].endswith("니다") and _declarative(words[-1])
+    # A trailing parenthesized note ("(HH)") and closing marks are not the
+    # ending.
+    bare = re.sub(r"(?:\s*\([^()]*\))+\s*$", "", text.strip()).rstrip(".!?")
+    words = bare.split()
+    if not words or words[-1].endswith("니다"):
+        return False
+    last = words[-1]
+    # A number with the copula ("61%다", "3배다").
+    if re.search(r"[\d%]다$|\d[가-힣]다$", last):
+        return True
+    return _declarative(last)
 
 
 def sentence_headings(markdown: str) -> list[str]:

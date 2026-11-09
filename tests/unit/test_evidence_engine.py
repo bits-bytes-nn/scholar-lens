@@ -1474,3 +1474,43 @@ def test_a_comparison_cell_states_a_number_and_is_no_plain_sentence() -> None:
     assert not result_cell("보상 모델 없이 선호를 최적화")
     assert not result_cell("승률을 61%로 끌어올린다")
     assert not result_cell("")
+
+
+def test_a_number_the_table_cannot_show_stays_in_its_section() -> None:
+    from scholar_lens.domain.survey.evidence_post import repair_outline
+
+    ledger = _ledger()
+    unusable = ledger.add(
+        _doc(),
+        kind="number",
+        claim="승률을 61%로 끌어올림",
+        quote="DPO reaches a 61% win rate against PPO",
+        anchor="S3",
+        scope="TL;DR, GPT-4 judge",
+        cell="승률을 61%로 끌어올린다",
+    )
+    outline = _outline(
+        table=[{"paper": "2305.18290", "results": [unusable.id]}],
+        sections=[
+            {
+                "kind": "introduction",
+                "title": "도입",
+                "thesis": "t",
+                "evidence": ["E1"],
+            },
+            {
+                "kind": "lineage",
+                "title": "DPO 계보",
+                "thesis": "t",
+                "lineage": "offline",
+                "papers": ["2305.18290"],
+                "evidence": ["E2", unusable.id],
+            },
+            {"kind": "comparison", "title": "비교", "thesis": "t"},
+            {"kind": "insights", "title": "통찰", "thesis": "t"},
+        ],
+    )
+    fixed, _ = repair_outline(outline, _plan(), ledger)
+    # The table shows the number it can; the other stays in its section.
+    assert fixed.table[0].results == ["E2"]
+    assert unusable.id in fixed.sections[1].evidence
