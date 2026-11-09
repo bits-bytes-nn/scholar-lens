@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 
 from pydantic import BaseModel
@@ -336,7 +336,10 @@ class EvidencePaperEngine(PostEngine[PaperOutline, PaperSection, EvidencePaper])
         )
 
     def repair(
-        self, outline: PaperOutline, ledger: EvidenceLedger
+        self,
+        outline: PaperOutline,
+        ledger: EvidenceLedger,
+        merged: Collection[str] = (),
     ) -> tuple[PaperOutline, list[str]]:
         return repair_paper_outline(
             outline, ledger, self.settings.post, self.settings.language

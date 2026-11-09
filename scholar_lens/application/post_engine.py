@@ -612,7 +612,7 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
                 outline = self.canonical_elsewhere(
                     with_canonical_evidence(outline, same), same
                 )
-                outline, repaired = self.repair(outline, ledger)
+                outline, repaired = self.repair(outline, ledger, merged=set(same))
                 if repaired:
                     logger.info(
                         "%s repaired in code: %s",
@@ -1385,9 +1385,14 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
         return None
 
     def repair(
-        self, outline: OutlineT, ledger: EvidenceLedger
+        self,
+        outline: OutlineT,
+        ledger: EvidenceLedger,
+        merged: Collection[str] = (),
     ) -> tuple[OutlineT, list[str]]:
-        """What code fixes in an outline, and what it changed."""
+        """What code fixes in an outline, and what it changed. ``merged``:
+        the evidence merged into another as the same fact (never to be
+        brought back)."""
         raise NotImplementedError
 
     def outline_problems(self, outline: OutlineT, ledger: EvidenceLedger) -> list[str]:

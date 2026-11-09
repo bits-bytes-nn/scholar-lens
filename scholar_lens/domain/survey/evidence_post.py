@@ -161,11 +161,18 @@ def outline_problems(
                 )
             if item.paper_id in used:
                 used[item.paper_id] += 1
+    # The table shows a paper's results too: they count toward its share.
+    for row in outline.table:
+        if row.paper in used:
+            used[row.paper] += len(
+                {*row.results, *([row.limitation] if row.limitation else [])}
+            )
     for pid, count in used.items():
         need = 2 if papers[pid].role == "core" else 1
         if count < need and len(ledger.of_paper(pid)) >= need:
             problems.append(
-                f"{pid} needs at least {need} pieces of evidence in sections"
+                f"{pid} needs at least {need} pieces of evidence in sections "
+                "or its table row"
             )
     for name, mapping, keys in (
         ("short_names", outline.short_names, papers),
@@ -354,7 +361,11 @@ def _one_citation_per_run(markdown: str) -> str:
 
 
 def repair_outline(
-    outline: EvidenceOutline, plan: SurveyPlan, ledger: EvidenceLedger
+    outline: EvidenceOutline,
+    plan: SurveyPlan,
+    ledger: EvidenceLedger,
+    *,
+    merged: Collection[str] = (),
 ) -> tuple[EvidenceOutline, list[str]]:
     """Fix what code can fix in an outline, deterministically: evidence given
     twice keeps its first section; evidence a lineage section does not cover
@@ -407,15 +418,16 @@ def repair_outline(
     for pid, paper in papers.items():
         # Only evidence whose cell the table can show goes there (the rest
         # stays in its section, so no number leaves the post).
+        # A fact merged into another (same_facts) is never brought back.
         numbers = [
             e.id
             for e in ledger.of_paper(pid)
-            if e.kind == "number" and result_cell(e.cell)
+            if e.kind == "number" and result_cell(e.cell) and e.id not in merged
         ]
         limits = [
             e.id
             for e in ledger.of_paper(pid)
-            if e.kind == "limitation" and limitation_cell(e.cell)
+            if e.kind == "limitation" and limitation_cell(e.cell) and e.id not in merged
         ]
         if pid not in rows and (paper.role == "core" or numbers):
             rows[pid] = TableRow(paper=pid)
@@ -423,22 +435,30 @@ def repair_outline(
         if pid in rows:
             row = rows[pid]
             # What the outline gave the table that the table cannot show
-            # goes to the paper's lineage section instead of nowhere.
-            dropped = [
-                e
-                for e in [*row.results, *([row.limitation] if row.limitation else [])]
-                if e not in numbers and e not in limits and e not in used
-            ]
-            row.results = [e for e in row.results if e in numbers][:2] or numbers[:2]
+            # (each id against the column it sits in) goes to its paper's
+            # lineage section instead of nowhere.
+            off_table = [e for e in row.results if e not in numbers] + (
+                [row.limitation]
+                if row.limitation and row.limitation not in limits
+                else []
+            )
+            row.results = (
+                list(dict.fromkeys(e for e in row.results if e in numbers))[:2]
+                or numbers[:2]
+            )
             if row.limitation not in limits:
                 row.limitation = limits[0] if limits else None
-            if dropped and (target := home.get(pid)) is not None:
-                sections[target].evidence += [
-                    e
-                    for e in dropped
-                    if (item := ledger.get(e)) and item.paper_id == pid
-                ]
-                notes.append(f"gave {dropped} back to {pid}'s lineage section")
+            shown = {*row.results, *([row.limitation] if row.limitation else [])}
+            for eid in dict.fromkeys(off_table):
+                item = ledger.get(eid)
+                if item is None or eid in used or eid in shown or eid in merged:
+                    continue
+                if (target := home.get(item.paper_id)) is not None:
+                    sections[target].evidence.append(eid)
+                    used.add(eid)
+                    notes.append(
+                        f"gave {eid} back to {item.paper_id}'s lineage section"
+                    )
     order = [p.id for p in plan.papers]
     table = sorted(rows.values(), key=lambda r: order.index(r.paper))
     # The table owns its results: a number shown there is not restated in

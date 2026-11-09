@@ -322,9 +322,12 @@ class EvidenceSurveyEngine(PostEngine[EvidenceOutline, OutlineSection, EvidenceS
         )
 
     def repair(
-        self, outline: EvidenceOutline, ledger: EvidenceLedger
+        self,
+        outline: EvidenceOutline,
+        ledger: EvidenceLedger,
+        merged: Collection[str] = (),
     ) -> tuple[EvidenceOutline, list[str]]:
-        return repair_outline(outline, self._plan, ledger)
+        return repair_outline(outline, self._plan, ledger, merged=merged)
 
     def outline_problems(
         self, outline: EvidenceOutline, ledger: EvidenceLedger

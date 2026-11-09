@@ -1297,9 +1297,11 @@ class TestOutlineRejections:
         assert any(f"leaves out ['{SECOND}']" in p for p in problems), problems
 
     def test_a_core_paper_needs_two_pieces_of_evidence(self) -> None:
+        # In sections or its table row (an empty row here).
         sections = _sections(evidence=["E4"])
         sections[0]["evidence"] = []
-        problems = _problems(_outline(sections=sections))
+        empty_row = [{"paper": "2305.18290", "results": []}]
+        problems = _problems(_outline(sections=sections, table=empty_row))
         assert any("needs at least 2 pieces" in p for p in problems), problems
 
     def test_a_supporting_paper_needs_one_piece_of_evidence(self) -> None:
@@ -1312,7 +1314,8 @@ class TestOutlineRejections:
         assert not any("needs at least" in p for p in problems), problems
         sections = _sections(evidence=[], papers=["2305.18290", SECOND])
         sections[0]["evidence"] = []
-        problems = _problems(_outline(sections=sections), plan)
+        empty_row = [{"paper": "2305.18290", "results": []}]
+        problems = _problems(_outline(sections=sections, table=empty_row), plan)
         assert any("needs at least 1 pieces" in p for p in problems), problems
 
     def test_a_table_row_citing_a_non_number_is_a_problem(self) -> None:
@@ -1578,3 +1581,86 @@ def test_a_paper_with_only_unusable_cells_still_gives_a_sound_outline(
     # back to its paper's section.
     assert {"E2", "E3"} <= set(fixed.sections[1].evidence)
     assert not outline_problems(fixed, _plan(), ledger, title_max_length=70)
+
+
+def _rows_outline(table: list[dict], lineage: list[str]) -> Any:
+    return _outline(
+        table=table,
+        sections=[
+            {"kind": "introduction", "title": "도입", "thesis": "t", "evidence": []},
+            {
+                "kind": "lineage",
+                "title": "DPO 계보",
+                "thesis": "t",
+                "lineage": "offline",
+                "papers": ["2305.18290"],
+                "evidence": lineage,
+            },
+            {"kind": "comparison", "title": "비교", "thesis": "t"},
+            {"kind": "insights", "title": "통찰", "thesis": "t"},
+        ],
+    )
+
+
+def test_a_merged_fact_is_not_brought_back_beside_its_copy() -> None:
+    from scholar_lens.domain.survey.evidence_post import repair_outline
+
+    ledger = _only_unusable_cells()  # E2: an unshowable 61% cell
+    shown = ledger.add(
+        _doc(),
+        kind="number",
+        claim="승률 61%",
+        quote="DPO reaches a 61% win rate against PPO",
+        anchor="S3",
+        scope="TL;DR, GPT-4 judge",
+        cell="승률 61%",
+    )
+    # The outline merged the showable copy into E2 (same fact).
+    fixed, _ = repair_outline(
+        _rows_outline([{"paper": "2305.18290", "results": ["E2"]}], ["E1"]),
+        _plan(),
+        ledger,
+        merged={shown.id},
+    )
+    shown_ids = set(fixed.table[0].results) | set(fixed.sections[1].evidence)
+    assert not ({"E2", shown.id} <= shown_ids)  # the fact once
+
+
+def test_a_row_listing_an_unshowable_id_twice_gives_it_back_once() -> None:
+    from scholar_lens.domain.survey.evidence_post import repair_outline
+
+    ledger = _only_unusable_cells()
+    fixed, _ = repair_outline(
+        _rows_outline([{"paper": "2305.18290", "results": ["E2", "E2"]}], ["E1"]),
+        _plan(),
+        ledger,
+    )
+    assert fixed.sections[1].evidence.count("E2") == 1
+    assert not outline_problems(fixed, _plan(), ledger, title_max_length=70)
+
+
+def test_table_evidence_counts_toward_a_papers_share() -> None:
+    from scholar_lens.domain.survey.evidence_post import repair_outline
+
+    # A core paper whose evidence is a method and two showable numbers the
+    # table takes: its share is met by the table row.
+    ledger = _ledger()
+    ledger.add(
+        _doc(),
+        kind="number",
+        claim="KL 0.5",
+        quote="DPO reaches a 61% win rate against PPO",
+        anchor="S3",
+        scope="TL;DR, GPT-4 judge",
+        cell="승률 61% (재현)",
+    )
+    fixed, _ = repair_outline(
+        _rows_outline([{"paper": "2305.18290", "results": []}], ["E2"]),
+        _plan(),
+        ledger,
+    )
+    assert not [
+        p
+        for p in outline_problems(fixed, _plan(), ledger, title_max_length=70)
+        if "pieces of evidence" in p
+    ]

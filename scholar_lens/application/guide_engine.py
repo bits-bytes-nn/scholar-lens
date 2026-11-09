@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 
 from scholar_lens.application.checkpoints import input_hash
@@ -377,7 +377,10 @@ class EvidenceGuideEngine(PostEngine[GuideOutline, GuideSection, EvidenceGuide])
         )
 
     def repair(
-        self, outline: GuideOutline, ledger: EvidenceLedger
+        self,
+        outline: GuideOutline,
+        ledger: EvidenceLedger,
+        merged: Collection[str] = (),
     ) -> tuple[GuideOutline, list[str]]:
         return repair_guide_outline(outline, ledger)
 
