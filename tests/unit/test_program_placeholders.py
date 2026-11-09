@@ -167,6 +167,23 @@ def test_a_call_that_does_not_bind_to_the_posts_own_definition_is_a_problem() ->
                 True,
             )
         ],
+        # Other bindings: except-as, match capture, a star import, global.
+        [
+            (
+                "def f(a):\n    pass\ntry:\n    pass\nexcept Exception as f:\n    pass\nf()",
+                True,
+            )
+        ],
+        [("def f(a):\n    pass\nmatch 1:\n    case f:\n        pass\nf()", True)],
+        [("def dumps(a):\n    pass\nfrom json import *\ndumps({}, indent=2)", True)],
+        # A base may change what calling the class does.
+        [
+            (
+                "from enum import Enum\nclass Planet(Enum):\n    EARTH = (1.0, 2.0)\n"
+                "    def __init__(self, mass, radius):\n        self.mass = mass\nPlanet((1.0, 2.0))",
+                True,
+            )
+        ],
         # An internals sketch (an unchecked section) defines nothing a reader runs.
         [("def handle(t, *, user_id):\n    pass", False), ("handle('t')", True)],
     ],
@@ -181,3 +198,17 @@ def test_calls_the_signature_check_must_not_flag(
         for i, (code, checked) in enumerate(blocks)
     ]
     assert not [p for _, p in python_code_problems(sections) if "does not match" in p]
+
+
+def test_calls_that_run_at_definition_are_checked() -> None:
+    from scholar_lens.domain.program import python_code_problems
+
+    code = "def f(a):\n    pass\ndef g(x=f()):\n    pass\nclass C:\n    v = f()\n"
+    found = [
+        p
+        for _, p in python_code_problems(
+            [("s", f"## s\n\n```python\n{code}```\n", True)]
+        )
+        if "does not match" in p
+    ]
+    assert len(found) == 2

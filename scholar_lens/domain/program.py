@@ -213,7 +213,13 @@ def _call_signature(node: ast.stmt) -> tuple[str, ast.arguments, bool] | None:
     so a decorated definition is not checked."""
     if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
         return None if node.decorator_list else (node.name, node.args, False)
-    if isinstance(node, ast.ClassDef) and not node.decorator_list:
+    # A base or metaclass may change what calling the class does (an Enum).
+    if (
+        isinstance(node, ast.ClassDef)
+        and not node.decorator_list
+        and not node.keywords
+        and all(isinstance(b, ast.Name) and b.id == "object" for b in node.bases)
+    ):
         inits = [
             item
             for item in node.body
@@ -241,11 +247,27 @@ def _bound_by(node: ast.stmt) -> set[str]:
             names.update((a.asname or a.name).split(".")[0] for a in n.names)
         elif isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store):
             names.add(n.id)
+        elif isinstance(n, ast.ExceptHandler | ast.MatchAs | ast.MatchStar) and n.name:
+            names.add(n.name)
+        elif isinstance(n, ast.MatchMapping) and n.rest:
+            names.add(n.rest)
         for child in ast.iter_child_nodes(n):
             visit(child)
 
     visit(node)
     return names
+
+
+def _star_import(node: ast.stmt) -> bool:
+    return isinstance(node, ast.ImportFrom) and any(a.name == "*" for a in node.names)
+
+
+def _declared_global(node: ast.stmt) -> set[str]:
+    """Names a function in ``node`` declares ``global`` (it may rebind them
+    when called)."""
+    return {
+        name for n in ast.walk(node) if isinstance(n, ast.Global) for name in n.names
+    }
 
 
 def _calls_run_now(node: ast.stmt) -> list[ast.Call]:
@@ -255,12 +277,21 @@ def _calls_run_now(node: ast.stmt) -> list[ast.Call]:
     calls: list[ast.Call] = []
 
     def visit(n: ast.AST) -> None:
-        if isinstance(
-            n, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef | ast.Lambda
-        ):
-            # Decorators and defaults run now; the body runs later.
-            for d in getattr(n, "decorator_list", []):
+        if isinstance(n, ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda):
+            # Decorators and default values run now; the body runs later.
+            for d in [
+                *getattr(n, "decorator_list", []),
+                *n.args.defaults,
+                *(d for d in n.args.kw_defaults if d is not None),
+            ]:
                 visit(d)
+            return
+        if isinstance(n, ast.ClassDef):
+            # A class body runs at definition (its methods later).
+            for d in [*n.decorator_list, *n.bases, *(k.value for k in n.keywords)]:
+                visit(d)
+            for stmt in n.body:
+                visit(stmt)
             return
         if isinstance(n, ast.Call):
             calls.append(n)
@@ -372,7 +403,9 @@ def _code_findings(
                 problems += _signature_findings(title, tree, signatures, report=report)
             else:
                 for stmt in tree.body:
-                    for name in _bound_by(stmt):
+                    if _star_import(stmt):
+                        signatures.clear()
+                    for name in _bound_by(stmt) | _declared_global(stmt):
                         signatures.pop(name, None)
             known |= bound
     return problems
@@ -407,7 +440,9 @@ def _signature_findings(
                         text,
                     )
                 )
-        for name in _bound_by(stmt):
+        if _star_import(stmt):
+            signatures.clear()
+        for name in _bound_by(stmt) | _declared_global(stmt):
             signatures.pop(name, None)
         if (signature := _call_signature(stmt)) is not None:
             signatures[signature[0]] = signature[1:]
