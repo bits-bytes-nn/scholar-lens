@@ -429,8 +429,12 @@ class Config(_Section):
     @classmethod
     def _language_name(cls, value: str) -> str:
         # One spelling for every comparison and lookup ("korean" -> "Korean"):
-        # fixed titles, alt texts and length targets are keyed by it.
-        return " ".join(word.capitalize() for word in value.split())
+        # fixed titles, alt texts and length targets are keyed by it. A word
+        # with other than letters ("zh-TW") is kept as written.
+        words = value.split()
+        if not words:
+            raise ValueError("output_language must name a language")
+        return " ".join(w.capitalize() if w.isalpha() else w for w in words)
 
     @classmethod
     def from_yaml(cls, file_path: str | Path) -> "Config":

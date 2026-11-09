@@ -201,27 +201,24 @@ _LIST_ITEM = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+\S")
 THIN_SUBSECTION_PROBLEM = "thin_subsection"
 
 
-def thin_subsections(markdown: str) -> list[str]:
-    """The headings of subsections (``###`` and deeper) with at most one
-    prose sentence and nothing else of their own (no figure, equation,
-    table, code block or list) before the next heading: what deleting
-    sentences leaves behind, or a heading over a single remark. A
-    subsection whose content is its own child subsections is not thin."""
+def _thin_headings(markdown: str) -> list[tuple[int, int, str]]:
+    """``(ordinal, line, title)`` of each thin subsection's heading: its
+    place among the draft's headings, its line and its text (see
+    :func:`thin_subsections`)."""
     lines = markdown.split("\n")
     roles = block_lines(markdown)
-    starts = [
-        (i, len(m.group(1)), m.group(2))
-        for i, (line, role) in enumerate(zip(lines, roles, strict=True))
-        if role == "prose" and (m := _SUBHEADING.match(line))
-    ]
     headings = [
         i
         for i, (line, role) in enumerate(zip(lines, roles, strict=True))
-        if role == "prose" and line.startswith("#") and re.match(r"^#{1,6} ", line)
+        if role == "prose" and re.match(r"^#{1,6} ", line)
     ]
     thin = []
-    for i, level, title in starts:
-        end = next((h for h in headings if h > i), len(lines))
+    for ordinal, i in enumerate(headings):
+        m = _SUBHEADING.match(lines[i])
+        if not m:
+            continue
+        level = len(m.group(1))
+        end = headings[ordinal + 1] if ordinal + 1 < len(headings) else len(lines)
         if end < len(lines):
             child = re.match(r"^(#+) ", lines[end])
             if child and len(child.group(1)) > level:
@@ -231,27 +228,33 @@ def thin_subsections(markdown: str) -> list[str]:
         own = own or visual_count(body) > 0
         own = own or any(_LIST_ITEM.match(ln) for ln in lines[i + 1 : end])
         if not own and len(prose_sentences(body)) <= 1:
-            thin.append(title)
+            thin.append((ordinal, i, m.group(2)))
     return thin
 
 
+def thin_subsections(markdown: str) -> list[str]:
+    """The headings of subsections (``###`` and deeper) with at most one
+    prose sentence and nothing else of their own (no figure, equation,
+    table, code block or list) before the next heading: what deleting
+    sentences leaves behind, or a heading over a single remark. A
+    subsection whose content is its own child subsections is not thin."""
+    return [title for _, _, title in _thin_headings(markdown)]
+
+
 def merge_thin_subsections(before: str, after: str) -> str:
-    """``after`` (``before`` with sentences deleted) without the headings of
-    the subsections the deletions left thin (:func:`thin_subsections`):
-    the sentence left joins the text above it. A subsection already thin
-    in ``before`` is the writer's and stays."""
-    new = set(thin_subsections(after)) - set(thin_subsections(before))
-    if not new:
+    """``after`` (``before`` with sentences deleted, its headings all kept)
+    without the headings of the subsections the deletions left thin
+    (:func:`thin_subsections`): the sentence left joins the text above it.
+    Headings are matched by their place, so a subsection already thin in
+    ``before`` (the writer's) stays, and so does another of the same
+    title."""
+    was_thin = {ordinal for ordinal, _, _ in _thin_headings(before)}
+    drop = {
+        line for ordinal, line, _ in _thin_headings(after) if ordinal not in was_thin
+    }
+    if not drop:
         return after
-    lines = after.split("\n")
-    roles = block_lines(after)
-    kept = [
-        line
-        for line, role in zip(lines, roles, strict=True)
-        if not (
-            role == "prose" and (m := _SUBHEADING.match(line)) and m.group(2) in new
-        )
-    ]
+    kept = [line for i, line in enumerate(after.split("\n")) if i not in drop]
     return re.sub(r"\n{3,}", "\n\n", "\n".join(kept))
 
 

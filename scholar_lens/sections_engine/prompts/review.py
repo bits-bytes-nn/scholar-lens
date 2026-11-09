@@ -122,8 +122,9 @@ class PaperPlanningPrompt(BasePrompt):
        baseline and method name.
     9. needs_code: true where code from the paper's repository would make the
        section concrete (implementation, algorithm, architecture).
-    10. Titles are in {language}, descriptive, without numbers. purpose is one
-        line saying what the reader gets from the section.
+    10. Titles are in {language}, descriptive noun phrases (never a sentence
+        ending in "~다"/"~요"), without numbers. purpose is one line saying
+        what the reader gets from the section.
 
     Terminology rules:
     """

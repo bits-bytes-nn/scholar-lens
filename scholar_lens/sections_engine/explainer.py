@@ -45,6 +45,7 @@ from scholar_lens.domain.paper.models import (
     ReviewText,
 )
 from scholar_lens.domain.post_format import same_as_title
+from scholar_lens.domain.post_spec import sentence_title_problems
 from scholar_lens.domain.prompt_safety import neutralize_prompt_tags
 from scholar_lens.domain.quality_gate import publish_blockers
 from scholar_lens.domain.review_plan import (
@@ -371,6 +372,10 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
                 len(plan.sections),
                 ", ".join(s.difficulty for s in plan.sections),
             )
+            if sentences := sentence_title_problems(s.title for s in plan.sections):
+                self.notes.append(
+                    "Section titles to reword as noun phrases: " + "; ".join(sentences)
+                )
             return plan
         raise PlanError(f"The planner did not return a usable plan: {last_error}")
 
@@ -538,7 +543,13 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
             # Deterministic rule slips are the writer's to fix (one owner: this
             # loop); the checker itself weighs the writer's unsupported items.
             check.blockers = publish_blockers(draft)
-            check.must_fix += writing_issues(draft) + check.blockers
+            # The section's own heading is the plan's title, which the writer
+            # must keep: a sentence-shaped one is the plan's slip (noted when
+            # the review is assembled), not this draft's to fix.
+            own = f"sentence heading '{section.title.strip()[:60]}'"
+            check.must_fix += [
+                issue for issue in writing_issues(draft) if not issue.startswith(own)
+            ] + check.blockers
             logger.info(
                 "Section %d '%s' attempt %d: score %d, %d missing, %d must-fix.",
                 index + 1,

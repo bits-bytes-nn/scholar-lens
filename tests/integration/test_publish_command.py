@@ -116,9 +116,12 @@ def test_a_rejected_post_edited_is_published_on_the_runs_branch(
     assert request.branch_id == "my-guide" and request.post_name
     assert request.blocking == ["the claim check did not run"]
 
-    # Unedited, the post still breaks the rule: failed, exit 1.
+    # Unedited, the post still breaks the rule: failed, exit 1, its blocking
+    # problems still listed.
     assert cli.main(["publish", str(rejected)]) == cli.EXIT_FAILED
     assert not repo.pulls
+    result = saved_post.run_publish(str(rejected), create_pr=True)
+    assert result.blocking == ["the claim check did not run"]
 
     rejected.write_text(
         rejected.read_text().replace('author: "Edward Hu"', 'paper_author: "Microsoft"')

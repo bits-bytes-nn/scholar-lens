@@ -703,6 +703,7 @@ def test_generator_notes_survive_a_failed_publish(
     result = runtime.run_job(JobRequest(kind="review", source="2106.09685"))
     assert result.status == "failed"
     assert result.warnings == ["Review section 'Method' produced no text"]
+    assert result.blocking == []
     # The rejected draft is where the result points.
     assert result.markdown_path == "/work/post.rejected.md"
     assert result.s3_uri == "s3://b/rejected/post.rejected.md"

@@ -257,30 +257,17 @@ async def _generate_summary(
 
 async def servable_paper(paper: Paper, figures: FigureCheck) -> tuple[Paper, list[str]]:
     """``paper`` without the remote figures that cannot be downloaded (arXiv
-    HTML lists some it does not serve), from its figure list and its text's
-    figure markers, and a note naming them: neither engine then writes about
-    a figure the post cannot show."""
-    remote = list(
-        dict.fromkeys(
-            [str(f.path) for f in paper.figures if str(f.path).startswith("http")]
-            + [
-                m.group("src")
-                for m in FIGURE_MARKER.finditer(paper.content.text)
-                if m.group("src").startswith("http")
-            ]
-        )
-    )
+    HTML lists some it does not serve) in its figure list, and a note naming
+    them: neither engine then writes from a figure the post cannot show. The
+    text is left as read (its hash keys the evidence cache); its markers of
+    a dropped figure name no figure, so no reader records it
+    (:func:`paper_documents`) and the publish step drops any image of it."""
+    remote = [str(f.path) for f in paper.figures if str(f.path).startswith("http")]
     broken = set(await figures.unservable(remote)) if remote else set()
     if not broken:
         return paper, []
-    text = FIGURE_MARKER.sub(
-        lambda m: "" if m.group("src") in broken else m.group(0), paper.content.text
-    )
     paper = paper.model_copy(
-        update={
-            "figures": [f for f in paper.figures if str(f.path) not in broken],
-            "content": paper.content.model_copy(update={"text": text}),
-        }
+        update={"figures": [f for f in paper.figures if str(f.path) not in broken]}
     )
     return paper, [
         "Figures that cannot be downloaded were left out: " + ", ".join(sorted(broken))
@@ -289,11 +276,17 @@ async def servable_paper(paper: Paper, figures: FigureCheck) -> tuple[Paper, lis
 
 def paper_documents(paper: Paper) -> tuple[SourceDocument, list[SourceDocument]]:
     """The paper as a source document (its figures from the text's
-    ``[Image: …]`` markers) and, when the pipeline has one, its official
+    ``[Image: …]`` markers that name one of its figures) and, when the pipeline has one, its official
     code summary as reference material."""
     figures: dict[str, str] = {}
+    # A remote figure is one of the paper's figures (servable_paper drops
+    # those that cannot be downloaded); a local one is the PDF parser's.
+    listed = {str(f.path) for f in paper.figures}
     for m in FIGURE_MARKER.finditer(paper.content.text):
-        figures.setdefault(m.group("src"), m.group("caption") or m.group("alt") or "")
+        src = m.group("src")
+        if src.startswith("http") and src not in listed:
+            continue
+        figures.setdefault(src, m.group("caption") or m.group("alt") or "")
     document = SourceDocument.from_markdown(
         paper.arxiv_id,
         paper.title,

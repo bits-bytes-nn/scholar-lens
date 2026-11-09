@@ -2037,3 +2037,29 @@ def test_transparent_svg_renders_on_white_and_bom_is_detected() -> None:
 
     with PILImage.open(io.BytesIO(svg_to_png(svg))) as image:
         assert image.convert("RGB").getpixel((5, 5)) == (255, 255, 255)
+
+
+def test_a_figure_check_tries_a_transient_failure_again(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import httpx
+
+    from scholar_lens.adapters.github import publisher as publisher_module
+
+    calls: list[str] = []
+
+    def flaky(url: str) -> bytes:
+        calls.append(url)
+        if url.endswith("flaky.png") and calls.count(url) == 1:
+            raise httpx.ConnectTimeout("timed out")
+        if url.endswith("gone.png"):
+            raise ValueError("404")
+        return b"png"
+
+    monkeypatch.setattr(publisher_module, "download_image", flaky)
+    assert publisher_module._downloadable("https://x/flaky.png", sleep=lambda s: None)
+    # A deterministic failure is not tried again.
+    assert not publisher_module._downloadable(
+        "https://x/gone.png", sleep=lambda s: None
+    )
+    assert calls.count("https://x/gone.png") == 1

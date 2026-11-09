@@ -1418,3 +1418,17 @@ def test_an_outline_title_written_as_a_sentence_is_an_outline_problem() -> None:
     assert sentence_title_problems(["보상 모델 없는 학습", "보상 모델을 없앤다"]) == [
         "section title '보상 모델을 없앤다' is a sentence; write a noun phrase"
     ]
+
+
+def test_a_merge_keeps_another_subsection_of_the_same_title() -> None:
+    from scholar_lens.domain.evidence_draft import (
+        drop_sentences,
+        merge_thin_subsections,
+    )
+
+    before = (
+        "## 운영\n\n### 설정\n\n첫 문장입니다. 둘째 문장입니다.\n\n"
+        "### 설정\n\n남을 문장입니다. 지울 문장입니다.\n"
+    )
+    after = merge_thin_subsections(before, drop_sentences(before, ["지울 문장입니다."]))
+    assert after.count("### 설정") == 1 and after.index("### 설정") < after.index("첫")

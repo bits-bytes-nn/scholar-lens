@@ -1069,21 +1069,47 @@ def style_hits(body: str) -> list[StyleHit]:
 
 
 # A heading written as a Korean sentence (HEADING_STRUCTURE_RULES: a heading
-# is a noun phrase): a declarative ending ("~다", "~니다") after a Hangul
-# syllable, or a polite "~요" after a verb ending's vowel syllable ("해요",
-# "있어요", "이에요"; nouns such as "개요", "필요" and "주요" end otherwise),
-# optional final punctuation.
-_SENTENCE_HEADING = re.compile(
-    r"^#{2,6} (.*(?:[가-힣]다|[아어여에예워와해돼봐줘까네래대]요|[가-힣]죠))[.!]?[ \t]*$",
-    re.M,
-)
+# is a noun phrase): its last word ends in a polite "~요" after a verb
+# ending's vowel syllable ("해요", "있어요", "이에요"; nouns such as "개요",
+# "필요" and "주요" end otherwise), "~죠", or "~다" as a verb or adjective
+# ends (:func:`_declarative`), optional final punctuation.
+_HEADING_TEXT = re.compile(r"^#{2,6} (.*\S)[ \t]*$", re.M)
+_POLITE = re.compile(r"(?:[아어여에예워와해돼봐줘까네래대]요|[가-힣]죠)[.!]?$")
+# Syllables a "~다" follows as an ending: the copula and the stems and
+# tense marks of predicates ("모델이다", "가능하다", "되다", "있다", "했다").
+_PREDICATE_BEFORE_DA = frozenset("이하되않없같있었았였했겠렵롭답많좋낫닿크쉽깊높낮옳")
+# Nouns that end in "ㄴ다" like a present-tense verb.
+_NOUNS_IN_NDA = frozenset({"판다", "어젠다", "아젠다", "베란다", "프로파간다"})
+
+
+def _declarative(word: str) -> bool:
+    """Whether ``word`` ends in a declarative "~다": after a syllable with a
+    final ㄴ (present tense: "한다", "만든다"), after "니" ("합니다"), or
+    after a predicate stem or tense mark."""
+    word = word.rstrip(".!")
+    if len(word) < 2 or not word.endswith("다") or word in _NOUNS_IN_NDA:
+        return False
+    before = word[-2]
+    if not "가" <= before <= "힣":
+        return False
+    final = (ord(before) - ord("가")) % 28
+    return final == 4 or before == "니" or before in _PREDICATE_BEFORE_DA
+
+
+def _is_sentence_heading(text: str) -> bool:
+    last = text.split()[-1] if text.split() else ""
+    return bool(_POLITE.search(last)) or _declarative(last)
 
 
 def sentence_headings(markdown: str) -> list[str]:
     """The headings (their text) written as a Korean sentence, outside code
     and math."""
     prose = _masked(markdown, ("fence", "icode", *_MATH_KINDS))
-    return [m.group(0).lstrip("#").strip() for m in _SENTENCE_HEADING.finditer(prose)]
+    return [
+        m.group(1).strip()
+        for m in _HEADING_TEXT.finditer(prose)
+        if _is_sentence_heading(m.group(1).strip())
+    ]
 
 
 def writing_issues(markdown: str) -> list[str]:
@@ -1132,11 +1158,12 @@ def writing_issues(markdown: str) -> list[str]:
             "verification hedge (fix the claim from an official source or drop it): "
             f"{_snippet(markdown, m.start(), m.end())}"
         )
-    for m in _SENTENCE_HEADING.finditer(prose):
-        issues.append(
-            f"sentence heading '{m.group(1).strip()[:60]}' (write a noun phrase): "
-            f"{_snippet(markdown, m.start(), m.end())}"
-        )
+    for m in _HEADING_TEXT.finditer(prose):
+        if _is_sentence_heading(m.group(1).strip()):
+            issues.append(
+                f"sentence heading '{m.group(1).strip()[:60]}' (write a noun "
+                f"phrase): {_snippet(markdown, m.start(), m.end())}"
+            )
     code = _masked(markdown, ("fence", "icode", "display"))
     for m in SINGLE_DOLLAR.finditer(code):
         if LATEX_LIKE.search(m.group(0)):

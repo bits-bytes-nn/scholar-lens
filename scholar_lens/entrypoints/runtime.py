@@ -243,7 +243,9 @@ def record_error(
 ) -> None:
     """Fold a run's (or ``publish``'s) failure into ``result``: a rejected
     input, a post the blog rules or its images blocked (its rejected copy's
-    paths kept), or a failure."""
+    paths kept), or a failure. The run's blocking problems are kept as on a
+    finished run."""
+    result.blocking = list(getattr(error, "run_blocking", []))
     if isinstance(error, rejected_errors):
         if _is_fetch_outage(error):  # the source exists but could not be reached
             result.error = f"{type(error).__name__}: {error}"

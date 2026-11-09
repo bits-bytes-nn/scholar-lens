@@ -269,8 +269,8 @@ class PaperSummarizer(RetryableBase, TokenBudgetGuard):
     async def _fix_blockers(self, summary: str) -> str:
         """ONE targeted fix call (section_loop's targeted-fix order) when the
         summary has publish blockers or writing-rule slips. The fixed text is
-        kept only when it has fewer of them, no more blockers, no new blocker
-        kind and keeps the summary's structure
+        kept only when it has fewer blockers (or as many and fewer slips), no
+        new blocker kind and keeps the summary's structure
         (:func:`section_loop.lost_structure`); any failure keeps the
         original, whose blockers the publisher then reports."""
         blockers = publish_blockers(summary)
@@ -296,9 +296,10 @@ class PaperSummarizer(RetryableBase, TokenBudgetGuard):
             return summary
         if not fixed or fixed == summary:
             reason = "no change"
-        elif len(publish_blockers(fixed)) > len(blockers):
+        elif (after := len(publish_blockers(fixed))) > len(blockers):
             reason = "blockers increased"
-        elif len(_issues(fixed)) >= len(issues):
+        elif after == len(blockers) and len(_issues(fixed)) >= len(issues):
+            # Fewer blockers decide alone; with as many, the slips must drop.
             reason = "problems did not decrease"
         elif not _blockers(fixed) <= _blockers(summary):
             reason = "adds a new publish blocker"

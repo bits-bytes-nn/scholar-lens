@@ -275,3 +275,6 @@ def test_default_demoted_domains_are_copies() -> None:
 def test_the_output_language_has_one_spelling() -> None:
     assert Config(output_language=" korean ").output_language == "Korean"
     assert Config(output_language="ENGLISH").output_language == "English"
+    assert Config(output_language="zh-TW").output_language == "zh-TW"
+    with pytest.raises(ValidationError):
+        Config(output_language="   ")

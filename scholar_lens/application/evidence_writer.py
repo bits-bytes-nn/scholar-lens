@@ -1321,25 +1321,28 @@ class EvidenceWriter:
         transaction with the section's checks, so a fix that adds one to
         any section is not taken."""
         out: list[tuple[SectionT, str]] = []
-        names_seen = {
-            n
-            for section, md in written
-            for n in (title_of(section), *heading_names(md))
-        }
+        # A section is named by its title or heading, or by a subsection
+        # title no other section has (a shared one names no single section).
+        shared = Counter(n for _, md in written for n in heading_names(md))
+
+        def names_of(section: SectionT, md: str) -> set[str]:
+            own = {n for n in heading_names(md) if shared[n] == 1}
+            return {title_of(section), section_heading(md), *own}
+
+        names_seen = {n for section, md in written for n in names_of(section, md)}
         if unmatched := [
             f
             for f in findings
             if f.section.strip().lstrip("#").strip() not in names_seen
         ]:
             self.notes.append(
-                "Whole-post review problems naming no section of the post, not "
-                "applied: "
+                "Whole-post review problems naming no section of the post (or "
+                "a subsection title several sections share), not applied: "
                 + " | ".join(f"{f.section}: {f.problem}"[:160] for f in unmatched[:3])
             )
         for i, (section, md) in enumerate(written):
             title = title_of(section)
-            # The section's own title and headings, its subsections' included.
-            names = {title, *heading_names(md)}
+            names = names_of(section, md)
             issues = [
                 f"{f.problem} Fix: {f.fix}"
                 for f in findings

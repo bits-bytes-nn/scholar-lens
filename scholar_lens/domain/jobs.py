@@ -176,8 +176,8 @@ class JobRequest(BaseModel):
 class JobResult(BaseModel):
     """Outcome of one run. ``warnings`` lists non-fatal problems (review
     notes, rule slips). A blog PR that was requested but could not be opened
-    fails the run: ``pr_error`` says why, and ``markdown_path``/``s3_uri``
-    still point to the saved artifact."""
+    fails the run: ``pr_error`` says why, and ``s3_uri`` (and, for a local
+    run, ``markdown_path``) still point to the saved artifact."""
 
     # None only for a Batch request too malformed to name its kind.
     kind: ArtifactKind | None

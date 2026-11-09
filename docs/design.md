@@ -312,9 +312,9 @@ OpenAlex는 arXiv 시대 ML 논문의 인용 수를 크게 적게 세고(실측:
 3. **개요**(역할 `outline`: 리뷰는 `paper_planning_model_id`에 effort `planning_effort`, 요약은 `summary_model_id`에 effort `high`): 근거 하나를 한 절에 배정합니다. 코드가 먼저 보정하고(`domain/paper/evidence_paper.py::repair_paper_outline`) 절 순서(TL;DR 하나로 시작, 문제 하나, 방법·구현, 실험, 분석, 한계와 시사점 하나로 끝), 방법 절 유무, 수치 근거가 있으면 실험 절, 절 수 상한(리뷰는 `explanation.max_sections`, 요약은 6), 근거 중복·누락을 검사해(`paper_outline_problems`) 두 번까지 다시 묻습니다. 요약은 TL;DR과 고정된 다섯 절(연구 배경, 제안 방법, 구현 방식, 실험 결과, 의의와 한계, `SUMMARY_SECTIONS`)입니다. 그다음 배정된 근거를 인용문과 다시 대조해(`wrong_evidence`) 틀린 근거를 개요에서 뺍니다.
 4. **길이**(`domain/post_spec.py::depth_targets`): 절마다 깊이별 크기(`domain/lengths.py::DEPTH_CHARS`)를 `[min_total_chars, max_total_chars]`(리뷰 25,000–55,000, 요약 2,500–4,500, 한국어 산문 글자 수) 안으로 맞춥니다.
 5. **집필, 검증, 수정**(역할 `write` = 리뷰 `paper_synthesis_model_id`·요약 `summary_model_id`, 콘텐츠 필터에 막히면 `reader_model_id`. 검증은 역할 `evaluate` = 리뷰 `paper_evaluation_model_id`·요약 `summary_model_id`): 서베이·가이드와 같은 반복입니다(4.3.1절 7–8단계, 4.5절). 절은 자기 근거와 그 근거가 나온 원문 절(최대 40,000자)을 받습니다. 절을 다 쓰면 글 전체를 한 번 검토하고(`_review_post`), TL;DR은 마지막에 절의 근거와 첫머리로 씁니다(리뷰는 고정 질문 네 개를 `###`로, `tldr_problems`).
-6. **마무리**(`_final`, 역할 `evaluate`): 부제와 검색 설명을 만들고, 설명은 `description_problems`로 확인해 한 번 다시 묻습니다. 그래도 어기면 비우고 PR 메모를 남깁니다. 내려받을 수 없는 원격 그림은 빼고 메모로 남기며(`adapters/github/publisher.py::unservable`), 결과는 `sections` 엔진과 같은 형태(`ReviewText`, 요약 결과 dict)로 `domain/post_format.py`가 조립합니다.
+6. **마무리**(`_final`, 역할 `evaluate`): 부제와 검색 설명을 만들고, 설명은 `description_problems`로 확인해 한 번 다시 묻습니다. 그래도 어기면 비우고 PR 메모를 남깁니다. 내려받을 수 없는 원격 그림은 두 엔진 모두 쓰기 전에 논문의 그림 목록에서 빼고 메모로 남깁니다(`application/use_cases/paper.py::servable_paper`, 확인은 `adapters/github/publisher.py::unservable`이 4개씩, 일시적 오류는 다시 시도). 본문은 읽은 그대로 두어 근거 캐시 키가 바뀌지 않고, 빠진 그림의 표지는 원문 그림이 아니므로 읽기 에이전트가 기록하지 못합니다. 결과는 `sections` 엔진과 같은 형태(`ReviewText`, 요약 결과 dict)로 `domain/post_format.py`가 조립합니다.
 
-`max_total_tokens`와 `min_quality_score`, `max_synthesis_attempts`, `max_edit_rounds`는 `sections` 엔진만 씁니다. 근거 장부 엔진의 실행 상한은 추정 비용 `explanation.max_cost_usd`(기본 $40)·`summary.max_cost_usd`(기본 $12)입니다(4.5절).
+`max_total_tokens`와 `min_quality_score`, `max_synthesis_attempts`, `max_edit_rounds`는 `sections` 엔진만 씁니다. 추정 비용 상한 `explanation.max_cost_usd`(기본 $40)·`summary.max_cost_usd`(기본 $12)는 두 엔진에 모두 걸립니다(4.5절, 11장).
 
 ### 4.5 근거 장부 엔진 공통
 
@@ -326,7 +326,7 @@ OpenAlex는 arXiv 시대 ML 논문의 인용 수를 크게 적게 세고(실측:
 
 **가이드 출처 ID.** 가이드의 출처 문서는 권한별 접두어와 번호를 받습니다(`application/use_cases/guide.py::_PREFIX`, 접두어 `domain/guide/evidence_guide.py::SOURCE_ID_PREFIX`): 공식 문서 `src-D1`, 참고 자료 `src-R1`, 서드파티 `src-W1`, 이전 버전 문서 `src-O1`. 논문 글의 출처 ID는 `Paper.arxiv_id`(코드 요약은 `<ID>-code`), 서베이는 계획의 논문 ID입니다.
 
-**의미 판단은 프롬프트가.** 문장이 글 자신의 입력이나 작성 과정을 말하는지(근거, 제공 자료, 표 값의 출처, "문서에 따르면"), 출처가 무엇을 말하지 않는다는 부재 주장, 앞 절에 없는 내용을 가리키는 문장, 문장형 제목은 정규식으로 찾지 않습니다. 부재 주장과 `[[EX]]` 문장의 범위는 주장 대조 프롬프트(`domain/prompts/rules.py::CLAIM_SCOPE`)가, 자기 지칭(`sources`)·문장형 제목과 반복 문형(`style`)·근거 없는 앞 절 참조(`flow`)는 검토 프롬프트(`SELF_REFERENCE_CHECKS`)가 판단합니다. 코드는 수치, 근거 ID, 절 배정, 그림, 구조처럼 결정적으로 확인할 수 있는 것만 검사합니다(`domain/evidence_draft.py`).
+**의미 판단은 프롬프트가.** 문장이 글 자신의 입력이나 작성 과정을 말하는지(근거, 제공 자료, 표 값의 출처, "문서에 따르면"), 출처가 무엇을 말하지 않는다는 부재 주장, 앞 절에 없는 내용을 가리키는 문장은 정규식으로 찾지 않습니다. 한국어 문장형 제목은 끝말이 서술어 어미인지로 코드가 찾고(`domain/markdown/lint.py::sentence_headings`, 기본형 동사처럼 명사와 구분되지 않는 끝은 검토 프롬프트에 맡깁니다), 개요 제목이 문장이면 다시 묻되 실행을 막지는 않고 PR 메모로 남깁니다. 부재 주장과 `[[EX]]` 문장의 범위는 주장 대조 프롬프트(`domain/prompts/rules.py::CLAIM_SCOPE`)가, 자기 지칭(`sources`)·문장형 제목과 반복 문형(`style`)·근거 없는 앞 절 참조(`flow`)는 검토 프롬프트(`SELF_REFERENCE_CHECKS`)가 판단합니다. 코드는 수치, 근거 ID, 절 배정, 그림, 구조처럼 결정적으로 확인할 수 있는 것만 검사합니다(`domain/evidence_draft.py`).
 
 **근거 캐시.** 읽기 결과는 출처 문서마다 JSON으로 저장하고 다음 실행이 재사용합니다(`adapters/scholarly/survey_documents.py::EvidenceTextStore`). 로컬 파일이 먼저이고, 없으면 S3를 읽으며, 새로 읽은 근거는 두 곳에 모두 씁니다. 키는 각 엔진의 `_cache_key`가 정합니다.
 
@@ -342,7 +342,7 @@ OpenAlex는 arXiv 시대 ML 논문의 인용 수를 크게 적게 세고(실측:
 
 **실행 전 확인.** 모델을 부르기 전에 확인하고 실패합니다. 블로그 규칙에 없는 카테고리 유형이나 글 종류에 맞지 않는 유형(`application/run.py::check_post_type`), PR을 열 실행인데 `GITHUB_TOKEN`이 없는 경우(`check_pr_ready`), 검색 제공자 없이 `--search-query`를 준 가이드가 대상입니다. 서베이에서 근거를 하나도 남기지 못한 경우나 핵심 논문이 모두 근거를 남기지 못한 경우는 계획 거부가 아니라 실패(`EvidenceUnavailable`)로 보고합니다.
 
-**비용 상한.** 근거 장부 엔진은 토큰 예산 대신 실행의 누적 추정 비용(목록가)을 호출마다 확인해, 상한을 넘으면 `TokenBudgetExceeded`로 중단합니다(`adapters/bedrock/role_models.py::budgeted`). 상한은 `tech_guide.max_cost_usd`(기본 $60), `survey.write_max_cost_usd`(기본 $60), `explanation.max_cost_usd`(기본 $40), `summary.max_cost_usd`(기본 $12)이고, `null`이면 상한이 없습니다(`configs/config.py`).
+**비용 상한.** 근거 장부 엔진은 토큰 예산 대신 실행의 누적 추정 비용(목록가)을 호출마다 확인해, 상한을 넘으면 `TokenBudgetExceeded`로 중단합니다(`adapters/bedrock/role_models.py::budgeted`). `sections` 엔진의 리뷰·요약도 같은 상한을 단계마다 확인합니다(`adapters/bedrock/usage.py::TokenBudgetGuard`). 상한은 `tech_guide.max_cost_usd`(기본 $60), `survey.write_max_cost_usd`(기본 $60), `explanation.max_cost_usd`(기본 $40), `summary.max_cost_usd`(기본 $12)이고, `null`이면 상한이 없습니다(`configs/config.py`).
 
 ## 5. 데이터 수집과 파싱
 
@@ -520,7 +520,7 @@ PR 본문(`build_pr_body`)에는 논문 ID, PDF URL, 파싱 방식, 글자 수, 
 
 ### 8.3 예산과 비용
 
-`adapters/bedrock/usage.py::TokenUsageTracker`가 콜백으로 모든 호출의 토큰을 모델별로 모으고, 레지스트리의 1M 토큰당 단가로 비용을 추정합니다(`estimated_cost_usd`). 단가는 Anthropic 목록가이며 Bedrock 청구액과 다를 수 있습니다. `TokenBudgetGuard`는 단계마다 `max_total_tokens`를 검사해 넘으면 `TokenBudgetExceeded`로 멈춥니다. 서베이 계획의 `survey.max_total_tokens`는 소프트 상한입니다. 상한에 이르면 수정 호출을 건너뛰고, 하드 상한(소프트 상한의 1.5배, `domain/constants.py::HARD_BUDGET_MULTIPLE`)을 넘으면 중단합니다(두 검사 모두 `TokenBudgetGuard`의 `_over_soft_token_budget`, `_enforce_hard_token_budget`, 4.3절). 근거 장부 엔진(가이드, 서베이 쓰기, `engine: evidence`인 리뷰·요약, 4.5절)은 토큰 대신 호출마다 추정 비용을 검사해, `tech_guide.max_cost_usd`, `survey.write_max_cost_usd`, `explanation.max_cost_usd`, `summary.max_cost_usd`를 넘으면 `TokenBudgetExceeded`로 멈춥니다(`adapters/bedrock/role_models.py::budgeted`). 비용 지표는 실행이 끝날 때 한 번 보내므로, 비용 경보(11절)는 이미 쓴 비용을 알릴 뿐 실행을 멈추지 못합니다. 실행 중 상한은 위 토큰 예산과 비용 상한이 맡습니다.
+`adapters/bedrock/usage.py::TokenUsageTracker`가 콜백으로 모든 호출의 토큰을 모델별로 모으고, 레지스트리의 1M 토큰당 단가로 비용을 추정합니다(`estimated_cost_usd`). 단가는 Anthropic 목록가이며 Bedrock 청구액과 다를 수 있습니다. `TokenBudgetGuard`는 단계마다 `max_total_tokens`와 추정 비용 상한(`explanation.max_cost_usd`, `summary.max_cost_usd`)을 검사해 넘으면 `TokenBudgetExceeded`로 멈춥니다. 멈춤 메시지는 올릴 설정과 재개 방법을 알립니다(`domain/usage.py::cost_ceiling_message`). 서베이 계획의 `survey.max_total_tokens`는 소프트 상한입니다. 상한에 이르면 수정 호출을 건너뛰고, 하드 상한(소프트 상한의 1.5배, `domain/constants.py::HARD_BUDGET_MULTIPLE`)을 넘으면 중단합니다(두 검사 모두 `TokenBudgetGuard`의 `_over_soft_token_budget`, `_enforce_hard_token_budget`, 4.3절). 근거 장부 엔진(가이드, 서베이 쓰기, `engine: evidence`인 리뷰·요약, 4.5절)은 토큰 대신 호출마다 추정 비용을 검사해, `tech_guide.max_cost_usd`, `survey.write_max_cost_usd`, `explanation.max_cost_usd`, `summary.max_cost_usd`를 넘으면 `TokenBudgetExceeded`로 멈춥니다(`adapters/bedrock/role_models.py::budgeted`). 비용 지표는 실행이 끝날 때 한 번 보내므로, 비용 경보(11절)는 이미 쓴 비용을 알릴 뿐 실행을 멈추지 못합니다. 실행 중 상한은 위 토큰 예산과 비용 상한이 맡습니다.
 
 ## 9. 설정 참조
 
@@ -529,7 +529,7 @@ PR 본문(`build_pr_body`)에는 논문 ID, PDF URL, 파싱 방식, 글자 수, 
 - `resources.s3_bucket_name`: 글·이미지·결과 매니페스트 버킷. 미리 만들어 둔 버킷이어야 하며 배포에 필수입니다. 없으면 `status`는 저장된 결과 없이 Batch 상태만 보여 줍니다.
 - `resources.github.*_category`: `categories[0]`이 되므로 블로그 spec의 `types`에 있어야 합니다.
 - `explanation.max_synthesis_attempts`·`max_edit_rounds`: 리뷰 `sections` 엔진의 호출 수와 비용을 정하는 반복 상한입니다.
-- `explanation.engine`·`summary.engine`(기본 `sections`, 또는 `evidence`), `reader_model_id`(Sonnet 5.5), `min_total_chars`·`max_total_chars`(리뷰 25,000·55,000, 요약 2,500·4,500, 하한 ≤ 상한), `max_cost_usd`(리뷰 $40, 요약 $12), `chars_per_reader`(리뷰 15,000, 요약 40,000): 리뷰·요약의 엔진 선택과 근거 장부 엔진의 읽기 모델, 글 길이, 비용 상한, 읽기 에이전트 하나가 맡는 논문 글자 수입니다(4.4절). 길이, 비용 상한과 `chars_per_reader`는 `evidence` 엔진만 씁니다. 요약의 절 수 상한은 설정이 아니라 요약 명세의 고정 절과 TL;DR 수입니다(`domain/specs/paper.py::SUMMARY_MAX_SECTIONS`).
+- `explanation.engine`·`summary.engine`(기본 `sections`, 또는 `evidence`), `reader_model_id`(Sonnet 5.5), `min_total_chars`·`max_total_chars`(리뷰 25,000·55,000, 요약 2,500·4,500, 하한 ≤ 상한), `max_cost_usd`(리뷰 $40, 요약 $12), `chars_per_reader`(리뷰 15,000, 요약 40,000): 리뷰·요약의 엔진 선택과 근거 장부 엔진의 읽기 모델, 글 길이, 비용 상한, 읽기 에이전트 하나가 맡는 논문 글자 수입니다(4.4절). 길이와 `chars_per_reader`는 `evidence` 엔진만 쓰고, 비용 상한은 두 엔진에 모두 걸립니다. 요약의 절 수 상한은 설정이 아니라 요약 명세의 고정 절과 TL;DR 수입니다(`domain/specs/paper.py::SUMMARY_MAX_SECTIONS`).
 - `tech_guide.max_sources_read`(40), `min_total_chars`·`max_total_chars`(25,000·45,000, 하한 ≤ 상한), `max_cost_usd`($60): 가이드가 읽는 페이지 수, 글 길이와 비용 상한입니다(4.2절).
 - `survey.min_papers`·`max_papers`(기본 6·25, `max_papers` ≤ `candidate_pool`), `candidate_pool`(60): 서베이 논문 수 범위와 후보 수집 범위입니다(4.3절).
 - `survey.chars_per_core_paper`·`chars_per_supporting_paper`(3,000·800), `min_total_chars`·`max_total_chars`(20,000·70,000, 하한 ≤ 상한), `write_max_cost_usd`($60): 서베이 글 길이와 쓰기 단계의 비용 상한입니다(4.3.1절). `resources.github.survey_category`는 블로그 규칙의 유형이어야 합니다.

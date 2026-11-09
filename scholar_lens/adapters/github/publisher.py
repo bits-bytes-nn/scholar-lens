@@ -20,6 +20,7 @@ import asyncio
 import itertools
 import logging
 import os
+import random
 import re
 import shutil
 import time
@@ -48,6 +49,7 @@ from scholar_lens.adapters.http.rate_limit import (
     arxiv_retry_after_seconds,
 )
 from scholar_lens.adapters.http.url_guard import UnsafeUrlError, assert_url_is_public
+from scholar_lens.adapters.retry import is_transient_error
 from scholar_lens.domain.constants import AppConstants, EnvVars, LocalPaths, S3Paths
 from scholar_lens.domain.conventions import BlogPost, PostConventions
 from scholar_lens.domain.ids import ARXIV_ID_BODY, is_arxiv_host
@@ -701,20 +703,39 @@ class Publisher:
         return RuntimeError(f"{type(error).__name__}: {scrubbed}")
 
 
-def _downloadable(url: str) -> bool:
-    try:
-        download_image(url)
-    except Exception as e:  # noqa: BLE001 - any failure means it cannot be published
-        logger.warning("Figure %s cannot be downloaded: %s", url, e)
-        return False
-    return True
+# Figure checks: a few at a time (arXiv rate-limits), a transient failure
+# (429, 5xx, a timeout) tried again before the figure counts as unservable.
+FIGURE_CHECK_CONCURRENCY = 4
+FIGURE_CHECK_ATTEMPTS = 3
+
+
+def _downloadable(url: str, sleep: Callable[[float], None] = time.sleep) -> bool:
+    for attempt in range(1, FIGURE_CHECK_ATTEMPTS + 1):
+        try:
+            download_image(url)
+            return True
+        except (
+            Exception
+        ) as e:  # noqa: BLE001 - any failure means it cannot be published
+            if attempt < FIGURE_CHECK_ATTEMPTS and is_transient_error(e):
+                sleep(2.0**attempt + random.random())
+                continue
+            logger.warning("Figure %s cannot be downloaded: %s", url, e)
+            return False
+    return False
 
 
 async def unservable(urls: list[str]) -> list[str]:
     """The figure URLs that cannot be downloaded (arXiv HTML lists some it
     does not serve): an image that fails to download fails the publish
     step."""
-    ok = await asyncio.gather(*(asyncio.to_thread(_downloadable, u) for u in urls))
+    gate = asyncio.Semaphore(FIGURE_CHECK_CONCURRENCY)
+
+    async def check(url: str) -> bool:
+        async with gate:
+            return await asyncio.to_thread(_downloadable, url)
+
+    ok = await asyncio.gather(*(check(u) for u in urls))
     return [u for u, good in zip(urls, ok, strict=True) if not good]
 
 

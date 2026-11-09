@@ -235,6 +235,7 @@ async def publish_artifact(
             *blocking_notes(request.blocking),
             *request.review_notes,
         ]
+        e.run_blocking = list(request.blocking)  # type: ignore[attr-defined]
         raise
     outcome = PipelineOutcome(
         title=request.title,

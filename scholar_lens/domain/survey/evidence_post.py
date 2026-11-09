@@ -20,7 +20,6 @@ from scholar_lens.domain.markdown.tables import escape_cell_pipes
 from scholar_lens.domain.post_spec import (
     Depth,
     ownership_problems,
-    sentence_title_problems,
     structure_problems,
 )
 from scholar_lens.domain.specs.survey import SURVEY_SPEC
@@ -142,7 +141,6 @@ def outline_problems(
     if stray := set(covered) - lineages:
         problems.append(f"unknown lineages: {', '.join(sorted(map(str, stray)))}")
     problems += ownership_problems(SURVEY_SPEC, outline.sections, ledger)
-    problems += sentence_title_problems(s.title for s in outline.sections)
     owner = {eid for s in outline.sections for eid in s.evidence}
     used: dict[str, int] = dict.fromkeys(papers, 0)
     for s in outline.sections:

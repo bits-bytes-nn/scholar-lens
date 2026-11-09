@@ -502,13 +502,23 @@ class TestSummaryTargetedFix:
         self, sample_paper: Paper
     ) -> None:
         # The summary's ## headings are fixed; a subsection's may be fixed.
-        slipped = "> 리드입니다.\n\n## 질문\n\n### 보상 모델을 없애다\n\n본문입니다.\n"
+        slipped = "> 리드입니다.\n\n## 질문\n\n### 보상 모델을 없앤다\n\n본문입니다.\n"
         fixed = "> 리드입니다.\n\n## 질문\n\n### 보상 모델 없는 학습\n\n본문입니다.\n"
         summarizer = self._summarizer(slipped, fixed)
         result = await summarizer.summarize(sample_paper)
         assert result["summary"] == fixed.strip()
         sent = summarizer.fix_chain.ainvoke.await_args.args[0]
         assert "sentence heading" in sent["request"]
+
+    async def test_a_fix_with_fewer_blockers_is_kept_despite_new_slips(
+        self, sample_paper: Paper
+    ) -> None:
+        # The colon blocker goes; a self-reference (a checklist-only slip)
+        # comes: publishing is no longer blocked, so the fix is kept.
+        fixed = self.FIXED.replace("결과는 다음과", "이 절에서 결과는 다음과")
+        summarizer = self._summarizer(self.BROKEN, fixed)
+        result = await summarizer.summarize(sample_paper)
+        assert result["summary"] == fixed.strip()
 
     async def test_a_clean_summary_makes_no_fix_call(self, sample_paper: Paper) -> None:
         summarizer = self._summarizer(self.FIXED, self.BROKEN)

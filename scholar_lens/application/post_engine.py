@@ -115,6 +115,7 @@ from scholar_lens.domain.post_spec import (
     depth_targets,
     evidence_policy,
     other_sdk,
+    sentence_title_problems,
 )
 from scholar_lens.domain.program import program_problems, python_code_problems
 from scholar_lens.domain.prompts.rules import (
@@ -618,9 +619,12 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
                 )
                 problems = self.outline_problems(outline, ledger)
                 used = self.used_evidence(outline)
+                # Asked again, but never what makes an outline unusable: an
+                # outline that still has them on the last attempt is kept
+                # with a note.
                 missing = coverage_problems(
                     self.targets, outline.coverage, used, ledger
-                )
+                ) + sentence_title_problems(s.title for s in outline.sections)
                 if not problems:
                     # The structurally sound outline that maps the most
                     # targets (the later one on a tie): what the last
@@ -662,7 +666,11 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
     def _noted_coverage(self, outline: OutlineT, ledger: EvidenceLedger) -> OutlineT:
         """``outline``, with a PR note of the key targets no section has
         evidence for (those no evidence of the ledger can state named
-        apart)."""
+        apart) and of its section titles written as a sentence."""
+        if sentences := sentence_title_problems(s.title for s in outline.sections):
+            self.notes.append(
+                "Section titles to reword as noun phrases: " + "; ".join(sentences)
+            )
         used = self.used_evidence(outline)
         lacking = unassigned(self.targets, outline.coverage, used)
         hopeless = {t.id for t in unsatisfiable(self.targets, ledger)}
