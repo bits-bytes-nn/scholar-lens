@@ -1691,3 +1691,107 @@ def test_table_evidence_counts_toward_a_papers_share() -> None:
         for p in outline_problems(fixed, _plan(), ledger, title_max_length=70)
         if "pieces of evidence" in p
     ]
+
+
+def test_chained_same_fact_groups_resolve_to_the_item_finally_kept() -> None:
+    from scholar_lens.domain.evidence import same_fact_duplicates
+
+    ledger = _ledger()
+    for _ in range(2):
+        ledger.add(
+            _doc(),
+            kind="number",
+            claim="PPO 대비 승률 61%",
+            quote="DPO reaches a 61% win rate against PPO",
+            anchor="S3",
+            scope="TL;DR, GPT-4 judge",
+            cell="승률 61%",
+        )
+    ids = [e.id for e in ledger if e.kind == "number"]
+    same = same_fact_duplicates([[ids[0], ids[1]], [ids[1], ids[2]]], ledger)
+    assert same == {ids[1]: ids[0], ids[2]: ids[0]}
+
+
+def test_moving_evidence_to_a_later_section_that_lists_it_keeps_it_once() -> None:
+    from scholar_lens.domain.survey.evidence_post import repair_outline
+
+    plan = _two_paper_plan(role="core", first="core")
+    data = plan.model_dump(mode="json")
+    data["lineages"].append({"id": "online", "name": "Online", "description": "d"})
+    data["papers"][1]["lineage"] = "online"
+    plan = SurveyPlan.model_validate(data)
+    ledger = _ledger()
+    other = ledger.add(
+        _doc(SECOND),
+        kind="method",
+        claim="정책 샘플로 반복 학습",
+        quote="optimizes preferences without a reward model",
+        anchor="S1",
+    )
+    outline = _outline(
+        sections=[
+            {"kind": "introduction", "title": "도입", "thesis": "t", "evidence": []},
+            {
+                "kind": "lineage",
+                "title": "DPO 계보",
+                "thesis": "t",
+                "lineage": "offline",
+                "papers": ["2305.18290"],
+                "evidence": [other.id, "E1", "E4"],
+            },
+            {
+                "kind": "lineage",
+                "title": "온라인 계보",
+                "thesis": "t",
+                "lineage": "online",
+                "papers": [SECOND],
+                "evidence": [other.id],
+            },
+            {"kind": "comparison", "title": "비교", "thesis": "t"},
+            {"kind": "insights", "title": "통찰", "thesis": "t"},
+        ],
+    )
+    fixed, _ = repair_outline(outline, plan, ledger)
+    assert fixed.sections[2].evidence.count(other.id) == 1
+    assert other.id not in fixed.sections[1].evidence
+
+
+def test_a_row_naming_another_papers_evidence_gives_it_back() -> None:
+    from scholar_lens.domain.survey.evidence_post import repair_outline
+
+    plan = _two_paper_plan(role="supporting", first="core")
+    ledger = _ledger()
+    theirs = ledger.add(
+        _doc(SECOND),
+        kind="number",
+        claim="승률 70%",
+        quote="DPO reaches a 61% win rate against PPO",
+        anchor="S3",
+        scope="TL;DR, GPT-4 judge",
+        cell="승률 61%",
+    )
+    outline = _outline(
+        table=[{"paper": "2305.18290", "results": [theirs.id]}],
+        sections=_sections(evidence=["E1", "E4"], papers=["2305.18290", SECOND]),
+    )
+    fixed, _ = repair_outline(outline, plan, ledger)
+    first = next(r for r in fixed.table if r.paper == "2305.18290")
+    assert theirs.id not in first.results
+
+
+def test_a_survey_keeps_same_fact_merges_within_one_paper() -> None:
+    from scholar_lens.application.survey_engine import EvidenceSurveyEngine
+
+    ledger = _ledger()
+    other = ledger.add(
+        _doc(SECOND),
+        kind="number",
+        claim="PPO 대비 승률 61%",
+        quote="DPO reaches a 61% win rate against PPO",
+        anchor="S3",
+        scope="TL;DR, GPT-4 judge",
+        cell="승률 61%",
+    )
+    engine = EvidenceSurveyEngine.__new__(EvidenceSurveyEngine)
+    assert engine.allowed_same_facts({other.id: "E2"}, ledger) == {}
+    assert engine.allowed_same_facts({"E3": "E2"}, ledger) == {"E3": "E2"}

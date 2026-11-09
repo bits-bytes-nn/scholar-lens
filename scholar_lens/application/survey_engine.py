@@ -165,6 +165,8 @@ class EvidenceSurveyEngine(PostEngine[EvidenceOutline, OutlineSection, EvidenceS
         self._plan: SurveyPlan  # set by write
         self._references = ""
         self._guideline = ""
+        # The same-fact merges of the outline being checked (set by repair).
+        self._merged: dict[str, str] = {}
         self._kinds: dict[str, str] = {}
 
     # ---- read -------------------------------------------------------------------
@@ -327,7 +329,22 @@ class EvidenceSurveyEngine(PostEngine[EvidenceOutline, OutlineSection, EvidenceS
         ledger: EvidenceLedger,
         merged: Mapping[str, str] | None = None,
     ) -> tuple[EvidenceOutline, list[str]]:
+        # The outline checks count the same facts (plan() checks this
+        # repaired outline next).
+        self._merged = dict(merged or {})
         return repair_outline(outline, self._plan, ledger, merged=merged)
+
+    def allowed_same_facts(
+        self, same: Mapping[str, str], ledger: EvidenceLedger
+    ) -> dict[str, str]:
+        # A survey states each paper's own results: one paper's fact is
+        # never merged into another paper's (its row, share and section
+        # would lose it).
+        def paper(eid: str) -> str:
+            item = ledger.get(eid)
+            return item.paper_id if item else ""
+
+        return {d: k for d, k in same.items() if paper(d) == paper(k)}
 
     def outline_problems(
         self, outline: EvidenceOutline, ledger: EvidenceLedger
@@ -337,6 +354,7 @@ class EvidenceSurveyEngine(PostEngine[EvidenceOutline, OutlineSection, EvidenceS
             self._plan,
             ledger,
             title_max_length=self.settings.title_max_length,
+            merged=self._merged,
         )
 
     # The comparison table cites evidence too: its results and limitations

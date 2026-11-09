@@ -606,8 +606,11 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
                         schema=cast(type[BaseModel], self.outline_schema),
                     ),
                 )
-                same = duplicates | same_fact_duplicates(
-                    outline.same_facts, ledger, self.source_rank()
+                same = duplicates | self.allowed_same_facts(
+                    same_fact_duplicates(
+                        outline.same_facts, ledger, self.source_rank()
+                    ),
+                    ledger,
                 )
                 outline = self.canonical_elsewhere(
                     with_canonical_evidence(outline, same), same
@@ -1383,6 +1386,13 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
     def source_rank(self) -> Mapping[str, int] | None:
         """Source id -> rank (lower keeps a fact the outline marks as one)."""
         return None
+
+    def allowed_same_facts(
+        self, same: Mapping[str, str], ledger: EvidenceLedger
+    ) -> dict[str, str]:
+        """The outline's same-fact merges this kind accepts (all by default:
+        a guide merges what several pages state)."""
+        return dict(same)
 
     def repair(
         self,

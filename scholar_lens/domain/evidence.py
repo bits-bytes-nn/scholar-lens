@@ -545,7 +545,15 @@ def same_fact_duplicates(
         for e in items:
             if e.id != keep.id and e.id not in duplicates:
                 duplicates[e.id] = keep.id
-    return duplicates
+    # Each duplicate points to the item finally kept (groups may chain:
+    # [[E1, E2], [E2, E3]] keeps E1 for both), never to another duplicate.
+    for dup, kept in list(duplicates.items()):
+        seen = {dup}
+        while kept in duplicates and kept not in seen:
+            seen.add(kept)
+            kept = duplicates[kept]
+        duplicates[dup] = kept
+    return {d: k for d, k in duplicates.items() if d != k}
 
 
 def canonical_ids(ids: Iterable[str], duplicates: Mapping[str, str]) -> list[str]:

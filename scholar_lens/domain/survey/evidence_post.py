@@ -121,6 +121,7 @@ def outline_problems(
     ledger: EvidenceLedger,
     *,
     title_max_length: int,
+    merged: Mapping[str, str] | None = None,
 ) -> list[str]:
     """What makes an outline unusable: the section order, a lineage without
     its one section, unknown papers or evidence, evidence given twice or to
@@ -161,19 +162,26 @@ def outline_problems(
                 )
             if item.paper_id in in_sections:
                 in_sections[item.paper_id].add(eid)
+
     # A paper's share counts its evidence in sections and its table row,
     # each item once; a core paper's sections still need one item when it
     # has evidence the table cannot hold (its method, figures, findings).
-    shares = {pid: set(ids) for pid, ids in in_sections.items()}
+    # Facts, not items: evidence merged as the same fact counts once.
+    def fact(eid: str) -> str:
+        return (merged or {}).get(eid, eid)
+
+    shares = {pid: {fact(i) for i in ids} for pid, ids in in_sections.items()}
     for row in outline.table:
         if row.paper in shares:
             shares[row.paper] |= {
-                *row.results,
-                *([row.limitation] if row.limitation else []),
+                fact(i)
+                for i in [*row.results, *([row.limitation] if row.limitation else [])]
+                if (item := ledger.get(i)) and item.paper_id == row.paper
             }
     for pid, ids in shares.items():
         need = 2 if papers[pid].role == "core" else 1
-        if len(ids) < need and len(ledger.of_paper(pid)) >= need:
+        facts = {fact(e.id) for e in ledger.of_paper(pid)}
+        if len(ids) < need and len(facts) >= need:
             problems.append(
                 f"{pid} needs at least {need} pieces of evidence in sections "
                 "or its table row"
@@ -397,6 +405,10 @@ def repair_outline(
     }
     sections = [s.model_copy(deep=True) for s in outline.sections]
     seen: set[str] = set()
+    # Evidence in a lineage section that does not cover its paper moves to
+    # its paper's section after the pass (a later section that already
+    # lists it keeps that copy, once).
+    moves: list[tuple[int, str]] = []
     for i, s in enumerate(sections):
         kept = []
         for eid in s.evidence:
@@ -406,13 +418,16 @@ def repair_outline(
             if s.kind == "lineage" and item.paper_id not in s.papers:
                 target = home.get(item.paper_id)
                 if target is not None and target != i:
-                    sections[target].evidence.append(eid)
-                    notes.append(f"moved {eid} to its paper's lineage section")
-                    seen.add(eid)
+                    moves.append((target, eid))
                 continue
             kept.append(eid)
             seen.add(eid)
         s.evidence = kept
+    for target, eid in moves:
+        if eid not in seen:
+            sections[target].evidence.append(eid)
+            seen.add(eid)
+            notes.append(f"moved {eid} to its paper's lineage section")
     for item in ledger:
         paper = papers.get(item.paper_id)
         if (
@@ -467,9 +482,15 @@ def repair_outline(
             continue
         row = rows[pid]
         asked = [*row.results, *([row.limitation] if row.limitation else [])]
+
+        def own(eid: str | None, pid: str = pid) -> bool:
+            item = ledger.get(eid) if eid else None
+            return item is not None and item.paper_id == pid
+
         results: dict[str, str] = {}
         for eid in row.results:
-            if (copy := shown_copy(eid, "number", result_cell)) is not None:
+            copy = shown_copy(eid, "number", result_cell)
+            if copy is not None and own(copy):
                 results.setdefault(fact(copy), copy)
         row.results = list(results.values())[:2] or numbers[:2]
         limitation = (
@@ -477,7 +498,9 @@ def repair_outline(
             if row.limitation
             else None
         )
-        row.limitation = limitation or (limits[0] if limits else None)
+        row.limitation = (
+            limitation if own(limitation) else (limits[0] if limits else None)
+        )
         shown = {fact(e) for e in [*row.results, row.limitation] if e}
         for eid in dict.fromkeys(fact(e) for e in asked):
             item = ledger.get(eid)
@@ -493,14 +516,19 @@ def repair_outline(
     # is not restated in a section (facts said once; the survey's numbers in
     # one table).
     in_table = {
-        fact(eid)
+        (r.paper, fact(eid))
         for r in table
         for eid in [*r.results, *([r.limitation] if r.limitation else [])]
     }
+
+    def shown_in_table(eid: str) -> bool:
+        item = ledger.get(eid)
+        return item is not None and (item.paper_id, fact(eid)) in in_table
+
     for s in sections:
-        moved = [eid for eid in s.evidence if fact(eid) in in_table]
+        moved = [eid for eid in s.evidence if shown_in_table(eid)]
         if moved:
-            s.evidence = [eid for eid in s.evidence if fact(eid) not in in_table]
+            s.evidence = [eid for eid in s.evidence if not shown_in_table(eid)]
             notes.append(f"left {moved} to the table")
         # Synthesis sections interpret; they are not retellings.
         if s.kind in ("comparison", "insights", "conclusion") and s.depth == "deep":
