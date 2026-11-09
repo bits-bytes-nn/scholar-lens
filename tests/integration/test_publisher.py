@@ -2065,7 +2065,7 @@ def test_a_figure_check_tries_a_transient_failure_again(
     assert calls.count("https://x/gone.png") == 1
 
 
-def test_a_stalled_figure_check_keeps_the_figures_it_could_not_check(
+def test_a_stalled_figure_check_leaves_out_the_figures_it_could_not_check(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import asyncio
@@ -2081,4 +2081,8 @@ def test_a_stalled_figure_check_keeps_the_figures_it_could_not_check(
     monkeypatch.setattr(publisher_module, "_downloadable", slow)
     monkeypatch.setattr(publisher_module, "FIGURE_CHECK_DEADLINE_S", 0.2)
     urls = ["https://x/gone.png", "https://x/slow.png", "https://x/ok.png"]
-    assert asyncio.run(publisher_module.unservable(urls)) == ["https://x/gone.png"]
+    # A figure not checked in time is left out too: publishing would fail on it.
+    assert asyncio.run(publisher_module.unservable(urls)) == [
+        "https://x/gone.png",
+        "https://x/slow.png",
+    ]

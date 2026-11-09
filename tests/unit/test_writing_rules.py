@@ -777,9 +777,33 @@ def test_a_fence_opener_glued_to_prose_moves_to_its_own_line() -> None:
         # A move that would leave the rest of the post inside a block.
         "예시 ```python\nx = 1```\n\n다음 문단입니다.\n\n```\ncode2\n```\n\n끝.\n",
         "백틱 세 개로 엽니다: ```\n\n예를 들면\n\n```\nprint(1)\n```\n",
+        "백틱 세 개로 감쌉니다 ```\n```\n빈 블록 예시\n```\n\n다음.\n\n```python\ny = 1\n```\n",
     ):
         assert unglue_fences(text) == text
     # In a list item the block stays in the item.
     assert unglue_fences("1. 설치합니다: ```bash\n   pip install x\n   ```\n") == (
         "1. 설치합니다:\n\n   ```bash\n   pip install x\n   ```\n"
     )
+
+
+@pytest.mark.parametrize(
+    "heading, sentence",
+    [
+        ("캐시가 메모리를 넘어간다", True),
+        ("병목은 디코딩으로 옮겨 간다", True),
+        ("사용자가 데이터를 판다", True),
+        ("모델은 데이터와 함께 자란다", True),
+        ("카메라와 라이다", False),
+        ("아나콘다 환경", False),
+        ("귀여운 판다", False),
+        ("향후 연구 어젠다", False),
+        ("정규화 계수 람다", False),
+        ("모델 아키텍처 개요", False),
+    ],
+)
+def test_sentence_headings_follow_predicate_endings(
+    heading: str, sentence: bool
+) -> None:
+    from scholar_lens.domain.markdown.lint import sentence_headings
+
+    assert bool(sentence_headings(f"## {heading}\n")) is sentence

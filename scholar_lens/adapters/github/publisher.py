@@ -707,8 +707,9 @@ class Publisher:
 # (429, 5xx, a timeout) tried again before the figure counts as unservable.
 FIGURE_CHECK_CONCURRENCY = 4
 FIGURE_CHECK_ATTEMPTS = 3
-# The whole check's deadline, so a stalled source cannot hold a run.
-FIGURE_CHECK_DEADLINE_S = 180
+# The whole check's deadline, so a stalled source cannot hold a run (above
+# one figure's worst case: three downloads within their own deadlines).
+FIGURE_CHECK_DEADLINE_S = 300
 
 
 def _downloadable(url: str, sleep: Callable[[float], None] = time.sleep) -> bool:
@@ -729,8 +730,9 @@ def _downloadable(url: str, sleep: Callable[[float], None] = time.sleep) -> bool
 
 async def unservable(urls: list[str]) -> list[str]:
     """The figure URLs that cannot be downloaded (arXiv HTML lists some it
-    does not serve): an image that fails to download fails the publish
-    step."""
+    does not serve), or that could not be checked within
+    :data:`FIGURE_CHECK_DEADLINE_S`: an image that fails to download fails
+    the publish step."""
     gate = asyncio.Semaphore(FIGURE_CHECK_CONCURRENCY)
 
     async def check(url: str) -> bool:
@@ -744,14 +746,16 @@ async def unservable(urls: list[str]) -> list[str]:
     for task in pending:
         task.cancel()
     if pending:
-        # A source that stalls must not hold the run: the figures not checked
-        # in time are kept, and the publish step downloads them again.
+        # A source that stalls must not hold the run. A figure not checked in
+        # time counts as unservable: publishing fails on an image it cannot
+        # download, so writing about it would waste the run.
         logger.warning(
-            "Figure check stopped after %ds; %d figure(s) left unchecked.",
+            "Figure check stopped after %ds; %d figure(s) not checked in time "
+            "are left out.",
             FIGURE_CHECK_DEADLINE_S,
             len(pending),
         )
-    return [u for task, u in tasks.items() if task in done and not task.result()]
+    return [u for task, u in tasks.items() if task in pending or not task.result()]
 
 
 class FigureDownloads:

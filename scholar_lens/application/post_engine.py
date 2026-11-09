@@ -565,9 +565,11 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
         key target no evidence of a section is mapped to is a problem too,
         unless no evidence of the ledger can state it (its sources gave
         none); on the last attempt it stays a note rather than a failed
-        run. When no attempt maps every target, the structurally sound
-        outline with the fewest unmapped targets is kept (the later one on
-        a tie), whether the last attempt was sound or not.
+        run. A section title written as a sentence is asked again the same
+        way, and noted. When no attempt is free of both, the structurally
+        sound outline with the fewest unmapped targets, then the fewest
+        sentence titles, is kept (the later one on a tie), whether the last
+        attempt was sound or not.
 
         Raises:
             ValueError: The outline still breaks the spec's rules.

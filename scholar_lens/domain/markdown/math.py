@@ -156,6 +156,7 @@ _GLUED_OPENER = re.compile(
     r"^(?P<text>(?!\s*(?:`{3}|~{3})).*[^`\s])[ \t]+(?P<fence>`{3,}[A-Za-z0-9_+.#-]*)[ \t]*$"
 )
 _BARE_FENCE = re.compile(r"^\s*`{3,}\s*$")
+_INFO_FENCE = re.compile(r"^\s*(?:`{3,}|~{3,})\s*\S")
 _LIST_ITEM_PREFIX = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+")
 
 
@@ -192,9 +193,17 @@ def unglue_fences(markdown: str) -> str:
                 indent + m.group("fence"),
                 *lines[i + 1 :],
             ]
-            # Only a move that leaves every fence closed: one that would leave
-            # the rest of the text inside a block is not the writer's slip.
+            # Only a move that leaves every fence closed and every opener with
+            # a language word still an opener: one that re-pairs the rest of
+            # the text is not the writer's slip.
             if open_fence_line(moved) is not None:
+                continue
+            after = fence_roles(moved)
+            if any(
+                roles[j] != after[j + (2 if j > i else 0)]
+                for j in range(len(lines))
+                if j != i and _INFO_FENCE.match(lines[j])
+            ):
                 continue
             lines = moved
             changed = True

@@ -1078,19 +1078,23 @@ _POLITE = re.compile(r"(?:[아어여에예워와해돼봐줘까네래대]요|[�
 # Syllables a "~다" follows as an ending: the copula and the stems and
 # tense marks of predicates ("모델이다", "가능하다", "되다", "있다", "했다").
 _PREDICATE_BEFORE_DA = frozenset("이하되않없같있었았였했겠렵롭답많좋낫닿크쉽깊높낮옳")
-# Nouns (loanwords, names) whose last syllables read like a predicate ending
-# ("ㄴ다", "이다"), matched as word endings ("아나콘다", "카메라와 라이다").
-_NOUN_ENDINGS_LIKE_DA = (
-    "판다",
-    "젠다",
-    "란다",
-    "간다",
-    "콘다",
-    "완다",
-    "라이다",
-    "레이다",
-    "에이다",
-    "사이다",
+# Nouns (loanwords, names) whose last syllables read like a predicate
+# ending: those that are no verb form match as word endings ("아나콘다",
+# "카메라와 라이다"); those that are also common verb endings ("간다", "판다")
+# match only as the whole word.
+_NOUN_ENDINGS_LIKE_DA = ("콘다", "젠다", "라이다", "레이다", "에이다")
+_NOUNS_LIKE_DA = frozenset(
+    {
+        "판다",
+        "간다",
+        "란다",
+        "완다",
+        "사이다",
+        "우간다",
+        "르완다",
+        "베란다",
+        "프로파간다",
+    }
 )
 
 
@@ -1099,7 +1103,12 @@ def _declarative(word: str) -> bool:
     final ㄴ (present tense: "한다", "만든다"), after "니" ("합니다"), or
     after a predicate stem or tense mark."""
     word = word.rstrip(".!")
-    if len(word) < 2 or not word.endswith("다") or word.endswith(_NOUN_ENDINGS_LIKE_DA):
+    if (
+        len(word) < 2
+        or not word.endswith("다")
+        or word in _NOUNS_LIKE_DA
+        or word.endswith(_NOUN_ENDINGS_LIKE_DA)
+    ):
         return False
     before = word[-2]
     if not "가" <= before <= "힣":
@@ -1108,9 +1117,25 @@ def _declarative(word: str) -> bool:
     return final == 4 or before == "니" or before in _PREDICATE_BEFORE_DA
 
 
+# Endings of a word before a verb: a subject or object particle or a
+# connective ("데이터를 판다", "옮겨 간다"), not a noun's company ("카메라와").
+_BEFORE_A_VERB = re.compile(r"[을를이가은는도어아여서고게겨워해려쳐져혀돼봐줘]$")
+
+
 def _is_sentence_heading(text: str) -> bool:
-    last = text.split()[-1] if text.split() else ""
-    return bool(_POLITE.search(last)) or _declarative(last)
+    words = text.split()
+    if not words:
+        return False
+    last = words[-1]
+    if _POLITE.search(last) or _declarative(last):
+        return True
+    # A word that is a noun or a verb ending ("간다", "판다") reads as the verb
+    # after a particle or connective.
+    return (
+        last.rstrip(".!") in _NOUNS_LIKE_DA
+        and len(words) > 1
+        and bool(_BEFORE_A_VERB.search(words[-2]))
+    )
 
 
 def sentence_headings(markdown: str) -> list[str]:
