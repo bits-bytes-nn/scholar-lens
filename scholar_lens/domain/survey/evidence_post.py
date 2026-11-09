@@ -191,8 +191,9 @@ def outline_problems(
         )
         if papers[pid].role == "core" and prose_only and not in_sections[pid]:
             problems.append(
-                f"core paper {pid} needs evidence in its lineage section, not "
-                "only the table"
+                f"core paper {pid} needs evidence in its lineage section: the "
+                "numbers and limitations the table shows do not count; give it "
+                "a method, finding or figure"
             )
     for name, mapping, keys in (
         ("short_names", outline.short_names, papers),
@@ -419,7 +420,9 @@ def repair_outline(
                 target = home.get(item.paper_id)
                 if target is not None and target != i:
                     moves.append((target, eid))
-                continue
+                    continue
+                # Its paper has no lineage section: it stays, and the outline
+                # check names the section that does not cover it.
             kept.append(eid)
             seen.add(eid)
         s.evidence = kept
@@ -440,9 +443,23 @@ def repair_outline(
             sections[target].evidence.append(item.id)
             seen.add(item.id)
             notes.append(f"gave {item.id} ({item.kind}) to its paper's section")
-    rows = {
-        r.paper: r.model_copy(deep=True) for r in outline.table if r.paper in papers
-    }
+    # Rows by paper: a row that names its paper by its short name is that
+    # paper's, and a paper's later rows add to its first. Every id any row
+    # gave is accounted for below (shown, or given back to its section).
+    by_short = {name: pid for pid, name in outline.short_names.items()}
+    rows: dict[str, TableRow] = {}
+    asked: list[str] = []
+    for r in outline.table:
+        asked += [*r.results, *([r.limitation] if r.limitation else [])]
+        pid = r.paper if r.paper in papers else by_short.get(r.paper)
+        if pid is None:
+            notes.append(f"dropped table row {r.paper!r} (not a survey paper)")
+        elif pid in rows:
+            rows[pid].results += r.results
+            rows[pid].limitation = rows[pid].limitation or r.limitation
+            notes.append(f"merged the table rows of {pid}")
+        else:
+            rows[pid] = r.model_copy(deep=True, update={"paper": pid})
 
     def fact(eid: str) -> str:
         # Evidence merged as the same fact counts as the item it was merged
@@ -481,7 +498,6 @@ def repair_outline(
         if pid not in rows:
             continue
         row = rows[pid]
-        asked = [*row.results, *([row.limitation] if row.limitation else [])]
 
         def own(eid: str | None, pid: str = pid) -> bool:
             item = ledger.get(eid) if eid else None
@@ -501,15 +517,20 @@ def repair_outline(
         row.limitation = (
             limitation if own(limitation) else (limits[0] if limits else None)
         )
-        shown = {fact(e) for e in [*row.results, row.limitation] if e}
-        for eid in dict.fromkeys(fact(e) for e in asked):
-            item = ledger.get(eid)
-            if item is None or eid in shown or eid in in_sections:
-                continue
-            if (target := home.get(item.paper_id)) is not None:
-                sections[target].evidence.append(eid)
-                in_sections.add(eid)
-                notes.append(f"gave {eid} back to {item.paper_id}'s lineage section")
+    shown = {
+        (r.paper, fact(e))
+        for r in rows.values()
+        for e in [*r.results, r.limitation]
+        if e
+    }
+    for eid in dict.fromkeys(fact(e) for e in asked):
+        item = ledger.get(eid)
+        if item is None or (item.paper_id, eid) in shown or eid in in_sections:
+            continue
+        if (target := home.get(item.paper_id)) is not None:
+            sections[target].evidence.append(eid)
+            in_sections.add(eid)
+            notes.append(f"gave {eid} back to {item.paper_id}'s lineage section")
     order = [p.id for p in plan.papers]
     table = sorted(rows.values(), key=lambda r: order.index(r.paper))
     # The table owns the facts it shows: a result or limitation shown there

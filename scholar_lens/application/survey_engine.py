@@ -334,17 +334,21 @@ class EvidenceSurveyEngine(PostEngine[EvidenceOutline, OutlineSection, EvidenceS
         self._merged = dict(merged or {})
         return repair_outline(outline, self._plan, ledger, merged=merged)
 
-    def allowed_same_facts(
-        self, same: Mapping[str, str], ledger: EvidenceLedger
-    ) -> dict[str, str]:
-        # A survey states each paper's own results: one paper's fact is
-        # never merged into another paper's (its row, share and section
-        # would lose it).
-        def paper(eid: str) -> str:
-            item = ledger.get(eid)
-            return item.paper_id if item else ""
-
-        return {d: k for d, k in same.items() if paper(d) == paper(k)}
+    def same_fact_groups(
+        self, groups: Sequence[Sequence[str]], ledger: EvidenceLedger
+    ) -> list[list[str]]:
+        # A survey states each paper's own results: a group is split by
+        # paper, so one paper's fact is never merged into another's (its
+        # row, share and section would lose it) and the same paper's copies
+        # still merge.
+        out: list[list[str]] = []
+        for group in groups:
+            by_paper: dict[str, list[str]] = {}
+            for eid in group:
+                if (item := ledger.get(eid)) is not None:
+                    by_paper.setdefault(item.paper_id, []).append(eid)
+            out += [ids for ids in by_paper.values() if len(ids) > 1]
+        return out
 
     def outline_problems(
         self, outline: EvidenceOutline, ledger: EvidenceLedger

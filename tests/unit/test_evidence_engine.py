@@ -1793,5 +1793,62 @@ def test_a_survey_keeps_same_fact_merges_within_one_paper() -> None:
         cell="승률 61%",
     )
     engine = EvidenceSurveyEngine.__new__(EvidenceSurveyEngine)
-    assert engine.allowed_same_facts({other.id: "E2"}, ledger) == {}
-    assert engine.allowed_same_facts({"E3": "E2"}, ledger) == {"E3": "E2"}
+    # A group across papers is split by paper: same-paper copies still merge.
+    assert engine.same_fact_groups([[other.id, "E2"]], ledger) == []
+    assert engine.same_fact_groups([["E2", other.id, "E3"]], ledger) == [["E2", "E3"]]
+
+
+def _three_numbers() -> EvidenceLedger:
+    ledger = EvidenceLedger()
+    doc = _doc()
+    ledger.add(
+        doc,
+        kind="method",
+        claim="방법",
+        quote="optimizes preferences without a reward model",
+        anchor="S1",
+    )
+    for n in (1, 2, 3):
+        ledger.add(
+            doc,
+            kind="number",
+            claim=f"승률 {n}%",
+            quote="DPO reaches a 61% win rate against PPO",
+            anchor="S3",
+            scope="TL;DR, GPT-4 judge",
+            cell=f"승률 {n}%",
+        )
+    return ledger
+
+
+@pytest.mark.parametrize(
+    "table",
+    [
+        # A second row for the same paper.
+        [
+            {"paper": "2305.18290", "results": ["E4"]},
+            {"paper": "2305.18290", "results": ["E2"]},
+        ],
+        # A row naming its paper by an unknown name.
+        [{"paper": "DPO-unknown", "results": ["E4"]}],
+    ],
+)
+def test_no_table_row_takes_its_evidence_out_of_the_post(table: list[dict]) -> None:
+    from scholar_lens.domain.survey.evidence_post import repair_outline
+
+    ledger = _three_numbers()
+    fixed, _ = repair_outline(_rows_outline(table, ["E1"]), _plan(), ledger)
+    kept = {e for r in fixed.table for e in r.results} | {
+        e for s in fixed.sections for e in s.evidence
+    }
+    assert "E4" in kept
+
+
+def test_a_row_named_by_its_papers_short_name_is_that_papers() -> None:
+    from scholar_lens.domain.survey.evidence_post import repair_outline
+
+    outline = _rows_outline([{"paper": "DPO", "results": ["E4"]}], ["E1"])
+    outline = outline.model_copy(update={"short_names": {"2305.18290": "DPO"}})
+    fixed, _ = repair_outline(outline, _plan(), _three_numbers())
+    assert [r.paper for r in fixed.table] == ["2305.18290"]
+    assert fixed.table[0].results[0] == "E4"
