@@ -278,3 +278,32 @@ def test_the_output_language_has_one_spelling() -> None:
     assert Config(output_language="zh-TW").output_language == "zh-TW"
     with pytest.raises(ValidationError):
         Config(output_language="   ")
+
+
+def test_engine_settings_defaults_are_the_configurations() -> None:
+    """The engines' settings default to what the configuration does (the
+    run passes the configured values; tests build settings with defaults)."""
+    from scholar_lens.application.guide_engine import GuideSettings
+    from scholar_lens.application.paper_engine import PaperSettings
+
+    config = Config()
+    paper = PaperSettings(language="Korean", post="review", reader_tag="t")
+    review = config.explanation
+    assert (paper.max_sections, paper.chars_per_reader) == (
+        review.max_sections,
+        review.chars_per_reader,
+    )
+    assert (paper.min_total_chars, paper.max_total_chars) == (
+        review.min_total_chars,
+        review.max_total_chars,
+    )
+    guide = GuideSettings(language="Korean", title_max_length=70, reader_tag="t")
+    cfg = config.tech_guide
+    assert (guide.max_sections, guide.max_sources) == (
+        cfg.max_sections,
+        cfg.max_sources_read,
+    )
+    assert (guide.min_total_chars, guide.max_total_chars) == (
+        cfg.min_total_chars,
+        cfg.max_total_chars,
+    )

@@ -197,7 +197,7 @@ PostSpec ──┐            SourceSet ──┐
 | entrypoints | `scholar_lens/cli.py`, worker, `bootstrap` | 인자 해석, 설정 로드, 의존성 조립 | 모두 |
 
 - **포트**(`scholar_lens/application/ports.py`):
-  - 공통: `LanguageModel`, `EvidenceModels`, `UsageTracker`, `TextStore`, `CheckpointStore`, `ObjectStore`, `Files`(로컬 경로와 `s3://` 위치의 파일. 유스케이스는 파일을 이 포트로만 읽고 씁니다), `BlogSource`, `PostPublisher`, `FigureCheck`, `RunLedger`, `JobQueue`, `BilledCosts`
+  - 공통: `LanguageModel`, `EvidenceModels`, `UsageTracker`, `TextStore`(근거 캐시와 단계 저장본, `CheckpointStore`는 같은 포트의 별칭), `ObjectStore`, `Files`(로컬 경로와 `s3://` 위치의 파일. 유스케이스는 파일을 이 포트로만 읽고 씁니다), `BlogSource`, `PostPublisher`, `FigureCheck`, `RunLedger`, `JobQueue`, `BilledCosts`
   - 설정: `RunSettings`, `ResourceSettings`, `GithubSettings`
   - 가이드: `WebResearch`(수집·검색), `GuideResearch`, `PackageIndex`, `GuideTools`
   - 리뷰·요약: `PaperOrigin`(arXiv ID·PDF URL), `SectionsWriter`(sections 엔진), `PaperTools`

@@ -97,7 +97,9 @@ class GuideSettings:
     title_max_length: int
     # Cache-key part naming the reading model.
     reader_tag: str
-    max_sections: int = 14
+    # The run passes these from its configuration; the defaults equal the
+    # configuration's (a contract test holds them together).
+    max_sections: int = 11
     max_fix_rounds: int = GUIDE_SPEC.limits.fix_rounds
     # Agent turns per page: the docs and the user's material are read in
     # depth, search results for what they add.
@@ -111,8 +113,8 @@ class GuideSettings:
     # Source text handed to one section's writer and checks.
     source_chars: int = 40_000
     # Prose characters (Korean) of the whole guide.
-    min_total_chars: int = 30_000
-    max_total_chars: int = 55_000
+    min_total_chars: int = 25_000
+    max_total_chars: int = 45_000
 
     @property
     def korean(self) -> bool:

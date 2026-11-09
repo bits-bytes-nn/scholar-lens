@@ -87,7 +87,9 @@ class PaperSettings:
     post: PostKind
     # Cache-key part naming the reading model.
     reader_tag: str
-    max_sections: int = 12
+    # The run passes these from its configuration; the defaults equal the
+    # configuration's (a contract test holds them together).
+    max_sections: int = 20
     max_fix_rounds: int = _LIMITS.fix_rounds
     # Paper characters one reading agent covers, its turns and tokens.
     chars_per_reader: int = 15_000
@@ -99,7 +101,7 @@ class PaperSettings:
     source_chars: int = 40_000
     # Prose characters (Korean) of the whole post.
     min_total_chars: int = 25_000
-    max_total_chars: int = 45_000
+    max_total_chars: int = 55_000
 
     @property
     def korean(self) -> bool:
