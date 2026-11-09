@@ -16,6 +16,7 @@ from scholar_lens.domain.evidence import EvidenceLedger, canonical_ids
 from scholar_lens.domain.evidence_draft import MARKER, block_lines, cited_ids
 from scholar_lens.domain.glossary import GlossaryTerm
 from scholar_lens.domain.lengths import DEPTH_CHARS, scaled_targets
+from scholar_lens.domain.markdown.lint import ends_in_plain_declarative
 from scholar_lens.domain.markdown.tables import escape_cell_pipes
 from scholar_lens.domain.post_spec import (
     Depth,
@@ -237,6 +238,17 @@ def timeline_table(plan: SurveyPlan, outline: EvidenceOutline, korean: bool) -> 
     return _table(head, rows)
 
 
+def result_cell(cell: str) -> bool:
+    """Whether a number evidence's cell can stand in the comparison table's
+    results column: it states a number and is no plain-style sentence (a
+    sentence in another register reads as prose in a table)."""
+    return (
+        bool(cell)
+        and any(c.isdigit() for c in cell)
+        and not (ends_in_plain_declarative(cell))
+    )
+
+
 def comparison_table(
     plan: SurveyPlan, outline: EvidenceOutline, ledger: EvidenceLedger, korean: bool
 ) -> str:
@@ -262,8 +274,15 @@ def comparison_table(
             [
                 outline.short_names.get(paper.id, paper.title),
                 outline.lineage_names.get(paper.lineage, paper.lineage),
-                "; ".join(e.cell for e in results if e.cell) or none_result,
-                limit.cell if limit and limit.cell else none_limit,
+                "; ".join(e.cell for e in results if result_cell(e.cell))
+                or none_result,
+                (
+                    limit.cell
+                    if limit
+                    and limit.cell
+                    and not ends_in_plain_declarative(limit.cell)
+                    else none_limit
+                ),
             ]
         )
     return _table(head, rows)
@@ -379,7 +398,9 @@ def repair_outline(
         r.paper: r.model_copy(deep=True) for r in outline.table if r.paper in papers
     }
     for pid, paper in papers.items():
-        numbers = [e.id for e in ledger.of_paper(pid) if e.kind == "number"]
+        # The numbers whose cells the table can show, first.
+        found = [e for e in ledger.of_paper(pid) if e.kind == "number"]
+        numbers = [e.id for e in sorted(found, key=lambda e: not result_cell(e.cell))]
         limits = [e.id for e in ledger.of_paper(pid) if e.kind == "limitation"]
         if pid not in rows and (paper.role == "core" or numbers):
             rows[pid] = TableRow(paper=pid)

@@ -1174,6 +1174,14 @@ def _is_sentence_heading(text: str) -> bool:
     )
 
 
+def ends_in_plain_declarative(text: str) -> bool:
+    """Whether ``text`` ends as a plain-style Korean sentence ("~한다",
+    "~이다"; not the polite "~니다"): what a table cell may not be (a cell
+    is a noun phrase or an "입니다" sentence, KOREAN_STYLE)."""
+    words = text.strip().rstrip(".!?").split()
+    return bool(words) and not words[-1].endswith("니다") and _declarative(words[-1])
+
+
 def sentence_headings(markdown: str) -> list[str]:
     """The headings (their text) written as a Korean sentence, outside code
     and math."""

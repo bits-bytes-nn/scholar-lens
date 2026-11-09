@@ -1464,3 +1464,13 @@ def test_a_source_section_with_evidence_the_outline_never_uses_is_a_gap() -> Non
     )
     # One fact two readers recorded is one item, not two.
     assert not unused_source_sections([doc], ledger, used={"E1"}, same={"E3": "E2"})
+
+
+def test_a_comparison_cell_states_a_number_and_is_no_plain_sentence() -> None:
+    from scholar_lens.domain.survey.evidence_post import result_cell
+
+    assert result_cell("HH 승률 61%")
+    assert result_cell("정확도가 2.1%p 높습니다")
+    assert not result_cell("보상 모델 없이 선호를 최적화")
+    assert not result_cell("승률을 61%로 끌어올린다")
+    assert not result_cell("")
