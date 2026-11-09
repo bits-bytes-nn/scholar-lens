@@ -304,3 +304,41 @@ def uncited(
     """The targets none of whose mapped evidence the body cites."""
     have = set(cited)
     return [t for t in targets if not set(coverage.get(t.id, ())) & have]
+
+
+# A source section the readers recorded at least this many items from is
+# part of what the post covers.
+MIN_SECTION_EVIDENCE = 2
+
+
+def unused_source_sections(
+    documents: Iterable[SourceDocument],
+    ledger: Iterable[Evidence],
+    used: Collection[str],
+    same: Mapping[str, str],
+    *,
+    min_items: int = MIN_SECTION_EVIDENCE,
+) -> list[str]:
+    """Source sections the readers found worth ``min_items`` or more pieces
+    of evidence from, none of which the outline uses (an item counts as used
+    when it, or the item it duplicates, is): what a post built only from
+    its outline would leave out of the source. One problem per section, for
+    the outline writer."""
+    recorded: dict[tuple[str, str], list[str]] = {}
+    for e in ledger:
+        recorded.setdefault((e.paper_id, e.anchor), []).append(e.id)
+    problems = []
+    for document in documents:
+        for section in document.sections:
+            ids = recorded.get((document.paper_id, section.anchor), [])
+            if len(ids) < min_items:
+                continue
+            if any(i in used or same.get(i) in used for i in ids):
+                continue
+            name = section.heading or section.anchor
+            problems.append(
+                f"source section {section.anchor} '{name[:80]}' of {document.paper_id} "
+                f"has {len(ids)} evidence items ({', '.join(ids[:6])}) and no "
+                "section uses any: give its main point to the section it belongs to"
+            )
+    return problems

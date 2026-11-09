@@ -84,6 +84,7 @@ from scholar_lens.domain.coverage import (
     unassigned,
     uncited,
     unsatisfiable,
+    unused_source_sections,
     without_evidence,
 )
 from scholar_lens.domain.evidence import (
@@ -585,7 +586,7 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
         )
         prompt = base
         problems: list[str] = []
-        best: tuple[OutlineT, list[str], tuple[int, int]] | None = None
+        best: tuple[OutlineT, list[str], tuple[int, int, int], list[str]] | None = None
         known = {e.id for e in ledger}
         with usage_stage("outline"):
             for attempt in range(self.run.outline_repairs + 1):
@@ -628,18 +629,24 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
                 # weighed after coverage: an outline that keeps them is kept
                 # with a note.
                 titles = sentence_title_problems(s.title for s in outline.sections)
+                # The same way: source sections the readers recorded
+                # evidence from that the outline leaves out entirely.
+                gaps = unused_source_sections(
+                    self.covered_documents(), ledger, used, same
+                )
                 if not problems:
                     # The structurally sound outline that maps the most
-                    # targets, then has the fewest sentence titles (the later
-                    # one on a tie): what the last attempt gives back.
-                    rank = (len(missing), len(titles))
+                    # targets, then leaves out the fewest source sections,
+                    # then has the fewest sentence titles (the later one on a
+                    # tie): what the last attempt gives back.
+                    rank = (len(missing), len(gaps), len(titles))
                     if best is None or rank <= best[2]:
-                        best = (outline, missing, rank)
-                    if not missing and not titles:
+                        best = (outline, missing, rank, gaps)
+                    if not missing and not gaps and not titles:
                         return self._noted_coverage(outline, ledger)
                     if attempt == self.run.outline_repairs:
                         break
-                problems += missing + titles
+                problems += missing + gaps + titles
                 logger.warning(
                     "%s attempt %d unusable: %s",
                     name.capitalize(),
@@ -659,10 +666,15 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
             logger.warning(
                 "%s: no attempt was free of coverage gaps and sentence titles; "
                 "keeping the sound outline that mapped the most, %d key targets "
-                "unmapped, %d sentence titles.",
+                "unmapped, %d source sections left out, %d sentence titles.",
                 name.capitalize(),
                 *best[2],
             )
+            if best[3]:
+                self.notes.append(
+                    "Source sections the outline leaves out (evidence was "
+                    "recorded from them): " + " | ".join(g[:160] for g in best[3][:6])
+                )
             return self._noted_coverage(best[0], ledger)
         raise ValueError(
             f"The {name} breaks the rules after repairs: " + "; ".join(problems)
@@ -1374,6 +1386,12 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
     def outline_problems(self, outline: OutlineT, ledger: EvidenceLedger) -> list[str]:
         """What makes an outline unusable (the outline writer is told)."""
         raise NotImplementedError
+
+    def covered_documents(self) -> Sequence[SourceDocument]:
+        """The sources whose every section with recorded evidence the
+        outline should draw on (none by default: a guide or survey picks
+        from many sources; a paper post covers its paper)."""
+        return ()
 
     def cited_elsewhere(self, outline: OutlineT) -> set[str]:
         """Evidence the outline cites outside its sections (a table)."""

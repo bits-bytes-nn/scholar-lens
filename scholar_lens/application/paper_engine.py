@@ -193,6 +193,7 @@ class EvidencePaperEngine(PostEngine[PaperOutline, PaperSection, EvidencePaper])
         self.settings = settings
         self.free = _FREE_NUMBERS
         self._documents: dict[str, SourceDocument] = {}
+        self._paper_id = ""
         self._title = ""
         self._abstract = ""
         self._guideline = ""
@@ -267,6 +268,7 @@ class EvidencePaperEngine(PostEngine[PaperOutline, PaperSection, EvidencePaper])
     ) -> EvidencePaper:
         self._title, self._abstract, self._guideline = title, abstract, guideline
         self._documents = {d.paper_id: d for d in (paper, *extra)}
+        self._paper_id = paper.paper_id
         self._sources = input_hash([d.model_dump(mode="json") for d in (paper, *extra)])
         self.passages = {
             (d.paper_id, s.anchor): s.text for d in (paper, *extra) for s in d.sections
@@ -336,6 +338,12 @@ class EvidencePaperEngine(PostEngine[PaperOutline, PaperSection, EvidencePaper])
         return repair_paper_outline(
             outline, ledger, self.settings.post, self.settings.language
         )
+
+    def covered_documents(self) -> Sequence[SourceDocument]:
+        # The paper itself (not its code summary): a review or summary covers
+        # every part of it the readers found evidence in.
+        paper = self._documents.get(self._paper_id)
+        return (paper,) if paper is not None else ()
 
     def outline_problems(
         self, outline: PaperOutline, ledger: EvidenceLedger

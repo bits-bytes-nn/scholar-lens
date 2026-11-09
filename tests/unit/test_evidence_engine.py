@@ -1441,3 +1441,24 @@ def test_a_deleted_sentence_never_takes_a_heading_with_it() -> None:
     assert (
         drop_sentences(md, ["캐시 구조"]) == "## 운영\n\n### 캐시 구조\n\n본문입니다.\n"
     )
+
+
+def test_a_source_section_with_evidence_the_outline_never_uses_is_a_gap() -> None:
+    from scholar_lens.domain.coverage import unused_source_sections
+
+    doc = SourceDocument.from_markdown(
+        "p", "t", "full_text", "## 방법\n\n방법 본문.\n\n## 부록 실험\n\n실험 본문.\n"
+    )
+
+    def ev(i: str, anchor: str) -> Evidence:
+        return Evidence(
+            id=i, paper_id="p", kind="finding", claim="c", quote="q" * 30, anchor=anchor
+        )
+
+    ledger = [ev("E1", "S1"), ev("E2", "S2"), ev("E3", "S2"), ev("E4", "S1")]
+    gaps = unused_source_sections([doc], ledger, used={"E1"}, same={})
+    assert len(gaps) == 1 and "S2 '부록 실험'" in gaps[0]
+    # Using one of its items, or an item it duplicates, covers it.
+    assert not unused_source_sections(
+        [doc], ledger, used={"E1", "E9"}, same={"E3": "E9"}
+    )
