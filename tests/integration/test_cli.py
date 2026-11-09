@@ -541,14 +541,32 @@ def test_cancel_reports_the_job_and_errors_as_json(
 
     queue = mock.MagicMock()
     queue.cancel.return_value = CancelledJob(
-        job_id="j", batch_status="FAILED", reason="r"
+        job_id="j", previous_status="RUNNING", reason="r"
     )
     with (
         mock.patch.object(cli, "_aws_context"),
         mock.patch("scholar_lens.bootstrap.job_queue", return_value=queue),
     ):
         assert cli.main(["cancel", "j"]) == cli.EXIT_OK
-    assert _output(capsys)["batch_status"] == "FAILED"
+    assert _output(capsys)["previous_status"] == "RUNNING"
+    from scholar_lens.domain.jobs import JobAlreadyFinished
+
+    queue.cancel.side_effect = JobAlreadyFinished("already SUCCEEDED")
+    with (
+        mock.patch.object(cli, "_aws_context"),
+        mock.patch("scholar_lens.bootstrap.job_queue", return_value=queue),
+    ):
+        assert cli.main(["cancel", "j"]) == cli.EXIT_REJECTED
+    assert _output(capsys)["status"] == "rejected"
+    from scholar_lens.domain.jobs import JobAlreadyFinished
+
+    queue.cancel.side_effect = JobAlreadyFinished("already SUCCEEDED")
+    with (
+        mock.patch.object(cli, "_aws_context"),
+        mock.patch("scholar_lens.bootstrap.job_queue", return_value=queue),
+    ):
+        assert cli.main(["cancel", "j"]) == cli.EXIT_REJECTED
+    assert _output(capsys)["status"] == "rejected"
     queue.cancel.side_effect = RuntimeError("denied")
     with (
         mock.patch.object(cli, "_aws_context"),

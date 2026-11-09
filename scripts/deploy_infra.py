@@ -79,7 +79,7 @@ from scholar_lens.domain.constants import (
     SSMParams,
 )
 from scholar_lens.domain.cost_allocation import ARTIFACT_KINDS, application_profile_name
-from scholar_lens.domain.jobs import ssm_base
+from scholar_lens.domain.jobs import CANCEL_REASON, ssm_base
 from scholar_lens.entrypoints.logs import get_default_logger
 
 logger = get_default_logger()
@@ -574,6 +574,13 @@ class PaperReviewStack(Stack):
                 detail={
                     "status": ["FAILED"],
                     "jobQueue": [self.job_queue.job_queue_arn],
+                    # A job the user stopped (scholar-lens cancel) is no alarm;
+                    # a FAILED event without a reason still is (the values of
+                    # a field's list are alternatives).
+                    "statusReason": [
+                        {"anything-but": {"prefix": CANCEL_REASON}},
+                        {"exists": False},
+                    ],
                     "$or": [
                         {
                             "container": {

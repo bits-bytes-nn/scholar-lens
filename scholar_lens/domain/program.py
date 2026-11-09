@@ -10,7 +10,7 @@ import builtins
 import re
 import symtable
 import textwrap
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from scholar_lens.domain.verifiers import Problem
@@ -207,15 +207,68 @@ def program_problems(sections: Sequence[tuple[str, str, bool]]) -> list[Problem]
 
 def _call_signature(node: ast.stmt) -> tuple[str, ast.arguments, bool] | None:
     """A top-level definition's name, parameters and whether a call passes
-    ``self`` implicitly: a plain function, or an undecorated class with its
-    own ``__init__`` (its other constructors are unknown to this check)."""
+    ``self`` implicitly: an undecorated function, or an undecorated class
+    with its own ``__init__`` (the last one that is not an ``@overload``
+    stub). A decorator may change what a call takes (``@click.command``),
+    so a decorated definition is not checked."""
     if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
-        return node.name, node.args, False
+        return None if node.decorator_list else (node.name, node.args, False)
     if isinstance(node, ast.ClassDef) and not node.decorator_list:
-        for item in node.body:
-            if isinstance(item, ast.FunctionDef) and item.name == "__init__":
-                return node.name, item.args, True
+        inits = [
+            item
+            for item in node.body
+            if isinstance(item, ast.FunctionDef)
+            and item.name == "__init__"
+            and not item.decorator_list
+        ]
+        if inits:
+            return node.name, inits[-1].args, True
     return None
+
+
+def _bound_by(node: ast.stmt) -> set[str]:
+    """The names a top-level statement binds (imports, assignments, loop and
+    ``with`` targets, definitions), not inside a function or class body."""
+    names: set[str] = set()
+
+    def visit(n: ast.AST) -> None:
+        if isinstance(n, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+            names.add(n.name)
+            return
+        if isinstance(n, ast.Lambda):
+            return
+        if isinstance(n, ast.Import | ast.ImportFrom):
+            names.update((a.asname or a.name).split(".")[0] for a in n.names)
+        elif isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store):
+            names.add(n.id)
+        for child in ast.iter_child_nodes(n):
+            visit(child)
+
+    visit(node)
+    return names
+
+
+def _calls_run_now(node: ast.stmt) -> list[ast.Call]:
+    """The calls a top-level statement makes when it runs: not those in a
+    function, lambda or class body it defines (they run later, under their
+    own scope)."""
+    calls: list[ast.Call] = []
+
+    def visit(n: ast.AST) -> None:
+        if isinstance(
+            n, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef | ast.Lambda
+        ):
+            # Decorators and defaults run now; the body runs later.
+            for d in getattr(n, "decorator_list", []):
+                visit(d)
+            return
+        if isinstance(n, ast.Call):
+            calls.append(n)
+        for child in ast.iter_child_nodes(n):
+            visit(child)
+
+    visit(node)
+    return calls
 
 
 def _call_mismatch(call: ast.Call, args: ast.arguments, bound: bool) -> str:
@@ -313,48 +366,51 @@ def _code_findings(
                         names=tuple(missing),
                     )
                 )
-            if report:
-                problems += _signature_findings(title, tree, signatures)
-            for node in tree.body:
-                if (signature := _call_signature(node)) is not None:
-                    signatures[signature[0]] = signature[1:]
-                elif isinstance(
-                    node, ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef
-                ):
-                    signatures.pop(node.name, None)
+            # The running example's own definitions (an excerpt or an
+            # internals sketch defines none a reader runs).
+            if checked and not is_excerpt(code):
+                problems += _signature_findings(title, tree, signatures, report=report)
+            else:
+                for stmt in tree.body:
+                    for name in _bound_by(stmt):
+                        signatures.pop(name, None)
             known |= bound
     return problems
 
 
 def _signature_findings(
-    title: str, tree: ast.Module, signatures: Mapping[str, tuple[ast.arguments, bool]]
+    title: str,
+    tree: ast.Module,
+    signatures: dict[str, tuple[ast.arguments, bool]],
+    *,
+    report: bool,
 ) -> list[_CodeFinding]:
-    """Calls in ``tree`` to a function or class the post defined earlier (or
-    in this block) that do not bind to its parameters: a running example
-    that defeats itself when pasted in order."""
-    local = dict(signatures)
-    for stmt in tree.body:
-        if (signature := _call_signature(stmt)) is not None:
-            local[signature[0]] = signature[1:]
+    """Calls a block's top-level statements make, in order, to a function
+    or class the running example defined before them, that do not bind to
+    its parameters: a running example that defeats itself when pasted in
+    order. ``signatures`` is updated as the statements run (a definition
+    records one; any other binding of the name drops it); findings only
+    with ``report``."""
     findings = []
-    for node in ast.walk(tree):
-        if not (
-            isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Name)
-            and node.func.id in local
-        ):
-            continue
-        args, bound = local[node.func.id]
-        if why := _call_mismatch(node, args, bound):
-            call = ast.unparse(node)[:120]
-            findings.append(
-                _CodeFinding(
-                    title,
-                    f"a call does not match the post's own definition of "
-                    f"{node.func.id} ({why}): {call}",
-                    call,
+    for stmt in tree.body:
+        for call in _calls_run_now(stmt):
+            if not (isinstance(call.func, ast.Name) and call.func.id in signatures):
+                continue
+            args, bound = signatures[call.func.id]
+            if report and (why := _call_mismatch(call, args, bound)):
+                text = ast.unparse(call)[:120]
+                findings.append(
+                    _CodeFinding(
+                        title,
+                        f"a call does not match the post's own definition of "
+                        f"{call.func.id} ({why}): {text}",
+                        text,
+                    )
                 )
-            )
+        for name in _bound_by(stmt):
+            signatures.pop(name, None)
+        if (signature := _call_signature(stmt)) is not None:
+            signatures[signature[0]] = signature[1:]
     return findings
 
 

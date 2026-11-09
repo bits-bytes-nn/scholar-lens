@@ -32,6 +32,7 @@ from scholar_lens.domain.constants import SSMParams
 from scholar_lens.domain.jobs import (
     TERMINAL_BATCH_STATES,
     CancelledJob,
+    JobAlreadyFinished,
     JobRequest,
     JobResult,
     JobStatusReport,
@@ -149,21 +150,26 @@ def describe_job(
 
 
 def cancel_job(session: boto3.Session, job_id: str, *, reason: str) -> CancelledJob:
-    """Stop a Batch job: ``TerminateJob`` cancels a job that has not started
-    and stops a running one (its worker reports the run as interrupted).
+    """Ask Batch to stop a job: ``TerminateJob`` cancels a job that has not
+    started and stops a running one (its worker reports the run as
+    interrupted). Batch stops it asynchronously.
 
     Raises:
-        BatchJobError: Batch refused or could not be reached.
+        JobAlreadyFinished: The job already succeeded or failed.
+        BatchJobError: Batch refused or could not be reached, or no such job.
     """
     try:
         client = session.client("batch")
-        client.terminate_job(jobId=job_id, reason=reason)
         jobs = client.describe_jobs(jobs=[job_id]).get("jobs", [])
+        if not jobs:
+            raise BatchJobError(f"Batch job '{job_id}' not found.")
+        status = jobs[0]["status"]
+        if status in TERMINAL_BATCH_STATES:
+            raise JobAlreadyFinished(f"Batch job '{job_id}' already {status}.")
+        client.terminate_job(jobId=job_id, reason=reason)
     except (ClientError, HTTPClientError, BotoConnectionError) as e:
         raise BatchJobError(f"Failed to cancel Batch job '{job_id}': {e}") from e
-    if not jobs:
-        raise BatchJobError(f"Batch job '{job_id}' not found.")
-    return CancelledJob(job_id=job_id, batch_status=jobs[0]["status"], reason=reason)
+    return CancelledJob(job_id=job_id, previous_status=status, reason=reason)
 
 
 def wait_for_job(

@@ -4,7 +4,7 @@ finished, its result; a request to stop it."""
 from __future__ import annotations
 
 from scholar_lens.application.ports import JobQueue
-from scholar_lens.domain.jobs import CancelledJob, JobStatusReport
+from scholar_lens.domain.jobs import CANCEL_REASON, CancelledJob, JobStatusReport
 
 
 def job_status(
@@ -19,4 +19,4 @@ def job_status(
 
 def cancel_job(jobs: JobQueue, job_id: str) -> CancelledJob:
     """Ask the job to stop, with a reason Batch keeps on the job."""
-    return jobs.cancel(job_id, reason="Cancelled by the user (scholar-lens cancel).")
+    return jobs.cancel(job_id, reason=CANCEL_REASON)

@@ -340,8 +340,10 @@ class EvidencePaperEngine(PostEngine[PaperOutline, PaperSection, EvidencePaper])
         )
 
     def covered_documents(self) -> Sequence[SourceDocument]:
-        # The paper itself (not its code summary): a review or summary covers
-        # every part of it the readers found evidence in.
+        # A review covers every part of its paper the readers found evidence
+        # in (not the code summary); a summary picks, by design.
+        if self.settings.post != "review":
+            return ()
         paper = self._documents.get(self._paper_id)
         return (paper,) if paper is not None else ()
 

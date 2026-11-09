@@ -575,3 +575,37 @@ def test_a_whole_post_read_without_an_answer_blocks_the_post() -> None:
     (problem,) = result.blocking
     assert "whole-post repetition review could not run" in problem
     assert "consistency" in model.calls
+
+
+def test_a_source_section_the_outline_leaves_out_asks_again_then_is_noted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from scholar_lens.application import post_engine
+
+    gap = "source section S2 'Experiments' of 2305.18290 has 2 evidence items"
+    seen: list[tuple[str, ...]] = []
+
+    def gaps(documents, ledger, used, same):  # type: ignore[no-untyped-def]
+        seen.append(tuple(d.paper_id for d in documents))
+        return [gap] if len(seen) == 1 else []
+
+    monkeypatch.setattr(post_engine, "unused_source_sections", gaps)
+    model = CoverageModel("review")
+    _, result = _run(model)
+    # A review covers its paper (not the code summary): asked once more.
+    assert seen[0] == ("2305.18290",)
+    assert len(model.outline_prompts) == 2 and gap in model.outline_prompts[1]
+
+    # Still left out on the last attempt: noted, not a failed run.
+    monkeypatch.setattr(post_engine, "unused_source_sections", lambda *a: [gap])
+    model = CoverageModel("review")
+    _, result = _run(model, outline_repairs=1)
+    assert len(model.outline_prompts) == 2
+    assert any("Source sections the outline leaves out" in n for n in result.notes)
+    assert not result.blocking
+
+
+def test_a_summary_is_not_held_to_every_source_section() -> None:
+    model = CoverageModel("summary")
+    engine, _ = _run(model, post="summary")
+    assert engine.covered_documents() == ()

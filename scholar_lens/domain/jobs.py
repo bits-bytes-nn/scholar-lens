@@ -214,12 +214,23 @@ class JobResult(BaseModel):
     notification_failed: bool = Field(default=False, exclude=True)
 
 
+# The reason ``cancel`` gives Batch; the stack's failure alert skips jobs
+# stopped with it (the user asked).
+CANCEL_REASON = "Cancelled by the user (scholar-lens cancel)."
+
+
+class JobAlreadyFinished(ValueError):
+    """``cancel`` of a job that already succeeded or failed."""
+
+
 class CancelledJob(BaseModel):
-    """A remote job asked to stop: Batch cancels it before it starts and
-    terminates it after (the run's result then says it was interrupted)."""
+    """A remote job asked to stop (Batch stops it asynchronously): one that
+    had not started is cancelled and writes no result; a running one is
+    terminated and its result says it was interrupted."""
 
     job_id: str
-    batch_status: str
+    # The job's state when the stop was requested.
+    previous_status: str
     reason: str
 
 

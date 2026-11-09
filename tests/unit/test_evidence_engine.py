@@ -1462,3 +1462,5 @@ def test_a_source_section_with_evidence_the_outline_never_uses_is_a_gap() -> Non
     assert not unused_source_sections(
         [doc], ledger, used={"E1", "E9"}, same={"E3": "E9"}
     )
+    # One fact two readers recorded is one item, not two.
+    assert not unused_source_sections([doc], ledger, used={"E1"}, same={"E3": "E2"})

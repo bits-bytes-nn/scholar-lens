@@ -43,7 +43,12 @@ from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
-from scholar_lens.domain.jobs import JobRequest, JobResult, validation_summary
+from scholar_lens.domain.jobs import (
+    JobAlreadyFinished,
+    JobRequest,
+    JobResult,
+    validation_summary,
+)
 from scholar_lens.domain.survey.plan import SurveyInputError
 from scholar_lens.entrypoints.logs import configure_logging
 
@@ -677,6 +682,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "cancel":
         try:
             return _cancel(args.job_id)
+        except JobAlreadyFinished as e:
+            _emit({"status": "rejected", "error": str(e)})
+            return EXIT_REJECTED
         except Exception as e:  # noqa: BLE001 - report AWS/config errors as JSON
             _emit({"status": "error", "error": f"{type(e).__name__}: {e}"})
             return EXIT_ERROR

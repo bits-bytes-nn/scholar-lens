@@ -324,16 +324,19 @@ def unused_source_sections(
     when it, or the item it duplicates, is): what a post built only from
     its outline would leave out of the source. One problem per section, for
     the outline writer."""
+    # Each fact once: a duplicate counts as the item it repeats (the one
+    # the outline was shown).
     recorded: dict[tuple[str, str], list[str]] = {}
     for e in ledger:
-        recorded.setdefault((e.paper_id, e.anchor), []).append(e.id)
+        kept = same.get(e.id, e.id)
+        ids = recorded.setdefault((e.paper_id, e.anchor), [])
+        if kept not in ids:
+            ids.append(kept)
     problems = []
     for document in documents:
         for section in document.sections:
             ids = recorded.get((document.paper_id, section.anchor), [])
-            if len(ids) < min_items:
-                continue
-            if any(i in used or same.get(i) in used for i in ids):
+            if len(ids) < min_items or any(i in used for i in ids):
                 continue
             name = section.heading or section.anchor
             problems.append(

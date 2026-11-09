@@ -277,13 +277,21 @@ class TestSubmitAndDescribe:
 
     def test_cancel_terminates_the_job_with_a_reason(self, aws: boto3.Session) -> None:
         from scholar_lens.adapters.aws.batch import cancel_job
+        from scholar_lens.domain.jobs import JobAlreadyFinished
 
         batch = mock.MagicMock()
-        batch.describe_jobs.return_value = {"jobs": [{"status": "FAILED"}]}
+        batch.describe_jobs.return_value = {"jobs": [{"status": "RUNNING"}]}
         with mock.patch.object(aws, "client", return_value=batch):
             cancelled = cancel_job(aws, "job-1", reason="r")
         batch.terminate_job.assert_called_once_with(jobId="job-1", reason="r")
-        assert cancelled.batch_status == "FAILED"
+        assert cancelled.previous_status == "RUNNING"
+        # A finished job is not "cancelled".
+        batch.reset_mock()
+        batch.describe_jobs.return_value = {"jobs": [{"status": "SUCCEEDED"}]}
+        with mock.patch.object(aws, "client", return_value=batch):
+            with pytest.raises(JobAlreadyFinished):
+                cancel_job(aws, "job-1", reason="r")
+        batch.terminate_job.assert_not_called()
 
     def test_malformed_manifest_is_a_storage_error(self, aws: boto3.Session) -> None:
         handler = S3Handler(aws, BUCKET)

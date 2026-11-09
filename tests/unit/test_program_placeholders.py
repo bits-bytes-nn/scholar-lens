@@ -126,3 +126,58 @@ def test_a_call_that_does_not_bind_to_the_posts_own_definition_is_a_problem() ->
         )
         if "does not match" in p
     ]
+
+
+@pytest.mark.parametrize(
+    "blocks",
+    [
+        # A decorator may change what a call takes.
+        [
+            (
+                "import click\n@click.command()\n@click.option('--name')\ndef hello(name):\n    pass\n\nhello()",
+                True,
+            )
+        ],
+        # A name rebound by an import, an assignment or a lambda.
+        [
+            ("def attention(q, k, v):\n    return q", True),
+            (
+                "from torch.nn.functional import scaled_dot_product_attention as attention\n"
+                "attention(1, 2, 3, is_causal=True)",
+                True,
+            ),
+        ],
+        [
+            (
+                "import functools\ndef query(db, sql):\n    pass\nquery = functools.partial(query, 'db')\nquery('select 1')",
+                True,
+            )
+        ],
+        [("def make(x):\n    pass\nmake = lambda: 3\nmake()", True)],
+        # A call in a function body runs under its own scope.
+        [("def load(path):\n    pass\ndef run(load):\n    load()\nrun(print)", True)],
+        # A call before the block redefines the name binds to the earlier one.
+        [("def f(a):\n    pass\nf(1)\ndef f(a, b):\n    pass", True)],
+        # @overload stubs are not the constructor.
+        [
+            (
+                "from typing import overload\nclass C:\n    @overload\n    def __init__(self, a: str): ...\n"
+                "    @overload\n    def __init__(self, a: str, b: int): ...\n    def __init__(self, a, b=0):\n"
+                "        pass\nC('a', 1)",
+                True,
+            )
+        ],
+        # An internals sketch (an unchecked section) defines nothing a reader runs.
+        [("def handle(t, *, user_id):\n    pass", False), ("handle('t')", True)],
+    ],
+)
+def test_calls_the_signature_check_must_not_flag(
+    blocks: list[tuple[str, bool]],
+) -> None:
+    from scholar_lens.domain.program import python_code_problems
+
+    sections = [
+        (f"s{i}", f"## s{i}\n\n```python\n{code}\n```\n", checked)
+        for i, (code, checked) in enumerate(blocks)
+    ]
+    assert not [p for _, p in python_code_problems(sections) if "does not match" in p]

@@ -96,7 +96,7 @@ domain (순수 코드: 모델, 규칙, 검증, Markdown, 프롬프트 본문)
 
 ### 2.1 명령
 
-`cli.py::build_parser`가 하위 명령 여덟 개를 정의합니다(`survey`는 `plan`·`write` 두 단계).
+`cli.py::build_parser`가 하위 명령 아홉 개를 정의합니다(`survey`는 `plan`·`write` 두 단계).
 
 | 명령 | 동작 |
 | --- | --- |
@@ -104,8 +104,9 @@ domain (순수 코드: 모델, 규칙, 검증, Markdown, 프롬프트 본문)
 | `guide [URL...] [--reference URL]...` | 기술 가이드를 로컬에서 실행하거나 `--remote`로 제출(문서 URL과 참고 자료 URL 중 하나 이상) |
 | `survey plan TOPIC [--paper ID]... [--reference URL]... [--since Y] [--until Y]` | 서베이 계획 파일을 만들거나 `--remote`로 제출(4.3절). 글을 쓰지 않으므로 `--no-pr`가 없습니다 |
 | `survey write --plan PATH_OR_S3_URI [--no-pr]` | 계획 파일로 서베이 글을 쓰거나 `--remote`로 제출(4.3절). `--remote`이면 로컬 계획을 먼저 `<s3_prefix>/surveys/<slug>/plan-<sha256 앞 16자>.json`에 올리고(내용별 키라 덮어쓰지 않음, `application/use_cases/survey_write.py::stage_plan_for_batch`) 그 URI로 제출합니다 |
-| `publish MARKDOWN_PATH_OR_S3_URI [--no-pr]` | 실행이 저장했거나 거절한 글(고쳤을 수 있음)을 다시 검사하고 실행의 브랜치에서 PR을 열거나 갱신(`entrypoints/runtime.py::run_publish`, 2.4절). 로컬에서만 실행합니다 |
-| `status JOB_ID [--wait] [--timeout S]` | Batch 상태와 결과 매니페스트 조회(`adapters/aws/batch.py::describe_job`, `wait_for_job`). `--timeout` 기본값은 14,400초(4시간, `DEFAULT_WAIT_SECONDS`) |
+| `publish MARKDOWN_PATH_OR_S3_URI [--no-pr] [--resolved]` | 실행이 저장했거나 거절한 글(고쳤을 수 있음)을 다시 검사하고 실행의 브랜치에서 PR을 열거나 갱신(`entrypoints/runtime.py::run_publish`, 2.4절). `--resolved`는 실행의 차단 문제를 고쳤다는 뜻으로, 차단 대신 확인할 체크리스트 항목으로 바꿉니다. 로컬에서만 실행합니다 |
+| `status JOB_ID [--wait] [--timeout S]` | Batch 상태, 시작된 작업의 CloudWatch 로그 그룹·스트림(`log_group`, `log_stream`)과 결과 매니페스트 조회(`adapters/aws/batch.py::describe_job`, `wait_for_job`). `--timeout` 기본값은 14,400초(4시간, `DEFAULT_WAIT_SECONDS`) |
+| `cancel JOB_ID` | 원격 작업 중지 요청(`adapters/aws/batch.py::cancel_job`, `TerminateJob`). 시작 전이면 취소되어 결과를 남기지 않고, 실행 중이면 종료되어 결과에 중단으로 남습니다. Batch는 비동기로 멈추므로 결과에는 요청 당시 상태(`previous_status`)를 담습니다. 이미 끝난 작업은 거부(종료 코드 2)합니다. 로컬 자격 증명에 `batch:TerminateJob` 권한이 필요하고, 스택의 실패 알림은 이 사유로 멈춘 작업을 알리지 않습니다 |
 | `costs --since D [--until D] [--by kind\|stage\|model\|day] [--billed]` | 기간 `[since, until)`(UTC 날짜, `--until` 기본값은 내일)의 결과 매니페스트로 실행 비용을 묶어 보고(`application/use_cases/costs.py::report_costs`, 11장). `--by` 기본값은 `kind`, `--billed`는 Cost Explorer 청구액을 더함. S3 버킷이 없으면 실패(종료 코드 4) |
 | `worker --request JSON` | Batch 진입점. `AWS_BATCH_JOB_ID`를 작업 ID로 사용 |
 

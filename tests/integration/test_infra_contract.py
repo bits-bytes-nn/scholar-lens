@@ -225,6 +225,13 @@ class TestStackWiring:
         ]
         # Not 1/2: those are also a Python crash / argparse error.
         assert list(APP_REPORTED_EXIT_CODES) == [10, 11]
+        # A job the user cancelled is no alarm; one without a reason is.
+        from scholar_lens.domain.jobs import CANCEL_REASON
+
+        assert detail["statusReason"] == [
+            {"anything-but": {"prefix": CANCEL_REASON}},
+            {"exists": False},
+        ]
 
 
 class TestDeployPreconditions:
