@@ -575,7 +575,9 @@ def drop_sentences(markdown: str, sentences: Iterable[str]) -> str:
     for sentence in sentences:
         row = sentence.startswith("|")
         for i, (line, role) in enumerate(zip(lines, roles, strict=True)):
-            if role != "prose" or line is None:
+            # A heading is never a sentence (prose_sentences skips it), even
+            # when a claim unit repeats its words.
+            if role != "prose" or line is None or line.lstrip().startswith("#"):
                 continue
             if sentence not in line:
                 # A sentence around an inline image reads with the image

@@ -2063,3 +2063,22 @@ def test_a_figure_check_tries_a_transient_failure_again(
         "https://x/gone.png", sleep=lambda s: None
     )
     assert calls.count("https://x/gone.png") == 1
+
+
+def test_a_stalled_figure_check_keeps_the_figures_it_could_not_check(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import asyncio
+    import time
+
+    from scholar_lens.adapters.github import publisher as publisher_module
+
+    def slow(url: str, sleep=None) -> bool:  # type: ignore[no-untyped-def]
+        if "slow" in url:
+            time.sleep(0.5)
+        return "gone" not in url
+
+    monkeypatch.setattr(publisher_module, "_downloadable", slow)
+    monkeypatch.setattr(publisher_module, "FIGURE_CHECK_DEADLINE_S", 0.2)
+    urls = ["https://x/gone.png", "https://x/slow.png", "https://x/ok.png"]
+    assert asyncio.run(publisher_module.unservable(urls)) == ["https://x/gone.png"]

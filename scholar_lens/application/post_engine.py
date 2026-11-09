@@ -583,7 +583,7 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
         )
         prompt = base
         problems: list[str] = []
-        best: tuple[OutlineT, list[str]] | None = None
+        best: tuple[OutlineT, list[str], tuple[int, int]] | None = None
         known = {e.id for e in ledger}
         with usage_stage("outline"):
             for attempt in range(self.run.outline_repairs + 1):
@@ -619,23 +619,25 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
                 )
                 problems = self.outline_problems(outline, ledger)
                 used = self.used_evidence(outline)
-                # Asked again, but never what makes an outline unusable: an
-                # outline that still has them on the last attempt is kept
-                # with a note.
                 missing = coverage_problems(
                     self.targets, outline.coverage, used, ledger
-                ) + sentence_title_problems(s.title for s in outline.sections)
+                )
+                # Asked again, but never what makes an outline unusable, and
+                # weighed after coverage: an outline that keeps them is kept
+                # with a note.
+                titles = sentence_title_problems(s.title for s in outline.sections)
                 if not problems:
                     # The structurally sound outline that maps the most
-                    # targets (the later one on a tie): what the last
-                    # attempt gives back, sound or not.
-                    if best is None or len(missing) <= len(best[1]):
-                        best = (outline, missing)
-                    if not missing:
+                    # targets, then has the fewest sentence titles (the later
+                    # one on a tie): what the last attempt gives back.
+                    rank = (len(missing), len(titles))
+                    if best is None or rank <= best[2]:
+                        best = (outline, missing, rank)
+                    if not missing and not titles:
                         return self._noted_coverage(outline, ledger)
                     if attempt == self.run.outline_repairs:
                         break
-                problems += missing
+                problems += missing + titles
                 logger.warning(
                     "%s attempt %d unusable: %s",
                     name.capitalize(),
@@ -653,10 +655,11 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
                 )
         if best is not None:
             logger.warning(
-                "%s: no attempt mapped every key target; keeping the sound "
-                "outline that mapped the most, %d key targets unmapped.",
+                "%s: no attempt was free of coverage gaps and sentence titles; "
+                "keeping the sound outline that mapped the most, %d key targets "
+                "unmapped, %d sentence titles.",
                 name.capitalize(),
-                len(best[1]),
+                *best[2],
             )
             return self._noted_coverage(best[0], ledger)
         raise ValueError(

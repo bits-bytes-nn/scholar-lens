@@ -156,6 +156,7 @@ _GLUED_OPENER = re.compile(
     r"^(?P<text>(?!\s*(?:`{3}|~{3})).*[^`\s])[ \t]+(?P<fence>`{3,}[A-Za-z0-9_+.#-]*)[ \t]*$"
 )
 _BARE_FENCE = re.compile(r"^\s*`{3,}\s*$")
+_LIST_ITEM_PREFIX = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+")
 
 
 def unglue_fences(markdown: str) -> str:
@@ -180,7 +181,22 @@ def unglue_fences(markdown: str) -> str:
             )
             if nxt is None or roles[nxt] != "open" or not _BARE_FENCE.match(lines[nxt]):
                 continue
-            lines[i : i + 1] = [m.group("text").rstrip(), "", m.group("fence")]
+            # In a list item the block stays in the item: the fence takes the
+            # item's content column.
+            item = _LIST_ITEM_PREFIX.match(line)
+            indent = " " * len(item.group(0)) if item else ""
+            moved = [
+                *lines[:i],
+                m.group("text").rstrip(),
+                "",
+                indent + m.group("fence"),
+                *lines[i + 1 :],
+            ]
+            # Only a move that leaves every fence closed: one that would leave
+            # the rest of the text inside a block is not the writer's slip.
+            if open_fence_line(moved) is not None:
+                continue
+            lines = moved
             changed = True
             break
     return "\n".join(lines)

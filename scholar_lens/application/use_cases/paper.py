@@ -257,17 +257,22 @@ async def _generate_summary(
 
 async def servable_paper(paper: Paper, figures: FigureCheck) -> tuple[Paper, list[str]]:
     """``paper`` without the remote figures that cannot be downloaded (arXiv
-    HTML lists some it does not serve) in its figure list, and a note naming
-    them: neither engine then writes from a figure the post cannot show. The
-    text is left as read (its hash keys the evidence cache); its markers of
-    a dropped figure name no figure, so no reader records it
-    (:func:`paper_documents`) and the publish step drops any image of it."""
+    HTML lists some it does not serve), from its figure list and its text's
+    figure markers, and a note naming them: neither engine then writes from
+    a figure the post cannot show (the sections engine reads its figures
+    from the text's markers)."""
     remote = [str(f.path) for f in paper.figures if str(f.path).startswith("http")]
     broken = set(await figures.unservable(remote)) if remote else set()
     if not broken:
         return paper, []
+    text = FIGURE_MARKER.sub(
+        lambda m: "" if m.group("src") in broken else m.group(0), paper.content.text
+    )
     paper = paper.model_copy(
-        update={"figures": [f for f in paper.figures if str(f.path) not in broken]}
+        update={
+            "figures": [f for f in paper.figures if str(f.path) not in broken],
+            "content": paper.content.model_copy(update={"text": text}),
+        }
     )
     return paper, [
         "Figures that cannot be downloaded were left out: " + ", ".join(sorted(broken))

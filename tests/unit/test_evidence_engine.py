@@ -1432,3 +1432,12 @@ def test_a_merge_keeps_another_subsection_of_the_same_title() -> None:
     )
     after = merge_thin_subsections(before, drop_sentences(before, ["지울 문장입니다."]))
     assert after.count("### 설정") == 1 and after.index("### 설정") < after.index("첫")
+
+
+def test_a_deleted_sentence_never_takes_a_heading_with_it() -> None:
+    from scholar_lens.domain.evidence_draft import drop_sentences
+
+    md = "## 운영\n\n### 캐시 구조\n\n캐시 구조\n\n본문입니다.\n"
+    assert (
+        drop_sentences(md, ["캐시 구조"]) == "## 운영\n\n### 캐시 구조\n\n본문입니다.\n"
+    )

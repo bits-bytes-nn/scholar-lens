@@ -774,5 +774,12 @@ def test_a_fence_opener_glued_to_prose_moves_to_its_own_line() -> None:
         "인라인 `` ```python `` 표기입니다.\n",
         "끝이 ```python\n본문입니다.\n",
         "정상입니다.\n\n```python\nx = 1\n```\n",
+        # A move that would leave the rest of the post inside a block.
+        "예시 ```python\nx = 1```\n\n다음 문단입니다.\n\n```\ncode2\n```\n\n끝.\n",
+        "백틱 세 개로 엽니다: ```\n\n예를 들면\n\n```\nprint(1)\n```\n",
     ):
         assert unglue_fences(text) == text
+    # In a list item the block stays in the item.
+    assert unglue_fences("1. 설치합니다: ```bash\n   pip install x\n   ```\n") == (
+        "1. 설치합니다:\n\n   ```bash\n   pip install x\n   ```\n"
+    )

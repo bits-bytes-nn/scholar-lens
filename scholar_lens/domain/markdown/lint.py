@@ -1078,8 +1078,20 @@ _POLITE = re.compile(r"(?:[아어여에예워와해돼봐줘까네래대]요|[�
 # Syllables a "~다" follows as an ending: the copula and the stems and
 # tense marks of predicates ("모델이다", "가능하다", "되다", "있다", "했다").
 _PREDICATE_BEFORE_DA = frozenset("이하되않없같있었았였했겠렵롭답많좋낫닿크쉽깊높낮옳")
-# Nouns that end in "ㄴ다" like a present-tense verb.
-_NOUNS_IN_NDA = frozenset({"판다", "어젠다", "아젠다", "베란다", "프로파간다"})
+# Nouns (loanwords, names) whose last syllables read like a predicate ending
+# ("ㄴ다", "이다"), matched as word endings ("아나콘다", "카메라와 라이다").
+_NOUN_ENDINGS_LIKE_DA = (
+    "판다",
+    "젠다",
+    "란다",
+    "간다",
+    "콘다",
+    "완다",
+    "라이다",
+    "레이다",
+    "에이다",
+    "사이다",
+)
 
 
 def _declarative(word: str) -> bool:
@@ -1087,7 +1099,7 @@ def _declarative(word: str) -> bool:
     final ㄴ (present tense: "한다", "만든다"), after "니" ("합니다"), or
     after a predicate stem or tense mark."""
     word = word.rstrip(".!")
-    if len(word) < 2 or not word.endswith("다") or word in _NOUNS_IN_NDA:
+    if len(word) < 2 or not word.endswith("다") or word.endswith(_NOUN_ENDINGS_LIKE_DA):
         return False
     before = word[-2]
     if not "가" <= before <= "힣":

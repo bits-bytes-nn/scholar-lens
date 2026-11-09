@@ -638,9 +638,9 @@ def test_figures_that_cannot_be_downloaded_leave_the_paper_before_writing(
         paper_writer.servable_paper(paper, bootstrap.PaperToolkit(context).figures)
     )
     assert [f.path for f in kept.figures] == [FIGURE]
-    # The text stays as read (its hash keys the evidence cache); the dropped
-    # figure is no source figure, so no reader can record it.
-    assert kept.content.text == text
+    # Neither the figure list nor the text's markers keep it (the sections
+    # engine reads its figures from the markers).
+    assert FIGURE in kept.content.text and BROKEN not in kept.content.text
     document, _ = paper_writer.paper_documents(kept)
     assert [f.url for f in document.figures] == [FIGURE]
     assert notes == [f"Figures that cannot be downloaded were left out: {BROKEN}"]
