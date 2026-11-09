@@ -64,6 +64,7 @@ from scholar_lens.domain.evidence_draft import (
     unsourced_number_sentences,
 )
 from scholar_lens.domain.markdown.lint import drop_empty_headings
+from scholar_lens.domain.markdown.math import unglue_fences
 from scholar_lens.domain.post_spec import Limits
 from scholar_lens.domain.prompts.rules import FIX_ANSWER
 from scholar_lens.domain.usage_context import usage_stage
@@ -435,8 +436,10 @@ def with_canonical_evidence[OutlineT](
 
 
 def _kept(answer: str) -> str:
-    """A model answer stripped of surrounding whitespace, its cut flag kept."""
-    return ModelText(answer.strip(), cut=was_cut(answer))
+    """A model answer stripped of surrounding whitespace, a code fence
+    opener glued to a prose line moved to its own (every check then reads
+    the code as code), its cut flag kept."""
+    return ModelText(unglue_fences(answer.strip()), cut=was_cut(answer))
 
 
 def _incomplete(text: str) -> bool:

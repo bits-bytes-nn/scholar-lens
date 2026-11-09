@@ -150,6 +150,42 @@ def fence_roles(lines: list[str]) -> list[str]:
     return roles
 
 
+# A fence opener a writer glued to the end of a prose line ("... 같습니다.
+# ```python"): the text, then the opening run and its language word.
+_GLUED_OPENER = re.compile(
+    r"^(?P<text>(?!\s*(?:`{3}|~{3})).*[^`\s])[ \t]+(?P<fence>`{3,}[A-Za-z0-9_+.#-]*)[ \t]*$"
+)
+_BARE_FENCE = re.compile(r"^\s*`{3,}\s*$")
+
+
+def unglue_fences(markdown: str) -> str:
+    """``markdown`` with each code fence opener glued to the end of a prose
+    line moved to its own line. Only an opener whose block the text then
+    closes is moved: the next fence line is a bare fence that, as written,
+    opens a block instead of closing this one (so the code shows as prose
+    and its comments as headings)."""
+    lines = markdown.split("\n")
+    changed = True
+    while changed:
+        changed = False
+        roles = fence_roles(lines)
+        for i, (line, role) in enumerate(zip(lines, roles, strict=True)):
+            if role != "prose" or not (m := _GLUED_OPENER.match(line)):
+                continue
+            if m.group("text").count("`") % 2:
+                continue  # inside an inline code span
+            nxt = next(
+                (j for j in range(i + 1, len(lines)) if roles[j] in ("open", "close")),
+                None,
+            )
+            if nxt is None or roles[nxt] != "open" or not _BARE_FENCE.match(lines[nxt]):
+                continue
+            lines[i : i + 1] = [m.group("text").rstrip(), "", m.group("fence")]
+            changed = True
+            break
+    return "\n".join(lines)
+
+
 def open_fence_line(lines: list[str]) -> int | None:
     """Index of the opener of a fence left unclosed at the end, if any."""
     opened: int | None = None

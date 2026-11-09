@@ -754,3 +754,25 @@ def test_a_heading_written_as_a_sentence_is_a_writing_issue() -> None:
         "어텐션 로짓이 폭발합니다",
         "왜 빠를까요",
     ]
+
+
+def test_a_fence_opener_glued_to_prose_moves_to_its_own_line() -> None:
+    from scholar_lens.domain.markdown.lint import lint_markdown
+    from scholar_lens.domain.markdown.math import unglue_fences
+
+    glued = "앞 문장입니다. ```python\n# 주석\nx = 1\n```\n\n뒤 문장입니다.\n"
+    fixed = unglue_fences(glued)
+    assert (
+        fixed == "앞 문장입니다.\n\n```python\n# 주석\nx = 1\n```\n\n뒤 문장입니다.\n"
+    )
+    # At publish the comment stays code, not a heading.
+    assert "## 주석" not in lint_markdown(glued, warn=False)
+
+    # Left alone: an inline span of backticks, and an opener no bare fence
+    # closes (nothing shows it was meant to open a block).
+    for text in (
+        "인라인 `` ```python `` 표기입니다.\n",
+        "끝이 ```python\n본문입니다.\n",
+        "정상입니다.\n\n```python\nx = 1\n```\n",
+    ):
+        assert unglue_fences(text) == text

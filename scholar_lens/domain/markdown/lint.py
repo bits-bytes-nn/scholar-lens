@@ -71,6 +71,7 @@ from scholar_lens.domain.markdown.math import (
     open_fence,
     protected_spans,
     segments,
+    unglue_fences,
 )
 
 # Macros of non-standard packages that writers commonly emit; base MathJax
@@ -1192,7 +1193,8 @@ def lint_markdown(
 ) -> str:
     """Auto-fix the safe blog-rendering issues and warn about risky ones.
 
-    Auto-fixed: leftover envelope tags removed; callouts beyond
+    Auto-fixed: leftover envelope tags removed; a code fence opener glued
+    to a prose line moved to its own (:func:`unglue_fences`); callouts beyond
     :data:`MAX_CALLOUTS` become paragraphs; a body H1 becomes H2 and level
     jumps are raised; a blank line before a heading glued to the previous line, and around a
     pipe table glued to text;
@@ -1206,7 +1208,7 @@ def lint_markdown(
     of the blog's conventions' ``defined_macros`` are not; ``warn=False``
     skips the warnings). Returns the fixed Markdown.
     """
-    fixed = _remove_envelope_tags(markdown)
+    fixed = unglue_fences(_remove_envelope_tags(markdown))
     fixed = limit_callouts(fixed)
     fixed = _level_headings(fixed, warn=warn)
     fixed = _fix_headings(fixed)
