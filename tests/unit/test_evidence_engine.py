@@ -1901,3 +1901,55 @@ def test_a_survey_does_not_merge_a_method_into_a_limitation() -> None:
     engine = EvidenceSurveyEngine.__new__(EvidenceSurveyEngine)
     # E1 is a method, E3 a limitation of the same paper.
     assert engine.same_fact_groups([["E3", "E1"]], _ledger()) == []
+
+
+def test_a_core_paper_the_table_empties_keeps_a_prose_item_in_its_section() -> None:
+    from scholar_lens.domain.survey.evidence_post import repair_outline
+
+    ledger = EvidenceLedger()
+    doc = _doc()
+    ledger.add(
+        doc,
+        kind="limitation",
+        claim="beta가 작으면 불안정",
+        quote="Training is less stable when beta is small.",
+        anchor="S3",
+        cell="작은 beta에서 불안정",
+    )
+    ledger.add(
+        doc,
+        kind="method",
+        claim="보상 모델 없이 최적화",
+        quote="optimizes preferences without a reward model",
+        anchor="S1",
+    )
+    outline = _outline(
+        table=[],
+        sections=[
+            {
+                "kind": "introduction",
+                "title": "도입",
+                "thesis": "t",
+                "evidence": ["E1"],
+            },
+            {
+                "kind": "lineage",
+                "title": "DPO 계보",
+                "thesis": "t",
+                "lineage": "offline",
+                "papers": ["2305.18290"],
+                "evidence": [],
+            },
+            {"kind": "comparison", "title": "비교", "thesis": "t"},
+            {"kind": "insights", "title": "통찰", "thesis": "t"},
+        ],
+    )
+    fixed, _ = repair_outline(outline, _plan(), ledger)
+    # The table took the limitation (E1); the method (E2) fills the section.
+    assert fixed.table[0].limitation == "E1"
+    assert fixed.sections[1].evidence == ["E2"]
+    assert not [
+        p
+        for p in outline_problems(fixed, _plan(), ledger, title_max_length=70)
+        if "needs evidence in a section" in p
+    ]

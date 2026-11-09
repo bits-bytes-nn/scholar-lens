@@ -463,7 +463,7 @@ def repair_outline(
     for r in outline.table:
         asked += [*r.results, *([r.limitation] if r.limitation else [])]
         pid = r.paper if r.paper in papers else by_short.get(r.paper)
-        if pid is None or pid not in papers:
+        if pid is None:
             notes.append(f"dropped table row {r.paper!r} (not a survey paper)")
         elif pid in rows:
             rows[pid].results += r.results
@@ -567,6 +567,28 @@ def repair_outline(
         if moved:
             s.evidence = [eid for eid in s.evidence if not shown_in_table(eid)]
             notes.append(f"left {moved} to the table")
+    # A core paper the table left with nothing in any section gets its first
+    # unused prose item (a method, finding, definition) in its lineage
+    # section, as its figures and equations do.
+    placed = {eid for s in sections for eid in s.evidence}
+    for pid, paper in papers.items():
+        if paper.role != "core" or (target := home.get(pid)) is None:
+            continue
+        mine = [e for e in ledger.of_paper(pid)]
+        if any(e.id in placed for e in mine):
+            continue
+        prose = next(
+            (
+                e
+                for e in mine
+                if e.kind not in ("number", "limitation") and fact(e.id) == e.id
+            ),
+            None,
+        )
+        if prose is not None:
+            sections[target].evidence.append(prose.id)
+            placed.add(prose.id)
+            notes.append(f"gave {prose.id} to {pid}'s lineage section (its only prose)")
         # Synthesis sections interpret; they are not retellings.
         if s.kind in ("comparison", "insights", "conclusion") and s.depth == "deep":
             s.depth = "standard"
