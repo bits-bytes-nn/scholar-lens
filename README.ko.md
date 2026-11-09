@@ -94,6 +94,7 @@ poetry run python -m scholar_lens publish papers/guide-<slug>/<slug>.rejected.md
 poetry run python -m scholar_lens publish "s3://<bucket>/<s3_prefix>/posts/<date>-<slug>.md"
 poetry run python -m scholar_lens review 2106.09685 --remote     # AWS Batch에 제출
 poetry run python -m scholar_lens status <job-id> --wait         # 원격 작업 조회
+poetry run python -m scholar_lens cancel <job-id>                # 원격 작업 중지
 poetry run python -m scholar_lens costs --since 2026-11-01 --by stage --billed  # Batch 실행 비용
 ```
 
@@ -167,6 +168,7 @@ actionlint                                       # GitHub 워크플로 검사
 
 ## 변경 이력
 
+- 2026-11-09: `cancel <job-id>`로 원격 작업을 멈추고, `status`는 작업이 시작된 뒤 CloudWatch `log_group`과 `log_stream`을 알려 줍니다. 가이드 코드 검사는 글이 정의한 함수·클래스에 맞지 않는 호출(빠진 필수 인자, 없는 키워드)도 잡습니다.
 - 2026-11-09: `max_cost_usd`가 두 엔진의 리뷰·요약을 모두 막습니다. 실행 결과는 차단 문제를 `blocking`에 따로 담고, 고친 뒤 `publish --resolved`로 풀 수 있습니다. Batch 결과는 컨테이너 안 경로를 가리키지 않습니다. 만료되거나 없는 AWS 자격 증명과 거부된 권한은 그림·코드 분석을 품질이 떨어진 채 넘기지 않고 실행을 멈춥니다. 코드 색인이 실패해도 코드베이스 요약은 남습니다. 잘못된 인수와 설정 파일은 문제 키(와 파일)를 한 줄로 알립니다.
 - 2026-11-09: 리뷰·요약은 대등한 두 엔진을 씁니다(ADR 0004). `explanation.engine`, `summary.engine`이 `sections`(기본값)와 `evidence` 중 하나를 고르며, 어느 쪽도 지울 예정이 없습니다. sections 엔진은 `scholar_lens/legacy`에서 `scholar_lens/sections_engine`으로 옮겼습니다. 명령, 설정, 출력은 그대로입니다.
 - 2026-11-08: 코드를 계층으로 나눴습니다(docs/engine.md 5.1). `domain`(순수 코드), `application`(엔진, 명령마다 하나인 유스케이스, 포트), `adapters`(AWS, Bedrock, 웹, 학술 색인, 문서, GitHub, PyPI), `legacy`(sections 엔진), 엔트리포인트(`cli.py`, `entrypoints/`, 조립 지점 `bootstrap.py`)입니다. `scholar_lens/src`는 없어졌고 import-linter가 계층을 확인합니다. 테스트는 `tests/unit`과 `tests/integration`으로 나눴습니다. 명령, 작업 JSON, 출력은 그대로입니다.

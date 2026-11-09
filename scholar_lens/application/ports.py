@@ -15,7 +15,7 @@ from scholar_lens.domain.costs import RunRecord
 from scholar_lens.domain.evidence import SourceDocument
 from scholar_lens.domain.guide.models import GuideMaterial, TechGuide
 from scholar_lens.domain.guide.sdk_index import PackageSource
-from scholar_lens.domain.jobs import JobStatusReport
+from scholar_lens.domain.jobs import CancelledJob, JobStatusReport
 from scholar_lens.domain.paper.models import Paper, ReviewText
 from scholar_lens.domain.publishing import PublishRequest
 from scholar_lens.domain.survey.plan import (
@@ -44,6 +44,11 @@ class JobQueue(Protocol):
     def wait(self, job_id: str, *, timeout_seconds: float) -> JobStatusReport:
         """The report once the job is terminal or ``timeout_seconds`` pass
         (the last report either way)."""
+        ...
+
+    def cancel(self, job_id: str, *, reason: str) -> CancelledJob:
+        """Ask the job to stop (cancelled before it starts, terminated
+        after)."""
         ...
 
 

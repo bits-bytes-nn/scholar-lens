@@ -11,11 +11,12 @@ and scripts can parse the outcome directly::
     scholar-lens survey write --plan papers/survey-llm-preference-optimization/plan.json
     scholar-lens publish papers/guide-x/x.rejected.md
     scholar-lens status <job-id> --wait
+    scholar-lens cancel <job-id>
     scholar-lens costs --since 2026-11-01 --by stage --billed
 
 Exit codes: 0 succeeded (or submitted), 1 failed, 2 rejected input,
-3 still running (``status``), 4 a remote command itself failed (``--remote``
-or ``status``: ``"status": "error"`` for AWS credentials, config, Batch/S3 API
+3 still running (``status``), 4 a remote command itself failed (``--remote``,
+``status`` or ``cancel``: ``"status": "error"`` for AWS credentials, config, Batch/S3 API
 errors), so the job's state is unknown, 5 the artifact was saved but the
 requested blog PR failed (a ``failed`` result with ``pr_error``, its
 ``markdown_path`` and ``s3_uri`` kept; also from ``status`` and ``publish``).
@@ -341,6 +342,12 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
 
+    cancel = commands.add_parser(
+        "cancel",
+        help="Stop a remote job (cancelled before it starts, terminated after).",
+    )
+    cancel.add_argument("job_id")
+
     status = commands.add_parser("status", help="Show a remote job's state and result.")
     status.add_argument("job_id")
     status.add_argument(
@@ -507,6 +514,14 @@ def _status(job_id: str, *, wait: bool, timeout: float) -> int:
     return EXIT_PENDING  # not finished yet: ask again later
 
 
+def _cancel(job_id: str) -> int:
+    from scholar_lens.application.use_cases.status import cancel_job
+    from scholar_lens.bootstrap import job_queue
+
+    _emit(cancel_job(job_queue(_aws_context()), job_id))
+    return EXIT_OK
+
+
 def _costs(args: argparse.Namespace) -> int:
     from datetime import UTC, datetime, timedelta
 
@@ -656,6 +671,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "costs":
         try:
             return _costs(args)
+        except Exception as e:  # noqa: BLE001 - report AWS/config errors as JSON
+            _emit({"status": "error", "error": f"{type(e).__name__}: {e}"})
+            return EXIT_ERROR
+    if args.command == "cancel":
+        try:
+            return _cancel(args.job_id)
         except Exception as e:  # noqa: BLE001 - report AWS/config errors as JSON
             _emit({"status": "error", "error": f"{type(e).__name__}: {e}"})
             return EXIT_ERROR

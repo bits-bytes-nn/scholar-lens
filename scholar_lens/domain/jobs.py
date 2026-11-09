@@ -214,6 +214,15 @@ class JobResult(BaseModel):
     notification_failed: bool = Field(default=False, exclude=True)
 
 
+class CancelledJob(BaseModel):
+    """A remote job asked to stop: Batch cancels it before it starts and
+    terminates it after (the run's result then says it was interrupted)."""
+
+    job_id: str
+    batch_status: str
+    reason: str
+
+
 class SubmittedJob(BaseModel):
     job_id: str
     job_name: str
@@ -230,6 +239,9 @@ class JobStatusReport(BaseModel):
     status_reason: str | None = None
     created_at: str | None = None
     stopped_at: str | None = None
+    # Where the job's container logs are (CloudWatch Logs), once it started.
+    log_group: str | None = None
+    log_stream: str | None = None
     result: JobResult | None = None
 
 

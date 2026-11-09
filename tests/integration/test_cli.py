@@ -532,3 +532,27 @@ def test_costs_with_until_before_since_is_rejected_without_credentials(
         code = cli.main(["costs", "--since", "2026-11-05", "--until", "2026-11-01"])
     assert code == cli.EXIT_REJECTED and not context.called
     assert "--until" in _output(capsys)["error"]
+
+
+def test_cancel_reports_the_job_and_errors_as_json(
+    capsys: pytest.CaptureFixture,
+) -> None:
+    from scholar_lens.domain.jobs import CancelledJob
+
+    queue = mock.MagicMock()
+    queue.cancel.return_value = CancelledJob(
+        job_id="j", batch_status="FAILED", reason="r"
+    )
+    with (
+        mock.patch.object(cli, "_aws_context"),
+        mock.patch("scholar_lens.bootstrap.job_queue", return_value=queue),
+    ):
+        assert cli.main(["cancel", "j"]) == cli.EXIT_OK
+    assert _output(capsys)["batch_status"] == "FAILED"
+    queue.cancel.side_effect = RuntimeError("denied")
+    with (
+        mock.patch.object(cli, "_aws_context"),
+        mock.patch("scholar_lens.bootstrap.job_queue", return_value=queue),
+    ):
+        assert cli.main(["cancel", "j"]) == cli.EXIT_ERROR
+    assert _output(capsys)["status"] == "error"

@@ -254,6 +254,37 @@ class TestSubmitAndDescribe:
             with pytest.raises(BatchJobError, match="not found"):
                 describe_job(aws, "nope", s3_handler=None, s3_prefix="")
 
+    def test_a_started_job_reports_where_its_logs_are(self, aws: boto3.Session) -> None:
+        batch = mock.MagicMock()
+        batch.describe_jobs.return_value = {
+            "jobs": [
+                {
+                    "status": "RUNNING",
+                    "container": {
+                        "logStreamName": "worker/default/abc",
+                        "logConfiguration": {
+                            "logDriver": "awslogs",
+                            "options": {"awslogs-group": "/aws/batch/sl-worker"},
+                        },
+                    },
+                }
+            ]
+        }
+        with mock.patch.object(aws, "client", return_value=batch):
+            report = describe_job(aws, "job-1", s3_handler=None, s3_prefix="")
+        assert report.log_group == "/aws/batch/sl-worker"
+        assert report.log_stream == "worker/default/abc"
+
+    def test_cancel_terminates_the_job_with_a_reason(self, aws: boto3.Session) -> None:
+        from scholar_lens.adapters.aws.batch import cancel_job
+
+        batch = mock.MagicMock()
+        batch.describe_jobs.return_value = {"jobs": [{"status": "FAILED"}]}
+        with mock.patch.object(aws, "client", return_value=batch):
+            cancelled = cancel_job(aws, "job-1", reason="r")
+        batch.terminate_job.assert_called_once_with(jobId="job-1", reason="r")
+        assert cancelled.batch_status == "FAILED"
+
     def test_malformed_manifest_is_a_storage_error(self, aws: boto3.Session) -> None:
         handler = S3Handler(aws, BUCKET)
         handler.put_text(result_manifest_key("p", "job-x"), '{"status": "done"}')

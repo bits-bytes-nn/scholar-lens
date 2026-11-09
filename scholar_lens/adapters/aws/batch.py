@@ -31,6 +31,7 @@ from scholar_lens.adapters.retry import is_transient_error
 from scholar_lens.domain.constants import SSMParams
 from scholar_lens.domain.jobs import (
     TERMINAL_BATCH_STATES,
+    CancelledJob,
     JobRequest,
     JobResult,
     JobStatusReport,
@@ -40,6 +41,9 @@ from scholar_lens.domain.jobs import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Where Batch sends container logs when the job definition names no group.
+DEFAULT_BATCH_LOG_GROUP = "/aws/batch/job"
 
 
 def write_result_manifest(
@@ -123,6 +127,8 @@ def describe_job(
     if not jobs:
         raise BatchJobError(f"Batch job '{job_id}' not found.")
     job = jobs[0]
+    container = job.get("container") or {}
+    options = (container.get("logConfiguration") or {}).get("options") or {}
     report = JobStatusReport(
         job_id=job_id,
         job_name=job.get("jobName"),
@@ -130,10 +136,34 @@ def describe_job(
         status_reason=job.get("statusReason"),
         created_at=_iso(job.get("createdAt")),
         stopped_at=_iso(job.get("stoppedAt")),
+        log_group=(
+            options.get("awslogs-group", DEFAULT_BATCH_LOG_GROUP)
+            if container.get("logStreamName")
+            else None
+        ),
+        log_stream=container.get("logStreamName"),
     )
     if report.batch_status in TERMINAL_BATCH_STATES and s3_handler is not None:
         report.result = read_result_manifest(s3_handler, s3_prefix, job_id)
     return report
+
+
+def cancel_job(session: boto3.Session, job_id: str, *, reason: str) -> CancelledJob:
+    """Stop a Batch job: ``TerminateJob`` cancels a job that has not started
+    and stops a running one (its worker reports the run as interrupted).
+
+    Raises:
+        BatchJobError: Batch refused or could not be reached.
+    """
+    try:
+        client = session.client("batch")
+        client.terminate_job(jobId=job_id, reason=reason)
+        jobs = client.describe_jobs(jobs=[job_id]).get("jobs", [])
+    except (ClientError, HTTPClientError, BotoConnectionError) as e:
+        raise BatchJobError(f"Failed to cancel Batch job '{job_id}': {e}") from e
+    if not jobs:
+        raise BatchJobError(f"Batch job '{job_id}' not found.")
+    return CancelledJob(job_id=job_id, batch_status=jobs[0]["status"], reason=reason)
 
 
 def wait_for_job(
@@ -188,3 +218,6 @@ class BatchJobs:
         return wait_for_job(
             lambda: self.describe(job_id), timeout_seconds=timeout_seconds
         )
+
+    def cancel(self, job_id: str, *, reason: str) -> CancelledJob:
+        return cancel_job(self.session, job_id, reason=reason)

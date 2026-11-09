@@ -93,7 +93,8 @@ poetry run python -m scholar_lens guide https://docs.example.dev/ --fresh  # rec
 poetry run python -m scholar_lens publish papers/guide-<slug>/<slug>.rejected.md  # after editing it
 poetry run python -m scholar_lens publish "s3://<bucket>/<s3_prefix>/posts/<date>-<slug>.md"
 poetry run python -m scholar_lens review 2106.09685 --remote     # submit to AWS Batch
-poetry run python -m scholar_lens status <job-id> --wait         # poll a remote job
+poetry run python -m scholar_lens status <job-id> --wait         # poll a remote job (logs: log_group, log_stream)
+poetry run python -m scholar_lens cancel <job-id>                # stop a remote job
 poetry run python -m scholar_lens costs --since 2026-11-01 --by stage --billed  # what Batch runs cost
 ```
 
@@ -167,6 +168,7 @@ actionlint                                       # lint the GitHub workflows
 
 ## Changelog
 
+- 2026-11-09: `cancel <job-id>` stops a remote job, `status` reports its CloudWatch `log_group` and `log_stream` once it started, and the guide code check flags a call that does not match the post's own definition of a function or class (missing required arguments, unknown keywords).
 - 2026-11-09: `max_cost_usd` stops reviews and summaries on either engine; a failed run's result lists `blocking` problems on their own, `publish --resolved` clears them after a fix, and a Batch result no longer points to container paths. Expired or missing AWS credentials and denied access stop figure and code analysis instead of leaving a degraded post; a failed code index keeps the codebase summary. Invalid arguments and config files are reported in one line naming each bad key (and the file).
 - 2026-11-09: reviews and summaries have two peer engines (ADR 0004): `explanation.engine` / `summary.engine` choose `sections` (default) or `evidence`, and neither is slated for removal. The sections engine moved from `scholar_lens/legacy` to `scholar_lens/sections_engine`; commands, configuration and outputs are unchanged.
 - 2026-11-08: the code is layered (docs/engine.md 5.1): `domain` (pure), `application` (the engine, one use case per command, ports), `adapters` (AWS, Bedrock, web, scholarly indexes, documents, GitHub, PyPI), `legacy` (the sections engine) and the entrypoints (`cli.py`, `entrypoints/`, the composition root `bootstrap.py`); `scholar_lens/src` is gone and import-linter enforces the layers. Tests are split into `tests/unit` and `tests/integration`. Commands, job JSON and outputs are unchanged.
