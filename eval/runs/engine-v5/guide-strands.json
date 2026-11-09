@@ -1,0 +1,711 @@
+{
+ "item": "guide-strands",
+ "kind": "guide",
+ "source": [
+  "https://strandsagents.com/docs/user-guide/sdk/agents/agent-loop/",
+  "https://strandsagents.com/docs/user-guide/sdk/agents/hooks/"
+ ],
+ "criteria_note": "Scored A-F, G and guide criteria T1-T3. X1 (taxonomy) is for paper posts and was not scored. Claims were checked against the official Strands docs (agent-loop, hooks, interventions, human-in-the-loop, approve-before-acting, lifecycle-controls, structured-output(-behavior), retry-strategies, state, session-management, conversation-management, model-providers, python quickstart, observability), PyPI JSON, and strands-agents/harness-sdk main source (event_loop.py, sliding_window_conversation_manager.py). Third-party blog claims were not fetched and are marked unverifiable. No code was executed. Prose length counts characters excluding front matter, code blocks, tables, headings and Sources.",
+ "X": {
+  "prose_length_chars": 27354,
+  "scores": {
+   "A": {
+    "score": 6,
+    "reason": "Broken code fence: L169 '...A가 마지막에 닫게 되는 구조입니다. ```python' glues the fence to the sentence, so L171 '## excerpt: 감사 로그 훅 A와...' and L189 '## A, B 순으로 등록...' render as H2 headings and the fences after it pair up wrongly through L212. pip install appears twice (L50 and L368). One-sentence orphan paragraphs at L26 and L38. Front matter is fine."
+   },
+   "B": {
+    "score": 7.5,
+    "reason": "Mostly natural 합니다 prose. The lifecycle table (L245-249) leaves the '실행 시점' cells in English ('Before the agent loop starts'). Calques: L38 'Strands는 에이전트 루프를 직접 작성해야 할 자리에 쓰도록 설계됐습니다' -> 'Strands는 직접 짜던 에이전트 루프를 대신하도록 만들어졌습니다'; L654 'Deny 단락 평가 규칙'; L1093 '직접 메워야 하는 지점 두 곳을 보고합니다'."
+   },
+   "C": {
+    "score": 7,
+    "reason": "The ReAct subsection (L22-26) cuts in between the running example and the SDK description and ends in a stray one-sentence paragraph (L26). L1093 promises two gaps but the second ('GenAI 텔레메트리를 OTLP 스팬 이벤트로 기록') is not a gap. L1103 'harness' is never defined. Cross-references are otherwise accurate, and lookup_customer's late definition is flagged (L421)."
+   },
+   "D": {
+    "score": 8,
+    "reason": "Good worked examples at the hard points: message counting (L79), hook-order A/B (L169), intervention pipeline walkthrough (L264), token overshoot arithmetic (L679). The ReAct background (L24) is a slight detour."
+   },
+   "E": {
+    "score": 7.5,
+    "reason": "Good tables (stop reasons L99, interventions L243/L253, cancel checkpoints L687, limits table L1123) and a text loop diagram (L60). The Datadog screenshot (L1087) is hotlinked from a vendor CDN and only decorates the text. English cells sit in a Korean table (L245-249)."
+   },
+   "F": {
+    "score": 8,
+    "reason": "One wrong claim: L126/L133/L139 say window_size counts message pairs and that window_size=10 keeps about five tickets. The conversation-management doc and the source say window_size is the maximum number of messages (default 40), so 10 messages is about 2.5 tickets. The state doc says 'pairs', so the docs disagree with each other. Every other checked claim is supported, and third-party telemetry claims are attributed."
+   },
+   "G": {
+    "score": 7,
+    "reason": "The description is 120 chars, right at the minimum. The glued fence at L169 breaks rendering. Remote image at L1087. No math and no Liquid; fence info strings are fine."
+   },
+   "T1": {
+    "score": 7.5,
+    "reason": "Lots of real code. The hook-order example is unreadable because of the broken fence. ToolInterceptor uses self.safe_alternative_tool, which is never set (L229). handle_ticket (L791) puts an ask='stdio' HITL inside a server handler (the text admits at L814 that it cannot resume). Earlier examples use lookup_customer before its definition at L431 (marked as excerpts). No metrics.get_summary()."
+   },
+   "T2": {
+    "score": 8.5,
+    "reason": "Covers loop, history, conversation manager, hooks, interventions, structured output, HITL/Cedar, limits/cancel/concurrency, retry, state/sessions and OpenTelemetry, all from the sources. The ReAct digression is minor padding."
+   },
+   "T3": {
+    "score": 8,
+    "reason": "Explains mechanisms and why they work that way (schema-as-tool, short-circuit, fail-open/closed, limit check timing, lock-free sessions), plus observability and a limits table. Stays at docs level with no source internals, and the harness comparison (L1101-1103) is thin."
+   }
+  },
+  "principles": {
+   "claim_headings": "met: headings state claims, e.g. L95 '다음 행동을 정하는 정지 이유', L735 '반환된 정지 이유와 발생한 예외는 별개의 결과'",
+   "running_example": "met: the ticket-triage agent with lookup_customer/TicketTriage/issue_refund runs throughout (L20, L384, L573, L791)",
+   "mechanism_reason_code_example": "met: e.g. interventions L237 (why) -> L262 (rule) -> L266 code -> L264 worked trace",
+   "facts_said_once": "partly: pip install repeated (L50, L368); stop-reason handling restated (L113, L737-743)",
+   "numbers_with_scope_unit": "met: retry delays with units (L822), token overshoot example (L679)",
+   "nothing_invented": "partly: the window_size 'pairs' and 'five tickets' arithmetic is wrong by source (L139)",
+   "own_assessment_at_end": "met: L1131 '루프 제어가 필요하고 운영 경계를 직접 책임질 수 있는 팀에 잘 맞습니다'",
+   "length_fitted": "met: long but the topic spans ten docs pages",
+   "type_specific_shape": "partly: opens with TL;DR and the problem (L10-20); architecture comes early (L54); ends with a when-to-choose section and a failure-mode table",
+   "korean_style": "partly: natural overall; English table cells L245-249; some calques (L38, L654)"
+  },
+  "claims": {
+   "checked": 37,
+   "numbers_checked": 9,
+   "supported": 33,
+   "unsupported": 0,
+   "wrong": 1,
+   "unverifiable": 3,
+   "error_rate": 0.027,
+   "items": [
+    {
+     "line": "97-111",
+     "claim": "Stop reasons incl. limit_turns/limit_total_tokens/limit_output_tokens/limit_structured_output_attempts, stop_sequence, content_filtered, guardrail_intervened; TS camelCase",
+     "status": "supported",
+     "source": "agent-loop doc: 'Limit turns (limit_turns limitTurns)...Guardrail intervention (guardrail_intervened...)'"
+    },
+    {
+     "line": "108,113",
+     "claim": "max_tokens is unrecoverable; loop terminates with an error",
+     "status": "supported",
+     "source": "agent-loop doc: 'This is unrecoverable within the current loop... terminates with an error.'"
+    },
+    {
+     "line": "104-107,113",
+     "claim": "limit_* reasons leave history valid and reinvokable",
+     "status": "supported",
+     "source": "agent-loop doc: 'The agent’s message history remains in a valid state, and you can reinvoke with a higher budget'"
+    },
+    {
+     "line": "126,133,139",
+     "claim": "SlidingWindowConversationManager keeps the last N message PAIRS; window_size=10 keeps about five tickets (2 pairs each)",
+     "status": "wrong",
+     "source": "conversation-management doc: 'window_size=20,  # Maximum number of messages to keep'; source sliding_window_conversation_manager.py: 'window_size: Maximum number of messages to keep' (default 40). The state doc says 'message pairs', so the docs disagree; by source, 10 messages ~= 2.5 tickets, not 5"
+    },
+    {
+     "line": "143-152",
+     "claim": "agent.tool.notebook(..., record_direct_tool_call=False) skips recording; from strands.vended_tools import notebook",
+     "status": "supported",
+     "source": "state doc: 'agent.tool.notebook(mode=\"list\", record_direct_tool_call=False)'"
+    },
+    {
+     "line": "167",
+     "claim": "After callbacks reverse registration order; lower order runs first; SDK_FIRST/DEFAULT/SDK_LAST not enforced; float('-inf')/('inf')",
+     "status": "supported",
+     "source": "hooks doc: 'After event callbacks run in reverse registration order... lower values run first... float(\"-inf\")/float(\"inf\") for guaranteed absolute ordering'"
+    },
+    {
+     "line": "243-249",
+     "claim": "Lifecycle method -> valid actions table",
+     "status": "supported",
+     "source": "interventions doc: table 'before_invocation Proceed, Deny, Guide, Transform ... after_model_call Proceed, Guide, Transform'"
+    },
+    {
+     "line": "262",
+     "claim": "Precedence deny > confirm > guide > transform > proceed",
+     "status": "supported",
+     "source": "interventions doc: 'well-defined precedence (deny > confirm > guide > transform > proceed)'"
+    },
+    {
+     "line": "308",
+     "claim": "after_model_call Guide retries have no framework cap",
+     "status": "supported",
+     "source": "interventions doc: 'The framework imposes no retry cap on guide-triggered retries.'"
+    },
+    {
+     "line": "312",
+     "claim": "Confirm default evaluate accepts True, 'y', 'yes' case-insensitive; response skips pause",
+     "status": "supported",
+     "source": "interventions doc: 'The default accepts True, \"y\", or \"yes\" (case-insensitive).'"
+    },
+    {
+     "line": "335",
+     "claim": "on_error values throw (default)/proceed (fail-open)/deny (fail-closed)",
+     "status": "supported",
+     "source": "interventions doc: Error Handling table"
+    },
+    {
+     "line": "366",
+     "claim": "Pydantic installs with strands-agents",
+     "status": "supported",
+     "source": "structured-output doc: 'Pydantic model, which installs with strands-agents'"
+    },
+    {
+     "line": "465",
+     "claim": "TS structured output tool is named strands_structured_output",
+     "status": "supported",
+     "source": "structured-output-behavior doc: 'The tool is named strands_structured_output.'"
+    },
+    {
+     "line": "512",
+     "claim": "Forced retry adds 'You must format the previous response as structured output.'; structured_output_prompt call value wins; TS adds no message",
+     "status": "supported",
+     "source": "structured-output-behavior doc: Forced tool call section"
+    },
+    {
+     "line": "531",
+     "claim": "TS counts filter-blocked forced retry as failed attempt; Python ends with content_filtered; limit spans request, invocation_context continues it",
+     "status": "supported",
+     "source": "structured-output-behavior doc: 'In TypeScript, a forced retry that a content filter or guardrail stops also counts... In Python, that retry ends the call with its own stop reason'"
+    },
+    {
+     "line": "610",
+     "claim": "System One models such as Jev and Strands Decider; classifier failure asks a person",
+     "status": "supported",
+     "source": "approve-before-acting doc: 'such as Jev or Strands Decider... If the classifier’s model call fails, the handler asks a person'"
+    },
+    {
+     "line": "662",
+     "claim": "limits values positive integers (Py), positive finite numbers (TS)",
+     "status": "supported",
+     "source": "lifecycle-controls doc: 'Each cap must be a positive integer.' / 'positive finite number'"
+    },
+    {
+     "line": "671",
+     "claim": "limits example turns 5, output_tokens 2000, total_tokens 10000",
+     "status": "supported",
+     "source": "lifecycle-controls doc code example"
+    },
+    {
+     "line": "679",
+     "claim": "Limits checked at top of iteration; priority turns > total tokens > output tokens > SO attempts; worked 6,000+5,000=11,000 overshoot",
+     "status": "supported",
+     "source": "lifecycle-controls doc: 'Limits are checked at the top of each loop iteration... priority order: turns, then total tokens...' (arithmetic consistent)"
+    },
+    {
+     "line": "681",
+     "claim": "Total-token limit counts cache reads/writes on Bedrock, Anthropic, OpenAI, Gemini",
+     "status": "supported",
+     "source": "agent-loop doc: 'On Amazon Bedrock, Anthropic, OpenAI, and Google Gemini, that total counts prompt-cache reads and writes in full'"
+    },
+    {
+     "line": "694",
+     "claim": "Calling cancel() on an idle Python agent cancels the next invocation",
+     "status": "supported",
+     "source": "lifecycle-controls doc: 'Calling it while the agent is idle cancels the next invocation.'"
+    },
+    {
+     "line": "702",
+     "claim": "threading.Timer(30.0, cancel_signal.set) deadline pattern",
+     "status": "supported",
+     "source": "lifecycle-controls doc code example"
+    },
+    {
+     "line": "751",
+     "claim": "idempotency_token dedupe; IdempotencyAbortedError; TS has no modes/tokens, throws ConcurrentInvocationError",
+     "status": "supported",
+     "source": "agent-loop doc/lifecycle-controls doc: 'waiting calls raise IdempotencyAbortedError'; 'This SDK does not offer a configurable concurrency mode'"
+    },
+    {
+     "line": "822",
+     "claim": "Default: 5 retries (6 attempts), waits 4/8/16/32/64 s, ModelThrottledException only",
+     "status": "supported",
+     "source": "retry-strategies doc: 'retry throttling errors up to 5 times (6 total attempts)... Attempt 5: fails -> wait 64s'"
+    },
+    {
+     "line": "826-830",
+     "claim": "ModelRetryStrategy defaults max_attempts 6, initial_delay 4, max_delay 128",
+     "status": "supported",
+     "source": "retry-strategies doc: parameter table (max_delay float 128)"
+    },
+    {
+     "line": "832",
+     "claim": "TS DefaultModelRetryStrategy backoff default ExponentialBackoff({ baseMs: 4000, maxMs: 240000 })",
+     "status": "supported",
+     "source": "retry-strategies doc: 'new ExponentialBackoff({ baseMs: 4000, maxMs: 240000 })'"
+    },
+    {
+     "line": "990",
+     "claim": "Python returns request_state slot as result.state; TS returns full invocationState",
+     "status": "supported",
+     "source": "state doc: 'Python returns its request_state slot as result.state'"
+    },
+    {
+     "line": "994",
+     "claim": "Snapshot blob carries messages, agent state, conversation manager state, interrupt state, model state, system prompt",
+     "status": "supported",
+     "source": "session-management doc: 'single versioned Snapshot JSON blob whose data field carries...'"
+    },
+    {
+     "line": "1018",
+     "claim": "save_latest_on default 'invocation', 'message' option; fallback LocalFileStorage('./.strands/')",
+     "status": "supported",
+     "source": "session-management doc: 'SnapshotSessionManager default, save_latest_on=\"invocation\"'; 'Python falls back to LocalFileStorage(\"./.strands/\")'"
+    },
+    {
+     "line": "1024",
+     "claim": "Snapshot IDs are UUID v7, lexicographic = chronological",
+     "status": "supported",
+     "source": "session-management doc: 'Snapshot IDs are UUID v7, so they sort lexicographically in chronological order.'"
+    },
+    {
+     "line": "1044",
+     "claim": "multi_agent_save_latest_on default 'node'",
+     "status": "supported",
+     "source": "session-management doc: 'After Node Call (multi_agent_save_latest_on=\"node\", default)'"
+    },
+    {
+     "line": "1111-1113",
+     "claim": "No distributed lock; default agent_id='default'/TS 'agent'; non-atomic creation; symlink message_0.json",
+     "status": "supported",
+     "source": "session-management doc: 'The default IDs (agent_id=\"default\" id: 'agent')...'; symlink passage"
+    },
+    {
+     "line": "24",
+     "claim": "ReAct: PaLM-540B prompting; ALFWorld/WebShop +34%/+10% absolute success with one or two examples",
+     "status": "supported",
+     "source": "arXiv 2210.03629 abstract: 'outperforms imitation and reinforcement learning methods by an absolute success rate of 34% and 10% respectively'"
+    },
+    {
+     "line": "1059,1067",
+     "claim": "StrandsTelemetry().setup_console_exporter(); TS setupTracer({ exporters: { console: true } })",
+     "status": "supported",
+     "source": "observability-evaluation doc code"
+    },
+    {
+     "line": "1081,1093",
+     "claim": "New Relic blog: OTEL env-var config; logs need manual bridge; GenAI telemetry as span events",
+     "status": "unverifiable",
+     "source": "third-party blog not fetched; attributed in text"
+    },
+    {
+     "line": "1121",
+     "claim": "New Relic blog: tool I/O content captured by default regardless of settings",
+     "status": "unverifiable",
+     "source": "third-party blog not fetched; attributed in text"
+    },
+    {
+     "line": "1081,1085",
+     "claim": "Datadog blog: spans for planner, tool calls, handoffs",
+     "status": "unverifiable",
+     "source": "third-party blog not fetched; attributed"
+    }
+   ]
+  },
+  "checklist": {
+   "loop-diagram-remote": "avoided (partly): the loop diagram is a text block (L60-73), but the post hotlinks a remote Datadog CDN image at L1087",
+   "shared-agent-throw-scope": "n/a: no shared module-level agent or async-handler discussion; L751 only states the documented THROW behaviour",
+   "shared-agent-history-leak": "avoided (partly): L397 'A fresh agent per message keeps tickets from sharing conversation history' and L753 per-request agents; invoke_async is not recommended for async handlers",
+   "result-fields-incomplete": "repeated: results show stop_reason (L525, L673) but metrics.get_summary() never appears",
+   "multi-agent-subject": "n/a",
+   "repeated": 1,
+   "avoided": 2,
+   "na": 2,
+   "repeated_ids": [
+    "result-fields-incomplete"
+   ]
+  },
+  "extras": {
+   "architecture_first_line": 54,
+   "internals_first_line": 56,
+   "non_official_source_share": "3/15 (ReAct, New Relic, Datadog) = 20%; PyPI counted as official",
+   "opens_with_problem": "yes (L18-20 hand-written loop burden)",
+   "closes_with_choice_and_failure_modes": "yes (L1097-1131 with limits table L1123)"
+  },
+  "structure_defects": [
+   "L169: code fence glued to a sentence ('...구조입니다. ```python'); L171 and L189 render as H2 headings; later fences misalign through L212",
+   "L26: one-sentence orphan paragraph ('Strands Agents는 모델 주도(model-driven) 방식으로 ... SDK입니다.') at the end of the ReAct subsection",
+   "L38: subsection ends on one stray sentence that adds nothing",
+   "L1101-1103: subsection '### SDK 루프와 하네스 사이의 선택' has three thin sentences; 'harness' is undefined",
+   "L48-52 and L366-370: duplicate install block",
+   "L1093: lead-in promises two gaps, but the second item is not a gap (broken transition)"
+  ],
+  "top_issues": [
+   "Broken code fence at L169 turns code comments into H2 headings and garbles the hook-order example",
+   "window_size explained as message pairs with a wrong 'five tickets' estimate (L126-139); the source counts messages"
+  ]
+ },
+ "Y": {
+  "prose_length_chars": 29344,
+  "scores": {
+   "A": {
+    "score": 7.5,
+    "reason": "No broken fences, and the front matter is fine. Ordering problem: setup and the first agent ('## pip 한 줄에서...', L409) come after the hooks and interventions sections that already depend on agent.py (L141). The MCP docs-server subsection (L521-528) is off-topic padding. Orphan sentence at L99. The TL;DR (L14) is one very long paragraph."
+   },
+   "B": {
+    "score": 7.5,
+    "reason": "Natural 합니다/하십시오 register. Overlong sentences: L18 '모델에 계획을 맡기면 ... 얹어 둔 SDK입니다' (one 100+ char sentence; split it in two). Calque '단락' for short-circuit (L240 '이 구조에서 단락, 피드백 누적 ... 이 나옵니다', L249 '남은 핸들러를 단락'). L20 is a literal doc translation ('언어 모델은 질문에 답할 수 있지만, 에이전트는 일을 처리합니다')."
+   },
+   "C": {
+    "score": 6.5,
+    "reason": "Forward references: L141 'agent.py에서 정의한 lookup_order, issue_refund를 그대로 씁니다' comes before agent.py is shown (L442), and L210 and L260 do the same. Unclear source references: L79 '위 글이 Python 소스를 분석한 결과', L83 '같은 글에 따르면' (the article is never named). L1075 '앞의 7월 비교 글' points to a July article the post never introduced. L1069 ends on a non sequitur about AgentResult. L99 refers to '이 결과', which nothing defines."
+   },
+   "D": {
+    "score": 8.5,
+    "reason": "Strong help at the hard parts: stack-depth table (L91-95), intervention pipeline trace table (L306-313) with a fix suggestion, attempt-counting walkthrough (L674), idempotency-token choice advice (L752). Easy parts are not padded, apart from the MCP server aside."
+   },
+   "E": {
+    "score": 8.5,
+    "reason": "Tables used well (risk-to-control L26, stop_reason branches L73, preset values L131, pipeline trace L306, attempt counting L652, failure modes L1081) plus a text diagram (L54). No images; one would not add much."
+   },
+   "F": {
+    "score": 8.5,
+    "reason": "No wrong or unsupported claim among 44 checked. Source-level claims match event_loop.py on main. One internal inconsistency: the failure-mode table L1085 says '핸들러에서 횟수를 세다가 Deny로 격상', but L321 notes Deny is invalid in after_model_call (the doc itself suggests escalating to Deny). Third-party claims (Lambda streaming, L1073) are attributed."
+   },
+   "G": {
+    "score": 9,
+    "reason": "Description 140 chars, opens with the product name. No math or Liquid; fences are clean; no remote images."
+   },
+   "T1": {
+    "score": 8,
+    "reason": "A runnable agent.py (L444-485) with an install/auth/run command (python -u agent.py), a provider swap and composable add-on blocks. But blocks are presented before agent.py exists, and triage_limited (L663), triage_stream (L686) and handle_ticket (L825) give the agent issue_refund without HITL, against the post's own advice at L594. No metrics.get_summary()."
+   },
+   "T2": {
+    "score": 8,
+    "reason": "Broad, sourced coverage of loop internals, hooks, interventions, HITL/Cedar, setup and providers, structured output, lifecycle, retry, state and sessions. No observability section (OpenTelemetry appears only in the comparison, L1067-1069). Conversation-manager trimming is mentioned only in passing (L966). The MCP docs server (L521) is padding."
+   },
+   "T3": {
+    "score": 8.5,
+    "reason": "Goes past the docs into internals: recursive cycles and stack depth (L85-97), inner retry loop and BeforeModelCall cancel (L83), aux_model routing (L504-519), framework positioning and deployment limits (L1061-1089). Design advice is phrased as recommendations."
+   }
+  },
+  "principles": {
+   "claim_headings": "met: e.g. L48 '출구가 셋인 사이클 함수', L859 '4초에서 시작해 두 배씩 늘어나는 기본 대기'",
+   "running_example": "partly: the ticket agent with lookup_order/issue_refund runs throughout, but it is used (L141) before it is defined (L442)",
+   "mechanism_reason_code_example": "met: interventions L240 (why) -> L258 (rule) -> L262 code -> L306 trace table",
+   "facts_said_once": "partly: install packages appear at L12 and L36, and the default Bedrock provider is explained twice (L430); provider-agnosticism appears at L12 and L36",
+   "numbers_with_scope_unit": "met: retry table with units (L863), limits with units (L819)",
+   "nothing_invented": "met: no wrong claims found; dev-branch details are labelled as main",
+   "own_assessment_at_end": "met: L1089 '이 글의 판단은 이렇습니다 ...'",
+   "length_fitted": "met",
+   "type_specific_shape": "partly: TL;DR and problem first (L10-24), internals early (L38); setup is buried in the 5th H2; ends with choice and failure modes",
+   "korean_style": "partly: natural, but overlong sentences (L14, L18) and the '단락' calque"
+  },
+  "claims": {
+   "checked": 44,
+   "numbers_checked": 10,
+   "supported": 41,
+   "unsupported": 0,
+   "wrong": 0,
+   "unverifiable": 3,
+   "error_rate": 0.0,
+   "items": [
+    {
+     "line": "12,36",
+     "claim": "PyPI strands-agents, npm @strands-agents/sdk; provider-agnostic",
+     "status": "supported",
+     "source": "agent-loop doc / model-providers doc"
+    },
+    {
+     "line": "36",
+     "claim": "First-party providers Bedrock, Anthropic, OpenAI, Google; community packages; custom interface",
+     "status": "supported",
+     "source": "model-providers doc: 'First-party providers include Amazon Bedrock, Anthropic, OpenAI, and Google; community packages add more'"
+    },
+    {
+     "line": "50",
+     "claim": "event_loop.py duties: process messages, execute tools, recover errors, manage recursive cycles",
+     "status": "supported",
+     "source": "strands-py/src/strands/event_loop/event_loop.py module docstring"
+    },
+    {
+     "line": "73-77",
+     "claim": "max_tokens raises; tool_use runs tools and recurses; otherwise EventLoopStopEvent",
+     "status": "supported",
+     "source": "event_loop.py: 'if stop_reason == \"max_tokens\": raise MaxTokensReachedException' / recurse_event_loop / yield EventLoopStopEvent"
+    },
+    {
+     "line": "83",
+     "claim": "BeforeModelCallEvent.cancel skips model call and ends with end_turn; AfterModelCallEvent.retry -> continue",
+     "status": "supported",
+     "source": "event_loop.py: 'if before_model_call_event.cancel: ... stop_reason: StopReason = \"end_turn\"' ... 'if after_model_call_event.retry: continue'"
+    },
+    {
+     "line": "85-87",
+     "claim": "Cycles chain via recurse_event_loop, no while between cycles",
+     "status": "supported",
+     "source": "event_loop.py: 'async def recurse_event_loop(' ; inner 'while True' only for model retry, which the post states at L83"
+    },
+    {
+     "line": "87,1083",
+     "claim": "Very long tool chains may hit Python recursion limit before SDK limits",
+     "status": "unverifiable",
+     "source": "attributed to dev.to author; not verified by execution"
+    },
+    {
+     "line": "107",
+     "claim": "add_hook infers event type from type hint; TS addHook takes event type first",
+     "status": "supported",
+     "source": "hooks doc: 'agent.add_hook(typed_callback)  # Event type inferred from type hint'; 'agent.addHook(BeforeInvocationEvent, myCallback)'"
+    },
+    {
+     "line": "133",
+     "claim": "HookOrder.SDK_FIRST -100, DEFAULT 0, SDK_LAST 100",
+     "status": "supported",
+     "source": "hooks doc: 'HookOrder.SDK_FIRST (-100)... DEFAULT (0)... SDK_LAST (100)'"
+    },
+    {
+     "line": "137",
+     "claim": "SDK_FIRST - 1 and float('-inf')/('inf')",
+     "status": "supported",
+     "source": "hooks doc"
+    },
+    {
+     "line": "210",
+     "claim": "Resuming from interrupt with a plain string raises TypeError; interruptResponse list required",
+     "status": "supported",
+     "source": "hooks doc: 'Passing a plain string raises a TypeError.'"
+    },
+    {
+     "line": "254",
+     "claim": "Action behaviour by before/after events; method-valid actions",
+     "status": "supported",
+     "source": "interventions doc tables"
+    },
+    {
+     "line": "258",
+     "claim": "Precedence deny > confirm > guide > transform > proceed",
+     "status": "supported",
+     "source": "interventions doc"
+    },
+    {
+     "line": "317",
+     "claim": "on_error throw/proceed/deny semantics; TS onError",
+     "status": "supported",
+     "source": "interventions doc"
+    },
+    {
+     "line": "321",
+     "claim": "No cap on Guide retries in after_model_call; Deny not valid there",
+     "status": "supported",
+     "source": "interventions doc: 'The framework imposes no retry cap'; table after_model_call 'Proceed, Guide, Transform'"
+    },
+    {
+     "line": "325",
+     "claim": "Confirm default evaluate True/'y'/'yes'; denied sets event.cancel",
+     "status": "supported",
+     "source": "interventions doc"
+    },
+    {
+     "line": "360,368",
+     "claim": "allowed_tools=['*','!issue_refund'] means all tools bypass approval except issue_refund; negated tools can't be trusted",
+     "status": "supported",
+     "source": "human-in-the-loop doc: 'Supports \"*\" (all) and \"!tool_name\" (negation)'; '[\"*\", \"!delete_files\"] -> all except delete_files'"
+    },
+    {
+     "line": "368",
+     "claim": "Default classifier runs on agent model or aux model when set",
+     "status": "supported",
+     "source": "approve-before-acting doc: 'It runs on the agent’s model, or on the auxiliary model when you set one.'"
+    },
+    {
+     "line": "415",
+     "claim": "Python 3.10+ and an active virtualenv",
+     "status": "supported",
+     "source": "python quickstart doc: 'Confirm Python 3.10+ is available.'"
+    },
+    {
+     "line": "430",
+     "claim": "PyPI: default Bedrock needs AWS credentials and Claude 4 Sonnet access in us-west-2",
+     "status": "supported",
+     "source": "PyPI strands-agents 1.64.0 description: 'model access enabled for Claude 4 Sonnet in the us-west-2 region'"
+    },
+    {
+     "line": "434-436",
+     "claim": "Credentials: AWS_BEARER_TOKEN_BEDROCK, aws configure/AWS_ACCESS_KEY_ID..., IAM roles",
+     "status": "supported",
+     "source": "python quickstart doc"
+    },
+    {
+     "line": "498",
+     "claim": "AnthropicModel(model_id='claude-sonnet-5', max_tokens=4096)",
+     "status": "supported",
+     "source": "python quickstart doc code"
+    },
+    {
+     "line": "502",
+     "claim": "Ollama, SageMaker Python-only; Vercel TS-only; custom provider needs only streaming",
+     "status": "supported",
+     "source": "model-providers doc: language table (Ollama ✅/❌, SageMaker ✅/❌, Vercel ❌/✅); 'the streaming method is required'"
+    },
+    {
+     "line": "513-519",
+     "claim": "aux_model with opus-5-20260301 / haiku-4-5-20251001 ids; resolution component > aux_model > model; ModelRouter not accepted",
+     "status": "supported",
+     "source": "model-providers doc: Auxiliary model section"
+    },
+    {
+     "line": "526-527",
+     "claim": "claude mcp add strands uvx strands-agents-mcp-server; MCP Inspector command; requires uv",
+     "status": "supported",
+     "source": "python quickstart doc"
+    },
+    {
+     "line": "634-637",
+     "claim": "due_date trace 2025-07-22 -> 'must be after 2026-10-12' -> 2026-10-13",
+     "status": "supported",
+     "source": "structured-output-behavior doc example (presented as a doc example, not a run)"
+    },
+    {
+     "line": "646",
+     "claim": "main source: forced retry ending in JSON text is validated as structured output",
+     "status": "supported",
+     "source": "event_loop.py: '# The forced retry may end in JSON text when the provider could not force the tool'"
+    },
+    {
+     "line": "652-656",
+     "claim": "Attempt counting: failed validation and failed forced retry count; earlier other tools don't",
+     "status": "supported",
+     "source": "structured-output-behavior doc: 'Calls to your other tools before the forced retry don’t count.'"
+    },
+    {
+     "line": "709",
+     "claim": "Cache reads/writes counted on Bedrock/Anthropic/OpenAI/Gemini; stop-reason priority; fresh counters",
+     "status": "supported",
+     "source": "agent-loop doc/lifecycle-controls doc"
+    },
+    {
+     "line": "715-720",
+     "claim": "Four Python cancel checkpoints and notes",
+     "status": "supported",
+     "source": "agent-loop doc checkpoint table"
+    },
+    {
+     "line": "722",
+     "claim": "Idle cancel() cancels next invocation",
+     "status": "supported",
+     "source": "lifecycle-controls doc"
+    },
+    {
+     "line": "750-752",
+     "claim": "concurrent_invocation_mode THROW/UNSAFE_REENTRANT; idempotency_token; IdempotencyAbortedError",
+     "status": "supported",
+     "source": "lifecycle-controls doc/agent-loop doc"
+    },
+    {
+     "line": "770",
+     "claim": "TS throws ConcurrentInvocationError, no modes or tokens",
+     "status": "supported",
+     "source": "lifecycle-controls doc"
+    },
+    {
+     "line": "783-785",
+     "claim": "from strands.models import BedrockModel; MODEL_ID 'global.anthropic.claude-sonnet-5'",
+     "status": "supported",
+     "source": "lifecycle-controls doc worked example"
+    },
+    {
+     "line": "819,838",
+     "claim": "turns 6, total_tokens 20_000, deadline 20.0 s",
+     "status": "supported",
+     "source": "lifecycle-controls doc worked example (post adds structured_output_attempts 3)"
+    },
+    {
+     "line": "853",
+     "claim": "Python appends partial message then raises MaxTokensReachedException; TS MaxTokensError.partialMessage not added",
+     "status": "supported",
+     "source": "lifecycle-controls doc"
+    },
+    {
+     "line": "861-870",
+     "claim": "5 retries/6 attempts, 4/8/16/32/64 s",
+     "status": "supported",
+     "source": "retry-strategies doc"
+    },
+    {
+     "line": "899-901",
+     "claim": "TS ModelRetryStrategy abstract, DefaultModelRetryStrategy, computeRetryDecision; retryStrategy: null",
+     "status": "supported",
+     "source": "retry-strategies doc"
+    },
+    {
+     "line": "950",
+     "claim": "Doc's CustomRetry never resets attempts",
+     "status": "supported",
+     "source": "retry-strategies doc: CustomRetry example increments self.attempts without reset"
+    },
+    {
+     "line": "991",
+     "claim": "TS SessionManager is a Plugin; Snapshot manager restores latest on init",
+     "status": "supported",
+     "source": "session-management doc"
+    },
+    {
+     "line": "1017,1020",
+     "claim": "agent.session_id returns manager session_id; otherwise random 8-char hex; manager storage beats agent storage; Python ./.strands/ fallback, TS fails",
+     "status": "supported",
+     "source": "session-management doc: 'random 8-character hex string'; 'Manager-level storage takes precedence'"
+    },
+    {
+     "line": "1055-1059",
+     "claim": "No distributed lock; default IDs; non-atomic creation; symlink risk; not thread-safe",
+     "status": "supported",
+     "source": "session-management doc"
+    },
+    {
+     "line": "1073",
+     "claim": "Third-party: Lambda deployment lacks streaming, needs AgentCore Runtime or Fargate",
+     "status": "unverifiable",
+     "source": "third-party article not fetched; attributed"
+    },
+    {
+     "line": "1067-1075",
+     "claim": "Third-party comparison articles (March 2026 article, 'July' article citing QubitTool)",
+     "status": "unverifiable",
+     "source": "third-party articles not fetched; attributed"
+    }
+   ]
+  },
+  "checklist": {
+   "loop-diagram-remote": "avoided: the loop diagram is a text block (L54-69); no remote images",
+   "shared-agent-throw-scope": "n/a: no shared-agent web-handler warning; L750 states the documented THROW behaviour",
+   "shared-agent-history-leak": "avoided (partly): L550 '메시지마다 새 에이전트를 만들어 티켓끼리 대화 기록이 섞이지 않게' and L774 per-request agents; no invoke_async recommendation",
+   "result-fields-incomplete": "repeated: L483-484 print stop_reason and message only; metrics.get_summary() never appears",
+   "multi-agent-subject": "n/a",
+   "repeated": 1,
+   "avoided": 2,
+   "na": 2,
+   "repeated_ids": [
+    "result-fields-incomplete"
+   ]
+  },
+  "extras": {
+   "architecture_first_line": 38,
+   "internals_first_line": 50,
+   "non_official_source_share": "3/17 (AWS Builder Center post, dev.to, buildyour.group) = 18%; GitHub source and PyPI counted as official",
+   "opens_with_problem": "yes (L18-24 delegation risks table)",
+   "closes_with_choice_and_failure_modes": "yes (L1061-1089, failure-mode table L1081)"
+  },
+  "structure_defects": [
+   "L141, L210, L260: running example used before it is defined (agent.py appears at L442 in a later H2)",
+   "L99: orphaned one-sentence paragraph referring to an undefined '이 결과'",
+   "L1075: '앞의 7월 비교 글' refers to an article never introduced",
+   "L1069: last sentence (AgentResult contents) breaks the comparison argument",
+   "L79/L83: '위 글'/'같은 글' with no named antecedent",
+   "L521-528: off-topic subsection (docs MCP server for IDEs)"
+  ],
+  "top_issues": [
+   "Order breaks the running example: hooks and interventions code depends on agent.py, which appears only in the 5th H2 (L141 vs L442)",
+   "Examples after L594 give issue_refund without HITL, against the post's own warning; failure-mode table L1085 contradicts L321 on Deny in after_model_call"
+  ]
+ },
+ "preference": {
+  "overall": "Y",
+  "per_criterion": {
+   "A": "Y",
+   "B": "tie",
+   "C": "X",
+   "D": "Y",
+   "E": "Y",
+   "F": "Y",
+   "G": "Y",
+   "T1": "Y",
+   "T2": "X",
+   "T3": "Y"
+  },
+  "reason": "Y has no factual error among 44 checks, renders cleanly, and goes deeper (source-level loop internals, aux_model, deployment caveats), with better worked tables. Its main weakness is order: the running example is used before it is defined, and some references have no antecedent. X covers more ground (observability, conversation manager) and keeps a cleaner reading order, but it has a broken code fence that turns code comments into H2 headings, a wrong window_size explanation, and a hotlinked remote image."
+ }
+}
