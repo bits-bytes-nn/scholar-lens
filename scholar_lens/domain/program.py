@@ -10,7 +10,7 @@ import builtins
 import re
 import symtable
 import textwrap
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from scholar_lens.domain.verifiers import Problem
@@ -205,6 +205,47 @@ def program_problems(sections: Sequence[tuple[str, str, bool]]) -> list[Problem]
     return out
 
 
+def _call_signature(node: ast.stmt) -> tuple[str, ast.arguments, bool] | None:
+    """A top-level definition's name, parameters and whether a call passes
+    ``self`` implicitly: a plain function, or an undecorated class with its
+    own ``__init__`` (its other constructors are unknown to this check)."""
+    if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+        return node.name, node.args, False
+    if isinstance(node, ast.ClassDef) and not node.decorator_list:
+        for item in node.body:
+            if isinstance(item, ast.FunctionDef) and item.name == "__init__":
+                return node.name, item.args, True
+    return None
+
+
+def _call_mismatch(call: ast.Call, args: ast.arguments, bound: bool) -> str:
+    """Why ``call`` cannot bind to ``args`` ("" when it can or cannot be
+    told: a ``*``/``**`` argument at the call)."""
+    if any(isinstance(a, ast.Starred) for a in call.args) or any(
+        k.arg is None for k in call.keywords
+    ):
+        return ""
+    positional = [*args.posonlyargs, *args.args][1 if bound else 0 :]
+    given = {k.arg for k in call.keywords if k.arg}
+    names = {a.arg for a in [*positional, *args.kwonlyargs]}
+    if args.kwarg is None and (unknown := sorted(given - names)):
+        return f"unknown keyword argument(s) {', '.join(unknown)}"
+    if args.vararg is None and len(call.args) > len(positional):
+        return f"{len(call.args)} positional arguments for {len(positional)}"
+    required = positional[: len(positional) - len(args.defaults)]
+    missing = [
+        a.arg
+        for i, a in enumerate(required)
+        if i >= len(call.args) and a.arg not in given
+    ]
+    missing += [
+        a.arg
+        for a, default in zip(args.kwonlyargs, args.kw_defaults, strict=True)
+        if default is None and a.arg not in given
+    ]
+    return f"missing required argument(s) {', '.join(missing)}" if missing else ""
+
+
 def _code_findings(
     sections: Sequence[tuple[str, str, bool]],
 ) -> list[_CodeFinding]:
@@ -222,6 +263,8 @@ def _code_findings(
     known = set(dir(builtins)) | {"__name__", "__file__"}
     reliable = True
     problems: list[_CodeFinding] = []
+    # The post's own top-level functions and classes, as last defined.
+    signatures: dict[str, tuple[ast.arguments, bool]] = {}
     for title, markdown, checked in sections:
         for block in python_blocks(markdown):
             session = _session_code(block)
@@ -270,8 +313,49 @@ def _code_findings(
                         names=tuple(missing),
                     )
                 )
+            if report:
+                problems += _signature_findings(title, tree, signatures)
+            for node in tree.body:
+                if (signature := _call_signature(node)) is not None:
+                    signatures[signature[0]] = signature[1:]
+                elif isinstance(
+                    node, ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef
+                ):
+                    signatures.pop(node.name, None)
             known |= bound
     return problems
+
+
+def _signature_findings(
+    title: str, tree: ast.Module, signatures: Mapping[str, tuple[ast.arguments, bool]]
+) -> list[_CodeFinding]:
+    """Calls in ``tree`` to a function or class the post defined earlier (or
+    in this block) that do not bind to its parameters: a running example
+    that defeats itself when pasted in order."""
+    local = dict(signatures)
+    for stmt in tree.body:
+        if (signature := _call_signature(stmt)) is not None:
+            local[signature[0]] = signature[1:]
+    findings = []
+    for node in ast.walk(tree):
+        if not (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id in local
+        ):
+            continue
+        args, bound = local[node.func.id]
+        if why := _call_mismatch(node, args, bound):
+            call = ast.unparse(node)[:120]
+            findings.append(
+                _CodeFinding(
+                    title,
+                    f"a call does not match the post's own definition of "
+                    f"{node.func.id} ({why}): {call}",
+                    call,
+                )
+            )
+    return findings
 
 
 # A top-level value shown with its definition is cut at this length.

@@ -93,3 +93,36 @@ def test_the_writer_prompt_documents_the_marker() -> None:
     principles = " ".join(GUIDE_PRINCIPLES.split())
     assert f"`{EXCERPT_MARKER}" in principles
     assert "no `...` placeholder" in principles
+
+
+def test_a_call_that_does_not_bind_to_the_posts_own_definition_is_a_problem() -> None:
+    from scholar_lens.domain.program import python_code_problems
+
+    defined = (
+        "## 정의\n\n```python\ndef handle(ticket, *, user_id):\n    return ticket\n\n"
+        "class Agent:\n    def __init__(self, name, tools=None):\n        self.name = name\n"
+        "\n\ndef log(*args, **kwargs):\n    print(args, kwargs)\n```\n"
+    )
+    used = (
+        "## 사용\n\n```python\nhandle('t')\nAgent('a', tools=[], model='x')\n"
+        "handle('t', user_id=1)\nAgent('ok')\nlog(1, 2, x=3)\nhandle(*['t'], **{})\n```\n"
+    )
+    problems = [
+        p
+        for _, p in python_code_problems(
+            [("정의", defined, True), ("사용", used, True)]
+        )
+    ]
+    assert len(problems) == 2
+    assert "handle (missing required argument(s) user_id)" in problems[0]
+    assert "Agent (unknown keyword argument(s) model)" in problems[1]
+
+    # A later definition replaces the earlier one.
+    redefined = "## 다시\n\n```python\ndef handle(ticket):\n    return ticket\n\nhandle('t')\n```\n"
+    assert not [
+        p
+        for _, p in python_code_problems(
+            [("정의", defined, True), ("다시", redefined, True)]
+        )
+        if "does not match" in p
+    ]
