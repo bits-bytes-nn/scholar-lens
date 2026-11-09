@@ -1074,7 +1074,9 @@ def style_hits(body: str) -> list[StyleHit]:
 # "필요" and "주요" end otherwise), "~죠", or "~다" as a verb or adjective
 # ends (:func:`_declarative`), optional final punctuation.
 _HEADING_TEXT = re.compile(r"^#{2,6} (.*\S)[ \t]*$", re.M)
-_POLITE = re.compile(r"(?:[아어여에예워와해돼봐줘까네래대세]요|[가-힣]죠|시다)[.!]?$")
+_POLITE = re.compile(
+    r"(?:[아어여에예워와해돼봐줘까네래대세나]요|[가-힣]죠|시다)[.!?]?$"
+)
 # Syllables a "~다" follows as an ending: the copula and the stems and
 # tense marks of predicates ("모델이다", "가능하다", "되다", "있다", "했다").
 _PREDICATE_BEFORE_DA = frozenset(
@@ -1084,7 +1086,16 @@ _PREDICATE_BEFORE_DA = frozenset(
 # ending: those that are no verb form match as word endings ("아나콘다",
 # "카메라와 라이다"); those that are also common verb endings ("간다", "판다")
 # match only as the whole word.
-_NOUN_ENDINGS_LIKE_DA = ("콘다", "젠다", "라이다", "레이다", "에이다")
+_NOUN_ENDINGS_LIKE_DA = (
+    "콘다",
+    "젠다",
+    "라이다",
+    "레이다",
+    "에이다",
+    "플로리다",
+    "보르다",
+    "코르다",
+)
 _NOUNS_LIKE_DA = frozenset(
     {
         "판다",
@@ -1107,7 +1118,7 @@ def _declarative(word: str) -> bool:
     """Whether ``word`` ends in a declarative "~다": after a syllable with a
     final ㄴ (present tense: "한다", "만든다"), after "니" ("합니다"), or
     after a predicate stem or tense mark."""
-    word = word.rstrip(".!")
+    word = word.rstrip(".!?")
     if (
         len(word) < 2
         or not word.endswith("다")
@@ -1126,12 +1137,24 @@ def _declarative(word: str) -> bool:
 
 # Endings of a word before a verb: a subject or object particle or a
 # connective ("데이터를 판다", "옮겨 간다"), not a noun's company ("카메라와").
-# Particles (subject, object, topic, direction, place) and contracted
-# connectives; a bare final 아/어/서 is left out, as many nouns end in them
-# ("아시아", "소프트웨어", "레서").
+# Particles (subject, object, topic, direction, place) and connectives
+# (nouns that end like one are listed apart).
 _BEFORE_A_VERB = re.compile(
-    r"(?:[을를이가은는도로에]|에서|[고게겨워해려쳐져혀돼봐줘])$"
+    r"(?:[을를이가은는도로에]|에서|[고게겨워해려쳐져혀돼봐줘아어서])$"
 )
+# Nouns that end in 아/어/서 like a connective ("아시아 판다").
+_NOUNS_LIKE_CONNECTIVES = frozenset(
+    {"아시아", "소프트웨어", "하드웨어", "미들웨어", "펌웨어", "레서", "미디어"}
+)
+
+
+def _question_in_nga(word: str) -> bool:
+    """A question in "~ㄴ가?" ("다른가?", "필요한가?"): the question mark is
+    required, as nouns end alike ("전문가")."""
+    if not word.endswith("가?") or len(word) < 3:
+        return False
+    before = word[-3]
+    return "가" <= before <= "힣" and (ord(before) - ord("가")) % 28 == 4
 
 
 def _is_sentence_heading(text: str) -> bool:
@@ -1139,7 +1162,7 @@ def _is_sentence_heading(text: str) -> bool:
     if not words:
         return False
     last = words[-1]
-    if _POLITE.search(last) or _declarative(last):
+    if _POLITE.search(last) or _declarative(last) or _question_in_nga(last):
         return True
     # A word that is a noun or a verb ending ("간다", "판다") reads as the verb
     # after a particle or connective.
@@ -1147,6 +1170,7 @@ def _is_sentence_heading(text: str) -> bool:
         last.rstrip(".!") in _NOUNS_LIKE_DA
         and len(words) > 1
         and bool(_BEFORE_A_VERB.search(words[-2]))
+        and words[-2] not in _NOUNS_LIKE_CONNECTIVES
     )
 
 

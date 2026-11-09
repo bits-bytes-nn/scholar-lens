@@ -710,7 +710,7 @@ FIGURE_CHECK_ATTEMPTS = 3
 # One figure's deadline, from when it gets a slot (above its worst case:
 # three downloads within their own timeouts), so a stalled host cannot hold
 # the run; a figure not checked in time is left out.
-FIGURE_CHECK_DEADLINE_S = 120
+FIGURE_CHECK_DEADLINE_S = 180
 
 
 def _downloadable(url: str, sleep: Callable[[float], None] = time.sleep) -> bool:
@@ -736,20 +736,23 @@ async def unservable(urls: list[str]) -> list[str]:
     gate = asyncio.Semaphore(FIGURE_CHECK_CONCURRENCY)
 
     async def check(url: str) -> bool:
-        async with gate:
-            # Each figure's deadline starts when it gets a slot, so figures
-            # waiting behind a slow host are still tried.
-            try:
-                return await asyncio.wait_for(
-                    asyncio.to_thread(_downloadable, url), FIGURE_CHECK_DEADLINE_S
-                )
-            except TimeoutError:
-                logger.warning(
-                    "Figure %s not checked within %ds; left out.",
-                    url,
-                    FIGURE_CHECK_DEADLINE_S,
-                )
-                return False
+        # A slot is held until its download thread ends (a timed-out thread
+        # keeps running), so at most FIGURE_CHECK_CONCURRENCY downloads run;
+        # each figure's deadline starts when it gets a slot.
+        await gate.acquire()
+        download = asyncio.ensure_future(asyncio.to_thread(_downloadable, url))
+        download.add_done_callback(lambda _: gate.release())
+        try:
+            return await asyncio.wait_for(
+                asyncio.shield(download), FIGURE_CHECK_DEADLINE_S
+            )
+        except TimeoutError:
+            logger.warning(
+                "Figure %s not checked within %ds; left out.",
+                url,
+                FIGURE_CHECK_DEADLINE_S,
+            )
+            return False
 
     ok = await asyncio.gather(*(check(u) for u in urls))
     return [u for u, good in zip(urls, ok, strict=True) if not good]
