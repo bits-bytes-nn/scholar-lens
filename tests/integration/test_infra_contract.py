@@ -11,7 +11,7 @@ from scholar_lens.cli import APP_REPORTED_EXIT_CODES, build_parser
 from scholar_lens.domain.jobs import JobRequest
 from scripts import check_post_conventions as conventions
 from scripts.ci_synth_check import check_template, resources_of_type, synth_template
-from scripts.deploy_infra import JOB_COMMAND, check_deployable
+from scripts.deploy_infra import JOB_COMMAND, check_deployable, interpreter_name
 
 
 @pytest.fixture(scope="module")
@@ -306,3 +306,17 @@ class TestPostConventionsCheck:
     def test_scheduled_run_needs_a_repo(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("BLOG_REPO", raising=False)
         assert conventions.main(["--require-repo"]) == 2
+
+
+@pytest.mark.parametrize(
+    ("project", "stage", "expected"),
+    [
+        ("scholar-lens", "dev", "scholar_lens_dev_guide_code"),
+        ("1x.y", "prod", "sl_1x_y_prod_guide_code"),
+        ("p" * 60, "dev", "p" * 48),
+    ],
+)
+def test_the_interpreter_name_fits_agentcore(
+    project: str, stage: str, expected: str
+) -> None:
+    assert interpreter_name(project, stage) == expected

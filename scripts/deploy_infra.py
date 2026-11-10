@@ -6,6 +6,7 @@ the CloudFormation template; secrets are written to SSM separately by
 """
 
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -96,6 +97,15 @@ JOB_COMMAND = ["python3", "-m", "scholar_lens", "worker", "--request", "Ref::req
 BEDROCK_VENDORS = sorted(
     {m.value.split(".")[0] for m in (*LanguageModelId, *EmbeddingModelId)}
 )
+
+
+def interpreter_name(project_name: str, stage: str) -> str:
+    """The code interpreter's name: a letter first, then letters, digits and
+    underscores, at most 48 characters."""
+    name = re.sub(r"[^A-Za-z0-9_]", "_", f"{project_name}_{stage}_guide_code")
+    if not name[0].isalpha():
+        name = f"sl_{name}"
+    return name[:48]
 
 
 class PaperReviewStack(Stack):
@@ -299,8 +309,7 @@ class PaperReviewStack(Stack):
         return agentcore.CfnCodeInterpreterCustom(
             self,
             "GuideCodeInterpreter",
-            # Letters, digits and underscores only.
-            name=f"{self.project_name}_{self.stage}_guide_code".replace("-", "_"),
+            name=interpreter_name(self.project_name, self.stage),
             description="Runs Scholar Lens guide examples as a reader pastes them",
             network_configuration=agentcore.CfnCodeInterpreterCustom.CodeInterpreterNetworkConfigurationProperty(
                 network_mode="PUBLIC"
