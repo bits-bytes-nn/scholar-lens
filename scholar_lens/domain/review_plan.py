@@ -58,6 +58,10 @@ _HARD_SHARE_BONUS = 0.6
 MIN_LENGTH_SCALE = 0.5
 HARD_OVERRUN = 1.3
 MIN_HARD_SCALE = 0.8
+# Background sections (importance "context": the primers a reader may need)
+# take at most this share of the review's budget; the paper's own content
+# keeps the rest (the judges found reviews padded with background).
+MAX_CONTEXT_SHARE = 0.15
 # Sentences of context added on each side of a planned range, so evidence just
 # outside an LLM-estimated anchor still reaches the writer.
 RANGE_PADDING = 3
@@ -238,8 +242,37 @@ def _fit_budget(plan: ReviewPlan) -> None:
         return low
 
     budget = review_word_budget(plan)
-    if total(1.0) <= budget:
+    if total(1.0) > budget:
+        _fit_items(plan, budget, total, fit)
+    _cap_context(plan, budget)
+
+
+def _cap_context(plan: ReviewPlan, budget: int) -> None:
+    """Background sections shortened together to :data:`MAX_CONTEXT_SHARE`
+    of the budget (each section's floor still holds)."""
+    context = [s for s in plan.sections if s.importance == "context"]
+    words = sum(s.target_words for s in context)
+    cap = MAX_CONTEXT_SHARE * budget
+    if not context or words <= cap:
         return
+    factor = cap / words
+    for section in context:
+        section.length_scale *= factor
+        section.hard_scale *= factor
+    logger.info(
+        "Background sections: %d words for a %d-word share; shortened x%.2f.",
+        words,
+        round(cap),
+        factor,
+    )
+
+
+def _fit_items(
+    plan: ReviewPlan,
+    budget: int,
+    total: Callable[..., int],
+    fit: Callable[[Callable[[float], int], float, float], float],
+) -> None:
     scale = fit(total, MIN_LENGTH_SCALE, budget)
     hard = 1.0
     if total(scale) > HARD_OVERRUN * budget:

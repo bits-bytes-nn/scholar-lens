@@ -426,3 +426,33 @@ def test_closing_heading_must_be_the_whole_title(heading: str, closing: bool) ->
     text = f"## {heading}\n\nA sentence.\n\n## Next\n\nMore."
     source = SourceText.from_text(text, lambda chunk: [(0, len(chunk))])
     assert bool(source.closing_ranges()) is closing
+
+
+def test_background_sections_take_at_most_their_share_of_the_budget() -> None:
+    from scholar_lens.domain.review_plan import (
+        MAX_CONTEXT_SHARE,
+        ReviewPlan,
+        _fit_budget,
+        review_word_budget,
+    )
+
+    def section(title: str, importance: str, n: int) -> PlannedSection:
+        return PlannedSection(
+            title=title,
+            importance=importance,
+            must_cover=[
+                CoverItem(item=f"{title}{i}", difficulty="hard") for i in range(n)
+            ],
+            sentence_ranges=[(0, 1)],
+        )
+
+    plan = ReviewPlan(
+        sections=[section("배경", "context", 4), section("방법", "core", 3)]
+    )
+    _fit_budget(plan)
+    context = plan.sections[0].target_words
+    assert context <= max(
+        MIN_SECTION_WORDS, MAX_CONTEXT_SHARE * review_word_budget(plan) + 1
+    )
+    # The paper's own content keeps its length.
+    assert plan.sections[1].target_words > context
