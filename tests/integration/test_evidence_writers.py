@@ -119,7 +119,10 @@ def test_a_guide_run_wires_roles_ceiling_cache_and_sources(
             package_facts,
             sdk=None,
             roles=None,
+            program_runs=None,
         ) -> None:
+            # The code is read, not run, unless tech_guide.run_examples.
+            assert program_runs is None
             seen.engine_roles.append(roles)
             seen.settings.append(settings)
             seen.stores.append(store)
@@ -644,3 +647,31 @@ def test_figures_that_cannot_be_downloaded_leave_the_paper_before_writing(
     document, _ = paper_writer.paper_documents(kept)
     assert [f.url for f in document.figures] == [FIGURE]
     assert notes == [f"Figures that cannot be downloaded were left out: {BROKEN}"]
+
+
+def test_the_guide_code_runner_follows_the_configuration(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Off by default; on, a Batch job's stack interpreter wins over the
+    configured one, which wins over AWS's system interpreter."""
+    monkeypatch.delenv("SCHOLAR_LENS_CODE_INTERPRETER_ID", raising=False)
+    assert bootstrap.GuideToolkit(_context(tmp_path)).code_runner() is None
+    config = Config()
+    config.tech_guide.run_examples = True
+
+    def runner() -> str:
+        context = bootstrap.run_context(
+            config,
+            root_dir=tmp_path,
+            default_boto_session=boto3.Session(region_name="us-west-2"),
+            bedrock_boto_session=boto3.Session(region_name="us-west-2"),
+        )
+        found = bootstrap.GuideToolkit(context).code_runner()
+        assert found is not None
+        return found.interpreter_id
+
+    assert runner() == "aws.codeinterpreter.v1"
+    config.tech_guide.code_interpreter_id = "local_ci-abc"
+    assert runner() == "local_ci-abc"
+    monkeypatch.setenv("SCHOLAR_LENS_CODE_INTERPRETER_ID", "stack_ci-xyz")
+    assert runner() == "stack_ci-xyz"

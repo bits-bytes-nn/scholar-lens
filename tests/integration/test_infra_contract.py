@@ -81,6 +81,24 @@ class TestStackWiring:
             if s.get("Sid") == sid
         ]
 
+    def test_guide_code_runs_without_credentials_in_its_own_sandbox(
+        self, template: dict[str, Any]
+    ) -> None:
+        (interpreter,) = resources_of_type(
+            template, "AWS::BedrockAgentCore::CodeInterpreterCustom"
+        )
+        props = interpreter["Properties"]
+        assert props["NetworkConfiguration"]["NetworkMode"] == "PUBLIC"
+        assert "ExecutionRoleArn" not in props
+        (statement,) = self._statements(template, "GuideCodeSessions")
+        assert all(a.startswith("bedrock-agentcore:") for a in statement["Action"])
+        assert "*" not in str(statement["Resource"])
+        (job,) = resources_of_type(template, "AWS::Batch::JobDefinition")
+        env = {
+            e["Name"] for e in job["Properties"]["ContainerProperties"]["Environment"]
+        }
+        assert "SCHOLAR_LENS_CODE_INTERPRETER_ID" in env
+
     def test_bedrock_invoke_is_limited_to_the_app_vendors(
         self, template: dict[str, Any]
     ) -> None:

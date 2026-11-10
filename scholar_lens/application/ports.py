@@ -348,6 +348,52 @@ class PackageIndex(Protocol):
         ...
 
 
+class SandboxUnavailable(RuntimeError):
+    """The code sandbox could not be reached or refused the run (access,
+    quota, a service error): the code is not run, the post is not blamed."""
+
+
+@dataclass(frozen=True)
+class SandboxRun:
+    """What a sandbox run printed; ``failure``: why the program never
+    started ("" when it ran); ``warning``: what went wrong before it ran
+    (an install that failed)."""
+
+    stdout: str
+    failure: str = ""
+    warning: str = ""
+
+
+class CodeRunner(Protocol):
+    """An isolated sandbox without the run's credentials that runs a Python
+    program as a reader would (docs/engine.md, 4.7)."""
+
+    async def run(
+        self, program: str, *, requirements: Sequence[str], timeout_s: int
+    ) -> SandboxRun:
+        """``program``'s output, run by a fresh interpreter after installing
+        ``requirements`` (pip specifiers), killed after ``timeout_s``.
+
+        Raises:
+            SandboxUnavailable: The sandbox could not run anything.
+        """
+        ...
+
+
+@dataclass(frozen=True)
+class ProgramRuns:
+    """Running a post's code in the sandbox: the runner, the docs' packages
+    at the run's versions (name, version; the post's own ``pip install``
+    lines are added), the import roots whose failures are the post's, and
+    the time a block and the whole program may take."""
+
+    runner: CodeRunner
+    pins: tuple[tuple[str, str], ...]
+    modules: frozenset[str]
+    block_timeout_s: int
+    total_timeout_s: int
+
+
 # ---- the guide's ports ---------------------------------------------------------
 
 
@@ -404,6 +450,9 @@ class GuideWriting:
     max_sources: int
     min_total_chars: int
     max_total_chars: int
+    # Running the guide's code in the sandbox (when a runner is configured).
+    run_block_timeout_s: int = 60
+    run_timeout_s: int = 600
 
 
 class GuideTools(Protocol):
@@ -420,6 +469,11 @@ class GuideTools(Protocol):
 
     @property
     def figures(self) -> FigureCheck: ...
+
+    def code_runner(self) -> CodeRunner | None:
+        """The sandbox the guide's code runs in (None: the code is read,
+        not run)."""
+        ...
 
     def researcher(self) -> WebResearch:
         """A new researcher (the use case closes it)."""

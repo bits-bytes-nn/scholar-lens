@@ -66,7 +66,9 @@ from scholar_lens.application.ports import (
     CheckpointStore,
     LanguageModel,
     ModelRole,
+    ProgramRuns,
     RoleSpec,
+    SandboxUnavailable,
     TextStore,
 )
 from scholar_lens.domain.coverage import (
@@ -120,6 +122,14 @@ from scholar_lens.domain.post_spec import (
     sentence_title_problems,
 )
 from scholar_lens.domain.program import program_problems, python_code_problems
+from scholar_lens.domain.program_run import (
+    ProgramRun,
+    judge_run,
+    program_blocks,
+    program_script,
+    read_outcomes,
+    run_requirements,
+)
 from scholar_lens.domain.prompts.rules import (
     FIX_ANSWER,
     TARGETS_SYSTEM,
@@ -263,11 +273,15 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
         checkpoints: CheckpointStore | None = None,
         max_fix_rounds: int,
         roles: Mapping[ModelRole, RoleSpec] | None = None,
+        program_runs: ProgramRuns | None = None,
     ) -> None:
         super().__init__(
             model, prompts, max_fix_rounds=max_fix_rounds, limits=spec.limits
         )
         self.spec = spec
+        # Running the post's code in a sandbox (with the spec's code trace;
+        # None: the code is read, not run).
+        self.program_runs = program_runs
         # The model each role runs on (id, effort, thinking, fallback): part
         # of the key of every stage the role produces.
         self.roles: Mapping[ModelRole, RoleSpec] = dict(roles or {})
@@ -882,6 +896,7 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
             [
                 input_hash(*(self.pass_systems[n] for n in sorted(self.pass_systems))),
                 self.spec.post_passes,
+                self._run_inputs(),
                 *self.writing_inputs(),
             ],
             lambda: self.review_post(outline, ledger, written),
@@ -1158,6 +1173,17 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
                 logger.info("Post review %s trace: %s", name, review.trace[:600])
         program = steps.code_trace and "consistency" in steps.names
         found = self.program_findings(written) if program else []
+        # The code is run only when it reads clean: a block the static check
+        # flags fails the run the same way.
+        ran = await self.run_program(written) if program and not found else None
+        found += [
+            PostFinding(
+                section=f.section,
+                problem=f.problem,
+                fix="Make the block run as pasted after the earlier blocks.",
+            )
+            for f in (ran.findings if ran else [])
+        ]
         issues = [i for _, r in reviews for i in r.issues] + found
         fixed = written
         if issues:
@@ -1183,6 +1209,11 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
                 "Code that may not run as pasted: "
                 + " | ".join(f"{t}: {p}"[:200] for t, p in left[:5])
             )
+        elif ran is not None:
+            if fixed is not written and ran.findings:
+                ran = await self.run_program(fixed)
+            if ran is not None:
+                self.program_run_notes(ran)
         if "coverage" in steps.names:
             self.coverage_notes(outline, fixed)
         return fixed
@@ -1232,6 +1263,81 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
         """The program check of :meth:`program_problems` as problems (a
         whole-post fix's transaction refuses a fix that adds one)."""
         return program_problems(self._program_sections(written))
+
+    def _run_inputs(self) -> object:
+        """What of the sandbox run changes the reviewed post (a checkpoint
+        input)."""
+        runs = self.program_runs
+        if runs is None:
+            return None
+        return [
+            sorted(runs.pins),
+            sorted(runs.modules),
+            runs.block_timeout_s,
+            runs.total_timeout_s,
+        ]
+
+    async def run_program(
+        self, written: Sequence[tuple[SectionT, str]]
+    ) -> ProgramRun | None:
+        """The post's code run in the sandbox in reading order (None without
+        a sandbox, without a runnable section's block, or when the sandbox
+        could not run it: a note says why)."""
+        runs = self.program_runs
+        if runs is None:
+            return None
+        blocks = program_blocks(self._program_sections(written))
+        if not any(checked for _, _, checked in blocks):
+            return None
+        script = program_script(
+            [code for _, code, _ in blocks], block_timeout_s=runs.block_timeout_s
+        )
+        requirements = run_requirements(runs.pins, "\n\n".join(md for _, md in written))
+        try:
+            result = await runs.runner.run(
+                script, requirements=requirements, timeout_s=runs.total_timeout_s
+            )
+        except SandboxUnavailable as e:
+            logger.warning("The code sandbox is unavailable: %s", e)
+            self._note_once(f"The code examples were not run: {e}")
+            return None
+        if result.failure:
+            logger.warning("The code sandbox did not run the code: %s", result.failure)
+            self._note_once(f"The code examples were not run: {result.failure}")
+            return None
+        if result.warning:
+            logger.warning("Code sandbox: %s", result.warning)
+            self._note_once(f"Code sandbox: {result.warning}")
+        ran = judge_run(blocks, read_outcomes(result.stdout), runs.modules)
+        logger.info(
+            "Code run in the sandbox: %d of %d block(s), %d failure(s)%s.",
+            ran.blocks_run,
+            ran.blocks_total,
+            len(ran.findings),
+            f"; limited: {ran.limited}" if ran.limited else "",
+        )
+        return ran
+
+    def _note_once(self, note: str) -> None:
+        if (note := note[:300]) not in self.notes:
+            self.notes.append(note)
+
+    def program_run_notes(self, ran: ProgramRun) -> None:
+        """PR notes of the last sandbox run: a block that still fails, or
+        what limited the check."""
+        if ran.findings:
+            self.notes.append(
+                "Code that fails when run in the sandbox: "
+                + " | ".join(f"{f.section}: {f.problem}"[:240] for f in ran.findings)
+            )
+        elif ran.limited:
+            note = f"The sandbox check of the code examples was partial: {ran.limited}"
+            if not ran.limited.startswith("the run ended"):
+                note += (
+                    "; later blocks were checked for imports, module attributes "
+                    "and call signatures only"
+                )
+            self.notes.append(note[:400])
 
     def program_findings(
         self, written: Sequence[tuple[SectionT, str]]

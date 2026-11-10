@@ -70,6 +70,7 @@ poetry run python -m scholar_lens summarize 2106.09685 --no-pr
 - 단계별 `*_model_id`, `thinking_effort`, 품질 기준과 비용 상한: `sections` 엔진의 리뷰·요약과 서베이 계획은 `max_total_tokens`(기본값 800만, 100만, 30만 토큰), 모든 엔진에 걸리는 실행의 추정 비용 상한(`max_cost_usd`: `tech_guide` $60, `explanation` $40, `summary` $12. `survey.write_max_cost_usd` $60. `null`이면 상한 없음). 상한은 현재 시도에서 쓴 비용만 셉니다. 재실행이나 Batch 재시도가 checkpoint에서 불러온 단계는 비용이 들지 않고 다시 세지도 않으므로, 상한에 걸려 멈춘 실행을 재개하면 남은 단계에 상한만큼 더 쓸 수 있습니다
 - `explanation.engine`, `summary.engine`: `sections`(기본값) 또는 `evidence`. `evidence` 엔진은 `reader_model_id`와 `min_total_chars`·`max_total_chars`(리뷰 25,000·55,000, 요약 2,500·4,500)를 씁니다
 - 근거 캐시: 근거 장부 엔진은 읽기 에이전트가 출처마다 기록한 근거를 로컬 `papers/paper-evidence/`, `papers/guide-evidence/`, `papers/survey-evidence/`와 S3 `<s3_prefix>/papers/evidence/`, `<s3_prefix>/guides/evidence/`, `<s3_prefix>/surveys/evidence/`에 저장합니다. 키는 원문 텍스트 해시, 읽기 버전, 읽기 모델, 언어로 정합니다. 다시 실행하면 캐시를 쓰되 오늘의 검사를 통과하지 못한 근거는 버리고, 하나도 통과하지 못하면 그 출처를 다시 읽습니다. 같은 저장소의 `checkpoints/` 아래에 단계별 checkpoint도 둡니다([재개와 게시](#재개와-게시)). `--fresh`는 한 실행 동안 둘 다 무시합니다([상세](./docs/design.md#45-근거-장부-엔진-공통))
+- `tech_guide.run_examples`(기본값 `false`): 가이드의 Python 예제를 AgentCore Code Interpreter 샌드박스에서 실행하고, 붙여 넣은 그대로 실패하는 블록을 고칩니다. `run_block_timeout_s`(60)와 `run_timeout_s`(600)가 블록과 프로그램 전체의 실행 시간을 제한합니다. `code_interpreter_id`는 로컬 실행에서 쓸 인터프리터이며, Batch 작업은 스택의 인터프리터를 씁니다
 - `survey`: `min_papers`·`max_papers`(6·25), `candidate_pool`(60), 쓰기 단계의 `chars_per_core_paper`·`chars_per_supporting_paper`(3,000·800), `min_total_chars`·`max_total_chars`(20,000·70,000)
 - `resources.github.survey_category`(`Paper Surveys`): 블로그 글 규칙에 있는 유형이어야 하며, 없으면 `survey write`가 모델을 부르기 전에 멈춥니다
 - `output_language`(기본값 `Korean`)
@@ -169,6 +170,7 @@ actionlint                                       # GitHub 워크플로 검사
 
 ## 변경 이력
 
+- 2026-11-11: `tech_guide.run_examples`(기본값 끔)를 켜면 가이드의 Python 예제를 읽는 순서대로 Amazon Bedrock AgentCore Code Interpreter 샌드박스에서 AWS 자격 증명 없이 실행합니다. Batch는 공개 네트워크의 스택 커스텀 인터프리터를 써서 문서의 패키지를 설치합니다. 로컬은 `tech_guide.code_interpreter_id` 또는 아무것도 설치하지 않는 AWS 시스템 인터프리터를 씁니다. 사용·운영 절의 블록이 자기 코드 때문에 실패하면 고친 뒤 다시 실행합니다. 그래도 실패하거나, 샌드박스가 실행하지 못했거나, 자격 증명·네트워크·서비스가 없어 멈춘 경우는 PR 노트로 남깁니다. 스택에 인터프리터가 추가되며(유휴 비용 없음), 작업 역할은 그 인터프리터의 세션 시작·호출·중지만 할 수 있습니다.
 - 2026-11-10: 실행 중이거나 결과 없이 끝난 Batch 작업의 `status`가 `progress`(현재 단계, 모델 호출 수, 지금까지의 추정 비용, 마지막 보고 시각, Batch 시도 번호)를 보여 줍니다. worker가 30초에 한 번까지 `<s3_prefix>/progress/<job_id>.json`에 씁니다.
 - 2026-11-10: `--engine sections|evidence`(review, summarize)와 `--max-cost-usd`(review, summarize, guide, survey write)로 한 실행의 설정을 덮어씁니다. 다른 엔진이나 비용 상한을 시험하려고 Batch를 다시 배포할 필요가 없습니다. sections 엔진 리뷰는 TL;DR과 마무리 절의 주장을 논문과 대조해 한 번 고치고(문제가 줄 때만 채택), 배경 설명 절을 분량의 15% 안으로 줄입니다.
 - 2026-11-10: 단계 저장본을 검사 코드 버전(`domain` 패키지와 엔진 모듈 소스의 해시) 아래에 둡니다. 검사·정리·편집 규칙을 바꾼 배포 뒤에는 이전 코드가 만든 단계로 재개하지 않습니다. 근거 읽기 캐시는 그대로 쓰며, 그런 배포 뒤 입력마다 첫 실행은 단계를 한 번 다시 계산합니다.

@@ -340,6 +340,16 @@ class TechGuide(_Section):
     max_sources_read: int = Field(default=40, ge=1, le=120)
     min_total_chars: int = Field(default=25_000, ge=5_000, le=200_000)
     max_total_chars: int = Field(default=45_000, ge=5_000, le=200_000)
+    # Run the guide's Python examples in order in an AgentCore Code
+    # Interpreter sandbox (no credentials) and fix a block that fails as
+    # pasted. A Batch job uses the stack's interpreter (public network, so
+    # the docs' packages install); a local run uses ``code_interpreter_id``,
+    # by default AWS's system interpreter (no network, nothing installed).
+    run_examples: bool = False
+    code_interpreter_id: str | None = None
+    # The time one block and the whole program may run (seconds).
+    run_block_timeout_s: int = Field(default=60, ge=5, le=600)
+    run_timeout_s: int = Field(default=600, ge=30, le=3600)
 
     @model_validator(mode="after")
     def _length_range(self) -> "TechGuide":

@@ -168,6 +168,15 @@ tech_guide:
   max_sources_read: 40
   min_total_chars: 25000
   max_total_chars: 45000
+  # Run the guide's Python examples in order in an AgentCore Code
+  # Interpreter sandbox (no credentials; Batch: the stack's interpreter,
+  # which can install the docs' packages) and fix a block that fails as
+  # pasted. code_interpreter_id is for local runs (default: AWS's system
+  # interpreter, no network).
+  run_examples: false
+  code_interpreter_id: null
+  run_block_timeout_s: 60
+  run_timeout_s: 600
 
 survey:
   # Plan stage (`survey plan`): scope call, then the selection call.

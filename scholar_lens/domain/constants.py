@@ -12,6 +12,8 @@ HARD_BUDGET_MULTIPLE: float = 1.5
 class EnvVars(str, Enum):
     AWS_PROFILE_NAME = "AWS_PROFILE_NAME"
     BRAVE_API_KEY = "BRAVE_API_KEY"
+    # The stack's code interpreter (set on the Batch job definition).
+    CODE_INTERPRETER_ID = "SCHOLAR_LENS_CODE_INTERPRETER_ID"
     # Optional: Crossref's "polite pool" (a contact address), an OpenAlex key
     # and a Semantic Scholar key, all for higher limits on reference lookups.
     CROSSREF_MAILTO = "CROSSREF_MAILTO"

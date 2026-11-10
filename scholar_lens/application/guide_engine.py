@@ -29,6 +29,7 @@ from scholar_lens.application.ports import (
     CheckpointStore,
     LanguageModel,
     ModelRole,
+    ProgramRuns,
     RoleSpec,
     TextStore,
 )
@@ -153,6 +154,7 @@ class EvidenceGuideEngine(PostEngine[GuideOutline, GuideSection, EvidenceGuide])
         products: Sequence[str] = (),
         package_facts: str = "",
         sdk: SdkIndex | None = None,
+        program_runs: ProgramRuns | None = None,
     ) -> None:
         super().__init__(
             model,
@@ -171,6 +173,7 @@ class EvidenceGuideEngine(PostEngine[GuideOutline, GuideSection, EvidenceGuide])
             checkpoints=checkpoints,
             max_fix_rounds=settings.max_fix_rounds,
             roles=roles,
+            program_runs=program_runs,
         )
         self.settings = settings
         self.free = _FREE_NUMBERS

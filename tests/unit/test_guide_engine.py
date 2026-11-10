@@ -26,7 +26,13 @@ from scholar_lens.application.guide_engine import (
     EvidenceGuideEngine,
     GuideSettings,
 )
-from scholar_lens.application.ports import AgentLimits, AgentOutcome
+from scholar_lens.application.ports import (
+    AgentLimits,
+    AgentOutcome,
+    ProgramRuns,
+    SandboxRun,
+    SandboxUnavailable,
+)
 from scholar_lens.application.use_cases.guide import _source_urls, guide_documents
 from scholar_lens.domain.coverage import (
     CoverageTarget,
@@ -1181,3 +1187,124 @@ def test_settling_one_of_the_guides_listed_items_adds_no_problem(dropped: int) -
     assert all(p.where for p in problems if p.kind in ("source_id", "sdk_languages"))
     assert verifiers.added(before, after) == []
     assert [p.kind for p in verifiers.added(after, before)] == ["unknown_flags"]
+
+
+# ---- the code run in the sandbox -------------------------------------------------
+
+_TYPO = "client.rnu()"
+
+
+class _TypoFix:
+    """Whole-post reads with nothing to say; a fix renames the typo."""
+
+    def __init__(self, *, fixes: bool = True) -> None:
+        self.fixes: list[str] = []
+        self.fix_it = fixes
+
+    async def structured(self, *, prompt, schema, **_: Any):  # type: ignore[no-untyped-def]
+        if schema is PostReview:
+            return PostReview()
+        if schema is SectionEdits:
+            self.fixes.append(prompt)
+            edits = [Edit(find=_TYPO, replace="client.run()")] if self.fix_it else []
+            return SectionEdits(edits=edits)
+        if schema is FixedSection:  # the fix that gives up keeps the section
+            return FixedSection(section="")
+        if schema is ClaimCheck:
+            return claim_check(prompt, lambda _n, _s: None)
+        if schema is EvidenceCheck:
+            return evidence_check(prompt)
+        raise AssertionError(schema)
+
+
+class _LocalRunner:
+    """Runs the program here (the test's own code) as the sandbox would."""
+
+    def __init__(self, *, down: bool = False) -> None:
+        self.programs: list[str] = []
+        self.down = down
+
+    async def run(self, program: str, *, requirements, timeout_s: int):  # type: ignore[no-untyped-def]
+        import subprocess
+        import sys
+
+        if self.down:
+            raise SandboxUnavailable("accessDeniedException: no")
+        self.programs.append(program)
+        out = subprocess.run(
+            [sys.executable, "-I", "-c", program],
+            capture_output=True,
+            text=True,
+            timeout=timeout_s,
+            check=False,
+        ).stdout
+        return SandboxRun(stdout=out)
+
+
+def _typo_post(engine: EvidenceGuideEngine, ledger: EvidenceLedger) -> list[Any]:
+    outline = _outline()
+    usage = outline.sections[3]
+    define = usage.model_copy(update={"title": "클라이언트 만들기"})
+    use = usage.model_copy(update={"title": "클라이언트 실행"})
+    written = [
+        (
+            define,
+            "## 클라이언트 만들기\n\n`max_batch_size` 기본값은 10입니다 [[E2]].\n\n"
+            "```python\nclass Client:\n    def run(self):\n        return 1\n\n"
+            "client = Client()\n```\n",
+        ),
+        (
+            use,
+            "## 클라이언트 실행\n\n`max_batch_size` 기본값은 10입니다 [[E2]].\n\n"
+            f"```python\n{_TYPO}\n```\n",
+        ),
+    ]
+    for section, _md in written:
+        engine.checked[id(section)] = SectionChecks(
+            no_checks(), tuple(ledger), (), "", False, ""
+        )
+    return written
+
+
+def _run_engine(model: Any, runner: Any) -> EvidenceGuideEngine:
+    return EvidenceGuideEngine(
+        model,
+        GuideSettings(language="Korean", title_max_length=70, reader_tag="t"),
+        program_runs=ProgramRuns(
+            runner,
+            pins=(),
+            modules=frozenset({"pkg"}),
+            block_timeout_s=10,
+            total_timeout_s=60,
+        ),
+    )
+
+
+def test_a_block_that_fails_in_the_sandbox_is_fixed_and_run_again() -> None:
+    model, runner = _TypoFix(), _LocalRunner()
+    engine = _run_engine(model, runner)
+    ledger = _ledger()
+    written = _typo_post(engine, ledger)
+    assert engine.program_check(written) == []  # the static check reads it clean
+    out = asyncio.run(engine.review_post(_outline(), ledger, written))
+    assert "client.run()" in out[1][1]
+    assert any("AttributeError" in p for p in model.fixes)
+    assert len(runner.programs) == 2
+    assert not [n for n in engine.notes if "sandbox" in n or "examples" in n]
+
+
+def test_a_block_left_failing_is_noted() -> None:
+    model, runner = _TypoFix(fixes=False), _LocalRunner()
+    engine = _run_engine(model, runner)
+    ledger = _ledger()
+    asyncio.run(engine.review_post(_outline(), ledger, _typo_post(engine, ledger)))
+    assert [n for n in engine.notes if n.startswith("Code that fails when run")]
+
+
+def test_an_unavailable_sandbox_is_a_note_not_a_failure() -> None:
+    engine = _run_engine(_TypoFix(), _LocalRunner(down=True))
+    ledger = _ledger()
+    written = _typo_post(engine, ledger)
+    out = asyncio.run(engine.review_post(_outline(), ledger, written))
+    assert out == written
+    assert [n for n in engine.notes if "were not run" in n and "accessDenied" in n]

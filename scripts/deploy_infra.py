@@ -25,6 +25,9 @@ from aws_cdk import (
     aws_bedrock as bedrock,
 )
 from aws_cdk import (
+    aws_bedrockagentcore as agentcore,
+)
+from aws_cdk import (
     aws_cloudwatch as cloudwatch,
 )
 from aws_cdk import (
@@ -129,6 +132,7 @@ class PaperReviewStack(Stack):
         self.security_group = self._create_security_group()
 
         self.topic = self._create_sns_topic(email_address)
+        self.code_interpreter = self._create_code_interpreter()
         self.instance_role = self._create_instance_role()
         self.job_role = self._create_job_role()
         self.execution_role = self._create_execution_role()
@@ -287,6 +291,22 @@ class PaperReviewStack(Stack):
             ),
         ]
 
+    def _create_code_interpreter(self) -> agentcore.CfnCodeInterpreterCustom:
+        """The sandbox a guide's examples run in (tech_guide.run_examples):
+        public network so the docs' packages install from PyPI, and no
+        execution role, so the code gets no AWS credentials. Idle, it costs
+        nothing."""
+        return agentcore.CfnCodeInterpreterCustom(
+            self,
+            "GuideCodeInterpreter",
+            # Letters, digits and underscores only.
+            name=f"{self.project_name}_{self.stage}_guide_code".replace("-", "_"),
+            description="Runs Scholar Lens guide examples as a reader pastes them",
+            network_configuration=agentcore.CfnCodeInterpreterCustom.CodeInterpreterNetworkConfigurationProperty(
+                network_mode="PUBLIC"
+            ),
+        )
+
     def _create_job_policy_statements(self) -> list[iam.PolicyStatement]:
         """Least-privilege statements for the application running in-container."""
         statements = [*self._bedrock_statements(), *self._s3_statements()]
@@ -310,6 +330,15 @@ class PaperReviewStack(Stack):
                 conditions={
                     "StringEquals": {"cloudwatch:namespace": METRICS_NAMESPACE}
                 },
+            ),
+            iam.PolicyStatement(
+                sid="GuideCodeSessions",
+                actions=[
+                    "bedrock-agentcore:StartCodeInterpreterSession",
+                    "bedrock-agentcore:InvokeCodeInterpreter",
+                    "bedrock-agentcore:StopCodeInterpreterSession",
+                ],
+                resources=[self.code_interpreter.attr_code_interpreter_arn],
             ),
             iam.PolicyStatement(
                 sid="SsmReadSecrets",
@@ -434,6 +463,9 @@ class PaperReviewStack(Stack):
             command=JOB_COMMAND,
             environment={
                 EnvVars.TOPIC_ARN.value: self.topic.topic_arn,
+                EnvVars.CODE_INTERPRETER_ID.value: (
+                    self.code_interpreter.attr_code_interpreter_id
+                ),
                 EnvVars.LOG_LEVEL.value: "INFO",
                 **env_vars,
             },

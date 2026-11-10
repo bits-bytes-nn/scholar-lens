@@ -25,6 +25,7 @@ from scholar_lens.application.ports import (
     GuideResearch,
     GuideTools,
     PackageIndex,
+    ProgramRuns,
     UsageTracker,
 )
 from scholar_lens.application.run import (
@@ -277,6 +278,21 @@ async def write_guide_with_evidence(
             *unknown_extras(markdown, {n: e for n, (_, e) in provided.items()}),
         ]
 
+    runner = tools.code_runner()
+    program_runs = (
+        ProgramRuns(
+            runner,
+            pins=tuple((n, v) for n, (v, _) in sorted(provided.items())),
+            modules=frozenset(
+                {p.lower().replace("-", "_") for p in products}
+                | {m.split(".")[0] for m in (sdk.modules if sdk else ())}
+            ),
+            block_timeout_s=writing.run_block_timeout_s,
+            total_timeout_s=writing.run_timeout_s,
+        )
+        if runner is not None
+        else None
+    )
     store = tools.evidence_store(fresh=context.fresh)
     engine = EvidenceGuideEngine(
         model,
@@ -296,6 +312,7 @@ async def write_guide_with_evidence(
         products=products,
         package_facts=package_facts,
         sdk=sdk,
+        program_runs=program_runs,
     )
     result = await engine.write(
         material.topic,

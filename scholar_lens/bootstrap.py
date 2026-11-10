@@ -20,6 +20,10 @@ import scholar_lens.adapters.bedrock.prompts  # noqa: F401
 import scholar_lens.sections_engine.prompts.extraction  # noqa: F401
 import scholar_lens.sections_engine.prompts.review  # noqa: F401
 import scholar_lens.sections_engine.prompts.summary  # noqa: F401
+from scholar_lens.adapters.agentcore.code_interpreter import (
+    SYSTEM_INTERPRETER,
+    AgentCoreCodeRunner,
+)
 from scholar_lens.adapters.aws.batch import BatchJobs
 from scholar_lens.adapters.aws.billing import CostExplorerBilling
 from scholar_lens.adapters.aws.environment import is_running_in_aws
@@ -310,7 +314,20 @@ class GuideToolkit:
             max_sources=cfg.max_sources_read,
             min_total_chars=cfg.min_total_chars,
             max_total_chars=cfg.max_total_chars,
+            run_block_timeout_s=cfg.run_block_timeout_s,
+            run_timeout_s=cfg.run_timeout_s,
         )
+
+    def code_runner(self) -> AgentCoreCodeRunner | None:
+        if not self.cfg.run_examples:
+            return None
+        interpreter = (
+            os.getenv(EnvVars.CODE_INTERPRETER_ID.value)
+            or self.cfg.code_interpreter_id
+            or SYSTEM_INTERPRETER
+        )
+        logger.info("Guide code runs in the code interpreter %s.", interpreter)
+        return AgentCoreCodeRunner(self.context.default_boto_session, interpreter)
 
     def researcher(self) -> WebResearcher:
         return WebResearcher(search_provider=build_search_provider())

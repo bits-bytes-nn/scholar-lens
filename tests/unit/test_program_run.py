@@ -1,0 +1,220 @@
+"""Running a guide's code as a reader pastes it: the program, its outcome
+lines and whose failure it is."""
+
+from __future__ import annotations
+
+import subprocess
+import sys
+
+import pytest
+
+from scholar_lens.domain.program_run import (
+    BlockRun,
+    judge_run,
+    program_blocks,
+    program_script,
+    read_outcomes,
+    run_requirements,
+    verdict,
+)
+
+
+def _run(source: str, timeout: int = 60) -> str:
+    return subprocess.run(
+        [sys.executable, "-I", "-c", source],
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        check=False,
+    ).stdout
+
+
+def _py(code: str) -> str:
+    return f"```python\n{code}\n```"
+
+
+# ---- the blocks and the program ---------------------------------------------------
+
+
+def test_excerpts_run_unjudged_sessions_run_and_every_section_counts() -> None:
+    sections = [
+        ("설치", _py("x = 1"), False),
+        ("사용", _py("# excerpt\nfoo()") + "\n\n" + _py(">>> y = x\n>>> y\n1"), True),
+        ("실행", _py("print(y)"), True),
+    ]
+    assert [(t, c.strip(), r) for t, c, r in program_blocks(sections)] == [
+        ("설치", "x = 1", False),
+        ("사용", "# excerpt\nfoo()", False),
+        ("사용", "y = x\ny", True),
+        ("실행", "print(y)", True),
+    ]
+
+
+def test_the_program_shares_state_and_runs_on_after_a_failure() -> None:
+    script = program_script(
+        [
+            "import asyncio\nasync def f():\n    return 2\nx = asyncio.run(f())",
+            "if __name__ == '__main__':\n    print('main', x, end='')",
+            "z = 3\ny = x.nope\nprint('skipped')",
+            "print('after', z)",
+        ],
+        block_timeout_s=10,
+    )
+    out = _run(script)
+    assert "skipped" not in out and "after 3" in out
+    runs = read_outcomes(out)
+    assert [r.ok for r in runs] == [True, True, False, True]
+    assert runs[2].error_type == "AttributeError"
+    # The block's print without a newline does not hide the outcome line.
+    assert "main 2" in out
+
+
+def test_a_block_over_its_time_is_stopped() -> None:
+    script = program_script(["import time\ntime.sleep(30)"], block_timeout_s=1)
+    (run,) = read_outcomes(_run(script, timeout=20))
+    assert run.error_type == "BlockTimeout"
+    assert verdict(run, ()) == "environment"
+
+
+def test_outcomes_out_of_order_or_malformed_are_ignored() -> None:
+    mark = "@@SCHOLAR_LENS_RESULT@@"
+    out = "\n".join(
+        [
+            f'{mark}{{"index": 1, "ok": true}}',
+            f"{mark}not json",
+            f'{mark}{{"index": 3, "ok": true}}',
+            f'noise{mark}{{"index": 2, "ok": false, "error_type": "NameError"}}',
+        ]
+    )
+    assert [(r.index, r.ok) for r in read_outcomes(out)] == [(1, True), (2, False)]
+
+
+# ---- whose failure ------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("error_type", "module", "message", "expected"),
+    [
+        ("NameError", "builtins", "name 'client' is not defined", "code"),
+        ("SyntaxError", "builtins", "unexpected token", "code"),
+        ("TypeError", "builtins", "missing 1 required argument: 'api_key'", "code"),
+        ("AttributeError", "builtins", "'Agent' object has no attribute 'go'", "code"),
+        (
+            "AttributeError",
+            "builtins",
+            "'NoneType' object has no attribute 'x'",
+            "unclear",
+        ),
+        ("ModuleNotFoundError", "builtins", "No module named 'strands.tools'", "code"),
+        ("ModuleNotFoundError", "builtins", "No module named 'torch'", "environment"),
+        ("ImportError", "builtins", "cannot import name 'X' from 'y'", "code"),
+        (
+            "NoCredentialsError",
+            "botocore.exceptions",
+            "Unable to locate",
+            "environment",
+        ),
+        ("KeyError", "builtins", "'OPENAI_API_KEY'", "environment"),
+        ("ConnectionError", "builtins", "refused", "environment"),
+        ("ValueError", "builtins", "bad shape", "unclear"),
+    ],
+)
+def test_verdict(error_type: str, module: str, message: str, expected: str) -> None:
+    run = BlockRun(
+        index=1, ok=False, error_type=error_type, error_module=module, message=message
+    )
+    assert verdict(run, {"strands"}) == expected
+
+
+def _blocks() -> list[tuple[str, str, bool]]:
+    return [("설치", "a = 1", False), ("사용", "b = a.c", True), ("끝", "d", True)]
+
+
+def test_a_code_failure_in_a_runnable_section_is_a_finding() -> None:
+    run = judge_run(
+        _blocks(),
+        [
+            BlockRun(index=1, ok=True),
+            BlockRun(index=2, ok=False, error_type="AttributeError", message="no c"),
+        ],
+        (),
+    )
+    (finding,) = run.findings
+    assert finding.section == "사용"
+    assert "AttributeError" in finding.problem
+    assert (run.blocks_run, run.blocks_total, run.limited) == (2, 3, "")
+
+
+def test_failures_the_post_is_not_blamed_for_limit_the_check() -> None:
+    not_runnable = judge_run(
+        _blocks(), [BlockRun(index=1, ok=False, error_type="NameError")], ()
+    )
+    environment = judge_run(
+        _blocks(),
+        [
+            BlockRun(index=1, ok=True),
+            BlockRun(index=2, ok=False, error_type="ConnectionError"),
+        ],
+        (),
+    )
+    killed = judge_run(_blocks(), [BlockRun(index=1, ok=True)], ())
+    complete = judge_run(_blocks(), [BlockRun(index=i, ok=True) for i in (1, 2, 3)], ())
+    assert not (not_runnable.findings or environment.findings or killed.findings)
+    assert "not meant to run" in not_runnable.limited
+    assert "lacks" in environment.limited
+    assert "killed" in killed.limited
+    assert complete.limited == "" and complete.blocks_run == 3
+
+
+@pytest.mark.parametrize(
+    ("error_type", "message", "counts"),
+    [
+        ("NameError", "name 'result' is not defined", False),
+        ("AttributeError", "'Agent' object has no attribute 'go'", False),
+        ("AttributeError", "module 'strands' has no attribute 'Agnet'", True),
+        ("TypeError", "Agent.__init__() got an unexpected keyword argument 'x'", True),
+        ("TypeError", "unsupported operand type(s)", False),
+        ("ModuleNotFoundError", "No module named 'strands.tool'", True),
+    ],
+)
+def test_after_a_gap_only_failures_that_cannot_come_from_it_count(
+    error_type: str, message: str, counts: bool
+) -> None:
+    """The first block cannot reach the model; what a later block does not
+    find may be what that block would have made."""
+    run = judge_run(
+        [("시작", "r = agent('hi')", True), ("다음", "r.message", True)],
+        [
+            BlockRun(
+                index=1,
+                ok=False,
+                error_type="NoCredentialsError",
+                error_module="botocore.exceptions",
+            ),
+            BlockRun(index=2, ok=False, error_type=error_type, message=message),
+        ],
+        {"strands"},
+    )
+    assert bool(run.findings) is counts
+    assert ("does not depend on it" in run.findings[0].problem) if counts else True
+    assert "NoCredentialsError" in run.limited
+
+
+def test_the_sandbox_installs_the_docs_pins_and_what_the_post_installs() -> None:
+    post = (
+        '```bash\npip install "ray[serve]" transformers torch\n```\n'
+        "```bash\npip install Strands_Agents[otel] -U\n```\n"
+    )
+    assert run_requirements([("ray", "2.40.0"), ("strands-agents", "1.2")], post) == [
+        "ray[serve]==2.40.0",
+        "strands-agents[otel]==1.2",
+        "transformers",
+        "torch",
+    ]
+
+
+def test_a_message_loses_terminal_colours_and_line_breaks() -> None:
+    run = BlockRun(
+        index=1, ok=False, message="\x1b[36mray::Ctl\x1b[39m (pid=1)\n  File x"
+    )
+    assert run.message == "ray::Ctl (pid=1) File x"
