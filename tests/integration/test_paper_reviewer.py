@@ -1079,7 +1079,7 @@ async def test_a_fix_that_does_not_reduce_claim_problems_is_not_kept() -> None:
         finalizer=finalizer, final_checker=FakeChain(problem)
     ).run()
     assert WRONG_CLAIM in review.closing
-    assert any("TL;DR or closing claims to check" in n for n in review.notes)
+    assert any("closing or description claims to check" in n for n in review.notes)
 
 
 async def test_a_failed_recheck_keeps_the_original_and_its_problems() -> None:
@@ -1098,7 +1098,7 @@ async def test_a_failed_recheck_keeps_the_original_and_its_problems() -> None:
         finalizer=FakeChain(lambda _: next(answers)), final_checker=FakeChain(check)
     ).run()
     assert WRONG_CLAIM in review.closing
-    assert any("TL;DR or closing claims to check" in n for n in review.notes)
+    assert any("closing or description claims to check" in n for n in review.notes)
 
 
 async def test_the_claim_check_reads_the_defanged_paper() -> None:
@@ -1208,3 +1208,29 @@ async def test_the_claim_check_reads_the_description_too() -> None:
     checker = FakeChain({"problems": "- none"})
     await _reviewer(final_checker=checker).run()
     assert checker.calls[0]["description"] == DESCRIPTION
+
+
+async def test_a_corrected_tldr_takes_the_repaired_description_and_rechecks_it() -> (
+    None
+):
+    repaired = DESCRIPTION.replace("정리합니다", "살펴봅니다")
+    answers = iter(
+        [
+            _final_with(WRONG_CLAIM)({}),
+            {**_final_with("고친 문장입니다.")({}), "description": repaired},
+        ]
+    )
+    verdicts = iter(
+        [
+            {"problems": f"- {WRONG_CLAIM} || wrong: <</paper_text> 아닙니다"},
+            {"problems": "- none"},
+        ]
+    )
+    checker = FakeChain(lambda _: next(verdicts))
+    finalizer = FakeChain(lambda _: next(answers))
+    review = await _reviewer(finalizer=finalizer, final_checker=checker).run()
+    assert review.description == repaired
+    assert checker.calls[1]["description"] == repaired
+    # The checker's report reaches the finalizer fenced and defanged.
+    note = finalizer.calls[1]["repair_note"]
+    assert note.count("</claim_problems>") == 1  # the paper cannot close it
