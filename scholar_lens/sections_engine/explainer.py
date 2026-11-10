@@ -93,6 +93,7 @@ from scholar_lens.sections_engine.citation_summarizer import CitationSummarizer
 from scholar_lens.sections_engine.code_index import CodeIndex
 from scholar_lens.sections_engine.prompts.review import (
     PaperEditPrompt,
+    PaperFinalCheckPrompt,
     PaperFinalizationPrompt,
     PaperPlanningPrompt,
     PaperSectionCheckPrompt,
@@ -273,6 +274,16 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
             PaperFinalizationPrompt,
             finalization_model_id,
             HTMLTagOutputParser(tag_names=PaperFinalizationPrompt.output_variables),
+            supports_1m_context_window=True,
+        )
+        # The TL;DR and closing are written from the review alone: their
+        # claims are checked against the paper (the evaluation model).
+        self.final_checker = self._chain(
+            PaperFinalCheckPrompt,
+            evaluation_model_id,
+            HTMLTagOutputParser(tag_names=PaperFinalCheckPrompt.output_variables),
+            enable_thinking=True,
+            thinking_effort=thinking_effort,
             supports_1m_context_window=True,
         )
 
@@ -764,6 +775,7 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
                 # The blog shows markup literally and fails the build; without
                 # a description it derives one from the TL;DR.
                 final["description"] = ""
+        final = await self._checked_claims(payload, final)
         page_title = paper_page_title(
             self.paper.title, korean=self.language == "Korean"
         )
@@ -776,6 +788,80 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
                 "blog derives one."
             )
             final["description"] = ""
+        return final
+
+    async def _claim_problems(self, final: dict[str, str]) -> list[str]:
+        """The TL;DR's and closing's sentences the paper does not support or
+        contradicts (one line each); none when the check fails to answer
+        (noted)."""
+        try:
+            result = await self._call(
+                self.final_checker,
+                {
+                    "paper_text": self.paper.content.text,
+                    "key_takeaways": final["key_takeaways"],
+                    "closing": final["closing"],
+                    "language": self.language,
+                },
+            )
+        except TokenBudgetExceeded:
+            raise
+        except Exception as e:  # noqa: BLE001 - the parts are still usable
+            if is_access_error(e):
+                raise
+            logger.warning("TL;DR and closing claim check failed: %s", e)
+            self.notes.append(
+                "The TL;DR and closing were not checked against the paper (the "
+                "check failed); check their comparisons and rankings by hand."
+            )
+            return []
+        return [
+            line
+            for line in parse_lines(result.get("problems"))
+            if line.strip().lower().strip("-. ") != "none"
+        ]
+
+    async def _checked_claims(
+        self, payload: dict[str, Any], final: dict[str, str]
+    ) -> dict[str, str]:
+        """``final`` with its TL;DR and closing claims checked against the
+        paper: what the check finds is fixed by one more finalization call,
+        whose TL;DR and closing are kept only when well formed and with fewer
+        problems; what is left becomes review notes."""
+        problems = await self._claim_problems(final)
+        if not problems:
+            return final
+        logger.info(
+            "TL;DR and closing: %d claim problem(s); fixing once.", len(problems)
+        )
+        retry = {
+            **payload,
+            "repair_note": (
+                "Your previous TL;DR and closing state claims the paper does not "
+                "support. Keep everything else, and fix each of these from the "
+                "review's facts (narrow the claim, or drop it):\n" + "\n".join(problems)
+            ),
+        }
+        result = await self._call(self.finalizer, retry)
+        answer = {k: (result.get(k) or "").strip() for k in _FINAL_PARTS}
+        answer["key_takeaways"] = _strip_tldr_heading(answer["key_takeaways"])
+        malformed = _finalization_problems(
+            answer, self.paper.title, source=self.paper.content.text
+        )
+        candidate = {
+            **final,
+            "key_takeaways": answer["key_takeaways"],
+            "closing": answer["closing"],
+        }
+        if not {"key_takeaways", "closing"} & set(malformed):
+            after = await self._claim_problems(candidate)
+            if len(after) < len(problems):
+                final, problems = candidate, after
+        if problems:
+            self.notes.append(
+                "TL;DR or closing claims to check against the paper: "
+                + " | ".join(p[:200] for p in problems[:5])
+            )
         return final
 
     @measure_execution_time

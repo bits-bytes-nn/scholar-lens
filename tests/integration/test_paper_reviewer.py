@@ -139,6 +139,7 @@ def _reviewer(
     checker: FakeChain | None = None,
     editor: FakeChain | None = None,
     finalizer: FakeChain | None = None,
+    final_checker: FakeChain | None = None,
     citations: list[Citation] | None = None,
     code_retriever: Any = None,
     max_edit_rounds: int = 2,
@@ -180,6 +181,7 @@ def _reviewer(
     r.checker = checker or FakeChain(_pass)  # type: ignore[assignment]
     r.editor = editor or FakeChain(_no_edits)  # type: ignore[assignment]
     r.finalizer = finalizer or FakeChain(_final)  # type: ignore[assignment]
+    r.final_checker = final_checker or FakeChain({"problems": "- none"})  # type: ignore[assignment]
     r._source = lambda: SourceText.from_sentences(SENTENCES)  # type: ignore[method-assign]
     return r
 
@@ -1033,3 +1035,48 @@ async def test_only_verified_arxiv_links_survive() -> None:
     assert "Bradbury et al., 2018" in body
     for kept in ("abs/2106.09685v2", "pdf/2001.00001", "abs/1412.6980"):
         assert f"https://arxiv.org/{kept})" in body
+
+
+WRONG_CLAIM = "LoRA는 모든 기준선을 이깁니다."
+
+
+def _final_with(claim: str) -> Any:
+    def answer(_: dict[str, Any]) -> dict[str, str]:
+        return {**_final({}), "closing": f"## 한계와 시사점\n\n{claim}"}
+
+    return answer
+
+
+async def test_a_tldr_or_closing_claim_the_paper_does_not_support_is_fixed_once() -> (
+    None
+):
+    answers = iter(
+        [
+            _final_with(WRONG_CLAIM)({}),
+            _final_with("LoRA는 GLUE에서 전체 미세 조정과 비슷합니다.")({}),
+        ]
+    )
+    finalizer = FakeChain(lambda _: next(answers))
+    verdicts = iter(
+        [
+            {"problems": f"- {WRONG_CLAIM} || wrong: 일부 과제에서만 앞섭니다"},
+            {"problems": "- none"},
+        ]
+    )
+    checker = FakeChain(lambda _: next(verdicts))
+    review = await _reviewer(finalizer=finalizer, final_checker=checker).run()
+    assert WRONG_CLAIM not in review.closing
+    assert "wrong: 일부 과제에서만" in finalizer.calls[1]["repair_note"]
+    assert not any("claims to check" in n for n in review.notes)
+    # The check reads the paper itself, not the review.
+    assert checker.calls[0]["paper_text"] == " ".join(SENTENCES)
+
+
+async def test_a_fix_that_does_not_reduce_claim_problems_is_not_kept() -> None:
+    finalizer = FakeChain(_final_with(WRONG_CLAIM))
+    problem = {"problems": f"- {WRONG_CLAIM} || wrong: 일부 과제에서만 앞섭니다"}
+    review = await _reviewer(
+        finalizer=finalizer, final_checker=FakeChain(problem)
+    ).run()
+    assert WRONG_CLAIM in review.closing
+    assert any("TL;DR or closing claims to check" in n for n in review.notes)
