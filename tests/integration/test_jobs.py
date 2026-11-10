@@ -540,3 +540,47 @@ def test_submitted_request_is_accepted_by_an_older_worker(
 def test_urls_that_are_not_http_are_rejected_before_any_paid_stage(kwargs) -> None:
     with pytest.raises(ValidationError, match="http"):
         JobRequest(**kwargs)
+
+
+class TestJobProgress:
+    def test_a_running_job_reports_its_stage_and_cost_at_most_every_interval(
+        self, aws: boto3.Session
+    ) -> None:
+        from scholar_lens.adapters.aws.batch import ProgressReporter, read_progress
+        from scholar_lens.adapters.bedrock.usage import TokenUsageTracker
+        from scholar_lens.domain.usage import UsageEvent
+
+        handler = S3Handler(aws, BUCKET)
+        now = [0.0]
+        tracker = TokenUsageTracker()
+        tracker.listener = ProgressReporter(
+            handler, "sl", "job-7", interval=30, clock=lambda: now[0]
+        )
+        tracker.record(UsageEvent(stage="read", model_id="m", input_tokens=1))
+        first = read_progress(handler, "sl", "job-7")
+        assert first is not None and first.stage == "read" and first.calls == 1
+        now[0] = 10  # within the interval: not written again
+        tracker.record(UsageEvent(stage="outline", model_id="m", input_tokens=1))
+        assert read_progress(handler, "sl", "job-7").stage == "read"  # type: ignore[union-attr]
+        now[0] = 45
+        tracker.record(UsageEvent(stage="section", model_id="m", input_tokens=1))
+        last = read_progress(handler, "sl", "job-7")
+        assert last is not None and last.stage == "section" and last.calls == 3
+
+    def test_status_of_a_running_job_attaches_its_progress(
+        self, aws: boto3.Session
+    ) -> None:
+        from scholar_lens.domain.jobs import JobProgress, progress_key
+
+        handler = S3Handler(aws, BUCKET)
+        handler.put_text(
+            progress_key("sl", "job-8"),
+            JobProgress(
+                stage="section", calls=40, cost_usd=3.2, updated_at="t"
+            ).model_dump_json(),
+        )
+        batch = mock.MagicMock()
+        batch.describe_jobs.return_value = {"jobs": [{"status": "RUNNING"}]}
+        with mock.patch.object(aws, "client", return_value=batch):
+            report = describe_job(aws, "job-8", s3_handler=handler, s3_prefix="sl")
+        assert report.progress is not None and report.progress.cost_usd == 3.2

@@ -169,6 +169,7 @@ actionlint                                       # lint the GitHub workflows
 
 ## Changelog
 
+- 2026-11-10: `status` of a running Batch job shows its `progress` (current stage, model calls, estimated cost so far, last report time), written by the worker to `<s3_prefix>/progress/<job_id>.json` at most every 30 seconds.
 - 2026-11-10: `--engine sections|evidence` (review, summarize) and `--max-cost-usd` (review, summarize, guide, survey write) override the configuration for one run, so a Batch job no longer needs a redeploy to try another engine or ceiling. The sections engine's review checks its TL;DR and closing claims against the paper (one fix, kept when it has fewer problems) and caps background sections at 15% of its length budget.
 - 2026-11-10: stage checkpoints are kept under a version of the check code (a hash of the domain package and the engine modules), so a deploy that changes checks, repairs or edit rules never resumes from a stage the old code made; the reading cache is unaffected. The first run of each input after such a deploy recomputes its stages once.
 - 2026-11-09: the evidence engines' outline checkpoints include the version of the outline checks asked again for (key targets, sentence titles, source sections a review leaves out): runs resumed after this upgrade recompute their outline and later stages once. A survey comparison table shows only result cells that state a number in a noun phrase; other numbers stay in their section.

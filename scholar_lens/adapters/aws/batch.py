@@ -33,10 +33,12 @@ from scholar_lens.domain.jobs import (
     TERMINAL_BATCH_STATES,
     CancelledJob,
     JobAlreadyFinished,
+    JobProgress,
     JobRequest,
     JobResult,
     JobStatusReport,
     SubmittedJob,
+    progress_key,
     result_manifest_key,
     ssm_base,
 )
@@ -146,7 +148,59 @@ def describe_job(
     )
     if report.batch_status in TERMINAL_BATCH_STATES and s3_handler is not None:
         report.result = read_result_manifest(s3_handler, s3_prefix, job_id)
+    elif s3_handler is not None:
+        report.progress = read_progress(s3_handler, s3_prefix, job_id)
     return report
+
+
+def read_progress(
+    s3_handler: S3Handler, s3_prefix: str, job_id: str
+) -> JobProgress | None:
+    """A running job's last progress report; None when there is none or it
+    cannot be read (progress is advisory)."""
+    try:
+        text = s3_handler.get_text(progress_key(s3_prefix, job_id))
+        return JobProgress.model_validate_json(text) if text else None
+    except (S3OperationError, ValidationError) as e:
+        logger.warning("Progress of job '%s' unreadable: %s", job_id, e)
+        return None
+
+
+class ProgressReporter:
+    """Writes a Batch job's progress (stage, calls, cost) to S3 after a
+    model call, at most every ``interval`` seconds; a write that fails is
+    logged and never stops the run."""
+
+    def __init__(
+        self,
+        s3_handler: S3Handler,
+        s3_prefix: str,
+        job_id: str,
+        *,
+        interval: float = 30.0,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        self.s3_handler = s3_handler
+        self.key = progress_key(s3_prefix, job_id)
+        self.interval = interval
+        self.clock = clock
+        self._last: float | None = None
+
+    def __call__(self, tracker: Any, event: Any) -> None:  # noqa: ANN401
+        now = self.clock()
+        if self._last is not None and now - self._last < self.interval:
+            return
+        self._last = now
+        progress = JobProgress(
+            stage=event.stage,
+            calls=tracker.call_count,
+            cost_usd=round(tracker.estimated_cost_usd(), 4),
+            updated_at=datetime.now(UTC).isoformat(),
+        )
+        try:
+            self.s3_handler.put_text(self.key, progress.model_dump_json())
+        except S3OperationError as e:
+            logger.warning("Could not write job progress: %s", e)
 
 
 def cancel_job(session: boto3.Session, job_id: str, *, reason: str) -> CancelledJob:

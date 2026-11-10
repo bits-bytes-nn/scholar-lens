@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from types import SimpleNamespace
 from typing import Any
@@ -53,6 +53,10 @@ class TokenUsageTracker(BaseCallbackHandler):
     # Priced per call, so tiered (long-prompt) rates apply to the right calls.
     cost_usd: float = 0.0
     events: list[UsageEvent] = field(default_factory=list)
+    # Called after each recorded call (a Batch job's progress report).
+    listener: Callable[[TokenUsageTracker, UsageEvent], None] | None = field(
+        default=None, repr=False
+    )
     _started: dict[Any, float] = field(default_factory=dict, repr=False)
 
     @property
@@ -118,6 +122,8 @@ class TokenUsageTracker(BaseCallbackHandler):
             event.latency_ms = int((time.monotonic() - started) * 1000)
         self.events.append(event)
         logger.info("llm_usage %s", event.model_dump_json())
+        if self.listener is not None:
+            self.listener(self, event)
 
     def record(self, event: UsageEvent) -> None:
         """A call made outside LangChain (the Strands engine): priced and

@@ -19,7 +19,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from typing import Any
 
-from scholar_lens.adapters.aws.batch import write_result_manifest
+from scholar_lens.adapters.aws.batch import ProgressReporter, write_result_manifest
 from scholar_lens.adapters.aws.environment import is_running_in_aws
 from scholar_lens.adapters.aws.metrics import MetricsEmitter
 from scholar_lens.adapters.aws.notifications import publish_sns
@@ -209,6 +209,11 @@ def run_job(request: JobRequest, *, job_id: str | None = None) -> JobResult:
     context.fresh = request.fresh
     load_secrets_from_ssm(context, RUN_SECRETS)
     tracker = TokenUsageTracker()
+    if job_id is not None and context.s3_handler is not None:
+        # status shows a running job's stage and cost so far.
+        tracker.listener = ProgressReporter(
+            context.s3_handler, context.config.resources.s3_prefix, job_id
+        )
     started = time.monotonic()
     try:
         resources = context.config.resources

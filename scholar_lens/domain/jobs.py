@@ -252,6 +252,16 @@ class SubmittedJob(BaseModel):
     input: str
 
 
+class JobProgress(BaseModel):
+    """What a running Batch job has done so far: its current stage, the
+    model calls made and their estimated cost, and when it last reported."""
+
+    stage: str
+    calls: int
+    cost_usd: float
+    updated_at: str
+
+
 class JobStatusReport(BaseModel):
     """Batch state of a remote job plus its result once it has finished."""
 
@@ -264,6 +274,9 @@ class JobStatusReport(BaseModel):
     # Where the job's container logs are (CloudWatch Logs), once it started.
     log_group: str | None = None
     log_stream: str | None = None
+    # A job that has not finished: what it reported last (None before its
+    # first model call or without a bucket).
+    progress: JobProgress | None = None
     result: JobResult | None = None
 
 
@@ -274,6 +287,12 @@ def ssm_base(project_name: str, stage: str) -> str:
 
 def result_manifest_key(s3_prefix: str, job_id: str) -> str:
     return f"{s3_prefix}/{S3Paths.RESULTS.value}/{job_id}.json".lstrip("/")
+
+
+def progress_key(s3_prefix: str, job_id: str) -> str:
+    """A running job's progress (not under results/, which lists finished
+    runs only)."""
+    return f"{s3_prefix}/progress/{job_id}.json".lstrip("/")
 
 
 def validation_summary(error: ValidationError) -> str:
