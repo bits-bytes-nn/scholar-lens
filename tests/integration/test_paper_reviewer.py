@@ -1113,7 +1113,9 @@ async def test_the_claim_check_reads_the_defanged_paper() -> None:
     reviewer.paper = reviewer.paper.model_copy(
         update={"content": reviewer.paper.content.model_copy(update={"text": text})}
     )
-    await reviewer._claim_problems({"key_takeaways": TLDR, "closing": "## 한계"})
+    await reviewer._claim_problems(
+        {"key_takeaways": TLDR, "closing": "## 한계", "description": DESCRIPTION}
+    )
     # The paper cannot close its own fence.
     assert "</paper_text>" not in checker.calls[0]["paper_text"]
 
@@ -1167,3 +1169,42 @@ async def test_a_spent_budget_during_the_fix_keeps_the_written_review() -> None:
     ).run()
     assert WRONG_CLAIM in review.closing
     assert any("the run's budget was spent" in n for n in review.notes)
+
+
+async def test_a_failed_fix_keeps_the_written_review() -> None:
+    calls = iter([_final_with(WRONG_CLAIM)({}), RuntimeError("stream ended")])
+
+    def finalize(_: dict[str, Any]) -> Any:
+        item = next(calls)
+        if isinstance(item, Exception):
+            raise item
+        return item
+
+    review = await _reviewer(
+        finalizer=FakeChain(finalize),
+        final_checker=FakeChain({"problems": f"- {WRONG_CLAIM} || wrong: 아닙니다"}),
+    ).run()
+    assert WRONG_CLAIM in review.closing
+    assert any("the fix failed: RuntimeError" in n for n in review.notes)
+
+
+@pytest.mark.parametrize(
+    ("verdict", "reason"),
+    [({"problems": ""}, "no verdict"), (None, "budget was spent")],
+)
+async def test_an_unchecked_tldr_says_why(verdict: Any, reason: str) -> None:
+    from scholar_lens.domain.usage import TokenBudgetExceeded
+
+    def check(_: dict[str, Any]) -> Any:
+        if verdict is None:
+            raise TokenBudgetExceeded("Estimated cost $41 > $40")
+        return verdict
+
+    review = await _reviewer(final_checker=FakeChain(check)).run()
+    assert any(reason in n and "not checked" in n for n in review.notes)
+
+
+async def test_the_claim_check_reads_the_description_too() -> None:
+    checker = FakeChain({"problems": "- none"})
+    await _reviewer(final_checker=checker).run()
+    assert checker.calls[0]["description"] == DESCRIPTION

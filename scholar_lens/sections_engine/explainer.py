@@ -279,6 +279,7 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
         # The TL;DR and closing are written from the review alone: their
         # claims are checked against the paper (the evaluation model).
         self.evaluation_model_id = evaluation_model_id
+        self._check_failure = ""
         self.final_checker = self._chain(
             PaperFinalCheckPrompt,
             evaluation_model_id,
@@ -809,18 +810,26 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
                     ),
                     "key_takeaways": final["key_takeaways"],
                     "closing": final["closing"],
+                    "description": final["description"],
                     "language": self.language,
                 },
             )
+        except TokenBudgetExceeded as e:
+            # The review is written; the check is optional.
+            logger.warning("TL;DR and closing claim check skipped: %s", e)
+            self._check_failure = "the run's budget was spent"
+            return None
         except Exception as e:  # noqa: BLE001 - the parts are still usable
-            # A spent budget too: the review is written, the check is optional.
             if is_access_error(e):
                 raise
             logger.warning("TL;DR and closing claim check failed: %s", e)
+            self._check_failure = "the check failed"
             return None
-        if "problems" not in result:
-            # An answer outside the format is no verdict, not a clean pass.
-            logger.warning("TL;DR and closing claim check gave no <problems>.")
+        if not str(result.get("problems") or "").strip():
+            # An answer outside the format (no tag, or an empty one) is no
+            # verdict, not a clean pass: a clean answer is "- none".
+            logger.warning("TL;DR and closing claim check gave no verdict.")
+            self._check_failure = "the check gave no verdict"
             return None
         return parse_lines(result.get("problems"))
 
@@ -843,7 +852,7 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
             return final
         problems = await self._claim_problems(final)
         if problems is None:
-            self.notes.append(unchecked.format("the check failed"))
+            self.notes.append(unchecked.format(self._check_failure))
             return final
         if not problems:
             return final
@@ -861,11 +870,17 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
         }
         try:
             result = await self._call(self.finalizer, retry)
-        except TokenBudgetExceeded:
-            # The review is written: keep it and say what is left to check.
+        except Exception as e:  # noqa: BLE001 - the review is written
+            if is_access_error(e):
+                raise
+            why = (
+                "the run's budget was spent"
+                if isinstance(e, TokenBudgetExceeded)
+                else f"the fix failed: {type(e).__name__}"
+            )
+            # Keep the written review and say what is left to check.
             self.notes.append(
-                "TL;DR or closing claims to check against the paper (the fix was "
-                "skipped, the run's budget was spent): "
+                f"TL;DR or closing claims to check against the paper ({why}): "
                 + " | ".join(p[:200] for p in problems[:5])
             )
             return final
@@ -875,17 +890,18 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
             answer, self.paper.title, source=self.paper.content.text
         )
         if not {"key_takeaways", "closing"} & set(malformed):
-            candidate = {
-                **final,
-                "key_takeaways": answer["key_takeaways"],
-                "closing": answer["closing"],
-            }
+            # Its description is chosen first, so the recheck reads it too.
+            candidate = self._with_fitting_description(
+                {
+                    **final,
+                    "key_takeaways": answer["key_takeaways"],
+                    "closing": answer["closing"],
+                },
+                answer,
+            )
             after = await self._claim_problems(candidate)
             if after is not None and len(after) < len(problems):
-                final, problems = (
-                    self._with_fitting_description(candidate, answer),
-                    after,
-                )
+                final, problems = candidate, after
         if problems:
             self.notes.append(
                 "TL;DR or closing claims to check against the paper: "
@@ -896,9 +912,10 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
     def _with_fitting_description(
         self, final: dict[str, str], answer: dict[str, str]
     ) -> dict[str, str]:
-        """``final`` whose description fits its TL;DR: the kept one, else the
-        repaired answer's, else none (the blog derives one)."""
-        for description in (final["description"], answer["description"]):
+        """``final`` whose description fits its corrected TL;DR: the repaired
+        answer's (written with the fix), else the kept one, else none (the
+        blog derives one)."""
+        for description in (answer["description"], final["description"]):
             if description and not description_problems(
                 description, final["key_takeaways"]
             ):

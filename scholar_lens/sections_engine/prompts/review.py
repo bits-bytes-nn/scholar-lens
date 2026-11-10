@@ -684,7 +684,13 @@ class PaperFinalCheckPrompt(BasePrompt):
     written last, from the review alone, where comparison and ranking claims
     go wrong most often."""
 
-    input_variables: list[str] = ["paper_text", "key_takeaways", "closing", "language"]
+    input_variables: list[str] = [
+        "paper_text",
+        "key_takeaways",
+        "closing",
+        "description",
+        "language",
+    ]
     output_variables: list[str] = ["problems"]
 
     system_prompt_template: str = """
@@ -707,7 +713,12 @@ class PaperFinalCheckPrompt(BasePrompt):
     {closing}
     </closing>
 
-    Report every sentence of key_takeaways and closing whose factual claim the
+    <description>
+    {description}
+    </description>
+
+    Report every sentence of key_takeaways, closing and description whose
+    factual claim the
     paper does not support or contradicts. Look hardest at:
     - comparisons and rankings ("first", "best", "most", "outperforms", "on
       par with", "beats every baseline"): check every entity named against the

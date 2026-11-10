@@ -281,10 +281,10 @@ def _cap_context(context: list[PlannedSection], budget: int) -> None:
         section.length_scale = max(MIN_LENGTH_SCALE, factor)
         section.hard_scale = max(MIN_HARD_SCALE, factor)
     logger.info(
-        "Background sections: %d words for a %d-word share; shortened x%.2f.",
+        "Background sections: %d words for a %d-word share; now %d.",
         words,
         round(cap),
-        factor,
+        sum(s.target_words for s in context),
     )
 
 
