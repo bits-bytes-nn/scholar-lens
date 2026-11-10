@@ -604,3 +604,13 @@ def test_a_job_that_died_without_a_result_shows_its_last_progress(
         report = describe_job(aws, "job-9", s3_handler=handler, s3_prefix="sl")
     assert report.result is None and report.progress is not None
     assert report.progress.attempt == 2
+
+
+@pytest.mark.parametrize(("value", "attempt"), [("3", 3), ("", 1), ("x", 1)])
+def test_progress_reads_the_batch_attempt(
+    aws: boto3.Session, monkeypatch: pytest.MonkeyPatch, value: str, attempt: int
+) -> None:
+    from scholar_lens.adapters.aws.batch import ProgressReporter
+
+    monkeypatch.setenv("AWS_BATCH_JOB_ATTEMPT", value)
+    assert ProgressReporter(S3Handler(aws, BUCKET), "sl", "j").attempt == attempt

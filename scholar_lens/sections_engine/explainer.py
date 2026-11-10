@@ -812,12 +812,15 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
                     "language": self.language,
                 },
             )
-        except TokenBudgetExceeded:
-            raise
         except Exception as e:  # noqa: BLE001 - the parts are still usable
+            # A spent budget too: the review is written, the check is optional.
             if is_access_error(e):
                 raise
             logger.warning("TL;DR and closing claim check failed: %s", e)
+            return None
+        if "problems" not in result:
+            # An answer outside the format is no verdict, not a clean pass.
+            logger.warning("TL;DR and closing claim check gave no <problems>.")
             return None
         return parse_lines(result.get("problems"))
 
@@ -828,9 +831,9 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
         paper: what the check finds is fixed by one more finalization call,
         whose TL;DR and closing are kept only when well formed and checked
         with fewer problems (its description too when the kept one no longer
-        fits the new TL;DR); what is left becomes review notes. Skipped,
-        with a note, when the run's budget is nearly spent (it reads the
-        whole paper twice)."""
+        fits the new TL;DR); what is left becomes review notes. A spent
+        budget (before or during the check) keeps the written review with a
+        note: the check is optional."""
         unchecked = (
             "The TL;DR and closing were not checked against the paper ({}); "
             "check their comparisons and rankings by hand."
@@ -856,7 +859,16 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
                 + "\n".join(f"- {p}" for p in problems)
             ),
         }
-        result = await self._call(self.finalizer, retry)
+        try:
+            result = await self._call(self.finalizer, retry)
+        except TokenBudgetExceeded:
+            # The review is written: keep it and say what is left to check.
+            self.notes.append(
+                "TL;DR or closing claims to check against the paper (the fix was "
+                "skipped, the run's budget was spent): "
+                + " | ".join(p[:200] for p in problems[:5])
+            )
+            return final
         answer = {k: (result.get(k) or "").strip() for k in _FINAL_PARTS}
         answer["key_takeaways"] = _strip_tldr_heading(answer["key_takeaways"])
         malformed = _finalization_problems(

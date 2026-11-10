@@ -1139,3 +1139,31 @@ async def test_a_corrected_tldr_drops_a_description_it_no_longer_fits() -> None:
     # The corrected TL;DR no longer states rank 4, and the repaired answer's
     # description is not usable: the description is dropped.
     assert "4" not in review.description
+
+
+async def test_a_check_answer_outside_the_format_is_no_verdict() -> None:
+    review = await _reviewer(
+        finalizer=FakeChain(_final_with(WRONG_CLAIM)),
+        final_checker=FakeChain({}),  # no <problems> tag
+    ).run()
+    assert WRONG_CLAIM in review.closing
+    assert any("were not checked against the paper" in n for n in review.notes)
+
+
+async def test_a_spent_budget_during_the_fix_keeps_the_written_review() -> None:
+    from scholar_lens.domain.usage import TokenBudgetExceeded
+
+    calls = iter([_final_with(WRONG_CLAIM)({}), TokenBudgetExceeded("spent")])
+
+    def finalize(_: dict[str, Any]) -> Any:
+        item = next(calls)
+        if isinstance(item, Exception):
+            raise item
+        return item
+
+    review = await _reviewer(
+        finalizer=FakeChain(finalize),
+        final_checker=FakeChain({"problems": f"- {WRONG_CLAIM} || wrong: 아닙니다"}),
+    ).run()
+    assert WRONG_CLAIM in review.closing
+    assert any("the run's budget was spent" in n for n in review.notes)

@@ -59,8 +59,9 @@ MIN_LENGTH_SCALE = 0.5
 HARD_OVERRUN = 1.3
 MIN_HARD_SCALE = 0.8
 # Background sections (importance "context": the primers a reader may need)
-# take at most this share of the review's budget; the paper's own content
-# keeps the rest (the judges found reviews padded with background).
+# are shortened toward this share of the review's budget (their minimum
+# scales and floors hold); the paper's own content keeps the rest (the judges
+# found reviews padded with background).
 MAX_CONTEXT_SHARE = 0.15
 # Sentences of context added on each side of a planned range, so evidence just
 # outside an LLM-estimated anchor still reaches the writer.
@@ -244,8 +245,15 @@ def _fit_budget(plan: ReviewPlan) -> None:
     context = [s for s in plan.sections if s.importance == "context"]
     if others and context:
         _cap_context(context, budget)
+    # The paper's sections keep at least the budget less the background's
+    # share (the background's floors may hold it above its share).
     rest = (
-        budget - sum(s.target_words for s in context) if others and context else budget
+        round(
+            budget
+            - min(sum(s.target_words for s in context), MAX_CONTEXT_SHARE * budget)
+        )
+        if others and context
+        else budget
     )
     fitted = others if others and context else plan.sections
 
@@ -261,7 +269,7 @@ def _fit_budget(plan: ReviewPlan) -> None:
 def _cap_context(context: list[PlannedSection], budget: int) -> None:
     """Background sections shortened together toward :data:`MAX_CONTEXT_SHARE`
     of the budget, never below the item scales' minimums (each section's
-    floor holds too)."""
+    floor holds too), so the share is approached, not guaranteed."""
     for section in context:
         section.length_scale = section.hard_scale = 1.0
     words = sum(s.target_words for s in context)

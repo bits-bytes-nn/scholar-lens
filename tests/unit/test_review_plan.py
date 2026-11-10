@@ -431,6 +431,8 @@ def test_closing_heading_must_be_the_whole_title(heading: str, closing: bool) ->
 def test_background_sections_take_at_most_their_share_of_the_budget() -> None:
     from scholar_lens.domain.review_plan import (
         MAX_CONTEXT_SHARE,
+        MIN_HARD_SCALE,
+        MIN_LENGTH_SCALE,
         ReviewPlan,
         _fit_budget,
         review_word_budget,
@@ -446,13 +448,16 @@ def test_background_sections_take_at_most_their_share_of_the_budget() -> None:
             sentence_ranges=[(0, 1)],
         )
 
+    # Background over its share: it is cut toward the share, its minimum
+    # scales held; the paper's own sections keep the budget less that share.
     plan = ReviewPlan(
-        sections=[section("배경", "context", 4), section("방법", "core", 3)]
+        sections=[section("배경", "context", 8), section("방법", "core", 3)]
     )
+    budget = review_word_budget(plan)
     _fit_budget(plan)
-    context = plan.sections[0].target_words
-    assert context <= max(
-        MIN_SECTION_WORDS, MAX_CONTEXT_SHARE * review_word_budget(plan) + 1
-    )
-    # The paper's own content keeps its length.
-    assert plan.sections[1].target_words > context
+    background, method = plan.sections
+    assert background.length_scale >= MIN_LENGTH_SCALE
+    assert background.hard_scale >= MIN_HARD_SCALE
+    assert background.target_words < 8 * 450 * 0.8  # shortened
+    assert method.length_scale == method.hard_scale == 1.0  # fits the rest
+    assert method.target_words <= budget * (1 - MAX_CONTEXT_SHARE)

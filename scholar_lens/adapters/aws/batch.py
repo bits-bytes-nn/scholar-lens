@@ -188,7 +188,8 @@ class ProgressReporter:
         self.interval = interval
         self.clock = clock
         # Batch retries a job under the same id: the counts restart.
-        self.attempt = int(os.environ.get("AWS_BATCH_JOB_ATTEMPT", "1") or 1)
+        attempt = os.environ.get("AWS_BATCH_JOB_ATTEMPT", "1")
+        self.attempt = int(attempt) if attempt.isdigit() else 1
         self._last: float | None = None
 
     def __call__(self, tracker: Any, event: Any) -> None:  # noqa: ANN401
