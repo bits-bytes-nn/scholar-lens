@@ -922,6 +922,8 @@ def test_a_request_overrides_the_engine_and_cost_ceiling_for_its_run() -> None:
     )
     assert review.explanation.engine == "evidence"
     assert review.explanation.max_cost_usd == 5
+    # The asked-for cost is the ceiling: the token cap no longer decides first.
+    assert review.explanation.max_total_tokens is None
     assert config.explanation.engine == "sections"  # the loaded config is untouched
     survey = runtime.with_overrides(
         config, JobRequest(kind="survey_write", plan="p.json", max_cost_usd=20)
@@ -940,6 +942,7 @@ def test_a_request_overrides_the_engine_and_cost_ceiling_for_its_run() -> None:
     [
         {"kind": "guide", "urls": ["https://d.dev/"], "engine": "evidence"},
         {"kind": "survey_plan", "topic": "t", "max_cost_usd": 3},
+        {"kind": "review", "source": "2106.09685", "max_cost_usd": float("inf")},
     ],
 )
 def test_overrides_a_kind_cannot_take_are_rejected(fields: dict) -> None:

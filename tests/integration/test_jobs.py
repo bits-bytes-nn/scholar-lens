@@ -584,3 +584,23 @@ class TestJobProgress:
         with mock.patch.object(aws, "client", return_value=batch):
             report = describe_job(aws, "job-8", s3_handler=handler, s3_prefix="sl")
         assert report.progress is not None and report.progress.cost_usd == 3.2
+
+
+def test_a_job_that_died_without_a_result_shows_its_last_progress(
+    aws: boto3.Session,
+) -> None:
+    from scholar_lens.domain.jobs import JobProgress, progress_key
+
+    handler = S3Handler(aws, BUCKET)
+    handler.put_text(
+        progress_key("sl", "job-9"),
+        JobProgress(
+            stage="section", calls=9, cost_usd=1.0, updated_at="t", attempt=2
+        ).model_dump_json(),
+    )
+    batch = mock.MagicMock()
+    batch.describe_jobs.return_value = {"jobs": [{"status": "FAILED"}]}
+    with mock.patch.object(aws, "client", return_value=batch):
+        report = describe_job(aws, "job-9", s3_handler=handler, s3_prefix="sl")
+    assert report.result is None and report.progress is not None
+    assert report.progress.attempt == 2

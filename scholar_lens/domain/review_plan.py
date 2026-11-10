@@ -219,16 +219,12 @@ def review_word_budget(plan: ReviewPlan) -> int:
 
 
 def _fit_budget(plan: ReviewPlan) -> None:
-    """Shorten the easy and medium items (one scale for the whole review,
-    floors included in the total) until the targets fit the budget or reach
-    :data:`MIN_LENGTH_SCALE`; if the review is still over
-    :data:`HARD_OVERRUN` times the budget, shorten the hard items toward that
-    bound, down to :data:`MIN_HARD_SCALE`."""
-
-    def total(scale: float, hard: float = 1.0) -> int:
-        for section in plan.sections:
-            section.length_scale, section.hard_scale = scale, hard
-        return sum(s.target_words for s in plan.sections)
+    """Cap the background sections' share (:func:`_cap_context`), then
+    shorten the other sections' easy and medium items (one scale, floors
+    included in the total) until they fit what is left of the budget or
+    reach :data:`MIN_LENGTH_SCALE`; if still over :data:`HARD_OVERRUN` times
+    it, shorten their hard items toward that bound, down to
+    :data:`MIN_HARD_SCALE`."""
 
     def fit(set_total: Callable[[float], int], low: float, cap: float) -> float:
         # Bisection for the largest scale in [low, 1] whose total fits ``cap``
@@ -242,23 +238,40 @@ def _fit_budget(plan: ReviewPlan) -> None:
         return low
 
     budget = review_word_budget(plan)
-    if total(1.0) > budget:
-        _fit_items(plan, budget, total, fit)
-    _cap_context(plan, budget)
-
-
-def _cap_context(plan: ReviewPlan, budget: int) -> None:
-    """Background sections shortened together to :data:`MAX_CONTEXT_SHARE`
-    of the budget (each section's floor still holds)."""
+    # Background first: its share is capped, then the paper's own sections
+    # are fitted to what is left (a plan of background only is not capped).
+    others = [s for s in plan.sections if s.importance != "context"]
     context = [s for s in plan.sections if s.importance == "context"]
+    if others and context:
+        _cap_context(context, budget)
+    rest = (
+        budget - sum(s.target_words for s in context) if others and context else budget
+    )
+    fitted = others if others and context else plan.sections
+
+    def total_of(scale: float, hard: float = 1.0) -> int:
+        for section in fitted:
+            section.length_scale, section.hard_scale = scale, hard
+        return sum(s.target_words for s in fitted)
+
+    if total_of(1.0) > rest:
+        _fit_items(plan, rest, total_of, fit)
+
+
+def _cap_context(context: list[PlannedSection], budget: int) -> None:
+    """Background sections shortened together toward :data:`MAX_CONTEXT_SHARE`
+    of the budget, never below the item scales' minimums (each section's
+    floor holds too)."""
+    for section in context:
+        section.length_scale = section.hard_scale = 1.0
     words = sum(s.target_words for s in context)
     cap = MAX_CONTEXT_SHARE * budget
-    if not context or words <= cap:
+    if words <= cap:
         return
     factor = cap / words
     for section in context:
-        section.length_scale *= factor
-        section.hard_scale *= factor
+        section.length_scale = max(MIN_LENGTH_SCALE, factor)
+        section.hard_scale = max(MIN_HARD_SCALE, factor)
     logger.info(
         "Background sections: %d words for a %d-word share; shortened x%.2f.",
         words,

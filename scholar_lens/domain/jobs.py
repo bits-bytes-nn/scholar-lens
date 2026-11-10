@@ -77,7 +77,7 @@ class JobRequest(BaseModel):
     # the config.yaml of the last deploy): review / summarize the writing
     # engine; every kind that writes a post its cost ceiling (USD).
     engine: Literal["sections", "evidence"] | None = None
-    max_cost_usd: float | None = Field(default=None, gt=0)
+    max_cost_usd: float | None = Field(default=None, gt=0, allow_inf_nan=False)
 
     @model_validator(mode="after")
     def _check_inputs(self) -> JobRequest:
@@ -260,6 +260,8 @@ class JobProgress(BaseModel):
     calls: int
     cost_usd: float
     updated_at: str
+    # The Batch attempt reporting (a retry restarts the counts).
+    attempt: int = 1
 
 
 class JobStatusReport(BaseModel):
@@ -274,8 +276,9 @@ class JobStatusReport(BaseModel):
     # Where the job's container logs are (CloudWatch Logs), once it started.
     log_group: str | None = None
     log_stream: str | None = None
-    # A job that has not finished: what it reported last (None before its
-    # first model call or without a bucket).
+    # A job without a result: what it reported last while running (None
+    # before its first model call or without a bucket); for a job that died
+    # without a result, its last stage and cost.
     progress: JobProgress | None = None
     result: JobResult | None = None
 

@@ -100,12 +100,12 @@ domain (순수 코드: 모델, 규칙, 검증, Markdown, 프롬프트 본문)
 
 | 명령 | 동작 |
 | --- | --- |
-| `review SOURCE`, `summarize SOURCE` | 논문 산출물을 로컬에서 실행하거나 `--remote`로 제출. `--engine sections|evidence`와 `--max-cost-usd`는 그 실행의 설정을 덮어씀(`entrypoints/runtime.py::with_overrides`; `guide`, `survey write`도 `--max-cost-usd`를 받음) |
+| `review SOURCE`, `summarize SOURCE` | 논문 산출물을 로컬에서 실행하거나 `--remote`로 제출. `--engine sections|evidence`와 `--max-cost-usd`는 그 실행의 설정을 덮어씀(`entrypoints/runtime.py::with_overrides`; `guide`, `survey write`도 `--max-cost-usd`를 받음. sections 엔진에서는 토큰 상한을 풀어 요청한 비용이 상한이 됨. 유한한 양수만 받음) |
 | `guide [URL...] [--reference URL]...` | 기술 가이드를 로컬에서 실행하거나 `--remote`로 제출(문서 URL과 참고 자료 URL 중 하나 이상) |
 | `survey plan TOPIC [--paper ID]... [--reference URL]... [--since Y] [--until Y]` | 서베이 계획 파일을 만들거나 `--remote`로 제출(4.3절). 글을 쓰지 않으므로 `--no-pr`가 없습니다 |
 | `survey write --plan PATH_OR_S3_URI [--no-pr]` | 계획 파일로 서베이 글을 쓰거나 `--remote`로 제출(4.3절). `--remote`이면 로컬 계획을 먼저 `<s3_prefix>/surveys/<slug>/plan-<sha256 앞 16자>.json`에 올리고(내용별 키라 덮어쓰지 않음, `application/use_cases/survey_write.py::stage_plan_for_batch`) 그 URI로 제출합니다 |
 | `publish MARKDOWN_PATH_OR_S3_URI [--no-pr] [--resolved]` | 실행이 저장했거나 거절한 글(고쳤을 수 있음)을 다시 검사하고 실행의 브랜치에서 PR을 열거나 갱신(`entrypoints/runtime.py::run_publish`, 2.4절). `--resolved`는 실행의 차단 문제를 고쳤다는 뜻으로, 차단 대신 확인할 체크리스트 항목으로 바꿉니다. 로컬에서만 실행합니다 |
-| `status JOB_ID [--wait] [--timeout S]` | Batch 상태, 시작된 작업의 CloudWatch 로그 그룹·스트림(`log_group`, `log_stream`), 끝나지 않은 작업의 진행(`progress`: 현재 단계, 모델 호출 수, 추정 비용, 마지막 보고 시각. worker가 모델 호출 뒤 30초에 한 번까지 `<s3_prefix>/progress/<job_id>.json`에 씀, `adapters/aws/batch.py::ProgressReporter`)과 결과 매니페스트 조회(`adapters/aws/batch.py::describe_job`, `wait_for_job`). `--timeout` 기본값은 14,400초(4시간, `DEFAULT_WAIT_SECONDS`) |
+| `status JOB_ID [--wait] [--timeout S]` | Batch 상태, 시작된 작업의 CloudWatch 로그 그룹·스트림(`log_group`, `log_stream`), 결과가 없는 작업의 진행(`progress`: 현재 단계, 모델 호출 수, 추정 비용, 마지막 보고 시각, Batch 시도 번호. 결과 없이 끝난 작업이면 마지막 보고. worker가 모델 호출 뒤 30초에 한 번까지 `<s3_prefix>/progress/<job_id>.json`에 씀, `adapters/aws/batch.py::ProgressReporter`)과 결과 매니페스트 조회(`adapters/aws/batch.py::describe_job`, `wait_for_job`). `--timeout` 기본값은 14,400초(4시간, `DEFAULT_WAIT_SECONDS`) |
 | `cancel JOB_ID` | 원격 작업 중지 요청(`adapters/aws/batch.py::cancel_job`, `TerminateJob`). 시작 전이면 취소되어 결과를 남기지 않고, 실행 중이면 종료되어 결과에 중단으로 남습니다. Batch는 비동기로 멈추므로 결과에는 요청 당시 상태(`previous_status`)와 요청 직후 상태(`status`, 그 사이 끝난 작업이면 `SUCCEEDED`)를 담습니다. 이미 끝난 작업은 거부(종료 코드 2)합니다. 로컬 자격 증명에 `batch:TerminateJob` 권한이 필요하고, 스택의 실패 알림은 이 사유로 멈춘 작업을 알리지 않습니다 |
 | `costs --since D [--until D] [--by kind\|stage\|model\|day] [--billed]` | 기간 `[since, until)`(UTC 날짜, `--until` 기본값은 내일)의 결과 매니페스트로 실행 비용을 묶어 보고(`application/use_cases/costs.py::report_costs`, 11장). `--by` 기본값은 `kind`, `--billed`는 Cost Explorer 청구액을 더함. S3 버킷이 없으면 실패(종료 코드 4) |
 | `worker --request JSON` | Batch 진입점. `AWS_BATCH_JOB_ID`를 작업 ID로 사용 |
@@ -185,7 +185,7 @@ worker는 SIGTERM을 `SystemExit`로 바꿔(`cli.py::_raise_on_sigterm`) Batch �
 - 개념 하나는 한 절만 맡습니다. 다른 절은 그 개념을 참조만 합니다.
 - `max_sections`를 넘는 절은 마지막 절로 합칩니다.
 - 목표 분량은 `domain/review_plan.py::target_words`가 항목 난이도 기본값(쉬움 60, 중간 200, 어려움 450단어 상당)의 합에 중요도 계수(0.8/1.0/1.3)를 곱해 정하며, 절마다 최소 250단어입니다.
-- 리뷰 전체 예산은 `7000 × (1 + 0.6 × 어려운 항목 비율)`입니다(`review_word_budget`). 넘치면 쉬움·중간 항목만 한 비율로 줄이고(최대 절반까지), 어려운 항목은 그래도 예산의 1.3배를 넘을 때만 1.3배 쪽으로 줄이되 기본값의 0.8배(항목당 360단어) 아래로는 줄이지 않으므로 어려운 논문은 예산을 넘을 수 있습니다.
+- 리뷰 전체 예산은 `7000 × (1 + 0.6 × 어려운 항목 비율)`입니다(`review_word_budget`). 계획이 배경(`importance: context`)으로 표시한 절은 먼저 함께 줄여 예산의 15%(`MAX_CONTEXT_SHARE`) 안으로 맞추고(항목 비율의 하한은 유지, 배경 절만 있는 계획은 줄이지 않음), 나머지 절을 남은 예산에 맞춥니다. 넘치면 쉬움·중간 항목만 한 비율로 줄이고(최대 절반까지), 어려운 항목은 그래도 예산의 1.3배를 넘을 때만 1.3배 쪽으로 줄이되 기본값의 0.8배(항목당 360단어) 아래로는 줄이지 않으므로 어려운 논문은 예산을 넘을 수 있습니다.
 
 ### 3.2 보강
 
@@ -225,9 +225,11 @@ LLM 라우팅 호출 없이 계획을 따릅니다(`PaperReviewer._enrich`). 참
 
 `_finalization_problems`가 구조와 함께 수치를 코드로 확인합니다. TL;DR의 모든 수치는 논문 본문에, 설명의 모든 수치는 남기는 TL;DR(시도마다 부분별로 남기므로 그 시도의 TL;DR이 아닐 수 있음)이나 초록에 있어야 하고(`domain/validation.py::unsourced_numbers`, 6.3), 설명은 `description_problems`(평문, 길이)를 통과해야 합니다. 마무리 프롬프트는 초록도 입력으로 받습니다. 문제가 있으면 한 번 다시 요청하고, 그래도 남으면 PR 메모로 남깁니다. 마크업이 남은 설명과 페이지 `<title>`(논문 제목, 한국어 글은 " 논문 리뷰"를 붙인 길이, `domain/validation.py::paper_page_title`)보다 길지 않은 설명은 버려 블로그가 만들게 하고 PR 메모로 남깁니다. `run()`은 `ReviewText(body, key_takeaways, closing, subtitle, description)`을 돌려주고, `domain/post_format.py::format_review`가 TL;DR → 본문 → 한계와 시사점 → 참고문헌 순서로 조립합니다.
 
+**주장 대조.** TL;DR과 마무리 절은 편집된 글만 보고 쓰므로, 블라인드 판정에서 이 엔진의 사실 오류(비교·순위, 결과의 범위, 논문이 실제로 시험한 한계)가 가장 많이 나온 곳입니다. 마무리 뒤 평가 모델(`PaperFinalCheckPrompt`)이 두 부분의 문장을 논문 본문(프롬프트 태그를 무력화한 원문을 `fit_text`로 맞춤)과 대조합니다. 문제가 나오면 그 목록을 `repair_note`로 붙여 마무리를 한 번 더 요청하고, 형식이 맞고 다시 대조했을 때 문제가 줄었을 때만 새 TL;DR과 마무리 절을 씁니다. 설명은 새 TL;DR과 맞으면 그대로, 아니면 새 답의 설명을, 둘 다 맞지 않으면 비워 블로그가 만들게 합니다. 남은 문제, 대조 실패, 예산이 소진되어 건너뛴 경우는 PR 메모로 남깁니다(`_checked_claims`).
+
 ### 3.6 호출 수와 한계
 
-8개 절 논문에서 계획 1회, 절마다 집필·검수 약 2–3회, 편집 1–2회, 마무리 1회입니다. 계획과 편집은 논문 전체를 입력으로 받고, 컨텍스트를 넘으면 `fit_text`가 뒷부분을 잘라냅니다. 이때도 미배정 구간 보정이 남은 문장을 절에 붙입니다. 모든 단계는 `max_total_tokens` 예산 가드를 거칩니다.
+8개 절 논문에서 계획 1회, 절마다 집필·검수 약 2–3회, 편집 1–2회, 마무리 1회, 주장 대조 1–2회(문제가 나오면 마무리 1회 추가)입니다. 계획과 편집은 논문 전체를 입력으로 받고, 컨텍스트를 넘으면 `fit_text`가 뒷부분을 잘라냅니다. 이때도 미배정 구간 보정이 남은 문장을 절에 붙입니다. 모든 단계는 `max_total_tokens` 예산 가드를 거칩니다.
 
 ## 4. 요약, 기술 가이드, 논문 서베이 파이프라인
 

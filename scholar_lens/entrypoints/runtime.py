@@ -185,6 +185,10 @@ def with_overrides(config: Config, request: JobRequest) -> Config:
     if request.max_cost_usd is not None:
         key = "write_max_cost_usd" if section == "survey" else "max_cost_usd"
         update[key] = request.max_cost_usd
+        if section in ("explanation", "summary"):
+            # The sections engine also stops at its token cap, which would
+            # otherwise decide first: the run's ceiling is the cost asked for.
+            update["max_total_tokens"] = None
     if not update:
         return config
     logger.info("Run overrides of %s: %s", section, update)

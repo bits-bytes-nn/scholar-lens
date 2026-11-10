@@ -11,6 +11,7 @@ so ``status`` can report it after the container is gone.
 from __future__ import annotations
 
 import logging
+import os
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -148,7 +149,9 @@ def describe_job(
     )
     if report.batch_status in TERMINAL_BATCH_STATES and s3_handler is not None:
         report.result = read_result_manifest(s3_handler, s3_prefix, job_id)
-    elif s3_handler is not None:
+    if s3_handler is not None and report.result is None:
+        # A running job's progress, or what a job that died without a result
+        # (out of memory, a lost host) last reported.
         report.progress = read_progress(s3_handler, s3_prefix, job_id)
     return report
 
@@ -184,6 +187,8 @@ class ProgressReporter:
         self.key = progress_key(s3_prefix, job_id)
         self.interval = interval
         self.clock = clock
+        # Batch retries a job under the same id: the counts restart.
+        self.attempt = int(os.environ.get("AWS_BATCH_JOB_ATTEMPT", "1") or 1)
         self._last: float | None = None
 
     def __call__(self, tracker: Any, event: Any) -> None:  # noqa: ANN401
@@ -196,6 +201,7 @@ class ProgressReporter:
             calls=tracker.call_count,
             cost_usd=round(tracker.estimated_cost_usd(), 4),
             updated_at=datetime.now(UTC).isoformat(),
+            attempt=self.attempt,
         )
         try:
             self.s3_handler.put_text(self.key, progress.model_dump_json())

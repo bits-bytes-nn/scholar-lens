@@ -278,6 +278,7 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
         )
         # The TL;DR and closing are written from the review alone: their
         # claims are checked against the paper (the evaluation model).
+        self.evaluation_model_id = evaluation_model_id
         self.final_checker = self._chain(
             PaperFinalCheckPrompt,
             evaluation_model_id,
@@ -790,15 +791,22 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
             final["description"] = ""
         return final
 
-    async def _claim_problems(self, final: dict[str, str]) -> list[str]:
+    async def _claim_problems(self, final: dict[str, str]) -> list[str] | None:
         """The TL;DR's and closing's sentences the paper does not support or
-        contradicts (one line each); none when the check fails to answer
-        (noted)."""
+        contradicts (one line each); None when the check could not answer
+        (noted). The paper is the defanged text every fence of this engine
+        reads, fitted to the evaluation model."""
+        reserve = len(final["key_takeaways"]) + len(final["closing"]) + 20_000
         try:
             result = await self._call(
                 self.final_checker,
                 {
-                    "paper_text": self.paper.content.text,
+                    "paper_text": self.llm_factory.fit_text(
+                        self.evaluation_model_id,
+                        self._source().text,
+                        reserve_tokens=reserve,
+                        label="review claim check",
+                    ),
                     "key_takeaways": final["key_takeaways"],
                     "closing": final["closing"],
                     "language": self.language,
@@ -810,25 +818,30 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
             if is_access_error(e):
                 raise
             logger.warning("TL;DR and closing claim check failed: %s", e)
-            self.notes.append(
-                "The TL;DR and closing were not checked against the paper (the "
-                "check failed); check their comparisons and rankings by hand."
-            )
-            return []
-        return [
-            line
-            for line in parse_lines(result.get("problems"))
-            if line.strip().lower().strip("-. ") != "none"
-        ]
+            return None
+        return parse_lines(result.get("problems"))
 
     async def _checked_claims(
         self, payload: dict[str, Any], final: dict[str, str]
     ) -> dict[str, str]:
         """``final`` with its TL;DR and closing claims checked against the
         paper: what the check finds is fixed by one more finalization call,
-        whose TL;DR and closing are kept only when well formed and with fewer
-        problems; what is left becomes review notes."""
+        whose TL;DR and closing are kept only when well formed and checked
+        with fewer problems (its description too when the kept one no longer
+        fits the new TL;DR); what is left becomes review notes. Skipped,
+        with a note, when the run's budget is nearly spent (it reads the
+        whole paper twice)."""
+        unchecked = (
+            "The TL;DR and closing were not checked against the paper ({}); "
+            "check their comparisons and rankings by hand."
+        )
+        if self._over_soft_token_budget():
+            self.notes.append(unchecked.format("the run's token budget was spent"))
+            return final
         problems = await self._claim_problems(final)
+        if problems is None:
+            self.notes.append(unchecked.format("the check failed"))
+            return final
         if not problems:
             return final
         logger.info(
@@ -839,7 +852,8 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
             "repair_note": (
                 "Your previous TL;DR and closing state claims the paper does not "
                 "support. Keep everything else, and fix each of these from the "
-                "review's facts (narrow the claim, or drop it):\n" + "\n".join(problems)
+                "review's facts (narrow the claim, or drop it):\n"
+                + "\n".join(f"- {p}" for p in problems)
             ),
         }
         result = await self._call(self.finalizer, retry)
@@ -848,21 +862,40 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
         malformed = _finalization_problems(
             answer, self.paper.title, source=self.paper.content.text
         )
-        candidate = {
-            **final,
-            "key_takeaways": answer["key_takeaways"],
-            "closing": answer["closing"],
-        }
         if not {"key_takeaways", "closing"} & set(malformed):
+            candidate = {
+                **final,
+                "key_takeaways": answer["key_takeaways"],
+                "closing": answer["closing"],
+            }
             after = await self._claim_problems(candidate)
-            if len(after) < len(problems):
-                final, problems = candidate, after
+            if after is not None and len(after) < len(problems):
+                final, problems = (
+                    self._with_fitting_description(candidate, answer),
+                    after,
+                )
         if problems:
             self.notes.append(
                 "TL;DR or closing claims to check against the paper: "
                 + " | ".join(p[:200] for p in problems[:5])
             )
         return final
+
+    def _with_fitting_description(
+        self, final: dict[str, str], answer: dict[str, str]
+    ) -> dict[str, str]:
+        """``final`` whose description fits its TL;DR: the kept one, else the
+        repaired answer's, else none (the blog derives one)."""
+        for description in (final["description"], answer["description"]):
+            if description and not description_problems(
+                description, final["key_takeaways"]
+            ):
+                return {**final, "description": description}
+        self.notes.append(
+            "Review description dropped: it no longer fit the corrected TL;DR "
+            "(the blog derives one)."
+        )
+        return {**final, "description": ""}
 
     @measure_execution_time
     async def run(self) -> ReviewText:
