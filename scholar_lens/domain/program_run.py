@@ -18,7 +18,6 @@ from typing import Literal
 
 from pydantic import BaseModel, field_validator
 
-from scholar_lens.domain.guide.evidence_guide import install_requirements
 from scholar_lens.domain.program import _session_code, is_excerpt, python_blocks
 
 # The line a wrapped block prints its outcome on (stdout may hold more).
@@ -55,7 +54,6 @@ _ENVIRONMENT_ERRORS = frozenset(
         "PermissionError",
         "BlockTimeout",
         "KeyboardInterrupt",
-        "SystemExit",
     }
 )
 # Words of a message that point at the environment, not the code.
@@ -142,66 +140,167 @@ def _distribution(name: str) -> str:
     return name.lower().replace("_", "-").replace(".", "-")
 
 
+# The shell blocks a reader runs (an unlabelled block too).
+_SHELL_FENCE = re.compile(
+    r"^```[ \t]*(?:bash|sh|shell|zsh|console|terminal)?[ \t]*\n(.*?)^```",
+    re.M | re.S,
+)
+_PIP = re.compile(
+    r"(?:^|[\s;&|(])(?:uv\s+)?(?:python3?\s+-m\s+)?pip3?\s+install\s+(.+)"
+)
+# pip options that take a value (the value is not a requirement).
+_VALUED = frozenset(
+    {
+        "-r",
+        "--requirement",
+        "-c",
+        "--constraint",
+        "-t",
+        "--target",
+        "-i",
+        "--index-url",
+        "--extra-index-url",
+        "-f",
+        "--find-links",
+        "-e",
+        "--editable",
+        "--prefix",
+        "--root",
+        "--python",
+        "--platform",
+    }
+)
+# A PEP 508 name, extras and version specifiers (no URL, path or marker).
+_SPEC = re.compile(
+    r"^([A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?)"
+    r"(?:\[([A-Za-z0-9._,\s-]*)\])?"
+    r"((?:\s*(?:===|==|!=|~=|<=|>=|<|>)\s*[A-Za-z0-9.*+!_-]+\s*,?)*)$"
+)
+
+
+def post_installs(markdown: str) -> list[tuple[str, frozenset[str], str]]:
+    """(distribution, extras, specifier) of each requirement the post's
+    shell blocks ``pip install``: options and their values, files, paths and
+    URLs left out (prose is not read)."""
+    out: list[tuple[str, frozenset[str], str]] = []
+    for block in _SHELL_FENCE.finditer(markdown):
+        for line in block.group(1).splitlines():
+            line = line.strip().removeprefix("$ ").split(" #")[0]
+            if not (m := _PIP.search(line)):
+                continue
+            words = re.split(r"\s*(?:&&|\|\||;|\|)\s*", m.group(1))[0].split()
+            skip = False
+            for word in words:
+                if skip:
+                    skip = False
+                    continue
+                word = word.strip("'\"")
+                if word.startswith("-"):
+                    skip = word in _VALUED
+                    continue
+                if (spec := _SPEC.match(word)) is None or word.endswith(
+                    (".txt", ".whl", ".gz", ".zip")
+                ):
+                    continue
+                extras = frozenset(
+                    e.strip().lower()
+                    for e in (spec.group(2) or "").split(",")
+                    if e.strip()
+                )
+                out.append((spec.group(1), extras, spec.group(3).replace(" ", "")))
+    return out
+
+
 def run_requirements(pins: Sequence[tuple[str, str]], markdown: str) -> list[str]:
     """What the sandbox installs before the post's code: the packages the
-    docs install at the run's versions (``pins``) and what the post tells
-    the reader to ``pip install``, with the extras the post names."""
-    asked: dict[str, set[str]] = {}
-    for name, extras in install_requirements(markdown):
-        asked.setdefault(_distribution(name), set()).update(extras)
-    def spec(name: str, extras: set[str]) -> str:
+    docs install at the run's versions (``pins``), with the extras the post
+    names, and the other packages the post's shell blocks ``pip install``,
+    with their version specifiers."""
+    asked: dict[str, tuple[str, set[str], str]] = {}
+    for name, extras, specifier in post_installs(markdown):
+        key = _distribution(name)
+        _, known, earlier = asked.get(key, (name, set(), ""))
+        asked[key] = (name, known | extras, earlier or specifier)
+
+    def named(name: str, extras: set[str]) -> str:
         return f"{name}[{','.join(sorted(extras))}]" if extras else name
 
-    out = [
-        f"{spec(name, asked.pop(_distribution(name), set()))}=={version}"
-        for name, version in pins
-    ]
-    return out + [spec(name, extras) for name, extras in asked.items()]
+    out = []
+    for name, version in pins:
+        _, wanted, _ = asked.pop(_distribution(name), (name, set(), ""))
+        out.append(f"{named(name, wanted)}=={version}")
+    return out + [named(n, e) + v for n, e, v in asked.values()]
 
 
-def program_script(codes: Sequence[str], *, block_timeout_s: int) -> str:
+def program_script(
+    codes: Sequence[str], *, block_timeout_s: int, mark: str = RESULT_MARK
+) -> str:
     """One Python program that runs ``codes`` in order in one namespace (a
     reader's session: state carries over, ``__name__`` is ``"__main__"``),
-    each under an alarm, printing each block's outcome as one JSON line after
-    :data:`RESULT_MARK`. A failing block's later statements are skipped, the
-    next block still runs (what it needs may be defined). A fresh
-    interpreter, not a notebook kernel: ``asyncio.run`` works as pasted."""
+    each under an alarm, writing each block's outcome as one JSON line after
+    ``mark`` (:data:`RESULT_MARK` and a per-run nonce, so the code cannot
+    print one). A failing block's later statements are skipped, the next
+    block still runs (what it needs may be defined). A fresh interpreter,
+    not a notebook kernel: ``asyncio.run`` works as pasted.
+
+    The outcomes go to a copy of the output descriptor taken before any
+    block runs (a block that replaces or closes ``sys.stdout`` cannot hide
+    them), each in one write; the timeout is a ``BaseException`` (an
+    ``except Exception`` retry loop does not swallow it)."""
     return f"""
-import json as _sl_json, signal as _sl_signal, sys as _sl_sys
+import json as _sl_json, os as _sl_os, signal as _sl_signal, sys as _sl_sys
 _SL_CODES = {list(codes)!r}
-class BlockTimeout(Exception):
+_SL_MARK = {mark!r}
+_sl_fd = _sl_os.dup(1)
+class BlockTimeout(BaseException):
     pass
 def _sl_alarm(signum, frame):
     raise BlockTimeout("the block ran over {block_timeout_s}s")
-_sl_signal.signal(_sl_signal.SIGALRM, _sl_alarm)
-_sl_ns = {{"__name__": "__main__"}}
+def _sl_text(e):
+    try:
+        return str(e)[:400]
+    except BaseException:
+        return "<unprintable>"
+import types as _sl_types
+_sl_main = _sl_types.ModuleType("__main__")
+_sl_main.__file__ = _sl_os.path.abspath(_sl_sys.argv[0] or "main.py")
+_sl_sys.modules["__main__"] = _sl_main
+_sl_ns = _sl_main.__dict__
 for _sl_i, _sl_code in enumerate(_SL_CODES, 1):
+    _sl_signal.signal(_sl_signal.SIGALRM, _sl_alarm)
     _sl_signal.alarm({block_timeout_s})
     try:
         exec(compile(_sl_code, f"<block {{_sl_i}}>", "exec"), _sl_ns)
         _sl_out = {{"index": _sl_i, "ok": True}}
     except BaseException as _sl_e:
-        _sl_out = {{
+        _sl_ok = isinstance(_sl_e, SystemExit) and _sl_e.code in (0, None)
+        _sl_out = {{"index": _sl_i, "ok": True}} if _sl_ok else {{
             "index": _sl_i,
             "ok": False,
             "error_type": type(_sl_e).__name__,
-            "error_module": type(_sl_e).__module__,
-            "message": str(_sl_e)[:400],
+            "error_module": str(getattr(type(_sl_e), "__module__", "")),
+            "message": _sl_text(_sl_e),
         }}
     finally:
         _sl_signal.alarm(0)
-    _sl_sys.stdout.flush()
-    print("\\n" + {RESULT_MARK!r} + _sl_json.dumps(_sl_out), flush=True)
+    try:
+        _sl_sys.stdout.flush()
+    except BaseException:
+        pass
+    _sl_os.write(
+        _sl_fd, ("\\n" + _SL_MARK + _sl_json.dumps(_sl_out) + "\\n").encode()
+    )
 """
 
 
-def read_outcomes(stdout: str) -> list[BlockRun]:
-    """The outcomes :func:`program_script` printed, in block order (fewer
-    than its blocks when it was killed)."""
+def read_outcomes(stdout: str, mark: str = RESULT_MARK) -> list[BlockRun]:
+    """The outcomes :func:`program_script` wrote after ``mark``, in block
+    order (fewer than its blocks when it was killed); a line that does not
+    parse or is out of order is skipped."""
     out: list[BlockRun] = []
     for line in stdout.splitlines():
-        _, mark, rest = line.partition(RESULT_MARK)
-        if not mark:
+        _, found, rest = line.partition(mark)
+        if not found:
             continue
         try:
             run = BlockRun.model_validate(json.loads(rest))
@@ -210,6 +309,12 @@ def read_outcomes(stdout: str) -> list[BlockRun]:
         if run.index == len(out) + 1:
             out.append(run)
     return out
+
+
+def run_mark(nonce: str) -> str:
+    """The outcome mark of one run (``nonce``: random, unknown to the
+    code)."""
+    return f"{RESULT_MARK}{nonce}@@"
 
 
 def verdict(run: BlockRun, product_modules: Collection[str]) -> Verdict:
@@ -222,14 +327,18 @@ def verdict(run: BlockRun, product_modules: Collection[str]) -> Verdict:
     if run.error_type in _SOURCE_ERRORS:
         return "code"
     if run.error_type in ("ModuleNotFoundError", "ImportError"):
-        # A product module the post imports wrongly is the code's; a module
-        # the sandbox lacks (one the post never installs) is the
-        # environment's.
+        products = {m.lower() for m in product_modules}
         named = message.split("'")[1] if message.count("'") >= 2 else ""
         top = named.split(".")[0]
-        if top in product_modules or (
-            run.error_type == "ImportError" and "cannot import name" in message
-        ):
+        if run.error_type == "ImportError" and "cannot import name" in message:
+            # "cannot import name 'X' from 'pkg.mod' (...)": a product's.
+            quoted = message.split("'")
+            source = quoted[3].split(".")[0] if len(quoted) > 3 else ""
+            return "code" if source in products else "unclear"
+        # A product's submodule the post names wrongly is the code's; the
+        # product itself missing is an install that failed (or a sandbox
+        # that installs nothing).
+        if top in products and named != top:
             return "code"
         return "environment"
     if run.error_type in ("TypeError", "AttributeError"):

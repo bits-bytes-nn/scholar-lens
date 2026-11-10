@@ -34,6 +34,7 @@ import asyncio
 import json
 import logging
 import re
+import uuid
 from collections.abc import Awaitable, Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, TypeVar, cast
@@ -128,6 +129,7 @@ from scholar_lens.domain.program_run import (
     program_blocks,
     program_script,
     read_outcomes,
+    run_mark,
     run_requirements,
 )
 from scholar_lens.domain.prompts.rules import (
@@ -282,6 +284,8 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
         # Running the post's code in a sandbox (with the spec's code trace;
         # None: the code is read, not run).
         self.program_runs = program_runs
+        # Why the stage being computed must not be saved ("" to save it).
+        self._unsaved = ""
         # The model each role runs on (id, effort, thinking, fallback): part
         # of the key of every stage the role produces.
         self.roles: Mapping[ModelRole, RoleSpec] = dict(roles or {})
@@ -370,8 +374,15 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
                 logger.info("Stage %s loaded from its checkpoint %s.", stage, key)
                 return value
         mark = self.state_mark()
+        self._unsaved = ""
         value = await compute()
         data = dump(value)
+        if self._unsaved:
+            # A stage that could not do all it should (a sandbox that did
+            # not run) runs again on the next attempt.
+            logger.info("Stage %s not saved: %s.", stage, self._unsaved)
+            self._upstream = input_hash(key, json.loads(json.dumps(data)))
+            return value
         self.checkpoints.save(
             key,
             Checkpoint(
@@ -1210,7 +1221,9 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
                 + " | ".join(f"{t}: {p}"[:200] for t, p in left[:5])
             )
         elif ran is not None:
-            if fixed is not written and ran.findings:
+            # The fixes may have changed the code (any finding's, not only
+            # the run's): what is noted is the last code's run.
+            if self._program_code(fixed) != self._program_code(written):
                 ran = await self.run_program(fixed)
             if ran is not None:
                 self.program_run_notes(ran)
@@ -1271,6 +1284,7 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
         if runs is None:
             return None
         return [
+            runs.runner.name,
             sorted(runs.pins),
             sorted(runs.modules),
             runs.block_timeout_s,
@@ -1289,8 +1303,11 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
         blocks = program_blocks(self._program_sections(written))
         if not any(checked for _, _, checked in blocks):
             return None
+        mark = run_mark(uuid.uuid4().hex)
         script = program_script(
-            [code for _, code, _ in blocks], block_timeout_s=runs.block_timeout_s
+            [code for _, code, _ in blocks],
+            block_timeout_s=runs.block_timeout_s,
+            mark=mark,
         )
         requirements = run_requirements(runs.pins, "\n\n".join(md for _, md in written))
         try:
@@ -1299,16 +1316,18 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
             )
         except SandboxUnavailable as e:
             logger.warning("The code sandbox is unavailable: %s", e)
+            self._unsaved = "the code sandbox was unavailable"
             self._note_once(f"The code examples were not run: {e}")
             return None
         if result.failure:
             logger.warning("The code sandbox did not run the code: %s", result.failure)
+            self._unsaved = "the code sandbox did not run the code"
             self._note_once(f"The code examples were not run: {result.failure}")
             return None
         if result.warning:
             logger.warning("Code sandbox: %s", result.warning)
             self._note_once(f"Code sandbox: {result.warning}")
-        ran = judge_run(blocks, read_outcomes(result.stdout), runs.modules)
+        ran = judge_run(blocks, read_outcomes(result.stdout, mark), runs.modules)
         logger.info(
             "Code run in the sandbox: %d of %d block(s), %d failure(s)%s.",
             ran.blocks_run,
@@ -1317,6 +1336,9 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
             f"; limited: {ran.limited}" if ran.limited else "",
         )
         return ran
+
+    def _program_code(self, written: Sequence[tuple[SectionT, str]]) -> list[str]:
+        return [code for _, code, _ in program_blocks(self._program_sections(written))]
 
     def _note_once(self, note: str) -> None:
         if (note := note[:300]) not in self.notes:

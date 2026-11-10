@@ -11,6 +11,7 @@ from typing import Any, get_args
 
 import pytest
 
+from scholar_lens.application.checkpoints import Checkpoints
 from scholar_lens.application.evidence_writer import (
     ClaimCheck,
     Edit,
@@ -1220,6 +1221,8 @@ class _TypoFix:
 class _LocalRunner:
     """Runs the program here (the test's own code) as the sandbox would."""
 
+    name = "local"
+
     def __init__(self, *, down: bool = False) -> None:
         self.programs: list[str] = []
         self.down = down
@@ -1308,3 +1311,52 @@ def test_an_unavailable_sandbox_is_a_note_not_a_failure() -> None:
     out = asyncio.run(engine.review_post(_outline(), ledger, written))
     assert out == written
     assert [n for n in engine.notes if "were not run" in n and "accessDenied" in n]
+
+
+class _RepetitionEditsCode(_TypoFix):
+    """The repetition read names the running section; its fix breaks the
+    block's call (the static check still reads it clean)."""
+
+    async def structured(self, *, system, prompt, schema, **kw: Any):  # type: ignore[no-untyped-def]
+        if schema is PostReview and "repetition only" in system:
+            return PostReview(
+                issues=[
+                    PostFinding(
+                        section="클라이언트 실행", problem="Repeats.", fix="Trim."
+                    )
+                ]
+            )
+        if schema is SectionEdits:
+            self.fixes.append(prompt)
+            return SectionEdits(
+                edits=[Edit(find="client.run()", replace="client.go()")]
+            )
+        return await super().structured(
+            system=system, prompt=prompt, schema=schema, **kw
+        )
+
+
+def test_code_another_fix_changes_is_run_again() -> None:
+    model, runner = _RepetitionEditsCode(), _LocalRunner()
+    engine = _run_engine(model, runner)
+    ledger = _ledger()
+    written = _typo_post(engine, ledger)
+    written[1] = (written[1][0], written[1][1].replace(_TYPO, "client.run()"))
+    asyncio.run(engine.review_post(_outline(), ledger, written))
+    assert len(runner.programs) == 2
+    assert [n for n in engine.notes if n.startswith("Code that fails when run")]
+
+
+def test_a_review_the_sandbox_could_not_check_is_not_saved() -> None:
+    store = _DictStore()
+    engine = _run_engine(_TypoFix(), _LocalRunner(down=True))
+    engine.checkpoints = Checkpoints(store, engine.spec.name)  # type: ignore[arg-type]
+    ledger = _ledger()
+    written = _typo_post(engine, ledger)
+    asyncio.run(engine.reviewed(_outline(), ledger, written))
+    assert not [k for k in store.blobs if "review" in k]
+    engine = _run_engine(_TypoFix(), _LocalRunner())
+    engine.checkpoints = Checkpoints(store, engine.spec.name)  # type: ignore[arg-type]
+    written = _typo_post(engine, ledger)
+    asyncio.run(engine.reviewed(_outline(), ledger, written))
+    assert [k for k in store.blobs if "review" in k]

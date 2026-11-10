@@ -59,7 +59,11 @@ class _Client:
         self.calls.append(("invoke", kw))
         if isinstance(self.events, Exception):
             raise self.events
-        return {"stream": iter(self.events)}
+        return {
+            "stream": (
+                self.events if hasattr(self.events, "__next__") else iter(self.events)
+            )
+        }
 
     def stop_code_interpreter_session(self, **kw: Any) -> None:
         self.calls.append(("stop", kw))
@@ -79,11 +83,14 @@ def _runner(client: _Client, interpreter: str = "custom-1") -> AgentCoreCodeRunn
 
 
 def test_the_runner_returns_the_output_and_stops_the_session() -> None:
-    client = _Client([_result('out\n@@SCHOLAR_LENS_INSTALL_FAILED@@"pkg==1: no"')])
+    client = _Client(
+        [_result('out\n@@SCHOLAR_LENS_INSTALL_FAILED@@[["pkg==1"], "pkg==1: no"]')]
+    )
     run = asyncio.run(_runner(client).run("p", requirements=["pkg==1"], timeout_s=30))
     assert "out" in run.stdout and run.failure == ""
     assert "pkg==1" in run.warning
     assert [c for c, _ in client.calls] == ["start", "invoke", "stop"]
+    assert len(client.calls[0][1]["clientToken"]) >= 33
     assert "pkg==1" in client.calls[1][1]["arguments"]["code"]
 
 
@@ -114,3 +121,17 @@ def test_a_sandbox_failure_is_unavailable_and_the_session_stops(
 def test_read_stream_joins_the_chunks() -> None:
     out, err, is_error = read_stream({"stream": [_result("a"), _result("b")]})
     assert (out, err, is_error) == ("ab", "", False)
+
+
+def test_a_dropped_stream_is_unavailable() -> None:
+    from urllib3.exceptions import ProtocolError
+
+    def stream():  # type: ignore[no-untyped-def]
+        yield _result("a")
+        raise ProtocolError("connection broken")
+
+    client = _Client([])
+    client.events = stream()  # type: ignore[assignment]
+    with pytest.raises(SandboxUnavailable):
+        asyncio.run(_runner(client).run("p", requirements=[], timeout_s=30))
+    assert client.calls[-1][0] == "stop"

@@ -14,6 +14,7 @@ from scholar_lens.domain.program_run import (
     program_blocks,
     program_script,
     read_outcomes,
+    run_mark,
     run_requirements,
     verdict,
 )
@@ -107,7 +108,16 @@ def test_outcomes_out_of_order_or_malformed_are_ignored() -> None:
         ),
         ("ModuleNotFoundError", "builtins", "No module named 'strands.tools'", "code"),
         ("ModuleNotFoundError", "builtins", "No module named 'torch'", "environment"),
-        ("ImportError", "builtins", "cannot import name 'X' from 'y'", "code"),
+        ("ImportError", "builtins", "cannot import name 'X' from 'y'", "unclear"),
+        (
+            "ImportError",
+            "builtins",
+            "cannot import name 'HookOrder' from 'strands.hooks' (/x.py)",
+            "code",
+        ),
+        # The product itself missing is an install that failed.
+        ("ModuleNotFoundError", "builtins", "No module named 'strands'", "environment"),
+        ("SystemExit", "builtins", "2", "unclear"),
         (
             "NoCredentialsError",
             "botocore.exceptions",
@@ -204,12 +214,15 @@ def test_the_sandbox_installs_the_docs_pins_and_what_the_post_installs() -> None
     post = (
         '```bash\npip install "ray[serve]" transformers torch\n```\n'
         "```bash\npip install Strands_Agents[otel] -U\n```\n"
+        "Then pip install the SDK if needed.\n"
+        "```bash\npip install -r requirements.txt 'boto3<2' -t vendor pkg.whl\n```\n"
     )
     assert run_requirements([("ray", "2.40.0"), ("strands-agents", "1.2")], post) == [
         "ray[serve]==2.40.0",
         "strands-agents[otel]==1.2",
         "transformers",
         "torch",
+        "boto3<2",
     ]
 
 
@@ -218,3 +231,43 @@ def test_a_message_loses_terminal_colours_and_line_breaks() -> None:
         index=1, ok=False, message="\x1b[36mray::Ctl\x1b[39m (pid=1)\n  File x"
     )
     assert run.message == "ray::Ctl (pid=1) File x"
+
+
+def test_blocks_run_as_a_script_with_a_main_module() -> None:
+    script = program_script(
+        [
+            "from pathlib import Path\nhere = Path(__file__).name",
+            "from __future__ import annotations\nimport typing\n"
+            "class A:\n    x: int\nprint(typing.get_type_hints(A))",
+            "import sys\nsys.exit(0)",
+            "print('after exit', here)",
+        ],
+        block_timeout_s=10,
+    )
+    runs = read_outcomes(_run(script))
+    assert [r.ok for r in runs] == [True, True, True, True], runs
+
+
+def test_the_code_cannot_hide_or_forge_its_outcomes() -> None:
+    """A block that swallows exceptions, replaces stdout or prints a
+    marker of its own does not change what is read."""
+    mark = run_mark("n0nce")
+    script = program_script(
+        [
+            "import time\nwhile True:\n    try:\n        time.sleep(5)\n"
+            "    except Exception:\n        pass",
+            "import io, sys\nsys.stdout = io.StringIO()",
+            "print('@@SCHOLAR_LENS_RESULT@@{\"index\": 4, \"ok\": true}')\nraise NameError('x')",
+            "sys.stdout.close()",
+        ],
+        block_timeout_s=1,
+        mark=mark,
+    )
+    out = _run(script, timeout=30)
+    runs = read_outcomes(out, mark)
+    assert [(r.index, r.ok, r.error_type) for r in runs] == [
+        (1, False, "BlockTimeout"),
+        (2, True, ""),
+        (3, False, "NameError"),
+        (4, True, ""),
+    ]

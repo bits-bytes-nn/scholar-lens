@@ -368,6 +368,12 @@ class CodeRunner(Protocol):
     """An isolated sandbox without the run's credentials that runs a Python
     program as a reader would (docs/engine.md, 4.7)."""
 
+    @property
+    def name(self) -> str:
+        """Which sandbox (a checkpoint input: another one may judge the
+        code differently)."""
+        ...
+
     async def run(
         self, program: str, *, requirements: Sequence[str], timeout_s: int
     ) -> SandboxRun:

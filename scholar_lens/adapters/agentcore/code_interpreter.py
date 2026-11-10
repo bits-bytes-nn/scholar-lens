@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import uuid
 from collections.abc import Sequence
 from typing import Any
@@ -25,6 +26,7 @@ from botocore.exceptions import (
     NoCredentialsError,
     TokenRetrievalError,
 )
+from urllib3.exceptions import HTTPError
 
 from scholar_lens.adapters.aws.session import AwsSession
 from scholar_lens.application.ports import SandboxRun, SandboxUnavailable
@@ -38,6 +40,7 @@ SYSTEM_INTERPRETER = "aws.codeinterpreter.v1"
 # The time pip may take before the program runs.
 INSTALL_TIMEOUT_S = 300
 _INSTALL_MARK = "@@SCHOLAR_LENS_INSTALL_FAILED@@"
+_ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 # A session lives a little longer than the work it is started for.
 _SESSION_MARGIN_S = 120
 _MAX_SESSION_S = 28_800
@@ -49,34 +52,42 @@ def driver_code(program: str, requirements: Sequence[str], timeout_s: int) -> st
     the first import of what is missing still run) and prints the install
     failure and the program's outcome lines only."""
     return f"""
-import json, subprocess, sys, tempfile, time
+import json, os, subprocess, sys, tempfile, time
 _reqs = {list(requirements)!r}
 _failed = []
+_detail = []
 _deadline = time.monotonic() + {INSTALL_TIMEOUT_S}
 for _req in _reqs:
     # One at a time: a requirement that cannot be installed leaves the rest.
     _left = _deadline - time.monotonic()
     if _left <= 0:
-        _failed.append(_req + ": no time left")
+        _failed.append(_req)
+        _detail.append(_req + ": no time left")
         continue
     try:
         _p = subprocess.run(
             [sys.executable, "-m", "pip", "install", "--quiet",
              "--disable-pip-version-check", _req],
-            capture_output=True, text=True, timeout=_left,
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=_left,
         )
         if _p.returncode:
-            _failed.append(_req + ": " + (_p.stderr or _p.stdout)[-200:])
+            _failed.append(_req)
+            _detail.append(_req + ": " + (_p.stderr or _p.stdout)[-200:])
     except subprocess.TimeoutExpired:
-        _failed.append(_req + ": timed out")
+        _failed.append(_req)
+        _detail.append(_req + ": timed out")
 if _failed:
-    print({_INSTALL_MARK!r} + json.dumps("; ".join(_failed)))
-with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False) as _f:
+    print({_INSTALL_MARK!r} + json.dumps([_failed, "; ".join(_detail)]))
+with tempfile.NamedTemporaryFile(
+    "w", suffix=".py", delete=False, encoding="utf-8"
+) as _f:
     _f.write({program!r})
 try:
     _out = subprocess.run(
         [sys.executable, _f.name], capture_output=True, text=True,
-        timeout={timeout_s}, cwd=tempfile.mkdtemp(),
+        encoding="utf-8", errors="replace", timeout={timeout_s},
+        cwd=tempfile.mkdtemp(), env={{**os.environ, "PYTHONIOENCODING": "utf-8"}},
     ).stdout
 except subprocess.TimeoutExpired as _e:
     _out = _e.stdout or ""
@@ -116,6 +127,10 @@ class AgentCoreCodeRunner:
         self.session = session
         self.interpreter_id = interpreter_id
 
+    @property
+    def name(self) -> str:
+        return f"agentcore:{self.interpreter_id}"
+
     async def run(
         self, program: str, *, requirements: Sequence[str], timeout_s: int
     ) -> SandboxRun:
@@ -137,6 +152,16 @@ class AgentCoreCodeRunner:
             config=BotoConfig(
                 retries={"mode": "standard", "max_attempts": 3},
                 connect_timeout=10,
+                read_timeout=60,
+            ),
+        )
+        # The invocation is not retried: a retry would run the install and
+        # the program again in a session that may expire meanwhile.
+        runner = self.session.client(
+            "bedrock-agentcore",
+            config=BotoConfig(
+                retries={"mode": "standard", "max_attempts": 1},
+                connect_timeout=10,
                 read_timeout=work_s + 60,
             ),
         )
@@ -144,6 +169,8 @@ class AgentCoreCodeRunner:
             session_id = client.start_code_interpreter_session(
                 codeInterpreterIdentifier=self.interpreter_id,
                 name=f"scholar-lens-{uuid.uuid4().hex[:12]}",
+                # A retried start reuses the session it may have created.
+                clientToken=uuid.uuid4().hex + uuid.uuid4().hex[:8],
                 sessionTimeoutSeconds=min(work_s + _SESSION_MARGIN_S, _MAX_SESSION_S),
             )["sessionId"]
         except (NoCredentialsError, TokenRetrievalError):
@@ -151,7 +178,7 @@ class AgentCoreCodeRunner:
         except (ClientError, BotoCoreError) as e:
             raise SandboxUnavailable(f"could not start a session: {e}") from e
         try:
-            response = client.invoke_code_interpreter(
+            response = runner.invoke_code_interpreter(
                 codeInterpreterIdentifier=self.interpreter_id,
                 sessionId=session_id,
                 name="executeCode",
@@ -163,7 +190,9 @@ class AgentCoreCodeRunner:
             stdout, stderr, is_error = read_stream(response)
         except (NoCredentialsError, TokenRetrievalError):
             raise
-        except (ClientError, BotoCoreError) as e:
+        except (ClientError, BotoCoreError, HTTPError) as e:
+            # HTTPError: the event stream reads urllib3 directly (a read
+            # timeout or a dropped connection mid-stream).
             raise SandboxUnavailable(f"could not run the code: {e}") from e
         finally:
             try:
@@ -179,6 +208,7 @@ class AgentCoreCodeRunner:
         warning = ""
         for line in stdout.splitlines():
             if line.startswith(_INSTALL_MARK):
-                detail = json.loads(line[len(_INSTALL_MARK) :])
-                warning = f"could not install {str(detail)[:280]}"
+                _failed, detail = json.loads(line[len(_INSTALL_MARK) :])
+                plain = " ".join(_ANSI.sub("", str(detail)).split())
+                warning = f"could not install {plain[:280]}"
         return SandboxRun(stdout=stdout, warning=warning)
