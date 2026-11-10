@@ -168,6 +168,30 @@ def check_pr_token(context: AwsRunContext, create_pr: bool) -> None:
         )
 
 
+def with_overrides(config: Config, request: JobRequest) -> Config:
+    """``config`` with the request's per-run overrides: the writing engine of
+    a review or summary, and the cost ceiling of the kind it writes."""
+    section = {
+        "review": "explanation",
+        "summarize": "summary",
+        "guide": "tech_guide",
+        "survey_write": "survey",
+    }.get(request.kind)
+    if section is None:
+        return config
+    update: dict[str, object] = {}
+    if request.engine is not None:
+        update["engine"] = request.engine
+    if request.max_cost_usd is not None:
+        key = "write_max_cost_usd" if section == "survey" else "max_cost_usd"
+        update[key] = request.max_cost_usd
+    if not update:
+        return config
+    logger.info("Run overrides of %s: %s", section, update)
+    part = getattr(config, section).model_copy(update=update)
+    return config.model_copy(update={section: part})
+
+
 def run_job(request: JobRequest, *, job_id: str | None = None) -> JobResult:
     """Run ``request`` and return its result; never raises for pipeline errors
     (a ``SystemExit``/``KeyboardInterrupt`` still propagates after cleanup)."""
@@ -175,7 +199,7 @@ def run_job(request: JobRequest, *, job_id: str | None = None) -> JobResult:
     try:
         # Resolved before the run: an except clause that imports could raise.
         rejected_errors = _rejected_input_errors()
-        context = build_context(Config.load())
+        context = build_context(with_overrides(Config.load(), request))
     except Exception as e:  # noqa: BLE001 - reported, the job cannot start
         result.error = f"{type(e).__name__}: {e}"
         logger.error("Run could not start: %s", e)

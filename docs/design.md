@@ -100,7 +100,7 @@ domain (순수 코드: 모델, 규칙, 검증, Markdown, 프롬프트 본문)
 
 | 명령 | 동작 |
 | --- | --- |
-| `review SOURCE`, `summarize SOURCE` | 논문 산출물을 로컬에서 실행하거나 `--remote`로 제출 |
+| `review SOURCE`, `summarize SOURCE` | 논문 산출물을 로컬에서 실행하거나 `--remote`로 제출. `--engine sections|evidence`와 `--max-cost-usd`는 그 실행의 설정을 덮어씀(`entrypoints/runtime.py::with_overrides`; `guide`, `survey write`도 `--max-cost-usd`를 받음) |
 | `guide [URL...] [--reference URL]...` | 기술 가이드를 로컬에서 실행하거나 `--remote`로 제출(문서 URL과 참고 자료 URL 중 하나 이상) |
 | `survey plan TOPIC [--paper ID]... [--reference URL]... [--since Y] [--until Y]` | 서베이 계획 파일을 만들거나 `--remote`로 제출(4.3절). 글을 쓰지 않으므로 `--no-pr`가 없습니다 |
 | `survey write --plan PATH_OR_S3_URI [--no-pr]` | 계획 파일로 서베이 글을 쓰거나 `--remote`로 제출(4.3절). `--remote`이면 로컬 계획을 먼저 `<s3_prefix>/surveys/<slug>/plan-<sha256 앞 16자>.json`에 올리고(내용별 키라 덮어쓰지 않음, `application/use_cases/survey_write.py::stage_plan_for_batch`) 그 URI로 제출합니다 |

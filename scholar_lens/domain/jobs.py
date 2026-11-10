@@ -73,6 +73,11 @@ class JobRequest(BaseModel):
     plan: str | None = None
     # Opens a blog PR when the GitHub integration is enabled in config.
     create_pr: bool = True
+    # Per-run overrides of the configuration (a Batch job otherwise runs on
+    # the config.yaml of the last deploy): review / summarize the writing
+    # engine; every kind that writes a post its cost ceiling (USD).
+    engine: Literal["sections", "evidence"] | None = None
+    max_cost_usd: float | None = Field(default=None, gt=0)
 
     @model_validator(mode="after")
     def _check_inputs(self) -> JobRequest:
@@ -90,8 +95,12 @@ class JobRequest(BaseModel):
                 f"A {self.kind} request takes no 'parse_pdf', 'discover_subpages' "
                 "or 'fresh_sources'."
             )
-        if self.kind == "survey_plan" and self.fresh:
-            raise ValueError("A survey_plan request takes no 'fresh'.")
+        if self.kind == "survey_plan" and (self.fresh or self.max_cost_usd):
+            raise ValueError(
+                "A survey_plan request takes no 'fresh' or 'max_cost_usd'."
+            )
+        if self.engine and self.kind not in ("review", "summarize"):
+            raise ValueError("Only a review or summary request takes 'engine'.")
         if self.kind == "survey_write":
             if not (self.plan and self.plan.strip()):
                 raise ValueError("A survey_write request needs a 'plan'.")

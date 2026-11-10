@@ -93,6 +93,7 @@ poetry run python -m scholar_lens guide https://docs.example.dev/ --fresh  # 모
 poetry run python -m scholar_lens publish papers/guide-<slug>/<slug>.rejected.md  # 고친 뒤 게시
 poetry run python -m scholar_lens publish "s3://<bucket>/<s3_prefix>/posts/<date>-<slug>.md"
 poetry run python -m scholar_lens review 2106.09685 --remote     # AWS Batch에 제출
+poetry run python -m scholar_lens review 2106.09685 --remote --engine evidence --max-cost-usd 15  # 실행마다 덮어쓰기
 poetry run python -m scholar_lens status <job-id> --wait         # 원격 작업 조회
 poetry run python -m scholar_lens cancel <job-id>                # 원격 작업 중지
 poetry run python -m scholar_lens costs --since 2026-11-01 --by stage --billed  # Batch 실행 비용
@@ -168,6 +169,7 @@ actionlint                                       # GitHub 워크플로 검사
 
 ## 변경 이력
 
+- 2026-11-10: `--engine sections|evidence`(review, summarize)와 `--max-cost-usd`(review, summarize, guide, survey write)로 한 실행의 설정을 덮어씁니다. 다른 엔진이나 비용 상한을 시험하려고 Batch를 다시 배포할 필요가 없습니다. sections 엔진 리뷰는 TL;DR과 마무리 절의 주장을 논문과 대조해 한 번 고치고(문제가 줄 때만 채택), 배경 설명 절을 분량의 15% 안으로 줄입니다.
 - 2026-11-10: 단계 저장본을 검사 코드 버전(`domain` 패키지와 엔진 모듈 소스의 해시) 아래에 둡니다. 검사·정리·편집 규칙을 바꾼 배포 뒤에는 이전 코드가 만든 단계로 재개하지 않습니다. 근거 읽기 캐시는 그대로 쓰며, 그런 배포 뒤 입력마다 첫 실행은 단계를 한 번 다시 계산합니다.
 - 2026-11-09: 근거 장부 엔진의 개요 저장본 키에 다시 묻는 개요 검사(핵심 대상, 문장형 제목, 리뷰가 빠뜨린 원문 절)의 버전이 들어갑니다. 이 업그레이드 뒤 재개하는 실행은 개요와 그 뒤 단계를 한 번 다시 계산합니다. 서베이 비교표는 수치가 있는 명사구 결과 칸만 보이고, 나머지 수치는 해당 절에 남습니다.
 - 2026-11-09: `cancel <job-id>`로 원격 작업을 멈추고, `status`는 작업이 시작된 뒤 CloudWatch `log_group`과 `log_stream`을 알려 줍니다. 가이드 코드 검사는 글이 정의한 함수·클래스에 맞지 않는 호출(빠진 필수 인자, 없는 키워드)도 잡습니다.

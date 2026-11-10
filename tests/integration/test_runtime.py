@@ -907,3 +907,45 @@ def test_a_pr_run_without_a_token_fails_before_any_model_call(
     )
     context.config.resources.github.enabled = False
     check_pr_ready(context, JobRequest(kind="summarize", source="2106.09685"))
+
+
+def test_a_request_overrides_the_engine_and_cost_ceiling_for_its_run() -> None:
+    from scholar_lens.configs import Config
+    from scholar_lens.domain.jobs import JobRequest
+
+    config = Config()
+    review = runtime.with_overrides(
+        config,
+        JobRequest(
+            kind="review", source="2106.09685", engine="evidence", max_cost_usd=5
+        ),
+    )
+    assert review.explanation.engine == "evidence"
+    assert review.explanation.max_cost_usd == 5
+    assert config.explanation.engine == "sections"  # the loaded config is untouched
+    survey = runtime.with_overrides(
+        config, JobRequest(kind="survey_write", plan="p.json", max_cost_usd=20)
+    )
+    assert survey.survey.write_max_cost_usd == 20
+    assert (
+        runtime.with_overrides(
+            config, JobRequest(kind="guide", urls=["https://d.dev/"])
+        )
+        is config
+    )
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"kind": "guide", "urls": ["https://d.dev/"], "engine": "evidence"},
+        {"kind": "survey_plan", "topic": "t", "max_cost_usd": 3},
+    ],
+)
+def test_overrides_a_kind_cannot_take_are_rejected(fields: dict) -> None:
+    from pydantic import ValidationError
+
+    from scholar_lens.domain.jobs import JobRequest
+
+    with pytest.raises(ValidationError):
+        JobRequest(**fields)

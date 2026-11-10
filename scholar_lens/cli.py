@@ -151,6 +151,16 @@ def build_parser() -> argparse.ArgumentParser:
             help="Do not open a blog pull request (the post is still saved).",
         )
         sub.add_argument(
+            "--max-cost-usd",
+            type=float,
+            default=None,
+            metavar="USD",
+            help=(
+                "This run's cost ceiling instead of the configured one (a Batch "
+                "job otherwise uses the config.yaml of the last deploy)."
+            ),
+        )
+        sub.add_argument(
             "--fresh",
             action="store_true",
             help=(
@@ -168,6 +178,12 @@ def build_parser() -> argparse.ArgumentParser:
         sub = commands.add_parser(kind, help=help_text, description=help_text)
         sub.add_argument(
             "source", help="arXiv id (e.g. 2106.09685) or a paper PDF URL."
+        )
+        sub.add_argument(
+            "--engine",
+            choices=("sections", "evidence"),
+            default=None,
+            help="This run's writing engine instead of the configured one.",
         )
         sub.add_argument(
             "--repo-url",
@@ -417,6 +433,7 @@ def _request_from_args(args: argparse.Namespace) -> JobRequest:
             plan=args.plan,
             create_pr=args.create_pr,
             fresh=args.fresh,
+            max_cost_usd=args.max_cost_usd,
         )
     if args.command == "survey":
         return JobRequest(
@@ -437,6 +454,7 @@ def _request_from_args(args: argparse.Namespace) -> JobRequest:
             fresh_sources=args.fresh_sources,
             create_pr=args.create_pr,
             fresh=args.fresh,
+            max_cost_usd=args.max_cost_usd,
         )
     return JobRequest(
         kind=args.command,
@@ -445,6 +463,8 @@ def _request_from_args(args: argparse.Namespace) -> JobRequest:
         parse_pdf=args.parse_pdf,
         create_pr=args.create_pr,
         fresh=args.fresh,
+        engine=args.engine,
+        max_cost_usd=args.max_cost_usd,
     )
 
 

@@ -93,6 +93,7 @@ poetry run python -m scholar_lens guide https://docs.example.dev/ --fresh  # rec
 poetry run python -m scholar_lens publish papers/guide-<slug>/<slug>.rejected.md  # after editing it
 poetry run python -m scholar_lens publish "s3://<bucket>/<s3_prefix>/posts/<date>-<slug>.md"
 poetry run python -m scholar_lens review 2106.09685 --remote     # submit to AWS Batch
+poetry run python -m scholar_lens review 2106.09685 --remote --engine evidence --max-cost-usd 15  # per-run overrides
 poetry run python -m scholar_lens status <job-id> --wait         # poll a remote job (logs: log_group, log_stream)
 poetry run python -m scholar_lens cancel <job-id>                # stop a remote job
 poetry run python -m scholar_lens costs --since 2026-11-01 --by stage --billed  # what Batch runs cost
@@ -168,6 +169,7 @@ actionlint                                       # lint the GitHub workflows
 
 ## Changelog
 
+- 2026-11-10: `--engine sections|evidence` (review, summarize) and `--max-cost-usd` (review, summarize, guide, survey write) override the configuration for one run, so a Batch job no longer needs a redeploy to try another engine or ceiling. The sections engine's review checks its TL;DR and closing claims against the paper (one fix, kept when it has fewer problems) and caps background sections at 15% of its length budget.
 - 2026-11-10: stage checkpoints are kept under a version of the check code (a hash of the domain package and the engine modules), so a deploy that changes checks, repairs or edit rules never resumes from a stage the old code made; the reading cache is unaffected. The first run of each input after such a deploy recomputes its stages once.
 - 2026-11-09: the evidence engines' outline checkpoints include the version of the outline checks asked again for (key targets, sentence titles, source sections a review leaves out): runs resumed after this upgrade recompute their outline and later stages once. A survey comparison table shows only result cells that state a number in a noun phrase; other numbers stay in their section.
 - 2026-11-09: `cancel <job-id>` stops a remote job, `status` reports its CloudWatch `log_group` and `log_stream` once it started, and the guide code check flags a call that does not match the post's own definition of a function or class (missing required arguments, unknown keywords).

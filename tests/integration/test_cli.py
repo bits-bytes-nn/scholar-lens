@@ -574,3 +574,14 @@ def test_cancel_reports_the_job_and_errors_as_json(
     ):
         assert cli.main(["cancel", "j"]) == cli.EXIT_ERROR
     assert _output(capsys)["status"] == "error"
+
+
+def test_engine_and_cost_ceiling_flags_reach_the_request() -> None:
+    args = cli.parse_args(
+        ["review", "2106.09685", "--engine", "evidence", "--max-cost-usd", "7.5"]
+    )
+    request = cli._request_from_args(args)
+    assert request.engine == "evidence" and request.max_cost_usd == 7.5
+    # Sent to Batch only when set: an older worker sees no new field otherwise.
+    plain = cli._request_from_args(cli.parse_args(["review", "2106.09685"]))
+    assert "engine" not in plain.model_dump(exclude_defaults=True)
