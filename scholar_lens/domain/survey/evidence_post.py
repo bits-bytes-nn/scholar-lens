@@ -285,13 +285,15 @@ def result_cell(cell: str) -> bool:
     )
 
 
-# Section headings whose numbers set the scene, not the paper's results
-# (a product's adoption, a prior work's figure): the whole heading is one
-# such title, or two joined ("Background and Motivation"), after an
-# optional number; "Introduction and Results" is not one.
+# Section headings whose numbers are other works' (related work,
+# background, preliminaries): the whole heading is one such title, or two
+# joined ("Background and Related Work"), after an optional number. An
+# introduction is not one: a supporting paper is read from its abstract,
+# introduction and conclusion, where its own results are; the reader keeps
+# a number it only cites out of the number records.
 _BACKGROUND_TITLE = (
-    r"(?:introduction|background|motivation|related works?|prior work|"
-    r"preliminar(?:y|ies)|서론|배경|관련 연구|연구 배경|동기)"
+    r"(?:background|related works?|prior work|preliminar(?:y|ies)|"
+    r"배경|관련 연구|연구 배경)"
 )
 _BACKGROUND_SECTION = re.compile(
     rf"\s*(?:[\dIVX]+(?:\.\d+)*\.?\s+)?{_BACKGROUND_TITLE}"
@@ -302,8 +304,8 @@ _BACKGROUND_SECTION = re.compile(
 
 def result_evidence(item: Evidence) -> bool:
     """Whether ``item`` can stand in the comparison table's results column:
-    a number of the paper's own results (not one its introduction, background
-    or related work cites) whose cell :func:`result_cell` accepts."""
+    a number outside the paper's related-work and background sections whose
+    cell :func:`result_cell` accepts."""
     return (
         item.kind == "number"
         and result_cell(item.cell)

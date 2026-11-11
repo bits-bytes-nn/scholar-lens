@@ -1485,10 +1485,12 @@ def test_a_comparison_cell_states_a_number_and_is_no_plain_sentence() -> None:
         ("4 Experiments", True),
         ("Introduction and Results", True),
         ("5.2 Background noise robustness", True),
-        ("1 Introduction", False),
+        # A supporting paper's own results are often in its introduction.
+        ("1 Introduction", True),
         ("2 Related Work", False),
-        ("Background and Motivation", False),
-        ("1 서론", False),
+        ("I. BACKGROUND", False),
+        ("Background and Related Work", False),
+        ("2 관련 연구", False),
     ],
 )
 def test_a_number_the_introduction_cites_is_no_result(
