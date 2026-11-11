@@ -202,6 +202,15 @@ def post_installs(markdown: str) -> list[tuple[str, frozenset[str], str]]:
         for m in _ANY_FENCE.finditer(markdown)
         if m.group(3).lower() in _SHELL_INFO
     ]
+    # A notebook cell's %pip / !pip lines install too.
+    shell += [
+        "\n".join(
+            ln.lstrip()[1:]
+            for ln in block.splitlines()
+            if ln.lstrip().startswith(("%pip ", "!pip ", "!python ", "%uv ", "!uv "))
+        )
+        for block in python_blocks(markdown)
+    ]
     for block in shell:
         for line in block.splitlines():
             line = line.strip().removeprefix("$ ").split(" #")[0]

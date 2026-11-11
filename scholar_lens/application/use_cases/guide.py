@@ -287,7 +287,9 @@ async def write_guide_with_evidence(
             # of one is the post's, a missing root an install that failed.
             modules=frozenset(
                 {p.lower().replace("-", "_") for p in products}
-                | set(sdk.modules if sdk else ())
+                # A namespace package is not the product's alone: a missing
+                # part of it is another distribution not installed.
+                | (set(sdk.modules) - sdk.namespace_modules if sdk else set())
             ),
             block_timeout_s=writing.run_block_timeout_s,
             total_timeout_s=writing.run_timeout_s,

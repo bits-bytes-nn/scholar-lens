@@ -588,3 +588,31 @@ def test_a_module_a_cell_writes_is_importable_and_runnable() -> None:
     )
     script = program_script([c for _, c, _ in blocks], block_timeout_s=10)
     assert [r.ok for r in read_outcomes(_run(script))] == [True, True, True]
+
+
+def test_a_cells_pip_lines_install_and_a_namespace_part_is_the_environments() -> None:
+    from scholar_lens.domain.guide.sdk_index import SdkIndex
+
+    post = _py("%pip install llama-index-core llama-index-llms-bedrock-converse\nx = 1")
+    assert run_requirements([("llama-index-core", "0.12.0")], post) == [
+        "llama-index-core==0.12.0",
+        "llama-index-llms-bedrock-converse",
+    ]
+    sdk = SdkIndex.from_sources(
+        {"llama_index/core/__init__.py": "X = 1\n"},
+        "0.12.0",
+        top_levels=["llama_index"],
+    )
+    assert "llama_index" in sdk.namespace_modules
+    modules = set(sdk.modules) - sdk.namespace_modules
+    missing = BlockRun(
+        index=1,
+        ok=False,
+        error_type="ModuleNotFoundError",
+        message="No module named 'llama_index.llms'",
+    )
+    assert verdict(missing, modules) == "environment"
+    wrong = missing.model_copy(
+        update={"message": "No module named 'llama_index.core.nope'"}
+    )
+    assert verdict(wrong, modules) == "code"

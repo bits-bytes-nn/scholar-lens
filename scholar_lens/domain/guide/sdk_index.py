@@ -86,6 +86,9 @@ class SdkIndex:
     package_modules: set[str] = field(default_factory=set)
     # module -> the modules it star-imports.
     stars: dict[str, list[str]] = field(default_factory=dict)
+    # Namespace packages (no ``__init__.py``): other distributions may add
+    # to them.
+    namespace_modules: set[str] = field(default_factory=set)
 
     @property
     def packages(self) -> set[str]:
@@ -143,6 +146,7 @@ class SdkIndex:
                 if parent not in index.modules:
                     index.modules[parent] = set()
                     index.package_modules.add(parent)
+                    index.namespace_modules.add(parent)
         return index
 
     def _add(self, module: str, body: list[ast.stmt], text: str, package: str) -> None:
