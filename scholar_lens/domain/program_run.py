@@ -497,8 +497,14 @@ def _misused_builtin(run: BlockRun) -> bool:
 
 
 def _none_value(message: str) -> bool:
-    """Whether a (lowercased) validation message is about a None value."""
-    return "value: none" in message or "nonetype" in message
+    """Whether a (lowercased) validation message is about a missing value: a
+    None, or an empty string or list (``os.getenv(name, "")`` of a variable
+    the reader exports)."""
+    return (
+        "value: none" in message
+        or "nonetype" in message
+        or bool(re.search(r"invalid length for parameter .*value: 0\b", message))
+    )
 
 
 def caught_environment(run: BlockRun) -> str:
@@ -800,7 +806,7 @@ def judge_run(
             whose = "unclear"
         if (
             whose == "code"
-            and _misused_builtin(run)
+            and (_misused_builtin(run) or run.error_type in _SDK_CODE_ERRORS)
             and _used(code) & caught_names
             and run.error_type not in _SOURCE_ERRORS
         ):

@@ -811,3 +811,40 @@ def test_a_none_from_an_unset_variable_in_an_sdk_call_is_not_blamed() -> None:
         "type: <class 'NoneType'>, valid types: <class 'str'>",
     )
     assert verdict(run, ()) == "unclear"
+
+
+def test_an_empty_setting_or_a_caught_errors_value_in_an_sdk_call_is_not_blamed() -> (
+    None
+):
+    empty = BlockRun(
+        index=1,
+        ok=False,
+        error_type="ParamValidationError",
+        error_module="botocore.exceptions",
+        in_post=False,
+        message="Invalid length for parameter knowledgeBaseId, value: 0, valid min length: 10",
+    )
+    assert verdict(empty, ()) == "unclear"
+    blocks = [
+        (
+            "헬퍼",
+            "def kb():\n    try:\n        return lookup()\n    except Exception:\n        return ''\nKB = kb()",
+            True,
+        ),
+        ("검색", "runtime.retrieve(knowledgeBaseId=KB)", True),
+    ]
+    caught = BlockRun(
+        index=1,
+        ok=True,
+        raised=[
+            (
+                "NoCredentialsError",
+                "botocore.exceptions",
+                "Unable to locate credentials",
+            )
+        ],
+    )
+    bad = empty.model_copy(
+        update={"index": 2, "message": "Invalid type for parameter x, value: 3"}
+    )
+    assert not judge_run(blocks, [caught, bad], ()).findings
