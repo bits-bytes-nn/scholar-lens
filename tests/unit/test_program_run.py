@@ -761,3 +761,17 @@ def test_an_attribute_a_packages_getattr_refuses_is_the_callers(tmp_path) -> Non
     )
     (run,) = read_outcomes(_run(script))
     assert run.error_type == "AttributeError" and run.in_post
+
+
+def test_what_a_package_catches_inside_itself_does_not_excuse_the_post(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    (tmp_path / "sdk2.py").write_text(
+        "def client():\n    try:\n        raise ConnectionError('no endpoint data')\n"
+        "    except ConnectionError:\n        pass\n    return object()\n"
+    )
+    code = (
+        f"import sys\nsys.path.insert(0, {str(tmp_path)!r})\nimport sdk2\n"
+        "c = sdk2.client()\nrequest = {'messages': []}\nprint(request.messages)"
+    )
+    runs = read_outcomes(_run(program_script([code], block_timeout_s=10)))
+    assert runs[0].raised == []
+    assert judge_run([("사용", code, True)], runs, ()).findings

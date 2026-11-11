@@ -104,8 +104,8 @@ class BlockRun(BaseModel):
     message: str = ""
     # The innermost frame that raised it is a block's (False: a package's).
     in_post: bool = True
-    # (type, module, message) of the exceptions raised while it ran,
-    # caught ones included (at most 20).
+    # (type, module, message) of the exceptions of the environment the
+    # post's own code caught while it ran (at most 20).
     raised: list[tuple[str, str, str]] = []
 
     @field_validator("message")
@@ -350,24 +350,23 @@ else:
 _SL_FUTURE = 0
 for _sl_f in _sl_future.all_feature_names:
     _SL_FUTURE |= getattr(_sl_future, _sl_f).compiler_flag
-# Exceptions raised while a block runs, caught or not (a helper that
-# swallows a credential error leaves a result the next line misreads).
-# Only those that may be the environment's are kept (an import raises and
-# catches many others).
+# Exceptions of the environment the post's own code caught (a helper that
+# swallows a credential error leaves a result the next line misreads);
+# what a package catches inside itself is its business.
 _sl_raised = []
 _SL_ENV_TYPES = {sorted(_ENVIRONMENT_ERRORS)!r}
 _SL_ENV_MODULES = {list(_ENVIRONMENT_MODULES)!r}
 _SL_ENV_WORDS = {list(_ENVIRONMENT_WORDS)!r}
-def _sl_on_raise(code, offset, exc):
-    if len(_sl_raised) >= 20 or isinstance(
-        exc, (StopIteration, StopAsyncIteration, GeneratorExit, BlockTimeout)
-    ):
+def _sl_posts(filename):
+    if filename.startswith("<block "):
+        return True
+    if filename.startswith("<"):
+        return False
+    return _sl_os.path.realpath(filename).startswith(_SL_CWD + _sl_os.sep)
+def _sl_on_handled(code, offset, exc):
+    if len(_sl_raised) >= 20 or not _sl_posts(code.co_filename):
         return
     kind = type(exc)
-    if kind.__name__ in ("ConfigNotFound",):
-        # botocore looks for an optional config file on every client: not a
-        # failure a reader with credentials avoids.
-        return
     module = str(getattr(kind, "__module__", ""))
     text = _sl_text(exc)
     if (
@@ -383,8 +382,8 @@ _sl_mon = getattr(_sl_sys, "monitoring", None)
 if _sl_mon is not None:
     try:
         _sl_mon.use_tool_id(5, "scholar-lens")
-        _sl_mon.register_callback(5, _sl_mon.events.RAISE, _sl_on_raise)
-        _sl_mon.set_events(5, _sl_mon.events.RAISE)
+        _sl_mon.register_callback(5, _sl_mon.events.EXCEPTION_HANDLED, _sl_on_handled)
+        _sl_mon.set_events(5, _sl_mon.events.EXCEPTION_HANDLED)
     except ValueError:
         pass
 # A __future__ import holds for the later blocks, as in one file.
