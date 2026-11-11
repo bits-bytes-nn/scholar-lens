@@ -464,3 +464,51 @@ def test_a_gap_limits_only_the_blocks_that_use_what_it_binds() -> None:
     assert not judge_run(
         blocks, [excerpt, BlockRun(index=2, ok=True), uses], ()
     ).findings
+
+
+def test_state_a_failed_call_would_have_set_is_not_blamed() -> None:
+    blocks = [
+        (
+            "색인",
+            "class DocumentIndex:\n    def build(self, docs):\n        self.vectors = embed(docs)\nindex = DocumentIndex()",
+            True,
+        ),
+        ("빌드", "index.build(['a'])", True),
+        ("확인", "print(len(index.vectors))", True),
+    ]
+    runs = [
+        BlockRun(index=1, ok=True),
+        BlockRun(
+            index=2,
+            ok=False,
+            error_type="NoCredentialsError",
+            error_module="botocore.exceptions",
+            message="Unable to locate credentials",
+        ),
+        BlockRun(
+            index=3,
+            ok=False,
+            error_type="AttributeError",
+            message="'DocumentIndex' object has no attribute 'vectors'",
+        ),
+    ]
+    assert not judge_run(blocks, runs, ()).findings
+
+
+def test_a_gap_does_not_spread_through_builtins_or_modules() -> None:
+    blocks = [
+        ("설정", "import json\ncfg = {'a': 1}", True),
+        ("호출", "print(json.dumps(cfg))\nfetch()", True),
+        ("사용", "print(json.dumps([1]).decode())", True),
+    ]
+    runs = [
+        BlockRun(index=1, ok=True),
+        BlockRun(index=2, ok=False, error_type="ConnectionError", message="refused"),
+        BlockRun(
+            index=3,
+            ok=False,
+            error_type="AttributeError",
+            message="'str' object has no attribute 'decode'",
+        ),
+    ]
+    assert judge_run(blocks, runs, ()).findings

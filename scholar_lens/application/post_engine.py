@@ -1363,7 +1363,7 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
             )
         elif ran.limited:
             note = f"The sandbox check of the code examples was partial: {ran.limited}"
-            if not ran.limited.startswith("the run ended"):
+            if "the run ended" not in ran.limited:
                 note += (
                     "; later blocks were checked for imports, module attributes "
                     "and call signatures only"

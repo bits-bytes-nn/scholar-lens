@@ -613,7 +613,13 @@ def judge_run(
                 blocks_total=total,
                 limited=gap,
             )
-        gap_names |= _stored(blocks[run.index - 1 : run.index], 1)
+        # What the failed block binds, and the objects earlier blocks made
+        # that it uses (a method it called may have been meant to set their
+        # state); not modules or builtins it uses.
+        made = set().union(*(_bindings(c)[0] for _, c, _ in blocks[: run.index - 1]))
+        gap_names |= _stored(blocks[run.index - 1 : run.index], 1) | (
+            _used(code) & made
+        )
         if not gap:
             reason = {
                 "code": "fails, but is an excerpt or in a section not meant to run",
@@ -625,6 +631,7 @@ def judge_run(
                 f"{run.error_type}: {run.message[:160]}"
             )
     done = len(outcomes)
-    if done < total and not gap:
-        gap = f"the run ended after block {done} of {total} (killed or timed out)"
+    if done < total:
+        ended = f"the run ended after block {done} of {total} (killed or timed out)"
+        gap = f"{gap}; {ended}" if gap else ended
     return ProgramRun(blocks_run=done, blocks_total=total, limited=gap)
