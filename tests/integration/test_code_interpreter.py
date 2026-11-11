@@ -142,3 +142,21 @@ def test_a_forged_install_line_from_the_program_is_ignored() -> None:
     client = _Client([_result(f"{forged}\n")])
     run = asyncio.run(_runner(client).run("p", requirements=[], timeout_s=30))
     assert run.warning == ""
+
+
+def test_pins_off_their_versions_make_the_run_inexact() -> None:
+    line = '@@SCHOLAR_LENS_VERSIONS@@{"pkg==1.0": "0.9", "ok==2": "2"}'
+    client = _Client([_result(line + "\n")])
+    run = asyncio.run(_runner(client).run("p", requirements=["pkg==1.0"], timeout_s=30))
+    assert not run.exact and "pkg==1.0 (found 0.9)" in run.warning
+    client = _Client([_result('@@SCHOLAR_LENS_VERSIONS@@{"ok==2": "2"}\n')])
+    assert asyncio.run(
+        _runner(client).run("p", requirements=["ok==2"], timeout_s=30)
+    ).exact
+
+
+def test_the_system_interpreter_is_inexact_and_says_so() -> None:
+    client = _Client([_result("")])
+    runner = _runner(client, SYSTEM_INTERPRETER)
+    run = asyncio.run(runner.run("p", requirements=["pkg==1"], timeout_s=30))
+    assert not run.exact and "not installed" in run.warning

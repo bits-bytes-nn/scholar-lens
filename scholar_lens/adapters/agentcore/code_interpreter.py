@@ -40,6 +40,7 @@ SYSTEM_INTERPRETER = "aws.codeinterpreter.v1"
 # The time pip may take before the program runs.
 INSTALL_TIMEOUT_S = 300
 _INSTALL_MARK = "@@SCHOLAR_LENS_INSTALL_FAILED@@"
+_VERSIONS_MARK = "@@SCHOLAR_LENS_VERSIONS@@"
 _ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 # A session lives a little longer than the work it is started for.
 _SESSION_MARGIN_S = 120
@@ -79,6 +80,18 @@ for _req in _reqs:
         _detail.append(_req + ": timed out")
 if _failed:
     print({_INSTALL_MARK!r} + json.dumps([_failed, "; ".join(_detail)]))
+# The version each pin ended up at (a later install may have moved it, a
+# failed one leaves the preinstalled version).
+import importlib.metadata as _md
+_versions = {{}}
+for _req in _reqs:
+    if "==" in _req:
+        _name = _req.split("==")[0].split("[")[0]
+        try:
+            _versions[_req] = _md.version(_name)
+        except _md.PackageNotFoundError:
+            _versions[_req] = None
+print({_VERSIONS_MARK!r} + json.dumps(_versions))
 with tempfile.NamedTemporaryFile(
     "w", suffix=".py", delete=False, encoding="utf-8"
 ) as _f:
@@ -139,12 +152,15 @@ class AgentCoreCodeRunner:
         )
 
     def _run(self, program: str, requirements: list[str], timeout_s: int) -> SandboxRun:
+        skipped = ""
         if self.interpreter_id == SYSTEM_INTERPRETER and requirements:
-            logger.info(
-                "The system interpreter has no network; running without "
-                "installing %s.",
-                ", ".join(requirements),
+            # Its preinstalled packages are of other versions: only what
+            # cannot depend on a version is judged.
+            skipped = (
+                "the system interpreter has no network, so "
+                f"{', '.join(requirements)[:200]} were not installed"
             )
+            logger.info("Code sandbox: %s.", skipped)
             requirements = []
         work_s = timeout_s + (INSTALL_TIMEOUT_S if requirements else 0)
         client = self.session.client(
@@ -205,15 +221,33 @@ class AgentCoreCodeRunner:
                 logger.warning("Could not stop code session %s: %s", session_id, e)
         if is_error:
             raise SandboxUnavailable(f"the driver failed: {stderr[-300:]}")
-        warning = ""
+        warnings = [skipped] if skipped else []
+        exact = not skipped
         for line in stdout.splitlines():
-            # The driver's own line (the program's lines carry the result
+            # The driver's own lines (the program's lines carry the result
             # mark).
-            if line.startswith(_INSTALL_MARK) and RESULT_MARK not in line:
+            if RESULT_MARK in line:
+                continue
+            if line.startswith(_INSTALL_MARK):
                 try:
                     _failed, detail = json.loads(line[len(_INSTALL_MARK) :])
                 except ValueError:
                     detail = line[len(_INSTALL_MARK) :]
                 plain = " ".join(_ANSI.sub("", str(detail)).split())
-                warning = f"could not install {plain[:280]}"
-        return SandboxRun(stdout=stdout, warning=warning)
+                warnings.append(f"could not install {plain[:280]}")
+            elif line.startswith(_VERSIONS_MARK):
+                try:
+                    versions = json.loads(line[len(_VERSIONS_MARK) :])
+                except ValueError:
+                    versions = {}
+                off = [
+                    f"{req} (found {found or 'none'})"
+                    for req, found in versions.items()
+                    if found != req.rpartition("==")[2]
+                ]
+                if off:
+                    exact = False
+                    warnings.append(
+                        "not at the docs' versions: " + ", ".join(off)[:240]
+                    )
+        return SandboxRun(stdout=stdout, warning="; ".join(warnings), exact=exact)

@@ -450,6 +450,34 @@ def _used(code: str) -> set[str]:
     return {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)}
 
 
+def _missing_name(run: BlockRun) -> str:
+    quoted = run.message.split("'")
+    return quoted[1] if len(quoted) > 2 else ""
+
+
+def _stored(blocks: Sequence[tuple[str, str, bool]], upto: int) -> set[str]:
+    """Every name blocks 1..``upto`` bind anywhere (any depth, imports,
+    function parameters and handlers included)."""
+    names: set[str] = set()
+    for _, code, _ in blocks[:upto]:
+        try:
+            tree = ast.parse(code)
+        except (SyntaxError, ValueError):
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+                names.add(node.id)
+            elif isinstance(node, (ast.Import, ast.ImportFrom)):
+                names |= {(a.asname or a.name).split(".")[0] for a in node.names}
+            elif isinstance(
+                node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+            ):
+                names.add(node.name)
+            elif isinstance(node, ast.ExceptHandler) and node.name:
+                names.add(node.name)
+    return names
+
+
 def _shadowed(blocks: Sequence[tuple[str, str, bool]], before: int) -> set[str]:
     """Names the blocks before index ``before`` (1-based) last bound in an
     excerpt or a section not meant to run, by a definition or assignment
@@ -469,10 +497,16 @@ def judge_run(
     blocks: Sequence[tuple[str, str, bool]],
     outcomes: Sequence[BlockRun],
     product_modules: Collection[str],
+    *,
+    exact: bool = True,
 ) -> ProgramRun:
     """What running ``blocks`` (:func:`program_blocks`) showed: a finding
     for the first block of a runnable section that fails because of its
     code, and otherwise what limited the check.
+
+    With ``exact`` False (the docs' packages are not at their versions)
+    only failures of the code's own text count. A name the code binds
+    somewhere but the run never bound is not blamed.
 
     A block that fails for the environment (or a reason the check cannot
     attribute, or in a section not meant to run) leaves a gap: what it would
@@ -493,6 +527,19 @@ def judge_run(
             and run.error_type not in _SOURCE_ERRORS
         ):
             # It may fail only because it calls an illustration's version.
+            whose = "unclear"
+        if whose == "code" and not exact and run.error_type not in _SOURCE_ERRORS:
+            # The packages are not at the docs' versions: an import, an
+            # attribute or a signature may differ in the installed one.
+            whose = "unclear"
+        if (
+            whose == "code"
+            and run.error_type in ("NameError", "UnboundLocalError")
+            and _missing_name(run) in _stored(blocks, run.index)
+        ):
+            # The code binds it (the static check found the binding): a
+            # binding the run skipped (a try whose body failed, a branch not
+            # taken) is the environment's as likely as the code's.
             whose = "unclear"
         if whose == "code" and checked and (not gap or _reliable_after_gap(run)):
             return ProgramRun(

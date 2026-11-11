@@ -362,6 +362,9 @@ class SandboxRun:
     stdout: str
     failure: str = ""
     warning: str = ""
+    # Every docs package is installed at its version (False: a version-
+    # dependent failure is not the post's).
+    exact: bool = True
 
 
 class CodeRunner(Protocol):

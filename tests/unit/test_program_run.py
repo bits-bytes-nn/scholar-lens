@@ -323,3 +323,35 @@ def test_post_installs_pairs_fences() -> None:
         "```\npip install boto3\n```\n"
     )
     assert run_requirements([], post) == ["strands-agents-tools", "boto3"]
+
+
+def test_a_name_the_run_skipped_binding_is_not_blamed() -> None:
+    blocks = [
+        (
+            "호출",
+            "try:\n    resp = client.list()\nexcept Exception as e:\n    print(e)",
+            True,
+        ),
+        ("출력", "print(resp['Buckets'])\nprint(typo)", True),
+    ]
+    skipped = BlockRun(
+        index=2, ok=False, error_type="NameError", message="name 'resp' is not defined"
+    )
+    typo = skipped.model_copy(update={"message": "name 'typo' is not defined"})
+    ok = BlockRun(index=1, ok=True)
+    assert not judge_run(blocks, [ok, skipped], ()).findings
+    assert judge_run(blocks, [ok, typo], ()).findings
+
+
+def test_packages_off_their_versions_blame_only_the_codes_text() -> None:
+    blocks = [("사용", "import pandas\npandas.new_api()", True)]
+    attr = BlockRun(
+        index=1,
+        ok=False,
+        error_type="AttributeError",
+        message="module 'pandas' has no attribute 'new_api'",
+    )
+    syntax = BlockRun(index=1, ok=False, error_type="SyntaxError", message="bad")
+    assert judge_run(blocks, [attr], {"pandas"}).findings
+    assert not judge_run(blocks, [attr], {"pandas"}, exact=False).findings
+    assert judge_run(blocks, [syntax], (), exact=False).findings

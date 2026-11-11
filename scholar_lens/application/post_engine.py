@@ -1331,7 +1331,12 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
         if result.warning:
             logger.warning("Code sandbox: %s", result.warning)
             self._note_once(f"Code sandbox: {result.warning}")
-        ran = judge_run(blocks, read_outcomes(result.stdout, mark), runs.modules)
+        ran = judge_run(
+            blocks,
+            read_outcomes(result.stdout, mark),
+            runs.modules,
+            exact=result.exact,
+        )
         logger.info(
             "Code run in the sandbox: %d of %d block(s), %d failure(s)%s.",
             ran.blocks_run,
