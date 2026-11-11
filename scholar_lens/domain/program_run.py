@@ -273,6 +273,9 @@ import ast as _sl_ast, asyncio as _sl_asyncio, inspect as _sl_inspect
 _SL_CODES = {list(codes)!r}
 _SL_MARK = {mark!r}
 _sl_fd = _sl_os.dup(1)
+# The working directory is importable, as in a notebook (a module a
+# %%writefile cell wrote).
+_sl_sys.path.insert(0, _sl_os.getcwd())
 class BlockTimeout(BaseException):
     pass
 def _sl_alarm(signum, frame):

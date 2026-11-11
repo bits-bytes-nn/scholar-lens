@@ -572,3 +572,19 @@ def test_cell_magics_run_as_a_notebook_runs_them(cell: str, runs: str | None) ->
         assert [r.ok for r in read_outcomes(_run(script))] == [True, True]
     else:
         assert [c.strip() for _, c, _ in blocks] == ([runs] if runs else [])
+
+
+def test_a_module_a_cell_writes_is_importable_and_runnable() -> None:
+    blocks = program_blocks(
+        [
+            (
+                "도구",
+                _py("%%writefile tools.py\ndef add(a, b):\n    return a + b"),
+                True,
+            ),
+            ("사용", _py("from tools import add\nprint(add(1, 2))"), True),
+            ("실행", _py("%run tools.py\nprint(add(2, 3))"), True),
+        ]
+    )
+    script = program_script([c for _, c, _ in blocks], block_timeout_s=10)
+    assert [r.ok for r in read_outcomes(_run(script))] == [True, True, True]

@@ -91,7 +91,18 @@ def _cell_code(lines: list[str]) -> str:
         if name not in _PYTHON_CELL_MAGICS:
             return ""
         lines = rest.split("\n")
-    return "\n".join(ln for ln in lines if not ln.lstrip().startswith(("%", "!")))
+    out = []
+    for ln in lines:
+        stripped = ln.lstrip()
+        if stripped.startswith("%run ") and (args := stripped[5:].split()):
+            # Runs the file in the session's namespace, as IPython does.
+            indent = ln[: len(ln) - len(stripped)]
+            out.append(
+                f"{indent}exec(compile(open({args[0]!r}).read(), {args[0]!r}, 'exec'))"
+            )
+        elif not stripped.startswith(("%", "!")):
+            out.append(ln)
+    return "\n".join(out)
 
 
 def _session_code(code: str) -> str | None:
