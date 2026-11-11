@@ -72,11 +72,13 @@ def _session_code(code: str) -> str | None:
     lines = code.split("\n")
     if not any(ln.lstrip().startswith((">>>", "%", "!")) for ln in lines):
         return None
+    magic = [ln for ln in lines if not ln.lstrip().startswith(("%", "!"))]
+    if not any(ln.lstrip().startswith(">>>") for ln in lines):
+        # A notebook cell: its code without the magics and shell lines.
+        return "\n".join(magic)
+    # A REPL transcript: the prompted lines (the rest is output).
     return "\n".join(
-        _PROMPT.sub("", ln)
-        for ln in lines
-        if not ln.lstrip().startswith(("%", "!"))
-        and (_PROMPT.match(ln) or not ln.strip())
+        _PROMPT.sub("", ln) for ln in magic if _PROMPT.match(ln) or not ln.strip()
     )
 
 

@@ -527,3 +527,21 @@ def test_a_signature_error_is_the_codes_whatever_the_callee_is_called(
 ) -> None:
     run = BlockRun(index=1, ok=False, error_type="TypeError", message=message)
     assert verdict(run, ()) == "code"
+
+
+def test_a_notebook_cell_keeps_its_code_without_the_magics() -> None:
+    from scholar_lens.domain.program import python_code_problems
+
+    sections = [
+        (
+            "설치",
+            _py("%pip install requests\nimport json\ndata = json.dumps({})"),
+            True,
+        ),
+        ("사용", _py("print(data)"), True),
+    ]
+    assert [c.strip() for _, c, _ in program_blocks(sections)] == [
+        "import json\ndata = json.dumps({})",
+        "print(data)",
+    ]
+    assert python_code_problems(sections) == []
