@@ -287,6 +287,7 @@ _sl_fd = _sl_os.dup(1)
 # The working directory is importable, as in a notebook (a module a
 # %%writefile cell wrote).
 _sl_sys.path.insert(0, _sl_os.getcwd())
+_SL_CWD = _sl_os.path.realpath(_sl_os.getcwd())
 class BlockTimeout(BaseException):
     pass
 def _sl_alarm(signum, frame):
@@ -294,13 +295,19 @@ def _sl_alarm(signum, frame):
 def _sl_in_post(e):
     # Whether the innermost frame that raised it (import machinery aside)
     # is a block's: else an installed package raised it.
+    # A file under the working directory is the post's too (a module a
+    # %%writefile cell wrote).
     tb, last = e.__traceback__, ""
     while tb is not None:
         name = tb.tb_frame.f_code.co_filename
         if not name.startswith("<frozen"):
             last = name
         tb = tb.tb_next
-    return last.startswith("<block ")
+    if last.startswith("<block "):
+        return True
+    if last.startswith("<"):
+        return False
+    return _sl_os.path.realpath(last).startswith(_SL_CWD + _sl_os.sep)
 def _sl_text(e):
     try:
         return str(e)[:400]

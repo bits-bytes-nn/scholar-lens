@@ -657,3 +657,23 @@ def test_an_error_raised_inside_a_package_is_not_the_posts(tmp_path) -> None:  #
     assert verdict(runs[1], ()) == "unclear"
     assert verdict(runs[2], ()) == "code"
     assert not judge_run(blocks[:2], runs[:2], ()).findings
+
+
+def test_an_indented_shell_line_keeps_the_cell_valid() -> None:
+    cell = "try:\n    import json5\nexcept ImportError:\n    !pip install -q json5\nprint('ready')"
+    ((_, code, _),) = program_blocks([("설정", _py(cell), True)])
+    script = program_script([code], block_timeout_s=10)
+    assert [r.ok for r in read_outcomes(_run(script))] == [True]
+
+
+def test_an_error_in_a_module_the_post_wrote_is_the_posts() -> None:
+    blocks = program_blocks(
+        [
+            ("도구", _py("%%writefile weather_tools.py\nimport json\njson.nope"), True),
+            ("사용", _py("import weather_tools"), True),
+        ]
+    )
+    script = program_script([c for _, c, _ in blocks], block_timeout_s=10)
+    runs = read_outcomes(_run(script))
+    assert runs[1].error_type == "AttributeError" and runs[1].in_post
+    assert judge_run(blocks, runs, ()).findings

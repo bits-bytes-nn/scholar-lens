@@ -108,6 +108,10 @@ def _cell_code(lines: list[str]) -> str:
             out.append(f"{indent}{statement[0]}")
         elif not stripped.startswith(("%", "!")):
             out.append(ln)
+        elif ln != stripped:
+            # An indented magic or shell line (an except body): a pass
+            # keeps the block's structure.
+            out.append(f"{ln[: len(ln) - len(stripped)]}pass")
     return "\n".join(out)
 
 
