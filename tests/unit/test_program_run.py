@@ -616,3 +616,17 @@ def test_a_cells_pip_lines_install_and_a_namespace_part_is_the_environments() ->
         update={"message": "No module named 'llama_index.core.nope'"}
     )
     assert verdict(wrong, modules) == "code"
+
+
+def test_a_timing_magic_runs_its_statement() -> None:
+    from scholar_lens.domain.program import python_code_problems
+
+    sections = [
+        ("시작", _py("%time result = sum(range(3))"), True),
+        ("출력", _py("print(result)"), True),
+    ]
+    assert [c.strip() for _, c, _ in program_blocks(sections)] == [
+        "result = sum(range(3))",
+        "print(result)",
+    ]
+    assert python_code_problems(sections) == []

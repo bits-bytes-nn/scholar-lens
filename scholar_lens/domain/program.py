@@ -100,6 +100,12 @@ def _cell_code(lines: list[str]) -> str:
             out.append(
                 f"{indent}exec(compile(open({args[0]!r}).read(), {args[0]!r}, 'exec'))"
             )
+        elif stripped.startswith(("%time ", "%prun ", "%timeit ")) and (
+            statement := stripped.split(None, 1)[1:]
+        ):
+            # The statement a timing magic runs (and binds names with).
+            indent = ln[: len(ln) - len(stripped)]
+            out.append(f"{indent}{statement[0]}")
         elif not stripped.startswith(("%", "!")):
             out.append(ln)
     return "\n".join(out)
