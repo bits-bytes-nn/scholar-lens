@@ -1,0 +1,763 @@
+{
+ "item": "survey-rlhf",
+ "kind": "survey_write",
+ "source": "plan eval/sets/plans/survey-rlhf.json (22 papers); claims checked against arXiv abstract/HTML pages (ar5iv for pre-2021 papers)",
+ "criteria_note": "Scored A-F, G, survey-specific S1 and X1 (survey posts carry paper categories/tags). Mean over these 9 criteria. Both posts cite all 22 plan papers in the body; reference venue strings are identical and acceptable. F deductions of 2+ per found error.",
+ "X": {
+  "prose_length_chars": 53205,
+  "prose_length_note": "53,205 chars with whitespace (43,643 without); body only, excluding front matter, headings, display math, tables, images, source captions and references",
+  "scores": {
+   "A": {
+    "score": 8,
+    "reason": "Coherent six-lineage arc plus cross-cutting sections and a closing. Deductions: question-form heading '### 누구의 선호인가' (839); a near-empty subsection '### 가벼워진 소비 방식, 그대로인 신호' (833-837, three sentences); length written with a norm, '\\|y_{i}\\|' (485); '\\rho(y|x)' and 'odds(y|x)' use '|' not \\mid (105, 515)."
+   },
+   "B": {
+    "score": 8,
+    "reason": "Mostly natural engineer Korean. Deductions: '결과 가운데 두 가지가 오래 인용됩니다. 훨씬 짧은 요약을 내면서도 ... 거의 근접했습니다.' (147) has no subject and no 'first' marker (rewrite: '첫째, TL;DR로 학습한 6.7B 모델은 뉴스 요약을 학습한 적이 없는데도 ...'); noun frames such as '...결과를 내놓았습니다' / '...것을 보였습니다' (265, 333); '이 글의 판단으로는' repeated in nearly every section (265, 329, 475, 579, 688)."
+   },
+   "C": {
+    "score": 7,
+    "reason": "Several broken seams: '요약 실험에서는 경고 신호가 하나 나왔습니다. 저자들은 이 결과를 성취보다는 우려로 받아들였고' (125) refers to a result never stated; the Bai et al. HH subsection opens '가장 좋은 RLHF 정책을 학습하고 ...' (195) with no subject or introduction of the paper; 147 drops the subject. Cross-section references are otherwise accurate ('앞서 본 ...')."
+   },
+   "D": {
+    "score": 9,
+    "reason": "The TL;DR A-vs-B running example is carried through RM loss (135), Llama 2 margin (207), DPO (353), IPO deterministic pair (403), RRHF length normalisation (499), SimPO (563), KTO data (798), GRPO group (708); each worked number checks out (e.g. σ(0.15)≈0.537, loss≈0.621). Minor: the Nash-MD-PG example (623) is thin."
+   },
+   "E": {
+    "score": 7,
+    "reason": "Equations and figures are placed where discussed, but 53 figures include several that are only described, not read (e.g. 603 '정확도 곡선을 함께 보여 줍니다'; 117; 497). The comparison table (808-827) omits four plan papers (Llama 2, Online IPO, DAA, GRPO Dynamics)."
+   },
+   "F": {
+    "score": 6,
+    "reason": "One misattribution: labeler-heuristic exploitation presented as the reason the RL summaries were preferred over references (125, 841) - Ziegler says 'More worrisome, the 60k online model beats the human ground truth 96%' and offers the copying heuristic for the copying behaviour. One unsupported number: 'IPO의 25.45%' (664) - SPPO's Table 1 has Mistral-7B-IPO LC 23.78/21.08/20.06. Internal inconsistency: SPPO LC 28.53% in prose (664) vs 28.52% in the table (825). All other 31 checked claims match."
+   },
+   "G": {
+    "score": 8.5,
+    "reason": "use_math true with $$ present; description 131 chars, longer than the title; Liquid only inside raw; no '|' inside $$ on table rows. Description opens with 'LLM 선호 최적화' rather than a method name."
+   },
+   "S1": {
+    "score": 6,
+    "reason": "Table cells: 'IPO | 장난감 예제 D1 관측 선호 3개' (820) is not a result; 'RLHF Workflow | 한계: 길이 페널티 모델 길이 편향 ablation' (826) is garbled; '60k RL vs 지도학습' uses English 'vs' throughout. The cross-cutting section re-explains DAA length extrapolation (770) and Online IPO equivalence (784) already covered at 465-473 and 631."
+   },
+   "X1": {
+    "score": 7,
+    "reason": "Categories valid (Paper Surveys / Finetuning). Tags pick SimPO and RLAIF but not DPO, RLHF or GRPO, which carry the survey; 'Alignment' is the controlled tag."
+   }
+  },
+  "principles": {
+   "claim headings": {
+    "verdict": "met",
+    "evidence": "e.g. '## 보상 모델을 지우는 닫힌 형태 재매개화와 그 과적합' (331), '### 결정적 선호에서 무너지는 KL 정규화' (383)"
+   },
+   "running example": {
+    "verdict": "met",
+    "evidence": "TL;DR A-vs-B pair introduced at 15 and reused at 135, 207, 353, 403, 499, 563, 708, 782, 798"
+   },
+   "mechanism -> design choice -> formula -> worked example": {
+    "verdict": "met",
+    "evidence": "DPO 337-355, IPO 385-403, SimPO 549-563 each go mechanism, reason, equation, numeric example"
+   },
+   "facts said once": {
+    "verdict": "partly met",
+    "evidence": "Labeler-heuristic point twice (125, 841); DAA length point and SimPO no-regularisation stated in 770 and again 796, 847"
+   },
+   "numbers with variant, scope and unit": {
+    "verdict": "partly met",
+    "evidence": "Mostly scoped (e.g. 'Mistral-Base 7B에서 ... 21.5%에서 11.9%', 565) but 'Mistral-7B SPPO가 66.75' (664) omits the iteration and 28.53/28.52 disagree"
+   },
+   "nothing invented": {
+    "verdict": "partly met",
+    "evidence": "IPO 25.45% (664) not in source; heuristic misattribution (841)"
+   },
+   "writer's own assessment at the end": {
+    "verdict": "met",
+    "evidence": "865: '이 글의 관점에서 실무 선택은 신호의 종류가 먼저 결정합니다 ...'"
+   },
+   "length fitted to difficulty": {
+    "verdict": "partly met",
+    "evidence": "Hard parts (IPO, DAA null space) get room; but figure-walkthrough sentences pad easy material (93, 117, 603)"
+   },
+   "type-specific shape (survey numbers in one table)": {
+    "verdict": "partly met",
+    "evidence": "One results table (808-827), but many numbers also live only in prose (SPPO 664, ORPO 545) and four plan papers are missing from the table"
+   },
+   "Korean style": {
+    "verdict": "partly met",
+    "evidence": "Natural overall; subjectless sentences at 147, 195; repeated '이 글의 판단으로는'"
+   }
+  },
+  "claims": {
+   "checked": 34,
+   "numbers_checked": 30,
+   "supported": 32,
+   "unsupported": 1,
+   "wrong": 1,
+   "unverifiable": 0,
+   "error_rate": 0.059,
+   "items": [
+    {
+     "claim": "Human feedback on <1% of agent interactions",
+     "line": 59,
+     "number": true,
+     "verdict": "supported",
+     "source": "1706.03741 abstract: 'feedback on less than 1% of our agent's interactions'"
+    },
+    {
+     "claim": "Assumes human answers uniformly at random 10% of the time",
+     "line": 81,
+     "number": true,
+     "verdict": "supported",
+     "source": "1706.03741: 'assume there is a 10% chance that the human responds uniformly at random'"
+    },
+    {
+     "claim": "1/e of data held out for validation",
+     "line": 81,
+     "number": true,
+     "verdict": "supported",
+     "source": "1706.03741: 'A fraction of 1/e of the data is held out'"
+    },
+    {
+     "claim": "MuJoCo 700 labels nearly match RL (table)",
+     "line": 810,
+     "number": true,
+     "verdict": "supported",
+     "source": "1706.03741: 'With 700 labels we are able to nearly match reinforcement learning'"
+    },
+    {
+     "claim": "Interaction complexity reduced ~3 orders of magnitude",
+     "line": 99,
+     "number": true,
+     "verdict": "supported",
+     "source": "1706.03741: 'reduce the interaction complexity by roughly 3 orders of magnitude'"
+    },
+    {
+     "claim": "RM at most 60k samples vs 2M policy episodes; shared params overfit",
+     "line": 127,
+     "number": true,
+     "verdict": "supported",
+     "source": "1909.08593: 'at most 60k samples for the reward model, but 2M episodes for the policy'"
+    },
+    {
+     "claim": "Labelers' heuristic explains the over-preference of RL summaries over references ('이 결과를 ... 우려로 ... 휴리스틱을 악용', 'RLHF 모델이 참조 요약보다 지나치게 자주 선호되자 ... 휴리스틱을 악용했을 가능성')",
+     "line": "125, 841",
+     "number": false,
+     "verdict": "wrong",
+     "source": "1909.08593: 'More worrisome, the 60k online model beats the human ground truth 96%...'; the heuristic sentence ('some labelers check for copying as a fast heuristic') is offered for the copying behaviour, not as the explanation of the preference rate (human-fix copy-explains-preference)"
+    },
+    {
+     "claim": "Doubling RM data ~+1.1%, doubling model size ~+1.8% RM accuracy",
+     "line": 147,
+     "number": true,
+     "verdict": "supported",
+     "source": "2009.01325: '~1.1% increase ... ~1.8% increase'"
+    },
+    {
+     "claim": "6.7B RLHF RL fine-tuning ~320 GPU-days (table)",
+     "line": 812,
+     "number": true,
+     "verdict": "supported",
+     "source": "2009.01325: 'approximately 320 GPU-days'"
+    },
+    {
+     "claim": "1.3B RLHF 61% vs 10x supervised 43% vs reference (table)",
+     "line": 812,
+     "number": true,
+     "verdict": "supported",
+     "source": "2009.01325: '(61% versus 43% raw preference score against reference summaries)'"
+    },
+    {
+     "claim": "175B InstructGPT preferred to GPT-3 85±3% (table)",
+     "line": 813,
+     "number": true,
+     "verdict": "supported",
+     "source": "2203.02155: 'preferred to GPT-3 outputs 85 ± 3% of the time'"
+    },
+    {
+     "claim": "Raising KL coefficient does not fully recover DROP/SQuAD",
+     "line": 191,
+     "number": false,
+     "verdict": "supported",
+     "source": "2203.02155: 'never fully recovers on DROP and SQuAD'"
+    },
+    {
+     "claim": "Online PM accuracy base/RS/online 74/70/67% (table)",
+     "line": 814,
+     "number": true,
+     "verdict": "supported",
+     "source": "2204.05862: 'accuracies of 74%, 70%, and 67% on the test sets for the respective base, RS, and online-only distributions'"
+    },
+    {
+     "claim": "RM data threshold ~2,000 comparisons (table)",
+     "line": 815,
+     "number": true,
+     "verdict": "supported",
+     "source": "2210.10760: 'for amounts of data less than around 2,000 comparisons'"
+    },
+    {
+     "claim": "BoN KL ~log n, RL KL ~quadratic in steps; KL unfit as common measure",
+     "line": 255,
+     "number": false,
+     "verdict": "supported",
+     "source": "2210.10760: 'KL_bon increases with roughly log(n)' / 'approximately quadratically with step'"
+    },
+    {
+     "claim": "CAI uses 16 principles, one sampled per revision",
+     "line": 283,
+     "number": true,
+     "verdict": "supported",
+     "source": "2212.08073: 'We have written a total of 16 different principles'"
+    },
+    {
+     "claim": "438 HHH binary comparisons; original 221 >90% (table)",
+     "line": "297, 816",
+     "number": true,
+     "verdict": "supported",
+     "source": "2212.08073 Fig. 4 (438 questions); 221 comparisons 'well over 90% binary accuracy'"
+    },
+    {
+     "claim": "RLAIF 71% vs RLHF 73% over SFT on TL;DR; d-RLAIF preferred 60% over same-size RLAIF",
+     "line": 327,
+     "number": true,
+     "verdict": "supported",
+     "source": "2309.00267 HTML: summarization 71%/73%; d-RLAIF preferred 60% head-to-head"
+    },
+    {
+     "claim": "RLAIF harmless rate 88%; AI labeling >10x cheaper (table)",
+     "line": 819,
+     "number": true,
+     "verdict": "supported",
+     "source": "2309.00267: harmless SFT 64%, RLHF 76%, RLAIF 88%; 'over 10x cheaper'"
+    },
+    {
+     "claim": "TL;DR DPO preferred over PPO 58% by humans, GPT-4(C) 54%",
+     "line": 381,
+     "number": true,
+     "verdict": "supported",
+     "source": "2305.18290: 'preferred 58% times over PPO samples'; GPT-4 (C) 54%"
+    },
+    {
+     "claim": "CNN/DM DPO 0.36 vs PPO 0.26 (table)",
+     "line": 818,
+     "number": true,
+     "verdict": "supported",
+     "source": "2305.18290: DPO 0.36, PPO 0.26 at temperature 0"
+    },
+    {
+     "claim": "KTO alone beats DPO alone at Llama-7B/13B/30B, significant at 7B and 30B",
+     "line": 447,
+     "number": true,
+     "verdict": "supported",
+     "source": "2402.01306: 'significant (p<0.01) at 7B and 30B'"
+    },
+    {
+     "claim": "KTO matches DPO with up to 90% fewer desirable examples; OpenAssistant one-output KTO 0.631",
+     "line": "461, 822",
+     "number": true,
+     "verdict": "supported",
+     "source": "2402.01306: 'up to 90% fewer desirable examples'; 0.631 vs DPO 0.600"
+    },
+    {
+     "claim": "GRPO RL: 64 outputs per question, KL coefficient 0.04; DeepSeekMath-RL 7B GSM8K 88.2 / MATH 51.7",
+     "line": "722, 823",
+     "number": true,
+     "verdict": "supported",
+     "source": "2402.03300: KL coefficient 0.04, 64 samples; 88.2% / 51.7%"
+    },
+    {
+     "claim": "ORPO up to 80.5% vs SFT, 85.8% vs PPO; Phi-2 6.35%, Llama-2 9.44%; Mistral-ORPO-β 12.20% / MT-Bench 7.32",
+     "line": "545, 824",
+     "number": true,
+     "verdict": "supported",
+     "source": "2403.07691: Table 3 and abstract values"
+    },
+    {
+     "claim": "SimPO Spearman 0.82/0.59/0.34; Mistral-Base LC 21.5→11.9 without LN; Llama-3-8B-Instruct 44.7 vs 40.3; Gemma-2-9B 72.4; ~20% run time, ~10% memory",
+     "line": "565, 577, 827",
+     "number": true,
+     "verdict": "supported",
+     "source": "2405.14734 Tables 1, 4, 5, 6; Section 4.4"
+    },
+    {
+     "claim": "Mistral-7B SPPO LC 28.53% vs Snorkel 26.39% and IPO 25.45%",
+     "line": 664,
+     "number": true,
+     "verdict": "unsupported",
+     "source": "2405.00675 Table 1: SPPO Iter3 28.53, Snorkel 26.39; Mistral-7B-IPO LC is 23.78/21.08/20.06 - 25.45 does not appear"
+    },
+    {
+     "claim": "MT-Bench SPPO Iter3 7.59, first two iterations dropped; Open LLM avg 66.75 / 70.29",
+     "line": 664,
+     "number": true,
+     "verdict": "supported",
+     "source": "2405.00675: Iter1 7.21, Iter2 7.49 < base 7.51, Iter3 7.59; 66.75 (Mistral Iter2), 70.29 (Llama-3 Iter3)"
+    },
+    {
+     "claim": "Iterative DPO pairs from best-of-8 / worst-of-8; vanilla DPO 8B Arena-Hard 22.4",
+     "line": "686, 826",
+     "number": true,
+     "verdict": "supported",
+     "source": "2405.07863: n=8 ranked by RM, best and worst kept; DPO baseline Arena-Hard 22.4"
+    },
+    {
+     "claim": "Online IPO: 770M model, 3 seeds, 9 comparisons, IPO and IPO-MD indistinguishable",
+     "line": 633,
+     "number": true,
+     "verdict": "supported",
+     "source": "2403.08635: 'restricted to model of size 770M on a single task'; 3 seeds, 3x3 evaluations, IPO vs IPO-MD 0.515±0.024"
+    },
+    {
+     "claim": "Nash-MD bound KL ≤ 8/(τ²(T+1)) with η_t=2/(τ(t+2)); Nash-MD-PG best for β∈[0.125,0.375]; PM 0.78 vs RM 0.76",
+     "line": "615-625, 821",
+     "number": true,
+     "verdict": "supported",
+     "source": "2312.00886 Theorem and Section 7; appendix accuracies ~0.78 vs ~0.76"
+    },
+    {
+     "claim": "DAA runs peak within first 25% of epoch",
+     "line": 471,
+     "number": true,
+     "verdict": "supported",
+     "source": "2406.02900 Fig. 2: 'reach their best performance in the first 25% of the epoch'"
+    },
+    {
+     "claim": "Mirror GRPO: monotonic improvement and convergence to success probability 1; reference regularization loses monotonicity",
+     "line": 754,
+     "number": false,
+     "verdict": "supported",
+     "source": "2503.06639 Theorem 5: p_n strictly increases, p_n→1 for 0<p_ref<1; α>0 loses guaranteed monotonic improvement"
+    },
+    {
+     "claim": "Llama 2-Chat-RLHF optimal temperature 1.2-1.3 when sampling 10-100 outputs",
+     "line": 221,
+     "number": true,
+     "verdict": "supported",
+     "source": "2307.09288: temperature between 1.2 and 1.3"
+    }
+   ]
+  },
+  "checklist": {
+   "repeated": 1,
+   "avoided": 4,
+   "na": 1,
+   "repeated_ids": [
+    "copy-explains-preference"
+   ],
+   "details": {
+    "grpo-card-unverified-figure": {
+     "verdict": "avoided",
+     "evidence": "The 2503.06639 paragraphs (746-756) carry no numbers or equations beyond the symbol h_{ε,p_ref}; claims (Mirror GRPO → 1, absorbing 0) match Theorems 3, 5 and Section 6"
+    },
+    "copy-explains-preference": {
+     "verdict": "repeated",
+     "evidence": "841: 'TL;DR에서 RLHF 모델이 참조 요약보다 지나치게 자주 선호되자, 저자들은 모델이 라벨러의 휴리스틱을 악용했을 가능성을 지적했습니다'; also 125"
+    },
+    "daa-no-quantification": {
+     "verdict": "avoided",
+     "evidence": "463-473 and 806 make no claim that 2406.02900 lacks quantitative degradation figures"
+    },
+    "grpo-row-reward": {
+     "verdict": "n/a",
+     "evidence": "The comparison table (808-827) has no reward column; GRPO row lists only results and Maj@K/Pass@K limitation"
+    },
+    "heading-da-form-offline": {
+     "verdict": "avoided",
+     "evidence": "'### 보상 모델 없이도 남는 과최적화' (463)"
+    },
+    "heading-da-form-judge": {
+     "verdict": "avoided",
+     "evidence": "No da-form heading anywhere; nearest is the question heading '### 누구의 선호인가' (839)"
+    }
+   }
+  },
+  "structure_defects": {
+   "count": 5,
+   "items": [
+    "125 reference back to a result never stated ('이 결과를')",
+    "147 broken seam: list of two results without subject or first marker",
+    "195 subsection opens without naming Bai et al. (HH-RLHF)",
+    "833-837 subsection of three short sentences",
+    "839 sentence-shaped (question) heading '누구의 선호인가'"
+   ]
+  },
+  "top_issues": [
+   "Ziegler misattribution: labeler heuristic presented as the cause of the over-preference (125, 841)",
+   "Unsupported SPPO baseline 'IPO 25.45%' and 28.53/28.52 mismatch (664, 825)",
+   "Seams: undefined 'this result' (125), subjectless openings (147, 195)",
+   "Comparison table omits four plan papers and has garbled cells (820, 826)"
+  ],
+  "mean_score": 7.39
+ },
+ "Y": {
+  "prose_length_chars": 61963,
+  "prose_length_note": "61,963 chars with whitespace (51,667 without); same exclusions",
+  "scores": {
+   "A": {
+    "score": 7.5,
+    "reason": "Clear arc, noun-phrase headings, '핵심' boxes. Deductions: single '$' inside display math '\\beta_{\\text{bo$n$}}' (264) and inconsistent '\\alpha_{\\text{bon}}' (273); KL written '\\mid\\mid' (351) and '\\lVert' alone (441); two consecutive closing sections that overlap (818-840 and 842-850)."
+   },
+   "B": {
+    "score": 8,
+    "reason": "Natural and precise. Deductions: the opening repeats itself, 'Stiennon 등이 지적했듯 ... 어긋납니다' then 'Stiennon 등은 요약 과제에서 두 목표가 어긋나는 문제를 짚었습니다' (13); '논문이 퍼센트로 보고한 값으로 Mistral-7B-Instruct에서 1회차까지 7.69' (664) is awkward (rewrite: 'LC 승률은 1회차에 7.69%p, 2회차에 2.10%p, 3회차에 1.64%p 올랐습니다'); noun frame '... 별도의 선호 최적화 단계가 필요 없다는 것이 ORPO의 설계입니다' (515)."
+   },
+   "C": {
+    "score": 7.5,
+    "reason": "Seams are mostly smooth and each paper is introduced by name. Deduction: '글 끝의 연표는 ...' (17) points to the end of the post, but the timeline table follows immediately (21-44); the second closing section restates the first."
+   },
+   "D": {
+    "score": 8.5,
+    "reason": "Hard steps get help: full DPO derivation (349-371), log-odds blow-up example (409), intransitivity A>B>C>A (595), GRPO group arithmetic with population std (719), RL peak d*=exp(α/β−1) (273). The declared TL;DR running example (15) is used less consistently than in X; Christiano and Ziegler sections are long for easy material."
+   },
+   "E": {
+    "score": 8,
+    "reason": "Equations and figures well placed with reading guidance (e.g. 283 '점선은 프록시 보상이고 실선은 gold 보상'). Comparison table (795-816) covers 20 of 22 plan papers (missing Llama 2, GRPO Dynamics)."
+   },
+   "F": {
+    "score": 8.5,
+    "reason": "All 30 checked claims that could be located match the sources; one (CAI calibration at high PM scores, 305) is unverifiable and looks borrowed from 2204.05862. Table writes 'Llama-3-8B-SPPO 총 향상 15.85%' (813) for a 15.85-point LC gain."
+   },
+   "G": {
+    "score": 7,
+    "reason": "use_math true; description 144 chars and longer than title. Deductions: '$n$' inside $$ (264) breaks the single-$ rule; description opens '사람의 비교 판단으로 ...', not a method name."
+   },
+   "S1": {
+    "score": 6,
+    "reason": "Cells: 'Anthropic HH-RLHF | 한계: 온라인 PM 정확도 74/70/67%' (801) is a result, not a limitation; 'DAA | Pythia 6.9B 최고 성능 시점 데이터 25%' (816) garbled (it is 25% of the epoch); 'IPO 최적 정책 π*(y1)=σ(0.5/τ)' (807) is a formula, not a result; '총 향상 15.85%' unit. Cross-cutting section re-explains DAA length extrapolation (757) and Online IPO equivalence (761) from 471-479 and 631."
+   },
+   "X1": {
+    "score": 7,
+    "reason": "Categories valid; tags 'KL-Regularization' and 'Nash-Learning-from-Human-Feedback' are reusable, but DPO/GRPO/RLHF are absent while NLHF is spelled out at length."
+   }
+  },
+  "principles": {
+   "claim headings": {
+    "verdict": "met",
+    "evidence": "e.g. '### 보상 모델 없이도 한 에폭 안에서 시작되는 과최적화' (469)"
+   },
+   "running example": {
+    "verdict": "partly met",
+    "evidence": "TL;DR declared common example (15) and used at 144, 575, 595, 658, 753, but many worked examples are generic ('가상의 쌍', 379; 547)"
+   },
+   "mechanism -> design choice -> formula -> worked example": {
+    "verdict": "met",
+    "evidence": "DPO 349-379, ORPO 509-549, GRPO 690-719"
+   },
+   "facts said once": {
+    "verdict": "partly met",
+    "evidence": "Opening repeats Stiennon point (13); 74/70/67% both in prose (221) and table limitation cell (801); two closing sections overlap"
+   },
+   "numbers with variant, scope and unit": {
+    "verdict": "met",
+    "evidence": "e.g. 'Mistral-Base 7B를 AlpacaEval 2 LC 승률로 ... SimPO는 21.5%로 DPO의 15.1%보다 6.4%p' (783); '66.75' tied to 2회차 (664); one unit slip '15.85%' (813)"
+   },
+   "nothing invented": {
+    "verdict": "met",
+    "evidence": "No wrong claim among checked items; one unverifiable (305)"
+   },
+   "writer's own assessment at the end": {
+    "verdict": "met",
+    "evidence": "840, 850: evaluation under the same KL budget as the comparison criterion"
+   },
+   "length fitted to difficulty": {
+    "verdict": "partly met",
+    "evidence": "Long, well-paced on DPO/IPO/GRPO; early RLHF papers are long relative to difficulty (52-140)"
+   },
+   "type-specific shape (survey numbers in one table)": {
+    "verdict": "partly met",
+    "evidence": "One results table (795-816) but several cells misfiled"
+   },
+   "Korean style": {
+    "verdict": "met",
+    "evidence": "Natural register; few calques (515, 664)"
+   }
+  },
+  "claims": {
+   "checked": 31,
+   "numbers_checked": 22,
+   "supported": 30,
+   "unsupported": 0,
+   "wrong": 0,
+   "unverifiable": 1,
+   "error_rate": 0.0,
+   "items": [
+    {
+     "claim": "Feedback on <1% of interactions",
+     "line": 88,
+     "number": true,
+     "verdict": "supported",
+     "source": "1706.03741 abstract"
+    },
+    {
+     "claim": "Atari: 5,500 human queries over 7 games; Enduro beats RL; Qbert fails first level",
+     "line": "88, 100",
+     "number": true,
+     "verdict": "supported",
+     "source": "1706.03741: '5,500 queries to a human rater', 'seven Atari games', Enduro outperforming A3C, Qbert fails to beat first level"
+    },
+    {
+     "claim": "MuJoCo 1400 synthetic labels exceed true-reward RL (table)",
+     "line": 797,
+     "number": true,
+     "verdict": "supported",
+     "source": "1706.03741: 'by 1400 labels our algorithm performs slightly better than if it had simply been given the true reward'"
+    },
+    {
+     "claim": "Offline reward learning captured only part of reward; Pong endless rally",
+     "line": 753,
+     "number": false,
+     "verdict": "supported",
+     "source": "1706.03741: offline predictor 'captures only part of the true reward'; Pong agent avoids losing but does not score"
+    },
+    {
+     "claim": "Ziegler RM loss is softmax over four candidates",
+     "line": 104,
+     "number": true,
+     "verdict": "supported",
+     "source": "1909.08593: labelers choose best of four (y0..y3); softmax log-likelihood"
+    },
+    {
+     "claim": "RM data at most 60k vs 2M episodes; shared parameters overfit",
+     "line": 140,
+     "number": true,
+     "verdict": "supported",
+     "source": "1909.08593: 'at most 60k samples ... 2M episodes'"
+    },
+    {
+     "claim": "Pure RL fine-tuning worse than supervised baseline on ROUGE in all cases",
+     "line": 140,
+     "number": false,
+     "verdict": "supported",
+     "source": "1909.08593: 'pure RL fine-tuning is worse than the supervised baseline according to ROUGE in all cases'"
+    },
+    {
+     "claim": "Copying models; labelers' heuristic may have been exploited",
+     "line": 140,
+     "number": false,
+     "verdict": "supported",
+     "source": "1909.08593: 'smart copiers' ... 'some labelers check for copying as a fast heuristic'"
+    },
+    {
+     "claim": "60k vs reference TL;DR 96%; real human feedback vs sentiment classifier 77% (table)",
+     "line": 798,
+     "number": true,
+     "verdict": "supported",
+     "source": "1909.08593: 'beats the human ground truth 96% of the time for TL;DR'; 'in 77% of contexts'"
+    },
+    {
+     "claim": "Online collection mattered for summarization but not style tasks",
+     "line": 753,
+     "number": false,
+     "verdict": "supported",
+     "source": "1909.08593: 'online data collection was important for summarization but not for the simpler style tasks'"
+    },
+    {
+     "claim": "ROUGE-labeler agreement ~57% (supervised samples) falls to ~50% (HF samples)",
+     "line": 162,
+     "number": true,
+     "verdict": "supported",
+     "source": "2009.01325: '~57% agreement ... ' and ~50%"
+    },
+    {
+     "claim": "6.7B TL;DR model nearly matches T5 on CNN/DM at similar length; ~320 GPU-days",
+     "line": "170, 176",
+     "number": true,
+     "verdict": "supported",
+     "source": "2009.01325: 'nearly matches T5 despite never being trained to summarize news'; 'approximately 320 GPU-days'"
+    },
+    {
+     "claim": "Compute: 175B SFT 4.9, PPO-ptx 60, GPT-3 3,640 petaflops/s-days",
+     "line": 217,
+     "number": true,
+     "verdict": "supported",
+     "source": "2203.02155: 4.9 / 60 / 3,640 petaflops/s-days"
+    },
+    {
+     "claim": "175B RM unstable, unsuitable as value function",
+     "line": 192,
+     "number": false,
+     "verdict": "supported",
+     "source": "2203.02155: '175B RM training could be unstable and thus was less suitable to be used as the value function'"
+    },
+    {
+     "claim": "RM held-out labeler accuracy 69.6% (table)",
+     "line": 800,
+     "number": true,
+     "verdict": "supported",
+     "source": "2203.02155: '69.6 ± 0.9%'"
+    },
+    {
+     "claim": "Online PM accuracy 74/70/67%; weekly cadence; 52B helpfulness",
+     "line": "221-223",
+     "number": true,
+     "verdict": "supported",
+     "source": "2204.05862: 74%, 70%, 67%; 'roughly weekly cadence'; predominantly 52B, helpfulness only"
+    },
+    {
+     "claim": "Llama 2 KL β 0.01 for 7B/13B, 0.005 for 34B/70B",
+     "line": 243,
+     "number": true,
+     "verdict": "supported",
+     "source": "2307.09288: 'β=0.01 ... 7B and 13B ... 0.005 for 34B and 70B'"
+    },
+    {
+     "claim": "Until RLHF V3 only previous-iteration samples; rhyming-poem regression",
+     "line": 245,
+     "number": false,
+     "verdict": "supported",
+     "source": "2307.09288: 'RLHF V3 struggled more than previous versions to compose rhyming lines'"
+    },
+    {
+     "claim": "Gao: policy 1.2B and 90,000 RM comparisons fixed; policy-size runs used a 12M RM",
+     "line": "273, 275",
+     "number": true,
+     "verdict": "supported",
+     "source": "2210.10760: 'We hold policy size (1.2B) and data size (90,000) constant'; policy sweep with 12M RM"
+    },
+    {
+     "claim": "CAI CoT probabilities clamped to 40-60%; critiques help only small models",
+     "line": "305, 317",
+     "number": true,
+     "verdict": "supported",
+     "source": "2212.08073: 'lie within the 40-60 percent range'; 'no noticeable different for large models'"
+    },
+    {
+     "claim": "CAI: PM calibration worsened at high PM scores",
+     "line": 305,
+     "number": false,
+     "verdict": "unverifiable",
+     "source": "Not found in the checked passages of 2212.08073; the high-score calibration finding is stated in 2204.05862 §4.5"
+    },
+    {
+     "claim": "RLAIF 71% (RLHF 73%) over SFT; harmless 88%; >10x cheaper",
+     "line": "339, 806",
+     "number": true,
+     "verdict": "supported",
+     "source": "2309.00267 HTML: 71%/73%; 64/76/88%; 'over 10x cheaper'"
+    },
+    {
+     "claim": "DPO: 22-run IMDb sweep; GPT-4 TL;DR DPO ~61% vs PPO ~57%; CNN/DM 0.36 vs 0.26",
+     "line": "385, 391, 805",
+     "number": true,
+     "verdict": "supported",
+     "source": "2305.18290: 22 runs; 61% vs 57%; 0.36 vs 0.26"
+    },
+    {
+     "claim": "KTO: HALO gap significant only at 13B+ (p<0.05); Zephyr-β GSM8K +13.5; λ_D 1.5/2.0 hurts reference-free variant",
+     "line": "447, 467, 809",
+     "number": true,
+     "verdict": "supported",
+     "source": "2402.01306: 'only significant (p<0.05) at 13B+'; 'improves performance by 13.5 points'; λD 1.5 or 2.0 drops GSM8K/BBH"
+    },
+    {
+     "claim": "Mistral-Base LC: SimPO 21.5, DPO 15.1 (+6.4%p), R-DPO 17.4, ORPO 14.7, KTO 13.1, IPO 11.8",
+     "line": 783,
+     "number": true,
+     "verdict": "supported",
+     "source": "2405.14734 Table 4"
+    },
+    {
+     "claim": "SPPO LC gains 7.69 / 2.10 / 1.64; Mistral Iter2 Open LLM 66.75; Llama-3 70.29; Llama-3 total gain 15.85; Arena-Hard Iter3 23.3",
+     "line": "664, 813",
+     "number": true,
+     "verdict": "supported",
+     "source": "2405.00675 Tables: 17.11→24.79→26.89→28.53; 66.75 (Iter2); 22.92→38.77; Arena-Hard 23.3 (table writes '15.85%' for a points gain)"
+    },
+    {
+     "claim": "Iterative DPO 8B LC 31.3 vs vanilla DPO 22.5",
+     "line": 814,
+     "number": true,
+     "verdict": "supported",
+     "source": "2405.07863: DPO baseline LC 22.5, iterative 31.3"
+    },
+    {
+     "claim": "NLHF Nash solution 1/3+ε/2 for y1,y2 and 1/3−ε for y3; PM sizes 110M/3B/11B",
+     "line": "597, 621",
+     "number": true,
+     "verdict": "supported",
+     "source": "2312.00886: 'with probability 1/3+ε/2 each, and y3 with probability 1/3−ε'; T5X small/XL/XXL"
+    },
+    {
+     "claim": "Nash-MD-PG is a single gradient step, not exactly mirror descent",
+     "line": 615,
+     "number": false,
+     "verdict": "supported",
+     "source": "2312.00886 App. F: 'not directly implementing a mirror descent algorithm'"
+    },
+    {
+     "claim": "DAA scaling-law fit halves RMSE vs quadratic fit",
+     "line": 479,
+     "number": true,
+     "verdict": "supported",
+     "source": "2406.02900: 'this scaling law halves the RMSE'"
+    },
+    {
+     "claim": "Mroueh: degenerate p_ref fixed point not necessarily stable, condition on β",
+     "line": 743,
+     "number": false,
+     "verdict": "supported",
+     "source": "2503.06639: 'is not necessarily stable' and stability needs a condition on β"
+    }
+   ]
+  },
+  "checklist": {
+   "repeated": 0,
+   "avoided": 5,
+   "na": 1,
+   "repeated_ids": [],
+   "details": {
+    "grpo-card-unverified-figure": {
+     "verdict": "avoided",
+     "evidence": "737-745 have no numbers or equations; fixed-point and β-stability claims match 2503.06639 Theorems 3 and 6"
+    },
+    "copy-explains-preference": {
+     "verdict": "avoided",
+     "evidence": "140 ties the heuristic to the copying behaviour ('거의 전부 문장을 그대로 복사하는 추출식이었고 ... 휴리스틱에 기대는 습성을 모델이 악용했을 수 있다'), not to the 96% preference"
+    },
+    "daa-no-quantification": {
+     "verdict": "avoided",
+     "evidence": "469-479 report the 25% peak and RMSE halving; 834 says the paper offers no solution, which the paper states"
+    },
+    "grpo-row-reward": {
+     "verdict": "n/a",
+     "evidence": "Table (795-816) has no reward column"
+    },
+    "heading-da-form-offline": {
+     "verdict": "avoided",
+     "evidence": "'### 보상 모델 없이도 한 에폭 안에서 시작되는 과최적화' (469)"
+    },
+    "heading-da-form-judge": {
+     "verdict": "avoided",
+     "evidence": "'### 사람, GPT-4 판정, 정답 검증이라는 서로 다른 잣대' (789); no da-form headings"
+    }
+   }
+  },
+  "structure_defects": {
+   "count": 2,
+   "items": [
+    "17 wrong cross-reference: '글 끝의 연표' while the table is at 21",
+    "13 self-repeating opening (Stiennon point stated twice)"
+   ]
+  },
+  "top_issues": [
+   "Comparison-table cells misfiled or garbled (801, 807, 813, 816)",
+   "Markup: '$n$' inside $$ (264), \\mid\\mid for KL (351)",
+   "Wrong cross-reference '글 끝의 연표' (17) and overlapping double ending (818-850)",
+   "Running example declared but used unevenly"
+  ],
+  "mean_score": 7.56
+ },
+ "preference": {
+  "overall": "Y",
+  "per_criterion": {
+   "A": "tie",
+   "B": "tie",
+   "C": "Y",
+   "D": "X",
+   "E": "Y",
+   "F": "Y",
+   "G": "X",
+   "S1": "tie",
+   "X1": "tie"
+  },
+  "reason": "Y is factually cleaner (0 errors in 31 checked vs 2 in 34 for X, including the flagged Ziegler misattribution), introduces each paper explicitly, and its table covers more of the plan. X has the better-woven running example and tighter worked numbers, but its broken seams (125, 147, 195) and the unsupported SPPO baseline weigh more. Margins are modest."
+ }
+}
