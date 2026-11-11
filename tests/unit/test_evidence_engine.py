@@ -2015,3 +2015,10 @@ def test_cached_evidence_gets_its_section_heading() -> None:
     }
     (item,) = cached_evidence(json.dumps([old]), doc) or []
     assert item.section_heading == "1 Introduction"
+
+
+def test_an_ask_for_a_missing_number_says_what_a_number_is() -> None:
+    from scholar_lens.application.evidence_writer import _number_hint
+
+    assert "never a figure it cites" in _number_hint(["method", "number"])
+    assert _number_hint(["limitation"]) == ""
