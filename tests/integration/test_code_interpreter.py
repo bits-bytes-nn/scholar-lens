@@ -135,3 +135,10 @@ def test_a_dropped_stream_is_unavailable() -> None:
     with pytest.raises(SandboxUnavailable):
         asyncio.run(_runner(client).run("p", requirements=[], timeout_s=30))
     assert client.calls[-1][0] == "stop"
+
+
+def test_a_forged_install_line_from_the_program_is_ignored() -> None:
+    forged = "@@SCHOLAR_LENS_INSTALL_FAILED@@{@@SCHOLAR_LENS_RESULT@@"
+    client = _Client([_result(f"{forged}\n")])
+    run = asyncio.run(_runner(client).run("p", requirements=[], timeout_s=30))
+    assert run.warning == ""

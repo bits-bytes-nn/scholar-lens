@@ -283,9 +283,11 @@ async def write_guide_with_evidence(
         ProgramRuns(
             runner,
             pins=tuple((n, v) for n, (v, _) in sorted(provided.items())),
+            # The product's modules by their full names: a missing submodule
+            # of one is the post's, a missing root an install that failed.
             modules=frozenset(
                 {p.lower().replace("-", "_") for p in products}
-                | {m.split(".")[0] for m in (sdk.modules if sdk else ())}
+                | set(sdk.modules if sdk else ())
             ),
             block_timeout_s=writing.run_block_timeout_s,
             total_timeout_s=writing.run_timeout_s,

@@ -11,6 +11,7 @@ section that holds it.
 
 from __future__ import annotations
 
+import ast
 import json
 import re
 from collections.abc import Collection, Sequence
@@ -18,7 +19,12 @@ from typing import Literal
 
 from pydantic import BaseModel, field_validator
 
-from scholar_lens.domain.program import _session_code, is_excerpt, python_blocks
+from scholar_lens.domain.program import (
+    _ANY_FENCE,
+    _session_code,
+    is_excerpt,
+    python_blocks,
+)
 
 # The line a wrapped block prints its outcome on (stdout may hold more).
 RESULT_MARK = "@@SCHOLAR_LENS_RESULT@@"
@@ -141,10 +147,7 @@ def _distribution(name: str) -> str:
 
 
 # The shell blocks a reader runs (an unlabelled block too).
-_SHELL_FENCE = re.compile(
-    r"^```[ \t]*(?:bash|sh|shell|zsh|console|terminal)?[ \t]*\n(.*?)^```",
-    re.M | re.S,
-)
+_SHELL_INFO = frozenset({"", "bash", "sh", "shell", "zsh", "console", "terminal"})
 _PIP = re.compile(
     r"(?:^|[\s;&|(])(?:uv\s+)?(?:python3?\s+-m\s+)?pip3?\s+install\s+(.+)"
 )
@@ -183,8 +186,15 @@ def post_installs(markdown: str) -> list[tuple[str, frozenset[str], str]]:
     shell blocks ``pip install``: options and their values, files, paths and
     URLs left out (prose is not read)."""
     out: list[tuple[str, frozenset[str], str]] = []
-    for block in _SHELL_FENCE.finditer(markdown):
-        for line in block.group(1).splitlines():
+    # Fences are paired as the static check pairs them (a block's closing
+    # fence never opens another).
+    shell = [
+        m.group(4)
+        for m in _ANY_FENCE.finditer(markdown)
+        if m.group(3).lower() in _SHELL_INFO
+    ]
+    for block in shell:
+        for line in block.splitlines():
             line = line.strip().removeprefix("$ ").split(" #")[0]
             if not (m := _PIP.search(line)):
                 continue
@@ -238,8 +248,9 @@ def program_script(
     """One Python program that runs ``codes`` in order in one namespace (a
     reader's session: state carries over, ``__name__`` is ``"__main__"``),
     each under an alarm, writing each block's outcome as one JSON line after
-    ``mark`` (:data:`RESULT_MARK` and a per-run nonce, so the code cannot
-    print one). A failing block's later statements are skipped, the next
+    ``mark`` (:data:`RESULT_MARK` and a per-run nonce, so code printing
+    a mark by accident is not read as an outcome; code set on forging one
+    could, but gains nothing outside the sandbox). A failing block's later statements are skipped, the next
     block still runs (what it needs may be defined). A fresh interpreter,
     not a notebook kernel: ``asyncio.run`` works as pasted.
 
@@ -249,6 +260,7 @@ def program_script(
     ``except Exception`` retry loop does not swallow it)."""
     return f"""
 import json as _sl_json, os as _sl_os, signal as _sl_signal, sys as _sl_sys
+import ast as _sl_ast, asyncio as _sl_asyncio, inspect as _sl_inspect
 _SL_CODES = {list(codes)!r}
 _SL_MARK = {mark!r}
 _sl_fd = _sl_os.dup(1)
@@ -270,7 +282,14 @@ for _sl_i, _sl_code in enumerate(_SL_CODES, 1):
     _sl_signal.signal(_sl_signal.SIGALRM, _sl_alarm)
     _sl_signal.alarm({block_timeout_s})
     try:
-        exec(compile(_sl_code, f"<block {{_sl_i}}>", "exec"), _sl_ns)
+        _sl_c = compile(
+            _sl_code, f"<block {{_sl_i}}>", "exec", flags=_sl_ast.PyCF_ALLOW_TOP_LEVEL_AWAIT
+        )
+        if _sl_c.co_flags & _sl_inspect.CO_COROUTINE:
+            # Top-level await, as a notebook or `python -m asyncio` runs it.
+            _sl_asyncio.run(eval(_sl_c, _sl_ns))
+        else:
+            exec(_sl_c, _sl_ns)
         _sl_out = {{"index": _sl_i, "ok": True}}
     except BaseException as _sl_e:
         _sl_ok = isinstance(_sl_e, SystemExit) and _sl_e.code in (0, None)
@@ -329,18 +348,20 @@ def verdict(run: BlockRun, product_modules: Collection[str]) -> Verdict:
     if run.error_type in ("ModuleNotFoundError", "ImportError"):
         products = {m.lower() for m in product_modules}
         named = message.split("'")[1] if message.count("'") >= 2 else ""
-        top = named.split(".")[0]
         if run.error_type == "ImportError" and "cannot import name" in message:
             # "cannot import name 'X' from 'pkg.mod' (...)": a product's.
             quoted = message.split("'")
-            source = quoted[3].split(".")[0] if len(quoted) > 3 else ""
+            source = quoted[3] if len(quoted) > 3 else ""
             return "code" if source in products else "unclear"
         # A product's submodule the post names wrongly is the code's; the
         # product itself missing is an install that failed (or a sandbox
         # that installs nothing).
-        if top in products and named != top:
-            return "code"
-        return "environment"
+        # A product module's submodule that does not exist is the code's
+        # (its parent imported, so the product is installed); a product
+        # root or a namespace package's part missing is an install that
+        # failed (or a sandbox that installs nothing).
+        parent = named.rpartition(".")[0]
+        return "code" if parent and parent in products else "environment"
     if run.error_type in ("TypeError", "AttributeError"):
         # A wrong call or attribute, unless a missing setting made a value
         # None.
@@ -400,6 +421,50 @@ def _reliable_after_gap(run: BlockRun) -> bool:
     return False
 
 
+def _bindings(code: str) -> tuple[set[str], set[str]]:
+    """(names the block's top level defines or assigns, names it imports);
+    empty when it does not parse."""
+    try:
+        tree = ast.parse(code)
+    except (SyntaxError, ValueError):
+        return set(), set()
+    defined: set[str] = set()
+    imported: set[str] = set()
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            defined.add(node.name)
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            imported |= {(a.asname or a.name).split(".")[0] for a in node.names}
+        elif isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            for target in targets:
+                defined |= {n.id for n in ast.walk(target) if isinstance(n, ast.Name)}
+    return defined, imported
+
+
+def _used(code: str) -> set[str]:
+    try:
+        tree = ast.parse(code)
+    except (SyntaxError, ValueError):
+        return set()
+    return {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)}
+
+
+def _shadowed(blocks: Sequence[tuple[str, str, bool]], before: int) -> set[str]:
+    """Names the blocks before index ``before`` (1-based) last bound in an
+    excerpt or a section not meant to run, by a definition or assignment
+    (an illustration, such as a simplified class of the product, that the
+    runnable code then uses in place of the real one)."""
+    shadowed: set[str] = set()
+    for _, code, checked in blocks[: before - 1]:
+        defined, imported = _bindings(code)
+        if checked:
+            shadowed -= defined | imported
+        else:
+            shadowed = (shadowed - imported) | defined
+    return shadowed
+
+
 def judge_run(
     blocks: Sequence[tuple[str, str, bool]],
     outcomes: Sequence[BlockRun],
@@ -421,6 +486,14 @@ def judge_run(
             continue
         title, code, checked = blocks[run.index - 1]
         whose = verdict(run, product_modules)
+        if (
+            whose == "code"
+            and checked
+            and _used(code) & _shadowed(blocks, run.index)
+            and run.error_type not in _SOURCE_ERRORS
+        ):
+            # It may fail only because it calls an illustration's version.
+            whose = "unclear"
         if whose == "code" and checked and (not gap or _reliable_after_gap(run)):
             return ProgramRun(
                 findings=[run_finding(title, code, run, after_gap=bool(gap))],

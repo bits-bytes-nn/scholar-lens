@@ -1360,3 +1360,25 @@ def test_a_review_the_sandbox_could_not_check_is_not_saved() -> None:
     written = _typo_post(engine, ledger)
     asyncio.run(engine.reviewed(_outline(), ledger, written))
     assert [k for k in store.blobs if "review" in k]
+
+
+class _NameFix(_TypoFix):
+    async def structured(self, *, prompt, schema, **kw: Any):  # type: ignore[no-untyped-def]
+        if schema is SectionEdits:
+            self.fixes.append(prompt)
+            return SectionEdits(
+                edits=[Edit(find="clinet.run()", replace="client.run()")]
+            )
+        return await super().structured(prompt=prompt, schema=schema, **kw)
+
+
+def test_code_the_static_fix_cleans_is_run_after_it() -> None:
+    model, runner = _NameFix(), _LocalRunner()
+    engine = _run_engine(model, runner)
+    ledger = _ledger()
+    written = _typo_post(engine, ledger)
+    written[1] = (written[1][0], written[1][1].replace(_TYPO, "clinet.run()"))
+    assert engine.program_check(written)
+    out = asyncio.run(engine.review_post(_outline(), ledger, written))
+    assert "client.run()" in out[1][1]
+    assert len(runner.programs) == 1 and "client.run()" in runner.programs[0]

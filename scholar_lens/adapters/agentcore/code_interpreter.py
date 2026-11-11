@@ -207,8 +207,13 @@ class AgentCoreCodeRunner:
             raise SandboxUnavailable(f"the driver failed: {stderr[-300:]}")
         warning = ""
         for line in stdout.splitlines():
-            if line.startswith(_INSTALL_MARK):
-                _failed, detail = json.loads(line[len(_INSTALL_MARK) :])
+            # The driver's own line (the program's lines carry the result
+            # mark).
+            if line.startswith(_INSTALL_MARK) and RESULT_MARK not in line:
+                try:
+                    _failed, detail = json.loads(line[len(_INSTALL_MARK) :])
+                except ValueError:
+                    detail = line[len(_INSTALL_MARK) :]
                 plain = " ".join(_ANSI.sub("", str(detail)).split())
                 warning = f"could not install {plain[:280]}"
         return SandboxRun(stdout=stdout, warning=warning)

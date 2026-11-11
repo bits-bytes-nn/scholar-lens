@@ -1220,6 +1220,10 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
                 "Code that may not run as pasted: "
                 + " | ".join(f"{t}: {p}"[:200] for t, p in left[:5])
             )
+        elif program and found and ran is None:
+            # The static problems are fixed: the fixed code runs now.
+            if (ran := await self.run_program(fixed)) is not None:
+                self.program_run_notes(ran)
         elif ran is not None:
             # The fixes may have changed the code (any finding's, not only
             # the run's): what is noted is the last code's run.

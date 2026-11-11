@@ -118,6 +118,13 @@ def test_outcomes_out_of_order_or_malformed_are_ignored() -> None:
         # The product itself missing is an install that failed.
         ("ModuleNotFoundError", "builtins", "No module named 'strands'", "environment"),
         ("SystemExit", "builtins", "2", "unclear"),
+        # A namespace package's part: the product's install failed.
+        (
+            "ModuleNotFoundError",
+            "builtins",
+            "No module named 'google.adk'",
+            "environment",
+        ),
         (
             "NoCredentialsError",
             "botocore.exceptions",
@@ -133,11 +140,11 @@ def test_verdict(error_type: str, module: str, message: str, expected: str) -> N
     run = BlockRun(
         index=1, ok=False, error_type=error_type, error_module=module, message=message
     )
-    assert verdict(run, {"strands"}) == expected
+    assert verdict(run, {"strands", "strands.hooks", "google.adk"}) == expected
 
 
 def _blocks() -> list[tuple[str, str, bool]]:
-    return [("설치", "a = 1", False), ("사용", "b = a.c", True), ("끝", "d", True)]
+    return [("설치", "import os", False), ("사용", "b = os.c", True), ("끝", "d", True)]
 
 
 def test_a_code_failure_in_a_runnable_section_is_a_finding() -> None:
@@ -271,3 +278,48 @@ def test_the_code_cannot_hide_or_forge_its_outcomes() -> None:
         (3, False, "NameError"),
         (4, True, ""),
     ]
+
+
+def test_a_failure_through_an_illustrations_definition_is_not_blamed() -> None:
+    """A section not meant to run shows a simplified class of the product;
+    the usage section's call fails against it, not against the product."""
+    blocks = [
+        ("설치", "from strands import Agent", True),
+        ("원리", "class Agent:\n    def __init__(self, model):\n        pass", False),
+        ("사용", "agent = Agent(a=1)", True),
+    ]
+    fails = [
+        BlockRun(index=1, ok=True),
+        BlockRun(index=2, ok=True),
+        BlockRun(
+            index=3,
+            ok=False,
+            error_type="TypeError",
+            message="Agent.__init__() got an unexpected keyword argument 'a'",
+        ),
+    ]
+    run = judge_run(blocks, fails, {"strands"})
+    assert not run.findings and "cannot attribute" in run.limited
+    # Imported again in a runnable block, the name is the product's.
+    blocks.insert(2, ("다시", "from strands import Agent", True))
+    fails = [BlockRun(index=i, ok=True) for i in (1, 2, 3)] + [
+        fails[-1].model_copy(update={"index": 4})
+    ]
+    assert judge_run(blocks, fails, {"strands"}).findings
+
+
+def test_top_level_await_runs() -> None:
+    script = program_script(
+        ["import asyncio\nawait asyncio.sleep(0)\nx = 1", "print(x)"],
+        block_timeout_s=10,
+    )
+    assert [r.ok for r in read_outcomes(_run(script))] == [True, True]
+
+
+def test_post_installs_pairs_fences() -> None:
+    post = (
+        "```python\nx = 1\n```\n\nAvoid running pip install numpy==1.0 in prose.\n\n"
+        "```bash\npip install strands-agents-tools\n```\n"
+        "```\npip install boto3\n```\n"
+    )
+    assert run_requirements([], post) == ["strands-agents-tools", "boto3"]
