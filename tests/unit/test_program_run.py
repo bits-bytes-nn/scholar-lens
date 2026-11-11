@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import tempfile
 
 import pytest
 
@@ -21,13 +22,16 @@ from scholar_lens.domain.program_run import (
 
 
 def _run(source: str, timeout: int = 60) -> str:
-    return subprocess.run(
-        [sys.executable, "-I", "-c", source],
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-        check=False,
-    ).stdout
+    # In a scratch directory: a block may write files (a %%writefile cell).
+    with tempfile.TemporaryDirectory() as scratch:
+        return subprocess.run(
+            [sys.executable, "-I", "-c", source],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+            cwd=scratch,
+        ).stdout
 
 
 def _py(code: str) -> str:
@@ -545,3 +549,26 @@ def test_a_notebook_cell_keeps_its_code_without_the_magics() -> None:
         "print(data)",
     ]
     assert python_code_problems(sections) == []
+
+
+@pytest.mark.parametrize(
+    ("cell", "runs"),
+    [
+        ("%%writefile requirements.txt\nstrands-agents\nbedrock-agentcore", "file"),
+        ("%%bash\nls -la", ""),
+        ("%%time\nx = sum(range(3))", "x = sum(range(3))"),
+        ("resp = 1\nok = (resp\n      != 200)", None),
+    ],
+)
+def test_cell_magics_run_as_a_notebook_runs_them(cell: str, runs: str | None) -> None:
+    blocks = program_blocks([("셀", _py(cell), True)])
+    if runs is None:  # a plain script: run as written
+        assert blocks[0][1].strip() == cell
+    elif runs == "file":
+        ((_, code, _),) = blocks
+        script = program_script(
+            [code, "print(open('requirements.txt').read())"], block_timeout_s=10
+        )
+        assert [r.ok for r in read_outcomes(_run(script))] == [True, True]
+    else:
+        assert [c.strip() for _, c, _ in blocks] == ([runs] if runs else [])

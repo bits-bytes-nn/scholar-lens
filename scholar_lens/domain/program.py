@@ -66,16 +66,48 @@ def python_blocks(markdown: str) -> list[str]:
     ]
 
 
+# Cell magics whose body is Python.
+_PYTHON_CELL_MAGICS = frozenset({"time", "timeit", "capture", "prun"})
+
+
+def _cell_code(lines: list[str]) -> str:
+    """A notebook cell as the Python it runs: a ``%%writefile`` cell writes
+    its body to the file (a later import reads it), a cell magic whose body
+    is not Python runs nothing, and line magics and shell lines are left
+    out."""
+    body = [ln for ln in lines if ln.strip()]
+    first = body[0].strip() if body else ""
+    if first.startswith("%%"):
+        name, _, arg = first[2:].partition(" ")
+        rest = "\n".join(lines[lines.index(body[0]) + 1 :])
+        if name in ("writefile", "file") and (
+            path := [a for a in arg.split() if not a.startswith("-")]
+        ):
+            append = "-a" in arg.split() or "--append" in arg.split()
+            return (
+                f"with open({path[-1]!r}, {'a' if append else 'w'!r}) as _cell:\n"
+                f"    _cell.write({(rest + chr(10))!r})"
+            )
+        if name not in _PYTHON_CELL_MAGICS:
+            return ""
+        lines = rest.split("\n")
+    return "\n".join(ln for ln in lines if not ln.lstrip().startswith(("%", "!")))
+
+
 def _session_code(code: str) -> str | None:
     """A REPL transcript or notebook cell as the code it runs (prompts and
     ``%``/``!`` lines left out); None for a plain script."""
     lines = code.split("\n")
     if not any(ln.lstrip().startswith((">>>", "%", "!")) for ln in lines):
         return None
-    magic = [ln for ln in lines if not ln.lstrip().startswith(("%", "!"))]
+    try:
+        ast.parse(code)
+        return None  # a script whose continuation line starts with "%" or "!"
+    except (SyntaxError, ValueError):
+        pass
     if not any(ln.lstrip().startswith(">>>") for ln in lines):
-        # A notebook cell: its code without the magics and shell lines.
-        return "\n".join(magic)
+        return _cell_code(lines)
+    magic = [ln for ln in lines if not ln.lstrip().startswith(("%", "!"))]
     # A REPL transcript: the prompted lines (the rest is output).
     return "\n".join(
         _PROMPT.sub("", ln) for ln in magic if _PROMPT.match(ln) or not ln.strip()
