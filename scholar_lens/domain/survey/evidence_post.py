@@ -12,7 +12,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from scholar_lens.domain.coverage import CoverageTarget
-from scholar_lens.domain.evidence import EvidenceLedger, canonical_ids
+from scholar_lens.domain.evidence import Evidence, EvidenceLedger, canonical_ids
 from scholar_lens.domain.evidence_draft import MARKER, block_lines, cited_ids
 from scholar_lens.domain.glossary import GlossaryTerm
 from scholar_lens.domain.lengths import DEPTH_CHARS, scaled_targets
@@ -205,12 +205,8 @@ def outline_problems(
     core = {p.id for p in plan.papers if p.role == "core"}
     # The evidence the table can show (the repair's rule: other numbers and
     # limitations stay in their sections).
-    with_numbers = {
-        e.paper_id for e in ledger if e.kind == "number" and result_cell(e.cell)
-    }
-    with_limits = {
-        e.paper_id for e in ledger if e.kind == "limitation" and limitation_cell(e.cell)
-    }
+    with_numbers = {e.paper_id for e in ledger if result_evidence(e)}
+    with_limits = {e.paper_id for e in ledger if limitation_evidence(e)}
     for row in outline.table:
         if row.paper in with_numbers and not row.results:
             problems.append(
@@ -289,6 +285,31 @@ def result_cell(cell: str) -> bool:
     )
 
 
+# Sections whose numbers set the scene, not the paper's results (the
+# adoption of a product, the size of a market, a prior work's figure).
+_BACKGROUND_SECTION = re.compile(
+    r"\b(?:introduction|intro|background|motivation|related work|prior work|"
+    r"preliminar(?:y|ies))\b|서론|배경|관련 연구|동기",
+    re.I,
+)
+
+
+def result_evidence(item: Evidence) -> bool:
+    """Whether ``item`` can stand in the comparison table's results column:
+    a number of the paper's own results (not one its introduction, background
+    or related work cites) whose cell :func:`result_cell` accepts."""
+    return (
+        item.kind == "number"
+        and result_cell(item.cell)
+        and not _BACKGROUND_SECTION.search(item.anchor or "")
+    )
+
+
+def limitation_evidence(item: Evidence) -> bool:
+    """Whether ``item`` can stand in the table's limitation column."""
+    return item.kind == "limitation" and limitation_cell(item.cell)
+
+
 def comparison_table(
     plan: SurveyPlan, outline: EvidenceOutline, ledger: EvidenceLedger, korean: bool
 ) -> str:
@@ -314,9 +335,8 @@ def comparison_table(
             [
                 outline.short_names.get(paper.id, paper.title),
                 outline.lineage_names.get(paper.lineage, paper.lineage),
-                "; ".join(e.cell for e in results if result_cell(e.cell))
-                or none_result,
-                limit.cell if limit and limitation_cell(limit.cell) else none_limit,
+                "; ".join(e.cell for e in results if result_evidence(e)) or none_result,
+                limit.cell if limit and limitation_evidence(limit) else none_limit,
             ]
         )
     return _table(head, rows)
@@ -477,22 +497,22 @@ def repair_outline(
         # into (the one sections hold).
         return merged.get(eid, eid)
 
-    def shown_copy(eid: str, kind: str, showable: Callable[[str], bool]) -> str | None:
+    def shown_copy(eid: str, showable: Callable[[Evidence], bool]) -> str | None:
         """The copy of ``eid``'s fact the table can show: itself, else
         another item merged with it, else None."""
         group = [eid, *(e.id for e in ledger if fact(e.id) == fact(eid))]
         for candidate in dict.fromkeys(group):
             item = ledger.get(candidate)
-            if item is not None and item.kind == kind and showable(item.cell):
+            if item is not None and showable(item):
                 return candidate
         return None
 
-    def first_copies(pid: str, kind: str, showable: Callable[[str], bool]) -> list[str]:
+    def first_copies(pid: str, showable: Callable[[Evidence], bool]) -> list[str]:
         """The paper's evidence of ``kind`` the table can show, one copy per
         fact, in ledger order."""
         out: dict[str, str] = {}
         for e in ledger.of_paper(pid):
-            if e.kind == kind and showable(e.cell):
+            if showable(e):
                 out.setdefault(fact(e.id), e.id)
         return list(out.values())
 
@@ -501,8 +521,8 @@ def repair_outline(
         # Only evidence whose cell the table can show goes there, one copy
         # per fact; the rest stays in (or goes back to) its section, so no
         # fact leaves the post and none is said twice.
-        numbers = first_copies(pid, "number", result_cell)
-        limits = first_copies(pid, "limitation", limitation_cell)
+        numbers = first_copies(pid, result_evidence)
+        limits = first_copies(pid, limitation_evidence)
         if pid not in rows and (paper.role == "core" or numbers):
             rows[pid] = TableRow(paper=pid)
             notes.append(f"added {pid} to the table")
@@ -516,14 +536,12 @@ def repair_outline(
 
         results: dict[str, str] = {}
         for eid in row.results:
-            copy = shown_copy(eid, "number", result_cell)
+            copy = shown_copy(eid, result_evidence)
             if copy is not None and own(copy):
                 results.setdefault(fact(copy), copy)
         row.results = list(results.values())[:2] or numbers[:2]
         limitation = (
-            shown_copy(row.limitation, "limitation", limitation_cell)
-            if row.limitation
-            else None
+            shown_copy(row.limitation, limitation_evidence) if row.limitation else None
         )
         row.limitation = (
             limitation if own(limitation) else (limits[0] if limits else None)

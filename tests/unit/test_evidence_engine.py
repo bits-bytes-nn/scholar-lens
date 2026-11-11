@@ -1479,6 +1479,34 @@ def test_a_comparison_cell_states_a_number_and_is_no_plain_sentence() -> None:
     assert not result_cell("")
 
 
+@pytest.mark.parametrize(
+    ("anchor", "shown"),
+    [
+        ("4 Experiments", True),
+        ("Abstract", True),
+        ("1 Introduction", False),
+        ("2 Related Work", False),
+        ("Background and Motivation", False),
+        ("1 서론", False),
+    ],
+)
+def test_a_number_the_introduction_cites_is_no_result(anchor: str, shown: bool) -> None:
+    """A number that sets the scene (a product's user count in the
+    introduction) is not the paper's result: it stays in its section."""
+    from scholar_lens.domain.survey.evidence_post import result_evidence
+
+    item = Evidence(
+        id="E1",
+        paper_id="p",
+        kind="number",
+        claim="c",
+        quote="q" * 30,
+        anchor=anchor,
+        cell="사용자 1억 명",
+    )
+    assert result_evidence(item) is shown
+
+
 def test_a_number_the_table_cannot_show_stays_in_its_section() -> None:
     from scholar_lens.domain.survey.evidence_post import repair_outline
 
