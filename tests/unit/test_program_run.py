@@ -717,3 +717,47 @@ def test_a_transcript_showing_a_traceback_is_not_judged() -> None:
     )
     ((_, _, checked),) = program_blocks([("오류", _py(cell), True)])
     assert not checked
+
+
+def test_a_helper_that_swallows_an_environment_error_is_not_blamed() -> None:
+    code = (
+        "import socket\n"
+        "def ask(p):\n    try:\n        socket.create_connection(('10.255.255.1', 9), timeout=0.2)\n"
+        "    except Exception as e:\n        return f'Error: {e}'\n"
+        "reply = ask('hi')\nprint(reply.text)"
+    )
+    script = program_script([code], block_timeout_s=10)
+    runs = read_outcomes(_run(script))
+    assert runs[0].error_type == "AttributeError" and runs[0].raised
+    assert not judge_run([("사용", code, True)], runs, ()).findings
+
+
+def test_a_written_script_run_from_a_cell_is_checked_and_timeit_options_drop() -> None:
+    blocks = program_blocks(
+        [
+            ("앱", _py("%%writefile app.py\nprint(anser)"), True),
+            ("실행", _py("!python app.py"), True),
+            ("측정", _py("%timeit -n 10 -r 2 sum([1])\ndisplay(1)"), True),
+        ]
+    )
+    assert blocks[2][1].strip() == "sum([1])\ndisplay(1)"
+    script = program_script([c for _, c, _ in blocks], block_timeout_s=10)
+    runs = read_outcomes(_run(script))
+    assert runs[1].error_type == "NameError" and runs[1].in_post
+    assert runs[2].ok
+    assert judge_run(blocks, runs, ()).findings
+
+
+def test_an_attribute_a_packages_getattr_refuses_is_the_callers(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    (tmp_path / "sdk.py").write_text(
+        "class Client:\n    def __getattr__(self, name):\n"
+        "        raise AttributeError(f\"'Client' object has no attribute '{name}'\")\n"
+    )
+    script = program_script(
+        [
+            f"import sys\nsys.path.insert(0, {str(tmp_path)!r})\nimport sdk\nsdk.Client().nope()"
+        ],
+        block_timeout_s=10,
+    )
+    (run,) = read_outcomes(_run(script))
+    assert run.error_type == "AttributeError" and run.in_post

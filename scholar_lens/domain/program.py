@@ -66,6 +66,21 @@ def python_blocks(markdown: str) -> list[str]:
     ]
 
 
+_TIMING_VALUED = frozenset({"-n", "-r", "-p", "-l", "-s", "-T", "-D"})
+
+
+def _timed_statement(line: str) -> str:
+    """The statement of ``%time``/``%timeit``/``%prun`` without the
+    magic's options (``%timeit -n 10 -r 3 f()`` -> ``f()``)."""
+    rest = line.split(None, 1)[1] if len(line.split(None, 1)) > 1 else ""
+    while rest.startswith("-"):
+        option, _, rest = rest.partition(" ")
+        rest = rest.lstrip()
+        if option in _TIMING_VALUED and rest:
+            rest = rest.split(None, 1)[1] if len(rest.split(None, 1)) > 1 else ""
+    return rest
+
+
 # Cell magics whose body is Python.
 _PYTHON_CELL_MAGICS = frozenset({"time", "timeit", "capture", "prun"})
 
@@ -101,11 +116,18 @@ def _cell_code(lines: list[str]) -> str:
                 f"{indent}exec(compile(open({args[0]!r}).read(), {args[0]!r}, 'exec'))"
             )
         elif stripped.startswith(("%time ", "%prun ", "%timeit ")) and (
-            statement := stripped.split(None, 1)[1:]
+            statement := _timed_statement(stripped)
         ):
             # The statement a timing magic runs (and binds names with).
             indent = ln[: len(ln) - len(stripped)]
-            out.append(f"{indent}{statement[0]}")
+            out.append(f"{indent}{statement}")
+        elif script := re.match(r"!\s*python3?\s+([\w./-]+\.py)\s*$", stripped):
+            # A script a cell wrote, run as a reader's shell runs it.
+            indent = ln[: len(ln) - len(stripped)]
+            out.append(
+                f"{indent}__import__('runpy').run_path({script.group(1)!r}, "
+                "run_name='__main__')"
+            )
         elif not stripped.startswith(("%", "!")):
             out.append(ln)
         elif ln != stripped:

@@ -104,6 +104,9 @@ class BlockRun(BaseModel):
     message: str = ""
     # The innermost frame that raised it is a block's (False: a package's).
     in_post: bool = True
+    # (type, module, message) of the exceptions raised while it ran,
+    # caught ones included (at most 20).
+    raised: list[tuple[str, str, str]] = []
 
     @field_validator("message")
     @classmethod
@@ -290,7 +293,7 @@ def program_script(
     ``except Exception`` retry loop does not swallow it)."""
     return f"""
 import json as _sl_json, os as _sl_os, signal as _sl_signal, sys as _sl_sys
-import ast as _sl_ast, asyncio as _sl_asyncio, inspect as _sl_inspect
+import ast as _sl_ast, asyncio as _sl_asyncio, inspect as _sl_inspect, re as _sl_re
 _SL_CODES = {list(codes)!r}
 _SL_MARK = {mark!r}
 _sl_fd = _sl_os.dup(1)
@@ -309,9 +312,14 @@ def _sl_in_post(e):
     # %%writefile cell wrote).
     tb, last = e.__traceback__, ""
     while tb is not None:
-        name = tb.tb_frame.f_code.co_filename
-        if not name.startswith("<frozen"):
-            last = name
+        code = tb.tb_frame.f_code
+        # An object's __getattr__ raising AttributeError reports the
+        # attribute the caller asked for: the caller's frame counts.
+        if not code.co_filename.startswith("<frozen") and code.co_name not in (
+            "__getattr__",
+            "__getattribute__",
+        ):
+            last = code.co_filename
         tb = tb.tb_next
     if last.startswith("<block "):
         return True
@@ -332,6 +340,8 @@ if __name__ == "__main__":
     )
     _sl_sys.modules["__main__"] = _sl_main
     _sl_ns = _sl_main.__dict__
+    # A notebook's display() (prints, here).
+    _sl_ns["display"] = print
 else:
     # A child multiprocessing spawns runs this script as "__mp_main__" and
     # keeps its globals as the parent's __main__: the blocks define there
@@ -340,9 +350,47 @@ else:
 _SL_FUTURE = 0
 for _sl_f in _sl_future.all_feature_names:
     _SL_FUTURE |= getattr(_sl_future, _sl_f).compiler_flag
+# Exceptions raised while a block runs, caught or not (a helper that
+# swallows a credential error leaves a result the next line misreads).
+# Only those that may be the environment's are kept (an import raises and
+# catches many others).
+_sl_raised = []
+_SL_ENV_TYPES = {sorted(_ENVIRONMENT_ERRORS)!r}
+_SL_ENV_MODULES = {list(_ENVIRONMENT_MODULES)!r}
+_SL_ENV_WORDS = {list(_ENVIRONMENT_WORDS)!r}
+def _sl_on_raise(code, offset, exc):
+    if len(_sl_raised) >= 20 or isinstance(
+        exc, (StopIteration, StopAsyncIteration, GeneratorExit, BlockTimeout)
+    ):
+        return
+    kind = type(exc)
+    if kind.__name__ in ("ConfigNotFound",):
+        # botocore looks for an optional config file on every client: not a
+        # failure a reader with credentials avoids.
+        return
+    module = str(getattr(kind, "__module__", ""))
+    text = _sl_text(exc)
+    if (
+        kind.__name__ in _SL_ENV_TYPES
+        or module.split(".")[0] in _SL_ENV_MODULES
+        or any(
+            word in _sl_re.sub("'[^']*'", "", text.lower())
+            for word in _SL_ENV_WORDS
+        )
+    ):
+        _sl_raised.append([kind.__name__, module, text[:200]])
+_sl_mon = getattr(_sl_sys, "monitoring", None)
+if _sl_mon is not None:
+    try:
+        _sl_mon.use_tool_id(5, "scholar-lens")
+        _sl_mon.register_callback(5, _sl_mon.events.RAISE, _sl_on_raise)
+        _sl_mon.set_events(5, _sl_mon.events.RAISE)
+    except ValueError:
+        pass
 # A __future__ import holds for the later blocks, as in one file.
 _sl_flags = 0
 for _sl_i, _sl_code in enumerate(_SL_CODES, 1):
+    _sl_raised.clear()
     _sl_name = f"<block {{_sl_i}}>"
     _sl_linecache.cache[_sl_name] = (
         len(_sl_code), None, _sl_code.splitlines(True), _sl_name
@@ -376,6 +424,7 @@ for _sl_i, _sl_code in enumerate(_SL_CODES, 1):
         }}
     finally:
         _sl_signal.alarm(0)
+    _sl_out["raised"] = list(_sl_raised)
     try:
         _sl_sys.stdout.flush()
     except BaseException:
@@ -424,6 +473,35 @@ def _environment(run: BlockRun) -> bool:
         or run.error_module.split(".")[0] in _ENVIRONMENT_MODULES
         or any(word in unquoted for word in _ENVIRONMENT_WORDS)
     )
+
+
+_BUILTIN_MISUSE = re.compile(
+    r"'(?:str|nonetype|dict|list|tuple|int|float|bytes|bool)' object|"
+    r"string indices|nonetype|not subscriptable"
+)
+
+
+def _misused_builtin(run: BlockRun) -> bool:
+    """Whether ``run`` failed on a plain value (a str, None, a dict) used as
+    something else: what an error caught earlier may have left."""
+    return bool(_BUILTIN_MISUSE.search(run.message.lower()))
+
+
+def caught_environment(run: BlockRun) -> str:
+    """The first exception of the environment ``run``'s code raised and
+    caught ("" when none): what it computed may stand in for what the
+    reader's environment would give."""
+    for error_type, module, message in run.raised:
+        probe = BlockRun(
+            index=run.index,
+            ok=False,
+            error_type=error_type,
+            error_module=module,
+            message=message,
+        )
+        if _environment(probe):
+            return f"{error_type}: {probe.message[:120]}"
+    return ""
 
 
 def verdict(run: BlockRun, product_modules: Collection[str]) -> Verdict:
@@ -640,11 +718,45 @@ def judge_run(
     total = len(blocks)
     gap = ""
     gap_names: set[str] = set()
+    # Blocks that ran but caught an error of the environment (an SDK client
+    # that looked for credentials, a helper that returned the error's
+    # text): a later misuse of a str or None from them is not blamed.
+    caught_gap = ""
+    caught_names: set[str] = set()
     for run in outcomes:
         if run.ok:
+            if caught := caught_environment(run):
+                # It ran, but on what an error of the environment left (a
+                # helper that returns the error's text): a gap all the same.
+                title, code, _ = blocks[run.index - 1]
+                made = set().union(
+                    *(_bindings(c)[0] for _, c, _ in blocks[: run.index - 1])
+                )
+                caught_names |= _stored(blocks[run.index - 1 : run.index], 1) | (
+                    _used(code) & made
+                )
+                caught_gap = caught_gap or (
+                    f"block {run.index} of {total} ({title}) caught an error of "
+                    f"the environment: {caught}"
+                )
             continue
         title, code, checked = blocks[run.index - 1]
         whose = verdict(run, product_modules)
+        caught = caught_environment(run)
+        if (
+            whose == "code"
+            and caught
+            and _misused_builtin(run)
+            and run.error_type not in _SOURCE_ERRORS
+            and not (
+                run.error_type == "TypeError"
+                and run.in_post
+                and any(p in run.message for p in _SIGNATURE_PHRASES)
+            )
+        ):
+            # The code caught an error of the environment first: the value
+            # it then misused may be what that error left.
+            whose = "unclear"
         if (
             whose == "code"
             and checked
@@ -666,6 +778,14 @@ def judge_run(
             # binding the run skipped (a try whose body failed, a branch not
             # taken) is the environment's as likely as the code's.
             whose = "unclear"
+        if (
+            whose == "code"
+            and _misused_builtin(run)
+            and _used(code) & caught_names
+            and run.error_type not in _SOURCE_ERRORS
+        ):
+            whose = "unclear"
+            gap = gap or caught_gap
         # A gap matters to a block that uses what the gap's blocks bind
         # (an unrelated later block is judged as if there were none).
         related = bool(gap) and bool(_used(code) & gap_names)
