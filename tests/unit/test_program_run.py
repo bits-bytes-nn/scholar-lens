@@ -98,7 +98,14 @@ def test_outcomes_out_of_order_or_malformed_are_ignored() -> None:
     [
         ("NameError", "builtins", "name 'client' is not defined", "code"),
         ("SyntaxError", "builtins", "unexpected token", "code"),
-        ("TypeError", "builtins", "missing 1 required argument: 'api_key'", "code"),
+        ("TypeError", "builtins", "missing 1 required argument: 'model'", "code"),
+        # An SDK without its key raises a TypeError: the environment's.
+        (
+            "TypeError",
+            "builtins",
+            "Could not resolve authentication method. Expected either api_key",
+            "environment",
+        ),
         ("AttributeError", "builtins", "'Agent' object has no attribute 'go'", "code"),
         (
             "AttributeError",
@@ -355,3 +362,50 @@ def test_packages_off_their_versions_blame_only_the_codes_text() -> None:
     assert judge_run(blocks, [attr], {"pandas"}).findings
     assert not judge_run(blocks, [attr], {"pandas"}, exact=False).findings
     assert judge_run(blocks, [syntax], (), exact=False).findings
+
+
+def test_a_module_attribute_a_skipped_import_binds_is_not_blamed() -> None:
+    blocks = [
+        ("설치", "import pkg", True),
+        ("설정", "import os\nos.environ['PKG_ENDPOINT']\nimport pkg.storage", True),
+        ("저장", "pkg.storage.save(1)", True),
+    ]
+    gap = BlockRun(index=2, ok=False, error_type="KeyError", message="'PKG_ENDPOINT'")
+    attr = BlockRun(
+        index=3,
+        ok=False,
+        error_type="AttributeError",
+        message="module 'pkg' has no attribute 'storage'",
+    )
+    assert not judge_run(
+        blocks, [BlockRun(index=1, ok=True), gap, attr], {"pkg"}
+    ).findings
+    blocks[1] = ("설정", "import os\nos.environ['PKG_ENDPOINT']", True)
+    assert judge_run(blocks, [BlockRun(index=1, ok=True), gap, attr], {"pkg"}).findings
+
+
+def test_spawned_children_write_no_outcomes_and_futures_carry_over(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    mark = run_mark("x1")
+    script = program_script(
+        [
+            "from __future__ import annotations\nimport multiprocessing as mp\n"
+            "def sq(x):\n    return x * x",
+            "class A:\n    b: B\nclass B:\n    pass\nimport typing\ntyping.get_type_hints(A)",
+            "if __name__ == '__main__':\n    ctx = mp.get_context('spawn')\n"
+            "    with ctx.Pool(2) as pool:\n        print(pool.map(sq, [1, 2]))",
+            "import inspect\ndef f():\n    pass\ninspect.getsource(f)",
+        ],
+        block_timeout_s=60,
+        mark=mark,
+    )
+    path = tmp_path / "prog.py"
+    path.write_text(script)
+    out = subprocess.run(
+        [sys.executable, "-I", str(path)],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    ).stdout
+    assert out.count(mark) == 4, out
+    assert [r.ok for r in read_outcomes(out, mark)] == [True, True, True, True]

@@ -65,6 +65,7 @@ _ENVIRONMENT_ERRORS = frozenset(
 # Words of a message that point at the environment, not the code.
 _ENVIRONMENT_WORDS = (
     "credential",
+    "authenticat",
     "api key",
     "api_key",
     "token",
@@ -273,18 +274,41 @@ def _sl_text(e):
         return str(e)[:400]
     except BaseException:
         return "<unprintable>"
-import types as _sl_types
-_sl_main = _sl_types.ModuleType("__main__")
-_sl_main.__file__ = _sl_os.path.abspath(_sl_sys.argv[0] or "main.py")
-_sl_sys.modules["__main__"] = _sl_main
-_sl_ns = _sl_main.__dict__
+import __future__ as _sl_future, linecache as _sl_linecache, types as _sl_types
+if __name__ == "__main__":
+    # The blocks run in a __main__ module of their own (with a __file__).
+    _sl_main = _sl_types.ModuleType("__main__")
+    _sl_main.__file__ = _sl_os.path.abspath(
+        globals().get("__file__") or _sl_sys.argv[0] or "main.py"
+    )
+    _sl_sys.modules["__main__"] = _sl_main
+    _sl_ns = _sl_main.__dict__
+else:
+    # A child multiprocessing spawns runs this script as "__mp_main__" and
+    # keeps its globals as the parent's __main__: the blocks define there
+    # (a guarded block does not run, and the child writes no outcome).
+    _sl_ns = globals()
+_SL_FUTURE = 0
+for _sl_f in _sl_future.all_feature_names:
+    _SL_FUTURE |= getattr(_sl_future, _sl_f).compiler_flag
+# A __future__ import holds for the later blocks, as in one file.
+_sl_flags = 0
 for _sl_i, _sl_code in enumerate(_SL_CODES, 1):
+    _sl_name = f"<block {{_sl_i}}>"
+    _sl_linecache.cache[_sl_name] = (
+        len(_sl_code), None, _sl_code.splitlines(True), _sl_name
+    )
     _sl_signal.signal(_sl_signal.SIGALRM, _sl_alarm)
     _sl_signal.alarm({block_timeout_s})
     try:
         _sl_c = compile(
-            _sl_code, f"<block {{_sl_i}}>", "exec", flags=_sl_ast.PyCF_ALLOW_TOP_LEVEL_AWAIT
+            _sl_code,
+            _sl_name,
+            "exec",
+            flags=_sl_ast.PyCF_ALLOW_TOP_LEVEL_AWAIT | _sl_flags,
+            dont_inherit=True,
         )
+        _sl_flags |= _sl_c.co_flags & _SL_FUTURE
         if _sl_c.co_flags & _sl_inspect.CO_COROUTINE:
             # Top-level await, as a notebook or `python -m asyncio` runs it.
             _sl_asyncio.run(eval(_sl_c, _sl_ns))
@@ -306,9 +330,10 @@ for _sl_i, _sl_code in enumerate(_SL_CODES, 1):
         _sl_sys.stdout.flush()
     except BaseException:
         pass
-    _sl_os.write(
-        _sl_fd, ("\\n" + _SL_MARK + _sl_json.dumps(_sl_out) + "\\n").encode()
-    )
+    if __name__ == "__main__":
+        _sl_os.write(
+            _sl_fd, ("\\n" + _SL_MARK + _sl_json.dumps(_sl_out) + "\\n").encode()
+        )
 """
 
 
@@ -362,17 +387,19 @@ def verdict(run: BlockRun, product_modules: Collection[str]) -> Verdict:
         # failed (or a sandbox that installs nothing).
         parent = named.rpartition(".")[0]
         return "code" if parent and parent in products else "environment"
-    if run.error_type in ("TypeError", "AttributeError"):
-        # A wrong call or attribute, unless a missing setting made a value
-        # None.
-        return "unclear" if "nonetype" in message else "code"
     module = run.error_module.split(".")[0]
     if (
         run.error_type in _ENVIRONMENT_ERRORS
         or module in _ENVIRONMENT_MODULES
         or any(word in message for word in _ENVIRONMENT_WORDS)
     ):
+        # Before the call checks: an SDK raises a TypeError for a missing
+        # key ("Could not resolve authentication method").
         return "environment"
+    if run.error_type in ("TypeError", "AttributeError"):
+        # A wrong call or attribute, unless a missing setting made a value
+        # None.
+        return "unclear" if "nonetype" in message else "code"
     return "unclear"
 
 
@@ -397,7 +424,24 @@ def run_finding(
     )
 
 
-def _reliable_after_gap(run: BlockRun) -> bool:
+def _imported_modules(code: str) -> set[str]:
+    """The dotted modules ``code``'s import statements name (any depth)."""
+    try:
+        tree = ast.parse(code)
+    except (SyntaxError, ValueError):
+        return set()
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            names |= {a.name for a in node.names}
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            names |= {f"{node.module}.{a.name}" for a in node.names}
+    return names
+
+
+def _reliable_after_gap(
+    run: BlockRun, blocks: Sequence[tuple[str, str, bool]] = ()
+) -> bool:
     """Whether a code failure after a block that could not run still says
     the code is wrong: an import, a module attribute or a call signature
     does not depend on what the failed block would have made (a name it
@@ -406,7 +450,17 @@ def _reliable_after_gap(run: BlockRun) -> bool:
     if run.error_type in ("ModuleNotFoundError", "ImportError"):
         return True
     if run.error_type == "AttributeError":
-        return message.startswith("module ")
+        # "module 'pkg' has no attribute 'storage'": unless an earlier block
+        # imports pkg.storage (the import the gap may have skipped binds it).
+        quoted = message.split("'")
+        if not message.startswith("module ") or len(quoted) < 4:
+            return False
+        submodule = f"{quoted[1]}.{quoted[3]}"
+        return not any(
+            name == submodule or name.startswith(submodule + ".")
+            for _, code, _ in blocks[: run.index]
+            for name in _imported_modules(code)
+        )
     if run.error_type == "TypeError":
         return any(
             phrase in message
@@ -541,7 +595,11 @@ def judge_run(
             # binding the run skipped (a try whose body failed, a branch not
             # taken) is the environment's as likely as the code's.
             whose = "unclear"
-        if whose == "code" and checked and (not gap or _reliable_after_gap(run)):
+        if (
+            whose == "code"
+            and checked
+            and (not gap or _reliable_after_gap(run, blocks))
+        ):
             return ProgramRun(
                 findings=[run_finding(title, code, run, after_gap=bool(gap))],
                 blocks_run=run.index,
