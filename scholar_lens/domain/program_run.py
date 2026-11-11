@@ -34,6 +34,12 @@ RESULT_MARK = "@@SCHOLAR_LENS_RESULT@@"
 _SOURCE_ERRORS = frozenset(
     {"SyntaxError", "IndentationError", "TabError", "NameError", "UnboundLocalError"}
 )
+# SDK exceptions that check the call before it leaves for the service: the
+# code's whatever module raises them (botocore validates parameters and
+# service names before it looks for credentials).
+_SDK_CODE_ERRORS = frozenset(
+    {"ParamValidationError", "UnknownServiceError", "UnknownParameterError"}
+)
 # Modules whose exceptions mean the sandbox lacks what the reader would have
 # (credentials, network, a model or service endpoint).
 _ENVIRONMENT_MODULES = (
@@ -367,6 +373,8 @@ def _sl_on_handled(code, offset, exc):
     if len(_sl_raised) >= 20 or not _sl_posts(code.co_filename):
         return
     kind = type(exc)
+    if kind.__name__ in {sorted(_SDK_CODE_ERRORS)!r}:
+        return
     module = str(getattr(kind, "__module__", ""))
     text = _sl_text(exc)
     if (
@@ -467,6 +475,8 @@ def _environment(run: BlockRun) -> bool:
     got ...")."""
     unquoted = re.sub(r"'[^']*'|\"[^\"]*\"|`[^`]*`", "", run.message.lower())
     unquoted = re.sub(r"^[\w.<>]+\(\)\s*", "", unquoted)
+    if run.error_type in _SDK_CODE_ERRORS:
+        return False
     return (
         run.error_type in _ENVIRONMENT_ERRORS
         or run.error_module.split(".")[0] in _ENVIRONMENT_MODULES
@@ -510,7 +520,7 @@ def verdict(run: BlockRun, product_modules: Collection[str]) -> Verdict:
     if run.ok:
         return "ok"
     message = run.message.lower()
-    if run.error_type in _SOURCE_ERRORS:
+    if run.error_type in _SOURCE_ERRORS or run.error_type in _SDK_CODE_ERRORS:
         return "code"
     if run.error_type in ("ModuleNotFoundError", "ImportError"):
         if not run.in_post:
@@ -597,7 +607,9 @@ def _reliable_after_gap(
     does not depend on what the failed block would have made (a name it
     would have bound, or an attribute of its object, may)."""
     message = run.message
-    if run.error_type in ("ModuleNotFoundError", "ImportError"):
+    if run.error_type in ("ModuleNotFoundError", "ImportError") or (
+        run.error_type in _SDK_CODE_ERRORS
+    ):
         return True
     if run.error_type == "AttributeError":
         # "module 'pkg' has no attribute 'storage'": unless an earlier block

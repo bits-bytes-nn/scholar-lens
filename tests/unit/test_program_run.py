@@ -775,3 +775,26 @@ def test_what_a_package_catches_inside_itself_does_not_excuse_the_post(tmp_path)
     runs = read_outcomes(_run(program_script([code], block_timeout_s=10)))
     assert runs[0].raised == []
     assert judge_run([("사용", code, True)], runs, ()).findings
+
+
+@pytest.mark.parametrize(
+    ("error_type", "message"),
+    [
+        ("ParamValidationError", 'Unknown parameter in inferenceConfig: "max_tokens"'),
+        ("ParamValidationError", 'Missing required parameter in input: "Key"'),
+        ("UnknownServiceError", "Unknown service: 'bedrock-agent-runtimes'"),
+    ],
+)
+def test_an_sdks_own_call_validation_is_the_codes(
+    error_type: str, message: str
+) -> None:
+    run = BlockRun(
+        index=1,
+        ok=False,
+        error_type=error_type,
+        error_module="botocore.exceptions",
+        message=message,
+        in_post=False,
+    )
+    assert verdict(run, ()) == "code"
+    assert judge_run([("사용", "client.converse()", True)], [run], ()).findings
