@@ -62,6 +62,14 @@ _ENVIRONMENT_ERRORS = frozenset(
         "KeyboardInterrupt",
     }
 )
+# A TypeError of a call that does not match the callee's signature.
+_SIGNATURE_PHRASES = (
+    "unexpected keyword argument",
+    "required positional argument",
+    "required keyword-only argument",
+    "positional argument but",
+    "positional arguments but",
+)
 # Words of a message that point at the environment, not the code.
 _ENVIRONMENT_WORDS = (
     "credential",
@@ -391,6 +399,14 @@ def verdict(run: BlockRun, product_modules: Collection[str]) -> Verdict:
     # The words count outside the quoted names: "unexpected keyword argument
     # 'max_tokens'" is the code's, "Could not resolve authentication" is not.
     unquoted = re.sub(r"'[^']*'|\"[^\"]*\"|`[^`]*`", "", message)
+    # ... and outside the callee's name ("requires_access_token() got ...").
+    unquoted = re.sub(r"^[\w.<>]+\(\)\s*", "", unquoted)
+    if run.error_type == "TypeError" and any(
+        phrase in message for phrase in _SIGNATURE_PHRASES
+    ):
+        # A call that does not match its signature is the code's, whatever
+        # the callee is called.
+        return "code"
     if (
         run.error_type in _ENVIRONMENT_ERRORS
         or module in _ENVIRONMENT_MODULES
@@ -465,16 +481,7 @@ def _reliable_after_gap(
             for name in _imported_modules(code)
         )
     if run.error_type == "TypeError":
-        return any(
-            phrase in message
-            for phrase in (
-                "unexpected keyword argument",
-                "required positional argument",
-                "required keyword-only argument",
-                "positional argument but",
-                "positional arguments but",
-            )
-        )
+        return any(phrase in message for phrase in _SIGNATURE_PHRASES)
     return False
 
 

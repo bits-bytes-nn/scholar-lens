@@ -512,3 +512,18 @@ def test_a_gap_does_not_spread_through_builtins_or_modules() -> None:
         ),
     ]
     assert judge_run(blocks, runs, ()).findings
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "requires_access_token() got an unexpected keyword argument 'scope'",
+        "count_tokens() missing 1 required positional argument: 'text'",
+        "Client.get_credentials() takes 1 positional argument but 2 were given",
+    ],
+)
+def test_a_signature_error_is_the_codes_whatever_the_callee_is_called(
+    message: str,
+) -> None:
+    run = BlockRun(index=1, ok=False, error_type="TypeError", message=message)
+    assert verdict(run, ()) == "code"
