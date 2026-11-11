@@ -47,11 +47,9 @@ _SESSION_MARGIN_S = 120
 _MAX_SESSION_S = 28_800
 
 
-def driver_code(program: str, requirements: Sequence[str], timeout_s: int) -> str:
-    """The notebook cell that installs ``requirements``, runs ``program`` in
-    a fresh interpreter (also when the install failed: the blocks before
-    the first import of what is missing still run) and prints the install
-    failure and the program's outcome lines only."""
+def install_code(requirements: Sequence[str]) -> str:
+    """The notebook cell that installs ``requirements`` one at a time and
+    prints the ones that failed and the version each pin ended up at."""
     return f"""
 import json, os, subprocess, sys, tempfile, time
 _reqs = {list(requirements)!r}
@@ -92,6 +90,14 @@ for _req in _reqs:
         except _md.PackageNotFoundError:
             _versions[_req] = None
 print({_VERSIONS_MARK!r} + json.dumps(_versions))
+"""
+
+
+def run_code(program: str, timeout_s: int) -> str:
+    """The notebook cell that runs ``program`` in a fresh interpreter and
+    prints the program's outcome lines only."""
+    return f"""
+import os, subprocess, sys, tempfile
 with tempfile.NamedTemporaryFile(
     "w", suffix=".py", delete=False, encoding="utf-8"
 ) as _f:
@@ -194,16 +200,26 @@ class AgentCoreCodeRunner:
         except (ClientError, BotoCoreError) as e:
             raise SandboxUnavailable(f"could not start a session: {e}") from e
         try:
-            response = runner.invoke_code_interpreter(
-                codeInterpreterIdentifier=self.interpreter_id,
-                sessionId=session_id,
-                name="executeCode",
-                arguments={
-                    "language": "python",
-                    "code": driver_code(program, requirements, timeout_s),
-                },
-            )
-            stdout, stderr, is_error = read_stream(response)
+            # Two invocations, each well inside the 15-minute limit of a
+            # synchronous call: the install, then the program.
+            cells = [run_code(program, timeout_s)]
+            if requirements:
+                cells.insert(0, install_code(requirements))
+            stdout = stderr = ""
+            is_error = False
+            for cell in cells:
+                out, err, failed = read_stream(
+                    runner.invoke_code_interpreter(
+                        codeInterpreterIdentifier=self.interpreter_id,
+                        sessionId=session_id,
+                        name="executeCode",
+                        arguments={"language": "python", "code": cell},
+                    )
+                )
+                stdout, stderr = stdout + out + "\n", stderr + err
+                if failed:
+                    is_error = True
+                    break
         except (NoCredentialsError, TokenRetrievalError):
             raise
         except (ClientError, BotoCoreError, HTTPError) as e:

@@ -434,3 +434,33 @@ def test_spawned_children_write_no_outcomes_and_futures_carry_over(tmp_path) -> 
     ).stdout
     assert out.count(mark) == 4, out
     assert [r.ok for r in read_outcomes(out, mark)] == [True, True, True, True]
+
+
+def test_a_gap_limits_only_the_blocks_that_use_what_it_binds() -> None:
+    """An internals excerpt that cannot run alone leaves the unrelated
+    usage block judged in full."""
+    blocks = [
+        ("구조", "result = self.event_loop_cycle(messages)", False),
+        ("사용", "import json\njson.dumps({}).decode()", True),
+        ("이어서", "print(result.stop_reason)", True),
+    ]
+    excerpt = BlockRun(
+        index=1, ok=False, error_type="NameError", message="name 'self' is not defined"
+    )
+    attr = BlockRun(
+        index=2,
+        ok=False,
+        error_type="AttributeError",
+        message="'str' object has no attribute 'decode'",
+    )
+    run = judge_run(blocks, [excerpt, attr], ())
+    assert run.findings and "not depend" not in run.findings[0].problem
+    uses = BlockRun(
+        index=3,
+        ok=False,
+        error_type="AttributeError",
+        message="'Result' object has no attribute 'stop_reason'",
+    )
+    assert not judge_run(
+        blocks, [excerpt, BlockRun(index=2, ok=True), uses], ()
+    ).findings

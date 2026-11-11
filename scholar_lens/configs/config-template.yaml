@@ -176,7 +176,7 @@ tech_guide:
   run_examples: false
   code_interpreter_id: null
   run_block_timeout_s: 60
-  run_timeout_s: 600
+  run_timeout_s: 600  # at most 840 (a synchronous call may take 15 minutes)
 
 survey:
   # Plan stage (`survey plan`): scope call, then the selection call.

@@ -349,7 +349,8 @@ class TechGuide(_Section):
     code_interpreter_id: str | None = None
     # The time one block and the whole program may run (seconds).
     run_block_timeout_s: int = Field(default=60, ge=5, le=600)
-    run_timeout_s: int = Field(default=600, ge=30, le=3600)
+    # At most 840: one synchronous Code Interpreter call may take 15 minutes.
+    run_timeout_s: int = Field(default=600, ge=30, le=840)
 
     @model_validator(mode="after")
     def _length_range(self) -> "TechGuide":

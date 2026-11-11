@@ -572,6 +572,7 @@ def judge_run(
     finding are not judged (they may fail only because of it)."""
     total = len(blocks)
     gap = ""
+    gap_names: set[str] = set()
     for run in outcomes:
         if run.ok:
             continue
@@ -598,17 +599,21 @@ def judge_run(
             # binding the run skipped (a try whose body failed, a branch not
             # taken) is the environment's as likely as the code's.
             whose = "unclear"
+        # A gap matters to a block that uses what the gap's blocks bind
+        # (an unrelated later block is judged as if there were none).
+        related = bool(gap) and bool(_used(code) & gap_names)
         if (
             whose == "code"
             and checked
-            and (not gap or _reliable_after_gap(run, blocks))
+            and (not related or _reliable_after_gap(run, blocks))
         ):
             return ProgramRun(
-                findings=[run_finding(title, code, run, after_gap=bool(gap))],
+                findings=[run_finding(title, code, run, after_gap=related)],
                 blocks_run=run.index,
                 blocks_total=total,
                 limited=gap,
             )
+        gap_names |= _stored(blocks[run.index - 1 : run.index], 1)
         if not gap:
             reason = {
                 "code": "fails, but is an excerpt or in a section not meant to run",

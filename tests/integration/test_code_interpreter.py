@@ -13,8 +13,9 @@ import pytest
 from scholar_lens.adapters.agentcore.code_interpreter import (
     SYSTEM_INTERPRETER,
     AgentCoreCodeRunner,
-    driver_code,
+    install_code,
     read_stream,
+    run_code,
 )
 from scholar_lens.application.ports import SandboxUnavailable
 from scholar_lens.domain.program_run import program_script, read_outcomes
@@ -32,7 +33,7 @@ def _run(source: str, timeout: int = 60) -> str:
 
 def test_the_driver_runs_the_program_and_prints_its_outcomes_only() -> None:
     script = program_script(["print('x' * 50)", "z"], block_timeout_s=5)
-    out = _run(driver_code(script, [], 30))
+    out = _run(install_code([]) + run_code(script, 30))
     assert "xxxx" not in out
     assert [(r.index, r.ok) for r in read_outcomes(out)] == [(1, True), (2, False)]
 
@@ -89,7 +90,9 @@ def test_the_runner_returns_the_output_and_stops_the_session() -> None:
     run = asyncio.run(_runner(client).run("p", requirements=["pkg==1"], timeout_s=30))
     assert "out" in run.stdout and run.failure == ""
     assert "pkg==1" in run.warning
-    assert [c for c, _ in client.calls] == ["start", "invoke", "stop"]
+    # The install and the program are separate invocations (each within the
+    # 15-minute limit of a synchronous call).
+    assert [c for c, _ in client.calls] == ["start", "invoke", "invoke", "stop"]
     assert len(client.calls[0][1]["clientToken"]) >= 33
     assert "pkg==1" in client.calls[1][1]["arguments"]["code"]
 
