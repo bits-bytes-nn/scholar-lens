@@ -70,7 +70,7 @@ logger = logging.getLogger(__name__)
 
 # Bump when the reader's prompt or the evidence schema changes meaning; the
 # prompt's wording alone does not invalidate cached evidence.
-READER_VERSION = 8
+READER_VERSION = 9
 
 SURVEY_PROMPTS = WriterPrompts(
     reader=prompts.READER_SYSTEM,

@@ -115,6 +115,8 @@ class SourceSection(_Strict):
     anchor: str
     heading: str
     text: str
+    # The heading's Markdown level (2 for "##"; 0 when unknown).
+    level: int = 0
 
 
 class SourceFigure(_Strict):
@@ -186,7 +188,12 @@ class SourceDocument(_Strict):
             end = matches[n].start() if n < len(matches) else len(markdown)
             body = markdown[m.end() : end].strip()
             sections.append(
-                SourceSection(anchor=f"S{n}", heading=m.group(2).strip(), text=body)
+                SourceSection(
+                    anchor=f"S{n}",
+                    heading=m.group(2).strip(),
+                    text=body,
+                    level=len(m.group(1)),
+                )
             )
         placed = []
         for i, (image, caption) in enumerate(figures, 1):
@@ -222,6 +229,20 @@ class SourceDocument(_Strict):
 
     def section(self, anchor: str) -> SourceSection | None:
         return next((s for s in self.sections if s.anchor == anchor.strip()), None)
+
+    def heading_path(self, anchor: str) -> str:
+        """The headings from the top-level section down to the one at
+        ``anchor``, joined by " > " ("2 Related Work > 2.1 LLMs"); "" for an
+        unknown anchor."""
+        stack: list[tuple[int, str]] = []
+        for section in self.sections:
+            if section.heading:
+                level = section.level or 2
+                stack = [(lv, h) for lv, h in stack if lv < level]
+                stack.append((level, section.heading))
+            if section.anchor == anchor.strip():
+                return " > ".join(h for _, h in stack) if section.heading else ""
+        return ""
 
     def figure(self, figure_id: str) -> SourceFigure | None:
         return next((f for f in self.figures if f.id == figure_id.strip()), None)
@@ -271,6 +292,9 @@ class Evidence(_Strict):
     scope: str = ""
     # A noun phrase for a table cell (numbers and limitations).
     cell: str = ""
+    # The headings down to the section at ``anchor``, joined by " > " (set
+    # by code when recorded; empty in items recorded before it existed).
+    section_heading: str = ""
     figure_id: str | None = None
     figure_url: str | None = None
     caption: str | None = None
@@ -596,9 +620,10 @@ class EvidenceLedger(BaseModel):
                 # What the figure shows, as far as the text says: the check
                 # of its claim reads it.
                 fields["quote"] = figure.context
-        if not fields.get("table_header") and (
-            section := document.section(str(fields.get("anchor") or ""))
-        ):
+        section = document.section(str(fields.get("anchor") or ""))
+        if section is not None:
+            fields.setdefault("section_heading", document.heading_path(section.anchor))
+        if not fields.get("table_header") and section is not None:
             fields["table_header"] = table_header(
                 section.text, str(fields.get("quote") or "")
             )

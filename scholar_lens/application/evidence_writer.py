@@ -258,6 +258,18 @@ class WriterPrompts:
 RecordRule = Callable[[SourceDocument, str, Mapping[str, str]], list[str]]
 
 
+def _number_hint(missing: Sequence[str]) -> str:
+    """What a missing number may be (an ask for one must not turn a figure
+    the source only cites into its result)."""
+    if "number" not in missing:
+        return ""
+    return (
+        " A number is a result the source itself measured, never a figure it "
+        "cites to set the scene (a product's user count, another work's "
+        "score); a source whose evaluation is qualitative has none."
+    )
+
+
 def recheck(document: SourceDocument, item: Evidence) -> list[str]:
     """Today's problems of a stored record (cached under older rules)."""
     return evidence_problems(
@@ -325,7 +337,16 @@ def cached_evidence(
     except (ValueError, ValidationError):
         logger.warning("Unreadable cached evidence %s; reading again.", key)
         return None
-    items = [e.model_copy(update={"paper_id": document.paper_id}) for e in items]
+    items = [
+        e.model_copy(
+            update={
+                "paper_id": document.paper_id,
+                # Entries cached before the heading was kept get it now.
+                "section_heading": e.section_heading or document.heading_path(e.anchor),
+            }
+        )
+        for e in items
+    ]
     kept = [e for e in items if not recheck(document, e) and not rejected(e)]
     if items and not kept:
         logger.warning("No cached evidence of %s passes today; reading again.", key)
@@ -769,7 +790,7 @@ class EvidenceWriter:
                 return (
                     "Not yet: this source needs at least one piece of evidence "
                     f"of each kind {missing}. Record them, or call finish again "
-                    "if the source has none."
+                    "if the source has none." + _number_hint(missing)
                 )
             return "done"
 
@@ -795,7 +816,7 @@ class EvidenceWriter:
                     f"Evidence of kind {missing} is still missing. Record "
                     "it now if the source has it (for a figure: the one "
                     "that best shows the architecture, a flow or a result, "
-                    "described from the text before it)."
+                    "described from the text before it)." + _number_hint(missing)
                 )
             if short:
                 asks.append(

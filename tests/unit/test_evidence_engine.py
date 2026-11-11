@@ -1479,6 +1479,75 @@ def test_a_comparison_cell_states_a_number_and_is_no_plain_sentence() -> None:
     assert not result_cell("")
 
 
+@pytest.mark.parametrize(
+    ("heading", "shown"),
+    [
+        ("4 Experiments", True),
+        ("Introduction and Results", True),
+        ("5.2 Background noise robustness", True),
+        # A supporting paper's own results are often in its introduction.
+        ("1 Introduction", True),
+        ("2 Related Work", False),
+        ("I. BACKGROUND", False),
+        ("Background and Related Work", False),
+        ("2 관련 연구", False),
+        ("2. Background:", False),
+        ("A. Related Work", False),
+    ],
+)
+def test_a_number_the_introduction_cites_is_no_result(
+    heading: str, shown: bool
+) -> None:
+    """A number that sets the scene (a product's user count in the
+    introduction) is not the paper's result: it stays in its section. The
+    heading comes from the section the reader anchored the number in."""
+    from scholar_lens.domain.survey.evidence_post import result_evidence
+
+    doc = SourceDocument.from_markdown(
+        "p", "t", "full_text", f"## {heading}\n\nChatGPT has over 100 million users.\n"
+    )
+    item = EvidenceLedger().add(
+        doc,
+        kind="number",
+        claim="c",
+        quote="ChatGPT has over 100 million users",
+        anchor=doc.sections[0].anchor,
+        cell="사용자 1억 명",
+    )
+    assert item.section_heading == heading
+    assert result_evidence(item) is shown
+
+
+def test_a_number_in_a_related_work_subsection_is_no_result() -> None:
+    from scholar_lens.domain.survey.evidence_post import result_evidence
+
+    doc = SourceDocument.from_markdown(
+        "p",
+        "t",
+        "full_text",
+        "## 2 Related Work\n\nIntro.\n\n### 2.1 Large Language Models\n\n"
+        "GPT-4 scores 86.4% on MMLU.\n\n## 4 Experiments\n\nOurs reaches 90.1% on MMLU.\n",
+    )
+    cited = EvidenceLedger().add(
+        doc,
+        kind="number",
+        claim="c",
+        quote="GPT-4 scores 86.4% on MMLU",
+        anchor=doc.sections[1].anchor,
+        cell="GPT-4 MMLU 86.4%",
+    )
+    own = EvidenceLedger().add(
+        doc,
+        kind="number",
+        claim="c",
+        quote="Ours reaches 90.1% on MMLU",
+        anchor=doc.sections[2].anchor,
+        cell="MMLU 90.1%",
+    )
+    assert cited.section_heading == "2 Related Work > 2.1 Large Language Models"
+    assert not result_evidence(cited) and result_evidence(own)
+
+
 def test_a_number_the_table_cannot_show_stays_in_its_section() -> None:
     from scholar_lens.domain.survey.evidence_post import repair_outline
 
@@ -1953,3 +2022,35 @@ def test_a_core_paper_the_table_empties_keeps_a_prose_item_in_its_section() -> N
         for p in outline_problems(fixed, _plan(), ledger, title_max_length=70)
         if "needs evidence in a section" in p
     ]
+
+
+def test_cached_evidence_gets_its_section_heading() -> None:
+    import json
+
+    from scholar_lens.application.evidence_writer import cached_evidence
+
+    doc = SourceDocument.from_markdown(
+        "p",
+        "t",
+        "full_text",
+        "## 1 Introduction\n\nChatGPT has over 100 million users.\n",
+    )
+    old = {
+        "id": "E1",
+        "paper_id": "old",
+        "kind": "number",
+        "claim": "c",
+        "quote": "ChatGPT has over 100 million users",
+        "anchor": doc.sections[0].anchor,
+        "cell": "사용자 1억 명",
+        "scope": "ChatGPT, users, 2023",
+    }
+    (item,) = cached_evidence(json.dumps([old]), doc) or []
+    assert item.section_heading == "1 Introduction"
+
+
+def test_an_ask_for_a_missing_number_says_what_a_number_is() -> None:
+    from scholar_lens.application.evidence_writer import _number_hint
+
+    assert "never a figure it cites" in _number_hint(["method", "number"])
+    assert _number_hint(["limitation"]) == ""
