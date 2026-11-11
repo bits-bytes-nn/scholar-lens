@@ -102,6 +102,8 @@ class BlockRun(BaseModel):
     error_type: str = ""
     error_module: str = ""
     message: str = ""
+    # The innermost frame that raised it is a block's (False: a package's).
+    in_post: bool = True
 
     @field_validator("message")
     @classmethod
@@ -289,6 +291,16 @@ class BlockTimeout(BaseException):
     pass
 def _sl_alarm(signum, frame):
     raise BlockTimeout("the block ran over {block_timeout_s}s")
+def _sl_in_post(e):
+    # Whether the innermost frame that raised it (import machinery aside)
+    # is a block's: else an installed package raised it.
+    tb, last = e.__traceback__, ""
+    while tb is not None:
+        name = tb.tb_frame.f_code.co_filename
+        if not name.startswith("<frozen"):
+            last = name
+        tb = tb.tb_next
+    return last.startswith("<block ")
 def _sl_text(e):
     try:
         return str(e)[:400]
@@ -343,6 +355,7 @@ for _sl_i, _sl_code in enumerate(_SL_CODES, 1):
             "error_type": type(_sl_e).__name__,
             "error_module": str(getattr(type(_sl_e), "__module__", "")),
             "message": _sl_text(_sl_e),
+            "in_post": _sl_in_post(_sl_e),
         }}
     finally:
         _sl_signal.alarm(0)
@@ -381,6 +394,21 @@ def run_mark(nonce: str) -> str:
     return f"{RESULT_MARK}{nonce}@@"
 
 
+def _environment(run: BlockRun) -> bool:
+    """Whether ``run``'s exception points at the environment: its type or
+    module, or a word of its message outside the quoted names ("unexpected
+    keyword argument 'max_tokens'" is the code's, "Could not resolve
+    authentication" is not) and the callee's name ("requires_access_token()
+    got ...")."""
+    unquoted = re.sub(r"'[^']*'|\"[^\"]*\"|`[^`]*`", "", run.message.lower())
+    unquoted = re.sub(r"^[\w.<>]+\(\)\s*", "", unquoted)
+    return (
+        run.error_type in _ENVIRONMENT_ERRORS
+        or run.error_module.split(".")[0] in _ENVIRONMENT_MODULES
+        or any(word in unquoted for word in _ENVIRONMENT_WORDS)
+    )
+
+
 def verdict(run: BlockRun, product_modules: Collection[str]) -> Verdict:
     """Whose failure ``run`` is: the code's (a reader's paste fails the
     same), the environment's (credentials, network, a service, time), or
@@ -391,6 +419,10 @@ def verdict(run: BlockRun, product_modules: Collection[str]) -> Verdict:
     if run.error_type in _SOURCE_ERRORS:
         return "code"
     if run.error_type in ("ModuleNotFoundError", "ImportError"):
+        if not run.in_post:
+            # A package's own import failed (a dependency at another
+            # version).
+            return "environment"
         products = {m.lower() for m in product_modules}
         named = message.split("'")[1] if message.count("'") >= 2 else ""
         if run.error_type == "ImportError" and "cannot import name" in message:
@@ -398,39 +430,30 @@ def verdict(run: BlockRun, product_modules: Collection[str]) -> Verdict:
             quoted = message.split("'")
             source = quoted[3] if len(quoted) > 3 else ""
             return "code" if source in products else "unclear"
-        # A product's submodule the post names wrongly is the code's; the
-        # product itself missing is an install that failed (or a sandbox
-        # that installs nothing).
         # A product module's submodule that does not exist is the code's
         # (its parent imported, so the product is installed); a product
         # root or a namespace package's part missing is an install that
         # failed (or a sandbox that installs nothing).
         parent = named.rpartition(".")[0]
         return "code" if parent and parent in products else "environment"
-    module = run.error_module.split(".")[0]
-    # The words count outside the quoted names: "unexpected keyword argument
-    # 'max_tokens'" is the code's, "Could not resolve authentication" is not.
-    unquoted = re.sub(r"'[^']*'|\"[^\"]*\"|`[^`]*`", "", message)
-    # ... and outside the callee's name ("requires_access_token() got ...").
-    unquoted = re.sub(r"^[\w.<>]+\(\)\s*", "", unquoted)
     if run.error_type == "TypeError" and any(
         phrase in message for phrase in _SIGNATURE_PHRASES
     ):
         # A call that does not match its signature is the code's, whatever
-        # the callee is called.
-        return "code"
-    if (
-        run.error_type in _ENVIRONMENT_ERRORS
-        or module in _ENVIRONMENT_MODULES
-        or any(word in unquoted for word in _ENVIRONMENT_WORDS)
-    ):
+        # the callee is called, when the post's own line raised it (inside
+        # a package, a keyword forwarded down or a dependency at another
+        # version may be to blame).
+        return "code" if run.in_post else "unclear"
+    if _environment(run):
         # Before the call checks: an SDK raises a TypeError for a missing
         # key ("Could not resolve authentication method").
         return "environment"
     if run.error_type in ("TypeError", "AttributeError"):
-        # A wrong call or attribute, unless a missing setting made a value
-        # None.
-        return "unclear" if "nonetype" in message else "code"
+        # A wrong call or attribute on the post's line, unless a missing
+        # setting made a value None.
+        if not run.in_post or "nonetype" in message:
+            return "unclear"
+        return "code"
     return "unclear"
 
 

@@ -630,3 +630,30 @@ def test_a_timing_magic_runs_its_statement() -> None:
         "print(result)",
     ]
     assert python_code_problems(sections) == []
+
+
+def test_an_error_raised_inside_a_package_is_not_the_posts(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    lib = tmp_path / "mylib.py"
+    lib.write_text(
+        "def _dep(**kw):\n    pass\n"
+        "class Client:\n    def __init__(self):\n        _dep2(proxies=None)\n"
+        "def _dep2():\n    pass\n"
+    )
+    script = program_script(
+        [
+            f"import sys\nsys.path.insert(0, {str(tmp_path)!r})\nfrom mylib import Client",
+            "client = Client()",
+            "def f(a):\n    pass\nf(b=1)",
+        ],
+        block_timeout_s=10,
+    )
+    runs = read_outcomes(_run(script))
+    assert [r.in_post for r in runs if not r.ok] == [False, True]
+    blocks = [
+        ("설치", "", True),
+        ("사용", "client = Client()", True),
+        ("함수", "f(b=1)", True),
+    ]
+    assert verdict(runs[1], ()) == "unclear"
+    assert verdict(runs[2], ()) == "code"
+    assert not judge_run(blocks[:2], runs[:2], ()).findings
