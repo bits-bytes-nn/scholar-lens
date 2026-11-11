@@ -388,10 +388,13 @@ def verdict(run: BlockRun, product_modules: Collection[str]) -> Verdict:
         parent = named.rpartition(".")[0]
         return "code" if parent and parent in products else "environment"
     module = run.error_module.split(".")[0]
+    # The words count outside the quoted names: "unexpected keyword argument
+    # 'max_tokens'" is the code's, "Could not resolve authentication" is not.
+    unquoted = re.sub(r"'[^']*'|\"[^\"]*\"|`[^`]*`", "", message)
     if (
         run.error_type in _ENVIRONMENT_ERRORS
         or module in _ENVIRONMENT_MODULES
-        or any(word in message for word in _ENVIRONMENT_WORDS)
+        or any(word in unquoted for word in _ENVIRONMENT_WORDS)
     ):
         # Before the call checks: an SDK raises a TypeError for a missing
         # key ("Could not resolve authentication method").
