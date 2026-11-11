@@ -287,7 +287,9 @@ def result_cell(cell: str) -> bool:
 
 # Section headings whose numbers are other works' (related work,
 # background, preliminaries): the whole heading is one such title, or two
-# joined ("Background and Related Work"), after an optional number. An
+# joined ("Background and Related Work"), after an optional number or
+# letter, at any level of the section's heading path (a subsection of the
+# related work is the related work's). An
 # introduction is not one: a supporting paper is read from its abstract,
 # introduction and conclusion, where its own results are; the reader keeps
 # a number it only cites out of the number records.
@@ -296,8 +298,8 @@ _BACKGROUND_TITLE = (
     r"배경|관련 연구|연구 배경)"
 )
 _BACKGROUND_SECTION = re.compile(
-    rf"\s*(?:[\dIVX]+(?:\.\d+)*\.?\s+)?{_BACKGROUND_TITLE}"
-    rf"(?:\s*(?:and|&|및|과|와|,)\s*{_BACKGROUND_TITLE})?\s*",
+    rf"\s*(?:(?:[\dIVX]+|[A-Z])(?:\.\d+)*\.?\s+)?{_BACKGROUND_TITLE}"
+    rf"(?:\s*(?:and|&|및|과|와|,)\s*{_BACKGROUND_TITLE})?\s*:?\s*",
     re.I,
 )
 
@@ -309,7 +311,10 @@ def result_evidence(item: Evidence) -> bool:
     return (
         item.kind == "number"
         and result_cell(item.cell)
-        and not _BACKGROUND_SECTION.fullmatch(item.section_heading)
+        and not any(
+            _BACKGROUND_SECTION.fullmatch(heading)
+            for heading in item.section_heading.split(" > ")
+        )
     )
 
 

@@ -1491,6 +1491,8 @@ def test_a_comparison_cell_states_a_number_and_is_no_plain_sentence() -> None:
         ("I. BACKGROUND", False),
         ("Background and Related Work", False),
         ("2 관련 연구", False),
+        ("2. Background:", False),
+        ("A. Related Work", False),
     ],
 )
 def test_a_number_the_introduction_cites_is_no_result(
@@ -1514,6 +1516,36 @@ def test_a_number_the_introduction_cites_is_no_result(
     )
     assert item.section_heading == heading
     assert result_evidence(item) is shown
+
+
+def test_a_number_in_a_related_work_subsection_is_no_result() -> None:
+    from scholar_lens.domain.survey.evidence_post import result_evidence
+
+    doc = SourceDocument.from_markdown(
+        "p",
+        "t",
+        "full_text",
+        "## 2 Related Work\n\nIntro.\n\n### 2.1 Large Language Models\n\n"
+        "GPT-4 scores 86.4% on MMLU.\n\n## 4 Experiments\n\nOurs reaches 90.1% on MMLU.\n",
+    )
+    cited = EvidenceLedger().add(
+        doc,
+        kind="number",
+        claim="c",
+        quote="GPT-4 scores 86.4% on MMLU",
+        anchor=doc.sections[1].anchor,
+        cell="GPT-4 MMLU 86.4%",
+    )
+    own = EvidenceLedger().add(
+        doc,
+        kind="number",
+        claim="c",
+        quote="Ours reaches 90.1% on MMLU",
+        anchor=doc.sections[2].anchor,
+        cell="MMLU 90.1%",
+    )
+    assert cited.section_heading == "2 Related Work > 2.1 Large Language Models"
+    assert not result_evidence(cited) and result_evidence(own)
 
 
 def test_a_number_the_table_cannot_show_stays_in_its_section() -> None:

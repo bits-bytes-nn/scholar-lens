@@ -342,9 +342,7 @@ def cached_evidence(
             update={
                 "paper_id": document.paper_id,
                 # Entries cached before the heading was kept get it now.
-                "section_heading": e.section_heading
-                or ((section := document.section(e.anchor)) and section.heading)
-                or "",
+                "section_heading": e.section_heading or document.heading_path(e.anchor),
             }
         )
         for e in items
