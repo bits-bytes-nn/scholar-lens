@@ -677,3 +677,43 @@ def test_an_error_in_a_module_the_post_wrote_is_the_posts() -> None:
     runs = read_outcomes(_run(script))
     assert runs[1].error_type == "AttributeError" and runs[1].in_post
     assert judge_run(blocks, runs, ()).findings
+
+
+def test_a_signature_error_after_a_gap_that_redefined_the_callee_is_not_blamed() -> (
+    None
+):
+    blocks = [
+        ("v1", "def run_agent(prompt):\n    return prompt", True),
+        (
+            "v2",
+            "client.list()\ndef run_agent(prompt, session_id):\n    return prompt",
+            True,
+        ),
+        ("사용", "run_agent('hello', session_id='s1')", True),
+    ]
+    runs = [
+        BlockRun(index=1, ok=True),
+        BlockRun(
+            index=2,
+            ok=False,
+            error_type="NoCredentialsError",
+            error_module="botocore.exceptions",
+            message="Unable to locate credentials",
+        ),
+        BlockRun(
+            index=3,
+            ok=False,
+            error_type="TypeError",
+            message="run_agent() got an unexpected keyword argument 'session_id'",
+        ),
+    ]
+    assert not judge_run(blocks, runs, ()).findings
+
+
+def test_a_transcript_showing_a_traceback_is_not_judged() -> None:
+    cell = (
+        ">>> Config(nme='x')\nTraceback (most recent call last):\n  ...\n"
+        "TypeError: Config.__init__() got an unexpected keyword argument 'nme'"
+    )
+    ((_, _, checked),) = program_blocks([("오류", _py(cell), True)])
+    assert not checked

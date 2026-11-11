@@ -148,8 +148,18 @@ def program_blocks(
         for block in python_blocks(markdown):
             session = _session_code(block)
             code = block if session is None else session
+            # A transcript that shows a traceback demonstrates the error.
+            shows_error = (
+                session is not None and "Traceback (most recent call last)" in block
+            )
             if code.strip():
-                out.append((title, code, runnable and not is_excerpt(block)))
+                out.append(
+                    (
+                        title,
+                        code,
+                        runnable and not is_excerpt(block) and not shows_error,
+                    )
+                )
     return out
 
 
@@ -501,7 +511,9 @@ def _imported_modules(code: str) -> set[str]:
 
 
 def _reliable_after_gap(
-    run: BlockRun, blocks: Sequence[tuple[str, str, bool]] = ()
+    run: BlockRun,
+    blocks: Sequence[tuple[str, str, bool]] = (),
+    gap_names: Collection[str] = (),
 ) -> bool:
     """Whether a code failure after a block that could not run still says
     the code is wrong: an import, a module attribute or a call signature
@@ -523,7 +535,13 @@ def _reliable_after_gap(
             for name in _imported_modules(code)
         )
     if run.error_type == "TypeError":
-        return any(phrase in message for phrase in _SIGNATURE_PHRASES)
+        # Unless the gap would have (re)defined the callee: "run_agent()
+        # got an unexpected keyword argument" after a skipped redefinition.
+        callee = re.match(r"([\w.]+)\(\)", message)
+        root = callee.group(1).split(".")[0] if callee else ""
+        return root not in gap_names and any(
+            phrase in message for phrase in _SIGNATURE_PHRASES
+        )
     return False
 
 
@@ -654,7 +672,7 @@ def judge_run(
         if (
             whose == "code"
             and checked
-            and (not related or _reliable_after_gap(run, blocks))
+            and (not related or _reliable_after_gap(run, blocks, gap_names))
         ):
             return ProgramRun(
                 findings=[run_finding(title, code, run, after_gap=related)],
