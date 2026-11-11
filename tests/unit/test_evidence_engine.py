@@ -1480,30 +1480,37 @@ def test_a_comparison_cell_states_a_number_and_is_no_plain_sentence() -> None:
 
 
 @pytest.mark.parametrize(
-    ("anchor", "shown"),
+    ("heading", "shown"),
     [
         ("4 Experiments", True),
-        ("Abstract", True),
+        ("Introduction and Results", True),
+        ("5.2 Background noise robustness", True),
         ("1 Introduction", False),
         ("2 Related Work", False),
         ("Background and Motivation", False),
         ("1 서론", False),
     ],
 )
-def test_a_number_the_introduction_cites_is_no_result(anchor: str, shown: bool) -> None:
+def test_a_number_the_introduction_cites_is_no_result(
+    heading: str, shown: bool
+) -> None:
     """A number that sets the scene (a product's user count in the
-    introduction) is not the paper's result: it stays in its section."""
+    introduction) is not the paper's result: it stays in its section. The
+    heading comes from the section the reader anchored the number in."""
     from scholar_lens.domain.survey.evidence_post import result_evidence
 
-    item = Evidence(
-        id="E1",
-        paper_id="p",
+    doc = SourceDocument.from_markdown(
+        "p", "t", "full_text", f"## {heading}\n\nChatGPT has over 100 million users.\n"
+    )
+    item = EvidenceLedger().add(
+        doc,
         kind="number",
         claim="c",
-        quote="q" * 30,
-        anchor=anchor,
+        quote="ChatGPT has over 100 million users",
+        anchor=doc.sections[0].anchor,
         cell="사용자 1억 명",
     )
+    assert item.section_heading == heading
     assert result_evidence(item) is shown
 
 
@@ -1981,3 +1988,28 @@ def test_a_core_paper_the_table_empties_keeps_a_prose_item_in_its_section() -> N
         for p in outline_problems(fixed, _plan(), ledger, title_max_length=70)
         if "needs evidence in a section" in p
     ]
+
+
+def test_cached_evidence_gets_its_section_heading() -> None:
+    import json
+
+    from scholar_lens.application.evidence_writer import cached_evidence
+
+    doc = SourceDocument.from_markdown(
+        "p",
+        "t",
+        "full_text",
+        "## 1 Introduction\n\nChatGPT has over 100 million users.\n",
+    )
+    old = {
+        "id": "E1",
+        "paper_id": "old",
+        "kind": "number",
+        "claim": "c",
+        "quote": "ChatGPT has over 100 million users",
+        "anchor": doc.sections[0].anchor,
+        "cell": "사용자 1억 명",
+        "scope": "ChatGPT, users, 2023",
+    }
+    (item,) = cached_evidence(json.dumps([old]), doc) or []
+    assert item.section_heading == "1 Introduction"

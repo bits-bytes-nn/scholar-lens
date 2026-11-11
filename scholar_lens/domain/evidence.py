@@ -271,6 +271,9 @@ class Evidence(_Strict):
     scope: str = ""
     # A noun phrase for a table cell (numbers and limitations).
     cell: str = ""
+    # The heading of the section at ``anchor`` (set by code when recorded;
+    # empty in items recorded before it existed).
+    section_heading: str = ""
     figure_id: str | None = None
     figure_url: str | None = None
     caption: str | None = None
@@ -596,9 +599,10 @@ class EvidenceLedger(BaseModel):
                 # What the figure shows, as far as the text says: the check
                 # of its claim reads it.
                 fields["quote"] = figure.context
-        if not fields.get("table_header") and (
-            section := document.section(str(fields.get("anchor") or ""))
-        ):
+        section = document.section(str(fields.get("anchor") or ""))
+        if section is not None:
+            fields.setdefault("section_heading", section.heading)
+        if not fields.get("table_header") and section is not None:
             fields["table_header"] = table_header(
                 section.text, str(fields.get("quote") or "")
             )

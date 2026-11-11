@@ -285,11 +285,17 @@ def result_cell(cell: str) -> bool:
     )
 
 
-# Sections whose numbers set the scene, not the paper's results (the
-# adoption of a product, the size of a market, a prior work's figure).
+# Section headings whose numbers set the scene, not the paper's results
+# (a product's adoption, a prior work's figure): the whole heading is one
+# such title, or two joined ("Background and Motivation"), after an
+# optional number; "Introduction and Results" is not one.
+_BACKGROUND_TITLE = (
+    r"(?:introduction|background|motivation|related works?|prior work|"
+    r"preliminar(?:y|ies)|서론|배경|관련 연구|연구 배경|동기)"
+)
 _BACKGROUND_SECTION = re.compile(
-    r"\b(?:introduction|intro|background|motivation|related work|prior work|"
-    r"preliminar(?:y|ies))\b|서론|배경|관련 연구|동기",
+    rf"\s*(?:[\dIVX]+(?:\.\d+)*\.?\s+)?{_BACKGROUND_TITLE}"
+    rf"(?:\s*(?:and|&|및|과|와|,)\s*{_BACKGROUND_TITLE})?\s*",
     re.I,
 )
 
@@ -301,7 +307,7 @@ def result_evidence(item: Evidence) -> bool:
     return (
         item.kind == "number"
         and result_cell(item.cell)
-        and not _BACKGROUND_SECTION.search(item.anchor or "")
+        and not _BACKGROUND_SECTION.fullmatch(item.section_heading)
     )
 
 

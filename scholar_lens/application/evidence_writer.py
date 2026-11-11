@@ -325,7 +325,18 @@ def cached_evidence(
     except (ValueError, ValidationError):
         logger.warning("Unreadable cached evidence %s; reading again.", key)
         return None
-    items = [e.model_copy(update={"paper_id": document.paper_id}) for e in items]
+    items = [
+        e.model_copy(
+            update={
+                "paper_id": document.paper_id,
+                # Entries cached before the heading was kept get it now.
+                "section_heading": e.section_heading
+                or ((section := document.section(e.anchor)) and section.heading)
+                or "",
+            }
+        )
+        for e in items
+    ]
     kept = [e for e in items if not recheck(document, e) and not rejected(e)]
     if items and not kept:
         logger.warning("No cached evidence of %s passes today; reading again.", key)
