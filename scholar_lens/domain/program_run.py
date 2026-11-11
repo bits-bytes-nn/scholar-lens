@@ -496,6 +496,11 @@ def _misused_builtin(run: BlockRun) -> bool:
     return bool(_BUILTIN_MISUSE.search(run.message.lower()))
 
 
+def _none_value(message: str) -> bool:
+    """Whether a (lowercased) validation message is about a None value."""
+    return "value: none" in message or "nonetype" in message
+
+
 def caught_environment(run: BlockRun) -> str:
     """The first exception of the environment ``run``'s code raised and
     caught ("" when none): what it computed may stand in for what the
@@ -520,8 +525,12 @@ def verdict(run: BlockRun, product_modules: Collection[str]) -> Verdict:
     if run.ok:
         return "ok"
     message = run.message.lower()
-    if run.error_type in _SOURCE_ERRORS or run.error_type in _SDK_CODE_ERRORS:
+    if run.error_type in _SOURCE_ERRORS:
         return "code"
+    if run.error_type in _SDK_CODE_ERRORS:
+        # A None where a value belongs is a setting the reader exports
+        # (os.environ.get of an unset variable), as the None rule below.
+        return "unclear" if _none_value(message) else "code"
     if run.error_type in ("ModuleNotFoundError", "ImportError"):
         if not run.in_post:
             # A package's own import failed (a dependency at another
@@ -608,7 +617,7 @@ def _reliable_after_gap(
     would have bound, or an attribute of its object, may)."""
     message = run.message
     if run.error_type in ("ModuleNotFoundError", "ImportError") or (
-        run.error_type in _SDK_CODE_ERRORS
+        run.error_type in _SDK_CODE_ERRORS and not _none_value(message.lower())
     ):
         return True
     if run.error_type == "AttributeError":

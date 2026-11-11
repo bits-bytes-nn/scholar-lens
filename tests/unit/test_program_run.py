@@ -798,3 +798,16 @@ def test_an_sdks_own_call_validation_is_the_codes(
     )
     assert verdict(run, ()) == "code"
     assert judge_run([("사용", "client.converse()", True)], [run], ()).findings
+
+
+def test_a_none_from_an_unset_variable_in_an_sdk_call_is_not_blamed() -> None:
+    run = BlockRun(
+        index=1,
+        ok=False,
+        error_type="ParamValidationError",
+        error_module="botocore.exceptions",
+        in_post=False,
+        message="Invalid type for parameter knowledgeBaseId, value: None, "
+        "type: <class 'NoneType'>, valid types: <class 'str'>",
+    )
+    assert verdict(run, ()) == "unclear"
